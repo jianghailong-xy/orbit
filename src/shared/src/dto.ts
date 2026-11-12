@@ -847,10 +847,20 @@ export interface RunnerSelfUpdate {
   lastUpdatedAt?: string;
   lastUpdatedFrom?: string;
   lastUpdatedTo?: string;
-  /** The release it is waiting to install, and when it began taking no new work for it
-   *  (docs/runner-update-drain-design.md §4). Absent from a runner that does not report them. */
+  /** Where a release the runner is behind stands, for the runner page's Update card
+   *  (docs/runner-update-drain-design.md §4). Absent when none is waiting, and from every runner
+   *  too old to say: the clients keep the wording they had before for those. */
+  phase?: RunnerSelfUpdatePhase;
+  /** The release it is waiting to install. */
   targetVersion?: string;
+  /** ISO-8601: when the release was first found waiting for a busy runner, when the drain began
+   *  (taking no new work), and until when the owner postponed it. */
+  availableSince?: string;
   drainingSince?: string;
+  postponedUntil?: string;
+  /** While draining: the turns still in flight, and how many there were when the drain began. */
+  turnsInFlight?: number;
+  turnsAtDrain?: number;
 }
 
 /** Why a queued session waits on its runner's self-update (queuedReason 'runner_updating'): the
@@ -860,6 +870,20 @@ export interface QueuedRunnerUpdate {
   since: string | null;
   turns: Array<{ id: string; title: string | null }>;
 }
+
+/** A waiting release's phase, as the runner reports it:
+ *  - `available`: waiting for the turns in flight to end, under the 1 h limit; work goes on.
+ *  - `draining`: past the limit; the runner takes no new work until its turns end.
+ *  - `restarting`: nothing in flight; installing the release and starting again.
+ *  - `postponed`: the owner put it off until `postponedUntil`; work goes on. */
+export type RunnerSelfUpdatePhase = 'available' | 'draining' | 'restarting' | 'postponed';
+
+export const RUNNER_SELF_UPDATE_PHASES: readonly RunnerSelfUpdatePhase[] = [
+  'available',
+  'draining',
+  'restarting',
+  'postponed',
+];
 
 /** What the runner saw at one agent's working directory. Reported from the runner's own disk,
  *  so it answers the question the config form asks: does this path exist on that machine, and

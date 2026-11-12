@@ -125,9 +125,11 @@ import {
   runnerOfflineLastSeen,
   runnerRunningOf,
   runnerUpdatedFromTo,
+  runnerVersionUpdatingTo,
   runnerVersionTag,
   runnerWorkspaceRunning,
 } from '../lib/runnerCopy';
+import { runnerUpdateCard } from '../lib/runnerUpdateCard';
 import { useClaudeRegionCheckAgain } from '../lib/claudeRegion';
 import { CLAUDE_REGION_CHECK_AGAIN } from '../lib/claudeRegionCopy';
 import { ago } from '../lib/runnerEngines';
@@ -1309,6 +1311,12 @@ export function RunnerDetailPage() {
     const stuck = attention.find((item) => item.kind === 'cannotSelfUpdate');
     if (stuck) return { text: stuck.short, warn: true };
     if (compareRunnerVersions(version, latestVersion) >= 0) return { text: RUNNER_VERSION_LATEST, warn: false };
+    // Draining or restarting for a release: `0.1.253 · updating to 0.1.254`, in the card's amber.
+    const target = runner.selfUpdate?.targetVersion;
+    const phase = runner.selfUpdate?.phase;
+    if (target && (phase === 'draining' || phase === 'restarting')) {
+      return { text: runnerVersionUpdatingTo(target), warn: true };
+    }
     const state = runner.selfUpdate?.state;
     if (state === 'heldByRollout') return { text: RUNNER_VERSION_NOT_ROLLED_OUT, warn: false };
     if (state === 'enabled' || state === 'waitingForIdle') {
@@ -1329,6 +1337,8 @@ export function RunnerDetailPage() {
     return parts.filter(Boolean).join(RUNNER_LINE_SEPARATOR) || '—';
   })();
   const canUpdateNow = runnerCanUpdateNow(runner, nowMs);
+  // Where a release it is behind stands, from a runner that says (null for one that doesn't).
+  const updateCard = runnerUpdateCard(runner.selfUpdate, nowMs);
   // An engine update shares the runner's one relay slot with an engine's install. Only a run in
   // `update` mode is Engines' news; an install's belongs to the row that started it.
   const relay = runner.install;
@@ -1518,6 +1528,32 @@ export function RunnerDetailPage() {
         {version && <span>{runnerVersionTag(version)}</span>}
         {runner.hostname && <span>{runner.hostname}</span>}
       </div>
+
+      {/* The Update card (board 4): a release this runner is behind, in the phase it reports. */}
+      {updateCard && (
+        <section className={`rd-update-card ${updateCard.tone}`} aria-label={updateCard.title} data-phase={updateCard.phase}>
+          <div className="rd-update-head">
+            <div className="rd-update-title">{updateCard.title}</div>
+            <div className="rd-update-tag">{updateCard.tag}</div>
+          </div>
+          <div className="rd-update-body">{updateCard.body}</div>
+          {updateCard.progress && (
+            <>
+              <div className="rd-update-progress-label">{updateCard.progress.label}</div>
+              <div
+                className="rd-update-progress"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(updateCard.progress.done * 100)}
+              >
+                <span style={{ width: `${updateCard.progress.done * 100}%` }} />
+              </div>
+            </>
+          )}
+          {/* Later ▾ and Update Now… go here (their own tasks). */}
+        </section>
+      )}
 
       {/* Only when something needs a person, above both columns: each card says what happened,
           why it matters, and offers the one thing that fixes it. */}
