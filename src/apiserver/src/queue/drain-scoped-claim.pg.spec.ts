@@ -77,13 +77,14 @@ suite('a drain-scoped claim, on real PostgreSQL', async (t) => {
   const runner = { id: runnerId, ownerId };
 
   let minute = 0;
-  /** A PENDING Claude session on the runner; earlier ones are created first, so an unscoped claim takes them first. */
-  async function queued(title: string): Promise<string> {
+  /** A Claude session on a runner (this file's first by default), PENDING unless said otherwise; earlier ones are
+   *  created first, so an unscoped claim takes them first. */
+  async function queued(title: string, on = { runnerId, workspaceId }, status: RunStatus = RunStatus.PENDING): Promise<string> {
     const at = new Date(Date.UTC(2026, 10, 12, 4, minute++));
     const session = await db.session.create({
       data: {
-        title, prompt: 'hello', status: RunStatus.PENDING, ownerId, creatorId: ownerId, workspaceId,
-        assignedRunnerId: runnerId, provider: AgentProvider.CLAUDE, providerBuiltin: true,
+        title, prompt: 'hello', status, ownerId, creatorId: ownerId, workspaceId: on.workspaceId,
+        assignedRunnerId: on.runnerId, provider: AgentProvider.CLAUDE, providerBuiltin: true,
         engine: AgentProvider.CLAUDE, usesRuntimeDefaultModel: true, createdAt: at, lastTurnAt: at,
       },
       select: { id: true },
@@ -123,5 +124,39 @@ suite('a drain-scoped claim, on real PostgreSQL', async (t) => {
   await t.test('an unscoped claim (a runner that is not draining) takes any session, as before', async () => {
     const job = await claim();
     assert.equal(job?.sessionId, fresh);
+  });
+
+  // The runner's RUNNING rows fill maxConcurrent. A scoped claim starts no new work — the engine is already
+  // running on this runner — so the capacity caps do not hold it back, or its row would read PENDING while
+  // that engine runs. An unscoped claim on the same runner is still refused at the cap.
+  await t.test('at maxConcurrent, the scoped claim still takes its session and an unscoped one is still refused', async () => {
+    const fullRunnerId = randomUUID();
+    const fullWorkspaceId = randomUUID();
+    await db.runner.create({
+      data: {
+        id: fullRunnerId, ownerId, name: 'full-draining-runner', tokenHash: `x-${fullRunnerId}`,
+        status: RunnerStatus.ONLINE, maxConcurrent: 1, heartbeatDraining: true,
+      },
+    });
+    await db.workspace.create({
+      data: { id: fullWorkspaceId, ownerId, runnerId: fullRunnerId, name: 'full-ws', enabled: true, workDir: '/tmp/full' },
+    });
+    const on = { runnerId: fullRunnerId, workspaceId: fullWorkspaceId };
+    const full = { id: fullRunnerId, ownerId };
+    const claimOn = (drainScope?: string) => claimRoute(full, PROVIDERS, undefined, undefined, undefined, drainScope);
+    const busy = await queued('a turn in flight', on, RunStatus.RUNNING);
+    const waiting = await queued('new work, at the cap', on);
+    const engineAtWork = await queued('engine at work, at the cap', on);
+
+    assert.equal(await claimOn(), null, 'an unscoped claim passed the runner at maxConcurrent');
+    assert.equal(await status(waiting), RunStatus.PENDING);
+    const job = await claimOn(engineAtWork);
+    assert.equal(job?.sessionId, engineAtWork, 'the scoped claim was held back by maxConcurrent');
+    assert.equal(await status(engineAtWork), RunStatus.RUNNING);
+    assert.equal(await status(busy), RunStatus.RUNNING);
+    // The scoped claim took nothing else: the new session stays queued, and an unscoped claim is still refused.
+    assert.equal(await claimOn(engineAtWork), null, 'the RUNNING session was claimed again');
+    assert.equal(await claimOn(), null, 'an unscoped claim passed the runner at maxConcurrent after the scoped one');
+    assert.equal(await status(waiting), RunStatus.PENDING);
   });
 });

@@ -434,6 +434,7 @@ export class QueueService {
         // SAME SQL the session list uses to explain a queued row. Written twice they drift,
         // and a UI that names the wrong gate is worse than one that names none.
         const runnerId = Prisma.sql`${runner.id}::uuid`;
+        const scopedClaim = runner.onlySessionIds !== undefined;
         const claimed = await tx.$queryRaw<Array<{
           id: string; engine: string | null; provider: string; providerBuiltin: boolean; ownerId: string;
         }>>(Prisma.sql`
@@ -624,24 +625,30 @@ export class QueueService {
             )
             -- A runner may only ever drive sessions owned by its own owner.
             AND s."owner_id" = (SELECT r."owner_id" FROM "runner" r WHERE r.id = ${runnerId})
-            -- A slot is an active turn, not a warm process. Idle AWAITING_INPUT and
-            -- legacy INTERRUPTED sessions remain resumable without consuming capacity.
-            AND ${runnerActiveTurns(runnerId)}
-                  < (SELECT r."max_concurrent" FROM "runner" r WHERE r.id = ${runnerId})
-            -- Batch-run cap, independent of the runner cap above: a closed set the user
-            -- dispatched together, with the cap they chose for it.
-            AND (
-              s."batch_id" IS NULL
-              OR ${batchActiveTurns('s')} < s."batch_max_concurrent"
-            )
-            -- Spawn-tree cap, independent of both caps above. Where a batch run is closed and
-            -- user-capped, a tree grows on its own and is capped by the server. See
-            -- session-tree-sql.ts for why the ceiling is a share of the runner and why a
-            -- supervisor is exempt from the count.
-            AND (
-              s."root_session_id" IS NULL
-              OR ${treeActiveTurns('s')} < ${treeCeiling(runnerId)}
-            )
+            -- The capacity caps below hold back new work. A drain-scoped claim (ClaimingRunner.onlySessionIds)
+            -- starts none: it is for a session whose engine is already running a turn on this runner, and the
+            -- runner holds the message it brings until its update. Refused here, its row would read PENDING
+            -- while that engine runs, so it is exempt from all three; an unscoped claim never is.
+            AND (${scopedClaim}::boolean OR (
+              -- A slot is an active turn, not a warm process. Idle AWAITING_INPUT and
+              -- legacy INTERRUPTED sessions remain resumable without consuming capacity.
+              ${runnerActiveTurns(runnerId)}
+                < (SELECT r."max_concurrent" FROM "runner" r WHERE r.id = ${runnerId})
+              -- Batch-run cap, independent of the runner cap above: a closed set the user
+              -- dispatched together, with the cap they chose for it.
+              AND (
+                s."batch_id" IS NULL
+                OR ${batchActiveTurns('s')} < s."batch_max_concurrent"
+              )
+              -- Spawn-tree cap, independent of both caps above. Where a batch run is closed and
+              -- user-capped, a tree grows on its own and is capped by the server. See
+              -- session-tree-sql.ts for why the ceiling is a share of the runner and why a
+              -- supervisor is exempt from the count.
+              AND (
+                s."root_session_id" IS NULL
+                OR ${treeActiveTurns('s')} < ${treeCeiling(runnerId)}
+              )
+            ))
             -- A message may be queued behind a merge/commit still executing on this
             -- session's checkout (createTurn enqueues it PENDING rather than rejecting).
             -- Don't hand it a slot until that git operation settles off 'pending', or the
