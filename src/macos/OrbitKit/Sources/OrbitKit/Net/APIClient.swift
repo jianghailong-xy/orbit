@@ -576,6 +576,35 @@ public final class APIClient: @unchecked Sendable {
         try await delete("access-tokens/\(id)")
     }
 
+    // MARK: terminals — the approve card and Settings → Terminals (docs/terminal-session-design.md)
+
+    /// The terminal sign-ins waiting for this owner. Web parity: `terminalRequestsQuery`.
+    public func terminalRequests() async throws -> [TerminalRequest] {
+        let list: TerminalRequestList = try await get("terminals/requests")
+        return list.requests
+    }
+
+    /// Approve: the terminal's next poll collects a credential bound to this account and that machine, for 30 days.
+    public func approveTerminalRequest(_ id: String) async throws {
+        _ = try await postRaw("terminals/requests/\(id)/approve", body: Optional<Empty>.none)
+    }
+
+    /// Deny: the terminal is told so, and nothing is minted.
+    public func denyTerminalRequest(_ id: String) async throws {
+        _ = try await postRaw("terminals/requests/\(id)/deny", body: Optional<Empty>.none)
+    }
+
+    /// The live terminals, newest first. Web parity: `terminalsQuery`.
+    public func terminals() async throws -> [Terminal] {
+        let list: TerminalList = try await get("terminals")
+        return list.terminals
+    }
+
+    /// Revoke one terminal at once: its next request is 401.
+    public func revokeTerminal(_ id: String) async throws {
+        try await deleteRaw("terminals/\(id)")
+    }
+
     // MARK: approvals
 
     public func approvals(sessionID: String, status: String = "PENDING") async throws -> [ApprovalInfo] {

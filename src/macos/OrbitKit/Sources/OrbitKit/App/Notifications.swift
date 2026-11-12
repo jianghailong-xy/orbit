@@ -143,6 +143,8 @@ public enum AppIntent: Equatable, Sendable {
     case openOwnerRequest(requestID: String)
     /// An owner request's "Later": put off for `OwnerRequests.laterSeconds`, on this device only.
     case snoozeOwnerRequest(requestID: String)
+    /// A terminal asking to be approved (push kind `terminal-login`): the "Waiting on you" inbox, where its card is.
+    case openTerminalRequests
 }
 
 public enum Notifications {
@@ -248,6 +250,7 @@ public enum Notifications {
         if userInfo[keyKind] == "project-done", let project = userInfo[keyProject] {
             return .openProject(projectID: project)
         }
+        if userInfo[keyKind] == "terminal-login" { return .openTerminalRequests }
         // An owner request's actions open its card or put it off; its plain tap opens the session below.
         if let request = userInfo[keyOwnerRequest] {
             if actionId == actionOwnerRequestOpen { return .openOwnerRequest(requestID: request) }

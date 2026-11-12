@@ -996,6 +996,42 @@ test('the shared Android fixture carries what notifyLoopMissed sends, key for ke
   }
 });
 
+// A terminal asking to be approved (docs/terminal-session-design.md): the owner's devices ring with the machine and the
+// code, collapsed per request. The shared Android fixture's `terminal-login` sample is this send, so Android's
+// PushMessage parses exactly what is sent (PushAuthorityTest) and fcm-transport.spec converts it to the data it holds.
+function terminalLoginHarness(status = 'PENDING') {
+  const { service, sent } = wakeupMissedHarness();
+  (service as any).prisma.terminalLogin = {
+    findUnique: async () => ({
+      ownerId: 'owner-1', runnerId: '019a0000-0000-7000-8000-00000000000c', machineName: 'dev-laptop', userCode: '7KQ-4MZ', status,
+    }),
+  };
+  return { service, sent };
+}
+
+test('a terminal asking to be approved rings with its machine and code, and the shared Android fixture is that send', async () => {
+  const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/android-push.fixture.json'), 'utf8'));
+  const { service, sent } = terminalLoginHarness();
+  await service.notifyTerminalLogin('019a0000-0000-7000-8000-00000000000b');
+  assert.equal(sent.length, 1);
+  const { payload, collapseId } = sent[0];
+  assert.deepEqual(payload.aps.alert, { title: 'Approve a terminal?', body: 'Terminal on dev-laptop · code 7KQ-4MZ' });
+  assert.deepEqual([payload.kind, payload.terminalLoginID, payload.runnerID],
+    ['terminal-login', '019a0000-0000-7000-8000-00000000000b', '019a0000-0000-7000-8000-00000000000c']);
+  assert.equal(payload.aps.badge, undefined);
+  assert.equal(collapseId, 'terminal-login-019a0000-0000-7000-8000-00000000000b');
+  const sample = fixture.samples.find((candidate: { name: string }) => candidate.name === 'terminal-login');
+  assert.ok(sample, 'the shared Android fixture has no terminal-login sample');
+  assert.equal(JSON.stringify(payload), JSON.stringify(sample.source));
+  assert.deepEqual([sample.pushType, sample.collapseId], ['alert', collapseId]);
+});
+
+test('a terminal request already decided rings nothing', async () => {
+  const { service, sent } = terminalLoginHarness('APPROVED');
+  await service.notifyTerminalLogin('019a0000-0000-7000-8000-00000000000b');
+  assert.equal(sent.length, 0);
+});
+
 test('a wakeup-missed push that fails is logged, never thrown at the worker', async () => {
   const { service, sent } = wakeupMissedHarness(async () => {
     throw new Error('APNs went away');

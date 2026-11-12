@@ -28,10 +28,13 @@ data class PushPayload(
     /** `owner-request`: the request, and its kind (DECISION, SECRET, MANUAL_STEP or CONFIRM), which names the notification's action. */
     val ownerRequestId: String? = null,
     val ownerRequestKind: String? = null,
+    /** `terminal-login`: the terminal sign-in waiting for the owner's Approve (docs/terminal-session-design.md). */
+    val terminalLoginId: String? = null,
 ) {
     val isOwnerItem get() = kind in ownerItemKinds
     val isReminder get() = kind == "approval" || isOwnerItem
     val isOwnerRequest get() = kind == OWNER_REQUEST
+    val isTerminalLogin get() = kind == TERMINAL_LOGIN
     /** An owner request's primary action (`orbit://owner-request/<id>`): the inbox, its card open on its input. Neither it nor
      * Later ends the request; the tap on the notification itself opens the session that asked, as [link] says. */
     val ownerRequestLink: String? get() = ownerRequestId?.takeIf { isOwnerRequest }?.let { "orbit://owner-request/$it" }
@@ -39,6 +42,8 @@ data class PushPayload(
     /** The existing ACTION_VIEW/OrbitLinks entry retains authentication and the caller's stack. */
     val link: String? get() = when {
         kind == "project-done" -> projectId?.let { "orbit://project/$it" }
+        // A terminal asking to be approved: the Waiting on you inbox, whose Open tab heads with its card (iOS `.openTerminalRequests`).
+        kind == TERMINAL_LOGIN -> terminalLoginId?.let { "orbit://terminal-login/$it" }
         kind == "watch-matched" -> watchId?.let { "orbit://watch/$it" }
         // About a machine: its sign-in lapsed, or its Claude connection to Anthropic is in a region Anthropic does not offer Claude in.
         kind == "engine-signed-out" || kind == "claude-region-blocked" -> runnerId?.let { "orbit://runner/$it" }
@@ -61,6 +66,7 @@ data class PushPayload(
         val ownerItemKinds = setOf("approve-merge-to-main", "coordinator-question", "escalated-to-you", "fuse-paused",
             "landed-without-confirmation")
         const val OWNER_REQUEST = "owner-request"
+        const val TERMINAL_LOGIN = "terminal-login"
     }
 }
 
@@ -79,7 +85,7 @@ data class PushMessage(
         private val kinds = PushPayload.ownerItemKinds + setOf("project-done", "approval", "finished", "failed", "agent-message",
             "engine-signed-out", "confirmation-problems", "watch-matched", "wiki-review-mode-manual",
             "wiki-review-mode-tiered", "wiki-maintenance-failing", "loop-missed", "wakeup-dropped", "claude-region-blocked",
-            PushPayload.OWNER_REQUEST)
+            PushPayload.OWNER_REQUEST, PushPayload.TERMINAL_LOGIN)
 
         /** No unknown version, malformed identifier, or partial route can become a notification. */
         fun parse(data: Map<String, String>): PushMessage? = try {
@@ -112,7 +118,8 @@ data class PushMessage(
             val payload = PushPayload(string("title"), string("body"), string("category"), string("threadId"),
                 string("kind"), number("badge"), clear, id("sessionID"), id("projectID"), id("openItemID"),
                 id("taskID"), id("recordID"), id("runnerID"), string("engine"), id("watchID"),
-                number("generation"), id("wikiSpaceID"), ownerRequestId = id("ownerRequestID"), ownerRequestKind = string("ownerRequestKind"))
+                number("generation"), id("wikiSpaceID"), ownerRequestId = id("ownerRequestID"), ownerRequestKind = string("ownerRequestKind"),
+                terminalLoginId = id("terminalLoginID"))
             if (type == PushType.ALERT) {
                 require(!payload.title.isNullOrBlank() && payload.body != null && payload.kind in kinds)
                 when (payload.kind) {
@@ -122,6 +129,8 @@ data class PushMessage(
                     "agent-message" -> Unit // Headless orbit notify deliberately names no session.
                     // A session filed an owner request: about that session, and the request its actions open.
                     PushPayload.OWNER_REQUEST -> require(payload.sessionId != null && payload.ownerRequestId != null)
+                    // A terminal asking to be approved names the request and the machine it asks for.
+                    PushPayload.TERMINAL_LOGIN -> require(payload.terminalLoginId != null && payload.runnerId != null)
                     "confirmation-problems" -> require(payload.sessionId != null && payload.taskId != null && payload.recordId != null)
                     // A confirmed region flip is about its runner's Claude Code, as a sign-out is about its runner's engine.
                     "engine-signed-out", "claude-region-blocked" -> require(payload.runnerId != null && !payload.engine.isNullOrBlank())
