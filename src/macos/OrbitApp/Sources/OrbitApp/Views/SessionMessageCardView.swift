@@ -8,8 +8,9 @@ import OrbitKit
 /// The words are the sending agent's and are drawn as they were sent; what the card adds is who sent
 /// them — the session's title, which opens it, the agent it runs as, and the task it runs — from the
 /// payload the control plane recorded beside the echo (OrbitKit's `SessionMessage`, read out of
-/// `sessionMessage`). The block delivery appended to tell the recipient the same thing is named on the
-/// foot line, folded, with anything else delivery appended.
+/// `sessionMessage`). The block delivery appended to tell the recipient the same thing is not shown
+/// again (`SessionMessageCard.splitNote`); anything else delivery appended is named on the foot line,
+/// folded.
 ///
 /// One view for both native clients: `src/ios/project.yml` compiles this folder in place. Web parity:
 /// `SessionMessageCard.tsx`, with every word from OrbitKit's `SessionMessageCard`, which
@@ -20,6 +21,8 @@ struct SessionMessageCardView: View {
     let text: String
     var ts: String?
     var undelivered: Bool = false
+    /// The line for a sender that runs narrower than this session (`SessionMessageCard.narrower`).
+    var narrower: String? = nil
     /// What delivery appended to the same turn (a `controlPlaneNote`), as its own folded entry.
     var attached: (kind: String, text: String)?
     /// Withdraws the message while it is still queued behind the running turn; nil once a runner has
@@ -51,6 +54,12 @@ struct SessionMessageCardView: View {
             head
             bubble
             foot
+            if let narrower {
+                // A sender that runs narrower than this session: in the foot line's voice, under it.
+                Text(narrower)
+                    .font(.orbitMeta).foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if attachedOpen, let attached { AttachedNoteBody(attached: attached) }
             if undelivered {
                 // Amber, not red: the message was handed to a session that has not confirmed it.

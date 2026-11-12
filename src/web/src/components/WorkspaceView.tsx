@@ -570,6 +570,7 @@ import { type QueuedTurn, type RunEvent, useSessionStream } from '../lib/useSess
 import { SessionConversation } from './SessionConversation';
 import { useWikiChatSessionCards } from './WikiDraftCard';
 import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
+import { useOpenTaskOverPage } from '../lib/taskInPlace';
 
 // The queue's types live with the stream that keeps the queue (lib/useSessionStream); the modules
 // and tests that import them from here still can.
@@ -2044,6 +2045,8 @@ export function WorkspaceView({
   const message = useToast();
   const qc = useQueryClient();
   const navigate = useNavigate();
+  // A task opens over this conversation, not on its own page (lib/taskInPlace).
+  const openTaskOverPage = useOpenTaskOverPage();
   const [searchParams, setSearchParams] = useSearchParams();
   // Merge and Commit finish asynchronously on a runner heartbeat. Keep accepted operations by
   // session id so their result continues polling even if the user opens another conversation.
@@ -8424,7 +8427,7 @@ export function WorkspaceView({
     fastModeUsable,
     shownFastMode,
     pickFastMode,
-    openTask: () => navigate(`/tasks/${encodeId(selected.taskId)}`),
+    openTask: () => openTaskOverPage(encodeId(selected.taskId)),
   });
   const selectedSessionTagIds = ((selected?.tags ?? []) as SessionTagRef[]).map((t) => t.id);
   const setTagsFromMenu = ({
@@ -9264,7 +9267,7 @@ export function WorkspaceView({
                 type="button"
                 className="workspace-header-task"
                 title={`Back to task · ${selected.taskTitle ?? ''}`}
-                onClick={() => navigate(`/tasks/${encodeId(selected.taskId)}`)}
+                onClick={() => openTaskOverPage(encodeId(selected.taskId))}
               >
                 <ArrowLeftOutlined />
                 <span className="workspace-header-task-name">{selected.taskTitle ?? 'Back to task'}</span>

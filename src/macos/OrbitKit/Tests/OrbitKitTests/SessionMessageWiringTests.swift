@@ -72,10 +72,11 @@ final class SessionMessageWiringTests: XCTestCase {
                        "the card is no longer the first thing a user turn is asked about")
         // The branch itself: the card, drawn from the turn's own words and note, and then on to the
         // readings every other turn has always had.
-        XCTAssertEqual(Array(user[(first + 1)...].prefix(5)), [
+        XCTAssertEqual(Array(user[(first + 1)...].prefix(6)), [
+            "let note = SessionMessageCard.splitNote(b.note)",
             "SessionMessageCardView(card: card, text: b.text, ts: b.ts,",
-            "undelivered: undelivered,",
-            "attached: b.attached, onCancelQueued: cancel,",
+            "undelivered: undelivered, narrower: note.narrower,",
+            "attached: note.attached, onCancelQueued: cancel,",
             "revealed: revealedItemID == b.id)",
             "} else if let card = b.itemCard {",
         ], "a turn with a sender is not drawn as the session-message card")

@@ -33,6 +33,7 @@ import io.orbitd.android.core.cards.AntigravityRepair
 import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.cards.QuestionRecords
 import io.orbitd.android.core.cards.transcriptCards
+import io.orbitd.android.core.cards.SessionMessageNote
 import io.orbitd.android.core.cards.withoutWakeBlocks
 import io.orbitd.android.cards.TranscriptCardView
 import io.orbitd.android.cards.isOrbitTurnCard
@@ -253,7 +254,9 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             val atts = (shown.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
             val attachmentOnly = shown.type == "user" && shown.body().isBlank() && atts.isNotEmpty()
             // What delivery appended is not the person's: their row holds their words, and one line at its foot names the rest.
-            val note = shown.fields.string("controlPlaneNote")?.takeIf { it.isNotBlank() }
+            // Another session's message: its own block only tells the agent what the card shows, so it is not folded again (SessionMessageNote).
+            val sessionNote = if (shown.fields["sessionMessage"] is JsonObject) SessionMessageNote.split(shown.fields.string("controlPlaneNote")) else null
+            val note = (sessionNote?.rest ?: shown.fields.string("controlPlaneNote"))?.takeIf { it.isNotBlank() }
                 // A wake's blocks are its line (A08-11); only what else the note carried is an attached entry.
                 ?.let { if (cards.any { card -> card.key.endsWith(":wake") }) withoutWakeBlocks(it) else it }?.takeIf { it.isNotBlank() }
             val words = if (shown.type == "user") shown.personWords() else shown.body()
@@ -270,6 +273,8 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             // A message naming no sender session draws no bubble: it says whose it is not under its words.
             if (bubble == null && shown.fields["sessionMessage"] is JsonObject)
                 Text("Sent by another Orbit session, not by you", style = MaterialTheme.typography.bodySmall)
+            // A sender that runs narrower than this session: the one fact of its block the bubble does not show (SessionMessageNote).
+            sessionNote?.narrower?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)) }
             // How a steer of the reader's came out; words that never reached the engine are offered back to the composer.
             row.steer?.let { steer ->
                 val words = shown.personWords().trim()

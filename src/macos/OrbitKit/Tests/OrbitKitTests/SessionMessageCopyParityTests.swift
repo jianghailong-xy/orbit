@@ -127,6 +127,17 @@ final class SessionMessageCopyParityTests: XCTestCase {
                                                  text: "hi").label, "From Worker")
     }
 
+    /// A narrower sender gets the same line at both ends, and the same block is left out of the fold.
+    func testTheNarrowerLineAndTheBlockLeftOutAreTheWebs() throws {
+        let web = try flat(Self.webLib)
+        XCTAssertTrue(web.contains("`Sender runs in ${modeLabel(from)}, narrower than this session's ${modeLabel(to)}: not taken as your approval`"),
+                      "the narrower sender's line drifted from \(Self.webLib)")
+        XCTAssertTrue(web.contains("/<orbit-session-message\\b[^>]*>[\\s\\S]*?<\\/orbit-session-message>/g"),
+                      "the web no longer leaves the same block out")
+        XCTAssertTrue(web.contains("/The sender runs in (\\S+), which is narrower than this session's (\\S+)\\./"),
+                      "the web reads the narrower sentence differently")
+    }
+
     /// The foot line opens with the time, then the task, the same way at both ends; who this is not
     /// is the sender line's tooltip (docs/mocks/session-message-bubble).
     func testTheFootLineIsBuiltTheSameWay() throws {

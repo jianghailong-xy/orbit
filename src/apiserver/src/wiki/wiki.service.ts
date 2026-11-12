@@ -51,6 +51,7 @@ import {
   type WikiRefusalCode,
   type WikiReviewEffect,
   type WikiReviewMode,
+  type WikiSearchUnavailable,
   type WikiSimilar,
   type WikiSourceKind,
   type WikiSpaceSettings,
@@ -263,8 +264,9 @@ const WIKI_HTTP_STATUS: Readonly<Record<WikiRefusalCode, number>> = {
 
 /** A refusal carrying a contract code, thrown out of the service and answered by the door. */
 export class WikiRefusalError extends HttpException {
-  constructor(readonly refusal: WikiRefusal) {
-    super(refusal, WIKI_HTTP_STATUS[refusal.code]);
+  /** `status` is the code's own unless a route says otherwise (a read of an entry with no wiki is a 404). */
+  constructor(readonly refusal: WikiRefusal, status: number = WIKI_HTTP_STATUS[refusal.code]) {
+    super(refusal, status);
   }
 }
 
@@ -925,6 +927,20 @@ export function topicTitleFromSlug(slug: string): string {
   return [words[0][0].toUpperCase() + words[0].slice(1), ...words.slice(1)].join(' ');
 }
 
+/**
+ * A session's call where there is no wiki (docs/wiki-explicit-creation-design.md §3.3): what its search answers with, and
+ * the sentence a write is refused with. Agents read these; the owner is the only one who starts a wiki.
+ */
+const NO_WIKI = {
+  unavailable: 'no_wiki',
+  message: 'No wiki for this repository yet, so nothing was recorded. Only the owner can start one: if they asked for a '
+    + 'wiki here, file request_owner_action with kind WIKI_CREATE; otherwise carry on without it.',
+} as const;
+const WIKI_IN_TRASH = {
+  unavailable: 'wiki_in_trash',
+  message: 'The wiki for this repository is in Trash: the owner restores it from Trash.',
+} as const;
+
 // ── The service ─────────────────────────────────────────────────────────────────────────────────
 
 @Injectable()
@@ -948,14 +964,29 @@ export class WikiService {
   // ── Spaces (§2.1) ─────────────────────────────────────────────────────────────────────────────
 
   /**
-   * The space a runner call writes into: the calling session's workspace, bound on first use, or a
-   * space a headless call named (it has no session, and so no workspace to derive one from).
+   * The space a runner call writes into: the calling session's workspace, bound on first use to the wiki already in use
+   * for its repository, or a space a headless call named (it has no session, and so no workspace to derive one from).
    *
    * Binding a workspace is what the owner agreed to share (contract `readBoundary`), so this is also
-   * the read boundary: a session whose workspace is bound to no space is refused WIKI_SPACE_UNBOUND
-   * with one sentence saying how the owner binds it.
+   * the read boundary: a session whose workspace is in no wiki is refused WIKI_SPACE_UNBOUND with one sentence
+   * saying why. NOTHING HERE MAKES A WIKI (docs/wiki-explicit-creation-design.md §3.1): only the owner does, so a
+   * repository with no wiki in use is told so rather than given an empty one.
    */
   async resolveSpaceForCall(ownerId: string, sessionId: string | null, namedSpaceId?: string | null): Promise<string> {
+    const found = await this.locateSpaceForCall(ownerId, sessionId, namedSpaceId);
+    if ('spaceId' in found) return found.spaceId;
+    return refuse('WIKI_SPACE_UNBOUND', found.message);
+  }
+
+  /**
+   * The space a runner call reads, or why there is none: `unavailable` and the sentence a write is refused with
+   * (design §3.3). A workspace the owner left out is still refused here, and a headless call that names no space too.
+   */
+  async locateSpaceForCall(
+    ownerId: string,
+    sessionId: string | null,
+    namedSpaceId?: string | null,
+  ): Promise<{ spaceId: string } | { unavailable: WikiSearchUnavailable; message: string }> {
     if (sessionId) {
       const session = await this.prisma.session.findFirst({
         where: { id: sessionId, ownerId },
@@ -964,27 +995,36 @@ export class WikiService {
       if (!session) throw new NotFoundException('no such session');
       if (session.workspaceId) {
         // A row naming a wiki in Trash reads as no row (contract `space.trash.sessions`): a workspace on a repository
-        // goes on to the wiki in use for it, made empty if there is none, and one with no repository is told why.
+        // goes on to the wiki in use for it, and one with no repository is told its wiki is in Trash.
         const bound = await this.prisma.wikiSpaceWorkspace.findFirst({
           where: { workspaceId: session.workspaceId, ownerId },
           select: { spaceId: true, leftOutAt: true, space: { select: { deletedAt: true } } },
         });
         const inUse = bound && bound.space.deletedAt === null ? bound : null;
         if (inUse?.leftOutAt) return refuse('WIKI_SPACE_UNBOUND', 'The owner left this workspace out of its wiki.');
-        if (inUse) return inUse.spaceId;
+        if (inUse) return { spaceId: inUse.spaceId };
         const workspace = await this.prisma.workspace.findFirst({
           where: { id: session.workspaceId, ownerId },
-          select: { id: true, name: true, repoUrl: true },
+          select: { id: true, repoUrl: true },
         });
         if (workspace?.repoUrl) {
-          return this.bindOnFirstUse(ownerId, workspace.id, workspace.repoUrl, workspace.name);
+          const normalized = normalizeRepoUrl(workspace.repoUrl);
+          const spaceId = normalized === null ? null : await this.bindOnFirstUse(ownerId, workspace.id, normalized);
+          if (spaceId) return { spaceId };
+          const trashed = normalized === null
+            ? null
+            : await this.prisma.wikiSpace.findFirst({
+              where: { ownerId, trashedRepoUrlNorm: normalized, deletedAt: { not: null } },
+              select: { id: true },
+            });
+          return trashed ? WIKI_IN_TRASH : NO_WIKI;
         }
         if (bound && !namedSpaceId) {
-          return refuse(
-            'WIKI_SPACE_UNBOUND',
-            'The wiki this workspace is in was moved to Trash: the owner restores it from Trash, or binds the workspace '
+          return {
+            unavailable: 'wiki_in_trash',
+            message: 'The wiki this workspace is in was moved to Trash: the owner restores it from Trash, or binds the workspace '
               + 'to another wiki in Wiki settings.',
-          );
+          };
         }
       }
     }
@@ -994,38 +1034,30 @@ export class WikiService {
         select: { id: true },
       });
       if (!space) throw new NotFoundException('no such wiki space');
-      return space.id;
+      return { spaceId: space.id };
     }
+    if (sessionId) return NO_WIKI;
     return refuse(
       'WIKI_SPACE_UNBOUND',
-      'This workspace is bound to no wiki space: the owner binds it in Wiki settings '
-        + '(POST /api/wiki/spaces/:id/workspaces), or sets the workspace\'s repository URL so that it binds on first use.',
+      'A call with no session is in no workspace, so it names the wiki space it writes to (spaceId).',
     );
   }
 
-  /** A workspace with a repository joins its owner's space for that repository, creating it if new. */
-  private async bindOnFirstUse(
-    ownerId: string,
-    workspaceId: string,
-    repoUrl: string,
-    workspaceName: string,
-  ): Promise<string> {
-    const normalized = normalizeRepoUrl(repoUrl);
-    if (normalized === null) {
-      return refuse(
-        'WIKI_SPACE_UNBOUND',
-        'This workspace\'s repository URL says nothing a wiki space can be keyed by: the owner sets it in '
-          + 'the workspace form, or binds the workspace in Wiki settings.',
-      );
-    }
-    const bound = await withTransactionRetry(
+  /**
+   * A workspace with a repository joins its owner's wiki in use for that repository: one row, written on first use.
+   * Null when the repository has no wiki in use, and then nothing is written — a tool call never makes a wiki
+   * (docs/wiki-explicit-creation-design.md §3.1), and so never asks for a plan draft either.
+   */
+  private async bindOnFirstUse(ownerId: string, workspaceId: string, normalized: string): Promise<string | null> {
+    return withTransactionRetry(
       this.prisma,
       async (tx) => {
         const existing = await tx.wikiSpace.findFirst({
-          where: { ownerId, repoUrlNorm: normalized },
+          where: { ownerId, repoUrlNorm: normalized, deletedAt: null },
           select: { id: true },
         });
-        const spaceId = existing?.id ?? (await this.createSpaceRow(tx, ownerId, workspaceName, normalized)) ;
+        if (!existing) return null;
+        const spaceId = existing.id;
         // The binding is keyed by the workspace alone (`workspace_id` is unique), so a second session
         // of the same workspace finds the row it already has rather than making a second one.
         await tx.wikiSpaceWorkspace.upsert({
@@ -1040,14 +1072,10 @@ export class WikiService {
           where: { workspaceId, ownerId, space: { deletedAt: { not: null } } },
           data: { spaceId, leftOutAt: null },
         });
-        return { spaceId, created: !existing };
+        return spaceId;
       },
       loggedRetry(this.logger, 'wiki.bindOnFirstUse'),
     );
-    // A space made here, where a session's proposal needed one, is a new space like any other: its
-    // plan's first draft is asked for (contract `plan.jobs.trigger`).
-    if (bound.created) await this.spaceCreated(ownerId, bound.spaceId, null);
-    return bound.spaceId;
   }
 
   /**
