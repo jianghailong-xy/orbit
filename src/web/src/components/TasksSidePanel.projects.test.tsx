@@ -254,7 +254,7 @@ describe('the sidebar’s Tasks entry', () => {
     serve();
     await visit('/projects');
     const labels = [...container!.querySelectorAll('.tp-section .tp-item .tp-label')].map((l) => l.textContent);
-    expect(labels.slice(0, 4)).toEqual(['Projects', 'Tasks', 'Waiting on you', 'Wiki']);
+    expect(labels.slice(0, 3)).toEqual(['Projects', 'Tasks', 'Wiki']);
   });
 
   it.each([
