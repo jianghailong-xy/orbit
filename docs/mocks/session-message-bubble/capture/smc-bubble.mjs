@@ -22,6 +22,8 @@ const SCENES = [
   ['cur-desktop', 'cur', 2000, 1000, 1, 64, 'dark'],
   ['prop-desktop', 'prop', 2000, 1000, 1, 64, 'dark'],
   ['prop-desktop-short', 'prop', 2000, 1000, 1, 616, 'dark'],
+  ['cur-psc', 'cur', 2000, 1000, 1, 48, 'dark'],
+  ['prop-psc', 'prop', 2000, 1000, 1, 48, 'dark'],
   ['cur-phone', 'cur', 390, 844, 2, 64, 'dark'],
   ['prop-phone', 'prop', 390, 844, 2, 64, 'dark'],
 ];
@@ -57,7 +59,7 @@ for (const [name, tree, W, H, dsf, seq, theme] of SCENES) {
   await settle(page);
   await page.evaluate((s) => { for (const r of document.querySelectorAll('[data-orbit-fold]')) r.dispatchEvent(new CustomEvent('orbit:reveal-exchange', { detail: { seq: s } })); }, seq);
   await page.waitForTimeout(1000);
-  const wrap = page.locator('.smc-wrap', { has: page.locator(`[data-seq="${seq}"]`) }).first();
+  const wrap = page.locator('.smc-wrap, .psc-wrap', { has: page.locator(`[data-seq="${seq}"]`) }).first();
   await wrap.waitFor({ timeout: 30000 });
   await wrap.evaluate((w) => {
     w.scrollIntoView({ block: 'start' });
@@ -65,7 +67,7 @@ for (const [name, tree, W, H, dsf, seq, theme] of SCENES) {
     while (p && p !== document.body) { if (p.scrollHeight > p.clientHeight + 4 && getComputedStyle(p).overflowY !== 'visible') { p.scrollTop -= 90; break; } p = p.parentElement; }
   });
   await page.mouse.move(2, 2); await page.waitForTimeout(400);
-  const b = await wrap.evaluate((w) => { const r = w.getBoundingClientRect(); const c = w.querySelector('.smc').getBoundingClientRect(); const col = w.parentElement.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, cardW: c.width, cardH: c.height, colX: col.x, colW: col.width }; });
+  const b = await wrap.evaluate((w) => { const r = w.getBoundingClientRect(); const c = w.querySelector('.smc, .psc').getBoundingClientRect(); const col = w.parentElement.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, cardW: c.width, cardH: c.height, colX: col.x, colW: col.width }; });
   boxes[name] = b;
   await page.screenshot({ path: `${OUT}/${name}.png` });
   console.log(name, JSON.stringify(b), errors.slice(0, 2));

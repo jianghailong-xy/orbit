@@ -106,10 +106,26 @@ index fee4b64..b9742a7 100644
    );
  }
 diff --git a/src/web/src/index.css b/src/web/src/index.css
-index 1f44325..093b553 100755
+index 1f44325..3e176e5 100755
 --- a/src/web/src/index.css
 +++ b/src/web/src/index.css
-@@ -23612,57 +23612,62 @@ div.landing-jobs-open {
+@@ -23251,6 +23251,7 @@ div.landing-jobs-open {
+ }
+ .oic {
+   width: 100%;
++  max-width: 720px;
+   padding: 10px 12px;
+   border: 1px solid var(--warning-border);
+   border-radius: 12px;
+@@ -23426,6 +23427,7 @@ div.landing-jobs-open {
+ }
+ .tsc {
+   width: 100%;
++  max-width: 720px;
+   padding: 10px 12px;
+   border: 1px solid var(--brand-border);
+   border-radius: 12px;
+@@ -23612,57 +23614,62 @@ div.landing-jobs-open {
     words are another agent's, and the head says whose. */
  .smc-wrap {
    display: flex;
@@ -126,7 +142,7 @@ index 1f44325..093b553 100755
 +  flex-direction: column;
 +  align-items: flex-start;
 +  width: fit-content;
-+  max-width: 80%;
++  max-width: min(720px, 100%);
 +  margin: 8px auto 8px 0;
  }
 -.smc-head {
@@ -203,7 +219,7 @@ index 1f44325..093b553 100755
    padding: 0;
    border: 0;
    background: none;
-@@ -23672,16 +23677,27 @@ div.landing-jobs-open {
+@@ -23672,16 +23679,27 @@ div.landing-jobs-open {
    cursor: pointer;
  }
  .smc-meta {
@@ -236,7 +252,7 @@ index 1f44325..093b553 100755
  .smc-undelivered {
    margin-top: 4px;
    color: var(--warning);
-@@ -23707,33 +23723,14 @@ div.landing-jobs-open {
+@@ -23707,33 +23725,14 @@ div.landing-jobs-open {
  }
  /* A message that asks for a reply (session requests): what it asks, by when, and where it stands —
     read live, so the state word moves while the card does not. */
@@ -274,3 +290,19 @@ index 1f44325..093b553 100755
  .smc-request-state-no_reply,
  .smc-request-state-recipient_ended,
  .smc-request-state-expired,
+@@ -23831,6 +23830,7 @@ div.landing-jobs-open {
+ }
+ .psc {
+   width: 100%;
++  max-width: 720px;
+   padding: 10px 12px;
+   border: 1px solid var(--brand-border);
+   border-radius: 12px;
+@@ -23965,6 +23965,7 @@ div.landing-jobs-open {
+ }
+ .crc {
+   width: 100%;
++  max-width: 720px;
+   padding: 10px 12px;
+   border: 1px solid var(--brand-border);
+   border-radius: 12px;
