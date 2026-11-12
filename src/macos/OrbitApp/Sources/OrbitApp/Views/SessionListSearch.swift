@@ -13,21 +13,11 @@ extension View {
         if !isEnabled {
             self
         } else if #available(iOS 26.0, *), fromBottom {
-            searchable(text: text, prompt: "Search sessions")
-                .toolbar { DefaultToolbarItem(kind: .search, placement: .bottomBar) }
+            modifier(BottomSearchMode(text: text))
         } else {
             searchable(text: text, placement: .navigationBarDrawer(displayMode: .always),
                        prompt: "Search sessions")
         }
-    }
-
-    /// Search mode ends only at the field's own close button. iOS ends it by itself once an empty
-    /// field loses focus, and scrolling a list under a search field lowers the keyboard, so while the
-    /// query is empty a scroll leaves the keyboard (and the search) where they are. With a query the
-    /// keyboard may go: a field holding text stays in search mode without focus. The other way focus
-    /// was lost, a tap on the background, is held off in `KeyboardDismissInstaller`.
-    func keepsEmptySearchOnScroll(query: String) -> some View {
-        scrollDismissesKeyboard(query.isEmpty ? .never : .automatic)
     }
 
     /// Hides the bottom search field while the list scrolls down and brings it back as soon as the
@@ -40,6 +30,86 @@ extension View {
         } else {
             self
         }
+    }
+}
+
+/// The bottom field's search mode, which ends only at its close button (the X beside it), as in
+/// Notes (owner, 2026-11-12, docs/mocks/ios-search-mode-like-notes). A scroll or a tap elsewhere only
+/// lowers the keyboard: the field stays open at the bottom with its X.
+///
+/// iOS 26 ends search by itself once an empty field loses focus — the list's scroll, the app's
+/// tap-to-lower-the-keyboard (`KeyboardDismissInstaller`), a row's push — and reports that the same
+/// way as the X: `isPresented` turns false. What tells them apart is the tap just before it:
+/// `SearchCloseTap` remembers whether the last tap landed on the search field's own chrome. Any other
+/// ending is undone: search mode comes back without the keyboard, at once if the list is the page on
+/// screen, or when it is again (a pushed conversation, Settings).
+@available(iOS 26.0, *)
+private struct BottomSearchMode: ViewModifier {
+    @Binding var text: String
+    /// Search mode as the reader left it.
+    @State private var presented = false
+    /// iOS ended search mode while the list was covered; it comes back when the list does.
+    @State private var restoreOnReturn = false
+    @FocusState private var focused: Bool
+    /// The list is the page on screen — nothing pushed over it, no Settings sheet (`CompactShell`).
+    @Environment(\.liveRowCues) private var onScreen
+
+    func body(content: Content) -> some View {
+        content
+            .searchable(text: $text, isPresented: Binding(get: { presented }, set: setPresented),
+                        prompt: "Search sessions")
+            .searchFocused($focused)
+            .toolbar { DefaultToolbarItem(kind: .search, placement: .bottomBar) }
+            .onChange(of: onScreen) { _, shown in
+                if shown && restoreOnReturn { restore() }
+            }
+    }
+
+    private func setPresented(_ on: Bool) {
+        presented = on
+        // Used up on every change, so the tap that opened the field can't pass for a close later.
+        let closed = SearchCloseTap.consume()
+        if on || closed {
+            restoreOnReturn = false
+            return
+        }
+        if onScreen {
+            // The next turn: the system is still taking this search down in this one.
+            Task { @MainActor in restore() }
+        } else {
+            restoreOnReturn = true
+        }
+    }
+
+    /// Search mode back on, the keyboard down.
+    private func restore() {
+        restoreOnReturn = false
+        presented = true
+        focused = false
+    }
+}
+
+/// Whether the last tap in the app landed on the search field's own chrome — the X beside the
+/// bottom field above all — so `BottomSearchMode` can tell the reader closing search from iOS ending
+/// it. Fed by the window's tap recognizer (`KeyboardDismissInstaller`), which sees every tap.
+enum SearchCloseTap {
+    private static var last: (at: Date, onSearch: Bool)?
+
+    static func record(_ touch: UITouch) {
+        var view = touch.view
+        var onSearch = false
+        while let current = view, !onSearch {
+            onSearch = current is UISearchBar || String(describing: type(of: current)).contains("Search")
+            view = current.superview
+        }
+        last = (Date(), onSearch)
+    }
+
+    /// True once for a search-chrome tap in the last moment; the answer is used up either way.
+    static func consume() -> Bool {
+        defer { last = nil }
+        guard let last else { return false }
+        return last.onSearch && Date().timeIntervalSince(last.at) < 1
     }
 }
 
