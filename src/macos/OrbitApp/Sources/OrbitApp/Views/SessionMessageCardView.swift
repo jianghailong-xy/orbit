@@ -28,6 +28,10 @@ struct SessionMessageCardView: View {
     var onCancelQueued: (() -> Void)? = nil
 
     @Environment(\.openURL) private var openURL
+    /// The app's own link door: the sender's session and its task are pushed over a phone's
+    /// conversation (see `opensPagesOverConsole`), so the back swipe returns to it.
+    @Environment(AppModel.self) private var app: AppModel?
+    @Environment(\.opensPagesOverConsole) private var overConsole
     @State private var expanded = false
     /// Collapse a giant message past this many characters, as the owner's own bubble does: one huge
     /// Text lays out synchronously and stalls the console.
@@ -74,6 +78,12 @@ struct SessionMessageCardView: View {
         )
     }
 
+    /// One of this card's links through the app's own link door, told whether the card is in a
+    /// phone's conversation: there what it opens is pushed over it, elsewhere it routes.
+    private func openLink(_ url: URL) {
+        if app?.openOrbitLink(url, overConsole: overConsole) != true { openURL(url) }
+    }
+
     /// The queue's own line while the message waits behind a running turn: how it stands, and Cancel.
     private func queuedFoot(_ cancel: @escaping () -> Void) -> some View {
         HStack(spacing: 8) {
@@ -96,7 +106,7 @@ struct SessionMessageCardView: View {
                 .font(.orbitLabel).foregroundStyle(.secondary)
             if let url = SessionMessageCard.sessionLink(card) {
                 Button {
-                    openURL(url)
+                    openLink(url)
                 } label: {
                     Text(SessionMessageCard.title(card))
                         .font(.orbitLabel.weight(.semibold))
@@ -127,7 +137,7 @@ struct SessionMessageCardView: View {
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             if let url = SessionMessageCard.taskLink(card) {
-                Button(SessionMessageCard.openTask) { openURL(url) }
+                Button(SessionMessageCard.openTask) { openLink(url) }
                     .buttonStyle(.plain).font(.orbitMeta).foregroundStyle(.tint)
             }
         }

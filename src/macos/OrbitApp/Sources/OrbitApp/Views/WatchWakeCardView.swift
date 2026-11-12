@@ -21,6 +21,9 @@ struct WatchWakeCardView: View {
     @Environment(AppModel.self) private var model
     /// The session's Tasks card, which names the tasks this conversation filed — set by the console.
     @Environment(CreatedTasksModel.self) private var createdTasks: CreatedTasksModel?
+    /// In a phone's conversation, a target this wake names is pushed over it (see
+    /// `opensPagesOverConsole`), so the back swipe returns to the conversation.
+    @Environment(\.opensPagesOverConsole) private var overConsole
     let wake: WatchWake
     /// Exactly what the agent received, kept for the fold — never re-derived from the line.
     let text: String
@@ -203,7 +206,7 @@ struct WatchWakeCardView: View {
         let line = WatchWakeCard.changedLine(target, name: name(of: target))
         let tone = WatchWakeCard.isFailed(target) ? AnyShapeStyle(.red) : AnyShapeStyle(.tint)
         if let destination = route(for: target) {
-            Button { model.route(to: destination) } label: {
+            Button { model.openFromConversation(destination, overConsole: overConsole) } label: {
                 Text(line).font(.orbitMeta).foregroundStyle(tone).lineLimit(1)
             }
             .buttonStyle(.plain)
@@ -262,9 +265,11 @@ struct WatchWakeCardView: View {
     }
 
     private func route(for target: WatchWakeTarget) -> Route? {
+        // The wake's payload names each target by the stored UUID; the lists and every page read
+        // one by its public id, which is the spelling a pushed page hands the task detail store.
         switch target.kind {
-        case .session: return .session(target.id)
-        case .task: return .task(target.id)
+        case .session: return .session(PublicID.toPublic(target.id))
+        case .task: return .task(PublicID.toPublic(target.id))
         case .unknown: return nil
         }
     }

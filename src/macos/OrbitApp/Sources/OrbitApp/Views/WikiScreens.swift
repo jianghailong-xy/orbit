@@ -504,6 +504,9 @@ struct WikiIndexScreen: View {
 struct WikiEntryView: View {
     @Environment(AppModel.self) private var model
     let entryID: String
+    /// How a source row navigates. The phone's stacks push the task over the entry page, so the back
+    /// swipe returns to it; the wide shells route it, their sidebar being the way back.
+    var rowNavigation: SessionRowNavigation = .selection
 
     private enum Form: Identifiable {
         case edit, supersede
@@ -594,7 +597,12 @@ struct WikiEntryView: View {
             retire: { retiring = true },
             copyLink: { copyLink(wiki, detail.entry) },
             openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) },
-            openTask: { id in model.route(to: .task(PublicID.toPublic(id))) },
+            // A source's task opens over the entry page on a phone: pushed on the stack the page is
+            // on, so back returns here instead of landing on the Tasks list.
+            openTask: { id in
+                if rowNavigation == .push { model.push(.taskDetail(taskID: PublicID.toPublic(id))) }
+                else { model.route(to: .task(PublicID.toPublic(id))) }
+            },
             confirm: {
                 Task { finish(await wiki.confirm(detail.entry), done: WikiModeCopy.confirmed, failure: WikiCopy.entryConfirmFailed) }
             },

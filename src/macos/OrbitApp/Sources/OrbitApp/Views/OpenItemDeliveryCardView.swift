@@ -37,6 +37,10 @@ struct OpenItemDeliveryCardView: View {
     var onCancelQueued: (() -> Void)?
 
     @Environment(\.openURL) private var openURL
+    /// The app's own link door: the task, session and landing this card names are pushed over a
+    /// phone's conversation (see `opensPagesOverConsole`), so the back swipe returns to it.
+    @Environment(AppModel.self) private var app: AppModel?
+    @Environment(\.opensPagesOverConsole) private var overConsole
     @State private var allFiles = false
     @State private var showingRaw = false
 
@@ -133,7 +137,7 @@ struct OpenItemDeliveryCardView: View {
             Text("Task").font(.orbitLabel).foregroundStyle(.secondary)
             if let url {
                 Button {
-                    openURL(url)
+                    openLink(url)
                 } label: {
                     Text(task.title)
                         .font(.orbitLabel)
@@ -218,11 +222,11 @@ struct OpenItemDeliveryCardView: View {
     private var links: some View {
         HStack(spacing: 12) {
             if let url = OpenItemDeliveryCard.taskLink(card) {
-                Button(OpenItemDeliveryCard.openTask) { openURL(url) }
+                Button(OpenItemDeliveryCard.openTask) { openLink(url) }
                     .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.tint)
             }
             if let url = OpenItemDeliveryCard.sessionLink(card) {
-                Button(OpenItemDeliveryCard.openSession) { openURL(url) }
+                Button(OpenItemDeliveryCard.openSession) { openLink(url) }
                     .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.tint)
             }
             // The landing this failure came from (§2.9 LS6, board v4 06 b): the third link, after
@@ -233,6 +237,12 @@ struct OpenItemDeliveryCardView: View {
             }
             Spacer(minLength: 0)
         }
+    }
+
+    /// One of this card's links through the app's own link door, told whether the card is in a
+    /// phone's conversation: there what it opens is pushed over it, elsewhere it routes.
+    private func openLink(_ url: URL) {
+        if app?.openOrbitLink(url, overConsole: overConsole) != true { openURL(url) }
     }
 
     /// The paragraph the agent was handed, exactly as it read it — one tap away and folded by

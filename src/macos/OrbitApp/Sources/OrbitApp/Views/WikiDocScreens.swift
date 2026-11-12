@@ -53,6 +53,9 @@ extension AppModel {
 struct WikiDocScreen: View {
     @Environment(AppModel.self) private var model
     let address: WikiDocAddress
+    /// How a footnote's source navigates. The phone's stack pushes the task over the document, so the
+    /// back swipe returns to the sentence it was cited under; the wide shells route it.
+    var rowNavigation: SessionRowNavigation = .selection
 
     @State private var contentsShown = false
     /// When the reader last looked at this document before this visit — or, on a first one, when it began: a section
@@ -209,7 +212,11 @@ struct WikiDocScreen: View {
             if !model.openOrbitLink(SessionRecordLink.url(session: session, record: record)) {
                 model.open(.session(id: PublicID.toPublic(session)))
             }
-        case .task(let id):     model.open(.task(id: PublicID.toPublic(id)))
+        // A task opens over the document on a phone: pushed on the stack the page is on, so back
+        // returns to the footnote it was cited under instead of landing on the Tasks list.
+        case .task(let id):
+            if rowNavigation == .push { model.push(.taskDetail(taskID: PublicID.toPublic(id))) }
+            else { model.open(.task(id: PublicID.toPublic(id))) }
         case .session(let id):  model.open(.session(id: PublicID.toPublic(id)))
         case .project(let id):  model.open(.project(id: PublicID.toPublic(id)))
         case .external(let url): model.openExternal(url)

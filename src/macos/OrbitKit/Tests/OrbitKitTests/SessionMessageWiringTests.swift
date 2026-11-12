@@ -123,7 +123,11 @@ final class SessionMessageWiringTests: XCTestCase {
         let card = statements(try source(Self.cardPath))
         XCTAssertTrue(card.contains("if let url = SessionMessageCard.sessionLink(card) {"),
                       "the sender's title is no longer a link to the sending session")
-        XCTAssertTrue(card.contains("openURL(url)"), "the link opens nowhere")
+        // The title and "Its task" go through the app's own door, told by the console's
+        // `opensPagesOverConsole` that it is a phone's conversation, and fall back to the
+        // environment action elsewhere.
+        XCTAssertTrue(card.contains("private func openLink(_ url: URL) {"), "the link opens nowhere")
+        XCTAssertTrue(card.contains("if app?.openOrbitLink(url, overConsole: overConsole) != true { openURL(url) }"))
         XCTAssertTrue(card.contains("Text(SessionMessageCard.title(card))"))
         XCTAssertFalse(card.contains { $0.hasPrefix("#if os(") }, "the card differs by platform")
     }
