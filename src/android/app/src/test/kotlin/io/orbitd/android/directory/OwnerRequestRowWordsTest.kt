@@ -6,7 +6,6 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.assertExists
 import io.orbitd.android.TestOrbitApplication
 import io.orbitd.android.directory.SessionLine.Tone
 import io.orbitd.android.ui.OrbitTheme

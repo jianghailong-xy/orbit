@@ -115,7 +115,7 @@ class TaskMoveCardDeviceTest : IncrementDeviceTest() {
         verify("it names the source and its state", textOf("$card:from").startsWith("From Runner link v1") && textOf("$card:from").endsWith("(Done)"))
         verify("three moves with their criteria", (1..3).all { textOf("$card:move:${moveId(it)}:line") ==
             "Task to move · Target criterion requested: Criterion ${it + 3}" } && !exists(hasTestTag("$card:move:${moveId(4)}"), unmerged = true))
-        verify("Show all 8", textOf("$card:show-all") == "Show all 8")
+        verify("Show all 8", says("$card:show-all", "Show all 8"))
         verify("the batch's presses", says("$card:approve", "Approve 8 moves…") && says("$card:refuse", "Refuse…"))
         verify("the needs-you bar counts it", textOf("needs-you-bar-text").startsWith("1 open question"))
         capture("1-card")

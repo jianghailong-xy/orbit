@@ -11,6 +11,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.*
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.TestOrbitApplication
@@ -73,7 +74,9 @@ class TaskMoveCardTest {
     @After fun tearDown() { scope.cancel(); runBlocking { fixture.auth.logout() }; fixture.close() }
 
     private val key get() = TaskMoves.key(store.state.value.batches!!.first())
-    private fun node(suffix: String) = compose.onNodeWithTag("task-moves:$key:$suffix", useUnmergedTree = true)
+    /** A button merges its label into itself, so it is read in the merged tree; everything else in the unmerged one. */
+    private fun node(suffix: String) = compose.onNodeWithTag("task-moves:$key:$suffix",
+        useUnmergedTree = suffix !in setOf("show-all", "refuse", "approve", "cancel", "answer"))
 
     @Test fun beforeTheFirstPressTheCardSaysWhatWhereFromAndEachMove() {
         node("title").assertTextEquals("Move 8 tasks into this project")
@@ -138,7 +141,8 @@ class TaskMoveCardTest {
         node("approve").performClick()
         node("answer").performClick()
         compose.waitUntil(10_000) { store.state.value.refusals.isNotEmpty() }
-        node("refusal").assertTextContains("APPROVAL_TARGET_MISMATCH", substring = true)
+        compose.onNode(hasAnyAncestor(hasTestTag("task-moves:$key:refusal")) and hasText("APPROVAL_TARGET_MISMATCH", substring = true),
+            useUnmergedTree = true).assertExists()
         node("title").assertTextEquals("Approve 8 task moves?")
         assertTrue(fixture.rows.all { it.text("state") == "PENDING" })
     }
