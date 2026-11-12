@@ -546,7 +546,7 @@ final class TranscriptReducerTests: XCTestCase {
         r.apply(RunEvent(seq: 7, type: .interrupt, payload: .object([:])))
 
         let marks = r.state.items.compactMap { item -> String? in
-            guard case .interrupt(_, let seq, let runnerRestart) = item else { return nil }
+            guard case .interrupt(_, let seq, let runnerRestart, _) = item else { return nil }
             return "\(seq):\(runnerRestart ? "runner restart" : "stop")"
         }
         XCTAssertEqual(marks, ["2:stop", "5:runner restart", "7:stop"])

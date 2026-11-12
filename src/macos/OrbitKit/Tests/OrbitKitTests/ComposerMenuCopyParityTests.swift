@@ -259,7 +259,7 @@ final class ComposerMenuCopyParityTests: XCTestCase {
         // What became of it: turned off, or deleted.
         let deleted = SessionProviderChoices.KeyGone.deleted
         let off = SessionProviderChoices.KeyGone.turnedOff(providerID: "p1")
-        says("return row.enabled ? null : { status: '\(off.status)', href: `/providers/${encodeId(row.id)}` };")
+        says("return row.enabled ? null : { status: '\(off.status)', href: `/settings/providers/keys/${encodeId(row.id)}` };")
         says("return shownProvider === AgentProvider.DSH ? null : { status: '\(deleted.status)' };")
         says("{shownKeyGone.status === 'Key deleted' ? '\(deleted.rowStatus)' : shownKeyGone.status}")
         XCTAssertEqual(off.rowStatus, off.status)

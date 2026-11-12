@@ -65,6 +65,7 @@ import { SharedRateLimiter } from '../shared/public-surface.guard';
 import { SharedController } from '../shared/shared.controller';
 import { TasksController } from '../tasks/tasks.controller';
 import { TasksService } from '../tasks/tasks.service';
+import { keysOf, redLineCrossings } from '../test-support/share-red-line';
 import { ShareLinksController } from './share-links.controller';
 import { ShareLinksService } from './share-links.service';
 
@@ -118,39 +119,6 @@ function fieldPaths(value: unknown, prefix = ''): string[] {
   });
 }
 const fieldSet = (json: unknown): string[] => [...new Set(fieldPaths(json))].sort();
-
-/** Every key anywhere in an answer. */
-function keysOf(value: unknown, into = new Set<string>()): Set<string> {
-  if (Array.isArray(value)) value.forEach((item) => keysOf(item, into));
-  else if (value !== null && typeof value === 'object') {
-    for (const [key, child] of Object.entries(value as Json)) {
-      into.add(key);
-      keysOf(child, into);
-    }
-  }
-  return into;
-}
-
-/**
- * Contract §6 as field names: owner and account, runner and machine, repository, compute, the
- * dispatch / convergence / verification internals, comment delivery records. None of them is a
- * field of any public answer, whatever the link includes.
- */
-const RED_LINE_FIELDS = [
-  'owner', 'ownerId', 'ownerPublicId', 'userId', 'email', 'creatorId', 'creatorType', 'creatorSession',
-  'creatorSessionId', 'assignee', 'assigneeId', 'authorId', 'authorType', 'authorName',
-  'runner', 'runnerId', 'assignedRunnerId', 'targetRunnerId', 'workspaceId', 'workDir', 'repoUrl', 'env',
-  'branch', 'baseSha', 'knownGoodSha', 'pinnedRevision', 'mergeCheckCommand', 'integration',
-  'provider', 'providerBuiltin', 'model', 'costUsd', 'sumInputTokens', 'sumOutputTokens', 'contextTokens',
-  'poolMemberProviderId',
-  'dispatchAuthority', 'dispatchAttempt', 'dispatchHold', 'dispatchRefusal', 'autoRunWhenReady',
-  'autoRunSkipped', 'priority', 'runAt', 'requiredCapabilities', 'idempotencyKey', 'progressState',
-  'convergenceCounters', 'lastProgressAt', 'attemptGeneration', 'scopeRevision', 'completionFenceRevision',
-  'completionCriterionOverrideReason', 'criterionDefinitionId', 'criterionRevision', 'verdict',
-  'verifiesTaskId', 'verifier', 'verificationState', 'instructions', 'listId',
-  'deliveries', 'mentions', 'mentionDeliveryVersion', 'lastError', 'requiredAction',
-  'dependsOn', 'dependedOnBy', 'sessions', 'successorChain', 'supersedes',
-];
 
 test('a shared task: an explicit projection, the red line, its layers and its runs', {
   skip: !URL, concurrency: 1, timeout: 300_000,
@@ -510,12 +478,9 @@ test('a shared task: an explicit projection, the red line, its layers and its ru
     answers.push(['task page, no layers', await visit()]);
     for (const [what, answer] of answers) {
       assert.equal(answer.status, 200, `${what}: ${answer.text.slice(0, 300)}`);
-      assert.deepEqual(values.filter((value) => answer.text.includes(value)), [], `${what} carries a red-line value`);
-      // A transcript's events are the conversation itself — command output and file contents are
-      // what the Conversations layer warns about — so their payloads are not fields of the page.
-      const envelope = answer.json.events ? { ...answer.json, events: [] } : answer.json;
-      const keys = keysOf(what.endsWith('one event') ? { ...envelope, payload: null } : envelope);
-      assert.deepEqual(RED_LINE_FIELDS.filter((name) => keys.has(name)), [], `${what} carries a red-line field`);
+      const crossed = redLineCrossings(answer, values);
+      assert.deepEqual(crossed.values, [], `${what} carries a red-line value`);
+      assert.deepEqual(crossed.fields, [], `${what} carries a red-line field`);
     }
   });
 

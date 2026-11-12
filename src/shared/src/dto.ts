@@ -861,6 +861,17 @@ export interface RunnerSelfUpdate {
   /** While draining: the turns still in flight, and how many there were when the drain began. */
   turnsInFlight?: number;
   turnsAtDrain?: number;
+  /** While restarting for the owner's Update Now: how many turns it interrupted, which continue once
+   *  it is back. Absent for an update that waited for idle. */
+  interruptedTurns?: number;
+  /** The last update's restart: seconds from the stop to the new image starting, and how many turns
+   *  an Update Now interrupted for it. Absent when the runner did not measure them (an older one). */
+  lastUpdateSeconds?: number;
+  lastUpdateInterruptedTurns?: number;
+  /** How long, in seconds, the runner must have been quiet (no turn ended, nothing claimed) before an
+   *  automatic update installs. Sent with every report by runners that wait for one; absent from older
+   *  runners, which install at the first check with no turn in flight, and keep that wording. */
+  quietWindowSeconds?: number;
 }
 
 /** One of the viewer's turns a runner draining for its self-update waits for: the runner page's
@@ -870,6 +881,16 @@ export interface RunnerUpdateTurn {
   id: string;
   title: string | null;
   startedAt: string | null;
+}
+
+/** What of the viewer's waits on a runner draining for its self-update (D3): sessions on it that have not
+ *  started, and messages not yet delivered to its sessions — queued behind a running turn, or a follow-up
+ *  the runner holds for the update. Present on GET /runners only
+ *  while the runner drains and something of the viewer's waits; the web's banner, the native
+ *  attention item and the drain's one push all say these counts. */
+export interface RunnerDrainWaiting {
+  sessions: number;
+  messages: number;
 }
 
 /** Why a queued session waits on its runner's self-update (queuedReason 'runner_updating'): the
@@ -1247,6 +1268,20 @@ export interface RunnerHeartbeatResponse {
    *  runner then reports as `waitingForIdle`. Set once per request and cleared as it is handed
    *  over, like `refreshModelCatalog`. */
   checkSelfUpdate?: boolean;
+  /** This server takes a session claim scoped to named sessions (`GET /runner/sessions/claim?drainScope=`),
+   *  which a runner draining for an update sends for the sessions whose engine is running a turn on it.
+   *  Absent from an older server, to which such a runner sends no claim while it drains. */
+  drainScopedClaims?: boolean;
+  /** The owner's Later (ISO time): stop draining for the waiting release now and put it off until
+   *  then, when it waits for idle again under a fresh deferral limit. Set once per request and
+   *  cleared as it is handed over, like `checkSelfUpdate`; only a runner that declares
+   *  SELF_UPDATE_POSTPONE_V1 is asked. */
+  postponeSelfUpdateUntil?: string;
+  /** The owner's Update Now (POST /runners/:id/self-update/now): install the waiting release now,
+   *  interrupting the turns in flight through the graceful stop so their sessions resume after the
+   *  restart. Set once per request and cleared as it is handed over, like `checkSelfUpdate`; only a
+   *  runner that declares SELF_UPDATE_NOW_V1 is asked. */
+  selfUpdateNow?: boolean;
   /** This machine's free-space floor in MB (Runner.minFreeDiskMb), the same number the auto-run
    *  disk gate reads. Sent so the runner can apply it to work only it can see — reclaiming the
    *  session checkouts on its own disk — without keeping a second copy of the setting.
@@ -1323,6 +1358,49 @@ export interface RunnerHeartbeatResponse {
   secretGrants?: Array<{ id: string; expiresAt: string }>;
   /** Grants of this runner being removed: remove the copy if held, then confirm with /removed either way. */
   secretGrantsRemoving?: string[];
+}
+
+/** Declared by a runner that honours the owner's Later (`postponeSelfUpdateUntil`,
+ *  docs/runner-update-drain-design.md §4). A runner without it is refused a postpone as too old.
+ *  runner-go asserts the same string. */
+export const SELF_UPDATE_POSTPONE_V1 = 'self-update-postpone/v1';
+
+/** Declared by a runner that honours the owner's Update Now (`selfUpdateNow`,
+ *  docs/runner-update-drain-design.md §4): it interrupts the turns in flight, installs and restarts.
+ *  A runner without it is refused Update Now as too old. runner-go asserts the same string. */
+export const SELF_UPDATE_NOW_V1 = 'self-update-now/v1';
+
+/** The body of POST /runners/:id/self-update/now: the owner's explicit "interrupt these turns". */
+export interface RunnerSelfUpdateNowRequest {
+  interruptTurns: true;
+}
+
+/** Its answer: when it was asked, and how many of the owner's turns were running then. */
+export interface RunnerSelfUpdateNowResponse {
+  requestedAt: string;
+  turns: number;
+}
+
+/** The interrupt event's reason for a turn the owner's Update Now stopped (beside `runner_restart`). */
+export const RUNNER_UPDATE_INTERRUPT_REASON = 'runner_update';
+
+/** The interrupt event's reason for a turn a runner stop cut once its drain ran out (runner-go selfupdate_now.go). */
+export const RUNNER_RESTART_INTERRUPT_REASON = 'runner_restart';
+
+/** The first sentence of the turn Orbit sends a session whose turn Update Now interrupted (D4). The
+ *  clients draw a user turn that opens with it as one Orbit line, not as the owner's bubble. */
+export const RUNNER_UPDATE_RESUME_NOTE = 'The runner update interrupted this turn; continue.';
+
+/** The body of POST /runners/:id/self-update/postpone. `timeZone` is the owner's IANA zone, which
+ *  `until` is capped in: at most 09:00 tomorrow there (D2). */
+export interface RunnerSelfUpdatePostponeRequest {
+  until: string;
+  timeZone?: string;
+}
+
+/** Its answer: the time the runner is asked to wait until, after the cap. */
+export interface RunnerSelfUpdatePostponeResponse {
+  until: string;
 }
 
 // ── Claude region check (docs/claude-region-check-contract.md) ──

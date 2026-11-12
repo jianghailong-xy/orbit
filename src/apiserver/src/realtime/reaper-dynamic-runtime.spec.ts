@@ -29,6 +29,8 @@ test('reaper keeps the short runtime-initialization watchdog for Kimi', async ()
         },
       ],
     },
+    // No runner restart cut any of these turns (runtime-startup-clock.ts).
+    runEvent: { findMany: async () => [] },
   } as never;
   const service = new ReaperService(prisma, {} as never);
   let failure: { id: string; reason: string } | undefined;
@@ -67,6 +69,8 @@ test('reaper leaves a slow dynamic runtime inside the shared-state initializatio
         },
       ],
     },
+    // No runner restart cut any of these turns (runtime-startup-clock.ts).
+    runEvent: { findMany: async () => [] },
   } as never;
   const service = new ReaperService(prisma, {} as never);
   let finalized = false;
@@ -105,6 +109,8 @@ test('reaper still finalizes Codex after the shared-state backstop expires', asy
         },
       ],
     },
+    // No runner restart cut any of these turns (runtime-startup-clock.ts).
+    runEvent: { findMany: async () => [] },
   } as never;
   const service = new ReaperService(prisma, {} as never);
   let failure: { id: string; reason: string } | undefined;

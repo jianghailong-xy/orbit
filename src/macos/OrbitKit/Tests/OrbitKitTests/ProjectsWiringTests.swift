@@ -283,7 +283,7 @@ final class ProjectsWiringTests: XCTestCase {
         let shell = code(try appSource("Views/CompactShell.swift"))
         XCTAssertTrue(shell.contains("\nstruct NavigationDrawer: View {"), "MainView seats it, so it isn't private")
         let drawer = try slice(shell, from: "struct NavigationDrawer: View {", to: "private var actionBar: some View {")
-        XCTAssertTrue(drawer.contains("if !inSidebarColumn {\n                HStack {"), "the column draws no header of its own")
+        XCTAssertTrue(drawer.contains("if !inSidebarColumn { drawerHeader }"), "the column draws no header of its own")
         XCTAssertTrue(drawer.contains("if inSidebarColumn { columnBar }"), "its header rides the column's bar")
         let app = code(try appSource("AppModel.swift"))
         let entry = try slice(app, from: "func openDrawerDestination(_ destination: DrawerDestination, inColumn: Bool) {",

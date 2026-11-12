@@ -491,10 +491,32 @@ public struct RunnerSelfUpdate: Codable, Equatable, Sendable {
     /// While draining: the turns still in flight, and how many there were when the drain began.
     public var turnsInFlight: Int? = nil
     public var turnsAtDrain: Int? = nil
+    /// While restarting for the owner's Update Now: how many turns it interrupted, which continue once
+    /// it is back. Nil for an update that waited for idle.
+    public var interruptedTurns: Int? = nil
+    /// The last update's restart: seconds from the stop to the new image starting, and how many turns
+    /// an Update Now interrupted for it. Nil when the runner did not measure them (an older one).
+    public var lastUpdateSeconds: Int? = nil
+    public var lastUpdateInterruptedTurns: Int? = nil
+    /// How long, in seconds, the runner must have been quiet before an automatic update installs.
+    /// Nil from a runner that doesn't wait for one, which keeps the page's wording from before.
+    public var quietWindowSeconds: Int? = nil
 }
 
 /// One of the reader's turns a draining runner waits for (shared `RunnerUpdateTurn`): its session,
 /// title, and when the current run was claimed.
+/// What of the reader's waits on a runner draining for its self-update (shared `RunnerDrainWaiting`):
+/// sessions that have not started, and messages sent to sessions that had.
+public struct RunnerDrainWaiting: Codable, Equatable, Sendable {
+    public let sessions: Int
+    public let messages: Int
+
+    public init(sessions: Int, messages: Int) {
+        self.sessions = sessions
+        self.messages = messages
+    }
+}
+
 public struct RunnerUpdateTurn: Codable, Equatable, Sendable {
     public let id: String
     public let title: String?
@@ -504,6 +526,35 @@ public struct RunnerUpdateTurn: Codable, Equatable, Sendable {
 /// POST /runners/:id/self-update (Update Runner Now) acknowledges when the check was requested.
 public struct RunnerSelfUpdateRequest: Codable, Equatable, Sendable {
     public let requestedAt: String?
+}
+
+/// POST /runners/:id/self-update/now (Update Now, shared `RunnerSelfUpdateNowRequest`): the owner's
+/// explicit "interrupt these turns".
+public struct RunnerSelfUpdateNowRequest: Codable, Equatable, Sendable {
+    public let interruptTurns: Bool
+    public init(interruptTurns: Bool = true) { self.interruptTurns = interruptTurns }
+}
+
+/// Its answer: when it was asked, and how many of the owner's turns were running then.
+public struct RunnerSelfUpdateNowResponse: Codable, Equatable, Sendable {
+    public let requestedAt: String?
+    public let turns: Int?
+}
+
+/// POST /runners/:id/self-update/postpone (Later, shared `RunnerSelfUpdatePostponeRequest`): until when,
+/// and the reader's zone the server caps it in.
+public struct RunnerSelfUpdatePostponeRequest: Codable, Equatable, Sendable {
+    public let until: String
+    public let timeZone: String?
+    public init(until: String, timeZone: String?) {
+        self.until = until
+        self.timeZone = timeZone
+    }
+}
+
+/// Its answer: the time the runner was asked to wait until, after the cap.
+public struct RunnerSelfUpdatePostponeResponse: Codable, Equatable, Sendable {
+    public let until: String
 }
 
 /// POST /runners/:id/region-check (Check again, docs/claude-region-check-contract.md §7) answers when

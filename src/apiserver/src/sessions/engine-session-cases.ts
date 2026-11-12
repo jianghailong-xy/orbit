@@ -236,6 +236,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     snippet: '// A landing session is not a conversation anyone can share (§2.9 LS6).',
     note: 'POST and PUT /sessions/:id/share',
   },
+  'SessionGuestsService.ownedSession': {
+    file: 'session-guests/session-guests.service.ts',
+    snippet: '// Nobody is invited into the platform\'s landing record: it runs no engine turn (§2.9 LS6).\n    if (opts.write) assertEngineSession(session);',
+    note: 'POST /sessions/:id/guests and DELETE /sessions/:id/guests/:userId',
+  },
   'ShareLinksService.turnOff': {
     file: 'share-links/share-links.service.ts',
     snippet: 'if (kind === \'SESSION\') assertEngineSession(root);\n    await this.end({ ownerId, ...rootColumn(kind, rootId) }, new Date());',
@@ -315,6 +320,8 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /sessions/:id/share': 'ShareLinksService.put',
   'PUT /sessions/:id/share': 'ShareLinksService.put',
   'DELETE /sessions/:id/share': 'ShareLinksService.turnOff',
+  'POST /sessions/:id/guests': 'SessionGuestsService.ownedSession',
+  'DELETE /sessions/:id/guests/:userId': 'SessionGuestsService.ownedSession',
 
   // ── the runner door (32) ──────────────────────────────────────────────────────────────────────
   'POST /runner/sessions/:id/source/pin': 'RunnerApiController.assertEngineSessionById',

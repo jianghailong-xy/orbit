@@ -33,6 +33,7 @@ export * from './searchTerms';
 export * from './sessionCreatedTasks';
 export * from './questionRecord';
 export * from './session-message';
+export * from './session-guests';
 export * from './session-request';
 export * from './source';
 export * from './source-refusal';

@@ -1845,7 +1845,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 				draining = true
 				shutdownDone = nil
 				pollCancel()
-				drainTimer = time.After(shutdownDrainTimeout)
+				drainTimer = time.After(stopDrainBudget(shutdownCtx, shutdownDrainTimeout))
 				activeMu.Lock()
 				idle := active == nil
 				activeMu.Unlock()
@@ -1854,6 +1854,8 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 				}
 			}
 		case <-drainTimer:
+			// The turn still running is cut: marked, as the Claude drain marks its own (watchShutdownDrain).
+			emit(evInterrupt, stopInterruptPayload(shutdownCtx))
 			app.cancelPermissions()
 			return stCancelled, true, false
 		case <-app.done:

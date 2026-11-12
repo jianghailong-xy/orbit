@@ -29,6 +29,7 @@ const FIELDS = {
   postponedUntil: true,
   turnsInFlight: true,
   turnsAtDrain: true,
+  quietWindowSeconds: true,
 } satisfies Record<keyof RunnerSelfUpdate, true>;
 
 describe('RunnerSelfUpdate phases', () => {
@@ -62,9 +63,16 @@ describe('RunnerSelfUpdate phases', () => {
     expect(cases.get('postponed')!.postponedUntil).toBeDefined();
   });
 
+  it('a runner that reports a phase also reports its quiet window, in whole seconds', () => {
+    for (const phase of RUNNER_SELF_UPDATE_PHASES) {
+      expect(cases.get(phase)!.quietWindowSeconds, phase).toBe(600);
+    }
+  });
+
   it('an old runner sends a state and none of the phase fields', () => {
     const old = cases.get('oldRunner')!;
     expect(old).toEqual({ state: 'waitingForIdle' });
     expect(old.phase).toBeUndefined();
+    expect(old.quietWindowSeconds).toBeUndefined();
   });
 });
