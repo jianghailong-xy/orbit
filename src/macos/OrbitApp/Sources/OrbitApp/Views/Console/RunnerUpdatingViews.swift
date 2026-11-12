@@ -46,7 +46,8 @@ struct RunnerUpdatingQueuedView: View {
                     .multilineTextAlignment(.center)
                     .environment(\.openURL, OpenURLAction { url in
                         let link = url.absoluteString
-                        guard link.hasPrefix(Self.turnScheme) else { return .systemAction }
+                        // The only links in this text are the turns: nothing here leaves the app.
+                        guard link.hasPrefix(Self.turnScheme) else { return .discarded }
                         onOpenSession(String(link.dropFirst(Self.turnScheme.count)))
                         return .handled
                     })
