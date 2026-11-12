@@ -64,11 +64,11 @@ object OrbitExchangeFold {
 
     /**
      * What a turn's opening event says happened, when Orbit opened the turn and it is one the reader can be spared: a fact told to a
-     * coordinator, a watch or a background job coming back, a task run's notice or message, another session's reply. Null for everything
-     * else, and for those that went wrong — a refused start, a blocker, a failed target or job, a delivery nobody confirmed — which stay drawn
+     * coordinator, a watch or (in a coordinator, [coordinator]) a background job coming back, a task run's notice or message, another
+     * session's reply. Null for everything else, and for those that went wrong — a refused start, a blocker, a failed target or job, a delivery nobody confirmed — which stay drawn
      * (web `orbitTurnOf`). [wakeName] names a watch's target the way the wake's own line does.
      */
-    fun turnOf(event: RunEvent, wakeName: (String, JsonObject) -> String? = { _, _ -> null }): Head? {
+    fun turnOf(event: RunEvent, coordinator: Boolean = false, wakeName: (String, JsonObject) -> String? = { _, _ -> null }): Head? {
         if (event.type != "user") return null
         val payload = event.fields
         if (payload["steer"] == JsonPrimitive(true)) return null
@@ -119,6 +119,9 @@ object OrbitExchangeFold {
             return Head(if (name != null) "$title: $name" else title, title, "watch", target)
         }
         backgroundWake(payload.text("controlPlaneNote").orEmpty())?.let { wake ->
+            // Outside a coordinator a background job is the agent's work on what the reader asked: its turns are the answer, not news
+            // about it, so they stay drawn (owner, 2026-11-12).
+            if (!coordinator) return null
             if (BackgroundWakeCard.jobs(wake).any(BackgroundWakeCard::isFailed)) return null
             val title = BackgroundWakeCard.title(wake)
             val name = BackgroundWakeCard.lineName(wake)?.takeIf { it.isNotEmpty() }

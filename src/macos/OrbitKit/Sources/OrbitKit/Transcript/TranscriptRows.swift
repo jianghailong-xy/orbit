@@ -525,6 +525,7 @@ public enum TranscriptRows {
                              recap: RecapCard? = nil,
                              foldExchanges: Bool = true,
                              watchName: ((WatchWake, WatchWakeTarget) -> String?)? = nil,
+                             coordinator: Bool = false,
                              createdWorkspace: CreatedWorkspaceLine? = nil) -> [TranscriptRow] {
         var rows: [TranscriptRow] = []
         if let createdWorkspace, !canPageOlder { rows.append(.createdWorkspace(createdWorkspace)) }
@@ -650,7 +651,8 @@ public enum TranscriptRows {
         let grouped = groupToolRuns(rows)
         // The turns Orbit opened, folded with their answers (`OrbitExchangeFold`), unless the caller
         // draws every row as it is — a static export, a sub-agent's own transcript.
-        let folded = foldExchanges ? OrbitExchangeFold.fold(grouped, watchName: watchName) : grouped
+        let folded = foldExchanges ? OrbitExchangeFold.fold(grouped, watchName: watchName, coordinator: coordinator)
+            : grouped
         return folded.filter { seen.insert($0.id).inserted }
     }
 

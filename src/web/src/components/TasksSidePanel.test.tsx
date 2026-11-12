@@ -126,10 +126,11 @@ describe('TasksSidePanel nav', () => {
     expect({ opened, prevented }).toEqual({ opened: 1, prevented: 1 });
     expect(handleNavActivation({ key: ' ', preventDefault: () => { prevented += 1; } },
       () => { opened += 1; })).toBe(false);
-    // The two surfaces, and a wiki's row in the group under them; and the group's Trash row, which opens a dialog and
+    // The two surfaces, a wiki's row in the group under them, and the Projects group's quiet row, which opens the
+    // Projects page (docs/mocks/sidebar-projects-scroll, 03); and the Wiki group's Trash row, which opens a dialog and
     // is a button (docs/mocks/wiki-trash).
-    expect(source.match(/role="link"/g)).toHaveLength(3);
-    expect(source.match(/tabIndex=\{0\}/g)).toHaveLength(4);
+    expect(source.match(/role="link"/g)).toHaveLength(4);
+    expect(source.match(/tabIndex=\{0\}/g)).toHaveLength(5);
     expect(source.match(/role="button"\s+tabIndex=\{0\}/g)).toHaveLength(1);
     expect(source.match(/aria-current=\{sel === t\.key \? 'page' : undefined\}/g)).toHaveLength(1);
     expect(source.match(/aria-current=\{railSel === t\.key \? 'page' : undefined\}/g)).toHaveLength(1);
@@ -212,23 +213,16 @@ describe('TasksSidePanel scrolling', () => {
   const rule = (selector: string) =>
     styles.match(new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`))?.[1] ?? '';
 
-  it('scrolls Workspaces and Projects as one under the fixed entries, or only Projects while pinned', () => {
+  it('scrolls the groups as one under the fixed entries, each head held at the top', () => {
     // The middle itself no longer scrolls: the fixed entries stay put above the list.
     expect(rule('.tp-scroll')).not.toMatch(/overflow/);
     expect(rule('.tp-lists')).toMatch(/overflow-y:\s*auto;/);
-    expect(rule('.tp-lists.pin-workspaces')).toMatch(/overflow:\s*hidden;/);
-    expect(rule('.tp-lists.pin-workspaces > .tp-group-projects')).toMatch(/overflow-y:\s*auto;/);
-    expect(rule('.tp-lists.pin-workspaces > .tp-group-projects .tp-group-head')).toMatch(/position:\s*sticky;/);
+    expect(rule('.tp-lists .tp-group-head')).toMatch(/position:\s*sticky;/);
+    expect(styles).not.toMatch(/pin-workspaces/);
   });
 
-  it('keeps one scrollbar gutter on every block, so ⌘P lines up with ⌘1 whichever one scrolls', () => {
-    for (const selector of [
-      '.tp-scroll > .tp-section',
-      '.tp-lists',
-      '.tp-lists.pin-workspaces > .tp-group-workspaces',
-      '.tp-lists.pin-workspaces > .tp-group-wiki',
-      '.tp-lists.pin-workspaces > .tp-group-projects',
-    ]) {
+  it('keeps one scrollbar gutter on every block, so ⌘P lines up with ⌘1', () => {
+    for (const selector of ['.tp-scroll > .tp-section', '.tp-lists']) {
       expect(rule(selector)).toMatch(/scrollbar-gutter:\s*stable;/);
     }
   });

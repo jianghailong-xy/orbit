@@ -168,6 +168,40 @@ public enum SessionMessageCard {
         ("\(from) \(title(card))", text)
     }
 
+    /// The card's line for a sender that runs narrower than this session, each mode as the mode
+    /// picker names it (web `sessionMessageNarrower`; board session-message-attached-line ③).
+    public static func narrower(from: String, to: String) -> String {
+        "Sender runs in \(modeLabel(from)), narrower than this session's \(modeLabel(to)): not taken as your approval"
+    }
+
+    /// A session message's recorded note without its own block, which only tells the agent what the
+    /// card already shows (owner, 2026-11-12; web `splitSessionMessageNote`). `attached` is whatever
+    /// else delivery appended, still folded under the card — nil when nothing else rode along — and
+    /// `narrower` the card's line when the block says the sender runs narrower than this session.
+    public static func splitNote(_ note: String?) -> (attached: (kind: String, text: String)?, narrower: String?) {
+        guard let note else { return (nil, nil) }
+        let range = NSRange(note.startIndex..., in: note)
+        let blocks = blockPattern.matches(in: note, range: range).compactMap { Range($0.range, in: note).map { String(note[$0]) } }
+        let narrower = blocks.lazy.compactMap { block -> String? in
+            guard let m = narrowerPattern.firstMatch(in: block, range: NSRange(block.startIndex..., in: block)),
+                  let from = Range(m.range(at: 1), in: block), let to = Range(m.range(at: 2), in: block) else { return nil }
+            return Self.narrower(from: String(block[from]), to: String(block[to]))
+        }.first
+        let rest = blockPattern.stringByReplacingMatches(in: note, range: range, withTemplate: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let kind = rest.isEmpty ? "" : describeNote(rest)
+        return (kind.isEmpty ? nil : (kind, rest), narrower)
+    }
+
+    /// The block delivery appends after another session's message (apiserver `sessionMessageBlock`).
+    private static let blockPattern = try! NSRegularExpression(pattern: "<orbit-session-message\\b[^>]*>[\\s\\S]*?</orbit-session-message>")
+    /// The block's sentence for a sender that may do less than this session (apiserver `narrowerSenderNote`).
+    private static let narrowerPattern = try! NSRegularExpression(pattern: "The sender runs in (\\S+), which is narrower than this session's (\\S+)\\.")
+
+    private static func modeLabel(_ mode: String) -> String {
+        PermissionMode(rawValue: mode).map(AgentDefaults.label) ?? mode
+    }
+
     /// The session that sent the message, as the app's own `orbit-session:` door.
     public static func sessionLink(_ card: SessionMessage) -> URL? {
         link(card.fromSessionId, scheme: "orbit-session")
