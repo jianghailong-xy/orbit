@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -232,7 +232,7 @@ function MemberRow({
         {/* A refused key is final for the key, not for the account: a new one is the way back, and
             it is pasted on the provider's own page. */}
         {member.state === 'REFUSED' && (
-          <Button size="small" onClick={() => navigate(`/providers/${encodeId(member.id)}`)}>
+          <Button size="small" onClick={() => navigate(`/settings/providers/keys/${encodeId(member.id)}`)}>
             Re-add key
           </Button>
         )}
@@ -651,7 +651,7 @@ function PoolCard({
         <span className="re-head-sp" />
         {people && !member && <PeopleStack pool={shared!} />}
         {!member && <PoolGauge pool={pool} />}
-        <Link className="re-manage" to={`/providers/pools/${encodeId(pool.id)}`} aria-label={`Manage ${pool.label}`}>
+        <Link className="re-manage" to={`/settings/providers/pools/${encodeId(pool.id)}`} aria-label={`Manage ${pool.label}`}>
           <span className="pool-wide">Manage </span>→
         </Link>
       </div>
@@ -672,7 +672,16 @@ function PoolCard({
  * key are (NewPoolModal); a key OpenAI refused is replaced from its card, and an account OpenAI signed
  * out is signed in again from it — each taken out on the pool's own page.
  */
-export function AccountPools({ pools, refusals }: { pools: ProviderPool[]; refusals: PoolRefusals }) {
+export function AccountPools({
+  pools,
+  refusals,
+  action,
+}: {
+  pools: ProviderPool[];
+  refusals: PoolRefusals;
+  /** On the heading's right: Settings' pools page puts New account pool there. */
+  action?: ReactNode;
+}) {
   const isMobile = useIsMobile();
   const [replacing, setReplacing] = useState<{ pool: SharedPool; key: SharedPoolKey } | null>(null);
   /** The dialog for one of these pools: adding an account, or putting back one OpenAI signed out. */
@@ -696,6 +705,7 @@ export function AccountPools({ pools, refusals }: { pools: ProviderPool[]; refus
         <span className="re-sec-sub">
           Several accounts under one name.
         </span>
+        {action && <span className="pool-sec-action">{action}</span>}
       </div>
       {pools.map((pool) => {
         const open = fold[pool.id] ?? !isMobile;
@@ -914,7 +924,7 @@ export function NewPoolModal({ rows, onClose }: { rows: ProviderRow[]; onClose: 
       else message.success('Pool created');
       onClose();
       // Where its first key goes in — or where its account is signed in, straight away.
-      if (id) navigate(`/providers/pools/${encodeId(id)}`, signIn ? { state: { signIn: true } } : undefined);
+      if (id) navigate(`/settings/providers/pools/${encodeId(id)}`, signIn ? { state: { signIn: true } } : undefined);
     },
     onError: (e: Error) => {
       void qc.invalidateQueries({ queryKey: ['providers'] });
@@ -1010,7 +1020,7 @@ export function NewPoolModal({ rows, onClose }: { rows: ProviderRow[]; onClose: 
                 aria-label="People to add"
               />
               <div className="np-field-h">
-                They see it on their Machines & models page and in the session picker, and can start sessions on it.
+                They see it under Account pools in their Settings and in the session picker, and can start sessions on it.
               </div>
               <Checkbox checked={canAdd} onCheckedChange={setCanAdd} className="np-can-add">
                 They can add their own keys

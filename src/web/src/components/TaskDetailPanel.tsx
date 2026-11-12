@@ -1101,7 +1101,7 @@ export function TaskDetailPanel({
     }
     const choice = pinCredentials.find((row) => row.slug === slug);
     if (choice?.unavailable) {
-      navigate(choice.fixHref ?? `/infrastructure?runner=${encodeId(assigneeRunner?.id ?? '')}&engine=${choice.fixEngine ?? runEngine}`);
+      navigate(choice.fixHref ?? `/settings/machines/${encodeId(assigneeRunner?.id ?? '')}?engine=${choice.fixEngine ?? runEngine}`);
       return;
     }
     if (slug !== pinnedProvider) updateRunTarget.mutate({ engine: runEngine, provider: slug, model: null });
