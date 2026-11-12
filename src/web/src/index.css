@@ -27537,6 +27537,9 @@ button.agent-progress-agent:hover {
   padding: 10px 0;
   border-top: 1px solid var(--border);
 }
+.terminals-row:first-child {
+  border-top: 0;
+}
 .terminals-machine {
   color: var(--text-1);
   font-weight: 600;
