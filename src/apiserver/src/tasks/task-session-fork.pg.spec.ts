@@ -12,6 +12,7 @@
  *   - it gets a branch on a workspace whose worktrees are off, where an ordinary task gets none;
  *   - FORK_SOURCE_NOT_REACHABLE, at the create door and again when a run would be placed elsewhere;
  *   - FORK_IN_BOUND_PROJECT, at the create door and again when the binding came after the task;
+ *   - task_update refuses both: a reassignment to another machine and a move into a bound project;
  *   - the five fork columns cannot be rewritten (0540's guard), and a fork is only ever of the caller.
  *
  * Destructive only for the rows it makes (one owner, deleted at the end). Run it the way every pg spec
@@ -329,6 +330,57 @@ test('SR55: a task forked from its creating session', { skip, concurrency: 1, ti
     // Both codes would hold: the project's is the one reported (SR55, project before machine).
     const both = await refusal(() => createForked(w, { assigneeId: w.workspaceB }));
     assert.equal(both?.body?.code, 'FORK_IN_BOUND_PROJECT');
+  });
+
+  await t.test('task_update refuses to move a forked task where its next run could only be refused', async () => {
+    const w = await seed('update');
+    const task = await createForked(w, { projectId: undefined }) as { id: string };
+    // A second workspace on the forking session's machine: a legal reassignment, the control.
+    const sameMachine = randomUUID();
+    await admin.query(
+      `INSERT INTO "workspace" ("id","owner_id","name","runner_id","work_dir","enable_worktree")
+       VALUES ($1,$2,'update-ws-a2',$3,'/tmp/update-a2',false)`,
+      [sameMachine, w.ownerId, w.runnerA],
+    );
+    // A bound project the owner could move it into.
+    const bound = randomUUID();
+    await admin.query(
+      `INSERT INTO "project" ("id","owner_id","title","updated_at") VALUES ($1,$2,'update-bound',now())`,
+      [bound, w.ownerId],
+    );
+    await prisma.projectCodebase.create({
+      data: {
+        projectId: bound, ownerId: w.ownerId, canonicalRepoUrl: 'https://github.com/acme/widgets',
+        upstreamRef: 'refs/heads/main', integrationRef: 'refs/heads/main', refAuthority: 'REMOTE',
+      },
+    });
+
+    const reassigned = await refusal(() => tasks.update(w.ownerId, task.id, { assigneeId: w.workspaceB } as never));
+    assert.equal(reassigned?.status, 409);
+    assert.equal(reassigned?.body?.code, 'FORK_SOURCE_NOT_REACHABLE');
+    assert.equal(reassigned?.body?.kind, 'REFUSAL');
+    assert.equal(reassigned?.body?.requiredAction, 'ASSIGN_ON_FORK_RUNNER');
+    assert.equal(reassigned?.body?.detail?.forkRunnerId, w.runnerA);
+    assert.equal(reassigned?.body?.detail?.runnerId, w.runnerB);
+
+    const moved = await refusal(() => tasks.update(w.ownerId, task.id, { projectId: bound } as never));
+    assert.equal(moved?.status, 409);
+    assert.equal(moved?.body?.code, 'FORK_IN_BOUND_PROJECT');
+    assert.equal(moved?.body?.requiredAction, 'FORK_OUTSIDE_PROJECT');
+    assert.equal(moved?.body?.detail?.projectId, bound);
+
+    const after = await prisma.task.findUniqueOrThrow({ where: { id: task.id }, select: { assigneeId: true, projectId: true } });
+    assert.equal(after.assigneeId, w.workspaceA, 'a refused edit wrote nothing');
+    assert.equal(after.projectId, w.projectId);
+
+    // The controls: the same machine is fine, and an ordinary task moves anywhere.
+    await tasks.update(w.ownerId, task.id, { assigneeId: sameMachine } as never);
+    assert.equal((await prisma.task.findUniqueOrThrow({ where: { id: task.id }, select: { assigneeId: true } })).assigneeId, sameMachine);
+    const plain = await createForked(w, { title: 'Ordinary work', fork: undefined }) as { id: string };
+    await tasks.update(w.ownerId, plain.id, { assigneeId: w.workspaceB } as never);
+    await tasks.update(w.ownerId, plain.id, { projectId: bound } as never);
+    const plainAfter = await prisma.task.findUniqueOrThrow({ where: { id: plain.id }, select: { assigneeId: true, projectId: true } });
+    assert.deepEqual(plainAfter, { assigneeId: w.workspaceB, projectId: bound });
   });
 
   await t.test('only the calling session, on its own runner, can be forked; and a fork is never rewritten', async () => {

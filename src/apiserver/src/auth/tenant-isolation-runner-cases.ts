@@ -764,6 +764,18 @@ const taskCreateFieldCases = (route: string, wrap: (task: object) => object, whe
     heldRow: (of: RunnerTenant) => ['task', of.spare.taskId] as const,
   },
   [`${route} body ${where}dependsOnTaskIds[]`]: { as: RUNNER, request: (of: RunnerTenant) => ({ params: {}, body: wrap(taskBody({ dependsOnTaskIds: [of.dependencyTaskId] })) }) },
+  // SR55: a fork of A's session, asked from B's own calling session on B's own runner. A fork is only ever of the
+  // session making the call (tasks/task-fork.ts), so A's session is answered as an id that names nothing is.
+  [`${route} body ${where}fork.sessionId`]: {
+    as: RUNNER,
+    request: (of: RunnerTenant, mine: RunnerTenant) => ({
+      params: {},
+      headers: calling(mine.runner.callingSessionId),
+      body: wrap(taskBody({
+        fork: { sessionId: of.runner.callingSessionId, sha: '5'.repeat(40), baseHead: '4'.repeat(40), includesUncommitted: true },
+      })),
+    }),
+  },
 }) satisfies Record<string, RunnerFieldCase>;
 
 /** The task filters by id, as the runner's list doors take them. */
@@ -1356,13 +1368,6 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'the session is read by (id, the runner\'s owner), and the attempt it settles by (its task, that owner); another account\'s session finds nothing and answers 404 (projects/project-criterion-confirmation.service.ts:197)',
   'POST /runner/criterion-checks/report body attachmentIds[]':
     'counted among the runner owner\'s own uploads before anything is written; one that is not answers 404 (projects/project-criterion-confirmation.service.ts:281)',
-  // ── forked tasks (0540, SR55) ─────────────────────────────────────────────────────────────────────
-  'POST /runner/tasks body fork.sessionId':
-    'never looked up on its own: it must equal the x-orbit-session-id of the call, which must be a session this runner credential is running (tasks/task-fork.ts:90), and is then read under the runner owner (tasks/task-fork.ts:117); anything else is refused 403 before anything is written. task-session-fork.pg.spec.ts sends another session and another runner',
-  'POST /runner/tasks/batch-create body tasks[].fork.sessionId':
-    'never looked up on its own: it must equal the x-orbit-session-id of the call, which must be a session this runner credential is running (tasks/task-fork.ts:90), and is then read under the runner owner (tasks/task-fork.ts:117); anything else is refused 403 before anything is written. task-session-fork.pg.spec.ts sends another session and another runner',
-  'POST /runner/tasks/batch-preview body tasks[].fork.sessionId':
-    'not read: the preview judges a plan without its fork (tasks.service.ts previewCreateMany), writes nothing and names nothing of anybody\'s (runner-api/runner-tasks.controller.ts:389)',
   // ── owner requests (0503) ─────────────────────────────────────────────────────────────────────────
   'POST /runner/owner-requests body blocksTaskIds[]':
     'counted among the runner owner\'s own tasks before anything is written; one that is not answers 404 (owner-requests/owner-requests.service.ts:128); owner-requests.pg.spec.ts (f) sends another account\'s',
