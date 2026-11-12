@@ -443,6 +443,14 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// opens by saying so. Only `GET /sessions/:id` and the create answer carry it: a list row's nil
     /// says nothing.
     public var createdWorkspace: Bool? = nil
+    /// Which gate the server found holding a queued session, with the numbers it judged on (web
+    /// `QueuedGate`). Only a list row carries them, and only `runner_updating` is read so far
+    /// (`RunnerUpdating`); nil from an older control plane.
+    public var queuedReason: String? = nil
+    public var queuedActive: Int? = nil
+    public var queuedLimit: Int? = nil
+    /// Beside `queuedReason` `runner_updating` only: what the update is and what it waits for.
+    public var queuedRunnerUpdate: QueuedRunnerUpdate? = nil
     public let pendingApprovals: Int?
     /// What `pendingApprovals` is counting, when one word says it better than "approval":
     /// `OWNER_CONFIRMATION` when everything counted is an OWNER_CONFIRMED task's run waiting for its
@@ -689,6 +697,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         numTurns = try? values.decodeIfPresent(Int.self, forKey: .numTurns)
         runtimeSessionId = try? values.decodeIfPresent(String.self, forKey: .runtimeSessionId)
         createdWorkspace = try? values.decodeIfPresent(Bool.self, forKey: .createdWorkspace)
+        queuedReason = try? values.decodeIfPresent(String.self, forKey: .queuedReason)
+        queuedActive = try? values.decodeIfPresent(Int.self, forKey: .queuedActive)
+        queuedLimit = try? values.decodeIfPresent(Int.self, forKey: .queuedLimit)
+        queuedRunnerUpdate = try? values.decodeIfPresent(QueuedRunnerUpdate.self, forKey: .queuedRunnerUpdate)
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
         ownerItems = try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems)

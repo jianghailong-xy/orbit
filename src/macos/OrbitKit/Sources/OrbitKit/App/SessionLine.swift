@@ -74,7 +74,11 @@ public struct SessionLine: Equatable, Sendable {
             return SessionLine(text: "Running…", tone: .running)
         }
         if live && s.effectiveRunState == .queued {
-            return SessionLine(text: ClaudeRegion.heldWords(s, machine: machine) ?? "Queued", tone: .queued)
+            if let held = ClaudeRegion.heldWords(s, machine: machine) { return SessionLine(text: held, tone: .queued) }
+            // A runner draining for its update is the one queue word in the warning colour (board 5,
+            // web `sessionLine`): it can last hours, and only the owner can shorten it.
+            if RunnerUpdating.holds(s) { return SessionLine(text: RunnerUpdating.RUNNER_UPDATING_TITLE, tone: .warning) }
+            return SessionLine(text: "Queued", tone: .queued)
         }
         // Parked while a sub-agent or workflow it started works on: the workspace itself still
         // working, so it outranks the wait it is parked on and anything it left running (web's
