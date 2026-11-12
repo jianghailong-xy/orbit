@@ -20,7 +20,10 @@
  */
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
 import http from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
 
 import { JwtService } from '@nestjs/jwt';
@@ -93,7 +96,10 @@ test('a TERMINAL credential drives only its own runner\'s sessions, and is refus
   await db.modelProvider.create({
     data: { slug: providerSlug, label: 'terminal routes', runtime: 'claude', ownerId: owner.id, baseUrl: providerUrl, apiKeyEnc: providerKey, enabled: true },
   });
-  server = await startApiserver(url, jwtSecret);
+  // Uploads land in a folder of this run's, on the local backend, as the file specs keep them.
+  const filesDir = mkdtempSync(path.join(os.tmpdir(), 'terminal-routes-files-'));
+  t.after(() => rmSync(filesDir, { recursive: true, force: true }));
+  server = await startApiserver(url, jwtSecret, { ORBIT_FILES_BACKEND: 'local', ORBIT_FILES_DIR: filesDir });
 
   const api = (method: string, path: string, bearer?: string, body?: unknown): Promise<Reply> =>
     call(server!, method, `/api${path}`, bearer, body);
