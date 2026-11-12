@@ -6,10 +6,11 @@ import XCTest
 /// the reply column at its full width: the right side is the owner's own words only
 /// (docs/mocks/orbit-cards-left, approved 2026-11-11; the browser's `.oic/.tsc/.psc/.crc/.smc-wrap`
 /// moved left to match). Natively they always filled the column; the owner's bubble is the one view
-/// that pushes itself right (`UserBubbleView`'s leading Spacer).
+/// that pushes itself right (`UserBubbleView`'s leading Spacer). Since docs/mocks/session-message-bubble
+/// (approved 2026-11-12) none is wider than 720 pt, still from the leading edge (`orbitCardWidth()`).
 ///
 /// SwiftUI does not exist on Linux, so this reads source, like `UserTurnRowWiringTests`: each card's
-/// outermost frame fills from the leading edge, and none of them takes the bubble's right-side spacer.
+/// outermost frame is that capped column, and none of them takes the bubble's right-side spacer.
 final class OrbitCardSideWiringTests: XCTestCase {
 
     private static let views = "src/macos/OrbitApp/Sources/OrbitApp/Views"
@@ -19,6 +20,7 @@ final class OrbitCardSideWiringTests: XCTestCase {
         ("ProjectStartedCardView.swift", "struct ProjectStartedCardView"),
         ("ConfirmationReviewTurnCardViews.swift", "struct ReviewRequestedCardView"),
         ("ConfirmationReviewTurnCardViews.swift", "struct SentBackByReviewerCardView"),
+        ("ConfirmationReviewTurnCardViews.swift", "struct YouConfirmedCardView"),
         ("SessionMessageCardView.swift", "struct SessionMessageCardView"),
     ]
 
@@ -49,11 +51,23 @@ final class OrbitCardSideWiringTests: XCTestCase {
         for card in Self.cards {
             let text = try source(Self.views + "/" + card.file)
             let body = try body(of: card.view, in: text)
-            XCTAssertTrue(body.contains(".frame(maxWidth: .infinity, alignment: .leading)"),
-                          "\(card.view) no longer fills the reply column from the leading edge")
+            XCTAssertTrue(body.hasSuffix("\n        .orbitCardWidth()"),
+                          "\(card.view)'s outermost frame is no longer the capped column from the leading edge")
             XCTAssertFalse(body.contains("Spacer(minLength: 60)") || body.contains("alignment: .trailing)"),
                            "\(card.view) pushes itself to the owner's side, which is the owner's words only")
         }
+    }
+
+    func testTheCappedColumnIs720FromTheLeadingEdge() throws {
+        let text = try source(Self.views + "/SessionMessageCardView.swift")
+        guard let start = text.range(of: "func orbitCardWidth() -> some View {") else {
+            return XCTFail("orbitCardWidth() not found")
+        }
+        let rest = text[start.upperBound...]
+        let width = String(rest[..<(rest.range(of: "\n    }\n")?.lowerBound ?? rest.endIndex)])
+        XCTAssertTrue(width.contains("frame(maxWidth: 720, alignment: .leading)"), "a card is no longer capped at 720 pt")
+        XCTAssertTrue(width.contains(".frame(maxWidth: .infinity, alignment: .leading)"),
+                      "the capped card no longer sits at the leading edge")
     }
 
     func testOnlyTheOwnersBubbleTakesTheRightSide() throws {

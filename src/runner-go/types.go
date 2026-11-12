@@ -131,6 +131,21 @@ type SelfUpdateReport struct {
 	LastUpdatedAt   string `json:"lastUpdatedAt,omitempty"`
 	LastUpdatedFrom string `json:"lastUpdatedFrom,omitempty"`
 	LastUpdatedTo   string `json:"lastUpdatedTo,omitempty"`
+	// Where a release this runner is behind stands, for the runner page's Update card
+	// (docs/runner-update-drain-design.md §4): available | draining | restarting | postponed, the
+	// selfUpdatePhase* constants. Omitted when no release is waiting, as by every runner before it.
+	Phase string `json:"phase,omitempty"`
+	// The release the phase is about.
+	TargetVersion string `json:"targetVersion,omitempty"`
+	// RFC3339: when the release was first found waiting for a busy runner (the deferral clock's
+	// start), when the drain began, and until when the owner postponed it.
+	AvailableSince string `json:"availableSince,omitempty"`
+	DrainingSince  string `json:"drainingSince,omitempty"`
+	PostponedUntil string `json:"postponedUntil,omitempty"`
+	// While draining: the turns still in flight, and how many there were when the drain began (never
+	// fewer than are in flight now), so the page can say "Waiting for 2 of 8 turns".
+	TurnsInFlight int `json:"turnsInFlight,omitempty"`
+	TurnsAtDrain  int `json:"turnsAtDrain,omitempty"`
 }
 
 // AgentDirProbe is what the runner found at one agent's working directory: whether the path is

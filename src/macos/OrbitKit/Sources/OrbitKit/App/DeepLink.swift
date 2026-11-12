@@ -128,9 +128,12 @@ public enum ReferenceLink {
     /// project, whose page is not a `Route`.
     public static func route(_ url: URL) -> Route? {
         guard let ref = parse(url), PublicID.toUUID(ref.id) != nil else { return nil }
+        // A task or a session is named by its public id where the pages read it — a restored
+        // route, a pushed page and the store behind it compare that spelling — so a reference
+        // written as a UUID still lands on the page instead of a spinner.
         switch ref.kind {
-        case "task":    return .task(ref.id)
-        case "session": return .session(ref.id)
+        case "task":    return .task(PublicID.toPublic(ref.id))
+        case "session": return .session(PublicID.toPublic(ref.id))
         // A list is named by its public id everywhere the Tasks page knows it (`TaskListSummary.id`),
         // so a link that spelled it as a UUID still lands on the row that is showing.
         case "list":    return .list(PublicID.toPublic(ref.id))

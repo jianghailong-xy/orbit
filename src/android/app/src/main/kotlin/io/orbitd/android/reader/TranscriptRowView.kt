@@ -82,6 +82,8 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             // An Orbit turn drawn as its own card (`OrbitTurnCardView`) carries its block in its own fold: the row is the card alone.
             isOrbitTurnCard(line) && cards.drop(1).all { it.key.contains(":reply:") })
     }
+    // Another session's message is its bubble (SessionMessageBubble): no row heading, no tint across the row.
+    val bubble = cards.firstOrNull { it.key.endsWith(":sessionMessage") }
     /** [reveal]: a failed read opens the card to say so — except for a question card reading itself whole while folded. */
     fun loadFull(copy: Boolean = false, reveal: Boolean = true) { scope.launch {
         loading = true; error = false
@@ -129,7 +131,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
         else -> event.type.replace('_', ' ').replaceFirstChar(Char::uppercase)
     }
     val bg = when { highlighted -> MaterialTheme.colorScheme.secondaryContainer
-        event.type == "user" && answerLine == null -> MaterialTheme.colorScheme.surfaceVariant
+        event.type == "user" && answerLine == null && bubble == null -> MaterialTheme.colorScheme.surfaceVariant
         else -> MaterialTheme.colorScheme.surface }
     // The runtime's calls whose work outlives them: a sub-agent (Agent; Task before 2.x) and a Workflow.
     val taskKind = (shown.fields.string("name") ?: shown.fields.string("toolName")).takeIf { event.type == "tool_use" && it in setOf("Agent", "Task", "Workflow") }
@@ -150,7 +152,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             return@Column
         }
         // A thinking row is its own one line (A06-11); a question card's line folds and opens it, as its record does.
-        if (!detailOnly && event.type != "thinking") Row(Modifier.fillMaxWidth().then(if (questions.isEmpty()) Modifier else Modifier
+        if (!detailOnly && event.type != "thinking" && bubble == null) Row(Modifier.fillMaxWidth().then(if (questions.isEmpty()) Modifier else Modifier
             .clickable(onClickLabel = if (questionShown) "Hide options" else "Show options", role = Role.Button) { questionOpen = !questionShown }
             .semantics { stateDescription = if (questionShown) "Expanded" else "Collapsed" }),
             horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -249,7 +251,6 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             // The title is the whole row, as on web and iOS: the payload is the runner's bookkeeping (the request a Stop answered, the
             // restart's reason), which the body below would print as raw JSON.
         } else {
-            cards.forEach { TranscriptCardView(it, open, shown) }
             val atts = (shown.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
             val attachmentOnly = shown.type == "user" && shown.body().isBlank() && atts.isNotEmpty()
             // What delivery appended is not the person's: their row holds their words, and one line at its foot names the rest.
@@ -259,21 +260,21 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                 // A wake's blocks are its line (A08-11); only what else the note carried is an attached entry.
                 ?.let { if (cards.any { card -> card.key.endsWith(":wake") }) withoutWakeBlocks(it) else it }?.takeIf { it.isNotBlank() }
             val words = if (shown.type == "user") shown.personWords() else shown.body()
+            cards.forEach { if (it === bubble) SessionMessageBubble(it.source, shown, open, words, note?.trim(), revealed = highlighted) else TranscriptCardView(it, open, shown) }
             if (cards.isEmpty() && !attachmentOnly) { if (note == null || words.isNotBlank()) MarkdownText(words.ifBlank { shown.payload.toString() }, open = open) }
-            // Another session's words are the turn's point: shown under its card, their first lines when long (SessionMessageBody).
-            else if (shown.type == "user" && shown.fields["sessionMessage"] is JsonObject && words.isNotBlank())
-                SessionMessageBody(words, open, revealed = highlighted)
+            // Another session's words, and what delivery attached, are its bubble's.
+            else if (bubble != null) Unit
             else if (shown.body().isNotBlank()) DetailFold("Orbit attached") { MarkdownText(shown.body(), open = open) }
             atts.forEach { attachment -> attachment.string("id")?.let { id ->
                 val name = attachment.string("name") ?: "Attachment"
                 if (attachment.string("mime")?.startsWith("image/") == true) TranscriptImage("orbit-attachment:$id", name, open)
                 else TextButton(onClick = { open("orbit-attachment:$id") }) { Text(name) }
             } }
-            (shown.fields["sessionMessage"] as? JsonObject)?.let { sender ->
+            // A message naming no sender session draws no bubble: it says whose it is not under its words.
+            if (bubble == null && shown.fields["sessionMessage"] is JsonObject)
                 Text("Sent by another Orbit session, not by you", style = MaterialTheme.typography.bodySmall)
-                sessionNote?.narrower?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                sender.string("fromSessionId")?.let { id -> TextButton(onClick = { open("orbit-session:$id") }) { Text("Open sender session") } }
-            }
+            // A sender that runs narrower than this session: the one fact of its block the bubble does not show (SessionMessageNote).
+            sessionNote?.narrower?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)) }
             // How a steer of the reader's came out; words that never reached the engine are offered back to the composer.
             row.steer?.let { steer ->
                 val words = shown.personWords().trim()
@@ -283,7 +284,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             }
             if (shown.truncated) TextButton(enabled = !loading, onClick = { loadFull() }) { Text(if (error) "Couldn't load full message · Retry" else "Read full message") }
             // Last, in the meta voice of the steer's line above it: the person's words stay what the eye lands on.
-            note?.let { AttachedNoteEntry(it.trim()) }
+            if (bubble == null) note?.let { AttachedNoteEntry(it.trim()) }
         }
     }
     copyOverflow?.let { LongTextDialog(it) { copyOverflow = null } }

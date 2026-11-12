@@ -102,8 +102,13 @@ describe('another session’s message', () => {
     // The words are the ones that were sent — the block delivery appended is not among them.
     expect(el!.querySelector('.smc-body .md')?.textContent).toBe(SENT);
     expect(el!.querySelector('.smc-body')?.textContent).not.toContain('orbit-session-message');
+    // That it is not the reader's is the From line's tooltip and its screen-reader text, not a line
+    // of its own (docs/mocks/session-message-bubble).
+    expect(head?.getAttribute('title')).toBe('Sent by another Orbit session, not by you');
+    expect(head?.querySelector('.smc-not-you')?.textContent).toBe('Sent by another Orbit session, not by you');
+    // The foot row is one grey line: the time, the sender's task, what Orbit attached.
     const meta = el!.querySelector('.smc-meta');
-    expect(meta?.textContent).toContain('Sent by another Orbit session, not by you');
+    expect(meta?.textContent).not.toContain('Sent by another Orbit session');
     expect(meta!.querySelector('a')?.getAttribute('href')).toBe(`/tasks/${uuidToBase62(CARD.fromTaskId!)}`);
     // The block only tells the agent what the card already says: it is not folded under it again.
     expect(el!.querySelector('.chat-injected')).toBeNull();
