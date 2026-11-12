@@ -236,9 +236,13 @@ export class PushService {
           deletedAt: null,
           cancelRequestedAt: null,
         },
-        select: { title: true, ownerId: true },
+        select: { title: true, ownerId: true, notificationsMuted: true, notifyNeedsYou: true },
       });
       if (!session) return;
+      // The session's own switches (Settings → Notifications): muted silences it, and 'off' turns this alert off. There
+      // is no account preference for it, so inherit keeps it on. Decided before the stretch is claimed, so a silenced
+      // approval leaves `alerted_approval_at` where it was, and the next stretch still rings once the switch is back.
+      if (session.notificationsMuted || session.notifyNeedsYou === 'off') return;
 
       // App-icon badge = the owner's sessions that need a reply (the authoritative count, shared
       // with the in-app "needs you" list and the silent sync below). Record it so a follow-up
@@ -487,14 +491,18 @@ export class PushService {
           // The rolling recap, when one has been written: `settleAlert` prefers it over the
           // rules line, and falls back to that line when it is null.
           recapText: true,
+          notificationsMuted: true,
+          notifyTurnFinished: true,
           owner: { select: { preferences: true } },
         },
       });
       if (!session) return;
       const alert = settleAlert(session);
       if (!alert) return;
+      // Muted silences the session; its own 'on' or 'off' wins over the account's switch; inherit (null) reads that.
+      if (session.notificationsMuted || session.notifyTurnFinished === 'off') return;
       const prefs = (session.owner?.preferences ?? {}) as { notifySessionFinished?: boolean };
-      if (prefs.notifySessionFinished === false) return;
+      if (session.notifyTurnFinished !== 'on' && prefs.notifySessionFinished === false) return;
       const { tokens, feishu } = await this.channels(session.ownerId);
       if (tokens.length === 0 && !feishu) return;
 
@@ -560,7 +568,7 @@ export class PushService {
    * the outcome back, so it can say "I've pinged you" only when somebody was actually pinged, and
    * knows to keep working rather than wait when nobody was.
    *
-   * Three things can refuse it, and each is reported rather than swallowed:
+   * Four things can refuse it, and each is reported rather than swallowed: the session is muted,
    * the account turned agent notifications off, no device is registered, or this session already
    * rang within `AGENT_NOTIFY_MIN_INTERVAL_MS`. The rate limit exists because the interrupt budget
    * is per-person while the number of agents running is not — the same reason `settleAlert` is as
@@ -590,7 +598,7 @@ export class PushService {
         // reads as absent rather than as a session whose title we would then leak.
         const session = await this.prisma.session.findFirst({
           where: { id: input.sessionId, ownerId: input.ownerId },
-          select: { title: true, agentNotifiedAt: true, task: { select: { id: true, title: true, project: true } } },
+          select: { title: true, agentNotifiedAt: true, notificationsMuted: true, task: { select: { id: true, title: true, project: true } } },
         });
         if (!session) return { delivered: false, reason: 'session not found' };
         const project = session.task?.project;
@@ -646,6 +654,8 @@ export class PushService {
           const result = await this.notifyAgentMessage({ ...input, message: `Not reviewed by the coordinator · ${input.message.trim()}` }, true);
           return { ...result, recipient: 'owner', fallback };
         }
+        // Before the claim, so a muted session spends none of its once-a-minute turn.
+        if (session.notificationsMuted) return { delivered: false, reason: 'notifications are muted for this session' };
         title = session.title || input.fallbackTitle;
         rang = session.agentNotifiedAt ?? null;
       }

@@ -1132,3 +1132,124 @@ for (const unavailable of ['missing', 'ended', 'paused', 'fused', 'refused']) {
     assert.match(JSON.parse(harness.sent[0]).aps.alert.body, /^Not reviewed by the coordinator · /);
   });
 }
+
+// ── the session's own notification switches (Settings → Notifications) ────
+//
+// notifyTurnFinished / notifyNeedsYou: null inherits, 'on' or 'off' overrides; notificationsMuted silences every push of
+// the session, on every transport.
+
+test('a finished push follows the session: inherit reads the account, on and off override it, muted silences it', async () => {
+  const cases: Array<[string | null, boolean, boolean | undefined, number]> = [
+    // [notifyTurnFinished, muted, account notifySessionFinished, pushes]
+    [null, false, undefined, 1],
+    [null, false, false, 0],
+    ['on', false, false, 1],
+    ['on', false, undefined, 1],
+    ['off', false, undefined, 0],
+    ['off', false, true, 0],
+    [null, true, undefined, 0],
+    ['on', true, true, 0],
+  ];
+  for (const [notifyTurnFinished, notificationsMuted, notifySessionFinished, pushes] of cases) {
+    const preferences = notifySessionFinished === undefined ? {} : { notifySessionFinished };
+    const { service, sent, lookups } = settleHarness(settledSession({ notifyTurnFinished, notificationsMuted, owner: { preferences } }));
+    await service.notifySessionSettled('s-1');
+    assert.equal(sent.length, pushes, JSON.stringify({ notifyTurnFinished, notificationsMuted, notifySessionFinished }));
+    assert.equal(lookups[0].select.notifyTurnFinished, true);
+    assert.equal(lookups[0].select.notificationsMuted, true);
+  }
+});
+
+test('a muted or off finished push sends no Feishu card either', async () => {
+  for (const over of [{ notificationsMuted: true }, { notifyTurnFinished: 'off' }]) {
+    const { service } = settleHarness(settledSession(over));
+    let channels = 0;
+    (service as any).channels = async () => { channels += 1; return { tokens: [], feishu: { ownerId: 'owner-1' } }; };
+    await service.notifySessionSettled('s-1');
+    assert.equal(channels, 0, 'decided before any transport is looked up');
+  }
+});
+
+/** An approval push harness whose session row carries the given switches; claims and deliveries are counted. */
+function approvalSwitchHarness(row: Record<string, unknown>, opts: { claim?: boolean } = {}) {
+  const bodies: string[] = [];
+  const cards: unknown[] = [];
+  const joined: unknown[] = [];
+  const claims: string[] = [];
+  const lookups: any[] = [];
+  const feishu = {
+    approvalCard: (...args: unknown[]) => ({ args }),
+    post: async (_target: unknown, card: unknown) => { cards.push(card); return true; },
+    joinApprovalStretch: async (...args: unknown[]) => { joined.push(args); return true; },
+  };
+  const prisma = {
+    session: { findFirst: async (args: any) => { lookups.push(args); return { title: 'Session', ownerId: 'owner-1', ...row }; } },
+  };
+  const service = new PushService(prisma as any, enabledConfig(), feishu as any);
+  (service as any).needsYouSessions = async () => ['s-1'];
+  (service as any).channels = async () => ({ tokens: [{ token: 'device', environment: 'sandbox' }], feishu: { ownerId: 'owner-1' } });
+  (service as any).claimApprovalAlert = async (_s: string, approvalId: string) => { claims.push(approvalId); return opts.claim ?? true; };
+  (service as any).deliver = async (_t: unknown, body: string) => { bodies.push(body); };
+  return { service, bodies, cards, joined, claims, lookups };
+}
+
+test('an approval or question push follows the session: inherit and on ring, off and muted do not', async () => {
+  const cases: Array<[Record<string, unknown>, boolean]> = [
+    [{ notifyNeedsYou: null, notificationsMuted: false }, true],
+    [{ notifyNeedsYou: 'on', notificationsMuted: false }, true],
+    [{ notifyNeedsYou: 'off', notificationsMuted: false }, false],
+    [{ notifyNeedsYou: null, notificationsMuted: true }, false],
+    [{ notifyNeedsYou: 'on', notificationsMuted: true }, false],
+  ];
+  for (const [row, rings] of cases) {
+    for (const tool of ['Bash', 'AskUserQuestion']) {
+      for (const coordinatorFallback of [false, true]) {
+        const h = approvalSwitchHarness(row);
+        await h.service.notifyApprovalRequest('s-1', 'a-1', tool, coordinatorFallback);
+        const label = JSON.stringify({ row, tool, coordinatorFallback });
+        assert.equal(h.bodies.length, rings ? 1 : 0, label);
+        assert.equal(h.cards.length, rings ? 1 : 0, `Feishu: ${label}`);
+        assert.equal(h.lookups[0].select.notifyNeedsYou, true);
+        assert.equal(h.lookups[0].select.notificationsMuted, true);
+        // A silenced alert takes no edge, so it leaves alerted_approval_at where it was.
+        if (!rings) assert.deepEqual(h.claims, [], `no claim: ${label}`);
+      }
+    }
+  }
+});
+
+test('a silenced approval does not join a Feishu stretch, and does not block the next one once unmuted', async () => {
+  const muted = approvalSwitchHarness({ notificationsMuted: true }, { claim: false });
+  await muted.service.notifyApprovalRequest('s-1', 'a-1', 'Bash');
+  assert.deepEqual(muted.joined, []);
+  assert.deepEqual(muted.claims, []);
+
+  // The row the claim reads was not moved while muted, so the next stretch's opener claims and rings.
+  const unmuted = approvalSwitchHarness({ notificationsMuted: false });
+  await unmuted.service.notifyApprovalRequest('s-1', 'a-2', 'Bash');
+  assert.deepEqual(unmuted.claims, ['a-2']);
+  assert.equal(unmuted.bodies.length, 1);
+});
+
+test('an agent message to a muted session is refused before it takes the once-a-minute turn', async () => {
+  const muted = agentNotifyHarness({ session: { title: 'Fix the login bug', agentNotifiedAt: null, notificationsMuted: true } });
+  muted.rang.beforeClaim = () => { assert.fail('a muted session must not spend its turn'); };
+  assert.deepEqual(await muted.service.notifyAgentMessage(agentInput), {
+    delivered: false, reason: 'notifications are muted for this session',
+  });
+  assert.equal(muted.sent.length, 0);
+  assert.equal(muted.rang.sessions.has('s-1'), false, 'agentNotifiedAt left unset');
+
+  // Not muted rings as today, and an unmuted session is not held by the refused call.
+  const on = agentNotifyHarness({ session: { title: 'Fix the login bug', agentNotifiedAt: null, notificationsMuted: false } });
+  assert.equal((await on.service.notifyAgentMessage(agentInput)).delivered, true);
+  assert.equal(on.sent.length, 1);
+});
+
+test('the turn-finished and needs-you switches do not touch agent messages', async () => {
+  const { service, sent } = agentNotifyHarness({
+    session: { title: 'Fix the login bug', agentNotifiedAt: null, notificationsMuted: false, notifyTurnFinished: 'off', notifyNeedsYou: 'off' },
+  });
+  assert.equal((await service.notifyAgentMessage(agentInput)).delivered, true);
+  assert.equal(sent.length, 1);
+});
