@@ -120,9 +120,9 @@ struct OrbitApp: App {
             MenuBarContent().environment(model)
         } label: {
             if let badge = model.menuSummary.badge {
-                Label(badge, systemImage: "circle.hexagongrid.fill")
+                Label { Text(badge) } icon: { Image(nsImage: MenuBarIcon.image) }
             } else {
-                Image(systemName: "circle.hexagongrid")
+                Image(nsImage: MenuBarIcon.image)
             }
         }
         .menuBarExtraStyle(.window)
