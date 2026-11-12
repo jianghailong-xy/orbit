@@ -44,7 +44,8 @@ class TranslationCopyParityTest {
     }
 
     @Test fun webSaysTheSameWords() {
-        val web = source("src/web/src", setOf("ts", "tsx"))
+        // The web draws the language names from @orbit/shared (TRANSLATION_LANGUAGE_NAMES), so its words are its own and shared's.
+        val web = source("src/web/src", setOf("ts", "tsx")) + " " + source("src/shared/src", setOf("ts"))
         assumeTrue("Web has no Settings › Translation yet", web.contains(TranslationCopy.TRANSLATE_CONVERSATIONS))
         assertEquals("Android words the web does not say", emptyMap<String, String>(), missing(web))
     }
