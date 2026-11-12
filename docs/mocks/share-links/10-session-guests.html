@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>10 session guests</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="share.css">
+<style>
+  /* board-local classes are prefixed sg- (index.css has bare short classes) */
+  .sg-part { display: block; background: #fff; padding: 26px 30px 30px; }
+  .sg-part + .sg-part { border-top: 6px solid #eef0f3; }
+  .sg-h2 { font-size: 19px; font-weight: 650; margin: 0 0 4px; }
+  .sg-two { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 22px; align-items: start; }
+  .sg-three { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 18px; align-items: start; }
+  .sg-mask { background: #8f8f8f; border-radius: 10px; padding: 24px 0; display: flex; justify-content: center; }
+  .sg-dlg { width: 540px; position: relative; padding: 20px 24px 18px; }
+  .sg-ppl { border: 1px solid var(--border); border-radius: 8px; margin-top: 4px; }
+  .sg-inv { display: flex; gap: 8px; padding: 8px; border-bottom: 1px solid var(--border-subtle); }
+  .sg-inv .in { flex: 1; height: 30px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 6px; padding: 0 10px; font-size: 13px; color: var(--text-3); display: flex; align-items: center; }
+  .sg-p { display: grid; grid-template-columns: 28px minmax(0,1fr) auto auto; gap: 10px; align-items: center; padding: 8px 10px; font-size: 13px; }
+  .sg-p + .sg-p { border-top: 1px solid var(--border-subtle); }
+  .sg-av { width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: #fff; background: #7b8ce0; }
+  .sg-av.b { background: #5fae8b; } .sg-av.o { background: #c08a4a; }
+  .sg-p .nm { font-weight: 500; } .sg-p .em { font-size: 12px; color: var(--text-3); }
+  .sg-p .ct { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+  .sg-x { font-size: 12.5px; color: var(--text-2); border: 1px solid var(--border); border-radius: 6px; padding: 2px 9px; white-space: nowrap; }
+  .sg-cons { font-size: 12px; line-height: 1.55; color: var(--text-3); margin: 8px 2px 0; }
+  .sg-cons.warn { color: var(--warning); }
+  .sg-ack { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; margin: 8px 2px 0; color: var(--text-1); }
+  .sg-err { font-size: 12px; color: var(--error); padding: 0 10px 8px; }
+
+  /* transcript */
+  .sg-tr { background: var(--bg-base); border: 1px solid #dde0e6; border-radius: 10px; overflow: hidden; font-size: 13.5px; }
+  .sg-trh { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .sg-trh .t { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sg-body { padding: 14px 18px 6px; display: flex; flex-direction: column; gap: 12px; }
+  .sg-u { align-self: flex-end; max-width: 78%; display: flex; flex-direction: column; align-items: flex-end; }
+  .sg-from { font-size: 12px; color: var(--text-3); margin: 0 4px 3px 0; }
+  .sg-bub { background: var(--fill-muted, #f0f1f3); border-radius: 14px; padding: 8px 12px; line-height: 1.55; }
+  .sg-foot { font-size: 11.5px; color: var(--text-4); margin: 3px 4px 0 0; }
+  .sg-a { line-height: 1.65; color: var(--text-1); }
+  .sg-tool { font: 12px ui-monospace, "DejaVu Sans Mono", monospace; color: var(--text-2); background: var(--bg-sunken); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 5px 9px; }
+  .sg-comp { margin: 8px 14px 14px; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
+  .sg-comp .ph { color: var(--text-4); font-size: 13.5px; min-height: 36px; }
+  .sg-comp .bar { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-3); }
+  .sg-send { margin-left: auto; width: 28px; height: 28px; border-radius: 50%; background: var(--brand); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; }
+  .sg-send.off { background: #c9ccd2; }
+  .sg-chip { border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; font-size: 11.5px; color: var(--text-2); }
+  .sg-wait { margin: 0 14px; font-size: 12.5px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
+  .sg-wait i { width: 7px; height: 7px; border-radius: 50%; background: var(--warning-solid); }
+  .sg-note { margin: 8px 14px 0; font-size: 12px; color: var(--text-3); }
+  .sg-guest { padding: 1px 8px; border-radius: 999px; background: #eef3ff; border: 1px solid #c9d6ff; color: #3651c9; font-size: 11px; font-weight: 600; }
+
+  /* sidebar + session rows */
+  .sg-side { width: 270px; background: var(--bg-sunken); border: 1px solid #dde0e6; border-radius: 10px; padding: 10px 8px; font-size: 13px; }
+  .sg-gh { font-size: 11.5px; font-weight: 600; color: var(--text-3); padding: 8px 8px 4px; display: flex; gap: 6px; align-items: center; }
+  .sg-row { padding: 6px 8px; border-radius: 6px; }
+  .sg-row.on { background: #e6ebf8; }
+  .sg-row .t { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; gap: 6px; align-items: center; }
+  .sg-row .s { font-size: 12px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sg-row .t .tm { margin-left: auto; font-size: 11.5px; color: var(--text-4); font-weight: 400; display: inline-flex; gap: 4px; align-items: center; }
+
+  /* 404 */
+  .sg-gone { padding: 64px 20px; text-align: center; color: var(--text-2); }
+  .sg-gone b { display: block; font-size: 16px; color: var(--text-1); margin-bottom: 6px; }
+
+  /* sequence */
+  .sg-seq { position: relative; display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 0; margin-top: 6px; }
+  .sg-lane { text-align: center; }
+  .sg-lane .hd { display: inline-flex; flex-direction: column; justify-content: center; box-sizing: border-box; height: 52px; vertical-align: top; font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 8px; background: #f2f4f7; border: 1px solid #dde0e6; }
+  .sg-lane .hd.n { background: #fff4d6; border-color: #f0d58a; }
+  .sg-lane .ln { width: 0; border-left: 1.5px dashed #c5c9d0; height: 360px; margin: 6px auto 0; }
+  .sg-msg { position: absolute; height: 0; border-top: 1.5px solid #6d7686; }
+  .sg-msg::after { content: ""; position: absolute; top: -5px; right: -1px; border: 5px solid transparent; border-left: 8px solid #6d7686; border-right: 0; }
+  .sg-msg.back { border-top-style: dashed; }
+  .sg-msg.back::after { right: auto; left: -1px; border-left: 0; border-right: 8px solid #6d7686; }
+  .sg-msg span { position: absolute; left: 0; right: 0; bottom: 3px; text-align: center; font-size: 11.5px; color: var(--text-1); line-height: 1.35; }
+  .sg-msg span code { font: 11px ui-monospace, "DejaVu Sans Mono", monospace; background: #eceef1; padding: 0 3px; border-radius: 3px; }
+
+  /* tables */
+  .sg-tb { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+  .sg-tb th, .sg-tb td { border: 1px solid #e3e5e9; padding: 7px 9px; text-align: left; vertical-align: top; line-height: 1.55; }
+  .sg-tb th { background: #f5f6f8; font-weight: 600; font-size: 12.5px; }
+  .sg-tb td.rec { background: #f1f8f3; }
+  .sg-tb code { font: 11.5px ui-monospace, "DejaVu Sans Mono", monospace; background: #eceef1; padding: 0 4px; border-radius: 3px; }
+  .sg-ok { color: var(--success); font-weight: 700; } .sg-no { color: var(--error); font-weight: 700; }
+  .sg-steps { margin: 6px 0 0; padding-left: 20px; font-size: 13.5px; line-height: 1.75; }
+  .sg-steps code { font: 11.5px ui-monospace, "DejaVu Sans Mono", monospace; background: #eceef1; padding: 0 4px; border-radius: 3px; }
+</style>
+</head>
+<body class="m">
+<div class="m-sheet" id="sheet" style="width:1320px;padding:0">
+
+<!-- ═════════════════════════ 1 · 今天 vs 新 + 消息路径 ═════════════════════════ -->
+<section class="sg-part" id="part-1">
+  <h1 class="m-h1">10 · 会话访客：被邀请的人可以在你的会话里接着聊</h1>
+  <p class="m-sub">接在 1–9 的分享链接之后。公开链接照旧只读；新加的是「按邮箱邀请本 Orbit 上的人，他们能回话」，两者互不影响。
+    示例数据：所有者 Lin Wei，访客 Alice Chen，会话「Retry budget for flaky pg specs」跑在 runner build-box 上，模式 Accept edits。设计文档 <code>docs/session-guests-design.md</code>。</p>
+
+  <div class="sg-two">
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k">今天</span> 公开对话页：只能看</div>
+      <div class="pv">
+        <div class="pv-bar"><span class="pv-brand">Orbit</span>
+          <div class="pv-crumbs"><span class="here">Retry budget for flaky pg specs</span></div>
+          <div class="pv-right"><span class="pv-live"><i></i>Live</span><span class="pv-badge">Read-only</span></div></div>
+        <div class="sg-body" style="padding-bottom:14px">
+          <div class="sg-u"><div class="sg-bub">The link-heartbeat spec fails about once in 30 runs. Can we give pg specs a retry budget instead of skipping it?</div></div>
+          <div class="sg-a">A per-file retry budget would hide real regressions in the same file. I’d rather retry only the tests that carry a <code>@flaky</code> tag, at most twice, and print every retry in the summary…</div>
+          <div class="sg-tool">▸ Read src/apiserver/vitest.pg.config.ts</div>
+          <div class="sg-a" style="color:var(--text-3)">…</div>
+        </div>
+        <div class="pv-foot">Shared from Orbit · read-only</div>
+      </div>
+      <p class="m-cap">看的人想接着问，只能把问题发给所有者，再由所有者转述进会话。<code>/shared/:token/*</code> 全是 GET，分享框写着「They can’t reply or change anything.」</p>
+    </div>
+
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k new">新</span> 一条访客消息走到哪里</div>
+      <div class="sg-seq" id="seq">
+        <div class="sg-lane"><span class="hd n">Alice<br><span style="font-weight:400;font-size:11px">访客</span></span><div class="ln"></div></div>
+        <div class="sg-lane"><span class="hd n">访客门<br><span style="font-weight:400;font-size:11px">/guest-sessions</span></span><div class="ln"></div></div>
+        <div class="sg-lane"><span class="hd">createTurn<br><span style="font-weight:400;font-size:11px">所有者的会话</span></span><div class="ln"></div></div>
+        <div class="sg-lane"><span class="hd">Lin 的 runner<br><span style="font-weight:400;font-size:11px">build-box</span></span><div class="ln"></div></div>
+        <div class="sg-lane"><span class="hd">Lin Wei<br><span style="font-weight:400;font-size:11px">所有者</span></span><div class="ln"></div></div>
+        <!-- arrows: lane centres at 10%,30%,50%,70%,90% -->
+        <div class="sg-msg" style="left:10%;width:20%;top:118px"><span>POST turns<br>{content}</span></div>
+        <div class="sg-msg" style="left:30%;width:20%;top:170px"><span>查邀请 · 上限<br>署名 <code>ORBIT_GUEST</code></span></div>
+        <div class="sg-msg" style="left:50%;width:20%;top:222px"><span>inbox 正文 +<br>「不是主人」前言</span></div>
+        <div class="sg-msg" style="left:70%;width:20%;top:274px"><span>审批 / 提问<br>只到所有者</span></div>
+        <div class="sg-msg back" style="left:10%;width:60%;top:330px"><span>事件 → 访客页（同公开页的 events?after= 轮询）</span></div>
+        <div class="sg-msg back" style="left:50%;width:40%;top:380px"><span>会话行 From Alice Chen: …</span></div>
+      </div>
+      <p class="m-cap">跑在所有者的 runner、worktree 和额度上，与飞书群派活（feishu-bot-design §8）同一条路：同一组外部发送者列、同一种 runner 前言、同一条「审批只到主人」。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════════════════ 2 · 所有者侧 ═════════════════════════ -->
+<section class="sg-part" id="part-2">
+  <h2 class="sg-h2">所有者侧：分享框加一段 People who can reply，对话里看得出谁说的</h2>
+  <p class="m-sub">同一个 Share session 对话框。上半段是现有的公开链接（不动），下半段是新的邀请。</p>
+  <div class="sg-two">
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k new">新</span> Share session · 已邀请两人</div>
+      <div class="sg-mask">
+        <div class="dlg sg-dlg">
+          <span class="dlg-x">×</span>
+          <div class="dlg-t">Share session</div>
+          <div class="acc">
+            <span class="acc-ic off"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>
+            <div><div class="sel">Only you <span class="cv">▾</span></div>
+              <div class="acc-d">No public link. People you invite below can still open and reply.</div></div>
+          </div>
+
+          <div class="dlg-lbl m-mark" style="margin-top:18px"><span class="m-n">1</span>People who can reply</div>
+          <div class="sg-ppl">
+            <div class="sg-inv"><div class="in">Email of an Orbit account</div><span class="btn primary">Invite</span></div>
+            <div class="sg-p"><span class="sg-av">A</span><div><div class="nm">Alice Chen</div><div class="em">alice@example.com</div></div><span class="ct m-mark"><span class="m-n">2</span>12 messages today</span><span class="sg-x">Remove</span></div>
+            <div class="sg-p"><span class="sg-av b">R</span><div><div class="nm">Ravi Kumar</div><div class="em">ravi@example.com</div></div><span class="ct">Not opened yet</span><span class="sg-x">Remove</span></div>
+          </div>
+          <div class="sg-cons m-mark"><span class="m-n">3</span>They can send messages to this session. The agent runs them on build-box as Accept edits, using your accounts. Approvals and the agent’s questions still come only to you.</div>
+          <div class="dlg-foot"><span class="stat">Copy link <span class="muted">— the signed-in link, for yourself</span></span><span class="btn primary">Done</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k state">要多确认</span> 会话在 Bypass 下第一次邀请 · 以及查无此人</div>
+      <div class="sg-mask">
+        <div class="dlg sg-dlg">
+          <span class="dlg-x">×</span>
+          <div class="dlg-t">Share session</div>
+          <div class="dlg-lbl" style="margin-top:4px">People who can reply</div>
+          <div class="sg-ppl">
+            <div class="sg-inv"><div class="in" style="color:var(--text-1)">bob@example.com</div><span class="btn primary">Invite</span></div>
+            <div class="sg-err">No Orbit account uses this email.</div>
+          </div>
+          <div class="sg-cons warn m-mark"><span class="m-n">4</span>They can send messages to this session. The agent runs them on build-box as Bypass permissions, using your accounts — it won’t ask before acting.</div>
+          <div class="sg-ack"><span class="cb"></span><span>I understand the agent won’t ask before acting on their messages</span></div>
+          <div class="dlg-foot"><span class="stat"></span><span class="btn primary">Done</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sg-two" style="margin-top:22px">
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k new">新</span> 所有者的对话：访客的话上方一行灰字</div>
+      <div class="sg-tr">
+        <div class="sg-trh"><span class="t">Retry budget for flaky pg specs</span><span class="status-pill running"><span class="spin"></span>Running</span></div>
+        <div class="sg-body">
+          <div class="sg-u"><div class="sg-bub">Can we give pg specs a retry budget instead of skipping link-heartbeat?</div><div class="sg-foot">10:02</div></div>
+          <div class="sg-a">I’d retry only tests tagged <code>@flaky</code>, at most twice, and list every retry in the summary.</div>
+          <div class="sg-u m-mark"><span class="m-n">5</span><div class="sg-from">From Alice Chen</div><div class="sg-bub">Twice is fine, but CI should fail if the same test needed a retry three runs in a row.</div><div class="sg-foot">10:14</div></div>
+          <div class="sg-a">Good call. I’ll keep a per-test retry count in <code>.vitest-retries.json</code> and fail when a test needed a retry in three consecutive runs…</div>
+        </div>
+        <div class="sg-comp"><div class="ph">Message the agent…</div><div class="bar"><span class="sg-chip">Accept edits</span><span class="sg-chip">Opus 5.5</span><span class="sg-send">↑</span></div></div>
+      </div>
+    </div>
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k new">新</span> 会话列表</div>
+      <div style="display:flex;gap:18px;align-items:flex-start">
+        <div class="sg-side">
+          <div class="sg-gh">orbit-develop</div>
+          <div class="sg-row on m-mark"><span class="m-n">6</span><div class="t">Retry budget for flaky pg specs <span class="tm"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.6"/><path d="M15.5 14.2c3 .2 5.5 2.6 5.5 5.8"/></svg>2m</span></div><div class="s">From Alice Chen: Twice is fine, but CI should fail…</div></div>
+          <div class="sg-row"><div class="t">Settings sheet reorder <span class="tm">1h</span></div><div class="s">You: Ship it after the iOS shot</div></div>
+          <div class="sg-row"><div class="t">Landing receipts wording <span class="tm"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>3h</span></div><div class="s">Done. The wording now matches…</div></div>
+        </div>
+        <ul class="m-notes" style="margin:0;flex:1">
+          <li><span class="m-n">6</span><span>双人图标 = 有人能回话；地球 = 有公开链接（已有）。行文写 <b>From Alice Chen:</b>，不写 <b>You:</b>。</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <ul class="m-notes">
+    <li><span class="m-n">1</span><span><b>只能邀请本 Orbit 上已注册、未停用的账号</b>，按邮箱，形状照共享池的 Add person。邀请不需要公开链接，Access 是 Only you 也行；关掉公开链接不影响访客，移除访客也不影响链接。</span></li>
+    <li><span class="m-n">2</span><span><b>每人一行</b>：今天发了几条（每人每会话每天上限 50），没打开过写 Not opened yet。Remove 立即生效，还没投递的那人的排队消息一并撤回。</span></li>
+    <li><span class="m-n">3</span><span><b>后果写在框里</b>，点名 runner 和模式：消息跑在你的机器、你的账号上；审批和提问只到你。</span></li>
+    <li><span class="m-n">4</span><span><b>Auto / Don’t ask / Bypass</b> 下这句变琥珀色，第一次邀请要多勾一次。邀请是所有者通道动作：PAT 403，agent 不能替你邀请人。</span></li>
+    <li><span class="m-n">5</span><span><b>署名和飞书同一个位置</b>：气泡上方一行灰字，与 <code>From Feishu · &lt;name&gt;</code> 同字号同颜色；气泡本身只装访客的原话。</span></li>
+  </ul>
+</section>
+
+<!-- ═════════════════════════ 3 · 访客侧 ═════════════════════════ -->
+<section class="sg-part" id="part-3">
+  <h2 class="sg-h2">访客侧：Shared with me + 访客页（公开页外壳 + 只能打字的输入框）</h2>
+  <p class="m-sub">Alice 登录自己的 Orbit。访客页 <code>/g/&lt;sessionId&gt;</code> 要登录，内容 = 公开页勾了 Tool calls and output 的投影，红线照旧：不露 runner 名和本机路径、provider、模型、费用、仓库与分支。</p>
+  <div style="display:grid;grid-template-columns:270px minmax(0,1fr);gap:22px;align-items:start">
+    <div class="m-stage" style="padding:12px">
+      <div class="m-stage-l"><span class="m-k new">新</span> 访客的侧栏</div>
+      <div class="sg-side" style="width:auto">
+        <div class="sg-gh">alice-workspace</div>
+        <div class="sg-row"><div class="t">Docs search ranking <span class="tm">5m</span></div><div class="s">You: Try the BM25 weights…</div></div>
+        <div class="sg-gh m-mark" style="margin-top:8px"><span class="m-n">1</span>Shared with me</div>
+        <div class="sg-row on"><div class="t">Retry budget for flaky pg specs <span class="tm">2m</span></div><div class="s">Lin Wei · Running</div></div>
+        <div class="sg-row"><div class="t">Android cold start trace <span class="tm">2d</span></div><div class="s">Ravi Kumar · Completed</div></div>
+      </div>
+    </div>
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k new">新</span> 访客页 · 会话在跑</div>
+      <div class="pv">
+        <div class="pv-bar m-mark"><span class="m-n">2</span><span class="pv-brand">Orbit</span>
+          <div class="pv-crumbs"><span class="here">Retry budget for flaky pg specs</span><span class="sep">·</span><span>Shared by Lin Wei</span></div>
+          <div class="pv-right"><span class="status-pill running"><span class="spin"></span>Running</span><span class="sg-guest">Guest</span></div></div>
+        <div class="sg-body">
+          <div class="sg-u"><div class="sg-bub">Can we give pg specs a retry budget instead of skipping link-heartbeat?</div></div>
+          <div class="sg-a">I’d retry only tests tagged <code>@flaky</code>, at most twice, and list every retry in the summary.</div>
+          <div class="sg-u"><div class="sg-from">You</div><div class="sg-bub">Twice is fine, but CI should fail if the same test needed a retry three runs in a row.</div></div>
+          <div class="sg-tool">▸ Edit src/apiserver/vitest.pg.config.ts (+18 −2)</div>
+          <div class="sg-a">Good call. I’ll keep a per-test retry count…</div>
+        </div>
+        <div class="sg-comp m-mark"><span class="m-n">3</span><div class="ph">Message Lin Wei’s agent…</div><div class="bar"><span>Runs on Lin Wei’s machine</span><span class="sg-send off">↑</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sg-three" style="margin-top:22px">
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k state">等审批</span> agent 在问所有者</div>
+      <div class="sg-tr">
+        <div class="sg-body"><div class="sg-tool">▸ Bash npm run test:pg -- link-heartbeat</div><div class="sg-a" style="color:var(--text-3)">Waiting for approval…</div></div>
+        <div class="sg-wait m-mark"><span class="m-n">4</span><i></i>Waiting for Lin Wei to approve</div>
+        <div class="sg-comp"><div class="ph">Message Lin Wei’s agent…</div><div class="bar"><span>Your message waits its turn</span><span class="sg-send off">↑</span></div></div>
+      </div>
+    </div>
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k state">已结束</span> 发一句就接着跑</div>
+      <div class="sg-tr">
+        <div class="sg-body"><div class="sg-a">Done. Retries are capped at two and a third in a row fails CI.</div></div>
+        <div class="sg-comp m-mark"><span class="m-n">5</span><div class="ph" style="color:var(--text-1)">One more: log the retry count in the PR comment too.</div><div class="bar"><span>Send to continue — this restarts the session on Lin Wei’s machine.</span><span class="sg-send">↑</span></div></div>
+      </div>
+    </div>
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k">被移出</span> 或会话进了回收站、被删</div>
+      <div class="sg-tr"><div class="sg-gone m-mark"><span class="m-n">6</span><b>This conversation is no longer shared with you.</b>Ask the person who shared it if you need it again.</div></div>
+    </div>
+  </div>
+
+  <ul class="m-notes">
+    <li><span class="m-n">1</span><span><b>Shared with me</b> 是侧栏最后一组，只列被邀请的会话：标题、所有者名、状态。访客不会看到所有者的工作区、项目或别的会话。</span></li>
+    <li><span class="m-n">2</span><span><b>页头</b>：标题、Shared by &lt;所有者&gt;、状态，右侧是 Guest 徽章（不是 Read-only）。正文就是现在的 Transcript 组件；访客自己的话署 You。</span></li>
+    <li><span class="m-n">3</span><span><b>输入框只有文字和 Send</b>：没有模式 / 模型 / effort、没有 <code>!</code> shell、没有附件、没有 Interrupt。排队、Steer、撤回只对自己的消息。底部一行写明跑在谁的机器上。</span></li>
+    <li><span class="m-n">4</span><span><b>审批和 agent 的提问只到所有者</b>，访客只看到一行「在等 Lin Wei」，看不到审批详情；输入框照常能用，消息排队。</span></li>
+    <li><span class="m-n">5</span><span><b>会话已结束时</b>，访客的话照常 resume（D5 = A），沿用会话原来的模式和模型，访客改不了。</span></li>
+    <li><span class="m-n">6</span><span><b>移出、回收站、删除都回同一个页面</b>，不透露是哪一种；侧栏那一行同时消失。</span></li>
+  </ul>
+</section>
+
+<!-- ═════════════════════════ 4 · 边界 + 数据 ═════════════════════════ -->
+<section class="sg-part" id="part-4">
+  <h2 class="sg-h2">谁能做什么 · 数据与接口</h2>
+  <p class="m-sub">访客的话会驱动跑在所有者机器上、带着所有者仓库和凭据的 agent，这是本方案最大的风险。边界照飞书 §8.3 的七条对齐。</p>
+  <div class="sg-two">
+    <div class="m-stage">
+      <div class="m-stage-l">谁能做什么</div>
+      <table class="sg-tb">
+        <tr><th>动作</th><th style="width:70px">所有者</th><th style="width:70px">访客</th><th>说明</th></tr>
+        <tr><td>看对话（含工具输出）</td><td class="sg-ok">✓</td><td class="sg-ok">✓</td><td>访客看到的 = 公开投影 + 工具输出</td></tr>
+        <tr><td>发文字消息、Steer / 撤回自己排的</td><td class="sg-ok">✓</td><td class="sg-ok">✓</td><td>每人每会话每天 50 条</td></tr>
+        <tr><td>会话结束后接着发</td><td class="sg-ok">✓</td><td class="sg-ok">✓</td><td>D5；沿用原模式 / 模型</td></tr>
+        <tr><td>附件 / 图片</td><td class="sg-ok">✓</td><td class="sg-no">✕</td><td>D4，本期只文字</td></tr>
+        <tr><td><code>!</code> shell（kind: shell）</td><td class="sg-ok">✓</td><td class="sg-no">✕</td><td>访客的门不收 kind</td></tr>
+        <tr><td>改模式 / 模型 / effort / provider</td><td class="sg-ok">✓</td><td class="sg-no">✕</td><td>resume 也不收覆盖字段</td></tr>
+        <tr><td>审批、回答 agent 的提问</td><td class="sg-ok">✓</td><td class="sg-no">✕</td><td>只推给所有者</td></tr>
+        <tr><td>Interrupt / End / Merge / 删除 / 移动</td><td class="sg-ok">✓</td><td class="sg-no">✕</td><td></td></tr>
+        <tr><td>邀请 / 移除别人</td><td class="sg-ok">✓</td><td class="sg-no">✕</td><td>所有者通道，PAT 和 agent 也不行</td></tr>
+        <tr><td>Leave</td><td>—</td><td class="sg-ok">✓</td><td>访客自己退出</td></tr>
+      </table>
+      <p class="m-cap">agent 每收到一句访客消息，正文后面都接一段前言：这句话来自主人邀请的人、不是主人，也不是主人对任何事的批准（约 61 token，单测钉在 80 以内）。</p>
+    </div>
+    <div class="m-stage">
+      <div class="m-stage-l">数据与接口</div>
+      <table class="sg-tb">
+        <tr><th style="width:150px">东西</th><th>形状</th></tr>
+        <tr><td>新表 <code>session_guest</code></td><td>session_id（CASCADE）、owner_id、user_id（CASCADE）、added_at、removed_at、removed_reason <code>REMOVED | LEFT</code>；部分唯一 <code>(session_id, user_id) WHERE removed_at IS NULL</code></td></tr>
+        <tr><td>turn 署名</td><td>复用 0502 的 <code>external_sender_source / _id / _name</code>，CHECK 放宽到 <code>FEISHU | ORBIT_GUEST</code>；无新列</td></tr>
+        <tr><td>会话行</td><td><code>lastUserFromExternal: {source: 'ORBIT_GUEST', name}</code>；访客 userId 不进任何客户端读口</td></tr>
+        <tr><td>所有者接口</td><td><code>GET · POST {email} /sessions/:id/guests</code>、<code>DELETE …/guests/:userId</code></td></tr>
+        <tr><td>访客接口</td><td><code>GET /guest-sessions</code>、<code>GET /guest-sessions/:id</code>、<code>…/events?before=|after=</code>、<code>POST …/turns {clientTurnId, content}</code>、自己的 turn 的 DELETE / steer、<code>POST …/leave</code>；没有有效邀请一律 404</td></tr>
+        <tr><td>投影</td><td>复用 <code>/shared</code> 的显式 select，同一组否定断言 spec 跑两扇门</td></tr>
+        <tr><td>activity</td><td>每条访客消息一行 <code>session.guest.turn</code>（credential_kind GUEST）</td></tr>
+      </table>
+      <p class="m-cap"><b>旧客户端缺口</b>：已装的 iOS / Android / macOS 只认 FEISHU，会把访客的话画成所有者自己的（You:）。三端的署名必须和服务端同一版发。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════════════════ 5 · 待定 + 落地 ═════════════════════════ -->
+<section class="sg-part" id="part-5">
+  <h2 class="sg-h2">待定 · 要你拍板</h2>
+  <p class="m-sub">绿色格是推荐。全部照推荐，就是前四张图画的样子。</p>
+  <table class="sg-tb">
+    <tr><th style="width:130px"></th><th>A</th><th>B</th><th style="width:300px">为什么推荐</th></tr>
+    <tr><td><b>D1</b> 谁能被邀请</td><td class="rec">本 Orbit 上已注册的账号，按邮箱点名</td><td>拿到链接、登录了的任何人</td><td>A：每个能驱动你 agent 的人都是你点名的</td></tr>
+    <tr><td><b>D2</b> 访客在哪回话</td><td class="rec">独立访客页 <code>/g/&lt;id&gt;</code> + 侧栏 Shared with me，不依赖公开链接</td><td>在公开页 <code>/s/&lt;token&gt;</code> 上给登录的被邀请者加输入框</td><td>A：关公开链接不该连带赶走访客，反过来也一样</td></tr>
+    <tr><td><b>D3</b> 权限模式</td><td class="rec">沿用会话当前模式；Auto / Don’t ask / Bypass 下首次邀请多勾一次</td><td>只有 Default / Plan / Accept edits 的会话能邀请</td><td>A：和飞书「主人选模式」一致；B 会让大多数 Bypass 会话没法邀请。模式是整条会话一个值，没法只让访客那句换模式</td></tr>
+    <tr><td><b>D4</b> 附件</td><td class="rec">本期只文字</td><td>可带图片</td><td>A：先把署名和边界做稳，图片下一期</td></tr>
+    <tr><td><b>D5</b> 会话已结束时</td><td class="rec">访客的消息照常 resume</td><td>只在会话没结束时能回</td><td>A：「接着讨论」多半发生在会话结束之后</td></tr>
+    <tr><td><b>D6</b> 通知</td><td class="rec">访客发言不推给所有者，会话行显示 From &lt;name&gt;；审批照常推</td><td>每条访客消息都推给所有者</td><td>A：别人讨论得热闹时不刷你的屏</td></tr>
+  </table>
+
+  <h2 class="sg-h2" style="margin-top:22px">落地（按代价排）</h2>
+  <ol class="sg-steps">
+    <li><b>G1 服务端</b>：迁移（<code>session_guest</code>、CHECK 放宽）、所有者三接口、访客门与投影、每日上限、移除时撤回排队消息、activity。pg spec 覆盖：跨账号 404；shell、附件、覆盖字段被拒；移除即刻生效；否定断言。</li>
+    <li><b>G2 runner</b>：<code>ORBIT_GUEST</code> 的前言和 token 预算测试。</li>
+    <li><b>G3 Web</b>：分享框 People 段、From &lt;name&gt; 署名和会话行、Shared with me、访客页（复用 SharedSessionPage 外壳 + 纯文字的 Composer）。</li>
+    <li><b>G4 iOS / macOS 与 Android</b>：署名和会话行必须与 G1 同一版发；分享面板 People 段；Shared with me 与访客页可以晚一版。</li>
+  </ol>
+  <p class="m-cap">不做（本期）：匿名访客；访客用自己的 runner / 额度；访客审批；任务、项目级邀请；访客之间互相可见的成员列表；访客推送。</p>
+</section>
+
+</div>
+</body>
+</html>
