@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>02 · Move to a follow-up…</title>
+<link rel="stylesheet" href="board.css">
+</head>
+<body>
+<div class="board">
+  <h1>② “Move to a follow-up…”：选目标、搬什么、确认、搬完以后</h1>
+  <div class="sub">
+    已定（11-11，判据 3）：done 卡上没满足的判据给 “Open”（跳到卡住它的任务）和 “Move to a follow-up…”（把判据和它没完成的任务搬到另一个/新的项目）。这块板画已定板没画的：<b>选择器</b>（已有项目还是新建）、<b>搬走什么</b>、<b>确认</b>、<b>原卡片搬完以后</b>（全部满足 → Record as done，没有缺口）。<br>
+    例子沿用 CBAI：判据 4 “External prerequisites settled” 没满足，挂着 1 个 OPEN 任务。iOS 手绘为准，Web 是同一流程的对话框版。UI 文案英文，标注中文。
+  </div>
+
+  <div class="cols">
+    <!-- ① start -->
+    <div class="col" style="width:393px">
+      <div class="frame-title">① 起点 · 已定板 ③ 的 done 卡</div>
+      <div class="frame-sub">“1 thing stands in the way” 里，判据 4 下面两个按钮：Open / Move to a follow-up…</div>
+      <div class="ph">
+        <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="nav"><span class="l">‹</span><span class="t">Coordinator<small>CBAI AI 视觉内容平台…</small></span><span></span></div>
+        <div class="scroll">
+          <div class="c-card">
+            <div class="c-head"><span class="c-heading">Is this project done?</span><span class="c-prov">FROM ORBIT</span></div>
+            <div class="c-body">
+              <div class="c-untracked"><span>ⓘ</span><div><b style="color:var(--ink)">Non-code project.</b> Orbit checks the criteria only. Marked by the coordinator · Nov 11 · <span class="lnk">Change</span></div></div>
+              <div class="c-sec">Done when · 4 criteria</div>
+              <div class="c-tally">3 of 4 met</div>
+              <ul class="c-rows">
+                <li><span class="c-no">1</span><span class="c-text">Criterion 1</span><span class="c-state"><span class="ok">met</span></span></li>
+                <li><span class="c-no">2</span><span class="c-text">Criterion 2 (91 tasks)</span><span class="c-state"><span class="ok">met</span></span></li>
+                <li><span class="c-no">3</span><span class="c-text">Criterion 3 (2 tasks)</span><span class="c-state"><span class="ok">met</span></span></li>
+                <li><span class="c-no">4</span><span class="c-text">External prerequisites settled</span><span class="c-state"><span class="bad">not met</span></span></li>
+              </ul>
+              <div class="c-block">
+                <div class="c-block-title">1 thing stands in the way</div>
+                <div style="font-size:13px">4 · Criterion 4 is not met — 1 task is still open</div>
+                <div class="c-task"><span><span class="dot"></span>Settle external prerequisites (SMS, WeChat, payment, ICP)</span><span class="btn small">Open</span></div>
+                <div style="margin-top:8px" class="rel"><span class="btn small ring">Move to a follow-up…</span><i class="mk" style="left:150px;top:-8px">A</i></div>
+              </div>
+              <div class="c-meta">If you record it done anyway, Orbit keeps criterion 4 as the gap you accepted.</div>
+            </div>
+            <div class="c-actions"><span class="btn primary">Record as done anyway</span><span class="btn">Not yet…</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ② picker: new project -->
+    <div class="col" style="width:393px">
+      <div class="frame-title">② 选择器 · 新项目（默认）</div>
+      <div class="frame-sub">一张 sheet 把三件事说完：搬什么、留什么、搬到哪。</div>
+      <div class="ph">
+        <div class="status" style="color:#fff"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="dim" style="background:rgba(0,0,0,.4)"></div>
+        <div class="sheet" style="top:56px">
+          <div class="nav"><span class="l">Cancel</span><span class="t">Move to a follow-up</span><span class="r">Next</span></div>
+          <div class="scroll" style="padding-top:0">
+            <div class="hdr"><span>Moves</span><span></span></div>
+            <div class="grp rel">
+              <i class="mk l">B</i>
+              <div class="cell"><div class="crit"><span class="ord unmet">4</span><div class="txt">External prerequisites settled: SMS provider, WeChat Open Platform app, payment merchant, ICP filing.</div></div></div>
+              <div class="cell"><div class="meta" style="margin-bottom:4px">and its 1 open task</div><div style="font-size:14px"><span class="dot"></span>Settle external prerequisites (SMS, WeChat, payment, ICP)</div><div class="meta" style="margin-left:13px">Open · not running</div></div>
+            </div>
+            <div class="foot rel"><i class="mk l" style="left:-26px;top:0">C</i>Stays here: its 2 done tasks, as this project's history. This project keeps 3 criteria, all met.</div>
+            <div class="hdr"><span>To</span><span></span></div>
+            <div class="seg rel" style="margin:0 0 10px"><span class="on">New project</span><span>Existing project</span><i class="mk r">D</i></div>
+            <div class="field">CBAI AI 视觉内容平台 Phase 0 实施 · follow-up</div>
+            <div class="foot">It starts not started, in the same workspace, with this criterion and its task. You start it when you're ready.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ③ picker: existing project -->
+    <div class="col" style="width:393px">
+      <div class="frame-title">③ 选择器 · 已有项目</div>
+      <div class="frame-sub">只列 Open 的项目（Done / Cancelled 不列），按最近活动排；有搜索。</div>
+      <div class="ph">
+        <div class="status" style="color:#fff"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="dim" style="background:rgba(0,0,0,.4)"></div>
+        <div class="sheet" style="top:56px">
+          <div class="nav"><span class="l">Cancel</span><span class="t">Move to a follow-up</span><span class="r">Next</span></div>
+          <div class="scroll" style="padding-top:0">
+            <div class="hdr"><span>Moves</span><span></span></div>
+            <div class="grp"><div class="cell"><div class="crit"><span class="ord unmet">4</span><div class="txt">External prerequisites settled…</div></div><div class="meta" style="margin:4px 0 0 32px">and its 1 open task</div></div></div>
+            <div class="hdr"><span>To</span><span></span></div>
+            <div class="seg" style="margin:0 0 10px"><span>New project</span><span class="on">Existing project</span></div>
+            <div class="field ph-empty" style="margin-bottom:10px">🔍 Search projects</div>
+            <div class="grp">
+              <div class="cell row"><div><div>CBAI Phase 1 · launch readiness</div><div class="meta">Open · 12 tasks · active 2 h ago</div></div><span class="blue" style="font-weight:700">✓</span></div>
+              <div class="cell"><div>CBAI vendor accounts</div><div class="meta">Open · not started · 0 tasks</div></div>
+              <div class="cell"><div>Marketing site refresh</div><div class="meta">Open · 31 tasks · active yesterday</div></div>
+            </div>
+            <div class="foot">Open projects only.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ④ confirm -->
+    <div class="col" style="width:393px">
+      <div class="frame-title">④ 确认</div>
+      <div class="frame-sub">Next 之后一屏摘要。两边各会变成什么，说清楚；这一下就是你同意把判据从这个项目拿走。</div>
+      <div class="ph">
+        <div class="status" style="color:#fff"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="dim" style="background:rgba(0,0,0,.4)"></div>
+        <div class="sheet" style="top:56px">
+          <div class="nav"><span class="l">‹ Back</span><span class="t">Move to a follow-up</span><span></span></div>
+          <div class="scroll" style="padding-top:0">
+            <div class="hdr"><span>This project</span><span></span></div>
+            <div class="grp"><div class="cell"><div>CBAI AI 视觉内容平台 Phase 0 实施</div><div class="meta">Keeps 3 criteria, all met. You can record it as done right after.</div></div></div>
+            <div class="hdr"><span>CBAI AI 视觉内容平台 Phase 0 实施 · follow-up</span><span></span></div>
+            <div class="grp"><div class="cell"><div>New project, not started</div><div class="meta">Gets criterion 4 and 1 open task.</div></div></div>
+            <div class="foot rel"><i class="mk l" style="left:-26px;top:0">E</i>Both projects record the move: who moved it and when. Nothing is deleted.</div>
+            <div style="height:120px"></div>
+            <span class="pill pri">Move criterion 4</span>
+            <div style="height:10px"></div>
+            <span class="pill sec">Cancel</span>
+          </div>
+        </div>
+      </div>
+      <div style="height:18px"></div>
+      <div class="ph" style="height:300px">
+        <div class="status" style="color:#fff"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="dim" style="background:rgba(0,0,0,.4)"></div>
+        <div class="alert rel" style="top:56%">
+          <div class="a-b"><h4>A task is running</h4><p>“Settle external prerequisites” is running now. Stop it or let it finish, then move the criterion.</p></div>
+          <div class="a-btns v"><span>OK</span></div>
+          <i class="mk r" style="top:6px;right:6px">F</i>
+        </div>
+      </div>
+    </div>
+
+    <!-- ⑤ after -->
+    <div class="col" style="width:393px">
+      <div class="frame-title">⑤ 搬完以后 · 原项目的 done 卡</div>
+      <div class="frame-sub">3 条判据全部满足，按钮回到 “Record as done”，没有 “anyway”，也不存缺口。</div>
+      <div class="ph">
+        <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="nav"><span class="l">‹</span><span class="t">Coordinator<small>CBAI AI 视觉内容平台…</small></span><span></span></div>
+        <div class="scroll">
+          <div class="c-card">
+            <div class="c-head"><span class="c-heading">Is this project done?</span><span class="c-prov">FROM ORBIT</span></div>
+            <div class="c-body">
+              <div class="c-untracked"><span>ⓘ</span><div><b style="color:var(--ink)">Non-code project.</b> Orbit checks the criteria only. Marked by the coordinator · Nov 11 · <span class="lnk">Change</span></div></div>
+              <div class="c-sec">Done when · 3 criteria</div>
+              <div class="c-tally">3 of 3 met</div>
+              <ul class="c-rows">
+                <li><span class="c-no">1</span><span class="c-text">Criterion 1</span><span class="c-state"><span class="ok">met</span></span></li>
+                <li><span class="c-no">2</span><span class="c-text">Criterion 2 (91 tasks)</span><span class="c-state"><span class="ok">met</span></span></li>
+                <li><span class="c-no">3</span><span class="c-text">Criterion 3 (2 tasks)</span><span class="c-state"><span class="ok">met</span></span></li>
+              </ul>
+              <div class="c-moved rel"><i class="mk l">G</i>Criterion 4 moved to <span class="lnk">CBAI AI 视觉内容平台 Phase 0 实施 · follow-up</span> by you · Nov 11, 19:40</div>
+            </div>
+            <div class="c-actions rel"><span class="btn primary">Record as done</span><span class="btn">Not yet…</span><i class="mk" style="left:122px;top:-2px">H</i></div>
+          </div>
+          <div class="cap" style="margin:18px 4px 8px">目标项目 · 项目详情</div>
+          <div class="hdr" style="margin-top:0"><span>Acceptance criteria</span><span></span></div>
+          <div class="grp rel">
+            <i class="mk l">I</i>
+            <div class="cell"><div class="crit"><span class="ord unmet">1</span><div><div class="txt">External prerequisites settled: SMS provider, WeChat Open Platform app, payment merchant, ICP filing.</div><div class="st">Not met by its work</div><div class="q">Moved from <span class="blue">CBAI AI 视觉内容平台 Phase 0 实施</span> by you · Nov 11</div></div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- web -->
+    <div class="col" style="width:540px">
+      <div class="frame-title">⑥ Web · 同一流程的对话框</div>
+      <div class="frame-sub">Web 的 done 卡在协调者对话里（ProjectSettlementCard）。选择器和确认是一个对话框的两步。</div>
+      <div class="w-modal">
+        <div class="w-h">Move to a follow-up</div>
+        <div class="w-b">
+          <div class="w-lbl" style="margin-top:4px">Moves</div>
+          <div class="w-box"><b>4</b> · External prerequisites settled: SMS provider, WeChat Open Platform app, payment merchant, ICP filing.<div style="color:#8c8c8c;margin-top:4px">and its 1 open task: <span class="lnk">Settle external prerequisites (SMS, WeChat, payment, ICP)</span></div></div>
+          <div class="w-hint">Stays here: its 2 done tasks. This project keeps 3 criteria, all met.</div>
+          <div class="w-lbl">To</div>
+          <div class="w-seg"><span class="on">New project</span><span>Existing project</span></div>
+          <div class="w-in" style="margin-top:10px">CBAI AI 视觉内容平台 Phase 0 实施 · follow-up</div>
+          <div class="w-hint">It starts not started, in the same workspace, with this criterion and its task.</div>
+        </div>
+        <div class="w-f"><span class="w-btn">Cancel</span><span class="w-btn pri">Next</span></div>
+      </div>
+      <div style="height:20px"></div>
+      <div class="w-modal">
+        <div class="w-h">Move to a follow-up</div>
+        <div class="w-b">
+          <div class="w-seg"><span>New project</span><span class="on">Existing project</span></div>
+          <div class="w-in ph-empty" style="margin-top:10px">Search open projects</div>
+          <div class="w-list">
+            <div class="on"><span>CBAI Phase 1 · launch readiness</span><span style="color:#8c8c8c">12 tasks · 2 h ago</span></div>
+            <div><span>CBAI vendor accounts</span><span style="color:#8c8c8c">not started</span></div>
+            <div><span>Marketing site refresh</span><span style="color:#8c8c8c">31 tasks · yesterday</span></div>
+          </div>
+        </div>
+        <div class="w-f"><span class="w-btn">Cancel</span><span class="w-btn pri">Next</span></div>
+      </div>
+      <div style="height:20px"></div>
+      <div class="w-modal">
+        <div class="w-h">Move criterion 4 to “CBAI Phase 1 · launch readiness”?</div>
+        <div class="w-b">
+          <div><b>This project</b> keeps 3 criteria, all met. You can record it as done right after.</div>
+          <div style="margin-top:6px"><b>CBAI Phase 1 · launch readiness</b> gets criterion 4 and 1 open task, after its 6 criteria.</div>
+          <div class="w-hint" style="margin-top:8px">Both projects record the move: who moved it and when. Nothing is deleted.</div>
+        </div>
+        <div class="w-f"><span class="w-btn">Back</span><span class="w-btn pri">Move criterion 4</span></div>
+      </div>
+    </div>
+
+    <!-- side -->
+    <div class="col" style="width:500px">
+      <div class="notes" style="margin-top:0">
+        <div class="n"><span class="k">A</span><div>入口只在 done 卡里没满足的判据下（已定）。项目详情的判据行要不要也有，见待你定 4。</div></div>
+        <div class="n"><span class="k">B</span><div><b>搬走</b>：判据本身 + 服务它、还没结束的任务（OPEN / 等待中 / 被阻塞）。任务带着它的依赖、评论、附件走。</div></div>
+        <div class="n"><span class="k">C</span><div><b>留下</b>：服务它、已经 DONE / CANCELLED 的任务——是这个项目的历史，不搬。原项目判据集记一次修订（revision +1），done 卡和项目详情都能看到 G 这一行。</div></div>
+        <div class="n"><span class="k">D</span><div><b>默认新项目</b>：标题 “原标题 · follow-up”，可改；同一个 workspace；未开工，目标写成 “Follow-up of …: criterion 4”。已有项目只列 Open 的。</div></div>
+        <div class="n"><span class="k">E</span><div><b>确认页</b>说两边各变成什么。这一下就是 owner 同意从原项目拿走一条判据（放宽判据本来就要 owner 决定），所以不会再弹判据确认卡。</div></div>
+        <div class="n"><span class="k">F</span><div>服务它的任务正在跑 → 不让搬，说清楚怎么办。</div></div>
+        <div class="n"><span class="k">G</span><div>原卡片多一行灰色记录：搬去哪（可点）、谁、何时。</div></div>
+        <div class="n"><span class="k">H</span><div>全部满足 → “Record as done”（不是 “anyway”），不存 acceptedGaps。</div></div>
+        <div class="n"><span class="k">I</span><div>目标项目里这条判据排在最后，带 “Moved from … by you · Nov 11”；任务跟着进任务列表。新项目要你自己开工。</div></div>
+      </div>
+
+      <div class="side" style="margin-top:16px">
+        <h3>规则</h3>
+        <table>
+          <tr><th>情况</th><th>结果</th></tr>
+          <tr><td>判据没满足、有 OPEN 任务</td><td>判据 + OPEN 任务搬走；DONE 任务留下</td></tr>
+          <tr><td>判据没满足、没有任务（NO_WORK_SERVES_IT）</td><td>只搬判据</td></tr>
+          <tr><td>服务任务正在跑</td><td>拒绝（F）</td></tr>
+          <tr><td>任务和留下的任务有依赖</td><td>依赖保留，变成跨项目依赖（Crossings 里能看到）</td></tr>
+          <tr><td>搬到已有项目</td><td>追加为最后一条；目标项目判据修订 +1</td></tr>
+          <tr><td>判据是 “由确认满足” 模式（板 ③）</td><td>模式一起搬；已有的确认不带走（在新项目里没被确认过）</td></tr>
+          <tr><td>谁能搬</td><td>owner，从 done 卡；协调者只能建议（待你定 2）</td></tr>
+        </table>
+      </div>
+
+      <div class="side" style="margin-top:16px">
+        <h3>会改到的文件</h3>
+        <div class="mono" style="line-height:1.7">
+          apiserver: 新 POST /projects/:id/criteria/:key/move（判据定义 + 任务重挂、两边修订、记录），project-done-request.ts（搬完重读）<br>
+          shared: project-done.ts（moved 记录），criteria 修订类型<br>
+          web: components/ProjectSettlementCard.tsx，新 MoveCriterionDialog.tsx，lib/projectDone.ts（文案），ProjectAcceptanceCard.tsx（Moved from）<br>
+          iOS/macOS: Views/ProjectDoneCards.swift，新 MoveCriterionSheet.swift，Views/ProjectsView.swift（criteriaSection），OrbitKit/App/ProjectDone.swift（文案）<br>
+          Android: 同步<br>
+          + copy-parity 测试
+        </div>
+      </div>
+
+      <div class="side todo" style="margin-top:16px">
+        <h3>待你定</h3>
+        <ol>
+          <li><b>正在跑的任务怎么办？</b><span class="rec">建议：</span>不让搬（F），说清楚停掉或等它结束。另一种：允许，跑完后结果算到新项目。</li>
+          <li><b>协调者能不能自己搬？</b><span class="rec">建议：</span>不能直接搬——这等于从原项目拿走一条判据。协调者可以发一个“建议搬到 …”的待办，你在 done 卡上一按就是确认。</li>
+          <li><b>能撤销吗？</b><span class="rec">建议：</span>不做撤销按钮；要搬回来，在新项目上对同一条判据再用一次 Move（目标选回原项目）。</li>
+          <li><b>项目详情的判据行也给 Move？</b><span class="rec">建议：</span>先只放 done 卡（已定的入口），少一个地方。</li>
+          <li><b>新项目开工</b>：<span class="rec">建议：</span>未开工、不自动开协调者；它会出现在项目列表，等你开工。另一种：继承原项目设置并直接开工。</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

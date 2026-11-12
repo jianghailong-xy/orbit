@@ -129,6 +129,11 @@ import {
 import { agentProviderSeed, lastProviderByWorkspace } from '../workspaces/workspace-provider';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  reprojectAfterSettledChecks,
+  settleChecksOfEndedRun,
+  type SettledCriterionCheck,
+} from '../projects/criterion-check-ended';
+import {
   TaskWorkFacts,
   isExecutionClaimConflict,
   isLockNotAvailable,
@@ -8342,11 +8347,13 @@ export class SessionsService {
   ) {
     // Retried whole. Every terminal transition is decided from the Session row under its lock, so a
     // re-run sees whichever end actually committed rather than re-applying one that did not.
-    return withTransactionRetry(
+    const ended = await withTransactionRetry(
       this.prisma,
       (tx) => this.transitionEndLocked(tx, ownerId, sessionId, reason, lifecycle, requireNoProjectBinding),
       loggedRetry(this.logger, 'sessions.transitionEnd'),
     );
+    await reprojectAfterSettledChecks(this.prisma, ended.checksSettled, this.logger);
+    return ended;
   }
 
   /**
@@ -8369,6 +8376,8 @@ export class SessionsService {
     filingState: SessionFilingState;
     endReason: SessionEndReason | null;
     projectBound: boolean;
+    /** The Agent checks this end settled, for their projects' DONE after the commit. */
+    checksSettled?: SettledCriterionCheck[];
   }> {
     const locked = await tx.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM "session"
@@ -8472,6 +8481,12 @@ export class SessionsService {
     // its task. The requests queued here are left to the end itself: the status write below (or the
     // finalize after it) closes them RECIPIENT_ENDED, which wins over UNDELIVERED (session-request.ts).
     await settleUnrunSessionRequests(tx, sessionId, { code: 'SESSION_ENDED', closesRequests: false, retryArmed: false });
+    // An Agent check this run was, ended before its verdict (projects/criterion-check-ended.ts).
+    const checksSettled = await settleChecksOfEndedRun(
+      tx,
+      { sessionId, taskId: session.taskId },
+      `its run was ended (${reason})`,
+    );
     if (session.status === RunStatus.PENDING) {
       await tx.session.update({
         where: { id: sessionId },
@@ -8533,6 +8548,7 @@ export class SessionsService {
       filingState,
       endReason: reason,
       projectBound: false,
+      checksSettled,
     };
   }
 

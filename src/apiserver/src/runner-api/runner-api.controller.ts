@@ -327,6 +327,11 @@ import {
 } from '../sessions/session-request';
 import { readTurnCards } from '../sessions/turn-cards';
 import {
+  reprojectAfterSettledChecks,
+  settleChecksOfEndedRun,
+} from '../projects/criterion-check-ended';
+import { CRITERION_CHECK_REPORT_TOOL } from '../projects/project-criterion-confirmation.service';
+import {
   recordOwnerConfirmationRequest,
   runStoppedWorking,
   unspentOwnerConfirmationClaim,
@@ -7305,6 +7310,16 @@ export class RunnerApiController {
       // (attempt-ended-unsettled). A failure comment here read as "re-run this task" beside a run
       // already resuming. Once the retries are spent the failing turn comes back with none armed.
       const retryPending = (retryArmAt ?? current.retryAt) != null;
+      // An Agent check whose run is over without its verdict (projects/criterion-check-ended.ts):
+      // its turn failed with no retry armed, or it parked idle with nothing left to wake it.
+      const checksSettled = failSession
+        ? (retryPending ? [] : await settleChecksOfEndedRun(tx, { sessionId, taskId: current.taskId },
+          `its run failed: ${failureText || 'run failed'}`))
+        : nextStatus === RunStatus.AWAITING_INPUT
+          ? await settleChecksOfEndedRun(tx, { sessionId, taskId: current.taskId },
+            `its run stopped without calling ${CRITERION_CHECK_REPORT_TOOL}`,
+            { runningBgJobs: current.runningBgJobs, retryAt: retryArmAt ?? current.retryAt })
+          : [];
       if (failTask && !retryPending) {
         // Surface the abandoned task for a human, and open its project's exception item in this same
         // transaction (contract §4.3 B).
@@ -7341,6 +7356,7 @@ export class RunnerApiController {
         reviewsAbandoned,
         repairCheck: repairCheckAfter(current),
         droppedWakeups,
+        checksSettled,
       };
     }, loggedRetry(this.logger, 'runnerApi.turnComplete', {
       transaction: {
@@ -7379,6 +7395,9 @@ export class RunnerApiController {
         `confirmation review ${finalized.reviewToDeliver} was not delivered: `
         + `${error instanceof Error ? error.message : error}`,
       ));
+    }
+    if ('checksSettled' in finalized) {
+      await reprojectAfterSettledChecks(this.prisma, finalized.checksSettled, this.logger);
     }
     if ('reviewsAbandoned' in finalized && finalized.reviewsAbandoned?.length) {
       const ownerId = finalized.taskOwnerId;
@@ -9071,6 +9090,12 @@ export class RunnerApiController {
       // unanswerable. Same predicate as the turn boundary, evaluated after the drain that made it
       // true rather than before it.
       await reapApprovalsOfEndedTurns(tx, sessionId);
+      // An Agent check this run was, ended without its verdict (projects/criterion-check-ended.ts).
+      const checksSettled = retryAt != null ? [] : await settleChecksOfEndedRun(
+        tx,
+        { sessionId, taskId: current.taskId },
+        `the runner finalized its run as ${effectiveStatus}${dto.error ? ` (${dto.error})` : ''}`,
+      );
       // Abnormal end (FAILED/CANCELLED): if the workspace never got to finalize its
       // task, reclaim a now-stalled IN_PROGRESS task so it stops looking like it's
       // still running. A genuine FAILED run lands the task at FAILED (needs a human);
@@ -9145,6 +9170,7 @@ export class RunnerApiController {
         // stopped — rather than at a turn-complete; one already parked has had its turn's end settled.
         repairCheck: repairCheckAfter(current, current.status === RunStatus.RUNNING),
         droppedWakeups,
+        checksSettled,
       };
     }, loggedRetry(this.logger, 'runnerApi.finalize'));
     // A run the region check refused or stopped (§10): the session goes on, so no settlement is announced. Its row
@@ -9161,6 +9187,9 @@ export class RunnerApiController {
     // The one-shot wakeups this finalize dropped with its FAILED session, no retry armed: their owner is
     // told, once, now that the drop has committed (contract §4).
     signalDrainedWakeups(this.push, this.logger, outcome.droppedWakeups ?? []);
+    if ('checksSettled' in outcome) {
+      await reprojectAfterSettledChecks(this.prisma, outcome.checksSettled, this.logger);
+    }
 
     if (
       'taskReclaimed' in outcome

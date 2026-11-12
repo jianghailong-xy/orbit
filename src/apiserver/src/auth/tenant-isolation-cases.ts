@@ -335,6 +335,12 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   },
   'POST /projects/:id/pause': { request: (of) => ({ params: { id: of.projectId } }) },
   'POST /projects/:id/resume': { request: (of) => ({ params: { id: of.projectId } }) },
+  'POST /projects/:id/criteria/:criterionKey/move': {
+    request: (of) => ({
+      params: { id: of.projectId, criterionKey: of.projectCriterionId },
+      body: { newProject: { title: 'census follow-up' } },
+    }),
+  },
   'POST /projects/:id/sessions/complete': { request: (of) => ({ params: { id: of.projectId } }) },
   'GET /projects/:id/acceptance/criteria-decisions/pending': { request: (of) => ({ params: { id: of.projectId } }) },
   'POST /projects/:id/acceptance/criteria-decisions/:intentId': {
@@ -815,6 +821,10 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
  * that shows the route finds its object only under the caller's own account. Kept as short as it can be.
  */
 export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  // ── criteria met by confirmation (0545) ────────────────────────────────────────────────────────
+  'POST /projects/:id/criteria/:criterionId/confirmations': 'the criterion is read by (id, the project, the caller as the project\'s owner) before anything is read or written, so another account\'s project or criterion answers 404 (projects/project-criterion-confirmation.service.ts:244); project-criterion-confirmation.spec.ts reads the door',
+  'POST /projects/:id/criteria/:criterionId/confirmations/withdraw': 'the criterion is read by (id, the project, the caller as the project\'s owner) before anything is read or written, so another account\'s project or criterion answers 404 (projects/project-criterion-confirmation.service.ts:244), and the UPDATE is keyed by that definition id',
+  'POST /projects/:id/criteria/:criterionId/checks': 'the criterion is read by (id, the project, the caller as the project\'s owner) before anything is read or written, so another account\'s project or criterion answers 404 (projects/project-criterion-confirmation.service.ts:244); the check task is then filed through TasksService.create under the same owner',
   'GET /owner-requests/:id':
     'the request is read by (id, the caller) and nothing else, so another account\'s id answers 404 (owner-requests/owner-requests.service.ts:193); owner-requests.pg.spec.ts (f) sends it',
   'POST /owner-requests/:id/done':
@@ -998,6 +1008,14 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
           { id: of.projectCriterionId, text: 'the census holds elsewhere', verificationMethod: 'the census' },
         ],
       },
+    }),
+  },
+  // The destination is read under the owner's own key: another account's project is one that names
+  // nothing (404), before anything is moved.
+  'POST /projects/:id/criteria/:criterionKey/move body toProjectId': {
+    request: (of, mine) => ({
+      params: { id: mine.projectId, criterionKey: mine.projectCriterionId },
+      body: { toProjectId: of.projectId },
     }),
   },
   'POST /projects/:id/coordinator body workspaceId': {
@@ -1300,6 +1318,10 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
 
 /** Ids a request carries that name nothing of an account's to reach, each with why and where that is so. */
 export const TENANT_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
+  'POST /projects/:id/criteria/:criterionId/confirmations body attachmentIds[]':
+    'counted among the caller\'s own uploads (attachment by id and owner) before anything is written; one that is not answers 404 (projects/project-criterion-confirmation.service.ts:281)',
+  'POST /projects/:id/criteria/:criterionId/checks body workspaceId':
+    'handed to TasksService.create as the check task\'s assignee, which reads the workspace by (id, the caller) and refuses another account\'s 403 before any row is written (tasks/tasks.service.ts:2606)',
   'POST /owner-requests/:id/secret body savedSecretId':
     'read by (id, the caller) before anything is written, so another account\'s saved secret is the 404 of one that does not exist (owner-requests/owner-secrets.service.ts:217); owner-secrets.pg.spec.ts (h) sends another account\'s',
   'POST /tasks/:id/execute body triggerId':

@@ -35,6 +35,8 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /projects/:id/done',
   'POST /projects/:id/pause',
   'POST /projects/:id/resume',
+  // Move to a follow-up… on the done card: it refuses an acting session, as pause and resume do.
+  'POST /projects/:id/criteria/:criterionKey/move',
   // Complete on a finished project's row (session-list-projects-design §3.6): it refuses an acting
   // session, as pause and resume do.
   'POST /projects/:id/sessions/complete',

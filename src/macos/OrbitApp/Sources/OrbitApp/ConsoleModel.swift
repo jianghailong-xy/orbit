@@ -4821,6 +4821,41 @@ final class ConsoleModel {
         return true
     }
 
+    /// Move to a follow-up…, from the done card in this conversation. Nil when it moved; otherwise
+    /// the door's own words.
+    func moveCriterion(_ criterionKey: String, _ body: MoveCriterionBody) async -> String? {
+        guard let projectID else { return nil }
+        do {
+            _ = try await api.moveCriterion(projectID: projectID, criterionKey: criterionKey, body)
+        } catch {
+            return APIClient.failureReason(error)
+        }
+        await refreshRulerQuestions(force: true)
+        return nil
+    }
+
+    /// The owner's Confirm sheet, from the done card in this conversation.
+    func confirmCriterion(_ criterionID: String, _ body: ConfirmCriterionBody) async -> String? {
+        guard let projectID else { return nil }
+        do {
+            try await api.confirmCriterion(projectID: projectID, criterionID: criterionID, body)
+        } catch {
+            return APIClient.failureReason(error)
+        }
+        await refreshRulerQuestions(force: true)
+        return nil
+    }
+
+    /// The Confirm sheet's one screenshot.
+    func uploadConfirmationShot(_ data: Data, filename: String, mimeType: String) async throws -> String {
+        try await api.uploadAttachment(sessionID: nil, filename: filename, mimeType: mimeType, data: data)
+    }
+
+    /// The open projects a criterion can move to.
+    func openProjectsForMove() async -> [ProjectSummary] {
+        (try? await api.projects(status: .open)) ?? []
+    }
+
     /// Reopen project, from the receipt — the same status door the project page's menu presses.
     func reopenProject() async {
         guard let projectID else { return }

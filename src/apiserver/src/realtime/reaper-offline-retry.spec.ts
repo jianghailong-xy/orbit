@@ -18,6 +18,8 @@ function sweepWithOfflineRunner(task: { autoRunWhenReady: boolean } | null) {
   const taskChanges: string[] = [];
   let taskColumns: Record<string, unknown> = {};
   const tx = {
+    // No Agent check is waiting on these runs (projects/criterion-check-ended.ts).
+    projectCriterionConfirmation: { findMany: async () => [] },
     session: {
       updateMany: async ({ data }: { data: Record<string, unknown> }) => {
         claimData = data;

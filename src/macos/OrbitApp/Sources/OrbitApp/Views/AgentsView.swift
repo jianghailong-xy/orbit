@@ -544,7 +544,8 @@ struct AgentPanes: View {
                     .background(.bar)
                 }
                 NeedsYouBannerView(excluding: app.selectedAgentSessionID,
-                                   projectInColumn: rowNavigation == .selection)
+                                   projectInColumn: rowNavigation == .selection,
+                                   overList: true)
             }
         }
         #endif
