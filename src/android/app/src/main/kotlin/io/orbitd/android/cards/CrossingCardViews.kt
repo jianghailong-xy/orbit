@@ -58,6 +58,7 @@ fun CrossingCardView(batch: CrossingBatch, state: CrossingCardStore.State, onOpe
                 color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3, overflow = TextOverflow.Ellipsis)
             if (batch.live && refused > 0) Text(CrossingCards.notRecorded(refused), Modifier.testTag("${batch.id}:not-recorded"),
                 style = MaterialTheme.typography.bodySmall, color = tone)
+            if (batch.live) state.batchRefusals[batch.id]?.let { BatchRefusal(it, "${batch.id}:refused") }
             HorizontalDivider(color = tone.copy(alpha = 0.28f))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(CrossingCards.link(batch), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
@@ -66,6 +67,18 @@ fun CrossingCardView(batch: CrossingBatch, state: CrossingCardStore.State, onOpe
             }
         }
         receipt?.let { ReceiptLine(it, Modifier.padding(horizontal = 4.dp).testTag("${batch.id}:receipt")) }
+    }
+}
+
+/** The batch door's refusal of a move batch's one answer: its code and its sentence, which names every move whose crossing key no
+ * longer matched. Nothing was written, so the card still asks. */
+@Composable
+private fun BatchRefusal(refusal: ProjectCrossings.Refusal, tag: String) {
+    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.error.copy(alpha = 0.08f), RoundedCornerShape(8.dp)).padding(8.dp).testTag(tag),
+        verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(CrossingCards.refusalHead(refusal), Modifier.testTag("$tag:head"), style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+            color = MaterialTheme.colorScheme.error)
+        Text(refusal.message, style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -85,17 +98,17 @@ private fun ReceiptLine(receipt: CrossingReceipt, modifier: Modifier = Modifier)
  * After this window's own answer is recorded it leaves on its own about 2 s later, as every card review does (`CardReviewSheet`). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CrossingReviewSheet(store: CrossingCardStore, projectId: String?) {
+fun CrossingReviewSheet(store: CrossingCardStore, projectId: String?, sessionId: String?) {
     val state by store.state.collectAsState()
     val open = state.review ?: return
-    val batch = projectId?.let { state.batches(it).firstOrNull { batch -> batch.id == open } }
+    val batch = state.batches(projectId, sessionId).firstOrNull { it.id == open }
     LaunchedEffect(batch == null) { if (batch == null) store.close() }
-    if (batch == null || projectId == null) return
+    if (batch == null) return
     var pressedHere by remember(open) { mutableStateOf(false) }
     LaunchedEffect(pressedHere, batch.live) { if (pressedHere && !batch.live) { delay(2_000); store.close() } }
     ModalBottomSheet(onDismissRequest = { store.close() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         dragHandle = { BottomSheetDefaults.DragHandle() }) {
-        CrossingReview(batch, state, close = { store.close() }) { approve -> pressedHere = true; store.decide(projectId, batch, approve) }
+        CrossingReview(batch, state, close = { store.close() }) { approve -> pressedHere = true; store.decide(projectId, sessionId, batch, approve) }
     }
 }
 
@@ -123,8 +136,8 @@ fun CrossingReview(batch: CrossingBatch, state: CrossingCardStore.State, close: 
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(buildAnnotatedString { withStyle(SpanStyle(color = secondary)) { append("From ") }; append(CrossingCards.sourceTitle(batch)) },
                     Modifier.testTag("$tag:from"), style = MaterialTheme.typography.bodyMedium)
-                Text(buildAnnotatedString { withStyle(SpanStyle(color = secondary)) { append("To ") }; append("this project") },
-                    style = MaterialTheme.typography.bodyMedium)
+                Text(buildAnnotatedString { withStyle(SpanStyle(color = secondary)) { append("To ") }; append(CrossingCards.toText(batch)) },
+                    Modifier.testTag("$tag:to"), style = MaterialTheme.typography.bodyMedium)
             }
             Text(CrossingCards.listHead(batch), style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold), color = secondary)
             Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
@@ -147,6 +160,7 @@ fun CrossingReview(batch: CrossingBatch, state: CrossingCardStore.State, close: 
                     .padding(horizontal = 10.dp, vertical = 8.dp), style = MaterialTheme.typography.bodyMedium)
             }
             Text(CrossingCards.consequence(batch), Modifier.testTag("$tag:consequence"), style = MaterialTheme.typography.bodySmall, color = secondary)
+            if (batch.live) state.batchRefusals[batch.id]?.let { BatchRefusal(it, "$tag:refused") }
         }
         HorizontalDivider()
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

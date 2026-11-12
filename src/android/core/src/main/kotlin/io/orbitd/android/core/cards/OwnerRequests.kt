@@ -352,14 +352,11 @@ object OwnerRequests {
      * Where each request goes in a conversation (web `decisionReceiptAnchor`): after the last row stamped at or before it was filed,
      * by the row's index, or -1 ahead of every row. Requests with no readable moment are left out.
      */
-    fun place(rowTimes: List<String?>, requests: List<OwnerRequest>): Map<Int, List<OwnerRequest>> = place(rowTimes, requests) { it.createdAt }
-
-    /** The same rule for anything else a conversation inserts at the moment it was asked ([at]), such as a batch of task moves. */
-    fun <T> place(rowTimes: List<String?>, items: List<T>, at: (T) -> String?): Map<Int, List<T>> {
+    fun place(rowTimes: List<String?>, requests: List<OwnerRequest>): Map<Int, List<OwnerRequest>> {
         val times = rowTimes.map(::parse)
-        return items.mapNotNull { item ->
-            val moment = parse(at(item)) ?: return@mapNotNull null
-            times.indexOfLast { it != null && !it.isAfter(moment) } to item
+        return requests.mapNotNull { request ->
+            val at = parse(request.createdAt) ?: return@mapNotNull null
+            times.indexOfLast { it != null && !it.isAfter(at) } to request
         }.groupBy({ it.first }, { it.second })
     }
 

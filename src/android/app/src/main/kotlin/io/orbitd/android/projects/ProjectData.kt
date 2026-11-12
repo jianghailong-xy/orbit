@@ -6,7 +6,6 @@ import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.net.*
 import io.orbitd.android.core.protocol.ProtocolException
 import io.orbitd.android.core.protocol.Wire
-import io.orbitd.android.cards.TaskMoves
 import io.orbitd.android.taskprojects.FeatureWriteRefused
 import io.orbitd.android.taskprojects.FeatureWrites
 import kotlinx.serialization.json.*
@@ -69,13 +68,13 @@ class ProjectApi(private val auth: AuthSession, private val handle: SessionHandl
      * not read here: the list the page reads again says what it left. */
     suspend fun decideCrossing(id: String, row: JsonObject, approve: Boolean) = send("crossing:${row.text("crossingKey")}",
         listOf("projects", id, "handoffs", ProjectCrossings.doorId(row), "decision"), body = ProjectCrossings.request(row, approve))
-    /** The task moves a session draws as cards (`GET /sessions/:id/task-moves`): every waiting batch, then the latest answered ones. */
+    /** The task moves a session draws on its crossing cards (`GET /sessions/:id/task-moves`): every waiting batch, then the latest answered ones. */
     suspend fun taskMoves(sessionId: String) = read(listOf("sessions", sessionId, "task-moves"))
-    /** One answer to a whole batch of moves, from the move card's second press: every move with the crossing key the card read, so
+    /** One answer to a whole batch of moves, from the crossing card's review: every move with the crossing key the card read, so
      * a batch that changed since the read is refused whole rather than answered in part (`POST /sessions/:id/task-moves/decision`). */
-    suspend fun decideMoveBatch(sessionId: String, moves: List<JsonObject>, approve: Boolean) =
-        send("moves:${moves.joinToString(",") { it.text("crossingKey").orEmpty() }}", listOf("sessions", sessionId, "task-moves", "decision"),
-            body = TaskMoves.request(moves, approve))
+    suspend fun decideMoveBatch(sessionId: String, batch: CrossingBatch, approve: Boolean) =
+        send("moves:${batch.pending.joinToString(",") { it.text("crossingKey").orEmpty() }}", listOf("sessions", sessionId, "task-moves", "decision"),
+            body = CrossingCards.moveRequest(batch, approve))
     /** The owner's Retry on a landing job the integration read says can be retried: its silent generation ends and the next one is
      * queued. Answers the integration view read again. */
     suspend fun retryJob(id: String, jobId: String) = send("retry:$jobId", listOf("projects", id, "integration", "jobs", jobId, "retry")) as? JsonObject

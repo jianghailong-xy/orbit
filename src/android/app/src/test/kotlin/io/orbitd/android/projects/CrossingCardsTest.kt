@@ -170,4 +170,67 @@ class CrossingCardsTest {
         val placed = CrossingCards.place(times, listOf(early, mid, late))
         assertEquals(listOf(early), placed[-1]); assertEquals(listOf(mid), placed[2]); assertEquals(listOf(late), placed[3])
     }
+
+    // MARK: task moves served to a session (waiting-on-you-removal, owner 11-12)
+
+    private fun asked(row: JsonObject, by: String) = JsonObject(row + ("requestedBySession" to buildJsonObject { put("id", by); put("title", "S $by") }) +
+        ("toProject" to buildJsonObject { put("title", "Runner hardening") }))
+    private fun read(vararg rows: JsonObject, drawnAs: String = "REQUESTER") = buildJsonObject {
+        put("batchKey", "k"); put("state", rows.first().text("state")!!); put("since", rows.first().text("requestedAt")!!)
+        putJsonArray("drawnAs") { add(drawnAs) }; put("moves", JsonArray(rows.toList()))
+    }
+
+    /** One asker's moves are one card: the batch door takes one asker's moves, so two askers out of one project are two answers. */
+    @Test fun movesGroupByAskerAsWell() {
+        val rows = listOf(asked(row("a", requestedAt = at(1)), "S1"), asked(row("b", requestedAt = at(2)), "S2"), asked(row("c", requestedAt = at(3)), "S1"),
+            row("f1", kind = "FILE_TASK", requestedAt = at(4)), row("f2", kind = "FILE_TASK", requestedAt = at(5)))
+        assertEquals(listOf(listOf("a", "c"), listOf("b"), listOf("f1", "f2")),
+            CrossingCards.batches(rows, here).map { b -> b.rows.map { it.text("id") } })
+    }
+
+    /** The session read becomes the same card under the id the project read spells it with, oldest move first; anything that is not a
+     * move, or a read with no moves, is no card. */
+    @Test fun aSessionReadIsTheSameCard() {
+        val batch = CrossingCards.batch(read(asked(row("b", requestedAt = at(2)), "S1"), asked(row("a", requestedAt = at(1)), "S1")))!!
+        assertEquals("crossing-batch-Pa", batch.id)
+        assertEquals(listOf("a", "b"), batch.rows.map { it.text("id") })
+        assertFalse(batch.inTarget)
+        assertTrue(CrossingCards.batch(read(row("a"), drawnAs = "TARGET_COORDINATOR"))!!.inTarget)
+        assertNull(CrossingCards.batch(read(row("f", kind = "FILE_TASK"))))
+        assertNull(CrossingCards.batch(buildJsonObject { put("batchKey", "k"); putJsonArray("moves") {} }))
+    }
+
+    /** In the session that asked, the card names where the tasks go; in the target's coordinator it says "here" and "this project". */
+    @Test fun theAskingSessionsCardNamesTheTarget() {
+        val many = CrossingCards.batch(read(asked(row("a"), "S1"), asked(row("b", requestedAt = at(1)), "S1")))!!
+        assertEquals("Move these tasks into Runner hardening?", CrossingCards.title(many))
+        assertEquals("Runner hardening", CrossingCards.toText(many))
+        val one = CrossingCards.batch(read(asked(row("a"), "S1")))!!
+        assertEquals("Move this task into Runner hardening?", CrossingCards.title(one))
+        val target = CrossingCards.batch(read(asked(row("a"), "S1"), asked(row("b", requestedAt = at(1)), "S1"), drawnAs = "TARGET_COORDINATOR"))!!
+        assertEquals("Move these tasks here?", CrossingCards.title(target))
+        assertEquals("this project", CrossingCards.toText(target))
+    }
+
+    /** Both reads serving one batch draw one card, the project read's; a session batch the project read does not hold is added. */
+    @Test fun mergedDrawsABatchBothReadsServeOnce() {
+        val rows = listOf(asked(row("a", requestedAt = at(1)), "S1"), asked(row("b", requestedAt = at(2)), "S1"))
+        val project = CrossingCards.batches(rows, here)
+        val same = CrossingCards.batch(read(*rows.toTypedArray(), drawnAs = "TARGET_COORDINATOR"))!!
+        val other = CrossingCards.batch(read(asked(row("z", requestedAt = at(0), to = "AAAElsewhere"), "S1")))!!
+        val merged = CrossingCards.merged(project, listOf(same, other))
+        assertEquals(listOf("crossing-batch-Pz", "crossing-batch-Pa"), merged.map { it.id })
+        assertTrue(merged.last().inTarget)
+        // The same waiting rows under a later first row (the project read grouped them from an earlier one) are not drawn twice.
+        val tail = CrossingCards.batch(read(rows[1], drawnAs = "TARGET_COORDINATOR"))!!
+        assertEquals(1, CrossingCards.merged(project, listOf(tail)).size)
+    }
+
+    /** A move batch's answer is ONE body: the decision and every waiting move with the crossing key the card read. */
+    @Test fun aMoveBatchIsAnsweredWithOneBody() {
+        val b = batch(row("a"), row("b", state = "APPLIED", decidedAt = at(3)), row("c"))
+        assertEquals("""{"decision":"APPROVE","moves":[{"handoffId":"Pa","crossingKey":"key-a"},{"handoffId":"Pc","crossingKey":"key-c"}]}""",
+            CrossingCards.moveRequest(b, approve = true).toString())
+        assertEquals("DENY", CrossingCards.moveRequest(b, approve = false)["decision"]!!.jsonPrimitive.content)
+    }
 }

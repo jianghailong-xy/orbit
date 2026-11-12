@@ -242,14 +242,19 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
     val ownerRunner = remember(data.runners) { runnerNames(data.runners) }
     // The cross-project requests its project was asked, as cards in the conversation that coordinates it (`CrossingCards`): read
-    // behind each of the session's snapshot reads, as the owner requests are. Only a coordinator's session names a project.
+    // behind each of the session's snapshot reads, as the owner requests are. Only a coordinator's session names a project. The move
+    // batches come from the session's own read as well, so the session that ASKED for them draws the same card (iOS
+    // `ConsoleModel.refreshTaskMoves`); that read follows the row's waiting signal and its last turn too, because an answer given
+    // at the other end drops the count to the "0" of a row that never waited, and only another read says it moved.
     val coordinated = snapshotDetail?.text("projectId")
     val crossingStore = remember(handle) { CrossingCardStore.of(app.session, handle, app.processScope) { app.canWrite(handle) } }
     val crossingState by crossingStore.state.collectAsState()
     LaunchedEffect(crossingStore, coordinated, state.session?.snapshotReads) { coordinated?.let(crossingStore::load) }
+    LaunchedEffect(crossingStore, route.id, state.session?.snapshotReads, listed?.pendingApprovals, listed?.waitingKind, listed?.taskMoves,
+        listed?.lastTurnAt) { crossingStore.loadMoves(route.id!!) }
     // A review open here is this conversation's: leaving it closes it.
     DisposableEffect(crossingStore) { onDispose { crossingStore.close() } }
-    val crossingBatches = remember(crossingState.rows, coordinated) { coordinated?.let { crossingState.batches(it) }.orEmpty() }
+    val crossingBatches = remember(crossingState.rows, crossingState.sessionMoves, coordinated, route.id) { crossingState.batches(coordinated, route.id) }
     // What the needs-you bar counts in this conversation (iOS `ConsoleModel.openBelowRows`), and which way it lies from
     // the reader: the cards are drawn in the rail before the tail, so they are above only once the reader is past it. A question
     // answered here stops counting with the press, not with the read after it (A08-13).
@@ -652,7 +657,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         }
         }
         if (!state.denied) CardReviewSheet(cards, reviewStates, openLink, discussCard)
-        if (!state.denied) CrossingReviewSheet(crossingStore, coordinated)
+        if (!state.denied) CrossingReviewSheet(crossingStore, coordinated, route.id)
         if (!state.denied) CardReceiptSheet(cards, openLanding = { open(OrbitRoute(Destination.SESSION, it)) })
         if (!state.denied) EvidenceFilesSheet(cards)
         if (details && !state.denied) SessionDetails(state.session, api, openLink) { details = false }
