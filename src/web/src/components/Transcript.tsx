@@ -88,8 +88,8 @@ import { TaskRunHandoffNotice } from './TaskRunHandoffNotice';
 import type { TaskRunConflict } from '../lib/taskRunHandoff';
 import { WatchWakeCard, WatchWakeNamesCtx, watchWakeTitle } from './WatchWakeCard';
 import { BackgroundWakeCard, backgroundWakeName, backgroundWakeTitle } from './BackgroundWakeCard';
-import { ExchangeTreeCtx, OrbitExchangeGroup, OrbitExchangeSolo } from './OrbitExchangeFold';
-import { parseRunNotice, replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
+import { OrbitExchangeGroup, OrbitExchangeSolo } from './OrbitExchangeFold';
+import { foldsAtLength, parseRunNotice, replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
 import { BackgroundJobsNote } from './BackgroundJobsNote';
 import { ReferencedTaskNote } from './ReferencedTaskNote';
 import { WikiContextNote } from './WikiContextNote';
@@ -1833,7 +1833,6 @@ function NodeList({
   const items = useMemo(() => groupToolRuns(nodes, chat), [nodes, chat]);
   const exporting = useContext(ExportCtx) !== null;
   const wakeName = useContext(WatchWakeNamesCtx);
-  const { coordinator } = useContext(ExchangeTreeCtx);
   const renderItem = (item: NodeListItem) => {
     const seqs = item.kind === 'steps' ? item.nodes.map((node) => node.seq) : [item.node.seq];
     // The row a turn opens with, under its message and over everything the turn writes.
@@ -1855,8 +1854,8 @@ function NodeList({
   };
   // A static export has no way to open a fold, so it draws every turn as it always has.
   const blocks = useMemo(
-    () => (exporting ? items.map((item) => ({ kind: 'item' as const, item })) : foldOrbitExchanges(items, wakeName, coordinator)),
-    [items, exporting, wakeName, coordinator],
+    () => (exporting ? items.map((item) => ({ kind: 'item' as const, item })) : foldOrbitExchanges(items, wakeName)),
+    [items, exporting, wakeName],
   );
   return (
     <>
@@ -1893,14 +1892,12 @@ const LOUD_DELIVERIES: ReadonlySet<string> = new Set(['TASK_DISPATCH_REFUSED', '
 
 /**
  * What a turn's opening node says happened, when Orbit opened the turn and it is one the reader
- * can be spared: a fact told to a coordinator, a watch or (in a coordinator) a background job
- * coming back, another session's reply. Null for everything else, and for those that went wrong — a refused start, a
+ * can be spared: a fact told to a coordinator, a watch or a background job coming back, another session's reply. Null for everything else, and for those that went wrong — a refused start, a
  * blocker, a stopped run, a failed target or job, a delivery nobody confirmed — which stay drawn.
  */
 function orbitTurnOf(
   node: Node,
   wakeName: WakeName,
-  coordinator: boolean,
 ): Omit<OrbitExchangeSummary, 'seq' | 'lastSeq' | 'reply'> | null {
   if (node.kind !== 'user' || !node.turnHead || node.steer) return null;
   if (node.delivery === 'failed' || node.delivery === 'unconfirmed') return null;
@@ -1972,9 +1969,6 @@ function orbitTurnOf(
   }
   const background = parseBackgroundWake(node.note);
   if (background) {
-    // Outside a coordinator a background job is the agent's work on what the reader asked: its
-    // turns are the answer, not news about it, so they stay drawn (owner, 2026-11-12).
-    if (!coordinator) return null;
     if (background.jobs.some((job) => job.status === 'failed' || job.status === 'killed')) return null;
     const title = backgroundWakeTitle(background);
     const name = backgroundWakeName(background);
@@ -2003,7 +1997,6 @@ function turnNeedsReader(items: NodeListItem[]): boolean {
 function foldOrbitExchanges(
   items: NodeListItem[],
   wakeName: WakeName,
-  coordinator: boolean,
 ): FoldBlock[] {
   const turns: NodeListItem[][] = [];
   for (const item of items) {
@@ -2019,13 +2012,15 @@ function foldOrbitExchanges(
   };
   turns.forEach((turn, i) => {
     const first = turn[0];
-    const orbit = i < turns.length - 1 && first.kind === 'node' ? orbitTurnOf(first.node, wakeName, coordinator) : null;
+    const orbit = i < turns.length - 1 && first.kind === 'node' ? orbitTurnOf(first.node, wakeName) : null;
     const replies = turn.flatMap((item) =>
       item.kind === 'node' && item.node.kind === 'assistant' && item.node.text.trim() ? [item.node.text] : [],
     );
     // An exchange is the turn and its answer: one the agent has not answered yet is already the
-    // single line its card draws, and folding it would only take that line away.
-    if (orbit && replies.length > 0 && !turnNeedsReader(turn)) {
+    // single line its card draws, and folding it would only take that line away. An answer long
+    // enough to say something stays drawn too (`foldsAtLength`).
+    const answered = replies.reduce((n, text) => n + text.length, 0);
+    if (orbit && replies.length > 0 && foldsAtLength(orbit.category, answered) && !turnNeedsReader(turn)) {
       const seqs = turn.flatMap((item) => (item.kind === 'steps' ? item.nodes : [item.node]).map((node) => node.seq));
       run.push({
         summary: {
