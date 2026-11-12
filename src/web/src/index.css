@@ -1904,36 +1904,6 @@ button.toast--pill:focus-visible {
   color: var(--text-3);
   font-size: 14px;
 }
-.runner-drag-handle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 28px;
-  margin-left: -5px;
-  padding: 0;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-4);
-  font-size: 15px;
-  cursor: grab;
-  touch-action: none;
-  flex: none;
-}
-.runner-drag-handle:hover,
-.runner-drag-handle:focus-visible {
-  background: var(--bg-hover-strong);
-  color: var(--text-2);
-  outline: none;
-}
-.runner-drag-handle:active {
-  cursor: grabbing;
-}
-.runner-drag-handle:disabled {
-  cursor: default;
-  opacity: 0.45;
-}
 .runner-dot {
   width: 9px;
   height: 9px;
@@ -1970,28 +1940,6 @@ button.toast--pill:focus-visible {
 /* A spent quota window: the whole track red, even where its percent counts what is left and is 0. */
 .runner-util.spent .runner-util-fill {
   background: var(--error-solid);
-}
-/* The third line: what this machine needs a person for. When it wraps on a narrow screen, the
-   triangle stays with its first line. */
-.runner-attention {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  margin-top: 5px;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.35;
-}
-.runner-attention.bad {
-  color: var(--error);
-}
-.runner-attention.warn {
-  color: var(--warning);
-}
-.runner-attention .anticon {
-  flex: none;
-  margin-top: 2.5px;
-  font-size: 11px;
 }
 .runner-token-box {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -16617,12 +16565,6 @@ button.chat-jump-start:hover {
   font-size: 12px;
   color: var(--text-3);
 }
-.re-sec-count {
-  margin-left: auto;
-  font-size: 11.5px;
-  color: var(--text-4);
-  white-space: nowrap;
-}
 
 .re-card {
   border: 1px solid var(--border);
@@ -16702,30 +16644,10 @@ button.chat-jump-start:hover {
   padding-left: 9px;
   white-space: nowrap;
 }
-.re-dot {
-  flex: none;
-  /* Onto the name's line rather than the middle of the two-line block it heads (see
-     .re-runner-card .re-toggle), and 9px with a ring of its own so it holds its own beside the
-     chevron instead of reading as a speck of dust. */
-  width: 9px;
-  height: 9px;
-  margin-top: 7px;
-  border-radius: 50%;
-  background: var(--dot-idle);
-  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--dot-idle) 20%, transparent);
-}
-.re-dot.on {
-  background: var(--success-solid);
-  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--success-solid) 20%, transparent);
-}
 .re-runner {
   font-size: 13px;
   font-weight: 650;
   color: var(--text-1);
-}
-.re-runner-meta {
-  font-size: 11.5px;
-  color: var(--text-3);
 }
 .re-head-sp {
   flex: 1;
@@ -16734,225 +16656,6 @@ button.chat-jump-start:hover {
   font-size: 12px;
   color: var(--brand);
   white-space: nowrap;
-}
-
-/* Identity expands the runner; its status and Manage link stay separate. */
-.re-runner-card .re-head {
-  /* What the handle stands against, in the card's left margin (below). */
-  position: relative;
-  flex-wrap: wrap;
-  gap: 0;
-  padding: 0;
-}
-/* What a machine's sessions can run on, a chip per engine on a line of its own under the name
-   (MachineChips) — amber for one with an account signed out. */
-.mc-row {
-  flex-basis: 100%;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  /* Under the name: past the chevron's column, the dot and the gaps beside them. */
-  padding: 0 14px 11px 71px;
-}
-.mc-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 22px;
-  padding: 0 8px 0 4px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-raised);
-  color: var(--text-2);
-  font-size: 12px;
-  white-space: nowrap;
-}
-.mc-n {
-  color: var(--text-3);
-}
-.mc-chip.out {
-  border-color: var(--warning-border);
-  background: var(--warning-bg);
-  color: var(--warning);
-}
-.mc-out {
-  font-weight: 600;
-}
-/* An offline machine's are what it last said, as its rows are. */
-.re-card.offline .mc-row {
-  opacity: 0.62;
-}
-.re-runner-card.offline .re-head {
-  background: var(--bg-subtle);
-}
-.re-runner-card .re-toggle {
-  flex: 1;
-  align-self: stretch;
-  /* The chevron and the dot lead the identity, which stacks a name over a host and version: a
-     mark centred on that block lands in the gap between the two lines, belonging to neither. */
-  align-items: flex-start;
-  gap: 10px;
-  min-height: 64px;
-  padding: 10px 14px;
-  border-radius: 11px 0 0 11px;
-}
-.re-runner-card .re-toggle:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: -3px;
-}
-.re-runner-card .re-chev {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* The column the engine rows put their icon in: the header and the rows under it then share one
-     grid, and the chevron never moves again with whatever a row's summary happens to say. */
-  width: 28px;
-  height: 24px;
-  color: var(--text-2);
-  transition: color 0.15s, transform 0.15s;
-}
-/* Lit wherever a press would fold the card — anywhere on its head but Details, the handle and ⋯. */
-.re-runner-card .re-chev.open,
-.re-runner-card .re-head:hover:not(:has(.re-manage:hover, .re-drag:hover, .re-machine-menu:hover)) .re-chev {
-  color: var(--brand);
-}
-.re-runner-copy {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
-.re-runner-copy .re-runner,
-.re-runner-copy .re-runner-meta {
-  overflow-wrap: anywhere;
-}
-.re-runner-copy .re-runner {
-  font-size: 15px;
-}
-.re-runner-copy .re-runner-meta {
-  font-size: 12px;
-}
-.re-runner-status {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-.re-runner-status .re-summary {
-  border-left: 0;
-  padding-left: 0;
-  font-size: 12px;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-.re-runner-status .re-summary.warn {
-  color: var(--warning);
-}
-.re-runner-status .re-summary .anticon {
-  margin-right: 5px;
-}
-.re-runner-card .re-manage {
-  display: flex;
-  flex: none;
-  align-items: center;
-  min-height: 44px;
-  margin: 0 4px 0 8px;
-}
-.re-runner-card .re-manage:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 3px;
-  border-radius: 4px;
-}
-/* The card is the machine too: it moves by the handle in its left margin, its own actions sit behind
-   the ⋯ at the end, and under its name are how busy it is and what it needs a person for. */
-.re-runner-card.dragging {
-  position: relative;
-  box-shadow: 0 8px 24px rgba(31, 35, 41, 0.16);
-}
-/* The handle stands in the card's own left margin, level with the chevron, and out of the head's
-   flow, where it pushed the chevron 22px right of the column the chevron leads: the one the engine
-   rows put their icon in. */
-.re-runner-card .re-drag {
-  position: absolute;
-  top: 8px;
-  left: 0;
-  margin: 0;
-}
-/* Where a pointer can hover, the handle comes up with the card under it, or with its own keyboard
-   focus; a touch screen shows it always, and so does a narrow card, which gives it a column of its
-   own (below). */
-@media (hover: hover) {
-  @container re-card (width > 600px) {
-    .re-runner-card .re-drag {
-      transition: opacity 0.15s;
-    }
-    .re-runner-card:not(:hover, .dragging) .re-drag:not(:focus-visible) {
-      opacity: 0;
-    }
-  }
-}
-.re-runner-copy .runner-util {
-  display: block;
-  margin-top: 3px;
-}
-.re-runner-copy .runner-attention {
-  margin-top: 2px;
-}
-.re-runner-card .re-machine-menu {
-  flex: none;
-  margin-right: 10px;
-}
-@container re-card (max-width: 600px) {
-  .re-runner-card .re-head {
-    position: static;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
-    column-gap: 8px;
-    padding: 0 14px 0 6px;
-  }
-  .re-runner-card .re-drag {
-    position: static;
-    grid-row: 1;
-    grid-column: 1;
-    align-self: start;
-    margin: 13px 0 0;
-  }
-  .re-runner-card .re-drag + .re-toggle {
-    border-radius: 0;
-  }
-  .re-runner-card .re-toggle {
-    grid-row: 1;
-    grid-column: 2 / -1;
-    align-items: flex-start;
-    min-height: 54px;
-    padding: 10px 0 0;
-    border-radius: 11px;
-  }
-  /* Under 600px the chevron stays where it has always been: the top-right of the row, beside
-     the name. Only the wide card leads with it. */
-  .re-runner-card .re-chev {
-    order: 2;
-  }
-  .re-runner-status {
-    grid-column: 2;
-    margin-left: 17px;
-  }
-  .re-runner-card .re-manage {
-    grid-column: 3;
-    margin: 0;
-  }
-  .re-runner-card .re-machine-menu {
-    grid-column: 4;
-    align-self: center;
-    margin: 0 -6px 0 0;
-  }
-  .mc-row {
-    grid-column: 2 / -1;
-    padding: 0 0 10px;
-  }
 }
 
 .re-row {
@@ -17528,31 +17231,6 @@ button.chat-jump-start:hover {
 .re-unreported {
   padding: 14px;
   font-size: 12.5px;
-  color: var(--text-3);
-}
-
-.re-empty {
-  padding: 26px;
-  text-align: center;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--bg-raised);
-}
-.re-empty-logos {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  margin-bottom: 14px;
-}
-.re-empty h4 {
-  margin: 0 0 4px;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-1);
-}
-.re-empty p {
-  margin: 0 0 16px;
-  font-size: 13px;
   color: var(--text-3);
 }
 

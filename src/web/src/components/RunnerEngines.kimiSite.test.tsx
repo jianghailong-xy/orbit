@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { KIMI_LOGIN_REGION_V1, type RunnerEngineHealth, type RunnerLoginState } from '@orbit/shared';
-import { RunnerEngines } from './RunnerEngines';
+import { EngineRows } from './RunnerEngines.test-rows';
 import { clickRunnerMenuItem } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
@@ -59,9 +59,8 @@ afterEach(() => {
   localStorage.clear();
 });
 
-/** The Providers section over this runner, its card open, with the relay reading `login`. */
+/** This runner's engine rows, with the relay reading `login`. */
 function mount(r: Runner, login: RunnerLoginState = IDLE) {
-  localStorage.setItem('orbit:providers-expanded-runners', JSON.stringify([r.id]));
   apiMock.mockImplementation(async (path: string, options?: { method?: string }) => {
     if (path === '/runners') return [r];
     if (path.endsWith('/login') && (options?.method ?? 'GET') === 'GET') return login;
@@ -77,7 +76,7 @@ function mount(r: Runner, login: RunnerLoginState = IDLE) {
     root!.render(
       <MemoryRouter initialEntries={['/providers']}>
         <QueryClientProvider client={qc}>
-          <RunnerEngines />
+          <EngineRows />
         </QueryClientProvider>
       </MemoryRouter>,
     ),

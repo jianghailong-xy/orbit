@@ -2,10 +2,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
-import { ENGINE_CLI_NAMES, type RunnerEngineHealth, type RunnerInstallState } from '@orbit/shared';
+import { type RunnerEngineHealth, type RunnerInstallState } from '@orbit/shared';
 import { encodeId } from '../lib/idCodec';
 import { updateNoteOf } from '../lib/runnerEngines';
-import { machineChipsOf, RunnerEngines, rowKindOf, summaryOf } from './RunnerEngines';
+import { rowKindOf } from './RunnerEngines';
+import { EngineRows } from './RunnerEngines.test-rows';
 import type { Runner } from './TasksSidePanel';
 
 const health = (over: Partial<RunnerEngineHealth>): RunnerEngineHealth => ({
@@ -23,13 +24,6 @@ const install = (over: Partial<RunnerInstallState>): RunnerInstallState => ({
   mode: over.status ? 'install' : null,
   ...over,
 });
-
-/** What a machine card's head says it runs on (MachineChips), a chip each, as words. */
-const chipsOf = (runner: Runner) =>
-  machineChipsOf(runner).map(
-    (chip) =>
-      `${ENGINE_CLI_NAMES[chip.engine]}${chip.signedOut ? ' signed out' : chip.logins < chip.accounts ? ` ${chip.logins} of ${chip.accounts} signed in` : chip.logins > 1 ? ` ×${chip.logins}` : ''}`,
-  );
 
 const NOW = Date.parse('2026-08-04T12:00:00.000Z');
 const hoursAgo = (h: number) => new Date(NOW - h * 3600_000).toISOString();
@@ -241,8 +235,8 @@ const runner = (over: Partial<Runner>): Runner => ({
   ...over,
 });
 
-// Cards start folded and the section remembers which ones the user opened, in localStorage —
-// which Node doesn't have. This stub is how a test says "this card is open".
+// The rows remember which groups of accounts the user opened, in localStorage — which Node doesn't
+// have.
 const store = new Map<string, string>();
 Object.defineProperty(globalThis, 'localStorage', {
   configurable: true,
@@ -252,45 +246,34 @@ Object.defineProperty(globalThis, 'localStorage', {
   },
 });
 
-function render(runners: Runner[], { open = true, path = '/providers' } = {}) {
+function render(runners: Runner[]) {
   store.clear();
-  if (open) {
-    store.set('orbit:providers-expanded-runners', JSON.stringify(runners.map((r) => r.id)));
-  }
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(['runners'], runners);
   return renderToStaticMarkup(
-    <MemoryRouter initialEntries={[path]}>
+    <MemoryRouter initialEntries={['/providers']}>
       <QueryClientProvider client={qc}>
-        <RunnerEngines />
+        <EngineRows />
       </QueryClientProvider>
     </MemoryRouter>,
   );
 }
 
-describe('the "On your runners" section', () => {
+describe("a machine's engine rows", () => {
   it.each([
     [{ supported: false, installed: true, version: '1.2.16', envKeyAvailable: false }, 'Update runner'],
     [{ supported: true, installed: false, version: null, envKeyAvailable: false }, 'Not installed'],
     [{ supported: true, installed: true, version: 'agy 1.2.16', envKeyAvailable: false }, 'Couldn’t check'],
   ] as const)('shows Antigravity readiness and the upgrade required for older runners: %s', (state, label) => {
     const box = runner({ antigravity: state, engines: [health({ engine: 'kimi' })] });
-    const html = render([box], { path: `/providers?runner=${encodeId(box.id)}&engine=antigravity` });
-    // The rows, after the head's chips (which name Kimi Code too).
+    const html = render([box]);
     const rows = html.slice(html.indexOf('class="re-row'));
     const row = rows.slice(rows.indexOf('data-engine="antigravity"'), rows.indexOf('>Kimi Code<'));
     expect(rows.indexOf('>Antigravity CLI<')).toBeLessThan(rows.indexOf('>Kimi Code<'));
-    expect(html.match(/re-row focused/g)).toHaveLength(1);
     expect(row).toContain('>Antigravity CLI<');
     expect(row).toContain(label);
     expect(row).toContain('Update this runner to sign in with Google.');
     expect(row).not.toContain('>Sign in<');
-    expect(html).toContain('1 runner · 1 signed in');
-    // Its head runs on Kimi Code alone: an Antigravity CLI no session can use here gets no chip, and isn't
-    // called signed out either.
-    expect(chipsOf(box)).toEqual(['Kimi Code']);
-    expect(summaryOf(box)).toBeNull();
-    expect(summaryOf({ ...box, install: install({ engine: 'antigravity', status: 'installing' }) })).toBe('Installing…');
     if (!state.supported) {
       expect(row).toContain('Update runner');
       expect(row).not.toContain('>Install<');
@@ -326,7 +309,6 @@ describe('the "On your runners" section', () => {
     expect(html).toContain('Signed out');
     expect(html).toContain('Not installed');
     expect(html).toContain('Install');
-    expect(html).toContain('1 runner · 1 signed in');
   });
 
   it("says a runner hasn't reported rather than calling its engines missing", () => {
@@ -384,109 +366,10 @@ describe('the "On your runners" section', () => {
     expect(codex).not.toContain('>Install<');
   });
 
-  it('starts folded, so a page of set-up machines is a list rather than a wall', () => {
-    const html = render(
-      [
-        runner({
-          engines: [health({ engine: 'claude' }), health({ engine: 'codex', auth: 'no' })],
-        }),
-      ],
-      { open: false },
-    );
 
-    // The card is there and says what it runs on — the engine signed out there has no chip, its row says
-    // so once the card is open — it just isn't unpacked into a row per engine.
-    expect(html).toContain('mac-studio');
-    // (Static markup marks where one text node ends and the next begins with an empty comment.)
-    expect(html).toMatch(/<span class="mc-chip">(?:(?!<\/span>).)*Claude Code(?:<!-- -->)? <\/span>/);
-    expect(html).not.toContain('Codex');
-    expect(html).not.toContain('class="re-row');
-    expect(html).not.toContain('Signed out');
-  });
 
-  it('folds a runner away without hiding what it would have said', () => {
-    const busy = runner({
-      engines: [
-        health({ engine: 'claude' }),
-        health({ engine: 'codex', auth: 'no' }),
-        health({ engine: 'kimi', installed: false, auth: 'unknown' }),
-      ],
-    });
-    // Nothing in flight: the chips say who is signed in and who isn't, and the line has nothing to add.
-    expect(chipsOf(busy)).toEqual(['Claude Code', 'Codex signed out']);
-    expect(summaryOf(busy)).toBeNull();
-    const all = runner({ engines: [health({}), health({ engine: 'codex' }), health({ engine: 'kimi' })] });
-    expect(chipsOf(all)).toEqual(['Claude Code', 'Codex', 'Kimi Code']);
-    expect(summaryOf(all)).toBeNull();
-    // With nothing signed in or out to draw — a CLI that wouldn't say, one not installed — the line is
-    // the count.
-    expect(
-      summaryOf(runner({ engines: [health({ auth: 'unknown' }), health({ engine: 'codex', installed: false, auth: 'unknown' })] })),
-    ).toBe('0 of 3 signed in');
-    expect(summaryOf(runner({ engines: null }))).toBe('Engines not reported');
-    // A folded card must still say that something needs attention, or collapsing becomes a way
-    // to lose a failed install.
-    expect(
-      summaryOf(runner({ engines: [health({})], install: install({ status: 'failed', engine: 'kimi' }) })),
-    ).toBe('Install failed');
-    expect(
-      summaryOf(runner({ engines: [health({})], install: install({ status: 'installing', engine: 'kimi' }) })),
-    ).toBe('Installing…');
-  });
 
-  it('chips Antigravity only where a session can run on it, and never calls it signed out with no Google sign-in to offer', () => {
-    const loggedIn = [health({}), health({ engine: 'codex' }), health({ engine: 'kimi' })];
-    for (const auth of ['yes', 'no', 'unknown'] as const) {
-      const box = runner({ engines: [...loggedIn, health({ engine: 'antigravity', auth })] });
-      expect(chipsOf(box), auth).toEqual(['Claude Code', 'Codex', ...(auth === 'yes' ? ['Antigravity CLI'] : []), 'Kimi Code']);
-      expect(summaryOf(box), auth).toBeNull();
-    }
-    expect(chipsOf(runner({ engines: [health({}), health({ engine: 'antigravity' })] }))).toEqual([
-      'Claude Code',
-      'Antigravity CLI',
-    ]);
-  });
 
-  it('marks the one row a "Not signed in" link came here for', () => {
-    const box = runner({
-      engines: [
-        health({ engine: 'claude' }),
-        health({ engine: 'codex', auth: 'no' }),
-        health({ engine: 'kimi' }),
-      ],
-    });
-    const path = `/providers?runner=${encodeId(box.id)}&engine=codex`;
-    const html = render([box], { path });
-    // Exactly one row is marked, and it's the engine the link named — not the first one drawn.
-    expect(html.match(/re-row focused/g)).toHaveLength(1);
-    expect(html.slice(html.indexOf('re-row focused'))).toContain('Codex');
-    // An unnamed engine, or no link at all, marks nothing.
-    expect(render([box], { path: `/providers?runner=${encodeId(box.id)}` })).not.toContain(
-      'focused',
-    );
-    expect(render([box])).not.toContain('focused');
-    // OpenCode's row is one a link can name too: every row on the machine's own page points here,
-    // OpenCode's included (engineSignInHref).
-    const withCode = runner({
-      engines: [health({ engine: 'claude' }), health({ engine: 'opencode', auth: 'unknown' })],
-    });
-    const atCode = render([withCode], {
-      path: `/providers?runner=${encodeId(withCode.id)}&engine=opencode`,
-    });
-    expect(atCode.match(/re-row focused/g)).toHaveLength(1);
-    expect(atCode.slice(atCode.indexOf('re-row focused'))).toContain('OpenCode');
-  });
-
-  it('explains the subscription source and leaves machine upkeep on the runner page', () => {
-    const box = runner({ engines: [health({ engine: 'claude', version: '2.1.220' })] });
-    const html = render([box]);
-    expect(html).toContain('Use subscriptions signed in on your machines.');
-    // But not the lever. `POST /runners/:id/engine-update` takes no engine: its object is the
-    // machine, and every other control on this page is scoped to one (runner, engine) pair. It
-    // lives on the machine's own page, which this card already links to.
-    expect(html).not.toContain('Update engines');
-    expect(html).toContain(`/settings/machines/${encodeId(box.id)}`);
-  });
 
   it('does not report an update run it no longer owns', () => {
     // The report names every CLI the pass touched, OpenCode included — and this runner reports no
@@ -567,42 +450,6 @@ describe('the "On your runners" section', () => {
     expect(row).toContain('opencode auth login');
   });
 
-  it('never summarizes a folded card with a problem the card cannot show', () => {
-    // Drift on OpenCode is real and worth saying — on the machine's page, and on the row itself
-    // where a runner reports one. This line counts the engines a sign-in is possible for, and
-    // OpenCode is not one of them: it is in neither the N signed in nor the drift count.
-    // summaryOf reads the real clock (it renders, it isn't a pure rule), so these are real offsets.
-    const hAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
-    const drifting = runner({
-      engines: [
-        health({
-          engine: 'claude',
-          version: '2.1.228',
-          update: { status: 'checked', at: hAgo(1), okAt: hAgo(1) },
-        }),
-        health({
-          engine: 'opencode',
-          version: '1.18.0',
-          auth: 'unknown',
-          update: { status: 'failed', at: hAgo(1), okAt: hAgo(30 * 24), message: 'EACCES' },
-        }),
-      ],
-    });
-    // Claude Code's chip says the rest.
-    expect(summaryOf(drifting)).toBeNull();
-    // Sanity: the same record on an engine this page does show is still counted, so the filter
-    // is scoping the summary rather than disabling it.
-    const shown = runner({
-      engines: [
-        health({
-          engine: 'codex',
-          version: '0.146.0',
-          update: { status: 'failed', at: hAgo(1), okAt: hAgo(30 * 24), message: 'EACCES' },
-        }),
-      ],
-    });
-    expect(summaryOf(shown)).toBe('1 engine not updating');
-  });
 
   it("shows a drifting engine the machine's own reason, and points at where to act", () => {
     const box = runner({
@@ -677,32 +524,5 @@ describe('the "On your runners" section', () => {
     expect(html).not.toContain('re-panel warn');
   });
 
-  it("a folded card admits it isn't updating, ahead of the good news", () => {
-    const drifted = runner({
-      engines: [
-        health({
-          engine: 'claude',
-          update: { status: 'failed', at: daysAgo(1), okAt: daysAgo(30), message: 'EACCES' },
-        }),
-      ],
-    });
-    expect(summaryOf(drifted)).toBe('1 engine not updating');
-    // An offline machine isn't drifting, it's away — and the header already says so.
-    expect(summaryOf({ ...drifted, online: false })).toBeNull();
-    // An update in flight, and its outcome, are the card's news while they last.
-    expect(
-      summaryOf(runner({ engines: [health({})], install: install({ status: 'installing', mode: 'update' }) })),
-    ).toBe('Updating…');
-    expect(
-      summaryOf(runner({ engines: [health({})], install: install({ status: 'failed', mode: 'update' }) })),
-    ).toBe('Update failed');
-  });
 
-  it('offers the free route first when there is no runner at all', () => {
-    const html = render([]);
-
-    expect(html).toContain('Already pay for Claude, Codex or Kimi?');
-    // Straight to registering one: the list it used to send to is this page now.
-    expect(html).toMatch(/<a href="\/runners\/register"[^>]*><button[^>]*><span>Register a machine<\/span><\/button><\/a>/);
-  });
 });

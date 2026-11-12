@@ -126,6 +126,57 @@
   color: var(--text-2);
   font-size: 14px;
 }
+/* A machine's row (MachineRows): its grip takes the icon's place on hover or focus, so at rest the
+   group looks like every other (board-3). */
+.settings-nav-sortable {
+  position: relative;
+}
+.settings-nav-sortable.dragging {
+  z-index: 1;
+}
+.settings-nav-sortable.dragging .settings-nav-row {
+  background: var(--bg-hover-strong);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  cursor: grabbing;
+}
+.settings-nav-grip {
+  position: absolute;
+  top: 5px;
+  left: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 13px;
+  cursor: grab;
+  touch-action: none;
+  opacity: 0;
+}
+.settings-nav-sortable:hover .settings-nav-grip,
+.settings-nav-sortable.dragging .settings-nav-grip,
+.settings-nav-grip:focus-visible {
+  opacity: 1;
+}
+.settings-nav-sortable:hover .settings-nav-icon,
+.settings-nav-sortable.dragging .settings-nav-icon,
+.settings-nav-sortable:has(.settings-nav-grip:focus-visible) .settings-nav-icon {
+  visibility: hidden;
+}
+.settings-nav-grip:hover,
+.settings-nav-grip:focus-visible {
+  background: var(--bg-hover-strong);
+  color: var(--text-1);
+  outline: none;
+}
+.settings-nav-grip:disabled {
+  cursor: default;
+}
 .settings-nav-label {
   flex: 1;
   min-width: 0;

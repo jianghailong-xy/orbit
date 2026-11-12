@@ -1,6 +1,23 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import { NavLink, Outlet, useMatch, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import {
   ApiOutlined,
   BellOutlined,
@@ -9,6 +26,7 @@ import {
   DatabaseOutlined,
   FolderOutlined,
   HddOutlined,
+  HolderOutlined,
   KeyOutlined,
   LeftOutlined,
   LinkOutlined,
@@ -29,6 +47,7 @@ import {
   type AttentionWorkspace,
 } from '../../lib/runnerAttention';
 import { settingsReturnPath } from '../../lib/settingsReturn';
+import { useToast } from '../../lib/toast';
 import { ControlPlaneProvider } from '../../lib/useControlPlane';
 import { ImpersonationBanner } from '../ImpersonationBanner';
 import { vendorName, vendorOf } from '../ProviderGallery';
@@ -171,25 +190,7 @@ function SettingsNav() {
       </NavGroup>
 
       <NavGroup title="Machines" add={{ label: 'Register a machine', onClick: () => navigate('/runners/register') }}>
-        {runners.map((runner) => {
-          const state = stateOf(runner);
-          return (
-            <NavRow
-              key={runner.id}
-              to={`/settings/machines/${runner.id}`}
-              icon={<HddOutlined />}
-              label={runnerName(runner)}
-              trailing={
-                <span
-                  className={`settings-dot settings-dot--${state}`}
-                  role="img"
-                  aria-label={MACHINE_STATE_LABEL[state]}
-                  title={MACHINE_STATE_LABEL[state]}
-                />
-              }
-            />
-          );
-        })}
+        <MachineRows runners={runners} stateOf={stateOf} />
       </NavGroup>
 
       <NavGroup title="Providers" add={{ label: 'Connect a provider', onClick: () => navigate('/settings/providers/new') }}>
@@ -221,6 +222,127 @@ function SettingsNav() {
         <WorkspaceRows workspaces={workspaces} machineOf={machineOf} />
       </NavGroup>
     </nav>
+  );
+}
+
+/**
+ * The Machines group's rows, in the order every runner list uses, and dragged into a new one: by the
+ * row itself with a mouse, or by the grip that shows on hover or focus, which a keyboard picks up with
+ * Space or Enter and moves with the arrows. The new order shows at once and goes back if the server
+ * refuses it. A press that never moves stays a click, and opens the machine's page.
+ */
+function MachineRows({ runners, stateOf }: { runners: Runner[]; stateOf: (runner: Runner) => MachineState }) {
+  const qc = useQueryClient();
+  const message = useToast();
+  const reorderMut = useMutation({
+    mutationFn: (ids: string[]) => api<Runner[]>('/runners/reorder', { method: 'POST', body: { ids } }),
+    // Moved at once, and put back if the server refuses: a row that waited for the round trip
+    // would jump back under the pointer first.
+    onMutate: async (ids) => {
+      await qc.cancelQueries({ queryKey: runnersQuery().queryKey });
+      const previous = qc.getQueryData<Runner[]>(runnersQuery().queryKey);
+      if (previous) {
+        const rank = new Map(ids.map((id, index) => [id, index]));
+        qc.setQueryData<Runner[]>(
+          runnersQuery().queryKey,
+          [...previous]
+            .sort(
+              (a, b) =>
+                (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+            )
+            .map((runner, position) => ({ ...runner, position })),
+        );
+      }
+      return { previous };
+    },
+    onError: (e: Error, _ids, context) => {
+      if (context?.previous) qc.setQueryData(runnersQuery().queryKey, context.previous);
+      message.error("Couldn't reorder the machines", e.message);
+    },
+    onSuccess: (data) => qc.setQueryData(runnersQuery().queryKey, data),
+    onSettled: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
+  });
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const onDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id || reorderMut.isPending) return;
+    const from = runners.findIndex((runner) => runner.id === active.id);
+    const to = runners.findIndex((runner) => runner.id === over.id);
+    if (from < 0 || to < 0) return;
+    reorderMut.mutate(arrayMove(runners, from, to).map((runner) => runner.id));
+  };
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <SortableContext items={runners.map((runner) => runner.id)} strategy={verticalListSortingStrategy}>
+        {runners.map((runner) => (
+          <MachineRow key={runner.id} runner={runner} state={stateOf(runner)} dragDisabled={reorderMut.isPending} />
+        ))}
+      </SortableContext>
+    </DndContext>
+  );
+}
+
+function MachineRow({ runner, state, dragDisabled }: { runner: Runner; state: MachineState; dragDisabled: boolean }) {
+  const { attributes, listeners, setActivatorNodeRef, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: runner.id, disabled: dragDisabled });
+  const name = runnerName(runner);
+  // The click a drag ends with is the drag's, not the link's. dnd-kit stops that click at the
+  // document, before React's handlers, which leaves the browser to follow the link's href with a
+  // full page load to the machine just moved; the window sees it first, and cancels it.
+  const node = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!isDragging) return;
+    const swallow = (event: MouseEvent) => {
+      if (node.current?.contains(event.target as Node)) event.preventDefault();
+    };
+    window.addEventListener('click', swallow, true);
+    return () => {
+      setTimeout(() => window.removeEventListener('click', swallow, true), 50);
+    };
+  }, [isDragging]);
+  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    // A finger on the row scrolls the nav; only the grip drags by touch.
+    if (event.pointerType === 'touch' && !(event.target as Element).closest('.settings-nav-grip')) return;
+    listeners?.onPointerDown?.(event);
+  };
+  return (
+    <div
+      ref={(element) => {
+        node.current = element;
+        setNodeRef(element);
+      }}
+      className={`settings-nav-sortable${isDragging ? ' dragging' : ''}`}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      onPointerDown={onPointerDown}
+    >
+      <NavRow
+        to={`/settings/machines/${runner.id}`}
+        icon={<HddOutlined />}
+        label={name}
+        trailing={
+          <span
+            className={`settings-dot settings-dot--${state}`}
+            role="img"
+            aria-label={MACHINE_STATE_LABEL[state]}
+            title={MACHINE_STATE_LABEL[state]}
+          />
+        }
+      />
+      <button
+        ref={setActivatorNodeRef}
+        type="button"
+        className="settings-nav-grip"
+        title="Drag to reorder"
+        disabled={dragDisabled}
+        {...attributes}
+        aria-label={`Reorder ${name}`}
+        onKeyDown={(event) => listeners?.onKeyDown?.(event)}
+      >
+        <HolderOutlined />
+      </button>
+    </div>
   );
 }
 
@@ -317,7 +439,8 @@ function NavGroup({
 
 function NavRow({ to, icon, label, trailing }: { to: string; icon: ReactNode; label: string; trailing?: ReactNode }) {
   return (
-    <NavLink to={to} className={({ isActive }) => `settings-nav-row${isActive ? ' active' : ''}`}>
+    // Not a native drag: a row a pointer drags is the Machines group's reorder (MachineRows).
+    <NavLink to={to} draggable={false} className={({ isActive }) => `settings-nav-row${isActive ? ' active' : ''}`}>
       <span className="settings-nav-icon">{icon}</span>
       <span className="settings-nav-label">{label}</span>
       {trailing}

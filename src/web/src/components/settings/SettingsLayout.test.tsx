@@ -24,6 +24,12 @@ vi.mock('../../api', async (original) => ({ ...(await original<typeof import('..
 const { api } = await import('../../api');
 const apiMock = vi.mocked(api);
 
+const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock('../../lib/toast', async (original) => ({
+  ...(await original<typeof import('../../lib/toast')>()),
+  useToast: () => toast,
+}));
+
 vi.mock('../../lib/useControlPlane', async (original) => ({
   ...(await original<typeof import('../../lib/useControlPlane')>()),
   ControlPlaneProvider: ({ children }: { children: ReactNode }) => children,
@@ -105,6 +111,12 @@ let root: Root | null = null;
 let keys: unknown[] = KEYS;
 let workspaces: unknown[] = WORKSPACES;
 let pools: unknown[] = [{ id: 'p1', name: 'Team', members: [] }];
+let runners: typeof RUNNERS = RUNNERS;
+/** What POST /runners/reorder answers: the runners in the order asked, unless a test says otherwise. */
+let reorder: (ids: string[]) => Promise<unknown> = async (ids) => {
+  runners = ids.map((id) => RUNNERS.find((r) => r.id === id)!);
+  return runners;
+};
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -114,8 +126,15 @@ beforeEach(() => {
   keys = KEYS;
   workspaces = WORKSPACES;
   pools = [{ id: 'p1', name: 'Team', members: [] }];
-  apiMock.mockImplementation((async (path: string) => {
-    if (path === '/runners') return RUNNERS;
+  runners = RUNNERS;
+  reorder = async (ids) => {
+    runners = ids.map((id) => RUNNERS.find((r) => r.id === id)!);
+    return runners;
+  };
+  toast.error.mockReset();
+  apiMock.mockImplementation((async (path: string, init?: { body?: { ids: string[] } }) => {
+    if (path === '/runners/reorder') return reorder(init!.body!.ids);
+    if (path === '/runners') return runners;
     if (path === '/workspaces') return workspaces;
     if (path === '/providers/mine') return keys;
     if (path === '/providers/pools') return pools;
@@ -482,5 +501,147 @@ describe('the Settings building blocks', () => {
       ['Suggested replies', "Offers what you'd type next.", true],
       ['Session recaps', null, false],
     ]);
+  });
+});
+
+/**
+ * Machines are dragged into the order every runner list uses, in the Machines group itself: by the row
+ * with a pointer, or by its grip with the keyboard. The new order shows at once, is sent as
+ * POST /runners/reorder { ids }, and goes back with "Couldn't reorder the machines" if the server
+ * refuses it. A press that doesn't move is still the link's.
+ */
+describe('reordering machines in the nav', () => {
+  const ROW_HEIGHT = 30;
+  // jsdom lays nothing out: each machine's row is given the box it would have, one under another.
+  beforeEach(() => {
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      const sortable = this.closest('.settings-nav-sortable');
+      const index = sortable ? [...sortable.parentElement!.children].indexOf(sortable) : 0;
+      const top = index * ROW_HEIGHT;
+      return { x: 0, y: top, top, left: 0, right: 240, bottom: top + ROW_HEIGHT, width: 240, height: ROW_HEIGHT, toJSON: () => ({}) } as DOMRect;
+    });
+  });
+  afterEach(async () => {
+    // A drag's sensor keeps its click guard on the document for 50 ms after it lets go, and the
+    // document outlives a test: let it go before the next test's click.
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    vi.restoreAllMocks();
+  });
+
+  const machineOrder = () => rows('Machines').map((r) => r.label);
+  const machineRow = (label: string) =>
+    [...group('Machines').querySelectorAll<HTMLAnchorElement>('a.settings-nav-row')].find(
+      (a) => a.querySelector('.settings-nav-label')?.textContent === label,
+    )!;
+  const reorderCalls = () =>
+    apiMock.mock.calls.filter(([path]) => path === '/runners/reorder').map(([, init]) => init);
+
+  /** A mouse pressed on a row, moved `dy` px down in steps, and let go. */
+  async function dragRow(label: string, dy: number): Promise<MouseEvent> {
+    const row = machineRow(label);
+    const start = { clientX: 20, clientY: 15 };
+    const pointer = (type: string, x: number, y: number) =>
+      new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerType: 'mouse', clientX: x, clientY: y });
+    await act(async () => {
+      row.dispatchEvent(pointer('pointerdown', start.clientX, start.clientY));
+    });
+    for (let step = 1; step <= 4; step += 1) {
+      await act(async () => {
+        document.dispatchEvent(pointer('pointermove', start.clientX, start.clientY + (dy * step) / 4));
+      });
+    }
+    // The click a released press ends with lands on the row, as a browser's does.
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 });
+    await act(async () => {
+      document.dispatchEvent(pointer('pointerup', start.clientX, start.clientY + dy));
+    });
+    await act(async () => {
+      row.dispatchEvent(click);
+    });
+    await settle();
+    return click;
+  }
+
+  it('draws a grip for each machine, named for it, that shows only on hover or focus', async () => {
+    await visit('/settings/general');
+    const grips = [...group('Machines').querySelectorAll<HTMLButtonElement>('button.settings-nav-grip')];
+    expect(grips.map((g) => g.getAttribute('aria-label'))).toEqual([
+      'Reorder gpu-box',
+      'Reorder old-laptop',
+      'Reorder Studio Mac',
+    ]);
+    expect(grips.every((g) => g.title === 'Drag to reorder')).toBe(true);
+    // Hidden at rest is the stylesheet's to say: opacity 0, shown on the row's hover or the grip's focus.
+    const fs = await import('node:fs');
+    const css = fs.readFileSync(
+      [`${process.cwd()}/src/components/settings/Settings.css`, `${process.cwd()}/src/web/src/components/settings/Settings.css`].find(
+        (path) => fs.existsSync(path),
+      )!,
+      'utf8',
+    );
+    expect(css).toMatch(/\.settings-nav-grip \{[^}]*opacity: 0;/);
+    expect(css).toMatch(/\.settings-nav-sortable:hover \.settings-nav-grip,[^{]*\.settings-nav-grip:focus-visible \{\s*opacity: 1;/);
+    // No other group has one.
+    expect(nav().querySelectorAll('button.settings-nav-grip')).toHaveLength(3);
+  });
+
+  it('a drag sends the new order to POST /runners/reorder and the nav shows it, without opening the machine', async () => {
+    await visit('/settings/general');
+    expect(machineOrder()).toEqual(['gpu-box', 'old-laptop', 'Studio Mac']);
+    const click = await dragRow('gpu-box', 2 * ROW_HEIGHT);
+    // The browser doesn't follow the link either.
+    expect(click.defaultPrevented).toBe(true);
+    expect(reorderCalls()).toEqual([{ method: 'POST', body: { ids: ['oldLaptop', 'studioMac', 'gpuBox'] } }]);
+    expect(machineOrder()).toEqual(['old-laptop', 'Studio Mac', 'gpu-box']);
+    // The drag's click was the drag's: Settings stayed where it was.
+    expect(addressBar()).toBe('/settings/general');
+    expect(page()).toBe('/settings/general');
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('moves a machine with the keyboard on its grip, as the old handle did', async () => {
+    await visit('/settings/general');
+    const grip = group('Machines').querySelector<HTMLButtonElement>('button[aria-label="Reorder Studio Mac"]')!;
+    const key = async (code: string) => {
+      await act(async () => {
+        grip.dispatchEvent(new KeyboardEvent('keydown', { code, key: code === 'Space' ? ' ' : code, bubbles: true, cancelable: true }));
+      });
+      await settle();
+    };
+    grip.focus();
+    await key('Space');
+    await key('ArrowUp');
+    await key('Space');
+    expect(reorderCalls()).toEqual([{ method: 'POST', body: { ids: ['gpuBox', 'studioMac', 'oldLaptop'] } }]);
+    expect(machineOrder()).toEqual(['gpu-box', 'Studio Mac', 'old-laptop']);
+    expect(addressBar()).toBe('/settings/general');
+  });
+
+  it('a refused reorder puts the machines back and says so', async () => {
+    let refuse!: (error: Error) => void;
+    reorder = () => new Promise((_resolve, reject) => (refuse = reject));
+    await visit('/settings/general');
+    await dragRow('Studio Mac', -2 * ROW_HEIGHT);
+    expect(reorderCalls()).toEqual([{ method: 'POST', body: { ids: ['studioMac', 'gpuBox', 'oldLaptop'] } }]);
+    // Shown at once, before the server answers.
+    expect(machineOrder()).toEqual(['Studio Mac', 'gpu-box', 'old-laptop']);
+    await act(async () => refuse(new Error('Machine order is stale')));
+    await settle();
+    expect(machineOrder()).toEqual(['gpu-box', 'old-laptop', 'Studio Mac']);
+    expect(toast.error).toHaveBeenCalledWith("Couldn't reorder the machines", 'Machine order is stale');
+  });
+
+  it('a plain click on a machine still opens its page, and sends no reorder', async () => {
+    await visit('/settings/general');
+    await dragRow('old-laptop', 0);
+    expect(addressBar()).toBe('/settings/machines/oldLaptop');
+    expect(page()).toBe('machine:oldLaptop:');
+    expect(reorderCalls()).toEqual([]);
+    // A press that moved less than the drag's 5 px is a click too.
+    await go('/settings/general');
+    await dragRow('gpu-box', 3);
+    expect(addressBar()).toBe('/settings/machines/gpuBox');
+    expect(reorderCalls()).toEqual([]);
+    expect(machineOrder()).toEqual(['gpu-box', 'old-laptop', 'Studio Mac']);
   });
 });

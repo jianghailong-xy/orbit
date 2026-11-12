@@ -25,7 +25,6 @@ final class SettingsCopyParityTests: XCTestCase {
     private static let accessTokenWords = "src/web/src/lib/accessTokens.ts"
     private static let infrastructure = "src/web/src/pages/InfrastructurePage.tsx"
     private static let keyCards = "src/web/src/components/ProviderKeyCards.tsx"
-    private static let engines = "src/web/src/components/RunnerEngines.tsx"
     private static let pools = "src/web/src/components/AccountPools.tsx"
     private static let engineNames = "src/shared/src/providerEngines.ts"
 
@@ -241,20 +240,14 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(pools, "re-sec-sub\"> \(ProvidersOverview.accountPoolsDetail)", in: Self.pools)
     }
 
-    /// A machine's line: the slots the web card's head counts, and the summary its folded card gives
-    /// (`summaryOf`), word for word. Since docs/mocks/infrastructure-focus the web card's head names each
-    /// engine signed in on a chip of its own, and counts them in words only for a machine with no chip to
-    /// draw; iOS's row still sums every machine up in one line, All signed in included.
+    /// A machine's line: the slots and the summary the web's machine card gave on its head (`summaryOf`),
+    /// word for word. The web no longer draws that card: since the Settings redesign each machine is a row
+    /// of the Settings nav and a page of its own (/settings/machines/:id), and the card list, `summaryOf`
+    /// with it, is gone from RunnerEngines.tsx. iOS's row still sums every machine up in one line, All
+    /// signed in included, in the words the card last used.
     func testAMachinesLineSaysWhatTheWebCardSays() throws {
-        let engines = try web(Self.engines)
-        assertSays(engines, "busy && `${active} / ${max} running`", in: Self.engines)
         XCTAssertEqual(Infrastructure.running(active: 2, max: 4), "2 / 4 running")
-        assertSays(engines, "return updating ? 'Update failed' : 'Install failed';", in: Self.engines)
-        assertSays(engines, "return updating ? 'Updating…' : 'Installing…';", in: Self.engines)
-        assertSays(engines, "if (!runner.engines) return '\(Infrastructure.summary(try runner(nil)))';", in: Self.engines)
-        assertSays(engines, "return stale === 1 ? '1 engine not updating' : `${stale} engines not updating`;",
-                   in: Self.engines)
-        assertSays(engines, "return `${shown.filter(signedIn).length} of ${engines.length} signed in`;", in: Self.engines)
+        XCTAssertEqual(Infrastructure.summary(try runner(nil)), "Engines not reported")
         let all = #"[{"engine":"claude","installed":true,"auth":"yes"},{"engine":"codex","installed":true,"auth":"yes"},{"engine":"kimi","installed":true,"auth":"yes"}]"#
         XCTAssertEqual(Infrastructure.summary(try runner(all)), "All signed in")
     }
@@ -262,8 +255,7 @@ final class SettingsCopyParityTests: XCTestCase {
     /// Needs you: each line and what it means. The web drew the same lines in `NeedsAttention` until
     /// docs/mocks/infrastructure-focus (2026-10-25), which left an offline machine and an unavailable pool
     /// to their own cards; iOS keeps the block for those until its own page is redrawn, and since
-    /// 2026-10-29 lists no engine signed out, as the web's machine card draws it nothing. What is still the
-    /// web's: the machine named as the web names it.
+    /// 2026-10-29 lists no engine signed out, as the web's machine card drew it nothing.
     func testNeedsYouSaysWhatTheWebSays() throws {
         XCTAssertEqual(Infrastructure.offlineLine(machine: "ThinkPad"), "ThinkPad is offline")
         XCTAssertEqual(Infrastructure.offlineDetail(lastHeartbeatAt: nil, nowMs: 0),
@@ -271,8 +263,6 @@ final class SettingsCopyParityTests: XCTestCase {
         XCTAssertEqual(Infrastructure.poolLine(pool: "Claude keys"), "Claude keys is unavailable")
         XCTAssertEqual(Infrastructure.poolDetail(reason: "No account can run"),
                        "No account can run · no session can start on it")
-        // The machine named as the web's card names it: its alias, else its own name.
-        assertSays(try web(Self.engines), "const name = runner.displayName || runner.name;", in: Self.engines)
     }
 
     /// The engines, as the web names them: every engine a session can run on, in the pickers' order and by
