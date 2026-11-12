@@ -7,6 +7,7 @@ import {
   Get,
   Header,
   Headers,
+  HttpCode,
   MessageEvent,
   Param,
   Patch,
@@ -690,6 +691,15 @@ export class SessionsController {
     @Body() body: SessionSettingsPatch,
   ) {
     return this.sessions.updateSettings(user.userId, id, body);
+  }
+
+  /** The Settings panel's Restart: reload the live engine with the session's env, after the turn
+   *  in flight if there is one — see SessionsService.restart. */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/restart')
+  @HttpCode(202)
+  restart(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.sessions.restart(user.userId, id);
   }
 
   /** Which of its runner's Codex or Claude accounts the session runs on — see switchAccount. */

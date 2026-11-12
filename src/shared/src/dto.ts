@@ -113,6 +113,17 @@ export interface SessionSettingsPatch {
   muted?: boolean;
 }
 
+/**
+ * `POST /sessions/:id/restart` (202): the live engine is reloaded with the session's env as it stands
+ * when the runner takes the reload up. Refused 409 `ENGINE_NOT_RUNNING` once the engine has ended — its
+ * next start already uses the new env.
+ */
+export interface SessionRestartResponse {
+  queued: true;
+  /** A turn is running now: the reload waits for it to end. */
+  afterTurn: boolean;
+}
+
 /** `GET /sessions/:id/move-targets`: everything the Move panel and its confirmation need. */
 export interface SessionMoveTargets {
   workspaceId: string | null;

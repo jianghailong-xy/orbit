@@ -600,6 +600,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'PATCH /sessions/:id/config': { request: (of) => ({ params: { id: of.sessionId }, body: { effort: 'low' } }) },
   'PATCH /sessions/:id/account': { request: (of) => ({ params: { id: of.sessionId }, body: { account: 'automatic' } }) },
   'PATCH /sessions/:id/settings': { request: (of) => ({ params: { id: of.sessionId }, body: { muted: true } }) },
+  'POST /sessions/:id/restart': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/interrupt': { request: (of) => ({ params: { id: of.sessionId }, body: {} }) },
   'POST /sessions/:id/end': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/merge': { request: (of) => ({ params: { id: of.sessionId }, body: {} }) },

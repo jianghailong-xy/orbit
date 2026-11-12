@@ -94,6 +94,26 @@ function notifyOf(value: string | null | undefined): SessionNotifyOverride {
   return value === 'on' || value === 'off' ? value : 'inherit';
 }
 
+/** The `reload` a Settings restart queues (POST /sessions/:id/restart): no setting moved, only the env. */
+export const RESTART_RELOAD_CONTENT = JSON.stringify({ env: true });
+
+/**
+ * Whether a queued `reload` is handed out with the session's freshly resolved env
+ * (RunnerApiController.reloadProviderEnv): a provider switch, which moves the credential, and a
+ * Settings restart, which re-applies the env. Every other reload runs on the env the engine has.
+ */
+export function reloadCarriesEnv(content: string | null | undefined): boolean {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(content ?? '{}');
+  } catch {
+    return false;
+  }
+  if (!payload || typeof payload !== 'object') return false;
+  const { provider, env } = payload as { provider?: unknown; env?: unknown };
+  return (typeof provider === 'string' && provider !== '') || env === true;
+}
+
 /** The Session fields the projection reads. */
 export interface SessionSettingsRow {
   env: unknown;

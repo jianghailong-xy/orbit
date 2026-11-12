@@ -142,6 +142,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     snippet: "// A landing's row belongs to the platform (§2.9 LS6), as for rename and config.",
     note: 'PATCH /settings',
   },
+  'SessionsService.restart': {
+    file: 'sessions/sessions.service.ts',
+    snippet: "throw new ConflictException('the session is in Trash; restore it before restarting it');\n      }\n      assertEngineSessionRow(session);",
+    note: 'POST /restart',
+  },
   'SessionsService.switchAccount': {
     file: 'sessions/sessions.service.ts',
     snippet: '// Switching the runner account a session runs on is an engine door (§2.9 LS6).',
@@ -304,6 +309,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'PATCH /sessions/:id/config': 'SessionsService.updateConfig',
   'PATCH /sessions/:id/account': 'SessionsService.switchAccount',
   'PATCH /sessions/:id/settings': 'SessionsService.updateSettings',
+  'POST /sessions/:id/restart': 'SessionsService.restart',
   'POST /sessions/:id/interrupt': 'SessionsService.interrupt',
   'POST /sessions/:id/end': 'SessionsService.getSendable',
   'POST /sessions/:id/merge': 'SessionsService.mergeToMain',

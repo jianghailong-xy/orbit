@@ -140,7 +140,7 @@ function prismaFor(s: Scenario) {
   const tx = {
     $queryRaw: async () => [],
     conversationTurn: { findUnique: async () => ({ id: 'seed-turn' }) },
-    session: { findUnique: async () => row },
+    session: { findUnique: async () => row, updateMany: async () => ({ count: 1 }) },
     modelProvider: { findFirst: async () => s.customRow ?? null },
   };
   return {

@@ -3,6 +3,7 @@ import { isRunNotifyTurn, runNotifyContent } from './run-notify';
 import {
   SESSION_MERGE_RECOVERY_V1, readMergeRecovery, mergeRecoveryConfirmable, mergeRecoveryContinuePrompt, mergeRecoveryPrompt,
   mergeRecoveryReady, type MergeRecovery, type MergeRecoveryAction, type SessionSettings,
+  type SessionRestartResponse,
 } from '@orbit/shared';
 import {
   BadRequestException,
@@ -242,7 +243,9 @@ import { GENERATING_SESSION_FILTER, isSessionGenerating } from '../common/sessio
 import { countLiveApprovals, readByLiveBackgroundJob } from './abandoned-approvals';
 import { holdsWorkspaceWriteValues, withoutEnvValues } from './workspace-write-card-values';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
-import { parseSessionSettingsPatch, sameEnv, sessionSettingsOf, stringEnv } from './session-settings';
+import {
+  parseSessionSettingsPatch, reloadCarriesEnv, RESTART_RELOAD_CONTENT, sameEnv, sessionSettingsOf, stringEnv,
+} from './session-settings';
 import {
   normalizeBuiltinPermissionMode,
   normalizeEffortForProvider,
@@ -10563,6 +10566,58 @@ export class SessionsService {
     // The owner's other clients and tabs redraw the panel without waiting for a turn, as for rename.
     this.realtime.publishSessionUpdated(id);
     return settings;
+  }
+
+  /**
+   * The Settings panel's Restart (POST /sessions/:id/restart): reload the live engine so it runs on the
+   * session's env as it stands. Queued as a `reload` turn, which the inbox hands out with the env
+   * resolved at that moment (RunnerApiController.reloadProviderEnv) and only while no message or shell
+   * turn is in flight — so a restart asked for mid-turn happens when that turn ends (`afterTurn`).
+   * A reload already queued that will carry the env is the restart: nothing more is queued.
+   *
+   * An ended engine is refused 409 ENGINE_NOT_RUNNING: there is nothing to reload, and the claim that
+   * starts the next one builds it with the env as it is then.
+   */
+  async restart(ownerId: string, id: string): Promise<SessionRestartResponse> {
+    const { afterTurn, queued } = await withTransactionRetry(this.prisma, async (tx) => {
+      // Serialized with the settings PATCH and other restarts, so two restarts cannot both queue one.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session"
+        WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+        FOR UPDATE`;
+      if (locked.length === 0) throw new NotFoundException('session not found');
+      const session = await tx.session.findFirst({ where: { id, ownerId } });
+      if (!session) throw new NotFoundException('session not found');
+      if (session.deletedAt) {
+        throw new ConflictException('the session is in Trash; restore it before restarting it');
+      }
+      assertEngineSessionRow(session);
+      if (!SessionsService.engineLive(session)) {
+        throw new ConflictException({
+          code: 'ENGINE_NOT_RUNNING',
+          message: 'The session has ended, so there is no engine to restart. Its next message starts one with the new env.',
+        });
+      }
+      const inFlight = await tx.conversationTurn.findFirst({
+        where: { sessionId: id, kind: { in: ['message', 'shell'] }, status: 'IN_FLIGHT' },
+        select: { id: true },
+      });
+      const pending = await tx.conversationTurn.findMany({
+        where: { sessionId: id, kind: 'reload', status: 'PENDING' },
+        select: { id: true, content: true },
+      });
+      if (pending.some((turn) => reloadCarriesEnv(turn.content))) {
+        return { afterTurn: inFlight != null, queued: false };
+      }
+      await this.insertTurnLocked(tx, id, {
+        kind: 'reload',
+        content: RESTART_RELOAD_CONTENT,
+        clientTurnId: randomUUID(),
+      });
+      return { afterTurn: inFlight != null, queued: true };
+    }, loggedRetry(this.logger, 'sessions.restart'));
+    if (queued) this.realtime.notifyInbox(id);
+    return { queued: true, afterTurn };
   }
 
   async rename(ownerId: string, id: string, rawTitle: string) {
