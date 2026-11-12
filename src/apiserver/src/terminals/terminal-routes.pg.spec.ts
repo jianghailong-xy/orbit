@@ -135,10 +135,12 @@ test('a TERMINAL credential drives only its own runner\'s sessions, and is refus
     assert.match(String(stream.headers['content-type']), /^text\/event-stream/);
 
     // Send, interrupt, answer the approval card: on A, each reaching its handler and writing.
-    const turnsBefore = await db.conversationTurn.count({ where: { sessionId: onA.id } });
-    const sent = await api('POST', `/sessions/${onA.id}/turns`, terminal, { clientTurnId: randomUUID(), content: 'sent from a terminal' });
+    const clientTurnId = randomUUID();
+    const sent = await api('POST', `/sessions/${onA.id}/turns`, terminal, { clientTurnId, content: 'sent from a terminal' });
     assert.ok(sent.status === 200 || sent.status === 201, `sending to A's session answered ${sent.status}: ${sent.text}`);
-    assert.equal(await db.conversationTurn.count({ where: { sessionId: onA.id } }), turnsBefore + 1, 'the turn was filed');
+    // The turn itself (a session never claimed files its opening turn beside it, so a count says less).
+    const filed = await db.conversationTurn.findMany({ where: { sessionId: onA.id, clientTurnId }, select: { content: true } });
+    assert.deepEqual(filed, [{ content: 'sent from a terminal' }], 'the turn was filed');
     const interrupted = await api('POST', `/sessions/${onA.id}/interrupt`, terminal);
     assert.ok(![401, 403].includes(interrupted.status) && interrupted.status < 500, `interrupting A's session answered ${interrupted.status}: ${interrupted.text}`);
     const answered = await api('POST', `/sessions/${onA.id}/approvals/${onA.approvalId}/decision`, terminal, { behavior: 'allow' });
