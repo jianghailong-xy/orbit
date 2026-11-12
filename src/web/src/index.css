@@ -8138,6 +8138,8 @@ button.chat-jump-start:hover {
 .chat-translate-foot.is-reply {
   display: flex;
   margin: 2px 0 6px;
+  /* Under the reply's text, which .chat-assistant insets by 12px. */
+  padding: 0 12px;
 }
 .chat-translate-foot.is-error {
   color: var(--error-solid);
