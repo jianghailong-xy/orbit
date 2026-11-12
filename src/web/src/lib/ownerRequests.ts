@@ -71,6 +71,9 @@ export interface OwnerRequest {
   secretScope?: 'TASK' | 'SESSION';
   secretGrant: OwnerRequestSecretGrant | null;
   verifyHint: string | null;
+  /** WIKI_CREATE: the repository the wiki is asked for, and the asking session's workspace it would read it from. */
+  repoUrlNorm?: string | null;
+  workspaceId?: string | null;
   expiresAt: string | null;
   askedBySessionId: string;
   projectId: string | null;
@@ -78,7 +81,8 @@ export interface OwnerRequest {
   resolvedByUserId: string | null;
   resolvedBySessionId: string | null;
   resolutionNote: string | null;
-  answer: { option?: number; text?: string } | null;
+  /** DECISION: the option and text; WIKI_CREATE once DONE: the wiki made. */
+  answer: { option?: number; text?: string; spaceId?: string; name?: string } | null;
   /** The client that ended it, from `X-Orbit-Client`. Not served yet: without it the summary names no device. */
   resolvedClient?: string | null;
   createdAt: string;

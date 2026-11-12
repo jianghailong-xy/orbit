@@ -25403,6 +25403,7 @@ button.project-open-item-action:disabled {
   .wk-trash-acts { grid-column: 2; }
   .wk-trash-row .wk-trash-error { grid-column: 2; }
 }
+.tp-group-wiki .tp-wiki-new { color: var(--text-3); }
 .wk-maint-off { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; }
 .wk-maint-t { font-size: 14px; color: var(--text-1); }
 .wk-maint-d { margin-top: 2px; font-size: 12px; line-height: 1.5; color: var(--text-3); }

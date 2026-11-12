@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { DownOutlined, SearchOutlined } from '@ant-design/icons';
@@ -21,11 +21,13 @@ import { WikiRunDrawer } from '../components/WikiRunPage';
 import { WikiSettingsButton } from '../components/WikiSettingsButton';
 import { WikiShareButton } from '../components/WikiShareButton';
 import { WikiSettingsPage } from '../components/WikiSettingsPage';
+import { WikiCreateDialog } from '../components/WikiSetUpDialog';
 import { WikiFirstStartCard } from '../components/WikiStartCard';
 import { openSessionSearch } from '../components/SessionSearch';
 import { wikiLinkHost } from '../components/WikiSources';
 import { wikiEntriesQuery, wikiEntryQuery, wikiHealthQuery, wikiSpacesQuery } from '../lib/queries';
 import { routeId } from '../lib/idCodec';
+import { WIKI_NEW } from '../lib/wikiStart';
 import {
   WIKI_DISABLED_NOTE,
   WIKI_NO_SPACES,
@@ -381,14 +383,19 @@ function WikiFrame({
   );
 }
 
+/** The head picker's last item, which opens the Create wiki form: no slug has a space in it. */
+const NEW_WIKI_VALUE = ' new';
+
 /**
  * The head's space (design §12.3.4, mock 31 ④): with one space, its name as a label with nothing to
  * choose; with more, the native select — closed, the name alone; open, every space with what waits in
- * it. The name is the repository's (`wikiSpaceNames`), not the slug.
+ * it, then New wiki… under a divider (docs/wiki-explicit-creation-design.md §3.4), which opens the Create
+ * wiki form and leaves the head on this space. The name is the repository's (`wikiSpaceNames`), not the slug.
  */
 function WikiHeadSpace({ space, spaces }: { space: SpaceRow; spaces: readonly SpaceRow[] }) {
   const navigate = useNavigate();
   const names = useMemo(() => wikiSpaceNames(spaces), [spaces]);
+  const [creating, setCreating] = useState(false);
   const name = names.get(space.id) ?? space.title;
   if (spaces.length < 2) {
     return (
@@ -400,14 +407,24 @@ function WikiHeadSpace({ space, spaces }: { space: SpaceRow; spaces: readonly Sp
   return (
     <span className="wk-select" title={WIKI_SPACE_PICKER_HINT}>
       <span className="v">{name}</span>
-      <select value={space.slug} aria-label={WIKI_SPACE_PICKER_HINT} onChange={(event) => navigate(wikiSpacePath(event.target.value))}>
+      <select
+        value={space.slug}
+        aria-label={WIKI_SPACE_PICKER_HINT}
+        onChange={(event) => {
+          if (event.target.value === NEW_WIKI_VALUE) setCreating(true);
+          else navigate(wikiSpacePath(event.target.value));
+        }}
+      >
         {spaces.map((row) => (
           <option key={row.id} value={row.slug}>
             {wikiSpaceOption(names.get(row.id) ?? row.title, row)}
           </option>
         ))}
+        <hr />
+        <option value={NEW_WIKI_VALUE}>{WIKI_NEW}</option>
       </select>
       <DownOutlined className="ic caret" />
+      {creating && <WikiCreateDialog onClose={() => setCreating(false)} />}
     </span>
   );
 }
