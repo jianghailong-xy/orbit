@@ -262,6 +262,25 @@ class ChannelFixture(unittest.TestCase):
         except ValueError:
             return response.status, data.decode("utf-8", "replace")
 
+    def concurrently(self, *calls):
+        """Run each call in its own thread at once; their answers in order. A thread's exception fails the test."""
+        answers, errors = [None] * len(calls), []
+
+        def run(index, call):
+            try:
+                answers[index] = call()
+            except BaseException as error:  # noqa: BLE001 - reported below, not lost with the thread
+                errors.append(error)
+
+        threads = [threading.Thread(target=run, args=(i, call)) for i, call in enumerate(calls)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        if errors:
+            raise AssertionError(f"{len(errors)} of {len(calls)} concurrent calls raised: {errors!r}") from errors[0]
+        return answers
+
     # ── helpers playing the backend ──
     def volume(self, runner=RUNNER, limit=10 * 2 ** 30):
         status, body = self.call("PUT", f"/v1/volumes/mr-data-{runner}", {"ownerId": OWNER, "runnerId": runner, "limitBytes": limit})
@@ -616,6 +635,26 @@ class LoopbackWithoutPeersTest(TcpPeerFixture):
         self.assertEqual(self.call("GET", "/v1/resources", token=None)[0], 401)
 
 
+class ListenBacklogTest(ChannelFixture):
+    def test_a_burst_beyond_socketserver_s_default_backlog_is_queued_not_refused(self):
+        self.assertGreaterEqual(self.server.request_queue_size, 128)
+        self.assertGreaterEqual(self.ch.TcpServer.request_queue_size, 128)
+        # Hold the accept loop so every connect lands in the backlog at once: with socketserver's 5, the sixth
+        # connect to a unix socket fails with EAGAIN.
+        self.server.shutdown()
+        held = []
+        try:
+            for _ in range(32):
+                connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                connection.settimeout(5)
+                connection.connect(self.config["listen"]["unixSocket"])
+                held.append(connection)
+        finally:
+            for connection in held:
+                connection.close()
+        self.assertEqual(len(held), 32)
+
+
 class VolumeTest(ChannelFixture):
     def test_a_data_volume_is_created_once_with_this_instance_s_labels(self):
         first = self.volume()
@@ -834,16 +873,7 @@ class ContainerTest(ChannelFixture):
     def test_concurrent_creates_make_one_container(self):
         volume = self.volume()
         self.credential()
-        answers = []
-
-        def create():
-            answers.append(self.call("POST", "/v1/containers", self.request(volume["uid"])))
-
-        threads = [threading.Thread(target=create) for _ in range(8)]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
+        answers = self.concurrently(*[lambda: self.call("POST", "/v1/containers", self.request(volume["uid"]))] * 8)
         self.assertEqual(sorted(a[0] for a in answers), [200] * 7 + [201])
         self.assertEqual(len({a[1]["uid"] for a in answers}), 1)
         self.assertEqual(self.docker.calls.count(("create_container", f"mr-{RUNNER}")), 1)
@@ -986,12 +1016,7 @@ class ContainerLimitTest(ChannelFixture):
             volume = self.volume(runner)
             self.credential(runner=runner, token=f"credential-of-{runner}")
             requests.append(self.request(volume["uid"], runner=runner))
-        answers = []
-        threads = [threading.Thread(target=lambda r=r: answers.append(self.call("POST", "/v1/containers", r))) for r in requests]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
+        answers = self.concurrently(*[lambda r=r: self.call("POST", "/v1/containers", r) for r in requests])
         self.assertEqual(sorted(a[0] for a in answers), [201, 429, 429, 429])
         self.assertEqual(len([c for c in self.docker.containers_by_name.values() if c["Config"]["Labels"].get("orbit.managed-runner.instance") == INSTANCE]), 3)
 

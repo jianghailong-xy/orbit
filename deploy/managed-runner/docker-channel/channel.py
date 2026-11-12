@@ -1538,8 +1538,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.close_connection = True
 
 
+# socketserver listens with a backlog of 5. A burst of more simultaneous connects than that is refused at once on a
+# unix socket (connect() fails with EAGAIN; a TCP peer retries its SYN after a second): the apiserver's own bursts,
+# and several managers sharing one channel host. The kernel caps this at net.core.somaxconn.
+LISTEN_BACKLOG = socket.SOMAXCONN
+
+
 class UnixServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     daemon_threads = True
+    request_queue_size = LISTEN_BACKLOG
 
     def get_request(self):
         request, _ = super().get_request()
@@ -1548,6 +1555,7 @@ class UnixServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
 
 class TcpServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
+    request_queue_size = LISTEN_BACKLOG
     allow_peers = None  # a frozenset of source addresses where listen.allowPeers is given; None lets any through
 
     def verify_request(self, request, client_address):
