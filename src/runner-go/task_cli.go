@@ -245,6 +245,9 @@ Options:
                               task by itself once this instant has come (see below)
   --start-now                 Start the task as soon as it is created: one approval covers the
                               create and the start (see below); not with --run-at
+  --fork-from-session         Start the task from this session's work, uncommitted edits
+                              included, on this machine in its own checkout. Not available yet:
+                              refused until this runner can take the snapshot
   --engine ENGINE             Pin the CLI the run uses: claude (Claude Code), codex (Codex),
                               kimi (Kimi Code), antigravity (Antigravity CLI), opencode
                               (OpenCode), dsh (DeepSeek Harness) or cursor (Cursor CLI)
