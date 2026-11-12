@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Task detail · Agent-First · iOS</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#e9e9ee;font-family:-apple-system,BlinkMacSystemFont,Inter,'PingFang SC','Noto Sans SC',sans-serif;color:#1d1d1f;-webkit-font-smoothing:antialiased}
+.board{width:2000px;padding:56px 64px 64px 84px;background:#ececf1}
+h1{font-size:34px;font-weight:700;letter-spacing:-.4px}
+.sub{font-size:16px;color:#555;margin-top:10px;line-height:1.6;max-width:1600px}
+.row{display:flex;gap:64px;align-items:flex-start;margin-top:30px}
+.tag{display:inline-block;font-size:14px;font-weight:700;padding:4px 12px;border-radius:999px;margin-bottom:12px}
+.tag.now{background:#fde2e1;color:#b42318}.tag.new{background:#dde8ff;color:#1f4fd1}
+.cap{font-size:13px;color:#666;margin:10px 4px 0;width:393px;line-height:1.5}
+/* phone */
+.phone{width:393px;height:852px;border-radius:46px;background:#f2f2f7;box-shadow:0 0 0 10px #1c1c1e,0 18px 40px rgba(0,0,0,.25);overflow:visible;position:relative;font-size:15px}
+.sb{height:50px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 6px 40px;font-weight:600;font-size:16px}
+.nav{height:46px;display:flex;align-items:center;justify-content:space-between;padding:0 16px}
+.circ{width:36px;height:36px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;color:#1d1d1f;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.scroll{position:absolute;top:96px;left:0;right:0;bottom:74px;overflow:hidden;padding:0 16px}
+.scroll.up{top:96px}
+.proj{font-size:13px;color:#007aff;display:flex;gap:5px;align-items:center;margin:4px 4px 0}
+.title{font-size:22px;font-weight:700;line-height:1.25;margin:6px 4px 0;letter-spacing:-.2px}
+.meta{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:8px 4px 0;font-size:13px;color:#6e6e73}
+.pill{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:2px 9px;font-size:12.5px;font-weight:600}
+.pill.run{background:#e1ebff;color:#1f4fd1}.pill.done{background:#e3f5e8;color:#157a3a}.pill.mute{background:#e9e9ee;color:#6e6e73}.pill.wait{background:#fff1dc;color:#a35a00}
+.av{width:18px;height:18px;border-radius:50%;background:#e1ebff;color:#1f4fd1;font:700 10px/18px Inter;text-align:center;display:inline-block}
+.chip{display:inline-flex;gap:5px;align-items:center;border:.5px solid #c7c7cc;border-radius:999px;padding:3px 9px;font-size:12.5px;color:#6e6e73;margin:8px 4px 0}
+.press{display:flex;gap:10px;margin:14px 0 6px}
+.btn{flex:1;text-align:center;border-radius:14px;padding:12px 10px;font-weight:600;font-size:16px;background:#e5e5ea;color:#007aff}
+.btn.pri{background:#007aff;color:#fff}
+.hint{font-size:12px;color:#8e8e93;margin:2px 4px 0}
+.sh{font-size:20px;font-weight:700;margin:20px 4px 8px;display:flex;align-items:baseline;gap:8px}
+.sh small{font-size:13px;font-weight:400;color:#8e8e93}
+.sh .r{margin-left:auto;font-size:15px;font-weight:400;color:#007aff}
+.card{background:#fff;border-radius:12px;overflow:hidden}
+.cell{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:.5px solid #e5e5ea;font-size:15px}
+.cell:last-child{border-bottom:0}
+.cell .k{flex:none}
+.cell .v{margin-left:auto;color:#8e8e93;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
+.cell .chev{color:#c7c7cc;font-size:16px;margin-left:4px}
+.prose{padding:12px 14px;font-size:14.5px;line-height:1.5;color:#1d1d1f}
+.foot{font-size:12.5px;color:#8e8e93;margin:6px 6px 0}
+.now{background:#fff;border-radius:12px;padding:12px 14px}
+.now .who{display:flex;gap:10px;align-items:center}
+.now .who b{font-size:15.5px}
+.now .who div div{font-size:12.5px;color:#8e8e93}
+.step{display:flex;gap:8px;align-items:baseline;margin-top:12px;font-size:14px}
+.step span{color:#6e6e73}
+.bar{height:6px;border-radius:3px;background:#e5e5ea;margin:7px 0;overflow:hidden}
+.bar i{display:block;height:100%;width:60%;background:#007aff;border-radius:3px}
+.msg{font-size:13.5px;background:#f2f2f7;border-radius:8px;padding:7px 9px;line-height:1.4}
+.when{font-size:12px;color:#8e8e93;margin-top:6px}
+.fold{position:relative;max-height:92px;overflow:hidden}
+.fold:after{content:'';position:absolute;left:0;right:0;bottom:0;height:36px;background:linear-gradient(rgba(255,255,255,0),#fff)}
+.ev{background:#f2faf4;border:.5px solid #b9e2c6;border-radius:12px;padding:12px 14px}
+.ev .head{display:flex;gap:8px;align-items:center;font-size:12.5px;color:#6e6e73;flex-wrap:wrap}
+.ev .claim{font-size:14px;line-height:1.45;margin:8px 0 6px;border-left:3px solid #b9e2c6;padding-left:9px}
+.ck{display:flex;gap:7px;font-size:13px;line-height:1.45;padding:2px 0}
+.ck b{color:#34c759;width:14px;flex:none;text-align:center}
+.mono{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:12px}
+.envchips{display:flex;flex-wrap:wrap;gap:6px;padding:11px 14px}
+.envchips span{background:#f2f2f7;border-radius:7px;padding:3px 8px;font-size:13px}
+.envchips span em{font-style:normal;color:#8e8e93;margin-right:4px}
+.act{display:flex;gap:10px;padding:10px 14px;border-bottom:.5px solid #e5e5ea;font-size:14px;line-height:1.4}
+.act:last-child{border-bottom:0}
+.act .t{width:66px;flex:none;color:#8e8e93;font-size:12.5px;padding-top:1px}
+.act .bad{margin-left:auto}
+.composer{position:absolute;left:0;right:0;bottom:0;border-radius:0 0 46px 46px;padding:10px 14px 30px;background:rgba(242,242,247,.96);border-top:.5px solid #d1d1d6;display:flex;gap:8px;align-items:center}
+.composer .to{background:#e1ebff;color:#1f4fd1;font-weight:600;font-size:13px;border-radius:999px;padding:7px 11px;white-space:nowrap}
+.composer .to.c{background:#e5e5ea;color:#3a3a3c}
+.composer .in{flex:1;background:#fff;border-radius:18px;padding:9px 14px;color:#8e8e93;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.composer .send{width:34px;height:34px;border-radius:50%;background:#d1d1d6;color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px}
+.mk{position:absolute;width:24px;height:24px;border-radius:50%;background:#f97316;color:#fff;font:700 13px/24px Inter,sans-serif;text-align:center;box-shadow:0 0 0 3px #fff;z-index:5}
+.mk.b{background:#2563eb}
+.dim{position:absolute;inset:0;border-radius:46px;background:rgba(0,0,0,.28);z-index:3}
+.sheet{position:absolute;left:0;right:0;bottom:0;top:120px;background:#f2f2f7;border-radius:14px 14px 46px 46px;z-index:4;padding:0 16px}
+.sheet .grab{width:36px;height:5px;border-radius:3px;background:#c7c7cc;margin:7px auto 4px}
+.sheet .bar2{display:flex;justify-content:space-between;align-items:center;padding:8px 2px 12px;font-size:16px}
+.sheet .bar2 b{font-size:17px}
+.menu{position:absolute;right:14px;top:92px;width:250px;background:#fafafc;border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.25);z-index:4;overflow:hidden;font-size:16px}
+.menu div{padding:11px 16px;display:flex;justify-content:space-between;border-bottom:.5px solid #e0e0e5}
+.menu div:last-child{border-bottom:0}
+.menu .gap{height:7px;padding:0;background:#e5e5ea;border:0}
+.menu .red{color:#ff3b30}
+.notes{background:#fff;border-radius:14px;padding:20px 24px;font-size:15px;line-height:1.6;flex:1}
+.notes li{display:flex;gap:10px;margin-bottom:11px;list-style:none}
+.notes li b.n{flex:none;width:24px;height:24px;border-radius:50%;background:#f97316;color:#fff;font:700 13px/24px Inter;text-align:center;margin-top:1px}
+.notes li b.n.b{background:#2563eb}
+code{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:.88em;background:rgba(0,0,0,.05);padding:1px 5px;border-radius:4px}
+table.rules{border-collapse:collapse;width:100%;background:#fff;border-radius:14px;overflow:hidden;font-size:14px;line-height:1.55;margin-top:24px}
+table.rules th,table.rules td{padding:10px 14px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
+table.rules th{background:#f6f6f9;font-size:13px;color:#555}
+.todo{background:#fff;border-radius:14px;padding:20px 24px;margin-top:24px;font-size:15px;line-height:1.7;border:2px solid #f97316}
+.todo h3{color:#c2410c;margin-bottom:6px}
+.todo li{margin-left:20px;margin-bottom:6px}
+.files{background:#fff;border-radius:14px;padding:18px 24px;margin-top:24px;font-size:14px;line-height:1.7}
+</style>
+</head>
+<body>
+
+<!-- ============ BOARD 4 · iOS today vs first screen ============ -->
+<div class="board" id="b4">
+  <h1>任务详情页 · Agent-First · iOS（板 4）：现在 vs 改版首屏</h1>
+  <p class="sub">web 已上线（d2b0c8c08）。iOS 照同一顺序：<b>状态 → 现在在做什么 / 交付了什么 → 完成标准 → 在计划里的位置 → 信封一行 → 一条时间线</b>，用 iOS 自己的写法：insetGrouped 卡片、Sheet 编辑、⋯ 原生菜单、输入框里的收件人胶囊。同一张任务（「Apiserver: docker.hosts list…」，Running），界面文字英文；进度、花费为示意。<b>TasksView.swift 是 iOS 和 macOS 共用的页面</b>，Mac 会跟着同样的顺序走（见板 5 待定 ④）。</p>
+
+  <div class="row">
+    <div>
+      <span class="tag now">现在 · iOS 首屏</span>
+      <div class="phone">
+        <div class="sb"><span>9:41</span><span>▪▪▪ ◔ ▮</span></div>
+        <div class="nav"><span class="circ">‹</span><span class="circ">⋯</span></div>
+        <div class="scroll">
+          <div class="proj">▦ Managed runners on other Docker hosts (orb…</div>
+          <div class="title">Apiserver: docker.hosts list, remote channels, one manager per host, placement</div>
+          <div class="meta"><span class="pill mute">Open</span><span class="av">O</span>orbit-develop · 3h ago</div>
+          <div class="chip">✓ Judged by · submitted evidence</div>
+          <div class="press"><span class="btn pri">→ Open the run</span></div>
+          <div class="sh">Details</div>
+          <div class="card">
+            <div class="cell"><span class="k">Assignee</span><span class="v">orbit-develop ⌃</span></div>
+            <div class="cell"><span class="k">Engine</span><span class="v">Assignee's · Claude Code ⌃</span></div>
+            <div class="cell"><span class="k">Provider</span><span class="v">Engine default ⌃</span></div>
+            <div class="cell"><span class="k">Model</span><span class="v">Provider default ⌃</span></div>
+            <div class="cell"><span class="k">List</span><span class="v">No list ⌃</span></div>
+            <div class="cell"><span class="k">Start at</span><span class="v">Not set ⌃</span></div>
+            <div class="cell"><span class="k">Created from</span><span class="v">Managed runners on…</span><span class="chev">›</span></div>
+          </div>
+          <div class="foot">Created Nov 12, 9:35 AM</div>
+          <div class="sh">Dependencies</div>
+        </div>
+        <div class="composer"><span class="in">Add a comment… type @Workspace to mention</span><span class="send">↑</span></div>
+        <span class="mk" style="left:-40px;top:200px">1</span>
+        <span class="mk" style="left:-40px;top:330px">2</span>
+        <span class="mk" style="left:-40px;top:760px">3</span>
+        <span class="mk" style="left:-40px;top:800px">4</span>
+      </div>
+      <div class="cap">现在：首屏是信封（7 行字段，全是默认值），状态写 Open，run 在做什么、跑了多久、花了多少一个字没有。往下依次是 Dependencies / Description / Acceptance / Inputs / Attribution / Followed by / Runs / Comments。</div>
+    </div>
+
+    <div>
+      <span class="tag new">改版 · Running 首屏</span>
+      <div class="phone">
+        <div class="sb"><span>9:41</span><span>▪▪▪ ◔ ▮</span></div>
+        <div class="nav"><span class="circ">‹</span><span class="circ">⋯</span></div>
+        <div class="scroll">
+          <div class="proj">▦ Managed runners on other Docker hosts (orb…</div>
+          <div class="title">Apiserver: docker.hosts list, remote channels, one manager per host, placement</div>
+          <div class="meta"><span class="pill run">◌ Running · 7m</span><span class="av">O</span>orbit-develop · Opus 5.5 · $0.84</div>
+          <div class="chip">✓ Judged by · submitted evidence</div>
+          <div class="press"><span class="btn pri">→ Open the run</span></div>
+          <div class="sh">Now</div>
+          <div class="now">
+            <div class="who"><span class="av" style="width:28px;height:28px;line-height:28px;font-size:13px">O</span><div><b>orbit-develop is working</b><div>Started 9:42 AM · Opus 5.5 · $0.84 so far</div></div></div>
+            <div class="step"><b>Step 3 of 5</b><span>One manager per host</span></div>
+            <div class="bar"><i></i></div>
+            <div class="msg">Wiring the per-host manager into runners/managed/manager.service.ts</div>
+            <div class="when">Last progress 12s ago</div>
+          </div>
+          <div class="sh">Done means</div>
+          <div class="card"><div class="prose">The apiserver reads a <span class="mono">docker.hosts</span> list, opens one remote channel and one manager per host, and places each new managed runner on a host…</div></div>
+        </div>
+        <div class="composer"><span class="to">To the run ▾</span><span class="in">Message orbit-develop…</span><span class="send">↑</span></div>
+        <span class="mk b" style="left:-40px;top:196px">1</span>
+        <span class="mk b" style="left:-40px;top:300px">2</span>
+        <span class="mk b" style="left:-40px;top:356px">3</span>
+        <span class="mk b" style="left:-40px;top:665px">4</span>
+        <span class="mk b" style="left:-40px;top:800px">5</span>
+      </div>
+      <div class="cap">改版：状态行一个真相（Running · 7m · 模型 · 花费），主按钮照旧随状态换字；Now 卡是首屏主角；输入框左侧的胶囊说明这句话发给谁。</div>
+    </div>
+
+    <div class="notes">
+      <ol>
+        <li><b class="n">1</b><div><b>状态与 run 打架。</b>头部 <code>Open</code>，但 run 在跑——同 web 问题 1。</div></li>
+        <li><b class="n">2</b><div><b>首屏被信封占满。</b>Details 7 行（Assignee / Engine / Provider / Model / List / Start at / Created from），全是灰色默认值。</div></li>
+        <li><b class="n">3</b><div><b>agent 的工作在页面最底。</b>Runs 一行「orbit-develop · Succeeded」，没有进度、花费、交付；证据和判定整页没有。</div></li>
+        <li><b class="n">4</b><div><b>评论框不认收件人。</b>「type @Workspace to mention」，想跟正在跑的 agent 说话要先进会话。</div></li>
+        <li style="margin-top:18px"><b class="n b">1</b><div><b>一条状态行。</b><code>TaskStatusPill</code> 在有 RUNNING 会话时读 <code>Running · 7m</code>，后面是执行者、最新 run 的模型、累计花费（花费要等 apiserver 下次部署才有值，在那之前这一段不显示）。</div></li>
+        <li><b class="n b">2</b><div><b>操作行不变规则、少一个键。</b>继续用已批准的「随状态原地换字」：Running → Open the run；Open → Run now；Failed → Run again；Owner 判定 → Confirm done。<b>Reopen 从操作行移进 ⋯</b>（同 web）；Done 的任务操作行为空。</div></li>
+        <li><b class="n b">3</b><div><b>Now 卡。</b>读 <code>task.progress</code>（phase / current / total / message / lastProgressAt）；没报告过进度的 run 只显示第一行。点卡片 = Open the run。</div></li>
+        <li><b class="n b">4</b><div><b>Done means 在前</b>，Brief 折叠在后（板 5）。</div></li>
+        <li><b class="n b">5</b><div><b>收件人胶囊。</b>有 live run 时默认 <code>To the run</code>（走现有 @ 提及投递，进它正在跑的会话），点开是 iOS Menu：To the run / Comment；没有 live run 时胶囊不出现，就是普通评论框。</div></li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+<!-- ============ BOARD 5 · scrolled, done, sheets, rules ============ -->
+<div class="board" id="b5">
+  <h1>任务详情页 · Agent-First · iOS（板 5）：往下滑、Done、⋯ 与 Runs with 的 Sheet、规则</h1>
+  <p class="sub">往下的顺序与 web 一致：Done means → Brief → In the plan → Runs with → Activity。编辑和细节都用 iOS 的「进一层」：Runs with 点开是 Sheet，In the plan 点开推入现有的依赖页。</p>
+
+  <div class="row">
+    <div>
+      <span class="tag new">A · Running 往下滑</span>
+      <div class="phone">
+        <div class="sb"><span>9:41</span><span>▪▪▪ ◔ ▮</span></div>
+        <div class="nav"><span class="circ">‹</span><span style="font-weight:600;font-size:15px">Apiserver: docker.hosts…</span><span class="circ">⋯</span></div>
+        <div class="scroll">
+          <div class="sh" style="margin-top:6px">Done means</div>
+          <div class="card"><div class="prose">The apiserver reads a <span class="mono">docker.hosts</span> list, opens one remote channel and one manager per host, and places each new managed runner on a host; existing single-host configs keep working unchanged.</div></div>
+          <div class="foot">Judged by submitted evidence · the coordinator decides</div>
+          <div class="sh">Brief for the agent<span class="r">Show all</span></div>
+          <div class="card"><div class="prose fold">Read docs/managed-runner-remote-host-design.md (branch orbit/orbit-prod-ip-10-66-0-1-runner-runner-do-29e980; merge it if your base lacks it), decision D1 and Proposal item 2. In src/apiserver/src/runners/managed…</div></div>
+          <div class="sh">In the plan</div>
+          <div class="card">
+            <div class="prose" style="padding-bottom:6px">Nothing blocks this task. “Channel-host kit, /upgrade and the lab” waits on it.</div>
+            <div class="cell"><span class="k" style="color:#007aff">Show graph</span><span class="v">1 downstream</span><span class="chev">›</span></div>
+          </div>
+          <div class="sh">Runs with</div>
+          <div class="card">
+            <div class="cell" style="align-items:flex-start"><div style="display:flex;flex-wrap:wrap;gap:6px;flex:1" class="envchips2">
+              <span style="background:#f2f2f7;border-radius:7px;padding:3px 8px;font-size:13px"><em style="font-style:normal;color:#8e8e93">Agent</em> orbit-develop</span>
+              <span style="background:#f2f2f7;border-radius:7px;padding:3px 8px;font-size:13px"><em style="font-style:normal;color:#8e8e93">Engine</em> Claude Code</span>
+              <span style="background:#f2f2f7;border-radius:7px;padding:3px 8px;font-size:13px"><em style="font-style:normal;color:#8e8e93">Model</em> Default</span>
+            </div><span class="chev" style="margin-top:3px">›</span></div>
+          </div>
+          <div class="foot">No list · no input files</div>
+          <div class="sh">Activity</div>
+          <div class="card">
+            <div class="act"><span class="t">9:35 AM</span><span><b>Filed</b> from <span style="color:#007aff">Managed runners…</span></span></div>
+            <div class="act"><span class="t">9:42 AM</span><span><b>orbit-develop</b> · Opus 5.5 · $0.84</span><span class="bad pill run">Running</span></div>
+          </div>
+        </div>
+        <div class="composer"><span class="to">To the run ▾</span><span class="in">Message orbit-develop…</span><span class="send">↑</span></div>
+        <span class="mk b" style="left:-40px;top:258px">6</span>
+        <span class="mk b" style="left:-40px;top:420px">7</span>
+        <span class="mk b" style="left:-40px;top:556px">8</span>
+        <span class="mk b" style="left:-40px;top:688px">9</span>
+      </div>
+    </div>
+
+    <div>
+      <span class="tag new">B · Done 首屏</span>
+      <div class="phone">
+        <div class="sb"><span>9:41</span><span>▪▪▪ ◔ ▮</span></div>
+        <div class="nav"><span class="circ">‹</span><span class="circ">⋯</span></div>
+        <div class="scroll">
+          <div class="proj">▦ Managed runners on other Docker hosts (orb…</div>
+          <div class="title">Docker channel: listen on a private address with allowPeers</div>
+          <div class="meta"><span class="pill done">● Done</span><span class="pill done">Landed</span><span class="av">O</span>orbit-develop · $3.12</div>
+          <div class="chip">✓ Judged by · submitted evidence</div>
+          <div class="sh">Delivered</div>
+          <div class="ev">
+            <div class="head"><span class="pill done">✓ Accepted</span>Evidence r1 · by a reviewing agent · 10:31 AM</div>
+            <div class="claim">The channel listens on one private IPv4 with a required allowPeers list; other sources are closed before a request is read; 0.0.0.0, public and empty-allowPeers configs are refused…</div>
+            <div class="ck"><b>✓</b><span class="mono">python3 -B -m unittest discover -s scripts/managed-runner</span></div>
+            <div class="ck"><b>•</b><span>Commit 7c41e9a0b</span></div>
+          </div>
+          <div class="sh">Landing</div>
+          <div class="card"><div class="cell"><span class="k">Landed on main</span><span class="v">7c41e9a</span><span class="chev">›</span></div></div>
+          <div class="sh">Done means</div>
+          <div class="card"><div class="prose">The channel can listen on one private IPv4 address with a required allowPeers list…</div></div>
+        </div>
+        <div class="composer"><span class="in">Add a comment… type @Workspace to mention</span><span class="send">↑</span></div>
+        <span class="mk b" style="left:-40px;top:300px">10</span>
+        <span class="mk b" style="left:-40px;top:555px">11</span>
+      </div>
+    </div>
+
+    <div>
+      <span class="tag new">C · ⋯ 菜单（Done 任务）</span>
+      <div class="phone">
+        <div class="sb"><span>9:41</span><span>▪▪▪ ◔ ▮</span></div>
+        <div class="nav"><span class="circ">‹</span><span class="circ" style="background:#e5e5ea">⋯</span></div>
+        <div class="scroll">
+          <div class="proj">▦ Managed runners on other Docker hosts (orb…</div>
+          <div class="title">Docker channel: listen on a private address with allowPeers</div>
+          <div class="meta"><span class="pill done">● Done</span><span class="pill done">Landed</span></div>
+        </div>
+        <div class="dim" style="background:rgba(0,0,0,.08)"></div>
+        <div class="menu">
+          <div>Reopen task<span>↺</span></div>
+          <div>Run again<span>↻</span></div>
+          <div>Follow task<span>👁</span></div>
+          <div class="gap"></div>
+          <div>Copy link<span>🔗</span></div>
+          <div>Share…<span>🌐</span></div>
+          <div>Copy as Markdown<span>▤</span></div>
+          <div class="gap"></div>
+          <div class="red">Delete task<span>🗑</span></div>
+        </div>
+        <span class="mk b" style="left:-40px;top:92px">12</span>
+      </div>
+    </div>
+
+    <div>
+      <span class="tag new">D · Runs with → Sheet</span>
+      <div class="phone">
+        <div class="sb"><span>9:41</span><span>▪▪▪ ◔ ▮</span></div>
+        <div class="dim"></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <div class="bar2"><span style="color:#007aff">Cancel</span><b>Runs with</b><span style="color:#007aff;font-weight:600">Done</span></div>
+          <div class="card">
+            <div class="cell"><span class="k">Assignee</span><span class="v">orbit-develop ⌃</span></div>
+            <div class="cell"><span class="k">Engine</span><span class="v">Assignee's · Claude Code ⌃</span></div>
+            <div class="cell"><span class="k">Provider</span><span class="v">Engine default ⌃</span></div>
+            <div class="cell"><span class="k">Model</span><span class="v">Provider default ⌃</span></div>
+            <div class="cell"><span class="k">List</span><span class="v">No list ⌃</span></div>
+            <div class="cell"><span class="k">Start at</span><span class="v">Not set ⌃</span></div>
+          </div>
+          <div class="sh" style="font-size:17px">Inputs</div>
+          <div class="card"><div class="cell"><span class="k" style="color:#007aff">＋ Add file</span></div></div>
+          <div class="foot" style="margin-top:12px">Changes apply to the next run. The run going now keeps what it started with.</div>
+        </div>
+        <span class="mk b" style="left:-40px;top:190px">13</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top:26px">
+    <div class="notes">
+      <ol>
+        <li><b class="n b">6</b><div><b>Done means + 判定一行</b>：验收全文；判定方式在卡片下脚注说一次。Acceptance 原有的 Edit 仍在这张卡的 section 头上（未画）。</div></li>
+        <li><b class="n b">7</b><div><b>Brief for the agent 折叠 4 行</b>，「Show all」原地展开（Markdown 照旧）。</div></li>
+        <li><b class="n b">8</b><div><b>In the plan</b>：一句话 + 「Show graph ›」推入<b>现有的</b>依赖页（今天 Dependencies section 的内容，含 Add prerequisite 和 Auto-run 开关）。没有依赖的任务整段不出现，⋯ 里有 Add a prerequisite。</div></li>
+        <li><b class="n b">9</b><div><b>Runs with + Activity</b>：信封一行芯片，点整行开 Sheet（D）。Activity 合并 Filed、每次 run（模型 · 花费 · 状态，点进会话，✦ 路由的 Why 照旧）、证据提交与判定、评论，旧→新。原 Attribution / Followed by 只在有内容时出现。</div></li>
+      </ol>
+    </div>
+    <div class="notes">
+      <ol start="10">
+        <li><b class="n b">10</b><div><b>Delivered</b>：最新证据 + 判定 + 各项检查；未判定写 Awaiting a decision；被退回写 Sent back + 理由。读 <code>GET /tasks/:id/evidence</code>（web 已在用）。</div></li>
+        <li><b class="n b">11</b><div><b>Landing</b> 维持今天的落地 section（web 在同一位置），只是排在 Delivered 之后。</div></li>
+        <li><b class="n b">12</b><div><b>⋯ 菜单</b>：Reopen task / Run again（停下的任务）、Follow task、Add a prerequisite（无依赖时）、Copy link / Share… / Copy as Markdown、Delete task。今天 iOS 菜单里的 <b>Mark done</b> 去留见待定 ③。</div></li>
+        <li><b class="n b">13</b><div><b>Runs with Sheet</b>：今天 Details 的六个字段原样搬进 Sheet（Picker、Start at 子 Sheet、Suggested tier 都不变），加 Inputs。Created by / from / Created 进 Activity 的 Filed 行。</div></li>
+      </ol>
+    </div>
+  </div>
+
+  <table class="rules">
+    <tr><th style="width:150px">区块</th><th>Open（未跑）</th><th>Running</th><th>等所有者</th><th>Done</th><th>Failed / Cancelled</th></tr>
+    <tr><td>操作行</td><td>Run now</td><td>Open the run</td><td>Confirm done / Waiting for your confirmation</td><td>（空）</td><td>Run again（Failed）；Cancelled 空</td></tr>
+    <tr><td>Now / Delivered</td><td>—</td><td>Now</td><td>Now + 等待说明</td><td>Delivered</td><td>Delivered（若有证据）</td></tr>
+    <tr><td>Done means · Brief</td><td colspan="5">始终；Brief 折叠 4 行。Automatic judgement 未设置时不画（与 web 同）</td></tr>
+    <tr><td>In the plan</td><td colspan="5">有依赖才出现：一句话 + Show graph ›</td></tr>
+    <tr><td>Runs with</td><td colspan="5">一行芯片，点开 Sheet</td></tr>
+    <tr><td>Activity</td><td colspan="5">Filed / runs / 证据与判定 / 评论 合一，旧→新；Runs、Comments、Attribution、Followed by 四个 section 取消（后两者有内容时单独出现）</td></tr>
+    <tr><td>输入框</td><td colspan="5">有 live run：左侧 To the run ▾ 胶囊，默认发给 run；否则普通评论框</td></tr>
+  </table>
+
+  <div class="todo">
+    <h3>待你定</h3>
+    <ol>
+      <li><b>Runs with 的编辑方式</b>：推荐 <b>Sheet</b>（iOS 惯用，字段多、有子 Sheet）。另一种是像 web 一样原地展开——手机上会把 Activity 推到很远。</li>
+      <li><b>收件人切换</b>：推荐输入框左侧 <b>胶囊 + Menu</b>（不占一行）。另一种是输入框上方的分段控件（和 web 一样，但多占 40pt）。</li>
+      <li><b>⋯ 里的 Mark done</b>：iOS 今天有、web 没有（web 规则「浏览器不提供 Mark done」）。推荐<b>保留</b>（有 wiring 测试钉着，且手动收尾在手机上更常见）；也可以借这次去掉以与 web 一致。</li>
+      <li><b>macOS</b>：任务页与 iOS 是同一个 SwiftUI 视图，改了 iOS，Mac 也变成同样顺序。推荐<b>一起改</b>，Mac 上 Sheet 换成 popover/sheet 的 Mac 写法，实现时补一张 Mac 截图给你看，不再单出板子。Android 另出板。</li>
+    </ol>
+  </div>
+
+  <div class="files">
+    <b>会动到的文件</b>：<code>src/macos/OrbitApp/Sources/OrbitApp/Views/TasksView.swift</code>（page 顺序、header 状态行、actions 去 Reopen、Now / Delivered / In the plan / Runs with Sheet / Activity、composer 胶囊、⋯ 菜单）· <code>OrbitKit/App/TaskDetailPage.swift</code>（TaskDetailCopy 新词、actionRow 规则、planSentence / elapsed / cost / evidence 文案，与 web 逐字对齐的 parity 测试）· OrbitKit 模型：<code>TaskItem</code> 加 <code>progress</code>、<code>sessions[].costUsd</code>，新增 evidence 读取 · 测试：<code>TaskDetailWiringTests</code>、<code>TaskDetailCopyParityTests</code>（改成钉新的 iOS 标题）。服务端不用改。
+  </div>
+</div>
+
+</body>
+</html>
