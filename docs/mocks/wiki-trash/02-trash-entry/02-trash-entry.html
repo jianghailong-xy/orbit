@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Wiki 02 · Trash 的入口从侧栏挪走</title>
+<style>
+  body { margin: 0; background: #f4f5f7; color: #1f2329; }
+  .b-part { font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; padding: 28px 36px 32px; width: 1180px; box-sizing: border-box; background: #f4f5f7; }
+  .b-part h1 { font-size: 24px; margin: 0 0 6px; }
+  .b-part h2 { font-size: 19px; margin: 0 0 12px; }
+  .b-lead { color: #4e5969; margin: 0 0 18px; }
+  .b-row { display: flex; gap: 28px; align-items: flex-start; }
+  .b-frame { background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 14px; }
+  .b-frame .b-cap { font-weight: 600; margin-bottom: 8px; }
+  .b-frame .b-sub { color: #86909c; font-size: 13px; margin: -6px 0 8px; }
+  .b-shot { position: relative; display: inline-block; }
+  .b-shot img { display: block; border: 1px solid #e5e6eb; border-radius: 6px; }
+  .b-ring { position: absolute; border: 2px dashed #f53f3f; border-radius: 8px; }
+  .b-ring.ok { border-color: #00b42a; }
+  .b-num { position: absolute; width: 22px; height: 22px; border-radius: 11px; background: #f53f3f; color: #fff; font: 600 13px/22px Inter, sans-serif; text-align: center; }
+  .b-num.ok { background: #00b42a; }
+  ol.b-notes { margin: 16px 0 0; padding-left: 22px; }
+  ol.b-notes li { margin: 4px 0; }
+  .b-why { background: #fff; border-radius: 10px; padding: 12px 18px; margin-top: 16px; }
+  table.b-t { border-collapse: collapse; background: #fff; width: 100%; border-radius: 10px; overflow: hidden; }
+  table.b-t td, table.b-t th { border-bottom: 1px solid #eef0f3; padding: 9px 12px; text-align: left; vertical-align: top; }
+  table.b-t th { background: #f7f8fa; font-weight: 600; }
+  .b-rec { color: #00b42a; font-weight: 600; }
+  code { font: 13px "JetBrains Mono", "DejaVu Sans Mono", monospace; background: #eef0f3; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<section class="b-part" id="part-1">
+  <h1>Wiki 02 · Trash 的入口从侧栏挪走</h1>
+  <p class="b-lead">全部是真实页面截图：同一份 main 代码构建两次（今天 / 原型，原型差异见 <code>prototype.patch</code>），用的是 ui-migration fixtures，外加 2 个 wiki、Trash 里放 2 个。</p>
+  <div class="b-row">
+    <div class="b-frame">
+      <div class="b-cap">① 今天</div>
+      <div class="b-sub">Wiki 分组的最后一行固定是 Trash</div>
+      <div class="b-shot">
+        <img src="shots/t-side.png" width="280">
+        <div class="b-ring" style="left:6px; top:120px; width:259px; height:40px"></div>
+        <div class="b-num" style="left:252px; top:100px">1</div>
+      </div>
+    </div>
+    <div class="b-frame">
+      <div class="b-cap">② 建议：侧栏只放 wiki</div>
+      <div class="b-sub">Trash 行去掉，侧栏里没有新增任何东西</div>
+      <div class="b-shot">
+        <img src="shots/p-side.png" width="280">
+      </div>
+    </div>
+    <div class="b-frame">
+      <div class="b-cap">③ 建议：wiki 行的 ⋯ / 右键菜单</div>
+      <div class="b-sub">Move to Trash… 在哪里，打开 Trash 就在哪里</div>
+      <div class="b-shot">
+        <img src="shots/p-menu.png" width="280">
+        <div class="b-ring ok" style="left:96px; top:154px; width:156px; height:36px"></div>
+        <div class="b-num ok" style="left:256px; top:161px">2</div>
+      </div>
+    </div>
+  </div>
+  <ol class="b-notes">
+    <li><b>今天：</b>Trash 和 wiki 同级，用的是同样的行、同样的缩进，右侧还挂着数字。可它不是一个 wiki，点了也不进任何页面，只弹出一个对话框；一年也用不上几回，却常驻在侧栏。</li>
+    <li><b>建议：</b>Trash 在 wiki 行的菜单里，排在 Wiki settings 下面，带数量；Trash 为空时这一项不出现。危险操作 Move to Trash… 照旧单独放在分隔线下面。点它打开的就是今天这个 Trash 对话框（见 ⑤）。</li>
+  </ol>
+</section>
+
+<section class="b-part" id="part-2">
+  <h2>另外两处入口，都已上线，这次不改</h2>
+  <div class="b-row">
+    <div class="b-frame">
+      <div class="b-cap">④ Wiki settings 最后一张卡片</div>
+      <div class="b-sub">“Trash holds 2 wikis. Open Trash”，正好在 Move to Trash… 下面</div>
+      <div class="b-shot">
+        <img src="shots/settings.png" width="620">
+        <div class="b-ring ok" style="left:30px; top:140px; width:206px; height:24px"></div>
+        <div class="b-num ok" style="left:240px; top:140px">3</div>
+      </div>
+    </div>
+    <div class="b-frame">
+      <div class="b-cap">⑤ 点进去的 Trash</div>
+      <div class="b-sub">从 ③ 或 ④ 进来，看到的都是同一个对话框</div>
+      <div class="b-shot"><img src="shots/dialog.png" width="400"></div>
+    </div>
+  </div>
+  <ol class="b-notes" start="3">
+    <li>还没有任何 wiki 时，首个 wiki 卡片上还有一句 “2 wikis are in Trash.”，同样保留。去掉侧栏那一行后，凡是能把 wiki 移进 Trash 的地方，旁边都找得到 Trash。</li>
+  </ol>
+  <div class="b-why">
+    <b>刚删完想撤销？</b>删除用的就是 ③ 这个菜单，再点开一次就能看到 Trash (N)；从 Settings 删的，④ 就在同一张卡片里。今天 Move to Trash 之后的 toast 只是告诉你已经移走，不带撤回按钮，这次也不加。
+  </div>
+</section>
+
+<section class="b-part" id="part-3">
+  <h2>待定 · 要你拍板</h2>
+  <table class="b-t">
+    <tr><th style="width:120px">问题</th><th>方案 A</th><th>方案 B</th></tr>
+    <tr>
+      <td>Web 侧栏</td>
+      <td class="b-rec">去掉 Trash 行，wiki 行菜单里加 “Trash (2)”（③）。推荐</td>
+      <td>去掉 Trash 行，什么都不补，只靠 Settings（④）和首个 wiki 卡片</td>
+    </tr>
+    <tr>
+      <td>iOS / macOS / Android</td>
+      <td class="b-rec">wiki 选择器下面那一行 Trash 也一起去掉，只留在 Wiki settings 末尾（它们本来就有这个入口）。推荐</td>
+      <td>原生端这次不动，只改 Web</td>
+    </tr>
+  </table>
+  <h2 style="margin-top:22px">落地（按代价排）</h2>
+  <ol class="b-notes" style="margin-top:0">
+    <li>Web：<code>TasksSidePanel.tsx</code> 删除 Trash 行，wiki 行菜单加一项，改对应测试，约 20 行（patch 就在本目录）。</li>
+    <li>iOS/macOS、Android：删除选择器下的 Trash 行，并改对应测试；文案 fixture 不变。</li>
+  </ol>
+</section>
+
+</body>
+</html>
