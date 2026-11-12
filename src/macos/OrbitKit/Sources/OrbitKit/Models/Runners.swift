@@ -505,6 +505,18 @@ public struct RunnerSelfUpdate: Codable, Equatable, Sendable {
 
 /// One of the reader's turns a draining runner waits for (shared `RunnerUpdateTurn`): its session,
 /// title, and when the current run was claimed.
+/// What of the reader's waits on a runner draining for its self-update (shared `RunnerDrainWaiting`):
+/// sessions that have not started, and messages sent to sessions that had.
+public struct RunnerDrainWaiting: Codable, Equatable, Sendable {
+    public let sessions: Int
+    public let messages: Int
+
+    public init(sessions: Int, messages: Int) {
+        self.sessions = sessions
+        self.messages = messages
+    }
+}
+
 public struct RunnerUpdateTurn: Codable, Equatable, Sendable {
     public let id: String
     public let title: String?

@@ -464,6 +464,7 @@ import { loginCodeRelay } from '../runners/login-code-relay';
 import { readDirProbeResult } from '../runners/dir-probe';
 import { readRunnerRepoHealth, sanitizeRunnerRepoHealth } from '../common/runner-repo-health';
 import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
+import { claimDrainWaitingPush } from '../common/runner-drain-waiting';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
 import { orchestrationEnabled } from '../common/orchestration-switch';
@@ -2089,6 +2090,8 @@ export class RunnerApiController {
         // to send a leaseOwner or a draining flag writes NULL: no active lease, not draining.
         heartbeatLeaseOwner,
         heartbeatDraining: typeof dto?.draining === 'boolean' ? dto.draining : null,
+        // A beat that is not draining ends the drain's one push (migration 0595): the next drain pushes again.
+        ...(dto?.draining === true ? {} : { drainWaitingPushedAt: null }),
         // Per-engine health for Infrastructure. Sanitized on the way in as well as out, so a
         // malformed report can't be stored as a claim about this machine; an older runner omits
         // the field entirely and keeps whatever was last known.
@@ -2261,6 +2264,16 @@ export class RunnerApiController {
         // that attempt ends, so its probe reads `no` mid-sign-in — not news to whoever is signing in.
         if (current.engine === 'antigravity' && antigravitySignInUnderWay(updated)) continue;
         void this.push.notifyEngineSignedOut(runner.id, current.engine);
+      }
+    }
+    // Draining for its update with something of the owner's waiting on it: tell them, once per drain (D3). The claim
+    // is the guard — only the beat whose UPDATE matched pushes — and a failure costs the push, never the heartbeat.
+    if (dto?.draining === true) {
+      try {
+        const push = await claimDrainWaitingPush(this.prisma, runner.id);
+        if (push) void this.push.notifyRunnerDrainWaiting(push);
+      } catch (error) {
+        this.logger.warn(`runner ${runner.id}: drain push skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
       }
     }
     // A finished install stops being news the moment the probe confirms it: clear the slot so the

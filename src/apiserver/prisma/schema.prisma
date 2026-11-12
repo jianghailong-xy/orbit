@@ -792,6 +792,9 @@ model Runner {
   // The owner's Update Now (0590): install the waiting release now, interrupting the turns in
   // flight. Handed to the next heartbeat as selfUpdateNow and cleared there, like the two above.
   selfUpdateNowRequestedAt DateTime? @map("self_update_now_requested_at")
+  // The push that something of the owner's waits on this runner's drain (0595): set by the one
+  // heartbeat that sends it, cleared by a beat that is not draining, so each drain pushes once.
+  drainWaitingPushedAt DateTime? @map("drain_waiting_pushed_at")
   // Where this machine puts checkouts Orbit clones for it, reported each heartbeat. A clone of
   // `<owner>/<repo>` lands at `<reposRoot>/<owner>-<repo>`.
   // NULL means this runner has never reported one — a build too old to send it. That withdraws

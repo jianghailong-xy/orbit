@@ -37,6 +37,7 @@ import {
 } from '../common/antigravity-readiness';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
+import { drainWaitingOf } from '../common/runner-drain-waiting';
 import { postponeUntil } from './self-update-postpone';
 import { ACTIVE_TURN_STATUSES } from '../common/session-scheduling';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -220,6 +221,7 @@ export class RunnersService {
     const atWork = await activeSessionsOn(this.prisma, runners, new Date(now));
     const used = runners.map((runner) => engineHealthWithActiveSessions(usedRunnerEngines(runner), atWork.get(runner.id)));
     const updateTurns = await this.updateTurnsOf(where.ownerId, runners);
+    const drainWaiting = await drainWaitingOf(this.prisma, where.ownerId, runners);
     return runners.map(({
       availableCommands,
       availableSkills,
@@ -271,6 +273,8 @@ export class RunnersService {
       activeSessions: activeByRunner.get(r.id) ?? 0,
       // Only on a runner draining for its self-update: the viewer's turns the drain waits for.
       ...(updateTurns.has(r.id) ? { updateTurns: updateTurns.get(r.id) } : {}),
+      // Only while it drains and something of the viewer's waits on it: the banner and attention item (D3).
+      ...(drainWaiting.has(r.id) ? { drainWaiting: drainWaiting.get(r.id) } : {}),
       // Surface the `/` autocomplete catalog under clean names (mirrors the heartbeat DTO).
       commands: (availableCommands ?? []) as unknown as SlashCommandInfo[],
       skills: (availableSkills ?? []) as unknown as SlashCommandInfo[],

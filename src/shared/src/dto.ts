@@ -883,6 +883,15 @@ export interface RunnerUpdateTurn {
   startedAt: string | null;
 }
 
+/** What of the viewer's waits on a runner draining for its self-update (D3): sessions that have not
+ *  started and messages sent to sessions that had, all PENDING on it. Present on GET /runners only
+ *  while the runner drains and something of the viewer's waits; the web's banner, the native
+ *  attention item and the drain's one push all say these counts. */
+export interface RunnerDrainWaiting {
+  sessions: number;
+  messages: number;
+}
+
 /** Why a queued session waits on its runner's self-update (queuedReason 'runner_updating'): the
  *  release, the owner's turns the drain waits for, and when the wait began. */
 export interface QueuedRunnerUpdate {

@@ -2940,7 +2940,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0572_session_guest_daily_turns',
       // 0590 adds one nullable TIMESTAMP(3) `self_update_now_requested_at` on `runner` (no default, catalog-only); no
       // preserved rows, triggers or DONE fence change, and no row is written.
-      '0590_runner_self_update_now'],
+      '0590_runner_self_update_now',
+      // 0595 adds one nullable TIMESTAMP(3) `drain_waiting_pushed_at` on `runner` (no default, catalog-only); no
+      // preserved rows, triggers or DONE fence change, and no row is written.
+      '0595_runner_drain_waiting_push'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
