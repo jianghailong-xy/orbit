@@ -33,6 +33,67 @@ export interface CrossingBatch {
   rows: ProjectCrossingRow[];
   /** The first row's requestedAt: where the card is drawn in the conversation. */
   moment: string;
+  /** The target project by name, in a conversation that does not coordinate it (the session that
+   *  asked for the moves); absent where the target is this conversation's own project. */
+  targetTitle?: string | null;
+}
+
+/**
+ * The task moves one session draws as one card, as `GET /sessions/:id/task-moves` serves them: one
+ * asker, one source project, one target project. While waiting it is every PENDING move of the
+ * three; once answered, the moves one answer settled. The same batch is read by the session that
+ * asked and by the target project's coordinator, and answered by one
+ * `POST /sessions/:id/task-moves/decision` with every move and its crossing key.
+ */
+export interface TaskMoveBatch {
+  batchKey: string;
+  requestedBySessionId: string;
+  fromProjectId: string;
+  toProjectId: string;
+  state: string;
+  since: string;
+  decidedAt: string | null;
+  /** Whether this session asked for these moves, coordinates the project they go into, or both. */
+  drawnAs: ReadonlyArray<'REQUESTER' | 'TARGET_COORDINATOR'>;
+  moves: ProjectCrossingRow[];
+}
+
+/** The card id a batch of moves keeps from waiting to answered: its oldest move's. */
+function batchId(first: ProjectCrossingRow): string {
+  return `crossing-batch-${first.publicId ?? first.id}`;
+}
+
+/** The session read's batches of task moves as the decision card draws them, oldest first. */
+export function moveBatches(read: readonly TaskMoveBatch[]): CrossingBatch[] {
+  return read
+    .filter((batch) => batch.moves.length > 0)
+    .map((batch) => {
+      const rows = [...batch.moves].sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
+      const first = rows[0];
+      return {
+        id: batchId(first),
+        kind: 'MOVE_TASK',
+        fromProjectId: batch.fromProjectId,
+        sourceTitle: first.fromProject?.title ?? UNNAMED_PROJECT,
+        rows,
+        moment: first.requestedAt,
+        targetTitle: batch.drawnAs.includes('TARGET_COORDINATOR')
+          ? null
+          : first.toProject?.title ?? UNNAMED_PROJECT,
+      };
+    })
+    .sort((a, b) => a.moment.localeCompare(b.moment));
+}
+
+/** The batch answer: every waiting move with the crossing key the card was drawn from. */
+export function moveBatchAnswer(
+  batch: CrossingBatch,
+  decision: 'APPROVE' | 'DENY',
+): { decision: 'APPROVE' | 'DENY'; moves: Array<{ handoffId: string; crossingKey: string }> } {
+  return {
+    decision,
+    moves: pendingRows(batch).map((row) => ({ handoffId: row.publicId ?? row.id, crossingKey: row.crossingKey })),
+  };
 }
 
 export const UNNAMED_PROJECT = 'unnamed project';
@@ -84,7 +145,7 @@ export function crossingBatches(
         current = [row];
         const first = row;
         batches.push({
-          id: `crossing-batch-${first.publicId ?? first.id}`,
+          id: batchId(first),
           kind: first.kind,
           fromProjectId: first.fromProjectId,
           sourceTitle: first.fromProject?.title ?? UNNAMED_PROJECT,
@@ -125,10 +186,13 @@ export function batchDecidedAt(batch: CrossingBatch): string | null {
 
 // ── copy ────────────────────────────────────────────────────────────────────────────────────────
 
-export function crossingTitle(kind: string, count: number): string {
+/** The card's question. `target` names the project the moves go into when it is not this
+ *  conversation's own (the session that asked for them). */
+export function crossingTitle(kind: string, count: number, target?: string | null): string {
   const one = count === 1;
   if (kind === 'FILE_TASK') return one ? 'File this task here?' : 'File these tasks here?';
   if (kind === 'DEPEND_ON_TASK') return one ? 'Allow this dependency?' : 'Allow these dependencies?';
+  if (target) return one ? `Move this task to ${target}?` : `Move these tasks to ${target}?`;
   return one ? 'Move this task here?' : 'Move these tasks here?';
 }
 

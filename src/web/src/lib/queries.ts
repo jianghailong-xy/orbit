@@ -43,6 +43,7 @@ import type { OwnerConfirmationView } from '../components/OwnerConfirmationCard'
 import type { PendingCriteriaDecisionQueue } from '../components/CriteriaDecisionCard';
 import type { ProjectOpenItemsView } from '../components/CoordinatorQuestionCard';
 import type { ProjectCrossingRow, TaskAttribution } from './attribution';
+import type { TaskMoveBatch } from './crossingBatches';
 import type { EvidenceFileCitation, EvidenceFilePage } from './evidenceFiles';
 import type {
   WikiArticleDirectory,
@@ -881,6 +882,15 @@ export const projectCrossingsQuery = (projectId: string) =>
     queryKey: ['project', projectId, 'crossings'] as const,
     queryFn: () =>
       api<ProjectCrossingRow[]>(`/projects/${encodeURIComponent(projectId)}/handoffs`),
+  });
+
+/** The task-move batches one session draws as decision cards: those it asked for, and those into a
+ *  project it coordinates — every waiting one, then the latest answered (`lib/crossingBatches.ts`). */
+export const sessionTaskMovesQuery = (sessionId: string) =>
+  queryOptions({
+    queryKey: ['session-task-moves', sessionId] as const,
+    queryFn: () =>
+      api<TaskMoveBatch[]>(`/sessions/${encodeURIComponent(sessionId)}/task-moves`),
   });
 
 /**
