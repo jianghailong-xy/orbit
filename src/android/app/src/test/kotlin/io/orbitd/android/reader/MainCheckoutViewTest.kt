@@ -95,7 +95,8 @@ class MainCheckoutViewTest {
         val (model, _) = model(actions = true)
         val case = fixture["results"]!!.jsonArray.map { it.jsonObject }.first { it["name"]!!.jsonPrimitive.content == "PUSH_REJECTED" }
         show(model) { MainCheckoutResultRow(MainCheckout.result(case["result"]!!.jsonObject)!!) }
-        compose.onNodeWithTag("main-checkout-result").assertTextContains(case["text"]!!.jsonPrimitive.content, substring = true)
-        compose.onNodeWithTag("main-checkout-result").assertTextContains("Ask the agent to rebase and push", substring = true)
+        compose.onNodeWithTag("main-checkout-result").assertExists()
+        // The sentence, then its link, as one text.
+        compose.onNodeWithText(case["text"]!!.jsonPrimitive.content + "  Ask the agent to rebase and push").assertExists()
     }
 }
