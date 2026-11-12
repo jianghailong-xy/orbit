@@ -228,12 +228,35 @@ export function runLineMainHint(main: string = DEFAULT_MAIN_BRANCH): string {
 export const RUN_DELIVERY = 'Delivery';
 export const RUN_DELIVERY_PLATFORM = 'Orbit lands it';
 export const RUN_DELIVERY_AGENT_PUSH = 'The agent pushes it';
+/** How it runs' Delivery row, by id: the merge card's "Let the agent push instead…" brings the reader
+ *  there — on the project page directly, and from anywhere else by the URL's hash. */
+export const RUN_DELIVERY_ANCHOR = 'project-run-delivery';
+/** Brings the Delivery row into view and gives it focus; false where the page draws none. */
+export function revealRunDelivery(): boolean {
+  const row = document.getElementById(RUN_DELIVERY_ANCHOR);
+  if (!row) return false;
+  row.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  row.focus({ preventScroll: true });
+  return true;
+}
 export function runDeliveryPlatformHint(main: string = DEFAULT_MAIN_BRANCH): string {
   return `The agent doesn’t push to ${main}: Orbit lands its branch once the work is accepted.`;
 }
 export function runDeliveryAgentPushHint(main: string = DEFAULT_MAIN_BRANCH): string {
-  return `The agent pushes to ${main} itself, and Orbit checks the commits are there.`;
+  return `No merge card. The agent pushes to ${main} itself, and Orbit records each commit once it sees it there.`;
 }
+/**
+ * The question asked before the agent takes over a project that has a merge waiting on the owner
+ * (owner decision 2026-11-10): the switch changes what later tasks do, and the waiting card stays.
+ */
+export function runAgentPushConfirmTitle(main: string = DEFAULT_MAIN_BRANCH): string {
+  return `Let the agent push to ${main}?`;
+}
+export function runAgentPushConfirmBody(main: string = DEFAULT_MAIN_BRANCH): string {
+  return `Tasks finished from now on are pushed by their agent: no merge card, and Orbit merges nothing into ${main}. Merges already waiting for you stay until you answer them.`;
+}
+export const RUN_AGENT_PUSH_CONFIRM = 'Let the agent push';
+export const RUN_AGENT_PUSH_CANCEL = 'Cancel';
 /** Why the agent may not push here: the project lands on a project branch, or no line is decided. */
 export function runDeliveryNeedsMainLine(main: string = DEFAULT_MAIN_BRANCH): string {
   return `The agent can push only on a project that lands directly into ${main}. On a project branch, `
@@ -249,11 +272,12 @@ export const RUN_AUTOMATIC_HINT_PROJECT_BRANCH =
   'The coordinator runs it for you: it decides when each task is done, handles conflicts and '
   + 'failed checks, and merges the branch into main once the merge check passes — with a receipt '
   + 'you can revert. The criteria and anything irreversible stay yours.';
-/** …and directly into main, where the merging half is the one thing it never does by itself. */
+/** …and directly into main, where the merging half is the one thing it never does by itself — and
+ *  the way to skip that card is the Delivery row (owner decision 2026-11-10). */
 export const RUN_AUTOMATIC_HINT_MAIN =
   'The coordinator runs it for you: it decides when each task is done and handles conflicts and '
-  + 'failed checks. Merging into main always asks you — a project that lands directly on main '
-  + 'never merges by itself. The criteria and anything irreversible stay yours.';
+  + 'failed checks. Merging into main always asks you — to skip that card, choose “The agent pushes '
+  + 'it” under Delivery. The criteria and anything irreversible stay yours.';
 export const RUN_SWITCH_ON = 'On';
 export const RUN_SWITCH_OFF = 'Off';
 export const RUN_AT_MOST = 'At most';
@@ -262,6 +286,10 @@ export const RUN_MERGE_CHECK_HINT =
   'Runs on the combined tree before anything lands — on the project branch and again before main.';
 export function runMergeCheckHint(main: string = DEFAULT_MAIN_BRANCH): string {
   return `Runs on the combined tree before anything lands — on the project branch and again before ${main}.`;
+}
+/** The merge check while the agent pushes its own work: Orbit runs nothing, the agent runs it. */
+export function runMergeCheckHintAgentPush(main: string = DEFAULT_MAIN_BRANCH): string {
+  return `Run by the agent before it pushes, on its work rebased onto ${main}. Orbit doesn’t run it.`;
 }
 export const RUN_MERGE_CHECK_PLACEHOLDER = 'No check — work lands once it rebases cleanly';
 /** The check's budget, under the command: the seconds it may run before the landing is stopped. An
@@ -298,6 +326,13 @@ function automaticHintProjectBranch(main: string): string {
     + 'you can revert. The criteria and anything irreversible stay yours.';
 }
 function automaticHintMain(main: string): string {
+  return 'The coordinator runs it for you: it decides when each task is done and handles conflicts and '
+    + `failed checks. Merging into ${main} always asks you — to skip that card, choose “The agent pushes `
+    + 'it” under Delivery. The criteria and anything irreversible stay yours.';
+}
+/** The same sentence as it read before Delivery, for a server that reports no delivery mode: there
+ *  is no Delivery row to point to. */
+export function runAutomaticHintMainNoDelivery(main: string = DEFAULT_MAIN_BRANCH): string {
   return 'The coordinator runs it for you: it decides when each task is done and handles conflicts and '
     + `failed checks. Merging into ${main} always asks you — a project that lands directly on ${main} `
     + 'never merges by itself. The criteria and anything irreversible stay yours.';

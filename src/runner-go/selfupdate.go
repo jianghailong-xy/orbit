@@ -854,16 +854,21 @@ func upgrade(server string) {
 			version, m.Version, server)
 		return
 	}
-	// As root — the `sudo /usr/local/bin/orbit upgrade` a runner that cannot update itself asks for — first
-	// move a legacy install out of root's /usr/local/bin, so this release lands where the
-	// runner can replace it next time. Its service restarts once the release is in place.
+	// As root — the `sudo /usr/local/bin/orbit upgrade` a runner that cannot update itself asks for —
+	// first put the install in the layout the runner can update itself in (install_layout.go): a
+	// /usr/local/bin/orbit linked to an account's copy becomes root's own file again and takes this
+	// release, and a legacy runner service moves onto its account's own copy of it once it is in place.
+	logf := func(s string) { fmt.Fprint(os.Stderr, s) }
 	var restart func()
+	swap := func() bool { return downloadAndSwap(server, key, m, logf) }
 	if os.Geteuid() == 0 {
 		if exe, err := selfUpdateTarget(); err == nil {
-			restart = migrateLegacyInstall(exe)
+			var target string
+			target, restart = migrateLegacyInstall(exe)
+			swap = func() bool { return installRelease(server, key, m, target, probeAsThisProcess, logf) }
 		}
 	}
-	swapped := downloadAndSwap(server, key, m, func(s string) { fmt.Fprint(os.Stderr, s) })
+	swapped := swap()
 	if restart != nil {
 		restart()
 	}

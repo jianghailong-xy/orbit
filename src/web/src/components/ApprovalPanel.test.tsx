@@ -1019,6 +1019,8 @@ describe('one waiting completion decision on the session page', () => {
       // The open items the coordinator question card reads (§5.2). Empty: no question is open in
       // this case, so the card draws nothing and what is asserted here is the evidence card beside
       // it — an unstubbed read would fail the census rather than the assertion.
+      // No cross-project request is waiting on this project: the crossing card reads this door.
+      if (path === `/projects/${PROJECT_ID}/handoffs`) return reply([]);
       if (path === `/projects/${PROJECT_ID}/open-items`) {
         return reply({ needsYou: [], withCoordinator: [] });
       }
@@ -1045,6 +1047,7 @@ describe('one waiting completion decision on the session page', () => {
       if (path.startsWith('/tasks/page')) return reply({ items: [], nextCursor: null });
       if (path.startsWith('/tasks')) return reply({ items: [], total: 0, counts: {} });
       if (path === '/providers' || path === '/providers/pools' || path === '/providers/shared-pools' || path === '/session-tags' || path === '/session-folders' || path === '/task-lists' || path === '/runners' || path === '/watches' || path === '/watches?state=ACTIVE' || path === '/watches?state=PAUSED' || path === '/watches?needsAttention=true' || path === '/wiki/spaces') return reply([]);
+      if (path.startsWith('/owner-requests')) return reply({ requests: [] });
       unstubbed.push(path);
       return reply([]);
     });

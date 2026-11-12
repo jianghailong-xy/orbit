@@ -127,6 +127,17 @@ final class SessionMessageCopyParityTests: XCTestCase {
                                                  text: "hi").label, "From Worker")
     }
 
+    /// A narrower sender gets the same line at both ends, and the same block is left out of the fold.
+    func testTheNarrowerLineAndTheBlockLeftOutAreTheWebs() throws {
+        let web = try flat(Self.webLib)
+        XCTAssertTrue(web.contains("`Sender runs in ${modeLabel(from)}, narrower than this session's ${modeLabel(to)}: not taken as your approval`"),
+                      "the narrower sender's line drifted from \(Self.webLib)")
+        XCTAssertTrue(web.contains("/<orbit-session-message\\b[^>]*>[\\s\\S]*?<\\/orbit-session-message>/g"),
+                      "the web no longer leaves the same block out")
+        XCTAssertTrue(web.contains("/The sender runs in (\\S+), which is narrower than this session's (\\S+)\\./"),
+                      "the web reads the narrower sentence differently")
+    }
+
     /// The card puts the time and the task in the foot line the same way at both ends.
     func testTheFootLineIsBuiltTheSameWay() throws {
         let card = try flat(Self.webCard)
@@ -135,5 +146,21 @@ final class SessionMessageCopyParityTests: XCTestCase {
         XCTAssertTrue(SessionMessageCard.meta(ts: "2026-10-01T15:40:00.000Z",
                                               now: Date(timeIntervalSince1970: 1_790_000_000))
             .hasPrefix("\(SessionMessageCard.notYou) · "))
+    }
+
+    /// A long message folds at the same height, to the same lines, behind the same words at both ends.
+    func testALongMessageFoldsTheSameWay() throws {
+        let card = try flat(Self.webCard)
+        XCTAssertTrue(card.contains("SESSION_MESSAGE_CLAMP_LINES = \(SessionMessageCard.clampLines);"),
+                      "the folded line count drifted from \(Self.webCard)")
+        XCTAssertTrue(card.contains("SESSION_MESSAGE_CLAMP_FROM = \(SessionMessageCard.clampFrom);"),
+                      "the line count a message folds past drifted from \(Self.webCard)")
+        XCTAssertTrue(card.contains("SESSION_MESSAGE_SHOW_MORE = '\(SessionMessageCard.showMore)'"))
+        XCTAssertTrue(card.contains("SESSION_MESSAGE_SHOW_LESS = '\(SessionMessageCard.showLess)'"))
+        XCTAssertTrue(card.contains("el.scrollHeight > line * SESSION_MESSAGE_CLAMP_FROM"),
+                      "the web no longer folds by measured height")
+        XCTAssertFalse(SessionMessageCard.folds(height: 240, lineHeight: 20), "twelve lines show whole")
+        XCTAssertTrue(SessionMessageCard.folds(height: 241, lineHeight: 20))
+        XCTAssertFalse(SessionMessageCard.folds(height: 900, lineHeight: 0), "nothing measured folds nothing")
     }
 }

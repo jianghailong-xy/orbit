@@ -34,6 +34,8 @@ data class WikiAnchor(
     val type: String? = null, val path: String? = null, val symbol: String? = null, val regionSha256: String? = null,
     val sha: String? = null, val criterionId: String? = null, val semanticHash: String? = null, val contentHash: String? = null,
     val command: String? = null, val expectedExit: Int? = null, val ref: String? = null, val check: WikiAnchorCheck? = null,
+    /** A code anchor learned when no code could be read, held to no tree yet (contract `anchorRules.deferred`). */
+    val deferred: Boolean? = null,
 )
 
 // MARK: a space
@@ -231,8 +233,17 @@ data class WikiSearchHit(val id: String, val kind: String? = null, val title: St
     val recordedAt: String? = null, val changedAt: String? = null, val anchorCheckedRef: String? = null,
     val anchorCheckedAt: String? = null)
 
+/** `unavailable` says why nothing could be looked up (contract `searchUnavailable`, [WikiSearchUnavailable]); null on an
+ * answer that searched a wiki. Kept as the server spelled it, so a value newer than this build still decodes. */
 @Serializable
-data class WikiSearchResponse(val q: String? = null, val hits: List<WikiSearchHit>? = null)
+data class WikiSearchResponse(val q: String? = null, val hits: List<WikiSearchHit>? = null, val unavailable: String? = null)
+
+/** The closed set behind [WikiSearchResponse.unavailable] (src/shared `WIKI_SEARCH_UNAVAILABLE`). */
+object WikiSearchUnavailable {
+    const val NO_WIKI = "no_wiki"
+    const val WIKI_IN_TRASH = "wiki_in_trash"
+    val all = listOf(NO_WIKI, WIKI_IN_TRASH)
+}
 
 @Serializable
 data class WikiChangeResult(val changesetId: String? = null, val replayed: Boolean? = null, val ops: List<Outcome>? = null) {
@@ -280,12 +291,28 @@ data class WikiMaintenanceHealth(
     }
 }
 
-/** What the space's repository steps depend on (contract `repoOps.looks`, P2). */
-data class WikiSpaceRepoHealth(val look: String, val pending: Int = 0) {
+/** What the space's repository steps depend on (contract `repoOps.looks`, P2), and what the latest maintenance run read
+ * of it (docs/wiki-repo-tiers-design.md §7.1): its [tier] — `git`, `folder`, `sessions` or `wrong_repository`, null
+ * while no run has read it or from an older control plane — why it read less than git, that reason as one sentence, and
+ * when it was read. */
+data class WikiSpaceRepoHealth(val look: String, val pending: Int = 0, val tier: String? = null, val reason: String? = null,
+    val detail: String? = null, val checkedAt: String? = null) {
     companion object {
         fun read(element: JsonElement?): WikiSpaceRepoHealth? {
             val c = element as? JsonObject ?: return null
-            return WikiSpaceRepoHealth(c["look"].text() ?: "unknown", c["pending"].integer() ?: 0)
+            return WikiSpaceRepoHealth(c["look"].text() ?: "unknown", c["pending"].integer() ?: 0, c["tier"].text(),
+                c["reason"].text(), c["detail"].text(), c["checkedAt"].text())
+        }
+    }
+}
+
+/** What a maintenance run read of the repository (contract `jobs.read.job.repo`, design §7.4); null for any other kind
+ * and before its probe. */
+data class WikiJobRepo(val tier: String, val reason: String? = null, val detail: String? = null) {
+    companion object {
+        fun read(element: JsonElement?): WikiJobRepo? {
+            val c = element as? JsonObject ?: return null
+            return WikiJobRepo(c["tier"].text() ?: return null, c["reason"].text(), c["detail"].text())
         }
     }
 }
@@ -383,7 +410,7 @@ data class WikiJob(
     val attempts: Int = 0, val createdAt: String, val updatedAt: String, val startedAt: String? = null, val endedAt: String? = null,
     val nextAttemptAt: String? = null, val failureKind: String? = null, val error: String? = null, val ahead: Int? = null,
     val progress: WikiJobProgress? = null, val calls: WikiJobCallCounts = WikiJobCallCounts(),
-    val nextCall: NextCall? = null, val requests: List<WikiJobCall> = emptyList(),
+    val nextCall: NextCall? = null, val requests: List<WikiJobCall> = emptyList(), val repo: WikiJobRepo? = null,
 ) {
     /** Of its calls that wait, the one the queue reaches first. */
     data class NextCall(val ahead: Int, val enqueuedAt: String)
@@ -396,7 +423,7 @@ data class WikiJob(
                 c["endedAt"].text(), c["nextAttemptAt"].text(), c["failureKind"].text(), c["error"].text(), c["ahead"].integer(),
                 WikiJobProgress.read(c["progress"]), WikiJobCallCounts.read(c["calls"]),
                 (c["nextCall"] as? JsonObject)?.let { n -> n["enqueuedAt"].text()?.let { NextCall(n["ahead"].integer() ?: 0, it) } },
-                (c["requests"] as? JsonArray)?.mapNotNull(WikiJobCall::read).orEmpty())
+                (c["requests"] as? JsonArray)?.mapNotNull(WikiJobCall::read).orEmpty(), WikiJobRepo.read(c["repo"]))
         }
     }
 }

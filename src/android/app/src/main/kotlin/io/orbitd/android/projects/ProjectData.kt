@@ -27,6 +27,7 @@ class ProjectApi(private val auth: AuthSession, private val handle: SessionHandl
     suspend fun coordinator(id: String) = readObject(listOf("projects", id, "coordinator", "status"))
     suspend fun graph(id: String) = readObject(listOf("projects", id, "dependency-graph"))
     suspend fun ready(id: String) = readObject(listOf("projects", id, "panorama", "ready"), listOf("limit" to "5"))
+    suspend fun doneCheck(id: String) = readObject(listOf("projects", id, "done-check"))
     suspend fun confirmation(id: String) = readObject(listOf("projects", id, "acceptance", "confirmation"))
     suspend fun share(id: String) = readObject(listOf("projects", id, "share"))
     /** Every crossing this project is an end of, in either direction (`GET /projects/:id/handoffs`). */
@@ -114,7 +115,13 @@ class ProjectApi(private val auth: AuthSession, private val handle: SessionHandl
         if (!writable()) throw FeatureWriteRefused()
         return Wire.decode(auth.request(handle, ApiRequest(listOf("projects", id, "coordinator"), HttpMethod.POST)).body, JsonObject.serializer())
     }
-    suspend fun replaceCoordinator(id: String, revision: String) = send(revision, listOf("projects", id, "coordinator", "replace")) as? JsonObject
+    /** A [workspaceId] opens the new coordinator there (Change workspace…), and the project is coordinated from there
+     * afterwards; none opens it where the last one ran. */
+    suspend fun replaceCoordinator(id: String, revision: String, workspaceId: String? = null) = send(revision, listOf("projects", id, "coordinator", "replace"),
+        body = workspaceId?.let { buildJsonObject { put("workspaceId", it) } }) as? JsonObject
+    /** The owner's workspaces and runners, for Change workspace…'s list. */
+    suspend fun workspaces(): List<JsonObject> = (read(listOf("workspaces")) as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
+    suspend fun runners(): List<JsonObject> = (read(listOf("runners")) as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
 }
 
 /** What `GET /projects/:id/integration` says about the project's main branch (`ProjectIntegrationView`, contract L6): the

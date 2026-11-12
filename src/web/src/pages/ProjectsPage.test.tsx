@@ -140,6 +140,10 @@ function newClient() {
 // is not always what the key holds) and by the level being read, so a later subtask page under the
 // same project cannot land here. Spelled out rather than imported — a key the component changed
 // unilaterally should break these tests, which it can't do if both sides read one constant.
+/** The queries this page made of its own: the rows' `Waiting on you` badge shares one account-wide read. */
+const pageQueryKeys = (qc: QueryClient) =>
+  qc.getQueryCache().getAll().map((q) => q.queryKey).filter((key) => key[0] !== 'owner-requests');
+
 const tasksKey = (projectUuid: string) => ['project', encodeId(projectUuid), 'tasks', 'root'];
 
 // Unit L7's entry, under the same `['project', id]` prefix as the document and for the same
@@ -248,7 +252,7 @@ const detail = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('ProjectsPage', () => {
-  it('reads exactly GET /projects, GET /projects/<id>, the project DELETE, the status PATCH, the coordinator status GET, its three writes, the two task-page levels and the per-row prerequisite read — no other endpoint', () => {
+  it('reads exactly GET /projects, GET /projects/<id>, the project DELETE, the coordinator status GET, its three writes, the two task-page levels and the per-row prerequisite read — no other endpoint', () => {
     // Negative control: a static render never invokes queryFn (nothing to observe at runtime —
     // see the module comment), so this asserts on the one place the real endpoints are decided.
     // Fails if any call grows extra args or a query string, if a path changes, or if a tenth
@@ -269,12 +273,9 @@ describe('ProjectsPage', () => {
       // reads, because a method that drifted to POST or a path that grew a segment would be a
       // different verb against the same button — and this endpoint cascades.
       "`/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' }",
-      // The account owner's own write to `project.status`, and the only one this app has: PATCH,
-      // with a body carrying nothing but the status being claimed. Held as literally as the rest,
-      // because the shape of this body is the unit — a second field smuggled in here would make a
-      // status press write something nobody confirmed, and the method drifting to PUT would
-      // replace the project document with three characters of it.
-      "`/projects/${encodeURIComponent(projectId)}`, { method: 'PATCH', body: { status } }",
+      // No status PATCH here any more: the account owner's write to `project.status` moved to
+      // lib/projectDone.ts (`updateProjectStatus`, re-exported from this page) with the DONE gate,
+      // and is held there.
       '`/projects/${encodeURIComponent(id!)}`',
       // The write that opens the conversation with this project's coordinator, and the reason it
       // is one: resolve-or-create, so a stale or trashed binding is repaired server-side rather
@@ -283,20 +284,15 @@ describe('ProjectsPage', () => {
       // the one thing that clears `NO_LANDING_WORKSPACE` — and an empty object otherwise, which is
       // what lets the server borrow the workspace this project's work already runs in.
       "`/projects/${encodeURIComponent(projectId)}/coordinator`, { method: 'POST', body: workspaceId ? { workspaceId } : {} }",
-      // The other half of that pair, and a SEPARATE route for the reason the card draws a separate
-      // button: the open above resolves, so pressing it on a completed conversation hands that same
-      // conversation back. This one replaces it. No body at all — where the replacement opens is
-      // the project's to decide, and a `workspaceId` here would be a move wearing a replacement's
-      // name (the rebind below is the move).
-      "`/projects/${encodeURIComponent(projectId)}/coordinator/replace`, { method: 'POST' }",
+      // The other half of that pair — the replace door — moved to components/CoordinatorChange.tsx
+      // with the coordinator's Change, and is held there (below). Its body names a
+      // workspace only when the reader picked one: "start the next coordinator THERE".
       // No Automatic PATCH here any more: the switch moved off the coordinator card into How it
       // runs (`ProjectRunSettings`), which writes `automatic` with the rest of the settings the
       // start card set — asserted over the requests that leave the client in
       // ProjectRunSettings.test.tsx and ProjectsPage.automatic.test.tsx.
-      // The verb behind every COORDINATOR_UNAVAILABLE. Held as literally as the path above,
-      // `workspaceId` included: this endpoint has no `null` spelling, and a body that could send
-      // one would be a way to REACH the state it exists to leave.
-      "`/projects/${encodeURIComponent(projectId)}/coordinator/rebind`, { method: 'POST', body: { workspaceId } }",
+      // No rebind here any more: a project whose workspace broke starts its next coordinator in a
+      // workspace the reader picks (the replace door with a workspaceId), in one step.
       // Exactly this, spelled out: the root level is requested by sending NO parentId, so an
       // added `&parentId=…` here would silently turn this into a subtask page under the same
       // cache key. `limit=100` is inline rather than interpolated so this stays a literal read
@@ -316,6 +312,16 @@ describe('ProjectsPage', () => {
       // is what proves there is no THIRD task-page spelling and no sixth endpoint in the file.
       '`/projects/${encodeURIComponent(projectId)}/tasks/page?parentId=${encodeURIComponent(encodeId(parentTaskId))}&limit=100`',
     ]);
+    const startSource = readFileSync(fileURLToPath(new URL('../components/CoordinatorChange.tsx', import.meta.url)), 'utf8');
+    expect([...startSource.matchAll(API_CALL)].map((m) => m[1].trim().replace(/,$/, ''))).toEqual([
+      "`/projects/${encodeURIComponent(projectId)}/coordinator/replace`, { method: 'POST', body: workspaceId ? { workspaceId } : {} }",
+    ]);
+    // The status write that moved to lib/projectDone.ts keeps its exact shape there: PATCH, with a
+    // body carrying nothing but the status being claimed.
+    const doneSource = readFileSync(fileURLToPath(new URL('../lib/projectDone.ts', import.meta.url)), 'utf8');
+    expect([...doneSource.matchAll(API_CALL)].map((m) => m[1].trim().replace(/,$/, ''))).toContain(
+      "`/projects/${encodeURIComponent(projectId)}`, { method: 'PATCH', body: { status } }",
+    );
     // Tasks are created by agents, not from this page: the list above is the whole of what it puts
     // on the wire, so a POST to /tasks reappearing anywhere in the file fails it.
     expect(source).not.toContain("api('/tasks'");
@@ -1362,7 +1368,7 @@ describe('ProjectDetailPage — top-level tasks', () => {
     // open a page for those three — expansion is the next unit, so the document, its root task
     // level, the panorama's own entries and the Coordinator surface's one read are the only
     // queries this page is allowed to have.
-    expect(qc.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
+    expect(pageQueryKeys(qc)).toEqual([
       ['project', encodeId(P1)],
       tasksKey(P1),
       ...headerKeys(P1),
@@ -1561,7 +1567,7 @@ describe('ProjectDetailPage — expanding a task onto its subtasks', () => {
     // ...and closed means NOT FETCHED, not merely not shown: the level component is the only
     // thing that registers a child query, and a closed row does not render one at all. Two rows
     // claiming four children between them still leave exactly the queries this page already had.
-    expect(qc.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
+    expect(pageQueryKeys(qc)).toEqual([
       ['project', encodeId(P1)],
       tasksKey(P1),
       ...headerKeys(P1),
@@ -1679,7 +1685,7 @@ describe('ProjectDetailPage — expanding a task onto its subtasks', () => {
       'aria-expanded="false"',
     ]);
     // ...and none of THEIR levels is fetched either, so opening one row never opens a subtree.
-    expect(qc.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([childKey(P1, 't1')]);
+    expect(pageQueryKeys(qc)).toEqual([childKey(P1, 't1')]);
   });
 
   it('spins inside the row while the child page is still loading', () => {

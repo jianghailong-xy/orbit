@@ -382,6 +382,8 @@ beforeEach(() => {
     }
     // The open items the coordinator question card reads (§5.2): no question is open in any of these
     // cases, and the start request the start card is drawn from is served beside them.
+    // No cross-project request is waiting on this project: the crossing card reads this door.
+    if (path === `/projects/${PROJECT_PUBLIC}/handoffs`) return reply([]);
     if (path === `/projects/${PROJECT_PUBLIC}/open-items`) {
       return reply({ needsYou: [], withCoordinator: [], startRequest: startRow });
     }
@@ -450,6 +452,7 @@ beforeEach(() => {
     if (path.startsWith('/tasks/page')) return reply({ items: [], nextCursor: null });
     if (path.startsWith('/tasks')) return reply({ items: [], total: 0, counts: {} });
     if (path === '/providers' || path === '/providers/pools' || path === '/providers/shared-pools' || path === '/session-tags' || path === '/session-folders' || path === '/task-lists' || path === '/runners' || path === '/watches' || path === '/watches?state=ACTIVE' || path === '/watches?state=PAUSED' || path === '/watches?needsAttention=true') return reply([]);
+    if (path.startsWith('/owner-requests')) return reply({ requests: [] });
     unstubbed.push(path);
     return reply([]);
   }) as unknown as typeof api);

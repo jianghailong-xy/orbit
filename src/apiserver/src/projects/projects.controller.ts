@@ -28,6 +28,7 @@ import {
   DecideProjectHandoffDto,
   OpenProjectCoordinatorDto,
   RebindProjectCoordinatorDto,
+  ReplaceProjectCoordinatorDto,
   RecordMergeEvidenceDto,
   RecordTaskCheckpointDto,
   ResolveProjectBlockerDto,
@@ -460,6 +461,16 @@ export class ProjectsController {
     return { ...started, coordinator };
   }
 
+  /** Read the owner's current project done check. */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Get(':id/done-check')
+  doneCheck(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+  ) {
+    return this.acceptance.readProjectDoneCheck(user.userId, id);
+  }
+
   /**
    * Record as done: the account owner records the project DONE in person
    * (`ProjectAcceptanceService.recordProjectDone`). A request carrying an acting session is refused
@@ -821,14 +832,19 @@ export class ProjectsController {
    * presses it says so and asks first; nothing else may reach it by accident, which is why it is
    * not a field on anything.
    *
-   * No body. §7.5 freezes a rotation as "the SESSION is replaced; the agent and the workspace are
-   * not", so there is nothing here left to name — the replacement opens where the last one ran, and
-   * moving it is still `POST :id/coordinator/rebind`.
+   * The body may name a workspace: "start a new coordinator there". The outgoing conversation is
+   * completed where it is and the replacement opens in that workspace, which becomes the project's
+   * coordination workspace. Without one the replacement opens where the last one ran, as §7.5 froze
+   * a rotation.
    */
   @PatScope('projects:write', { workspaceConfinable: false })
   @Post(':id/coordinator/replace')
-  replaceCoordinator(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
-    return this.projects.coordinator(user.userId, id, undefined, 'replace');
+  replaceCoordinator(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto?: ReplaceProjectCoordinatorDto,
+  ) {
+    return this.projects.coordinator(user.userId, id, dto?.workspaceId, 'replace');
   }
 
   /**

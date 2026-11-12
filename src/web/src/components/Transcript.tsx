@@ -36,7 +36,7 @@ import { formatThinkingDuration, formatThinkingSize } from '../lib/thinkingDraft
 import { checkDuration } from '../lib/checkDuration';
 import { quotaWindowKind } from '../lib/quotaWindow';
 import { Fragment, createContext, isValidElement, memo, useContext, useEffect, useId, useMemo, useReducer, useRef, useState } from 'react';
-import type { ComponentProps, ReactNode } from 'react';
+import type { ComponentProps, ContextType, ReactNode } from 'react';
 import {
   AgentProvider,
   apiErrorRetryAt,
@@ -86,8 +86,10 @@ import { AppLink } from './AppLink';
 import { SameOriginLink } from './SameOriginLink';
 import { TaskRunHandoffNotice } from './TaskRunHandoffNotice';
 import type { TaskRunConflict } from '../lib/taskRunHandoff';
-import { WatchWakeCard } from './WatchWakeCard';
-import { BackgroundWakeCard } from './BackgroundWakeCard';
+import { WatchWakeCard, WatchWakeNamesCtx, watchWakeTitle } from './WatchWakeCard';
+import { BackgroundWakeCard, backgroundWakeName, backgroundWakeTitle } from './BackgroundWakeCard';
+import { OrbitExchangeGroup, OrbitExchangeSolo } from './OrbitExchangeFold';
+import { foldsAtLength, parseRunNotice, replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
 import { BackgroundJobsNote } from './BackgroundJobsNote';
 import { ReferencedTaskNote } from './ReferencedTaskNote';
 import { WikiContextNote } from './WikiContextNote';
@@ -97,6 +99,7 @@ import { EMPTY_LIVE_TOOL_OUTPUTS, type LiveToolOutputs } from '../lib/liveToolOu
 import { EMPTY_LIVE_TASK_PROGRESS, endedTaskProgress, type LiveTaskProgress } from '../lib/liveTaskProgress';
 import { TaskProgressBlock } from './TaskProgressBlock';
 import { parseWatchWake } from '../lib/watches';
+import { resolutionTurnLabel } from '../lib/ownerRequests';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import { parseOpenItemDelivery } from '../lib/openItemDelivery';
 import type { OpenItemDeliveryCard as OpenItemDelivery, ProjectStartedCard as Started } from '@orbit/shared';
@@ -107,16 +110,44 @@ import { OwnerAnswerLine } from './OwnerAnswerLine';
 import { parseCoordinatorDelivery } from '../lib/coordinatorDelivery';
 import type { CoordinatorDeliveryCard as CoordinatorDelivery } from '@orbit/shared';
 import { CoordinatorDeliveryLine } from './CoordinatorDeliveryLine';
+import { coordinatorDeliverySentence } from '../lib/coordinatorDelivery';
 import { parseTaskStartCard } from '../lib/taskStartCard';
 import type { TaskStartCard as TaskStart } from '@orbit/shared';
 import { TaskStartCard } from './TaskStartCard';
 import { parseProjectStarted } from '../lib/projectStarted';
 import { ProjectStartedCard } from './ProjectStartedCard';
-import { parseSessionMessage } from '../lib/sessionMessage';
+import { parseSessionMessage, splitSessionMessageNote } from '../lib/sessionMessage';
 import { externalSenderLabel, parseExternalSender } from '../lib/externalSender';
-import { parseConfirmationReturn, parseConfirmationReviewRequest } from '../lib/confirmationReviewTurns';
-import type { ConfirmationReturnCard, ConfirmationReviewRequestCard } from '@orbit/shared';
-import { ReviewRequestedCard, SentBackByReviewerCard } from './ConfirmationReviewTurnCards';
+import {
+  parseConfirmationAnswers,
+  parseConfirmationReturn,
+  parseConfirmationReviewRequest,
+} from '../lib/confirmationReviewTurns';
+import type {
+  ConfirmationAnswersCard,
+  ConfirmationReturnCard,
+  ConfirmationReviewRequestCard,
+  EvidenceReviewCard,
+  EvidenceSendBackCard,
+  RunNoticeCard,
+  RunQuestionCard,
+  SessionOpeningCard,
+} from '@orbit/shared';
+import { ReviewRequestedCard, SentBackByReviewerCard, YouConfirmedCard } from './ConfirmationReviewTurnCards';
+import {
+  EvidenceSentBackCard,
+  EvidenceToReviewCard,
+  RunNoticeTurnCard,
+  RunQuestionTurnCard,
+  SessionOpeningLine,
+} from './OrbitTurnCards';
+import {
+  parseEvidenceReview,
+  parseEvidenceSendBack,
+  parseRunNotice as parseRunNoticeCard,
+  parseRunQuestion,
+  parseSessionOpening,
+} from '../lib/orbitTurnCards';
 import type { ExternalMessageFrom, SessionMessageCard as SessionMessage, SessionReplyCard as SessionReply } from '@orbit/shared';
 import { SessionMessageCard } from './SessionMessageCard';
 import { parseSessionReplies, withoutReplyBlocks } from '../lib/sessionRequest';
@@ -583,6 +614,14 @@ type TextNode = {
   // the run (lib/confirmationReviewTurns). Orbit's turns, drawn as their cards.
   reviewRequest?: ConfirmationReviewRequestCard;
   reviewReturn?: ConfirmationReturnCard;
+  /** The owner's answers handed to the reviewer (§7 Q5): drawn as `You confirmed`. */
+  reviewAnswers?: ConfirmationAnswersCard;
+  /** Five more of Orbit's own turns, each drawn as its card (OrbitTurnCards.tsx). */
+  evidenceReview?: EvidenceReviewCard;
+  evidenceSendBack?: EvidenceSendBackCard;
+  runQuestion?: RunQuestionCard;
+  runNotice?: RunNoticeCard;
+  sessionOpening?: SessionOpeningCard;
   // This message opens a turn, so the turn's head row (TurnHead) is drawn under it and over
   // whatever the turn goes on to write — with the `turn_end` that closed the turn once it has one.
   // Only a top-level message opens one: a steer joins the turn already running, and a message
@@ -885,7 +924,14 @@ const readersOwnWords = (node: TextNode): boolean =>
   && !node.startedCard
   && !node.reviewRequest
   && !node.reviewReturn
+  && !node.reviewAnswers
+  && !node.evidenceReview
+  && !node.evidenceSendBack
+  && !node.runQuestion
+  && !node.runNotice
+  && !node.sessionOpening
   && !parseWatchWake(node.text)
+  && !resolutionTurnLabel(node.text)
   && !parseBackgroundWake(node.note);
 
 function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): Node[] {
@@ -1201,6 +1247,12 @@ function buildTranscript(
         const sessionReplies = parseSessionReplies(p) ?? undefined;
         const reviewRequest = parseConfirmationReviewRequest(p) ?? undefined;
         const reviewReturn = parseConfirmationReturn(p) ?? undefined;
+        const reviewAnswers = parseConfirmationAnswers(p) ?? undefined;
+        const evidenceReview = parseEvidenceReview(p) ?? undefined;
+        const evidenceSendBack = parseEvidenceSendBack(p) ?? undefined;
+        const runQuestion = parseRunQuestion(p) ?? undefined;
+        const runNotice = parseRunNoticeCard(p) ?? undefined;
+        const sessionOpening = parseSessionOpening(p) ?? undefined;
         const priorSteer = ev.turnId ? userByTurn.get(ev.turnId) : undefined;
         if (priorSteer?.steer && p.steer !== true) {
           priorSteer.steer = false;
@@ -1239,6 +1291,12 @@ function buildTranscript(
             sessionReplies,
             reviewRequest,
             reviewReturn,
+            reviewAnswers,
+            evidenceReview,
+            evidenceSendBack,
+            runQuestion,
+            runNotice,
+            sessionOpening,
             ts: ev.ts,
             images: imgs,
             attachmentRefs: refs,
@@ -1517,19 +1575,40 @@ export const TaskActivityCtx = createContext<TaskActivity>({ live: EMPTY_LIVE_TA
 type TaskLookup = { progress: (id: string) => TaskProgress | null; running: (id: string) => boolean };
 const TaskLookupCtx = createContext<TaskLookup>({ progress: () => null, running: () => false });
 
-function StreamingDrafts() {
+function StreamingDrafts({ lastTurnEnd }: { lastTurnEnd: number }) {
   const drafts = useContext(StreamingDraftsCtx);
+  // Whether the reader opened the reasoning, held here rather than in the row: the row unmounts
+  // each time a block settles, and a reader who opened one wants the next block of the same turn
+  // open too. A turn's end puts it back to folded. Read off the transcript's last `turn_end` rather
+  // than off `live`: a reply sent right after a turn ends starts the next one before the session's
+  // status says it ever stopped. Its seq, not a count, so loading older pages changes nothing.
+  const [thinkOpen, setThinkOpen] = useState(false);
+  useEffect(() => {
+    setThinkOpen(false);
+  }, [lastTurnEnd]);
   if (!drafts) return null;
   return (
     <>
-      {drafts.think && <ThinkingStream text={drafts.think} startedAt={drafts.thinkStartedAt} />}
+      {drafts.think && (
+        <ThinkingStream
+          text={drafts.think}
+          startedAt={drafts.thinkStartedAt}
+          open={thinkOpen}
+          onToggle={() => setThinkOpen((o) => !o)}
+        />
+      )}
       {drafts.text && <StreamingMessage text={drafts.text} />}
     </>
   );
 }
 
 /**
- * Reasoning as it streams: a viewport about ten lines tall that keeps itself at the newest line,
+ * Reasoning as it streams, folded to one row by default: the row that a settled block shows, with
+ * a clock and a character count that keep moving, so the reader sees it working without a box of
+ * italic text scrolling at the tail of every turn (owner, 2026-11-11;
+ * docs/mocks/thinking-fold-live).
+ *
+ * Opened, it is a viewport about ten lines tall that keeps itself at the newest line,
  * rather than an unbounded block. Unbounded, a stretch of it pushed the answer — and the tool
  * calls on the way to it — out of a pane pinned to the tail, and the fold at the end then took
  * back a page of height at once, moving whatever the reader was looking at.
@@ -1537,28 +1616,58 @@ function StreamingDrafts() {
  * The follow is sticky, not forced: a reader who scrolls up inside it to re-read something stays
  * where they put themselves until they return to the bottom.
  */
-function ThinkingStream({ text, startedAt }: { text: string; startedAt?: number }) {
+function ThinkingStream({
+  text,
+  startedAt,
+  open,
+  onToggle,
+}: {
+  text: string;
+  startedAt?: number;
+  open: boolean;
+  onToggle: () => void;
+}) {
   const port = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
   useEffect(() => {
     const el = port.current;
     if (el && follow.current) el.scrollTop = el.scrollHeight;
-  }, [text]);
+    // The top edge fades only over text scrolled past, so a block that fits, or a reader who
+    // scrolled back to its start, reads its first line whole.
+    if (el) el.classList.toggle('is-scrolled', el.scrollTop > 0);
+  }, [text, open]);
   return (
     <div className="chat-think-live">
-      <div className="chat-think-live-head">
-        💭 Thinking… <LiveSeconds startedAt={startedAt} />
-      </div>
-      <div
-        className="chat-think-port"
-        ref={port}
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 8;
+      <button
+        type="button"
+        className="chat-think-live-head"
+        aria-expanded={open}
+        onClick={() => {
+          // Opening lands on the newest line, whatever the last opening was scrolled to.
+          follow.current = true;
+          onToggle();
         }}
       >
-        <div className="chat-think-stream chat-streaming">{text}</div>
-      </div>
+        {open ? <DownOutlined /> : <RightOutlined />} 💭 <span className="chat-think-live-word">Thinking…</span>
+        <span className="chat-think-meta">
+          <LiveSeconds startedAt={startedAt} />
+          {startedAt !== undefined ? ' · ' : ''}
+          {formatThinkingSize(text.length)}
+        </span>
+      </button>
+      {open && (
+        <div
+          className="chat-think-port"
+          ref={port}
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 8;
+            el.classList.toggle('is-scrolled', el.scrollTop > 0);
+          }}
+        >
+          <div className="chat-think-stream chat-streaming">{text}</div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1572,7 +1681,7 @@ function LiveSeconds({ startedAt }: { startedAt?: number }) {
     return () => clearInterval(timer);
   }, [startedAt]);
   if (startedAt === undefined) return null;
-  return <span className="chat-think-meta">{formatThinkingDuration(Date.now() - startedAt)}</span>;
+  return <>{formatThinkingDuration(Date.now() - startedAt)}</>;
 }
 
 // `live` indicates the session is still streaming, so a tool_use without a
@@ -1664,6 +1773,10 @@ export const Transcript = memo(function Transcript({
     }
     return at < 0 || at >= nodes.length ? [nodes, [] as Node[]] : [nodes.slice(0, at), nodes.slice(at)];
   }, [nodes, streamingAfterSeq]);
+  const lastTurnEnd = useMemo(() => {
+    for (let i = events.length - 1; i >= 0; i--) if (events[i].type === 'turn_end') return events[i].seq;
+    return 0;
+  }, [events]);
   const body = (
     <TaskLookupCtx.Provider value={taskLookup}>
       <ImagePreviewProvider>
@@ -1671,7 +1784,7 @@ export const Transcript = memo(function Transcript({
           <Fragment key={insert.key}>{insert.element}</Fragment>
         ))}
         <NodeList nodes={before} live={live} placed={placed} />
-        <StreamingDrafts />
+        <StreamingDrafts lastTurnEnd={lastTurnEnd} />
         {after.length > 0 && <NodeList nodes={after} live={live} placed={placed} />}
       </ImagePreviewProvider>
     </TaskLookupCtx.Provider>
@@ -1699,9 +1812,7 @@ export interface TranscriptInsert {
   element: ReactNode;
 }
 
-const TOOL_GROUP_MIN = 3;
-
-type NodeListItem = { kind: 'node'; node: Node } | { kind: 'toolGroup'; key: string; nodes: ToolNode[] };
+type NodeListItem = { kind: 'node'; node: Node } | { kind: 'steps'; key: string; nodes: Node[] };
 
 function NodeList({
   nodes,
@@ -1716,45 +1827,230 @@ function NodeList({
   // In a wiki chat a drafting call is its card, which no run summary may fold away (`isGroupableTool`).
   const chat = useContext(WikiDraftCardCtx) !== null;
   const items = useMemo(() => groupToolRuns(nodes, chat), [nodes, chat]);
+  const exporting = useContext(ExportCtx) !== null;
+  const wakeName = useContext(WatchWakeNamesCtx);
+  const renderItem = (item: NodeListItem) => {
+    const seqs = item.kind === 'steps' ? item.nodes.map((node) => node.seq) : [item.node.seq];
+    // The row a turn opens with, under its message and over everything the turn writes.
+    const head =
+      item.kind === 'node' && item.node.kind === 'user' && item.node.turnHead ? (
+        <TurnHead key={`head-${item.node.seq}`} startTs={item.node.ts} endTs={item.node.turnHead.endTs} live={live} />
+      ) : null;
+    return [
+      item.kind === 'steps' ? (
+        <StepsLine key={item.key} nodes={item.nodes} live={live} />
+      ) : (
+        <NodeView key={item.node.seq} node={item.node} live={live} />
+      ),
+      head,
+      ...seqs
+        .flatMap((seq) => placed?.get(seq) ?? [])
+        .map((insert) => <Fragment key={insert.key}>{insert.element}</Fragment>),
+    ];
+  };
+  // A static export has no way to open a fold, so it draws every turn as it always has.
+  const blocks = useMemo(
+    () => (exporting ? items.map((item) => ({ kind: 'item' as const, item })) : foldOrbitExchanges(items, wakeName)),
+    [items, exporting, wakeName],
+  );
   return (
     <>
-      {items.flatMap((item) => {
-        const seqs = item.kind === 'toolGroup' ? item.nodes.map((node) => node.seq) : [item.node.seq];
-        // The row a turn opens with, under its message and over everything the turn writes.
-        const head =
-          item.kind === 'node' && item.node.kind === 'user' && item.node.turnHead ? (
-            <TurnHead key={`head-${item.node.seq}`} startTs={item.node.ts} endTs={item.node.turnHead.endTs} live={live} />
-          ) : null;
+      {blocks.flatMap((block) => {
+        if (block.kind === 'item') return renderItem(block.item);
+        const withBody = block.exchanges.map((ex) => ({
+          ...ex.summary,
+          body: () => <>{ex.items.flatMap(renderItem)}</>,
+        }));
         return [
-          item.kind === 'toolGroup' ? (
-            <ToolGroupView key={item.key} nodes={item.nodes} live={live} />
+          withBody.length === 1 ? (
+            <OrbitExchangeSolo key={`exchange-${withBody[0].seq}`} ex={withBody[0]} />
           ) : (
-            <NodeView key={item.node.seq} node={item.node} live={live} />
+            <OrbitExchangeGroup key={`exchanges-${withBody[0].seq}`} exchanges={withBody} />
           ),
-          head,
-          ...seqs
-            .flatMap((seq) => placed?.get(seq) ?? [])
-            .map((insert) => <Fragment key={insert.key}>{insert.element}</Fragment>),
         ];
       })}
     </>
   );
 }
 
-function groupToolRuns(nodes: Node[], chat = false): NodeListItem[] {
-  const out: NodeListItem[] = [];
-  let run: ToolNode[] = [];
+// ── Turns Orbit opened, folded (components/OrbitExchangeFold, lib/orbitExchangeFold) ─────────────
+
+type WakeName = ContextType<typeof WatchWakeNamesCtx>;
+type FoldedExchange = { summary: OrbitExchangeSummary; items: NodeListItem[] };
+type FoldBlock = { kind: 'item'; item: NodeListItem } | { kind: 'exchanges'; exchanges: FoldedExchange[] };
+
+/**
+ * Facts a coordinator is told that are bad news: they stay in view, as they always were drawn. A
+ * stopped run is not one of them: in real coordinators every such notice was a run waiting on
+ * purpose, and what needs the owner reaches them as a card of its own.
+ */
+const LOUD_DELIVERIES: ReadonlySet<string> = new Set(['TASK_DISPATCH_REFUSED', 'PROJECT_BLOCKER_RAISED']);
+
+/**
+ * What a turn's opening node says happened, when Orbit opened the turn and it is one the reader
+ * can be spared: a fact told to a coordinator, a watch or a background job coming back, another session's reply. Null for everything else, and for those that went wrong — a refused start, a
+ * blocker, a stopped run, a failed target or job, a delivery nobody confirmed — which stay drawn.
+ */
+function orbitTurnOf(
+  node: Node,
+  wakeName: WakeName,
+): Omit<OrbitExchangeSummary, 'seq' | 'lastSeq' | 'reply'> | null {
+  if (node.kind !== 'user' || !node.turnHead || node.steer) return null;
+  if (node.delivery === 'failed' || node.delivery === 'unconfirmed') return null;
+  if (node.itemCard || node.ownerAnswer || node.taskStart || node.startedCard) return null;
+  if (node.reviewRequest || node.reviewReturn) return null;
+  const ts = node.ts;
+  // Another session's message: a task's run reporting to its coordinator, folded under that task.
+  // The agent's answer under it says what it did; anything the owner must decide comes as a card.
+  if (node.sessionMessage) {
+    const card = node.sessionMessage;
+    const task = card.fromTaskId ? card.fromTitle.replace(/^Task: /, '') : null;
+    return {
+      ts,
+      what: `Message from ${task ?? card.fromTitle}`,
+      whatInTask: 'Message',
+      category: 'message',
+      target: card.fromTaskId
+        ? { kind: 'TASK', id: card.fromTaskId, title: task ?? undefined }
+        : { kind: 'SESSION', id: card.fromSessionId, title: card.fromTitle },
+    };
+  }
+  // A task run's notify that could not reach the owner, handed to the coordinator (lib/orbitExchangeFold).
+  const notice = parseRunNotice(node.note ?? node.text);
+  if (notice) {
+    return {
+      ts,
+      what: notice.taskTitle ? `Run notice: ${notice.taskTitle}` : 'Run notice',
+      whatInTask: 'Run notice',
+      category: 'notice',
+      target: notice.taskId ? { kind: 'TASK', id: notice.taskId, title: notice.taskTitle ?? undefined } : null,
+    };
+  }
+  if (node.sessionReplies) {
+    if (node.text.trim() !== '' || node.sessionReplies.length !== 1) return null;
+    const reply = node.sessionReplies[0];
+    return {
+      ts,
+      what: `Reply from ${reply.fromTitle}`,
+      category: 'reply',
+      target: { kind: 'SESSION', id: reply.fromSessionId, title: reply.fromTitle },
+    };
+  }
+  const delivery = node.coordinatorDelivery;
+  if (delivery) {
+    if (LOUD_DELIVERIES.has(delivery.kind)) return null;
+    const what = coordinatorDeliverySentence(delivery);
+    const task = delivery.task;
+    return {
+      ts,
+      what,
+      whatInTask: task ? what.replace(`: ${task.title}`, '') : undefined,
+      category: delivery.kind.startsWith('EVIDENCE_') ? 'evidence' : delivery.kind === 'DEPENDENT_READY' ? 'ready' : 'project',
+      target: task ? { kind: 'TASK', id: task.id, title: task.title } : null,
+    };
+  }
+  const wake = parseWatchWake(node.text);
+  if (wake) {
+    if (wake.changedTargets.some((t) => t.status === 'FAILED')) return null;
+    const one = wake.changedTargets.length === 1 ? wake.changedTargets[0] : null;
+    const name = one ? wakeName?.(wake.watchId, one) : undefined;
+    const title = watchWakeTitle(wake.kind);
+    return {
+      ts,
+      what: name ? `${title}: ${name}` : title,
+      whatInTask: title,
+      category: 'watch',
+      target: one && (one.kind === 'TASK' || one.kind === 'SESSION') ? { kind: one.kind, id: one.id, title: name } : null,
+    };
+  }
+  const background = parseBackgroundWake(node.note);
+  if (background) {
+    if (background.jobs.some((job) => job.status === 'failed' || job.status === 'killed')) return null;
+    const title = backgroundWakeTitle(background);
+    const name = backgroundWakeName(background);
+    return { ts, what: name ? `${title}: ${name}` : title, category: 'job', target: null };
+  }
+  return null;
+}
+
+/** A turn that asks the reader something, or went wrong, stays in view whatever opened it. */
+function turnNeedsReader(items: NodeListItem[]): boolean {
+  return items.some((item) =>
+    (item.kind === 'steps' ? item.nodes : [item.node]).some(
+      (node) =>
+        node.kind === 'error'
+        || node.kind === 'authError'
+        || (node.kind === 'tool' && /(^|__|\.)(ask_owner|request_owner_action)$/.test(node.name)),
+    ),
+  );
+}
+
+/**
+ * The list cut into turns — each opens at a top-level message — with the turns Orbit opened folded,
+ * runs of them together. The last turn never folds: it is what the reader opened the conversation
+ * to see, and it may still be running.
+ */
+function foldOrbitExchanges(
+  items: NodeListItem[],
+  wakeName: WakeName,
+): FoldBlock[] {
+  const turns: NodeListItem[][] = [];
+  for (const item of items) {
+    const opens = item.kind === 'node' && item.node.kind === 'user' && !!item.node.turnHead;
+    if (opens || turns.length === 0) turns.push([item]);
+    else turns[turns.length - 1].push(item);
+  }
+  const out: FoldBlock[] = [];
+  let run: FoldedExchange[] = [];
   const flush = () => {
-    if (run.length >= TOOL_GROUP_MIN) {
-      out.push({ kind: 'toolGroup', key: `tool-group-${run[0].seq}`, nodes: run });
-    } else {
-      out.push(...run.map((node) => ({ kind: 'node' as const, node })));
-    }
+    if (run.length) out.push({ kind: 'exchanges', exchanges: run });
     run = [];
   };
+  turns.forEach((turn, i) => {
+    const first = turn[0];
+    const orbit = i < turns.length - 1 && first.kind === 'node' ? orbitTurnOf(first.node, wakeName) : null;
+    const replies = turn.flatMap((item) =>
+      item.kind === 'node' && item.node.kind === 'assistant' && item.node.text.trim() ? [item.node.text] : [],
+    );
+    // An exchange is the turn and its answer: one the agent has not answered yet is already the
+    // single line its card draws, and folding it would only take that line away. An answer long
+    // enough to say something stays drawn too (`foldsAtLength`).
+    const answered = replies.reduce((n, text) => n + text.length, 0);
+    if (orbit && replies.length > 0 && foldsAtLength(orbit.category, answered) && !turnNeedsReader(turn)) {
+      const seqs = turn.flatMap((item) => (item.kind === 'steps' ? item.nodes : [item.node]).map((node) => node.seq));
+      run.push({
+        summary: {
+          ...orbit,
+          seq: (first as { node: Node }).node.seq,
+          lastSeq: Math.max(...seqs.filter(Number.isFinite)),
+          reply: replyGist(replies[replies.length - 1] ?? ''),
+        },
+        items: turn,
+      });
+      return;
+    }
+    flush();
+    turn.forEach((item) => out.push({ kind: 'item', item }));
+  });
+  flush();
+  return out;
+}
 
+/**
+ * Everything a turn does between two things it says — its thinking and its tool calls, however few
+ * — folds into one line of steps ("Thought for 15s, ran 2 shell commands"), so the replies read as
+ * one thread and the work between them as a sentence. A call that is its own card (below) stays a
+ * row of its own and ends the run.
+ */
+function groupToolRuns(nodes: Node[], chat = false): NodeListItem[] {
+  const out: NodeListItem[] = [];
+  let run: Node[] = [];
+  const flush = () => {
+    if (run.length) out.push({ kind: 'steps', key: `steps-${run[0].seq}`, nodes: run });
+    run = [];
+  };
   for (const node of nodes) {
-    if (isGroupableTool(node, chat)) {
+    if (node.kind === 'thinking' || isGroupableTool(node, chat)) {
       run.push(node);
       continue;
     }
@@ -1770,20 +2066,15 @@ function groupToolRuns(nodes: Node[], chat = false): NodeListItem[] {
 // top-level row. Excluded by name rather than by what has arrived, so the row doesn't hop out of
 // the group later, when the result lands (session_create) or the first child event does (Task).
 //
-// A picture is the one exclusion that can't be read off the name: `Read` on a .png and an MCP
-// screenshot tool answer alike with an image block, and only the result says so. It is excluded
-// anyway, because the group is the one fold ToolView can't open through — the card unfolds itself
-// on an image (see defaultOpen) and a closed group hides it whole, so a screenshot inside a run
-// reaches the reader as nothing at all. The hop this costs happens once and never reverses: an
-// image block that has arrived stays arrived, unlike the running/failed states the folded row
-// deliberately reports instead of opening on.
+// A picture folds like any other read (owner, 11-11: an agent reading its own screenshot is a
+// step, not something to show the reader). Opening the line draws the card folded; opening the card
+// draws the picture, fetching back bytes the server clipped.
 function isGroupableTool(node: Node, chat = false): node is ToolNode {
   return (
     node.kind === 'tool' &&
     // A wiki chat's drafting call is its card (`WikiDraftCard`), told by its name, as the others here are.
     !(chat && wikiChatDraftingCall(node.name, node.input)) &&
     node.children.length === 0 &&
-    !hasResultImage(node.result?.content) &&
     !node.id.startsWith('shell-') &&
     node.name !== 'AskUserQuestion' &&
     node.name !== 'ExitPlanMode' &&
@@ -1855,7 +2146,10 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // the reader's, so not the reader's bubble. Who sent it is what the control plane recorded
       // beside the echo (lib/sessionMessage), so it is asked first — before anything is read out of
       // the words themselves, which are the sending agent's to choose. No payload, the old reading.
+      // The block delivery appended only tells the agent what the card shows, so it is not folded
+      // under it a second time; what else rode along is (lib/sessionMessage).
       if (node.sessionMessage) {
+        const { rest, narrower } = splitSessionMessageNote(node.note);
         return (
           <SessionMessageCard
             card={node.sessionMessage}
@@ -1863,7 +2157,8 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             seq={seq}
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
-            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
+            narrower={narrower}
+            attached={rest && <ControlPlaneNote kind={describeNote(rest)} text={rest} />}
             queued={queued}
           />
         );
@@ -1911,6 +2206,12 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             />
           </>
         );
+      }
+      // The turn Orbit starts when an owner request ends: the card above says how it ended, and the
+      // payload is written for the agent.
+      const ownerRequestEnding = resolutionTurnLabel(node.text);
+      if (ownerRequestEnding) {
+        return <div className="owner-request-turn-divider"><span>{ownerRequestEnding}</span></div>;
       }
       // A turn a watch queued is the watch's to show, not a message the user typed.
       const wake = parseWatchWake(node.text);
@@ -2033,6 +2334,53 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             undelivered={undelivered}
             attached={attached}
             queued={queued}
+          />
+        );
+      }
+      // The owner's answers handed to the reviewer once they confirmed (§7 Q5): Orbit's words to the
+      // agent, about the reader. Drawn as what the reader did — `You confirmed`, each question and
+      // the answer they gave — with the block the agent read folded at the foot.
+      if (node.reviewAnswers) {
+        return (
+          <YouConfirmedCard
+            card={node.reviewAnswers}
+            text={node.text}
+            seq={seq}
+            undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
+            queued={queued}
+          />
+        );
+      }
+      // Five more of Orbit's own turns (OrbitTurnCards.tsx): a revision to review, a send-back, a task
+      // run's question and its notify, and the opening of a session Orbit opened. Each is drawn as
+      // what happened; the block the agent read — the turn's words, or its note when the turn has
+      // none — folds at the card's foot, and any other note rides under it as it always did.
+      if (node.evidenceReview || node.evidenceSendBack || node.runQuestion || node.runNotice) {
+        const hasWords = node.text.trim() !== '';
+        const told = hasWords ? node.text : node.note ?? '';
+        const props = {
+          seq,
+          ts: node.ts,
+          undelivered: node.delivery === 'failed' || node.delivery === 'unconfirmed',
+          told,
+          attached: hasWords && node.note
+            ? <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />
+            : undefined,
+          queued,
+        };
+        if (node.evidenceReview) return <EvidenceToReviewCard card={node.evidenceReview} {...props} />;
+        if (node.evidenceSendBack) return <EvidenceSentBackCard card={node.evidenceSendBack} {...props} />;
+        if (node.runQuestion) return <RunQuestionTurnCard card={node.runQuestion} {...props} />;
+        return <RunNoticeTurnCard card={node.runNotice!} {...props} />;
+      }
+      if (node.sessionOpening) {
+        return (
+          <SessionOpeningLine
+            card={node.sessionOpening}
+            brief={node.text}
+            seq={seq}
+            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
           />
         );
       }
@@ -3472,9 +3820,23 @@ function nodeText(node: ReactNode): string {
 }
 
 function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
+  const exp = useContext(ExportCtx);
   const id = attachmentIdFromSrc(href);
   if (id) {
     const name = typeof title === 'string' && title.trim() ? title.trim() : nodeText(children).trim() || undefined;
+    // An upload keeps its file name in the link's title. When that name is a picture, the reader
+    // meant to show it — the native clients draw it too (MarkdownFileRef.isImage). The saved HTML
+    // file embeds only `![…]` pictures, so it keeps the chip.
+    if (!exp && name && looksLikeImagePath(name)) {
+      return (
+        <ResolvedAttachmentImage
+          id={id}
+          className="md-image"
+          alt={nodeText(children).trim() || name}
+          loadingClassName="md-image md-image-loading"
+        />
+      );
+    }
     return <AttachmentFile id={id} name={name} />;
   }
   if (typeof href === 'string' && isLegacyArtifactSrc(href)) {
@@ -3785,8 +4147,9 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // A wiki chat's drafting call (contract `chat.drafts.toolResult`) is drawn as the card its answer names, wherever the
   // chat is shown — the panel and the full session page provide the card's host; a share link and an export do not.
   const draftCall = useContext(WikiDraftCardCtx) !== null && wikiChatDraftingCall(node.name, node.input);
-  // A plan is the point of the turn — open it by default; a result carrying an image (a
-  // screenshot the workspace produced for the user) opens so the picture shows without a click.
+  // A plan is the point of the turn — open it by default. A result carrying an image no longer
+  // opens (owner, 11-11): an agent reading a screenshot is a step, and its picture waits for a click
+  // like any other output; the click is what fetches back bytes the server clipped.
   // A static export opens every card (nothing can be un-folded after the fact).
   // A created batch joins them: it is a write to state outside this session, the titles it names
   // appear nowhere else in the transcript, and under auto-approval the panel that would have shown
@@ -3796,17 +4159,13 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // proportionate to unfold: the input is what has the lines (a heredoc clamps at
   // sixteen), the reason is four — and the agent, not the reader, is the first responder
   // to a failed step. The red mark on the folded row says it happened; the click says why.
-  // Keyed on the *preview* result, which is why a clipped image keeps its (dataless) block: this
-  // decides whether the card opens, and opening the card is what fetches the picture back. Asking
-  // `resultImages` here instead would deadlock the two — the refetch below is gated on being open.
   // A question to the user no longer opens: folded, its card is already the record of what was
   // asked and how it was answered (see `questionUnread` below for the one time it still does).
   const usuallyOpen =
     !!exp ||
     node.name === 'ExitPlanMode' ||
     isShell ||
-    isAutoOpenBatch(node) ||
-    hasResultImage(node.result?.content);
+    isAutoOpenBatch(node);
   const [manualOpen, setManualOpen] = useState<boolean | null>(null);
   const isQuestion = node.name === 'AskUserQuestion';
   // Opening a clipped card pulls its untrimmed call/result back (see useFullPayload); until
@@ -3972,131 +4331,151 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   );
 }
 
-type ToolGroupSummary = {
-  title: string;
-  summary: string;
-  breakdown?: string;
-  lead?: { label: 'Running' | 'Failed'; text: string; mono: boolean };
-  icon: ReactNode;
-  tone: Tone;
-  status: 'running' | 'error' | 'pending' | 'ok';
-};
+/** What one kind of call adds to a steps line, as a verb phrase for `n` of them. */
+type StepVerb = { key: string; phrase: (n: number) => string };
 
-function ToolGroupView({ nodes, live }: { nodes: ToolNode[]; live?: boolean }) {
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+function stepVerb(node: ToolNode): StepVerb {
+  const i = node.input ?? {};
+  switch (node.name) {
+    case 'Bash': {
+      const word = shellCommandSummary(String(i.command ?? '')).split(/\s+/)[0];
+      if (['ls', 'tree', 'find'].includes(word)) {
+        return { key: 'list', phrase: (n) => `listed ${plural(n, 'directory', 'directories')}` };
+      }
+      return { key: 'shell', phrase: (n) => `ran ${plural(n, 'shell command', 'shell commands')}` };
+    }
+    case 'Read':
+      return { key: 'read', phrase: (n) => `read ${plural(n, 'file', 'files')}` };
+    case 'Grep':
+    case 'Glob':
+      return { key: 'search', phrase: (n) => `searched ${plural(n, 'time', 'times')}` };
+    case 'Edit':
+    case 'MultiEdit':
+    case 'apply_patch':
+      return { key: 'edit', phrase: (n) => `edited ${plural(n, 'file', 'files')}` };
+    case 'Write':
+      return { key: 'write', phrase: (n) => `wrote ${plural(n, 'file', 'files')}` };
+    case 'WebFetch':
+      return { key: 'fetch', phrase: (n) => `fetched ${plural(n, 'page', 'pages')}` };
+    case 'WebSearch':
+      return { key: 'web', phrase: (n) => `searched the web ${plural(n, 'time', 'times')}` };
+    case 'TodoWrite':
+      return { key: 'todo', phrase: () => 'updated the plan' };
+    default:
+      return { key: 'other', phrase: (n) => `used ${plural(n, 'tool', 'tools')}` };
+  }
+}
+
+/** The file a call reads or writes, so three edits to one file count as one file edited. */
+function stepFile(node: ToolNode): string | null {
+  const path = node.input?.file_path ?? node.input?.path;
+  return typeof path === 'string' && path ? path : null;
+}
+
+/** The steps line's words for `nodes`: the thinking first, then each kind of call in the order it came. */
+export function stepsSummary(nodes: Node[]): string {
+  let thought = false;
+  let thinkMs = 0;
+  const kinds = new Map<string, { verb: StepVerb; calls: number; files: Set<string>; unnamed: number }>();
+  for (const node of nodes) {
+    if (node.kind === 'thinking') {
+      thought = true;
+      thinkMs += node.thinkingMs ?? 0;
+      continue;
+    }
+    if (node.kind !== 'tool') continue;
+    const verb = stepVerb(node);
+    const kind = kinds.get(verb.key) ?? { verb, calls: 0, files: new Set<string>(), unnamed: 0 };
+    kinds.set(verb.key, kind);
+    kind.calls += 1;
+    const file = ['read', 'edit', 'write'].includes(verb.key) ? stepFile(node) : null;
+    if (file) kind.files.add(file);
+    else kind.unnamed += 1;
+  }
+  const parts = [...kinds.values()].map(({ verb, calls, files, unnamed }) =>
+    verb.phrase(['read', 'edit', 'write'].includes(verb.key) ? files.size + unnamed : calls),
+  );
+  if (thought) parts.unshift(thinkMs ? `Thought for ${formatThinkingDuration(thinkMs)}` : 'Thought');
+  const line = parts.join(', ');
+  return line && line[0].toUpperCase() + line.slice(1);
+}
+
+/** Asks a folded steps line to open, so ⌘F can show a match inside it (SessionFind). */
+export const REVEAL_EVENT = 'orbit:reveal';
+
+/**
+ * A run of steps, folded to one muted line that opens into the cards it stands for. While the
+ * turn is live, a call still in flight is drawn under the line on its own — what it is doing, and
+ * the command — and joins the line once it answers. A failure does not unfold anything: the line
+ * says how many failed, in red, and the reader opens it.
+ */
+function StepsLine({ nodes, live }: { nodes: Node[]; live?: boolean }) {
   const exp = useContext(ExportCtx);
-  const summary = useMemo(() => summarizeToolGroup(nodes, live), [nodes, live]);
-  const [manualOpen, setManualOpen] = useState<boolean | null>(null);
-  // Nothing auto-opens but a static export. A failure used to force the group open, which
-  // unfolded the failed call too (ToolView opens on error) — one wrong command turned into a
-  // screenful of clamped heredoc with the reason buried under it. The row says which call failed
-  // instead, in the same slot that names the running one.
-  const open = manualOpen ?? !!exp;
-  const toggle = () => setManualOpen((prev) => !(prev ?? !!exp));
+  const [open, setOpen] = useState(!!exp);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const reveal = () => setOpen(true);
+    el.addEventListener(REVEAL_EVENT, reveal);
+    return () => el.removeEventListener(REVEAL_EVENT, reveal);
+  }, []);
+  const running = live ? nodes.filter((node): node is ToolNode => node.kind === 'tool' && !node.result) : [];
+  const settled = running.length ? nodes.filter((node) => !running.includes(node as ToolNode)) : nodes;
+  const line = stepsSummary(settled);
+  const failed = settled.filter((node) => node.kind === 'tool' && node.result?.isError).length;
   return (
-    <div
-      data-seq={nodes[0].seq}
-      className={`chat-tool-card chat-tool-group chat-tone-${summary.tone}${open ? ' is-open' : ''}`}
-    >
-      <div className="chat-tool-row" onClick={toggle}>
-        <span className="chat-tool-caret">{open ? <DownOutlined /> : <RightOutlined />}</span>
-        <span className="chat-tool-icon">{summary.icon}</span>
-        <span className="chat-tool-name">{summary.title}</span>
-        <span
-          className="chat-tool-summary"
-          title={summary.lead ? `${summary.summary} · ${summary.lead.label}: ${summary.lead.text}` : summary.summary}
-        >
-          {summary.summary}
-          {summary.lead && (
-            <span className={`chat-tool-group-lead${summary.lead.label === 'Failed' ? ' is-failed' : ''}`}>
-              {' '}
-              · {summary.lead.label}:{' '}
-              <span className={summary.lead.mono ? 'mono' : undefined}>{summary.lead.text}</span>
-            </span>
-          )}
-        </span>
-        {summary.breakdown && <span className="chat-tool-meta chat-tool-group-breakdown">{summary.breakdown}</span>}
-        <ToolGroupStatus status={summary.status} />
-      </div>
-      {open && (
-        <div className="chat-tool-group-detail">
+    <div ref={ref} className={`chat-steps${open ? ' is-open' : ''}`} data-seq={nodes[0].seq}>
+      {line && (
+        <div className="chat-steps-line" onClick={() => setOpen((o) => !o)}>
+          {line}
+          {failed > 0 && <span className="chat-steps-failed">{` · ${failed} failed`}</span>}
+          <span className="chat-steps-caret">{open ? <DownOutlined /> : <RightOutlined />}</span>
+        </div>
+      )}
+      {open ? (
+        <div className="chat-steps-detail">
           {nodes.map((node) => (
-            <ToolView key={node.seq} node={node} live={live} />
+            <NodeView key={node.seq} node={node} live={live} />
           ))}
+        </div>
+      ) : (
+        running.map((node) => <StepLive key={node.seq} node={node} />)
+      )}
+    </div>
+  );
+}
+
+/** A call in flight under its steps line: what it is doing, then the command it runs. */
+function StepLive({ node }: { node: ToolNode }) {
+  const desc = describeTool(node.name, node.input, false);
+  const what = leadToolSummary(desc);
+  const command = node.name === 'Bash' && node.input?.description ? shellCommandSummary(String(node.input?.command ?? '')) : '';
+  return (
+    <div className="chat-steps-live" data-seq={node.seq}>
+      <div className="chat-steps-live-head">
+        <span className="chat-steps-dot" />
+        <span className={what?.mono ? 'mono' : undefined}>{what?.text}</span>
+      </div>
+      {command && (
+        <div className="chat-steps-live-cmd mono" title={command}>
+          <span className="chat-steps-elbow">⎿</span> $ {command}
         </div>
       )}
     </div>
   );
 }
 
-function summarizeToolGroup(nodes: ToolNode[], live?: boolean): ToolGroupSummary {
-  const described = nodes.map((node) => describeTool(node.name, node.input, node.id.startsWith('shell-')));
-  const counts = new Map<string, number>();
-  for (const desc of described) counts.set(desc.label, (counts.get(desc.label) ?? 0) + 1);
-  const entries = [...counts.entries()].sort((a, b) => b[1] - a[1]);
-  const sameKind = entries.length === 1;
-  const title = sameKind ? `${entries[0][0]} × ${nodes.length}` : `Tools × ${nodes.length}`;
-  const running = nodes.filter((node) => live && !node.result).length;
-  const pending = nodes.filter((node) => !live && !node.result).length;
-  const failed = nodes.filter((node) => !!node.result?.isError).length;
-  const succeeded = nodes.length - running - pending - failed;
-  const parts: string[] = [];
-  if (running) parts.push(`${running} running`);
-  if (failed) parts.push(`${failed} failed`);
-  if (pending) parts.push(`${pending} pending`);
-  if (succeeded) parts.push(`${succeeded} succeeded`);
-  // One call earns a slot on the folded row, and only when it is the reason someone would look:
-  // the one still in flight (progress), or — once nothing is running — the one that failed. Any
-  // other call is an arbitrary anchor that doesn't stand for the group (a 31-step group tends to
-  // end on some small `ls`), so the row goes to the counts and the per-kind breakdown instead.
-  // Running points at the *oldest* unfinished call, so parallel calls settling can't make the
-  // label jump backwards; failed points at the first failure, which is usually the cause of any
-  // that follow.
-  const leadIndex = running
-    ? nodes.findIndex((node) => !node.result)
-    : failed
-      ? nodes.findIndex((node) => !!node.result?.isError)
-      : -1;
-  const leadText = leadIndex >= 0 ? leadToolSummary(described[leadIndex]) : undefined;
-  const lead: ToolGroupSummary['lead'] = leadText
-    ? { label: running ? 'Running' : 'Failed', ...leadText }
-    : undefined;
-  const first = described[0];
-  const status: ToolGroupSummary['status'] = running ? 'running' : failed ? 'error' : pending ? 'pending' : 'ok';
-  return {
-    title,
-    summary: parts.join(' · '),
-    breakdown: sameKind ? undefined : entries.map(([label, count]) => `${label} × ${count}`).join(' · '),
-    lead,
-    icon: sameKind ? first?.icon : <ToolOutlined />,
-    tone: sameKind ? (first?.tone ?? 'default') : 'default',
-    status,
-  };
-}
-
-// What the call the row names is doing, in the same words its expanded row uses: the
+// What the call a live line names is doing, in the same words its expanded row uses: the
 // tool's own description when it has one (`desc.summary` already falls back to the raw
 // command for shells that ship without one), never a second, command-shaped language.
 function leadToolSummary(desc: ToolDesc): { text: string; mono: boolean } | undefined {
   if (desc.path) return { text: relPath(desc.path), mono: true };
   if (desc.summary) return { text: desc.summary, mono: !!desc.summaryMono };
   if (desc.meta) return { text: desc.meta, mono: true };
-  // A generic tool can have no compact input summary (apply_patch is the common example when its
-  // input only carries a file list). Naming the tool is still more useful than a red row with no
-  // lead, and keeps the failed call discoverable inside the folded group.
   return { text: desc.label, mono: false };
-}
-
-function ToolGroupStatus({ status }: { status: ToolGroupSummary['status'] }) {
-  switch (status) {
-    case 'running':
-      return <LoadingOutlined className="chat-tool-status running" spin />;
-    case 'error':
-      return <CloseCircleFilled className="chat-tool-status err" />;
-    case 'pending':
-      return <MinusCircleOutlined className="chat-tool-status pending" />;
-    case 'ok':
-      return <CheckCircleFilled className="chat-tool-status ok" />;
-  }
 }
 
 // Folded-row status: spinner while a result is still pending on a live session,

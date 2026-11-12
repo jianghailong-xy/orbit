@@ -77,6 +77,7 @@ Usage:
   orbit watch <command>             Wait on Orbit tasks and sessions without polling
   orbit wiki <command>              Read the Orbit wiki and propose to it
   orbit file <command>              Keep files in Orbit instead of in the repository
+  orbit secret exec NAME -- CMD     Run CMD with a secret the owner delivered to this runner
   orbit notify --message TEXT       Alert this account's devices with a line you write
   orbit token <command>             Mint/list/revoke credentials for headless processes
   orbit login [--with-token]        Act as yourself: approve a personal access token in the browser
@@ -104,6 +105,7 @@ Env:
 
 // Per-command help, shown for `orbit <cmd> --help|-h` and `orbit help <cmd>`.
 var cmdHelp = map[string]string{
+	"secret": secretHelp,
 	"register": `orbit register — register this machine and install the background service
 
 Usage:
@@ -122,7 +124,7 @@ Options:
   --token <token>          Optional one-time enrollment token (skips browser approval)
   --name <name>            Runner name (default: machine hostname)
   --labels a,b,c           Routing labels (e.g. sg,hdfs)
-  --max-concurrent <n>     Max concurrent jobs (default: 16)
+  --max-concurrent <n>     Max concurrent jobs (default: CPU core count)
   --workdir <path>         Project directory Claude Code runs in (default: current dir)
   --force                  Re-register without confirming, even if this machine is already registered
   --no-service             Register only; don't install/start the background service
@@ -192,10 +194,12 @@ saying how to continue it instead.
 Usage:
   orbit upgrade
 
-Use this if the startup auto-update isn't working. On an install whose binary still
-sits in root's /usr/local/bin, sudo /usr/local/bin/orbit upgrade moves it into
-~/.orbit/bin of the account the runner service runs as, links /usr/local/bin/orbit to
-it and restarts the service, so later releases install themselves.
+Use this if the startup auto-update isn't working. sudo /usr/local/bin/orbit upgrade
+installs the release at /usr/local/bin/orbit, which stays root's own file. Where an
+account's runner service still runs that file, it then gives the account its own copy
+in ~/.orbit/bin and restarts the service on it, so later releases install themselves.
+Where an earlier release linked /usr/local/bin/orbit to an account's copy, it puts
+root's own file back in place of the link.
 `,
 	"engine-update": `orbit engine-update — update the coding-engine CLIs now
 
@@ -303,6 +307,11 @@ func main() {
 	// answers git and does nothing else.
 	if len(os.Args) > 1 && os.Args[1] == gitCredentialReadOnlyCommand {
 		os.Exit(runGitCredentialReadOnly(os.Args[2:]))
+	}
+	// `orbit secret exec NAME -- command…` (secret_exec.go), also ahead of everything below: the command's own
+	// arguments are not this CLI's flags (a `--help` among them is the command's), and its environment is the shell's.
+	if len(os.Args) > 1 && os.Args[1] == "secret" {
+		os.Exit(cmdSecret(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 	}
 	// Services installed by an older Orbit release have a baked PATH that predates one or more
 	// official per-user engine directories. Refresh the current process too: doctor/install may
@@ -522,7 +531,7 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 		fmt.Printf("\n1 · Name this machine\n    %s (from --name)\n", name)
 	}
 	labels := parseLabels(flags["labels"])
-	maxConcurrent := getInt(flags, "max-concurrent", 16)
+	maxConcurrent := getInt(flags, "max-concurrent", defaultMaxConcurrent())
 	token := flags["token"]
 	// The directory Claude Code runs in (the project to work on). Defaults to the
 	// register cwd so a runner registered inside a repo operates on that repo.
@@ -842,6 +851,11 @@ func cmdUnregister(bools map[string]bool) {
 	}
 
 	uninstallService() // stop + remove the background service first
+
+	// Every secret file this runner wrote goes with it (secret_store.go).
+	if n := removeLedgerSecrets(newCallerTransport(cfg.ServerURL, cfg.RunnerToken, runnerCallerCLI)); n > 0 {
+		fmt.Printf("✓ removed %d secret file(s) the owner had delivered to this runner\n", n)
+	}
 
 	if err := newCallerTransport(cfg.ServerURL, cfg.RunnerToken, runnerCallerCLI).deregister(); err != nil {
 		fmt.Fprintf(os.Stderr, "note: could not delete %q from the control plane (%s)\n", cfg.Name, firstLine(err.Error()))
@@ -1262,6 +1276,11 @@ func getStr(m map[string]string, k, def string) string {
 		return v
 	}
 	return def
+}
+
+// defaultMaxConcurrent is the machine's CPU core count.
+func defaultMaxConcurrent() int {
+	return runtime.NumCPU()
 }
 
 func getInt(m map[string]string, k string, def int) int {

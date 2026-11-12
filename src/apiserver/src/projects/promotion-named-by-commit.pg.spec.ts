@@ -1,3 +1,4 @@
+import { seedPromotionRequest } from '../test-support/promotion-request';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
@@ -1037,6 +1038,7 @@ test('(7) §10.5 O-L8: every other SOURCE_BRANCH_MISSING from such a runner keep
         testedSha: sha('c'), testedTreeSha: sha('e'), landedSha: sha('c'), landedTreeSha: sha('e'), aheadOfUpstream: 1,
       });
       assert.deepEqual((await receiptsOf(stack, t.taskId)).map((receipt) => receipt.result), ['MERGED'], 'CONTROL: it landed');
+      await seedPromotionRequest(stack.prisma, line.projectId);
       const made = await stack.promotions.considerCandidate(line.projectId);
       assert.ok(made, 'CONTROL: the landing made a candidate');
       const lineCheck = (await dispatch(stack, line.runnerId, 'project-line-2', LEGACY)).find((command) => command.kind === 'CHECK_PROMOTION');
@@ -1162,6 +1164,7 @@ async function failedProjectBranch(stack: Stack, label: string, body: (source: s
     testedSha: sha('c'), testedTreeSha: sha('e'), landedSha: sha('c'), landedTreeSha: sha('e'), aheadOfUpstream: 1,
   });
   assert.deepEqual((await receiptsOf(stack, t.taskId)).map((receipt) => receipt.result), ['MERGED'], 'CONTROL: it landed');
+  await seedPromotionRequest(stack.prisma, w.projectId);
   assert.ok(await stack.promotions.considerCandidate(w.projectId), 'CONTROL: the landing made a candidate');
   const check = (await dispatch(stack, w.runnerId, `${label}-2`, CURRENT)).find((command) => command.kind === 'CHECK_PROMOTION');
   assert.equal(check?.promotionSourceKind, 'PROJECT_BRANCH');

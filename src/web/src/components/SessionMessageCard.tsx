@@ -1,4 +1,4 @@
-import { useContext, useState, type ReactNode } from 'react';
+import { useContext, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { MessageOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import type { SessionMessageCard as Card } from '@orbit/shared';
@@ -19,7 +19,7 @@ import {
   sessionMessageTitle,
 } from '../lib/sessionMessage';
 import { AppLink } from './AppLink';
-import { ExportCtx, MD, USER_BUBBLE_TRUNCATE, relTime } from './Transcript';
+import { ExportCtx, MD, REVEAL_EVENT, relTime } from './Transcript';
 
 /**
  * Another Orbit session's message, drawn as "From [that session]" — instead of the account owner's
@@ -29,8 +29,8 @@ import { ExportCtx, MD, USER_BUBBLE_TRUNCATE, relTime } from './Transcript';
  * The words are the sending agent's and are drawn as they were sent; what the card adds is who sent
  * them: the session's title, which opens it, the agent it runs as, and the task it runs, from the
  * payload the control plane recorded beside the echo (`sessionMessage`, lib/sessionMessage). The
- * block delivery appended to tell the recipient the same thing rides inside, folded, with anything
- * else delivery appended.
+ * block delivery appended to tell the recipient the same thing is not shown again; anything else
+ * delivery appended rides inside, folded.
  *
  * Every word is shared with the native card (OrbitKit `SessionMessageCard`), and
  * `SessionMessageCopyParityTests.swift` reads lib/sessionMessage.ts to hold the two to it.
@@ -41,6 +41,7 @@ export function SessionMessageCard({
   seq,
   ts,
   undelivered,
+  narrower,
   attached,
   queued,
 }: {
@@ -50,6 +51,8 @@ export function SessionMessageCard({
   seq?: number;
   ts?: string;
   undelivered?: boolean;
+  /** The line for a sender that runs narrower than this session (`splitSessionMessageNote`). */
+  narrower?: string | null;
   /** What delivery appended to the same turn, as its own folded entry. */
   attached?: ReactNode;
   /** The queue's own line, while the message still waits to be delivered (WorkspaceView's queued
@@ -59,8 +62,22 @@ export function SessionMessageCard({
   // An export is read on paper, where nothing can be unfolded: it gets the whole message.
   const exporting = useContext(ExportCtx) != null;
   const [expanded, setExpanded] = useState(false);
-  const long = text.length > USER_BUBBLE_TRUNCATE;
-  const shown = long && !expanded && !exporting ? text.slice(0, USER_BUBBLE_TRUNCATE) : text;
+  // A message taller than SESSION_MESSAGE_CLAMP_FROM lines shows its first SESSION_MESSAGE_CLAMP_LINES
+  // and a "Show more" (design: docs/mocks/session-message-clamp/, approved 2026-11-11). Measured, not
+  // counted: real task-run messages run 500–3,000 characters over 10–40 lines, so a character cut
+  // (6,000 until then) never fired on the ones that filled a screen.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const tall = useTallBody(bodyRef, !exporting);
+  const clamped = tall && !expanded && !exporting;
+  // A find that lands in the hidden part opens it, as it opens a steps line (SessionFind).
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const reveal = () => setExpanded(true);
+    el.addEventListener(REVEAL_EVENT, reveal);
+    return () => el.removeEventListener(REVEAL_EVENT, reveal);
+  }, []);
   const title = sessionMessageTitle(card);
   const sessionPublic = routeId(card.fromSessionId);
   const sessionHref = sessionPublic ? `/sessions/${encodeURIComponent(sessionPublic)}` : null;
@@ -72,7 +89,8 @@ export function SessionMessageCard({
       {/* The sticky bar at the top of the transcript names this turn off these two attributes, the
           way it names every other turn the owner did not type. */}
       <div
-        className={`smc${queued ? ' is-queued' : ''}`}
+        ref={rootRef}
+        className={`smc${queued ? ' is-queued' : ''}${clamped ? ' is-clamped' : ''}`}
         data-seq={seq}
         data-sticky-label={sticky.label}
         data-sticky-text={sticky.text}
@@ -87,16 +105,14 @@ export function SessionMessageCard({
           )}
           {card.fromAgentName && <span className="smc-agent">{card.fromAgentName}</span>}
         </div>
-        {shown && (
-          <div className="smc-body">
-            <MD breaks>{shown}</MD>
+        {text && (
+          <div ref={bodyRef} className={`smc-body${clamped ? ' is-clamped' : ''}`}>
+            <MD breaks>{text}</MD>
           </div>
         )}
-        {long && !exporting && (
-          <button type="button" className="smc-more" onClick={() => setExpanded(!expanded)}>
-            {expanded
-              ? 'Show less'
-              : `Show ${(text.length - USER_BUBBLE_TRUNCATE).toLocaleString()} more characters`}
+        {tall && !exporting && (
+          <button type="button" className="smc-more" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+            {expanded ? SESSION_MESSAGE_SHOW_LESS : SESSION_MESSAGE_SHOW_MORE}
           </button>
         )}
         <div className="smc-meta">
@@ -109,6 +125,7 @@ export function SessionMessageCard({
             </>
           )}
         </div>
+        {narrower && <div className="smc-narrower">{narrower}</div>}
         {card.requestId && (exporting
           ? <div className="smc-request"><span className="smc-request-asks">{SESSION_REQUEST_ASKS}</span></div>
           : <SessionRequestStatus requestId={card.requestId} />)}
@@ -118,6 +135,35 @@ export function SessionMessageCard({
       </div>
     </div>
   );
+}
+
+/** Lines a long message shows while folded, and how many lines make it long enough to fold. */
+export const SESSION_MESSAGE_CLAMP_LINES = 8;
+export const SESSION_MESSAGE_CLAMP_FROM = 12;
+export const SESSION_MESSAGE_SHOW_MORE = 'Show more';
+export const SESSION_MESSAGE_SHOW_LESS = 'Show less';
+
+/**
+ * Whether the body runs past SESSION_MESSAGE_CLAMP_FROM lines, by its rendered height against its own
+ * line height, re-measured as the width changes. With no layout to read (an export, a test DOM), it is
+ * never tall, so the message shows whole.
+ */
+function useTallBody(ref: RefObject<HTMLDivElement | null>, enabled: boolean): boolean {
+  const [tall, setTall] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !enabled) return;
+    const measure = () => {
+      const line = parseFloat(getComputedStyle(el).lineHeight) || 0;
+      setTall(line > 0 && el.scrollHeight > line * SESSION_MESSAGE_CLAMP_FROM);
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref, enabled]);
+  return tall;
 }
 
 /**

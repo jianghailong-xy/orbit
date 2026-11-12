@@ -509,6 +509,9 @@ final class AppModel {
     private(set) var sharedPools: SharedPoolsModel?
     /// The account's watches: Following, the console's Watching card, and every session's row and header.
     private(set) var watches: WatchesModel?
+    /// What sessions asked the owner to do: the "Waiting on you" inbox, each conversation's request
+    /// cards and the push actions that open them.
+    private(set) var ownerRequests: OwnerRequestsModel?
     /// The account's projects: the Projects section and the drawer's project rows.
     private(set) var projects: ProjectsModel?
     /// The account's wiki: the Wiki section, the drawer's Wiki row and every entry page.
@@ -599,6 +602,24 @@ final class AppModel {
         }
         #endif
         watches = watchesModel
+        let ownerRequestsModel = OwnerRequestsModel(baseURL: url, tokenStore: tokenStore)
+        // "Delivered to Runner HPC": the runner a key goes to, by the name the owner knows it by.
+        ownerRequestsModel.runnerName = { [weak self] id in
+            guard let names = self?.agents?.runnerNames else { return "this runner" }
+            return names[id] ?? names.first { PublicID.storageKey($0.key) == PublicID.storageKey(id) }?.value
+                ?? "this runner"
+        }
+        // A coordinator's question in the inbox opens its card where it was asked: the project's
+        // coordinator conversation, landed on that card (the needs-you banner's entry).
+        ownerRequestsModel.onAnswerQuestion = { [weak self, weak ownerRequestsModel] question in
+            guard let self, let session = question.coordinatorSessionID else { return }
+            ownerRequestsModel?.inboxPresented = false
+            self.openProjectCoordinator(
+                sessionID: session, agentID: question.coordinatorWorkspaceID,
+                focus: SessionOwnerItem(itemId: question.row.itemId, kind: .coordinatorQuestion,
+                                        title: question.row.title, since: question.row.waitingSince))
+        }
+        ownerRequests = ownerRequestsModel
         projects = ProjectsModel(baseURL: url, tokenStore: tokenStore)
         wiki = WikiModel(baseURL: url, tokenStore: tokenStore)
         wikiChat = WikiChatModel(baseURL: url, tokenStore: tokenStore)
@@ -916,6 +937,7 @@ final class AppModel {
         linkCards?.removeAll()
         linkCards = nil
         managedRunner?.reset()
+        newAccount = nil
         #if os(iOS)
         disablePush()   // reads the access token, so before the store is cleared below
         #endif
@@ -1095,6 +1117,7 @@ final class AppModel {
         // remote lifecycle change or permanent deletion cannot leave a ghost console.
         await refreshFocusedSessionDetailIfNeeded()
         await refreshWatchesIfDue()
+        await refreshOwnerRequestsIfDue()
         await projects?.refreshIfDue(live: controlPlaneLive)
         await managedRunner?.refreshIfDue()
     }
@@ -1124,6 +1147,23 @@ final class AppModel {
         watchesRefreshNotBefore = now.addingTimeInterval(
             controlPlaneLive ? PollSchedule.liveFallback : Self.watchesRefreshInterval)
         await watches.load()
+    }
+
+    /// The owner requests' floor: no event names them, so they ride the watches' cadence — a minute
+    /// apart with the control stream live, 30 s without it — and every press reads its answer back.
+    private var ownerRequestsRefreshNotBefore = Date.distantPast
+
+    private func refreshOwnerRequestsIfDue(now: Date = Date()) async {
+        guard now >= ownerRequestsRefreshNotBefore, let ownerRequests else { return }
+        ownerRequestsRefreshNotBefore = now.addingTimeInterval(
+            controlPlaneLive ? PollSchedule.liveFallback : Self.watchesRefreshInterval)
+        await ownerRequests.load()
+    }
+
+    /// `orbit://owner-request/<id>`, a push's "Provide key": the inbox, that card open on its input.
+    func openOwnerRequest(_ id: String) {
+        settingsPresented = false
+        ownerRequests?.show(id)
     }
 
     /// The runners a page just read (`RunnersModel.onRead`) are the tick's runner snapshot too, so the
@@ -1440,7 +1480,7 @@ final class AppModel {
     /// the server announces (contract §5 N5): the window is read, never swept. So the list reads again
     /// a second after the earliest such row is due — web's `reviewDueAt` effect.
     private func scheduleReviewDueRefresh(_ list: [Session]) {
-        let due = list.compactMap { $0.confirmationUnderReview.flatMap { RelativeTime.parse($0.dueAt) } }.min()
+        let due = list.compactMap { $0.confirmationUnderReview.flatMap { $0.dueAt.flatMap(RelativeTime.parse) } }.min()
         guard due != reviewDueAt else { return }
         reviewDueAt = due
         reviewDueTask?.cancel()
@@ -1997,6 +2037,27 @@ final class AppModel {
         case .machines?:        selectedSection = .runners
         case .workspace?, nil:  break
         }
+    }
+
+    // MARK: a new account's welcome card (docs/mocks/new-user-onboarding)
+
+    /// Whether this account has never had a session: its Open and Completed lists, one row each, both
+    /// answered empty (board 03, rule 1; the web's `useNewAccount`). Nil until read, and false after a
+    /// read that failed. Kept for this run of the app only: nothing is stored to remember it.
+    private(set) var newAccount: Bool?
+
+    /// Read it again: the pages that can wear the welcome card ask as they appear, as the web's query
+    /// does on mount, so the card goes once a first session exists anywhere.
+    func readNewAccount() async {
+        guard let api else { return }
+        let generation = apiGeneration
+        let open = try? await api.sessionRowCount(view: .open)
+        // A row in Open already says it: Completed is asked only when Open is empty.
+        var completed: Int?
+        if open == 0 { completed = try? await api.sessionRowCount(view: .completed) }
+        let answer = Welcome.isNewAccount(openRows: open, completedRows: completed)
+        guard generation == apiGeneration, self.api === api else { return }
+        newAccount = answer
     }
 
     // MARK: a machine with no workspace (board rules 1–12)
@@ -2860,6 +2921,7 @@ final class AppModel {
     /// (`ProjectPage.drawsEnding`): the criteria document's own subject, the same read the
     /// conversation's settled card keeps.
     private(set) var projectSessionsDone: ProjectDoneSubject?
+    private(set) var projectSessionsConfirmedAt: String?
 
     var projectSessionsColumn: SessionProjectAddress? { nav.projectSessionsColumn }
 
@@ -3100,18 +3162,10 @@ final class AppModel {
     }
 
     /// One poll of what the page's start row needs (docs/mocks/project-start-sessions-page): the
-    /// project's open items — the coordinator's request to start among them — while the sidebar row
-    /// says nobody has started it. A started project, or one the row does not say about, reads
-    /// nothing more than before; a read that fails keeps the last answer rather than drawing none.
+    /// project's open items, including the start request and the owner's latest Not yet answer.
+    /// A failed read keeps the last answer rather than drawing none.
     func loadProjectStart(_ address: SessionProjectAddress) async {
         guard let api else { return }
-        let key = PublicID.storageKey(address.projectID)
-        let row = projects?.sidebarProjects.first { PublicID.storageKey($0.id) == key }
-        // The start row needs the items only on a project nobody has started.
-        guard row?.status == .open, row?.started == false else {
-            projectSessionsOpenItems = nil
-            return
-        }
         let items = try? await api.projectOpenItems(projectID: address.projectID)
         guard projectSessionsAddress == address, !Task.isCancelled, let items else { return }
         projectSessionsOpenItems = items
@@ -3133,7 +3187,16 @@ final class AppModel {
         }
         let document = try? await api.projectCriteria(projectID: address.projectID)
         guard projectSessionsAddress == address, !Task.isCancelled, let document else { return }
+        let confirmedAt: String?
+        if document.doneBy == .derived {
+            let standing = try? await api.acceptanceConfirmation(projectID: address.projectID)
+            confirmedAt = standing?.confirmation?.confirmedAt
+        } else {
+            confirmedAt = nil
+        }
+        guard projectSessionsAddress == address, !Task.isCancelled else { return }
         projectSessionsDone = document.doneSubject
+        projectSessionsConfirmedAt = confirmedAt
     }
 
     /// A member may belong to another Workspace. Carry its record into the console's cache, which
@@ -3300,7 +3363,12 @@ final class AppModel {
         agents?.applyMovedSession(id, folderID: folderID)
     }
 
-    // MARK: moving a session to another workspace (iOS — docs/session-folders-move-design.md §4, §5)
+    #endif
+
+    // MARK: moving a session to another workspace (docs/session-folders-move-design.md §4, §5)
+    //
+    // The Move panel is iOS's; reading the targets and moving are both platforms', for the project
+    // page's Change (docs/mocks/coordinator-move-workspace/04-change).
 
     /// What the Move panel's second group lists and its confirmation says (`GET /sessions/:id/
     /// move-targets`): each other workspace with whether the session can go there and why not, and
@@ -3310,6 +3378,7 @@ final class AppModel {
         return try await api.sessionMoveTargets(id)
     }
 
+    #if os(iOS)
     /// New Folder… on a workspace's page in the Move panel: a folder in the workspace the session is
     /// about to move to, which the confirmation then files it in. Throws the server's refusal — a name
     /// that workspace already has is a 409 — for the page to put into words.
@@ -3319,6 +3388,8 @@ final class AppModel {
         if !sessionFolders.contains(where: { $0.id == folder.id }) { sessionFolders.append(folder) }
         return folder
     }
+
+    #endif
 
     /// Move a session to another workspace, filed in one of its folders or in none — the
     /// confirmation's Move, or its End and Move (§5.3–5.4): end the session, wait until it has
@@ -3343,7 +3414,9 @@ final class AppModel {
         defer { Task { await reloadSessionLists() } }
         switch outcome {
         case .moved:
+            #if os(iOS)
             patchSessionWorkspace(id, to: target, folder: folderID)
+            #endif
             showToast(SessionMoveCopy.movedToWorkspace(target.name), sessionID: id, sessionTitle: name,
                       tone: .info, icon: "folder")
             return nil
@@ -3352,6 +3425,7 @@ final class AppModel {
         }
     }
 
+    #if os(iOS)
     /// Write a move to another workspace into every loaded copy of a row, as `patchSessionFolder`
     /// writes a folder: the Open snapshot — whose agent filter is what takes the row out of the
     /// workspace's Open list — the pane's own Completed rows, and the detail cache.
@@ -3785,6 +3859,13 @@ final class AppModel {
         case .open(let route): self.route(to: route)
         case let .approve(sid, behavior): Task { await approveAll(sessionID: sid, behavior: behavior) }
         case let .reply(sid, text): Task { await reply(sessionID: sid, text: text) }
+        case let .openProject(projectID):
+            #if os(iOS)
+            settingsPresented = false
+            openProjectSessions(PublicID.toPublic(projectID), inColumn: false)
+            #else
+            openProject(PublicID.toPublic(projectID))
+            #endif
         case let .openProjectMerge(projectID, sid):
             #if os(iOS)
             // A push names its project by the stored UUID; every list row spells it base62.
@@ -3793,6 +3874,10 @@ final class AppModel {
             #else
             route(to: .session(sid))
             #endif
+        case .openOwnerRequest(let id):
+            openOwnerRequest(id)
+        case .snoozeOwnerRequest(let id):
+            ownerRequests?.snooze(id, for: OwnerRequests.laterSeconds)
         }
     }
 

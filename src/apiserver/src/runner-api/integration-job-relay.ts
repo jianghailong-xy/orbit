@@ -273,6 +273,8 @@ interface HeldClaim {
   acceptanceCommand: string | null;
   acceptanceExpectedExitCode: number | null;
   acceptanceTimeoutSeconds: number | null;
+  landingCheckCommand: string | null;
+  landingCheckTimeoutSeconds: number | null;
   mergeCheckCommand: string | null;
   mergeCheckTimeoutSeconds: number | null;
   cancelRequestedAt: Date | null;
@@ -763,6 +765,8 @@ const HELD_CLAIM_COLUMNS = Prisma.sql`
       t."acceptance_command" AS "acceptanceCommand",
       t."acceptance_expected_exit_code" AS "acceptanceExpectedExitCode",
       t."acceptance_timeout_seconds" AS "acceptanceTimeoutSeconds",
+      cb."landing_check_command" AS "landingCheckCommand",
+      cb."landing_check_timeout_seconds" AS "landingCheckTimeoutSeconds",
       cb."merge_check_command" AS "mergeCheckCommand",
       cb."merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
       j."cancel_requested_at" AS "cancelRequestedAt",
@@ -1266,8 +1270,8 @@ export interface IntegrationJobPlatformEnd {
  * only pushes after it reads `cancelRequested = false` from this answer.
  *
  * A RENEWAL MUST NOT INVALIDATE THE OPEN LIST'S VERSION: the statement updates the job row, and
- * `readOpenListVersion` fingerprints that table by the columns the list can show, excluding these
- * renewal-only ones (open-list-version.ts).
+ * the table's Open-list counter skips an UPDATE that changed nothing but these renewal-only columns
+ * (`open_list_bump_owner`, migration 0511).
  */
 export async function receiveIntegrationJobProgress(
   prisma: PrismaService,
@@ -1413,7 +1417,7 @@ function progressReport(body: IntegrationJobProgressRequest): {
   let current: IntegrationJobCurrentCheck | null = null;
   if (check != null) {
     const name = check.name;
-    if (name !== 'TASK_ACCEPTANCE' && name !== 'MERGE_CHECK') {
+    if (name !== 'TASK_ACCEPTANCE' && name !== 'MERGE_CHECK' && name !== 'LANDING_CHECK') {
       throw new IntegrationJobRefused('INVALID_RESULT', `unknown check name ${name}`);
     }
     if (![check.index, check.count, check.budgetSeconds].every((n) => Number.isSafeInteger(n) && n >= 1)) {
@@ -1664,7 +1668,7 @@ function outputChunk(body: IntegrationJobOutputRequest): {
     );
   }
   const name = body.check?.name;
-  if (name !== 'TASK_ACCEPTANCE' && name !== 'MERGE_CHECK') {
+  if (name !== 'TASK_ACCEPTANCE' && name !== 'MERGE_CHECK' && name !== 'LANDING_CHECK') {
     throw new IntegrationJobRefused('INVALID_RESULT', `unknown check name ${String(name)}`);
   }
   const index = body.check.index;
@@ -1922,6 +1926,17 @@ export async function applyIntegrationJobResult(
   if (!REPORTABLE_JOB_STATES.includes(state as never) || !isTerminalJobState(state)) {
     throw new IntegrationJobRefused('INVALID_RESULT', `${state} is not a result`);
   }
+  for (const check of body.checks ?? []) {
+    if (check.skipped !== undefined && (check.skipped !== 'PATHS_EXEMPT'
+      || check.name !== 'LANDING_CHECK' || !Array.isArray(check.files) || check.files.length === 0
+      || !check.files.every((file) => typeof file === 'string' && file.length > 0))) {
+      throw new IntegrationJobRefused('INVALID_RESULT', 'a skipped landing check names PATHS_EXEMPT and its files');
+    }
+  }
+  if (body.baselineRed === true && (state !== 'CHECK_FAILED'
+    || !body.checks?.some((check) => check.scope === 'BASELINE'))) {
+    throw new IntegrationJobRefused('INVALID_RESULT', 'baselineRed requires CHECK_FAILED and a BASELINE check');
+  }
   // J2, said before the database says it, so the runner gets the reason rather than a constraint.
   if (state === 'LANDED' && (!body.landedTreeSha || body.landedTreeSha !== body.testedTreeSha)) {
     throw new IntegrationJobRefused(
@@ -2053,8 +2068,14 @@ export async function applyIntegrationJobResult(
     )) {
       throw new IntegrationJobRefused('STALE_CLAIM');
     }
+    if (body.baselineRed === true && job.kind !== 'LAND_TASK') {
+      throw new IntegrationJobRefused('INVALID_RESULT', 'only LAND_TASK may report baselineRed');
+    }
     // §10.6: OBSERVED and OBSERVE are an observation's alone, and an observation ends only OBSERVED,
     // ERROR or CANCELLED — said by the kind of the row, now that it is read.
+    if (job.kind !== 'LAND_TASK' && body.checks?.some((check) => check.skipped !== undefined)) {
+      throw new IntegrationJobRefused('INVALID_RESULT', 'only LAND_TASK may skip a landing check');
+    }
     const misfit = observationRefusal(job.kind, { state, phase: body.phase ?? null });
     if (misfit) throw new IntegrationJobRefused('INVALID_RESULT', misfit);
     // O-J3: an observation that looked writes what it saw, task by task, with its terminal state.
@@ -2569,6 +2590,7 @@ export async function applyIntegrationJobResult(
       sourceOnUpstream: typeof body.sourceOnUpstream === 'boolean' ? body.sourceOnUpstream : undefined,
       // The same for the other measurement a NOTHING_TO_LAND carries (0410).
       sourceFullyApplied: typeof body.sourceFullyApplied === 'boolean' ? body.sourceFullyApplied : undefined,
+      baselineRed: body.baselineRed === true,
       checks: checks as unknown as Prisma.InputJsonValue,
       conflicts: (body.conflicts ?? []).slice(0, 200),
       errorCode: body.errorCode ?? undefined,
@@ -2774,6 +2796,7 @@ export async function applyIntegrationJobResult(
           targetSha: body.targetShaBefore ?? null,
           conflicts: body.conflicts ?? [],
           checks,
+          baselineRed: body.baselineRed === true,
           errorCode: body.errorCode ?? null,
           errorDetail,
           // J-T13: at the payload's TOP level, a field of its own — the delivery text's generator
@@ -2978,6 +3001,7 @@ async function appendResultEvents(
       data: {
         name: check.name,
         index,
+        ...(check.skipped ? { skipped: check.skipped, files: check.files } : {}),
         exitCode: check.exitCode,
         expectedExitCode: check.expectedExitCode,
         timedOut: check.timedOut,
@@ -3488,6 +3512,7 @@ function fullyAppliedComment(input: {
   state: string,
   detail: {
     kind: string;
+    baselineRed?: boolean;
     phase: string | null;
     targetRef: string;
     targetSha: string | null;
@@ -3530,7 +3555,7 @@ function fullyAppliedComment(input: {
   // (J-T1b), and, for a rerun, the generation it was and what it was asked to answer — so a second
   // red is read as a second red, not as a first one.
   const classified = {
-    failureClass: landingFailureClass({ state, checks: detail.checks }),
+    failureClass: landingFailureClass({ state, checks: detail.checks, baselineRed: detail.baselineRed }),
     generation: detail.generation,
     // §4.2's payload: the landing this failure belongs to and the round it failed in, at the top
     // level of every INTEGRATION_* kind. `errorDetail` is quoted verbatim by the delivery text (G6),
@@ -3556,7 +3581,7 @@ function fullyAppliedComment(input: {
     };
   }
   if (state === 'CHECK_FAILED') {
-    const failed = detail.checks.find((check) => check.exitCode !== check.expectedExitCode)
+    const failed = detail.checks.find((check) => !check.skipped && check.exitCode !== check.expectedExitCode)
       ?? detail.checks[detail.checks.length - 1];
     return {
       jobKind: detail.kind,

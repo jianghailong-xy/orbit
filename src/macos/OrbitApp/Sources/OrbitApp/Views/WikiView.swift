@@ -25,8 +25,6 @@ struct WikiHomeActions {
     var search: (String) async -> [WikiSearchHit] = { _ in [] }
     /// The space's Wiki settings: the gear in the bar (mock 12 ①) and Manage spaces.
     var openSettings: () -> Void = {}
-    /// Trash, from the space menu under Manage spaces (docs/mocks/wiki-trash).
-    var openTrash: () -> Void = {}
     /// The Contents sheet — the directory — from the list button in the bar (mock 30 ③).
     var openContents: () -> Void = {}
     /// Activity, from the bar's history mark (design §12.3.2).
@@ -80,8 +78,6 @@ struct WikiHomePage: View {
     var waiting = 0
     /// The space has a public link open: the bar's globe is green.
     var shareLive = false
-    /// How many wikis are in Trash: the space menu offers it while any is.
-    var trashed = 0
     /// Drawn beside the directory column: no head, no Contents in the bar, no foot.
     var besideContents = false
     var actions = WikiHomeActions()
@@ -183,8 +179,7 @@ struct WikiHomePage: View {
                 .font(.largeTitle.bold())
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
-            WikiSpacePicker(space: space, spaces: spaces, pick: actions.pickSpace, manage: actions.openSettings,
-                            trashed: trashed, openTrash: actions.openTrash)
+            WikiSpacePicker(space: space, spaces: spaces, pick: actions.pickSpace, manage: actions.openSettings)
         }
         .padding(.top, 4)
     }
@@ -610,16 +605,13 @@ struct WikiFirstStartPage: View {
 /// on a phone, the directory column's beside it. With one space it is a grey label and no control: no chevron,
 /// no menu. With several, a menu of every space, the current one ticked — a toggle per space, whose tick a menu
 /// draws in its own column, its name the title and the repository and documents the line under it — what waits
-/// in each in the row's icon cell, and Manage spaces at the foot, into Wiki settings, with Trash under it while Trash
-/// holds a wiki (docs/mocks/wiki-trash).
+/// in each in the row's icon cell, and Manage spaces at the foot, into Wiki settings. Trash is not in it: it opens
+/// from Wiki settings (docs/mocks/wiki-trash/02-trash-entry).
 struct WikiSpacePicker: View {
     let space: WikiSpace
     let spaces: [WikiSpace]
     var pick: (String) -> Void = { _ in }
     var manage: () -> Void = {}
-    /// How many wikis are in Trash.
-    var trashed = 0
-    var openTrash: () -> Void = {}
 
     var body: some View {
         let names = WikiSpaceLogic.names(spaces)
@@ -652,11 +644,6 @@ struct WikiSpacePicker: View {
                 Divider()
                 Button(action: manage) {
                     Label(WikiCopy.manageSpaces, systemImage: "gearshape")
-                }
-                if trashed > 0 {
-                    Button(action: openTrash) {
-                        Label(WikiModeCopy.trashPickerItem, systemImage: "trash")
-                    }
                 }
             } label: {
                 HStack(spacing: 4) {
@@ -1235,6 +1222,10 @@ struct WikiEntryPage: View {
                     .font(.orbitMono)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
+                if WikiLogic.anchorDeferred(anchor) {
+                    Text(WikiCopy.anchorDeferred).font(.orbitLabel).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 WikiMarkText(mark: mark)
             }
         }
@@ -1916,12 +1907,14 @@ func wikiStatusText(_ parts: [WikiStatusPart]) -> AttributedString {
     return line
 }
 
-/// A part's colour: amber while a run waits, red when it broke; the line's own grey otherwise.
+/// A part's colour: amber while a run waits, red when it broke, grey when muted — the folder tier's words stay grey
+/// though they lead to Settings; the line's own colour otherwise.
 private func wikiStatusColour(_ tone: WikiStatusPart.Tone) -> Color? {
     switch tone {
     case .warn: return Color.orange
     case .error: return Color.red
-    case .muted, .plain: return nil
+    case .muted: return Color.secondary
+    case .plain: return nil
     }
 }
 

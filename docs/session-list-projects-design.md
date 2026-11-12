@@ -75,6 +75,10 @@
 - 写 `lastUserText` 的几处（`sessions.service.ts` 里带 `senderSessionId` 的那几处）同时写它；发送方的记法与对话里「From <会话名>」卡片（`sessionMessage`）同源，不从正文猜。
 - 客户端：有 `lastUserFrom` 时，行上写 `<title>: <消息>`；没有时照旧 `You: <消息>`（§6）。老服务器不给这个字段，照旧。发送会话的标题为空或全是空白时写 `Untitled session: <消息>`，和对话里 From 卡片对没有标题的会话的叫法同一句（web `SESSION_MESSAGE_UNTITLED`、OrbitKit `SessionMessageCard.untitled`、Android `TaskDetailCopy.untitledSession`；coordinator 11-07）：`You:` 只在 `lastUserFrom` 为 null 时用。
 
+**Orbit 开的会话的第一条**（owner 2026-11-11，效果图 `docs/mocks/orbit-turn-cards/`）：`prompt_by_orbit` 为真的会话（任务执行会话除外，它有任务卡片）的开场轮次，回显带 `sessionOpening`（`SessionOpeningCard`），按指向它的那一行判别种类，不从简报正文猜：项目的 `coordinator_session_id` → COORDINATOR；`project_coordinator_wake.session_id` → JUDGMENT（事实是任务的就指任务，否则指项目）；`task_list.owner_session_id` → DISPATCH；`task_comment_mention_delivery.target_session_id` → MENTION（带 owner 那条评论原文）；都对不上 → OTHER。客户端画成整宽的灰色一行 `Orbit started this session …`（目标是链接），简报默认折起（`Show brief` / `Hide brief`），不再是 owner 的气泡。
+
+**Orbit 消息重发后的卡片**：Orbit 的消息投递失败后以 `auto-retry:orbit:` 重发时，键里写明被重发的那一轮（自动重发 `auto-retry:orbit:from:<turnId>:<nonce>`，失败卡片的 Retry 原本就是 `auto-retry:orbit:retry-message:<turnId>`），读卡片和 `lastUserFromOrbit` 时沿着它找到原来那一轮、读原来的卡片，所以重发的那条和原来画得一样。
+
 **Orbit 自己发进会话的消息**（owner 11-07 拍板，问题 34tGg4je5fQXFyKY4m4AU：「改：写 Orbit: 加那条通知的一句话」）。`lastUserFrom` 只记别的会话；平台自己写进会话的消息过去记的发送方是空，行上写成 `You: From Orbit · project … has a revision of completion evidence…`，coordinator 处理通知的那几分钟最常见。
 
 - 来源：三处读口同时带 `lastUserFromOrbit: { coordinatorDelivery: <卡片> | null } | null`（迁移 0491，`session.last_user_from_orbit`），与 `lastUserText`、`lastUserFrom` 同处写、同处清（`pendingMessageColumns`）；不是 Orbit 写的为 `null`，老客户端不认这个字段，照旧写 `You:`。`lastUserFrom` 不变，一条消息只有一个发送方：别的会话发的，不管它的 key 选了什么，都是那个会话的。

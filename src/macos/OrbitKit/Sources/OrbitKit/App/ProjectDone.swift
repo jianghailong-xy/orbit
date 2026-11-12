@@ -250,6 +250,39 @@ public struct DoneRequest: Codable, Equatable, Sendable {
     }
 }
 
+/// The owner card reads the server check, including refusals and warnings.
+public struct ProjectDoneFinding: Codable, Equatable, Sendable {
+    public struct Criterion: Codable, Equatable, Sendable { public let ordinal: Int }
+    public struct Task: Codable, Equatable, Sendable { public let taskId: String }
+    public struct Item: Codable, Equatable, Sendable { public let itemId: String }
+    public struct Job: Codable, Equatable, Sendable { public let integrationJobId: String }
+    public let code: String
+    public let message: String
+    public let criterion: Criterion?
+    public let tasks: [Task]
+    public let items: [Item]
+    public let jobs: [Job]
+
+    public func line(main: String) -> String {
+        let template: String
+        let n: Int
+        switch code {
+        case "DONE_NO_CRITERIA": return ProjectDone.checkNoCriteria
+        case "DONE_CRITERION_UNSATISFIED": template = ProjectDone.checkUnmet; n = criterion?.ordinal ?? 0
+        case "DONE_CRITERION_UNLANDED": template = ProjectDone.checkUnlanded; n = criterion?.ordinal ?? 0
+        case "DONE_TASKS_IN_FLIGHT": template = tasks.count == 1 ? ProjectDone.checkTask : ProjectDone.checkTasks; n = tasks.count
+        case "DONE_OWNER_ITEMS_OPEN": template = ProjectDone.checkOwnerItems; n = items.count
+        case "DONE_INTEGRATION_IN_FLIGHT": template = ProjectDone.checkLandings; n = jobs.count
+        default: return message
+        }
+        return template.replacingOccurrences(of: "{n}", with: String(n)).replacingOccurrences(of: "{main}", with: main)
+    }
+}
+
+public struct ProjectDoneCheck: Codable, Equatable, Sendable {
+    public let findings: [ProjectDoneFinding]
+}
+
 /// `POST /projects/:id/done`: the request the press answers (nil when the owner records it done
 /// without being asked), the seal the owner read, and the gaps accepted — `ProjectDoneRequestBody`.
 /// Encoded by hand: the door reads an absent request and a null one the same, and the browser
@@ -394,11 +427,21 @@ public struct ProjectDoneSubject: Equatable, Sendable {
 // MARK: - the words
 
 public enum ProjectDone {
+    public static let staleHeading = "The coordinator’s request went stale"
+    public static let staleDetail = "The coordinator has been told and will ask again when the work settles."
+    public static func staleRequest(_ items: ProjectOpenItemsView?) -> String? {
+        guard items?.doneRequest == nil, let stale = items?.latestDoneRequestSuperseded else { return nil }
+        if let declined = items?.latestDoneRequestDecline, declined.declinedAt >= stale.supersededAt { return nil }
+        return stale.reason.trimmingCharacters(in: CharacterSet(charactersIn: ". \n")) + ". " + staleDetail
+    }
+
 
     // The owner card, in `lib/projectDone.ts`'s order. Each is one of that file's declarations,
     // word for word.
 
     /// `DONE_CARD_HEADING` — the card's question, and the title of the open item that asks it.
+    public static let declineHeading = "You said not yet"
+    public static let declineHint = "The card comes back after the coordinator changes something."
     public static let heading = "Is this project done?"
     /// `DONE_CARD_COORDINATOR_CALL`.
     public static let coordinatorCall = "Coordinator’s call"
@@ -413,6 +456,15 @@ public enum ProjectDone {
     /// `DONE_CARD_RECORD`.
     public static let recordAsDone = "Record as done"
     /// `DONE_CARD_RECORD_ANYWAY` — while some criterion is still not met.
+    public static let checkNoCriteria = "No acceptance criteria are stated"
+    public static let checkUnmet = "Criterion {n} is not met"
+    public static let checkUnlanded = "Criterion {n} is not on {main}"
+    public static let checkTasks = "{n} tasks are still running"
+    public static let checkTask = "1 task is still running"
+    public static let checkOwnerItems = "Open owner items: {n}"
+    public static let checkLandings = "Landings in flight: {n}"
+    public static let findingsHeading = "Orbit can’t prove {n} things"
+    public static let findingsAccepted = "These will be kept as the gaps you accepted."
     public static let recordAsDoneAnyway = "Record as done anyway"
     /// `DONE_CARD_NOT_YET`.
     public static let notYet = "Not yet…"
@@ -425,6 +477,11 @@ public enum ProjectDone {
     /// `DONE_CARD_SEE_ACCEPTED`.
     public static let seeWhatAccepted = "See what you accepted"
     /// `DONE_CARD_REOPEN`.
+    public static let derivedFrom = "From the criteria you confirmed on"
+    public static let derivedReopenHint = "Not right? Reopen it."
+    public static func derivedLine(_ confirmedAt: String?, timeZone: TimeZone = .current) -> String? {
+        date(confirmedAt, timeZone: timeZone).map { "\(derivedFrom) \($0). \(derivedReopenHint)" }
+    }
     public static let reopenProject = "Reopen project"
     /// `DONE_CARD_EXPLANATION` — the one paragraph the card keeps.
     public static let recordingExplanation =
@@ -701,8 +758,9 @@ public enum ProjectDone {
         return ([projectTitle, askedByCoordinator] + [waiting].compactMap { $0 }).joined(separator: " · ")
     }
 
-    /// What the record press says: anyway while some criterion is not met.
-    public static func recordLabel(_ counts: ProjectDoneCounts?) -> String {
+    /// What the record press says: anyway without a request, or while some criterion is not met.
+    public static func recordLabel(_ counts: ProjectDoneCounts?, asked: Bool = true) -> String {
+        guard asked else { return recordAsDoneAnyway }
         if let counts, counts.met < counts.criteria { return recordAsDoneAnyway }
         return recordAsDone
     }
@@ -722,32 +780,11 @@ public enum ProjectDone {
         return refs.isEmpty ? checked : "\(checked) · evidence \(refs.joined(separator: ", "))"
     }
 
-    /// The gaps a card nobody asked for carries (`syntheticDoneGaps`): every criterion that is not
-    /// met, or not on main for a reason that is a gap — nothing to land and no code to land are
-    /// outcomes, not gaps to paper over. Main is the subject's main branch, by name.
-    public static func syntheticGaps(_ subject: ProjectDoneSubject) -> [AcceptedGap] {
-        let main = subject.main
-        return (subject.derivedDone?.criteria ?? [])
-            .filter { criterion in
-                let reason = criterion.landingReason
-                let gap = reason != nil && reason != .nothingToLand && reason != .codeless
-                return gap || !criterion.satisfied
-            }
-            .map { criterion in
-                let item = subject.criteria.first { $0.id == criterion.definitionId }
-                let reason = landingReasonLabel(criterion.landingReason, main: main)
-                return AcceptedGap(
-                    criterionKey: item?.key ?? item?.id ?? criterion.definitionId,
-                    title: item?.text ?? criterion.definitionId,
-                    whyNotProven: criterion.satisfied
-                        ? "Orbit cannot prove this criterion is on \(main): \(reason)."
-                        : "Orbit cannot prove this criterion is met by its work yet.")
-            }
-    }
-
-    /// The gaps the card shows: the request's, or the ones Orbit fills in when nobody asked.
+    /// The gaps the card shows: the request's. A card nobody asked for carries none — it shows the
+    /// server's done check instead (`ProjectDoneCheck`), as the web card does since it dropped
+    /// `syntheticDoneGaps`.
     public static func gaps(_ subject: ProjectDoneSubject, request: DoneRequest?) -> [AcceptedGap] {
-        request?.gaps ?? syntheticGaps(subject)
+        request?.gaps ?? []
     }
 
     /// The Orbit checked line (`orbitCheckedText`): whether every criterion is met, what is running,
@@ -839,7 +876,7 @@ public enum ProjectDone {
                             currentDigest: String?) -> ProjectDoneRequestBody? {
         guard let digest = request?.criteriaDigest ?? currentDigest else { return nil }
         return ProjectDoneRequestBody(requestId: requestID, criteriaDigest: digest,
-                                      acceptedGaps: gaps(subject, request: request))
+                                      acceptedGaps: request?.gaps ?? [])
     }
 
     /// The note "Not yet…" sends, or nil while there is nothing in it.

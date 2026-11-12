@@ -299,6 +299,8 @@ beforeEach(() => {
     }
     if (path === `/projects/${PROJECT_ID}/promotions/current`) return reply(currentPromotion);
     if (path === `/projects/${PROJECT_ID}/promotions/merged`) return reply(merges);
+    // No cross-project request is waiting on this project: the crossing card reads this door.
+    if (path === `/projects/${PROJECT_ID}/handoffs`) return reply([]);
     if (path === `/projects/${PROJECT_ID}/open-items`) {
       openItemsCalls += 1;
       return reply({ needsYou: [], withCoordinator: withCoordinatorItems, startRequest });
@@ -896,13 +898,15 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await until(() => expect(suggestion()).toBe('Directly into develop · Automatic off · 1 at a time'));
   });
 
-  it('reads no open items for a project already started, and draws no start', async () => {
+  it('draws no start for a project already started, though it reads the open items for the Not yet note', async () => {
     projects = [project({ startedAt: '2026-10-02T00:00:00Z' })];
     await mount();
     await openSessions();
     await settle();
     expect(page()!.querySelector('.session-project-start')).toBeNull();
-    expect(openItemsCalls).toBe(0);
+    // Read since 6455363cf for the owner's latest Not yet answer, which a started project shows too;
+    // the start row is still decided by `startedAt` alone.
+    expect(openItemsCalls).toBeGreaterThan(0);
     expect(page()!.querySelector('.session-project-page-progress')?.textContent).toBe('2/5 done · 1 running');
   });
 
@@ -1435,8 +1439,8 @@ describe('the project sessions page — the Landings row', () => {
     const entry = (): HTMLElement | null => mounted().querySelector<HTMLElement>(`[data-landing-entry="${landing.id}"]`);
     await until(() => expect(entry()?.className).toContain('is-outlined'));
     expect(entry()!.className).toContain('is-open');
-    expect(entry()!.querySelector('.landings-window-row')?.getAttribute('aria-expanded')).toBe('true');
-    expect(entry()!.querySelector('.landings-window-row-text')?.textContent).toBe('landed long ago');
+    expect(entry()!.querySelector('.landings-window-reply')?.getAttribute('aria-expanded')).toBe('true');
+    expect(entry()!.querySelector('.landings-window-reply strong')?.textContent).toBe('landed long ago');
     // No conversation is drawn for it: no header, no composer.
     expect(mounted().querySelector('.workspace-header')).toBeNull();
     expect(mounted().querySelector('textarea')).toBeNull();

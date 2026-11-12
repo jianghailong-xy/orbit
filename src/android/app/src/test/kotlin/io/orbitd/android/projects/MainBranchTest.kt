@@ -177,8 +177,12 @@ class MainBranchTest {
             "into master once the merge check passes — with a receipt you can revert. The criteria and anything irreversible stay yours.",
             RunSettings.automaticHint("PROJECT_BRANCH", "master"))
         assertEquals("The coordinator runs it for you: it decides when each task is done and handles conflicts and failed checks. Merging into master " +
-            "always asks you — a project that lands directly on master never merges by itself. The criteria and anything irreversible stay yours.",
+            "always asks you — to skip that card, choose “The agent pushes it” under Delivery. The criteria and anything irreversible stay yours.",
             RunSettings.automaticHint("MAIN", "master"))
+        // A read with no delivery mode draws no Delivery row to point at: the sentence says why it asks instead.
+        assertEquals("The coordinator runs it for you: it decides when each task is done and handles conflicts and failed checks. Merging into master " +
+            "always asks you — a project that lands directly on master never merges by itself. The criteria and anything irreversible stay yours.",
+            RunSettings.automaticHint("MAIN", "master", hasDelivery = false))
         assertEquals(listOf("Merging the branch into master", "Any change to the criteria"),
             StartProjectCopy.comesToYou(false, "PROJECT_BRANCH", emptyList(), 0, 7_200, "master").drop(2).map { it.text })
         assertEquals("Each merge into master", StartProjectCopy.comesToYou(true, "MAIN", emptyList(), 0, 7_200, "master").first().text)

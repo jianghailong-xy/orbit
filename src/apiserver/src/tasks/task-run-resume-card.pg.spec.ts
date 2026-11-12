@@ -60,6 +60,7 @@ const INSTRUCTIONS = 'New tests go in new files.';
 
 /** Every card a turn can carry, by the name its echo stores it under: a brief must carry exactly one. */
 const CARD_FIELDS: Record<keyof TurnCards, true> = {
+  runQuestion: true,
   openItemDelivery: true,
   ownerAnswer: true,
   coordinatorDelivery: true,
@@ -67,6 +68,11 @@ const CARD_FIELDS: Record<keyof TurnCards, true> = {
   projectStarted: true,
   confirmationReviewRequest: true,
   confirmationReturn: true,
+  confirmationAnswers: true,
+  runNotice: true,
+  evidenceReview: true,
+  evidenceSendBack: true,
+  sessionOpening: true,
   sessionMessage: true,
   sessionReplies: true,
   externalSender: true,

@@ -415,7 +415,8 @@ private struct CompactSections: View {
         // selection in this shell. Settings › Infrastructure is the same page on Settings' own stack.
         case .runners:
             NavigationStack(path: $model.nav.path) {
-                RunnersListView(rowNavigation: .push)
+                // A new account with no machine lands here: the welcome card (docs/mocks/new-user-onboarding).
+                NoMachineWelcomeGate { RunnersListView(rowNavigation: .push) }
                     .drawerToggle(open: openDrawer)
                     .refreshable { await model.runners?.load() }
                     .navigationDestination(for: NavNode.self) { node in
@@ -773,6 +774,8 @@ struct NavigationDrawer: View {
                         sectionRow(section)
                     }
                 }
+                // What agents have asked the owner to do: the inbox, with how many are waiting.
+                if let requests = model.ownerRequests, !requests.unsupported { waitingOnYouRow(requests) }
                 workspacesHeader
                 agentsRows
                 projectRows
@@ -847,14 +850,15 @@ struct NavigationDrawer: View {
 
     /// The header, on the iPad column's bar: the title drawn on the bar itself — off the shared glass
     /// (iOS 26), as the session list's workspace title is — and the search button beside the system's
-    /// sidebar toggle.
+    /// sidebar toggle. `.fixedSize()` because iOS 26 proposes a leading item far less than its width,
+    /// which drew the title as "Or…" (see `WorkspaceTitleSwitcher`).
     @ToolbarContentBuilder
     private var columnBar: some ToolbarContent {
         if #available(iOS 26.0, *) {
-            ToolbarItem(placement: .topBarLeading) { drawerTitle }
+            ToolbarItem(placement: .topBarLeading) { drawerTitle.fixedSize() }
                 .sharedBackgroundVisibility(.hidden)
         } else {
-            ToolbarItem(placement: .topBarLeading) { drawerTitle }
+            ToolbarItem(placement: .topBarLeading) { drawerTitle.fixedSize() }
         }
         ToolbarItem(placement: .topBarTrailing) {
             searchButton { Image(systemName: "magnifyingglass") }
@@ -1003,6 +1007,31 @@ struct NavigationDrawer: View {
     /// Projects row writes and says its own, and nothing at all at zero. Opening the Wiki never clears
     /// it: only answering what waits does. Selected whenever the Wiki is what is showing, since the
     /// drawer has no rows below it for the Wiki's pages.
+    /// "Waiting on you": a sheet rather than a page, so a push's action can raise it over anything.
+    private func waitingOnYouRow(_ requests: OwnerRequestsModel) -> some View {
+        let waiting = requests.waitingCount
+        return Button {
+            requests.tab = .open
+            requests.inboxPresented = true
+        } label: {
+            pill(selected: false) {
+                HStack(spacing: 12) {
+                    Image(systemName: "hand.raised").frame(width: 24).foregroundStyle(.primary)
+                    Text(OwnerRequests.waitingOnYou).foregroundStyle(.primary)
+                    Spacer(minLength: 0)
+                    if waiting > 0 {
+                        Text("\(waiting)")
+                            .font(.orbitMeta.weight(.semibold))
+                            .foregroundStyle(.orange)
+                    }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .drawerRow()
+        .accessibilityIdentifier("owner-request-inbox-entry")
+    }
+
     private var wikiRow: some View {
         let selected = model.drawerDestination == .section(.wiki)
         let waiting = model.wiki?.waiting ?? 0

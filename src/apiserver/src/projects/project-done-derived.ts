@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { Logger } from '@nestjs/common';
+import type { PushService } from '../push/push.service';
 import { Prisma, ProjectStatus } from '@prisma/client';
 import type { ProjectDoneBy } from '@orbit/shared';
 
@@ -300,6 +301,8 @@ export interface StoreDerivedProjectStatusOptions {
   /** Where the coordinator is told why the owner's DONE was reopened. An edge without one — the
    *  merge-receipt writer, a hand-built fixture — still reopens the record, and tells nobody. */
   sessions?: SessionsService;
+  /** Owner notification, sent only by the successful post-commit OPEN → DONE writer. */
+  push?: Pick<PushService, 'notifyProjectDone'>;
 }
 
 const log = new Logger('ProjectDoneDerived');
@@ -561,10 +564,12 @@ export async function storeDerivedProjectStatus(
   const stored = await prisma.project.findFirst({
     where: { id: projectId, ownerId },
     select: {
+      title: true,
       status: true,
       doneBy: true,
       doneAt: true,
       doneCriteriaDigest: true,
+      doneTaskEpochs: true,
       reopenedAt: true,
       reopenedFacts: true,
     },
@@ -608,6 +613,16 @@ export async function storeDerivedProjectStatus(
     },
   });
 
+  if (written.count === 1 && derived.done && stored.status === ProjectStatus.OPEN && options.push) {
+    await options.push.notifyProjectDone({
+      ownerId, projectId, title: stored.title,
+      criteriaCount: derived.counts.criteria,
+    }).catch((e) =>
+      log.warn(`owner not told project ${projectId} is done: ${
+        (e as { message?: string })?.message ?? String(e)}`),
+    );
+  }
+
   if (written.count === 1 && reopenedBy !== null && !derived.done && options.sessions) {
     await tellCoordinatorProjectReopened(prisma, options.sessions, {
       ownerId,
@@ -627,6 +642,7 @@ export const NO_DONE_RECORD = {
   doneBy: null,
   doneAt: null,
   doneCriteriaDigest: null,
+  doneTaskEpochs: Prisma.DbNull,
   acceptedGaps: [],
 } as const satisfies Prisma.ProjectUpdateManyMutationInput;
 
@@ -660,8 +676,8 @@ const CHECK_CONCLUSION_SELECT = { id: true, verdict: true, verdictRevision: true
  *
  * WHY THE FACTS, AND NOT A TIME
  * -----------------------------
- * `ownerRecordReopenedBy` below can ask a timestamp, because the one task fact it needs has one: the
- * start of a lifecycle epoch. This needs a task's status too, and no row says when that moved:
+ * `ownerRecordReopenedBy` below compares lifecycle epochs captured at the DONE press. This needs a
+ * task's status too, and no row says when that moved:
  * `task.updated_at` moves on a rename, which must not end the press. So this compares what the facts
  * are, with no clock, the way a done request compares its `stateDigest`.
  *
@@ -812,7 +828,8 @@ export async function readStandingOwnerReopen(
  *     about a different set.
  *   * A task serving one of them was reopened after it was recorded. `task_progress_epoch_advance`
  *     (0271) starts a task's next lifecycle epoch whenever it leaves DONE, CANCELLED or FAILED for
- *     OPEN or IN_PROGRESS, whichever door moved it, so the epoch's start is the reopen itself.
+ *     OPEN or IN_PROGRESS, whichever door moved it. Compare its counter with the captured epoch,
+ *     independent of transaction start times and clock skew. Legacy records retain the time rule.
  *
  * Both are read off committed rows rather than told by the edge that runs the projection, so every
  * edge gives the same answer, and a later one still sees a reopen an earlier one missed.
@@ -821,20 +838,25 @@ async function ownerRecordReopenedBy(
   prisma: Pick<PrismaService, 'task'>,
   ownerId: string,
   projectId: string,
-  record: { doneAt: Date | null; doneCriteriaDigest: string | null },
+  record: { doneAt: Date | null; doneCriteriaDigest: string | null; doneTaskEpochs: Prisma.JsonValue },
   seal: string,
 ): Promise<ProjectReopenReason | null> {
   if (record.doneCriteriaDigest !== seal) return { kind: 'CRITERIA_CHANGED', currentDigest: seal };
-  const reopened = await prisma.task.findFirst({
+  const captured = record.doneTaskEpochs as Record<string, number> | null;
+  const serving = await prisma.task.findMany({
     where: {
       ownerId,
       projectId,
       criterionDefinitionId: { not: null },
-      progress: { epochStartedAt: { gt: record.doneAt! } },
+      ...(captured === null ? { progress: { epochStartedAt: { gt: record.doneAt! } } } : {}),
     },
     orderBy: { id: 'asc' },
-    select: { id: true, title: true },
+    select: { id: true, title: true, status: true, progress: { select: { lifecycleEpoch: true } } },
   });
+  const reopened = captured === null ? serving[0] : serving.find((task) =>
+    captured[task.id] === undefined
+      ? !['DONE', 'CANCELLED', 'FAILED'].includes(task.status)
+      : (task.progress?.lifecycleEpoch ?? 0) > captured[task.id]!);
   return reopened
     ? { kind: 'SERVING_TASK_REOPENED', taskId: reopened.id, taskTitle: reopened.title }
     : null;

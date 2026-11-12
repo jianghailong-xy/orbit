@@ -31,6 +31,8 @@ struct LandingStatusCardView: View {
     let waitDoors: [LandingMenuAction]
     let acting: Bool
     let act: (LandingMenuAction) -> Void
+    /// Whether what the card carries is open under its line: its caret's turn.
+    var open: Bool = true
     @Environment(AppModel.self) private var app
 
     var body: some View {
@@ -43,114 +45,100 @@ struct LandingStatusCardView: View {
         }
     }
 
-    @ViewBuilder private var titleLine: some View {
-        if let title, !title.isEmpty {
-            Text(title)
-                .font(.orbitLabel)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
+    /// The card's head as the chat's background-job line (owner 2026-11-11,
+    /// docs/mocks/landings-chat-tools-native): how it stands, a round's word, the task, its clock.
+    private func line(kind: LandingLineView.Kind, title: String, word: String? = nil,
+                      status: String? = nil) -> some View {
+        let name = [word, self.title].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+        return LandingLineView(kind: kind, title: title, name: name.isEmpty ? nil : name, status: status,
+                               time: nil, open: open)
     }
 
     @ViewBuilder private func statusCard(_ landing: SessionLandingView) -> some View {
         let card = LandingPageCopy.attemptCard(landing, now: now, updatedAt: readAt,
                                                failed: readFailed, facts: facts)
         let outcome = LandingPageCopy.outcomeCard(landing, promotion: promotion)
-        VStack(alignment: .leading, spacing: 8) {
+        // A round's word (Merge check, Merge to main) says which of its jobs this is.
+        let word = landing.subject == "PROMOTION" && card?.rightIsClock == false ? card?.word : nil
+        // No card of its own: the line, and what it carries hung under the line's mark, as the chat
+        // hangs a job line's fold.
+        VStack(alignment: .leading, spacing: 6) {
             if let outcome {
-                ProjectLandingHead(
-                    title: outcome.title,
-                    head: ProjectPage.LandingHead(right: outcome.right, isClock: false,
-                                                  detail: outcome.detail ?? ""),
-                    running: false, timedOut: false, ok: outcome.ok)
-                titleLine
-                if let heading = outcome.tasksHeading {
-                    Text(heading).font(.orbitLabel.weight(.semibold))
-                    ForEach(outcome.tasks, id: \.self) { title in
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text("•").foregroundStyle(.secondary)
-                            Text(title).font(.orbitLabel)
-                        }
-                    }
-                }
-                if let checkLine = outcome.checkLine {
-                    Text(checkLine).font(.orbitMeta).foregroundStyle(.green)
-                }
-                if let treeLine = outcome.treeLine {
-                    Text(treeLine).font(.orbitMeta).foregroundStyle(.secondary)
-                }
+                line(kind: outcome.ok ? .ok : .quiet, title: outcome.title, status: outcome.right)
             } else if let card {
-                ProjectLandingHead(
-                    title: card.word,
-                    head: ProjectPage.LandingHead(right: card.right, isClock: card.rightIsClock,
-                                                  detail: card.detail),
-                    running: card.running, timedOut: card.timedOut, failed: card.stoppedOnFailure)
-                titleLine
-                if let budget = card.budget {
-                    Text(budget).font(.orbitMeta).foregroundStyle(.secondary)
-                    if let progress = card.progress {
-                        budgetMeter(progress: progress, usual: card.usualProgress)
-                    }
-                }
-                if let live = card.live {
-                    HStack(spacing: 6) {
-                        if card.fresh {
-                            Circle().fill(.green).frame(width: 7, height: 7)
-                        }
-                        Text(live).font(.orbitMeta).foregroundStyle(.secondary)
-                    }
-                }
-                // What the running check leads to, said while it runs (mockup 05 a): the reader
-                // learns now whether to wait for a question or walk away. Web: `promotionOnPassLine`.
-                if landing.subject == "PROMOTION", landing.settledAt == nil, card.running,
-                   landing.currentAttempt?.kind == "CHECK_PROMOTION",
-                   let onPass = PromotionCards.onPassLine(promotion) {
-                    Text(onPass).font(.orbitMeta).foregroundStyle(.secondary)
-                }
-                if card.timedOut, let attempt = landing.currentAttempt {
-                    Text(LandingPageCopy.timeoutLine(landing, attempt: attempt,
-                                                     main: facts.mainBranch))
-                        .font(.orbitMeta).foregroundStyle(.secondary)
-                    if let push = LandingPageCopy.pushSentence(landing, attempt: attempt) {
-                        Text(push).font(.orbitMeta).foregroundStyle(.secondary)
-                    }
-                }
-                if let failure = card.failure {
-                    Text(failure).font(.orbitMeta).foregroundStyle(.secondary)
-                }
-                if card.timedOut {
-                    timedOutDoors(landing)
-                }
+                line(kind: card.stoppedOnFailure || card.timedOut ? .failed : .running,
+                     title: card.rightIsClock ? card.word : card.right, word: word,
+                     status: card.rightIsClock ? card.right : nil)
             } else {
-                Text(LandingPageCopy.queued).font(.orbitMeta).foregroundStyle(.secondary)
-                titleLine
+                line(kind: .running, title: LandingPageCopy.queued)
             }
-            if !waitDoors.isEmpty {
-                waitingDoors
+            VStack(alignment: .leading, spacing: 8) {
+                if let outcome {
+                    if let detail = outcome.detail, !detail.isEmpty {
+                        Text(detail).font(.orbitMeta).foregroundStyle(.secondary)
+                    }
+                    if let heading = outcome.tasksHeading {
+                        Text(heading).font(.orbitLabel.weight(.semibold))
+                        ForEach(outcome.tasks, id: \.self) { title in
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text("•").foregroundStyle(.secondary)
+                                Text(title).font(.orbitLabel)
+                            }
+                        }
+                    }
+                    if let checkLine = outcome.checkLine {
+                        Text(checkLine).font(.orbitMeta).foregroundStyle(.green)
+                    }
+                    if let treeLine = outcome.treeLine {
+                        Text(treeLine).font(.orbitMeta).foregroundStyle(.secondary)
+                    }
+                } else if let card {
+                    if !card.detail.isEmpty {
+                        Text(card.detail).font(.orbitMeta).foregroundStyle(.tertiary)
+                    }
+                    if let budget = card.budget {
+                        Text(budget).font(.orbitMeta).foregroundStyle(.secondary)
+                        if let progress = card.progress {
+                            budgetMeter(progress: progress, usual: card.usualProgress)
+                        }
+                    }
+                    if let live = card.live {
+                        HStack(spacing: 6) {
+                            if card.fresh {
+                                Circle().fill(.green).frame(width: 7, height: 7)
+                            }
+                            Text(live).font(.orbitMeta).foregroundStyle(.secondary)
+                        }
+                    }
+                    // What the running check leads to, said while it runs (mockup 05 a): the reader
+                    // learns now whether to wait for a question or walk away. Web: `promotionOnPassLine`.
+                    if landing.subject == "PROMOTION", landing.settledAt == nil, card.running,
+                       landing.currentAttempt?.kind == "CHECK_PROMOTION",
+                       let onPass = PromotionCards.onPassLine(promotion) {
+                        Text(onPass).font(.orbitMeta).foregroundStyle(.secondary)
+                    }
+                    if card.timedOut, let attempt = landing.currentAttempt {
+                        Text(LandingPageCopy.timeoutLine(landing, attempt: attempt,
+                                                         main: facts.mainBranch))
+                            .font(.orbitMeta).foregroundStyle(.secondary)
+                        if let push = LandingPageCopy.pushSentence(landing, attempt: attempt) {
+                            Text(push).font(.orbitMeta).foregroundStyle(.secondary)
+                        }
+                    }
+                    if let failure = card.failure {
+                        Text(failure).font(.orbitMeta).foregroundStyle(.secondary)
+                    }
+                    if card.timedOut {
+                        timedOutDoors(landing)
+                    }
+                }
+                if !waitDoors.isEmpty {
+                    waitingDoors
+                }
             }
+            .padding(.leading, LandingLineView.indent)
         }
-        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(background(for: card, outcome: outcome),
-                    in: RoundedRectangle(cornerRadius: 14))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(stroke(for: card, outcome: outcome), lineWidth: 1)
-        }
-    }
-
-    private func background(for card: LandingAttemptCard?,
-                            outcome: LandingOutcomeCard?) -> Color {
-        // A settled success is the board's green card (mockup 05 c); a timed-out attempt amber;
-        // everything else the neutral wash the row wears.
-        if outcome?.ok == true { return Color.green.opacity(0.08) }
-        if card?.timedOut == true { return Color.orange.opacity(0.08) }
-        return Color.secondary.opacity(0.1)
-    }
-
-    private func stroke(for card: LandingAttemptCard?,
-                        outcome: LandingOutcomeCard?) -> Color {
-        if outcome?.ok == true { return Color.green.opacity(0.3) }
-        return card?.timedOut == true ? Color.orange.opacity(0.3) : Color.clear
     }
 
     /// The quiet meter under the head: how far the step is through its budget, with the check's
@@ -202,7 +190,7 @@ struct LandingStatusCardView: View {
         }
     }
 
-    /// The offline card: the last integration snapshot, frozen, and no door — a press against a stale
+    /// The offline line: the last integration snapshot, frozen, and no door — a press against a stale
     /// fact is a decision made on nothing.
     private var offlineCard: some View {
         let placeholder = LandingPageCopy.offlinePlaceholder(
@@ -211,57 +199,50 @@ struct LandingStatusCardView: View {
         let card = placeholder.flatMap {
             LandingPageCopy.attemptCard($0, now: now, updatedAt: nil, failed: true)
         }
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 6) {
             if let card {
-                ProjectLandingHead(
-                    title: card.word,
-                    head: ProjectPage.LandingHead(right: card.right, isClock: card.rightIsClock,
-                                                  detail: card.detail),
-                    running: false, timedOut: false)
-                titleLine
+                line(kind: .running, title: card.rightIsClock ? card.word : card.right,
+                     status: card.rightIsClock ? card.right : nil)
                 if let live = card.live {
                     Text(live).font(.orbitMeta).foregroundStyle(.secondary)
+                        .padding(.leading, LandingLineView.indent)
                 }
             } else {
-                Text(LandingPageCopy.updateUnavailable)
-                    .font(.orbitLabel).foregroundStyle(.secondary)
-                titleLine
+                line(kind: .running, title: LandingPageCopy.updateUnavailable)
             }
         }
-        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 14))
     }
 
     private var loadingCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text(LandingPageCopy.loadingLanding)
-                    .font(.orbitLabel).foregroundStyle(.secondary)
-            }
-            titleLine
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 14))
+        line(kind: .running, title: LandingPageCopy.loadingLanding)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// The doors a landing that waits for a decision carries (board 02 d): the first is the solid
     /// one, as the board draws Open Coordinator beside a plain Open Task.
     private var waitingDoors: some View {
-        HStack(spacing: 8) {
-            ForEach(Array(waitDoors.enumerated()), id: \.offset) { index, action in
-                if index == 0 {
-                    Button(Self.doorLabel(action)) { act(action) }
-                        .buttonStyle(.borderedProminent).controlSize(.small)
-                } else {
-                    Button(Self.doorLabel(action)) { act(action) }
-                        .buttonStyle(.bordered).controlSize(.small)
-                }
+        VStack(alignment: .leading, spacing: 9) {
+            if waitDoors.contains(.openCoordinator) {
+                Label(LandingPageCopy.decisionsTheCoordinator, systemImage: "person")
+                    .font(.orbitMeta).foregroundStyle(.secondary)
             }
-            Spacer(minLength: 0)
+            HStack(spacing: 8) {
+                ForEach(Array(waitDoors.enumerated()), id: \.offset) { index, action in
+                    if index == 0 {
+                        Button(Self.doorLabel(action)) { act(action) }
+                            .buttonStyle(.borderedProminent).controlSize(.small)
+                    } else {
+                        Button(Self.doorLabel(action)) { act(action) }
+                            .buttonStyle(.bordered).controlSize(.small)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
         }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
     }
 
     static func doorLabel(_ action: LandingMenuAction) -> String {
@@ -273,14 +254,19 @@ struct LandingStatusCardView: View {
     }
 }
 
-/// A landing's record (mockups 05 a/e/g/i): the server's timeline, one section per attempt, with the
-/// check a finished line names opening its output. In the Landings window it is what a landing opens
-/// to, under its card or its row.
+/// A landing's record (mockups 05 a/e/g/i), drawn as the session chat draws a turn's tools (owner
+/// 2026-11-11, docs/mocks/landings-chat-tools-native): one section per attempt — its heading only when
+/// there are several — and each attempt's lines gathered into its steps (`LandingSteps`), each one of
+/// the chat's tool rows. A step opens to its own lines, the server's sentences as they were; a check's
+/// to its output too. A step that failed, or runs now, starts open. In the Landings window it is what a
+/// landing opens to, under its line.
 struct LandingTimelineView: View {
     let sessionID: String
     let landing: SessionLandingView
     let now: Date
     @State private var openLog: LandingLogSelectors?
+    /// The steps the reader opened or folded, by section and step; the rest keep their default.
+    @State private var pressed: [String: Bool] = [:]
 
     var body: some View {
         timeline(landing)
@@ -311,19 +297,27 @@ struct LandingTimelineView: View {
     @ViewBuilder private func sectionView(_ section: IntegrationTimelineSection,
                                           landing: SessionLandingView) -> some View {
         let current = section.jobId == landing.currentAttempt?.jobId
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Text(section.title).font(.orbitLabel.weight(.semibold))
-                if let state = LandingPageCopy.sectionState(section.state) {
-                    Text(state).font(.orbitMeta).foregroundStyle(.secondary)
+        let steps = LandingSteps.steps(section.entries, kind: section.kind)
+        let live = current && landing.currentAttempt?.state == "RUNNING" && landing.currentAttempt?.timedOut == false
+        VStack(alignment: .leading, spacing: 3) {
+            if (landing.timeline?.sections.count ?? 0) > 1 {
+                HStack(spacing: 8) {
+                    Text(section.title).font(.orbitLabel.weight(.semibold))
+                    if let state = LandingPageCopy.sectionState(section.state) {
+                        Text(state).font(.orbitMeta).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
             }
-            ForEach(Array(section.entries.enumerated()), id: \.offset) { index, entry in
-                entryView(entry, section: section, entries: section.entries, index: index)
+            ForEach(Array(steps.enumerated()), id: \.element.key) { index, step in
+                let last = index == steps.count - 1
+                let status: StepStatus = LandingSteps.failed(step, kind: section.kind) ? .failed
+                    : last && live ? .running
+                    : last && current && landing.currentAttempt?.state == "QUEUED" ? .pending : .ok
+                stepRow(step, status: status, section: section)
             }
-            if current, let attempt = landing.currentAttempt,
-               attempt.state == "RUNNING", !attempt.timedOut, attempt.check != nil {
+            // A check streaming before its attempt wrote any line has no step to sit in.
+            if steps.isEmpty, live, let attempt = landing.currentAttempt, attempt.check != nil {
                 liveCheck(attempt)
             }
             if current, let band = LandingPageCopy.noReportBand(landing) {
@@ -336,6 +330,81 @@ struct LandingTimelineView: View {
         }
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    enum StepStatus { case ok, failed, running, pending }
+
+    private static func icon(_ key: String) -> String {
+        switch key {
+        case "queue": return "list.bullet"
+        case "claim": return "arrow.down.to.line"
+        case "sync": return "arrow.triangle.branch"
+        case "push": return "icloud.and.arrow.up"
+        default: return "terminal"
+        }
+    }
+
+    private static func tone(_ key: String) -> Color {
+        switch key {
+        case "queue": return .gray
+        case "claim", "sync": return .blue
+        case "push": return .orange
+        default: return .teal
+        }
+    }
+
+    /// One step as the chat's tool row (`ToolCardView`'s row): the tone bar, the caret, the icon tile,
+    /// its name in the mono face, its summary line and its mark. No time on a phone's row; the lines it
+    /// opens to carry theirs.
+    @ViewBuilder private func stepRow(_ step: LandingStep, status: StepStatus,
+                                      section: IntegrationTimelineSection) -> some View {
+        let key = "\(section.jobId)|\(step.key)"
+        let open = pressed[key] ?? (status == .failed || status == .running)
+        let tone = Self.tone(step.key)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 7) {
+                Image(systemName: "chevron.right")
+                    .font(.orbitMeta.weight(.semibold)).foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(open ? 90 : 0))
+                Image(systemName: Self.icon(step.key))
+                    .font(.orbitMeta).foregroundStyle(tone)
+                    .frame(width: 20, height: 20)
+                    .background(tone.opacity(0.14), in: RoundedRectangle(cornerRadius: 5))
+                Text(step.name)
+                    .font(.orbitMono.weight(.semibold)).foregroundStyle(.primary)
+                    .lineLimit(1).fixedSize()
+                Text(step.summary.text)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.tail)
+                Spacer(minLength: 4)
+                switch status {
+                case .failed: Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+                case .running: ProgressView().controlSize(.mini)
+                case .pending: Image(systemName: "clock").foregroundStyle(.secondary)
+                case .ok: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { withAnimation(.easeOut(duration: 0.15)) { pressed[key] = !open } }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+            if open {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(step.entries.map { $0.index }, id: \.self) { index in
+                        entryView(section.entries[index], section: section, entries: section.entries, index: index)
+                    }
+                    if status == .running, let attempt = landing.currentAttempt, attempt.check != nil {
+                        liveCheck(attempt)
+                    }
+                }
+                .padding(.leading, 17)
+            }
+        }
+        .padding(.leading, 11).padding(.trailing, 8).padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(open ? Color.primary.opacity(0.04) : Color.clear)
+        .overlay(alignment: .leading) { Rectangle().fill(tone).frame(width: 3) }
+        .clipShape(RoundedRectangle(cornerRadius: open ? 8 : 0))
     }
 
     @ViewBuilder private func entryView(_ entry: IntegrationTimelineEntry,
@@ -662,5 +731,77 @@ final class LandingPromotionSource: PromotionReviewSource {
                                                       promotionID: view.promotionId)
             return nil
         } catch { return APIClient.failureReason(error) }
+    }
+}
+
+/// A landing as the session chat's background-job line (owner 2026-11-11,
+/// docs/mocks/landings-chat-tools-native; `BackgroundWakeCardView`'s line), on two lines as a phone
+/// has room for: the mark, how it ended (red when it failed), a short fact on a chip, when, and
+/// `Details ›`; under them the task's name, up to two lines. Web: `LandingLine` in
+/// ProjectLandingsWindow.tsx, one line on a wide window.
+struct LandingLineView: View {
+    enum Kind { case ok, merge, quiet, failed, running }
+
+    /// Where what a line carries hangs: under its title, off its mark.
+    static let indent: CGFloat = 22
+
+    let kind: Kind
+    let title: String
+    let name: String?
+    let status: String?
+    let time: String?
+    let open: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                mark.frame(width: 16)
+                Text(title)
+                    .foregroundStyle(kind == .failed ? Color.red : Color.secondary)
+                    .lineLimit(1)
+                if let status, !status.isEmpty {
+                    Text(status)
+                        .font(.orbitMonoFine).foregroundStyle(.secondary)
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(Color.gray.opacity(0.14), in: RoundedRectangle(cornerRadius: 4))
+                        .lineLimit(1).fixedSize()
+                }
+                if let time, !time.isEmpty {
+                    Text(time).font(.orbitMeta.monospacedDigit()).foregroundStyle(.secondary)
+                        .lineLimit(1).fixedSize()
+                }
+                HStack(spacing: 3) {
+                    Text(LandingStepCopy.details)
+                    Image(systemName: "chevron.right")
+                        .font(.orbitMeta.weight(.semibold))
+                        .rotationEffect(.degrees(open ? 90 : 0))
+                }
+                .font(.orbitMeta).foregroundStyle(.tertiary)
+                .fixedSize()
+                Spacer(minLength: 0)
+            }
+            .font(.orbitLabel)
+            if let name, !name.isEmpty {
+                Text(name)
+                    .font(.orbitLabel)
+                    .foregroundStyle(kind == .merge ? Color.secondary : Color.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .padding(.leading, Self.indent)
+            }
+        }
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder private var mark: some View {
+        switch kind {
+        case .ok: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+        case .failed: Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+        case .quiet: Image(systemName: "minus.circle").foregroundStyle(.secondary)
+        case .running: Image(systemName: "clock").foregroundStyle(.secondary)
+        case .merge: Text("⇢").fontWeight(.semibold).foregroundStyle(Color.accentColor)
+        }
     }
 }

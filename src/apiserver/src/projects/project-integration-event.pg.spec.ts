@@ -1,3 +1,4 @@
+import { seedPromotionRequest } from '../test-support/promotion-request';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
@@ -368,7 +369,8 @@ function claim(stack: Stack, w: World, lease: string): Promise<IntegrationJobCom
 
 type Failure = Omit<IntegrationJobResultRequest, 'claimGeneration' | 'leaseOwner'>;
 
-function report(stack: Stack, w: World, job: IntegrationJobCommand, result: Failure) {
+async function report(stack: Stack, w: World, job: IntegrationJobCommand, result: Failure) {
+  if (job.kind === 'LAND_TASK') await seedPromotionRequest(stack.db, w.projectId);
   return stack.api.integrationJobResult({ id: w.runnerId }, job.jobId, {
     claimGeneration: job.claimGeneration,
     leaseOwner: job.leaseOwner,
@@ -595,6 +597,14 @@ test('a LAND_TASK records enqueue, claim, round, check and landing, in order, in
       );
       assert.ok(timeline.sections[0].entries.every((entry) => entry.id !== null), 'stored facts carry their row id');
       assert.equal(timeline.truncated, false);
+      // What queued it, for the turn's opening message: the task marked done handed over its
+      // work session's branch.
+      const trigger = timeline.sections[0].trigger!;
+      assert.equal(trigger.cause, 'DONE');
+      assert.equal(trigger.by, 'TASK');
+      assert.equal(trigger.sessionId, task.sessionId);
+      assert.equal(trigger.sourceRef, `refs/heads/${task.branch}`);
+      assert.equal(trigger.reason, null);
       // Every line's sentence is the server's, English, and no client has to compose one.
       assert.ok(timeline.sections[0].entries.every((entry) => entry.text.length > 0));
 
@@ -668,6 +678,19 @@ test('a failure, the coordinator rerun and the owner rerun each sign their own l
       assert.equal(thirdRetry.actor?.type, 'OWNER');
       assert.equal(thirdRetry.actor?.userId, w.ownerId);
       assert.match(thirdRetry.text, /Rerun by the owner · run it once more by hand/);
+      // Each generation's trigger says who queued it: the done task, the coordinator's rerun with
+      // its session and reason, the owner's rerun with its reason. A red generation names the
+      // source commit its runner reported with the result.
+      const triggers = timeline.sections.map((section) => section.trigger!);
+      assert.deepEqual(triggers.map((each) => [each.cause, each.by]),
+        [['DONE', 'TASK'], ['RETRY', 'COORDINATOR'], ['RETRY', 'OWNER']]);
+      assert.equal(triggers[0].sessionId, task.sessionId);
+      assert.equal(triggers[1].sessionId, w.coordinatorSessionId);
+      assert.equal(triggers[1].reason, 'the baseline was repaired');
+      assert.equal(triggers[2].sessionId, null);
+      assert.equal(triggers[2].reason, 'run it once more by hand');
+      assert.equal(triggers[0].sourceSha, RED.sourceSha);
+      assert.equal(triggers[1].sourceSha, RED.sourceSha);
       // 0368's handling line sits beside the generation that took over the item — its claim, not
       // claim 0 — so it is drawn with that attempt and after the generation whose failure it answers.
       const handledEntry = timeline.sections[1].entries.find((entry) => entry.kind === 'HANDLING')!;
@@ -912,6 +935,11 @@ test('a stolen push records the moved commits: Automatic re-checks, the owner co
       const ownerConfirmation = timeline.sections[4].entries.find((entry) => entry.kind === 'CONFIRMATION')!;
       assert.equal(ownerConfirmation.actor?.type, 'OWNER');
       assert.equal(ownerConfirmation.actor?.userId, w.ownerId);
+      // The round's triggers: Orbit queues each check; Automatic confirms the first merge, the owner
+      // the second, and the next generation after its refused push runs under that same confirmation.
+      assert.deepEqual(timeline.sections.map((section) => [section.trigger!.cause, section.trigger!.by]), [
+        ['CHECK', 'ORBIT'], ['CONFIRMED', 'AUTOMATIC'], ['CHECK', 'ORBIT'], ['CONFIRMED', 'OWNER'], ['CONFIRMED', 'OWNER'],
+      ]);
       // That next generation runs and its merge check goes red: the candidate is blocked, and a
       // blocked candidate is what leaves its round open for the later one below (a candidate still
       // in flight owns the round; M-F1/M-F4 do not offer a second one beside it).

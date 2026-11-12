@@ -26,8 +26,22 @@ fun transcriptCards(event: RunEvent): List<InteractionCard> = buildList {
         backgroundWake(payload.text("controlPlaneNote").orEmpty())?.let { wake ->
             add(InteractionCard("record:${event.seq}:wake", CardFamily.BACKGROUND, "Background update", wake, "", objectId = "${event.seq}", binding = "", status = "Recorded"))
         }
-        addProjection("confirmationReviewRequest", "Review requested", CardFamily.REVIEW, listOf("requestId", "taskId", "title", "runSessionId", "dueAt"))
+        addProjection("confirmationReviewRequest", "Review requested", CardFamily.REVIEW, listOf("requestId", "taskId", "title", "runSessionId"))
         addProjection("confirmationReturn", "Sent back by the reviewer", CardFamily.REVIEW, listOf("requestId", "reason"))
+        // The owner's answers handed to the reviewer once they confirmed (contract §7 Q5): "You confirmed", with at least one answer.
+        if (payload.obj("confirmationAnswers")?.let(OwnerReview::confirmationAnswers)?.isNotEmpty() == true) {
+            addProjection("confirmationAnswers", OwnerReview.youConfirmed, CardFamily.REVIEW, listOf("taskId", "title", "decidedAt"))
+        }
+        // Five more of Orbit's own turns (docs/mocks/orbit-turn-cards/, `OrbitTurnCards`): each its card, never the reader's bubble.
+        fun addTurnCard(field: String, title: String, family: CardFamily, valid: (JsonObject) -> Boolean) {
+            val source = payload.obj(field)?.takeIf(valid) ?: return
+            add(InteractionCard("record:${event.seq}:$field", family, title, source, "", objectId = "${event.seq}", binding = "", status = "Recorded"))
+        }
+        addTurnCard("evidenceReview", OrbitTurnCards.evidenceToReview, CardFamily.REVIEW, OrbitTurnCards::isEvidenceReview)
+        addTurnCard("evidenceSendBack", OrbitTurnCards.evidenceSentBack, CardFamily.REVIEW, OrbitTurnCards::isEvidenceSendBack)
+        addTurnCard("runQuestion", OrbitTurnCards.questionFromRun, CardFamily.SESSION_REQUEST, OrbitTurnCards::isRunQuestion)
+        addTurnCard("runNotice", OrbitTurnCards.noticeFromRun, CardFamily.SESSION_REQUEST, OrbitTurnCards::isRunNotice)
+        addTurnCard("sessionOpening", "Orbit started this session", CardFamily.SESSION_REQUEST, OrbitTurnCards::isSessionOpening)
         addProjection("taskStart", "Task started", CardFamily.SESSION_REQUEST, listOf("taskId", "title"))
         addProjection("projectStarted", "Project started", CardFamily.SESSION_REQUEST, listOf("projectId", "projectTitle", "by"))
         addProjection("openItemDelivery", "Project item delivered", CardFamily.SESSION_REQUEST, listOf("itemId", "kind", "title"))

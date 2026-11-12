@@ -323,6 +323,8 @@ struct ComposerView: View {
         if offeredSuggestion != nil { return "" }
         // Cursor CLI takes no message mid-turn: one written now waits for the turn to end (contract §3.2).
         if cursorTurnRunning, console.replyContext == nil { return CursorRuntime.runningPlaceholder }
+        // A new account's welcome card above: what to write (docs/mocks/new-user-onboarding).
+        if console.welcomes, console.replyContext == nil { return WelcomeCopy.WELCOME_PLACEHOLDER }
         // A machine's new session page has no workspace to send to, and no question to answer.
         if let machine = console.machinePlaceholder { return machine }
         // A wiki chat's panel says what to ask, unless a reply has its own words.
@@ -541,6 +543,8 @@ struct ComposerView: View {
         .onChange(of: autoFocus) { _, now in
             if now { requestFocus() }
         }
+        // A first message picked on the welcome card (`ConsoleModel.fillFromWelcome`).
+        .onChange(of: console.focusRequests) { _, _ in requestFocus() }
         // The app-level session list refreshes from control-plane activity and carries capability
         // changes (including runner heartbeat recovery). Feed that newer snapshot into the open
         // console; a direct send still re-fetches immediately before a terminal /resume.

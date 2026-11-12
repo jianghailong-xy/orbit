@@ -100,7 +100,8 @@ owner 明确要求内容覆盖「用户开发的东西」本身。落法如下�
   - 仓库和 space 相同的 workspace 自动在这个 space 里：读取时按 repo_url 判定，不靠写入，所以不需要等 agent 调 wiki 工具；
   - 没有 repo_url 的，由 owner 在 Wiki 设置里手动加入；别的仓库的不能加入，它们有自己的 space；
   - owner 可以把 workspace 留在外面：它的会话不再进维护，调 wiki 工具被拒，已写进 wiki 的内容保留，也不会自己回来；
-  - 不在任何 space 里或被留在外面时，工具返回 `WIKI_SPACE_UNBOUND` 并附一句人话说明。
+  - 会话的 wiki 工具从不建 space（`docs/wiki-explicit-creation-design.md` §3.1）：第一次调用只把 workspace 绑到这个仓库已有的、在用的 space；
+  - 没有 wiki 时，`wiki_search` 回空结果并带 `unavailable`（`no_wiki` / `wiki_in_trash`），`wiki_get` 回 404、写入回 409，都是 `WIKI_SPACE_UNBOUND` 附一句人话说明（§3.3）；被留在外面时照旧拒绝。
   - 项目通过其 codebase 的 URL 推导所属 space，不另外建表。
 - **为什么按代码库而不是按项目**：43% 的活跃会话既不挂任务，也不是协调会话，大量「为什么」恰恰在这些自由会话里。项目页只作为二级索引。
 
@@ -279,9 +280,9 @@ agent（MCP / CLI）、owner（web / iOS / CLI）、维护作业、导入，全�
 
 | type | 形态 | 复验方法 | 状态 |
 |---|---|---|---|
-| `path` | repo 相对路径 | `git cat-file -e origin/main:<path>` | verified / missing |
+| `path` | repo 相对路径 | `git cat-file -e <ref>:<path>`（`<ref>` 是 fetch 后的默认分支） | verified / missing |
 | `symbol` | path + 符号名 + 区域哈希 | `git grep -n` 定位符号，对其后 N 行做哈希比对 | verified / changed / missing |
-| `commit` | sha | `git merge-base --is-ancestor <sha> origin/main` | verified / missing（用非祖先 sha 会毒化下游，所以必须验） |
+| `commit` | sha | `git merge-base --is-ancestor <sha> <ref>` | verified / missing（用非祖先 sha 会毒化下游，所以必须验） |
 | `criterion` | 判据 id + semanticHash | 服务端比对 | verified / changed |
 | `merge_evidence` | contentHash | 服务端比对是否仍被观察到 | verified / missing |
 | `command` | 命令 + 期望退出码 | 维护作业重跑（配方） | verified / changed |
@@ -492,6 +493,8 @@ EXECUTABLE 判据）——随维护会话在 P11（2026-10-19）删除：维护�
 
 ### 8.2 维护作业「Wiki maintenance」（阶段 2）
 
+> 2026-11-11 起，读不到 git 仓库不再拦住整次运行：仓库按 git / 文件夹 / 只有会话分档，见 `docs/wiki-repo-tiers-design.md`。下面「锚点复验」一步按档位执行。
+
 - **开关**：在 space 设置或首页的设置卡里打开维护，指定 workspace（决定从哪台 runner 读仓库）和每日运行次数（`dailyRunLimit`）。
   - 模型是部署配置的 System model：不再选 provider（P11 起 provider 不是设置），不花账号自己的 key、订阅或账号池，也不占 runner 槽位。
 - **触发（事实驱动，不用时钟）**
@@ -501,6 +504,14 @@ EXECUTABLE 判据）——随维护会话在 P11（2026-10-19）删除：维护�
   - merge receipt 或晋升到 main 会额外把 `anchors_due` 置位。
   - 平台原则「时钟不得启动 agent 工作」（`open-item-escalation.service.ts:84-91`）因此不受影响。
 - **一次运行的步骤**（wiki-worker 里的 `maintain` 作业，契约 §27）
+  0. 探测仓库的档位（契约 §26.7、§27.3 第 1 步）：
+     - `git`：space 仓库的 git checkout，读 fetch 后的 origin/main，和以前一样；
+     - `folder`：目录在、不是 git checkout，runner 声明了 `wiki-repo-op-folder/v1` 就直接扫目录，快照以树哈希为名；
+     - `sessions`：读不到（没有 workspace 或工作目录、目录不存在、runner 没有 / 离线 / 太旧、旧 runner 遇到非 git 目录、文件太多、凭据被拒，
+       或瞬时故障重试 3 次仍不行），只从会话学；
+     - `wrong_repository`：读到的是别的仓库（origin、根提交不对，或文件夹和上一份快照的路径重合不到一半），只做 `sessions` 档的事。
+     前提错误不重试，当场按档位继续；读不到仓库不是运行的失败。下面第 1 到第 3 步每一档都照做，第 2 步告诉模型「仓库是什么」时，
+     没有快照就用 space 的 title。
   1. 在进程里读按会话抽好的案卷。案卷由服务端确定性抽取、先脱敏，每个会话不超过 8k token，内容包括：
      - owner 消息和 steer；
      - AskUserQuestion 的问答、带理由的 DENIED、ExitPlanMode；
@@ -514,8 +525,15 @@ EXECUTABLE 判据）——随维护会话在 P11（2026-10-19）删除：维护�
      origin=maintenance，提议者是这次运行的作业。
   3. **推进游标**（判据 3 第 4 版）：op 记下后立刻越过这些 op 所属的会话。之后的步骤失败，运行照样记失败、计入连续失败，但游标不回退，
      下一次运行不再重读这些会话；提交失败发生在记下之前，游标不动。
-  4. 锚点复验：作业把锚点交给 space 的 workspace 所在的 runner，作为 `anchors` 仓库操作在 fetch 后的 `origin/main` 上跑 git 检查，结果由服务端记下。
-  5. 按已确认的 plan 只重写受影响的节；落不进任何一节的新知识产出 plan 修改建议（判据 3 第 3 版）。
+  4. 锚点复验，按档位：
+     - `git`：作业把锚点交给 space 的 workspace 所在的 runner，作为 `anchors` 仓库操作在 fetch 后的仓库默认分支上跑 git 检查，结果由服务端记下；
+     - `folder`：路径和符号锚点在文件夹上核，检查记 `source: folder` 和树哈希，只在同一个树哈希上算数；提交锚点不核，保留上一次的结果；
+     - `sessions` / `wrong_repository`：代码锚点不核，保留上一次的结果，等第一次读得到仓库的运行再核。服务端锚点（criterion、record、merge_evidence）
+       今天没有检查会写，所以这一档这一步什么都不写。
+     - 抽取时锚点也按档位收：文件夹档不收条目写的提交锚点；没有快照时不再丢掉写了代码锚点的条目，而是收下锚点并标 `deferred`，
+       条目照常进 Review，第一次核过之前不进推送块；第一次核时代码锚点全都不在的，提一条 challenge `None of its code anchors exist in this repository`。
+  5. 按已确认的 plan 只重写受影响的节；落不进任何一节的新知识产出 plan 修改建议（判据 3 第 3 版）。`sessions` / `wrong_repository` 档整步跳过
+     （`docs.skipped no_repository`），之后第一次读得到仓库的运行按追赶的记账补写；`folder` 档没有 diff，写于别的 sha 的节交给节的指纹判断。
 - **成本护栏**（照 Wikova 的实测）
   - Wikova ingest 的计费输入 p50 1.1M、最高 9.5M token，由轮数驱动。
   - 所以：运行里没有 agent 回合，每个案卷一次模型调用，经全局并发受限的请求队列，每步有调用预算和等待上限（P11 之前维护会话的护栏是 maxTurns 120、被截断就算失败、禁用 Task / Agent 子 agent 和 WebFetch / WebSearch）；每次运行最多 30 个 op；单次改动的 active 条目不超过 10%，超过就熔断；没有新事实就不建运行（成本为 0）。
@@ -529,7 +547,13 @@ EXECUTABLE 判据）——随维护会话在 P11（2026-10-19）删除：维护�
   提交时有 op 被拒就判失败。「跑完了」不等于「做对了」：游标已推进而后续步骤失败的运行同样记 failed，游标停在原地、下一次运行不重读那些会话。
 - **健康**
   - `wiki_cursor` 记录 last_ok_at、滞后量、连续失败次数，显示在 Wiki 页头（效果图 01 的状态行）。
-  - 连续失败 3 次：推送一次通知，并在 Following 的 Needs attention 里出现一条。
+  - 连续失败 3 次：推送一次通知（kind `wiki-maintenance-failing`）。Following 的 Needs attention 只列 watch，wiki 的告警在那里没有一行。
+  - 仓库部分（2026-11-11，契约 §20）：health 的 `repo` 多 `tier`、`reason`、`detail`、`checkedAt`，状态行在维护部分后面接一段：
+    `folder` 写 `Reading the folder, not git`（灰），`sessions` 写 `Code checks paused: <detail>`（琥珀，红色原因时红），`wrong_repository` 写 `<detail>`（红），
+    后两者带 `Fix in Settings`；手机只写 `Reading the folder` / `Code checks paused` / `Wrong folder`。读不到仓库的运行照样成功，backlog 照样下降。
+  - 红色原因（别的仓库、凭据被拒）连续 3 次运行：推送一次（同一个 kind，标题 `Wiki code checks paused for 3 runs`），读到一次仓库就清零。
+  - 恢复入口：选 workspace 时先探测一次（`POST …/maintenance/probe`，别的仓库不让打开）；维护卡上 `Check again and run now`
+    （`POST …/maintenance/run`，计入每日次数）和 `path_overlap` 时的 `Use this folder`。
   - 监控可推送条目数与推送块字节数的下限，防止作业全绿、推送块却被掏空。
 
 ### 8.3 导入（阶段 2）
@@ -701,7 +725,7 @@ iPhone 抽屉、web 手机抽屉、web 桌面侧栏、iPad 与 macOS 侧栏都�
 #### 12.3.1 首页：内容
 
 - **从上到下**：页头 → 内容状态行 → 搜索 → 原则组 → 文档按大类 → `Browse by category · A–Z index`。web 手机、iOS、iPad 详情栏是同一个顺序（图 30 ③、31 ①③）。顺序由 web 的 `WikiHome.tsx`、`index.css` 的手机规则和 iOS 的 `WikiLogic.HomeBand` 一起钉住。
-- **页头**：`Wiki` · space（§12.3.4）· Contents · Activity（带「等你」数，§12.3.3）· Settings · New entry。
+- **页头**：`Wiki` · space（§12.3.4）· Contents · Activity（带「等你」数，§12.3.3）· Settings。New entry 在 11-11 去掉（效果图 45 ③）：手写条目改在 wiki 聊天里说。
   - iOS 工具栏：Contents（`list.bullet`）· Activity（`clock.arrow.circlepath`）· Settings。
   - web 桌面不画 Contents：目录栏就在左边。今天 ≥961px 就是这样，≤960px 才有这个按钮。
 - **内容状态行**：`35 documents · 5 written`，即 `docs.total` 与 `docs.written`。维护状态（条目数、待审、维护、追赶）不在首页，在 Activity。

@@ -7,6 +7,14 @@
  */
 export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   // The design's list.
+  // Owner request secrets (docs/design/owner-request-secrets.md §8.1): entering, cancelling or revoking a key, and the
+  // saved secrets. Each also refuses a request carrying an acting session, SECRET_OWNER_CHANNEL_ONLY.
+  'POST /owner-requests/:id/secret',
+  'POST /owner-requests/:id/secret/cancel',
+  'POST /owner-requests/:id/secret/revoke',
+  'GET /account-secrets',
+  'PUT /account-secrets/:id',
+  'DELETE /account-secrets/:id',
   'POST /tasks/:taskId/owner-confirmation',
   'POST /tasks/:taskId/evidence/decision',
   'POST /sessions/:id/approvals/:approvalId/decision',
@@ -20,6 +28,7 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   // from agents. These refuse a request that carries an agent session — starting a project seals its
   // criteria, the standard-set confirmation by another door.
   'POST /projects/:id/start',
+  'GET /projects/:id/done-check',
   'POST /projects/:id/done',
   'POST /projects/:id/pause',
   'POST /projects/:id/resume',
@@ -60,6 +69,9 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /wiki/spaces/:id/verifications/reopen',
   'POST /wiki/spaces/:id/workspaces',
   'DELETE /wiki/spaces/:id/workspaces/:workspaceId',
+  // The maintenance settings' probe and Check again and run now (docs/wiki-repo-tiers-design.md §7.3).
+  'POST /wiki/spaces/:id/maintenance/probe',
+  'POST /wiki/spaces/:id/maintenance/run',
   'DELETE /wiki/spaces/:id',
   'POST /wiki/spaces/:id/restore',
   'DELETE /wiki/spaces/:id/purge',

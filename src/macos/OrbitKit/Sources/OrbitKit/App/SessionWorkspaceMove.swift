@@ -52,6 +52,12 @@ public enum SessionWorkspaceMoveLogic {
         answer.reason
     }
 
+    /// The sentence under the group: why the session can't leave, or — for a project's coordinator
+    /// that can — that the project's coordination goes with it.
+    public static func groupFooter(_ answer: SessionMoveTargets) -> String? {
+        answer.reason ?? (answer.coordinates == nil ? nil : SessionMoveCopy.coordinatorMoves)
+    }
+
     /// The folders the session can be filed in on a workspace's page: the ones the server listed,
     /// and any made from the page since (New Folder…), by name as the list orders folders
     /// (`SessionFolderGrouping.byName`).
@@ -176,8 +182,21 @@ public extension SessionMoveCopy {
         return sentences.joined(separator: " ")
     }
 
-    /// The confirmation's title.
-    static func confirmTitle(_ target: SessionMoveTarget) -> String { "Move to \(target.name)?" }
+    /// After the session's title when it is a project's coordinator.
+    static func coordinatorOf(_ project: String) -> String { "Coordinator of \(project)" }
+    /// Under Move to Another Workspace for a project's coordinator.
+    static let coordinatorMoves = "The project’s coordinator moves with it."
+
+    /// The line under the panel's title: the session's title, and the project it coordinates.
+    static func sessionLine(_ title: String, _ answer: SessionMoveTargets?) -> String {
+        guard let coordinates = answer?.coordinates else { return title }
+        return "\(title) · \(coordinatorOf(coordinates.title))"
+    }
+
+    /// The confirmation's title — the coordinator's own when the session is one.
+    static func confirmTitle(_ target: SessionMoveTarget, _ answer: SessionMoveTargets? = nil) -> String {
+        answer?.coordinates == nil ? "Move to \(target.name)?" : "Move the coordinator to \(target.name)?"
+    }
 
     /// The confirmation's body, put together as §5.3 says: the conversation goes, the agent's memory
     /// of it is summarized when another runner rebuilds it, the changes stay on their branch in the
@@ -189,19 +208,30 @@ public extension SessionMoveCopy {
         if target.conversation == .rebuilt {
             paragraphs.append("Earlier parts of the conversation are summarized for the agent.")
         }
-        if let branch = answer.branch, answer.changedFiles > 0 {
-            let unmerged = answer.unmergedFiles
-            if unmerged > 0 {
-                let files = unmerged == 1 ? "1 changed file isn’t" : "\(unmerged) changed files aren’t"
-                let they = unmerged == 1 ? "It stays" : "They stay"
-                paragraphs.append("\(files) merged into \(answer.mergeTarget ?? "main") yet. "
-                                  + "\(they) on branch \(branch) in \(workspace).")
-            } else {
-                paragraphs.append("Changes made so far stay on branch \(branch) in \(workspace).")
-            }
+        // A project's coordinator takes its project along (the server writes both together).
+        if let coordinates = answer.coordinates {
+            paragraphs.append("\(coordinates.title) is coordinated from \(target.name) from now on, and its row "
+                              + "moves to \(target.name)’s list. Its tasks keep running where they are.")
         }
-        if answer.needsEnd { paragraphs.append("The session ends first.") }
+        if let files = filesSentence(answer, from: workspace) { paragraphs.append(files) }
+        if answer.needsEnd {
+            // An ended coordinator is not handed Orbit's updates: they wait on the project page.
+            paragraphs.append(answer.coordinates == nil ? "The session ends first."
+                              : "The session ends first. Until you message it again, Orbit’s updates for "
+                                + "the project wait on the project page.")
+        }
         return paragraphs.joined(separator: "\n\n")
+    }
+
+    /// What becomes of the changes the session made: how many aren't merged yet, on which branch, in
+    /// which workspace (web `moveFilesSentence`). Nil when the session changed nothing on a branch.
+    static func filesSentence(_ answer: SessionMoveTargets, from workspace: String) -> String? {
+        guard let branch = answer.branch, answer.changedFiles > 0 else { return nil }
+        let unmerged = answer.unmergedFiles
+        guard unmerged > 0 else { return "Changes made so far stay on branch \(branch) in \(workspace)." }
+        let files = unmerged == 1 ? "1 changed file isn’t" : "\(unmerged) changed files aren’t"
+        let they = unmerged == 1 ? "It stays" : "They stay"
+        return "\(files) merged into \(answer.mergeTarget ?? "main") yet. \(they) on branch \(branch) in \(workspace)."
     }
 
     /// The confirmation's button: End and Move for a session that has to be ended first.

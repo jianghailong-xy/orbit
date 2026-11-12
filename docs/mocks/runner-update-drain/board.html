@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Runner 更新：看得见、能延后、能中断 · 效果图</title>
+<style>
+  :root { --border:#dee0e3; --t1:#1f2329; --t2:#646a73; --t3:#8f959e; --brand:#3370ff; --tint:#eaf1ff; --bborder:#bcd3ff; --warn:#c2710c; --warnbg:#fff6e8; --warnbd:#f5d7a8; --danger:#d83931; }
+  body { margin:0; background:#f4f4f6; font:15px/1.55 "Inter","Noto Sans SC","WenQuanYi Zen Hei",sans-serif; color:#1d1d1f; }
+  .b-part { width:1440px; margin:0 auto; padding:36px 44px 40px; box-sizing:border-box; background:#fff; border-bottom:1px solid #e3e3e8; font:15px/1.55 "Inter","Noto Sans SC","WenQuanYi Zen Hei",sans-serif; }
+  h1 { font-size:26px; margin:0 0 6px; } h2 { font-size:20px; margin:0 0 14px; } h3 { font-size:16px; margin:0 0 8px; }
+  .b-sub { color:#6e6e73; margin:0 0 20px; }
+  .b-cols { display:grid; grid-template-columns:1fr 1fr; gap:28px; }
+  .b-cols3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:22px; }
+  .b-cap { font-size:14px; font-weight:700; margin:0 0 8px; }
+  .b-cap.old { color:#8e8e93; } .b-cap.new { color:#1f8a3b; }
+  .b-n { display:inline-block; min-width:22px; height:22px; line-height:22px; text-align:center; border-radius:11px; background:#ff3b30; color:#fff; font-size:13px; font-weight:700; margin-right:6px; font-style:normal; }
+  .b-pin { position:absolute; z-index:5; }
+  .b-notes { margin-top:16px; display:grid; grid-template-columns:1fr 1fr; gap:6px 28px; font-size:14px; }
+  .b-notes p { margin:0; }
+  .b-mono { font-family:"DejaVu Sans Mono",monospace; font-size:12.5px; }
+  .b-warn { border-left:4px solid #ff9f0a; background:#fff8ec; padding:10px 14px; border-radius:6px; margin-top:14px; font-size:14px; }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th,td { border:1px solid #e0e0e5; padding:8px 10px; vertical-align:top; text-align:left; }
+  th { background:#f6f6f8; } td.rec { background:#f1fbf3; }
+  .b-tag { display:inline-block; font-size:12px; padding:1px 7px; border-radius:8px; background:#34a853; color:#fff; margin-left:6px; }
+
+  /* state machine */
+  .sm { display:flex; align-items:stretch; gap:0; margin:8px 0 6px; }
+  .sm-node { flex:1; border:2px solid #c7c7cc; border-radius:12px; padding:12px 14px; background:#fafafc; font-size:14px; position:relative; }
+  .sm-node b { font-size:15px; display:block; margin-bottom:4px; }
+  .sm-node.hot { border-color:#ff9f0a; background:#fff8ec; }
+  .sm-node.new { border:2px dashed #34a853; background:#f1fbf3; }
+  .sm-arrow { width:56px; display:flex; align-items:center; justify-content:center; color:#8e8e93; font-size:12px; text-align:center; }
+  .sm-arrow span { display:block; }
+  .who { font-size:12.5px; color:#6e6e73; margin-top:6px; }
+
+  /* web app frame */
+  .win { border:1px solid #d6d7da; border-radius:12px; overflow:hidden; background:#fff; box-shadow:0 6px 24px rgba(0,0,0,.07); position:relative; }
+  .win-top { height:30px; background:#f3f4f6; border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 12px; gap:6px; }
+  .win-top i { width:11px; height:11px; border-radius:6px; background:#d0d2d6; display:inline-block; }
+  .app { display:grid; grid-template-columns:230px 1fr; min-height:440px; }
+  .side { border-right:1px solid var(--border); background:#fafbfc; padding:10px 8px; font-size:13px; }
+  .side .ws { font-size:11.5px; color:var(--t3); text-transform:uppercase; letter-spacing:.04em; margin:6px 8px; }
+  .row { padding:7px 8px; border-radius:7px; margin-bottom:2px; display:flex; justify-content:space-between; gap:6px; align-items:center; color:var(--t1); position:relative; }
+  .row.sel { background:#e8edf7; }
+  .row .nm { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .chip { font-size:11px; color:var(--t3); white-space:nowrap; }
+  .chip.run { color:var(--brand); }
+  .chip.upd { color:var(--warn); }
+  .pane { display:flex; flex-direction:column; position:relative; }
+  .pane-head { height:44px; border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 18px; font-weight:600; font-size:14px; color:var(--t1); gap:8px; }
+  .pane-head .st { font-weight:400; color:var(--t3); font-size:12.5px; }
+  .pane-head .st.upd { color:var(--warn); }
+  .pane-body { flex:1; padding:18px 22px; display:flex; flex-direction:column; gap:12px; background:#fff; }
+  .composer { margin:10px 18px 16px; border:1px solid var(--border); border-radius:12px; height:54px; color:var(--t3); font-size:13px; padding:10px 14px; box-sizing:border-box; }
+  .q-state { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; text-align:center; }
+  .dots { display:flex; gap:6px; } .dots span { width:7px; height:7px; border-radius:4px; background:#c3c7cd; }
+  .q-title { font-size:15px; font-weight:600; color:var(--t1); }
+  .q-desc { font-size:13px; color:var(--t3); max-width:340px; line-height:1.5; }
+  .q-desc.wide { max-width:420px; }
+  .q-desc a, .lnk { color:var(--brand); text-decoration:none; }
+  .q-meta { font-size:12px; color:var(--t3); }
+  .btns { display:flex; gap:8px; justify-content:center; align-items:center; }
+  .btn { font-size:13px; border:1px solid var(--border); border-radius:8px; padding:5px 12px; background:#fff; color:var(--t1); white-space:nowrap; }
+  .btn.pri { background:var(--brand); border-color:var(--brand); color:#fff; }
+  .btn.dng { background:var(--danger); border-color:var(--danger); color:#fff; }
+  .btn .car { color:var(--t3); margin-left:4px; font-size:11px; }
+  .bubble-u { align-self:flex-end; max-width:70%; background:#f2f3f5; border-radius:14px; padding:9px 13px; font-size:13.5px; color:var(--t1); }
+  .bubble-q { align-self:flex-end; max-width:70%; background:var(--tint); border:1px dashed var(--bborder); border-radius:14px; padding:9px 13px; font-size:13.5px; color:var(--t1); }
+  .foot { align-self:flex-end; font-size:12px; color:var(--t3); margin-top:-6px; position:relative; }
+  .foot .upd { color:var(--warn); border-bottom:1px dotted var(--warn); }
+  .asst { font-size:13.5px; color:var(--t1); max-width:86%; line-height:1.6; }
+  .pop { position:absolute; background:#fff; border:1px solid var(--border); border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.14); padding:14px 16px; font-size:13px; color:var(--t1); z-index:3; }
+  .pop .h { font-weight:600; font-size:14px; margin-bottom:6px; }
+  .pop .d { color:var(--t2); line-height:1.5; margin-bottom:10px; }
+  .menu { position:absolute; background:#fff; border:1px solid var(--border); border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.14); padding:5px; font-size:13px; z-index:4; min-width:200px; }
+  .menu div { padding:6px 10px; border-radius:6px; display:flex; justify-content:space-between; gap:16px; }
+  .menu div.hi { background:#e8edf7; }
+  .menu div span { color:var(--t3); }
+  .banner { display:flex; align-items:center; gap:10px; padding:8px 14px 8px 18px; background:var(--warnbg); border-bottom:1px solid var(--warnbd); font-size:13px; color:var(--t1); }
+  .banner .ic { width:16px; height:16px; border-radius:8px; border:2px solid var(--warn); box-sizing:border-box; position:relative; flex:none; }
+  .banner .ic:after { content:""; position:absolute; left:5px; top:2px; width:2px; height:6px; background:var(--warn); }
+  .banner .tx { flex:1; }
+  .banner .btn { padding:3px 10px; font-size:12.5px; }
+  .tline { font-size:12.5px; color:var(--t3); text-align:center; }
+  .scrim { position:absolute; inset:30px 0 0 0; background:rgba(15,20,30,.32); z-index:2; }
+  .dlg { position:absolute; left:50%; top:52%; transform:translate(-50%,-50%); width:440px; background:#fff; border-radius:14px; box-shadow:0 18px 50px rgba(0,0,0,.25); padding:20px 22px 18px; z-index:3; font-size:13.5px; color:var(--t1); }
+  .dlg .h { font-size:16px; font-weight:650; margin-bottom:8px; }
+  .dlg .d { color:var(--t2); line-height:1.55; margin-bottom:10px; }
+  .dlg ul { margin:0 0 12px; padding:0; list-style:none; border:1px solid var(--border); border-radius:10px; }
+  .dlg li { padding:8px 12px; border-top:1px solid var(--border); display:flex; justify-content:space-between; gap:12px; }
+  .dlg li:first-child { border-top:0; }
+  .dlg li span { color:var(--t3); font-size:12.5px; white-space:nowrap; }
+  .dlg .act { display:flex; justify-content:flex-end; gap:8px; margin-top:6px; }
+
+  /* runner page */
+  .rp { padding:20px 26px; background:#fff; }
+  .rp-h { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+  .rp-h b { font-size:18px; } .rp-h .on { font-size:12px; color:#1f8a3b; background:#e9f7ee; border-radius:9px; padding:1px 8px; }
+  .card { border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-bottom:14px; font-size:13.5px; color:var(--t1); position:relative; }
+  .card.upd { border-color:var(--warnbd); background:#fffbf4; }
+  .card .ct { font-weight:650; font-size:14.5px; margin-bottom:4px; display:flex; justify-content:space-between; align-items:center; }
+  .card .cs { color:var(--t2); margin-bottom:10px; line-height:1.5; }
+  .bar { height:6px; border-radius:3px; background:#eceef1; overflow:hidden; margin:6px 0 10px; }
+  .bar i { display:block; height:100%; background:var(--warn); }
+  .kv { display:grid; grid-template-columns:150px 1fr; gap:6px 10px; font-size:13px; }
+  .kv .k { color:var(--t3); }
+  .turns { border:1px solid var(--border); border-radius:9px; margin:8px 0 12px; background:#fff; }
+  .turns div { padding:7px 12px; border-top:1px solid var(--border); display:flex; justify-content:space-between; font-size:13px; }
+  .turns div:first-child { border-top:0; }
+  .turns span { color:var(--t3); }
+
+  /* phone */
+  .phone { width:393px; height:852px; border-radius:54px; border:10px solid #1c1c1e; background:#f2f2f7; position:relative; overflow:hidden; box-sizing:content-box; font-family:"Inter","Noto Sans SC",sans-serif; }
+  .ph-status { height:54px; display:flex; justify-content:space-between; align-items:flex-end; padding:0 34px 6px; font-size:15px; font-weight:600; }
+  .ph-nav { height:44px; display:flex; align-items:center; padding:0 16px; gap:8px; font-size:16px; font-weight:600; justify-content:center; position:relative; }
+  .ph-nav .bk { position:absolute; left:16px; color:#007aff; font-weight:400; font-size:17px; }
+  .ph-nav .sub { display:block; font-size:12px; font-weight:400; color:#c2710c; text-align:center; }
+  .ph-body { padding:12px 16px; }
+  .ph-card { background:#fff; border-radius:14px; padding:14px 16px; font-size:15px; margin-bottom:14px; }
+  .ph-card .t { font-weight:600; font-size:16px; margin-bottom:6px; }
+  .ph-card .d { color:#6e6e73; font-size:14px; line-height:1.45; }
+  .ph-btn { display:block; text-align:center; padding:11px 0; border-radius:12px; font-size:16px; margin-top:10px; background:#e9e9ee; color:#007aff; }
+  .ph-btn.pri { background:#007aff; color:#fff; }
+  .ph-grp { font-size:13px; color:#6e6e73; text-transform:uppercase; margin:18px 16px 6px; }
+  .ph-list { background:#fff; border-radius:12px; margin:0 0 6px; }
+  .ph-list div { padding:11px 16px; border-top:.5px solid #d1d1d6; display:flex; justify-content:space-between; font-size:15px; }
+  .ph-list div:first-child { border-top:0; }
+  .ph-list span { color:#8a8a8d; }
+  .ph-sheet { position:absolute; left:0; right:0; bottom:0; background:#f2f2f7; border-radius:14px 14px 0 0; padding:8px 8px 34px; box-shadow:0 -8px 30px rgba(0,0,0,.18); }
+  .ph-sheet .grp { background:#fff; border-radius:13px; overflow:hidden; margin-bottom:8px; }
+  .ph-sheet .grp div { padding:15px; text-align:center; color:#007aff; font-size:18px; border-top:.5px solid #d1d1d6; }
+  .ph-sheet .grp div:first-child { border-top:0; }
+  .ph-sheet .grp .ttl { font-size:13px; color:#8a8a8d; padding:12px 16px; }
+  .ph-sheet .grp .red { color:#ff3b30; }
+  .ph-dim { position:absolute; inset:0; background:rgba(0,0,0,.3); }
+  .ph-strip { margin:0 0 12px; background:#fff6e8; border:1px solid #f5d7a8; border-radius:12px; padding:10px 14px; font-size:14px; color:#1f2329; }
+</style>
+</head>
+<body>
+
+<!-- ───────────────────────── 1 ───────────────────────── -->
+<section class="b-part" id="part-1">
+  <h1>Runner 更新：看得见、能延后、能中断</h1>
+  <p class="b-sub">按 macOS「软件更新」的思路：更新是一个看得见的对象，有明确的阶段；凡是因为它而停住的工作，都说出原因，并且就地给出「Later」和「Update Now」。</p>
+
+  <h2>① 今天：runner 替你做了取舍，你看不到，也改不了</h2>
+  <div class="sm">
+    <div class="sm-node"><b>有新版本</b>每 10 分钟查一次；有 turn 在跑就推迟<div class="who">影响：无</div></div>
+    <div class="sm-arrow"><span>推迟满<br>1 小时</span></div>
+    <div class="sm-node hot"><b>排空（drain）</b>不再领取任何新 session，也不跑已有 session 的后续消息；等在跑的 turn 自己结束，<b style="display:inline">没有上限</b><div class="who">界面显示：「Waiting for the runner to pick it up」 / 「Queued」 ✗</div></div>
+    <div class="sm-arrow"><span>全部<br>空闲</span></div>
+    <div class="sm-node"><b>安装并重启</b>几秒钟<div class="who">影响：几秒</div></div>
+  </div>
+  <div class="b-notes">
+    <p>· 服务端其实已经知道：心跳里有 <span class="b-mono">heartbeat_draining=true</span>，<span class="b-mono">self_update.reason</span> 写着 “deferred for 1h5m51s … until the 8 turn(s) in flight end”。</p>
+    <p>· 可是排队原因 <span class="b-mono">queuedReason</span> 只认 5 种（离线、runner 满、run 满、batch 满、git 操作），没有「在更新」，于是落到 null，界面说「马上就会被领走」。</p>
+    <p>· runner 页面在排空前后都只显示同一句「installs when no turn is running」。</p>
+    <p>· 「Update Runner Now」只是让它早点去查，查到有 turn 在跑还是继续等，实际上帮不上忙。</p>
+  </div>
+
+  <h2 style="margin-top:26px">② 建议：四个阶段，所有界面用同一套说法</h2>
+  <div class="sm">
+    <div class="sm-node"><b>Available</b>和今天一样，安静地等空闲<div class="who">只在 runner 页面显示一行</div></div>
+    <div class="sm-arrow"><span>1 小时</span></div>
+    <div class="sm-node hot new"><b>Draining · 新：看得见</b>排队的 session、排队的消息、session 列表、runner 页面都写「Runner updating」，说明在等哪几个 turn、已经等了多久<div class="who">两个动作：<b style="display:inline">Later ▾</b> · <b style="display:inline">Update Now…</b></div></div>
+    <div class="sm-arrow"><span>空闲 或<br>Update Now</span></div>
+    <div class="sm-node new"><b>Restarting</b>「Restarting into 0.1.254…」<br>被中断的 turn 重启后自动接着跑</div>
+  </div>
+  <div class="sm" style="margin-top:10px;">
+    <div class="sm-node" style="flex:0 0 auto; visibility:hidden;"></div>
+    <div class="sm-node new" style="flex:0 0 520px; margin-left:330px;"><b>Postponed · 新</b>按了 Later：立刻结束排空、恢复领活；到点后重新等空闲，再给 1 小时<div class="who">runner 页面：「0.1.254 postponed until 18:40 · Update Now」</div></div>
+  </div>
+  <div class="b-warn">守住 09-25 的规则：<b>自动</b>更新永远不打断在跑的 turn。中断只发生在你亲手按下 Update Now、并在确认框里看到会打断哪几个 turn 之后。</div>
+</section>
+
+<!-- ───────────────────────── 2 ───────────────────────── -->
+<section class="b-part" id="part-2">
+  <h2>③ 排队的 session：说出原因，并就地给出两个动作（Web）</h2>
+  <div class="b-cols">
+    <div>
+      <p class="b-cap old">今天</p>
+      <div class="win"><div class="win-top"><i></i><i></i><i></i></div>
+        <div class="app">
+          <div class="side">
+            <div class="ws">orbit-develop</div>
+            <div class="row sel"><span class="nm">Why is the send stuck in Queued</span><span class="chip">Queued</span></div>
+            <div class="row"><span class="nm">Backfill missing shard rows</span><span class="chip run">Running</span></div>
+            <div class="row"><span class="nm">Why are 11-08 metrics zero</span><span class="chip run">Running</span></div>
+            <div class="row"><span class="nm">Cluster repair checklist</span><span class="chip">Queued</span></div>
+          </div>
+          <div class="pane">
+            <div class="pane-head">Why is the send stuck in Queued <span class="st">· Queued</span></div>
+            <div class="q-state">
+              <div class="dots"><span></span><span></span><span></span></div>
+              <div class="q-title">Queued</div>
+              <div class="q-desc">Waiting for the runner to pick it up.</div>
+            </div>
+            <div class="composer">Reply…</div>
+          </div>
+        </div>
+      </div>
+      <p style="font-size:13.5px;color:#6e6e73;margin-top:10px;">这句话原本描述的是「一次长轮询就会被领走」，实际上这里一等就是几个小时，没有任何说明，也没有可以点的东西。</p>
+    </div>
+    <div>
+      <p class="b-cap new">建议</p>
+      <div class="win"><div class="win-top"><i></i><i></i><i></i></div>
+        <div class="app">
+          <div class="side">
+            <div class="ws">orbit-develop</div>
+            <div class="row sel"><span class="nm">Why is the send stuck in Queued</span><span class="chip upd">Runner updating</span><i class="b-n b-pin" style="right:-14px;top:-10px;">1</i></div>
+            <div class="row"><span class="nm">Backfill missing shard rows</span><span class="chip run">Running</span></div>
+            <div class="row"><span class="nm">Why are 11-08 metrics zero</span><span class="chip run">Running</span></div>
+            <div class="row"><span class="nm">Cluster repair checklist</span><span class="chip upd">Runner updating</span></div>
+          </div>
+          <div class="pane">
+            <div class="pane-head">Why is the send stuck in Queued <span class="st upd">· Runner updating</span></div>
+            <div class="q-state" style="position:relative;">
+              <div class="dots"><span></span><span></span><span></span></div>
+              <div class="q-title">Runner updating<i class="b-n" style="margin-left:8px;">2</i></div>
+              <div class="q-desc wide">studio-mac is updating to 0.1.254. It starts no new work until 2 turns finish: <a>Backfill missing shard rows</a> and <a>Why are 11-08 metrics zero</a>. This session starts right after.</div>
+              <div class="q-meta">Waiting 38 min<i class="b-n" style="margin-left:8px;">3</i></div>
+              <div class="btns"><span class="btn">Later<span class="car">▾</span></span><span class="btn">Update Now…</span><i class="b-n">4</i></div>
+            </div>
+            <div class="composer">Reply…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="b-notes">
+    <p><i class="b-n">1</i>session 列表上的状态从「Queued」改成「Runner updating」，用 warning 色。同一台 runner 后面排着的其他 session 也一样显示。</p>
+    <p><i class="b-n">2</i>新的排队原因 <span class="b-mono">runner_updating</span>：排在「离线」之后、所有容量判断之前。排空期间容量数字说明不了任何问题，这和「离线优先」是同一个理由。</p>
+    <p><i class="b-n">3</i>写明在等哪两个 turn（可以点进去看）、已经等了多久，让人自己判断是等下去还是动手。</p>
+    <p><i class="b-n">4</i>两个按钮就放在等待原因下面，不用跑去 runner 页面找。下一张图是它们点开后的样子。</p>
+  </div>
+
+  <h2 style="margin-top:30px">④ 已经在跑的 session 里，后续消息被挡住</h2>
+  <div class="b-cols">
+    <div>
+      <p class="b-cap old">今天</p>
+      <div class="win"><div class="win-top"><i></i><i></i><i></i></div>
+        <div class="pane" style="min-height:400px;">
+          <div class="pane-head">Cluster repair checklist</div>
+          <div class="pane-body">
+            <div class="asst">Done — the three failing nodes are drained and the checklist is updated. Want me to run the health probe next?</div>
+            <div class="bubble-q">Yes, run it and post the summary.</div>
+            <div class="foot">11:41 · Queued</div>
+          </div>
+          <div class="composer">Reply…</div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p class="b-cap new">建议：foot row 上那一行灰字说明原因，点开是同样的说明和两个动作</p>
+      <div class="win"><div class="win-top"><i></i><i></i><i></i></div>
+        <div class="pane" style="min-height:400px;">
+          <div class="pane-head">Cluster repair checklist</div>
+          <div class="pane-body">
+            <div class="asst">Done — the three failing nodes are drained and the checklist is updated. Want me to run the health probe next?</div>
+            <div class="bubble-q">Yes, run it and post the summary.</div>
+            <div class="foot">11:41 · Queued · <span class="upd">runner updating</span><i class="b-n" style="margin-left:6px;">5</i></div>
+          </div>
+          <div class="pop" style="right:22px; top:196px; width:330px;">
+            <div class="h">Runner updating</div>
+            <div class="d">studio-mac starts no new turns until 2 turns finish, then updates to 0.1.254. This message is sent right after. Waiting 38 min.</div>
+            <div class="btns" style="justify-content:flex-start;"><span class="btn">Later<span class="car">▾</span></span><span class="btn">Update Now…</span></div>
+          </div>
+          <div class="composer" style="visibility:hidden">Reply…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="b-notes">
+    <p><i class="b-n">5</i>遵守 10-27 的裁定（用户输入的内容是视觉重心）：气泡本身不变，原因只放在 foot row 的灰字里。没有边框，也不额外上色，「runner updating」只是加了一条虚下划线，表示可以点。</p>
+    <p>点开的浮层和 ③ 是同一段文字、同两个按钮，所以三处（session 列表、排队页、消息浮层）读起来是同一件事。</p>
+  </div>
+</section>
+
+<!-- ───────────────────────── 3 ───────────────────────── -->
+<section class="b-part" id="part-3">
+  <h2>⑤ 像 Mac 一样：Later 延后、Update Now 中断（Web）</h2>
+  <div class="b-cols">
+    <div>
+      <p class="b-cap new">Later ▾：立刻结束排空，到点再说</p>
+      <div class="win"><div class="win-top"><i></i><i></i><i></i></div>
+        <div class="pane" style="min-height:420px;">
+          <div class="banner"><span class="ic"></span><span class="tx"><b>studio-mac is updating to 0.1.254</b> — 1 session and 1 message are waiting for 2 turns to finish.</span><span class="btn">Later<span class="car">▾</span></span><span class="btn">Update Now…</span><span style="color:var(--t3);font-size:15px;">×</span><i class="b-n">6</i></div>
+          <div class="pane-head">Why is the send stuck in Queued <span class="st upd">· Runner updating</span></div>
+          <div class="q-state">
+            <div class="dots"><span></span><span></span><span></span></div>
+            <div class="q-title">Runner updating</div>
+            <div class="q-desc wide">studio-mac is updating to 0.1.254. It starts no new work until 2 turns finish: <a>Backfill missing shard rows</a> and <a>Why are 11-08 metrics zero</a>. This session starts right after.</div>
+            <div class="q-meta">Waiting 38 min</div>
+            <div class="btns" style="position:relative;"><span class="btn" style="border-color:var(--brand);">Later<span class="car">▾</span></span><span class="btn">Update Now…</span>
+              <div class="menu" style="left:0; top:34px; text-align:left; white-space:nowrap; min-width:290px;">
+                <div class="hi">Postpone 1 hour <span>until 12:57</span></div>
+                <div>Postpone until tonight <span>02:00</span></div>
+                <div>Postpone until tomorrow <span>09:00</span></div>
+              </div>
+              <i class="b-n b-pin" style="left:302px; top:40px;">7</i>
+            </div>
+          </div>
+          <div style="height:120px"></div>
+        </div>
+      </div>
+      <p class="tline" style="margin-top:12px;">选完之后，这一页立刻变成正常启动的样子，runner 页面上显示：<b style="color:#1f2329">0.1.254 postponed until 12:57 · Update Now</b></p>
+    </div>
+    <div>
+      <p class="b-cap new">Update Now…：确认框里列出会被打断的 turn</p>
+      <div class="win"><div class="win-top"><i></i><i></i><i></i></div>
+        <div class="pane" style="min-height:420px;">
+          <div class="pane-head">Why is the send stuck in Queued <span class="st upd">· Runner updating</span></div>
+          <div class="q-state"><div class="q-title">Runner updating</div></div>
+          <div style="height:200px"></div>
+        </div>
+        <div class="scrim"></div>
+        <div class="dlg">
+          <div class="h">Update studio-mac now?<i class="b-n" style="margin-left:8px;">8</i></div>
+          <div class="d">It stops these turns, installs 0.1.254 and restarts — usually under a minute. Each one then continues where it stopped, with a note that the update interrupted it.</div>
+          <ul>
+            <li>Backfill missing shard rows <span>running 1 h 52 min</span></li>
+            <li>Why are 11-08 metrics zero <span>running 47 min</span></li>
+          </ul>
+          <div class="d" style="margin-bottom:12px;">Background jobs in those sessions are stopped too. Waiting work starts once it is back.</div>
+          <div class="act"><span class="btn">Cancel</span><span class="btn dng">Interrupt 2 Turns and Update</span></div>
+        </div>
+      </div>
+      <p class="tline" style="margin-top:12px;">按下之后，所有显示 Runner updating 的地方都变成：<b style="color:#1f2329">Restarting into 0.1.254…</b> → 恢复正常</p>
+    </div>
+  </div>
+  <div class="b-notes">
+    <p><i class="b-n">6</i>工作区顶部的提示条只在这台 runner 正在排空、<b>并且</b>有你的东西在等它时才出现（D3），和 Mac 的「需要重启以完成更新」是同一个位置感。× 只是关掉这一次的提示，不改变更新本身。同一时刻发一条推送。</p>
+    <p><i class="b-n">7</i>Later 的三个选项（D1）。选「tonight」相当于「今晚更新」：到点之后，只要空闲就立刻装，不再给 1 小时；如果还有 turn 在跑，就重新给 1 小时再排空。</p>
+    <p><i class="b-n">8</i>这是唯一会打断工作的按钮，所以确认框里点名列出每个会被打断的 turn 和它已经跑了多久，按钮文字也直接写出代价（Interrupt 2 Turns），用红色。只有 owner 能看到和按下这个按钮。</p>
+    <p>被打断的 turn 怎么处理（D4，推荐 A）：走 runner 正常停机的那条路，session 保持可以 resume；新版本起来后重新领取，并补发一句「The runner update interrupted this turn; continue.」这里要实测 Claude/Codex 的 resume 是否可靠，再定稿。</p>
+  </div>
+</section>
+
+<!-- ───────────────────────── 4 ───────────────────────── -->
+<section class="b-part" id="part-4">
+  <h2>⑥ runner 页面：Update 卡片，四个阶段（Web）</h2>
+  <div class="b-cols">
+    <div>
+      <p class="b-cap new">Draining</p>
+      <div class="win"><div class="win-top"><i></i><i></i><i></i></div>
+        <div class="rp">
+          <div class="rp-h"><b>studio-mac</b><span class="on">Online</span><span style="color:var(--t3);font-size:13px;">macOS · 0.1.253</span></div>
+          <div class="card upd">
+            <div class="ct">Updating to 0.1.254<span style="font-size:12.5px;color:var(--warn);font-weight:500;">Not taking new work</span></div>
+            <div class="cs">0.1.254 has been waiting since 09:58. After an hour it stopped taking new work so the turns in flight can finish; then it installs and restarts. 1 session and 1 message are waiting.</div>
+            <div style="font-size:12.5px;color:var(--t3);">Waiting for 2 of 8 turns · 38 min</div>
+            <div class="bar"><i style="width:75%"></i></div>
+            <div class="turns">
+              <div>Backfill missing shard rows <span>running 1 h 52 min</span></div>
+              <div>Why are 11-08 metrics zero <span>running 47 min</span></div>
+            </div>
+            <div class="btns" style="justify-content:flex-start;"><span class="btn">Later<span class="car">▾</span></span><span class="btn">Update Now…</span></div>
+          </div>
+          <div class="card">
+            <div class="ct">About</div>
+            <div class="kv"><span class="k">Version</span><span>0.1.253 <span style="color:var(--warn)">· updating to 0.1.254</span></span><span class="k">Last Update</span><span>11-11 22:03 · 0.1.252 → 0.1.253</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p class="b-cap new">其余三个阶段（同一张卡片）</p>
+      <div class="win" style="padding:16px 18px;">
+        <div class="card"><div class="ct">0.1.254 is available<span style="font-size:12.5px;color:var(--t3);font-weight:500;">Available</span></div>
+          <div class="cs" style="margin-bottom:8px;">It installs when no turn is running. If turns keep running for an hour, it stops taking new work so they can finish.</div>
+          <div class="btns" style="justify-content:flex-start;"><span class="btn">Update Now…</span></div></div>
+        <div class="card"><div class="ct">0.1.254 postponed until 12:57<span style="font-size:12.5px;color:var(--t3);font-weight:500;">Postponed</span></div>
+          <div class="cs" style="margin-bottom:8px;">Taking work as usual. At 12:57 it waits for the turns in flight again, for up to an hour.</div>
+          <div class="btns" style="justify-content:flex-start;"><span class="btn">Change<span class="car">▾</span></span><span class="btn">Update Now…</span></div></div>
+        <div class="card upd"><div class="ct">Restarting into 0.1.254…<span style="font-size:12.5px;color:var(--warn);font-weight:500;">Restarting</span></div>
+          <div class="cs" style="margin-bottom:0;">2 interrupted turns continue once it is back. Usually under a minute.</div></div>
+        <div class="card"><div class="ct">Updated to 0.1.254<span style="font-size:12.5px;color:#1f8a3b;font-weight:500;">12:21</span></div>
+          <div class="cs" style="margin-bottom:0;">Took 34 s. 2 interrupted turns resumed; 1 waiting session started.</div></div>
+      </div>
+      <div class="b-notes" style="grid-template-columns:1fr;">
+        <p>· Available 阶段和今天一样安静，只是多了一个真的能用的 Update Now…，取代现在那个「Update Runner Now」（它只会让 runner 早点检查，检查完照样等）。</p>
+        <p>· Updated 这张卡片显示 24 小时后自动消失；之后这条信息回到 About 里的「Last Update」那一行。</p>
+        <p>· 被 rollout 暂缓、更新被关闭、目录没有写权限、更新失败，这些都沿用今天已有的 attention 文案，不改。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── 5 ───────────────────────── -->
+<section class="b-part" id="part-5">
+  <h2>⑦ iPhone（Android 同构）：同样的原因，同样的两个动作</h2>
+  <div style="display:flex; gap:40px; justify-content:center;">
+    <div>
+      <p class="b-cap new">排队的 session</p>
+      <div class="phone">
+        <div class="ph-status"><span>11:42</span><span>●●● ▮</span></div>
+        <div class="ph-nav"><span class="bk">‹</span><span>Why is the send stuck…<span class="sub">Runner updating</span></span></div>
+        <div class="ph-body" style="padding-top:150px; text-align:center;">
+          <div style="font-weight:600;font-size:17px;margin-bottom:8px;">Runner updating</div>
+          <div style="color:#6e6e73;font-size:14.5px;line-height:1.45;padding:0 14px;">studio-mac is updating to 0.1.254. It starts no new work until 2 turns finish. This session starts right after.</div>
+          <div style="color:#8a8a8d;font-size:13px;margin:10px 0 18px;">Waiting 38 min</div>
+          <div style="padding:0 30px;"><span class="ph-btn">Later…</span><span class="ph-btn">Update Now…</span></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p class="b-cap new">点 Later… 弹出 action sheet</p>
+      <div class="phone">
+        <div class="ph-status"><span>11:42</span><span>●●● ▮</span></div>
+        <div class="ph-nav"><span class="bk">‹</span><span>Why is the send stuck…<span class="sub">Runner updating</span></span></div>
+        <div class="ph-dim"></div>
+        <div class="ph-sheet">
+          <div class="grp">
+            <div class="ttl">Postpone the 0.1.254 update on studio-mac. It takes work again right away.</div>
+            <div>In 1 Hour</div><div>Tonight at 02:00</div><div>Tomorrow at 09:00</div>
+          </div>
+          <div class="grp"><div style="font-weight:600;">Cancel</div></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p class="b-cap new">runner 页面 + 确认</p>
+      <div class="phone">
+        <div class="ph-status"><span>11:42</span><span>●●● ▮</span></div>
+        <div class="ph-nav"><span class="bk">‹ Runners</span><span>studio-mac</span></div>
+        <div class="ph-body">
+          <div class="ph-strip"><b>Updating to 0.1.254</b><br><span style="color:#6e6e73;font-size:13.5px;">Not taking new work · waiting for 2 turns · 38 min · 1 session and 1 message waiting</span></div>
+          <div class="ph-grp" style="margin-left:0;">Waiting for</div>
+          <div class="ph-list"><div>Backfill missing shard… <span>1 h 52 min</span></div><div>Why are 11-08 metrics… <span>47 min</span></div></div>
+        </div>
+        <div class="ph-dim"></div>
+        <div class="ph-sheet">
+          <div class="grp">
+            <div class="ttl">Stop 2 running turns, install 0.1.254 and restart? They continue where they stopped once it is back.</div>
+            <div class="red">Interrupt 2 Turns and Update</div>
+          </div>
+          <div class="grp"><div style="font-weight:600;">Cancel</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="b-notes">
+    <p>· 手机上不放提示条，改为在已有的 attention 列表里加一项「studio-mac is updating — 1 session waiting」，点进去就是右边的 runner 页面，同时发推送。</p>
+    <p>· 按钮文字和 Web 完全一致（Later / Update Now / Interrupt 2 Turns and Update），三端共用同一张文案表，由 parity 测试守住。</p>
+  </div>
+</section>
+
+<!-- ───────────────────────── 6 ───────────────────────── -->
+<section class="b-part" id="part-6">
+  <h2>⑧ 数据、协议，以及待你拍板的几件事</h2>
+  <div class="b-cols">
+    <div>
+      <h3>数据和协议（只加字段，旧 runner 照常工作）</h3>
+      <table>
+        <tr><th>哪里</th><th>改什么</th></tr>
+        <tr><td>排队原因 SQL</td><td><span class="b-mono">WHEN r.heartbeat_draining THEN 'runner_updating'</span>，放在 runner_offline 之后；<span class="b-mono">queuedActive</span> = 这台 runner 在跑的 turn 数</td></tr>
+        <tr><td>shared <span class="b-mono">RunnerSelfUpdate</span></td><td>加 <span class="b-mono">phase</span>（available / draining / restarting / postponed）、<span class="b-mono">targetVersion</span>、<span class="b-mono">drainingSince</span>、<span class="b-mono">postponedUntil</span>；由 runner 填写，旧 runner 不发，客户端就沿用今天的文案</td></tr>
+        <tr><td>API（只有 owner 能调，记审计）</td><td><span class="b-mono">POST /runners/:id/self-update/postpone {until}</span><br><span class="b-mono">POST /runners/:id/self-update/now {interruptTurns:true}</span><br>和现在的 <span class="b-mono">selfUpdateRequestedAt</span> 一样，放在心跳回包里带给 runner</td></tr>
+        <tr><td>runner</td><td>postpone：清掉 <span class="b-mono">drainingForUpdate</span>，在 until 之前不重新计时；now：走正常停机（session 保持可 resume），然后安装、重启</td></tr>
+        <tr><td>apiserver</td><td>重新领取被打断的 session 时，补一个 resume turn，附带一行 Orbit 说明</td></tr>
+      </table>
+      <h3 style="margin-top:20px">落地顺序（按代价从低到高）</h3>
+      <ol style="margin:0;padding-left:22px;font-size:14px;">
+        <li>新增 <span class="b-mono">runner_updating</span> 排队原因，加上三端文案和排队消息的 foot row 灰字。不改 runner，最快见效。</li>
+        <li>runner 上报 phase 等字段，runner 页面加 Update 卡片。</li>
+        <li>Later（延后）端到端。</li>
+        <li>Update Now，以及被打断 turn 的自动 resume（先实测）。</li>
+        <li>提示条和推送。</li>
+      </ol>
+      <div class="b-warn">另一个 bug，单独开 task：runner 排空期间，有个 session 实际在跑，数据库里却还是 PENDING。它会让新的排队原因把这个 session 也错标成「Runner updating」。</div>
+    </div>
+    <div>
+      <h3>待定 · 要你拍板</h3>
+      <table>
+        <tr><th style="width:120px">问题</th><th>A</th><th>B</th></tr>
+        <tr><td>D1 Later 有哪些选项</td><td class="rec">1 小时 / 今晚 02:00 / 明早 09:00<span class="b-tag">推荐</span></td><td>只给一个「1 小时」</td></tr>
+        <tr><td>D2 延后有没有上限</td><td class="rec">不封顶，但每次最多延到明天，到点会再问一次<span class="b-tag">推荐</span></td><td>标记为「必须」的版本不允许延后</td></tr>
+        <tr><td>D3 什么时候出提示条和推送</td><td class="rec">只在有你的东西在等它的时候<span class="b-tag">推荐</span></td><td>只要 runner 进入排空就提示</td></tr>
+        <tr><td>D4 被 Update Now 打断的 turn</td><td class="rec">自动 resume，并附一句说明<span class="b-tag">推荐</span></td><td>停在原处，等你自己去点继续</td></tr>
+        <tr><td>D5 安静时段设置</td><td class="rec">先不做，D1 的「今晚」已经覆盖<span class="b-tag">推荐</span></td><td>每台 runner 设一个时间窗，窗口内不等空闲直接装</td></tr>
+      </table>
+      <div class="b-notes" style="grid-template-columns:1fr;">
+        <p>· 为什么不做「只放行这一个 session」：那样要改 runner 的领取协议，而且每放行一次更新就再往后推一次。它的效果和 Later 差不多，成本却高得多。</p>
+        <p>· 为什么不给排空加自动超时：超时后自动恢复领活的话，忙碌的 runner 就永远装不上更新了。当初加排空，就是为了让 0.1.248 的心跳修复能装上。该不该推迟，交给人来决定。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>

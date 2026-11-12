@@ -12,6 +12,7 @@ import {
 } from '@orbit/shared';
 
 import { attribute, type RequestForBlock } from './session-message';
+import { readRunQuestionCard, RUN_QUESTION_PREFIX } from './run-question';
 import { SESSION_REPLY_TURN_KEY_PREFIX } from './watch-turn-key';
 
 /**
@@ -319,6 +320,7 @@ export type ReplyRefusal =
 
 /** What `session_reply` carries. */
 export interface SessionReplyInput {
+  answers?: import('./run-question').QuestionAnswer[];
   message?: string | null;
   option?: number | null;
 }
@@ -331,6 +333,7 @@ export function readReply(request: Pick<SessionRequest, 'options'>, input: Sessi
   replyText: string | null;
   replyOption: number | null;
 } {
+  if (input.answers !== undefined) throw new BadRequestException('answers is only for a run question');
   const message = typeof input.message === 'string' ? stripNul(input.message).trim() : '';
   if (input.message != null && typeof input.message !== 'string') {
     throw new BadRequestException('message must be text');
@@ -1534,7 +1537,7 @@ export async function readTurnRequestIds(
 
 /** A request as the clients read it: `GET /session-requests/:id` and the session's own list. */
 export async function readSessionRequestView(
-  db: Pick<Prisma.TransactionClient, 'sessionRequest' | 'session'>,
+  db: Prisma.TransactionClient,
   ownerId: string,
   requestId: string,
 ): Promise<SessionRequestView | null> {
@@ -1545,6 +1548,10 @@ export async function readSessionRequestView(
     select: { id: true, title: true },
   });
   const titleOf = (id: string) => sessions.find((session) => session.id === id)?.title ?? '';
+  // A run's question: its card as it stands now, which the clients draw over the one its turn's echo
+  // carries (read before anyone answered).
+  const runQuestion = request.kind === 'RUN_QUESTION' && request.approvalId
+    ? await readRunQuestionCard(db, `${RUN_QUESTION_PREFIX}${request.approvalId}`) : null;
   return {
     requestId: uuidToBase62(request.id),
     state: request.state as SessionRequestView['state'],
@@ -1561,6 +1568,7 @@ export async function readSessionRequestView(
     ...(request.replyOption != null ? { replyOption: request.replyOption } : {}),
     ...(request.excerpt != null ? { excerpt: clip(request.excerpt, EXCERPT_BLOCK_CHARS) } : {}),
     ...(request.closeReason != null ? { closeReason: request.closeReason } : {}),
+    ...(runQuestion ? { runQuestion } : {}),
   };
 }
 
@@ -1587,7 +1595,7 @@ export async function readOpenRequestPeers(
   if (sessionIds.length === 0) return peers;
   const ids = [...new Set(sessionIds)];
   const open = await db.sessionRequest.findMany({
-    where: { ownerId, state: 'OPEN', OR: [{ fromSessionId: { in: ids } }, { toSessionId: { in: ids } }] },
+    where: { ownerId, kind: 'MESSAGE', state: 'OPEN', OR: [{ fromSessionId: { in: ids } }, { toSessionId: { in: ids } }] },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     select: { id: true, fromSessionId: true, toSessionId: true },
   });

@@ -35,6 +35,7 @@ import type { ConfiguredProvider } from './workspaceDefaults';
 import type { ProviderModelRow } from './providerAdmin';
 import type { ProjectDependencyGraphResponse } from './projectDependencyGraph';
 import type { SidebarProject } from './projectAttention';
+import type { AccountSecret, OwnerRequest, OwnerRequestListFilter } from './ownerRequests';
 import type { ProjectFilter } from '../components/ProjectsToolbar';
 import type { CoordinatorStatus } from '../components/ProjectCoordinatorCard';
 import type { PendingDecisionQueue } from '../components/DecisionRail';
@@ -515,7 +516,14 @@ export const sessionRequestQuery = (requestId: string) =>
   queryOptions({
     queryKey: ['sessions', 'request', requestId] as const,
     queryFn: () => getSessionRequest(requestId),
-    refetchInterval: (q) => (q.state.data?.state === 'OPEN' ? 60_000 : false),
+    // A run's question can still move after its request closes: passed to the owner, it waits for
+    // their answer (OrbitTurnCards `RunQuestionTurnCard`).
+    refetchInterval: (q) => {
+      const view = q.state.data;
+      const moving = view?.state === 'OPEN'
+        || (view?.runQuestion?.answeredBy === null && view.runQuestion.approvalStatus === 'PENDING');
+      return moving ? 60_000 : false;
+    },
   });
 
 /**
@@ -664,6 +672,24 @@ export const openProjectsQuery = () =>
     // The splash reads it to decide the Open list's shape (BootGate); the rail mounting a moment
     // later shows that read instead of making another.
     staleTime: streamStaleTime,
+  });
+
+/**
+ * The owner requests in one state, newest first, at most 200. No realtime event announces one, so
+ * this polls like the coordinator's questions do; a press re-reads it at once.
+ */
+export const ownerRequestsQuery = (filter: OwnerRequestListFilter) =>
+  queryOptions({
+    queryKey: ['owner-requests', filter] as const,
+    queryFn: () => api<{ requests: OwnerRequest[] }>(`/owner-requests?state=${filter}`),
+    refetchInterval: streamPoll(20_000),
+  });
+
+/** The owner's saved account secrets, by label: what "Use saved" offers on a secret request. */
+export const accountSecretsQuery = () =>
+  queryOptions({
+    queryKey: ['account-secrets'] as const,
+    queryFn: () => api<{ secrets: AccountSecret[] }>('/account-secrets'),
   });
 
 /** The project document also supplies title and task counts when a finished project is
@@ -1458,6 +1484,19 @@ export const wikiDocQuery = (spaceId: string | null, slug: string | null) =>
  * A wiki write re-reads it (`wiki.changed`); while something is working it is read again besides, because a
  * chat's turn ending is a session's event, which says nothing to this key.
  */
+/**
+ * The panel's history (board 45 ④): the chats whose title holds `q`, one page of rules.chatsListed at a time
+ * (contract `chat.list.page`). Under the chats read's key, so whatever re-reads that reads this again.
+ */
+export const wikiChatHistoryQuery = (spaceId: string, q: string) =>
+  infiniteQueryOptions({
+    queryKey: ['wiki', 'chats', spaceId, 'history', q] as const,
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => getWikiChats(spaceId, { q, offset: pageParam }),
+    getNextPageParam: (page, pages) => (page?.more ? pages.reduce((n, one) => n + (one?.chats.length ?? 0), 0) : undefined),
+    staleTime: 15_000,
+  });
+
 export const wikiChatsQuery = (spaceId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'chats', spaceId] as const,

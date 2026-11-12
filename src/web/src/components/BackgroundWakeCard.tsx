@@ -23,8 +23,8 @@ function status(job: BackgroundWakeJob): string | null {
   return job.ended ? job.status : null;
 }
 
-/** What happened, at a glance. */
-function title(wake: BackgroundWake): string {
+/** What happened, at a glance. Also what a folded exchange says (Transcript `orbitTurnOf`). */
+export function backgroundWakeTitle(wake: BackgroundWake): string {
   const { jobs } = wake;
   if (jobs.length === 0) return 'Scheduled wakeup';
   if (jobs.length > 1) return `${jobs.length} background jobs finished`;
@@ -34,7 +34,7 @@ function title(wake: BackgroundWake): string {
 
 /** What the line names after its title: the one job, or why the wakeup was asked for. Several jobs
  *  are counted by the title and named in the fold. */
-function lineName(wake: BackgroundWake): string | null {
+export function backgroundWakeName(wake: BackgroundWake): string | null {
   const { jobs } = wake;
   if (jobs.length === 1) return jobs[0].description || jobs[0].command;
   if (jobs.length === 0) return wake.wakeups[0]?.reason ?? null;
@@ -127,7 +127,7 @@ export function BackgroundWakeCard({
   // A wakeup, or a job that has only written something: nothing has come out either way yet.
   const pending = !failed && (wake.jobs.length === 0 || wake.jobs.some((job) => !job.ended));
   const several = wake.jobs.length > 1;
-  const name = lineName(wake);
+  const name = backgroundWakeName(wake);
   // A job started without a description is named by its command: one line of it here, all of it
   // in the fold.
   const nameIsCommand = wake.jobs.length === 1 && !wake.jobs[0].description;
@@ -139,7 +139,7 @@ export function BackgroundWakeCard({
           <span className={`bgwake-mark${pending ? ' is-pending' : ''}`}>
             {failed ? <CloseCircleFilled /> : pending ? <ClockCircleOutlined /> : <CheckCircleFilled />}
           </span>
-          <span className="bgwake-title">{title(wake)}</span>
+          <span className="bgwake-title">{backgroundWakeTitle(wake)}</span>
           {name && <span className={`bgwake-name${nameIsCommand ? ' is-command' : ''}`}>{name}</span>}
           {closing && <span className="bgwake-status">{closing}</span>}
           {ts && <span className="bgwake-time">{relTime(ts)}</span>}

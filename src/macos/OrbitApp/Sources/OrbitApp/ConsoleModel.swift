@@ -1873,11 +1873,32 @@ final class ConsoleModel {
         return true
     }
 
+    /// The item a record link or a search hit last asked for. A fold over the turns Orbit opened
+    /// (`OrbitExchangeFoldView`) that holds it opens the way down to it, as a steps line's row is
+    /// scrolled to in its stead.
+    private(set) var revealedItemID: String?
+
+    /// The project's dependency graph, for the task tree a group of folded Orbit turns opens to. Read
+    /// once, and only once a group is opened (`wantExchangeTree`): a conversation nobody opens a group
+    /// in costs no request.
+    private(set) var exchangeGraph: ProjectDependencyGraph?
+    private var exchangeGraphAsked = false
+
+    func wantExchangeTree(projectID: String?) {
+        guard !exchangeGraphAsked, let projectID, !projectID.isEmpty else { return }
+        exchangeGraphAsked = true
+        Task { @MainActor [weak self, api] in
+            let graph = try? await api.projectDependencyGraph(projectID)
+            self?.exchangeGraph = graph
+        }
+    }
+
     /// Ask the transcript to scroll to the record's row. The row is found as the transcript draws it
     /// (`TranscriptRows.build`), so a tool call folded into a run is reached through the run's row.
     private func markRecord(_ anchor: TranscriptAnchor, page: [RunEvent]) {
         let state = reducer.state
         guard let itemID = TranscriptRecordAnchor.itemID(for: anchor, page: page, in: state.items) else { return }
+        revealedItemID = itemID
         let rows = TranscriptRows.build(state: state, statusCards: localStatusCards, canPageOlder: false,
                                         showWorkingIndicator: false, decisionCards: decisionCards)
         scrollTick += 1
@@ -1941,6 +1962,19 @@ final class ConsoleModel {
     /// The status that drives send decisions: the stream status, upgraded to the server's
     /// terminal status when the stream missed the (un-replayable) terminal transition.
     var sessionStatus: RunStatus { ComposerLogic.reconcileStatus(stream: state.status, server: serverStatus) }
+
+    /// A new account's welcome card stands over this draft (docs/mocks/new-user-onboarding): the empty
+    /// composer says what to write. Set by the page drawing the card.
+    var welcomes = false
+    /// Bumped to ask the composer to take focus (`fillFromWelcome`).
+    var focusRequests = 0
+
+    /// A first message picked on the welcome card: into the composer, to be read, changed and sent
+    /// there. Nothing is sent.
+    func fillFromWelcome(_ example: String) {
+        composerText = example
+        focusRequests &+= 1
+    }
 
     /// What an empty composer says on a machine's new session page, which has no workspace to send to.
     var machinePlaceholder: String? {
@@ -4393,6 +4427,12 @@ final class ConsoleModel {
                 // The owner answers one of these by pressing a door, not by replying — so it counts,
                 // and the bar is told it is not a question (see `openBelowRows`' doc).
                 return waiting(ExceptionCards.isOpen(ownerItemStanding(itemID)), question: false)
+            case .ownerRequest(let requestID):
+                // Answered on its card, by pressing — like the exceptions above.
+                return waiting(pendingOwnerRequests.contains(PublicID.storageKey(requestID)), question: false)
+            case .crossingBatch(let batchID):
+                // Answered on its card, by pressing.
+                return waiting(crossingBatch(batchID)?.isLive == true, question: false)
             }
         }
         // Oldest in the CONVERSATION first — which is not the order these were delivered in, now
@@ -4638,6 +4678,10 @@ final class ConsoleModel {
             reopenConfirmationForANewVersion()
             deliver(.acceptanceConfirmation)
         }
+        // The cross-project requests into this project, one card per batch (`CrossingBatches`).
+        if let rows = try? await api.projectCrossings(projectID: projectID) {
+            adoptCrossings(rows)
+        }
         // A press that arrived before this read now has its row to land on.
         scrollToPendingOwnerItem()
         lastRulerRead = Date()
@@ -4736,6 +4780,11 @@ final class ConsoleModel {
             return .at(at)
         }
         return .onArrival(afterItemID: DeliveryAnchor.onArrival(of: .projectDone, items: state.items))
+    }
+
+    func readProjectDoneCheck() async throws -> ProjectDoneCheck? {
+        guard let projectID else { return nil }
+        return try await api.projectDoneCheck(projectID: projectID)
     }
 
     /// Record the project done from its card (`POST /projects/:id/done`, `ProjectDone.body`): the
@@ -4883,6 +4932,82 @@ final class ConsoleModel {
     }
 
     /// The same, for a card whose whole placement the caller worked out (`DeliveryAnchor`).
+    /// This conversation's owner requests (`OwnerRequestsModel.forSession`), each placed by its own
+    /// `createdAt` — where it was asked — and drawn from the account's read on every render: whole
+    /// while pending, one line once ended. Which are still pending is kept for the needs-you bar.
+    func adoptOwnerRequests(_ requests: [OwnerRequest]) {
+        pendingOwnerRequests = Set(requests.filter { $0.state == .pending }.map { PublicID.storageKey($0.id) })
+        for request in requests {
+            deliver(.ownerRequest(requestID: request.id), placement: .at(request.createdAt))
+        }
+    }
+
+    /// The owner requests of this conversation still pending, by storage key.
+    private(set) var pendingOwnerRequests: Set<String> = []
+
+    // MARK: cross-project requests into this project
+
+    /// The project's handoffs as last read, both directions; nil while unread.
+    private(set) var crossings: [ProjectCrossing]?
+    /// Batches this process saw with a row still pending, by batch id.
+    private var crossingBatchesSeenLive: Set<String> = []
+    /// Batches pressed in this process, and when.
+    private var crossingBatchesPressedAt: [String: Date] = [:]
+    /// The door's refusal of the last answer sent for a row, by row id.
+    private(set) var crossingRefusals: [String: ProjectCrossings.Refusal] = [:]
+
+    /// The batches asking this project, oldest first.
+    var crossingBatches: [CrossingBatch] {
+        guard let crossings, let projectID else { return [] }
+        return CrossingBatches.batches(crossings, projectID: projectID)
+    }
+
+    func crossingBatch(_ batchID: String) -> CrossingBatch? {
+        crossingBatches.first { $0.id == batchID }
+    }
+
+    func crossingStanding(_ batch: CrossingBatch) -> CrossingBatches.Standing {
+        CrossingBatches.standing(batch, sawLive: crossingBatchesSeenLive.contains(batch.id),
+                                 pressedAt: crossingBatchesPressedAt[batch.id])
+    }
+
+    /// Pressed here, and every row now answered — what lets the review sheet leave.
+    func crossingAnsweredHere(_ batchID: String) -> Bool {
+        crossingBatchesPressedAt[batchID] != nil && crossingBatch(batchID)?.answered == true
+    }
+
+    /// Adopt a handoffs read: remember which batches were seen waiting, and put one card per batch
+    /// where its first row was asked.
+    private func adoptCrossings(_ rows: [ProjectCrossing]) {
+        crossings = rows
+        for batch in crossingBatches {
+            if batch.isLive { crossingBatchesSeenLive.insert(batch.id) }
+            deliver(.crossingBatch(batchID: batch.id), placement: .at(batch.moment))
+        }
+    }
+
+    /// Answer every row of the batch still pending, one decision POST each with its own crossing
+    /// key, through the project page's door. A refused POST keeps the door's refusal on its row;
+    /// the ones taken are not rolled back. Then the handoffs are read again.
+    func decideCrossingBatch(_ batchID: String, _ decision: ProjectCrossingDecision) async {
+        guard let projectID, let batch = crossingBatch(batchID), batch.isLive else { return }
+        let pressedAt = Date()
+        var taken = 0
+        for (row, _) in CrossingBatches.requests(batch, decision) {
+            do {
+                try await api.decideProjectCrossing(projectID: projectID, crossing: row, decision)
+                crossingRefusals[row.id] = nil
+                taken += 1
+            } catch {
+                crossingRefusals[row.id] = ProjectCrossings.refusal(error)
+            }
+        }
+        if taken > 0 { crossingBatchesPressedAt[batchID] = pressedAt }
+        if let rows = try? await api.projectCrossings(projectID: projectID) {
+            adoptCrossings(rows)
+        }
+    }
+
     private func deliver(_ kind: DeliveredDecisionCard.Kind,
                          placement: DeliveredDecisionCard.Placement) {
         let card = DeliveredDecisionCard(kind: kind, placement: placement)
@@ -5142,7 +5267,7 @@ final class ConsoleModel {
         reviewDueRead?.cancel()
         reviewDueRead = nil
         guard let review = OwnerConfirmations.waitingIn(read, sessionID: sessionID)?.review,
-              review.state == .underReview, let due = RelativeTime.parse(review.dueAt) else { return }
+              review.state == .underReview, let due = review.dueAt.flatMap(RelativeTime.parse) else { return }
         let wait = max(0, due.timeIntervalSinceNow + 1)
         reviewDueRead = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))

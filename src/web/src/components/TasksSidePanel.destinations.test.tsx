@@ -42,7 +42,8 @@ const OPEN_PROJECTS: SidebarProject[] = [{
   title: 'DeepSeek Harness',
   status: 'OPEN',
   createdAt: '2026-08-01T00:00:00.000Z',
-  lastActivityAt: '2026-10-05T00:00:00.000Z',
+  // Touched an hour ago, so the rail names it rather than folding it into its quiet row.
+  lastActivityAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
   buckets: { running: 0 },
   attention: { ownerItems: [] },
   coordinatorActivity: null,
@@ -231,7 +232,7 @@ describe('Machines & models, which has no sidebar row (docs/mocks/machines-and-m
     serve();
     await visit('/tasks');
     const labels = [...container!.querySelectorAll('.tp-section .tp-label')].map((label) => label.textContent);
-    expect(labels).toEqual(['Projects', 'Tasks', 'Wiki']);
+    expect(labels).toEqual(['Projects', 'Tasks', 'Waiting on you', 'Wiki']);
   });
 
   it('is a row of the account menu, above Settings, that opens its page', async () => {

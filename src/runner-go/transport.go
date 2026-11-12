@@ -107,11 +107,17 @@ func init() {
 		sessionMoveCapabilityV1,
 		wikiRepoOpCapabilityV1,
 		wikiRepoOpReadCapabilityV1,
+		wikiRepoOpFolderCapabilityV1,
+		wikiRepoOpProbeCapabilityV1,
 		cursorKeyCheckCapabilityV1,
 		dirProbeCapabilityV1,
 		createWorkDirCapabilityV1,
 		claudeRegionCapabilityV1,
 	}, cursorAccountCapabilities()...), declaredSteerCapabilities()...), ",")
+	// Where 0600 means something (secret_file_unix.go); a Windows runner is never handed a secret.
+	if secretFilesSupported {
+		runnerCapabilitiesV1 += "," + ownerSecretCapabilityV1
+	}
 }
 
 type transportHTTPError struct {
@@ -538,6 +544,7 @@ func (t *Transport) postEvents(ctx context.Context, sessionID string, batch RunE
 func (t *Transport) finalizeRun(ctx context.Context, sessionID string, b RunFinalizeRequest) (bool, error) {
 	var r RunFinalizeResponse
 	b.LeaseOwner = t.leaseOwner
+	b = scrubRunFinalize(b, sessionID)
 	path := "/runner/sessions/" + sessionID + "/finalize"
 	if err := t.do(ctx, "POST", path, b, &r, 35*time.Second); err != nil {
 		return true, err
@@ -694,6 +701,8 @@ func takeoverClaimedSession(ctx context.Context, t *Transport, job *ClaimedSessi
 func (t *Transport) turnComplete(ctx context.Context, sessionID string, b TurnCompleteRequest) (string, error) {
 	var r TurnCompleteResponse
 	b.LeaseOwner = t.leaseOwner
+	// Every path a completion is sent by, a kept one an earlier process journaled included (secret_wire.go).
+	b = scrubTurnComplete(b, sessionID)
 	err := retryIdempotentWhile(ctx, func(attemptCtx context.Context) error {
 		r = TurnCompleteResponse{}
 		return t.do(attemptCtx, "POST", "/runner/sessions/"+sessionID+"/turn-complete", b, &r, 35*time.Second)
@@ -1011,6 +1020,11 @@ func (t *Transport) uploadSessionAttachmentFile(ctx context.Context, sessionID s
 	}
 	if info.Size() > maxSessionAttachmentBytes {
 		return "", errAttachmentTooLarge
+	}
+	// Every door that sends a file's bytes comes through here or uploadFile: none sends one holding an
+	// owner-request secret (local_file.go).
+	if err := refuseFileHoldingSecret(file, file.Name()); err != nil {
+		return "", err
 	}
 
 	var body bytes.Buffer
@@ -1758,6 +1772,56 @@ func (t *Transport) fileOwnerRequest(sessionID string, body map[string]interface
 	return out, err
 }
 
+// withdrawOwnerRequest withdraws a request this session filed: a PENDING one of any kind, or a DONE SECRET one whose
+// key is in use, which ends that key's grant (secret_store.go).
+func (t *Transport) withdrawOwnerRequest(sessionID, id string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/owner-requests/"+url.PathEscape(id)+"/withdraw", body, &out,
+		taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// secretGrantTimeout bounds each of the three secret-grant calls. They are small, and a reconcile makes them one
+// after another.
+const secretGrantTimeout = 15 * time.Second
+
+// fetchSecretGrant asks for one grant's value. The answer is never logged, and an error never carries it: a non-2xx
+// answer has no value in its body.
+func (t *Transport) fetchSecretGrant(id string) (*SecretGrantFetch, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out SecretGrantFetch
+	if err := t.do(nil, "POST", "/runner/secret-grants/"+url.PathEscape(id)+"/fetch", map[string]interface{}{},
+		&out, secretGrantTimeout); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ackSecretGrant reports whether a fetched grant was materialised.
+func (t *Transport) ackSecretGrant(id string, ack SecretGrantAck) error {
+	if err := validatePathSegmentID(id); err != nil {
+		return err
+	}
+	return t.do(nil, "POST", "/runner/secret-grants/"+url.PathEscape(id)+"/ack", ack, nil, secretGrantTimeout)
+}
+
+// removedSecretGrant reports a grant gone from this machine; note says what was found, never the value.
+func (t *Transport) removedSecretGrant(id, note string) error {
+	if err := validatePathSegmentID(id); err != nil {
+		return err
+	}
+	body := map[string]interface{}{}
+	if note != "" {
+		body["note"] = note
+	}
+	return t.do(nil, "POST", "/runner/secret-grants/"+url.PathEscape(id)+"/removed", body, nil, secretGrantTimeout)
+}
+
 // requestProjectStart files a coordinator's request that the account owner start its project, and
 // returns at once: the owner answers on the start card, and the coordinator is told when the project
 // starts, as a turn of its own.
@@ -1882,6 +1946,17 @@ func (t *Transport) observeIntegration(sessionID, id, reason string) (json.RawMe
 	var out json.RawMessage
 	err := t.doHeaders(nil, "POST",
 		"/runner/projects/"+url.PathEscape(id)+"/integration/observe",
+		map[string]interface{}{"reason": reason}, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// requestPromotion records a K7 request as the project's current coordinator conversation.
+func (t *Transport) requestPromotion(sessionID, id, reason string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/promotions/request",
 		map[string]interface{}{"reason": reason}, &out, taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }

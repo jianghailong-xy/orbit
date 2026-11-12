@@ -220,6 +220,7 @@ export interface ControlSessionSummary {
     latestFailureAt: string;
     observationCount: number;
   }>;
+  questionWithCoordinator?: { count: number; since: string; dueAt: string } | null;
   pendingApprovals: number;
   /** What `pendingApprovals` is counting, when one word says it better than "approval":
    *  `OWNER_CONFIRMATION` when everything counted is an OWNER_CONFIRMED task's run waiting for its
@@ -336,6 +337,7 @@ export interface ControlSessionError {
  *  detail still comes from the approvals REST endpoint. */
 export interface ControlApproval {
   approvalId: string;
+  questionWithCoordinator?: { count: number; since: string; dueAt: string } | null;
   pendingApprovals: number;
   /** Overwritten together with `pendingApprovals`; see `ControlSessionSummary.waitingKind`. */
   waitingKind?: SessionWaitingKind | null;

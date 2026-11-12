@@ -53,6 +53,8 @@ struct UserTurnRow: View {
     /// The words of a message that never reached the engine, back in the composer: nil unless
     /// `SteerDelivery.offersPutBack` says so and there is a console to act through.
     var putBack: (() -> Void)? = nil
+    /// The item a record link or a search hit asked for: this turn's long message opens if it is that one.
+    @Environment(\.revealedItemID) private var revealedItemID
 
     var body: some View {
         let b = bubble
@@ -78,9 +80,12 @@ struct UserTurnRow: View {
         // not from the moment a runner takes it, so the queue draws the same card. With no payload the
         // turn keeps its old reading — this is checked before the wakes, as the browser checks it.
         if let card = b.sessionMessage {
+            // Its own block only tells the agent what the card shows: not folded under it again.
+            let note = SessionMessageCard.splitNote(b.note)
             SessionMessageCardView(card: card, text: b.text, ts: b.ts,
-                                   undelivered: undelivered,
-                                   attached: b.attached, onCancelQueued: cancel)
+                                   undelivered: undelivered, narrower: note.narrower,
+                                   attached: note.attached, onCancelQueued: cancel,
+                                   revealed: revealedItemID == b.id)
         } else if let card = b.itemCard {
             // The note the same turn carried rides inside the card (`b.attached`): nobody typed
             // this turn either, so the control plane's words do not go back into a bubble in the
@@ -141,6 +146,32 @@ struct UserTurnRow: View {
             SentBackByReviewerCardView(card: card, ts: b.ts,
                                        undelivered: undelivered,
                                        attached: b.attached, onCancelQueued: cancel)
+        } else if let card = b.reviewAnswers {
+            // The owner's answers handed to the reviewer once they confirmed (§7 Q5): Orbit's words
+            // to the agent about the reader, drawn as what the reader did (web parity: NodeView).
+            YouConfirmedCardView(card: card, text: b.text,
+                                 undelivered: undelivered,
+                                 attached: b.attached, onCancelQueued: cancel)
+        } else if let card = b.evidenceReview {
+            // Five more of Orbit's own turns (`OrbitTurnCards.swift`, web parity: NodeView). The three
+            // a block is rendered into at delivery carry nobody's words: what the agent read is the
+            // note once delivered and the turn's own words while it waits, folded at the card's foot.
+            EvidenceToReviewCardView(card: card, told: told(b), ts: b.ts,
+                                     undelivered: undelivered, onCancelQueued: cancel)
+        } else if let card = b.evidenceSendBack {
+            EvidenceSentBackCardView(card: card, text: b.text, ts: b.ts,
+                                     undelivered: undelivered,
+                                     attached: b.attached, onCancelQueued: cancel)
+        } else if let card = b.runQuestion {
+            RunQuestionCardView(card: card, told: told(b), ts: b.ts,
+                                undelivered: undelivered, onCancelQueued: cancel)
+        } else if let card = b.runNotice {
+            RunNoticeCardView(card: card, told: told(b), ts: b.ts,
+                              undelivered: undelivered, onCancelQueued: cancel)
+        } else if let card = b.sessionOpening {
+            // The opening of a session Orbit opened with a brief of its own: one row saying why.
+            SessionOpeningRowView(card: card, text: b.text,
+                                  undelivered: undelivered, onCancelQueued: cancel)
         } else if let replies = b.sessionReplies, !replies.isEmpty {
             // The outcomes of this session's own requests, handed back (`sessionReplies`,
             // `SessionReply.parse`): a reply turn carries nobody's words, and a message of the
@@ -210,6 +241,13 @@ struct UserTurnRow: View {
     /// its other blocks instead of repeating the wake beneath the card.
     private func attachedRest(_ wake: BackgroundWake) -> (kind: String, text: String)? {
         wake.rest.isEmpty ? nil : (kind: describeNote(wake.rest), text: wake.rest)
+    }
+
+    /// The block a platform turn was handed with: the note delivery recorded, else its own words
+    /// (a queued turn's, which hold the block until delivery moves it into the note).
+    private func told(_ bubble: UserBubble) -> String {
+        guard queued == nil, let note = bubble.note, !note.isEmpty else { return bubble.text }
+        return bubble.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? note : bubble.text + "\n\n" + note
     }
 
     /// What the reply cards did NOT take from a turn's note, as the entry folded inside them.

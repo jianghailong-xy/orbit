@@ -145,6 +145,10 @@ export interface RunnerObjects {
   reviewerSessionId: string;
   /** Wiki: a session in a workspace bound to the space. */
   wikiSessionId: string;
+  /** A SECRET grant to this machine, awaiting delivery, for the machine session's PENDING request (migration 0506). */
+  secretGrantId: string;
+  /** A grant of this machine being removed: what `removed` confirms. */
+  removingSecretGrantId: string;
   /** An import job of the space (server execution P5, contract `import.server`), ended, to be read back. */
   wikiImportJobId: string;
   /** Shared: a session link's root with a file in it; a task link's root with a run and a file; a project link's. */
@@ -245,6 +249,18 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
   },
   // One chunk of a running check's output (contract §2.2 J-T4's output route, §2.9 LS2): fenced on
   // the claim it names, so a machine that learned A's claim is still not A's. A's own chunk is taken.
+  // Secret delivery (docs/design/owner-request-secrets.md §4.2, §8.1): every door reads the grant by (id, the
+  // authenticated runner, its owner), so another machine's grant — of this account or another — is the 404 of an id
+  // that names nothing. A's own fetch hands over the value, its ack delivers it, its `removed` confirms the removal.
+  'POST /runner/secret-grants/:id/fetch': { as: RUNNER, request: (of) => ({ params: { id: of.runner.secretGrantId } }) },
+  'POST /runner/secret-grants/:id/ack': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.secretGrantId }, body: { outcome: 'DELIVERED' } }),
+  },
+  'POST /runner/secret-grants/:id/removed': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.removingSecretGrantId }, body: { note: 'census' } }),
+  },
   'POST /runner/integration-jobs/:jobId/output': {
     as: RUNNER,
     request: (of) => ({
@@ -619,6 +635,13 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
   },
   // The coordinator's "look again" (§10.8): the acting session is the project's current coordinator, as
   // on the doors above, and the owner's own machine has an observation queued.
+  'POST /runner/projects/:id/promotions/request': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: of.projectId }, headers: calling(mine.runner.coordinatorSessionId),
+      body: { reason: 'the census' },
+    }),
+  },
   'POST /runner/projects/:id/integration/observe': {
     as: RUNNER,
     request: (of, mine) => ({
@@ -810,6 +833,9 @@ const coordinatorRequests: Readonly<Record<string, (mine: RunnerTenant) => Tenan
   'POST /runner/projects/:id/integration/jobs/:jobId/abandon': (mine) => ({
     params: { id: mine.projectId, jobId: mine.runner.integrationJobId },
     body: { reason: 'the census' },
+  }),
+  'POST /runner/projects/:id/promotions/request': (mine) => ({
+    params: { id: mine.projectId }, body: { reason: 'the census' },
   }),
   'POST /runner/projects/:id/integration/observe': (mine) => ({
     params: { id: mine.projectId },
@@ -1300,15 +1326,15 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
 
 /**
  * The plan-usage snapshot a heartbeat reports, wherever it nests: provider-side names of rate-limit
- * buckets and credits, kept on the reporting machine's own row and read back only through it.
+ * buckets, credits and reset grants, kept on the reporting machine's own row and read back only through it.
  */
-const PLAN_USAGE_IDS = ['limitId', 'rateLimits[].limitId', 'rateLimitReset.rateLimitResetCredits.credits[].id', 'buckets[].id'];
+const PLAN_USAGE_IDS = ['limitId', 'rateLimits[].limitId', 'rateLimitReset.rateLimitResetCredits.credits[].id', 'buckets[].id', 'resetGrants.grants[].id'];
 const planUsageReadings = Object.fromEntries(
   ['planUsage.', 'planUsage.claude.', 'planUsage.codex.', 'planUsage.kimi.', 'planUsage.cursor.', 'planUsage.antigravity.', 'engines[].planUsage.']
     .flatMap((at) => PLAN_USAGE_IDS.map((id) => [
       `POST /runner/heartbeat body ${at}${id}`,
-      'a provider\'s own name for one of its rate-limit buckets or credits, not an Orbit row: stored as the reporting '
-        + 'machine\'s own plan usage and read back only through that machine (runner-api.controller.ts:1085)',
+      'a provider\'s own name for one of its rate-limit buckets, credits or reset grants, not an Orbit row: stored as the reporting '
+        + 'machine\'s own plan usage and read back only through that machine (runner-api.controller.ts:2167)',
     ])),
 );
 
@@ -1318,7 +1344,7 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/owner-requests body blocksTaskIds[]':
     'counted among the runner owner\'s own tasks before anything is written; one that is not answers 404 (owner-requests/owner-requests.service.ts:128); owner-requests.pg.spec.ts (f) sends another account\'s',
   'POST /runner/owner-requests body secretSpec.runnerId':
-    'counted among the runner owner\'s own runners before anything is written; one that is not answers 404 (owner-requests/owner-requests.service.ts:136); owner-requests.pg.spec.ts (f) sends another account\'s',
+    'never used: the runner is the asking session\'s own (design §4.1), and any other one is refused 400 before anything is written (owner-requests/owner-secrets.service.ts:182); owner-requests.pg.spec.ts (c) sends another account\'s',
   'POST /runner/owner-requests body clientRequestId':
     'the caller\'s own idempotency key, unique per asking session, and read back only by (the runner\'s owner, the asking session, the key) (owner-requests/owner-requests.service.ts:169); it names nothing of anybody else\'s',
   'POST /runner/owner-requests body projectId':
@@ -1445,6 +1471,8 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'POST /runner/projects/:id/acceptance/merge-evidence body requirementId':
     'a name the evidence is filed under, matched only within the project the path names, which is locked under its '
     + 'owner first (project-acceptance.service.ts:868)',
+  'POST /runner/projects/:id/owner-questions body forRunQuestion':
+    'matches ownerId, toSessionId against the project coordinator, kind RUN_QUESTION and state OPEN before linking the request in the item transaction (project-open-item.service.ts:897)',
   'POST /runner/projects/:id/owner-questions body clientQuestionId':
     'the coordinator\'s own key for one question, a dedupe key within the project the path names '
     + '(project-open-item.service.ts:686)',

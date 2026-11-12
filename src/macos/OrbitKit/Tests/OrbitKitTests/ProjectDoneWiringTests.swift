@@ -10,6 +10,14 @@ import XCTest
 /// over the source, the way `StartProjectWiringTests` does, each assertion written so that DETACHING
 /// the wire is what turns it red. What it cannot see is layout; that is what the screenshots are for.
 final class ProjectDoneWiringTests: XCTestCase {
+    func testStaleRowDrawsKitWordsOnProjectPage() throws {
+        let cards = try source(Self.cards)
+        let page = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/SessionProjectPage.swift")
+        XCTAssertTrue(cards.contains("Text(ProjectDone.staleHeading)"))
+        XCTAssertTrue(page.contains("ProjectDone.staleRequest(app.projectSessionsOpenItems)"))
+        XCTAssertTrue(page.contains("ProjectStaleDoneRow(detail: detail)"))
+    }
+
 
     private enum WiringError: Error, CustomStringConvertible {
         case missing(String)
@@ -175,7 +183,7 @@ final class ProjectDoneWiringTests: XCTestCase {
                      "Text(ProjectDone.criterionState(criterion, main: subject.main))",
                      "ProjectDoneGapList(subject: subject, gaps: gaps)",
                      "ProjectDone.orbitCheckedLine(counts: counts, confirmedAt: confirmedAt,",
-                     "Text(ProjectDone.recordingExplanation)", "Text(ProjectDone.recordLabel(counts))",
+                     "Text(ProjectDone.recordingExplanation)", "Text(ProjectDone.recordLabel(counts, asked: request != nil))",
                      "Text(ProjectDone.notYet)", "TextField(ProjectDone.missingBeforeDone, text: $note, axis: .vertical)",
                      "Text(ProjectDone.notYetHint)", "Text(ProjectDone.sendToCoordinator)", "Text(ProjectDone.back)",
                      "if request != nil, onNotYet != nil { notYetButton }",

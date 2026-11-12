@@ -12,6 +12,7 @@ import {
   SafetyOutlined,
 } from '@ant-design/icons';
 import { MentionDeliveryNotes } from './MentionDeliveryNotes';
+import { WaitingOnYouTaskBadge } from './OwnerRequestCard';
 import { TaskInputs } from './TaskInputs';
 import { LandTaskStatus, landingBadge, landingIsLive } from './LandTaskStatus';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
@@ -1383,6 +1384,7 @@ export function TaskDetailPanel({
             {landing && (
               <span className={`tdp-badge tone-${landing.tone}`} data-landing-badge="">{landing.label}</span>
             )}
+            {task?.id && <WaitingOnYouTaskBadge taskId={task.id} />}
             {supersession && <span className="tdp-meta-item muted">· {supersession}</span>}
             {task?.assignee && (
               <span className="tdp-meta-item">

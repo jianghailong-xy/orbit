@@ -1,4 +1,6 @@
+import { questionAnswers } from './run-question';
 import {
+  BadRequestException,
   ForbiddenException,
   HttpException,
   Injectable,
@@ -7,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { CreatorType, Prisma, type SessionRequest } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
-import { uuidToBase62, type SessionRequestView } from '@orbit/shared';
+import { RunEventType, uuidToBase62, type SessionRequestView } from '@orbit/shared';
 
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
@@ -88,6 +90,40 @@ export class SessionRequestService {
     requestId: string,
     input: SessionReplyInput,
   ): Promise<{ requestId: string; state: 'REPLIED'; handOff: SessionReplyHandOff }> {
+    const request = await this.prisma.sessionRequest.findFirst({ where: { id: requestId, ownerId } });
+    if (request?.kind === 'RUN_QUESTION') {
+      if (request.toSessionId !== callerSessionId) throw new ForbiddenException('only the session this request was sent to can reply to it');
+      const outcome = await withTransactionRetry(this.prisma, async tx => {
+        await tx.$queryRaw`SELECT id FROM session_request WHERE id = ${requestId}::uuid FOR UPDATE`;
+        const current = await tx.sessionRequest.findUniqueOrThrow({ where: { id: requestId } });
+        if (current.state !== 'OPEN') return false;
+        const approval = await tx.approval.findUniqueOrThrow({ where: { id: current.approvalId! } });
+        if (approval.toolName !== 'AskUserQuestion') throw new BadRequestException('a coordinator may answer questions, never tool permission approvals');
+        const answer = approval.status === 'PENDING' ? questionAnswers(approval.input, input) : null;
+        const decided = answer ? await tx.approval.updateMany({ where: { id: approval.id, status: 'PENDING' }, data: {
+          status: 'ALLOWED', decidedAt: new Date(), decidedCredentialKind: 'COORDINATOR', answers: answer.answers,
+        } }) : { count: 0 };
+        if (!decided.count) {
+          const settled = await tx.approval.findUniqueOrThrow({ where: { id: approval.id } });
+          await tx.sessionRequest.update({ where: { id: requestId }, data: {
+            state: settled.decidedById ? 'OWNER_ANSWERED' : 'UNDELIVERED', closedAt: new Date(),
+            closeReason: settled.decidedById ? null : 'QUESTION_ABANDONED',
+          } });
+          return false;
+        }
+        await tx.sessionRequest.update({ where: { id: requestId }, data: {
+          state: 'REPLIED', replyText: answer!.text, closedAt: new Date(),
+        } });
+        return true;
+      }, loggedRetry(this.log, 'questions.reply'));
+      if (!outcome) throw requestClosedRefusal(await this.prisma.sessionRequest.findUniqueOrThrow({ where: { id: requestId } }));
+      this.realtime.publish(request.fromSessionId, { seq: 0, type: RunEventType.APPROVAL_RESOLVED, payload: {
+        id: request.approvalId!, behavior: 'allow',
+      }, ts: new Date().toISOString() });
+      this.realtime.publishSessionUpdated(request.fromSessionId);
+      this.realtime.publishSessionUpdated(request.toSessionId);
+      return { requestId: uuidToBase62(requestId), state: 'REPLIED', handOff: 'ALREADY' };
+    }
     // One compare-and-set on the request row, so no transaction: an answer and a NO_REPLY judgment
     // racing each other meet on that row's lock, and the second finds it no longer OPEN.
     const answered = await replyToSessionRequest(this.prisma, { ownerId, callerSessionId, requestId, reply: input });

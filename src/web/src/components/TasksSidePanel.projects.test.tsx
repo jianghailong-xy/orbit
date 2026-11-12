@@ -192,9 +192,27 @@ describe('the sidebar’s Projects group', () => {
       // Its coordinator's turn a minute ago is newer than FineWeb's last task write.
       { title: 'Orbit Wiki · 阶段 1（MVP）', working: true, needsYou: null, active: false },
       { title: 'FineWeb × Common Crawl → RocksDB 语料库', working: true, needsYou: null, active: false },
-      { title: 'Postgres 性能与容量治理', working: false, needsYou: null, active: false },
     ]);
     expect(container!.querySelector('.tp-count.needs-you')?.getAttribute('title')).toBe('2 waiting on you');
+  });
+
+  it('folds the quiet projects into its last row, which opens the Projects page', async () => {
+    // Postgres: nothing waiting, nothing in flight, last touched six days ago.
+    serve();
+    await visit('/tasks');
+    const quiet = container!.querySelector<HTMLElement>('.tp-group-projects .tp-project-quiet')!;
+    expect(quiet.textContent).toBe('1 quiet project');
+    expect(quiet.getAttribute('role')).toBe('link');
+    expect(quiet.previousElementSibling?.classList.contains('tp-project')).toBe(true);
+    await act(async () => quiet.click());
+    expect(pathname).toBe('/projects');
+  });
+
+  it('names a quiet project while its page is open, so its row can be lit', async () => {
+    serve();
+    await visit(`/projects/${POSTGRES}`);
+    expect(projectRows().at(-1)).toEqual({ title: 'Postgres 性能与容量治理', working: false, needsYou: null, active: true });
+    expect(container!.querySelector('.tp-project-quiet')).toBeNull();
   });
 
   it('no longer holds the task lists, and no longer reads them', async () => {
@@ -254,7 +272,7 @@ describe('the sidebar’s Tasks entry', () => {
     serve();
     await visit('/projects');
     const labels = [...container!.querySelectorAll('.tp-section .tp-item .tp-label')].map((l) => l.textContent);
-    expect(labels.slice(0, 3)).toEqual(['Projects', 'Tasks', 'Wiki']);
+    expect(labels.slice(0, 4)).toEqual(['Projects', 'Tasks', 'Waiting on you', 'Wiki']);
   });
 
   it.each([

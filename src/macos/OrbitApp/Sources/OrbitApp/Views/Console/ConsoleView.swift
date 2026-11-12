@@ -40,8 +40,8 @@ struct ConsoleView: View {
     /// The band was opened where the reader is — its folded bar tapped, or the keyboard put away —
     /// and stays open until their next drag.
     @State private var bandOpened = false
-    /// Bumped by the folded bar's ↓, which the transcript answers with the floating disc's jump.
-    @State private var jumpRequest = 0
+    /// The folded pill comes and goes by fading alone under Reduce Motion.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// A wide shell: a task this conversation opens opens over it, not in the Tasks section
     /// (`opensTasksOverPage`, owner decision 2026-11-12).
     @Environment(\.opensTasksOverPage) private var opensTasksOverPage
@@ -166,7 +166,7 @@ struct ConsoleView: View {
                                         reviewingCard: approvalReview != nil || promotionReview != nil,
                                         questionWidth: navTitleWidth,
                                         readingBack: $readingBack, bandFolded: foldsBand(console),
-                                        bandOpened: $bandOpened, jumpRequest: jumpRequest)
+                                        bandOpened: $bandOpened)
         #if os(iOS)
         if #available(iOS 26.0, *) {
             transcript.safeAreaBar(edge: .bottom, spacing: 0) {
@@ -187,8 +187,9 @@ struct ConsoleView: View {
     }
 
     /// The band under the transcript: its members, or — folded while the reader goes back through the
-    /// history (`foldsBand`) — the one bar they stand behind (`ComposerBandFold`), in the band's gutter
-    /// and on its foot. A tap on the bar opens the band where the reader is.
+    /// history (`foldsBand`) — the one pill they stand behind (`ComposerBandFold`), centred and sunk
+    /// below the band's foot to stand over the home indicator, as Safari's folded address bar does. A
+    /// tap on the pill opens the band where the reader is.
     private func composerBand(_ console: ConsoleModel) -> some View {
         let folded = foldsBand(console)
         return ZStack(alignment: .bottom) {
@@ -196,10 +197,14 @@ struct ConsoleView: View {
                 .modifier(ComposerBandFold(folded: folded))
             #if os(iOS)
             if #available(iOS 26.0, *), folded {
-                FoldedBandBar(console: console, open: { bandOpened = true }, jump: { jumpRequest &+= 1 })
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, .composerBandFoot)
-                    .transition(.opacity.combined(with: .scale(scale: 0.94, anchor: .bottom)))
+                FoldedBandBar(console: console, open: { bandOpened = true })
+                    // The pill hugs what it says; this only caps it, and a long draft is what gives way.
+                    .padding(.horizontal, 72)
+                    // Its foot is off the screen's edge, not the safe area's: the band stands on the
+                    // safe area, so the pill reaches down into it by the difference.
+                    .padding(.bottom, .foldedBandPillFoot - windowBottomInset)
+                    .transition(reduceMotion ? .opacity
+                                : .opacity.combined(with: .scale(scale: 0.8, anchor: .bottom)))
             }
             #endif
         }
@@ -212,6 +217,15 @@ struct ConsoleView: View {
             if !editing { bandOpened = true }
         }
     }
+
+    #if os(iOS)
+    /// The screen's own bottom inset — the window's, which no bar or keyboard moves.
+    private var windowBottomInset: CGFloat {
+        UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow }
+            .first?.safeAreaInsets.bottom ?? 0
+    }
+    #endif
 
     private func bandMembers(_ console: ConsoleModel) -> some View {
         // Unread messages, error, background tray, git bar, composer — web's order
@@ -327,6 +341,10 @@ struct ConsoleView: View {
                     focusID: sessionID)
             } else if let console = registry.peek(sessionID) {
                 transcriptAndBand(console, navTitleWidth: navTitleWidth)
+                // The owner requests this conversation filed, each drawn where it was asked.
+                .onChange(of: appModel.ownerRequests?.forSession(sessionID), initial: true) { _, requests in
+                    console.adoptOwnerRequests(requests ?? [])
+                }
                 // Image cache for user-turn attachments, read by `UserBubbleView` down the tree.
                 .environment(registry.attachments)
                 // The tasks this conversation filed, which a watch's wake line names its targets by.
@@ -682,13 +700,10 @@ struct TranscriptView: View {
     /// Written for `ConsoleView.foldsBand`: whether the reader has gone back far enough through the
     /// history for a phone's composer band to fold to its bar (`TailPinning.foldsBand`).
     var readingBack: Binding<Bool> = .constant(false)
-    /// The band is folded to its bar (`FoldedBandBar`), which carries the jump to the latest in the
-    /// floating disc's place.
+    /// The band is folded to its pill (`FoldedBandBar`): the floating disc stands down until it opens.
     var bandFolded = false
     /// The bar was tapped open; the reader's next drag folds the band again.
     var bandOpened: Binding<Bool> = .constant(false)
-    /// Bumped by the bar's ↓: the floating disc's jump (`jumpToLatest`).
-    var jumpRequest = 0
     @State private var reviewSessionID: String?
     /// Which session's Recap card has stepped aside for this visit. It is set once that conversation
     /// starts a new turn, because the reader is in it now and a card arriving under each answer
@@ -850,6 +865,8 @@ struct TranscriptView: View {
         // The ended questions this conversation holds: a turn handing one's answer to the coordinator
         // is that question's card — in the transcript and on the queue alike (`OwnerAnswerLineView`).
         .environment(\.answeredQuestions, console.answeredQuestions)
+        // The item a record link or a search hit asked for: a long message from another session opens to it.
+        .environment(\.revealedItemID, console.revealedItemID)
         .scrollContentBackground(.hidden)   // show the window background, not the List's own
         #if os(iOS)
         // Turn OFF the scroll view's touch delay so an in-list control (the jump-to-latest disc, the
@@ -872,7 +889,7 @@ struct TranscriptView: View {
         }
         // On the list alone, under `chrome`, so the jump-to-latest disc floating over it stays solid.
         .meetsComposerBand()
-        .softTopEdge()
+        .noTopEdgeEffect()
         // Follow new/streaming content only while pinned at the bottom (web's smart auto-scroll):
         // if the user has scrolled up to read, don't drag them back. A session switch always
         // re-pins. One-shot, non-animated scrollTo — never the per-frame animated scroll that froze
@@ -1016,14 +1033,13 @@ struct TranscriptView: View {
         // Floating jump-to-latest button (web's `.scroll-to-bottom`): shown while scrolled up, and
         // while the tail is out of view for any other reason (`stranded`).
         .overlay(alignment: .bottom) {
-            // While the composer band is folded its bar carries the jump, at its right end.
+            // While the composer band is folded only its pill stands there (the owner, 2026-11-11):
+            // the jump comes back with the band.
             if !bandFolded, !atBottom || console.detached || stranded {
                 scrollToBottomButton(proxy: proxy)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
-        // The folded band's ↓, pressed: the disc's jump.
-        .onChange(of: jumpRequest) { jumpToLatest(proxy) }
         // One observer for both, so a switch to a session that is already working is decided in one
         // step: the card is back for a newly opened session, and away once it starts a turn.
         .onChange(of: RecapVisit(sessionID: console.sessionID, rests: recapRests), initial: true) { old, new in
@@ -1136,10 +1152,42 @@ struct TranscriptView: View {
                              statusCards: console.localStatusCards,
                              canPageOlder: canPageOlder,
                              showWorkingIndicator: console.showWorkingIndicator,
+                             running: console.state.status == .running,
                              decisionCards: console.decisionCards,
                              clocks: console.receiptClocks,
                              recap: recapCard,
+                             watchName: watchWakeName,
                              createdWorkspace: console.createdWorkspaceLine)
+    }
+
+    /// The name a folded watch turn gives its one target (`OrbitExchangeFold.orbitTurn`): the watch's
+    /// own record of it first, then the session this client holds — what `WatchWakeCardView` names
+    /// it by.
+    private func watchWakeName(_ wake: WatchWake, _ target: WatchWakeTarget) -> String? {
+        let key = PublicID.storageKey(target.id)
+        if let title = app.watches?.watch(wake.watchId)?.targets
+            .first(where: { PublicID.storageKey($0.targetResourceId) == key })?.targetTitle,
+            !title.isEmpty {
+            return title
+        }
+        return target.kind == .session ? app.session(id: target.id)?.title : nil
+    }
+
+    /// What places a folded Orbit turn under its task: which task a session runs, off the session rows
+    /// this client holds, and which tasks a task waits on, off the project's dependency graph — read
+    /// only once a group is opened (`ConsoleModel.wantExchangeTree`).
+    private var exchangeTreeLookup: ExchangeTreeLookup {
+        let graph = OrbitExchangeFold.upstream(from: console.exchangeGraph)
+        var taskBySession: [String: String] = [:]
+        for session in app.sessions {
+            if let taskId = session.taskId, !taskId.isEmpty { taskBySession[PublicID.storageKey(session.id)] = taskId }
+        }
+        let runs = taskBySession
+        let title = graph.taskTitle
+        return ExchangeTreeLookup(
+            taskOfSession: { id in runs[PublicID.storageKey(id)].map { ($0, title($0)) } },
+            upstreamOf: graph.upstreamOf,
+            taskTitle: graph.taskTitle)
     }
 
     /// The conversation's last row while it is at rest (`RecapCard`), unless it stepped aside for
@@ -1173,6 +1221,7 @@ struct TranscriptView: View {
         switch row {
         case .loadOlder: return EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)
         case .bottom:    return EdgeInsets()
+        case .turnHead:  return EdgeInsets(top: 0, leading: 16, bottom: 4, trailing: 16)
         default:         return EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16)
         }
     }
@@ -1202,10 +1251,20 @@ struct TranscriptView: View {
         case .item(let item):
             TranscriptItemView(item: item, fullPayload: console.fullPayload, console: console)
                 .modifier(AnchorRow(itemID: item.id, ruler: ruler, recompute: recomputeStuck))
-        case .toolGroup(let cards):
-            // No `AnchorRow`: a folded run of tool calls is never the "Your question" the sticky
-            // header names, so it has no business moving that anchor.
-            ToolGroupCardView(cards: cards, fullPayload: console.fullPayload)
+        case .turnHead(let line):
+            // No `AnchorRow`: the head belongs to the message above it, which is the anchor.
+            TurnHeadRowView(line: line)
+        case .steps(let items):
+            // No `AnchorRow`: a steps line is never the "Your question" the sticky header names,
+            // so it has no business moving that anchor.
+            StepsRowView(items: items, fullPayload: console.fullPayload)
+        case .exchanges(let turns):
+            // No `AnchorRow`, for the steps line's reason: a fold over turns Orbit opened is no
+            // "Your question". Opened, it draws each turn's rows through this same function.
+            OrbitExchangeFoldView(
+                exchanges: turns, reveal: console.revealedItemID, lookup: exchangeTreeLookup,
+                want: { console.wantExchangeTree(projectID: app.session(id: console.sessionID)?.projectId) },
+                render: { AnyView(transcriptRow($0)) })
         case .statusCard(let card):
             SessionStatusCardView(card: card)
         case .decisionCard(let card):
@@ -1270,7 +1329,7 @@ struct TranscriptView: View {
         case .promotionApproval(let promotionID):
             openPromotionReview(promotionID)
         case .criteriaDecision, .acceptanceConfirmation, .startProject, .criteriaChange,
-             .ownerConfirmation, .coordinatorQuestion:
+             .ownerConfirmation, .coordinatorQuestion, .crossingBatch:
             openApprovalReview(.delivered(card))
         default:
             break
@@ -1394,7 +1453,7 @@ struct TranscriptView: View {
         .help(console.detached ? SessionRecordLink.Copy.jumpToLatest : "Scroll to latest")
     }
 
-    /// The jump to the latest: the floating disc's, and the folded composer band's ↓ (`jumpRequest`).
+    /// The jump to the latest: the floating disc's.
     private func jumpToLatest(_ proxy: ScrollViewProxy) {
         // A window opened at a record ends at a gap: the latest message is past it, so reaching it
         // re-seeds the window from the tail (`jumpToLatest`), after which the follow pins the bottom.
@@ -1453,14 +1512,13 @@ struct TranscriptView: View {
 }
 
 private extension View {
-    /// The top edge held to iOS 26's soft scroll-edge effect, capsule or not. With the question's
-    /// capsule in the nav bar's centre the phone chose the hard style on its own — a frosted strip
-    /// down to the bar's lower edge, a hairline under it, the rows behind it gone (the owner's
-    /// screenshot, 2026-10-16) — where without the capsule the transcript runs on up behind the bar,
-    /// as the owner asked it to. They asked for that with the capsule too.
-    @ViewBuilder func softTopEdge() -> some View {
+    /// No iOS 26 scroll-edge effect at the top: the transcript runs on up behind the nav bar as it
+    /// is, capsule or not. The hard style (a frosted strip and a hairline, which the phone chose on
+    /// its own with the question's capsule in the bar) was ruled out by the owner on 2026-10-16, and
+    /// the soft style's blur-to-clear gradient on 2026-11-11.
+    @ViewBuilder func noTopEdgeEffect() -> some View {
         #if os(iOS)
-        if #available(iOS 26.0, *) { scrollEdgeEffectStyle(.soft, for: .top) } else { self }
+        if #available(iOS 26.0, *) { scrollEdgeEffectHidden(true, for: .top) } else { self }
         #else
         self
         #endif
@@ -1877,10 +1935,9 @@ private struct ScrollTracker: ViewModifier {
                     atBottom = pinned
                     tailOutOfView = now.bottomGap > TailPinning.nearBottom
                     #if os(iOS)
-                    // What the folded band keeps over the list: its bar and its foot, over the screen's
-                    // own bottom inset — the window's, which no bar or keyboard moves.
-                    let foldedInset = CGFloat.foldedBandBar + .composerBandFoot
-                        + (scroll.view?.window?.safeAreaInsets.bottom ?? 0)
+                    // What the folded band keeps over the list: its pill and its foot, which is off the
+                    // screen's own edge (`ConsoleView.composerBand`).
+                    let foldedInset = CGFloat.foldedBandPill + .foldedBandPillFoot
                     let back = TailPinning.foldsBand(pinned: pinned, sample: now, foldedInset: Double(foldedInset))
                     if readingBack.wrappedValue != back { readingBack.wrappedValue = back }
                     #endif

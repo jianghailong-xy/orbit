@@ -68,7 +68,7 @@ export interface IntegrationJobEventInput {
   kind: IntegrationJobEventKind;
   claim?: number | bigint;
   round?: number | null;
-  check?: { name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK'; index: number } | null;
+  check?: { name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK'; index: number } | null;
   phase?: string | null;
   step?: string | null;
   actor?: IntegrationTimelineActorInput | null;
@@ -233,12 +233,12 @@ export function roundText(round: number, kind: string): string {
   return kind === 'LAND_TASK' ? `Round ${round} of ${LAND_TASK_ROUNDS_PER_CLAIM}` : `Round ${round}`;
 }
 
-export function checkLabel(name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK'): string {
-  return name === 'MERGE_CHECK' ? 'Merge check' : 'Task acceptance';
+export function checkLabel(name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK'): string {
+  return name === 'LANDING_CHECK' ? 'Landing check' : name === 'MERGE_CHECK' ? 'Merge check' : 'Task acceptance';
 }
 
 export function checkStartedText(
-  check: { name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' },
+  check: { name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK' },
   claim: number | null,
   runnerName: string | null,
 ): string {
@@ -249,13 +249,15 @@ export function checkStartedText(
 }
 
 export function checkFinishedText(check: {
-  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  skipped?: 'PATHS_EXEMPT';
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
   exitCode: number | null;
   expectedExitCode: number;
   timedOut: boolean;
   durationMs: number;
 }): string {
   const label = checkLabel(check.name);
+  if (check.skipped === 'PATHS_EXEMPT') return `${label} skipped · only exempt paths changed`;
   if (check.timedOut) return `${label} timed out after ${durationText(check.durationMs)}`;
   if (check.exitCode !== check.expectedExitCode) {
     const code = check.exitCode == null ? 'no exit code' : `exit ${check.exitCode}`;
@@ -590,7 +592,7 @@ export function eventEntry(row: EventRow): IntegrationTimelineEntry<Date> {
     claim: Number(row.claim),
     round: row.round,
     check: row.checkName && row.checkIndex != null
-      ? { name: row.checkName as 'TASK_ACCEPTANCE' | 'MERGE_CHECK', index: row.checkIndex }
+      ? { name: row.checkName as 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK', index: row.checkIndex }
       : null,
     phase: row.phase as IntegrationTimelineEntry<Date>['phase'],
     step: row.step,

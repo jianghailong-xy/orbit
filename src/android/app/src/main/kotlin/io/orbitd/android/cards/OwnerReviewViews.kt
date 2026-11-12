@@ -311,5 +311,41 @@ internal fun ReviewTurnCard(card: InteractionCard, ts: String?, open: (String) -
     }
 }
 
+/** The owner's answers handed to the reviewer once they confirmed (contract §7 Q5; web `YouConfirmedCard`): what the reader did — the
+ * task, each question and the answer they gave — with the block the agent read folded at the foot. Nobody typed it, so it is never the
+ * reader's bubble. */
+@Composable
+internal fun YouConfirmedCard(card: InteractionCard, event: io.orbitd.android.core.realtime.RunEvent?, open: (String) -> Unit, undelivered: Boolean) {
+    val source = card.source
+    val tone = LocalOrbitColors.current.success
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(Modifier.fillMaxWidth().testTag("review-you-confirmed")
+        .background(tone.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+        .border1(tone.copy(alpha = 0.30f)).padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(painterResource(R.drawable.ic_check_circle), null, Modifier.size(16.dp), tint = tone)
+            Text(OwnerReview.youConfirmed, Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = tone)
+            source.text("decidedAt")?.let { OwnerReview.receiptTime(it) }?.let {
+                Text(it, style = MaterialTheme.typography.labelSmall, color = secondary)
+            }
+        }
+        val task = source.text("taskId")
+        Text(source.text("title").orEmpty(), Modifier.then(if (task != null) Modifier.clickable(role = Role.Button) { open("orbit-task:$task") } else Modifier),
+            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+            color = if (task != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+        Text(OwnerReview.answersSentToReviewer, style = MaterialTheme.typography.labelSmall, color = secondary)
+        OwnerReview.confirmationAnswers(source).forEach { answer ->
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(answer.question, style = MaterialTheme.typography.bodySmall, color = secondary)
+                Text(answer.answer, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+                if (answer.notShown) Text(OwnerReview.answerNotShown, style = MaterialTheme.typography.labelSmall, color = LocalOrbitColors.current.needsYou)
+            }
+        }
+        if (undelivered) Text(OwnerAnswerLine.undelivered, style = MaterialTheme.typography.labelSmall, color = LocalOrbitColors.current.needsYou)
+        event?.let { ToldFold("${card.key}:told", it, OwnerReview.reviewerWasTold) }
+    }
+}
+
 private fun Modifier.border1(color: androidx.compose.ui.graphics.Color) =
     this.then(Modifier.border(1.dp, color, RoundedCornerShape(8.dp)))

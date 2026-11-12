@@ -1,18 +1,24 @@
+import { visibleQuestions, questionHolds } from '../sessions/run-question';
 import http2 from 'node:http2';
 import { randomUUID } from 'node:crypto';
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
+import { recordRunNotify } from '../sessions/run-notify';
+import { runItemHold } from '../projects/run-item-hold';
+import { COORDINATOR_PAUSE_SELECT, conversationIsPaused } from '../projects/coordinator-evidence-queue';
+import { openFuseEpisodeId } from '../projects/project-fuse';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
 import { RunStatus, type DeviceToken } from '@prisma/client';
-import { AgentProvider, ENGINE_CLI_NAMES, type LoginEngine } from '@orbit/shared';
+import { AgentProvider, ENGINE_CLI_NAMES, RUN_NOTICE_MESSAGE_MAX, uuidToBase62, type LoginEngine } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { readOwnerItemSessionIds } from '../projects/owner-decision-signal';
-import { openItemsNoLongerOwed } from '../projects/project-open-item';
+import { conversationIsOver, openItemsNoLongerOwed } from '../projects/project-open-item';
 import { agentAlert } from './agent-alert';
 import { badgeDiff, BadgeState } from './badge-diff';
 import { ownerItemAlert } from './owner-item-alert';
-import { ownerRequestAlert, type OwnerRequestKind } from '../owner-requests/owner-request';
+import { ownerRequestAlert, ownerRequestPushCategory, type OwnerRequestKind } from '../owner-requests/owner-request';
 import { settleAlert } from './settle-alert';
 import { FcmTransport } from './fcm-transport';
 import { FeishuTransport, orbitUrl, type FeishuTarget } from './feishu-transport';
@@ -63,6 +69,10 @@ const WAKEUP_MISSED_REASONS: Record<WakeupMissedReason, string> = {
 /** What became of an agent's own `notify` call — the answer handed straight back to the agent. */
 export interface AgentNotifyResult {
   delivered: boolean;
+  recipient?: 'coordinator' | 'owner';
+  recipientSessionId?: string;
+  placement?: string;
+  fallback?: string;
   /** Devices the configured transports accepted it for. Present only when delivered. */
   devices?: number;
   /** The owner's Feishu app took it as a card (docs/feishu-bot-design.md §6.1). Present only when it did. */
@@ -80,6 +90,7 @@ export interface AgentNotifyResult {
 const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
   'engine-signed-out': 'Engine signed out',
   'claude-region-blocked': 'Claude is not available on this runner',
+  'confirmation-raised': 'Coordinator raised this for your decision',
   'confirmation-problems': 'Problems found after you confirmed',
   'owner-request': 'Request for you',
   'watch-matched': 'Watch matched',
@@ -116,6 +127,7 @@ export class PushService {
     private readonly prisma: PrismaService,
     config: ConfigService,
     @Optional() private readonly feishu?: FeishuTransport,
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {
     this.keyId = config.get<string>('APNS_KEY_ID');
     this.teamId = config.get<string>('APNS_TEAM_ID');
@@ -291,6 +303,9 @@ export class PushService {
   private async claimApprovalAlert(sessionId: string, approvalId: string): Promise<boolean> {
     return withTransactionRetry(this.prisma, async (tx) => {
       await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR NO KEY UPDATE`;
+      const candidates = await tx.approval.findMany({ where: { sessionId, toolName: 'AskUserQuestion', status: 'PENDING' }, select: { id: true, toolName: true } });
+      const holds = await questionHolds(tx, candidates.map(a => a.id));
+      const held = [...holds].filter(([, h]) => h?.place === 'HELD').map(([id]) => id);
       const claimed = await tx.$executeRaw`
         UPDATE "session" AS s SET "alerted_approval_at" = x."created_at"
           FROM "approval" AS x
@@ -300,6 +315,8 @@ export class PushService {
              SELECT 1 FROM "approval" AS a
               WHERE a."session_id" = s."id" AND a."id" <> x."id"
                 AND (a."created_at", a."id") < (x."created_at", x."id")
+                AND NOT (a."id" = ANY(${held}::uuid[]))
+                AND a."decided_credential_kind" IS DISTINCT FROM 'COORDINATOR'
                 AND (a."status" = 'PENDING' OR a."decided_at" > x."created_at"))`;
       return claimed === 1;
     }, loggedRetry(this.log, 'push.claimApprovalAlert'));
@@ -527,7 +544,6 @@ export class PushService {
   }, alreadyClaimed = false): Promise<AgentNotifyResult> {
     const alert = agentAlert(input.message);
     if (!alert) return { delivered: false, reason: 'message is empty' };
-    if (!this.enabled) return { delivered: false, reason: 'push is not configured on this server' };
     try {
       let title = input.fallbackTitle;
       // When this session (headless, this account) last rang the owner's devices.
@@ -537,12 +553,66 @@ export class PushService {
         // reads as absent rather than as a session whose title we would then leak.
         const session = await this.prisma.session.findFirst({
           where: { id: input.sessionId, ownerId: input.ownerId },
-          select: { title: true, agentNotifiedAt: true },
+          select: { title: true, agentNotifiedAt: true, task: { select: { id: true, title: true, project: true } } },
         });
         if (!session) return { delivered: false, reason: 'session not found' };
+        const project = session.task?.project;
+        if (!alreadyClaimed && project?.coordinatorEnabled && project.coordinatorSessionId !== input.sessionId) {
+          const now = new Date();
+          const wait = agentNotifyWait(session.agentNotifiedAt ?? null, now);
+          if (wait !== null) return { delivered: false, reason: `rate limited — try again in ${wait}s` };
+          const taken = await this.claimAgentNotify(input, now);
+          if (taken !== null) return { delivered: false, reason: `rate limited — try again in ${agentNotifyWait(taken, now) ?? 1}s` };
+          const coordinator = project.coordinatorSessionId ? await this.prisma.session.findFirst({
+            where: { id: project.coordinatorSessionId, ownerId: input.ownerId }, select: COORDINATOR_PAUSE_SELECT,
+          }) : null;
+          const dueAt = new Date(now.getTime() + project.exceptionEscalationSeconds * 1000);
+          const fused = await openFuseEpisodeId(this.prisma, project.id);
+          const hold = runItemHold({
+            kind: 'NOTIFY', project: { automatic: true, coordinatorEnabled: true },
+            coordinatorSessionId: project.coordinatorSessionId, coordinatorSession: coordinator,
+            answered: false, delivery: fused ? 'REFUSED' : 'PENDING', deliveryRefusal: fused ? 'COORDINATOR_PAUSED' : null,
+            deliveredTurn: null, stoppedWithoutAnswer: false, dueAt,
+          }, now);
+          let fallback = hold?.place === 'FALLBACK' ? hold.reason : 'UNREACHABLE';
+          if (hold?.place === 'HELD') {
+            try {
+              const requestId = randomUUID();
+              const clientTurnId = `run-notify:v1:${requestId}`;
+              const { SessionsService } = await import('../sessions/sessions.service.js');
+              const sent = await this.moduleRef!.get(SessionsService, { strict: false }).createTurn(
+                input.ownerId, hold.coordinatorSessionId, { clientTurnId, content: '', intent: 'NEXT_TURN' },
+                { coalesce: async (tx) => {
+                  // createTurn holds the recipient lock: a pause that won the race must not be disarmed.
+                  const current = await tx.session.findFirst({
+                    where: { id: hold.coordinatorSessionId, ownerId: input.ownerId }, select: COORDINATOR_PAUSE_SELECT,
+                  });
+                  if (!current || conversationIsOver(current) || conversationIsPaused(current)
+                    || await openFuseEpisodeId(tx, project.id)) {
+                    throw new ConflictException('The coordinator is unavailable');
+                  }
+                  return null;
+                }, onTurnWritten: async (tx, turn) => {
+                  await recordRunNotify(tx, {
+                    id: requestId, kind: 'RUN_NOTIFY', ownerId: input.ownerId, fromSessionId: input.sessionId!,
+                    toSessionId: hold.coordinatorSessionId, turnId: turn.id, clientTurnId,
+                    requestPreview: input.message.trim().slice(0, RUN_NOTICE_MESSAGE_MAX), replyBy: dueAt,
+                  });
+                } },
+              );
+              return { delivered: true, recipient: 'coordinator', recipientSessionId: uuidToBase62(hold.coordinatorSessionId), placement: sent.placement };
+            } catch (error) {
+              this.log.warn(`coordinator notify failed: ${(error as Error).message}`);
+              fallback = 'UNREACHABLE';
+            }
+          }
+          const result = await this.notifyAgentMessage({ ...input, message: `Not reviewed by the coordinator · ${input.message.trim()}` }, true);
+          return { ...result, recipient: 'owner', fallback };
+        }
         title = session.title || input.fallbackTitle;
         rang = session.agentNotifiedAt ?? null;
       }
+      if (!this.enabled) return { delivered: false, reason: 'push is not configured on this server' };
       const user = await this.prisma.user.findUnique({
         where: { id: input.ownerId },
         select: { preferences: true, agentNotifiedAt: true },
@@ -633,6 +703,28 @@ export class PushService {
       ? await this.prisma.session.findFirst({ where: { id: input.sessionId }, select: { agentNotifiedAt: true } })
       : await this.prisma.user.findUnique({ where: { id: input.ownerId }, select: { agentNotifiedAt: true } });
     return holder?.agentNotifiedAt ?? now;
+  }
+
+  /** The projection's successful OPEN → DONE edge, after its compare-and-set commits. */
+  async notifyProjectDone(input: {
+    ownerId: string; projectId: string; title: string;
+    criteriaCount: number;
+  }): Promise<void> {
+    if (!this.enabled) return;
+    const { tokens } = await this.channels(input.ownerId);
+    const body = JSON.stringify({
+      aps: {
+        alert: {
+          title: `${input.title} is done`,
+          body: `Orbit recorded it: all ${input.criteriaCount} criteria met and on main.`,
+        },
+        sound: 'default',
+        'thread-id': input.projectId,
+      },
+      kind: 'project-done',
+      projectID: input.projectId,
+    });
+    await this.deliver(tokens, body, 'alert', '10');
   }
 
   /**
@@ -740,7 +832,7 @@ export class PushService {
    * A session filed an owner request (`OwnerRequestsService.file`). Sent once, after the row commits,
    * and only while it is still PENDING. The banner is the kind ("Decision needed") over the request's
    * own title, cut to a lock-screen line; collapsed on the request, so a replay never stacks a second
-   * one. The tap opens the session that asked. Best-effort: a failure is logged, never thrown.
+   * one. The tap opens the session that asked; the category's actions open the card itself. Best-effort: a failure is logged, never thrown.
    */
   async notifyOwnerRequest(requestId: string): Promise<void> {
     if (!this.enabled) return;
@@ -757,12 +849,15 @@ export class PushService {
         aps: {
           alert,
           sound: 'default',
+          // Per kind: the clients' actions open the card on its input, or put it off ("Later").
+          category: ownerRequestPushCategory(request.kind as OwnerRequestKind),
           'thread-id': `owner-request-${request.askedBySessionId}`,
         },
         kind: 'owner-request',
         sessionID: request.askedBySessionId,
         ...(request.projectId ? { projectID: request.projectId } : {}),
         ownerRequestID: requestId,
+        ownerRequestKind: request.kind,
       });
       this.background(this.feishuOther(feishu, {
         kind: 'owner-request', ...alert, collapseId: `owner-request-${requestId}`,
@@ -800,6 +895,37 @@ export class PushService {
    * problems — and none is the reviewer's. No badge: a settled task is not waiting on anybody.
    * The tap opens the run's session, where the receipt the problems hang under is drawn.
    */
+  /** §13 A6: only the first REVIEW ending a coordinator hold calls this, after commit. */
+  async notifyConfirmationRaised(recordId: string): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const record = await this.prisma.taskOwnerConfirmationReviewRecord.findUnique({
+        where: { id: recordId },
+        select: { kind: true, ownerId: true, taskId: true, body: true,
+          task: { select: { title: true } },
+          review: { select: { request: { select: { sessionId: true } } } } },
+      });
+      if (!record || record.kind !== 'REVIEW') return;
+      const count = ((record.body ?? {}) as { needsYou?: unknown[] }).needsYou?.length ?? 0;
+      const { tokens, feishu } = await this.channels(record.ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const alert = { title: record.task.title, body: count
+        ? `Coordinator raised this for your decision · ${count} to decide`
+        : 'Coordinator raised this for your confirmation' };
+      const collapseId = `confirmation-raised-${recordId}`;
+      const body = JSON.stringify({
+        aps: { alert, sound: 'default', 'thread-id': `task-${record.taskId}` },
+        kind: 'confirmation-raised', sessionID: record.review.request.sessionId,
+        taskID: record.taskId, recordID: recordId,
+      });
+      this.background(this.feishuOther(feishu, { kind: 'confirmation-raised', ...alert,
+        collapseId, sessionId: record.review.request.sessionId }));
+      await this.deliver(tokens, body, 'alert', '10', collapseId);
+    } catch (err) {
+      this.log.warn(`confirmation raised notify failed: ${(err as Error).message}`);
+    }
+  }
+
   async notifyConfirmationProblems(recordId: string): Promise<void> {
     if (!this.enabled) return;
     try {
@@ -1049,6 +1175,36 @@ export class PushService {
     }
   }
 
+  /**
+   * The owner's one alert that maintenance runs keep finding a repository somebody has to set right — another
+   * repository's folder, or a credential the remote refused (wiki contract `maintenance.health.notifyRepository`): the
+   * failing alert's kind and thread, so it opens the same space, in the reason's own words.
+   */
+  async notifyWikiRepositoryAttention(input: { ownerId: string; spaceId: string; title: string; runs: number; detail: string }): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const { tokens, feishu } = await this.channels(input.ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const detail = input.detail.split('\n', 1)[0]!.trim();
+      const body = JSON.stringify({
+        aps: {
+          alert: {
+            title: `Wiki code checks paused for ${input.runs} runs`,
+            body: `${input.title}: ${detail.length > 160 ? `${detail.slice(0, 159)}…` : detail}. Fix it in the wiki's Settings.`,
+          },
+          sound: 'default',
+          'thread-id': `wiki-${input.spaceId}`,
+        },
+        wikiSpaceID: input.spaceId,
+        kind: 'wiki-maintenance-failing',
+      });
+      this.background(this.feishuOfPush(feishu, body));
+      await this.deliver(tokens, body, 'alert', '10');
+    } catch (err) {
+      this.log.warn(`wiki repository notify failed: ${(err as Error).message}`);
+    }
+  }
+
   async notifyWikiMaintenanceFailing(input: {
     ownerId: string;
     spaceId: string;
@@ -1111,11 +1267,12 @@ export class PushService {
           cancelRequestedAt: null,
           approvals: { some: { status: 'PENDING' } },
         },
-        select: { id: true },
+        select: { id: true, taskId: true, approvals: { where: { status: 'PENDING' }, select: { id: true, toolName: true } } },
       }),
       readOwnerItemSessionIds(this.prisma, ownerId),
     ]);
-    return [...new Set([...rows.map((r) => r.id), ...blockedOnOwner])];
+    const visible = new Set((await visibleQuestions(this.prisma, rows.filter(r => r.taskId).flatMap(r => r.approvals))).map(a => a.id));
+    return [...new Set([...rows.filter(r => !r.taskId || r.approvals.some(a => visible.has(a.id))).map(r => r.id), ...blockedOnOwner])];
   }
 
   /** Debounced: something that could lower `ownerId`'s "needs you" count happened (an approval

@@ -499,7 +499,7 @@ describe('the words, as the copy table has them', () => {
       + 'checks, and merges the branch into main once the merge check passes — with a receipt you can '
       + 'revert. The criteria and anything irreversible stay yours.');
     expect(RUN_AUTOMATIC_HINT_MAIN).toContain(
-      'Merging into main always asks you — a project that lands directly on main never merges by itself.');
+      'Merging into main always asks you — to skip that card, choose “The agent pushes it” under Delivery.');
     expect(RUN_MERGE_CHECK_HINT).toBe(
       'Runs on the combined tree before anything lands — on the project branch and again before main.');
     expect(startExplanation(4)).toBe(
@@ -1403,8 +1403,12 @@ describe('the delivery mode on the card', () => {
     server.integration = integrationOf({ upstreamRef: 'main', deliveryMode: 'PLATFORM', deliveryModeChosenAt: null });
     server.row = rowOf('item-1', suggestingMain());
     const { card } = await delivered();
-    expect(rowNames(card())).toEqual(['Automatic', 'Tasks land on', 'Main branch', 'Delivery', 'Merge check', 'At most']);
+    // Delivery straight under the line it belongs to, before Main branch (owner decision 2026-11-10).
+    expect(rowNames(card())).toEqual(['Automatic', 'Tasks land on', 'Delivery', 'Main branch', 'Merge check', 'At most']);
     expect(deliveryField(card()).textContent).toBe('Orbit lands it');
+    await mergeCheckBox(card());
+    expect(settingRow(card(), 'Merge check').textContent).toContain(
+      'Runs on the combined tree before anything lands — on the project branch and again before main.');
     expect(deliveryLocked(card())).toBe(false);
     expect(settingRow(card(), 'Delivery').querySelector(':scope > .start-card-hint')?.textContent)
       .toBe('The agent doesn’t push to main: Orbit lands its branch once the work is accepted.');
@@ -1414,12 +1418,17 @@ describe('the delivery mode on the card', () => {
     await until(() => menuOptions().length === 2, 'the delivery menu');
     expect(menuOptions().map((option) => option.querySelector('b')?.textContent)).toEqual([
       'Orbit lands it', 'The agent pushes it']);
-    expect(menuOptions()[1]!.textContent).toContain('The agent pushes to main itself, and Orbit checks the commits are there.');
+    expect(menuOptions()[1]!.textContent).toContain(
+      'No merge card. The agent pushes to main itself, and Orbit records each commit once it sees it there.');
     await pointerPress(menuOptions()[1], 'The agent pushes it');
 
     expect(deliveryField(card()).textContent).toBe('The agent pushes it');
     expect(settingRow(card(), 'Delivery').querySelector(':scope > .start-card-hint')?.textContent)
-      .toBe('The agent pushes to main itself, and Orbit checks the commits are there.');
+      .toBe('No merge card. The agent pushes to main itself, and Orbit records each commit once it sees it there.');
+    // The merge check is the agent's to run now.
+    expect(settingRow(card(), 'Merge check').textContent).toContain(
+      'Run by the agent before it pushes, on its work rebased onto main. Orbit doesn’t run it.');
+    expect(settingRow(card(), 'Merge check').textContent).not.toContain('again before main');
     // No merge into main asks anybody now (O-L2): the sentence and the list both say so.
     expect(settingRow(card(), 'Automatic').textContent).toContain(
       'The coordinator decides when each task is done. The agent pushes each task’s work to main itself.');

@@ -129,6 +129,14 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         case escalatedItem(itemID: String)
         /// The pause on the coordinator, by the item the resume door takes (§6.3 F-T4, mock 6 ①).
         case fusePause(itemID: String)
+        /// One owner request this conversation filed (`OwnerRequests`), by its id: the whole card
+        /// while it is pending, its one line once it has ended — drawn where it was asked, by its own
+        /// `createdAt`, and re-read from the account's requests on every render.
+        case ownerRequest(requestID: String)
+        /// One batch of cross-project requests into the project this conversation coordinates
+        /// (`CrossingBatches`), by its id (`crossing-batch-<first row>`): placed at its first row's
+        /// `requestedAt` and re-read from the project's handoffs on every render, live or answered.
+        case crossingBatch(batchID: String)
     }
 
     /// Where this row belongs, which is the whole difference between a question and a record.
@@ -215,6 +223,9 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         // the pause card gives itself.
         case .escalatedItem(let itemID):          return "open-item-\(itemID)"
         case .fusePause(let itemID):              return "fuse-\(itemID)"
+        // The web card's DOM id, `owner-request-<id>`.
+        case .ownerRequest(let requestID):        return "owner-request-\(PublicID.storageKey(requestID))"
+        case .crossingBatch(let batchID):         return batchID
         }
     }
 }
@@ -381,7 +392,7 @@ public enum DeliveryAnchor {
              .acceptanceConfirmationReceipt,
              .evidenceDecision, .ownerDecisionReceipt, .evidenceDecisionReceipt,
              .promotionApproval, .promotionReceipt, .coordinatorQuestion,
-             .coordinatorQuestionRecord, .escalatedItem, .fusePause:
+             .coordinatorQuestionRecord, .escalatedItem, .fusePause, .ownerRequest, .crossingBatch:
             return items.last?.id
         }
     }
@@ -442,8 +453,15 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
     case createdWorkspace(CreatedWorkspaceLine)
     case loadOlder(cursor: Int)
     case item(TranscriptItem)
-    /// A run of consecutive tool calls, folded into one row (see `TranscriptRows.groupToolRuns`).
-    case toolGroup([ToolCard])
+    /// How long a turn worked, or has been working: drawn under the message that opened it and over
+    /// everything the turn wrote (`TurnHead`).
+    case turnHead(TurnHeadLine)
+    /// A stretch of work between two replies — settled thinking and tool calls — folded into one
+    /// steps line (see `TranscriptRows.groupToolRuns`, `StepsSummary`).
+    case steps([TranscriptItem])
+    /// Turns Orbit opened, each with everything drawn under it, folded into one row — a run of them
+    /// into one group row (`OrbitExchangeFold`; web parity: `OrbitExchangeSolo` / `OrbitExchangeGroup`).
+    case exchanges([OrbitExchange])
     case statusCard(LocalStatusCard)
     case decisionCard(DeliveredDecisionCard)
     case approval(PendingApproval)
@@ -466,7 +484,11 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
         case .createdWorkspace:      return "created-workspace"
         case .loadOlder(let cursor): return "load-older-\(cursor)"
         case .item(let item):        return item.id
-        case .toolGroup(let cards):  return cards.first?.id ?? "tool-group-empty"
+        case .turnHead(let line):    return "turn-head-\(line.bubbleID)"
+        case .steps(let items):      return items.first?.id ?? "steps-empty"
+        // The bare id of the first turn's opening bubble, for `.steps`' reason: it replaces that
+        // bubble's own row, and a scroll aimed at it must still land somewhere.
+        case .exchanges(let turns):  return turns.first?.id ?? "exchanges-empty"
         case .statusCard(let card):  return "local-status-\(card.id)"
         case .decisionCard(let card): return card.id
         case .approval(let appr):    return "approval-\(appr.id)"
@@ -488,15 +510,21 @@ public enum TranscriptRows {
     /// questions still trailing at the tail, which stay nearest the composer (web parity: the card
     /// is drawn after the transcript and before the cards that ask the owner something).
     ///
+    /// `running` is whether the session's turn is running now, which is when the newest turn's head
+    /// counts up (`TurnHead.label`).
+    ///
     /// `createdWorkspace` is the conversation's first line, so it is above everything — and only once
     /// the first page is loaded: first means first, not the top of a window that starts later.
     public static func build(state: TranscriptState,
                              statusCards: [LocalStatusCard],
                              canPageOlder: Bool,
                              showWorkingIndicator: Bool,
+                             running: Bool = false,
                              decisionCards: [DeliveredDecisionCard] = [],
                              clocks known: ReceiptAnchor.Clocks? = nil,
                              recap: RecapCard? = nil,
+                             foldExchanges: Bool = true,
+                             watchName: ((WatchWake, WatchWakeTarget) -> String?)? = nil,
                              createdWorkspace: CreatedWorkspaceLine? = nil) -> [TranscriptRow] {
         var rows: [TranscriptRow] = []
         if let createdWorkspace, !canPageOlder { rows.append(.createdWorkspace(createdWorkspace)) }
@@ -560,6 +588,7 @@ public enum TranscriptRows {
         // older than, so a record's moment being above the window must not hide the control that
         // pages the window back to it.
         if canPageOlder { rows.append(.loadOlder(cursor: state.oldestSeq ?? 0)) }
+        let turnHeads = TurnHead.lines(state)
         for item in state.items {
             // An AskUserQuestion / ExitPlanMode tool card duplicates the live interactive approval
             // rendered below while the prompt still awaits an answer — show only the interactive
@@ -567,6 +596,11 @@ public enum TranscriptRows {
             // Transcript.tsx hides the read-only copy while `live && !result`).
             if !Approvals.duplicatesPendingApproval(item, pendingApprovals: state.pendingApprovals) {
                 rows.append(.item(item))
+            }
+            // Only a head with something to say gets a row: an empty one would still hold its insets.
+            if case .user(let bubble) = item, let line = turnHeads[bubble.id],
+               TurnHead.label(line, running: running) != nil {
+                rows.append(.turnHead(line))
             }
             for card in anchored.removeValue(forKey: item.id) ?? [] { rows.append(.statusCard(card)) }
             for card in anchoredDecisions.removeValue(forKey: item.id) ?? [] {
@@ -613,33 +647,31 @@ public enum TranscriptRows {
         // Ids are unique by construction above; a repeat could only come from a malformed stream
         // (two events sharing a tool_use id). Drop it rather than hand the List a diff that aborts.
         var seen = Set<String>()
-        return groupToolRuns(rows).filter { seen.insert($0.id).inserted }
+        let grouped = groupToolRuns(rows)
+        // The turns Orbit opened, folded with their answers (`OrbitExchangeFold`), unless the caller
+        // draws every row as it is — a static export, a sub-agent's own transcript.
+        let folded = foldExchanges ? OrbitExchangeFold.fold(grouped, watchName: watchName) : grouped
+        return folded.filter { seen.insert($0.id).inserted }
     }
 
-    /// Web parity (`TOOL_GROUP_MIN`): a shorter run reads better as its own rows than as a row
-    /// saying "Bash × 2".
-    public static let toolGroupMin = 3
-
-    /// Fold runs of consecutive tool calls into one row. Between two pieces of prose the transcript's
-    /// job is to say "it did nine things", not to spend nine rows saying which — on a phone those
-    /// nine rows are the whole screen, and the reply that follows them is off it.
+    /// Fold everything a turn does between two things it says — its settled thinking and its tool
+    /// calls, however few — into one steps line ("Thought for 15s, ran 2 shell commands"), so the
+    /// replies read as one thread and the work between them as a sentence (web parity:
+    /// `groupToolRuns` / `StepsLine` in Transcript.tsx).
     ///
-    /// Anything that isn't a groupable call ends the run, so a status card, a sentence, or an
-    /// approval between two calls keeps them apart, exactly as the reader saw them happen.
+    /// Anything that isn't a step ends the run, so a status card, a sentence, or an approval between
+    /// two calls keeps them apart, exactly as the reader saw them happen. Thinking still being
+    /// written is not a step yet: it keeps its own open row until it settles, then joins the line.
     static func groupToolRuns(_ rows: [TranscriptRow]) -> [TranscriptRow] {
         var out: [TranscriptRow] = []
-        var run: [ToolCard] = []
+        var run: [TranscriptItem] = []
         func flush() {
-            if run.count >= toolGroupMin {
-                out.append(.toolGroup(run))
-            } else {
-                out.append(contentsOf: run.map { TranscriptRow.item(.toolCall($0)) })
-            }
+            if !run.isEmpty { out.append(.steps(run)) }
             run.removeAll()
         }
         for row in rows {
-            if case .item(let item) = row, case .toolCall(let card) = item, isGroupable(card) {
-                run.append(card)
+            if case .item(let item) = row, isStep(item) {
+                run.append(item)
             } else {
                 flush()
                 out.append(row)
@@ -649,30 +681,34 @@ public enum TranscriptRows {
         return out
     }
 
-    /// A call one folded row can stand in for: no interactive twin rendered below it (question,
+    private static func isStep(_ item: TranscriptItem) -> Bool {
+        switch item {
+        case .thinking(let block): return block.isFinalized
+        case .toolCall(let card):  return isGroupable(card)
+        default:                   return false
+        }
+    }
+
+    /// A call a steps line can stand in for: no interactive twin rendered below it (question,
     /// plan), no transcript or card of its own (Task, Workspace, a spawned child session), and not
     /// a `!`-shell command the user ran — that one is the user's own line, not a step.
     ///
-    /// A picture is the one exclusion that can't be read off the name: `Read` on a .png and an MCP
-    /// screenshot tool answer alike with an image block, and only the result says so. It is excluded
-    /// anyway, because the group is the one fold the card can't open through — the card unfolds
-    /// itself on an image (`ToolCardView.defaultOpen`) and a closed group hides it whole, so a
-    /// screenshot inside a run reaches the reader as nothing at all, and a folded card never
-    /// refetches the bytes the server stripped. The hop out of the run this costs happens once and
-    /// never reverses: an image block that has arrived stays arrived, unlike the running/failed
-    /// states the folded row deliberately reports instead of opening on. Web parity:
-    /// `isGroupableTool`.
+    /// A picture folds like any other read (owner, 11-11: an agent reading its own screenshot is a
+    /// step, not something to show the reader). Opening the line draws the card folded; opening
+    /// the card draws the picture, fetching back bytes the server clipped.
+    /// Web parity: `isGroupableTool`.
     /// A sub-agent's own transcript (`TranscriptState.subagentItems`), as the rows its Agent card
-    /// draws: the conversation's folding — runs of calls into one row — and nothing else, since a
+    /// draws: the conversation's folding — runs of steps into one line — and nothing else, since a
     /// nested list has no approvals, queue or scroll target of its own (web parity: the
     /// `.chat-subagent` NodeList).
     public static func nested(_ items: [TranscriptItem]) -> [TranscriptRow] {
         var state = TranscriptState()
         state.items = items
-        return build(state: state, statusCards: [], canPageOlder: false, showWorkingIndicator: false)
+        return build(state: state, statusCards: [], canPageOlder: false, showWorkingIndicator: false,
+                     foldExchanges: false)
             .filter {
                 switch $0 {
-                case .item, .toolGroup: return true
+                case .item, .steps: return true
                 default: return false
                 }
             }
@@ -680,7 +716,6 @@ public enum TranscriptRows {
 
     private static func isGroupable(_ card: ToolCard) -> Bool {
         if card.id.hasPrefix("shell-") { return false }
-        if card.resultHasImage { return false }
         switch card.name {
         // Task/Agent/Workflow: Claude Code's names for a sub-agent and a team of them (the 08-14
         // Agent→Workspace rename had rewritten "Agent" here). Their cards carry work of their own —

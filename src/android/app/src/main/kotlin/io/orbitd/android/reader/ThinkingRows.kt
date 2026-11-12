@@ -51,6 +51,10 @@ internal object ThinkingSummary {
     fun size(chars: Int): String =
         if (chars < 1000) "$chars chars" else String.format(Locale.ROOT, "%.1f", chars / 1000.0).removeSuffix(".0") + "k chars"
 
+    /** The row of a stretch still being written, folded by default (docs/mocks/thinking-fold-live): its size, growing as it
+     * streams, says it is still working. No clock, for the reason above — iOS and web, which do have a start, add one. */
+    fun liveLabel(chars: Int): String = "Thinking… ${size(chars)}"
+
     /** The whole row: the block count only when blocks were folded together, the duration only when the runner stored one. */
     fun settledLabel(chars: Int, blocks: Int, thinkingMs: Long?): String = buildList {
         add(if (thinkingMs != null && thinkingMs > 0) "Thought for ${duration(thinkingMs / 1000.0)}" else "Thought")
@@ -89,17 +93,20 @@ internal fun ThinkingFold(label: String, expanded: Boolean, toggle: () -> Unit) 
 }
 
 /**
- * A stretch of reasoning still being written (iOS `ThinkingView` before it settles): open, since watching it think is the point
- * of showing it at all, and held to about 160 dp that keep themselves at the newest line — unbounded, it pushed the answer and the
- * calls on the way to it out of a transcript pinned to its tail (a DeepSeek turn writes 23k characters of reasoning at the
- * median). Sticky but not forced, as the web holds it: a reader who scrolls up inside it stays there. A tap folds it.
+ * A stretch of reasoning still being written (iOS `ThinkingView` before it settles): folded by default, one row whose size grows
+ * as it streams (owner, 2026-11-11, docs/mocks/thinking-fold-live — a box of reasoning scrolling at the tail of every turn was the
+ * biggest moving thing on screen and the least read). A tap opens it, held to about 160 dp that keep themselves at the newest
+ * line — unbounded, it pushed the answer and the calls on the way to it out of a transcript pinned to its tail (a DeepSeek turn
+ * writes 23k characters of reasoning at the median). Sticky but not forced, as the web holds it: a reader who scrolls up inside
+ * it stays there.
  */
 @Composable
 internal fun LiveThinking(parent: String, text: String, open: (String) -> Unit) {
     var pinned by rememberSaveable(parent) { mutableStateOf<Boolean?>(null) }
-    val expanded = pinned ?: true
+    val expanded = pinned ?: false
+    val label = ThinkingSummary.liveLabel(text.length)
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        ThinkingFold(if (parent.isEmpty()) "Thinking…" else "Subagent · Thinking…", expanded) { pinned = !expanded }
+        ThinkingFold(if (parent.isEmpty()) label else "Subagent · $label", expanded) { pinned = !expanded }
         if (expanded) {
             val scroll = rememberScrollState()
             LaunchedEffect(scroll) {

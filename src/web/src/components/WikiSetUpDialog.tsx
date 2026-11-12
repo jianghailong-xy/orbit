@@ -8,6 +8,7 @@ import {
   wikiMaintenanceSettings,
   wikiSpaceSettings,
   type WikiMaintenanceSettings,
+  type WikiRepoProbeAnswer,
 } from '@orbit/shared';
 import { encodeId } from '../lib/idCodec';
 import { runnersQuery, wikiSpacesQuery, wikiSpaceWorkspacesQuery, wikiSystemModelQuery, workspacesQuery } from '../lib/queries';
@@ -51,7 +52,8 @@ import {
   wikiWorkspaceDefault,
   type WikiWorkspaceChoice,
 } from '../lib/wikiStart';
-import { createWikiSpace, updateWikiSpace, useWikiWrite, type WikiSpaceUpdate } from '../lib/wikiWrites';
+import { createWikiSpace, probeWikiMaintenance, updateWikiSpace, useWikiWrite, type WikiSpaceUpdate } from '../lib/wikiWrites';
+import { WIKI_PROBE_CHECKING, WIKI_PROBE_FAILED } from '../lib/wikiRepoCard';
 import { WikiModelLine, WikiPrivacyNote } from './WikiSystemModel';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
@@ -113,6 +115,16 @@ export function WikiSetUpDialog({ space, onClose }: { space: WikiSpaceRow; onClo
   );
   const current = choices.find((choice) => sameId(choice.id, maintenance.workspaceId))?.id ?? maintenance.workspaceId;
   const chosen = picked ?? wikiWorkspaceDefault(offered, { current, from: fromWorkspace(offered) });
+  // The workspace's folder, asked of its runner as it is chosen (docs/wiki-repo-tiers-design.md §7.3): never retried — an
+  // answer that does not come is said, and Turn on stays open.
+  const probe = useQuery({
+    queryKey: ['wiki', 'space', space.id, 'probe', chosen] as const,
+    queryFn: () => probeWikiMaintenance(space.id, chosen!),
+    enabled: chosen !== null,
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
+  });
 
   return (
     <MaintenanceForm
@@ -125,6 +137,7 @@ export function WikiSetUpDialog({ space, onClose }: { space: WikiSpaceRow; onClo
       workspaceId={chosen}
       onWorkspace={setPicked}
       workspaceNote={WIKI_REPO_FROM_NOTE}
+      probe={chosen === null ? null : { answer: probe.data ?? null, checking: probe.isFetching && !probe.data, failed: probe.isError }}
       loading={loading}
       onClose={onClose}
       onSubmit={async (next) => {
@@ -205,6 +218,7 @@ function MaintenanceForm({
   workspaceId,
   onWorkspace,
   workspaceNote,
+  probe = null,
   loading,
   onClose,
   onSubmit,
@@ -219,6 +233,8 @@ function MaintenanceForm({
   workspaceId: string | null;
   onWorkspace: (workspaceId: string) => void;
   workspaceNote: string;
+  /** What the chosen workspace's folder would be read as (the settings' probe); null where nothing is asked. */
+  probe?: { answer: WikiRepoProbeAnswer | null; checking: boolean; failed: boolean } | null;
   loading: boolean;
   onClose: () => void;
   onSubmit: (maintenance: NonNullable<WikiSpaceUpdate['maintenance']> & { enabled: true; workspaceId: string }) => Promise<void>;
@@ -258,7 +274,7 @@ function MaintenanceForm({
       footer={
         <>
           <Button onClick={onClose}>{WIKI_CANCEL}</Button>
-          <Button variant="primary" disabled={!workspaceId} loading={saving} onClick={() => void submit()}>
+          <Button variant="primary" disabled={!workspaceId || probe?.answer?.canTurnOn === false} loading={saving} onClick={() => void submit()}>
             {submitLabel}
           </Button>
         </>
@@ -285,6 +301,7 @@ function MaintenanceForm({
             </span>
           )}
         />
+        {probe && <WikiProbeAnswer {...probe} />}
         <div className="wk-setup-d">{workspaceNote}</div>
 
         {server && (
@@ -347,5 +364,37 @@ function MaintenanceForm({
         </div>
       )}
     </Dialog>
+  );
+}
+
+const PROBE_GLYPH: Record<WikiRepoProbeAnswer['tone'], string> = { ok: '✓', folder: '▣', paused: '!', wrong: '!', unchecked: '?' };
+
+/**
+ * The probe's answer under the workspace picker (mock 44 ⑤): green for git, purple for a folder, amber for a folder that
+ * is not there, red for another repository's — Turn on is off then — and grey when the runner could not be asked.
+ */
+function WikiProbeAnswer({ answer, checking, failed }: { answer: WikiRepoProbeAnswer | null; checking: boolean; failed: boolean }) {
+  if (!answer) {
+    if (!checking && !failed) return null;
+    return (
+      <div className="wk-probe unchecked" role="status">
+        <span className="g" aria-hidden="true">{checking ? '…' : '?'}</span>
+        <span>{checking ? WIKI_PROBE_CHECKING : WIKI_PROBE_FAILED}</span>
+      </div>
+    );
+  }
+  return (
+    <div className={`wk-probe ${answer.tone}`} role="status">
+      <span className="g" aria-hidden="true">{PROBE_GLYPH[answer.tone]}</span>
+      <span>
+        <b>{answer.title}</b>
+        {answer.note && (
+          <>
+            <br />
+            {answer.note}
+          </>
+        )}
+      </span>
+    </div>
   );
 }

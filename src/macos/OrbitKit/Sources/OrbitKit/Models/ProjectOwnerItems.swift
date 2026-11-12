@@ -561,7 +561,18 @@ public struct ProjectClosedQuestion: Codable, Equatable, Sendable, Identifiable 
     public var withdrawn: Bool { resolution == "WITHDRAWN" }
 }
 
+/// The owner’s latest Not yet answer.
+public struct ProjectDoneRequestDecline: Codable, Equatable, Sendable {
+    public let note: String
+    public let declinedAt: String
+}
+
 /// The project's open exceptions, split by who is expected to act (§4.8).
+public struct ProjectDoneRequestSuperseded: Codable, Equatable, Sendable {
+    public let reason: String
+    public let supersededAt: String
+}
+
 public struct ProjectOpenItemsView: Codable, Equatable, Sendable {
     public let needsYou: [ProjectOpenItemRow]
     public let withCoordinator: [ProjectOpenItemRow]
@@ -580,15 +591,22 @@ public struct ProjectOpenItemsView: Codable, Equatable, Sendable {
     /// beside the groups for the reason `startRequest` is. Absent from a server that predates done
     /// requests.
     public let doneRequest: ProjectOpenItemRow?
+    public let latestDoneRequestSuperseded: ProjectDoneRequestSuperseded?
+    /// Kept until a newer done request is filed.
+    public let latestDoneRequestDecline: ProjectDoneRequestDecline?
 
     public init(needsYou: [ProjectOpenItemRow] = [], withCoordinator: [ProjectOpenItemRow] = [],
                 closedQuestions: [ProjectClosedQuestion] = [],
-                startRequest: ProjectOpenItemRow? = nil, doneRequest: ProjectOpenItemRow? = nil) {
+                startRequest: ProjectOpenItemRow? = nil, doneRequest: ProjectOpenItemRow? = nil,
+                latestDoneRequestSuperseded: ProjectDoneRequestSuperseded? = nil,
+                latestDoneRequestDecline: ProjectDoneRequestDecline? = nil) {
         self.needsYou = needsYou
         self.withCoordinator = withCoordinator
         self.closedQuestions = closedQuestions
         self.startRequest = startRequest
+        self.latestDoneRequestDecline = latestDoneRequestDecline
         self.doneRequest = doneRequest
+        self.latestDoneRequestSuperseded = latestDoneRequestSuperseded
     }
 
     public init(from decoder: Decoder) throws {
@@ -601,6 +619,8 @@ public struct ProjectOpenItemsView: Codable, Equatable, Sendable {
         closedQuestions = (try? c.decodeIfPresent([ProjectClosedQuestion].self,
                                                   forKey: .closedQuestions)) ?? []
         startRequest = (try? c.decodeIfPresent(ProjectOpenItemRow.self, forKey: .startRequest)) ?? nil
+        latestDoneRequestSuperseded = try c.decodeIfPresent(ProjectDoneRequestSuperseded.self, forKey: .latestDoneRequestSuperseded)
+        latestDoneRequestDecline = try c.decodeIfPresent(ProjectDoneRequestDecline.self, forKey: .latestDoneRequestDecline)
         doneRequest = (try? c.decodeIfPresent(ProjectOpenItemRow.self, forKey: .doneRequest)) ?? nil
     }
 }

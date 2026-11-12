@@ -20,12 +20,14 @@ function binding(overrides: Partial<{
   integrationStartedAt: Date | null;
   integrationRef: string;
   remoteName: string;
+  mergeCheckCommand: string | null;
 }> = {}) {
   return {
     deliveryMode: 'PLATFORM',
     integrationStartedAt: STARTED,
     integrationRef: 'refs/heads/main',
     remoteName: 'origin',
+    mergeCheckCommand: null,
     ...overrides,
   };
 }
@@ -74,6 +76,41 @@ test('O-L3: an AGENT_PUSH project tells the run to push to the upstream, in the 
   });
   assert.ok(remote.includes(said('This project delivers by pushing to main. Push your commits to upstream/main '
     + 'before you finish — Orbit checks that they are there.')), remote);
+});
+
+test('an AGENT_PUSH project with a merge check tells the run to run it before it pushes', () => {
+  // No candidate is made for an agent's push, so nothing of Orbit's runs the check (owner decision
+  // 2026-11-10, docs/mocks/agent-push-delivery): the brief hands it to the agent.
+  const PUSH = 'This project delivers by pushing to feature/v1.1.1. Push your commits to '
+    + 'origin/feature/v1.1.1 before you finish — Orbit checks that they are there.';
+  const checked = brief({
+    ...TASK,
+    project: { codebases: [binding({
+      deliveryMode: 'AGENT_PUSH',
+      integrationRef: 'refs/heads/feature/v1.1.1',
+      mergeCheckCommand: '  npm test  ',
+    })] },
+  });
+  assert.ok(checked.includes(said(`${PUSH} Before you push, rebase onto origin/feature/v1.1.1 and run the `
+    + 'project’s merge check, `npm test`; push only once it passes.')), checked);
+
+  // A blank command is no check: the sentence stays the one without it.
+  for (const mergeCheckCommand of [null, '', '   ']) {
+    const unchecked = brief({
+      ...TASK,
+      project: { codebases: [binding({
+        deliveryMode: 'AGENT_PUSH',
+        integrationRef: 'refs/heads/feature/v1.1.1',
+        mergeCheckCommand,
+      })] },
+    });
+    assert.ok(unchecked.includes(said(PUSH)), JSON.stringify(mergeCheckCommand));
+  }
+
+  // On PLATFORM the check is Orbit's to run, and the brief does not mention it.
+  const platform = brief({ ...TASK, project: { codebases: [binding({ mergeCheckCommand: 'npm test' })] } });
+  assert.ok(platform.includes(said('Do not push to main. Orbit lands your branch after your work is accepted.')),
+    platform);
 });
 
 test('O-L3: a PLATFORM project that has started integrating tells the run not to push', () => {

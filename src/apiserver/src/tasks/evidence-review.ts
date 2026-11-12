@@ -1,6 +1,11 @@
 import { ConflictException } from '@nestjs/common';
 import { CreatorType, type Prisma } from '@prisma/client';
-import { uuidToBase62 } from '@orbit/shared';
+import {
+  base62ToUuid,
+  uuidToBase62,
+  type EvidenceReviewCard,
+  type EvidenceSendBackCard,
+} from '@orbit/shared';
 import { SESSION_ENDING_SELECT, conversationIsOver } from '../projects/project-open-item';
 import { COORDINATOR_PAUSE_SELECT, conversationIsPaused } from '../projects/coordinator-evidence-queue';
 import type { BlockSender } from '../sessions/session-message';
@@ -464,6 +469,121 @@ export async function evidenceReviewBlock(db: Db, evidenceId: string): Promise<s
     close,
   ];
   return lines.join('\n');
+}
+
+/**
+ * The "Evidence to review" card an evidence-review turn's echo and its queued row carry, read from
+ * the rows its block is rendered from (`evidenceReviewBlock`), so the card says what the block says:
+ * waiting, replaced by a later revision, decided, or closed with the task.
+ */
+export async function readEvidenceReviewCard(
+  db: Db,
+  clientTurnId: string | null | undefined,
+): Promise<EvidenceReviewCard | null> {
+  const evidenceId = evidenceIdOfReviewTurn(clientTurnId);
+  if (!evidenceId) return null;
+  const evidence = await db.taskCompletionEvidence.findUnique({
+    where: { id: evidenceId },
+    select: {
+      id: true,
+      taskId: true,
+      revision: true,
+      sourceSessionId: true,
+      evidence: true,
+      decisions: { select: { decision: true }, take: 1 },
+      task: { select: { title: true, status: true, creatorSessionId: true } },
+    },
+  });
+  if (!evidence) return null;
+  const delivered = evidence.task.creatorSessionId
+    ? await db.conversationTurn.findFirst({
+      where: { sessionId: evidence.task.creatorSessionId, clientTurnId: { startsWith: evidenceReviewTurnId(evidence.id) } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: { deliveredAt: true },
+    })
+    : null;
+  const latest = await db.taskCompletionEvidence.findFirst({
+    where: { taskId: evidence.taskId },
+    orderBy: { revision: 'desc' },
+    select: { revision: true },
+  });
+  const [decided] = evidence.decisions;
+  const state: EvidenceReviewCard['state'] = latest && latest.revision !== evidence.revision ? 'SUPERSEDED'
+    : decided ? 'DECIDED'
+    : evidence.task.status !== 'OPEN' && evidence.task.status !== 'IN_PROGRESS' ? 'CLOSED'
+    : 'OPEN';
+  return {
+    evidenceId: evidence.id,
+    taskId: evidence.taskId,
+    title: evidence.task.title,
+    revision: evidence.revision.toString(),
+    runSessionId: evidence.sourceSessionId,
+    dueAt: delivered?.deliveredAt
+      ? new Date(delivered.deliveredAt.getTime() + EVIDENCE_REVIEW_WINDOW_SECONDS * 1_000).toISOString()
+      : null,
+    claim: storedEvidenceEnvelope(evidence.evidence)?.claim ?? null,
+    state,
+    latestRevision: (latest?.revision ?? evidence.revision).toString(),
+    decision: decided?.decision ?? null,
+  };
+}
+
+/** The decision a send-back turn hands to its run. */
+export function decisionIdOfSendBackTurn(clientTurnId: string | null | undefined): string | null {
+  if (!clientTurnId?.startsWith(EVIDENCE_SEND_BACK_TURN_KEY_PREFIX)) return null;
+  return UUID_AT_START.exec(clientTurnId.slice(EVIDENCE_SEND_BACK_TURN_KEY_PREFIX.length))?.[1] ?? null;
+}
+
+/**
+ * The "Evidence sent back" card a send-back turn carries. Who sent it back is read the way its block
+ * said it (`evidenceSendBackMessage`): the deciding session named in the block's own `from-session`,
+ * or else the account owner when the decision is recorded as the owner's — the decision row alone
+ * cannot tell the owner's press in the app from a session recorded under the owner.
+ */
+export async function readEvidenceSendBackCard(
+  db: Db,
+  turn: { clientTurnId: string | null; content: string | null },
+): Promise<EvidenceSendBackCard | null> {
+  const decisionId = decisionIdOfSendBackTurn(turn.clientTurnId);
+  if (!decisionId) return null;
+  const decision = await db.taskEvidenceDecision.findUnique({
+    where: { id: decisionId },
+    select: {
+      taskId: true,
+      decision: true,
+      note: true,
+      decidedByType: true,
+      decidingSessionId: true,
+      evidence: { select: { revision: true } },
+      task: { select: { title: true } },
+    },
+  });
+  if (!decision || decision.decision !== 'SEND_BACK') return null;
+  const named = /\bfrom-session="([0-9A-Za-z]+)"/.exec(turn.content ?? '')?.[1];
+  const fromSessionId = named ? safeUuid(named) : null;
+  const owner = !fromSessionId && decision.decidedByType === CreatorType.USER;
+  const bySessionId = owner ? null : fromSessionId ?? decision.decidingSessionId;
+  const bySession = bySessionId
+    ? await db.session.findUnique({ where: { id: bySessionId }, select: { title: true } })
+    : null;
+  return {
+    decisionId,
+    taskId: decision.taskId,
+    title: decision.task.title,
+    revision: decision.evidence.revision.toString(),
+    note: decision.note ?? '',
+    by: owner ? 'OWNER' : 'SESSION',
+    bySessionId: bySession ? bySessionId : null,
+    byTitle: bySession?.title ?? null,
+  };
+}
+
+function safeUuid(id: string): string | null {
+  try {
+    return base62ToUuid(id);
+  } catch {
+    return null;
+  }
 }
 
 /**

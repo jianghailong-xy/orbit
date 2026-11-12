@@ -164,3 +164,56 @@ test('the replica that hears of a batch hands its streams the events, whole or r
   assert.deepEqual(mine, []);
   assert.equal(seen.length, before);
 });
+
+/**
+ * A batch whose ingest changed the session's row where no event of it says so — the first engine event of a run
+ * stamping engineStartedAt — is followed by a session_updated, on this replica and on every other, still in one
+ * notification. A batch of nothing but deltas can be that batch, so it is announced too.
+ */
+/** Everything this replica's hub carries for the session: what both its session streams and its owners' control
+ *  streams are made from (a session_updated only reaches the latter, streamForUser). */
+function hubOf(realtime: RealtimeService): NormalizedRunEvent[] {
+  const seen: NormalizedRunEvent[] = [];
+  (realtime as unknown as { hub: { subscribe(f: (m: { runId: string; event: NormalizedRunEvent }) => void): void } })
+    .hub.subscribe((m) => { if (m.runId === SESSION) seen.push(m.event); });
+  return seen;
+}
+
+test('a batch that changed the session\'s row is followed by a session_updated, here and on the other replicas', async () => {
+  const origin = database();
+  const sender = new RealtimeService(origin.prisma as never, {} as never);
+  const here = hubOf(sender);
+  sender.publishBatch(SESSION, [ev(3, RunEventType.SYSTEM, { subtype: 'init' }), ev(4, RunEventType.TOOL_USE, { id: 't1' })], true);
+  sender.publishBatch(SESSION, [ev(5, RunEventType.TEXT_DELTA)], true);
+  const big = Array.from({ length: 12 }, (_, i) => ev(20 + i, RunEventType.ASSISTANT, { text: 'x'.repeat(1_000) }));
+  sender.publishBatch(SESSION, big, true);
+  sender.publishBatch(SESSION, [ev(40, RunEventType.TOOL_USE, { id: 't2' })]);
+  await settle();
+
+  assert.deepEqual(
+    here.map((e) => `${e.seq}:${e.type}`),
+    ['3:system', '4:tool_use', '0:session_updated', '5:text_delta', '0:session_updated',
+      ...big.map((e) => `${e.seq}:assistant`), '0:session_updated', '40:tool_use'],
+    'each flagged batch, then its row update; an unflagged one as before',
+  );
+  assert.equal(origin.notified.length, 4, 'still one notification per batch');
+  assert.deepEqual(origin.notified.map((n) => n.payload.u), [1, 1, 1, undefined]);
+  assert.deepEqual(origin.notified[1].payload.b, [], 'a delta-only batch announces the row change alone');
+  assert.equal(origin.notified[2].payload.f, 20, 'the big one as its range, flag and all');
+
+  const createdAt = new Date(TS);
+  const receiving = database(big.map((e) => ({ seq: e.seq, type: e.type as string, payload: e.payload, turnId: TURN, createdAt })));
+  const replica = new RealtimeService(receiving.prisma as never, {} as never);
+  const there = hubOf(replica);
+  const hear = (replica as unknown as { onNotify(channel: string, payload: string): void }).onNotify.bind(replica);
+  for (const { channel, payload } of origin.notified) hear(channel, JSON.stringify(payload));
+  await settle();
+  await settle();
+
+  assert.deepEqual(
+    there.map((e) => `${e.seq}:${e.type}`),
+    ['3:system', '4:tool_use', '0:session_updated', '0:session_updated',
+      ...big.map((e) => `${e.seq}:assistant`), '0:session_updated', '40:tool_use'],
+    'the stored events, each row update after its batch, the read-back one included',
+  );
+});

@@ -215,17 +215,20 @@ pg spec 用执行计划钉住了这一点。它声明为 IMMUTABLE（里面的 `
   NULL 表示背后没有仓库的 space，这种可以有任意多个。`root_commit_sha` 等 runner 补报后用来区分同一 URL 背后的两个仓库。
 - **slug**：`^[a-z0-9]+(?:-[a-z0-9]+)*$`，至多 64 字符，每个 owner 内唯一。主题的 slug 同形，在 space 内唯一。
 - **绑定**：一个 workspace 最多一行，且只能指向自己 owner 的 space（复合外键拒绝别的）。行代表 owner 或会话说过的话，优先于仓库。
-  - 仓库和 space 相同的 workspace 不需要行就在这个 space 里：读取时比较规范化后的 `repo_url` 和 `repo_url_norm`（`wiki/wiki-workspaces.ts`），不写入。所以不管 `repo_url` 是怎么来的都会加入，后建的 space 也能拿到已有的 workspace。会话第一次调 wiki 工具时仍写一行，这个仓库还没有 space 时也由这一步建出来。
+  - 仓库和 space 相同的 workspace 不需要行就在这个 space 里：读取时比较规范化后的 `repo_url` 和 `repo_url_norm`（`wiki/wiki-workspaces.ts`），不写入。所以不管 `repo_url` 是怎么来的都会加入，后建的 space 也能拿到已有的 workspace。会话第一次调 wiki 工具时仍写一行，但只对这个仓库已有的、在用的 space 写；任何 wiki 工具调用都不建 space，也不排 plan 起草（`docs/wiki-explicit-creation-design.md` §3.1）。
   - 没有仓库的 workspace 由 owner 在 Wiki 设置里加入（`POST /api/wiki/spaces/:id/workspaces`）。别的仓库的 workspace 回 400：那个仓库有自己的 space，它的会话写出来的知识在这里也会被当成别的仓库的知识丢掉。
   - owner 在 Wiki 设置里把 workspace 留在外面（`DELETE /api/wiki/spaces/:id/workspaces/:workspaceId`），写 `left_out_at`；只靠仓库加入的 workspace 会为此新建一行。它的会话不再进维护，调 wiki 工具被拒，已写进 wiki 的内容保留，也不会自己回来。同一个 POST 能把它打开。
   - 这两个写入都只属于 owner：带会话头回 `WIKI_OWNER_CHANNEL_ONLY`，个人访问令牌回 `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`，因为谁在 space 里就是谁能读它的条目。两者都不动游标：加入的 workspace 从 space 当前的水位往后读。
-  - 会话所在 workspace 不在任何 space 时返回 `WIKI_SPACE_UNBOUND`，并用一句话说明怎么绑；被留在外面的 workspace 返回同一个码，并说明这一点。项目通过其 codebase 的仓库地址找到 space，没有单独的表。
+  - 会话所在 workspace「没有 wiki」（没有行，或行指向回收站里的 wiki；且没有 `repo_url`，或同仓库没有在用的 space）时（`binding.unbound`，设计 §3.3）：
+    `GET search` 回 `200`，`{ q, semantic: false, hits: [], unavailable }`，`unavailable` 是闭集 `searchUnavailable`：`no_wiki`，或仓库的 wiki（没有仓库时是行指向的那个）在回收站里时 `wiki_in_trash`，不记曝光；
+    `GET entries/:id` 回 `404 WIKI_SPACE_UNBOUND`，`This workspace has no wiki.`；`POST changesets`、`drafts`、`notes` 回 `409 WIKI_SPACE_UNBOUND`，原话是 `No wiki for this repository yet, so nothing was recorded. Only the owner can start one: if they asked for a wiki here, file request_owner_action with kind WIKI_CREATE; otherwise carry on without it.`，仓库的 wiki 在回收站里时换成 `The wiki for this repository is in Trash: the owner restores it from Trash.`。
+    被留在外面的 workspace 照旧在每个工具上返回 `WIKI_SPACE_UNBOUND`，并说明这一点。项目通过其 codebase 的仓库地址找到 space，没有单独的表。
   - Wiki 设置的 Workspaces 卡（web、macOS/iOS、Android，在 Review mode 和 Maintenance 之间，效果图 38）读 `GET /api/wiki/spaces/:id/workspaces`：`{ workspaces, addable }`，每行 `{ id, name, runner, inWiki }`。`workspaces` 是这个仓库上、或这个 space 的行点名的活 workspace，按名字排（不分大小写），切开关时行不跳，被留在外面的留在列表里，`inWiki` 为 false。`addable` 是 `Add workspace…` 能加的：没有仓库、也不在任何 wiki 里（被别的 space 留在外面的算不在）。
 - **回收站**（`space.trash`，迁移 0486，效果图 `docs/mocks/wiki-trash`，owner 2026-11-07 定）：删除 wiki 改为移进回收站，保留 365 天，期间可以恢复；到期或 owner 永久删除后，在后台分批删掉。
   - `DELETE /api/wiki/spaces/:id` 移进回收站，回 `{ spaceId, deletedAt, purgeAt }`；别人的、已在回收站的或已经没有的回普通 404。四个回收站路由都只属于 owner：带会话头回 `WIKI_OWNER_CHANNEL_ONLY`，个人访问令牌回 `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`，没有 agent 工具和 CLI 命令。
   - 移进去是一个很短的事务：锁住这一行，写 `deleted_at` 和 `purge_at`（365 天后），原 slug 和仓库存进 `trashed_slug`、`trashed_repo_url_norm`，slug 换成按 id 生成的占位、仓库置空，维护关掉，未结束的 `wiki_job` 和 `wiki_plan_job` 删掉。其余行一行不动。
   - 回收站里的 wiki 在任何入口都当作不存在：列表、各页面、按它或它里面东西的 id 读、跨 wiki 搜索、Review 队列、链接卡片、会话的 wiki 工具、各个调度。公开链接暂停（`PAUSED` / `IN_TRASH`，访客 404），恢复后自动重新打开。
-  - 会话：指向回收站里 wiki 的 `wiki_space_workspace` 行在它在回收站期间不起作用。有仓库的 workspace，会话用这个仓库当前在用的 wiki，没有就按 `binding.automatic` 建一个空的，workspace 的行随之指向新 wiki；没有仓库的 workspace 回 `WIKI_SPACE_UNBOUND`，说明 wiki 在回收站里。
+  - 会话：指向回收站里 wiki 的 `wiki_space_workspace` 行在它在回收站期间不起作用。有仓库的 workspace，会话用这个仓库当前在用的 wiki，workspace 的行随之指向它；没有在用的就算没有 wiki（`unavailable: wiki_in_trash`），不建新的。没有仓库的 workspace 搜索回 `wiki_in_trash`，写入回 `WIKI_SPACE_UNBOUND`，说明 wiki 在回收站里。
   - `POST /api/wiki/spaces/:id/restore` 恢复，回这个 wiki（同 `GET /api/wiki/spaces/:id`）：slug 回原样，被在用的 wiki 占了就加 `-2`、`-3`…；仓库回原样，被在用的 wiki 占着就回 409，原话是 “A newer wiki for <repo> is in your wikis now. Move it to Trash first, then restore this one.”；设置回原样但维护保持关闭；内容、公开链接都回来，期间没进别的 wiki 的 workspace 也回来。在用的 wiki 原样回答；已到期或已经没有的回 404。
   - `DELETE /api/wiki/spaces/:id/purge` 永久删除，回 `{ spaceId }`：`purge_at` 改成现在，马上离开回收站；不在回收站的回 404。真正的删除由 `WikiTrashPurge` 在跑单例清扫的进程上每分钟做一次：租约拿下一个到期的 wiki，每条语句删一批（条目连同它们的 supersede 链，然后按目录里指向 `wiki_space` 的外键逐表删，最后删 wiki 本身），一次最多 30 秒，中断后下一次接着删。
   - `GET /api/wiki/trash` 列出回收站：`{ spaces: [{ id, slug, title, repoUrlNorm, deletedAt, purgeAt, entries }] }`，最近移进的在前，slug 和仓库是原来的，`entries` 是在用条目数。
@@ -321,7 +324,7 @@ JSON 的 `kinds.<kind>.fields` 与 TS 的 `KIND_SPECS[kind].fields` 用同一套
 
 | type | 字段 | 复验结果 | 复验方式 |
 | --- | --- | --- | --- |
-| `path` | path | verified / missing | runner：`git cat-file -e origin/main:<path>` |
+| `path` | path | verified / missing | runner：`git cat-file -e <ref>:<path>` |
 | `symbol` | path, symbol, regionSha256? | verified / changed / missing | runner：`git grep -n` 找符号，对其后若干行做哈希比对 |
 | `commit` | sha（40 位小写十六进制） | verified / missing | runner：`git merge-base --is-ancestor`，必须验 |
 | `criterion` | criterionId, semanticHash? | verified / changed | 服务端比对 semanticHash |
@@ -439,8 +442,8 @@ JSON 的 `kinds.<kind>.fields` 与 TS 的 `KIND_SPECS[kind].fields` 用同一套
     `wiki-import-golden.spec.ts` 让服务端的实现逐字节对上它；P10 放行了服务端读 note 与 runner 不同的地方（`wikiImportNote`），那里以服务端的
     为准，Go 那边的不回移。回答的 JSON 按 encoding/json 的读法：`{entries}`
     包裹键不区分大小写，字符串和键里的孤立代理字符读作 U+FFFD，超出 float64 范围的数字使整个回答判为解析失败（不读成 Infinity）。
-    锚点查 space 的快照：路径在 origin/main 的树里、
-    提交被 origin/main 可达；space 的 runner 能取时先要一份新快照（最多等 180 秒，持租约等），取不到就用 space 已有的快照，
+    锚点查 space 的快照：路径在默认分支的树里、
+    提交被默认分支可达；space 的 runner 能取时先要一份新快照（最多等 180 秒，持租约等），取不到就用 space 已有的快照，
     都没有就不带锚点。之后先 dry run，再以 import 来源、调用会话的身份、`wiki-import:<空间和 op 的哈希>` 幂等键提议；
     分批规则同上：遇到 `WIKI_QUOTA` 或 `WIKI_REVIEW_QUEUE_FULL`，剩下的留给下一次。
   - 命令停止等待（作业留在服务端，id 记在本机，下一次运行先收它的结果）：System model 拒了 key 或没配置时立即停；模型
@@ -1225,7 +1228,8 @@ JSON 里是 `anchorRules.verify`；实现在 `src/apiserver/src/wiki/wiki-anchor
 
 ### 17.2 runner 怎么验
 
-- 先 `git fetch origin +refs/heads/main:refs/remotes/origin/main`，再对 `refs/remotes/origin/main` 此刻指向的提交逐个检查；fetch 失败就什么都不验、
+- 先读 origin 的默认分支（`git ls-remote --symref origin HEAD`，读不到时用 checkout 的 `refs/remotes/origin/HEAD`），再
+  `git fetch origin +refs/heads/<name>:refs/remotes/origin/<name>`，对该 ref 此刻指向的提交逐个检查；fetch 失败就什么都不验、
   什么都不报。报告里带这个 40 位 sha（`ref`）。
 - path：`git cat-file -e <ref>:<path>`（去掉开头的 `./`、`/` 和结尾的 `/`），在就是 verified，不在就是 missing。
 - symbol：`git grep -n -w -F -I` 在该文件（路径是目录时取路径序的第一个文件）里找符号作为整词出现的第一行；从这一行起共 20 行
@@ -1595,6 +1599,8 @@ JSON 里是 `maintenance.health`；服务端在 `src/apiserver/src/wiki/wiki-hea
 `advanceCursor`（通知），用户门在 `wiki/wiki-health.controller.ts`；共享类型与 look 的判定在 `src/shared/src/wikiHealth.ts`；
 两端的文案在 web `lib/wikiHealth.ts` 与 OrbitKit `WikiHealthLogic.swift`，由 `src/shared/src/wiki-health.fixture.json` 锁住。
 读的是 0315 的 `wiki_cursor` 与 0320 的 `wiki_maintenance_run`（0356 给运行行加了尝试次数与失败类别，见 19.7）。
+仓库分档（`docs/wiki-repo-tiers-design.md` §6、§7，2026-11-11）给 `repo` 加了档位四个字段（20.1）、状态行的仓库部分（20.2）和红色原因的通知（20.4）；
+读的是 0514、0519 给运行行加的 `repo_tier` / `repo_reason` / `repo_detail` / `repo_checked_at` 和 0519 给游标行加的 `repo_attention_runs`。
 
 ### 20.1 读：`GET /api/wiki/spaces/:id/health`
 
@@ -1619,6 +1625,16 @@ JSON 里是 `maintenance.health`；服务端在 `src/apiserver/src/wiki/wiki-hea
   没有这个字段，客户端当作没这么说：服务端的那部分都不画（§24.5 的「读」）。
 - `systemModel`（P9）：§23.5 读到的 System model 状态（`{ state, model, since, checkedAt, workerSeenAt }`，不含地址和 key），在 `serverExecutes`
   为真时读——P11 起总是如此；把账号留在 runner 上的控制面给 null，那时模型不归这个账号管。状态行的服务端原因就从它和 `repo` 说出来。
+- `repo`（`maintenance.health.repo`，键的顺序就是契约的顺序）：
+  - `look`、`workspace`、`runner`、`pending`：§26.6 原有的四个，分档之前的客户端照旧只读 `look`；
+  - `tier`：最近一次做过探测的维护运行（进行中或已结束，取它最近一次尝试）读到的档位（`repoOps.tiers`：`git` / `folder` / `sessions` /
+    `wrong_repository`），即运行行的 `repo_tier`；还没有运行探测过时为 null；
+  - `reason`：它读得比 git 少的原因（`repoOps.reasons`，运行行的 `repo_reason`）；`git` 和 `folder` 时为 null；
+  - `detail`：这个原因的一句英文（`wikiRepoDetail`，如 `~/work/app was not found on MacBook`），家目录写成 `~`，按失败文字的规则脱敏
+    （owner 的环境变量值也遮掉），由运行写在 `repo_detail` 上；`folder` 时写这个目录是什么（`~/work/app is not a git checkout`；没有 origin 的 git checkout 写 `~/work/app has no origin remote, so it is read as a folder`）；`git` 时为 null。
+    0519 之前的运行没有这一列，按 reason 现说。旧 runner 把非 git 目录答成 `not_git` 时，这一句是 `Upgrade the runner to read folders`；
+  - `checkedAt`：那次运行的探测时间（`repo_checked_at`），没有就取它最近一次尝试的开始；`tier` 为 null 时也为 null。
+  比分档早的控制面没有后四个字段，客户端当作没说，不画仓库部分。
 
 ### 20.2 四种样子（另加「正在跑」）
 
@@ -1637,6 +1653,20 @@ JSON 里是 `maintenance.health`；服务端在 `src/apiserver/src/wiki/wiki-hea
   `review queue full`。
 - 时间：`just now` / `4m ago` / `2h ago` / `1d ago` / `3w ago`；滞后量三天以内按小时（`26h`，对着 24 小时的线读），之后按天（`14d`）。
 - web 各宽度与 iOS 同一句话：entries（全量、千分位）· 锚点 · 维护部分；web 桌面在 entries 后多一个审阅数（手机由琥珀横幅说）。
+- **仓库部分**（`maintenance.health.client`，设计 `docs/wiki-repo-tiers-design.md` §7.2）：维护开着时接在维护部分后面，web、iOS、Android 同样的字、
+  同样的几段，由 `src/shared/src/wiki-health.fixture.json` 锁住（宽屏 `parts` / `text`，窄屏 `narrowParts` / `narrowText`，手机的 `line`）：
+
+  | `repo.tier` | 宽屏 | 窄屏（手机、iOS、Android） | 颜色 | 链接 |
+  |---|---|---|---|---|
+  | `git`、null | 无 | 无 | — | — |
+  | `folder` | `Reading the folder, not git` | `Reading the folder` | 灰 | 进 Settings；提示 `Commit anchors are not checked: <detail>.` |
+  | `sessions` | `Code checks paused: <detail>` | `Code checks paused` | 琥珀点；`reason` 是红色原因（20.4 的 `reasons`）时红点 | `Fix in Settings` |
+  | `wrong_repository` | `<detail>` | `Wrong folder` | 红点 | `Fix in Settings` |
+
+- 读不到仓库不是运行失败（§27.3 第 1 步）：这样的运行照样 `succeeded`、backlog 照样下降，`look` 不会因为仓库变成 `failing`，原因只在仓库部分说。
+- **Activity 的 Runs 卡**（`maintenance.health.repoRunTier`）：每个维护运行带一个档位标记，读 `jobs.read` 的 `job.repo {tier, reason, detail}`
+  （运行行的三列；别的作业和探测之前为 null）：`git`、`folder` 或 `sessions only`（`wrong_repository` 也写这个），后者再跟 detail，琥珀，
+  红色原因时红；由 `src/shared/src/wiki-server-execution.fixture.json` 的 `runs.tiers` 锁住。
 
 ### 20.3 连续失败 3 次通知 owner 一次
 
@@ -1647,6 +1677,19 @@ JSON 里是 `maintenance.health`；服务端在 `src/apiserver/src/wiki/wiki-hea
   手机没响，失败照样记下。
 - 成功的运行把计数清零（§16.4），下一轮连续失败到它自己的第 3 次再推一次。
 - **memory 写入归零（`maintenance.health.notifyNoNotes`）**：Claude 的 memory 可能不再走事件流，这时运行照样成功，只是看不到写入（设计 §8）。最近连续 3 次结束的运行（不论结局）都读过至少 20 个 Claude session（`report.claims.claudeSessions`），`report.claims.seen` 都是 0，就在让连续次数恰好到 3 的那次运行结束时通知 owner 一次，走 `PushService.notifyWikiMemoryWritesQuiet`，kind 和 thread 同上，所以各端打开的是同一个 space。尽力而为，不会让运行失败。中间有一次不满足就断开，下一轮到它自己的第 3 次再推一次。没有 `claims` 的旧报告不算。
+
+### 20.4 红色的仓库原因连续 3 次通知 owner 一次（`maintenance.health.notifyRepository`）
+
+- 红色原因：`wrong_repository`、`root_mismatch`、`path_overlap`（别的仓库的目录）和 `fetch_refused`（远端拒绝了凭据）——要 owner 去修，
+  而运行不靠仓库照样成功，连续失败的计数（20.3）永远数不到它。
+- 计数在游标行的 `repo_attention_runs`（迁移 0519），每次由事实或 owner 建的维护运行结束时（`finishWikiMaintenanceJob` →
+  `WikiMaintenance.noteRepoAttention`）：`repo_reason` 是红色原因的加一；读到了仓库的（`repo_tier` 为 `git` 或 `folder`）清零；其余的
+  （没探测、或原因不是红色的）不动。回填不计。
+- 加一是游标行上的一条 `UPDATE … RETURNING`，只有读回恰好 `afterRuns`（3）的那一次运行结束发推送，并发结束的只有一个读到这个数。
+  推送走 `PushService.notifyWikiRepositoryAttention`：标题 `Wiki code checks paused for <runs> runs`，正文 `<space>: <repo_detail>. Fix it in the wiki's Settings.`，
+  kind 与 thread 同 20.3（`wiki-maintenance-failing`、`wiki-<space>`）。在语句之后、任何事务之外发，尽力而为，不会让运行失败。
+- 只有推送：Following 的 Needs attention 只列 watch，wiki 的告警今天在那里没有一行（设计 §6 原先写的那一条没有做，见设计顶部的修订）。
+- 读到一次仓库就清零，下一轮到它自己的第 3 次再推一次。
 
 ## 21. Wiki plan：先有 plan，owner 确认后才写文档（判据 11）
 
@@ -1779,7 +1822,7 @@ JSON 里是 `plan.jobs`；迁移 `0338_wiki_plan_job`；服务端在 `src/apiser
   和生成（`build`，`docs_build`，owner 确认一个版本后按它写全部文档，21.9）都是服务端的作业（21.10、22.13），不建任务、不建会话。P11 之前
   它们是该 space 隐藏的「Wiki maintenance」清单里的任务，由维护会话跑 `orbit wiki plan draft` / `revise` / `orbit wiki docs build`，判据
   `EXECUTABLE` 是 `orbit wiki plan check`（契约原来的 `plan.jobs.task`），P11 随维护会话删除。
-- **事实触发，不用时钟**（`triggers`）：`space_created`——新建 space（`POST /api/wiki/spaces`，或会话提议时隐式建的 space）；
+- **事实触发，不用时钟**（`triggers`）：`space_created`——新建 space（`POST /api/wiki/spaces`，唯一的调用方；会话的 wiki 工具不建 space）；
   `owner`——owner 在 plan 页要求（`POST /api/wiki/spaces/:id/plan/redraft`，只认 JWT，带会话头一律 `WIKI_OWNER_CHANNEL_ONLY`；
   body 带 `instructions` 就是修订，最多 `rules.instructionsMaxChars` 4000 字，不带就是起草。客户端有两个门：有版本时 Redraft… 必须写字，它读那个版本；
   不读版本的重新起草走 ⋯ 里的 Start over…，确认后发不带 `instructions` 的请求；没有版本时 Redraft… 可以不写字。上一个作业没留下草稿时，输入框带着它的 `instructions`），或者确认一个版本
@@ -1822,7 +1865,7 @@ JSON 里是 `plan.jobs`；迁移 `0338_wiki_plan_job`；服务端在 `src/apiser
 P11（2026-10-19）删除了这三条命令（契约原来的 `plan.jobs.cli`）和 runner 上的起草流水线（`src/runner-go/wiki_plan*.go`）。下面的步骤
 （`plan.jobs.run`）是服务端的 plan 作业照做的，细节见 21.10。
 
-- **准备材料**：space 的快照——runner 在维护 workspace 的 checkout 上 fetch 后按 origin/main 做的，checkout 不是 space 的仓库就判失败：模块结构
+- **准备材料**：space 的快照——runner 在维护 workspace 的 checkout 上 fetch 后按仓库默认分支做的，checkout 不是 space 的仓库就判失败：模块结构
   与入口、`docs/` 标题树（不含 `docs/mocks`、`docs/evidence`）、contracts 清单、代码符号索引；再读 plan 材料（`plan.jobs.materials`）：项目、
   会话标题的统计与聚类、条目与主题分布。
 - **分四步起草**，每个单元一次 System model 请求（经请求队列，不开 thinking），紧凑行格式：目录骨架 → 按大类补每篇的读者与范围 → 逐篇大纲
@@ -2834,14 +2877,16 @@ JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` 
 `src/apiserver/src/wiki-worker/`（表、领取、结算、快照与原文缓存 `wiki-repo-ops.ts`、`pg_notify` 监听 `wiki-repo-op-notify.ts`、
 两个通道共用的 LISTEN 连接 `wiki-notify-channel.ts`），runner 侧在 `src/runner-go/wiki_repo_ops.go`（四种操作复用
 `wiki_plan_repo.go` 的索引和 `wiki_anchors.go` 的锚点检查）；共享常量在 `src/shared/src/wikiRepoOps.ts`。
+仓库分档（`docs/wiki-repo-tiers-design.md`，2026-11-11）加了失败的原因（26.7）、文件夹快照（26.8）和探测（26.9），runner 侧在
+`wiki_repo_folder.go` 与 `wiki_repo_probe.go`，迁移 `0521_wiki_repo_snapshot_source` 与 `0530_wiki_repo_probe`。
 
 ### 26.1 表与状态
 
-- `wiki_repo_op`：`id`、`job_id`（复合外键到 `wiki_job`，作业删掉它也跟着删）、`owner_id`、`space_id`（复合外键到 `wiki_space`）、
+- `wiki_repo_op`：`id`、`job_id`（复合外键到 `wiki_job`，作业删掉它也跟着删；0530 起可以为空，只有 `probe` 可以不挂作业，`wiki_repo_op_job_chk`）、`owner_id`、`space_id`（复合外键到 `wiki_space`）、
   `workspace_id`（复合外键到 `workspace`：读的是它的 `work_dir`，路由按它的 `runner_id`）、`runner_id`（领取时写入，接管时刷新）、
   `kind`、`input`（JSONB，从不含地址和 key）、`state`、租约四列（`lease_owner` / `claim_generation` / `claimed_at` / `heartbeat_at`）、
   `result`、`error`、`created_at` / `updated_at` / `ended_at`。
-- `state`：`queued` / `running` / `succeeded` / `failed` / `cancelled`；`kind`：`snapshot` / `read` / `diff` / `anchors`。
+- `state`：`queued` / `running` / `succeeded` / `failed` / `cancelled`；`kind`：`snapshot` / `read` / `diff` / `anchors` / `probe`（0530 加 `probe`）。
 - CHECK：租约三列（owner、claimed_at、heartbeat_at）与 `running` 互为条件；只有结束态有 `ended_at`；`succeeded` 没有 `error`；
   `input` / `result` 是对象。
 - 领取**不占槽位**：仓库操作不是任务也不是会话，`runnerActiveTurns`（runner 上 RUNNING 的会话数）在领取前后不变
@@ -2855,6 +2900,12 @@ JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` 
 - 第二个能力 `wiki-repo-op-read/v1`（`WIKI_REPO_OP_READ_CAPABILITY`，owner 2026-10-08）：声明了它的 runner，`read` 回答的是指定 sha 上的
   整个文件。只声明 `wiki-repo-op/v1` 的 runner 照旧能领到操作，只是 `read` 只给每个文件的前 `boundedChars`（22,000）字——服务端照旧处理，
   健康行给出同一个「升级 runner」的原因（§26.6）。
+- 第三个能力 `wiki-repo-op-folder/v1`（`repoOps.folderCapability`，`WIKI_REPO_OP_FOLDER_CAPABILITY`，runner 侧 `wikiRepoOpFolderCapabilityV1`）：
+  入队时（`enqueueWikiRepoOp`）只有 workspace 的 runner 声明了它，服务端才在操作的 `input` 里写 `allowFolder: true`，**每一种操作都写**。
+  带它的 runner 遇到不是 git checkout 的工作目录，按文件夹读（26.8），而不是以 `not_git` 失败。没声明它的 runner 照旧答 `not_git`，
+  维护运行按 `sessions` 档跑，运行行的 detail 写 `Upgrade the runner to read folders`。
+- 第四个能力 `wiki-repo-op-probe/v1`（`repoOps.probeCapability`，`WIKI_REPO_OP_PROBE_CAPABILITY`）：只有声明了它的 runner 领得到 `probe`（26.9）；
+  旧 runner 不认识这个种类，会先 fetch 再报错，所以服务端根本不问它。
 - 领取照集成作业：一条 `WITH candidate AS (SELECT … JOIN workspace w ON w.id = o.workspace_id
   WHERE w.runner_id = <本机> AND (state = 'queued' OR (state = 'running' AND heartbeat_at < now - 60s AND lease_owner <> <本进程>))
   ORDER BY created_at, id LIMIT 1 FOR UPDATE SKIP LOCKED) UPDATE "wiki_repo_op" … FROM candidate`，每条给一个新代数。**每次心跳最多 2 个**，两个 apiserver 同时心跳时
@@ -2939,6 +2990,83 @@ JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` 
   机器：没有声明 `wiki-repo-op/v1` 的（什么都领不到，需要仓库的步骤会挂起），和只声明了它、没有声明 `wiki-repo-op-read/v1` 的
   （照旧只读到 22,000 字）。`runner` 字段里的 `capability` 和 `wholeFile` 把这两者分开：前者说这台机器能不能领，后者说它读不读整个文件。
 
+### 26.7 档位与失败的原因（`repoOps.tiers`、`repoOps.reasons`，设计 §2、§6）
+
+- **档位**（`repoOps.tiers.names`）：维护运行每次读出来的结果，不是设置。
+  - `git`：space 仓库的 git checkout，照分档之前一样读 origin/main（安全检查、fetch 锁、读缓存都不变）；
+  - `folder`：目录在、不是 git checkout（或是没有 origin 的 git checkout，space 没有仓库地址），由声明了 `wiki-repo-op-folder/v1` 的 runner 扫描（26.8），快照以树哈希为名。条目、游标、路径与
+    符号锚点、文档都照 git 档；提交锚点不核，保留上一次的检查；
+  - `sessions`：仓库什么都读不到，运行只从会话学。没有快照；代码锚点保留上一次的检查、仍然待核；文档一步跳过（`docs.skipped no_repository`）。
+    没有别的失败时运行照样 `succeeded`：读得少不是运行的失败；
+  - `wrong_repository`：读到的是别的仓库（原因是 `wrong_repository`、`root_mismatch` 或 `path_overlap`），运行只做 `sessions` 档做的事。
+- 记在运行行的 `repo_tier`、`repo_reason`（0514，`wiki_maintenance_run_repo_tier_chk` 限定四个档位；探测之前为 null，每次尝试开始时清空）
+  和 `repo_detail`、`repo_checked_at`（0519），以及运行报告的 `repo {tier, reason}`；`git` 时 reason 为 null。
+- **原因**（`repoOps.reasons`），服务端按它分类，不再从错误文字里猜：
+
+  | 类别 | 原因 | 怎么处理 |
+  |---|---|---|
+  | 前提（`premise`） | `no_workspace`、`runner_missing`、`runner_offline`、`runner_upgrade`（服务端自己读的 readiness，`looks`）；`no_work_dir`、`not_found`、`not_git`、`too_many_files`、`fetch_refused`（runner 的失败回答） | 不重试：运行当场不带仓库继续，作业不再试（不占 `jobs.retry.limit`），这次运行不再问 runner；档位 `sessions` |
+  | 前提，别的仓库（`wrongRepository`） | `wrong_repository`（origin 不是 space 的地址，或 space 有地址而 checkout 没有 origin）、`root_mismatch`（不从 space 的第一个提交开始）、`path_overlap`（26.8） | 同上；档位 `wrong_repository` |
+  | 瞬时（`transient`） | `fetch_failed`（网络）、`op_timeout`（操作没在等待内结算）、`runner_lost`（领着它的 runner 沉默，服务端收尾）、`folder_moved`（读的途中文件夹变了）、`op_failed`（服务端不认识的失败） | 按 `repoOps.probe` 重试（§27.3 第 1 步）：这次尝试按 infra 结束，退避后再试；本作业的快照累计 `maxAttempts`（3）次没成功后，按最后一次的原因走 `sessions` 档 |
+
+- **回写**：runner 的失败结果在 `error` 旁边带 `reason`（`{state: 'failed', error, reason}`）。服务端认识的原因写进失败行的 `result.reason`，
+  不认识的不写。分档之前的 runner 不带原因，按它的文字读（`wikiRepoFailureReason`）：`names no working directory` → `no_work_dir`，
+  ` is not a git checkout` → `not_git`，` is a clone of …, not of the space's repository` → `wrong_repository`，`does not start from the space's first commit` →
+  `root_mismatch`，`git authentication failed` → `fetch_refused`，`could not fetch origin's default branch` → `fetch_failed`，服务端自己的
+  `the runner's claim has been silent since` → `runner_lost`；都不是就是 `op_failed`。
+- 有 origin 却 fetch 失败的 git checkout 不降成扫目录：它是 `fetch_failed` 或 `fetch_refused`。没有 origin 这个远端的 git checkout 不 fetch
+  （设计 §2.1 的「本地 git」）：space 没有仓库地址、输入带 `allowFolder` 时按 `folder` 档扫工作目录（26.8，索引带 `noOrigin: true`，`repo_detail` 是
+  `<dir> has no origin remote, so it is read as a folder`）；space 有仓库地址时以 `wrong_repository` 失败，错误写
+  `<dir> has no origin remote, so it cannot be checked against <repo>`，`repo_detail` 是 `<dir> has no origin remote, so it cannot be checked against this wiki's repository`，
+  只问一次、不重试。没有 `allowFolder` 的输入照旧 fetch，以 `fetch_failed` 失败。
+
+### 26.8 文件夹快照（`repoOps.folder`，设计 §2.3、§4、§5）
+
+- **走目录**：从工作目录往下走，不跟随符号链接（指向文件的、指向目录的、目录里的、目录外的都不跟），不出工作目录；只记普通文件和目录。
+- **排除**：先用内置排除表 `exclude`（`.git/`、`.env`、`.env.*`、`*.pem`、`*.key`、`*.p12`、`id_rsa*`、`id_ed25519*`、`.ssh/`、`.aws/`、`.npmrc`、
+  `.netrc`、`node_modules/`、`.venv/`、`venv/`、`__pycache__/`、`target/`、`dist/`、`build/`、`.next/`、`.gradle/`、`DerivedData/`），按名字在任意深度匹配，
+  以 `/` 结尾的只匹配目录；它在任何 `.gitignore` 之前生效，`.gitignore` 不能把它排除的东西加回来。再按 git 的规则读目录里每一层的 `.gitignore`（没有 `.git` 也读）。
+- **文件**：前 8 KB 里有 NUL 的是二进制：只记路径、大小和 hash，不读文本。单个文件的文本仍以 `repoOps.read.wholeFileBytes`（2 MB）为上限。
+- **文件数**：`maxFiles`（100,000，按排除之后的数）。超过就不建快照，操作以 `too_many_files` 失败，运行按 `sessions` 档跑。
+- **索引**：和 git 快照的索引相同，另加 `source: 'folder'`（git 快照没有这个字段，读作 git）、每个文件的 `hash`（内容的 sha256，二进制也算），
+  `commits` 是空数组，`date` 是建快照的时间；从没有 origin 的 git checkout 读出的另加 `noOrigin: true`。`wiki_repo_snapshot.source`（0521，`git` 或 `folder`，默认 `git`）记下它是哪一种。
+- **树哈希**：每个文件一行 `path NUL size NUL sha256(content) LF`，按路径排序拼起来取 sha1，40 位十六进制。它就是快照的 sha，所以 `skipSha`、
+  按 `(space, sha, path)` 的原文缓存和快照换代都照 git 档。
+- **读**：在树哈希上读之前，runner 先重新扫描；树哈希变了就以 `folder_moved` 失败。维护运行为此重建一次快照（每次运行一次），在新的树哈希上
+  再读；再变一次，这次尝试按 infra 结束（`REPO_OP_FAILED`），作业按退避重试。文件夹没有历史，也就没有 `diff`：写于别的 sha 的文档节都当作
+  可能变了，交给节的指纹判断（§27.3 第 9 步）。
+- **锚点**：`path` 是存在的文件、或下面有文件的目录（排除之后的树里）；`symbol` 照 `git grep -w -F -I` 的按路径顺序第一处和同样的区域哈希；
+  `commit` 在文件夹上不核、不下发，保留上一次的检查。核出的检查记 `source: 'folder'`，`ref` 是树哈希；这样的检查只在同一个树哈希的文件夹上成立
+  （`anchorRules.verify.skip`），git 档的运行会重核。
+- **路径重合度**（`minPathOverlap` 0.5）：space 已有一份快照（git 或 folder）时，文件夹快照落地之前先算 `|新路径 ∩ 旧路径| / |旧路径|`
+  （`wikiRepoPathOverlap`）。不到 0.5 就不落地，操作以 `path_overlap` 失败，错误写 `<dir> shares N% of its files with the last snapshot of <repo>`，
+  运行按 `wrong_repository` 档跑。从没有过快照的 space 直接接受第一份。owner 在设置里按 `Use this folder`（§27.1 的 `maintenance.run`，
+  `acceptFolder: true`）时，这一次的快照跳过比对直接落地，以后就和它比。
+
+### 26.9 探测（`repoOps.kinds.probe`、`maintenance.probe`，设计 §7.3）
+
+- **种类 `probe`**：只回答工作目录会按哪一档读，别的都不做：不 fetch、不建快照、不读文件。git checkout 的 origin 是 space 的 `repo.urlNorm`、
+  它已有的历史（检出的提交，否则上次 fetch 留下的 origin 默认分支）从 `rootCommitSha` 开始，就答 `{tier: 'git', origin}`；目录在、不是 git，
+  或是没有 origin 的 git checkout 而 space 没有仓库地址，答 `{tier: 'folder'}`；其余以原因失败：`no_work_dir`、`not_found`、`wrong_repository`（文字里写着
+  另一个 origin，或 `<dir> has no origin remote, so it cannot be checked against <repo>`）、`root_mismatch`。
+  只交给声明了 `wiki-repo-op-probe/v1` 的 runner；由设置发起，不挂作业（`job_id` 为空，0530）。
+- **路由** `POST /api/wiki/spaces/:id/maintenance/probe`，请求 `{ workspaceId }`（设置表单要选的那个，不必是维护现在用的）。只给 space 的 owner，
+  走用户门、不带会话头（`WIKI_OWNER_CHANNEL_ONLY`），不收个人访问令牌；别的账号的 space 或 workspace 是普通的 404。
+- 只有 runner 在心跳、且声明了探测能力时才问它，最多等 `repoOps.probe.waitSeconds`（15 秒）；否则什么都不问。
+- **回答** `WikiRepoProbeAnswer { workspaceId, tier, reason, origin, tone, title, note, canTurnOn, checkedAt }`（`wikiRepoProbeAnswer`）：
+
+  | tone | 何时 | 文案 | `canTurnOn` |
+  |---|---|---|---|
+  | `ok`（绿） | `git` | `Git checkout of <origin>` | true |
+  | `folder`（紫） | `folder` | `Folder, not git` / `Entries and code checks work. Commit anchors are not checked.` | true |
+  | `paused`（琥珀） | `sessions`：`not_found`、`no_work_dir` | `wikiRepoDetail` 那一句（`<dir> was not found on <runner>`）/ `Maintenance can still learn from sessions. Code checks wait until the folder is back.` | true |
+  | `wrong`（红） | `wrong_repository`：`wrong_repository`、`root_mismatch` | `<dir> is a clone of <url>, not this wiki's repository` | false |
+  | `unchecked`（灰） | tier 为 null：runner 不在线、太旧、没有或不答 | `Could not check: <runner> is offline` 等 | true |
+
+- **打开维护**：把维护打开、或维护开着时换 workspace 的 `PATCH /api/wiki/spaces/:id`，先问同一个探测；`canTurnOn` 为 false 时以 409
+  `WIKI_MAINTENANCE_WRONG_REPOSITORY` 拒绝，消息就是探测的那一句，什么都不写。`POST /api/wiki/spaces` 不问：要问的 space 还不存在，
+  而且它的表单只列这个仓库的 workspace。
+
 ## 27. 服务端执行的维护运行：`maintain` 作业（服务端执行 P8）
 
 JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407_wiki_maintain_job`；设计见
@@ -2962,6 +3090,14 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
   下一轮，紧排在文章作业后面；不到期什么都不建。问失败只记日志，不算这次运行失败，下一轮仍由 owner 的下一个事件来建。只有排了文章作业的
   运行结束会这样问：没排文章作业的运行什么都不问——追赶期的运行就不排（`maintenance.job.catchUp.trigger`，§19.8）。所以追赶进行中，运行的
   结束不会自己接着建下一次，下一次由下一个事实或 owner 的事件来建：这是已知的缺口，P11 有意照原样留着。
+- **owner 要的一次运行**（`maintenance.run`，设计 `docs/wiki-repo-tiers-design.md` §7.3）：`POST /api/wiki/spaces/:id/maintenance/run`，
+  请求 `{ acceptFolder? }`，门同 §26.9 的探测（owner、不带会话头、不收个人访问令牌）。它当场建一个 `maintain` 作业和它的运行行，`due = owner`
+  （0530 放宽 `wiki_maintenance_run_due_chk`），在空间锁下、由事实建运行的同一个写入者建；第一步就是探测，所以先重新看一次目录。期望位置照
+  事实的运行给，没有待处理的已结算事实时不给。回答 201 `{ jobId, runId }`；维护关着 400；已有没结束的 `maintain` 作业 409
+  `WIKI_MAINTENANCE_RUNNING`；当天（UTC）的次数已满 409 `WIKI_MAINTENANCE_DAILY_LIMIT`——owner 的这次和别的一样计入每日次数。
+  `acceptFolder: true` 就是 `Use this folder`：这次的文件夹快照跳过路径重合度直接落地（§26.8），写进作业和快照操作的输入。
+  Settings 的维护卡在 `health.repo.tier` 不是 `git`（null 除外）或最近一次运行失败时画 `Check again and run now` 和 `Change workspace…`，
+  次数用完时按钮不可用、写 `Daily limit reached`；`health.repo.reason` 是 `path_overlap` 时再画 `Use this folder`，确认一次才发。
 - 隐藏列表不是必需的：`settings.maintenance.enabled` 与 `workspaceId` 就够，P11 起也不再建列表（§16.1）。
 - 当日计数、追赶与熔断都按运行行统计：`wikiMaintenanceRunsToday` 数 `job_id` 非空的运行行（维护任务建的旧运行没有作业，不计），
   追赶期本地端点不计数的判定看运行行上的 `local_endpoint`——worker 起跑时按 System model 的地址写入，
@@ -2983,8 +3119,16 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
 
 ### 27.3 流水线：与 `orbit wiki maintain` 同序
 
-1. **仓库**：一次 `snapshot` 仓库操作拿到 origin/main 的 sha 与索引（路径与大小、文档标题与章节、符号、契约、可达提交、
-   README 首段）；锚点查快照，不再有 checkout。runner 的 checkout 不是 space 的仓库（origin 地址、有记录时的根提交对不上）就判失败。
+1. **探测**（`stoppedAt` 仍记作 `repo`；仓库分档，设计 `docs/wiki-repo-tiers-design.md` §3）：先读出这次运行读仓库的档位（§26.7）。
+   - runner 根本问不了（readiness 是 `no_workspace`、`runner_missing`、`runner_offline`，或完全没有仓库能力的 `runner_upgrade`）：按 `sessions`
+     档跑，不建快照，不问 runner。
+   - 否则一次 `snapshot` 仓库操作：git 档拿到 origin/main 的 sha 与索引（路径与大小、文档标题与章节、符号、契约、可达提交、README 首段），
+     文件夹档拿到以树哈希为名的文件夹快照（§26.8）；锚点查快照，不再有 checkout。
+   - 快照失败按原因分类（§26.7）：前提错误当场继续，别的仓库的走 `wrong_repository` 档、其余走 `sessions` 档，不重试，这次运行不再问 runner；
+     瞬时失败抛 `WikiJobInfraError`，这次尝试按 infra 结束、作业按退避重试，本作业的快照累计 `repoOps.probe.maxAttempts`（3）次没成功后，
+     按最后一次的原因走 `sessions` 档。
+   - 档位、原因、一句 detail 和时间写在运行行上（`repo_tier`、`repo_reason`、`repo_detail`、`repo_checked_at`），档位与原因也写进报告的 `repo`。
+   - 第 2 到第 7 步（案卷、抽取与声明、自查与熔断、提交、推进游标、核实）不依赖仓库，每一档都照下面的写法跑。
 2. **案卷**：`WikiMaintenance.dossierPage` 同一条服务端读法，从游标读到运行期望的位置；已处理过的（`unchanged`）跳过。
    **同一轮里每个会话的案卷只提取一次**（2026-10-11，P10 第 93 轮：运行 6e6feff0 要提取 31 份案卷只有 18 个会话，7cf172e3 读了
    30 个会话只有 20 个）。相邻两页各发一次同一个会话时（§16.3），两次的 unit（会话 id）与提示词逐字相同，队列直接复用第一份的请求行，
@@ -2995,8 +3139,11 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
    runner 路径原来每页各读一次，P11 随它删除。
 3. **抽取**：每个案卷一个请求（step `extract`，unit 是案卷的 session id），同一作业最多
    `maintenance.job.rules.extractConcurrency` 个在途；照演示的 A2+6：8k 案卷、不开 thinking、每例最多 `entriesPerSessionMax`（6）条，提示里
-   带 space 的仓库名、地址和它是做什么的（取自 README 开头），讲的不是这个仓库的会话回 `{"offTopic": true}`（键不区分大小写），代码锚点全都
-   不在本仓库的条目丢弃（`offTopic`、`entries.foreign` 计数，`maintenance.job.offTopic`），principle 只有 owner 能写、抽到的丢弃并计数；每条按案卷的行与 spans 检查字段与引文、
+   带 space 的仓库名、地址和它是做什么的（有快照取自 README 开头，没有快照——`sessions` 档——用 space 的 title），讲的不是这个仓库的会话回 `{"offTopic": true}`（键不区分大小写），代码锚点全都
+   不在本仓库的条目丢弃（`offTopic`、`entries.foreign` 计数，`maintenance.job.offTopic`）。锚点按档位收（`anchorRules.deferred`）：有快照时照上一句；
+   文件夹档不收条目写的 `commit` 锚点（不保留、不标 `deferred`、也不算进「全都不在本仓库」），只写了提交锚点的条目照收、只是没有代码锚点；
+   没有快照（`sessions`、`wrong_repository`）时不丢条目，把每个像仓库相对路径的 path 和每个完整的 40 位 sha 都收下并标 `deferred: true`，
+   这样的条目照常进 Review，但在第一次核过之前不进推送块（`push.eligible.anchorDeferredNot`）。principle 只有 owner 能写、抽到的丢弃并计数；每条按案卷的行与 spans 检查字段与引文、
    按快照检查锚点、按 `WIKI_MAINTAIN_JOB.planMaxTokens` 之外的同一条提示词重问一次（unit 加 `#retry`，拒绝原因写进提示词）。
    引文的定位照 §16.3 的规则（`wikiMaintainPlain` / `wikiMaintainPlace`，P11 之前与 runner 逐字一致）。
    **只核对声明的一遍**（`maintenance.job.server.claims`，step `claims`，unit 是 session id，重问是 `<session id>#retry`）：抽取之后，对本次有变化、带声明的案卷各跑一遍 `wikiMaintainCheckClaims`，读 16.3 说的另一份案卷。模型逐条回答 `shown`、`narrowed`、`contradicted`、`absent`、`not_durable`，带 `shownBy`，每条答了 `shown` 或 `narrowed` 的声明写一条条目，不写别的。条目按抽取的规则检查，再加上 `shownBy` 里最多两条第一手的行，重复声明原文的工具行不加。留出的、没有声明的 session 不跑。抽取的案卷、提示和调用次数都不变。模型给不出回答时，这份案卷的声明记 `unanswered`，运行和抽取的 op 不受影响；平台的失败照常让运行在 `claims` 这一步停下。这一遍的 op 和抽取的 op 走同一个自检和熔断，但抽取的先记下、先核实完，这样这一遍的 op 的 `similar[]` 里有抽取刚写的条目，核实它时那些条目已经生效，重复就走现有的 duplicate。
@@ -3027,7 +3174,10 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
    结论带 `adopt` 写，报告计在 `verification.adopted` 里。运行日志「the next run adopts it/them」从此成立。以前收养只收
    已结束会话的 op，作业留下的没人再核：2026-10-10 生产上作业 3b2bd5f2 和 61e91611 各留下一个，之后每轮的 adopted 都是 0；
    服务端收养的结论也不带 `adopt`，写入方只在作业自己的 op 里找，连已结束会话的 op 也 404。
-8. **锚点**：一页一页取 `listWikiAnchorsForJob`，每页至多 `anchorRules.verify.rules.listEntriesMax` 条（2026-10-10 起服务端用列表上限当批量：
+8. **锚点**（按档位）：`sessions` 和 `wrong_repository` 档没有快照，代码锚点一条都不下发、不写，各自保留上一次的检查，等第一次读得到仓库的运行
+   再核；服务端锚点（`criterion`、`record`、`merge_evidence`）今天没有任何检查会写它们（`anchorRules.verify.typesNote`），所以这一步什么都不写，
+   报告的 `anchors` 全是 0。`folder` 档：路径和符号锚点在文件夹上核，记 `source: 'folder'` 和树哈希（§26.8），提交锚点不下发、保留上一次的检查。
+   `git` 档照下文。一页一页取 `listWikiAnchorsForJob`，每页至多 `anchorRules.verify.rules.listEntriesMax` 条（2026-10-10 起服务端用列表上限当批量：
    一次 `anchors` 仓库操作就是一次 runner 心跳的等待加一次 fetch，锚点本身每条只有毫秒级，一页越小越是白等；canary 的
    7,600–7,700 条从约 88 次操作降到约 22 次）。待复核的条目不分页攒起来，每满 `listEntriesMax` 条（最后不满的也一样）作为一次
    `anchors` 仓库操作交给空间所在的 runner，结果按现有写入口
@@ -3049,7 +3199,9 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
    `wiki_repo_op` 行，正如检查是 `kind` 为 `anchors` 的行。按 canary 的 19 轮回放，一轮从约 763 秒（11,565 条锚点、40 次操作）降到约
    44 秒（平均重查约 400 个条目、538 条锚点，约 2.7 次 `anchors` 操作加 3.7 次 `diff`）；一次 REPO_OP_WAIT 之后的重放、或两轮之间
    main 没动时，`anchors` 仓库操作减到 0。
-9. **文档**（追赶期整步跳过）：`wikiDocsAffected` 拿服务端那一半；仓库那一半用 `diff` 仓库操作按节自己的 `repoSha`
+9. **文档**（追赶期整步跳过；`sessions` 和 `wrong_repository` 档也整步跳过，报告写 `docs.skipped no_repository`，之后第一次读得到仓库的运行
+   照追赶之后的记账写这期间变了的：条目那一半按服务端的记录，仓库那一半按每节 `repoSha` 以来的 diff。`folder` 档照常写，但文件夹没有 diff：
+   写于别的 sha 的节都当作变了，交给节的指纹判断，材料没变就不调模型、不重写）：`wikiDocsAffected` 拿服务端那一半；仓库那一半用 `diff` 仓库操作按节自己的 `repoSha`
    比到 head（消失的路径先撤回，`withdrawPaths`），只重写受影响的节（P7 的 `runWikiDocsBuild`，`only` 传入本次要写的节）。
    **比较要读的文件按提交合并**（2026-10-10）：`diff` 仍是每个 `repoSha` 一次（等于 head 的不发；快照里没有的那个提交，它的节直接算
    受影响，不发 diff 也不读），全部发完才读文件：每个提交上被改到的节要读的路径先收齐，在那个提交上用一次 `read` 读完，head 上的
@@ -3072,7 +3224,7 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
    `src/shared/src/wiki-maintain-proposal.fixture.json` 存着 runner 的检查在 P11 之前对一组回答给出的结论（P11 删 Go 代码后冻结），服务端的
    移植要给出同样的结论（主题按夹具的 `topics` 查；服务端有三条报错用英文写，结论一样）。
    再用 P6 的门（`proposeServer`）检查，最多三轮把两道检查报的错回给模型。
-10. **结束**：写报告与 token 合计，`finishWikiMaintenanceJob` 推进游标、写运行行、按 owner 2026-10-08 的决定调用
+10. **结束**：写报告（含 `repo {tier, reason}`）与 token 合计，`finishWikiMaintenanceJob` 推进游标、写运行行、按 owner 2026-10-08 的决定调用
     `queueWikiArticlesAfterRun`——只有成功、记下了 op、且不在追赶期才排文章作业（§24）。报告是整个运行的（§24.10）：被交还、重放过的
     运行，之前的尝试读的、记下的、核实的、检查的、写成的都算在内，token 是运行的每一次调用、每次一回。
 
@@ -3097,7 +3249,9 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
 
 ### 27.4 失败与恢复（设计 §5.5）
 
-- **infra**：runner 不在或太旧、仓库操作超时、请求等过上限、worker 崩溃（租约自然过期），以及数据库在运行底下出的故障
+- **仓库读不到不是运行的失败**（仓库分档，§27.3 第 1 步）：runner 不在、太旧到一个仓库操作都领不了、工作目录不是 git 等前提错误，在探测时就成了
+  `sessions` / `wrong_repository` 档，运行照样往下跑；瞬时的快照失败重试 3 次后同样如此。下面的 infra 指的是探测之后的步骤里遇到的这些情况。
+- **infra**：runner 不在或太旧（探测之后的步骤里）、仓库操作超时、请求等过上限、worker 崩溃（租约自然过期），以及数据库在运行底下出的故障
   （`classifyTransactionFault` 的 TRANSIENT 与 RESOURCE）：事务没能按时开始、或被自己的超时关掉（P2028），按时拿不到连接（P2024），
   连接或资源类 SQLSTATE（08、53、57、58 类），死锁或序列化冲突在事务自己的重试之后仍在。运行行不结束，作业回 `queued` 按退避重试，
   **不计入连续失败**（`consecutive_failures` 不动）；这些故障都整个回滚，重放不会碰到写了一半的东西。2026-10-17 之前，除

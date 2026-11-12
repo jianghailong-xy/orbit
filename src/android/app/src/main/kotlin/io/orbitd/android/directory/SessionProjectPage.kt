@@ -216,6 +216,7 @@ private class ProjectSessionsState(initial: List<DirectorySession>) {
     var openItems by mutableStateOf<JsonObject?>(null)
     /** The project document, while the project may be done: what the page's ending is drawn from (`ProjectDone.drawsEnding`). */
     var done by mutableStateOf<JsonObject?>(null)
+    var confirmedAt by mutableStateOf<String?>(null)
 }
 
 private enum class StartSheet { ASKED, OWN }
@@ -324,11 +325,10 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
             app.landingJobs.remember(handle, projectId, view)
         } else state.integrationReadFailed = true
     }
-    /** The start row's read, while the sidebar says nobody has started the project. A read that fails keeps the last answer. */
+    /** The page reads the start request and latest Not yet answer. A failed read keeps the last answer. */
     suspend fun loadStart() {
         val row = currentProject
         gateRead = listOf(row?.let { it.text("status") to ProjectDoc.started(it) })
-        if (row?.text("status") != "OPEN" || ProjectDoc.started(row) != false) { state.openItems = null; return }
         val items = try { projects.openItems(projectId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
         if (items != null) state.openItems = items
     }
@@ -339,7 +339,15 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
         val row = currentProject
         if (row?.text("status") == "OPEN") { state.done = null; return }
         val doc = try { projects.document(projectId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
-        if (doc != null) state.done = doc
+        if (doc != null) {
+            val confirmedAt = if (doc.text("doneBy") == "DERIVED") {
+                try { projects.confirmation(projectId)?.obj("confirmation")?.text("confirmedAt") }
+                catch (cancel: CancellationException) { throw cancel }
+                catch (_: Exception) { null }
+            } else null
+            state.done = doc
+            state.confirmedAt = confirmedAt
+        }
     }
     LaunchedEffect(handle, projectId) {
         // A member on its way to Trash leaves the page on the press, wherever it was pressed, and what the page holds of it goes too
@@ -429,7 +437,15 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
                     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
                         .background(success.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
                         .border(1.dp, success.copy(alpha = 0.3f), RoundedCornerShape(14.dp)).padding(12.dp)) {
-                        ProjectSettledCard(ending, "project-sessions-ending")
+                        ProjectSettledCard(ending, "project-sessions-ending", confirmedAt = state.confirmedAt, enabled = app.canWrite(handle), onReopen = {
+                            try {
+                                projects.setStatus(projectId, "OPEN", "reopen:${ending.text("updatedAt")}")
+                                loadDone()
+                                app.realtime.refreshDirectory()
+                                null
+                            } catch (cancel: CancellationException) { throw cancel }
+                            catch (failure: Exception) { "${ProjectDone.notReopened} — ${failureReason(failure)}" }
+                        })
                     }
                 } else ProgressCard(project, members, state, openStart = { startSheet = it })
             }
@@ -469,7 +485,19 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
                         rerunCheck = { promotionId -> landingDoor {
                             projects.recheckPromotion(projectId, promotionId, LandingSessionCopy.RERUN_CHECK_REASON) } },
                         onDetails = { promotionReview = it },
-                        onCoordinator = coordinator?.let { c -> { open(OrbitRoute(Destination.SESSION, c.id, route.workspaceId, origin = Origin.LIST)) } })
+                        onCoordinator = coordinator?.let { c -> { open(OrbitRoute(Destination.SESSION, c.id, route.workspaceId, origin = Origin.LIST)) } },
+                        // Why it asks, off the line read and the Automatic the merge's document read carries; Let the agent push
+                        // instead… opens the project's page, whose How it runs has Delivery.
+                        asksReason = PromotionCards.askReason(merge.current, integration?.text("line"), integration?.text("deliveryMode"), merge.automatic),
+                        onLetAgentPush = ::openProject)
+                }
+            }
+            val staleRequest = io.orbitd.android.projects.ProjectDone.staleRequest(state.openItems)
+            if (staleRequest != null) {
+                item(key = "done-request-stale") { io.orbitd.android.projects.ProjectStaleDoneRow(staleRequest) }
+            } else if (state.openItems?.obj("doneRequest") == null) {
+                state.openItems?.obj("latestDoneRequestDecline")?.let { decline ->
+                    item(key = "done-decline") { io.orbitd.android.projects.ProjectDoneDeclineRow(decline) }
                 }
             }
             coordinator?.let { c ->

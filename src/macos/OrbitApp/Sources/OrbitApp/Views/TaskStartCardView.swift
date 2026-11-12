@@ -239,7 +239,7 @@ struct TaskStartCardView: View {
 
     /// Show details on the left when there is anything behind it, and the task's own door on the
     /// right. Opened and shut instantly: animating a row the List is re-measuring is the flicker
-    /// `ToolGroupCardView` documents.
+    /// `StepsRowView` documents.
     private var links: some View {
         HStack(spacing: 12) {
             if TaskStartCard.hasDetails(card) {

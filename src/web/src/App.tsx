@@ -15,6 +15,7 @@ import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AdminSignInPage } from './pages/AdminSignInPage';
+import { AdminEmailPage } from './pages/AdminEmailPage';
 import { AdminIntegrationsPage } from './pages/AdminIntegrationsPage';
 import { InfrastructurePage } from './pages/InfrastructurePage';
 import { ProviderConnectPage, ProviderPickPage } from './pages/ProviderConnectPage';
@@ -36,6 +37,7 @@ import { SharedSessionPage } from './pages/SharedSessionPage';
 import { SharedWikiDocRoute } from './pages/SharedWikiPage';
 import { TaskRoute } from './pages/TaskRoute';
 import { FollowingPage } from './pages/FollowingPage';
+import { WaitingOnYouPage } from './pages/WaitingOnYouPage';
 import { WikiPage } from './pages/WikiPage';
 
 // Backward-compat: old links nested a session under its runner with raw UUIDs
@@ -256,6 +258,15 @@ export function App() {
                 </DocView>
               }
             />
+            {/* The admin area's outgoing email: Resend and the welcome email (docs/welcome-email-design.md §3.1). */}
+            <Route
+              path="admin/email"
+              element={
+                <DocView>
+                  <AdminEmailPage />
+                </DocView>
+              }
+            />
             {/* The admin area's Integrations: Feishu bots' switch (docs/feishu-bot-design.md §4.1). */}
             <Route
               path="admin/integrations"
@@ -311,6 +322,15 @@ export function App() {
               }
             />
             <Route path="admin/providers" element={<InfrastructureRedirect keys />} />
+            {/* Everything an agent has asked the owner to do: owner requests and coordinator questions. */}
+            <Route
+              path="waiting"
+              element={
+                <DocView>
+                  <WaitingOnYouPage />
+                </DocView>
+              }
+            />
             {/* Everything this account follows: watches, filed Active / Needs attention / Triggered
                 history. `?watch=<id>` opens one watch's card. */}
             <Route
