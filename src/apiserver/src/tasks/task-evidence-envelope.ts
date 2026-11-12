@@ -136,6 +136,15 @@ export function heldToProjectCriterion(
     && (task.criterionDefinitionId !== null || task.criterionRevision !== null);
 }
 
+/** Whether the task states any standard at all: a declared project criterion (even one since
+ * deleted, which the decision door then routes), or non-blank `acceptanceCriteria` of its own. A
+ * submission for a task that states none can never be decided, and the submitter is the one who can
+ * fix it, so the submit path refuses it (docs/evidence-always-has-an-addressee-design.md §2.3). */
+export function statesAStandard(task: CriterionStandingTask): boolean {
+  return heldToProjectCriterion(task)
+    || (task.acceptanceCriteria !== null && comparableCriterionText(task.acceptanceCriteria) !== '');
+}
+
 /** Whether `key` names the project criterion this task declares — the one criterion of its project
  * it is held to. Another criterion of the project is not its standard, however live. */
 export function quotesDeclaredCriterion(task: CriterionStandingTask, key: string): boolean {

@@ -335,7 +335,7 @@ import {
   verificationSubjectNeedsVerifierRefusal,
   type TaskCompletionCriterionValue,
 } from './task-completion-criterion';
-import { TASK_DELIVERY_SELECT, buildTaskExecutionPrompt } from './task-execution-prompt';
+import { TASK_DELIVERY_SELECT, TASK_STANDARD_SELECT, buildTaskExecutionPrompt } from './task-execution-prompt';
 import {
   MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS,
   normaliseTaskCriterionOverrideReason,
@@ -15022,6 +15022,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // How the run's work reaches its line, which the prompt says (§10.5 O-L3).
         codeless: true,
         project: { select: TASK_DELIVERY_SELECT },
+        // The standard the prompt states for its evidence (step 3).
+        ...TASK_STANDARD_SELECT,
       },
     });
     if (!task) throw new NotFoundException('task not found');
@@ -15497,6 +15499,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * as it always did.
    */
   private buildExecutePrompt(task: {
+    id: string;
+    projectId?: string | null;
+    criterionRevision?: number | null;
+    criterionDefinition?: { id: string; text: string } | null;
     title: string;
     description?: string | null;
     acceptanceCriteria?: string | null;
@@ -15634,6 +15640,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // and how the run's work reaches its line, which the prompt says (§10.5 O-L3).
         codeless: true,
         project: { select: { status: true, ...TASK_DELIVERY_SELECT } },
+        // The standard the prompt states for its evidence (step 3).
+        ...TASK_STANDARD_SELECT,
         list: { select: { instructions: true } },
         assignee: { select: { id: true, runnerId: true } },
       },

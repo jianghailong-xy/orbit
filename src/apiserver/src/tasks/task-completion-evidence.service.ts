@@ -39,6 +39,7 @@ import {
   evidenceCriterionMatch,
   parseEvidenceEnvelope,
   resolveEvidenceCitations,
+  statesAStandard,
   storedEvidenceEnvelope,
 } from './task-evidence-envelope';
 import { TasksService } from './tasks.service';
@@ -328,6 +329,19 @@ export class TaskCompletionEvidenceService {
          FOR UPDATE
       `);
       if (!task) throw new NotFoundException('task not found');
+      // Known at submit time, so refused to the caller here, before anything is written: evidence
+      // for a task that states no standard would sit undecidable with nobody able to move it.
+      // A verifier is settled by its verdict on the task it checks, not by a judgment of its
+      // evidence against a standard of its own, so it is not held to stating one.
+      if (task.verifiesTaskId === null && !statesAStandard(task)) {
+        throw new ConflictException({
+          code: 'TASK_STATES_NO_STANDARD',
+          message: 'this task states no standard to judge evidence against: it declares no criterionKey and its '
+            + 'acceptanceCriteria are empty. Write the task\'s acceptanceCriteria (task_update) or declare a '
+            + 'criterionKey, then submit again.',
+          requiredAction: 'WRITE_ACCEPTANCE_CRITERIA_OR_DECLARE_CRITERION_KEY',
+        });
+      }
 
       // Source Session status never gates the fact: RUNNING, AWAITING_INPUT and terminal source
       // Sessions submit the same evidence. Task.status is read only to decide whether the evidence
