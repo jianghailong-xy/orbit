@@ -1,0 +1,2 @@
+   4 NOT SERVED /api/wiki/trash
+   2 NOT SERVED /api/auth/capabilities

@@ -1,0 +1,231 @@
+Attributes: Application, 0x117504b40, pid: 27331, label: 'TerminalProbe'
+Element subtree:
+ →Application, 0x117504b40, pid: 27331, label: 'TerminalProbe'
+    Window (Main), 0x117504c80, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x117504dc0, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x117504f00, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x117505040, {{-402.0, -874.0}, {1206.0, 2622.0}}
+          Other, 0x117505180, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x1175052c0, {{0.0, 0.0}, {402.0, 874.0}}
+              CollectionView, 0x117505400, {{0.0, 0.0}, {305.5, 874.0}}
+                Other, 0x117505540, {{0.0, -1620.0}, {305.7, 3762.3}}
+                Cell, 0x117505680, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x1175057c0, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x117505900, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x117505a40, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x117505b80, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x117505cc0, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x117505e00, {{0.0, 128.0}, {305.3, 44.3}}
+                        Button, 0x117505f40, {{0.0, 128.0}, {305.3, 44.3}}, label: 'Projects'
+                          Image, 0x117506080, {{26.3, 142.7}, {15.3, 15.3}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                          StaticText, 0x1175061c0, {{58.0, 140.0}, {62.3, 20.3}}, label: 'Projects'
+                Cell, 0x117507ac0, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x117507c00, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x117507d40, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x117507e80, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x117508000, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x117508140, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x117508280, {{0.0, 172.3}, {305.3, 44.3}}
+                        Button, 0x1175083c0, {{0.0, 172.3}, {305.3, 44.3}}, label: 'Tasks'
+                          Image, 0x117508500, {{24.7, 186.0}, {18.7, 17.0}}, identifier: 'checklist', label: 'checklist'
+                          StaticText, 0x117508640, {{58.0, 184.3}, {43.0, 20.3}}, label: 'Tasks'
+                Cell, 0x117508780, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x1175088c0, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x117508a00, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x117508b40, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x117508c80, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x117508dc0, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x117508f00, {{0.0, 216.7}, {305.3, 44.3}}
+                        Button, 0x117509040, {{0.0, 216.7}, {305.3, 44.3}}, label: 'Wiki'
+                          Image, 0x117509180, {{27.0, 230.0}, {14.0, 18.0}}, identifier: 'book.closed', label: 'book.closed'
+                          StaticText, 0x1175092c0, {{58.0, 228.7}, {32.7, 20.3}}, label: 'Wiki'
+                Cell, 0x117509400, {{0.0, 261.0}, {305.3, 44.3}}
+                  Other, 0x117509540, {{0.0, 261.0}, {305.3, 44.3}}
+                    Other, 0x117509680, {{0.0, 261.0}, {305.3, 44.3}}
+                      Other, 0x1175097c0, {{0.0, 261.0}, {305.3, 44.3}}
+                  Other, 0x117509900, {{0.0, 261.0}, {305.3, 44.3}}
+                    Other, 0x117509a40, {{0.0, 261.0}, {305.3, 44.3}}
+                      Other, 0x117509b80, {{0.0, 261.0}, {305.3, 44.3}}
+                        Button, 0x117509cc0, {{0.0, 261.0}, {305.3, 44.3}}, identifier: 'owner-request-inbox-entry', label: 'Waiting on you, 1'
+                          Image, 0x117509e00, {{28.0, 274.0}, {13.7, 18.3}}, identifier: 'hand.raised', label: 'Block'
+                          StaticText, 0x117509f40, {{58.0, 273.0}, {112.3, 20.3}}, label: 'Waiting on you'
+                          StaticText, 0x11750a080, {{277.7, 276.5}, {5.7, 13.3}}, label: '1'
+                Cell, 0x11750a1c0, {{0.0, 305.3}, {305.3, 44.7}}
+                  Other, 0x11750a300, {{0.0, 305.3}, {305.3, 44.7}}
+                    Other, 0x11750a440, {{0.0, 305.3}, {305.3, 44.7}}
+                      Other, 0x11750a580, {{0.0, 305.3}, {305.3, 44.7}}
+                  Other, 0x11750a6c0, {{0.0, 305.3}, {305.3, 44.7}}
+                    Other, 0x11750a800, {{0.0, 305.3}, {305.3, 44.7}}
+                      Other, 0x11750a940, {{0.0, 305.3}, {305.3, 44.7}}
+                        StaticText, 0x11750aa80, {{0.0, 305.3}, {305.3, 44.7}}, label: 'Workspaces'
+                Cell, 0x11750abc0, {{0.0, 350.0}, {305.3, 44.3}}
+                  Other, 0x11750ad00, {{0.0, 350.0}, {305.3, 44.3}}
+                    Other, 0x11750ae40, {{0.0, 350.0}, {305.3, 44.3}}
+                      Other, 0x11750af80, {{0.0, 350.0}, {305.3, 44.3}}
+                  Other, 0x11750b0c0, {{0.0, 350.0}, {305.3, 44.3}}
+                    Other, 0x11750b200, {{0.0, 350.0}, {305.3, 44.3}}
+                      Other, 0x11750b340, {{0.0, 350.0}, {305.3, 44.3}}
+                        Button, 0x11750b480, {{0.0, 350.0}, {305.3, 44.3}}, label: 'shop-api,  · build-box'
+                          Other, 0x11750b5c0, {{24.7, 364.7}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x11750b700, {{24.7, 364.7}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x11750b840, {{58.0, 362.0}, {68.0, 20.3}}, label: 'shop-api'
+                          StaticText, 0x11750b980, {{126.0, 362.0}, {86.0, 20.3}}, label: ' · build-box'
+                Other, 0x11750bac0, {{272.2, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x11750bc00, {{299.2, 605.3}, {3.0, 265.7}}
+                Other, 0x11750bd40, {{272.2, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x11750be80, {{299.2, 605.3}, {3.0, 265.7}}
+              StaticText, 0x11750c000, {{22.0, 84.8}, {52.3, 26.3}}, label: 'Orbit'
+              Button, 0x11750c140, {{251.7, 76.0}, {44.0, 44.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+              Button, 0x11750c280, {{10.0, 788.7}, {165.0, 43.0}}, label: 'New session'
+                Image, 0x11750c3c0, {{31.0, 801.0}, {18.3, 18.3}}, identifier: 'square.and.pencil', label: 'Compose'
+                StaticText, 0x11750c500, {{57.0, 799.8}, {100.0, 20.3}}, label: 'New session'
+              Button, 0x11750c640, {{251.7, 788.0}, {44.0, 44.0}}, identifier: 'gearshape', label: 'Settings'
+              Other, 0x11750c780, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x11750c8c0, {{0.0, 62.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI29PresentationHosting'
+                  Other, 0x11750ca00, {{20.0, 66.0}, {36.0, 36.0}}, identifier: 'line.3.horizontal', label: 'Open navigation'
+                    Other, 0x11750cb40, {{20.0, 66.0}, {36.0, 36.0}}
+                      Button, 0x11750cc80, {{22.3, 66.0}, {31.3, 36.0}}, identifier: 'line.3.horizontal', label: 'Open navigation'
+                  Other, 0x11750cdc0, {{76.0, 73.7}, {69.7, 20.7}}, label: 'Workspace: shop-api'
+                    Other, 0x11750cf00, {{76.0, 73.7}, {69.7, 20.7}}
+                      StaticText, 0x11750d040, {{76.0, 74.0}, {69.7, 20.3}}, label: 'Workspace: shop-api'
+                  Other, 0x11750d180, {{283.7, 66.0}, {41.7, 36.0}}, label: 'Session scope, Open'
+                    Other, 0x11750d2c0, {{283.7, 66.0}, {41.7, 36.0}}
+                      Button, 0x11750d400, {{283.7, 66.0}, {41.7, 36.0}}, label: 'Session scope, Open'
+                        Button, 0x11750d540, {{283.7, 66.0}, {41.7, 36.0}}
+                          Image, 0x11750d680, {{293.3, 77.7}, {22.0, 13.0}}, identifier: 'line.3.horizontal.decrease', label: 'Filter'
+                  Button, 0x11750d7c0, {{341.3, 66.0}, {40.7, 36.0}}, label: 'Start a new session with shop-api'
+                Other, 0x11750d900, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x11750da40, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x11750db80, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x11750dcc0, {{0.0, 0.0}, {402.0, 874.0}}
+                        Other, 0x11750de00, {{0.0, 116.0}, {402.0, 672.0}}
+                        CollectionView, 0x11750df40, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x11750e080, {{0.0, 0.0}, {402.0, 874.0}}
+                            Other, 0x11750e1c0, {{0.0, 0.0}, {402.0, 170.8}}
+                            Other, 0x11750e300, {{0.0, 733.2}, {402.0, 140.8}}
+                          Other, 0x11750e440, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x11750e580, {{369.0, 116.0}, {30.0, 672.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x11750e6c0, {{396.0, 778.0}, {3.0, 7.0}}
+                          Other, 0x11750e800, {{369.0, 116.0}, {30.0, 672.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x11750e940, {{396.0, 778.0}, {3.0, 7.0}}
+                        Image, 0x11750ea80, {{167.3, 403.0}, {67.3, 53.7}}, identifier: 'bubble.left.and.bubble.right', label: 'Conversation'
+                        StaticText, 0x11750ebc0, {{111.0, 403.0}, {180.0, 98.3}}, label: 'No open sessions'
+                Other, 0x11750ed00, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x11750ee40, {{0.0, 0.0}, {402.0, 874.0}}
+                    Toolbar, 0x11750ef80, {{0.0, 788.0}, {402.0, 86.0}}, identifier: 'Toolbar', label: 'Toolbar'
+                      Other, 0x11750f0c0, {{28.0, 798.0}, {346.0, 48.0}}
+                        Other, 0x11750f200, {{28.0, 798.0}, {346.0, 48.0}}
+                          Other, 0x11750f340, {{28.0, 798.0}, {0.0, 0.0}}
+                            Other, 0x11750f480, {{28.0, 798.0}, {346.0, 48.0}}
+                              Other, 0x11750f5c0, {{28.0, 798.0}, {346.0, 48.0}}
+                                Other, 0x11750f700, {{33.0, 803.0}, {336.0, 38.0}}
+                                  SearchField, 0x11750f840, {{33.0, 803.0}, {336.0, 38.0}}, label: 'Search sessions', placeholderValue: 'Search sessions'
+                                    Image, 0x11750f980, {{46.0, 812.3}, {20.3, 18.7}}, identifier: 'magnifyingglass', label: 'Search'
+      Other, 0x11750fac0, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x11750fc00, {{-402.0, -874.0}, {1206.0, 2622.0}}
+        Other, 0x11750fd40, {{0.0, 62.0}, {402.0, 812.0}}
+          Other, 0x11750fe80, {{0.0, 62.0}, {402.0, 812.0}}
+            Other, 0x117510000, {{0.0, 62.0}, {402.0, 812.0}}
+              Other, 0x117510140, {{0.0, 62.0}, {402.0, 812.0}}
+                Other, 0x117510280, {{0.0, 62.0}, {402.0, 812.0}}
+                  Other, 0x1175103c0, {{0.0, 62.0}, {402.0, 812.0}}
+                    NavigationBar, 0x117510500, {{0.0, 78.0}, {402.0, 54.0}}, identifier: 'Terminals'
+                      Button, 0x117510640, {{16.0, 78.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Settings'
+                      StaticText, 0x117510780, {{162.3, 89.7}, {77.3, 20.7}}, label: 'Terminals'
+                      Other, 0x1175108c0, {{346.0, 82.0}, {36.0, 36.0}}, identifier: 'xmark', label: 'Close'
+                        Other, 0x117510a00, {{346.0, 82.0}, {36.0, 36.0}}
+                          Button, 0x117510b40, {{350.7, 82.0}, {26.7, 36.0}}, identifier: 'xmark', label: 'Close'
+                    Other, 0x117510c80, {{0.0, 62.0}, {402.0, 812.0}}
+                      Other, 0x117510dc0, {{0.0, 62.0}, {402.0, 812.0}}
+                        Other, 0x117510f00, {{0.0, 62.0}, {402.0, 812.0}}
+                          Other, 0x117511040, {{0.0, 62.0}, {402.0, 812.0}}
+                            CollectionView, 0x117511180, {{0.0, 62.0}, {402.0, 812.0}}
+                              Other, 0x1175112c0, {{-16.0, -1492.0}, {434.0, 3579.3}}
+                              Other, 0x117511400, {{0.0, 62.0}, {402.0, 812.0}}
+                              Other, 0x117511540, {{0.0, 62.0}, {402.0, 812.0}}
+                              Cell, 0x117511680, {{16.0, 167.0}, {370.0, 117.3}}
+                                Other, 0x1175117c0, {{16.0, 167.0}, {370.0, 117.3}}
+                                  Other, 0x117511900, {{16.0, 167.0}, {370.0, 117.3}}
+                                Other, 0x117511a40, {{16.0, 167.0}, {370.0, 117.3}}
+                                  Other, 0x117511b80, {{16.0, 167.0}, {370.0, 117.3}}
+                                    Other, 0x117511cc0, {{16.0, 167.0}, {370.0, 117.3}}
+                                      StaticText, 0x117511e00, {{32.0, 184.0}, {227.3, 83.3}}, label: 'dev-laptop, Approved Nov 10, 2026, Last used 3m ago, Expires Dec 10, 2026 · in 28 days'
+                                        StaticText, 0x117511f40, {{32.0, 184.0}, {83.3, 20.3}}, label: 'dev-laptop'
+                                        StaticText, 0x117512080, {{32.0, 207.3}, {161.3, 18.0}}, label: 'Approved Nov 10, 2026'
+                                        StaticText, 0x1175121c0, {{32.0, 228.3}, {122.3, 18.0}}, label: 'Last used 3m ago'
+                                        StaticText, 0x117512300, {{32.0, 249.3}, {227.3, 18.0}}, label: 'Expires Dec 10, 2026 · in 28 days'
+                                      Button, 0x117512440, {{300.3, 211.7}, {69.7, 28.0}}, identifier: 'terminal-revoke-34term1', label: 'Revoke'
+                              Cell, 0x117512580, {{16.0, 284.3}, {370.0, 117.3}}
+                                Other, 0x1175126c0, {{16.0, 284.3}, {370.0, 117.3}}
+                                  Other, 0x117512800, {{16.0, 284.3}, {370.0, 117.3}}
+                                Other, 0x117512940, {{16.0, 284.3}, {370.0, 117.3}}
+                                  Other, 0x117512a80, {{16.0, 284.3}, {370.0, 117.3}}
+                                    Other, 0x117512bc0, {{16.0, 284.3}, {370.0, 117.3}}
+                                      StaticText, 0x117512d00, {{32.0, 301.3}, {225.0, 83.3}}, label: 'HPC, Approved Nov 11, 2026, Never used, Expires Dec 11, 2026 · in 29 days'
+                                        StaticText, 0x117512e40, {{32.0, 301.3}, {34.3, 20.3}}, label: 'HPC'
+                                        StaticText, 0x117512f80, {{32.0, 324.7}, {159.0, 18.0}}, label: 'Approved Nov 11, 2026'
+                                        StaticText, 0x1175130c0, {{32.0, 345.7}, {78.0, 18.0}}, label: 'Never used'
+                                        StaticText, 0x117513200, {{32.0, 366.7}, {225.0, 18.0}}, label: 'Expires Dec 11, 2026 · in 29 days'
+                                      Button, 0x117513340, {{300.3, 329.0}, {69.7, 28.0}}, identifier: 'terminal-revoke-34term2', label: 'Revoke'
+                              Other, 0x117513480, {{32.0, 283.3}, {338.0, 1.0}}
+                              Cell, 0x1175135c0, {{16.0, 401.7}, {370.0, 61.7}}
+                                Other, 0x117513700, {{16.0, 401.7}, {370.0, 61.7}}
+                                Other, 0x117513840, {{16.0, 401.7}, {370.0, 61.7}}
+                                  Other, 0x117513980, {{16.0, 401.7}, {370.0, 61.7}}
+                                    Other, 0x117513ac0, {{16.0, 401.7}, {370.0, 61.7}}
+                                      StaticText, 0x117513c00, {{16.0, 401.7}, {370.0, 61.7}}, label: 'Terminals where you typed orbit and approved it. Each one can start sessions on its machine and answer their approval cards until it expires.'
+                              Other, 0x117513d40, {{369.0, 132.0}, {30.0, 680.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                Other, 0x117513e80, {{396.0, 511.7}, {3.0, 297.3}}
+                              Other, 0x116cec000, {{369.0, 132.0}, {30.0, 680.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                Other, 0x116cec140, {{396.0, 511.7}, {3.0, 297.3}}
+                    Other, 0x116cec280, {{0.0, 62.0}, {402.0, 812.0}}
+                      Other, 0x116cec3c0, {{0.0, 62.0}, {402.0, 812.0}}
+      Other, 0x116cec500, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x116cec640, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x116cec780, {{0.0, 0.0}, {402.0, 874.0}}
+        Alert, 0x116cec8c0, {{41.0, 354.0}, {320.0, 194.0}}, label: 'Revoke the terminal on dev-laptop?'
+          Other, 0x116ceca00, {{41.0, 354.0}, {320.0, 194.0}}
+            Other, 0x116cecb40, {{41.0, 354.0}, {320.0, 194.0}}
+              Other, 0x116cecc80, {{41.0, 354.0}, {320.0, 194.0}}
+              Other, 0x116cecdc0, {{41.0, 354.0}, {320.0, 194.0}}
+                ScrollView, 0x116cecf00, {{41.0, 354.0}, {320.0, 114.0}}
+                  Other, 0x116ced040, {{41.0, 354.0}, {320.0, 114.0}}
+                    StaticText, 0x116ced180, {{71.0, 376.0}, {260.0, 42.3}}, label: 'Revoke the terminal on dev-laptop?'
+                    StaticText, 0x116ced2c0, {{71.0, 425.7}, {260.0, 38.0}}, label: 'It stops working at once. Typing orbit there asks you to approve it again.'
+                  Other, 0x116ced400, {{41.0, 466.0}, {320.0, 2.0}}
+                  Other, 0x116ced540, {{328.0, 354.0}, {30.0, 114.0}}, label: 'Vertical scroll bar, 2 pages', value: 0%
+                    Other, 0x116ced680, {{355.0, 315.0}, {3.0, 36.0}}
+                  Other, 0x116ced7c0, {{41.0, 435.0}, {320.0, 30.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                    Other, 0x116ced900, {{2.0, 462.0}, {36.0, 3.0}}
+                  Other, 0x116ceda40, {{328.0, 354.0}, {30.0, 114.0}}, label: 'Vertical scroll bar, 2 pages', value: 0%
+                    Other, 0x116cedb80, {{355.0, 315.0}, {3.0, 36.0}}
+                  Other, 0x116cedcc0, {{41.0, 435.0}, {320.0, 30.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                    Other, 0x116cede00, {{2.0, 462.0}, {36.0, 3.0}}
+                ScrollView, 0x116cedf40, {{41.0, 468.0}, {320.0, 80.0}}
+                  Other, 0x116cee080, {{41.0, 468.0}, {320.0, 80.0}}
+                    Other, 0x116cee1c0, {{57.0, 484.0}, {288.0, 48.0}}
+                      Button, 0x116cee300, {{57.0, 484.0}, {140.0, 48.0}}, label: 'Cancel'
+                      Button, 0x116cee440, {{205.0, 484.0}, {140.0, 48.0}}, label: 'Revoke'
+                  Other, 0x116cee580, {{328.0, 468.0}, {30.0, 80.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                    Other, 0x116cee6c0, {{355.0, 558.0}, {3.0, 7.0}}
+                  Other, 0x116cee800, {{41.0, 515.0}, {320.0, 30.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                    Other, 0x116cee940, {{131.0, 542.0}, {7.0, 3.0}}
+                  Other, 0x116ceea80, {{328.0, 468.0}, {30.0, 80.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                    Other, 0x116ceebc0, {{355.0, 558.0}, {3.0, 7.0}}
+                  Other, 0x116ceed00, {{41.0, 515.0}, {320.0, 30.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                    Other, 0x116ceee40, {{131.0, 542.0}, {7.0, 3.0}}
+          Other, 0x116ceef80, {{41.0, 354.0}, {320.0, 194.0}}
+            Other, 0x116cef0c0, {{41.0, 354.0}, {320.0, 194.0}}
+              Other, 0x116cef200, {{41.0, 354.0}, {320.0, 194.0}}
+                Other, 0x116cef340, {{41.0, 354.0}, {320.0, 194.0}}
+                  Other, 0x116cef480, {{41.0, 354.0}, {320.0, 194.0}}
+                    Other, 0x116cef5c0, {{41.0, 354.0}, {402.0, 874.0}}
+                Other, 0x116cef700, {{41.0, 354.0}, {320.0, 194.0}}
+                  Other, 0x116cef840, {{41.0, 354.0}, {402.0, 874.0}}
+Path to element:
+ →Application, 0x117504b40, pid: 27331, label: 'TerminalProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.terminalprobe'
+  Output: {
+    Application, 0x116cef980, pid: 27331, label: 'TerminalProbe'
+  }

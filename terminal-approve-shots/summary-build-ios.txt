@@ -1,0 +1,6 @@
+Test Case '-[TerminalProbeUITests.TerminalShotTests testIPhoneApprovesAndRevokesATerminal]' started.
+Test Case '-[TerminalProbeUITests.TerminalShotTests testIPhoneApprovesAndRevokesATerminal]' passed (206.436 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 206.436 (206.442) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 206.436 (206.444) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 206.436 (206.457) seconds
+** TEST SUCCEEDED **

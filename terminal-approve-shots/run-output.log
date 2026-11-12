@@ -1,0 +1,34 @@
+==> stub ready after 2s
+==> iPhone FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC
+Test Case '-[TerminalProbeUITests.TerminalShotTests testIPhoneApprovesAndRevokesATerminal]' started.
+Test Case '-[TerminalProbeUITests.TerminalShotTests testIPhoneApprovesAndRevokesATerminal]' passed (206.436 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 206.436 (206.442) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 206.436 (206.444) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 206.436 (206.457) seconds
+** TEST SUCCEEDED **
+.tp-probe/run.sh: line 53:  1930 Terminated: 15          python3 -u stub.py 8765 "$OUT/requests.log" > "$OUT/stub.out" 2>&1
+total 3920
+drwxr-xr-x  24 runner  staff     768 Nov 12 18:34 .
+drwxr-xr-x  15 runner  staff     480 Nov 12 18:20 ..
+-rw-r--r--   1 runner  staff       7 Nov 12 18:34 .done-probe
+drwxr-xr-x  19 runner  staff     608 Nov 12 18:34 attachments
+-rw-r--r--   1 runner  staff  171423 Nov 12 18:31 ios-1-approve-card.png
+-rw-r--r--   1 runner  staff   90054 Nov 12 18:32 ios-2-after-approve.png
+-rw-r--r--   1 runner  staff  303926 Nov 12 18:32 ios-3-settings.png
+-rw-r--r--   1 runner  staff  179449 Nov 12 18:32 ios-4-terminals.png
+-rw-r--r--   1 runner  staff  257421 Nov 12 18:32 ios-5-revoke-question.png
+-rw-r--r--   1 runner  staff  145462 Nov 12 18:33 ios-6-after-revoke.png
+-rw-r--r--@  1 runner  staff    3086 Nov 12 18:32 ios-inbox-requests.txt
+-rw-r--r--@  1 runner  staff    6361 Nov 12 18:33 ios-settings-requests.txt
+-rw-r--r--   1 runner  staff      71 Nov 12 18:34 not-served.txt
+-rw-r--r--   1 runner  staff    6398 Nov 12 18:33 requests.log
+-rw-r--r--   1 runner  staff       0 Nov 12 18:17 stub.out
+-rw-r--r--@  1 runner  staff     452 Nov 12 18:33 TerminalShotTeststestIPhoneApprovesAndRevokesATerminal-notes.txt
+-rw-r--r--@  1 runner  staff   13498 Nov 12 18:31 tree-ios-1-approve-card.txt
+-rw-r--r--@  1 runner  staff   12325 Nov 12 18:32 tree-ios-2-after-approve.txt
+-rw-r--r--@  1 runner  staff   27401 Nov 12 18:32 tree-ios-3-settings.txt
+-rw-r--r--@  1 runner  staff   16322 Nov 12 18:32 tree-ios-4-terminals.txt
+-rw-r--r--@  1 runner  staff   19790 Nov 12 18:32 tree-ios-5-revoke-question.txt
+-rw-r--r--@  1 runner  staff   14887 Nov 12 18:33 tree-ios-6-after-revoke.txt
+-rw-r--r--   1 runner  staff     103 Nov 12 18:34 writes.txt
+-rw-r--r--   1 runner  staff  697279 Nov 12 18:34 xcodebuild-ios.log

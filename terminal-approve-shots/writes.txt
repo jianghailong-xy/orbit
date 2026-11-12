@@ -1,0 +1,2 @@
+18:32:01 BODY POST /api/terminals/requests/34req1/approve 
+18:32:55 BODY DELETE /api/terminals/34term1

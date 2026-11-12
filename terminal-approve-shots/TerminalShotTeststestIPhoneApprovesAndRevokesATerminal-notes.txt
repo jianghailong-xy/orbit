@@ -1,0 +1,11 @@
+card: Terminal on dev-laptop · code 7KQ-4MZ shown
+card: It can start sessions in your workspaces on this machine and answer their approval cards for 30 days. shown
+card: Waiting on you shown
+after Approve the card is gone
+ios-3-settings: in view after 1 move(s) at (16.0, 631.3333333333334, 370.0, 52.0)
+list: HPC shown
+list: Never used shown
+list: Approved  shown
+list: Last used  shown
+list: Expires  shown
+after Revoke dev-laptop is gone; HPC shown

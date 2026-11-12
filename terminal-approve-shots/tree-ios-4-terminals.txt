@@ -1,0 +1,189 @@
+Attributes: Application, 0x117528dc0, pid: 27331, label: 'TerminalProbe'
+Element subtree:
+ →Application, 0x117528dc0, pid: 27331, label: 'TerminalProbe'
+    Window (Main), 0x117528f00, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x117529040, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x117529180, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x1175292c0, {{-402.0, -874.0}, {1206.0, 2622.0}}
+          Other, 0x117529400, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x117529540, {{0.0, 0.0}, {402.0, 874.0}}
+              CollectionView, 0x117529680, {{0.0, 0.0}, {305.5, 874.0}}
+                Other, 0x1175297c0, {{0.0, -1620.0}, {305.7, 3762.3}}
+                Cell, 0x117529900, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x117529a40, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x117529b80, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x117529cc0, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x117529e00, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x117529f40, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x11752a080, {{0.0, 128.0}, {305.3, 44.3}}
+                        Button, 0x11752a1c0, {{0.0, 128.0}, {305.3, 44.3}}, label: 'Projects'
+                          Image, 0x11752a300, {{26.3, 142.3}, {15.3, 15.3}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                          StaticText, 0x11752a440, {{58.0, 140.0}, {62.3, 20.3}}, label: 'Projects'
+                Cell, 0x11752a580, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x11752a6c0, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x11752a800, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x11752a940, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x11752aa80, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x11752abc0, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x11752ad00, {{0.0, 172.3}, {305.3, 44.3}}
+                        Button, 0x11752ae40, {{0.0, 172.3}, {305.3, 44.3}}, label: 'Tasks'
+                          Image, 0x11752af80, {{24.7, 186.0}, {18.7, 17.0}}, identifier: 'checklist', label: 'checklist'
+                          StaticText, 0x11752b0c0, {{58.0, 184.3}, {43.0, 20.3}}, label: 'Tasks'
+                Cell, 0x11752b200, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x11752b340, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x11752b480, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x11752b5c0, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x11752b700, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x11752b840, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x11752b980, {{0.0, 216.7}, {305.3, 44.3}}
+                        Button, 0x11752bac0, {{0.0, 216.7}, {305.3, 44.3}}, label: 'Wiki'
+                          Image, 0x11752bc00, {{27.0, 230.0}, {14.0, 18.0}}, identifier: 'book.closed', label: 'book.closed'
+                          StaticText, 0x11752bd40, {{58.0, 228.7}, {32.7, 20.3}}, label: 'Wiki'
+                Cell, 0x11752be80, {{0.0, 261.0}, {305.3, 44.3}}
+                  Other, 0x116bd21c0, {{0.0, 261.0}, {305.3, 44.3}}
+                    Other, 0x116bd0b40, {{0.0, 261.0}, {305.3, 44.3}}
+                      Other, 0x116bd0c80, {{0.0, 261.0}, {305.3, 44.3}}
+                  Other, 0x116bd0dc0, {{0.0, 261.0}, {305.3, 44.3}}
+                    Other, 0x116bd0f00, {{0.0, 261.0}, {305.3, 44.3}}
+                      Other, 0x116bd1040, {{0.0, 261.0}, {305.3, 44.3}}
+                        Button, 0x116bd1180, {{0.0, 261.0}, {305.3, 44.3}}, identifier: 'owner-request-inbox-entry', label: 'Waiting on you, 1'
+                          Image, 0x116bd12c0, {{28.0, 274.0}, {13.7, 18.3}}, identifier: 'hand.raised', label: 'Block'
+                          StaticText, 0x116bd1400, {{58.0, 273.0}, {112.3, 20.3}}, label: 'Waiting on you'
+                          StaticText, 0x116bd1540, {{277.7, 276.5}, {5.7, 13.3}}, label: '1'
+                Cell, 0x116bd1680, {{0.0, 305.3}, {305.3, 44.7}}
+                  Other, 0x116bd17c0, {{0.0, 305.3}, {305.3, 44.7}}
+                    Other, 0x116bd1900, {{0.0, 305.3}, {305.3, 44.7}}
+                      Other, 0x116bd1a40, {{0.0, 305.3}, {305.3, 44.7}}
+                  Other, 0x116bd1b80, {{0.0, 305.3}, {305.3, 44.7}}
+                    Other, 0x116bd1cc0, {{0.0, 305.3}, {305.3, 44.7}}
+                      Other, 0x116bd1e00, {{0.0, 305.3}, {305.3, 44.7}}
+                        StaticText, 0x116bd1f40, {{0.0, 305.3}, {305.3, 44.7}}, label: 'Workspaces'
+                Cell, 0x116bd2080, {{0.0, 350.0}, {305.3, 44.3}}
+                  Other, 0x11758c000, {{0.0, 350.0}, {305.3, 44.3}}
+                    Other, 0x11758c140, {{0.0, 350.0}, {305.3, 44.3}}
+                      Other, 0x11758c280, {{0.0, 350.0}, {305.3, 44.3}}
+                  Other, 0x11758c3c0, {{0.0, 350.0}, {305.3, 44.3}}
+                    Other, 0x11758c500, {{0.0, 350.0}, {305.3, 44.3}}
+                      Other, 0x11758c640, {{0.0, 350.0}, {305.3, 44.3}}
+                        Button, 0x11758c780, {{0.0, 350.0}, {305.3, 44.3}}, label: 'shop-api,  · build-box'
+                          Other, 0x11758c8c0, {{24.7, 364.3}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x11758ca00, {{24.7, 364.3}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x11758cb40, {{58.0, 362.0}, {68.0, 20.3}}, label: 'shop-api'
+                          StaticText, 0x11758cc80, {{126.0, 362.0}, {86.0, 20.3}}, label: ' · build-box'
+                Other, 0x11758cdc0, {{272.2, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x11758cf00, {{299.2, 605.3}, {3.0, 265.7}}
+                Other, 0x11758d040, {{272.2, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x11758d180, {{299.2, 605.3}, {3.0, 265.7}}
+              StaticText, 0x11758d2c0, {{22.0, 84.8}, {52.3, 26.3}}, label: 'Orbit'
+              Button, 0x11758d400, {{251.7, 76.0}, {44.0, 44.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+              Button, 0x11758d540, {{10.0, 788.7}, {165.0, 43.0}}, label: 'New session'
+                Image, 0x11758d680, {{31.0, 801.0}, {18.3, 18.3}}, identifier: 'square.and.pencil', label: 'Compose'
+                StaticText, 0x11758d7c0, {{57.0, 799.8}, {100.0, 20.3}}, label: 'New session'
+              Button, 0x11758d900, {{251.7, 788.0}, {44.0, 44.0}}, identifier: 'gearshape', label: 'Settings'
+              Other, 0x11758da40, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x11758db80, {{0.0, 62.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI29PresentationHosting'
+                  Other, 0x11758dcc0, {{20.0, 66.0}, {36.0, 36.0}}, identifier: 'line.3.horizontal', label: 'Open navigation'
+                    Other, 0x11758de00, {{20.0, 66.0}, {36.0, 36.0}}
+                      Button, 0x11758df40, {{22.3, 66.0}, {31.3, 36.0}}, identifier: 'line.3.horizontal', label: 'Open navigation'
+                  Other, 0x11758e080, {{76.0, 73.7}, {69.7, 20.7}}, label: 'Workspace: shop-api'
+                    Other, 0x11758e1c0, {{76.0, 73.7}, {69.7, 20.7}}
+                      StaticText, 0x11758e300, {{76.0, 74.0}, {69.7, 20.3}}, label: 'Workspace: shop-api'
+                  Other, 0x11758e440, {{283.7, 66.0}, {41.7, 36.0}}, label: 'Session scope, Open'
+                    Other, 0x11758e580, {{283.7, 66.0}, {41.7, 36.0}}
+                      Button, 0x11758e6c0, {{283.7, 66.0}, {41.7, 36.0}}, label: 'Session scope, Open'
+                        Button, 0x11758e800, {{283.7, 66.0}, {41.7, 36.0}}
+                          Image, 0x11758e940, {{293.3, 77.7}, {22.0, 13.0}}, identifier: 'line.3.horizontal.decrease', label: 'Filter'
+                  Button, 0x11758ea80, {{341.3, 66.0}, {40.7, 36.0}}, label: 'Start a new session with shop-api'
+                Other, 0x11758ebc0, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x11758ed00, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x11758ee40, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x11758ef80, {{0.0, 0.0}, {402.0, 874.0}}
+                        Other, 0x11758f0c0, {{0.0, 116.0}, {402.0, 672.0}}
+                        CollectionView, 0x11758f200, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x11758f340, {{0.0, 0.0}, {402.0, 874.0}}
+                            Other, 0x11758f480, {{0.0, 0.0}, {402.0, 170.8}}
+                            Other, 0x11758f5c0, {{0.0, 733.2}, {402.0, 140.8}}
+                          Other, 0x11758f700, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x11758f840, {{369.0, 116.0}, {30.0, 672.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x11758f980, {{396.0, 778.0}, {3.0, 7.0}}
+                          Other, 0x11758fac0, {{369.0, 116.0}, {30.0, 672.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x11758fc00, {{396.0, 778.0}, {3.0, 7.0}}
+                        Image, 0x11758fd40, {{167.3, 403.0}, {67.3, 53.7}}, identifier: 'bubble.left.and.bubble.right', label: 'Conversation'
+                        StaticText, 0x11758fe80, {{111.0, 403.0}, {180.0, 98.3}}, label: 'No open sessions'
+                Other, 0x117590000, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x117590140, {{0.0, 0.0}, {402.0, 874.0}}
+                    Toolbar, 0x117590280, {{0.0, 788.0}, {402.0, 86.0}}, identifier: 'Toolbar', label: 'Toolbar'
+                      Other, 0x1175903c0, {{28.0, 798.0}, {346.0, 48.0}}
+                        Other, 0x117590500, {{28.0, 798.0}, {346.0, 48.0}}
+                          Other, 0x117590640, {{28.0, 798.0}, {0.0, 0.0}}
+                            Other, 0x117590780, {{28.0, 798.0}, {346.0, 48.0}}
+                              Other, 0x1175908c0, {{28.0, 798.0}, {346.0, 48.0}}
+                                Other, 0x117590a00, {{33.0, 803.0}, {336.0, 38.0}}
+                                  SearchField, 0x117590b40, {{33.0, 803.0}, {336.0, 38.0}}, label: 'Search sessions', placeholderValue: 'Search sessions'
+                                    Image, 0x117590c80, {{46.0, 812.3}, {20.3, 18.7}}, identifier: 'magnifyingglass', label: 'Search'
+      Other, 0x117590dc0, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x117590f00, {{-402.0, -874.0}, {1206.0, 2622.0}}
+        Other, 0x117591040, {{0.0, 62.0}, {402.0, 812.0}}
+          Other, 0x117591180, {{0.0, 62.0}, {402.0, 812.0}}
+            Other, 0x1175912c0, {{0.0, 62.0}, {402.0, 812.0}}
+              Other, 0x117591400, {{0.0, 62.0}, {402.0, 812.0}}
+                Other, 0x117591540, {{0.0, 62.0}, {402.0, 812.0}}
+                  Other, 0x117591680, {{0.0, 62.0}, {402.0, 812.0}}
+                    NavigationBar, 0x1175917c0, {{0.0, 78.0}, {402.0, 54.0}}, identifier: 'Terminals'
+                      Button, 0x117591900, {{16.0, 78.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Settings'
+                      StaticText, 0x117591a40, {{162.3, 89.7}, {77.3, 20.7}}, label: 'Terminals'
+                      Other, 0x117591b80, {{346.0, 82.0}, {36.0, 36.0}}, identifier: 'xmark', label: 'Close'
+                        Other, 0x117591cc0, {{346.0, 82.0}, {36.0, 36.0}}
+                          Button, 0x117591e00, {{350.7, 82.0}, {26.7, 36.0}}, identifier: 'xmark', label: 'Close'
+                    Other, 0x117591f40, {{0.0, 62.0}, {402.0, 812.0}}
+                      Other, 0x117592080, {{0.0, 62.0}, {402.0, 812.0}}
+                        Other, 0x1175921c0, {{0.0, 62.0}, {402.0, 812.0}}
+                          Other, 0x117592300, {{0.0, 62.0}, {402.0, 812.0}}
+                            CollectionView, 0x117592440, {{0.0, 62.0}, {402.0, 812.0}}
+                              Other, 0x117592580, {{-16.0, -1492.0}, {434.0, 3579.3}}
+                              Other, 0x1175926c0, {{0.0, 62.0}, {402.0, 812.0}}
+                              Other, 0x117592800, {{0.0, 62.0}, {402.0, 812.0}}
+                              Cell, 0x117592940, {{16.0, 167.0}, {370.0, 117.3}}
+                                Other, 0x117592a80, {{16.0, 167.0}, {370.0, 117.3}}
+                                  Other, 0x117592bc0, {{16.0, 167.0}, {370.0, 117.3}}
+                                Other, 0x117592d00, {{16.0, 167.0}, {370.0, 117.3}}
+                                  Other, 0x117592e40, {{16.0, 167.0}, {370.0, 117.3}}
+                                    Other, 0x117592f80, {{16.0, 167.0}, {370.0, 117.3}}
+                                      StaticText, 0x1175930c0, {{32.0, 184.0}, {227.3, 83.3}}, label: 'dev-laptop, Approved Nov 10, 2026, Last used 3m ago, Expires Dec 10, 2026 · in 28 days'
+                                        StaticText, 0x117593200, {{32.0, 184.0}, {83.3, 20.3}}, label: 'dev-laptop'
+                                        StaticText, 0x117593340, {{32.0, 207.3}, {161.3, 18.0}}, label: 'Approved Nov 10, 2026'
+                                        StaticText, 0x117593480, {{32.0, 228.3}, {122.3, 18.0}}, label: 'Last used 3m ago'
+                                        StaticText, 0x1175935c0, {{32.0, 249.3}, {227.3, 18.0}}, label: 'Expires Dec 10, 2026 · in 28 days'
+                                      Button, 0x117593700, {{300.3, 211.7}, {69.7, 28.0}}, identifier: 'terminal-revoke-34term1', label: 'Revoke'
+                              Cell, 0x117593840, {{16.0, 284.3}, {370.0, 117.3}}
+                                Other, 0x117593980, {{16.0, 284.3}, {370.0, 117.3}}
+                                  Other, 0x117593ac0, {{16.0, 284.3}, {370.0, 117.3}}
+                                Other, 0x117593c00, {{16.0, 284.3}, {370.0, 117.3}}
+                                  Other, 0x117593d40, {{16.0, 284.3}, {370.0, 117.3}}
+                                    Other, 0x117593e80, {{16.0, 284.3}, {370.0, 117.3}}
+                                      StaticText, 0x117594000, {{32.0, 301.3}, {225.0, 83.3}}, label: 'HPC, Approved Nov 11, 2026, Never used, Expires Dec 11, 2026 · in 29 days'
+                                        StaticText, 0x117594140, {{32.0, 301.3}, {34.3, 20.3}}, label: 'HPC'
+                                        StaticText, 0x117594280, {{32.0, 324.7}, {159.0, 18.0}}, label: 'Approved Nov 11, 2026'
+                                        StaticText, 0x1175943c0, {{32.0, 345.7}, {78.0, 18.0}}, label: 'Never used'
+                                        StaticText, 0x117594500, {{32.0, 366.7}, {225.0, 18.0}}, label: 'Expires Dec 11, 2026 · in 29 days'
+                                      Button, 0x117594640, {{300.3, 329.0}, {69.7, 28.0}}, identifier: 'terminal-revoke-34term2', label: 'Revoke'
+                              Other, 0x117594780, {{32.0, 283.3}, {338.0, 1.0}}
+                              Cell, 0x1175948c0, {{16.0, 401.7}, {370.0, 61.7}}
+                                Other, 0x117594a00, {{16.0, 401.7}, {370.0, 61.7}}
+                                Other, 0x117594b40, {{16.0, 401.7}, {370.0, 61.7}}
+                                  Other, 0x117594c80, {{16.0, 401.7}, {370.0, 61.7}}
+                                    Other, 0x117594dc0, {{16.0, 401.7}, {370.0, 61.7}}
+                                      StaticText, 0x117594f00, {{16.0, 401.7}, {370.0, 61.7}}, label: 'Terminals where you typed orbit and approved it. Each one can start sessions on its machine and answer their approval cards until it expires.'
+                              Other, 0x117595040, {{369.0, 132.0}, {30.0, 680.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                Other, 0x117595180, {{396.0, 511.7}, {3.0, 297.3}}
+                              Other, 0x1175952c0, {{369.0, 132.0}, {30.0, 680.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                Other, 0x117595400, {{396.0, 511.7}, {3.0, 297.3}}
+                    Other, 0x117595540, {{0.0, 62.0}, {402.0, 812.0}}
+                      Other, 0x117595680, {{0.0, 62.0}, {402.0, 812.0}}
+Path to element:
+ →Application, 0x117528dc0, pid: 27331, label: 'TerminalProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.terminalprobe'
+  Output: {
+    Application, 0x1175957c0, pid: 27331, label: 'TerminalProbe'
+  }
