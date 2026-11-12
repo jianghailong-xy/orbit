@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# TEMPORARY evidence probe (task 34vZvzdK0NZaSo0JNQ2ES, never merged). Serve stub.py, build the iPhone and Mac
+# probe apps from the tree's own shell and shared sources, and let MainCheckoutShotTests drive and photograph them.
+# Adapted from docs/evidence/coordinator-delivery-line/probe-harness/run.sh.
+set -uo pipefail
+cd "$(dirname "$0")"
+OUT="${OUT:-$PWD/shots}"
+rm -rf "$OUT" results
+mkdir -p "$OUT/ios" "$OUT/mac" results
+xcodegen generate >/dev/null || exit 1
+# The probe project builds the app sources at ../src; the stub reads the shared fixture there too.
+
+serve() {  # $1 = log file. The stub must answer before anything runs, or the pass is void.
+  if [ -n "${STUB_PID:-}" ]; then kill "$STUB_PID" 2>/dev/null; wait "$STUB_PID" 2>/dev/null; fi
+  python3 -u stub.py 8765 "$1" > "$1.out" 2>&1 &
+  STUB_PID=$!
+  for i in $(seq 1 30); do
+    if curl -fs -o /dev/null http://127.0.0.1:8765/api/agents; then
+      echo "==> stub ready on 127.0.0.1:8765 (pid $STUB_PID, after ${i}s)"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "==> stub never answered on 127.0.0.1:8765; its output:"
+  cat "$1.out"
+  exit 1
+}
+
+STUB_PID=""
+STATUS=0
+run_pass() {  # $1 label, $2 scheme, $3 destination, $4 shots dir
+  echo "==> $1"
+  SHOTS_DIR="$4" TEST_RUNNER_SHOTS_DIR="$4" xcodebuild test -project McProbe.xcodeproj -scheme "$2" \
+    -destination "$3" -derivedDataPath ".dd-$1" -resultBundlePath "results/$1.xcresult" \
+    CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- > "build-$1.log" 2>&1 || STATUS=1
+  grep -E "Test Case|Executed|error:|\*\* TEST" "build-$1.log" | tail -80 || true
+  cp "build-$1.log" "$4/xcodebuild-$1.log"
+  # The OrbitApp files this task changed, as this build compiled them into the probe app.
+  grep -E "SwiftCompile .*(MainCheckoutViews|WorktreeBar|ConsoleView|AgentsView)\.swift" "build-$1.log" \
+    | sed -E 's#/Users/runner/work/[^ ]*/src/#src/#g' | sort -u > "$4/compiled-$1.txt" || true
+  # A runner whose test process could not write the pictures still keeps them as attachments.
+  mkdir -p "$4/attachments"
+  xcrun xcresulttool export attachments --path "results/$1.xcresult" --output-path "$4/attachments" \
+    > /dev/null 2>&1 || true
+  # The Mac UI-test runner may not write outside its container: name the exported pictures and notes instead.
+  python3 - "$4" <<'PY' || true
+import json, os, shutil, sys
+out = sys.argv[1]; base = os.path.join(out, "attachments")
+for test in json.load(open(os.path.join(base, "manifest.json"))):
+    for a in test["attachments"]:
+        name = a["suggestedHumanReadableName"].split("_0_")[0]
+        ext = os.path.splitext(a["exportedFileName"])[1]
+        if ext in (".png", ".txt") and not os.path.exists(os.path.join(out, name if ext == ".txt" else name + ext)):
+            shutil.copy(os.path.join(base, a["exportedFileName"]), os.path.join(out, name if ext == ".txt" else name + ext))
+PY
+}
+
+# The task frame is 393x852 pt: make an iPhone 16 on the newest iOS runtime when the runner has none.
+if ! xcrun simctl list devices available | grep -q "iPhone 16 ("; then
+  RUNTIME=$(xcrun simctl list runtimes -j | python3 -c 'import json,sys; r=[x for x in json.load(sys.stdin)["runtimes"] if x["isAvailable"] and x["platform"]=="iOS"]; print(r[-1]["identifier"] if r else "")')
+  xcrun simctl create "iPhone 16" com.apple.CoreSimulator.SimDeviceType.iPhone-16 "$RUNTIME" || true
+fi
+IPHONE_UDID=$(xcrun simctl list devices available -j | python3 -c '
+import json,sys,re
+d=json.load(sys.stdin)["devices"]; best=None
+for rt,ds in d.items():
+    m=re.search(r"iOS-(\d+)-(\d+)",rt); v=(int(m.group(1)),int(m.group(2))) if m else (0,0)
+    for x in ds:
+        if x["isAvailable"] and "iPhone" in x["name"]:
+            # 393x852 pt, as the task asks: iPhone 16 (the 16 Pro is 402x874).
+            k=(x["name"]=="iPhone 16",v,("Pro" in x["name"])*2-("Max" in x["name"]))
+            if best is None or k>best[0]: best=(k,x["udid"],x["name"])
+print(best[1] if best else "")')
+echo "==> iPhone $IPHONE_UDID: $(xcrun simctl list devices | grep "$IPHONE_UDID" | sed -E 's/^ +//')"
+xcrun simctl boot "$IPHONE_UDID" 2>/dev/null || true
+xcrun simctl bootstatus "$IPHONE_UDID" -b >/dev/null 2>&1 || true
+# The status bar reads the app's clock (TZ=Asia/Shanghai), so the line's time and the bar's agree.
+xcrun simctl status_bar "$IPHONE_UDID" override --time "$(TZ=Asia/Shanghai date +%-I:%M)" \
+  --batteryState charged --batteryLevel 100 2>/dev/null || true
+for domain in com.apple.Preferences com.apple.keyboard.preferences; do
+  xcrun simctl spawn "$IPHONE_UDID" defaults write "$domain" DidShowContinuousPathIntroduction -bool true 2>/dev/null || true
+done
+
+serve "$OUT/ios/requests.log"
+run_pass ios McProbe "id=$IPHONE_UDID" "$OUT/ios"
+serve "$OUT/mac/requests.log"
+run_pass mac McMacProbe "platform=macOS" "$OUT/mac"
+kill "$STUB_PID" 2>/dev/null || true
+
+for p in ios mac; do
+  grep -E '" 404 ' "$OUT/$p/requests.log" | sed -E 's/^[0-9:.]+ //' | sort | uniq -c | sort -rn > "$OUT/$p/not-served.txt" || true
+  grep -E "POST|PATCH|DELETE|body:" "$OUT/$p/requests.log" > "$OUT/$p/writes.txt" || true
+done
+ls -la "$OUT/ios" "$OUT/mac"
+exit "$STATUS"
