@@ -285,6 +285,38 @@ class PushAuthorityTest {
         }
     }
 
+    /** The orphan sweep's push to an owner whose project has no coordinator to tell (docs/evidence-always-has-an-addressee-design.md
+     * §4): it parses exactly as the server sends it (the shared fixture's sample), opens its project as project-done does, and stands
+     * while the project is open. Without its project it is no notification. */
+    @Test fun anOrphanReportOpensItsProjectAndStandsWhileTheProjectIsOpen() = runBlocking {
+        val sample = pushFixture()["samples"]!!.jsonArray.map { it.jsonObject }
+            .single { it["name"]!!.jsonPrimitive.content == "project-orphan" }
+        val data = sample["data"]!!.jsonObject.mapValues { it.value.jsonPrimitive.content }
+        val push = PushMessage.parse(data) ?: throw AssertionError("the server's project-orphan push is dropped")
+        val project = sample["source"]!!.jsonObject["projectID"]!!.jsonPrimitive.content
+        assertEquals(PushType.ALERT, push.type)
+        assertEquals("project-orphan", push.payload.kind)
+        assertTrue(ObjectId.same(push.payload.projectId, project))
+        assertFalse(push.payload.isReminder)
+        assertEquals("orbit://project/$project", push.link)
+        assertEquals(OrbitRoute(Destination.PROJECT_SESSIONS, project, origin = Origin.EXTERNAL),
+            push.link?.let { OrbitLinks.parse(it, origin = Origin.EXTERNAL) })
+        assertNull("it names its project", PushMessage.parse(data + ("payload" to
+            """{"title":"Session translation: nobody has this","body":"Nobody can move it now.","kind":"project-orphan"}""")))
+        authorityFixture { authority, server, _ ->
+            var status = "OPEN"
+            server.respond = { request ->
+                assertEquals("/api/projects/$project", request.path)
+                response("""{"id":"$project","status":"$status"}""")
+            }
+            assertEquals(PushCheck.ACTIVE, authority.check(push))
+            status = "DONE"
+            assertEquals(PushCheck.STALE, authority.check(push))
+            server.respond = { response("{}", 404) }
+            assertEquals(PushCheck.MISSING, authority.check(push))
+        }
+    }
+
     @Test fun headlessMessageHasNoInventedRouteAndChecksCurrentAccountPreference() = runBlocking {
         authorityFixture { authority, server, _ ->
             val push = message("agent-message")
