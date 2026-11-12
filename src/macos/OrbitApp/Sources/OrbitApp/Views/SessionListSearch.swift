@@ -66,6 +66,9 @@ private struct BottomSearchMode: ViewModifier {
     }
 
     private func setPresented(_ on: Bool) {
+        // iOS reports one ending more than once (the X: probe round 3). Only a change counts, or
+        // the repeat — its tap used up — would read as iOS ending search and put it back.
+        guard on != presented else { return }
         presented = on
         // Used up on every change, so the tap that opened the field can't pass for a close later.
         let closed = SearchCloseTap.consume()
