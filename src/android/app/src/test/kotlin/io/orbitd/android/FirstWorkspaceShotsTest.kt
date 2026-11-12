@@ -9,6 +9,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import io.orbitd.android.composer.MachineSetupCopy
 import io.orbitd.android.composer.WelcomeCopy
+import io.orbitd.android.composer.WelcomeSignInCopy
 import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.net.*
 import io.orbitd.android.core.protocol.Wire
@@ -161,6 +162,11 @@ class FirstWorkspaceShotsTest {
         compose.onAllNodesWithTag("welcome-example", useUnmergedTree = true).assertCountEquals(3)
         WelcomeCopy.WELCOME_EXAMPLES.forEach { awaitText(it) }
         awaitText(WelcomeCopy.WELCOME_PLACEHOLDER)
+        // Step 2 is the web's sign-in: Sign in to <engine>, Use an API key instead (the account has a key: it runs on it), its hint.
+        awaitText("Sign in to Claude Code")
+        awaitText(WelcomeSignInCopy.USE_API_KEY_INSTEAD)
+        awaitText(WelcomeSignInCopy.KEY_HINT)
+        awaitText(MachineSetupCopy.setupUseEngine("Codex"))
         assertTrue("the Open list was read", FirstWorkspaceShell.calls.contains("GET sessions?view=open&limit=1"))
         assertTrue("the Completed list was read", FirstWorkspaceShell.calls.contains("GET sessions?view=completed&limit=1"))
 
@@ -184,6 +190,9 @@ class FirstWorkspaceShotsTest {
         compose.onAllNodesWithText(WelcomeCopy.welcomeTitle("Owner"), substring = true, useUnmergedTree = true).assertCountEquals(0)
         compose.onAllNodesWithTag("welcome-example", useUnmergedTree = true).assertCountEquals(0)
         compose.onAllNodesWithText(WelcomeCopy.WELCOME_PLACEHOLDER, useUnmergedTree = true).assertCountEquals(0)
+        // The setup card's own sign-in, as before.
+        awaitText(MachineSetupCopy.SETUP_USE_API_KEY)
+        compose.onAllNodesWithText(WelcomeSignInCopy.USE_API_KEY_INSTEAD, useUnmergedTree = true).assertCountEquals(0)
     }
 
     @Test fun heldMessageWaitsCanBeWithdrawnAutoCreatesTheSessionOnceReadyAndDrawsTheCreatedWorkspaceLine() {

@@ -236,7 +236,17 @@ internal fun MachineSetupCard(
                         if (!offline && engine in ProviderEngines.LOGIN_ENGINES) {
                             Box(Modifier.padding(top = 8.dp)) {
                                 key(engine) {
-                                    RunnerSignInCard(
+                                    // A new account's card draws the web's sign-in (Sign in to <engine>, Use an API key instead, and
+                                    // its hint); everybody else's keeps the setup card's own.
+                                    if (welcome != null) RunnerSignInCard(
+                                        api = managementApi,
+                                        runner = runner,
+                                        engine = engine,
+                                        onUseApiKey = if (keyToUse != null) onUseKey else welcome.onOpenKeys,
+                                        onSignedIn = onSignedIn,
+                                        apiKeyLabel = WelcomeSignInCopy.USE_API_KEY_INSTEAD,
+                                        apiKeyHint = WelcomeSignInCopy.KEY_HINT,
+                                    ) else RunnerSignInCard(
                                         api = managementApi,
                                         runner = runner,
                                         engine = engine,
@@ -298,7 +308,13 @@ internal fun MachineSetupCard(
 }
 
 /** What a new account's first machine adds to the setup card. */
-internal data class MachineWelcome(val name: String?, val composerText: String, val onExample: (String) -> Unit)
+internal data class MachineWelcome(
+    val name: String?,
+    val composerText: String,
+    val onExample: (String) -> Unit,
+    /** Use an API key instead with no key that runs here: where one is connected (Machines & models). */
+    val onOpenKeys: () -> Unit,
+)
 
 @Composable
 internal fun SetupStepRow(number: Int, done: Boolean, content: @Composable ColumnScope.() -> Unit) {

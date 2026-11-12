@@ -61,6 +61,7 @@ import io.orbitd.android.composer.NewSessionComposer
 import io.orbitd.android.composer.NoMachineWelcomeCard
 import io.orbitd.android.composer.rememberAccountName
 import io.orbitd.android.composer.rememberManagedOffered
+import io.orbitd.android.composer.rememberManagedRunner
 import io.orbitd.android.composer.rememberNewAccount
 import io.orbitd.android.text.LocalReaderResources
 import io.orbitd.android.text.ReaderResources
@@ -257,6 +258,23 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             val before = navigation
             navigation = before.landHome(workspaces.map { it.id }.filterNot { ObjectId.same(it, deletedWorkspace) }, lastWorkspace.id, opened, provisionalLanding)
             if (!data.cached) provisionalLanding = null else if (navigation !== before) provisionalLanding = rootOf(navigation)
+        }
+        // A new account whose only workspace is its managed runner's default lands on that workspace's draft, where the welcome card
+        // stands (docs/mocks/new-user-onboarding; the web's DefaultLanding + WorkspaceView). Once per sign-in, over the list the launch
+        // landed on, so Back still reaches it; an account that has had a session keeps today's landing.
+        var managedLanded by remember(signedIn.handle) { mutableStateOf(false) }
+        val onlyWorkspace = workspaces.singleOrNull()?.id
+        val managedForLanding = rememberManagedRunner(management, ask = data.ready && onlyWorkspace != null && !managedLanded)
+        val managedDefault = managedForLanding.shown?.status?.workspaceId
+            ?.takeIf { onlyWorkspace != null && ObjectId.same(it, onlyWorkspace) }?.let { onlyWorkspace }
+        val newManagedAccount = rememberNewAccount(management, managedDefault != null && !managedLanded)
+        LaunchedEffect(newManagedAccount, managedDefault, route, navigation.canGoBack) {
+            val workspace = managedDefault ?: return@LaunchedEffect
+            if (!newManagedAccount || managedLanded || navigation.canGoBack) return@LaunchedEffect
+            if (route.destination == Destination.WORKSPACE && ObjectId.same(route.id, workspace)) {
+                managedLanded = true
+                open(OrbitRoute(Destination.DRAFT, workspaceId = workspace))
+            }
         }
         // A merge's push (A11-9) names its project only: once the directory is read, its sessions page lands as the project's root
         // over the workspace the drawer's row would pick (iOS 6b4bef713 `openProjectMerge`).

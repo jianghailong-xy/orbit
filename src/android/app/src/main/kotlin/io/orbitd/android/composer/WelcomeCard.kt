@@ -146,6 +146,15 @@ internal fun FollowManagedRunner(reader: ManagedRunnerReader, follow: Boolean) {
     }
 }
 
+/**
+ * The sign-in's words on the welcome card, as the web's RunnerSignIn draws them (`WelcomeSignInCopyTest` finds each in
+ * src/web/src/components/RunnerSignIn.tsx). Its main button is the shared card's own "Sign in to <engine>".
+ */
+internal object WelcomeSignInCopy {
+    const val USE_API_KEY_INSTEAD = "Use an API key instead"
+    const val KEY_HINT = "Signing in fixes this runner. A key is account-wide — switch to its model to use it."
+}
+
 private val CARD_SHAPE = RoundedCornerShape(18.dp)
 
 /** The card's frame: the setup card's surface. */
@@ -287,7 +296,8 @@ internal fun ManagedWelcomeCard(
     onOpenRunner: (String) -> Unit,
     onOwnInstead: () -> Unit,
     onExample: (String) -> Unit,
-    onUseKey: (() -> Unit)?,
+    /** Use an API key instead: the draft's key when one can run there, else where a key is connected (the web's pickApiKey). */
+    onUseKey: () -> Unit,
     onChangeCredential: () -> Unit,
     onSignedIn: () -> Unit,
 ) {
@@ -319,8 +329,9 @@ internal fun ManagedWelcomeCard(
                 StepHelp(WelcomeCopy.WELCOME_MODEL_HELP)
                 if (runner != null && online && engine in ProviderEngines.LOGIN_ENGINES) Box(Modifier.padding(top = 8.dp)) {
                     key(engine) {
-                        RunnerSignInCard(api = managementApi, runner = runner, engine = engine, signInTitle = RunnerCopy.SIGN_IN,
-                            onUseApiKey = onUseKey, onSignedIn = onSignedIn)
+                        RunnerSignInCard(api = managementApi, runner = runner, engine = engine, onUseApiKey = onUseKey,
+                            onSignedIn = onSignedIn, apiKeyLabel = WelcomeSignInCopy.USE_API_KEY_INSTEAD,
+                            apiKeyHint = WelcomeSignInCopy.KEY_HINT)
                     }
                 } else Later(WelcomeCopy.WELCOME_AFTER_COMPUTER)
             }

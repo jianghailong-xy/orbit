@@ -179,7 +179,10 @@ private fun ManagedWelcomeDraft(
         onOpenRunner = { id -> open(OrbitRoute(Destination.RUNNER, id)) },
         onOwnInstead = onOwnInstead,
         onExample = { text -> model.edit(text, text.length, text.length); onPicked() },
-        onUseKey = keyToUse?.let { pick -> { model.config(buildJsonObject { put("engine", pick.engine); put("provider", pick.provider) }) } },
+        onUseKey = {
+            keyToUse?.let { pick -> model.config(buildJsonObject { put("engine", pick.engine); put("provider", pick.provider) }) }
+                ?: open(OrbitRoute(Destination.RUNNER))
+        },
         onChangeCredential = { model.config(buildJsonObject { put("engine", engine); put("provider", engine) }) },
         onSignedIn = {
             app.realtime.refreshDirectory()
@@ -368,9 +371,12 @@ private fun MachineDraftComposer(
                                 model.refreshCatalog()
                             }
                         },
-                        welcome = if (!machineWelcome) null else MachineWelcome(welcomeName, state.draft.text) { text ->
-                            model.edit(text, text.length, text.length); focusRequest++
-                        },
+                        welcome = if (!machineWelcome) null else MachineWelcome(
+                            name = welcomeName,
+                            composerText = state.draft.text,
+                            onExample = { text -> model.edit(text, text.length, text.length); focusRequest++ },
+                            onOpenKeys = { open(OrbitRoute(Destination.RUNNER)) },
+                        ),
                     )
                     setupState.held?.let { held ->
                         HeldFirstMessageView(

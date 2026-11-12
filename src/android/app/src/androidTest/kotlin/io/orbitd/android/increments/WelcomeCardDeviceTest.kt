@@ -2,7 +2,9 @@ package io.orbitd.android.increments
 
 import androidx.compose.ui.test.*
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.orbitd.android.composer.MachineSetupCopy
 import io.orbitd.android.composer.WelcomeCopy
+import io.orbitd.android.composer.WelcomeSignInCopy
 import io.orbitd.android.directory.SessionListCopy
 import io.orbitd.android.management.RunnerCopy
 import okhttp3.mockwebserver.MockResponse
@@ -89,13 +91,33 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
 
     private fun says(text: String, substring: Boolean = false) = exists(hasText(text, substring = substring), unmerged = true)
 
-    /** The managed runner's default workspace: the launch lands on its list, and New session opens its draft. */
-    private fun openManagedDraft() {
+    private val startSession get() = hasContentDescription(SessionListCopy.startSession("default"))
+
+    /** A new account whose only workspace is the managed runner's default: signed in from a cold, cleared app, the launch lands on that
+     *  workspace's draft with the welcome card, with no tap at all (the web's DefaultLanding + WorkspaceView). */
+    private fun landOnManagedDraft() {
         signIn()
-        val start = hasContentDescription(SessionListCopy.startSession("default"))
-        await("the default workspace") { exists(start) }
-        compose.onNode(start).performClick()
+        awaitTag("welcome-card")
+        verify("the launch landed on the draft, not the session list", !exists(startSession) && says("New session"))
+    }
+
+    /** An account that has had a session: the launch lands on the default workspace's list, as today; New session opens its draft. */
+    private fun openManagedDraftByHand() {
+        signIn()
+        await("the default workspace's list") { exists(startSession) }
+        awaitNewAccountRead()
+        verify("the launch stays on the session list", exists(startSession) && !exists(hasTestTag("welcome-card"), unmerged = true))
+        capture("6-history-managed-landing")
+        compose.onNode(startSession).performClick()
         settle()
+    }
+
+    /** Step 2's sign-in as the web's RunnerSignIn draws it on the welcome card. */
+    private fun verifyWebSignIn(engine: String) {
+        await("Sign in to $engine") { says("Sign in to $engine") }
+        verify("Use an API key instead beside it", says(WelcomeSignInCopy.USE_API_KEY_INSTEAD))
+        verify("the key hint under them", says(WelcomeSignInCopy.KEY_HINT))
+        verify("no bare Sign In", !says(RunnerCopy.SIGN_IN))
     }
 
     /** The two reads that decide whether the account is new have both been answered. */
@@ -115,8 +137,7 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
 
     @Test fun managedPreparing() = journey {
         fleet = Fleet.MANAGED_PREPARING
-        openManagedDraft()
-        awaitTag("welcome-card")
+        landOnManagedDraft()
         verifyHead()
         verify("step 1 says Orbit is starting one", says(WelcomeCopy.WELCOME_COMPUTER) && says(WelcomeCopy.WELCOME_COMPUTER_MANAGED))
         verify("step 1 holds the managed runner's own state", says("Preparing your managed runner"))
@@ -127,16 +148,18 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
         verify("no engine row stands beside the card", !exists(hasTestTag("new-session-engine"), unmerged = true))
         verifyPlaceholder()
         capture("1-managed")
+        // The list the launch landed on is still under the draft.
+        back()
+        await("Back reaches the default workspace's list") { exists(startSession) }
     }
 
     @Test fun managedModel() = journey {
         fleet = Fleet.MANAGED_MODEL
-        openManagedDraft()
-        awaitTag("welcome-card")
+        landOnManagedDraft()
         await("step 1 done") { says(WelcomeCopy.WELCOME_COMPUTER_DONE) && says(WelcomeCopy.welcomeComputerReady("managed-mia")) }
         verify("step 2 asks for a model", says(WelcomeCopy.WELCOME_MODEL) && says(WelcomeCopy.WELCOME_MODEL_HELP))
-        // The runner's sign-in card, the setup card's own (RunnerSignInCard): its button says Sign In.
-        await("the runner's sign-in card") { exists(hasText(RunnerCopy.SIGN_IN) and hasAnyAncestor(hasTestTag("welcome-card")), unmerged = true) && !says(WelcomeCopy.WELCOME_AFTER_COMPUTER) }
+        verifyWebSignIn("Claude Code")
+        verify("step 2 no longer waits for the computer", !says(WelcomeCopy.WELCOME_AFTER_COMPUTER))
         verify("the foot waits for steps 1 and 2", says(WelcomeCopy.WELCOME_FOOT_WAIT))
         verifyPlaceholder()
         capture("2-model")
@@ -144,8 +167,7 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
 
     @Test fun managedReady() = journey {
         fleet = Fleet.MANAGED_READY
-        openManagedDraft()
-        awaitTag("welcome-card")
+        landOnManagedDraft()
         await("step 2 done") { says(WelcomeCopy.WELCOME_MODEL_DONE) && says("Claude Code signed in on managed-mia") }
         compose.onAllNodesWithTag("welcome-example", useUnmergedTree = true).onFirst().performClick()
         settle()
@@ -164,6 +186,8 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
         await("the welcome head on the setup card") { says(WelcomeCopy.welcomeTitle("Mia Chen")) }
         verify("the setup title gives way to the greeting", !says("machine-setup-card", "Set up mia-macbook"))
         verifyPlaceholder()
+        verifyWebSignIn("Claude Code")
+        verify("the other installed CLI is offered", says(MachineSetupCopy.setupUseEngine("Codex")))
         capture("4-machine")
         compose.onAllNodesWithTag("welcome-example", useUnmergedTree = true).onFirst().performScrollTo()
         verify("step 3 offers the three examples", WelcomeCopy.WELCOME_EXAMPLES.all { says(it) } && says(WelcomeCopy.WELCOME_FIRST))
@@ -184,9 +208,8 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
     @Test fun anAccountWithHistorySeesNoCard() = journey {
         hadSession = true
         fleet = Fleet.MANAGED_PREPARING
-        openManagedDraft()
+        openManagedDraftByHand()
         awaitTag("new-session-engine")
-        awaitNewAccountRead()
         verify("the managed draft keeps its engine row and no card",
             !exists(hasTestTag("welcome-card"), unmerged = true) && !says(WelcomeCopy.WELCOME_PLACEHOLDER))
         capture("6-history-managed")
@@ -210,6 +233,7 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
         await("the setup title") { says("Set up mia-macbook") }
         awaitNewAccountRead()
         verify("no greeting and no examples", !says(WelcomeCopy.welcomeTitle("Mia Chen")) && !exists(hasTestTag("welcome-example"), unmerged = true))
+        verify("the setup card keeps its own Sign In", says(RunnerCopy.SIGN_IN) && !says(WelcomeSignInCopy.USE_API_KEY_INSTEAD))
         capture("6-history-machine")
     }
 }

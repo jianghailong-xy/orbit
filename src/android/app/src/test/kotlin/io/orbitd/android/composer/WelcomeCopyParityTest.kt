@@ -72,6 +72,14 @@ class WelcomeCopyParityTest {
         assertEquals(web, kotlin)
     }
 
+    /** The welcome card's sign-in says what the web's RunnerSignIn says: its key button, its hint, and "Sign in to <engine>". */
+    @Test fun theSignInWordsAreTheWebRunnerSignIns() {
+        val web = File(root, "src/web/src/components/RunnerSignIn.tsx").readText()
+        assertTrue("Use an API key instead moved in RunnerSignIn.tsx", web.contains(WelcomeSignInCopy.USE_API_KEY_INSTEAD))
+        assertTrue("the key hint moved in RunnerSignIn.tsx", web.contains(WelcomeSignInCopy.KEY_HINT))
+        assertTrue("Sign in to <engine> moved in RunnerSignIn.tsx", web.contains("`Sign in to \${ENGINE_NAME[engine]}`"))
+    }
+
     private companion object {
         const val WEB = "src/web/src/lib/welcomeCopy.ts"
         const val KOTLIN = "src/android/app/src/main/kotlin/io/orbitd/android/composer/WelcomeCopy.kt"

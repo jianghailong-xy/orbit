@@ -1227,7 +1227,9 @@ private class SignInRelay(private val api: ManagementApi, val runnerId: String, 
 @Composable
 internal fun RunnerSignInCard(api: ManagementApi, runner: JsonObject, engine: String, account: String? = null, accountName: String? = null,
                              autoStart: Boolean = false, signInTitle: String? = null, onUseApiKey: (() -> Unit)? = null,
-                             onClose: (() -> Unit)? = null, onSignedIn: (() -> Unit)? = null) {
+                             onClose: (() -> Unit)? = null, onSignedIn: (() -> Unit)? = null,
+                             apiKeyLabel: String = io.orbitd.android.composer.MachineSetupCopy.SETUP_USE_API_KEY,
+                             apiKeyHint: String? = null) {
     val runnerId = runner.text("id")
     val scope = rememberCoroutineScope()
     val relay = remember(runnerId, engine, account) { SignInRelay(api, runnerId, engine, account, adding = accountName != null) }
@@ -1312,7 +1314,7 @@ internal fun RunnerSignInCard(api: ManagementApi, runner: JsonObject, engine: St
                     }
                     Text(KimiSite.SEPARATE_ACCOUNTS, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
                     onUseApiKey?.let { useKey ->
-                        OutlinedButton(onClick = useKey) { Text(io.orbitd.android.composer.MachineSetupCopy.SETUP_USE_API_KEY) }
+                        OutlinedButton(onClick = useKey) { Text(apiKeyLabel) }
                     }
                 } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Button(onClick = { scope.launch { relay.begin(accountName, scope) } }, enabled = !relay.busy && named) {
@@ -1326,9 +1328,11 @@ internal fun RunnerSignInCard(api: ManagementApi, runner: JsonObject, engine: St
                         })
                     }
                     onUseApiKey?.let { useKey ->
-                        OutlinedButton(onClick = useKey) { Text(io.orbitd.android.composer.MachineSetupCopy.SETUP_USE_API_KEY) }
+                        OutlinedButton(onClick = useKey) { Text(apiKeyLabel) }
                     }
                 }
+                // What a key is beside a sign-in, where the card says it (the web's RunnerSignIn hint, on the welcome card).
+                if (onUseApiKey != null && apiKeyHint != null) Text(apiKeyHint, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
                 close()
             }
         }
