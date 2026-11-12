@@ -234,7 +234,11 @@ final class SettingsStackWiringTests: XCTestCase {
         let pages = code(try slice(sheet, from: "private struct SettingsPageView: View {", to: "// MARK: - The list"))
         XCTAssertTrue(pages.contains("case .sessions:       SessionSettingsPage()"))
         let page = code(try slice(sheet, from: "private struct SessionSettingsPage: View {", to: "// MARK: - Notifications"))
-        XCTAssertTrue(page.contains("ForEach(SessionSettings.Row.allCases, id: \\.self)"))
+        XCTAssertTrue(page.contains("ForEach(SessionSettings.groups, id: \\.self)"),
+                      "the page draws its groups in SessionSettings.groups' order")
+        XCTAssertTrue(page.contains("case .translation:"), "Translation is drawn where groups puts it")
+        XCTAssertEqual(page.components(separatedBy: "translationSection").count - 1, 2,
+                       "Translation is drawn once, from the groups, and defined once")
         XCTAssertTrue(page.contains("Text(SessionSettings.footer(row))"), "each row's hint is its footer")
         XCTAssertTrue(page.contains(".navigationTitle(SettingsPage.sessions.title)"))
         let controls = try slice(page, from: "@ViewBuilder private func control(_ row: SessionSettings.Row) -> some View {",

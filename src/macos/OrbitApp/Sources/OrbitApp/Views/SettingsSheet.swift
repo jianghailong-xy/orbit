@@ -734,14 +734,18 @@ private struct SessionSettingsPage: View {
 
     var body: some View {
         Form {
-            ForEach(SessionSettings.Row.allCases, id: \.self) { row in
-                Section {
-                    control(row)
-                } footer: {
-                    Text(SessionSettings.footer(row))
+            ForEach(SessionSettings.groups, id: \.self) { group in
+                switch group {
+                case .row(let row):
+                    Section {
+                        control(row)
+                    } footer: {
+                        Text(SessionSettings.footer(row))
+                    }
+                case .translation:
+                    translationSection
                 }
             }
-            translationSection
         }
         .navigationTitle(SettingsPage.sessions.title)
         .onAppear(perform: seed)
