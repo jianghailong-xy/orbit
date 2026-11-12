@@ -23251,6 +23251,7 @@ div.landing-jobs-open {
 }
 .oic {
   width: 100%;
+  max-width: 720px;
   padding: 10px 12px;
   border: 1px solid var(--warning-border);
   border-radius: 12px;
@@ -23426,6 +23427,7 @@ div.landing-jobs-open {
 }
 .tsc {
   width: 100%;
+  max-width: 720px;
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -23616,53 +23618,77 @@ div.landing-jobs-open {
   margin: 8px 0;
 }
 .smc {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--brand-border);
-  border-radius: 12px;
-  background: var(--bg-raised);
-  color: var(--text-1);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: fit-content;
+  max-width: min(720px, 100%);
+  min-width: 0;
 }
 .smc-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
+  margin-bottom: 3px;
   color: var(--text-2);
   font-size: 12px;
+  line-height: 1.4;
 }
-.smc-mark {
-  flex: none;
-  color: var(--brand);
+.smc-head > .smc-mark {
+  margin-right: 4px;
+  color: var(--text-3);
+}
+.smc-head > .smc-from {
+  margin-left: 4px;
+}
+/* Said by the side the message sits on and the "From" line; the sentence is for a screen reader. */
+.smc-not-you {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 .smc-from {
-  color: var(--brand);
+  color: var(--text-2);
   font-weight: 600;
   text-decoration: none;
   overflow-wrap: anywhere;
 }
+a.smc-from:hover {
+  color: var(--brand);
+}
 .smc-agent {
-  flex: none;
-  padding: 0 8px;
-  border: 1px solid var(--brand-border);
-  border-radius: 9px;
-  color: var(--text-2);
-  font-size: 11px;
-  line-height: 18px;
+  color: var(--text-3);
 }
-.smc-body {
-  margin-top: 6px;
+.smc-agent::before {
+  content: ' · ';
+  white-space: pre;
 }
-/* A long message shows its first 8 lines, fading out, until "Show more" (SessionMessageCard). */
+.smc-bubble {
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--bg-hover-strong);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.smc-body > :first-child {
+  margin-top: 0;
+}
+.smc-body > :last-child {
+  margin-bottom: 0;
+}
+/* A long message shows its first 4 lines, fading out, until "Show more" (SessionMessageCard). */
 .smc-body.is-clamped {
-  max-height: 12.4em;
-  max-height: 8lh;
+  max-height: 6.2em;
+  max-height: 4lh;
   overflow: hidden;
-  -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent);
-  mask-image: linear-gradient(to bottom, #000 70%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent);
+  mask-image: linear-gradient(to bottom, #000 55%, transparent);
 }
 .smc-more {
-  margin: 4px 0 2px;
+  margin: 2px 0 0;
   padding: 0;
   border: 0;
   background: none;
@@ -23671,16 +23697,34 @@ div.landing-jobs-open {
   font-size: 13px;
   cursor: pointer;
 }
+/* One grey foot row: time · its task · the request and where it stands · what Orbit attached. Items
+   keep whole and the row wraps between them. */
 .smc-meta {
-  margin-top: 8px;
-  padding-top: 6px;
-  border-top: 1px solid var(--bg-hover-strong);
+  margin-top: 3px;
   color: var(--text-3);
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 18px;
+}
+.smc-meta > * {
+  white-space: nowrap;
+}
+.smc-meta > :not(:last-child)::after {
+  content: '\00a0· ';
+  white-space: normal;
 }
 .smc-meta a {
-  color: var(--brand);
+  color: var(--text-3);
   text-decoration: none;
+}
+.smc-meta a:hover {
+  color: var(--brand);
+}
+.smc-meta > .chat-injected {
+  display: inline;
+  margin: 0;
+}
+.smc-meta > .chat-injected > .chat-injected-panel {
+  white-space: normal;
 }
 .smc-undelivered {
   margin-top: 4px;
@@ -23689,7 +23733,7 @@ div.landing-jobs-open {
 }
 /* Still waiting to be delivered (WorkspaceView's queued tail): dashed like a queued message, with the
    queue's status line at its foot — the same shape the delivery and project-start cards take. */
-.smc.is-queued {
+.smc.is-queued > .smc-bubble {
   border-style: dashed;
 }
 .smc-queued {
@@ -23707,32 +23751,13 @@ div.landing-jobs-open {
 }
 /* A message that asks for a reply (session requests): what it asks, by when, and where it stands —
    read live, so the state word moves while the card does not. */
-.smc-request {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  margin-top: 6px;
-  color: var(--text-2);
-  font-size: 12px;
-}
-.smc-request-asks {
-  font-weight: 600;
-}
-.smc-request-state {
-  padding: 0 8px;
-  border: 1px solid var(--bg-hover-strong);
-  border-radius: 9px;
-  line-height: 18px;
-  font-size: 11px;
+.smc-request > :not(:last-child)::after {
+  content: '\00a0· ';
+  white-space: normal;
+  color: var(--text-3);
 }
 .smc-request-state-open {
-  border-color: var(--brand-border);
   color: var(--brand);
-}
-.smc-request-state-replied {
-  border-color: var(--success);
-  color: var(--success);
 }
 .smc-request-state-no_reply,
 .smc-request-state-recipient_ended,
@@ -23831,6 +23856,7 @@ div.landing-jobs-open {
 }
 .psc {
   width: 100%;
+  max-width: 720px;
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -23965,6 +23991,7 @@ div.landing-jobs-open {
 }
 .crc {
   width: 100%;
+  max-width: 720px;
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
