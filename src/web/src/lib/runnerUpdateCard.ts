@@ -1,4 +1,4 @@
-import type { RunnerSelfUpdate, RunnerSelfUpdatePhase } from '@orbit/shared';
+import type { RunnerSelfUpdate, RunnerSelfUpdatePhase, RunnerUpdateTurn } from '@orbit/shared';
 import {
   RUNNER_LINE_SEPARATOR,
   RUNNER_UPDATE_AVAILABLE_BODY,
@@ -10,12 +10,14 @@ import {
   RUNNER_UPDATE_TAG_RESTARTING,
   RUNNER_UPDATE_TURN,
   RUNNER_UPDATE_TURNS,
+  RUNNER_UPDATE_UNTITLED_TURN,
   runnerUpdateAvailableTitle,
   runnerUpdateDrainingBody,
   runnerUpdateDrainingTitle,
   runnerUpdatePostponedBody,
   runnerUpdatePostponedTitle,
   runnerUpdateRestartingTitle,
+  runnerUpdateTurnRunning,
   runnerUpdateWaitedHours,
   runnerUpdateWaitedHoursMinutes,
   runnerUpdateWaitedMinutes,
@@ -33,6 +35,9 @@ export interface RunnerUpdateCard {
   body: string;
   /** Draining only: the turns it waits for and how long, with the share of them already done. */
   progress?: { label: string; done: number };
+  /** Draining only: the reader's turns it waits for, longest-running first — title, and how long
+   *  each has run (`running 1 h 52 min`, none when the server has no start for it). */
+  turns?: Array<{ id: string; title: string; running: string | null }>;
 }
 
 /** How long it has waited: `38 min`, `1 h 52 min`, `2 h`. */
@@ -59,7 +64,11 @@ export function runnerUpdateClock(iso: string): string {
  * The card a runner's report calls for, or null: no phase (nothing waiting, or a runner too old to
  * say, which keeps About's wording) or no version to name.
  */
-export function runnerUpdateCard(report: RunnerSelfUpdate | null | undefined, nowMs: number): RunnerUpdateCard | null {
+export function runnerUpdateCard(
+  report: RunnerSelfUpdate | null | undefined,
+  nowMs: number,
+  updateTurns?: RunnerUpdateTurn[],
+): RunnerUpdateCard | null {
   const phase = report?.phase;
   const version = report?.targetVersion;
   if (!phase || !version) return null;
@@ -87,6 +96,13 @@ export function runnerUpdateCard(report: RunnerSelfUpdate | null | undefined, no
           ? runnerUpdateDrainingBody(version, runnerUpdateClock(report.availableSince))
           : RUNNER_UPDATE_DRAINING_BODY_NO_SINCE,
         progress: { label: runnerUpdateProgressLabel(left, of, waited), done: of ? (of - left) / of : 0 },
+        turns: (updateTurns ?? []).map((turn) => ({
+          id: turn.id,
+          title: turn.title?.trim() || RUNNER_UPDATE_UNTITLED_TURN,
+          running: turn.startedAt
+            ? runnerUpdateTurnRunning(runnerUpdateWaited(Math.max(0, Math.floor((nowMs - Date.parse(turn.startedAt)) / 60_000))))
+            : null,
+        })),
       };
     }
     case 'restarting':

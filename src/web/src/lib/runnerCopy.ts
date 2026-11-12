@@ -519,6 +519,12 @@ export function runnerUpdateWaitedHours(hours: number): string {
   return `${hours} h`;
 }
 
+/** A turn the drain waits for, on its row: how long it has run. */
+export function runnerUpdateTurnRunning(duration: string): string {
+  return `running ${duration}`;
+}
+export const RUNNER_UPDATE_UNTITLED_TURN = 'Untitled session';
+
 export function runnerUpdateRestartingTitle(version: string): string {
   return `Restarting into ${version}…`;
 }

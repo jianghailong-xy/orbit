@@ -848,6 +848,14 @@ public enum RunnerPageFormat {
         /// Draining only: `Waiting for 2 of 8 turns · 38 min`, and the share of those turns done.
         public let progressLabel: String?
         public let progress: Double?
+        /// Draining only: the reader's turns it waits for — session, title, `running 1 h 52 min`.
+        public var turns: [Turn] = []
+
+        public struct Turn: Equatable, Sendable {
+            public let id: String
+            public let title: String
+            public let running: String?
+        }
     }
 
     /// The card a runner's report calls for; nil with no phase (nothing waiting, or a runner too old
@@ -879,7 +887,17 @@ public enum RunnerPageFormat {
                 body: since.map { RunnerPageCopy.runnerUpdateDrainingBody(version: version, since: $0) }
                     ?? RunnerPageCopy.RUNNER_UPDATE_DRAINING_BODY_NO_SINCE,
                 progressLabel: waited.map { count + RunnerPageCopy.RUNNER_LINE_SEPARATOR + $0 } ?? count,
-                progress: of.map { $0 > 0 ? Double($0 - left) / Double($0) : 0 } ?? 0)
+                progress: of.map { $0 > 0 ? Double($0 - left) / Double($0) : 0 } ?? 0,
+                turns: (runner.updateTurns ?? []).map { turn in
+                    let title = turn.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    return UpdateCard.Turn(
+                        id: turn.id,
+                        title: title.isEmpty ? RunnerPageCopy.RUNNER_UPDATE_UNTITLED_TURN : title,
+                        running: turn.startedAt.flatMap { RelativeTime.parse($0) }.map {
+                            RunnerPageCopy.runnerUpdateTurnRunning(
+                                duration: updateWaited(minutes: max(0, Int(now.timeIntervalSince($0) / 60))))
+                        })
+                })
         case "restarting":
             return UpdateCard(phase: phase, warn: true,
                               title: RunnerPageCopy.runnerUpdateRestartingTitle(version: version),

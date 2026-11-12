@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { RunnerSelfUpdate } from '@orbit/shared';
+import type { RunnerSelfUpdate, RunnerUpdateTurn } from '@orbit/shared';
 import type { Runner } from '../components/TasksSidePanel';
 import { runnerAttention, runnerCanUpdateNow, type RunnerAttentionInput } from '../lib/runnerAttention';
 import cases from '../lib/runnerAttention.cases.json';
@@ -488,8 +488,17 @@ describe('the Update card, one per phase the runner reports', () => {
       done: bar ? Number(bar.getAttribute('aria-valuenow')) : null,
     };
   };
-  const phase = (report: Partial<RunnerSelfUpdate>) =>
-    reporting('selfUpdate waitingForIdle and behind', { state: 'waitingForIdle', targetVersion: '0.1.197', ...report });
+  /** The turn rows: title, where it links, and how long it has run. */
+  const turnRows = () =>
+    $$('.rd-update-card .rd-update-turns li').map((li) => [
+      text(li.querySelector('a')),
+      li.querySelector('a')!.getAttribute('href'),
+      text(li.querySelector('span')),
+    ]);
+  const phase = (report: Partial<RunnerSelfUpdate>, updateTurns?: RunnerUpdateTurn[]) => {
+    const input = reporting('selfUpdate waitingForIdle and behind', { state: 'waitingForIdle', targetVersion: '0.1.197', ...report });
+    return updateTurns ? { ...input, runner: { ...input.runner, updateTurns } } : input;
+  };
 
   it('available: quiet, says when it installs and when it would stop taking work', async () => {
     await mount(phase({ phase: 'available', availableSince: at(20), turnsInFlight: 3 }));
@@ -506,7 +515,13 @@ describe('the Update card, one per phase the runner reports', () => {
 
   it('draining: the turns it waits for, how long, a bar, and About says updating to', async () => {
     const since = at(98);
-    await mount(phase({ phase: 'draining', availableSince: since, drainingSince: at(38), turnsInFlight: 2, turnsAtDrain: 8 }));
+    await mount(
+      phase({ phase: 'draining', availableSince: since, drainingSince: at(38), turnsInFlight: 2, turnsAtDrain: 8 }, [
+        { id: '34w8a1Backfill00000001', title: 'Backfill missing shard rows', startedAt: at(112) },
+        { id: '34w8a1Metrics000000002', title: 'Why are 11-08 metrics zero', startedAt: at(47) },
+        { id: '34w8a1Untitled00000003', title: null, startedAt: null },
+      ]),
+    );
     expect(updateCard()).toEqual({
       tone: 'warn',
       title: 'Updating to 0.1.197',
@@ -517,12 +532,20 @@ describe('the Update card, one per phase the runner reports', () => {
       progress: 'Waiting for 2 of 8 turns · 38 min',
       done: 75,
     });
+    // Board 4's rows: each turn the drain waits for, a link to its session, and how long it has run.
+    expect(turnRows()).toEqual([
+      ['Backfill missing shard rows', '/sessions/34w8a1Backfill00000001', 'running 1 h 52 min'],
+      ['Why are 11-08 metrics zero', '/sessions/34w8a1Metrics000000002', 'running 47 min'],
+      ['Untitled session', '/sessions/34w8a1Untitled00000003', null],
+    ]);
     expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'updating to 0.1.197']);
     expect($$('.rd-kv-value small.warn').map(text)).toEqual(['updating to 0.1.197']);
   });
 
   it('draining for over an hour, from a runner that did not count the turns at the start', async () => {
+    // A server too old to send updateTurns: the card, with no rows.
     await mount(phase({ phase: 'draining', drainingSince: at(112), turnsInFlight: 1 }));
+    expect(turnRows()).toEqual([]);
     expect(updateCard()).toMatchObject({
       body: 'It stopped taking new work so the turns in flight can finish; then it installs and restarts.',
       progress: 'Waiting for 1 turn · 1 h 52 min',

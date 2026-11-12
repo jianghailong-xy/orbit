@@ -46,6 +46,7 @@ import type {
   RunnerModelCatalog,
   RunnerRegionView,
   RunnerSelfUpdate,
+  RunnerUpdateTurn,
   RuntimeDefaultModels,
   SlashCommandInfo,
 } from '@orbit/shared';
@@ -265,6 +266,8 @@ export interface Runner {
   // latest release, and the last update it installed. undefined/null = a runner too old to report
   // it, which runnerAttention judges by runsAsRoot as it always has.
   selfUpdate?: RunnerSelfUpdate | null;
+  // Only on a runner draining for its self-update: the reader's turns the drain waits for (board 4).
+  updateTurns?: RunnerUpdateTurn[];
   // Free-space floor in MB (PATCH minFreeDiskMb): below it this machine takes no new task runs.
   // null = no floor.
   minFreeDiskMb?: number | null;

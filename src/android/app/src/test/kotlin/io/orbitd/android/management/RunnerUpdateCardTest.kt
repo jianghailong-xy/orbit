@@ -54,6 +54,23 @@ class RunnerUpdateCardTest {
         assertEquals("0.1.253 · updating to 0.1.254", RunnerPage.versionValue(r, "0.1.254"))
     }
 
+    @Test fun drainingListsTheTurnsItWaitsForWithHowLongEachHasRun() {
+        val r = JsonObject(runner("draining").toMutableMap().apply {
+            put("updateTurns", buildJsonArray {
+                addJsonObject { put("id", "34w8a1Backfill00000001"); put("title", "Backfill missing shard rows"); put("startedAt", "2023-11-14T21:59:20Z") }
+                addJsonObject { put("id", "34w8a1Metrics000000002"); put("title", "Why are 11-08 metrics zero"); put("startedAt", "2023-11-14T23:04:20Z") }
+                addJsonObject { put("id", "34w8a1Untitled00000003"); put("title", JsonNull); put("startedAt", JsonNull) }
+            })
+        })
+        assertEquals(listOf(
+            RunnerPage.UpdateTurn("34w8a1Backfill00000001", "Backfill missing shard rows", "running 1 h 52 min"),
+            RunnerPage.UpdateTurn("34w8a1Metrics000000002", "Why are 11-08 metrics zero", "running 47 min"),
+            RunnerPage.UpdateTurn("34w8a1Untitled00000003", "Untitled session", null),
+        ), RunnerPage.updateCard(r, ms("2023-11-14T23:51:20Z"), utc)!!.turns)
+        // From a server too old to send them: the card, with no rows.
+        assertEquals(emptyList<RunnerPage.UpdateTurn>(), RunnerPage.updateCard(runner("draining"), ms("2023-11-14T23:51:20Z"), utc)!!.turns)
+    }
+
     @Test fun drainingFromARunnerThatDidNotCountTheTurnsAtTheStart() {
         val r = runner("draining") { remove("availableSince"); remove("turnsAtDrain") }
         val card = RunnerPage.updateCard(r, ms("2023-11-15T01:05:20Z"), utc)!!
@@ -95,7 +112,7 @@ class RunnerUpdateCardTest {
         val flat = swift!!.replace(Regex("\"\\s*\\+\\s*\""), "").replace(Regex("\\s+"), " ")
         for (words in listOf(RunnerCopy.UPDATE_TAG_AVAILABLE, RunnerCopy.UPDATE_TAG_DRAINING, RunnerCopy.UPDATE_TAG_RESTARTING,
             RunnerCopy.UPDATE_TAG_POSTPONED, RunnerCopy.UPDATE_AVAILABLE_BODY, RunnerCopy.UPDATE_DRAINING_BODY_NO_SINCE,
-            RunnerCopy.UPDATE_RESTARTING_BODY)) {
+            RunnerCopy.UPDATE_RESTARTING_BODY, RunnerCopy.UPDATE_UNTITLED_TURN)) {
             assertTrue("RunnerPageCopy.swift does not say \"$words\"", flat.contains("\"$words\""))
         }
         assertTrue(flat.contains("Taking work as usual. At \\(until) it waits for the turns in flight again, for up to an hour."))
@@ -111,6 +128,6 @@ class RunnerUpdateCardTest {
             if (screens.isEmpty() && candidate.isFile) screens = candidate.readText()
             dir = dir?.parentFile
         }
-        assertTrue(screens.contains("RunnerPage.updateCard(runner, now)?.let { UpdateCardView(it) }"))
+        assertTrue(screens.contains("RunnerPage.updateCard(runner, now)?.let { UpdateCardView(it) { session -> open(OrbitRoute(Destination.SESSION, session, origin = Origin.LINK)) } }"))
     }
 }

@@ -863,6 +863,15 @@ export interface RunnerSelfUpdate {
   turnsAtDrain?: number;
 }
 
+/** One of the viewer's turns a runner draining for its self-update waits for: the runner page's
+ *  Update card lists them (board 4), each with a link and how long it has run. `startedAt` is when the
+ *  current run was claimed; null when the server never stamped one. */
+export interface RunnerUpdateTurn {
+  id: string;
+  title: string | null;
+  startedAt: string | null;
+}
+
 /** Why a queued session waits on its runner's self-update (queuedReason 'runner_updating'): the
  *  release, the owner's turns the drain waits for, and when the wait began. */
 export interface QueuedRunnerUpdate {

@@ -617,7 +617,34 @@ struct RunnerDetailContent: View {
             }
             .padding(.vertical, 4)
             .listRowBackground(card.warn ? Color.orange.opacity(0.08) : nil)
+            // The turns it waits for (board 4): each opens its session.
+            ForEach(card.turns, id: \.id) { turn in
+                Button { openSession(turn.id) } label: {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(turn.title)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Spacer(minLength: 8)
+                        if let running = turn.running {
+                            Text(running)
+                                .font(.orbitLabel)
+                                .foregroundStyle(Color.secondary)
+                                .lineLimit(1)
+                        }
+                        RunnerChevron()
+                    }
+                    .foregroundStyle(Color.primary)
+                    .contentShape(Rectangle())
+                }
+                .runnerRowButtonStyle()
+            }
         }
+    }
+
+    /// A turn the Update card names: its conversation, after the Settings sheet comes down.
+    private func openSession(_ id: String) {
+        model.settingsPresented = false
+        model.route(to: .session(id))
     }
 
     /// Only what needs a person, most severe first, each with what to do about it.

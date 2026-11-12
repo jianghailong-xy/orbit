@@ -135,6 +135,8 @@ public enum RunnerPageCopy {
         "\(hours) h \(minutes) min"
     }
     public static func runnerUpdateWaitedHours(hours: Int) -> String { "\(hours) h" }
+    public static func runnerUpdateTurnRunning(duration: String) -> String { "running \(duration)" }
+    public static let RUNNER_UPDATE_UNTITLED_TURN = "Untitled session"
     public static func runnerUpdateRestartingTitle(version: String) -> String { "Restarting into \(version)…" }
     public static let RUNNER_UPDATE_RESTARTING_BODY = "Usually under a minute."
     public static func runnerUpdatePostponedTitle(version: String, until: String) -> String {

@@ -2328,6 +2328,41 @@ button.toast--pill:focus-visible {
   height: 100%;
   background: var(--warning);
 }
+/* The turns a drain waits for (board 4): one bordered list, a row each — the session, and how long
+   it has run. */
+.rd-update-turns {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+.rd-update-turns > li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 14px;
+  font-size: 13px;
+}
+.rd-update-turns > li + li {
+  border-top: 1px solid var(--border-subtle);
+}
+.rd-update-turns a {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+}
+.rd-update-turns a:hover {
+  text-decoration: underline;
+}
+.rd-update-turns span {
+  flex: none;
+  color: var(--text-3);
+}
 /* The machine's contents on the left, its settings and facts in a narrower column on the right. */
 .rd-cols {
   display: grid;

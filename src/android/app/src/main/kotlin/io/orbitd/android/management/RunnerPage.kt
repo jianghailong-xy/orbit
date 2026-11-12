@@ -33,6 +33,8 @@ internal object RunnerCopy {
     const val UPDATE_DRAINING_BODY_NO_SINCE = "It stopped taking new work so the turns in flight can finish; then it installs and restarts."
     fun updateWaitingForOf(left: Int, of: Int, unit: String) = "Waiting for $left of $of $unit"
     fun updateWaitingFor(left: Int, unit: String) = "Waiting for $left $unit"
+    fun updateTurnRunning(duration: String) = "running $duration"
+    const val UPDATE_UNTITLED_TURN = "Untitled session"
     fun updateRestartingTitle(version: String) = "Restarting into $version…"
     const val UPDATE_RESTARTING_BODY = "Usually under a minute."
     fun updatePostponedTitle(version: String, until: String) = "$version postponed until $until"
@@ -1264,7 +1266,11 @@ internal object RunnerPage {
     /** The runner page's Update card (board 4): a release this runner is behind, in the phase it reports — OrbitKit
      * RunnerPageFormat.UpdateCard. [warn]: amber while it holds work back or restarts. [progressLabel] and [progress]: draining only. */
     data class UpdateCard(val phase: String, val warn: Boolean, val title: String, val tag: String, val body: String,
-                          val progressLabel: String? = null, val progress: Float? = null)
+                          val progressLabel: String? = null, val progress: Float? = null, val turns: List<UpdateTurn> = emptyList())
+
+    /** A turn the drain waits for (the runner's `updateTurns`): its session, title, and `running 1 h 52 min` when the server knows
+     * when the run began. */
+    data class UpdateTurn(val id: String, val title: String, val running: String?)
 
     /** The card a runner's report calls for; none with no phase (nothing waiting, or a runner too old to say), no version to
      * name, or a phase this client doesn't know — those keep the page's wording from before. */
@@ -1284,7 +1290,12 @@ internal object RunnerPage {
                 UpdateCard(phase, true, RunnerCopy.updateDrainingTitle(version), RunnerCopy.UPDATE_TAG_DRAINING,
                     since?.let { RunnerCopy.updateDrainingBody(version, it) } ?: RunnerCopy.UPDATE_DRAINING_BODY_NO_SINCE,
                     progressLabel = waited?.let { count + RunnerCopy.SEP + it } ?: count,
-                    progress = if (of != null && of > 0) (of - left).toFloat() / of else 0f)
+                    progress = if (of != null && of > 0) (of - left).toFloat() / of else 0f,
+                    turns = runner.list("updateTurns").mapNotNull { turn ->
+                        val turnId = turn.str("id") ?: return@mapNotNull null
+                        UpdateTurn(turnId, turn.str("title")?.trim()?.takeIf { it.isNotEmpty() } ?: RunnerCopy.UPDATE_UNTITLED_TURN,
+                            isoMs(turn.str("startedAt"))?.let { RunnerCopy.updateTurnRunning(updateWaited(maxOf(0L, (nowMs - it) / 60_000).toInt())) })
+                    })
             }
             "restarting" -> UpdateCard(phase, true, RunnerCopy.updateRestartingTitle(version), RunnerCopy.UPDATE_TAG_RESTARTING, RunnerCopy.UPDATE_RESTARTING_BODY)
             "postponed" -> report.str("postponedUntil")?.let { updateClock(it, zone) }?.let { until ->
