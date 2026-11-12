@@ -166,6 +166,15 @@ public enum SessionWaitingKind: String, Codable, Sendable {
     /// A project that looks finished and that its coordinator did not ask about within the
     /// project's escalation window: the row says "Record as done…".
     case recordAsDone = "RECORD_AS_DONE"
+    /// Everything counted is one or more open `request_owner_action` requests this session asked,
+    /// all of ONE kind (`ownerRequests`): the row says that kind's word — "Decision for you",
+    /// "Key needed", "Steps for you" or "Confirm for you". Two kinds on one row are a mix and keep
+    /// "Waiting for approval" (the shared copy's `ownerRequestRowWord`).
+    case ownerRequest = "OWNER_REQUEST"
+    /// Everything counted is PENDING task moves waiting on this session — the ones it asked for and
+    /// the ones into a project it coordinates (`taskMoves`): the row says "Approve task move" or
+    /// "Approve N task moves", and the card in the conversation approves them all at once.
+    case moveRequest = "MOVE_REQUEST"
     /// Forward-compatibility floor: no named kind, which is also what an older control plane sends.
     case unknown = "UNKNOWN"
 
@@ -198,6 +207,38 @@ public enum OwnerItemKind: String, Codable, Sendable {
     public init(from decoder: Decoder) throws {
         let raw = try decoder.singleValueContainer().decode(String.self)
         self = OwnerItemKind(rawValue: raw) ?? .unknown
+    }
+}
+
+/// What one `request_owner_action` request asks the owner for — the four kinds the owner request
+/// card and the session row both name (`@orbit/shared`'s `SessionOwnerRequestKind`).
+///
+/// A kind this client does not know decodes as ``unknown`` and is not named anywhere: a control
+/// plane that learns a fifth kind must not make a session row fail to decode.
+public enum SessionOwnerRequestKind: String, Codable, Sendable {
+    case decision = "DECISION"
+    case secret = "SECRET"
+    case manualStep = "MANUAL_STEP"
+    case confirm = "CONFIRM"
+    /// Forward-compatibility floor.
+    case unknown = "UNKNOWN"
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = SessionOwnerRequestKind(rawValue: raw) ?? .unknown
+    }
+
+    /// The session row's word for a request of this kind — `@orbit/shared`'s
+    /// `OWNER_REQUEST_ROW_WORDS`, word for word. Nil for a kind this build cannot name, and the row
+    /// then keeps its long-standing "Waiting for approval".
+    public var rowWord: String? {
+        switch self {
+        case .decision:   return "Decision for you"
+        case .secret:     return "Key needed"
+        case .manualStep: return "Steps for you"
+        case .confirm:    return "Confirm for you"
+        case .unknown:    return nil
+        }
     }
 }
 

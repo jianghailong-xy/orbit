@@ -504,8 +504,8 @@ final class AppModel {
     private(set) var sharedPools: SharedPoolsModel?
     /// The account's watches: Following, the console's Watching card, and every session's row and header.
     private(set) var watches: WatchesModel?
-    /// What sessions asked the owner to do: the "Waiting on you" inbox, each conversation's request
-    /// cards and the push actions that open them.
+    /// What sessions asked the owner to do: each conversation's request cards and the push actions
+    /// that open them.
     private(set) var ownerRequests: OwnerRequestsModel?
     /// The account's projects: the Projects section and the drawer's project rows.
     private(set) var projects: ProjectsModel?
@@ -600,16 +600,6 @@ final class AppModel {
             guard let names = self?.agents?.runnerNames else { return "this runner" }
             return names[id] ?? names.first { PublicID.storageKey($0.key) == PublicID.storageKey(id) }?.value
                 ?? "this runner"
-        }
-        // A coordinator's question in the inbox opens its card where it was asked: the project's
-        // coordinator conversation, landed on that card (the needs-you banner's entry).
-        ownerRequestsModel.onAnswerQuestion = { [weak self, weak ownerRequestsModel] question in
-            guard let self, let session = question.coordinatorSessionID else { return }
-            ownerRequestsModel?.inboxPresented = false
-            self.openProjectCoordinator(
-                sessionID: session, agentID: question.coordinatorWorkspaceID,
-                focus: SessionOwnerItem(itemId: question.row.itemId, kind: .coordinatorQuestion,
-                                        title: question.row.title, since: question.row.waitingSince))
         }
         ownerRequests = ownerRequestsModel
         projects = ProjectsModel(baseURL: url, tokenStore: tokenStore)
@@ -1151,10 +1141,30 @@ final class AppModel {
         await ownerRequests.load()
     }
 
-    /// `orbit://owner-request/<id>`, a push's "Provide key": the inbox, that card open on its input.
+    /// `orbit://owner-request/<id>`, a push's "Provide key"/"Answer", a reminder's tap: the
+    /// conversation that asked, landed on that request's row. The doors carry only the request's
+    /// id, so a request the account's lists do not hold yet is read first.
     func openOwnerRequest(_ id: String) {
         settingsPresented = false
-        ownerRequests?.show(id)
+        guard let ownerRequests else { return }
+        if let request = ownerRequests.request(id) {
+            open(ownerRequest: request)
+            return
+        }
+        Task { @MainActor [weak self, weak ownerRequests] in
+            guard let self, let request = await ownerRequests?.read(id) else { return }
+            self.open(ownerRequest: request)
+        }
+    }
+
+    /// The one navigation every owner-request door takes: the conversation that asked
+    /// (`askedBySessionId`), told first which request's row to land on so the read that mounts it
+    /// spends the press.
+    private func open(ownerRequest: OwnerRequest) {
+        let sessionID = PublicID.toPublic(ownerRequest.askedBySessionId)
+        consoleRegistry?.model(for: sessionID, agentID: agentID(for: sessionID))
+            .focus(ownerRequestID: ownerRequest.id)
+        route(to: .session(sessionID))
     }
 
     /// The runners a page just read (`RunnersModel.onRead`) are the tick's runner snapshot too, so the

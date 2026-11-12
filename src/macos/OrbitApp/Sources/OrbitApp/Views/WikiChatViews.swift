@@ -12,14 +12,7 @@ import OrbitKit
 
 // MARK: - the transcript, here
 
-extension TranscriptView {
-    /// The session page's transcript in a wiki chat's panel (design §9): the same rows, cards and approvals, with the
-    /// sticky question kept out of a navigation bar the panel does not have.
-    init(wikiChat console: ConsoleModel) {
-        self.console = console
-        self.hidesStickyQuestion = true
-    }
-}
+// TranscriptView's wiki-chat init lives in ConsoleView.swift, beside the private state it relies on.
 
 private struct WikiChatPanelKey: EnvironmentKey {
     static let defaultValue = false

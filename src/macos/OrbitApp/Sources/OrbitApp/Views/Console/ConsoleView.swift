@@ -976,6 +976,19 @@ struct TranscriptView: View {
                 holdScroll(to: request.rowID, anchor: .center, opensReview: true)
             }
         }
+        // An owner request a link, a push's action or the Later reminder named: its card's row. The
+        // press can arrive before this transcript first appears, and the card is drawn from the
+        // account's request read a moment later, so the request is only spent once its row exists —
+        // `initial: true` follows one held by a console the press created.
+        .onChange(of: console.ownerRequestRequest, initial: true) { _, request in
+            guard let request, rows.contains(where: { $0.id == request.rowID }) else { return }
+            atBottom = false
+            console.ownerRequestRequestFollowed()
+            #if os(iOS)
+            transcriptScroll.halt()
+            #endif
+            DispatchQueue.main.async { holdScroll(to: request.rowID, anchor: .center) }
+        }
         // A link to one record (`SessionRecordLink`): scroll to its row. The reader is taken off
         // the live tail first, said outright as the sticky header's jump says it — a programmatic
         // jump is no drag the scroll tracker could read, and the next publish would pull them back.
@@ -1319,7 +1332,7 @@ struct TranscriptView: View {
         case .promotionApproval(let promotionID):
             openPromotionReview(promotionID)
         case .criteriaDecision, .acceptanceConfirmation, .startProject, .criteriaChange,
-             .ownerConfirmation, .coordinatorQuestion:
+             .ownerConfirmation, .coordinatorQuestion, .crossingBatch:
             openApprovalReview(.delivered(card))
         default:
             break
@@ -2100,4 +2113,15 @@ struct DiagnosticNoticeRow: View {
 private struct RecapVisit: Equatable {
     let sessionID: String
     let rests: Bool
+}
+
+// The wiki chat's initializer lives beside `TranscriptView`'s private state rather than in
+// `WikiChatViews.swift`: a custom init in another file leaves the private `@State` default-value
+// expressions unresolved at link time under Xcode 27.0's Swift 6.4 IRGen (the symbol is emitted
+// file-private but referenced from the other file).
+extension TranscriptView {
+    init(wikiChat console: ConsoleModel) {
+        self.console = console
+        self.hidesStickyQuestion = true
+    }
 }

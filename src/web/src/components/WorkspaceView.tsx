@@ -1,4 +1,4 @@
-import { type MergeRecoveryAction, type ProjectSidebarTaskCounts } from '@orbit/shared';
+import { ownerRequestRowWord, type MergeRecoveryAction, type ProjectSidebarTaskCounts } from '@orbit/shared';
 import {
   AppstoreOutlined,
   ArrowDownOutlined,
@@ -341,6 +341,7 @@ import {
 } from './CriteriaDecisionCard';
 import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows } from './CoordinatorQuestionCard';
 import { useSessionOwnerRequestInserts } from './OwnerRequestCard';
+import { taskMoveSignal, useCrossingDecisionCards } from './CrossingDecisionCard';
 import { AnsweredQuestionsCtx } from './OwnerAnswerLine';
 import { answeredItemKey, answersHandedOver } from '../lib/ownerAnswer';
 import {
@@ -1169,7 +1170,9 @@ const waitingLabel = (s: any): string => {
   if (s.waitingKind === 'START_REQUEST') return READY_TO_START;
   if (s.waitingKind === 'DONE_REQUEST') return PROJECT_DONE_COPY.readyToClose;
   if (s.waitingKind === 'RECORD_AS_DONE') return PROJECT_DONE_COPY.recordAsDoneRow;
-  return 'Waiting for approval';
+  // What a session asked of you (`request_owner_action`), all of one kind, in that kind's word, and
+  // task moves waiting on you: "Approve task move" / "Approve N task moves".
+  return ownerRequestRowWord(s) ?? 'Waiting for approval';
 };
 
 // `watching` is this session as an observer — what its row says about the live watches that will
@@ -4885,11 +4888,21 @@ export function WorkspaceView({
   // What this session has asked the owner to do, where it asked.
   const ownerRequestCards = useSessionOwnerRequestInserts(selectedTrashed ? null : selectedId, transcriptEvents);
 
+  // Cross-project requests into the project this conversation coordinates, one decision card per
+  // batch, drawn where the batch was first asked (board docs/mocks/handoff-in-chat). The batches
+  // still waiting are counted by the pinned strip beside the criteria proposals.
+  const crossingCards = useCrossingDecisionCards(
+    selectedTrashed ? null : selectedId,
+    selectedTrashed ? null : coordinatedProjectId,
+    transcriptEvents,
+    taskMoveSignal(selectedSession as { taskMoves?: Array<{ handoffIds?: string[] }> } | null),
+  );
+
   // One array for the transcript, memoized: a fresh array on every render would rebuild the whole
   // conversation with it (`Transcript` memoizes on this prop).
   const transcriptInserts = useMemo(
-    () => [...decisionReceipts, ...questionRecords, ...ownerRequestCards, ...blockedPromotionCard, ...exceptionCards],
-    [decisionReceipts, questionRecords, ownerRequestCards, blockedPromotionCard, exceptionCards],
+    () => [...decisionReceipts, ...questionRecords, ...ownerRequestCards, ...crossingCards.inserts, ...blockedPromotionCard, ...exceptionCards],
+    [decisionReceipts, questionRecords, ownerRequestCards, crossingCards.inserts, blockedPromotionCard, exceptionCards],
   );
 
   // Follow `/sessions/<id>?item=<itemId>` only after the open-item insert has been rendered. The
@@ -9621,6 +9634,7 @@ export function WorkspaceView({
             // answered: the card the server delivered into this conversation. A second set of
             // buttons up here would be two faces racing for one answer.
             onOpenCriteria={(row) => revealCriteriaCard(row.intentId)}
+            crossings={crossingCards.pointers}
           />
         )}
 

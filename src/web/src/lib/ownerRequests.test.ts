@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { expiryText, resolutionTurnLabel, snoozeChoices, waitingCount } from './ownerRequests';
-import type { SidebarProject } from './projectAttention';
+import { expiryText, resolutionTurnLabel, snoozeChoices } from './ownerRequests';
 
 const NOW = Date.parse('2026-11-09T12:00:00.000Z');
 const HOUR = 3_600_000;
@@ -27,25 +26,6 @@ describe('resolutionTurnLabel', () => {
   it('leaves what a person typed alone', () => {
     expect(resolutionTurnLabel('Orbit owner request 34uabc (SECRET) ended DONE: looks wrong to me')).toBeNull();
     expect(resolutionTurnLabel('hello')).toBeNull();
-  });
-});
-
-describe('waitingCount', () => {
-  const asking = (count: number) => ({
-    attention: { ownerItems: [
-      { kind: 'COORDINATOR_QUESTION', count, oldestWaitingSince: '' },
-      { kind: 'ESCALATED', count: 9, oldestWaitingSince: '' },
-    ] },
-  }) as unknown as SidebarProject;
-
-  it('adds both tables, not a project’s other items, and leaves out what is put off', () => {
-    const requests = [{ id: 'a' }, { id: 'b' }];
-    expect(waitingCount(requests, [asking(2)], {}, NOW)).toBe(4);
-    expect(waitingCount(requests, [asking(2)], { a: NOW + HOUR }, NOW)).toBe(3);
-  });
-
-  it('counts a reminder that has fallen due', () => {
-    expect(waitingCount([{ id: 'a' }], [], { a: NOW - 1 }, NOW)).toBe(1);
   });
 });
 

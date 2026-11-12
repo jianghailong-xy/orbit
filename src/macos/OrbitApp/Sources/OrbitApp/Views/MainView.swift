@@ -178,8 +178,6 @@ struct SectionSidebar: View {
                         .tag(SidebarSelection.section(section))
                 }
             }
-            // "Waiting on you", raised as a sheet over whatever is selected.
-            OwnerRequestInboxEntry()
         }
         .navigationTitle("Orbit")
         .safeAreaInset(edge: .bottom, spacing: 0) {

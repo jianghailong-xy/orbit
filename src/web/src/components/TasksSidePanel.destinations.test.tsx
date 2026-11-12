@@ -231,7 +231,7 @@ describe('Machines & models, which has no sidebar row (docs/mocks/machines-and-m
     serve();
     await visit('/tasks');
     const labels = [...container!.querySelectorAll('.tp-section .tp-label')].map((label) => label.textContent);
-    expect(labels).toEqual(['Projects', 'Tasks', 'Waiting on you', 'Wiki']);
+    expect(labels).toEqual(['Projects', 'Tasks', 'Wiki']);
   });
 
   it('is a row of the account menu, above Settings, that opens its page', async () => {
