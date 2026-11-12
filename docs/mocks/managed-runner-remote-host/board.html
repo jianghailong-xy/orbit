@@ -154,17 +154,17 @@
     </div>
   </div>
   <div class="b-arrow"><b>加一台</b>：在那台机器上跑 install → 把它的条目加进 docker.hosts → 重建 apiserver。<b>撤一台</b>：标 draining → 把上面的 runner 迁走或停用 → 删条目。</div>
-  <h2 style="margin-top:22px">待定 · 要你拍板</h2>
+  <h2 style="margin-top:22px">D5–D7 · 已定：全按推荐（A）</h2>
   <table>
     <tr><th style="width:13%"></th><th style="width:44%">方案 A</th><th>方案 B</th></tr>
     <tr><td><b>D5 新 runner 放哪台</b></td>
-      <td class="rec">自动：创建时选池里空余最多的主机（跳过 draining），之后固定在那台。<span class="b-tag">推荐</span></td>
+      <td class="rec">自动：创建时选池里空余最多的主机（跳过 draining），之后固定在那台。<span class="b-tag">已选</span></td>
       <td>管理员在 Admin → Users 里给每个账号手动指定主机。</td></tr>
     <tr><td><b>D6 runner 在主机间迁移</b></td>
-      <td class="rec">不自动。管理员迁一个睡着的 runner：A 上备份卷 → B 上恢复 → 切换记录（现有 volume-switch 已能做最后一步）。有第二台机器时再做成一条管理命令。<span class="b-tag">推荐</span></td>
+      <td class="rec">不自动。管理员迁一个睡着的 runner：A 上备份卷 → B 上恢复 → 切换记录（现有 volume-switch 已能做最后一步）。有第二台机器时再做成一条管理命令。<span class="b-tag">已选</span></td>
       <td>不用 Docker 后端，改用 Kubernetes（多台机器组 k3s + Ceph RBD）：集群自己跨节点挪 runner，但要在家里机器上维护集群和 Ceph。</td></tr>
     <tr><td><b>D7 先后顺序</b></td>
-      <td class="rec">现在就把 profile 做成列表、每台一个 manager；先只用 10.66.0.3 上线；放置和 draining 在同一个项目里紧接着做，实验室里用两台通道主机验证。<span class="b-tag">推荐</span></td>
+      <td class="rec">现在就把 profile 做成列表、每台一个 manager；先只用 10.66.0.3 上线；放置和 draining 在同一个项目里紧接着做，实验室里用两台通道主机验证。<span class="b-tag">已选</span></td>
       <td>多主机全部做完再上线。</td></tr>
   </table>
   <h2 style="margin-top:22px">落地（更新后）</h2>
