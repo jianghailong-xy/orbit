@@ -104,7 +104,7 @@ export function CreatedWorkspaceLine({
           <button
             className="msc-change"
             type="button"
-            onClick={() => navigate(`/runners/${encodeId(runnerId)}?workspace=${encodeId(workspace.id)}`)}
+            onClick={() => navigate(`/settings/workspaces/${encodeId(workspace.id)}`)}
           >
             {CREATED_SETTINGS}
           </button>

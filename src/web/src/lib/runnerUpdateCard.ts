@@ -10,13 +10,25 @@ import {
   RUNNER_UPDATE_TAG_RESTARTING,
   RUNNER_UPDATE_TURN,
   RUNNER_UPDATE_TURNS,
+  runnerUpdateAvailableBodyQuiet,
+  RUNNER_UNIT_MINUTE,
+  RUNNER_UNIT_MINUTES,
   RUNNER_UPDATE_UNTITLED_TURN,
   runnerUpdateAvailableTitle,
   runnerUpdateDrainingBody,
   runnerUpdateDrainingTitle,
   runnerUpdatePostponedBody,
   runnerUpdatePostponedTitle,
+  RUNNER_UPDATE_RESTARTING_BODY_ONE,
+  RUNNER_UPDATE_RESUMED_ONE,
+  runnerUpdateRestartingBodyMany,
   runnerUpdateRestartingTitle,
+  runnerUpdateResumedMany,
+  runnerUpdateTookMinutes,
+  runnerUpdateTookMinutesSeconds,
+  runnerUpdateTookSeconds,
+  runnerUpdateUpdatedTook,
+  runnerUpdateUpdatedTitle,
   runnerUpdateTurnRunning,
   runnerUpdateWaitedHours,
   runnerUpdateWaitedHoursMinutes,
@@ -27,7 +39,8 @@ import {
 
 /** The runner page's Update card (docs/runner-update-drain-design.md §3.5, board 4). */
 export interface RunnerUpdateCard {
-  phase: RunnerSelfUpdatePhase;
+  /** The runner's phase, or `updated`: no release waiting, and one installed within the last day. */
+  phase: RunnerSelfUpdatePhase | 'updated';
   /** `warn` for the phases that hold work back or restart it; `quiet` for the others. */
   tone: 'warn' | 'quiet';
   title: string;
@@ -60,6 +73,16 @@ export function runnerUpdateClock(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
+/** A runner's quiet window (selfUpdate.quietWindowSeconds) in whole minutes, at least one. */
+export function runnerQuietMinutes(quietWindowSeconds: number): number {
+  return Math.max(1, Math.round(quietWindowSeconds / 60));
+}
+
+function availableBodyQuiet(quietWindowSeconds: number): string {
+  const minutes = runnerQuietMinutes(quietWindowSeconds);
+  return runnerUpdateAvailableBodyQuiet(minutes, minutes === 1 ? RUNNER_UNIT_MINUTE : RUNNER_UNIT_MINUTES);
+}
+
 /**
  * The card a runner's report calls for, or null: no phase (nothing waiting, or a runner too old to
  * say, which keeps About's wording) or no version to name.
@@ -71,7 +94,8 @@ export function runnerUpdateCard(
 ): RunnerUpdateCard | null {
   const phase = report?.phase;
   const version = report?.targetVersion;
-  if (!phase || !version) return null;
+  if (!phase) return report ? updatedCard(report, nowMs) : null;
+  if (!version) return null;
   switch (phase) {
     case 'available':
       return {
@@ -79,7 +103,8 @@ export function runnerUpdateCard(
         tone: 'quiet',
         title: runnerUpdateAvailableTitle(version),
         tag: RUNNER_UPDATE_TAG_AVAILABLE,
-        body: RUNNER_UPDATE_AVAILABLE_BODY,
+        // A runner that reports its quiet window waits for it; one that doesn't keeps the old wording.
+        body: report.quietWindowSeconds ? availableBodyQuiet(report.quietWindowSeconds) : RUNNER_UPDATE_AVAILABLE_BODY,
       };
     case 'draining': {
       const left = report.turnsInFlight ?? 0;
@@ -111,7 +136,10 @@ export function runnerUpdateCard(
         tone: 'warn',
         title: runnerUpdateRestartingTitle(version),
         tag: RUNNER_UPDATE_TAG_RESTARTING,
-        body: RUNNER_UPDATE_RESTARTING_BODY,
+        // After the owner's Update Now, the turns it interrupted continue once it is back.
+        body: !report.interruptedTurns
+          ? RUNNER_UPDATE_RESTARTING_BODY
+          : report.interruptedTurns === 1 ? RUNNER_UPDATE_RESTARTING_BODY_ONE : runnerUpdateRestartingBodyMany(report.interruptedTurns),
       };
     case 'postponed': {
       if (!report.postponedUntil) return null;
@@ -125,4 +153,44 @@ export function runnerUpdateCard(
       };
     }
   }
+}
+
+/** How long the Updated card stays: a day, then About's Last Update says it (board 4). */
+export const RUNNER_UPDATE_UPDATED_HOURS = 24;
+
+/** How long the restart took: `34 s`, `1 min 12 s`, `2 min`. */
+export function runnerUpdateTook(seconds: number): string {
+  if (seconds < 60) return runnerUpdateTookSeconds(seconds);
+  const rest = seconds % 60;
+  return rest ? runnerUpdateTookMinutesSeconds(Math.floor(seconds / 60), rest) : runnerUpdateTookMinutes(Math.floor(seconds / 60));
+}
+
+/** `Took 34 s. 2 interrupted turns resumed.`; either half alone when the runner measured only that. */
+export function runnerUpdateUpdatedBody(took: string | null, interruptedTurns: number): string {
+  const parts: string[] = [];
+  if (took) parts.push(runnerUpdateUpdatedTook(took));
+  if (interruptedTurns === 1) parts.push(RUNNER_UPDATE_RESUMED_ONE);
+  else if (interruptedTurns > 1) parts.push(runnerUpdateResumedMany(interruptedTurns));
+  return parts.join(' ');
+}
+
+/**
+ * The Updated card (board 4): the last update, for a day after it was installed — how long the
+ * restart took and how many turns an Update Now interrupted for it, as far as the runner measured
+ * them. After that About's Last Update says it. Null with no update recorded, or an older one.
+ */
+function updatedCard(report: RunnerSelfUpdate, nowMs: number): RunnerUpdateCard | null {
+  const at = report.lastUpdatedAt ? Date.parse(report.lastUpdatedAt) : NaN;
+  if (!report.lastUpdatedTo || Number.isNaN(at)) return null;
+  if (nowMs - at > RUNNER_UPDATE_UPDATED_HOURS * 3_600_000 || at - nowMs > 60_000) return null;
+  return {
+    phase: 'updated',
+    tone: 'quiet',
+    title: runnerUpdateUpdatedTitle(report.lastUpdatedTo),
+    tag: runnerUpdateClock(report.lastUpdatedAt!),
+    body: runnerUpdateUpdatedBody(
+      report.lastUpdateSeconds ? runnerUpdateTook(report.lastUpdateSeconds) : null,
+      report.lastUpdateInterruptedTurns ?? 0,
+    ),
+  };
 }

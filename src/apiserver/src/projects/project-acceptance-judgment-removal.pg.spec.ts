@@ -190,10 +190,16 @@ test('the criterion definition table keeps its trigger and every column of its s
       // `evaluation_plan_hash`, the lane those four fed. Still the whole table in ordinal order,
       // still exact: the point of this census is that nobody adds or removes a column without
       // saying so here.
+      //
+      // Migration 0545 added `satisfied_by` (TASKS or CONFIRMATION, owner decision 2026-11-11):
+      // how the criterion is met, authored with its text and folded into its revision and hashes.
+      // It is part of what the criterion says, not a conclusion about it: the confirmations
+      // themselves live in their own table, `project_criterion_confirmation`, not on this row.
       assert.deepEqual(columns.map((c) => c.column_name), [
         'id', 'project_id', 'ordinal', 'text', 'revision', 'content_hash',
         'created_at', 'updated_at', 'verification_method',
         'completion_criterion_override_reason', 'semantic_revision', 'semantic_hash',
+        'satisfied_by',
       ]);
     } finally {
       await db.$disconnect();

@@ -377,6 +377,7 @@ model User {
   feishuMessages   FeishuMessage[]
   /// The Feishu message chains of its sessions (migration 0499).
   feishuThreads    FeishuThread[]
+  sessionGuestPlaces SessionGuest[] // the sessions this user was invited into as a guest (0560)
   /// Its sessions' replies on their way back to Feishu (migration 0501).
   feishuOutbox     FeishuOutbox[]
 
@@ -785,6 +786,15 @@ model Runner {
   // Now"), cleared as the next heartbeat hands the request over. No reply: the state above is
   // the answer, on the heartbeats that follow — the shape of modelCatalogRefreshAt.
   selfUpdateRequestedAt DateTime? @map("self_update_requested_at")
+  // The owner's Later (0571): the time the waiting release is put off until, handed to the next
+  // heartbeat as postponeSelfUpdateUntil and cleared there, like selfUpdateRequestedAt.
+  selfUpdatePostponeUntil DateTime? @map("self_update_postpone_until")
+  // The owner's Update Now (0590): install the waiting release now, interrupting the turns in
+  // flight. Handed to the next heartbeat as selfUpdateNow and cleared there, like the two above.
+  selfUpdateNowRequestedAt DateTime? @map("self_update_now_requested_at")
+  // The push that something of the owner's waits on this runner's drain (0595): set by the one
+  // heartbeat that sends it, cleared by a beat that is not draining, so each drain pushes once.
+  drainWaitingPushedAt DateTime? @map("drain_waiting_pushed_at")
   // Where this machine puts checkouts Orbit clones for it, reported each heartbeat. A clone of
   // `<owner>/<repo>` lands at `<reposRoot>/<owner>-<repo>`.
   // NULL means this runner has never reported one — a build too old to send it. That withdraws
@@ -2285,6 +2295,7 @@ model Session {
   observingWatches      Watch[]
   /// Public links with this session as their root, ended ones included (migration 0306).
   shareLinks            ShareLink[]
+  guests                SessionGuest[] // the people the owner invited to reply (0560)
 
   @@index([assignedRunnerId, status])
   // "what did this workspace last run on", the derived seed a new session inherits when the
@@ -3149,6 +3160,18 @@ model Project {
   /// The gaps the owner accepted when recording it done, as the card sent them (`AcceptedGap[]`).
   acceptedGaps       Json      @default("[]") @map("accepted_gaps")
 
+  /// Non-code by an explicit mark, never inferred (migration 0535, owner decision 2026-11-11): the
+  /// coordinator sets it through project_update, the owner on the project page. A marked project
+  /// reads no landing (`project-done-derived.ts`, `project-done-request.ts`). The three columns
+  /// after it say who wrote it last, set or cleared — OWNER, or COORDINATOR with the conversation
+  /// it was written from — and when; null while nobody has.
+  nonCode                Boolean   @default(false) @map("non_code")
+  nonCodeSetBy           String?   @map("non_code_set_by")
+  nonCodeSetBySessionId  String?   @map("non_code_set_by_session_id") @db.Uuid
+  nonCodeSetAt           DateTime? @map("non_code_set_at") @db.Timestamptz(3)
+  /// The short reason given with the mark's last write (migration 0555); null when none was.
+  nonCodeReason          String?   @map("non_code_reason")
+
   /// The account owner's Reopen project (migration 0469): when they pressed it, and what it was
   /// pressed over, the seal of the criteria and each task serving one by a digest of its facts
   /// (`project-done-derived.ts`). While those have not moved, the projection does not store DONE over
@@ -3298,6 +3321,7 @@ model Project {
   acceptanceCriterionDefinitions ProjectAcceptanceCriterionDefinition[]
   standardSetConfirmations       ProjectStandardSetConfirmation[]
   criteriaAuthorship             ProjectCriteriaAuthorship[]
+  criterionConfirmations         ProjectCriterionConfirmation[]
   mergeEvidence   ProjectMergeEvidence[]
   mergeReceipts   SessionMergeReceipt[]
 
@@ -4183,9 +4207,84 @@ model ProjectAcceptanceCriterionDefinition {
   /// settles it — `Task.criterionDefinitionId` is a declaration, not a completion input.
   servingTasks Task[]
 
+  /// How this criterion is met (migration 0545): `TASKS` by the work filed under it (the rule
+  /// `project-criterion-satisfaction.ts` has always applied), `CONFIRMATION` by a standing
+  /// confirmation of its current revision from the owner, the coordinator or an Agent check. A
+  /// change of mode is a change of meaning: the definition trigger bumps `revision` and
+  /// `semanticRevision` and folds the mode into both hashes for a CONFIRMATION row.
+  satisfiedBy   CriterionSatisfiedBy           @default(TASKS) @map("satisfied_by")
+  confirmations ProjectCriterionConfirmation[]
+
   @@unique([projectId, ordinal], map: "project_acceptance_definition_ordinal_idx")
   @@index([projectId, contentHash], map: "project_acceptance_definition_content_idx")
   @@map("project_acceptance_criterion_definition")
+}
+
+/// How a project criterion is met (migration 0545).
+enum CriterionSatisfiedBy {
+  TASKS
+  CONFIRMATION
+
+  @@map("criterion_satisfied_by")
+}
+
+/// Who said a CONFIRMATION criterion holds.
+enum CriterionConfirmerKind {
+  OWNER
+  COORDINATOR
+  AGENT_CHECK
+
+  @@map("criterion_confirmer_kind")
+}
+
+/// Where one confirmation row stands. An owner's or a coordinator's row is CONFIRMED when it is
+/// written; an Agent check's row is PENDING while its check task runs, and the check's report
+/// settles it CONFIRMED (PASS) or FAILED (FAIL).
+enum CriterionConfirmationOutcome {
+  PENDING
+  CONFIRMED
+  FAILED
+
+  @@map("criterion_confirmation_outcome")
+}
+
+/// One confirmation of one revision of a CONFIRMATION criterion, or one Agent-check attempt at it
+/// (migration 0545). A criterion in CONFIRMATION mode is met exactly while a row of this criterion
+/// is CONFIRMED, names the criterion's CURRENT revision and is not withdrawn: a revision bump makes
+/// every row before it stale without touching it, and a withdrawal is a stamp, never a delete, so
+/// who confirmed and who took it back both stay on record.
+model ProjectCriterionConfirmation {
+  id           String                                @id @default(uuid(7)) @db.Uuid
+  ownerId      String                                @map("owner_id") @db.Uuid
+  projectId    String                                @map("project_id") @db.Uuid
+  project      Project                               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  definitionId String                                @map("definition_id") @db.Uuid
+  definition   ProjectAcceptanceCriterionDefinition  @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  /// The criterion revision this row is about.
+  revision     Int
+  confirmerKind CriterionConfirmerKind               @map("confirmer_kind")
+  outcome      CriterionConfirmationOutcome
+  /// The coordinator conversation that confirmed, or the Agent check's run. Null for the owner.
+  sessionId    String?                               @map("session_id") @db.Uuid
+  /// The Agent check's task, through which its run was dispatched. Null for the other two kinds.
+  checkTaskId  String?                               @map("check_task_id") @db.Uuid
+  /// What was checked: optional for every kind.
+  note         String?
+  attachmentIds String[]                             @default([]) @map("attachment_ids") @db.Uuid
+  /// The criterion's wording and verification method at `revision`, kept with the row (migration
+  /// 0555) so a stale confirmation can show what was confirmed. Null on an older row whose revision
+  /// had already moved when 0555 ran.
+  criterionText               String? @map("criterion_text")
+  criterionVerificationMethod String? @map("criterion_verification_method")
+  createdAt    DateTime                              @default(now()) @map("created_at")
+  /// When an Agent check reported its verdict. Equal to `createdAt` for the other two kinds.
+  settledAt    DateTime?                             @map("settled_at")
+  withdrawnAt  DateTime?                             @map("withdrawn_at")
+  withdrawnByKind CriterionConfirmerKind?            @map("withdrawn_by_kind")
+
+  @@index([definitionId, createdAt], map: "project_criterion_confirmation_definition_idx")
+  @@index([checkTaskId], map: "project_criterion_confirmation_check_task_idx")
+  @@map("project_criterion_confirmation")
 }
 
 /// The account owner saying, of ONE version of a project's stated criteria, that the complete set
@@ -9187,4 +9286,31 @@ model ProjectPromotionRequest {
 
   @@index([projectId, createdAt])
   @@map("project_promotion_request")
+}
+
+/// Someone the owner of a session invited to reply in it (docs/session-guests-design.md §7, migration 0560). A live row
+/// (`removedAt` null) lets `userId` read the session through /guest-sessions and send turns into it, recorded as the
+/// owner's turns with external sender ORBIT_GUEST. Removing or leaving stamps `removedAt` and `removedReason`
+/// (REMOVED | LEFT); inviting again is a new row. Two partial indexes this schema cannot spell: unique
+/// (session_id, user_id) WHERE removed_at IS NULL, and (user_id) WHERE removed_at IS NULL.
+model SessionGuest {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  sessionId     String    @map("session_id") @db.Uuid
+  session       Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade, map: "session_guest_session_id_fkey")
+  /// The session's owner when the guest was added. No foreign key: the session's cascade takes the row.
+  ownerId       String    @map("owner_id") @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade, map: "session_guest_user_id_fkey")
+  addedAt       DateTime  @default(now()) @map("added_at") @db.Timestamptz(3)
+  /// The first time the guest opened the session; null until they do.
+  openedAt      DateTime? @map("opened_at") @db.Timestamptz(3)
+  removedAt     DateTime? @map("removed_at") @db.Timestamptz(3)
+  /// REMOVED (the owner took them out) | LEFT (they left); set exactly when removedAt is.
+  removedReason String?   @map("removed_reason")
+  /// The UTC day turnsOnDay counts (0572); null until the guest's first message.
+  turnDay       DateTime? @map("turn_day") @db.Date
+  /// Messages the guest sent on turnDay: the daily cap's count, taken by one conditional UPDATE.
+  turnsOnDay    Int       @default(0) @map("turns_on_day")
+
+  @@map("session_guest")
 }

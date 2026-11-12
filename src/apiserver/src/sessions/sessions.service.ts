@@ -129,6 +129,11 @@ import {
 import { agentProviderSeed, lastProviderByWorkspace } from '../workspaces/workspace-provider';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  reprojectAfterSettledChecks,
+  settleChecksOfEndedRun,
+  type SettledCriterionCheck,
+} from '../projects/criterion-check-ended';
+import {
   TaskWorkFacts,
   isExecutionClaimConflict,
   isLockNotAvailable,
@@ -155,6 +160,7 @@ import { cursorDefaultPermissionMode } from '../common/permission-semantics';
 import { PatRefusal, refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { orchestrationEnabled } from '../common/orchestration-switch';
+import { isStopping } from '../common/graceful-stop';
 import { normalizePermissionRules } from '../common/permission-rules';
 import { reachesPastOneMcpTool } from './remember-rules';
 import {
@@ -3813,6 +3819,7 @@ export class SessionsService {
       pinnedAt: Date | null;
       folderId: string | null;
       shared: boolean;
+      hasGuests: boolean;
       tags: { id: string; name: string; color: string; isSystem: boolean; position: number }[];
       runningBgCount: number;
       runningBgShells: string[];
@@ -3931,6 +3938,12 @@ export class SessionsService {
              AND sl.revoked_at IS NULL
              AND (sl.expires_at IS NULL OR sl.expires_at > now())
         )) AS "shared",
+        -- Whether anyone the owner invited can reply here now (session_guest, 0560): the list's
+        -- two-person icon beside the globe (docs/session-guests-design.md §3).
+        EXISTS (
+          SELECT 1 FROM session_guest sg
+           WHERE sg.session_id = s.id AND sg.removed_at IS NULL
+        ) AS "hasGuests",
         COALESCE((
           SELECT json_agg(json_build_object(
                    'id', st.id, 'name', st.name, 'color', st.color,
@@ -4161,6 +4174,7 @@ export class SessionsService {
         pinnedAt: r.pinnedAt,
         folderId: r.folderId,
         shared: r.shared === true,
+        hasGuests: r.hasGuests === true,
         tags: r.tags,
         runningBgCount: r.runningBgCount,
         runningBgJobCount: freshRunningBgJobs(r.runningBgJobs, r.runningBgJobActivity).length,
@@ -7376,6 +7390,13 @@ export class SessionsService {
     return { ok: true };
   }
 
+  /** Tell the runner and the session's readers that its queue changed: what a withdrawal outside cancelQueuedTurn
+   *  (a session guest's turns going with their invitation, session-guests.service.ts) announces after its commit. */
+  announceQueuedTurnsChanged(id: string) {
+    this.realtime.notifyInbox(id);
+    this.realtime.publishQueuedTurnsChanged(id);
+  }
+
   /**
    * Wait for the runner to say what came of a `withdraw` turn, and answer the person with it. The
    * steer is gone only when the engine said it dropped it; everything else is a refusal naming why.
@@ -7996,7 +8017,8 @@ export class SessionsService {
         };
       }
       const remaining = deadline - Date.now();
-      if (remaining <= 0) {
+      // A stopping apiserver stops waiting (common/graceful-stop.ts): the merge is the runner's, and goes on.
+      if (remaining <= 0 || isStopping()) {
         return {
           outcome: 'TIMED_OUT' as const,
           operationId,
@@ -8004,7 +8026,9 @@ export class SessionsService {
           receipt: null,
           receiptAbsentReason: 'MERGE_STILL_RUNNING' as const,
           nextStep:
-            `no outcome after ${waitSeconds}s, and none is claimed here: the merge is still queued ` +
+            (remaining > 0
+              ? 'no outcome yet: this server is restarting, so it stopped waiting early. None is claimed here: the merge is still queued '
+              : `no outcome after ${waitSeconds}s, and none is claimed here: the merge is still queued `) +
             `as operation ${operationId ?? '(none recorded)'}. A runner picks a merge up on its ` +
             'next heartbeat, which ticks every 30 seconds, so a shorter wait than that times out ' +
             'even for a merge that then succeeds. Read the outcome with merge_receipts on this ' +
@@ -8342,11 +8366,13 @@ export class SessionsService {
   ) {
     // Retried whole. Every terminal transition is decided from the Session row under its lock, so a
     // re-run sees whichever end actually committed rather than re-applying one that did not.
-    return withTransactionRetry(
+    const ended = await withTransactionRetry(
       this.prisma,
       (tx) => this.transitionEndLocked(tx, ownerId, sessionId, reason, lifecycle, requireNoProjectBinding),
       loggedRetry(this.logger, 'sessions.transitionEnd'),
     );
+    await reprojectAfterSettledChecks(this.prisma, ended.checksSettled, this.logger);
+    return ended;
   }
 
   /**
@@ -8369,6 +8395,8 @@ export class SessionsService {
     filingState: SessionFilingState;
     endReason: SessionEndReason | null;
     projectBound: boolean;
+    /** The Agent checks this end settled, for their projects' DONE after the commit. */
+    checksSettled?: SettledCriterionCheck[];
   }> {
     const locked = await tx.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM "session"
@@ -8472,6 +8500,12 @@ export class SessionsService {
     // its task. The requests queued here are left to the end itself: the status write below (or the
     // finalize after it) closes them RECIPIENT_ENDED, which wins over UNDELIVERED (session-request.ts).
     await settleUnrunSessionRequests(tx, sessionId, { code: 'SESSION_ENDED', closesRequests: false, retryArmed: false });
+    // An Agent check this run was, ended before its verdict (projects/criterion-check-ended.ts).
+    const checksSettled = await settleChecksOfEndedRun(
+      tx,
+      { sessionId, taskId: session.taskId },
+      `its run was ended (${reason})`,
+    );
     if (session.status === RunStatus.PENDING) {
       await tx.session.update({
         where: { id: sessionId },
@@ -8533,6 +8567,7 @@ export class SessionsService {
       filingState,
       endReason: reason,
       projectBound: false,
+      checksSettled,
     };
   }
 
@@ -9114,6 +9149,12 @@ export class SessionsService {
        */
       senderSessionId?: string;
       /**
+       * Who outside Orbit sent the turn — see `createTurn`'s own. Carried onto both branches: a
+       * guest's message to an ended session revives it (docs/session-guests-design.md §5, D5) and is
+       * no less the guest's for that.
+       */
+      externalSender?: ExternalTurnSender;
+      /**
        * What rides on the turn — see `createTurn`'s own. Carried onto both branches for the reason
        * `senderSessionId` is: a request is no less a request for having woken its recipient up.
        */
@@ -9247,6 +9288,7 @@ export class SessionsService {
         fence: opts?.fence,
         participateSendTransaction: opts?.participateSendTransaction,
         senderSessionId: opts?.senderSessionId,
+        externalSender: opts?.externalSender,
         onTurnWritten: opts?.onTurnWritten,
         requestFingerprint,
       });
@@ -9539,6 +9581,7 @@ export class SessionsService {
         clientTurnId: dto.clientTurnId,
         requestFingerprint,
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
+        ...externalSenderColumns(opts?.externalSender),
         ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
@@ -9591,7 +9634,9 @@ export class SessionsService {
           // Previewed from enqueue, as in createTurn: a revive waits for a slot like any other
           // turn, and until the runner reports it the row would show the reply from before. With
           // its sender, as there.
-          ...(dto.content ? pendingMessageColumns(dto.content, sentBy, sentByOrbit) : {}),
+          ...(dto.content
+            ? pendingMessageColumns(dto.content, sentBy, sentByOrbit, externalSenderOf(externalSenderColumns(opts?.externalSender)))
+            : {}),
           mergeStatus: null,
           mergeOperationId: null,
           mergeOperationOwner: null,

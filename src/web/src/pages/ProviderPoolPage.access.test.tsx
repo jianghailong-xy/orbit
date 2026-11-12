@@ -34,7 +34,7 @@ const LIN = id(3);
 const NAMES: Record<string, string> = { [JIANG]: 'jianghailong', [ZHANG]: 'Zhang Min', [LIN]: 'Lin Wei' };
 const POOL_ID = id(800);
 const AT = `/providers/shared-pools/${POOL_ID}`;
-const PAGE = `/providers/pools/${POOL_ID}`;
+const PAGE = `/settings/providers/pools/${POOL_ID}`;
 const IN_AN_HOUR = new Date(Date.now() + 60 * 60 * 1000).toISOString();
 const IN_THREE_DAYS = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -169,7 +169,7 @@ describe('a Codex pool shared with people before it has an API key', () => {
         <QueryClientProvider client={client}>
           <MemoryRouter initialEntries={[PAGE]}>
             <Routes>
-              <Route path="/providers/pools/:id" element={<ProviderPoolPage />} />
+              <Route path="/settings/providers/pools/:id" element={<ProviderPoolPage />} />
             </Routes>
           </MemoryRouter>
         </QueryClientProvider>,

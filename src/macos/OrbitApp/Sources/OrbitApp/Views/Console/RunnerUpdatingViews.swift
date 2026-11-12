@@ -5,13 +5,16 @@ import OrbitKit
 // docs/mocks/runner-update-drain draws it on a phone: the queued page — why, the turns it waits for
 // and how long — while the conversation is empty, and otherwise `Queued · runner updating` on the
 // foot row of the reader's last message. The words are `RunnerUpdating`'s, which are the web's
-// (`runnerSlots.ts`). Later and Update Now… come with the tasks that make them do something.
+// (`runnerSlots.ts`). Both offer Later (`RunnerUpdateLaterControl`) and, for a runner that declares
+// `self-update-now/v1`, Update Now… (`RunnerUpdateNowControl`) for the session's runner (board 5).
 
 /// What the foot-row tag needs: which bubble carries it, the session it explains and its runner.
 struct RunnerUpdatingFoot: Equatable {
     let bubbleID: String
     let session: Session
     let machine: String?
+    /// The runner Later postpones; nil until the console has read it, which draws no Later.
+    var runnerID: String? = nil
 }
 
 private struct RunnerUpdatingFootKey: EnvironmentKey {
@@ -31,6 +34,7 @@ extension EnvironmentValues {
 struct RunnerUpdatingQueuedView: View {
     let session: Session
     let machine: String?
+    var runnerID: String? = nil
     var onOpenSession: (String) -> Void = { _ in }
     /// The turns' links, which the page opens in place rather than handing to the system.
     private static let turnScheme = "orbit-turn:"
@@ -53,6 +57,12 @@ struct RunnerUpdatingQueuedView: View {
                     })
                 if let waited = RunnerUpdating.waited(session, now: context.date) {
                     Text(waited).font(.footnote).foregroundStyle(.tertiary)
+                }
+                if let runnerID {
+                    RunnerUpdateLaterControl(runnerID: runnerID, version: session.queuedRunnerUpdate?.targetVersion,
+                                             machine: machine)
+                        .padding(.top, 8)
+                    RunnerUpdateNowControl(runnerID: runnerID, machine: machine)
                 }
             }
             .padding(.horizontal, 32)
@@ -109,6 +119,13 @@ struct RunnerUpdatingTagView: View {
                     .font(.callout)
                 if let waited = RunnerUpdating.waited(foot.session, now: context.date) {
                     Text("\(waited).").font(.callout).foregroundStyle(.secondary)
+                }
+                if let runnerID = foot.runnerID {
+                    RunnerUpdateLaterControl(runnerID: runnerID,
+                                             version: foot.session.queuedRunnerUpdate?.targetVersion,
+                                             machine: foot.machine)
+                        .padding(.top, 4)
+                    RunnerUpdateNowControl(runnerID: runnerID, machine: foot.machine)
                 }
             }
             .fixedSize(horizontal: false, vertical: true)

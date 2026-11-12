@@ -13,21 +13,11 @@ extension View {
         if !isEnabled {
             self
         } else if #available(iOS 26.0, *), fromBottom {
-            searchable(text: text, prompt: "Search sessions")
-                .toolbar { DefaultToolbarItem(kind: .search, placement: .bottomBar) }
+            modifier(BottomSearchMode(text: text))
         } else {
             searchable(text: text, placement: .navigationBarDrawer(displayMode: .always),
                        prompt: "Search sessions")
         }
-    }
-
-    /// Search mode ends only at the field's own close button. iOS ends it by itself once an empty
-    /// field loses focus, and scrolling a list under a search field lowers the keyboard, so while the
-    /// query is empty a scroll leaves the keyboard (and the search) where they are. With a query the
-    /// keyboard may go: a field holding text stays in search mode without focus. The other way focus
-    /// was lost, a tap on the background, is held off in `KeyboardDismissInstaller`.
-    func keepsEmptySearchOnScroll(query: String) -> some View {
-        scrollDismissesKeyboard(query.isEmpty ? .never : .automatic)
     }
 
     /// Hides the bottom search field while the list scrolls down and brings it back as soon as the
@@ -40,6 +30,66 @@ extension View {
         } else {
             self
         }
+    }
+}
+
+/// The bottom field's search mode, which ends only at its close button (the X beside it), as in
+/// Notes (owner, 2026-11-12, docs/mocks/ios-search-mode-like-notes). A scroll, a tap elsewhere or a
+/// pushed page only lowers the keyboard: the field stays open at the bottom with its X.
+///
+/// Measured on the iOS 26.5 simulator (probe rounds 1–5): with `isPresented` held here, iOS no longer
+/// ends search when the field loses focus — that was the reported bug, under a bare `searchable`. But
+/// the X then ends it only while the keyboard is down; with the keyboard up the X merely lowers it,
+/// and iOS writes `isPresented = true` twice. So a press of the X (`SearchCloseTap`) ends search mode
+/// whatever iOS writes, and clears the query as the X does with the keyboard down.
+@available(iOS 26.0, *)
+private struct BottomSearchMode: ViewModifier {
+    @Binding var text: String
+    @State private var presented = false
+
+    func body(content: Content) -> some View {
+        content
+            .searchable(text: $text, isPresented: Binding(get: { presented }, set: setPresented),
+                        prompt: "Search sessions")
+            .toolbar { DefaultToolbarItem(kind: .search, placement: .bottomBar) }
+    }
+
+    private func setPresented(_ on: Bool) {
+        if SearchCloseTap.recent() {
+            presented = false
+            text = ""
+        } else {
+            presented = on
+        }
+    }
+}
+
+/// Whether the reader just pressed the X beside the bottom search field (`BottomSearchMode`). Fed by
+/// the window's tap recognizer (`KeyboardDismissInstaller`), which sees every tap.
+///
+/// On iOS 26.5 the X is a `_UIButtonBarButton` in the bottom bar's `FloatingBarHostingView`, the
+/// bar it shares with the field and nothing else; a tap in that bar outside the text field is the X.
+/// Any other tap forgets it, so tapping the field again right after the X opens search as usual.
+enum SearchCloseTap {
+    private static var lastClose: Date?
+
+    static func record(_ touch: UITouch) {
+        var view = touch.view
+        var inBar = false
+        var inField = false
+        while let current = view {
+            inField = inField || current is UITextField
+            let name = String(describing: type(of: current))
+            inBar = inBar || current is UISearchBar || name.contains("FloatingBar")
+            view = current.superview
+        }
+        lastClose = inBar && !inField ? Date() : nil
+    }
+
+    /// The X was pressed in the last moment: what iOS writes right after it is the X's doing.
+    static func recent() -> Bool {
+        guard let lastClose else { return false }
+        return Date().timeIntervalSince(lastClose) < 1.5
     }
 }
 
@@ -71,6 +121,9 @@ private struct BottomSearchScrollReveal: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            // As in Notes: reading on lowers the keyboard (a List alone keeps it up), and search mode
+            // stays (`BottomSearchMode`).
+            .scrollDismissesKeyboard(.immediately)
             .onScrollPhaseChange { _, phase in
                 tracker.readerDriven = phase != .idle && phase != .animating
             }
