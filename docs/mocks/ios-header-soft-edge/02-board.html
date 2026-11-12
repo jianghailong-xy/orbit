@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>iOS 会话列表标题区：参考 Gemini 的软边</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #eef0f3; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: #1c1c1e; }
+  .b-part { padding: 28px 32px 32px; width: 1520px; }
+  .b-part h1 { font-size: 26px; margin-bottom: 4px; }
+  .b-part h2 { font-size: 20px; margin: 0 0 12px; }
+  .b-sub { color: #6b6b70; margin-bottom: 20px; }
+  .b-row { display: flex; gap: 28px; align-items: flex-start; }
+  .b-col { width: 460px; }
+  .b-cap { font-weight: 600; font-size: 17px; margin: 0 0 8px; }
+  .b-cap small { font-weight: 400; color: #6b6b70; font-size: 14px; margin-left: 6px; }
+  .b-notes { margin-top: 12px; font-size: 14px; color: #3a3a3c; }
+  .b-notes li { margin: 0 0 4px 18px; }
+  .b-tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 10px; margin-left: 6px; vertical-align: 2px; }
+  .b-tag.now { background: #e5e5ea; color: #48484a; }
+  .b-tag.rec { background: #d6f0dc; color: #1a7f37; }
+  .b-tag.alt { background: #fde7c7; color: #8a5300; }
+
+  /* phone: owner's Pro Max, 440pt wide, header region + a few rows */
+  .ph { width: 440px; height: 360px; border-radius: 44px 44px 0 0; overflow: hidden; position: relative;
+        background: #fff; box-shadow: 0 0 0 1px #d1d1d6, 0 10px 30px rgba(0,0,0,.08); }
+  .ph .list { position: absolute; left: 0; right: 0; top: 0; }
+  .row { padding: 10px 20px 12px; }
+  .row .t { font-size: 17px; font-weight: 600; line-height: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .s { font-size: 15px; color: #8a8a8e; line-height: 20px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .row .m { font-size: 13px; color: #a1a1a6; margin-top: 3px; }
+  .row + .row { border-top: .5px solid #e5e5ea; margin-left: 20px; padding-left: 0; }
+
+  /* status bar */
+  .sb { position: absolute; top: 0; left: 0; right: 0; height: 54px; z-index: 5; font-weight: 600; font-size: 17px; }
+  .sb .tm { position: absolute; left: 62px; top: 20px; }
+  .sb .rt { position: absolute; right: 40px; top: 21px; display: flex; gap: 6px; align-items: center; font-size: 15px; }
+  .sb .bat { width: 27px; height: 13px; border-radius: 4px; background: #1c1c1e; color: #fff; font-size: 10px; line-height: 13px; text-align: center; }
+
+  /* nav bar items */
+  .glass { position: absolute; z-index: 6; background: rgba(255,255,255,.78); backdrop-filter: blur(10px) saturate(1.6);
+           border: .5px solid rgba(0,0,0,.08); box-shadow: 0 2px 10px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.9); }
+  .drawer { left: 19px; top: 62px; width: 44px; height: 44px; border-radius: 50%; }
+  .caps { right: 20px; top: 62px; width: 107px; height: 44px; border-radius: 22px; }
+  .glass svg { position: absolute; }
+  .title { position: absolute; z-index: 6; left: 77px; top: 72px; font-size: 17px; line-height: 22px; letter-spacing: -.2px; }
+  .title.semi { font-weight: 650; }
+  .title.med { font-weight: 500; }
+
+  /* ① hard edge: frosted strip + hairline */
+  .hard { position: absolute; z-index: 4; left: 0; right: 0; top: 0; height: 116px;
+          background: rgba(250,250,252,.82); backdrop-filter: blur(18px) saturate(1.4);
+          border-bottom: .5px solid rgba(60,60,67,.29); }
+
+  /* ② soft edge: progressive blur + white wash, no line */
+  .soft { position: absolute; z-index: 4; left: 0; right: 0; top: 0; height: 140px; pointer-events: none; }
+  .soft > div { position: absolute; inset: 0; }
+  .soft .b1 { backdrop-filter: blur(1px); -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 60%, transparent 100%); }
+  .soft .b2 { backdrop-filter: blur(3px); -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 45%, transparent 80%); }
+  .soft .b3 { backdrop-filter: blur(8px); -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 30%, transparent 62%); }
+  .soft .b4 { backdrop-filter: blur(16px); -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 40%, transparent 65%); }
+  .soft .wash { background: linear-gradient(to bottom, rgba(255,255,255,.95) 0, rgba(255,255,255,.82) 50%, rgba(255,255,255,.35) 80%, rgba(255,255,255,0) 100%); }
+
+  /* marks */
+  .mk { position: absolute; z-index: 9; width: 22px; height: 22px; border-radius: 50%; background: #ff3b30; color: #fff;
+        font-size: 13px; font-weight: 700; text-align: center; line-height: 22px; box-shadow: 0 0 0 2px #fff; }
+  .ring { position: absolute; z-index: 8; border: 2px dashed #ff3b30; border-radius: 8px; }
+
+  table.b-t { border-collapse: collapse; margin-top: 6px; font-size: 14px; }
+  table.b-t td, table.b-t th { border: 1px solid #d1d1d6; padding: 6px 10px; text-align: left; vertical-align: top; background: #fff; }
+  table.b-t th { background: #f2f2f7; }
+  code { font-family: "JetBrains Mono", monospace; font-size: 12.5px; background: #e9e9ee; padding: 0 4px; border-radius: 4px; }
+
+  .ph { height: 430px; }
+  .band { position: absolute; z-index: 5; left: 0; right: 0; top: 116px; height: 50px; }
+  .band.opaque { background: #fff; }
+  .fade { position: absolute; z-index: 5; left: 0; right: 0; top: 166px; height: 20px;
+          background: linear-gradient(to bottom, #fff 0, rgba(255,255,255,.75) 35%, rgba(255,255,255,0) 100%); }
+  .soft.tall { height: 196px; }
+  .soft.tall .wash { background: linear-gradient(to bottom, rgba(255,255,255,.95) 0, rgba(255,255,255,.85) 55%, rgba(255,255,255,.4) 82%, rgba(255,255,255,0) 100%); }
+  .ny { position: absolute; z-index: 6; left: 20px; right: 20px; top: 116px; height: 44px; border-radius: 22px;
+        background: rgba(255,255,255,.8); backdrop-filter: blur(10px) saturate(1.6);
+        border: .5px solid rgba(0,0,0,.08); box-shadow: 0 2px 10px rgba(0,0,0,.07), inset 0 1px 0 rgba(255,255,255,.9);
+        display: flex; align-items: center; gap: 10px; padding: 0 16px 0 7px; }
+  .ny .c { width: 30px; height: 30px; border-radius: 50%; background: rgba(255,149,0,.15); color: #ff9500;
+           display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; flex: none; }
+  .ny .w { flex: 1; min-width: 0; line-height: 17px; }
+  .ny .a { font-size: 14px; font-weight: 600; display: flex; }
+  .ny .a span:first-child { flex: 1; }
+  .ny .a span:last-child { color: #8a8a8e; font-weight: 400; font-size: 13px; }
+  .ny .d { font-size: 13px; color: #8a8a8e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ny .ch { color: #8a8a8e; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<section class="b-part" id="part-1">
+  <h1>有审批条时的标题区（beta.236 之后）</h1>
+  <p class="b-sub">440 pt 宽，会话列表已上滚，标题栏下面挂着 needs-you 条（审批走它）。条放在列表顶部的一条带子里（116–166 pt）；软边只在导航栏那一段。① 是按代码推的样子，真机可能略有出入。</p>
+  <div class="b-row">
+    <div class="b-col">
+      <p class="b-cap">① 今天<span class="b-tag now">beta.236</span><small>带子白底，下沿一刀切</small></p>
+      <div class="ph" id="p1"></div>
+      <ul class="b-notes">
+        <li><b>1</b> 会话滑到带子下沿被白底直接切掉：没有线，但边是硬的，和没有审批条时的软边对不上。</li>
+        <li><b>2</b> 滑过带子后又在导航栏那一段被软边糊淡地露出来，上下各一种处理。</li>
+      </ul>
+    </div>
+    <div class="b-col">
+      <p class="b-cap">② 方案 A<span class="b-tag now">未选</span><small>白底 + 下沿 20 pt 渐隐</small></p>
+      <div class="ph" id="p2"></div>
+      <ul class="b-notes">
+        <li><b>1</b> 带子下面接一段 20 pt 白 → 透明：会话是淡进带子里的，和无审批条时同一种观感。</li>
+        <li>带子仍是白底，胶囊两边的空隙不透字；下拉刷新那套（<code>topInsetClearOfRefresh</code>）不动。</li>
+        <li>只改 <code>NeedsYouBannerView</code> 列表里那处背景，渐隐不挡点按（不吃手势）。</li>
+      </ul>
+    </div>
+    <div class="b-col">
+      <p class="b-cap">③ 方案 B<span class="b-tag rec">选定 11-12</span><small>带子透明，软边一直延到条下</small></p>
+      <div class="ph" id="p3"></div>
+      <ul class="b-notes">
+        <li><b>1</b> 理想效果最像 Gemini：胶囊像导航按钮一样浮着。</li>
+        <li>做法：不用 <code>.safeAreaBar</code>（列表用它下拉刷新会坏），带子自己画一层：材质模糊 + 页面色淡白，从屏幕顶到条下 20 pt 渐隐，接上系统的软边；不吃点按。</li>
+      </ul>
+    </div>
+  </div>
+  <p class="b-sub" style="margin-top:18px">已定：B（11-12）。没有审批条时三张一样，即 01 板的 ②。</p>
+</section>
+
+<script>
+const rows = [
+  ['回收站权重与位置设计审查', 'Review 了侧栏 Trash 行：它像 wiki 导航却只弹框、权重偏高，建议移到底部并降成一行灰字…', '3 分钟前'],
+  ['Runner 更新时排空会话', '更新前先等正在跑的会话收尾，超过 10 分钟的给出提示，并把排空状态写进心跳…', '18 分钟前'],
+  ['任务卡片的证据收件人', '每份证据都要有收件人：协调者、负责人或项目本身，没有收件人的证据不再落盘…', '1 小时前'],
+  ['标题栏按钮对齐', '抽屉按钮和右侧胶囊的中心线差了 1 pt，在 Pro Max 上更明显…', '2 小时前'],
+  ['会话访客权限', '访客只能看、不能发消息；分享链接 30 天过期，过期后显示一行灰字…', '昨天'],
+];
+const ICON = {
+  menu: '<svg width="44" height="44" viewBox="0 0 44 44"><g stroke="#1c1c1e" stroke-width="2.2" stroke-linecap="round"><path d="M13 16h18M13 22h18M13 28h18"/></g></svg>',
+  filter: '<svg width="44" height="44" viewBox="0 0 44 44" style="left:10px;top:0"><g stroke="#1c1c1e" stroke-width="2.2" stroke-linecap="round"><path d="M12 16h20M15 22h14M18 28h8"/></g></svg>',
+  compose: '<svg width="44" height="44" viewBox="0 0 44 44" style="left:56px;top:0"><g fill="none" stroke="#1c1c1e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 13h-6a3 3 0 0 0-3 3v13a3 3 0 0 0 3 3h13a3 3 0 0 0 3-3v-6"/><path d="M28.5 11.5l4 4L23 25h-4v-4z"/></g></svg>',
+};
+const NY = '<div class="ny"><div class="c">!</div><div class="w"><div class="a"><span>Approval: run a shell command</span><span>12m</span></div><div class="d">Fix header edge · orbit-develop</div></div><div class="ch">›</div></div>';
+function phone(id, variant, marks) {
+  const el = document.getElementById(id);
+  const list = rows.map(r => `<div class="row"><div class="t">${r[0]}</div><div class="s">${r[1]}</div><div class="m">${r[2]}</div></div>`).join('');
+  const softSmall = '<div class="soft"><div class="b1"></div><div class="b2"></div><div class="b3"></div><div class="b4"></div><div class="wash"></div></div>';
+  const softTall = '<div class="soft tall"><div class="b1"></div><div class="b2"></div><div class="b3"></div><div class="b4"></div><div class="wash"></div></div>';
+  el.innerHTML = `
+    <div class="list" style="top:${variant === 'B' ? 84 : 100}px">${list}</div>
+    ${variant === 'B' ? softTall : softSmall}
+    ${variant !== 'B' ? '<div class="band opaque"></div>' : ''}
+    ${variant === 'A' ? '<div class="fade"></div>' : ''}
+    <div class="sb"><span class="tm">2:30</span><span class="rt">▂▄▆█ 5G <span class="bat">24</span></span></div>
+    <div class="glass drawer">${ICON.menu}</div>
+    <div class="title med">orbit-develop</div>
+    <div class="glass caps">${ICON.filter}${ICON.compose}</div>
+    ${NY}
+    ${marks}`;
+}
+phone('p1', 'today',
+  '<div class="ring" style="left:4px;top:160px;width:432px;height:14px"></div><div class="mk" style="left:404px;top:172px">1</div>' +
+  '<div class="ring" style="left:12px;top:104px;width:330px;height:14px"></div><div class="mk" style="left:346px;top:98px">2</div>');
+phone('p2', 'A',
+  '<div class="ring" style="left:4px;top:162px;width:432px;height:28px"></div><div class="mk" style="left:404px;top:184px">1</div>');
+phone('p3', 'B',
+  '<div class="ring" style="left:4px;top:112px;width:432px;height:60px;border-radius:12px"></div><div class="mk" style="left:404px;top:164px">1</div>');
+</script>
+</body>
+</html>

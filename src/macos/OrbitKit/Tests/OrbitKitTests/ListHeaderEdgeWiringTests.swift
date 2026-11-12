@@ -52,6 +52,23 @@ final class ListHeaderEdgeWiringTests: XCTestCase {
         XCTAssertFalse(console.contains("softTopEdgeEffect"), "the transcript keeps the 11-11 rule")
     }
 
+    /// With the needs-you bar over the Sessions list, the soft edge carries on under the bar
+    /// (iOS 26) rather than the bar standing on the page's colour, which cut the rows off at its
+    /// lower edge (the owner, 2026-11-12, option B of 02-board.html).
+    func testTheNeedsYouBarOverTheListStandsOnTheSoftEdge() throws {
+        let sessions = section(try source(views + "AgentsView.swift"),
+                               from: ".topInsetClearOfRefresh {", to: "#endif")
+        XCTAssertTrue(sessions.contains("overList: true"), "the Sessions list mounts it over the list")
+        let banner = try source(views + "NeedsYouBannerView.swift")
+        let surface = section(banner, from: "@ViewBuilder private var surface", to: "private var listSoftEdge")
+        XCTAssertTrue(surface.contains("else if overList {"))
+        XCTAssertTrue(surface.contains("listSoftEdge"))
+        let edge = section(banner, from: "private var listSoftEdge: some View {", to: "\n}")
+        XCTAssertTrue(edge.contains(".ignoresSafeArea(edges: .top)"), "up behind the nav bar")
+        XCTAssertTrue(edge.contains(".padding(.bottom, -20)"), "fading out 20pt below the bar")
+        XCTAssertTrue(edge.contains(".allowsHitTesting(false)"), "taking no touches")
+    }
+
     func testBareBarTitlesAreBodyMedium() throws {
         let identity = try source(views + "AgentIdentity.swift")
         XCTAssertTrue(identity.contains("static let barTitle = Font.body.weight(.medium)"))
