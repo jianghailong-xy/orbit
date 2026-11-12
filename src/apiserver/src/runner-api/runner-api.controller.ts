@@ -1936,6 +1936,12 @@ export class RunnerApiController {
     if (row.landingNamed) assertEngineSessionRow({ sessionKind: 'LANDING' });
     let verdict = linkBeatVerdict(runnerId, row, digests, supervised.length);
     if (verdict.answer === 'REPORT') {
+      // A beat whose checkout report changed is written here, not by the full reconcile: read what it overwrites, so
+      // the owner's clients are told which workspaces' checkouts moved, as reconcileHeartbeat tells them.
+      const reposChanged = verdict.reports.includes('repos') && dto?.repos != null;
+      const priorRepoHealth = reposChanged
+        ? (await this.prisma.runner.findUnique({ where: { id: runnerId }, select: { repoHealth: true } }))?.repoHealth
+        : undefined;
       try {
         await writeLinkBeatReports(this.prisma, {
           runnerId,
@@ -1947,6 +1953,11 @@ export class RunnerApiController {
           storedPlanUsage: row.planUsage,
           now: new Date(),
         });
+        if (reposChanged) {
+          for (const workspaceId of workspacesWithChangedRepoHealth(priorRepoHealth, sanitizeRunnerRepoHealth(dto.repos) ?? [])) {
+            this.realtime.publishWorkspaceRepoHealthChanged(admission.ownerId, workspaceId);
+          }
+        }
       } catch (error) {
         if (!(error instanceof LinkReportUnwritable)) throw error;
         // What one statement cannot write, the full reconcile writes, and refuses, as an HTTPS beat does.
