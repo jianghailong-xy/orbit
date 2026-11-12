@@ -90,7 +90,7 @@ struct UserBubbleView: View {
                 }
                 // The bubble is the person's words and nothing else: what delivery appended is named
                 // on a line in the meta row under it (`AttachedNoteLine`), never in it.
-                if !words.isEmpty {
+                if !bubble.text.isEmpty {
                     typedText(shown, showsCard: showsCard)
                         .padding(.horizontal, bubbleInset(showsCard))
                         .padding(.vertical, showsCard ? 5 : 8)
