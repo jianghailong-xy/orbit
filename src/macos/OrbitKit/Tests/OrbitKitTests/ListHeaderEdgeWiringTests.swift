@@ -58,6 +58,38 @@ final class ListHeaderEdgeWiringTests: XCTestCase {
         XCTAssertTrue(folder.contains(".softTopEdgeEffect()"), "the folder page")
     }
 
+    /// The rule (05-board.html, A): every plain list in the app asks for the soft edge, so a page
+    /// added later cannot fall back to the hard strip unnoticed. The two exceptions are named.
+    func testEveryPlainListAsksForTheSoftEdge() throws {
+        let exempt: Set<String> = [
+            "Console/ConsoleView.swift",   // the transcript: no edge effect at all (11-11)
+            "CompactShell.swift",          // the phone drawer: its own SoftEdgeLayer
+        ]
+        var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        var root: URL?
+        for _ in 0..<12 {
+            let candidate = dir.appendingPathComponent(views)
+            if FileManager.default.fileExists(atPath: candidate.path) { root = candidate; break }
+            dir = dir.deletingLastPathComponent()
+        }
+        let viewsDir = try XCTUnwrap(root)
+        let files = try XCTUnwrap(FileManager.default.enumerator(atPath: viewsDir.path))
+            .compactMap { $0 as? String }.filter { $0.hasSuffix(".swift") }
+        var found = 0
+        var missing: [String] = []
+        for file in files where !exempt.contains(file) {
+            let lines = try String(contentsOf: viewsDir.appendingPathComponent(file), encoding: .utf8)
+                .components(separatedBy: "\n")
+            for (i, line) in lines.enumerated() where line.trimmingCharacters(in: .whitespaces) == ".listStyle(.plain)" {
+                found += 1
+                let next = lines[(i + 1)...].first { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+                if next?.contains(".softTopEdgeEffect()") != true { missing.append("\(file):\(i + 1)") }
+            }
+        }
+        XCTAssertGreaterThan(found, 15, "the scan found the app's lists")
+        XCTAssertEqual(missing, [], "a plain list without .softTopEdgeEffect() on the next line")
+    }
+
     func testTheTranscriptStillHasNoEdgeEffect() throws {
         let console = try source(views + "Console/ConsoleView.swift")
         XCTAssertFalse(console.contains("softTopEdgeEffect"), "the transcript keeps the 11-11 rule")
