@@ -273,7 +273,7 @@ internal fun ReviewTurnCard(card: InteractionCard, ts: String?, open: (String) -
     val source = card.source
     val requested = card.key.endsWith(":confirmationReviewRequest")
     val tone = if (requested) MaterialTheme.colorScheme.primary else LocalOrbitColors.current.needsYou
-    Column(Modifier.fillMaxWidth().testTag(if (requested) "review-requested" else "review-sent-back")
+    Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().testTag(if (requested) "review-requested" else "review-sent-back")
         .background(tone.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
         .border1(tone.copy(alpha = 0.30f)).padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -319,7 +319,7 @@ internal fun YouConfirmedCard(card: InteractionCard, event: io.orbitd.android.co
     val source = card.source
     val tone = LocalOrbitColors.current.success
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
-    Column(Modifier.fillMaxWidth().testTag("review-you-confirmed")
+    Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().testTag("review-you-confirmed")
         .background(tone.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
         .border1(tone.copy(alpha = 0.30f)).padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
