@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -358,6 +360,70 @@ func TestMainCheckoutRelayRestartMidAction(t *testing.T) {
 				t.Fatalf("result after restart %+v", res)
 			}
 			c.check(t, res)
+		})
+	}
+}
+
+// A failure no other code names is answered once with ACTION_FAILED, carrying git's reason, and
+// leaves Git as it was: the person is never left waiting for a TIMEOUT that says the runner might
+// have done it.
+func TestMainCheckoutRelayGitFailureIsActionFailed(t *testing.T) {
+	cases := []struct {
+		name    string
+		setup   func(t *testing.T) relayCase
+		message string
+	}{
+		{"commit with no git identity", func(t *testing.T) relayCase {
+			empty := filepath.Join(t.TempDir(), "gitconfig")
+			if err := os.WriteFile(empty, nil, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("GIT_CONFIG_GLOBAL", empty)
+			t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+			c := commitRelayCase(t)
+			mustGit(t, c.root, "config", "--unset", "user.email")
+			mustGit(t, c.root, "config", "--unset", "user.name")
+			mustGit(t, c.root, "config", "user.useConfigOnly", "true")
+			return c
+		}, "no email was given"},
+		{"commit that can't write its journal", func(t *testing.T) relayCase {
+			c := commitRelayCase(t)
+			// A file where the journal's directory goes: git dir writes fail as on a full or
+			// read-only disk (chmod would not stop a root test run).
+			if err := os.WriteFile(filepath.Join(c.root, ".git", "orbit-main-checkout"), []byte("in the way\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			return c
+		}, "not a directory"},
+		{"push whose upstream remote is refused", func(t *testing.T) relayCase {
+			c := pushRelayCase(t)
+			mustGit(t, c.root, "config", "branch.main.remote", "-evil")
+			return c
+		}, "starts with '-'"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resetMainCheckoutSeen(t)
+			srv := newFakeMainCheckoutServer(t)
+			c := tc.setup(t)
+			c.cmd.ExpiresAt = mcFuture()
+			before, gitBefore := c.state(t), readGitState(t, c.root)
+			handleMainCheckoutRequest(srv.tr, c.request("fails"), c.deps)
+			handleMainCheckoutRequest(srv.tr, c.request("fails"), c.deps) // delivered again
+			res := srv.oneResult(t, "fails")
+			if res.Status != mainCheckoutRefused || res.Code != mainCheckoutActionFailed || res.Kind != c.kind ||
+				res.RequestID != c.cmd.RequestID || res.FinishedAt == "" || !strings.Contains(res.GitMessage, tc.message) {
+				t.Fatalf("result %+v", res)
+			}
+			if strings.Contains(res.GitMessage, "\n") || strings.HasPrefix(res.GitMessage, "fatal: ") {
+				t.Fatalf("gitMessage is not one cleaned line: %q", res.GitMessage)
+			}
+			if now := c.state(t); now != before {
+				t.Fatalf("checkout changed: %q → %q", before, now)
+			}
+			if now := readGitState(t, c.root); now != gitBefore {
+				t.Fatalf("git state changed: %+v → %+v", gitBefore, now)
+			}
 		})
 	}
 }

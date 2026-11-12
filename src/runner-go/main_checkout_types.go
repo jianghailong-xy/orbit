@@ -48,6 +48,7 @@ const (
 	mainCheckoutPushAuthFailed    = "PUSH_AUTH_FAILED"
 	mainCheckoutPushFailed        = "PUSH_FAILED"
 	mainCheckoutRescueFailed      = "RESCUE_FAILED"
+	mainCheckoutActionFailed      = "ACTION_FAILED"
 	mainCheckoutActionInFlight    = "ACTION_IN_FLIGHT"
 	mainCheckoutRunnerOffline     = "RUNNER_OFFLINE"
 	mainCheckoutTimeout           = "TIMEOUT"
@@ -59,7 +60,7 @@ var mainCheckoutRefusalCodes = []string{
 	mainCheckoutFingerprintStale, mainCheckoutHeadMoved, mainCheckoutMoveConflict, mainCheckoutMoveSourceChanged,
 	mainCheckoutTargetBusy, mainCheckoutCheckoutBlocked, mainCheckoutDetached, mainCheckoutNoHead,
 	mainCheckoutNothingToPush, mainCheckoutNoRemote, mainCheckoutPushRejected, mainCheckoutPushAuthFailed,
-	mainCheckoutPushFailed, mainCheckoutRescueFailed, mainCheckoutActionInFlight, mainCheckoutRunnerOffline,
+	mainCheckoutPushFailed, mainCheckoutRescueFailed, mainCheckoutActionFailed, mainCheckoutActionInFlight, mainCheckoutRunnerOffline,
 	mainCheckoutTimeout, mainCheckoutCancelled,
 }
 

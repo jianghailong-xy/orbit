@@ -147,6 +147,7 @@ export const MAIN_CHECKOUT_REFUSAL_CODES = [
   'PUSH_AUTH_FAILED',
   'PUSH_FAILED',
   'RESCUE_FAILED',
+  'ACTION_FAILED',
   'ACTION_IN_FLIGHT',
   'RUNNER_OFFLINE',
   'TIMEOUT',
@@ -194,7 +195,7 @@ export interface MainCheckoutActionResult {
   ahead?: number;
   /** PUSH_REJECTED: commits upstream has that the branch doesn't. */
   behind?: number;
-  /** PUSH_*, RESCUE_FAILED: git's own reason, one line, with credentials and URLs' userinfo removed. */
+  /** PUSH_*, RESCUE_FAILED, ACTION_FAILED: git's own reason, one line, with credentials and URLs' userinfo removed. */
   gitMessage?: string;
   /** RUNNER_OFFLINE, TIMEOUT. */
   runnerName?: string;
@@ -432,6 +433,14 @@ const NOTHING: Record<MainCheckoutActionKind, string> = {
   rescue: 'Nothing saved',
 };
 
+/** ACTION_FAILED: what git could not do. */
+const GIT_VERB: Record<MainCheckoutActionKind, string> = {
+  move: 'move',
+  commit: 'commit',
+  push: 'push',
+  rescue: 'save',
+};
+
 const CANT: Record<MainCheckoutActionKind, string> = {
   move: "Can't move right now",
   commit: "Can't commit right now",
@@ -592,6 +601,12 @@ export function mainCheckoutResultLine(
         'refused',
         `${nothing}:`,
         ` Orbit couldn't save the main checkout to a rescue branch first${quoted(r.gitMessage)}. The main checkout was left as it was.`,
+      );
+    case 'ACTION_FAILED':
+      return line(
+        'refused',
+        `${nothing}:`,
+        ` git couldn't ${GIT_VERB[r.kind]}${quoted(r.gitMessage)}. The main checkout was left as it was.`,
       );
     case 'ACTION_IN_FLIGHT':
       return line(

@@ -112,10 +112,13 @@ func commitMainCheckout(ctx context.Context, cmd MainCheckoutActionCommand) (Mai
 
 	done := func(commit string) (MainCheckoutActionResult, error) {
 		if err := alignMainCheckoutIndex(ctx, root, commit, cmd.Files); err != nil {
-			return res, fmt.Errorf("commit %s made; aligning the index: %w", commit, err)
+			// The commit is on the branch, so the answer is that it was made: ACTION_FAILED would say
+			// the checkout was left as it was. The chosen paths' index entries still show the old
+			// HEAD; their working-tree content is untouched, and a redo of this request realigns them.
+			logln(fmt.Sprintf("main checkout %s: commit %s made; aligning the index failed: %v", root, shortSha(commit), err))
 		}
 		if err := mainCheckoutCommitStep("index-align"); err != nil {
-			return res, err
+			return res, stoppedMainCheckout(err)
 		}
 		res.Status, res.Head, res.Subject = mainCheckoutDone, commit, strings.SplitN(message, "\n", 2)[0]
 		n := len(cmd.Files)
@@ -198,7 +201,7 @@ func commitMainCheckout(ctx context.Context, cmd MainCheckoutActionCommand) (Mai
 		return res, err
 	}
 	if err := mainCheckoutCommitStep("commit-tree"); err != nil {
-		return res, err
+		return res, stoppedMainCheckout(err)
 	}
 	journal.Commit = commit
 	if err := writeCommitJournal(journalPath, journal); err != nil {
@@ -215,7 +218,7 @@ func commitMainCheckout(ctx context.Context, cmd MainCheckoutActionCommand) (Mai
 		return res, err
 	}
 	if err := mainCheckoutCommitStep("update-ref"); err != nil {
-		return res, err
+		return res, stoppedMainCheckout(err)
 	}
 	return done(commit)
 }

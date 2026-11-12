@@ -336,6 +336,27 @@ test('a result is a system line in the initiating session: a run_event at max(se
   assert.equal(await w.prisma.conversationTurn.count({ where: { sessionId: w.sessionId, kind: 'notice' } }), 0);
 });
 
+test('a runner\'s ACTION_FAILED is accepted and written as its line; a control-plane code from the runner is not', { skip }, async (t) => {
+  const w = await world(t);
+  const { requestId } = await commit(w);
+  const [handed] = await handOut(w);
+  await assert.rejects(
+    w.service.actionResult(w.runnerId, handed.id, { ...done(requestId), status: 'refused', code: 'TIMEOUT' } as MainCheckoutActionResult),
+    BadRequestException,
+  );
+  await w.service.actionResult(w.runnerId, handed.id, {
+    ...done(requestId), status: 'refused', code: 'ACTION_FAILED', gitMessage: 'no email was given and auto-detection is disabled',
+  } as MainCheckoutActionResult);
+  const [line] = await lines(w);
+  assert.equal(line.result.code, 'ACTION_FAILED');
+  assert.equal(
+    line.notice,
+    'Nothing committed: git couldn\'t commit (“no email was given and auto-detection is disabled”). The main checkout was left as it was.',
+  );
+  const answer = await commit(w, requestId);
+  assert.equal(answer.result?.code, 'ACTION_FAILED');
+});
+
 test('a live session on a capable runner gets the line as a `notice` turn for the runner to number', { skip }, async (t) => {
   const w = await world(t);
   await w.prisma.session.update({ where: { id: w.sessionId }, data: { status: RunStatus.AWAITING_INPUT, assignedRunnerId: w.runnerId } });

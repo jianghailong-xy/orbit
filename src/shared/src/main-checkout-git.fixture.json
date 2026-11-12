@@ -23,6 +23,7 @@
     "PUSH_AUTH_FAILED",
     "PUSH_FAILED",
     "RESCUE_FAILED",
+    "ACTION_FAILED",
     "ACTION_IN_FLIGHT",
     "RUNNER_OFFLINE",
     "TIMEOUT",
@@ -662,6 +663,23 @@
       "view": {},
       "lead": "Nothing saved:",
       "text": "Nothing saved: Orbit couldn't save the main checkout to a rescue branch first (“fatal: Unable to create '.git/index.lock': File exists.”). The main checkout was left as it was."
+    },
+    {
+      "name": "ACTION_FAILED",
+      "onBoard": false,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "commit",
+        "status": "refused",
+        "code": "ACTION_FAILED",
+        "branch": "main",
+        "gitMessage": "unable to auto-detect email address (got 'root@hpc.(none)')"
+      },
+      "view": {},
+      "lead": "Nothing committed:",
+      "text": "Nothing committed: git couldn't commit (“unable to auto-detect email address (got 'root@hpc.(none)')”). The main checkout was left as it was."
     },
     {
       "name": "ACTION_IN_FLIGHT",

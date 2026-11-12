@@ -209,10 +209,17 @@ Variants of the success lines:
 | `PUSH_AUTH_FAILED` | refused | runner | **board** Push failed: the runner's git couldn't authenticate to origin (“Permission denied (publickey)”). Your commit is still in the main checkout. | — |
 | `PUSH_FAILED` | refused | runner | Push failed: git couldn't push to origin (“Could not resolve host: github.com”). Your commit is still in the main checkout. | — |
 | `RESCUE_FAILED` | refused | runner | Nothing saved: Orbit couldn't save the main checkout to a rescue branch first (“…”). The main checkout was left as it was. | — |
+| `ACTION_FAILED` | refused | runner | Nothing committed: git couldn't commit (“unable to auto-detect email address”). The main checkout was left as it was. | — |
 | `ACTION_IN_FLIGHT` | refused | apiserver | Nothing moved: another action on this main checkout is still running. Try again when it finishes. | — |
 | `RUNNER_OFFLINE` | waiting | apiserver | **board** Waiting for the runner — orbit-hpc hasn't checked in for 3 min. Nothing has been changed; this runs when it's back, or you can cancel. | Cancel |
 | `TIMEOUT` | refused | apiserver | Timed out: orbit-hpc didn't answer within 5 min, so Orbit stopped waiting. If it ran the action anyway, its result will appear here. | — |
 | `CANCELLED` | refused | apiserver | Cancelled: nothing was changed. | — |
+
+`ACTION_FAILED` is the runner's catch-all: git failed for a reason no other code names (no identity,
+a full disk, a lock it couldn't take, an unexpected error) before the action changed anything. It
+carries git's one-line reason in `gitMessage`, redacted as the push errors are. Its verb is the
+action's: move, commit, push, or save for rescue. A runner never leaves a request it took
+unanswered because it failed; only a deadline that passed before it started does that.
 
 `CHECKOUT_BLOCKED` takes `state`:
 

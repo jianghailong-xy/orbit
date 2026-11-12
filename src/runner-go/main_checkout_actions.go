@@ -42,8 +42,12 @@ type mainCheckoutDeps struct {
 // stop the action right there, as a crash would.
 var mainCheckoutStep = func(step string) bool { return false }
 
-// errMainCheckoutStopped is what an action stopped by mainCheckoutStep returns.
+// errMainCheckoutStopped is what an action stopped by a test seam returns: it answers nothing, as a
+// crash would.
 var errMainCheckoutStopped = errors.New("stopped by the test seam")
+
+// stoppedMainCheckout marks a commit or push test seam's error as a stop.
+func stoppedMainCheckout(err error) error { return fmt.Errorf("%w: %w", errMainCheckoutStopped, err) }
 
 // mainCheckoutSeen holds the requests this process has taken, by id, until their deadline: a
 // request delivered again while its first copy runs, or after it was answered, is not run again,
@@ -101,13 +105,30 @@ func handleMainCheckoutRequest(t *Transport, req MainCheckoutRunnerRequest, deps
 		res, err := runMainCheckoutAction(*req.Command, deps)
 		if err != nil {
 			logln(fmt.Sprintf("main checkout %s %s: %v", req.Command.Kind, req.ID, err))
-			return
+			if errors.Is(err, errMainCheckoutExpired) || errors.Is(err, errMainCheckoutStopped) {
+				return // past its deadline (the control plane has finished it), or a test's crash
+			}
+			res = actionFailedResult(*req.Command, res, err)
 		}
 		syncManagedVolume("a main checkout action", req.Command.Root)
 		postWithRetry("main checkout result", func() error { return t.mainCheckoutResult(req.ID, res) })
 	default:
 		logln("main checkout request", req.ID, "has an unknown op", req.Op)
 	}
+}
+
+// actionFailedResult is the ACTION_FAILED answer to an action that failed before it changed
+// anything, for a reason no other code names: git's one-line reason, redacted as push's are.
+func actionFailedResult(cmd MainCheckoutActionCommand, partial MainCheckoutActionResult, err error) MainCheckoutActionResult {
+	r := newMainCheckoutResult(cmd)
+	r.Branch = partial.Branch
+	var secrets []string
+	if root, rerr := mainCheckoutRoot(context.Background(), cmd.Root); rerr == nil {
+		r.Root = root
+		secrets = remoteURLSecrets(context.Background(), root, "origin")
+	}
+	r.GitMessage = redactGitMessage(pushReasonLine(err.Error()), secrets)
+	return refuseMainCheckout(r, mainCheckoutActionFailed)
 }
 
 // pastDeadline reports whether an RFC 3339 deadline has passed ("" never does).

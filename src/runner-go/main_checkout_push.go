@@ -159,7 +159,7 @@ func pushMainCheckout(ctx context.Context, cmd MainCheckoutActionCommand) (MainC
 		return refuse(mainCheckoutPushRejected)
 	}
 	if err := mainCheckoutPushStep("pushed"); err != nil {
-		return res, err
+		return res, stoppedMainCheckout(err)
 	}
 	res.Status, res.RemoteAfter = mainCheckoutDone, head
 	return finish()
