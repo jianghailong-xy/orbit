@@ -60,7 +60,7 @@ class RunnerUpdatingCopyParityTest {
         assertHas("`\${who} starts no new turns until \${turnsFinish(count)}, then \${update}.`")
         assertHas("`updates to \${version}`")
         quoted("updates")
-        assertEquals("$who updates now.", RunnerUpdating.runnerUpdatingMessageText(many.copy(queuedActive = 0), who)
+        assertEquals("$who updates to $version now.", RunnerUpdating.runnerUpdatingMessageText(many.copy(queuedActive = 0), who)
             .removeSuffix(" ${RunnerUpdating.MESSAGE_SENT}"))
         assertHas("`\${who} \${update} now.`")
         // The wait, in minutes and in hours.
