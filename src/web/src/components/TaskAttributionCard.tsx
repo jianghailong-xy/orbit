@@ -244,3 +244,28 @@ export function TaskAttributionCard({ taskId }: { taskId: string }) {
     </Card>
   );
 }
+
+/**
+ * Whether the card says anything the task page does not already: a crossing or a blocker, or work
+ * that counts towards a project other than the one the page's header names. Everything else on it
+ * is that header's project again, and empty rows.
+ */
+export function attributionNeedsCard(view: TaskAttribution, projectId: string | null | undefined): boolean {
+  if (view.crossing || view.blocker) return true;
+  const owning = view.owning;
+  return owning != null && owning.projectId !== projectId && owning.projectPublicId !== projectId;
+}
+
+/**
+ * The card on the task page, drawn only when `attributionNeedsCard` says so. The same read as the
+ * card; while it loads, or if it fails, nothing is drawn, because the quiet case is the usual one.
+ */
+export function TaskAttributionNotice({ taskId, projectId }: { taskId: string; projectId: string | null | undefined }) {
+  const attribution = useQuery({ ...taskAttributionQuery(taskId), enabled: Boolean(taskId) });
+  if (!attribution.data || !attributionNeedsCard(attribution.data, projectId)) return null;
+  return (
+    <Card title="Attribution" size="small" style={{ marginTop: 16 }}>
+      <TaskAttributionBody view={attribution.data} />
+    </Card>
+  );
+}

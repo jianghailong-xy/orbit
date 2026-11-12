@@ -66,9 +66,15 @@ final class MachineSetupWiringTests: XCTestCase {
     func testTheMacsSidebarListsTheSetUpRowsLast() throws {
         let main = try app("Views/MainView.swift")
         let sidebar = try slice(main, from: "private func workspaceRows(", to: "struct AccountFooter")
-        try assertInOrder(sidebar, ["ForEach(agents.orderedItems)", "ForEach(agents.machinesToSetUp)", "setUpRow(machine)",
-                                    ".tag(SidebarSelection.machine(machine.id))"],
+        // One flat ForEach over `AgentListLogic.sidebarRows` (whose order AgentListLogicTests pins): an
+        // if/else or a second ForEach under the section is the row shape the outline list's reload aborted on.
+        let rows = try slice(sidebar, from: "private func workspaceRows(", to: "private func setUpRow(")
+        try assertInOrder(rows, ["ForEach(AgentListLogic.sidebarRows(agents?.orderedItems ?? [], machines: agents?.machinesToSetUp ?? []))",
+                                 "case .agent(let agent):", "case .setUp(let machine):", "setUpRow(machine)",
+                                 ".tag(SidebarSelection.machine(machine.id))", "case .placeholder:"],
                           "the workspaces, then the machines to set up")
+        XCTAssertEqual(rows.components(separatedBy: "ForEach(").count - 1, 1, "one ForEach under the section")
+        XCTAssertFalse(rows.contains("} else {"), "no if/else swapping the placeholder for the rows")
         let row = try slice(main, from: "private func setUpRow(_ machine: MachineToSetUp) -> some View {", to: "\n    }\n")
         try assertInOrder(row, ["model.machineDraftRunnerID == machine.id ? AnyShapeStyle(.primary) : AnyShapeStyle(Color.accentColor)",
                                 "MachineSetupCopy.setupTitle(machine: machine.name)", "Image(systemName: \"folder.badge.plus\")"],

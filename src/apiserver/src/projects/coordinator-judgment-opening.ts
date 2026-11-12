@@ -244,7 +244,7 @@ export function settledAcceptanceProtocol(projectId: string): string {
     + 'project’s coordinator session. Such a task serves no acceptance criterion and may not carry a '
     + 'criterionKey, while every task a judgment session opens must carry one — so open none of them. '
     + 'For work that is not in flight and really is not on main (landingReason ON_PROJECT_BRANCH, NO_RECEIPT, '
-    + 'NOTHING_TO_LAND or CODELESS), write what you checked, criterion by criterion, in a task_comment on the '
+    + 'NO_BRANCH, NOTHING_TO_LAND or CODELESS), write what you checked, criterion by criterion, in a task_comment on the '
     + 'tasks concerned to escalate it to a person, then end this turn. '
     + 'Only when an acceptance criterion really still lacks work — not a merge — open an ordinary task with '
     + 'task_create, carrying the criterionKey it serves.\n'
@@ -864,8 +864,9 @@ const LANDING_REASON_SENTENCES: Readonly<Record<CriterionLandingReason, string>>
     + 'prove the branch tip is already on main either — with nothing to merge, there will be no receipt',
   NO_RECEIPT: 'no receipt proves its work is on the project branch or on main: it may have been merged outside '
     + 'Orbit, or not merged yet',
-  CODELESS: 'its tasks did no work on a worktree branch, so they look like they produce no code, yet they did not '
-    + 'declare codeless — with no branch to land, there will never be a receipt',
+  NO_BRANCH: 'its tasks did no work on a worktree branch and did not declare codeless — they may have changed '
+    + 'code, but with no branch to land there will never be a receipt, so Orbit cannot see whether it reached main',
+  CODELESS: 'its tasks were declared codeless or worked in another repository, so nothing of it lands here',
 };
 
 /** The counts line, from the projection's own counts: the one place they are added up. */

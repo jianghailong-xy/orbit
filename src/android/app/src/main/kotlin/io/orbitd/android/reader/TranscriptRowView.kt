@@ -115,8 +115,9 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
     LaunchedEffect(row.key, questions.isNotEmpty()) { if (questions.isNotEmpty() && (event.truncated || row.result?.truncated == true)) loadFull(reveal = false) }
     val title = when (event.type) {
         "user" -> if (cards.isNotEmpty()) "Orbit" else (event.fields["sessionMessage"] as? JsonObject)?.let { "From ${it.string("fromTitle") ?: "another Orbit session"}" }
-            // Somebody outside Orbit — a connected Feishu group's member (`externalSender`, docs/feishu-bot-design.md §8.2): their
-            // words, headed `From Feishu · <name>` so they do not read as the owner's own (web `.chat-user-from`, OrbitKit `UserBubbleView`).
+            // Somebody other than the owner — a connected Feishu group's member (`externalSender`, docs/feishu-bot-design.md §8.2), or
+            // a guest the owner invited (docs/session-guests-design.md §3): their words, headed `From Feishu · <name>` or `From <name>`
+            // so they do not read as the owner's own (web `.chat-user-from`, OrbitKit `UserBubbleView`).
             ?: ExternalSender.parse(event.fields["externalSender"])?.let(ExternalSender::label) ?: "You"
         "assistant" -> "Assistant"
         "thinking" -> "Thinking"

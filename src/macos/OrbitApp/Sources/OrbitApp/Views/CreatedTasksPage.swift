@@ -40,6 +40,7 @@ struct CreatedTasksPage: View {
         }
         #if os(iOS)
         .listStyle(.plain)
+        .softTopEdgeEffect()
         #endif
         .overlay {
             if !loaded {

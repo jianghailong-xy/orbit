@@ -26,6 +26,7 @@ struct WikiContentsColumn: View {
                                  pick: select)
             }
             .listStyle(.plain)
+            .softTopEdgeEffect()
             .navigationTitle("")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

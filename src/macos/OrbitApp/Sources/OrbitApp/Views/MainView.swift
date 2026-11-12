@@ -143,7 +143,8 @@ enum SidebarSelection: Hashable {
     case agent(String)
     /// A machine with no workspace: its Set up row, and the new session page it opens.
     case machine(String)
-    /// An open project in the Projects group: its page, in the Projects section.
+    /// An open project in the Projects group: its sessions page in the session column, as the iPad
+    /// opens it (owner 2026-11-12).
     case project(String)
 }
 
@@ -159,16 +160,21 @@ struct SectionSidebar: View {
     let isAdmin: Bool
     @AppStorage("sidebar.workspacesExpanded") private var workspacesExpanded = true
     @AppStorage("sidebar.projectsExpanded") private var projectsExpanded = true
+    /// The workspace whose settings its row's menu opened.
+    @State private var editingWorkspace: Agent?
 
     /// Bridge the model's fields to the List's single selection.
     private var selection: Binding<SidebarSelection?> {
         Binding(
             get: {
                 if let runnerID = model.machineDraftRunnerID { return .machine(runnerID) }
-                if model.selectedSection == .agents, let id = model.selectedAgentID { return .agent(id) }
-                if model.selectedSection == .projects, case .projectDetail(let id, _)? = model.nav.path.first {
-                    return .project(id)
+                if model.selectedSection == .agents, let address = model.projectSessionsColumn {
+                    // The row's tag is the project list's own spelling of the id.
+                    let key = PublicID.storageKey(address.projectID)
+                    let listed = model.projects?.projects.first { PublicID.storageKey($0.id) == key }?.id
+                    return .project(listed ?? address.projectID)
                 }
+                if model.selectedSection == .agents, let id = model.selectedAgentID { return .agent(id) }
                 return .section(model.selectedSection)
             },
             set: { value in
@@ -176,11 +182,11 @@ struct SectionSidebar: View {
                 case .section(let s):
                     model.selectedSection = s
                 case .agent(let id):
-                    model.openAgent(id)
+                    openWorkspace(id)
                 case .machine(let runnerID):
                     model.openMachineDraft(runnerID)
                 case .project(let id):
-                    model.openProject(id)
+                    model.openProjectSessions(id, inColumn: true)
                 case nil:
                     break
                 }
@@ -239,6 +245,9 @@ struct SectionSidebar: View {
             }
             .background(.bar)
         }
+        .sheet(item: $editingWorkspace) { agent in
+            if let agents = model.agents { AgentSettingsSheet(agents: agents, agent: agent) }
+        }
         .task { await model.loadAgentsThenLand() }
         // Whether the Wiki row is drawn at all is the spaces read's answer (WIKI_DISABLED, `WikiLogic.shown`).
         .task { await model.wiki?.loadSpaces() }
@@ -279,37 +288,65 @@ struct SectionSidebar: View {
     }
 
     /// The Workspaces one line each, in the drawer's runner-stable order, then a Set up row per machine
-    /// with no workspace.
-    @ViewBuilder
+    /// with no workspace. One flat ForEach over `AgentListLogic.sidebarRows`, one view per row: an
+    /// if/else or a second ForEach in here is the shape the outline list's row reload aborted on.
     private func workspaceRows(shortcutIndex: [String: Int]) -> some View {
-        if let agents = model.agents, !agents.orderedItems.isEmpty || !agents.machinesToSetUp.isEmpty {
-            ForEach(agents.orderedItems) { agent in
+        let agents = model.agents
+        return ForEach(AgentListLogic.sidebarRows(agents?.orderedItems ?? [], machines: agents?.machinesToSetUp ?? [])) { row in
+            switch row {
+            case .agent(let agent):
+                let configured = agents?.configuredProviders ?? []
                 WorkspaceNavigationRow(
                     agent: agent,
-                    runnerLabel: agents.runnerLabel(agent.runnerId),
+                    runnerLabel: agents?.runnerLabel(agent.runnerId) ?? "",
                     // The system draws the selection, so the folder keeps one colour.
                     selected: false,
-                    offline: agents.runnerIsOffline(agent.runnerId),
+                    offline: agents?.runnerIsOffline(agent.runnerId) ?? false,
                     running: model.runningWorkspaceIDs.contains(agent.id),
                     jobs: model.jobWorkspaceIDs.contains(agent.id),
                     waiting: model.agentNeedsYou[agent.id] ?? 0,
                     shortcut: shortcutIndex[agent.id]
                 )
                 // What the two-line row used to say under the name: what its next session starts on, and where.
-                .help(SessionProviderChoices.engineVia(engine: agent.defaultEngine(configured: agents.configuredProviders),
+                .help(SessionProviderChoices.engineVia(engine: agent.defaultEngine(configured: configured),
                                                        provider: agent.defaultProvider,
-                                                       configured: agents.configuredProviders)
+                                                       configured: configured)
                       + (agent.workDir.map { " · \($0)" } ?? ""))
+                .contextMenu { workspaceMenu(agent) }
                 .tag(SidebarSelection.agent(agent.id))
-            }
-            ForEach(agents.machinesToSetUp) { machine in
+            case .setUp(let machine):
                 setUpRow(machine)
                     .tag(SidebarSelection.machine(machine.id))
+            case .placeholder:
+                Text(emptyWorkspacesText("No workspaces"))
+                    .font(.orbitLabel).foregroundStyle(.secondary)
             }
-        } else {
-            Text(emptyWorkspacesText("No workspaces"))
-                .font(.orbitLabel).foregroundStyle(.secondary)
         }
+    }
+
+    /// A workspace row's right-click menu (docs/mocks/macos-sidebar, 01, owner 2026-11-12): a session in
+    /// it, its list, its settings, its folder's path, and the machine it runs on.
+    @ViewBuilder
+    private func workspaceMenu(_ agent: Agent) -> some View {
+        Button("New Session") {
+            openWorkspace(agent.id)
+            model.newSessionInCurrentAgent()
+        }
+        Button("Open Sessions") { openWorkspace(agent.id) }
+        Divider()
+        Button("Workspace Settings…") { editingWorkspace = agent }
+        if let path = agent.workDir {
+            Button("Copy Path") { PlatformPasteboard.copyString(path) }
+        }
+        if let runnerID = agent.runnerId {
+            Button("Show Machine") { model.route(to: .runner(runnerID)) }
+        }
+    }
+
+    /// The workspace's own session list, off any project's sessions page that covered it.
+    private func openWorkspace(_ id: String) {
+        if model.selectedAgentID == id, model.projectSessionsColumn != nil { model.leaveProjectSessions() }
+        model.openAgent(id)
     }
 
     /// In the tint, as on the phone's drawer, until it is the row selected: blue on the selection's
