@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MAIN_CHECKOUT_ACTION_KINDS,
   MAIN_CHECKOUT_CARD_HANDLED_COPY,
+  MAIN_CHECKOUT_CARD_HEALTH_LAG_SECONDS,
   MAIN_CHECKOUT_FILE_LIMIT,
   MAIN_CHECKOUT_GIT_CAPABILITY,
   MAIN_CHECKOUT_LINK_ACTIONS,
@@ -68,10 +69,12 @@ const fixture = JSON.parse(readFileSync(path.join(__dirname, 'main-checkout-git.
   results: FixtureResult[];
   cardHandled: {
     copy: Record<string, string>;
+    healthLagSeconds: number;
     cases: Array<{
       name: string;
       results: MainCheckoutActionResult[];
       current: MainCheckoutCurrent | null;
+      cardAgeSeconds: number | null;
       handled: MainCheckoutCardHandled | null;
     }>;
   };
@@ -211,10 +214,11 @@ describe('main checkout Git contract', () => {
 
   it('retires a card once its changes were moved, saved or are gone, and only then', () => {
     expect(fixture.cardHandled.copy).toEqual(MAIN_CHECKOUT_CARD_HANDLED_COPY);
+    expect(fixture.cardHandled.healthLagSeconds).toBe(MAIN_CHECKOUT_CARD_HEALTH_LAG_SECONDS);
     for (const c of fixture.cardHandled.cases) {
-      expect(mainCheckoutCardHandled(fixture.changedNotice, c.results, c.current), c.name).toBe(c.handled);
+      expect(mainCheckoutCardHandled(fixture.changedNotice, c.results, c.current, c.cardAgeSeconds), c.name).toBe(c.handled);
     }
-    expect(mainCheckoutCardHandled(fixture.changedNotice, [], fixture.heartbeatRepo)).toBeNull();
-    expect(mainCheckoutCardHandled(fixture.changedNotice, [], fixture.snapshot)).toBeNull();
+    expect(mainCheckoutCardHandled(fixture.changedNotice, [], fixture.heartbeatRepo, 600)).toBeNull();
+    expect(mainCheckoutCardHandled(fixture.changedNotice, [], fixture.snapshot, 600)).toBeNull();
   });
 });

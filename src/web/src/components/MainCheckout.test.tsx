@@ -230,7 +230,8 @@ describe('a handled main checkout card', () => {
     paths: ['src/api/client.ts'],
     finishedAt: '2026-11-12T08:00:00.000Z',
   };
-  const event = (seq: number, payload: unknown) => ({ seq, type: 'system', payload: payload as Record<string, unknown> });
+  const OLD = new Date(Date.now() - 10 * 60_000).toISOString();
+  const event = (seq: number, payload: unknown, ts = OLD) => ({ seq, type: 'system', ts, payload: payload as Record<string, unknown> });
   const resultEvent = (seq: number, result: MainCheckoutActionResult) =>
     event(seq, { noticeKind: 'main-checkout-action-result', notice: mainCheckoutResultLine(result).text, result });
   const actionButtons = (view: HTMLElement) => [...view.querySelectorAll<HTMLButtonElement>('.mck-card-buttons > button')];
@@ -269,6 +270,21 @@ describe('a handled main checkout card', () => {
     );
     expect(actionButtons(view).every((b) => b.disabled)).toBe(true);
     expect(view.querySelector('.mck-card-handled')?.textContent).toBe('These changes are no longer in the main checkout');
+  });
+
+  it('does not read a clean heartbeat as gone while the card is new: that is the checkout from before the turn', async () => {
+    const clean = { ...HEALTH_DIRTY, state: 'clean', fileCount: 0 };
+    for (const ts of [new Date().toISOString(), undefined]) {
+      const view = await mount(
+        <Transcript events={[{ seq: 1, type: 'system', ts, payload: NOTICE as unknown as Record<string, unknown> }]} />,
+        makeHost({ health: clean }),
+      );
+      expect(actionButtons(view).map((b) => b.disabled)).toEqual([false, false, false]);
+      expect(view.querySelector('.mck-card-handled')).toBeNull();
+      await act(async () => root!.unmount());
+      root = null;
+      container?.remove();
+    }
   });
 
   it('stays live after a refusal, after a move of only some of its files, and for a result written before it', async () => {

@@ -39,11 +39,13 @@ const LEFT_KEY = 'mck-card-left:';
  *  them, or the checkout no longer holds them, the card stays as history with one muted line and no actions. */
 export function MainCheckoutCard({ notice, seq }: { notice: MainCheckoutChangedNotice; seq?: number }) {
   const host = useMainCheckoutHost();
-  const results = useMainCheckoutResults();
+  const transcript = useMainCheckoutResults();
+  const writtenAt = seq === undefined ? undefined : transcript.writtenAt.get(seq);
   const handled = mainCheckoutCardHandled(
     notice,
-    results.filter((r) => seq === undefined || r.seq > seq).map((r) => r.result),
+    transcript.results.filter((r) => seq === undefined || r.seq > seq).map((r) => r.result),
     host?.health,
+    writtenAt ? (Date.now() - Date.parse(writtenAt)) / 1000 : null,
   );
   const leftKey = `${LEFT_KEY}${host?.sessionId ?? ''}:${notice.fingerprint}`;
   const [left, setLeft] = useState(() => {

@@ -245,6 +245,9 @@ class MainCheckoutTest {
         val copy = block["copy"]!!.jsonObject
         assertEquals(copy["result"]!!.jsonPrimitive.content, MainCheckout.Handled.RESULT.line)
         assertEquals(copy["gone"]!!.jsonPrimitive.content, MainCheckout.Handled.GONE.line)
+        assertEquals(block["healthLagSeconds"]!!.jsonPrimitive.double, MainCheckout.CARD_HEALTH_LAG_SECONDS, 0.0)
+        assertEquals(30.0, MainCheckout.ageSeconds("2026-11-12T08:00:00.000Z", java.time.Instant.parse("2026-11-12T08:00:30Z").toEpochMilli()))
+        assertNull(MainCheckout.ageSeconds(null))
         // The same words sit in the shared module verbatim.
         assertTrue(source.contains("'${MainCheckout.COPY_CARD_HANDLED_RESULT}'"))
         assertTrue(source.contains("'${MainCheckout.COPY_CARD_HANDLED_GONE}'"))
@@ -253,7 +256,8 @@ class MainCheckoutTest {
         assertTrue(cases.isNotEmpty())
         cases.forEach { c ->
             val results = c["results"]!!.jsonArray.mapNotNull { MainCheckout.result(it.jsonObject) }
-            val got = MainCheckout.handled(notice, results, c["current"] as? JsonObject)
+            val age = (c["cardAgeSeconds"] as? JsonPrimitive)?.doubleOrNull
+            val got = MainCheckout.handled(notice, results, c["current"] as? JsonObject, age)
             assertEquals(c["name"]!!.jsonPrimitive.content, (c["handled"] as? JsonPrimitive)?.contentOrNull, got?.name?.lowercase())
         }
     }

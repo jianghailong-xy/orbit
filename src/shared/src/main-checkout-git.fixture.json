@@ -747,11 +747,12 @@
     }
   ],
   "cardHandled": {
-    "_comment": "Whether the changedNotice card above is handled: results are the ones written after it in the same session, current the checkout as the client knows it now (a snapshot with files, or the heartbeat repo with paths). handled is the MAIN_CHECKOUT_CARD_HANDLED_COPY key, or null for a live card.",
+    "_comment": "Whether the changedNotice card above is handled: results are the ones written after it in the same session, current the checkout as the client knows it now (a snapshot with files, or the heartbeat repo with paths). cardAgeSeconds how long ago the card was written (null: unknown). handled is the MAIN_CHECKOUT_CARD_HANDLED_COPY key, or null for a live card.",
     "copy": {
       "result": "Handled — see the result below",
       "gone": "These changes are no longer in the main checkout"
     },
+    "healthLagSeconds": 120,
     "cases": [
       {
         "name": "move done for all its files",
@@ -771,6 +772,7 @@
           }
         ],
         "current": null,
+        "cardAgeSeconds": 600,
         "handled": "result"
       },
       {
@@ -789,6 +791,7 @@
           }
         ],
         "current": null,
+        "cardAgeSeconds": 600,
         "handled": "result"
       },
       {
@@ -825,6 +828,7 @@
           "truncated": false,
           "fingerprint": "mc1:62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7:27a2714bb42c00aee96da70da7154696ed3f0e90e9fa66183614c6e8fdc54ba8"
         },
+        "cardAgeSeconds": 600,
         "handled": null
       },
       {
@@ -846,6 +850,7 @@
           }
         ],
         "current": null,
+        "cardAgeSeconds": 600,
         "handled": null
       },
       {
@@ -866,6 +871,7 @@
           }
         ],
         "current": null,
+        "cardAgeSeconds": 600,
         "handled": null
       },
       {
@@ -886,6 +892,7 @@
           }
         ],
         "current": null,
+        "cardAgeSeconds": 600,
         "handled": null
       },
       {
@@ -897,6 +904,7 @@
           "fileCount": 0,
           "truncated": false
         },
+        "cardAgeSeconds": 600,
         "handled": "gone"
       },
       {
@@ -914,6 +922,7 @@
             }
           ]
         },
+        "cardAgeSeconds": 600,
         "handled": "gone"
       },
       {
@@ -935,6 +944,7 @@
             }
           ]
         },
+        "cardAgeSeconds": 600,
         "handled": null
       },
       {
@@ -949,6 +959,7 @@
             "README.md"
           ]
         },
+        "cardAgeSeconds": 600,
         "handled": null
       },
       {
@@ -963,6 +974,7 @@
             "README.md"
           ]
         },
+        "cardAgeSeconds": 600,
         "handled": "gone"
       },
       {
@@ -987,7 +999,65 @@
           "fileCount": 0,
           "truncated": false
         },
+        "cardAgeSeconds": 600,
         "handled": "gone"
+      },
+      {
+        "name": "a clean heartbeat right after the card is the checkout from before the turn",
+        "results": [],
+        "current": {
+          "root": "/root/orbit",
+          "state": "clean",
+          "fileCount": 0,
+          "truncated": false
+        },
+        "cardAgeSeconds": 10,
+        "handled": null
+      },
+      {
+        "name": "a clean heartbeat when the card's time is unknown settles nothing",
+        "results": [],
+        "current": {
+          "root": "/root/orbit",
+          "state": "clean",
+          "fileCount": 0,
+          "truncated": false
+        },
+        "cardAgeSeconds": null,
+        "handled": null
+      },
+      {
+        "name": "a clean heartbeat once the card is old enough",
+        "results": [],
+        "current": {
+          "root": "/root/orbit",
+          "state": "clean",
+          "fileCount": 0,
+          "truncated": false
+        },
+        "cardAgeSeconds": 120,
+        "handled": "gone"
+      },
+      {
+        "name": "a result line counts at any age",
+        "results": [
+          {
+            "requestId": "req-1",
+            "root": "/root/orbit",
+            "finishedAt": "2026-11-12T08:00:00.000Z",
+            "kind": "move",
+            "status": "done",
+            "branch": "main",
+            "fileCount": 3,
+            "remaining": 0,
+            "rescueBranch": "orbit/rescue-5f2c1a9",
+            "targetSessionId": "sess-1",
+            "targetBranch": "orbit/fix-retry-backoff"
+          }
+        ],
+        "current": null,
+        "cardAgeSeconds": 1,
+        "handled": "result"
       }
     ]
   }

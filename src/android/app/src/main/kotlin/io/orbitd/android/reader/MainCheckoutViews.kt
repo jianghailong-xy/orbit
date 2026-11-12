@@ -69,7 +69,7 @@ private fun FileLine(file: MainCheckout.File, modifier: Modifier = Modifier, lea
  * recommended action (Move to this worktree), the review, and the rest under ⋯. Without the runner's capability it is the text alone.
  */
 @Composable
-internal fun MainCheckoutCard(notice: MainCheckout.ChangedNotice, key: String, seq: Long? = null) {
+internal fun MainCheckoutCard(notice: MainCheckout.ChangedNotice, key: String, seq: Long? = null, writtenAt: String? = null) {
     val model = LocalMainCheckout.current
     val console = LocalSessionConsole.current
     val detail = console?.detail
@@ -78,7 +78,7 @@ internal fun MainCheckoutCard(notice: MainCheckout.ChangedNotice, key: String, s
     // Moved, saved or gone: the card stays as history, its buttons held and one muted line saying why.
     val results = LocalMainCheckoutResults.current
     val handled = MainCheckout.handled(notice, results.filter { seq == null || it.first > seq }.map { it.second },
-        mc?.workspace?.get("repoHealth") as? JsonObject)
+        mc?.workspace?.get("repoHealth") as? JsonObject, MainCheckout.ageSeconds(writtenAt))
     val busy = mc?.busy == true || handled != null
     val isolated = detail.isolated()
     val sessionBranch = detail?.string("branch")

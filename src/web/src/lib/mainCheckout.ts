@@ -57,11 +57,17 @@ export function useMainCheckoutHost(): MainCheckoutHost | null {
   return useContext(MainCheckoutCtx);
 }
 
-/** Every main-checkout result line of the conversation on screen, with its seq: a card reads the ones after it to
- *  learn whether it was handled. Provided by Transcript. */
-export const MainCheckoutResultsCtx = createContext<ReadonlyArray<{ seq: number; result: MainCheckoutActionResult }>>([]);
+/** The conversation on screen as a main-checkout card reads it to learn whether it was handled: every result line with
+ *  its seq, and when each event was written. Provided by Transcript. */
+export interface MainCheckoutTranscript {
+  results: ReadonlyArray<{ seq: number; result: MainCheckoutActionResult }>;
+  /** The event's `ts`, by seq; absent when the stream carried none. */
+  writtenAt: ReadonlyMap<number, string>;
+}
 
-export function useMainCheckoutResults(): ReadonlyArray<{ seq: number; result: MainCheckoutActionResult }> {
+export const MainCheckoutResultsCtx = createContext<MainCheckoutTranscript>({ results: [], writtenAt: new Map() });
+
+export function useMainCheckoutResults(): MainCheckoutTranscript {
   return useContext(MainCheckoutResultsCtx);
 }
 

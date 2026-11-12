@@ -174,6 +174,9 @@ internal object MainCheckout {
     /** A handled card's muted line, in place of its Move hint (shared `MAIN_CHECKOUT_CARD_HANDLED_COPY`). */
     const val COPY_CARD_HANDLED_RESULT = "Handled — see the result below"
     const val COPY_CARD_HANDLED_GONE = "These changes are no longer in the main checkout"
+    /** How old a card must be before the heartbeat's checkout can speak for it (shared `MAIN_CHECKOUT_CARD_HEALTH_LAG_SECONDS`):
+     *  right after the card the heartbeat still reports the checkout from before the turn. */
+    const val CARD_HEALTH_LAG_SECONDS = 120.0
 
     fun filesCount(n: Int) = "$n ${if (n == 1) "file" else "files"}"
     private fun uncommittedFiles(n: Int, other: Boolean = false) = "$n ${if (other) "other " else ""}uncommitted ${if (n == 1) "file" else "files"}"
@@ -321,12 +324,14 @@ internal object MainCheckout {
     /** RESULT when a Move or Save to a rescue branch written after the card in the same session succeeded for all its files, GONE
      *  when the checkout provably holds none of its paths, null while it is live. A refusal, a partial move or a move of fewer files
      *  keeps it live, and so does a checkout Orbit can't see whole. [current] is a snapshot (`files`) or the heartbeat's repo
-     *  (`paths`: tracked only and capped, so they settle nothing unless they number `fileCount`). */
-    fun handled(notice: ChangedNotice, laterResults: List<Result>, current: JsonObject?): Handled? {
+     *  (`paths`: tracked only and capped, so they settle nothing unless they number `fileCount`). [cardAgeSeconds] is how long ago
+     *  the card was written: under [CARD_HEALTH_LAG_SECONDS], or null, [current] is not read. */
+    fun handled(notice: ChangedNotice, laterResults: List<Result>, current: JsonObject?, cardAgeSeconds: Double?): Handled? {
         val took = laterResults.any { r ->
             r.root == notice.root && r.status == "done" && (r.kind == "rescue" || (r.kind == "move" && (r.fileCount ?: 0) >= notice.files.size))
         }
         if (took) return Handled.RESULT
+        if (cardAgeSeconds == null || cardAgeSeconds < CARD_HEALTH_LAG_SECONDS) return null
         current ?: return null
         if (current.str("root") != notice.root) return null
         val fileCount = current.int("fileCount") ?: return null
@@ -337,6 +342,10 @@ internal object MainCheckout {
         val now = listed.toSet()
         return if (notice.files.any { it.path in now }) null else Handled.GONE
     }
+
+    /** Seconds since an event's `ts`, or null when it carries none that reads. */
+    fun ageSeconds(ts: String?, nowMillis: Long = System.currentTimeMillis()): Double? =
+        ts?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }?.let { (nowMillis - it) / 1000.0 }
 
     // -----------------------------------------------------------------------------------------------------------
     // "Ask the agent …": prompts put in the composer, never sent by themselves (not on the board; the contract leaves them

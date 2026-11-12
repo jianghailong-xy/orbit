@@ -1816,13 +1816,16 @@ export const Transcript = memo(function Transcript({
     return 0;
   }, [events]);
   // The main-checkout cards read the result lines written after them (MainCheckoutCard's handled state).
-  const mainCheckoutResults = useMemo(
-    () =>
-      events.flatMap((ev) =>
-        ev.type === 'system' && isMainCheckoutResult(ev.payload) ? [{ seq: ev.seq, result: ev.payload.result }] : [],
-      ),
-    [events],
-  );
+  const mainCheckoutResults = useMemo(() => {
+    const results: Array<{ seq: number; result: MainCheckoutResultNotice['result'] }> = [];
+    const writtenAt = new Map<number, string>();
+    for (const ev of events) {
+      if (ev.type !== 'system') continue;
+      if (isMainCheckoutResult(ev.payload)) results.push({ seq: ev.seq, result: ev.payload.result });
+      else if (isMainCheckoutChanged(ev.payload) && ev.ts) writtenAt.set(ev.seq, ev.ts);
+    }
+    return { results, writtenAt };
+  }, [events]);
   const body = (
     <MainCheckoutResultsCtx.Provider value={mainCheckoutResults}>
       <TaskLookupCtx.Provider value={taskLookup}>

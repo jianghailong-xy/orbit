@@ -81,7 +81,7 @@ struct MainCheckoutCardView: View {
         let actions = MainCheckoutCard.showsActions(actionsSupported: ctx.actionsSupported,
                                                     dismissed: console.mainCheckout.dismissedCards.contains(item.id))
         // Moved, saved or gone: the card stays as history, its buttons held and one muted line saying why.
-        let handled = MainCheckoutCard.handled(notice, seq: item.seq, in: console.state.items,
+        let handled = MainCheckoutCard.handled(notice, item: item, in: console.state.items,
                                                health: ctx.workspace?.repoHealth)
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: 8) {

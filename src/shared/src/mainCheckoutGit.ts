@@ -663,16 +663,23 @@ export interface MainCheckoutCurrent {
   paths?: readonly string[];
 }
 
+/** How old a card must be before the heartbeat's checkout can speak for it. The heartbeat carries no time of its own, and
+ *  right after the card it still reports the checkout from before the turn (the runner rescans every 60 s and beats every
+ *  30 s): read then, a clean checkout would retire every new card. */
+export const MAIN_CHECKOUT_CARD_HEALTH_LAG_SECONDS = 120;
+
 /**
  * Whether a main-checkout-changed card is done with, and why: 'result' when a Move or Save to a rescue branch
  * written after it in the same session succeeded for all its files, 'gone' when the current checkout provably holds
  * none of its paths, null when it is still live. A refusal, a partial move or a move of fewer files than the card
- * lists keeps it live, and so does a checkout Orbit can't see whole.
+ * lists keeps it live, and so does a checkout Orbit can't see whole. `cardAgeSeconds` is how long ago the card was
+ * written: under MAIN_CHECKOUT_CARD_HEALTH_LAG_SECONDS, or unknown, `current` is not read.
  */
 export function mainCheckoutCardHandled(
   notice: Pick<MainCheckoutChangedNotice, 'root' | 'files'>,
   laterResults: readonly MainCheckoutActionResult[],
   current?: MainCheckoutCurrent | null,
+  cardAgeSeconds?: number | null,
 ): MainCheckoutCardHandled | null {
   const took = laterResults.some(
     (r) =>
@@ -681,6 +688,7 @@ export function mainCheckoutCardHandled(
       (r.kind === 'rescue' || (r.kind === 'move' && (r.fileCount ?? 0) >= notice.files.length)),
   );
   if (took) return 'result';
+  if (cardAgeSeconds == null || !(cardAgeSeconds >= MAIN_CHECKOUT_CARD_HEALTH_LAG_SECONDS)) return null;
   if (!current || current.root !== notice.root || typeof current.fileCount !== 'number') return null;
   if (current.fileCount === 0) return 'gone';
   const listed = current.files ? current.files.map((f) => f.path) : current.paths;

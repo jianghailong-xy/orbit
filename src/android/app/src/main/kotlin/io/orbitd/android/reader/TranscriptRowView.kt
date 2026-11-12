@@ -169,7 +169,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             return@Column
         }
         // The main checkout's card (board 01) and an action's outcome line (board 03).
-        if (event.type == MainCheckout.ROW_CARD) { MainCheckout.changedNotice(shown.fields)?.let { MainCheckoutCard(it, row.key, event.seq) }; return@Column }
+        if (event.type == MainCheckout.ROW_CARD) { MainCheckout.changedNotice(shown.fields)?.let { MainCheckoutCard(it, row.key, event.seq, event.ts) }; return@Column }
         if (event.type == MainCheckout.ROW_RESULT) { MainCheckout.resultNotice(shown.fields)?.let { MainCheckoutResultRow(it) }; return@Column }
         // A thinking row is its own one line (A06-11); a question card's line folds and opens it, as its record does.
         if (!detailOnly && event.type != "thinking" && bubble == null) Row(Modifier.fillMaxWidth().then(if (questions.isEmpty()) Modifier else Modifier

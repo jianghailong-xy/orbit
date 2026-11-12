@@ -80,9 +80,17 @@ class MainCheckoutViewTest {
     @Test fun aCheckoutWithoutItsPathsSaysTheyAreGone() {
         val clean = buildJsonObject { put("root", "/root/orbit"); put("state", "clean"); put("branch", "main"); put("fileCount", 0) }
         val (model, _) = model(actions = true, repoHealth = clean)
-        show(model) { MainCheckoutCard(notice, "event:3", 3L) }
+        show(model) { MainCheckoutCard(notice, "event:3", 3L, writtenAt = java.time.Instant.now().minusSeconds(600).toString()) }
         assertCardActions(enabled = false)
         compose.onNodeWithTag("main-checkout-card-handled").assertTextEquals("These changes are no longer in the main checkout")
+    }
+
+    @Test fun aCleanHeartbeatRightAfterTheCardIsTheCheckoutFromBeforeTheTurn() {
+        val clean = buildJsonObject { put("root", "/root/orbit"); put("state", "clean"); put("branch", "main"); put("fileCount", 0) }
+        val (model, _) = model(actions = true, repoHealth = clean)
+        show(model) { MainCheckoutCard(notice, "event:3", 3L, writtenAt = java.time.Instant.now().toString()) }
+        assertCardActions(enabled = true)
+        compose.onNodeWithTag("main-checkout-card-handled").assertDoesNotExist()
     }
 
     @Test fun aRefusalOrAResultBeforeTheCardLeavesItLive() {

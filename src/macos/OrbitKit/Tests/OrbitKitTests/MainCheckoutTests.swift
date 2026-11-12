@@ -152,6 +152,7 @@ final class MainCheckoutTests: XCTestCase {
         XCTAssertEqual(copy["gone"], MainCheckoutCopy.cardHandledGone)
         XCTAssertEqual(MainCheckoutCardHandled.result.line, MainCheckoutCopy.cardHandledResult)
         XCTAssertEqual(MainCheckoutCardHandled.gone.line, MainCheckoutCopy.cardHandledGone)
+        XCTAssertEqual(block["healthLagSeconds"] as? Double, MainCheckoutCopy.cardHealthLagSeconds)
         let cases = try XCTUnwrap(block["cases"] as? [[String: Any]])
         XCTAssertFalse(cases.isEmpty)
         for c in cases {
@@ -160,13 +161,14 @@ final class MainCheckoutTests: XCTestCase {
             let current = c["current"] as? [String: Any]
             let listed = (current?["files"] as? [[String: Any]])?.compactMap { $0["path"] as? String }
                 ?? current?["paths"] as? [String]
+            let age = c["cardAgeSeconds"] as? Double
             let got = MainCheckoutCard.handled(notice, laterResults: results, root: current?["root"] as? String,
                                                fileCount: current?["fileCount"] as? Int,
-                                               truncated: current?["truncated"] as? Bool, listed: listed)
+                                               truncated: current?["truncated"] as? Bool, listed: listed, cardAgeSeconds: age)
             XCTAssertEqual(got?.rawValue, c["handled"] as? String, name)
             if current?["files"] == nil {
                 let health = try current.map { try Self.decode(RunnerRepoHealth.self, $0) }
-                XCTAssertEqual(MainCheckoutCard.handled(notice, laterResults: results, health: health)?.rawValue,
+                XCTAssertEqual(MainCheckoutCard.handled(notice, laterResults: results, health: health, cardAgeSeconds: age)?.rawValue,
                                c["handled"] as? String, name)
             }
         }
@@ -183,23 +185,40 @@ final class MainCheckoutTests: XCTestCase {
             let r = try XCTUnwrap(results.first { $0["name"] as? String == name }, name)
             return ["noticeKind": "main-checkout-action-result", "notice": r["text"] as Any, "result": r["result"] as Any]
         }
+        let written = "2026-11-12T08:00:00.000Z"
+        let now = try XCTUnwrap(RelativeTime.parse(written))
+        func event(_ seq: Int, _ object: Any) throws -> RunEvent {
+            RunEvent(seq: seq, type: .system, ts: written, payload: try Self.decode(JSONValue.self, object))
+        }
+        func card(_ items: [TranscriptItem]) throws -> MainCheckoutNoticeItem {
+            let found = items.compactMap { item -> MainCheckoutNoticeItem? in
+                if case .mainCheckout(let m) = item, m.changed != nil { return m }
+                return nil
+            }
+            return try XCTUnwrap(found.first)
+        }
         let dirty = RunnerRepoHealth(root: "/root/orbit", state: "dirty", branch: "main", paths: ["src/api/client.ts"],
                                      fileCount: 3)
+        let clean = RunnerRepoHealth(root: "/root/orbit", state: "clean", branch: "main", paths: nil, fileCount: 0)
         func items(_ events: [RunEvent]) -> [TranscriptItem] {
             var r = TranscriptReducer()
             for e in events { r.apply(e) }
             return r.state.items
         }
-        let moved = items([try Self.systemEvent(seq: 1, changed), try Self.systemEvent(seq: 2, try payload("move done"))])
-        XCTAssertEqual(MainCheckoutCard.handled(notice, seq: 1, in: moved, health: dirty), .result)
-        let refused = items([try Self.systemEvent(seq: 1, changed), try Self.systemEvent(seq: 2, try payload("MOVE_CONFLICT"))])
-        XCTAssertNil(MainCheckoutCard.handled(notice, seq: 1, in: refused, health: dirty))
-        let before = items([try Self.systemEvent(seq: 1, try payload("move done")), try Self.systemEvent(seq: 2, changed)])
-        XCTAssertNil(MainCheckoutCard.handled(notice, seq: 2, in: before, health: dirty))
-        let clean = RunnerRepoHealth(root: "/root/orbit", state: "clean", branch: "main", paths: nil, fileCount: 0)
-        XCTAssertEqual(MainCheckoutCard.handled(notice, seq: 1, in: refused, health: clean), .gone)
-        XCTAssertNil(MainCheckoutCard.handled(notice, seq: 1, in: refused,
-                                              health: RunnerRepoHealth(root: "/root/orbit", state: "dirty", branch: "main", paths: nil)))
+        let moved = items([try event(1, changed), try event(2, try payload("move done"))])
+        XCTAssertEqual(try card(moved).ts, written)
+        XCTAssertEqual(MainCheckoutCard.handled(notice, item: try card(moved), in: moved, health: dirty, now: now), .result)
+        let refused = items([try event(1, changed), try event(2, try payload("MOVE_CONFLICT"))])
+        XCTAssertNil(MainCheckoutCard.handled(notice, item: try card(refused), in: refused, health: dirty, now: now.addingTimeInterval(600)))
+        let before = items([try event(1, try payload("move done")), try event(2, changed)])
+        XCTAssertNil(MainCheckoutCard.handled(notice, item: try card(before), in: before, health: dirty, now: now.addingTimeInterval(600)))
+        // A clean heartbeat right after the card is the checkout from before the turn; two minutes on, it is news.
+        XCTAssertNil(MainCheckoutCard.handled(notice, item: try card(refused), in: refused, health: clean, now: now.addingTimeInterval(10)))
+        XCTAssertEqual(MainCheckoutCard.handled(notice, item: try card(refused), in: refused, health: clean,
+                                                now: now.addingTimeInterval(600)), .gone)
+        XCTAssertNil(MainCheckoutCard.handled(notice, item: try card(refused), in: refused,
+                                              health: RunnerRepoHealth(root: "/root/orbit", state: "dirty", branch: "main", paths: nil),
+                                              now: now.addingTimeInterval(600)))
     }
 
     // MARK: reducer

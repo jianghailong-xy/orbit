@@ -369,7 +369,7 @@ public struct TranscriptReducer: Sendable, Codable {
         let notice = str(ev, "notice") ?? ""
         if kind == MainCheckoutNoticeItem.changedKind {
             guard let changed = try? JSONDecoder().decode(MainCheckoutChangedNotice.self, from: data) else { return nil }
-            return MainCheckoutNoticeItem(id: nextID(), seq: ev.seq, notice: notice, changed: changed)
+            return MainCheckoutNoticeItem(id: nextID(), seq: ev.seq, notice: notice, changed: changed, ts: ev.ts)
         }
         struct Envelope: Decodable { let result: MainCheckoutActionResult }
         guard let envelope = try? JSONDecoder().decode(Envelope.self, from: data) else { return nil }

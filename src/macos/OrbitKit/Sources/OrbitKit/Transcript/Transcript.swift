@@ -69,14 +69,17 @@ public struct MainCheckoutNoticeItem: Equatable, Sendable, Codable, Identifiable
     public let changed: MainCheckoutChangedNotice?
     /// Set for a result line.
     public let result: MainCheckoutActionResult?
+    /// The event's `ts`: when the card was written, which decides whether the heartbeat can speak for it.
+    public var ts: String? = nil
 
     public init(id: String, seq: Int, notice: String, changed: MainCheckoutChangedNotice? = nil,
-                result: MainCheckoutActionResult? = nil) {
+                result: MainCheckoutActionResult? = nil, ts: String? = nil) {
         self.id = id
         self.seq = seq
         self.notice = notice
         self.changed = changed
         self.result = result
+        self.ts = ts
     }
 }
 

@@ -29,6 +29,9 @@ public enum MainCheckoutCopy {
     /// A handled card's muted line, in place of its Move hint (`MAIN_CHECKOUT_CARD_HANDLED_COPY`).
     public static let cardHandledResult = "Handled — see the result below"
     public static let cardHandledGone = "These changes are no longer in the main checkout"
+    /// How old a card must be before the heartbeat's checkout can speak for it (`MAIN_CHECKOUT_CARD_HEALTH_LAG_SECONDS`):
+    /// right after the card the heartbeat still reports the checkout from before the turn.
+    public static let cardHealthLagSeconds: Double = 120
     /// The sheet's own words, which the board leaves to the client.
     public static let loading = "Reading the main checkout…"
     public static let readFailed = "Couldn't read the main checkout"
@@ -400,14 +403,17 @@ public struct MainCheckoutCard: Equatable, Sendable {
     /// checkout provably holds none of its paths, nil while it is live. A refusal, a partial move or a move of
     /// fewer files keeps it live, and so does a checkout Orbit can't see whole. `listed` is every changed
     /// path the client knows of: a snapshot's files, or the heartbeat's paths (tracked only and capped, so
-    /// they settle nothing unless they number `fileCount`).
+    /// they settle nothing unless they number `fileCount`). `cardAgeSeconds` is how long ago the card was written: under
+    /// `MainCheckoutCopy.cardHealthLagSeconds`, or nil, the checkout is not read.
     public static func handled(_ notice: MainCheckoutChangedNotice, laterResults: [MainCheckoutActionResult],
-                               root: String?, fileCount: Int?, truncated: Bool?, listed: [String]?) -> MainCheckoutCardHandled? {
+                               root: String?, fileCount: Int?, truncated: Bool?, listed: [String]?,
+                               cardAgeSeconds: Double?) -> MainCheckoutCardHandled? {
         let took = laterResults.contains { r in
             r.root == notice.root && r.status == "done"
                 && (r.kind == .rescue || (r.kind == .move && (r.fileCount ?? 0) >= notice.files.count))
         }
         if took { return .result }
+        guard let cardAgeSeconds, cardAgeSeconds >= MainCheckoutCopy.cardHealthLagSeconds else { return nil }
         guard root == notice.root, let fileCount else { return nil }
         if fileCount == 0 { return .gone }
         guard let listed, truncated != true, listed.count >= fileCount else { return nil }
@@ -416,19 +422,20 @@ public struct MainCheckoutCard: Equatable, Sendable {
     }
 
     public static func handled(_ notice: MainCheckoutChangedNotice, laterResults: [MainCheckoutActionResult],
-                               health: RunnerRepoHealth?) -> MainCheckoutCardHandled? {
+                               health: RunnerRepoHealth?, cardAgeSeconds: Double?) -> MainCheckoutCardHandled? {
         handled(notice, laterResults: laterResults, root: health?.root, fileCount: health?.fileCount,
-                truncated: health?.truncated, listed: health?.paths)
+                truncated: health?.truncated, listed: health?.paths, cardAgeSeconds: cardAgeSeconds)
     }
 
-    /// The card at `seq` of `items`, against the result lines after it.
-    public static func handled(_ notice: MainCheckoutChangedNotice, seq: Int, in items: [TranscriptItem],
-                               health: RunnerRepoHealth?) -> MainCheckoutCardHandled? {
-        let later = items.compactMap { item -> MainCheckoutActionResult? in
-            guard case .mainCheckout(let m) = item, m.seq > seq else { return nil }
+    /// The card `item` of `items`, against the result lines after it, at `now`.
+    public static func handled(_ notice: MainCheckoutChangedNotice, item: MainCheckoutNoticeItem, in items: [TranscriptItem],
+                               health: RunnerRepoHealth?, now: Date = Date()) -> MainCheckoutCardHandled? {
+        let later = items.compactMap { other -> MainCheckoutActionResult? in
+            guard case .mainCheckout(let m) = other, m.seq > item.seq else { return nil }
             return m.result
         }
-        return handled(notice, laterResults: later, health: health)
+        let age = item.ts.flatMap(RelativeTime.parse).map { now.timeIntervalSince($0) }
+        return handled(notice, laterResults: later, health: health, cardAgeSeconds: age)
     }
 }
 
