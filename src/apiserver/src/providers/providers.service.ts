@@ -16,6 +16,7 @@ import {
   type PlanUsageSnapshot,
   type ProviderKeyUsage,
   type ProviderPreset,
+  type ProviderPresetModel,
 } from '@orbit/shared';
 import { CLAUDE_EFFORT_ORDER } from '../common/runtime-provider';
 import { GENERATING_SESSION_FILTER } from '../common/session-generating';
@@ -706,6 +707,34 @@ export class ProvidersService {
     const row = await this.prisma.modelProvider.update({ where: { id }, data });
     this.publishChanged(ownerId, row.id);
     return this.desensitize(row);
+  }
+
+  /**
+   * Set or clear (null) the owner's SubAgent tier for one model of one of their own keys (docs/subagent-design.md
+   * §4.2, §7). Only a model the key lists and the catalogue gives no tier: the catalogue's tier stands, and a
+   * tier for a model the key does not offer would route nothing. Until one is set the model is not routed onto.
+   */
+  async setModelTier(ownerId: string, id: string, model: string, tier: 'S' | 'M' | 'L' | 'XL' | null) {
+    const current = await this.getScoped(ownerId, id);
+    const listed = (withPreset(current).models as unknown as ProviderPresetModel[] | null) ?? [];
+    if (!Array.isArray(listed) || !listed.some((entry) => entry?.value === model)) {
+      throw new BadRequestException({ code: 'MODEL_NOT_LISTED', message: `${current.label} does not list ${model}` });
+    }
+    const preset = providerPreset(current.presetSlug);
+    if (preset && catalogModels(preset).some((entry) => entry.value === model && entry.tier)) {
+      throw new BadRequestException({ code: 'TIER_FROM_CATALOGUE', message: `${model} takes its tier from the catalogue` });
+    }
+    // The model's own key of the map, set or removed inside the statement: two tiers set at once on one key's
+    // models cannot overwrite each other the way reading the map and writing it back would.
+    await this.prisma.$executeRaw`
+      UPDATE "model_provider"
+         SET "model_tiers" = CASE WHEN ${tier}::text IS NULL
+                               THEN "model_tiers" - ${model}::text
+                             ELSE "model_tiers" || jsonb_build_object(${model}::text, ${tier}::text)
+                             END
+       WHERE "id" = ${current.id}::uuid`;
+    this.publishChanged(ownerId, current.id);
+    return this.desensitize(await this.prisma.modelProvider.findUniqueOrThrow({ where: { id: current.id } }));
   }
 
   /** The id of one of the caller's own providers, found by the slug `orbit provider list` shows — the

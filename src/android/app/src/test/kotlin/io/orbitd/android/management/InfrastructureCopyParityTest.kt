@@ -45,7 +45,8 @@ class InfrastructureCopyParityTest {
     }
 
     /** No product string points at a Providers page: it became Infrastructure on every client (web 33e0e2e09, iOS 5e75edbde). Comments and
-     * code may still name the Swift types the words were ported from (ProvidersOverview). */
+     * code may still name the Swift types the words were ported from (ProvidersOverview). The Agent form's SubAgents group has a row named
+     * Providers (docs/mocks/subagent/05.png): the providers SubAgents may use, not a page. */
     @Test fun noProductStringSaysProviders() {
         val literal = Regex("\"(?:[^\"\\\\\\n]|\\\\.)*\"")
         val found = listOf("app", "core").flatMap { module ->
@@ -54,8 +55,12 @@ class InfrastructureCopyParityTest {
                     .flatMap { (index, line) -> literal.findAll(line).filter { "Providers" in it.value }.map { "${file.name}:${index + 1} ${it.value}" }.toList() }
             }
         }
-        assertEquals(emptyList<String>(), found)
+        // `subagentBlockedProviders` is the preferences field's wire name, never shown.
+        assertEquals(emptyList<String>(), found.filterNot { it.endsWith(" \"subagentBlockedProviders\"") } - "Subagents.kt:${subagentsRow()} \"Providers\"")
     }
+
+    private fun subagentsRow() = File(root, "src/android/app/src/main/kotlin/io/orbitd/android/management/Subagents.kt").readLines()
+        .indexOfFirst { it.contains("const val PROVIDERS = \"Providers\"") } + 1
 
     @Test fun theAntigravityRepairCardSaysInfrastructureAsIosDoes() {
         val engineAuth = read("${kit}EngineAuth.swift")

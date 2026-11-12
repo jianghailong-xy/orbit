@@ -50,6 +50,7 @@ import {
 } from '../lib/queries';
 import { CLAUDE_SESSION_ID_RE, importClaudeSessionAndWait } from '../lib/sessionImport';
 import { useRefreshSessionLists } from '../lib/useControlPlane';
+import { SubagentSettings } from '../components/SubagentSettings';
 import { AbandonedCheckouts } from '../components/AbandonedCheckouts';
 import { ClaudeHistoryOffer, type ImportMode } from '../components/ClaudeHistoryOffer';
 import { AccountSelect, offersAccount } from '../components/AccountSelect';
@@ -166,6 +167,9 @@ interface Workspace {
   /** The other engines smart selection may move this Agent's task runs to (§6). Empty = none: a run
    *  stays on this Agent's own engine. */
   modelRoutingProviders?: string[];
+  /** SubAgents (docs/subagent-design.md §7): on by default, 4 of one session's at once. */
+  subagentsEnabled?: boolean;
+  subagentsMaxRunning?: number;
   /** Default a new session under this workspace inherits. null = inherit the account default.
    *  The permission mode is deliberately NOT here — it belongs to the run (Session), with an
    *  account-level default. */
@@ -405,6 +409,8 @@ export function RunnerDetailPage() {
   const [fModelRouting, setFModelRouting] = useState(false);
   const [fOptimizeFor, setFOptimizeFor] = useState<NonNullable<Workspace['modelRoutingOptimizeFor']>>('cost');
   const [fRoutingEngines, setFRoutingEngines] = useState<string[]>([]);
+  const [fSubagents, setFSubagents] = useState(true);
+  const [fSubagentsMax, setFSubagentsMax] = useState(4);
   const [fEnv, setFEnv] = useState<{ key: string; value: string }[]>([]);
   // null = Default, the runner's own Codex account.
   const [fCodexAccount, setFCodexAccount] = useState<string | null>(null);
@@ -437,6 +443,8 @@ export function RunnerDetailPage() {
         modelRouting: fModelRouting,
         modelRoutingOptimizeFor: fOptimizeFor,
         modelRoutingProviders: fRoutingEngines,
+        subagentsEnabled: fSubagents,
+        subagentsMaxRunning: fSubagentsMax,
         env: Object.fromEntries(
           fEnv.map((r) => [r.key.trim(), r.value]).filter(([k]) => k),
         ),
@@ -636,6 +644,8 @@ export function RunnerDetailPage() {
     setFModelRouting(a?.modelRouting ?? false);
     setFOptimizeFor(a?.modelRoutingOptimizeFor ?? 'cost');
     setFRoutingEngines(a?.modelRoutingProviders ?? []);
+    setFSubagents(a?.subagentsEnabled ?? true);
+    setFSubagentsMax(a?.subagentsMaxRunning ?? 4);
     setFEnv(Object.entries(a?.env ?? {}).map(([key, value]) => ({ key, value })));
     setFCodexAccount(a?.codexAccount ?? null);
     setFClaudeAccount(a?.claudeAccount ?? null);
@@ -899,6 +909,24 @@ export function RunnerDetailPage() {
           />
         </SettingRow>
       )}
+
+      <SubagentSettings
+        enabled={fSubagents}
+        onEnabledChange={(v) => {
+          setFSubagents(v);
+          setDirty(true);
+        }}
+        optimizeFor={fOptimizeFor}
+        onOptimizeForChange={(v) => {
+          setFOptimizeFor(v);
+          setDirty(true);
+        }}
+        maxRunning={fSubagentsMax}
+        onMaxRunningChange={(v) => {
+          setFSubagentsMax(v);
+          setDirty(true);
+        }}
+      />
 
       {/* Model is not a workspace field: it resolves from the engine and provider this project last
           ran on, both said as they are (board 7 ②). Stated read-only because the row displays it —
