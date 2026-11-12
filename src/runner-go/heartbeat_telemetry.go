@@ -183,7 +183,11 @@ func heartbeatSessionSnapshot(pool *sessionPool, telemetry *heartbeatTelemetryPr
 ) {
 	supervisors, activeTargets := pool.heartbeatSnapshot()
 	ids := make([]string, 0, len(supervisors))
-	for id := range supervisors {
+	for id, s := range supervisors {
+		// Supervised means a supervisor exists: a session still being reclaimed has none yet.
+		if s.supervisor == nil {
+			continue
+		}
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)

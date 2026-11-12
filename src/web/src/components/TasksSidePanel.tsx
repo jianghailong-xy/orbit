@@ -59,7 +59,6 @@ import {
   projectDetailsQuery,
   sessionQuery,
   wikiSpacesQuery,
-  wikiTrashQuery,
   workspaceSessionCountsQuery,
 } from '../lib/queries';
 import { listPollMs, streamDown, streamPoll } from '../lib/listBudget';
@@ -78,7 +77,7 @@ import {
 } from '../lib/projectAttention';
 import { WIKI_PATH, wikiShown, wikiSpacePath, wikiWaitingOnYou, type WikiSpaceRow } from '../lib/wiki';
 import { WAITING_ON_YOU, useWaitingOnYouCount } from '../lib/ownerRequests';
-import { WIKI_SETTINGS_TITLE, WIKI_TRASH_OPEN, WIKI_TRASH_PAGE_TITLE, wikiSettingsPath } from '../lib/wikiReviewMode';
+import { WIKI_SETTINGS_TITLE, WIKI_TRASH_OPEN, wikiSettingsPath } from '../lib/wikiReviewMode';
 import {
   readWikiFromWorkspace,
   readWikiLastSpace,
@@ -92,7 +91,7 @@ import { SidebarNavIcon } from './SidebarNavIcon';
 import { Avatar } from './ui/Avatar';
 import { useConfirm } from './ui/ConfirmDialog';
 import { Menu, type MenuItem } from './ui/Menu';
-import { WikiTrashDialog, useMoveWikiToTrash } from './WikiTrashDialog';
+import { useMoveWikiToTrash } from './WikiTrashDialog';
 import { Tooltip } from './ui/Tooltip';
 
 const IS_MAC_PLATFORM =
@@ -365,10 +364,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const wikiRows = wikiSpaces.data ?? [];
   const wikiNames = useMemo(() => wikiSpaceNames(wikiSpaces.data ?? []), [wikiSpaces.data]);
   const [wikiOpen, setWikiOpen] = useState(true);
-  // The wikis in Trash (docs/mocks/wiki-trash): the Wiki group's last row while there are any, which opens Trash.
-  const wikiTrash = useQuery({ ...wikiTrashQuery(), enabled: !!me.data });
-  const wikiTrashCount = wikiTrash.data?.spaces?.length ?? 0;
-  const [wikiTrashOpen, setWikiTrashOpen] = useState(false);
 
   // The open workspace comes from /workspaces/<id>; behind a /sessions/<id> link, resolve
   // it from that session so its row highlights there too. The session query reuses
@@ -1122,24 +1117,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     menu={wikiMenu(space)}
                   />
                 ))}
-              {wikiOpen && wikiTrashCount > 0 && (
-                <div
-                  className="tp-item tp-wiki-trash"
-                  onClick={() => setWikiTrashOpen(true)}
-                  onKeyDown={(event) => handleNavActivation(event, () => setWikiTrashOpen(true))}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <span className="tp-ico">
-                    <DeleteOutlined />
-                  </span>
-                  <span className="tp-label">{WIKI_TRASH_PAGE_TITLE}</span>
-                  <span className="tp-count">{wikiTrashCount}</span>
-                </div>
-              )}
             </div>
           )}
-          {wikiTrashOpen && <WikiTrashDialog onClose={() => setWikiTrashOpen(false)} />}
 
           {(hasWorkspaceRows || hasWikis) && hasProjects && <div className="tp-divider" />}
 
