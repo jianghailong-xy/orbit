@@ -1,0 +1,30 @@
+[
+ {
+  "turnId": "34wNxjJXVhjMZCzF35Z7E",
+  "kind": "message",
+  "placement": "queued",
+  "translation": {
+   "state": "FAILED",
+   "from": "zh-Hans",
+   "original": "再跑一遍全部测试"
+  },
+  "content": "再跑一遍全部测试",
+  "createdAt": "2026-11-12T16:00:15.521Z",
+  "attachments": [],
+  "turnPublicId": "34wNxjJXVhjMZCzF35Z7E"
+ },
+ {
+  "turnId": "34wNxkFFPGkt7t6WdWRdv",
+  "kind": "message",
+  "placement": "queued",
+  "translation": {
+   "state": "TRANSLATING",
+   "from": "zh-Hans",
+   "original": "然后合并到 main"
+  },
+  "content": "然后合并到 main",
+  "createdAt": "2026-11-12T16:00:16.113Z",
+  "attachments": [],
+  "turnPublicId": "34wNxkFFPGkt7t6WdWRdv"
+ }
+]
