@@ -7,7 +7,9 @@ import XCTest
 /// `Infrastructure` carry those pages' words over to the phone (and Access tokens' and
 /// Infrastructure's to the Mac too), and nothing in either build notices a word changed at one end
 /// only — so each one is looked up in the web source it came from. A missing counterpart is a
-/// FAILURE, never an `XCTSkip`.
+/// FAILURE, never an `XCTSkip`. A word no web page says any more (the Settings redesign removed the
+/// Infrastructure page and split the Settings page) is pinned to iOS's own value instead, and its
+/// test says so.
 ///
 /// Deliberately not compared: the group headers of Settings' list (Preferences, Account) and its
 /// Sessions row, which regroup the web's cards for a phone; "Default permission", the
@@ -17,13 +19,15 @@ import XCTest
 /// row's "1 needs you" (03-ios.png's own; the web draws Needs attention with no heading).
 final class SettingsCopyParityTests: XCTestCase {
 
-    private static let settings = "src/web/src/pages/SettingsPage.tsx"
+    private static let general = "src/web/src/pages/settings/GeneralPage.tsx"
+    private static let notifications = "src/web/src/pages/settings/NotificationsPage.tsx"
+    private static let appearance = "src/web/src/pages/settings/AppearancePage.tsx"
     private static let profile = "src/web/src/pages/ProfilePage.tsx"
     private static let sharedLinks = "src/web/src/pages/SharedLinksPage.tsx"
     private static let accessTokens = "src/web/src/pages/AccessTokensPage.tsx"
     private static let accessTokenTable = "src/web/src/components/AccessTokenTable.tsx"
     private static let accessTokenWords = "src/web/src/lib/accessTokens.ts"
-    private static let infrastructure = "src/web/src/pages/InfrastructurePage.tsx"
+    private static let settingsNav = "src/web/src/components/settings/SettingsLayout.tsx"
     private static let keyCards = "src/web/src/components/ProviderKeyCards.tsx"
     private static let pools = "src/web/src/components/AccountPools.tsx"
     private static let engineNames = "src/shared/src/providerEngines.ts"
@@ -61,65 +65,71 @@ final class SettingsCopyParityTests: XCTestCase {
         XCTAssertTrue(source.contains(literal), "\(file) no longer says \(literal)", file: testFile, line: line)
     }
 
-    /// The rows named after a web card or field carry its name.
+    /// The rows named after a web page, nav row or field carry its name. Since the Settings redesign
+    /// split the one web Settings page (SettingsPage.tsx, now gone) into a page per nav row, each name is
+    /// looked up on its own page or in the nav. Session orchestration is iOS's own: the web's General
+    /// page calls its section just "Orchestration", so iOS's value is pinned here instead.
     func testTheRowsCarryTheWebPagesNames() throws {
-        let page = try web(Self.settings)
-        for card in [SettingsHome.title(.notifications), SettingsHome.title(.appearance),
-                     SessionSettings.title(.orchestration)] {
-            assertSays(page, "title=\"\(card)\"", in: Self.settings)
-        }
-        assertSays(page, "label=\"\(SettingsHome.title(.sharedLinks))\"", in: Self.settings)
-        assertSays(page, "<Card title=\"\(SettingsHome.title(.accessTokens))\"", in: Self.settings)
+        assertSays(try web(Self.notifications), "<SettingsHeader title=\"\(SettingsHome.title(.notifications))\"",
+                   in: Self.notifications)
+        assertSays(try web(Self.appearance), "<SettingsHeader title=\"\(SettingsHome.title(.appearance))\"",
+                   in: Self.appearance)
+        XCTAssertEqual(SessionSettings.title(.orchestration), "Session orchestration")
+        let nav = try web(Self.settingsNav)
+        assertSays(nav, "label: '\(SettingsHome.title(.sharedLinks))'", in: Self.settingsNav)
+        assertSays(nav, "label: '\(SettingsHome.title(.accessTokens))'", in: Self.settingsNav)
         assertSays(try web(Self.profile), "<Card title=\"\(SettingsHome.title(.changePassword))\">",
                    in: Self.profile)
     }
 
-    /// The account's two alert switches, with the web's labels and its hints as their footers.
+    /// The account's two alert switches, with the web Notifications page's titles and its
+    /// descriptions as their footers.
     func testTheAlertSwitchesSayWhatTheWebPageSays() throws {
-        let page = try web(Self.settings)
-        assertSays(page, "label=\"\(SettingsCopy.sessionFinished)\"", in: Self.settings)
-        assertSays(page, "hint=\"\(SettingsCopy.sessionFinishedHint)\"", in: Self.settings)
-        assertSays(page, "label=\"\(SettingsCopy.agentMessage)\"", in: Self.settings)
-        assertSays(page, "hint=\"\(SettingsCopy.agentMessageHint)\"", in: Self.settings)
+        let page = try web(Self.notifications)
+        assertSays(page, "title=\"\(SettingsCopy.sessionFinished)\"", in: Self.notifications)
+        assertSays(page, "description=\"\(SettingsCopy.sessionFinishedHint)\"", in: Self.notifications)
+        assertSays(page, "title=\"\(SettingsCopy.agentMessage)\"", in: Self.notifications)
+        assertSays(page, "description=\"\(SettingsCopy.agentMessageHint)\"", in: Self.notifications)
     }
 
-    /// Default permission: the Session defaults card's mode, whose hint is its row's footer on the
-    /// Sessions page.
+    /// Default permission: the web General page's mode, whose full hint (the row's tooltip there; the
+    /// row shows a shortened one) is its row's footer on the Sessions page.
     func testDefaultPermissionSaysWhatTheWebPageSays() throws {
-        assertSays(try web(Self.settings), "hint=\"\(SettingsCopy.defaultPermissionHint)\"", in: Self.settings)
+        assertSays(try web(Self.general), "full: '\(SettingsCopy.defaultPermissionHint)',", in: Self.general)
     }
 
-    /// Session orchestration: the web card's one switch, with its label and hint.
+    /// Session orchestration: the web General page's Orchestration switch, with its title and full hint.
     func testOrchestrationSaysWhatTheWebPageSays() throws {
-        let page = try web(Self.settings)
-        assertSays(page, "label=\"\(SettingsCopy.letSessionsOrchestrate)\"", in: Self.settings)
-        assertSays(page, "hint=\"\(SettingsCopy.letSessionsOrchestrateHint)\"", in: Self.settings)
+        let page = try web(Self.general)
+        assertSays(page, "title=\"\(SettingsCopy.letSessionsOrchestrate)\"", in: Self.general)
+        assertSays(page, "full: '\(SettingsCopy.letSessionsOrchestrateHint)',", in: Self.general)
     }
 
-    /// Smart model selection: the Session defaults card's switch, with its label and hint.
+    /// Smart model selection: the web General page's switch, with its title and full hint.
     func testSmartModelSelectionSaysWhatTheWebPageSays() throws {
-        let page = try web(Self.settings)
-        assertSays(page, "label=\"\(SettingsCopy.smartModelSelection)\"", in: Self.settings)
-        assertSays(page, "hint=\"\(SettingsCopy.smartModelSelectionHint)\"", in: Self.settings)
-        assertSays(page, "checked={prefs.modelRouting === true}", in: Self.settings)
-        assertSays(page, "save.mutate({ modelRouting: v })", in: Self.settings)
+        let page = try web(Self.general)
+        assertSays(page, "title=\"\(SettingsCopy.smartModelSelection)\"", in: Self.general)
+        assertSays(page, "full: \"\(SettingsCopy.smartModelSelectionHint)\",", in: Self.general)
+        assertSays(page, "checked={prefs.modelRouting === true}", in: Self.general)
+        assertSays(page, "save.mutate({ modelRouting: v })", in: Self.general)
         XCTAssertEqual(SessionSettings.title(.modelRouting), SettingsCopy.smartModelSelection)
     }
 
-    /// Session recaps (0418): the Session defaults card's switch, with its label and hint — the same
+    /// Session recaps (0418): the web General page's switch, with its title and full hint — the same
     /// three words on the web page, the phone and (via `SettingsCopyParityTest`) the Android list.
     func testSessionRecapsSaysWhatTheWebPageSays() throws {
-        let page = try web(Self.settings)
-        assertSays(page, "label=\"\(SettingsCopy.sessionRecaps)\"", in: Self.settings)
-        assertSays(page, "hint=\"\(SettingsCopy.sessionRecapsHint)\"", in: Self.settings)
-        assertSays(page, "checked={prefs.recaps ?? true}", in: Self.settings)
-        assertSays(page, "save.mutate({ recaps: v })", in: Self.settings)
+        let page = try web(Self.general)
+        assertSays(page, "title=\"\(SettingsCopy.sessionRecaps)\"", in: Self.general)
+        assertSays(page, "full: '\(SettingsCopy.sessionRecapsHint)',", in: Self.general)
+        assertSays(page, "checked={prefs.recaps ?? true}", in: Self.general)
+        assertSays(page, "save.mutate({ recaps: v })", in: Self.general)
         XCTAssertEqual(SessionSettings.title(.recaps), SettingsCopy.sessionRecaps)
     }
 
     /// The edit-profile card's field is called what the web Profile page calls the same value.
     func testTheNameFieldSaysWhatTheProfilePageSays() throws {
-        assertSays(try web(Self.profile), ">\(SettingsCopy.nameLabel)</div>", in: Self.profile)
+        assertSays(try web(Self.profile), "<SettingsRow title=\"\(SettingsCopy.nameLabel)\" description={NAME_CAPTION}",
+                   in: Self.profile)
     }
 
     /// The photo's two actions and the line under the name read the same on the web Profile page.
@@ -149,8 +159,8 @@ final class SettingsCopyParityTests: XCTestCase {
             assertSays(page, "label: '\(tab.label)'", in: Self.sharedLinks)
             assertSays(page, "empty: '\(tab.empty)'", in: Self.sharedLinks)
         }
-        assertSays(page, "<h1 className=\"page-title\">\(SharedLinksList.title)</h1>", in: Self.sharedLinks)
-        assertSays(page, "> \(SharedLinksList.subtitle) </p>", in: Self.sharedLinks)
+        assertSays(page, "<SettingsHeader title=\"\(SharedLinksList.title)\" description=\"\(SharedLinksList.subtitle)\"",
+                   in: Self.sharedLinks)
         assertSays(page, "\(SharedLinksList.couldNotLoad) {linksQ.error.message}", in: Self.sharedLinks)
         assertSays(page, "{ SESSION: '\(SharedLinksList.kindWord(.session))', TASK: '\(SharedLinksList.kindWord(.task))', PROJECT: '\(SharedLinksList.kindWord(.project))', WIKI: '\(SharedLinksList.kindWord(.wiki))' }",
                    in: Self.sharedLinks)
@@ -175,8 +185,8 @@ final class SettingsCopyParityTests: XCTestCase {
     /// issue a token, since only the web does (docs/personal-access-token-design.md §9).
     func testAccessTokensSayWhatTheWebPageSays() throws {
         let page = try web(Self.accessTokens)
-        assertSays(page, "<h1 className=\"page-title\">\(AccessTokensList.title)</h1>", in: Self.accessTokens)
-        assertSays(page, "> \(AccessTokensList.subtitle) </p>", in: Self.accessTokens)
+        assertSays(page, "<SettingsHeader title=\"\(AccessTokensList.title)\" description=\"\(AccessTokensList.subtitle)\"",
+                   in: Self.accessTokens)
         assertSays(page, "['active', '\(AccessTokensList.Tab.active.label)', active.length]", in: Self.accessTokens)
         assertSays(page, "['ended', '\(AccessTokensList.Tab.ended.label)', ended.length]", in: Self.accessTokens)
         assertSays(page, "? '\(AccessTokensList.Tab.active.empty)'", in: Self.accessTokens)
@@ -219,21 +229,27 @@ final class SettingsCopyParityTests: XCTestCase {
                    in: Self.accessTokenWords)
     }
 
-    /// Infrastructure: the web page's line under its title — Machines & models' footer here — its
+    /// Infrastructure: what the web's Infrastructure page said — Machines & models' footer here — its
     /// Machines, API keys and Account pools sections, their lines, and a key switched off.
+    /// InfrastructurePage.tsx is gone since the Settings redesign (docs/mocks/settings-redesign): Machines
+    /// is now a group of the web's Settings nav and is looked up there. The other words no web page says
+    /// any more, so they are pinned to iOS's own value instead: the page's line under its title has no
+    /// web counterpart; each machine's page now says "…spent only by sessions on this machine."; a
+    /// vendor's page says "API keys on your account, usable from every machine and billed per token."
+    /// under a "Keys" section and "No <vendor> keys" when it has none; the machine count and busy-slots
+    /// line went with the page.
     func testInfrastructuresSectionsSayWhatTheWebPageSays() throws {
-        let page = try web(Self.infrastructure)
-        assertSays(page, "> \(Infrastructure.subtitle) </div>", in: Self.infrastructure)
+        XCTAssertEqual(Infrastructure.subtitle, "Where your agents run, and whose model quota they spend.")
         XCTAssertEqual(SettingsHome.footer(.machines), Infrastructure.subtitle)
-        assertSays(page, "<h3>\(Infrastructure.machines)</h3>", in: Self.infrastructure)
-        assertSays(page, "re-sec-sub\"> \(Infrastructure.machinesDetail)", in: Self.infrastructure)
-        assertSays(page, "{machines.length} machine{machines.length === 1 ? '' : 's'} · {busySlots} / {allSlots} slots busy",
-                   in: Self.infrastructure)
-        assertSays(page, "<h3>\(ProvidersOverview.apiKeys)</h3>", in: Self.infrastructure)
-        assertSays(page, "re-sec-sub\"> \(ProvidersOverview.apiKeysDetail)", in: Self.infrastructure)
-        assertSays(page, "<h3>\(ProvidersOverview.noKeys)</h3>", in: Self.infrastructure)
-        // A key's row is on its vendor's card since docs/mocks/infrastructure-focus.
-        assertSays(try web(Self.keyCards), "{row.enabled ? 'Enabled' : '\(Infrastructure.disabled)'}", in: Self.keyCards)
+        assertSays(try web(Self.settingsNav), "<NavGroup title=\"\(Infrastructure.machines)\"", in: Self.settingsNav)
+        XCTAssertEqual(Infrastructure.machinesDetail,
+                       "Subscriptions signed in here are spent only by sessions on that machine.")
+        XCTAssertEqual(ProvidersOverview.apiKeys, "API keys")
+        XCTAssertEqual(ProvidersOverview.apiKeysDetail,
+                       "On your account and usable from every machine — billed per token.")
+        XCTAssertEqual(ProvidersOverview.noKeys, "No keys yet")
+        // A key's row is on its vendor's page, a switched-off one badged, since the Settings redesign.
+        assertSays(try web(Self.keyCards), "<Badge>\(Infrastructure.disabled)</Badge>", in: Self.keyCards)
 
         let pools = try web(Self.pools)
         assertSays(pools, "<h3>\(ProvidersOverview.accountPools)</h3>", in: Self.pools)
