@@ -795,7 +795,7 @@ private struct SessionSettingsPage: View {
     /// seven), Agents work in (English, not a choice) and the web's words as the footer. A server
     /// without a DeepSeek key draws it all disabled with frame 2's notice.
     @ViewBuilder private var translationSection: some View {
-        let unavailable = Translation.unavailable(model.user)
+        let unavailable = SessionTranslation.unavailable(model.user)
         Section {
             Toggle(TranslationCopy.translateConversations, isOn: $translation)
             if unavailable {
@@ -807,7 +807,7 @@ private struct SessionSettingsPage: View {
                 TranslationLanguagePicker()
             } label: {
                 LabeledContent(TranslationCopy.yourLanguage,
-                               value: Translation.language(model.user?.preferences).name)
+                               value: SessionTranslation.language(model.user?.preferences).name)
             }
             LabeledContent(TranslationCopy.agentsWorkIn, value: TranslationCopy.english)
         } header: {
@@ -829,7 +829,7 @@ private struct SessionSettingsPage: View {
         modelRouting = p?.smartModelSelection ?? false
         promptSuggestions = p?.suggestedReplies ?? true
         recaps = p?.showRecaps ?? true
-        translation = !Translation.unavailable(model.user) && p?.translationEnabled == true
+        translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true
     }
 }
 
@@ -839,7 +839,7 @@ private struct TranslationLanguagePicker: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        let current = Translation.language(model.user?.preferences)
+        let current = SessionTranslation.language(model.user?.preferences)
         Form {
             Section {
                 ForEach(TranslationLanguage.allCases, id: \.self) { lang in

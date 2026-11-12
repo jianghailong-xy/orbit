@@ -137,7 +137,7 @@ struct SettingsView: View {
                 Toggle(TranslationCopy.translateConversations, isOn: $translation)
                 Text(TranslationCopy.translateConversationsHint)
                     .font(.orbitLabel).foregroundStyle(.secondary)
-                if Translation.unavailable(model.user) {
+                if SessionTranslation.unavailable(model.user) {
                     Text(TranslationCopy.unavailable)
                         .font(.orbitLabel).foregroundStyle(.orange)
                 }
@@ -152,7 +152,7 @@ struct SettingsView: View {
                 Text(TranslationCopy.footnote)
                     .font(.orbitLabel).foregroundStyle(.secondary)
             }
-            .disabled(Translation.unavailable(model.user))
+            .disabled(SessionTranslation.unavailable(model.user))
 
             // One switch for the whole account, not one per workspace: the server reads it live on
             // every claim, spawn and call, so turning it off takes the tools away everywhere at once.
@@ -225,8 +225,8 @@ struct SettingsView: View {
             modelRouting = p?.smartModelSelection ?? false
             promptSuggestions = p?.suggestedReplies ?? true
             recaps = p?.showRecaps ?? true
-            translation = !Translation.unavailable(model.user) && p?.translationEnabled == true
-            translationLanguage = Translation.language(p)
+            translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true
+            translationLanguage = SessionTranslation.language(p)
             name = model.user?.name ?? ""
         }
         .onChange(of: name) { accountMessage = nil }
@@ -290,7 +290,7 @@ struct SettingsView: View {
     }
 
     private func saveTranslationLanguage() {
-        guard Translation.language(model.user?.preferences) != translationLanguage else { return }
+        guard SessionTranslation.language(model.user?.preferences) != translationLanguage else { return }
         Task { await model.savePreferences(UpdatePreferencesRequest(translationLanguage: translationLanguage.rawValue)) }
     }
 }

@@ -3,7 +3,7 @@ import XCTest
 
 /// SwiftUI does not exist on this platform, so the views that draw Settings › Translation are held to
 /// it over their source (as `PromptSuggestionTests` holds the composer): each one reads what OrbitKit
-/// decides — `Translation.userFoot` / `replyFoot`, `PendingApproval.shownInput`, the composer tag, and
+/// decides — `SessionTranslation.userFoot` / `replyFoot`, `PendingApproval.shownInput`, the composer tag, and
 /// the Settings rows on iOS and macOS.
 final class TranslationWiringTests: XCTestCase {
 
@@ -24,26 +24,33 @@ final class TranslationWiringTests: XCTestCase {
 
     func testTheBubblesDrawTheFootAndTheToggle() throws {
         let bubbles = try source(app + "Views/Console/MessageBubbles.swift")
-        XCTAssertTrue(bubbles.contains("Translation.shownUserText(bubble.text, bubble.translation, flipped: flipped)"))
-        XCTAssertTrue(bubbles.contains("Translation.userFoot(bubble.translation, flipped: flipped)"))
+        XCTAssertTrue(bubbles.contains("SessionTranslation.shownUserText(bubble.text, bubble.translation, flipped: flipped)"))
+        XCTAssertTrue(bubbles.contains("SessionTranslation.userFoot(bubble.translation, flipped: flipped)"))
         XCTAssertTrue(bubbles.contains("PlatformPasteboard.copyString(words)"), "copy hands back the words on screen")
-        XCTAssertTrue(bubbles.contains("Translation.shownReplyText(bubble.displayText, bubble.translation,"))
-        XCTAssertTrue(bubbles.contains("Translation.replyFoot(bubble.translation, pending: awaiting, flipped: flipped)"))
+        XCTAssertTrue(bubbles.contains("SessionTranslation.shownReplyText(bubble.displayText, bubble.translation,"))
+        XCTAssertTrue(bubbles.contains("SessionTranslation.replyFoot(bubble.translation, pending: awaiting, flipped: flipped)"))
         XCTAssertTrue(bubbles.contains("case .retryTurn: if let id = bubble.turnId { translationActions?.retryTurn(id) }"))
         XCTAssertTrue(bubbles.contains("case .sendAsWritten: if let id = bubble.turnId { translationActions?.sendAsWritten(id) }"))
         XCTAssertTrue(bubbles.contains("case .retryReply: if let seq = bubble.seq { translationActions?.retryReply(seq) }"))
     }
 
+    func testTheTrayDrawsAHeldMessagesFoot() throws {
+        let tray = try source(app + "Views/Console/PendingTrayView.swift")
+        XCTAssertTrue(tray.contains("TranslationFootView(parts: SessionTranslation.userFoot(row.bubble.translation, flipped: false))"))
+        XCTAssertTrue(tray.contains("case .retryTurn: translationActions?.retryTurn(id)"))
+        XCTAssertTrue(tray.contains("case .sendAsWritten: translationActions?.sendAsWritten(id)"))
+    }
+
     func testTheConsoleHandsTheBubblesItsDoors() throws {
         let console = try source(app + "Views/Console/ConsoleView.swift")
         XCTAssertTrue(console.contains(".environment(\\.translationActions, TranslationActions("))
-        XCTAssertTrue(console.contains("on: Translation.isOn(appModel.user),"))
+        XCTAssertTrue(console.contains("on: SessionTranslation.isOn(appModel.user),"))
         let model = try source(app + "ConsoleModel.swift")
         XCTAssertTrue(model.contains("api.retryTurnTranslation(sessionID: sessionID, turnId: turnId)"))
         XCTAssertTrue(model.contains("api.sendTurnAsWritten(sessionID: sessionID, turnId: turnId)"))
         XCTAssertTrue(model.contains("api.retryReplyTranslation(sessionID: sessionID, seq: seq)"))
         XCTAssertTrue(model.contains("translation: accepted.turnTranslation)"), "the send answer's chip")
-        XCTAssertTrue(model.contains("catch where Translation.refusedUntranslated(error) {"))
+        XCTAssertTrue(model.contains("catch where SessionTranslation.refusedUntranslated(error) {"))
     }
 
     func testCardsAndTheComposerShowTheTranslation() throws {
@@ -52,7 +59,7 @@ final class TranslationWiringTests: XCTestCase {
         XCTAssertTrue(cards.contains("approval.shownInput?[\"plan\"]"))
         XCTAssertTrue(cards.contains("UntranslatedDecisionRow(console: console, approval: approval)"))
         let composer = try source(app + "Views/ComposerView.swift")
-        XCTAssertTrue(composer.contains("ComposerTranslationTag(language: Translation.language(app.user?.preferences),"))
+        XCTAssertTrue(composer.contains("ComposerTranslationTag(language: SessionTranslation.language(app.user?.preferences),"))
         XCTAssertTrue(composer.contains("app.nav.openSettings(at: .sessions)"))
     }
 
@@ -68,6 +75,6 @@ final class TranslationWiringTests: XCTestCase {
         XCTAssertTrue(mac.contains("Toggle(TranslationCopy.translateConversations, isOn: $translation)"))
         XCTAssertTrue(mac.contains("Picker(TranslationCopy.yourLanguage, selection: $translationLanguage)"))
         XCTAssertTrue(mac.contains("LabeledContent(TranslationCopy.agentsWorkIn, value: TranslationCopy.english)"))
-        XCTAssertTrue(mac.contains(".disabled(Translation.unavailable(model.user))"))
+        XCTAssertTrue(mac.contains(".disabled(SessionTranslation.unavailable(model.user))"))
     }
 }

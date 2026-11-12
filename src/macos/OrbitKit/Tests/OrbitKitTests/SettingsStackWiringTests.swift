@@ -258,7 +258,7 @@ final class SettingsStackWiringTests: XCTestCase {
             // Settings › Translation: absent is off, and a server without a key draws it off.
             ("Toggle(TranslationCopy.translateConversations, isOn: $translation)",
              "UpdatePreferencesRequest(translationEnabled: value)",
-             "translation = !Translation.unavailable(model.user) && p?.translationEnabled == true"),
+             "translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true"),
         ] {
             XCTAssertTrue(controls.contains(toggle), "the page lost \(toggle)")
             XCTAssertTrue(page.contains(write), "the page no longer writes \(write)")

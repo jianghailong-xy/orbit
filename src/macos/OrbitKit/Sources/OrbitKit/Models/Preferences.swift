@@ -42,7 +42,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     /// agent's replies are translated. Absent means off. Tolerant like the three above.
     public let translationEnabled: Bool?
     /// "Your language" (a `TranslationLanguage` raw value), kept as a String so an unknown future
-    /// language decodes; `Translation.language` maps it, absent or unknown being the default pick.
+    /// language decodes; `SessionTranslation.language` maps it, absent or unknown being the default pick.
     public let translationLanguage: String?
 
     /// Whether smart model selection is on for this account — only an explicit `true` turns it on.

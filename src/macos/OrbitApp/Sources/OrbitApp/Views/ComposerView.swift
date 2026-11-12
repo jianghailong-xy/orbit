@@ -458,10 +458,10 @@ struct ComposerView: View {
                     }
                     // Settings › Translation (6A): "Chinese → English" on the box's right while the
                     // account translates; pressed, it opens the setting.
-                    .padding(.trailing, Translation.isOn(app.user) ? 112 : 0)
+                    .padding(.trailing, SessionTranslation.isOn(app.user) ? 112 : 0)
                     .overlay(alignment: .topTrailing) {
-                        if Translation.isOn(app.user) {
-                            ComposerTranslationTag(language: Translation.language(app.user?.preferences),
+                        if SessionTranslation.isOn(app.user) {
+                            ComposerTranslationTag(language: SessionTranslation.language(app.user?.preferences),
                                                    open: openTranslationSettings)
                         }
                     }

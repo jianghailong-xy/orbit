@@ -4,7 +4,7 @@ import OrbitKit
 // Settings › Translation in a conversation (board docs/mocks/session-translation/01-board.png,
 // frames 4–6 and 8): the line under a translated message with its per-message Show original, the
 // "Translating…" and "Translates when the reply is done" chips, and the failure rows with Retry /
-// Send as written. What each line says is `Translation.userFoot` / `replyFoot` in OrbitKit, where it
+// Send as written. What each line says is `SessionTranslation.userFoot` / `replyFoot` in OrbitKit, where it
 // is tested; these only draw it and call the console's doors.
 
 /// What the open conversation can do about a translation, provided by `ConsoleView`. `on` is the
@@ -29,9 +29,9 @@ extension EnvironmentValues {
 
 /// One line of foot parts: words, a grey chip, or link-styled presses, separated by "·".
 struct TranslationFootView: View {
-    let parts: [Translation.FootPart]
+    let parts: [SessionTranslation.FootPart]
     var alignment: HorizontalAlignment = .leading
-    let onAction: (Translation.FootAction) -> Void
+    let onAction: (SessionTranslation.FootAction) -> Void
 
     private var failed: Bool {
         parts.contains {
@@ -69,7 +69,7 @@ struct TranslationFootView: View {
         }
     }
 
-    private func isChip(_ part: Translation.FootPart) -> Bool {
+    private func isChip(_ part: SessionTranslation.FootPart) -> Bool {
         if case .chip = part { return true }
         return false
     }

@@ -225,7 +225,7 @@ public struct ApprovalTranslation: Codable, Equatable, Sendable {
 }
 
 /// What the account's translation setting comes to, and what a translated message says under it.
-public enum Translation {
+public enum SessionTranslation {
     /// The language the account writes and reads in; absent (or unknown) is the default pick.
     public static func language(_ prefs: UserPreferences?) -> TranslationLanguage {
         prefs?.translationLanguage.flatMap(TranslationLanguage.init(rawValue:)) ?? .default

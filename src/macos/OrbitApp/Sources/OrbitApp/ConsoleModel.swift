@@ -4229,7 +4229,7 @@ final class ConsoleModel {
             approvalAnswers[approval.id] = .sent(AnsweredApproval(approval: approval, behavior: behavior,
                                                                   answers: answers, at: Date()))
         }
-        catch where Translation.refusedUntranslated(error) {
+        catch where SessionTranslation.refusedUntranslated(error) {
             // The owner's words could not be translated, so nothing was recorded (1A): the card comes
             // back with Retry / Send as written rather than a failure line.
             approvalAnswers[approval.id] = nil

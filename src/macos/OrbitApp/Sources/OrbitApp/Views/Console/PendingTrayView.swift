@@ -65,6 +65,7 @@ private struct PendingTrayRowView: View {
     /// One line, so a long message does not push the composer up the screen; pressed, the words open
     /// in place.
     @State private var open = false
+    @Environment(\.translationActions) private var translationActions
 
     private var intoTurn: Bool { row.heading == .currentTurn }
 
@@ -86,9 +87,22 @@ private struct PendingTrayRowView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                     .onTapGesture { open.toggle() }
-                Text(row.state)
-                    .font(.orbitMeta)
-                    .foregroundStyle(.secondary)
+                if row.bubble.translation?.held == true, !row.busy {
+                    // Settings › Translation: "Translating…", or "Couldn't translate, so it wasn't
+                    // sent · Retry · Send as written" (board frame 6).
+                    TranslationFootView(parts: SessionTranslation.userFoot(row.bubble.translation, flipped: false)) { action in
+                        guard let id = row.bubble.turnId else { return }
+                        switch action {
+                        case .retryTurn: translationActions?.retryTurn(id)
+                        case .sendAsWritten: translationActions?.sendAsWritten(id)
+                        case .flip, .retryReply: break
+                        }
+                    }
+                } else {
+                    Text(row.state)
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                }
             }
             .opacity(row.busy ? 0.5 : 1)
             if !row.busy {

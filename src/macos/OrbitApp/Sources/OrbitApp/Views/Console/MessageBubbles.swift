@@ -60,8 +60,8 @@ struct UserBubbleView: View {
     private var files: [TurnAttachment] { bubble.attachments.filter { !$0.isImage } }
 
     /// The words on screen: what the owner wrote, or — a delivered message flipped — the English the
-    /// agent got. Copy hands back the same (`Translation.shownUserText`).
-    private var words: String { Translation.shownUserText(bubble.text, bubble.translation, flipped: flipped) }
+    /// agent got. Copy hands back the same (`SessionTranslation.shownUserText`).
+    private var words: String { SessionTranslation.shownUserText(bubble.text, bubble.translation, flipped: flipped) }
 
     var body: some View {
         let words = self.words
@@ -350,10 +350,10 @@ struct UserBubbleView: View {
     }
 
     /// Settings › Translation: "Translated · Show original" and its flip, the "Translating…" chip, or
-    /// "Couldn't translate, so it wasn't sent · Retry · Send as written" (`Translation.userFoot`).
+    /// "Couldn't translate, so it wasn't sent · Retry · Send as written" (`SessionTranslation.userFoot`).
     @ViewBuilder
     private var translationFoot: some View {
-        let parts = Translation.userFoot(bubble.translation, flipped: flipped)
+        let parts = SessionTranslation.userFoot(bubble.translation, flipped: flipped)
         if !parts.isEmpty {
             TranslationFootView(parts: parts, alignment: .trailing) { action in
                 switch action {
@@ -398,7 +398,7 @@ struct AssistantBubbleView: View {
         VStack(alignment: .leading, spacing: 6) {
             Group {
                 if bubble.isFinalized {
-                    MarkdownView(source: Translation.shownReplyText(bubble.displayText, bubble.translation,
+                    MarkdownView(source: SessionTranslation.shownReplyText(bubble.displayText, bubble.translation,
                                                                     flipped: flipped))
                 } else {
                     StreamingProse(text: bubble.displayText)
@@ -411,7 +411,7 @@ struct AssistantBubbleView: View {
             .textSelection(.enabled)
             .environment(\.previewOwnerID, bubble.id)
             if !bubble.isFinalized { TypingDots() }
-            TranslationFootView(parts: Translation.replyFoot(bubble.translation, pending: awaiting, flipped: flipped)) { action in
+            TranslationFootView(parts: SessionTranslation.replyFoot(bubble.translation, pending: awaiting, flipped: flipped)) { action in
                 switch action {
                 case .flip: flipped.toggle()
                 case .retryReply: if let seq = bubble.seq { translationActions?.retryReply(seq) }
