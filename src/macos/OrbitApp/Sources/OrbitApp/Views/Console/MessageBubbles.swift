@@ -29,6 +29,10 @@ struct UserBubbleView: View {
     @State private var copied = false
     /// Whether what Orbit attached is open: its line ends the meta row, its rows go under that row.
     @State private var noteOpen = false
+    /// Settings › Translation: this message flipped to the English the agent got. Per message and
+    /// never persisted (board frame 5).
+    @State private var flipped = false
+    @Environment(\.translationActions) private var translationActions
     // Collapse a giant pasted bubble: one huge Text lays out synchronously and stalls the UI.
     private let truncateAt = 6000
     // The meta row reserves its height even when hidden (so hover-reveal never shifts the bubble);
@@ -55,9 +59,14 @@ struct UserBubbleView: View {
     }
     private var files: [TurnAttachment] { bubble.attachments.filter { !$0.isImage } }
 
+    /// The words on screen: what the owner wrote, or — a delivered message flipped — the English the
+    /// agent got. Copy hands back the same (`Translation.shownUserText`).
+    private var words: String { Translation.shownUserText(bubble.text, bubble.translation, flipped: flipped) }
+
     var body: some View {
-        let long = bubble.text.count > truncateAt
-        let shown = long && !expanded ? String(bubble.text.prefix(truncateAt)) : bubble.text
+        let words = self.words
+        let long = words.count > truncateAt
+        let shown = long && !expanded ? String(words.prefix(truncateAt)) : words
         let showsCard = self.showsCard(shown)
         HStack(spacing: 0) {
             // web's `.chat-user-wrap` margin-left: 60 — the gutter the person's turn never crosses.
@@ -81,7 +90,7 @@ struct UserBubbleView: View {
                 }
                 // The bubble is the person's words and nothing else: what delivery appended is named
                 // on a line in the meta row under it (`AttachedNoteLine`), never in it.
-                if !bubble.text.isEmpty {
+                if !words.isEmpty {
                     typedText(shown, showsCard: showsCard)
                         .padding(.horizontal, bubbleInset(showsCard))
                         .padding(.vertical, showsCard ? 5 : 8)
@@ -97,6 +106,7 @@ struct UserBubbleView: View {
                 }
                 meta
                 why
+                translationFoot
                 if noteOpen, let attached = bubble.attached {
                     // What the line in the meta row opened, in the bubble's column on a quiet panel of
                     // its own (web's `.chat-user-wrap > .chat-injected-panel`).
@@ -279,6 +289,9 @@ struct UserBubbleView: View {
                             .padding(.leading, 2).contentShape(Rectangle())
                         }
                     }
+                } else if bubble.pending, bubble.translation?.held == true {
+                    // Held for its translation: the line under the meta says where it is (1A / 4A).
+                    EmptyView()
                 } else if bubble.pending {
                     Text(bubble.queued ? "Queued" : "Sending…").font(.orbitMeta).foregroundStyle(.secondary)
                     // A queued message can be withdrawn until the runner leases it (web parity). Offered
@@ -336,8 +349,25 @@ struct UserBubbleView: View {
         }
     }
 
+    /// Settings › Translation: "Translated · Show original" and its flip, the "Translating…" chip, or
+    /// "Couldn't translate, so it wasn't sent · Retry · Send as written" (`Translation.userFoot`).
+    @ViewBuilder
+    private var translationFoot: some View {
+        let parts = Translation.userFoot(bubble.translation, flipped: flipped)
+        if !parts.isEmpty {
+            TranslationFootView(parts: parts, alignment: .trailing) { action in
+                switch action {
+                case .flip: flipped.toggle()
+                case .retryTurn: if let id = bubble.turnId { translationActions?.retryTurn(id) }
+                case .sendAsWritten: if let id = bubble.turnId { translationActions?.sendAsWritten(id) }
+                case .retryReply: break
+                }
+            }
+        }
+    }
+
     private func copy() {
-        PlatformPasteboard.copyString(bubble.text)
+        PlatformPasteboard.copyString(words)
         copied = true
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_600_000_000)
@@ -348,6 +378,16 @@ struct UserBubbleView: View {
 
 struct AssistantBubbleView: View {
     let bubble: AssistantBubble
+    /// Settings › Translation: this reply flipped to the English the agent wrote (board frame 5).
+    @State private var flipped = false
+    @Environment(\.translationActions) private var translationActions
+
+    /// Waiting for its translation (2A): streaming while the account translates, or settled in a
+    /// translated turn before the server's `translation` event has come.
+    private var awaiting: Bool {
+        guard bubble.translation == nil else { return false }
+        return bubble.isFinalized ? bubble.awaitsTranslation == true : translationActions?.on == true
+    }
     // Assistant turns are long-form Markdown — render them as a full-width document on the window
     // background (no bubble), mirroring web's `.chat-assistant`. A tinted panel here would sit
     // gray-on-gray behind the code blocks' own surface and box long content into a narrow column;
@@ -358,16 +398,26 @@ struct AssistantBubbleView: View {
         VStack(alignment: .leading, spacing: 6) {
             Group {
                 if bubble.isFinalized {
-                    MarkdownView(source: bubble.displayText)
+                    MarkdownView(source: Translation.shownReplyText(bubble.displayText, bubble.translation,
+                                                                    flipped: flipped))
                 } else {
                     StreamingProse(text: bubble.displayText)
                 }
             }
             .font(.orbitProse)
             .foregroundStyle(Color.transcriptInk)
+            // The English greyed until its translation replaces it (2A).
+            .opacity(awaiting ? 0.5 : 1)
             .textSelection(.enabled)
             .environment(\.previewOwnerID, bubble.id)
             if !bubble.isFinalized { TypingDots() }
+            TranslationFootView(parts: Translation.replyFoot(bubble.translation, pending: awaiting, flipped: flipped)) { action in
+                switch action {
+                case .flip: flipped.toggle()
+                case .retryReply: if let seq = bubble.seq { translationActions?.retryReply(seq) }
+                case .retryTurn, .sendAsWritten: break
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

@@ -596,8 +596,10 @@ final class OrbitAskPreviewTests: XCTestCase {
                                  to: "private(set) var projectID: String?")
         XCTAssertTrue(decide.contains("? Approvals.createAndStartRequest"), decide)
         XCTAssertTrue(decide.contains(
-            ": ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRules: rules)"),
-                      "every other press keeps the body it always sent")
+            ": ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRules: rules,\n"
+                + "                                      sendAsWritten: sendAsWritten ? true : nil)"),
+                      "every other press keeps the body it always sent — sendAsWritten is left out unless "
+                          + "Send as written was pressed (Settings › Translation)")
     }
 
     // MARK: dag preview

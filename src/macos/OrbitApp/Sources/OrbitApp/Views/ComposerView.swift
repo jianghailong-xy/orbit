@@ -335,7 +335,7 @@ struct ComposerView: View {
         guard !console.isDraft else { return nil }
         let session = app.session(id: console.sessionID)
         return ComposerLogic.offeredPromptSuggestion(
-            console.state.promptSuggestion,
+            console.state.shownPromptSuggestion,
             session: session?.effectiveRunState,
             // A message on its way is a turn in flight before the record or the stream says so: the
             // suggestion it answered must not come back into the box it just left.
@@ -348,6 +348,15 @@ struct ComposerView: View {
                 || (session?.pendingApprovals ?? 0) > 0 || session?.waitingKind != nil,
             sendable: console.sendBlockedMessage == nil && console.runnerOnline != false
                 && session?.effectiveLifecycleState == .open)
+    }
+
+    /// The composer's translation tag: Settings › Sessions, where Translation is.
+    private func openTranslationSettings() {
+        #if os(iOS)
+        app.nav.openSettings(at: .sessions)
+        #else
+        app.selectedSection = .settings
+        #endif
     }
 
     /// Into the box, and the box focused: a guess is where the message starts, not a message sent.
@@ -445,6 +454,15 @@ struct ComposerView: View {
                             #else
                             PromptSuggestionLine(text: suggestion, accept: acceptSuggestion)
                             #endif
+                        }
+                    }
+                    // Settings › Translation (6A): "Chinese → English" on the box's right while the
+                    // account translates; pressed, it opens the setting.
+                    .padding(.trailing, Translation.isOn(app.user) ? 112 : 0)
+                    .overlay(alignment: .topTrailing) {
+                        if Translation.isOn(app.user) {
+                            ComposerTranslationTag(language: Translation.language(app.user?.preferences),
+                                                   open: openTranslationSettings)
                         }
                     }
                     .onChange(of: console.slashToken) { _, new in

@@ -138,8 +138,9 @@ final class PromptSuggestionTests: XCTestCase {
 
     func testTheComposerOffersItFillsTheBoxAndSendsNothing() throws {
         let composer = try composerSource()
-        XCTAssertTrue(composer.contains("ComposerLogic.offeredPromptSuggestion(\n            console.state.promptSuggestion,"),
-                      "the offer is the transcript's suggestion, held to ComposerLogic's rule")
+        XCTAssertTrue(composer.contains("ComposerLogic.offeredPromptSuggestion(\n            console.state.shownPromptSuggestion,"),
+                      "the offer is the transcript's suggestion (translated where the server translated it, "
+                          + "Settings › Translation), held to ComposerLogic's rule")
         XCTAssertTrue(composer.contains("PromptSuggestionLine(text: suggestion, accept: acceptSuggestion)"),
                       "the empty field draws it, on a Mac with Use")
         XCTAssertTrue(composer.contains("if offeredSuggestion != nil { return \"\" }"),

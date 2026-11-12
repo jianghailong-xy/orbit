@@ -72,6 +72,19 @@ public struct TranscriptState: Equatable, Sendable, Codable {
     /// started itself included) clears it. The composer decides whether to offer it
     /// (`ComposerLogic.offeredPromptSuggestion`).
     public var promptSuggestion: String?
+    /// Settings › Translation: the suggestion's own event and its translation into the owner's
+    /// language (from its payload, or folded in from the live `translation` event). Transient: a
+    /// rehydrated snapshot offers the English until the window is re-read.
+    public var promptSuggestionSeq: Int?
+    public var promptSuggestionTranslation: ReplyTranslation?
+    /// The suggestion as the composer offers it: translated where the server translated it (3A).
+    public var shownPromptSuggestion: String? {
+        guard let english = promptSuggestion else { return nil }
+        if let t = promptSuggestionTranslation?.text?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty {
+            return t
+        }
+        return english
+    }
     /// Every `turn_end` in the window: where the turns the window's messages opened stopped working
     /// (`TurnHead.lines`).
     public var turnEnds: [TurnEndMark] = []
@@ -189,6 +202,11 @@ public struct TranscriptReducer: Sendable, Codable {
     /// decode. It is the one transient that does not come back empty: see `init(from:)`.
     private var turnAccountedFor = false
 
+    /// Settings › Translation: the turn now open was opened by a message the owner wrote with
+    /// translation on, so its replies are translated by the server and one without a translation
+    /// yet is waiting for it (web: `turnTranslated`). Transient like `turnAccountedFor`.
+    private var turnTranslated = false
+
     /// Latest broadcast-only foreground-shell snapshot, including the runner's monotonic version.
     /// Keeping this beside (rather than inside) ``TranscriptState`` lets an output that beats its
     /// durable tool_use wait here, and lets a reordered replica notification be rejected. It is
@@ -296,7 +314,8 @@ public struct TranscriptReducer: Sendable, Codable {
         switch ev.type {
         case .textDelta:      appendAssistantDelta(str(ev, "delta") ?? str(ev, "text") ?? "", ts: ev.ts)
         case .assistant:      finalizeAssistant(str(ev, "text") ?? str(ev, "content") ?? "", seq: ev.seq,
-                                              turnId: ev.turnId, ts: ev.ts)
+                                              turnId: ev.turnId, ts: ev.ts,
+                                              translation: ReplyTranslation.parse(ev.payload["translation"]))
         case .thinkingDelta:  appendThinkingDelta(str(ev, "delta") ?? str(ev, "text") ?? "", ts: ev.ts)
         case .thinking:       finalizeThinking(str(ev, "text") ?? "", seq: ev.seq, ts: ev.ts,
                                                thinkingMs: ev.payload["thinkingMs"]?.intValue)
@@ -305,9 +324,14 @@ public struct TranscriptReducer: Sendable, Codable {
         case .toolResult:     closeTool(ev)
         // A suggestion arrives after its own turn's turn_end, so a later turn_end or user event is
         // something newer than what it guessed at.
-        case .turnEnd:        state.promptSuggestion = nil; endTurn(ev)
-        case .user:           state.promptSuggestion = nil; appendUser(ev)
-        case .promptSuggestion: state.promptSuggestion = nonEmpty(str(ev, "text")?.trimmingCharacters(in: .whitespacesAndNewlines))
+        case .turnEnd:        clearPromptSuggestion(); endTurn(ev); turnTranslated = false
+        case .user:           clearPromptSuggestion(); appendUser(ev)
+        case .promptSuggestion:
+            state.promptSuggestion = nonEmpty(str(ev, "text")?.trimmingCharacters(in: .whitespacesAndNewlines))
+            state.promptSuggestionSeq = state.promptSuggestion == nil ? nil : ev.seq
+            state.promptSuggestionTranslation = state.promptSuggestion == nil ? nil
+                : ReplyTranslation.parse(ev.payload["translation"])
+        case .translation:    applyTranslation(ev)
         case .userDelivery:   applyUserDelivery(ev)
         case .interrupt:      appendInterrupt(seq: ev.seq, runnerRestart: Self.cutByRunnerRestart(ev))
         case .error:          appendError(ev)
@@ -664,11 +688,15 @@ public struct TranscriptReducer: Sendable, Codable {
     /// stream may not have caught up with, while the server decided this under the Session row
     /// lock — so a bubble that says "Queued" here stops saying it, and trades the queue's Cancel
     /// for a steer's own Withdraw (`SteerDelivery.offersWithdraw`).
-    public mutating func setOptimisticTurnId(clientTurnId: String, turnId: String, steer: Bool = false) {
+    public mutating func setOptimisticTurnId(clientTurnId: String, turnId: String, steer: Bool = false,
+                                             translation: TurnTranslation? = nil) {
         // A queued send lives in `state.queued`, an idle one in `state.items` — tag whichever holds it.
+        // `translation`: the send's answer says the message is being translated (Settings ›
+        // Translation), so its bubble wears the "Translating…" chip from the moment it is known.
         if let i = state.queued.firstIndex(where: { $0.clientTurnId == clientTurnId && $0.pending }) {
             state.queued[i].turnId = turnId
             if steer { state.queued[i].steer = true }
+            if let translation { state.queued[i].translation = translation }
             return
         }
         guard let i = state.items.firstIndex(where: {
@@ -677,6 +705,7 @@ public struct TranscriptReducer: Sendable, Codable {
         }), case .user(var b) = state.items[i] else { return }
         b.turnId = turnId
         if steer { b.steer = true }
+        if let translation { b.translation = translation }
         state.items[i] = .user(b)
     }
 
@@ -829,6 +858,7 @@ public struct TranscriptReducer: Sendable, Codable {
                 bubble.ts = turn.createdAt ?? bubble.ts
                 // The cards the echo will carry, so the placeholder is the card it is replaced by.
                 bubble.cards = turn.cards
+                bubble.translation = turn.turnTranslation
                 bubble.authoredByOrbit = turn.authoredByOrbit == true
                 accepted.append(bubble)
                 continue
@@ -856,6 +886,7 @@ public struct TranscriptReducer: Sendable, Codable {
                 // tail reads `q.openItemDelivery`, `q.sessionMessage` …). One value for both rows
                 // here, so a card cannot reach one and miss the other.
                 bubble.cards = turn.cards
+                bubble.translation = turn.turnTranslation
                 bubble.authoredByOrbit = turn.authoredByOrbit == true
                 reconciled.append(bubble)
             } else {
@@ -866,6 +897,7 @@ public struct TranscriptReducer: Sendable, Codable {
                                         authoredByOrbit: turn.authoredByOrbit == true,
                                         shell: turn.kind == "shell")
                 bubble.cards = turn.cards
+                bubble.translation = turn.turnTranslation
                 reconciled.append(bubble)
             }
         }
@@ -910,6 +942,7 @@ public struct TranscriptReducer: Sendable, Codable {
             bubble.steer = SteerDelivery.isSteerKind(turn.kind)
             bubble.shell = turn.kind == "shell"
             bubble.cards = turn.cards
+            bubble.translation = turn.turnTranslation
             bubble.authoredByOrbit = turn.authoredByOrbit == true
             bubble.delivery = turn.delivery
             bubble.undelivered = turn.delivery == "failed"
@@ -940,7 +973,7 @@ public struct TranscriptReducer: Sendable, Codable {
     }
 
     private mutating func finalizeAssistant(_ full: String, seq: Int, turnId: String?,
-                                           ts: String? = nil) {
+                                           ts: String? = nil, translation: ReplyTranslation? = nil) {
         // Every branch below leaves a row — a reply, an error line, or a card — so the turn has
         // spoken for itself either way, and `endTurn` needn't speak for it.
         turnAccountedFor = true
@@ -983,12 +1016,68 @@ public struct TranscriptReducer: Sendable, Codable {
             b.seq = seq
             b.turnId = turnId ?? b.turnId
             if ts != nil { b.ts = ts }
+            b.translation = translation
+            b.awaitsTranslation = translation == nil && turnTranslated ? true : nil
             state.items[i] = .assistant(b)
         } else {
             state.items.append(.assistant(AssistantBubble(id: nextID(), text: full, streamingText: "",
-                                                          seq: seq, turnId: turnId, ts: ts)))
+                                                          seq: seq, turnId: turnId, ts: ts,
+                                                          translation: translation,
+                                                          awaitsTranslation: translation == nil && turnTranslated ? true : nil)))
         }
         openAssistant = nil
+    }
+
+    private mutating func clearPromptSuggestion() {
+        state.promptSuggestion = nil
+        state.promptSuggestionSeq = nil
+        state.promptSuggestionTranslation = nil
+    }
+
+    /// Settings › Translation: fold a live `translation` event into the reply (or suggestion) it
+    /// translates, exactly as a replay would have delivered it. An event outside the loaded window is
+    /// dropped: its replay carries the translation.
+    private mutating func applyTranslation(_ ev: RunEvent) {
+        guard let of = ev.payload["of"]?.intValue, let translation = ReplyTranslation.parse(ev.payload) else { return }
+        if state.promptSuggestionSeq == of, state.promptSuggestion != nil {
+            state.promptSuggestionTranslation = translation
+            return
+        }
+        guard let i = state.items.lastIndex(where: {
+            if case .assistant(let b) = $0 { return b.seq == of }
+            return false
+        }), case .assistant(var b) = state.items[i] else { return }
+        b.translation = translation
+        b.awaitsTranslation = nil
+        state.items[i] = .assistant(b)
+    }
+
+    /// Settings › Translation: the line under the owner's message changes with its held turn —
+    /// Retry and Send as written answer the new state at once, before any listing says so.
+    public mutating func setTurnTranslation(turnId: String, _ translation: TurnTranslation) {
+        func update(_ bubbles: inout [UserBubble]) {
+            for i in bubbles.indices where bubbles[i].turnId == turnId { bubbles[i].translation = translation }
+        }
+        update(&state.queued)
+        update(&state.accepted)
+        for i in state.items.indices {
+            if case .user(var b) = state.items[i], b.turnId == turnId {
+                b.translation = translation
+                state.items[i] = .user(b)
+            }
+        }
+    }
+
+    /// Settings › Translation: Retry on a reply whose translation failed is under way — the reply
+    /// waits for it again until the live `translation` event answers.
+    public mutating func markReplyRetrying(seq: Int) {
+        guard let i = state.items.lastIndex(where: {
+            if case .assistant(let b) = $0 { return b.seq == seq }
+            return false
+        }), case .assistant(var b) = state.items[i] else { return }
+        b.translation = nil
+        b.awaitsTranslation = true
+        state.items[i] = .assistant(b)
     }
 
     /// Drop the streaming bubble that was carrying the text just reclassified as a failure — it is
@@ -1430,6 +1519,8 @@ public struct TranscriptReducer: Sendable, Codable {
         // event, NOT `attachmentIds` — parse those so the bubble can render images / file chips
         // after a reload (web reads the same field).
         let atts = attachments(ev.payload["attachments"])
+        // Settings › Translation: the English is `body`; what the owner typed is `translation.original`.
+        let translation = TurnTranslation.parse(ev.payload["translation"])
         // Does this durable `user` event echo a still-pending optimistic bubble? Match on the
         // server `turnId` we tagged onto it (or an echoed `clientTurnId`), falling back to the
         // message text while the bubble is still untagged. The tag is applied from the POST /turns
@@ -1439,6 +1530,7 @@ public struct TranscriptReducer: Sendable, Codable {
         func echoes(_ b: UserBubble) -> Bool {
             if let cid, b.clientTurnId == cid { return true }
             if let tid = ev.turnId, b.turnId == tid { return true }
+            if b.turnId == nil, let original = translation?.original, !original.isEmpty, b.text == original { return true }
             return b.turnId == nil && !body.isEmpty && b.text == body
         }
         // The runner just leased a queued send: drop its placeholder from `state.queued` — this
@@ -1456,6 +1548,9 @@ public struct TranscriptReducer: Sendable, Codable {
         let topLevel = (str(ev, "parentToolUseId") ?? "").isEmpty
         let opening = topLevel && ev.seq > 0 && ev.seq != RunEvent.sentinelSeq
             ? TurnOpening(seq: ev.seq, ts: ev.ts) : nil
+        if topLevel && !steer {
+            turnTranslated = translation?.state == .done || translation?.state == .sentAsWritten
+        }
         // One message, one row. A steer the engine provably never read is handed back and delivered
         // again as the ordinary turn it would have been — the same row, the same turn id — so its
         // second `user` event is that message arriving, not another one: it amends the row already
@@ -1478,6 +1573,7 @@ public struct TranscriptReducer: Sendable, Codable {
                 b.note = recorded?.note
             }
             if !atts.isEmpty { b.attachments = atts }
+            b.translation = translation ?? b.translation
             state.items[i] = .user(b)
             return
         }
@@ -1508,6 +1604,7 @@ public struct TranscriptReducer: Sendable, Codable {
                 b.runQuestion = runQuestion
                 b.runNotice = runNotice
                 b.sessionOpening = sessionOpening
+                b.translation = translation
                 if !atts.isEmpty { b.attachments = atts }   // durable refs carry mime; keep ids if absent
                 b.ts = ev.ts ?? b.ts
                 b.steer = b.steer || steer
@@ -1553,7 +1650,7 @@ public struct TranscriptReducer: Sendable, Codable {
                                 reviewReturn: reviewReturn,
                                 reviewAnswers: reviewAnswers,
                                 evidenceReview: evidenceReview, evidenceSendBack: evidenceSendBack, runQuestion: runQuestion, runNotice: runNotice, sessionOpening: sessionOpening,
-                                opensTurn: steer ? nil : opening)
+                                opensTurn: steer ? nil : opening, translation: translation)
         // A steer of the reader's that nothing has read yet is not part of the conversation: it
         // waits in the tray — the row it was drawn as while queued, under the same id — until its
         // delivery settles (`applyUserDelivery`).
@@ -1755,7 +1852,9 @@ public struct TranscriptReducer: Sendable, Codable {
         let id = str(ev, "id") ?? str(ev, "approvalId") ?? nextID()
         let appr = PendingApproval(id: id, kind: approvalKind(ev),
                                    toolName: str(ev, "toolName") ?? str(ev, "name"),
-                                   input: ev.payload["input"])
+                                   input: ev.payload["input"],
+                                   translation: ApprovalTranslation.parse(ev.payload["translation"]))
+        // A translated card is published again under the same id (3A): it replaces the one drawn.
         if let i = state.pendingApprovals.firstIndex(where: { $0.id == id }) {
             state.pendingApprovals[i] = appr
         } else {
@@ -1780,8 +1879,15 @@ public struct TranscriptReducer: Sendable, Codable {
     public mutating func reconcileApprovals(_ approvals: [PendingApproval], knownBefore: Set<String>) {
         let listed = Set(approvals.map(\.id))
         state.pendingApprovals.removeAll { knownBefore.contains($0.id) && !listed.contains($0.id) }
-        for appr in approvals where !state.pendingApprovals.contains(where: { $0.id == appr.id }) {
-            state.pendingApprovals.append(appr)
+        for appr in approvals {
+            if let i = state.pendingApprovals.firstIndex(where: { $0.id == appr.id }) {
+                // The listing may hold the card's translation (3A) that a missed re-publish carried.
+                if state.pendingApprovals[i].translation == nil, let t = appr.translation {
+                    state.pendingApprovals[i].translation = t
+                }
+            } else {
+                state.pendingApprovals.append(appr)
+            }
         }
     }
 

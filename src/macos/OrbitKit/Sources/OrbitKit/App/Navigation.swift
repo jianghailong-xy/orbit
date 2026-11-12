@@ -181,6 +181,13 @@ public struct NavState: Equatable, Sendable {
         settingsPresented = true
     }
 
+    /// Put Settings up open on one of its pages — the composer's translation tag opens Sessions,
+    /// where Translation is (board decision 6A).
+    public mutating func openSettings(at page: SettingsPage) {
+        settingsPresented = true
+        settingsPath = [.settingsPage(page)]
+    }
+
     // MARK: - Derived facts
     //
     // Each one is a read of `path`. There is nothing else to keep in step with it.

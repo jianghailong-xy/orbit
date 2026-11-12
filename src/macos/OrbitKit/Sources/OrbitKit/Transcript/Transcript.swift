@@ -260,6 +260,10 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// This message opened a turn (`TurnOpening`), so the turn's head row is drawn under it. nil on
     /// a steer, an optimistic bubble not yet echoed, and every message read from a sub-agent.
     public var opensTurn: TurnOpening?
+    /// Settings › Translation: what the owner typed and how far its translation got, `text` being
+    /// the English the engine got (or, while held, the same words). Nil on every message translation
+    /// was not involved in.
+    public var translation: TurnTranslation?
 
     public init(id: String, text: String, attachments: [TurnAttachment] = [], ts: String? = nil,
                 clientTurnId: String? = nil, turnId: String? = nil, pending: Bool, queued: Bool = false,
@@ -282,7 +286,8 @@ public struct UserBubble: Equatable, Sendable, Codable {
                 sessionOpening: SessionOpeningCard? = nil,
                 shell: Bool = false, receipt: Bool = false,
                 deliveryCode: String? = nil, deliveryReason: String? = nil,
-                opensTurn: TurnOpening? = nil) {
+                opensTurn: TurnOpening? = nil, translation: TurnTranslation? = nil) {
+        self.translation = translation
         self.id = id
         self.text = text
         self.attachments = attachments
@@ -328,7 +333,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         case sessionMessage, externalSender, sessionReplies
         case authoredByOrbit, reviewRequest, reviewReturn, reviewAnswers, withdrawable, shell
         case evidenceReview, evidenceSendBack, runQuestion, runNotice, sessionOpening
-        case receipt, deliveryCode, deliveryReason, opensTurn
+        case receipt, deliveryCode, deliveryReason, opensTurn, translation
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -379,6 +384,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         deliveryReason = try? c.decodeIfPresent(String.self, forKey: .deliveryReason)
         // A snapshot from before turn heads existed draws none until the window is re-read.
         opensTurn = try? c.decodeIfPresent(TurnOpening.self, forKey: .opensTurn)
+        translation = try? c.decodeIfPresent(TurnTranslation.self, forKey: .translation)
     }
 }
 
@@ -396,6 +402,12 @@ public struct AssistantBubble: Equatable, Sendable, Codable {
     /// by comparing its own clock against the rows', the way web's `decisionReceiptAnchor` does.
     /// Nil while the bubble is still streaming, and on transcripts recorded before this existed.
     public var ts: String?
+    /// Settings › Translation: this reply in the owner's language, or that its translation failed —
+    /// from the event's own payload, or folded in from the live `translation` event.
+    public var translation: ReplyTranslation? = nil
+    /// The turn it answers was opened by a message the owner wrote with translation on, so a reply
+    /// with no `translation` yet is waiting for it ("Translates when the reply is done", 2A).
+    public var awaitsTranslation: Bool? = nil
     public var isFinalized: Bool { seq != nil }
     /// What the UI renders: finalized text if present, else the live buffer.
     public var displayText: String { text.isEmpty ? streamingText : text }
@@ -576,7 +588,14 @@ public struct PendingApproval: Equatable, Sendable, Identifiable, Codable {
     public var kind: Kind
     public var toolName: String?
     public var input: JSONValue?
-    public init(id: String, kind: Kind, toolName: String?, input: JSONValue?) {
+    /// Settings › Translation (3A): what the card shows in the owner's language. Draw `shownInput`;
+    /// `input` stays the English the engine sent.
+    public var translation: ApprovalTranslation?
+    /// `input` as the card shows it — translated where the server translated it.
+    public var shownInput: JSONValue? { ApprovalTranslation.shownInput(input, translation) }
+    public init(id: String, kind: Kind, toolName: String?, input: JSONValue?,
+                translation: ApprovalTranslation? = nil) {
+        self.translation = translation
         self.id = id
         self.kind = kind
         self.toolName = toolName

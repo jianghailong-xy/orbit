@@ -255,12 +255,16 @@ final class SettingsStackWiringTests: XCTestCase {
             ("Toggle(title, isOn: $promptSuggestions)", "UpdatePreferencesRequest(promptSuggestions: value)",
              "promptSuggestions = p?.suggestedReplies ?? true"),
             ("Toggle(title, isOn: $recaps)", "UpdatePreferencesRequest(recaps: value)", "recaps = p?.showRecaps ?? true"),
+            // Settings › Translation: absent is off, and a server without a key draws it off.
+            ("Toggle(TranslationCopy.translateConversations, isOn: $translation)",
+             "UpdatePreferencesRequest(translationEnabled: value)",
+             "translation = !Translation.unavailable(model.user) && p?.translationEnabled == true"),
         ] {
             XCTAssertTrue(controls.contains(toggle), "the page lost \(toggle)")
             XCTAssertTrue(page.contains(write), "the page no longer writes \(write)")
             XCTAssertTrue(page.contains(seed), "the page no longer seeds \(seed)")
         }
-        XCTAssertEqual(page.components(separatedBy: "guard (model.user?.preferences?.").count - 1, 4,
+        XCTAssertEqual(page.components(separatedBy: "guard (model.user?.preferences?.").count - 1, 5,
                        "every switch's write is guarded against the account's own value")
     }
 

@@ -31,6 +31,9 @@ struct SettingsView: View {
     @State private var promptSuggestions = true
     /// The account's switch for session recaps. Absent on the server means on.
     @State private var recaps = true
+    /// Settings › Translation: the account's switch (absent = off) and Your language.
+    @State private var translation = false
+    @State private var translationLanguage: TranslationLanguage = .default
     @State private var loaded = false
 
     @State private var curPw = ""
@@ -128,6 +131,29 @@ struct SettingsView: View {
                 }
             }
 
+            // Settings › Translation (board frames 1, 2 and 7): account-wide, written the moment it
+            // changes. A server without a DeepSeek key draws it disabled with frame 2's notice.
+            Section(TranslationCopy.title) {
+                Toggle(TranslationCopy.translateConversations, isOn: $translation)
+                Text(TranslationCopy.translateConversationsHint)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                if Translation.unavailable(model.user) {
+                    Text(TranslationCopy.unavailable)
+                        .font(.orbitLabel).foregroundStyle(.orange)
+                }
+                Picker(TranslationCopy.yourLanguage, selection: $translationLanguage) {
+                    ForEach(TranslationLanguage.allCases, id: \.self) { Text($0.name).tag($0) }
+                }
+                Text(TranslationCopy.yourLanguageHint)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                LabeledContent(TranslationCopy.agentsWorkIn, value: TranslationCopy.english)
+                Text(TranslationCopy.agentsWorkInHint)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                Text(TranslationCopy.footnote)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+            }
+            .disabled(Translation.unavailable(model.user))
+
             // One switch for the whole account, not one per workspace: the server reads it live on
             // every claim, spawn and call, so turning it off takes the tools away everywhere at once.
             Section("Session orchestration") {
@@ -182,6 +208,8 @@ struct SettingsView: View {
         .onChange(of: modelRouting) { saveModelRouting() }
         .onChange(of: promptSuggestions) { savePromptSuggestions() }
         .onChange(of: recaps) { saveRecaps() }
+        .onChange(of: translation) { saveTranslation() }
+        .onChange(of: translationLanguage) { saveTranslationLanguage() }
         .task { await model.accessTokens?.load() }
         .task { await model.runners?.load() }
         .onAppear {
@@ -197,6 +225,8 @@ struct SettingsView: View {
             modelRouting = p?.smartModelSelection ?? false
             promptSuggestions = p?.suggestedReplies ?? true
             recaps = p?.showRecaps ?? true
+            translation = !Translation.unavailable(model.user) && p?.translationEnabled == true
+            translationLanguage = Translation.language(p)
             name = model.user?.name ?? ""
         }
         .onChange(of: name) { accountMessage = nil }
@@ -251,6 +281,17 @@ struct SettingsView: View {
     private func saveRecaps() {
         guard (model.user?.preferences?.showRecaps ?? true) != recaps else { return }
         Task { await model.savePreferences(UpdatePreferencesRequest(recaps: recaps)) }
+    }
+
+    /// And for Settings › Translation's switch and language, each its own key.
+    private func saveTranslation() {
+        guard (model.user?.preferences?.translationEnabled ?? false) != translation else { return }
+        Task { await model.savePreferences(UpdatePreferencesRequest(translationEnabled: translation)) }
+    }
+
+    private func saveTranslationLanguage() {
+        guard Translation.language(model.user?.preferences) != translationLanguage else { return }
+        Task { await model.savePreferences(UpdatePreferencesRequest(translationLanguage: translationLanguage.rawValue)) }
     }
 }
 

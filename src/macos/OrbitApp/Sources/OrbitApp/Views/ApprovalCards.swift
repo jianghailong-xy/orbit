@@ -18,12 +18,14 @@ struct ApprovalCard: View {
     let approval: PendingApproval
 
     var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 6) {
             switch approval.kind {
             case .question: QuestionCard(console: console, approval: approval)
             case .plan:     PlanCard(console: console, approval: approval)
             case .tool:     ToolApprovalCard(console: console, approval: approval)
             }
+            // Settings › Translation (1A): the last answer was refused untranslated.
+            UntranslatedDecisionRow(console: console, approval: approval)
         }
         .environment(\.approvalReviewTarget, .approval(id: approval.id))
     }
@@ -734,7 +736,9 @@ struct QuestionCard: View {
     private var draft: QuestionReviewDraft { drafts.question(approval.id) }
 
     private var questions: [AskQuestion] {
-        approval.input.map { Approvals.parseQuestions(from: $0) } ?? []
+        // Shown in the owner's language where the server translated it (Settings › Translation, 3A);
+        // answers keyed by what is shown are mapped back to the English by the server.
+        approval.shownInput.map { Approvals.parseQuestions(from: $0) } ?? []
     }
     private var allAnswered: Bool {
         Approvals.allAnswered(questions, selections: draft.selections, custom: draft.custom)
@@ -2102,7 +2106,7 @@ struct PlanCard: View {
     let console: ConsoleModel
     let approval: PendingApproval
 
-    private var plan: String { approval.input?["plan"]?.stringValue ?? "Plan ready for review." }
+    private var plan: String { approval.shownInput?["plan"]?.stringValue ?? "Plan ready for review." }
 
     var body: some View {
         ApprovalReviewLayout(title: "Review this plan", symbol: "list.bullet.clipboard", tone: .purple,

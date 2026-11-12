@@ -1103,6 +1103,17 @@ final class ConsoleModel {
         case sent(AnsweredApproval)
     }
 
+    /// Settings › Translation (1A): decisions refused because the owner's own words could not be
+    /// translated (422 TRANSLATION_FAILED), by approval id. Nothing was recorded; the card that came
+    /// back offers Retry and Send as written, each sending the same press again.
+    private(set) var untranslatedDecisions: [String: UntranslatedDecision] = [:]
+
+    struct UntranslatedDecision: Equatable {
+        let behavior: ApprovalBehavior
+        let answers: [String: [String]]?
+        let remember: Bool
+    }
+
     /// An approval as it was answered here: the card as it was asked, and the press that answered
     /// it. The one copy of it there is — the server keeps no record of an approval's question — so
     /// the record lives as long as this console does.
@@ -3041,7 +3052,8 @@ final class ConsoleModel {
                 // written into that turn (a steer) rather than queued behind it, and the bubble
                 // has to stop saying "Queued" and trade the queue's Cancel for a steer's Withdraw.
                 reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid,
-                                            steer: SteerDelivery.isSteerKind(accepted.kind))
+                                            steer: SteerDelivery.isSteerKind(accepted.kind),
+                                            translation: accepted.turnTranslation)
                 publishStateNow()
             }
         } catch {
@@ -3799,7 +3811,8 @@ final class ConsoleModel {
                                         attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds))
             statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)
             if let tid = accepted.turnId {
-                reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid)
+                reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid,
+                                            translation: accepted.turnTranslation)
             }
             publishStateNow()
         } catch {
@@ -3820,6 +3833,42 @@ final class ConsoleModel {
     /// the server DELETE. Gated in the UI on a known `turnId` (the DELETE needs it); if the runner has
     /// already leased the message the server rejects the withdraw (409) and its durable `user` event
     /// lands it in the transcript as usual — so a lost race is a no-op, not an error.
+    // MARK: Settings › Translation (board frames 4–6)
+
+    /// Retry a held message whose translation failed (FAILED → TRANSLATING). The answer is the new
+    /// state, drawn at once; the turn list's nudge brings the rest.
+    func retryTurnTranslation(_ turnId: String) async {
+        do {
+            let answer = try await api.retryTurnTranslation(sessionID: sessionID, turnId: turnId)
+            reducer.setTurnTranslation(turnId: turnId, answer.translation)
+            publishStateNow()
+        } catch {
+            statusMessage = "Retry failed — \(APIClient.failureReason(error))."
+        }
+    }
+
+    /// Send as written: deliver a held message untranslated.
+    func sendTurnAsWritten(_ turnId: String) async {
+        do {
+            let answer = try await api.sendTurnAsWritten(sessionID: sessionID, turnId: turnId)
+            reducer.setTurnTranslation(turnId: turnId, answer.translation)
+            publishStateNow()
+        } catch {
+            statusMessage = "Send as written failed — \(APIClient.failureReason(error))."
+        }
+    }
+
+    /// Retry a reply whose translation failed: it waits again until the live `translation` event.
+    func retryReplyTranslation(_ seq: Int) async {
+        do {
+            try await api.retryReplyTranslation(sessionID: sessionID, seq: seq)
+            reducer.markReplyRetrying(seq: seq)
+            publishStateNow()
+        } catch {
+            statusMessage = "Retry failed — \(APIClient.failureReason(error))."
+        }
+    }
+
     func cancelQueued(_ bubble: UserBubble) async {
         guard let turnId = bubble.turnId else { return }
         reducer.removeQueued(id: bubble.id)
@@ -4158,7 +4207,7 @@ final class ConsoleModel {
     /// the new task's run.
     func decide(_ approval: PendingApproval, behavior: ApprovalBehavior,
                 answers: [String: [String]]? = nil, remember: Bool = false,
-                startAfterCreate: Bool = false) async {
+                startAfterCreate: Bool = false, sendAsWritten: Bool = false) async {
         var rules: [PermissionRule]?
         if remember, behavior == .allow, !executesDsh, let input = approval.input {
             rules = Approvals.rememberRules(toolName: approval.toolName ?? "", input: input)
@@ -4172,11 +4221,21 @@ final class ConsoleModel {
         // no startAfterCreate key in it at all.
         let req = startAfterCreate
             ? Approvals.createAndStartRequest
-            : ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRules: rules)
+            : ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRules: rules,
+                                      sendAsWritten: sendAsWritten ? true : nil)
         do {
             try await api.decideApproval(sessionID: sessionID, approvalID: approval.id, req)
+            untranslatedDecisions[approval.id] = nil
             approvalAnswers[approval.id] = .sent(AnsweredApproval(approval: approval, behavior: behavior,
                                                                   answers: answers, at: Date()))
+        }
+        catch where Translation.refusedUntranslated(error) {
+            // The owner's words could not be translated, so nothing was recorded (1A): the card comes
+            // back with Retry / Send as written rather than a failure line.
+            approvalAnswers[approval.id] = nil
+            untranslatedDecisions[approval.id] = UntranslatedDecision(behavior: behavior, answers: answers,
+                                                                      remember: remember)
+            await refreshApprovals()
         }
         catch {
             // Nothing was decided: the press is not what took this card away, and the re-seed below
@@ -6003,7 +6062,8 @@ final class ConsoleModel {
         guard let infos = try? await api.approvals(sessionID: sessionID) else { return }
         reducer.reconcileApprovals(infos.map {
             PendingApproval(id: $0.id, kind: Approvals.kind(toolName: $0.toolName),
-                            toolName: $0.toolName, input: $0.input)
+                            toolName: $0.toolName, input: $0.input,
+                            translation: ApprovalTranslation.parse($0.translation))
         }, knownBefore: knownBefore)
         publishStateNow()
     }

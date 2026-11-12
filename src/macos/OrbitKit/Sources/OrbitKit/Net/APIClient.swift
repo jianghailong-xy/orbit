@@ -582,6 +582,22 @@ public final class APIClient: @unchecked Sendable {
         try await get("sessions/\(sessionID)/approvals", query: [URLQueryItem(name: "status", value: status)])
     }
 
+    /// Settings › Translation: translate a held message again (FAILED → TRANSLATING).
+    public func retryTurnTranslation(sessionID: String, turnId: String) async throws -> TranslationActionResponse {
+        try await postEmpty("sessions/\(sessionID)/turns/\(turnId)/translation/retry")
+    }
+
+    /// Settings › Translation: deliver a held message untranslated (SENT_AS_WRITTEN).
+    public func sendTurnAsWritten(sessionID: String, turnId: String) async throws -> TranslationActionResponse {
+        try await postEmpty("sessions/\(sessionID)/turns/\(turnId)/translation/send-as-written")
+    }
+
+    /// Settings › Translation: translate a reply (or suggestion) whose translation failed again; the
+    /// result comes as a live `translation` event.
+    public func retryReplyTranslation(sessionID: String, seq: Int) async throws {
+        _ = try await postRaw("sessions/\(sessionID)/events/\(seq)/translation/retry", body: Optional<Empty>.none)
+    }
+
     public func decideApproval(sessionID: String, approvalID: String, _ req: ApprovalDecisionRequest) async throws {
         _ = try await postRaw("sessions/\(sessionID)/approvals/\(approvalID)/decision", body: req)
     }

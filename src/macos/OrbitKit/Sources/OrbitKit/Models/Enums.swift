@@ -293,6 +293,11 @@ public enum RunEventType: String, Codable, Sendable {
     /// A queued turn was added or withdrawn on another client. Live-only nudge; the focused
     /// console re-fetches GET /sessions/:id/turns, the durable source of truth.
     case queuedTurnsChanged = "queued_turns_changed"
+    /// Settings › Translation: an agent reply (an `assistant` text block) or a prompt suggestion was
+    /// translated into the owner's language, or its translation failed. Live-only at seq 0; the
+    /// durable record is the `translation` key the server writes into that event's own payload,
+    /// which every replay carries. Payload: `{ of, lang, text }` or `{ of, lang, failed: true }`.
+    case translation
     case backgroundTask = "background_task"
     case backgroundOutput = "background_output"
     /// How far a background sub-agent or workflow has got — relayed from Claude Code's
@@ -318,7 +323,7 @@ public enum RunEventType: String, Codable, Sendable {
     public var isDurable: Bool {
         switch self {
         case .textDelta, .thinkingDelta, .toolOutput, .approvalRequest, .approvalResolved,
-             .queuedTurnsChanged, .backgroundOutput, .taskProgress, .resync:
+             .queuedTurnsChanged, .translation, .backgroundOutput, .taskProgress, .resync:
             return false
         default:
             return true
