@@ -66,6 +66,7 @@ test('the client tail page applies the replay fence before its LIMIT', async () 
 test('the public shared transcript applies the same historical replay fence', async () => {
   let captured: TaggedQuery | undefined;
   const prisma = {
+    approval: { findMany: async () => [] },
     session: {
       findFirst: async () => ({
         id: SESSION,
@@ -117,6 +118,7 @@ test('what a shared session added after a seq sits behind the same fence, read a
   const reads: string[] = [];
   let captured: TaggedQuery | undefined;
   const prisma = {
+    approval: { findMany: async () => [] },
     session: {
       findFirst: async () => {
         reads.push('header');
