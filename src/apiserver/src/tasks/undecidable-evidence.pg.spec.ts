@@ -70,6 +70,9 @@ import { standardDigest, undecidableEvidenceTurnId, type HeldStandard } from './
  *          pending row carries `ownerAction: RESTART_TASK`, and pressing it starts the task;
  *
  * and in every state, no row the pending read returns has a required action its reader cannot take.
+ * A reword or delete follows a submission the Automatic coordinator was already handed to decide:
+ * its queued review turn is withdrawn and the notice says so; a moved revision was never handed to
+ * the target's coordinator, and its notice says it was not handed over.
  *
  * Not destructive: every case owns freshly generated ids and asserts over its own rows.
  */
@@ -384,6 +387,32 @@ async function told(db: PrismaClient, w: World) {
   return { coord: await messagesOn(db, w.coord), run: await messagesOn(db, w.run) };
 }
 
+type Said = Awaited<ReturnType<typeof messagesOn>>;
+
+/**
+ * What the coordinator was told before, less the review turn the submission queued on it (it is
+ * withdrawn once the revision is undecidable), and whether there was one: the notice says the
+ * earlier request is withdrawn when there was, and that it was never handed over when not.
+ */
+function reviewWithdrawn(before: Said, after: Said): { kept: Said; handed: boolean } {
+  const isReview = (turn: Said[number]) => (turn.content ?? '').includes('for you to decide');
+  const review = before.filter(isReview);
+  for (const turn of review) {
+    assert.ok(!after.some((said) => said.clientTurnId === turn.clientTurnId), 'the stale review turn is still queued');
+  }
+  return { kept: before.filter((turn) => !isReview(turn)), handed: review.length > 0 };
+}
+
+function assertHandOverWords(says: string, handed: boolean): void {
+  if (handed) {
+    assert.ok(says.includes('that request is withdrawn'), 'the earlier request to decide it is not withdrawn');
+    assert.ok(!says.includes('not handed to you'), 'the notice denies a hand-over that happened');
+  } else {
+    assert.ok(says.includes('so it was not handed to you to decide'));
+    assert.ok(!says.includes('that request is withdrawn'));
+  }
+}
+
 function newSince<T>(before: readonly T[], after: readonly T[]): T[] {
   assert.deepEqual(after.slice(0, before.length), before, 'what was said before was rewritten');
   return after.slice(before.length);
@@ -461,10 +490,12 @@ async function assertLiveRunAndCoordinatorToldOnce(
   assert.equal(toRun[0]!.clientTurnId, undecidableEvidenceTurnId('run', w.evidenceId, digest));
   assert.ok((toRun[0]!.content ?? '').includes(standardWords), 'the steer does not name the new standard');
   assert.ok((toRun[0]!.content ?? '').includes('task_evidence_submit'));
-  const toCoord = newSince(before.coord, after.coord);
+  const { kept, handed } = reviewWithdrawn(before.coord, after.coord);
+  const toCoord = newSince(kept, after.coord);
   assert.equal(toCoord.length, 1, 'the Automatic coordinator was told other than once');
   assert.equal(toCoord[0]!.clientTurnId, undecidableEvidenceTurnId('coordinator', w.evidenceId, digest));
   const coordSays = toCoord[0]!.content ?? '';
+  assertHandOverWords(coordSays, handed);
   assert.ok(coordSays.includes(uuidToBase62(w.run)), 'the coordinator is not told the run was told');
   assert.ok(!coordSays.includes('task_evidence_decide'), 'the coordinator is asked to decide a revision nobody can');
 
@@ -494,10 +525,12 @@ async function assertCoordinatorToActOn(
 ): Promise<void> {
   const after = await told(stack.db, w);
   assert.deepEqual(after.run, before.run, 'a run that has ended was written to');
-  const toCoord = newSince(before.coord, after.coord);
+  const { kept, handed } = reviewWithdrawn(before.coord, after.coord);
+  const toCoord = newSince(kept, after.coord);
   assert.equal(toCoord.length, 1, 'the coordinator was told other than once');
   assert.equal(toCoord[0]!.clientTurnId, undecidableEvidenceTurnId('coordinator', w.evidenceId, standardDigest(standard)));
   const says = toCoord[0]!.content ?? '';
+  assertHandOverWords(says, handed);
   assert.ok(says.includes('has no running session'));
   assert.ok(says.includes('It is yours to act on'));
   assert.ok(says.includes(`task_start, taskId ${uuidToBase62(w.task)}`));
@@ -596,6 +629,47 @@ test('reworded, no live run: the Automatic coordinator gets it to act on', { ski
     await stack.db.$disconnect();
   }
 });
+
+test('reworded after the revision was handed to the coordinator: the request is withdrawn, not denied',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'reworded-handed', { runEnded: true });
+      // The submission handed revision 1 to the Automatic coordinator to decide, queued unread.
+      const review = await stack.db.conversationTurn.findMany({
+        where: { sessionId: w.coord!, content: { contains: 'for you to decide' } },
+        select: { id: true, status: true },
+      });
+      assert.equal(review.length, 1, 'the revision was not handed to the coordinator to decide');
+      assert.equal(review[0]!.status, 'PENDING');
+
+      await reword(stack, w);
+      const digest = standardDigest(declaredStandard(w, WANTS_1_REWORDED));
+      const after = await messagesOn(stack.db, w.coord);
+      assert.equal(
+        await stack.db.conversationTurn.count({ where: { id: review[0]!.id } }), 0,
+        'the stale review turn is still queued',
+      );
+      assert.equal(after.length, 1, 'the coordinator conversation holds other than the one notice');
+      assert.equal(after[0]!.clientTurnId, undecidableEvidenceTurnId('coordinator', w.evidenceId, digest));
+      const says = after[0]!.content ?? '';
+      assert.ok(!says.includes('not handed to you'), 'the notice denies a hand-over that happened');
+      assert.ok(says.includes('Earlier you were asked to decide revision 1; that request is withdrawn'));
+      assert.ok(says.includes('EVIDENCE_JUDGMENT_CRITERION_MOVED'));
+      assert.ok(says.includes(`“${WANTS_1_REWORDED}”`));
+      assert.ok(says.includes('It is yours to act on'));
+      assert.ok(!says.includes('task_evidence_decide'));
+      // The coordinator is not shown a row for it, and the invariant holds.
+      assert.equal(rowFor(await read(stack, w, w.coord!), w.task), null);
+      await assertReadsHoldTheInvariant(stack, w);
+
+      // The same trigger again: nothing more.
+      await editAgain(stack, w);
+      assert.deepEqual(await messagesOn(stack.db, w.coord), after, 'the repeat said something more');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
 
 test('reworded, Manual project: nobody is messaged, the owner row offers Restart and pressing it starts the task',
   { skip, timeout: 180_000 }, async () => {

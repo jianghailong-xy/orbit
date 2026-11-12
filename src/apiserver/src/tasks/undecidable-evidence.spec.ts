@@ -114,6 +114,19 @@ test('the coordinator is told the revision cannot be decided, and whether a run 
   assert.ok(nobody.includes('“what the target wants”'));
 });
 
+test('a coordinator already asked to decide the revision is told that request is withdrawn', () => {
+  for (const e of [reworded(), moved()]) {
+    const handed = coordinatorMessage(e, [], true);
+    assert.ok(!handed.includes('not handed to you'), 'it denies a hand-over that happened');
+    assert.ok(handed.includes('Earlier you were asked to decide revision 3; that request is withdrawn'));
+    assert.ok(handed.includes('EVIDENCE_JUDGMENT_CRITERION_MOVED'));
+    assert.ok(!handed.includes('task_evidence_decide'));
+    const never = coordinatorMessage(e, []);
+    assert.ok(never.includes('so it was not handed to you to decide'));
+    assert.ok(!never.includes('withdrawn'));
+  }
+});
+
 test('a session acting for another project is disqualified; a task or session in none is not', () => {
   assert.equal(taskProjectDisqualification(TO, TO), null);
   assert.equal(taskProjectDisqualification(null, FROM), null);

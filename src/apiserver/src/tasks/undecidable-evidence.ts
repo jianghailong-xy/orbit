@@ -11,6 +11,8 @@ import { TaskStatus } from '@prisma/client';
 import type { Prisma as PrismaTypes } from '@prisma/client';
 import { uuidToBase62 } from '@orbit/shared';
 
+import { completionEvidenceWakeKey } from '../projects/completion-input';
+import { deliveryRecordOf } from '../projects/coordinator-evidence-queue';
 import { derivedUuid } from '../projects/project-dispatch-identity';
 import { SESSION_ENDING_SELECT, sessionHasEnded } from '../projects/project-open-item';
 import type { SessionsService } from '../sessions/sessions.service';
@@ -46,6 +48,13 @@ import {
  *     to act on — `task_start`, or change the standard. Nothing restarts the task by itself (D2 = A);
  *   * with neither, the owner's pending read offers Restart the task on the row
  *     (`undecidableAddressees`, `ownerAction`), and nobody is messaged.
+ *
+ * A revision is often undecidable only after it was handed to the coordinator to decide (a reword
+ * after submission). Then the notice says the earlier request is withdrawn rather than that it was
+ * never handed over, and a review turn still queued unread is taken off the queue
+ * (`withdrawReviewTurns`): the door would refuse whatever it answered. The delivery's wake stays
+ * DELIVERED, so should the standard come back to the one the revision quotes, the evidence queue
+ * reads the unread delivery as owed and sends it again.
  *
  * Each message is one turn keyed by (reader, evidence id, standard digest), so a trigger that fires
  * again with the same standard writes nothing new, and a standard that changes again is said again.
@@ -221,8 +230,16 @@ export function runMessage(e: UndecidableEvidence): string {
   );
 }
 
-/** To an Automatic project's coordinator: the revision cannot be decided, and whether a run was told. */
-export function coordinatorMessage(e: UndecidableEvidence, runSessionIds: readonly string[]): string {
+/**
+ * To an Automatic project's coordinator: the revision cannot be decided, and whether a run was told.
+ * `handedToYou`: a request to decide this revision was written to this conversation before the
+ * standard moved, so the notice withdraws it instead of saying it was never handed over.
+ */
+export function coordinatorMessage(
+  e: UndecidableEvidence,
+  runSessionIds: readonly string[],
+  handedToYou = false,
+): string {
   const taskKey = uuidToBase62(e.taskId);
   const standard = e.standard;
   const standardLine = standard.kind === 'NONE'
@@ -239,14 +256,20 @@ export function coordinatorMessage(e: UndecidableEvidence, runSessionIds: readon
     : 'This task has no running session now, so nobody will submit it again on their own. It is yours to act on: '
       + `start the task again (task_start, taskId ${taskKey}) so a new run submits a revision against that standard, `
       + 'or change the standard itself. Nothing restarts it by itself.';
+  const notYours = handedToYou
+    ? `Earlier you were asked to decide revision ${e.revision}; that request is withdrawn (taken off your queue if you had not `
+      + `read it yet): the standard it is bound to moved, so the decision door will refuse any answer to it `
+      + `(${CRITERION_MOVED_CODE}). Do not decide it: ${whyUndecidable(e)}.`
+    : `so it was not handed to you to decide: ${whyUndecidable(e)}.`;
   const lead = e.cause.kind === 'MOVED'
     ? `[Task “${e.title}” moved into this project with an evidence revision to be submitted again]\n\n`
       + `The account owner confirmed moving task ${taskKey} from project ${projectName(e.cause.from)} into this project. `
-      + `Revision ${e.revision} of its completion evidence has not been decided yet, and it cannot be decided here, `
-      + `so it was not handed to you to decide: ${whyUndecidable(e)}.`
+      + `Revision ${e.revision} of its completion evidence has not been decided yet, and it cannot be decided here`
+      + (handedToYou ? `. ${notYours}` : `, ${notYours}`)
     : `[Task “${e.title}”: evidence revision ${e.revision} can no longer be decided and has to be submitted again]\n\n`
       + `This project's acceptance criteria changed after revision ${e.revision} of the completion evidence of task ${taskKey} `
-      + `was submitted, and it cannot be decided now, so it was not handed to you to decide: ${whyUndecidable(e)}.`;
+      + `was submitted, and it cannot be decided now`
+      + (handedToYou ? `. ${notYours}` : `, ${notYours}`);
   return (
     `${lead}\n\n${standardLine}\n${runs}\nOnce a new revision is submitted, it is handed to you to decide as usual.\n\n`
     + 'This is a notice, not an interruption: the turn you are running is not interrupted by it, and you are reading it after that turn ended, '
@@ -334,7 +357,14 @@ export async function unansweredUndecidableRevision(
       completionEvidence: {
         orderBy: { revision: 'desc' },
         take: 1,
-        select: { id: true, revision: true, evidence: true, decisions: { select: { id: true }, take: 1 } },
+        select: {
+          id: true,
+          revision: true,
+          criterionRevision: true,
+          evidenceDigest: true,
+          evidence: true,
+          decisions: { select: { id: true }, take: 1 },
+        },
       },
     },
   });
@@ -353,7 +383,7 @@ export async function unansweredUndecidableRevision(
  */
 export async function tellEvidenceUndecidable(
   prisma: PrismaTypes.TransactionClient,
-  sessions: Pick<SessionsService, 'createTurn'>,
+  sessions: Pick<SessionsService, 'createTurn' | 'cancelQueuedTurn'>,
   input: { ownerId: string; taskId: string; cause: UndecidableCause },
 ): Promise<UndecidableEvidenceOutcome | null> {
   const found = await unansweredUndecidableRevision(prisma, input.ownerId, input.taskId);
@@ -392,14 +422,78 @@ export async function tellEvidenceUndecidable(
     });
     if (project?.coordinatorEnabled && project.coordinatorSessionId && project.coordinatorSession
       && !sessionHasEnded(project.coordinatorSession)) {
+      const handed = await withdrawReviewTurns(prisma, sessions, input.ownerId, {
+        taskId: task.id,
+        projectId: task.projectId,
+        coordinatorSessionId: project.coordinatorSessionId,
+        revision: {
+          revision: latest.revision.toString(),
+          criterionRevision: latest.criterionRevision,
+          evidenceDigest: latest.evidenceDigest,
+        },
+      });
       coordinatorTold = await tell(sessions, input.ownerId, project.coordinatorSessionId, {
         clientTurnId: undecidableEvidenceTurnId('coordinator', latest.id, digest),
-        content: coordinatorMessage(evidence, runsTold),
+        content: coordinatorMessage(evidence, runsTold, handed),
         steerIfLive: false,
       });
     }
   }
   return { evidenceId: latest.id, standardDigest: digest, runsTold, coordinatorTold };
+}
+
+/**
+ * Whether this revision was delivered to this coordinator conversation to decide
+ * (`CompletionEvidenceProducer`: a DELIVERED wake under the revision's own key, or the key a
+ * confirmed move handed it over under), and, if so, take each of its review turns still queued
+ * unread off the queue — the door would refuse whatever the coordinator answered. A turn already
+ * taken up is left: the notice that follows it withdraws the request in words. Read off the wake
+ * rather than the turn, so a repeat of the trigger, after the turn is gone, says the same thing.
+ */
+async function withdrawReviewTurns(
+  prisma: PrismaTypes.TransactionClient,
+  sessions: Pick<SessionsService, 'cancelQueuedTurn'>,
+  ownerId: string,
+  input: {
+    taskId: string;
+    projectId: string;
+    coordinatorSessionId: string;
+    revision: { revision: string; criterionRevision: string; evidenceDigest: string };
+  },
+): Promise<boolean> {
+  const wakes = await prisma.projectCoordinatorWake.findMany({
+    where: {
+      idempotencyKey: {
+        in: [
+          completionEvidenceWakeKey(input.taskId, input.revision),
+          completionEvidenceWakeKey(input.taskId, input.revision, input.projectId),
+        ],
+      },
+      projectId: input.projectId,
+      sessionId: input.coordinatorSessionId,
+      status: 'DELIVERED',
+    },
+    select: { delivery: true },
+  });
+  if (wakes.length === 0) return false;
+  const clientTurnIds = wakes.flatMap((wake) => {
+    const record = deliveryRecordOf(wake.delivery);
+    return record ? [record.clientTurnId] : [];
+  });
+  const queued = clientTurnIds.length === 0 ? [] : await prisma.conversationTurn.findMany({
+    where: { sessionId: input.coordinatorSessionId, clientTurnId: { in: clientTurnIds }, status: 'PENDING' },
+    select: { id: true },
+  });
+  for (const turn of queued) {
+    try {
+      await sessions.cancelQueuedTurn(ownerId, input.coordinatorSessionId, turn.id);
+    } catch (error) {
+      // Taken up in the meantime, or the conversation ended: the notice still withdraws it in words.
+      logger.log(`review turn ${turn.id} on session ${input.coordinatorSessionId} was not withdrawn: `
+        + `${error instanceof Error ? error.message : error}`);
+    }
+  }
+  return true;
 }
 
 /**
