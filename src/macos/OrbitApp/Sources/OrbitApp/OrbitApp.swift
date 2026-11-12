@@ -85,6 +85,10 @@ struct OrbitApp: App {
                 Button("Search Sessions…") { model.searchOpen = true }
                     .keyboardShortcut("k", modifiers: .command)
                     .disabled(!model.signedIn)
+                // The sidebar has no Following row (docs/mocks/macos-sidebar, 01): its watches are opened from
+                // the cards and links that name them, from the account menu, and from here.
+                Button(AppSection.following.title) { model.selectedSection = .following }
+                    .disabled(!model.signedIn)
                 Divider()
                 ForEach(Array(model.orderedAgents.prefix(9).enumerated()), id: \.element.id) { pair in
                     Button("\(pair.offset + 1)  \(pair.element.name)") {
@@ -116,9 +120,9 @@ struct OrbitApp: App {
             MenuBarContent().environment(model)
         } label: {
             if let badge = model.menuSummary.badge {
-                Label(badge, systemImage: "circle.hexagongrid.fill")
+                Label { Text(badge) } icon: { Image(nsImage: MenuBarIcon.image) }
             } else {
-                Image(systemName: "circle.hexagongrid")
+                Image(nsImage: MenuBarIcon.image)
             }
         }
         .menuBarExtraStyle(.window)

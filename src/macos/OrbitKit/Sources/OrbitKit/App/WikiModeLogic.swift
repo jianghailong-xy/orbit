@@ -81,8 +81,6 @@ public enum WikiModeCopy {
     }
     /// `1 wiki`, beside the word Trash on Wiki settings' row (`wikiTrashRowCount`).
     public static func trashRowCount(_ wikis: Int) -> String { counted(wikis, "wiki", "wikis") }
-    /// The space menu's item, under Manage spaces.
-    public static let trashPickerItem = "Trash"
 
     // Trash itself.
     public static let trashPageTitle = "Trash"                                    // WIKI_TRASH_PAGE_TITLE

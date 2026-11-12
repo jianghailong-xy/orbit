@@ -74,12 +74,15 @@ final class TaskDetailWiringTests: XCTestCase {
     func testTheWebPanelStillDrawsTheBlocksInThisOrder() throws {
         let web = try source(Self.webPanel)
         let body = try section(web, from: "<div className=\"tdp-body\">", to: "<div className=\"tdp-compose\">")
+        // 2026-11-12, docs/mocks/task-detail-agent-first: the web panel leads with the run — Now and
+        // the evidence, then the contract, the plan, the envelope folded to one line, one timeline.
+        // The phone has not followed yet.
         let order = try positions([
-            "showVerifierCard &&", ">Details<", ">Dependencies<", ">Description<", ">Acceptance<", "<TaskInputs ",
-            "<TaskAttributionCard ", "<TaskFollowedBy ", ">Runs (", ">Comments (",
+            "showVerifierCard &&", ">Now<", "{latestEvidence && (", ">Done means<", ">Brief for the agent<",
+            ">In the plan<", ">Runs with<", "<TaskInputs ", "<TaskAttributionNotice ", "<TaskFollowedBy ", ">Activity<",
         ], in: body)
         XCTAssertEqual(order, order.sorted(), "the web panel's blocks moved — decide whether the phone follows")
-        let head = try section(web, from: "<div className=\"tdp-head-actions\">", to: "<Popconfirm")
+        let head = try section(web, from: "<div className=\"tdp-head-actions\">", to: "<Menu")
         XCTAssertFalse(head.contains("Mark done"), "the browser offers no Mark done beside its presses either")
     }
 
@@ -188,7 +191,9 @@ final class TaskDetailWiringTests: XCTestCase {
         let view = try source(Self.tasksView)
         let runs = try section(view, from: "private func runsSection(_ task: TaskItem) -> some View {",
                                to: "private func runTime(")
-        XCTAssertTrue(runs.contains("Button { model.route(to: .session(session.id)) } label: { runRow(session, task) }"),
+        // `openRoute` keeps this press's routing where there is no page over the task and closes
+        // the wide shells' sheet first where there is (owner decision 2026-11-12).
+        XCTAssertTrue(runs.contains("Button { openRoute(.session(session.id)) } label: { runRow(session, task) }"),
                       "the row is still the way into the run")
         XCTAssertTrue(runs.contains("if let route = TaskDetailLogic.runRoute(session, smartSelection: smartSelection) {"))
         XCTAssertTrue(runs.contains("routeWhy = TaskRouteWhy(id: session.id, title: TaskDetailCopy.why(pick),"))
@@ -229,8 +234,10 @@ final class TaskDetailWiringTests: XCTestCase {
         XCTAssertTrue(menu.contains("ComposerLogic.menuLines("), "a Mac menu item does not wrap")
         XCTAssertTrue(menu.contains("ComposerLogic.sentences(TaskDetailCopy.modelChangeAppliesToThisRun)"),
                       "an iOS menu item stops at three lines")
-        // On the phone the task opens over the conversation, so back returns to the run.
-        XCTAssertTrue(menu.contains("app.openFromConversation(.task(taskID), overConsole: opensPagesOverConsole)"))
+        // On the phone the task opens over the conversation, so back returns to the run; on a
+        // wide shell it opens over the conversation as a sheet (owner decision 2026-11-12).
+        XCTAssertTrue(menu.contains("app.openFromConversation(.task(taskID), overConsole: opensPagesOverConsole,"))
+        XCTAssertTrue(menu.contains("overPage: opensTasksOverPage)"))
         XCTAssertTrue(menu.contains(".accessibilityLabel(chipAccessibilityLabel)"))
         XCTAssertTrue(menu.contains("TaskDetailCopy.chipPickedBySmartSelection"))
         let chip = try section(composer, from: "private var modelChipLabel: some View {", to: "private var chipEffortLabel")

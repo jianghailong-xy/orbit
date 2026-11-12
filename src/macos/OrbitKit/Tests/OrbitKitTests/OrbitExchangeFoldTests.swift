@@ -79,11 +79,11 @@ final class OrbitExchangeFoldTests: XCTestCase {
         exchange(50, delivery(50, "EVIDENCE_SUBMITTED", Self.b4, "B4 Link gateway", revision: 1), reply: "I confirmed B4.")
     }
 
-    private func rows(fold: Bool = true, coordinator: Bool = true) throws -> [TranscriptRow] {
+    private func rows(fold: Bool = true) throws -> [TranscriptRow] {
         var reducer = TranscriptReducer()
         for line in events { reducer.apply(try JSONDecoder().decode(RunEvent.self, from: Data(line.utf8))) }
         return TranscriptRows.build(state: reducer.state, statusCards: [], canPageOlder: false,
-                                    showWorkingIndicator: false, foldExchanges: fold, coordinator: coordinator)
+                                    showWorkingIndicator: false, foldExchanges: fold)
     }
 
     private func groups(_ rows: [TranscriptRow]) -> [[OrbitExchange]] {
@@ -113,29 +113,39 @@ final class OrbitExchangeFoldTests: XCTestCase {
         return ["text": wake, "controlPlaneNote": wake]
     }
 
-    /// Outside a coordinator a background job is the agent's work on what the reader asked: its turns
-    /// are the answer and stay drawn. In a coordinator they fold as before (owner, 2026-11-12).
-    func testABackgroundJobFoldsOnlyInACoordinator() throws {
+    /// Only a short answer folds: a watch's under 220 characters, any other's under 80, and a reply
+    /// from another session never (web parity: `foldsAtLength`, Transcript.orbitFold.test.tsx).
+    func testOnlyAShortAnswerFolds() throws {
+        let replyTurn: [String: Any] = ["text": "", "sessionReplies": [["requestId": "r", "fromSessionId": Self.runOfB1,
+                                                                        "fromTitle": "B1 run", "outcome": "REPLIED"]]]
         exchange(0, ["text": "Why is 11-10 not ready?"], reply: "I started a query.", tools: [])
-        exchange(5, jobWake("bgj_1", "Ledger split by lane"), reply: "Waiting on one more reading.",
+        exchange(5, jobWake("bgj_1", "Ledger"), reply: "Still running.", tools: ["mcp__orbit__bg_output"])
+        exchange(10, jobWake("bgj_2", "Script"),
+                 reply: "Found it: " + String(repeating: "the job waits on lane 7, which never arrives. ", count: 2),
                  tools: ["mcp__orbit__bg_output"])
-        exchange(10, jobWake("bgj_2", "Read the ready script"),
-                 reply: "Found it: the job waits on lane 7, which never arrives.", tools: ["mcp__orbit__bg_output"])
-        exchange(15, delivery(15, "EVIDENCE_SUBMITTED", Self.b1, "B1 Targeted hints", revision: 1), reply: "I confirmed B1.")
-        exchange(20, jobWake("bgj_3", "Clean up"), reply: "Done.", tools: ["mcp__orbit__bg_output"])
+        exchange(15, ["text": watchText(kind: "SESSION", id: Self.runOfB1)],
+                 reply: "Duplicate wake; " + String(repeating: "nothing new. ", count: 15))
+        exchange(20, ["text": watchText(kind: "SESSION", id: Self.runOfB1)],
+                 reply: "B1 landed. " + String(repeating: "All three gates are green on main. ", count: 7))
+        exchange(25, replyTurn, reply: "Exempt.")
+        exchange(30, ["text": "ok"], reply: "Done.", tools: [])
 
-        let plain = try rows(coordinator: false)
-        let drawn = texts(plain)
-        XCTAssertTrue(drawn.contains("Waiting on one more reading."))
-        XCTAssertTrue(drawn.contains("Found it: the job waits on lane 7, which never arrives."))
-        // What is not a job still folds there too.
-        XCTAssertEqual(groups(plain).map { $0.map(\.reply) }, [["I confirmed B1."]])
+        let built = try rows()
+        // Each folds alone: the job's long answer (102 characters) stands between them.
+        XCTAssertEqual(groups(built).map { $0.map(\.category) }, [[.job], [.watch]])
+        let drawn = texts(built)
+        XCTAssertTrue(drawn.contains { $0.hasPrefix("Found it:") }, "a job's answer of 80 or more stays")
+        XCTAssertTrue(drawn.contains { $0.hasPrefix("B1 landed.") }, "a watch's answer of 220 or more (256) stays")
+        XCTAssertTrue(drawn.contains("Exempt."), "a reply never folds by length")
+        XCTAssertFalse(drawn.contains { $0.hasPrefix("Duplicate wake") }, "a watch's 211 characters fold")
+    }
 
-        let coordinator = try rows(coordinator: true)
-        let group = try XCTUnwrap(groups(coordinator).first)
-        XCTAssertEqual(OrbitExchangeFold.groupCount(group.count), "3 Orbit updates handled")
-        XCTAssertEqual(OrbitExchangeFold.kinds(group), "1 evidence, 2 background jobs")
-        XCTAssertFalse(texts(coordinator).contains { $0.hasPrefix("Found it") })
+    func testTheLengthLineIsTheWebs() {
+        XCTAssertEqual([OrbitExchangeFold.foldsAtLength(.watch, 219), OrbitExchangeFold.foldsAtLength(.watch, 220)], [true, false])
+        for kind in [ExchangeCategory.evidence, .ready, .project, .job, .notice, .message] {
+            XCTAssertEqual([OrbitExchangeFold.foldsAtLength(kind, 79), OrbitExchangeFold.foldsAtLength(kind, 80)], [true, false])
+        }
+        XCTAssertFalse(OrbitExchangeFold.foldsAtLength(.reply, 0))
     }
 
     func testARunOfOrbitTurnsIsOneGroupAndTheReaderAndTheNewestTurnStay() throws {

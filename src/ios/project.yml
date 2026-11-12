@@ -46,6 +46,7 @@ targets:
         name: Shared
         excludes:
           - "OrbitApp.swift"
+          - "MenuBarIcon.swift"
           - "HotKeyManager.swift"
           - "UpdaterModel.swift"
           - "RunnerControl.swift"

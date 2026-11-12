@@ -166,7 +166,10 @@ final class ShareEntriesWiringTests: XCTestCase {
         let complete = try slice(menu, from: "appModel.completeSession(session.id)", to: "canComplete")
         XCTAssertTrue(complete.contains(".disabled("), "Complete follows the server's capability")
         XCTAssertTrue(menu.contains("appModel.deleteSession(session.id)"), "Delete remains a soft delete")
-        XCTAssertTrue(menu.contains("openFromConversation(.task(taskID), overConsole: opensPagesOverConsole)"))
+        // A wide shell opens that task over the conversation instead of switching sections
+        // (owner decision 2026-11-12); the phone's push is unchanged.
+        XCTAssertTrue(menu.contains("openFromConversation(.task(taskID), overConsole: opensPagesOverConsole,"))
+        XCTAssertTrue(menu.contains("overPage: opensTasksOverPage)"))
         XCTAssertTrue(menu.contains("openProjectFromConversation(projectID, overConsole: opensPagesOverConsole)"))
         XCTAssertFalse(menu.contains("appModel.route("), "opening related work must retain the phone's way back")
         XCTAssertFalse(menu.contains("setStatus("), "filing a session must not declare its task done")

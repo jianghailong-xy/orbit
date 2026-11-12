@@ -1,14 +1,32 @@
 import Foundation
 
-// Pure logic for workspace navigation order. macOS renders runner groups; iOS uses the flat
-// workspace order shared with the web.
+// Pure logic for workspace navigation order. Every client's rail uses the flat workspace order shared
+// with the web.
 
 public struct AgentGroup: Equatable, Sendable, Identifiable {
     public let runnerId: String?
     public let agents: [Agent]
-    /// A machine with no workspace: its group has this one row instead of workspaces (rule 9).
-    public var setUp: MachineToSetUp? = nil
     public var id: String { runnerId ?? "host" }
+}
+
+/// One row of the macOS sidebar's Workspaces section. The section draws exactly one view per row, so the
+/// outline list sees one flat, stable-id row set: an `if`/`else` swapping the placeholder for the rows,
+/// or a `ForEach` element yielding a varying number of rows, is the shape whose row reload
+/// NSOutlineView aborted on (beta.196, `-[NSLayoutConstraint setActive:]` under
+/// `reloadItem:reloadChildren:`).
+public enum SidebarWorkspaceRow: Equatable, Sendable, Identifiable {
+    case agent(Agent)
+    case setUp(MachineToSetUp)
+    /// Stands in for the rows while there are none: loading, failed, or empty.
+    case placeholder
+
+    public var id: String {
+        switch self {
+        case .agent(let a): return "agent:\(a.id)"
+        case .setUp(let m): return "setup:\(m.id)"
+        case .placeholder: return "placeholder"
+        }
+    }
 }
 
 /// Where New session goes (rule 11, board 03): the workspace in view, else the first machine that can
@@ -67,6 +85,16 @@ public enum AgentListLogic {
         #endif
     }
 
+    /// The Mac sidebar's Workspaces rows: the workspaces in `ordered` order, then a Set up row per machine
+    /// with no workspace; the placeholder alone when there is neither. A row id seen twice keeps its first
+    /// row only, since a duplicate id is itself a row set the outline list can't reconcile.
+    public static func sidebarRows(_ ordered: [Agent], machines: [MachineToSetUp]) -> [SidebarWorkspaceRow] {
+        var seen = Set<String>()
+        let rows = (ordered.map(SidebarWorkspaceRow.agent) + machines.map(SidebarWorkspaceRow.setUp))
+            .filter { seen.insert($0.id).inserted }
+        return rows.isEmpty ? [.placeholder] : rows
+    }
+
     /// Rule 9: the machines that get a Set up row, in the runner list's order. Online, with no
     /// workspace of this account on them: an offline one is already what Machines & models says needs
     /// you. A runner the server hasn't said is online is not one.
@@ -79,14 +107,6 @@ public enum AgentListLogic {
     /// `GET /runners`' answer for this machine, read the way the rest of the rail reads it.
     public static func isOnline(_ runner: Runner) -> Bool {
         WorkspaceRunnerAvailabilityLogic.onlineValue(explicit: runner.online, status: runner.status) == true
-    }
-
-    /// The macOS sidebar's groups: each machine's workspaces, then each machine that has none, with its
-    /// header and Set up row after every workspace (rule 9).
-    public static func sidebarGroups(_ agents: [Agent], runnerOrder: [String] = [],
-                                     machines: [MachineToSetUp]) -> [AgentGroup] {
-        grouped(agents, runnerOrder: runnerOrder)
-            + machines.map { AgentGroup(runnerId: $0.id, agents: [], setUp: $0) }
     }
 
     /// Where New session goes. `list` is the workspace list's state, `currentAgentID` the workspace ⌘N
