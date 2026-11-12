@@ -56,7 +56,7 @@ test('a draining runner lists the viewer’s turns it waits for; no other runner
     const metrics = await session(alice, r, 'Why are 11-08 metrics zero', RunStatus.RUNNING, 47);
     const backfill = await session(alice, r, 'Backfill missing shard rows', RunStatus.RUNNING, 112);
     await session(alice, r, 'Queued behind the drain', RunStatus.PENDING);
-    await session(alice, r, 'Finished earlier', RunStatus.COMPLETED, 300);
+    await session(alice, r, 'Finished earlier', RunStatus.SUCCEEDED, 300);
     // Bob's turn on Alice's runner is counted by turnsInFlight but never named to Alice.
     await session(bob, r, 'Bob’s private turn', RunStatus.RUNNING, 200);
 
