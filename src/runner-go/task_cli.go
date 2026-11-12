@@ -161,6 +161,10 @@ defaults to ORBIT_SESSION_ID and must execute this task; its lifecycle state is 
 Unicode composition and line endings share one stable digest; changed evidence makes a new revision.
 This command does not change task status and does not add a comment.
 
+The envelope is {"claim": ..., "checks": [...], "gaps": [...]}. It names no standard: Orbit records
+the one the task is held to (its declared criterion, else its own acceptance criteria) with the
+revision itself. A "criterion" an older client still sends is accepted and ignored.
+
 Each entry of checks is {"kind": ..., "ref": ...}, kind one of TOOL_CALL, COMMIT, ARTIFACT or FILE.
 A screenshot or a report goes in as {"kind": "FILE", "ref": "<id>"}, the id 'orbit file upload'
 printed for a file or a folder bundle kept in one of this task's sessions, or attached to the task.
@@ -1522,7 +1526,7 @@ func cliTaskEvidenceList(args []string, out io.Writer) error {
 func cliTaskEvidenceSubmit(args []string, in io.Reader, out io.Writer) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit task evidence-submit")
-	evidenceText := fs.String("evidence", "", "completion evidence envelope as one JSON object: {claim, criterion{key,text}, checks[], gaps[]}")
+	evidenceText := fs.String("evidence", "", "completion evidence envelope as one JSON object: {claim, checks[], gaps[]}")
 	evidenceFile := fs.String("evidence-file", "", "read evidence JSON from stdin (-)")
 	sourceSessionID := fs.String("source-session-id", "", "source task Session (defaults to ORBIT_SESSION_ID)")
 	idempotencyKey := fs.String("idempotency-key", "", "caller retry identity (max 200 characters)")

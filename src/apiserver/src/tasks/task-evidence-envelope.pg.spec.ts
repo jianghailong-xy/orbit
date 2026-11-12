@@ -429,20 +429,21 @@ suite('the evidence envelope is checked against rows, and the receipt says what 
     assert.equal(replay.citations?.length, 6);
   });
 
-  await t.test('a stale or unknown criterion is reported, never refused', async () => {
-    // Editing a project's criteria must not retroactively invalidate evidence that was true when
-    // it was written, so this lane reports and the citation lane refuses.
+  await t.test('a stale or unknown quoted criterion is accepted and ignored: the revision holds the live standard', async () => {
+    // The server binds the standard the task is held to (docs/evidence-always-has-an-addressee-design.md
+    // §2): a quote an older client still sends is never refused, and never what the revision is held to.
     const stale = await submit(envelope({
       claim: 'the fast gate passed, quoting wording that has since moved',
       criterion: { key, text: 'wording this project no longer uses' },
     }), 'stale-criterion');
     assert.equal(stale.revision, '2');
-    assert.equal(stale.criterionMatch?.matchesLive, false);
+    assert.deepEqual(stale.criterionMatch, { key, text: CRITERION_TEXT, matchesLive: true });
+    assert.deepEqual((stale.evidence as { criterion: unknown }).criterion, { key, text: CRITERION_TEXT });
     const unknownKey = await submit(envelope({
       claim: 'the fast gate passed, naming a criterion this project does not have',
       criterion: { key: 'notacriterionkey', text: CRITERION_TEXT },
     }), 'unknown-criterion');
-    assert.equal(unknownKey.criterionMatch?.matchesLive, false);
+    assert.deepEqual(unknownKey.criterionMatch, { key, text: CRITERION_TEXT, matchesLive: true });
   });
 
   await t.test('the ledger stores the envelope and re-derives no citation but a file\'s', async () => {

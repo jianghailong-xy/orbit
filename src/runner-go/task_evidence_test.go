@@ -307,3 +307,91 @@ func assertSaysAll(t *testing.T, what, text string, phrases ...string) {
 		}
 	}
 }
+
+// The server binds the standard a revision is judged against (docs/evidence-always-has-an-addressee-design.md
+// §2, D1), so neither face asks for `criterion` or needs one: the tool schema requires only `evidence`,
+// its description and the CLI help ask for three fields, and an envelope without `criterion` reaches
+// the server as written from both.
+func TestTaskEvidenceSubmitNeedsNoCriterion(t *testing.T) {
+	var submit map[string]interface{}
+	for _, descriptor := range toolDescriptors(false, false) {
+		if descriptor["name"] == "task_evidence_submit" {
+			submit = descriptor
+		}
+	}
+	if submit == nil {
+		t.Fatal("task_evidence_submit descriptor missing")
+	}
+	schema := submit["inputSchema"].(map[string]interface{})
+	if required, _ := json.Marshal(schema["required"]); string(required) != `["evidence"]` {
+		t.Errorf("required = %s, want only evidence", required)
+	}
+	evidence := schema["properties"].(map[string]interface{})["evidence"].(map[string]interface{})
+	if _, ok := evidence["required"]; ok {
+		t.Errorf("evidence schema requires fields: %#v", evidence["required"])
+	}
+	if _, ok := evidence["properties"]; ok {
+		t.Errorf("evidence schema declares properties: %#v", evidence["properties"])
+	}
+	evidenceDescription, _ := evidence["description"].(string)
+	submitDescription, _ := submit["description"].(string)
+	help := collapsedSpace(taskActionHelp["evidence-submit"])
+	assertSaysAll(t, "the evidence property", evidenceDescription, "The envelope, three fields: `claim`")
+	assertSaysAll(t, "the task_evidence_submit description", submitDescription,
+		"the three fields are required",
+		"an older client's `criterion` is accepted and ignored",
+	)
+	assertSaysAll(t, "`orbit task evidence-submit --help`", help,
+		`The envelope is {"claim": ..., "checks": [...], "gaps": [...]}. It names no standard`,
+		`A "criterion" an older client still sends is accepted and ignored.`,
+	)
+	for where, text := range map[string]string{
+		"the evidence property":                evidenceDescription,
+		"the task_evidence_submit description": submitDescription,
+		"`orbit task evidence-submit --help`":  help,
+	} {
+		for _, stale := range []string{"four fields", "criterion` ({key, text}", "criterion{key,text}", "copied from the project"} {
+			if strings.Contains(text, stale) {
+				t.Errorf("%s still asks for a criterion (%q):\n%s", where, stale, text)
+			}
+		}
+	}
+
+	var bodies []map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode evidence body: %v", err)
+		}
+		bodies = append(bodies, body)
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"ev-1","revision":"1"}`))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+	t.Setenv("ORBIT_TASK_ID", "task-1")
+	t.Setenv("ORBIT_SESSION_ID", "session-1")
+	t.Setenv("ORBIT_AGENT_ID", "agent-1")
+
+	const envelope = `{"claim":"done","checks":[{"kind":"TOOL_CALL","ref":"bgj_1"}],"gaps":[]}`
+	var out bytes.Buffer
+	if err := cmdTaskCLI([]string{"evidence-submit", "--evidence", envelope, "--json"}, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("CLI submit without criterion: %v", err)
+	}
+	var want map[string]interface{}
+	if err := json.Unmarshal([]byte(envelope), &want); err != nil {
+		t.Fatal(err)
+	}
+	mcp := &mcpServer{t: NewTransport(srv.URL, "runner-secret"), taskID: "task-1", sessionID: "session-1", agentID: "agent-1"}
+	if result := mcp.callTool("task_evidence_submit", map[string]interface{}{"evidence": want}); result["isError"] == true {
+		t.Fatalf("MCP submit without criterion failed: %#v", result)
+	}
+	if len(bodies) != 2 {
+		t.Fatalf("bodies = %#v", bodies)
+	}
+	for i, body := range bodies {
+		if !reflect.DeepEqual(body["evidence"], want) {
+			t.Errorf("call %d evidence = %#v, want %#v", i, body["evidence"], want)
+		}
+	}
+}

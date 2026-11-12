@@ -34,14 +34,12 @@ export const TASK_STANDARD_SELECT = {
 /**
  * The standard a submission for this task is judged against, as `liveCriterionText`
  * (task-evidence-envelope.ts) reads it: the declared project criterion's live text, else the task's
- * own acceptanceCriteria. The key is what the envelope's `criterion.key` must carry until the server
- * binds the standard itself (docs/evidence-always-has-an-addressee-design.md §2): the declared
- * criterion's key, else the task's own public id.
+ * own acceptanceCriteria. The server binds it to each revision itself
+ * (docs/evidence-always-has-an-addressee-design.md §2), so the brief states it and asks for no quote.
  */
 type TaskStandard =
-  | { kind: 'DECLARED' | 'OWN'; key: string; text: string }
-  | { kind: 'NONE' | 'VERIFIER'; key: string }
-  | { kind: 'DECLARED_GONE' };
+  | { kind: 'DECLARED'; key: string; text: string }
+  | { kind: 'OWN' | 'NONE' | 'VERIFIER' | 'DECLARED_GONE' };
 
 function taskStandard(task: {
   id: string;
@@ -57,12 +55,10 @@ function taskStandard(task: {
   // Deleting the criterion nulls only the id; the revision still says the task declared one
   // (`heldToProjectCriterion`), and neither its own column nor another criterion stands in for it.
   if (task.projectId != null && task.criterionRevision != null) return { kind: 'DECLARED_GONE' };
-  const own = task.acceptanceCriteria?.trim();
-  const key = publicIdOf(task.id);
-  if (own) return { kind: 'OWN', key, text: own };
+  if (task.acceptanceCriteria?.trim()) return { kind: 'OWN' };
   // A verifier is settled by its verdict on the task it checks, and the submit path does not hold
   // it to a standard of its own.
-  return { kind: task.verifiesTaskId != null ? 'VERIFIER' : 'NONE', key };
+  return { kind: task.verifiesTaskId != null ? 'VERIFIER' : 'NONE' };
 }
 
 /** A row's public id, as project_get and task_get spell it; anything not a UUID as it is. */
@@ -74,43 +70,27 @@ function publicIdOf(id: string): string {
   }
 }
 
-/** Step 3's sentence on the standard and the `criterion` field, for a task that submits evidence. */
-function evidenceStandardSentences(standard: TaskStandard): { standard: string; criterion: string } {
+/** Step 3's sentence on the standard, for a task that submits evidence. The envelope carries no
+ * `criterion`: the server binds this standard to the revision itself (`taskStandard` in
+ * task-evidence-envelope.ts). */
+function evidenceStandardSentence(standard: TaskStandard): string {
   switch (standard.kind) {
     case 'DECLARED':
-      return {
-        standard: `This task is held to its project's acceptance criterion ${standard.key}, which reads:\n\n`
-          + `${standard.text}\n\nYour evidence has to show that this holds. `,
-        criterion: `criterion (exactly {"key": "${standard.key}", "text": the criterion quoted above, character for `
-          + `character}; no other criterion is this task's standard)`,
-      };
+      return `This task is held to its project's acceptance criterion ${standard.key}, which reads:\n\n`
+        + `${standard.text}\n\nYour evidence has to show that this holds. `;
     case 'OWN':
-      return {
-        standard: `This task is held to its own acceptance criteria, quoted above, and to nothing else: your evidence `
-          + `has to show that they hold. `,
-        criterion: `criterion (exactly {"key": "${standard.key}", "text": this task's acceptance criteria quoted `
-          + `above, character for character}; no criterion of a project is this task's standard)`,
-      };
+      return `This task is held to its own acceptance criteria, quoted above, and to nothing else: your evidence `
+        + `has to show that they hold. `;
     case 'DECLARED_GONE':
-      return {
-        standard: `The project criterion this task declared has been deleted, so it has no standard and no evidence `
-          + `for it can be decided. Before you submit, say so with task_comment and ask for the task to declare `
-          + `another criterionKey or to clear it. `,
-        criterion: `criterion (the key and text of the standard the task is given)`,
-      };
+      return `The project criterion this task declared has been deleted, so it has no standard and no evidence `
+        + `for it can be decided. Before you submit, say so with task_comment and ask for the task to declare `
+        + `another criterionKey or to clear it. `;
     case 'VERIFIER':
-      return {
-        standard: `This task checks another task and is settled by its verdict, not by a standard of its own. `,
-        criterion: `criterion (exactly {"key": "${standard.key}", "text": one sentence naming what you checked})`,
-      };
+      return `This task checks another task and is settled by its verdict, not by a standard of its own. `;
     case 'NONE':
-      return {
-        standard: `This task states no standard: it declares no project criterion (criterionKey) and its `
-          + `acceptanceCriteria are empty, so a submission is refused. Before you submit, write what would settle `
-          + `the work into its acceptanceCriteria with task_update, or declare a criterionKey. `,
-        criterion: `criterion (with acceptanceCriteria written, {"key": "${standard.key}", `
-          + `"text": those acceptance criteria, character for character})`,
-      };
+      return `This task states no standard: it declares no project criterion (criterionKey) and its `
+        + `acceptanceCriteria are empty, so a submission is refused. Before you submit, write what would settle `
+        + `the work into its acceptanceCriteria with task_update, or declare a criterionKey. `;
   }
 }
 
@@ -203,7 +183,7 @@ export function buildTaskExecutionPrompt(task: {
   // none quoted another criterion of the project and sat undecidable for hours (2026-11-12,
   // docs/evidence-always-has-an-addressee-design.md §1–§2).
   const standard = taskStandard(task);
-  const said = evidenceStandardSentences(standard);
+  const said = evidenceStandardSentence(standard);
   return (
     `Start the task “${task.title}”.\n\n` +
     (task.description ? `Task description:\n${task.description}\n\n` : '') +
@@ -252,8 +232,9 @@ export function buildTaskExecutionPrompt(task: {
           + `a send-back arrives in this session as the next message — when it does, carry on as it says, and `
           + `declare again once you are done again. Do not call task_evidence_submit, and do not write status.\n`
         : `3. When you are done, submit the completion evidence envelope with task_evidence_submit. `
-          + said.standard
-          + `All four fields are required: claim (what you claim to have completed), ${said.criterion}, `
+          + said
+          + `Orbit records that standard with the evidence itself, so the envelope does not name one. `
+          + `All three fields are required: claim (what you claim to have completed), `
           + `checks (each {kind, ref}, kind one of `
           + `TOOL_CALL / COMMIT / ARTIFACT, ref pointing at a row already recorded under this task's sessions; at `
           + `least one must resolve, or the whole submission is refused), and gaps (what this evidence could not `

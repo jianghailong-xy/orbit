@@ -26,9 +26,10 @@ import { taskOfRunBehind } from './verifier-write-authority';
  *     revision 3 while revision 4 exists is an answer to a question nobody is asking any more, and
  *     accepting it would let a run submit a weak version, collect a decision, and then submit the
  *     one it actually wanted judged.
- *  2. **The criterion has not moved.** The envelope quotes the task's stated criterion — the
- *     project criterion it declares, or else its own acceptance criteria — by key AND by text,
- *     and the text is what is checked — bind to content, never to the identifier, exactly as
+ *  2. **The criterion has not moved.** The revision carries the task's stated criterion — the
+ *     project criterion it declares, or else its own acceptance criteria — by key AND by text, as
+ *     the server bound it at submit time (or, before it did, as the submitter quoted it), and the
+ *     text is what is checked — bind to content, never to the identifier, exactly as
  *     `criterionRevision` already does on the evidence row. A criterion whose wording was rewritten
  *     after the evidence was submitted is a different standard under the same key, so a decision
  *     made against the old wording would be recorded as if it had been made against the new one.
@@ -69,7 +70,9 @@ export const RUN_MAY_NOT_DECIDE_ACTION = 'ASK_THE_COORDINATOR_OR_THE_OWNER';
 export const SEND_BACK_NOTE_CODE = 'EVIDENCE_JUDGMENT_SEND_BACK_REQUIRES_NOTE';
 export const SEND_BACK_NOTE_ACTION = 'SAY_WHAT_THE_NEXT_EVIDENCE_REVISION_MUST_SHOW';
 
-/** The quoted criterion, when the stored evidence is the four-field envelope. */
+/** The criterion a stored revision is held to, when it carries one: the standard the server bound
+ * at submit time (`taskStandard`), or, on a revision stored before the server bound it, the
+ * submitter's own quote. Both are read and compared the same way. */
 export function quotedCriterion(evidence: unknown): { key: string; text: string } | null {
   if (!evidence || typeof evidence !== 'object' || Array.isArray(evidence)) return null;
   const criterion = (evidence as Record<string, unknown>).criterion;
@@ -125,6 +128,11 @@ export async function criterionStandingRefusal(
 ): Promise<CriterionStandingRefusal | null> {
   const criterion = quotedCriterion(evidence);
   if (!criterion) {
+    // The server binds no standard when the task had no live one at submit time
+    // (`taskStandard`), so a revision with none says that, in the words the task's state calls for.
+    if (heldToProjectCriterion(task) && task.criterionDefinitionId === null) {
+      return { ...movedRefusal(task, ''), criterionKey: null };
+    }
     const reason =
       'this evidence quotes no project criterion, so there is no stated standard to decide it '
       + 'against';

@@ -5,9 +5,9 @@ import { uuidToBase62 } from '@orbit/shared';
 import { buildTaskExecutionPrompt } from './task-execution-prompt';
 
 /**
- * The brief states the standard a task's evidence is judged against, and the exact `criterion` to
- * send for it, instead of telling the run to copy one from project_get
- * (docs/evidence-always-has-an-addressee-design.md §2). On 2026-11-12 two runs of a project task
+ * The brief states the standard a task's evidence is judged against instead of telling the run to
+ * copy one from project_get, and asks for an envelope with no `criterion`: the server binds the
+ * standard to each revision itself (docs/evidence-always-has-an-addressee-design.md §2). On 2026-11-12 two runs of a project task
  * that declared no criterionKey did as that sentence said, quoted another criterion of the project,
  * and their evidence sat undecidable for hours.
  */
@@ -37,14 +37,20 @@ function stepThree(brief: string): string {
   return brief.slice(start, end);
 }
 
-/** No sentence of the brief sends the run to project_get for its criterion. */
+/** No sentence of the brief sends the run to project_get for its criterion, and the envelope it
+ * asks for has no `criterion`. */
 function neverPointsAtProjectCriteria(brief: string): void {
   const steps = brief.slice(brief.indexOf('Follow these steps:'));
   assert.doesNotMatch(steps, /project_get/, steps);
   assert.doesNotMatch(steps, /copied from the acceptance criteria/, steps);
+  assert.doesNotMatch(steps, /criterion \((?:exactly|with|the key)|\{"key"/, steps);
+  if (steps.includes('task_evidence_submit')) {
+    assert.ok(steps.includes('Orbit records that standard with the evidence itself, so the envelope does not name one. '
+      + 'All three fields are required: claim (what you claim to have completed), checks ('), steps);
+  }
 }
 
-test('a project task with no criterionKey is held to its own acceptanceCriteria, and is told to send its own id as the key', () => {
+test('a project task with no criterionKey is held to its own acceptanceCriteria', () => {
   const brief = buildTaskExecutionPrompt({
     ...TASK,
     projectId: PROJECT_ID,
@@ -54,13 +60,11 @@ test('a project task with no criterionKey is held to its own acceptanceCriteria,
   assert.ok(brief.includes(`Acceptance criteria (what decides whether this task is done):\n${OWN}\n\n`), brief);
   const step = stepThree(brief);
   assert.ok(step.includes('This task is held to its own acceptance criteria, quoted above, and to nothing else'), step);
-  assert.ok(step.includes(`criterion (exactly {"key": "${uuidToBase62(TASK_ID)}", "text": this task's acceptance `
-    + 'criteria quoted above, character for character}; no criterion of a project is this task\'s standard)'), step);
   assert.ok(!step.includes(uuidToBase62(DEFINITION_ID)), step);
   neverPointsAtProjectCriteria(brief);
 });
 
-test('a project task that declares a criterionKey is held to that criterion\'s live text, quoted verbatim, with its key', () => {
+test('a project task that declares a criterionKey is held to that criterion\'s live text, quoted verbatim', () => {
   const brief = buildTaskExecutionPrompt({
     ...TASK,
     projectId: PROJECT_ID,
@@ -71,8 +75,6 @@ test('a project task that declares a criterionKey is held to that criterion\'s l
   const step = stepThree(brief);
   assert.ok(step.includes(`This task is held to its project's acceptance criterion ${key}, which reads:\n\n`
     + `${CRITERION}\n\nYour evidence has to show that this holds.`), step);
-  assert.ok(step.includes(`criterion (exactly {"key": "${key}", "text": the criterion quoted above, character for `
-    + 'character}; no other criterion is this task\'s standard)'), step);
   // Its own criteria are still shown, but no longer as what decides it.
   assert.ok(brief.includes('Acceptance criteria (the task\'s own notes; the standard it is judged against is in '
     + `step 3):\n${OWN}\n\n`), brief);
@@ -81,11 +83,10 @@ test('a project task that declares a criterionKey is held to that criterion\'s l
   neverPointsAtProjectCriteria(brief);
 });
 
-test('a task in no project is held to its own acceptanceCriteria, with its own id as the key', () => {
+test('a task in no project is held to its own acceptanceCriteria', () => {
   const brief = buildTaskExecutionPrompt({ ...TASK, projectId: null, criterionRevision: null, criterionDefinition: null });
   const step = stepThree(brief);
   assert.ok(step.includes('This task is held to its own acceptance criteria, quoted above, and to nothing else'), step);
-  assert.ok(step.includes(`criterion (exactly {"key": "${uuidToBase62(TASK_ID)}", `), step);
   neverPointsAtProjectCriteria(brief);
   // The same brief as a project task without a declaration: the filing does not change the standard.
   assert.equal(brief, buildTaskExecutionPrompt({ ...TASK, projectId: PROJECT_ID }));
@@ -112,11 +113,6 @@ test('a verifier with no criteria of its own is settled by its verdict, not told
   assert.ok(step.includes('This task checks another task and is settled by its verdict'), step);
   assert.ok(!step.includes('This task states no standard'), step);
   neverPointsAtProjectCriteria(brief);
-});
-
-test('a row whose id is not a UUID is keyed by that id as it is', () => {
-  const step = stepThree(buildTaskExecutionPrompt({ ...TASK, id: 'task-1' }));
-  assert.ok(step.includes('criterion (exactly {"key": "task-1", '), step);
 });
 
 test('a declared criterion since deleted is not replaced by the task\'s own criteria', () => {

@@ -41,6 +41,7 @@ import {
   resolveEvidenceCitations,
   statesAStandard,
   storedEvidenceEnvelope,
+  taskStandard,
 } from './task-evidence-envelope';
 import { TasksService } from './tasks.service';
 import { EvidenceReviewService } from './evidence-review.service';
@@ -361,10 +362,22 @@ export class TaskCompletionEvidenceService {
       // the same receipt a first one gets. Both read only rows already inside this transaction's
       // scope, and both refuse by throwing, so nothing below runs for a refused envelope.
       const citations = await resolveEvidenceCitations(tx, { ownerId, taskId }, envelope, images);
-      const criterionMatch = await evidenceCriterionMatch(tx, task, envelope.criterion);
+      // The server binds the standard this revision is judged against: the one the task is held to
+      // now, read under the Task mutex. Whatever `criterion` the submitter sent is dropped, never
+      // checked (docs/evidence-always-has-an-addressee-design.md §2.2, D1). The decision door holds
+      // this snapshot against the live standard, so it stays decidable until that is reworded.
+      const standard = await taskStandard(tx, task, taskId);
+      const unquoted: JsonObject = { ...normalizedEvidence };
+      delete unquoted.criterion;
+      const standardEvidence: JsonObject = standard
+        ? { ...unquoted, criterion: normalizeCompletionEvidence(standard) as JsonObject }
+        : unquoted;
+      // Reported so the submitter reads the standard its evidence is held to; true here by
+      // construction, it turns false only when that standard is reworded after this submission.
+      const criterionMatch = standard ? await evidenceCriterionMatch(tx, task, standard) : null;
       const receipt: EvidenceReceipt = { citations, criterionMatch };
       // In here because a cited file's sha256 is read with its citation, and is digested with the rest.
-      const boundEvidence = bindCitedFiles(normalizedEvidence, citations);
+      const boundEvidence = bindCitedFiles(standardEvidence, citations);
       const evidenceDigest = completionDigest(boundEvidence);
 
       if (idempotencyKey) {

@@ -76,13 +76,14 @@ function promptFor(task: {
 // when the executor stopped writing its own DONE: steps 3 and 4 are the instruction half of that
 // boundary, and they have to arrive in the same release as the refusal in `update()`
 // (`task-self-done-boundary.spec.ts`) or every run in flight hits a wall it was never told about.
-// Step 3 of the evidence protocol, verbatim, around what it says of the task's standard: the
-// sentence naming that standard and the exact `criterion` to send (2026-11-12,
+// Step 3 of the evidence protocol, verbatim, around what it says of the task's standard (2026-11-12,
 // docs/evidence-always-has-an-addressee-design.md §2). It used to tell every run to copy a criterion
-// from project_get, which led runs of project tasks with no criterionKey to quote another one.
-const evidenceStep = (standard: string, criterion: string): string =>
+// from project_get, which led runs of project tasks with no criterionKey to quote another one; since
+// the server binds the standard to each revision (P2), the envelope it asks for has no `criterion`.
+const evidenceStep = (standard: string): string =>
   '3. When you are done, submit the completion evidence envelope with task_evidence_submit. ' + standard +
-  `All four fields are required: claim (what you claim to have completed), ${criterion}, ` +
+  'Orbit records that standard with the evidence itself, so the envelope does not name one. ' +
+  'All three fields are required: claim (what you claim to have completed), ' +
   "checks (each {kind, ref}, kind one of TOOL_CALL / COMMIT / ARTIFACT, ref pointing at a row already recorded under this task's sessions; at " +
   'least one must resolve, or the whole submission is refused), and gaps (what this evidence could not ' +
   'establish; an empty array if nothing). Run the checks you will cite with bg_run and cite the job id it ' +
@@ -94,16 +95,11 @@ const evidenceStep = (standard: string, criterion: string): string =>
   'the authorization that unlocks downstream tasks, and only evaluating the completionCriterion the task ' +
   'declares can produce it; the server refuses a direct DONE from anyone.\n';
 
-/** The task's public id, as the brief spells the key a task with no declared criterion sends. */
-const TASK_KEY = '2aUyqjCzEIiEcYMKj7TZtw';
-
 // The fixture task states no standard (no criterionKey, no acceptanceCriteria).
 const NO_STANDARD_STEP = evidenceStep(
   'This task states no standard: it declares no project criterion (criterionKey) and its acceptanceCriteria ' +
   'are empty, so a submission is refused. Before you submit, write what would settle the work into its ' +
   'acceptanceCriteria with task_update, or declare a criterionKey. ',
-  `criterion (with acceptanceCriteria written, {"key": "${TASK_KEY}", "text": those acceptance criteria, ` +
-  'character for character})',
 );
 
 const STEP_FOUR =
@@ -266,9 +262,11 @@ test('step 3 asks for the evidence envelope and forbids writing status', async (
   const step3 = text.split('\n').find((line) => line.startsWith('3. '))!;
   assert.match(step3, /task_evidence_submit/);
   assert.match(step3, /Do not use task_comment in place of submitting evidence/);
-  for (const field of ['claim', 'criterion', 'checks', 'gaps']) {
+  for (const field of ['claim', 'checks', 'gaps']) {
     assert.match(step3, new RegExp(field), step3);
   }
+  // The server binds the standard to the revision (P2), so the envelope asks for no `criterion`.
+  assert.doesNotMatch(step3, /criterion \((?:exactly|with|the key)|\{"key"/, step3);
   assert.match(step3, /TOOL_CALL \/ COMMIT \/ ARTIFACT/);
   assert.match(step3, /least one must resolve/);
   assert.match(step3, /Do not copy a command's raw output into the evidence/);
@@ -358,7 +356,6 @@ test('an EVIDENCE_JUDGMENT task, and a verifier, still get the evidence envelope
   });
   assert.equal(await verifier(), promptWith(evidenceStep(
     'This task checks another task and is settled by its verdict, not by a standard of its own. ',
-    `criterion (exactly {"key": "${TASK_KEY}", "text": one sentence naming what you checked})`,
   )));
 });
 
