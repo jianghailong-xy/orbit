@@ -522,6 +522,9 @@ test('the System model refuses the key: the queue stops at the first 401, nothin
   const w = worker(h);
   await enqueueWikiArticlesJob(h.prisma as unknown as PrismaService, { ownerId: o.id, spaceId: o.spaceId });
   await until('the first call', w, async () => h.model.hits.length >= 1, 20);
+  // The model counts the call when it arrives; the queue settles it afterwards (the probe writes auth_failed, the request
+  // goes back). Wait for that, however slow the host, so the passes below all run against the refused key.
+  await w.queue.whenIdle();
   for (let i = 0; i < 20; i += 1) {
     await w.executor.runOnce();
     await w.queue.runOnce();
