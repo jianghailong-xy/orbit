@@ -148,6 +148,9 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                 shown.fields["afterUserMsg"] == JsonPrimitive(true)), console)
             return@Column
         }
+        // The main checkout's card (board 01) and an action's outcome line (board 03).
+        if (event.type == MainCheckout.ROW_CARD) { MainCheckout.changedNotice(shown.fields)?.let { MainCheckoutCard(it, row.key) }; return@Column }
+        if (event.type == MainCheckout.ROW_RESULT) { MainCheckout.resultNotice(shown.fields)?.let { MainCheckoutResultRow(it) }; return@Column }
         // A thinking row is its own one line (A06-11); a question card's line folds and opens it, as its record does.
         if (!detailOnly && event.type != "thinking") Row(Modifier.fillMaxWidth().then(if (questions.isEmpty()) Modifier else Modifier
             .clickable(onClickLabel = if (questionShown) "Hide options" else "Show options", role = Role.Button) { questionOpen = !questionShown }
