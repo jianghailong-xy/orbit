@@ -190,6 +190,17 @@ test('the owner channel refuses a personal access token door by door and field b
   const chatToRemove = await connectedChat('to-remove');
   const chatRow = (id: string) => db.feishuChatRoute.findUnique({ where: { id } });
 
+  // Two terminal sign-ins waiting on the account's runner: the approve card's doors stood up for real.
+  const terminalRequest = async () => (await db.terminalLogin.create({
+    data: {
+      deviceCodeHash: `owner-channel-${randomUUID()}`, userCode: '7KQ-4MZ', ownerId: userId, runnerId,
+      machineName: 'a runner', expiresAt: new Date(Date.now() + 10 * 60_000),
+    },
+  })).id;
+  const terminalToApprove = await terminalRequest();
+  const terminalToDeny = await terminalRequest();
+  const terminalStatus = async (id: string) => (await db.terminalLogin.findUniqueOrThrow({ where: { id } })).status;
+
   // ── (1) the owner channel, door by door ────────────────────────────────────────────────────
 
   const doors: Door[] = [
@@ -431,6 +442,16 @@ test('the owner channel refuses a personal access token door by door and field b
       path: `/integrations/feishu/chats/${chatToRemove}`,
       login: 200,
       observe: async () => (await chatRow(chatToRemove)) !== null,
+    },
+    // A terminal asking to be approved (docs/terminal-session-design.md): two real requests on the account's runner.
+    { route: 'GET /terminals/requests', path: '/terminals/requests', login: 200 },
+    {
+      route: 'POST /terminals/requests/:id/approve', path: `/terminals/requests/${terminalToApprove}/approve`,
+      login: 200, observe: () => terminalStatus(terminalToApprove),
+    },
+    {
+      route: 'POST /terminals/requests/:id/deny', path: `/terminals/requests/${terminalToDeny}/deny`,
+      login: 200, observe: () => terminalStatus(terminalToDeny),
     },
   ];
 

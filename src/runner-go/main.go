@@ -83,6 +83,7 @@ Usage:
   orbit login [--with-token]        Act as yourself: approve a personal access token in the browser
   orbit logout [--keep-token]       Revoke that token and forget it
   orbit whoami [--json]             Show who the CLI acts as, and why
+  orbit terminal login|logout       Approve this terminal in the Orbit app (remembered 30 days), or sign it out
   orbit api [-X METHOD] PATH        Call the Orbit REST API as yourself
   orbit capabilities [--json]       Show the CLI capabilities available to agents
   orbit host setup --server URL     Set this machine up for runners (root, once per host)
@@ -105,7 +106,8 @@ Env:
 
 // Per-command help, shown for `orbit <cmd> --help|-h` and `orbit help <cmd>`.
 var cmdHelp = map[string]string{
-	"secret": secretHelp,
+	"secret":   secretHelp,
+	"terminal": terminalHelp,
 	"register": `orbit register — register this machine and install the background service
 
 Usage:
@@ -422,6 +424,11 @@ func main() {
 	case "login":
 		if err := cmdLoginCLI(args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
 			fmt.Fprintln(os.Stderr, "orbit login:", err)
+			os.Exit(1)
+		}
+	case "terminal":
+		if err := cmdTerminalCLI(args[1:], os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "orbit terminal:", err)
 			os.Exit(1)
 		}
 	case "logout":

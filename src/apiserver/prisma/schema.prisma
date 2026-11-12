@@ -329,6 +329,8 @@ model User {
   refreshTokens    RefreshToken[] // long-lived rotating refresh tokens (hashed at rest)
   personalAccessTokens PersonalAccessToken[] // the user's own API tokens (hashed at rest, 0383)
   patDeviceLogins  PatDeviceLogin[] // the `orbit login` requests this user approved or denied (0388)
+  terminalLogins   TerminalLogin[] // terminal sign-ins asked for on this user's runners (0565)
+  terminalCredentials TerminalCredential[] // the terminals this user approved (0565)
   identities       UserIdentity[] // the Google account this user signs in with (0391)
   oauthLoginFlows  OAuthLoginFlow[] // Google sign-ins in flight that would link to this user (0391)
   clientVersions   ClientVersion[] // which build of each client this user is running
@@ -462,6 +464,56 @@ model PersonalAccessToken {
 ///
 /// `pat_device_login_status_chk` (status from the list below; decided ⇔ `decidedById` and
 /// `decidedAt` set) and `pat_device_login_expires_in_days_chk` live only in the migration.
+/// A terminal on a runner's machine asking the account's owner to approve it (docs/terminal-session-design.md
+/// "The terminal credential", 0565). Started with the machine's runner credential, so it is bound to that runner and
+/// to the runner's owner from the start; the owner approves or denies it in the app (an owner-channel act), and the
+/// CLI, polling with the device code only it holds, collects the TERMINAL credential once. No credential is kept here.
+model TerminalLogin {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  /// sha256 hex of the device code the CLI polls with.
+  deviceCodeHash String    @unique @map("device_code_hash")
+  /// The short code the terminal and the approve card both show (`7KQ-4MZ`). Never looked up: the card is the owner's.
+  userCode       String    @map("user_code")
+  ownerId        String    @map("owner_id") @db.Uuid
+  owner          User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  runnerId       String    @map("runner_id") @db.Uuid
+  runner         Runner    @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  /// The machine as the app names its runner, when the request started.
+  machineName    String    @map("machine_name")
+  /// `PENDING` | `APPROVED` | `DENIED` | `DELIVERED` (a poll collected the credential).
+  status         String    @default("PENDING")
+  decidedAt      DateTime? @map("decided_at") @db.Timestamptz(3)
+  /// The request's own end, ten minutes after it starts.
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([ownerId, status])
+  @@index([runnerId])
+  @@map("terminal_login")
+}
+
+/// A TERMINAL credential (0565): what `orbit` in a terminal acts with, minted only by the owner's approval of a
+/// TerminalLogin, bound to the account and to one runner, and ending 30 days after that approval. Only its sha256 is kept.
+model TerminalCredential {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  tokenHash   String    @unique @map("token_hash")
+  ownerId     String    @map("owner_id") @db.Uuid
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  runnerId    String    @map("runner_id") @db.Uuid
+  runner      Runner    @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  machineName String    @map("machine_name")
+  /// The approval that minted it.
+  approvedAt  DateTime  @map("approved_at") @db.Timestamptz(3)
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(3)
+  lastUsedAt  DateTime? @map("last_used_at") @db.Timestamptz(3)
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([ownerId])
+  @@index([runnerId])
+  @@map("terminal_credential")
+}
+
 model PatDeviceLogin {
   id             String    @id @default(uuid(7)) @db.Uuid
   /// sha256 hex of the device code the CLI polls with.
@@ -857,6 +909,9 @@ model Runner {
   regionCheckRequestedAt DateTime? @map("region_check_requested_at")
 
   executableRuntimeHeartbeats     ExecutableRuntimeHeartbeat[]
+  // Terminal sign-ins on this machine, and the TERMINAL credentials bound to it (0565): they go with it.
+  terminalLogins         TerminalLogin[]
+  terminalCredentials    TerminalCredential[]
 
   // Browser-less sign-in relay for this machine's built-in runtime CLI. The runner drives the CLI
   // on its own machine while the user approves in their own browser, so a machine with no

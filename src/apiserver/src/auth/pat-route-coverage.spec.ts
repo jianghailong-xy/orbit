@@ -29,6 +29,7 @@ import {
   patDeclaration,
 } from './pat-scope.decorator';
 import { PAT_SCOPES } from './pat.service';
+import { TERMINAL_SELF } from './terminal-credentials';
 
 // The personal-access-token census (docs/personal-access-token-design.md §6.2). A token is the user
 // on every route behind JwtAuthGuard, so each of those routes has to say what a token may do there:
@@ -326,6 +327,25 @@ test('§6.5: @PatSelf opens exactly two routes to every token — GET and DELETE
       .map(([name]) => `${c.name}.${name}`)
       .filter((at) => !routes.some((r) => r.at === at)));
   assert.deepEqual(unguarded, []);
+});
+
+// ── The TERMINAL credential: deny by default (docs/terminal-session-design.md) ─────────────────
+// JwtAuthGuard admits a TERMINAL credential only to a handler marked @TerminalSelf and refuses it 403 everywhere else.
+// Until the terminal's allowlist opens more, that is the terminal reading and revoking itself — exact both ways, so a
+// route opened to a terminal is a decision made here.
+const TERMINAL_SELF_ROUTES = ['DELETE /terminals/self', 'GET /terminals/self'];
+
+test('a TERMINAL credential reaches exactly GET and DELETE /terminals/self, and no route on a controller-wide mark', async () => {
+  const { controllers, routes } = await census;
+  const marked = routes
+    .filter((r) => Reflect.getMetadata(TERMINAL_SELF, (r.controller.prototype as Record<string, object>)[r.method]) === true)
+    .map((r) => r.route)
+    .sort();
+  assert.deepEqual(marked, TERMINAL_SELF_ROUTES, '@TerminalSelf on a handler');
+  assert.deepEqual([...controllers].filter((c) => Reflect.getMetadata(TERMINAL_SELF, c) !== undefined).map((c) => c.name), []);
+  // Each of them is still closed to a personal access token: a terminal acting on itself is not a token's business.
+  const open = routes.filter((r) => TERMINAL_SELF_ROUTES.includes(r.route) && r.declared.kind !== 'FORBIDDEN').map((r) => r.route);
+  assert.deepEqual(open, []);
 });
 
 test("§5: the owner channel's doors are refused to every token, and are exactly the listed ones", async () => {
