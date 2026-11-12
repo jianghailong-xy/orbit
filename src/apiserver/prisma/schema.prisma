@@ -377,6 +377,7 @@ model User {
   feishuMessages   FeishuMessage[]
   /// The Feishu message chains of its sessions (migration 0499).
   feishuThreads    FeishuThread[]
+  sessionGuestPlaces SessionGuest[] // the sessions this user was invited into as a guest (0560)
   /// Its sessions' replies on their way back to Feishu (migration 0501).
   feishuOutbox     FeishuOutbox[]
 
@@ -2285,6 +2286,7 @@ model Session {
   observingWatches      Watch[]
   /// Public links with this session as their root, ended ones included (migration 0306).
   shareLinks            ShareLink[]
+  guests                SessionGuest[] // the people the owner invited to reply (0560)
 
   @@index([assignedRunnerId, status])
   // "what did this workspace last run on", the derived seed a new session inherits when the
@@ -9187,4 +9189,27 @@ model ProjectPromotionRequest {
 
   @@index([projectId, createdAt])
   @@map("project_promotion_request")
+}
+
+/// Someone the owner of a session invited to reply in it (docs/session-guests-design.md §7, migration 0560). A live row
+/// (`removedAt` null) lets `userId` read the session through /guest-sessions and send turns into it, recorded as the
+/// owner's turns with external sender ORBIT_GUEST. Removing or leaving stamps `removedAt` and `removedReason`
+/// (REMOVED | LEFT); inviting again is a new row. Two partial indexes this schema cannot spell: unique
+/// (session_id, user_id) WHERE removed_at IS NULL, and (user_id) WHERE removed_at IS NULL.
+model SessionGuest {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  sessionId     String    @map("session_id") @db.Uuid
+  session       Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade, map: "session_guest_session_id_fkey")
+  /// The session's owner when the guest was added. No foreign key: the session's cascade takes the row.
+  ownerId       String    @map("owner_id") @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade, map: "session_guest_user_id_fkey")
+  addedAt       DateTime  @default(now()) @map("added_at") @db.Timestamptz(3)
+  /// The first time the guest opened the session; null until they do.
+  openedAt      DateTime? @map("opened_at") @db.Timestamptz(3)
+  removedAt     DateTime? @map("removed_at") @db.Timestamptz(3)
+  /// REMOVED (the owner took them out) | LEFT (they left); set exactly when removedAt is.
+  removedReason String?   @map("removed_reason")
+
+  @@map("session_guest")
 }

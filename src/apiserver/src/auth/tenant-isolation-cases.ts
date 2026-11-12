@@ -127,6 +127,8 @@ export interface Tenant {
   wikiTopicSlug: string;
   /** A Feishu group connected to the account's app (docs/feishu-bot-design.md §8.1). */
   feishuChatRouteId: string;
+  /** Another account, invited to reply in `sessionId` (docs/session-guests-design.md): its email, as the owner invites it. */
+  guestEmail: string;
   /** For /admin/*: a user an administrator acts on (with a profile photo), one of its tokens, a global provider. */
   adminSubjectId: string;
   adminSubjectTokenId: string;
@@ -152,6 +154,8 @@ export interface Tenant {
     tagId: string;
     shareLinkId: string;
     feishuChatRouteId: string;
+    /** A second guest of `sessionId`, whom the owner's remove takes out. */
+    guestUserId: string;
     listId: string;
     taskId: string;
   };
@@ -576,6 +580,11 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     nested: ['turnId'],
   },
   'POST /sessions/:id/resume': { request: (of) => ({ params: { id: of.sessionId }, body: turn('resume') }) },
+  // Session guests (docs/session-guests-design.md §7): the owner's People routes on A's session. The guest door is read
+  // by hand (TENANT_ISOLATION_BY_HAND): the account that owns the session is no guest of it.
+  'GET /sessions/:id/guests': { request: (of) => ({ params: { id: of.sessionId } }) },
+  'POST /sessions/:id/guests': { request: (of) => ({ params: { id: of.sessionId }, body: { email: of.guestEmail } }) },
+  'DELETE /sessions/:id/guests/:userId': { request: (of) => ({ params: { id: of.sessionId, userId: of.spare.guestUserId } }) },
   'PATCH /sessions/:id/config': { request: (of) => ({ params: { id: of.sessionId }, body: { effort: 'low' } }) },
   'PATCH /sessions/:id/account': { request: (of) => ({ params: { id: of.sessionId }, body: { account: 'automatic' } }) },
   'POST /sessions/:id/interrupt': { request: (of) => ({ params: { id: of.sessionId }, body: {} }) },
@@ -815,6 +824,21 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
  * that shows the route finds its object only under the caller's own account. Kept as short as it can be.
  */
 export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  // Session guests (docs/session-guests-design.md §7).
+  'GET /guest-sessions/:id':
+    "every guest route reads the caller's live session_guest row on that session first (session-guests/session-guests.service.ts:153) and answers the one 404 without it, so a session B was never invited to — A's included — is refused before anything is read or written; A, its owner, is no guest of it either, so neither account's request can be stood up from the census fixture. session-guests.pg.spec.ts (1) sends the invited guest's and a stranger's",
+  'GET /guest-sessions/:id/events':
+    "every guest route reads the caller's live session_guest row on that session first (session-guests/session-guests.service.ts:153) and answers the one 404 without it, so a session B was never invited to — A's included — is refused before anything is read or written; A, its owner, is no guest of it either, so neither account's request can be stood up from the census fixture. session-guests.pg.spec.ts (1) sends the invited guest's and a stranger's",
+  'GET /guest-sessions/:id/events/:seq':
+    "every guest route reads the caller's live session_guest row on that session first (session-guests/session-guests.service.ts:153) and answers the one 404 without it, so a session B was never invited to — A's included — is refused before anything is read or written; A, its owner, is no guest of it either, so neither account's request can be stood up from the census fixture. session-guests.pg.spec.ts (1) sends the invited guest's and a stranger's",
+  'POST /guest-sessions/:id/turns':
+    "every guest route reads the caller's live session_guest row on that session first (session-guests/session-guests.service.ts:153) and answers the one 404 without it, so a session B was never invited to — A's included — is refused before anything is read or written; A, its owner, is no guest of it either, so neither account's request can be stood up from the census fixture. session-guests.pg.spec.ts (1) sends the invited guest's and a stranger's",
+  'DELETE /guest-sessions/:id/turns/:turnId':
+    "every guest route reads the caller's live session_guest row on that session first (session-guests/session-guests.service.ts:153) and answers the one 404 without it, so a session B was never invited to — A's included — is refused before anything is read or written; A, its owner, is no guest of it either, so neither account's request can be stood up from the census fixture. session-guests.pg.spec.ts (1) sends the invited guest's and a stranger's; the turn is then looked up as the guest's own (session-guests/session-guests.service.ts:295)",
+  'POST /guest-sessions/:id/turns/:turnId/steer':
+    "every guest route reads the caller's live session_guest row on that session first (session-guests/session-guests.service.ts:153) and answers the one 404 without it, so a session B was never invited to — A's included — is refused before anything is read or written; A, its owner, is no guest of it either, so neither account's request can be stood up from the census fixture. session-guests.pg.spec.ts (1) sends the invited guest's and a stranger's; the turn is then looked up as the guest's own (session-guests/session-guests.service.ts:295)",
+  'POST /guest-sessions/:id/leave':
+    "every guest route reads the caller's live session_guest row on that session first (session-guests/session-guests.service.ts:153) and answers the one 404 without it, so a session B was never invited to — A's included — is refused before anything is read or written; A, its owner, is no guest of it either, so neither account's request can be stood up from the census fixture. session-guests.pg.spec.ts (1) sends the invited guest's and a stranger's",
   'GET /owner-requests/:id':
     'the request is read by (id, the caller) and nothing else, so another account\'s id answers 404 (owner-requests/owner-requests.service.ts:193); owner-requests.pg.spec.ts (f) sends it',
   'POST /owner-requests/:id/done':

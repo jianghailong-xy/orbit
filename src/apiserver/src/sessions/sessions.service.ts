@@ -9083,6 +9083,12 @@ export class SessionsService {
        */
       senderSessionId?: string;
       /**
+       * Who outside Orbit sent the turn — see `createTurn`'s own. Carried onto both branches: a
+       * guest's message to an ended session revives it (docs/session-guests-design.md §5, D5) and is
+       * no less the guest's for that.
+       */
+      externalSender?: ExternalTurnSender;
+      /**
        * What rides on the turn — see `createTurn`'s own. Carried onto both branches for the reason
        * `senderSessionId` is: a request is no less a request for having woken its recipient up.
        */
@@ -9216,6 +9222,7 @@ export class SessionsService {
         fence: opts?.fence,
         participateSendTransaction: opts?.participateSendTransaction,
         senderSessionId: opts?.senderSessionId,
+        externalSender: opts?.externalSender,
         onTurnWritten: opts?.onTurnWritten,
         requestFingerprint,
       });
@@ -9508,6 +9515,7 @@ export class SessionsService {
         clientTurnId: dto.clientTurnId,
         requestFingerprint,
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
+        ...externalSenderColumns(opts?.externalSender),
         ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
@@ -9560,7 +9568,9 @@ export class SessionsService {
           // Previewed from enqueue, as in createTurn: a revive waits for a slot like any other
           // turn, and until the runner reports it the row would show the reply from before. With
           // its sender, as there.
-          ...(dto.content ? pendingMessageColumns(dto.content, sentBy, sentByOrbit) : {}),
+          ...(dto.content
+            ? pendingMessageColumns(dto.content, sentBy, sentByOrbit, externalSenderOf(externalSenderColumns(opts?.externalSender)))
+            : {}),
           mergeStatus: null,
           mergeOperationId: null,
           mergeOperationOwner: null,

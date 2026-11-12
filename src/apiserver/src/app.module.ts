@@ -25,6 +25,7 @@ import { RunnerApiModule } from './runner-api/runner-api.module';
 import { AttachmentsModule } from './attachments/attachments.module';
 import { SharedModule } from './shared/shared.module';
 import { ShareLinksModule } from './share-links/share-links.module';
+import { SessionGuestsModule } from './session-guests/session-guests.module';
 import { PushModule } from './push/push.module';
 import { ProvidersModule } from './providers/providers.module';
 import { ProviderEngineMigrationModule } from './providers/provider-engine-migration.module';
@@ -68,6 +69,7 @@ import { EmailModule } from './email/email.module';
     AttachmentsModule,
     SharedModule,
     ShareLinksModule,
+    SessionGuestsModule,
     PushModule,
     ProvidersModule,
     // The provider/engine data migration, once per start, before the server listens (API server only).
