@@ -458,7 +458,7 @@ import { antigravityGoogleLoginRefusal, antigravitySignInUnderWay } from '../com
 import { RUNNER_OS_HEADER, withRunnerOs } from '../common/runner-platform';
 import { loginCodeRelay } from '../runners/login-code-relay';
 import { readDirProbeResult } from '../runners/dir-probe';
-import { readRunnerRepoHealth, sanitizeRunnerRepoHealth } from '../common/runner-repo-health';
+import { readRunnerRepoHealth, sanitizeRunnerRepoHealth, workspacesWithChangedRepoHealth } from '../common/runner-repo-health';
 import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
@@ -2058,6 +2058,14 @@ export class RunnerApiController {
     const storedFacts = linkBeat ? readFactsHash(linkBeat.row.factsHash) : null;
     const runnerRowUnchanged = !!linkBeat && !!storedFacts && !managedSleepOn
       && RUNNER_ROW_FACTS.every((kind) => storedFacts[kind] === linkBeat.digests.facts[kind]);
+    // The checkout health this beat overwrites, read only when it reports one and the row is written: a change is told
+    // to the owner's clients below, which is how a Main checkout bar follows an action without a reload.
+    const priorRepoHealth =
+      dto?.repos != null && !runnerRowUnchanged
+        ? 'repoHealth' in runner
+          ? (runner as { repoHealth?: unknown }).repoHealth
+          : (await this.prisma.runner.findUnique({ where: { id: runner.id }, select: { repoHealth: true } }))?.repoHealth
+        : undefined;
     const updated = runnerRowUnchanged
       ? durableBeatDue(runner.lastHeartbeatAt, beatAt)
         ? await this.prisma.runner.update({ where: { id: runner.id }, data: { lastHeartbeatAt: beatAt } }).catch(beatLost)
@@ -2134,6 +2142,12 @@ export class RunnerApiController {
           : {}),
       },
     }).catch(beatLost);
+    if (dto?.repos != null && !runnerRowUnchanged) {
+      // Advisory like every realtime nudge: a dropped one leaves the bar to the next read of the workspace list.
+      for (const workspaceId of workspacesWithChangedRepoHealth(priorRepoHealth, updated.repoHealth)) {
+        this.realtime.publishWorkspaceRepoHealthChanged(updated.ownerId, workspaceId);
+      }
+    }
     // Heard over HTTPS, or forwarded by the link gateway: either way this beat sent its facts in full
     // above, so none of the hashes a link heartbeat may carry instead. A forwarded beat names the gateway
     // node holding the connection (X-Orbit-Link-Gateway-Id). A link beat the beat statement recorded is
