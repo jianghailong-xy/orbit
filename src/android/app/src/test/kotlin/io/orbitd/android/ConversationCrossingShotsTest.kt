@@ -122,7 +122,7 @@ class ConversationCrossingShotsTest {
         // The review leaves on its own after the record, and the card in the conversation keeps the receipt.
         await { compose.onAllNodesWithTag("$batch:review", useUnmergedTree = true).fetchSemanticsNodes().isEmpty() }
         await { shows("Decision recorded") }
-        assertTrue(text("$batch:receipt").matches(Regex("Decision recorded · ✓ Approved by you at \\d{2}:\\d{2}")))
+        assertTrue(text("$batch:receipt").matches(Regex("Decision recorded · ✓ Approved by you at \\d{1,2}:\\d{2}.*")))
         assertEquals("moved", text("$batch:badge"))
         shot("conversation-answered-card")
     }

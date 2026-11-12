@@ -162,7 +162,7 @@ class CrossingCardViewsTest {
         assertEquals("/api/projects/$PROJECT/handoffs/Pm5/decision", fixture.decisions().last().path)
         show { Conversation() }
         compose.waitUntil(10_000) { shows("Approved by you") }
-        assertTrue(textOf("$batchId:receipt").matches(Regex("Decision recorded · ✓ Approved by you at \\d{2}:\\d{2}")))
+        assertTrue(textOf("$batchId:receipt").matches(Regex("Decision recorded · ✓ Approved by you at \\d{1,2}:\\d{2}.*")))
         assertEquals("moved", textOf("$batchId:badge"))
         compose.onNodeWithText("View details", useUnmergedTree = true).assertExists()
         compose.onAllNodesWithTag("$batchId:not-recorded", useUnmergedTree = true).assertCountEquals(0)

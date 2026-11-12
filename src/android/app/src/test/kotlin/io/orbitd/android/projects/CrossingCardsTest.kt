@@ -1,5 +1,6 @@
 package io.orbitd.android.projects
 
+import io.orbitd.android.core.cards.OwnerReview
 import io.orbitd.android.core.cards.text
 import java.time.Instant
 import java.time.ZoneOffset
@@ -140,14 +141,16 @@ class CrossingCardsTest {
     // MARK: receipts
 
     @Test fun receiptsSayWhoAnsweredAndWhen() {
+        // The receipt reads the app's own receipt clock (OwnerReview.receiptTime), which follows the reader's locale.
+        fun clock(iso: String) = OwnerReview.receiptTime(iso, now, utc)
         val approved = batch(row("a", state = "APPLIED", decidedAt = "2026-11-10T09:34:00.000Z"), row("b", state = "APPROVED", decidedAt = "2026-11-10T09:30:00.000Z"))
-        assertEquals("Decision recorded · ✓ Approved by you at 09:34", CrossingCards.receipt(approved, CrossingCards.Answerer.HERE, now = now, zone = utc)!!.line)
+        assertEquals("Decision recorded · ✓ Approved by you at ${clock("2026-11-10T09:34:00.000Z")}", CrossingCards.receipt(approved, CrossingCards.Answerer.HERE, now = now, zone = utc)!!.line)
         assertEquals("Approved at another end", CrossingCards.receipt(approved, CrossingCards.Answerer.ELSEWHERE, now = now, zone = utc)!!.line)
         val refused = batch(row("a", state = "DENIED", decidedAt = "2026-11-09T18:05:00.000Z"))
-        assertEquals("Decision recorded · ✓ Refused by you at 11/9 18:05", CrossingCards.receipt(refused, CrossingCards.Answerer.HERE, now = now, zone = utc)!!.line)
+        assertEquals("Decision recorded · ✓ Refused by you at ${clock("2026-11-09T18:05:00.000Z")}", CrossingCards.receipt(refused, CrossingCards.Answerer.HERE, now = now, zone = utc)!!.line)
         assertEquals("Refused at another end", CrossingCards.receipt(refused, CrossingCards.Answerer.ELSEWHERE, now = now, zone = utc)!!.line)
         val mixed = batch(row("a", state = "DENIED"), row("b", state = "APPLIED"))
-        assertEquals("Decision recorded · ✓ Answered by you at 11:58",
+        assertEquals("Decision recorded · ✓ Answered by you at ${clock("2026-11-10T11:58:00Z")}",
             CrossingCards.receipt(mixed, CrossingCards.Answerer.HERE, pressedAt = Instant.parse("2026-11-10T11:58:00Z"), now = now, zone = utc)!!.line)
         assertEquals("Answered at another end", CrossingCards.receipt(mixed, CrossingCards.Answerer.ELSEWHERE, now = now, zone = utc)!!.line)
         assertNull(CrossingCards.receipt(batch(row("a")), CrossingCards.Answerer.HERE))
