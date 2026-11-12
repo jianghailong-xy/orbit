@@ -44,6 +44,8 @@
 .orbit-select-option[data-disabled] { background: transparent; color: var(--orbit-control-disabled-text); cursor: not-allowed; }
 .orbit-select-option[data-disabled][data-selected] { background: var(--orbit-control-disabled-bg); }
 .orbit-select-group-label { padding: 5px 12px; color: var(--text-3); font-size: 12px; }
+.orbit-select-group-label:has(.orbit-select-group-note) { display: flex; align-items: center; gap: 8px; }
+.orbit-select-group-note { margin-left: auto; flex: none; font-weight: 600; background: var(--fill-muted); border-radius: 5px; padding: 0 6px; }
 .orbit-select-empty { text-align: center; color: var(--text-3); }
 .orbit-select-empty:not(:empty) { padding: 5px 12px; }
 .orbit-select-empty-content { margin: 8px; }

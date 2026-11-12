@@ -7,7 +7,13 @@
     "OrbitKit in `WikiStartParityTests`, Android in `WikiStartLogicTest`, and the server holds `repositories` to",
     "its `normalizeRepoUrl` in `wiki-repository-name.spec.ts`. Dates are read in `timeZone`; «ago» against `now`.",
     "`firstDrafts` and `writingOffline` are states `plan.states` does not reach: a draft with no version confirmed yet,",
-    "and documents whose writing waits for an offline runner."
+    "and documents whose writing waits for an offline runner.",
+    "`hasWiki` is the Create wiki form once a wiki exists (docs/wiki-explicit-creation-design.md §3.4, board 46 parts 4-5):",
+    "`workspaces.choices` grouped with `wikis`, the repositories of the wikis in use, as `groups` with `hasWiki`; a group",
+    "with a wiki is greyed under `label` and not offered, so `offered` and `defaults` reach only the others, and a",
+    "submission that meets a wiki made meanwhile shows the server's `refusal` message. `newWiki` is the sidebar row and",
+    "the head picker's last item that open the form. `wikiCreateCard` is the WIKI_CREATE owner-request card (§3.6):",
+    "the `facts` each `request` reads against `workspaces.choices`, under `labels`, and its three `buttons` in order."
   ],
   "timeZone": "Asia/Shanghai",
   "now": "2026-09-29T08:00:00.000Z",
@@ -1090,5 +1096,115 @@
     ],
     "allOffline": "eu",
     "none": null
+  },
+  "hasWiki": {
+    "newWiki": "New wiki…",
+    "label": "Has a wiki",
+    "wikis": [
+      "github.com/acme/shop-cli",
+      "github.com/acme/retired"
+    ],
+    "groups": [
+      {
+        "repository": "github.com/acme/billing-api",
+        "choices": [
+          "ba"
+        ],
+        "hasWiki": false
+      },
+      {
+        "repository": "github.com/acme/shop-cli",
+        "choices": [
+          "sg",
+          "st",
+          "us",
+          "eu"
+        ],
+        "hasWiki": true
+      }
+    ],
+    "offered": [
+      "ba"
+    ],
+    "defaults": [
+      {
+        "current": null,
+        "from": "sg",
+        "pick": "ba"
+      },
+      {
+        "current": null,
+        "from": "ba",
+        "pick": "ba"
+      },
+      {
+        "current": null,
+        "from": null,
+        "pick": "ba"
+      }
+    ],
+    "allHaveWikis": {
+      "wikis": [
+        "github.com/acme/shop-cli",
+        "github.com/acme/billing-api"
+      ],
+      "offered": [],
+      "pick": null
+    },
+    "refusal": {
+      "status": 409,
+      "code": "WIKI_SPACE_EXISTS",
+      "message": "This repository already has a wiki."
+    }
+  },
+  "wikiCreateCard": {
+    "labels": {
+      "repository": "Repository",
+      "readsFrom": "Reads from",
+      "maintenance": "Maintenance"
+    },
+    "buttons": [
+      "Create wiki",
+      "Change settings…",
+      "Not for this repository"
+    ],
+    "cases": [
+      {
+        "request": {
+          "repoUrlNorm": "github.com/acme/billing-api",
+          "workspaceId": "ba"
+        },
+        "facts": {
+          "repository": "github.com/acme/billing-api",
+          "readsFrom": "billing-api · build-01",
+          "offline": false,
+          "maintenance": "On · 8 runs a day · last 14 days"
+        }
+      },
+      {
+        "request": {
+          "repoUrlNorm": "github.com/acme/shop-cli",
+          "workspaceId": "eu"
+        },
+        "facts": {
+          "repository": "github.com/acme/shop-cli",
+          "readsFrom": "shop-cli @ EU · build-02",
+          "offline": true,
+          "maintenance": "On · 8 runs a day · last 14 days"
+        }
+      },
+      {
+        "request": {
+          "repoUrlNorm": "github.com/acme/shop-cli",
+          "workspaceId": "gone"
+        },
+        "facts": {
+          "repository": "github.com/acme/shop-cli",
+          "readsFrom": null,
+          "offline": false,
+          "maintenance": "On · 8 runs a day · last 14 days"
+        }
+      }
+    ]
   }
 }
