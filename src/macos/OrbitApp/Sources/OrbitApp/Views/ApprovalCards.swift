@@ -2201,6 +2201,8 @@ struct DeliveredDecisionCardView: View {
                 PromotionReceiptLine(promotion: promotion)
             case .ownerRequest(let requestID):
                 OwnerRequestView(requestID: requestID)
+            case .taskMoveBatch(let batchKey):
+                TaskMoveBatchCardView(console: console, batchKey: batchKey)
             }
         }
         .environment(\.approvalReviewTarget, .delivered(card))

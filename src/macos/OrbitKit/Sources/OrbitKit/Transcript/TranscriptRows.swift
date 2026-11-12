@@ -133,6 +133,11 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         /// while it is pending, its one line once it has ended — drawn where it was asked, by its own
         /// `createdAt`, and re-read from the account's requests on every render.
         case ownerRequest(requestID: String)
+        /// One batch of task moves waiting on this conversation, by the server's batch key: the
+        /// card while the batch is PENDING, its one resolved line once an answer settled it. Drawn
+        /// where it was asked, by the batch's own oldest request moment, and re-read from
+        /// `GET /sessions/:id/task-moves` on every render (`TaskMoves.swift`).
+        case taskMoveBatch(batchKey: String)
     }
 
     /// Where this row belongs, which is the whole difference between a question and a record.
@@ -221,6 +226,9 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         case .fusePause(let itemID):              return "fuse-\(itemID)"
         // The web card's DOM id, `owner-request-<id>`.
         case .ownerRequest(let requestID):        return "owner-request-\(PublicID.storageKey(requestID))"
+        // The batch card's id: the server's own batch key, which stays the same for the life of
+        // the batch, so the answered line replaces the waiting card's row rather than joining it.
+        case .taskMoveBatch(let batchKey):        return "task-move-batch-\(batchKey)"
         }
     }
 }
@@ -387,7 +395,8 @@ public enum DeliveryAnchor {
              .acceptanceConfirmationReceipt,
              .evidenceDecision, .ownerDecisionReceipt, .evidenceDecisionReceipt,
              .promotionApproval, .promotionReceipt, .coordinatorQuestion,
-             .coordinatorQuestionRecord, .escalatedItem, .fusePause, .ownerRequest:
+             .coordinatorQuestionRecord, .escalatedItem, .fusePause, .ownerRequest,
+             .taskMoveBatch:
             return items.last?.id
         }
     }

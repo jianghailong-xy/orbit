@@ -72,9 +72,11 @@ public enum SessionHeader {
     /// card's words, one of the four owner items in the words the banner and the card use, so a
     /// person who pressed either arrives where the words came from, a project waiting to be
     /// started in the start card's own `Ready to start`, and one waiting to be recorded done in
-    /// `Ready to close` (or `Record as done…`, unasked). Anything else waiting on you —
-    /// a blocked tool call, a proposal, a row counting two kinds at once — keeps the approval
-    /// wording. Web parity: `waitingLabel` in `WorkspaceView.tsx`, which the copy-parity test reads.
+    /// `Ready to close` (or `Record as done…`, unasked). An open owner request says its kind's word,
+    /// and waiting task moves say `Approve task move` / `Approve N task moves`. Anything else
+    /// waiting on you — a blocked tool call, a proposal, a row counting two kinds at once — keeps
+    /// the approval wording. Web parity: `waitingLabel` in `WorkspaceView.tsx`, which the
+    /// copy-parity test reads.
     public static func waitingWord(for s: Session) -> String {
         switch s.waitingKind {
         case .ownerConfirmation: return OwnerConfirmations.waitingForConfirmation
@@ -86,6 +88,17 @@ public enum SessionHeader {
         // and was not asked about in time: the two rows web's `waitingLabel` names.
         case .doneRequest:       return ProjectDone.readyToClose
         case .recordAsDone:      return ProjectDone.recordAsDoneRow
+        // An owner request this session filed (`OWNER_REQUEST`): the row says the request kind's
+        // own word — "Decision for you", "Key needed", "Steps for you", "Confirm for you". Two
+        // kinds on one row are a mix, and the server names no kind then; the fallback below says
+        // what it always did.
+        case .ownerRequest:      return s.ownerRequests?.first?.kind.rowWord ?? unnamedWord
+        // A batch of task moves waiting on this session (`MOVE_REQUEST`): the row counts the moves
+        // across every group, and says "Approve task move" / "Approve N task moves" — the same
+        // words `@orbit/shared` gives the web row.
+        case .moveRequest:
+            let moves = (s.taskMoves ?? []).reduce(0) { $0 + $1.count }
+            return moves > 0 ? TaskMoves.rowWord(moves) : unnamedWord
         default:                 return unnamedWord
         }
     }
