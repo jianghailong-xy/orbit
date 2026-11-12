@@ -4,9 +4,11 @@
  * Two layers. The planner is pure, so every refusal is put to it directly with the one fact that
  * causes it. The door is then driven end to end over an in-memory store standing in for the
  * transaction: the criterion and its open tasks reach an existing project and a new one, the
- * DONE task stays, A's seal moves and its confirmation moves with it, the move is recorded, and A's
- * done-check — `doneReadiness` over A's criteria as the satisfaction lane reads them from the store —
- * stops naming the criterion. Every refusal the door raises answers with its code and writes nothing.
+ * DONE task stays, A's seal moves and its confirmation does NOT move with it (owner decision
+ * 2026-11-12), the move is recorded, and A's done-check — `doneReadiness` over A's criteria as the
+ * satisfaction lane reads them from the store — stops naming the criterion. A whose last unmet
+ * criterion moved out is then not done by itself; the owner's plain Record as done records it.
+ * Every refusal the door raises answers with its code and writes nothing.
  * `criterion-move.pg.spec.ts` runs the same door against PostgreSQL.
  */
 
@@ -24,7 +26,9 @@ import {
   type CriterionMoveFacts,
 } from './criterion-move';
 import { criteriaFromDefinitions, standardSetVersion } from './project-acceptance';
+import { ProjectAcceptanceService } from './project-acceptance.service';
 import { readCriterionSatisfaction } from './project-criterion-satisfaction';
+import { deriveProjectDone, readStandardSetConfirmationState } from './project-done-derived';
 import { doneReadiness } from './project-done-request';
 import { ProjectsService } from './projects.service';
 
@@ -377,15 +381,17 @@ test('into an existing project: the criterion and its open tasks move, the DONE 
   assert.equal(taskRow(T_DONE).criterionRevision, 1, 'the declaration reads as one whose criterion is gone');
   assert.equal(store.projectOpenItem[0].projectId, B, 'the TASK_FAILED item went with its task');
 
-  // A's criteria revision: a new seal, recorded with the old one, and the confirmation carried to it.
+  // A's criteria revision: a new seal, recorded with the old one. The confirmation is NOT carried to
+  // it: A's reduced set is the owner's to record done (owner decision 2026-11-12).
   assert.notEqual(result.fromCriteriaDigest.after, result.fromCriteriaDigest.before);
   assert.equal(result.fromCriteriaDigest.before, sealBefore);
   const sealAfter = standardSetVersion(criteriaFromDefinitions(
     store.projectAcceptanceCriterionDefinition.filter((row) => row.projectId === A) as never)).digest;
   assert.equal(result.fromCriteriaDigest.after, sealAfter);
   const confirmations = store.projectStandardSetConfirmation.filter((row) => row.projectId === A);
-  assert.equal(confirmations.length, 2);
-  assert.equal(confirmations[1].criteriaDigest, sealAfter);
+  assert.equal(confirmations.length, 1, 'no confirmation row is written for the source');
+  assert.equal(confirmations[0].criteriaDigest, sealBefore, 'and the one on record still names the old seal');
+  assert.equal(store.projectStandardSetConfirmation.length, 1, 'nor for the destination');
   assert.equal(store.activity.length, 1);
   assert.equal(store.activity[0].type, CRITERION_MOVED_ACTIVITY);
   assert.deepEqual(
@@ -412,6 +418,100 @@ test('into a new project: created with the title and goal given, and it receives
   assert.deepEqual(
     store.task.filter((row) => row.projectId === created.id).map((row) => row.id), [T_OPEN, T_FAILED]);
   assert.deepEqual(await doneCheckOfA(store), []);
+});
+
+/**
+ * Record as done over A as the move left it: A's stated criteria and serving tasks read from the
+ * store, through the real `readProjectDoneCheck` and `recordProjectDone`. A is marked non-code here
+ * so that landing — which this spec is not about, and which `doneCheckOfA` above assumes — reads
+ * nothing; what is left is the criteria and the set's confirmation. `written` collects what the
+ * press stores on the project row.
+ */
+function recordDoneOver(store: Store, written: Row[]) {
+  const definitions = () => store.projectAcceptanceCriterionDefinition
+    .filter((row) => row.projectId === A)
+    .map((row) => ({
+      ...row,
+      servingTasks: store.task.filter((task) => task.criterionDefinitionId === row.id).map((task) => ({
+        ...servingShape(task), codeless: false, mergeReceipts: [], sessions: [], project: { codebases: [] },
+      })),
+    }));
+  const projectA = () => store.project.find((row) => row.id === A)!;
+  const client = {
+    project: {
+      findFirst: async () => ({ ...projectA(), nonCode: true }),
+      update: async ({ data }: { data: Row }) => {
+        written.push(data);
+        Object.assign(projectA(), data);
+        return { ...projectA() };
+      },
+    },
+    projectAcceptanceCriterionDefinition: { findMany: async () => definitions() },
+    projectIntegrationJob: { findMany: async () => [] },
+    projectCodebase: { findFirst: async () => null },
+    task: {
+      findMany: async () => store.task.filter((row) => row.projectId === A).map((row) => ({
+        ...row, progress: { lifecycleEpoch: 0 },
+      })),
+    },
+    session: { findMany: async () => [] },
+    projectOpenItem: {
+      findMany: async () => store.projectOpenItem.filter((item) => item.projectId === A && item.state === 'OPEN'),
+      updateMany: async () => ({ count: 0 }),
+    },
+    $queryRaw: async () => [{ status: projectA().status, non_code: true }],
+  };
+  return new ProjectAcceptanceService({
+    ...client,
+    $transaction: async (run: (tx: unknown) => Promise<unknown>) => run(client),
+  } as never);
+}
+
+test('moving the last unmet criterion out does not record A done by itself; the owner\'s plain Record as done does', async () => {
+  const store = world();
+  await service(store).moveCriterion(OWNER, A, C2, { toProjectId: B });
+
+  // The projection over A as the move left it: every remaining criterion met (and landed), and the
+  // set's confirmation standing on the seal before the move — so it withholds A on that alone.
+  const prisma = prismaOver(store);
+  const definitions = store.projectAcceptanceCriterionDefinition.filter((row) => row.projectId === A);
+  const confirmation = await readStandardSetConfirmationState(prisma as never, definitions as never, A);
+  assert.equal(confirmation, 'STALE');
+  const derived = deriveProjectDone(
+    (await readCriterionSatisfaction(prisma, OWNER, A)).map((row) => ({
+      definitionId: row.definitionId, satisfied: row.satisfied, landing: 'LANDED',
+      independence: 'INDEPENDENT', conflicts: [], remedy: null, landingReason: null,
+    })),
+    confirmation,
+  );
+  assert.equal(derived.done, false, 'Orbit does not record A done by itself');
+  assert.equal(derived.status, 'OPEN');
+  assert.deepEqual(derived.withheld, ['STANDARD_SET_UNCONFIRMED'], 'and nothing else holds it');
+  assert.deepEqual([derived.counts.criteria, derived.counts.met], [1, 1]);
+  const projectA = store.project.find((row) => row.id === A)!;
+  assert.equal(projectA.status, 'OPEN');
+  assert.equal(projectA.doneBy ?? null, null);
+
+  // The done-check the card is drawn from: no refusal and no gap, so the card offers plain Record
+  // as done — the set's confirmation is not one of its findings.
+  const written: Row[] = [];
+  const acceptance = recordDoneOver(store, written);
+  const check = await acceptance.readProjectDoneCheck(OWNER, A);
+  assert.deepEqual(check.criteria.map((criterion) => [criterion.stated.text, criterion.satisfied]),
+    [['the first holds', true]]);
+  assert.deepEqual(check.findings, []);
+  assert.equal(check.criteriaDigest, standardSetVersion(criteriaFromDefinitions(definitions as never)).digest);
+
+  // The owner's press records it: DONE, by the owner, with no gap.
+  const done = await acceptance.recordProjectDone(OWNER, A, { criteriaDigest: check.criteriaDigest, acceptedGaps: [] });
+  assert.equal(done.status, 'DONE');
+  assert.equal(done.doneBy, 'OWNER');
+  assert.deepEqual(done.acceptedGaps, []);
+  assert.equal(written.length, 1);
+  assert.equal(written[0].status, 'DONE');
+  assert.equal(written[0].doneBy, 'OWNER');
+  assert.deepEqual(written[0].acceptedGaps, []);
+  assert.equal(written[0].doneCriteriaDigest, check.criteriaDigest);
 });
 
 async function refusedWith(

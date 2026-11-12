@@ -22,10 +22,18 @@ import { readCriterionSatisfaction } from './project-criterion-satisfaction';
  * as "declared a criterion that is no longer there". Left pointing at the moved row they would be
  * counted as B's serving work, and B's landing would read receipts of A's line.
  *
- * A'S CONFIRMATION MOVES WITH THE EDIT when it named the set the move started from — the decision
- * door's rule (`decideCriteriaChange`): the owner pressing Move has read every word of the result,
- * and A whose remaining criteria are met is then done with no gap rather than waiting for a second
- * confirmation. B's is not carried: B gained a criterion nobody confirmed there.
+ * NO CONFIRMATION IS CARRIED, to either side (owner decision 2026-11-12). A's newest standard-set
+ * confirmation names the seal the move started from, and the move leaves it there: A's reduced set
+ * stands unconfirmed, so the derived-done projection withholds A (STANDARD_SET_UNCONFIRMED) and Orbit
+ * does not record A done by itself when the moved criterion was its last unmet one. Recording that
+ * is the owner's act — the done card's plain "Record as done", which stores `done_by = 'OWNER'`.
+ * Nothing on that path reads the set's confirmation: `doneReadiness` has no finding for it, so the
+ * done-check shows no refusal and no gap for it, and `recordProjectDone` neither refuses nor stores
+ * one; an owner-recorded DONE is reopened only by the seal moving or a serving task reopening, never
+ * by the confirmation. This is why the rule is here and not in the projection: the derived-done rules
+ * stay what they are for every other path (the decision door, `decideCriteriaChange`, still carries
+ * a confirmation through an edit the owner approved). B's is not carried either: B gained a criterion
+ * nobody confirmed there.
  *
  * REFUSED, WITH NOTHING WRITTEN, when (in this order):
  *   - A is not OPEN (`CRITERION_MOVE_SOURCE_NOT_OPEN`) or B is not (`CRITERION_MOVE_TARGET_NOT_OPEN`);
@@ -353,8 +361,8 @@ export const CRITERION_MOVED_ACTIVITY = 'project.criterion_moved';
 /**
  * Apply a plan `planCriterionMove` returned, inside the transaction that read its facts and under
  * the same locks: the definition row to B (last in B's order), the moving tasks and their
- * TASK_FAILED items to B, the kept tasks' declaration cleared, A's confirmation carried to its new
- * seal when it named the old one, and the activity row. Answers both seals of A.
+ * TASK_FAILED items to B, the kept tasks' declaration cleared, and the activity row. No confirmation
+ * row: A's reduced set is left for the owner (see the head of this file). Answers both seals of A.
  */
 export async function writeCriterionMove(
   tx: Db,
@@ -406,23 +414,9 @@ export async function writeCriterionMove(
     });
   }
 
+  // A's newest confirmation stays on the seal it named: carrying it to `after` would let the
+  // projection record A done by itself, which is the owner's to record (see the head of this file).
   const after = await criteriaSeal(tx, sourceId);
-  const confirmed = await tx.projectStandardSetConfirmation.findFirst({
-    where: { projectId: sourceId },
-    orderBy: [{ confirmedAt: 'desc' }, { id: 'desc' }],
-    select: { criteriaDigest: true },
-  });
-  if (confirmed?.criteriaDigest === before.digest) {
-    await tx.projectStandardSetConfirmation.create({
-      data: {
-        projectId: sourceId,
-        ownerId,
-        confirmedById: ownerId,
-        criteriaDigest: after.digest,
-        criteriaMaterial: after.material as unknown as Prisma.InputJsonValue,
-      },
-    });
-  }
 
   await tx.activity.create({
     data: {

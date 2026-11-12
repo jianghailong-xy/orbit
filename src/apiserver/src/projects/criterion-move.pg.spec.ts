@@ -6,11 +6,14 @@
  *  (1) into an existing project: the definition row and the open serving tasks are re-filed, the
  *      FAILED task's TASK_FAILED item goes with it, the DONE task stays and its declaration reads as
  *      one whose criterion is gone; A's seal moves, the move is recorded with both seals, A's owner
- *      confirmation is carried to the new seal, and A's done-check (`readProjectDoneCheck`) no longer
- *      names the criterion and refuses nothing;
+ *      confirmation is NOT carried to the new seal (owner decision 2026-11-12), and A's done-check
+ *      (`readProjectDoneCheck`) no longer names the criterion and refuses nothing;
  *  (2) into a new project created with the title and goal given;
  *  (3) each refusal answers with its code, and the rows are as they were (the landing-in-flight
- *      refusal, which needs a whole integration line, is the unit spec's).
+ *      refusal, which needs a whole integration line, is the unit spec's);
+ *  (4) the last unmet criterion moved out of a project whose remaining criteria are met: A stays
+ *      OPEN with no `done_by` after the move's own re-projection, its done-check has no finding at
+ *      all, and the owner's Record as done records DONE by OWNER with no accepted gap.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/criterion-move.pg.spec.ts
  */
@@ -164,12 +167,14 @@ test('an unmet criterion and its open tasks move to a follow-up project; each re
       assert.equal(rows.get(s.done)!.criterionRevision, 1);
       assert.equal((await prisma.projectOpenItem.findUniqueOrThrow({ where: { id: s.item } })).projectId, b.id);
 
-      // A's criteria revision: one criterion left, a new seal, recorded beside the old one, and the
-      // owner's confirmation standing on the new seal.
+      // A's criteria revision: one criterion left, a new seal, recorded beside the old one. The
+      // owner's confirmation stays on the old seal: A's reduced set is theirs to record done.
       const confirmation = await acceptance.standardSetConfirmation(ownerId, s.a);
       assert.equal(confirmation.currentVersion.digest, result.fromCriteriaDigest.after);
       assert.notEqual(result.fromCriteriaDigest.after, result.fromCriteriaDigest.before);
-      assert.equal(confirmation.state, 'CONFIRMED');
+      assert.equal(confirmation.state, 'STALE');
+      assert.equal(confirmation.confirmation?.criteriaDigest, result.fromCriteriaDigest.before);
+      assert.equal(await prisma.projectStandardSetConfirmation.count({ where: { projectId: s.a } }), 1);
       const recorded = await prisma.activity.findFirstOrThrow({
         where: { type: CRITERION_MOVED_ACTIVITY, actorId: ownerId, payload: { path: ['toProjectId'], equals: b.id } },
       });
@@ -305,5 +310,51 @@ test('an unmet criterion and its open tasks move to a follow-up project; each re
         await prisma.task.update({ where: { id: s.open }, data: { parentTaskId: parent.id } });
       });
       await refused('CRITERION_MOVE_TASK_ITEM_OPEN', (s) => taskFailedItem(s.a, s.open, 'INTEGRATION_CONFLICT'));
+    });
+
+    await t.test('(4) the last unmet criterion moved out: A is not done by itself, the owner records it', async () => {
+      // A marked non-code, so landing reads nothing and the only thing between A and a derived DONE
+      // is the set's confirmation — the one fact this case is about. Carrying the confirmation to
+      // the new seal (the old behaviour) made the move's re-projection record A DONE by DERIVED.
+      const a = await project('A, last unmet', ['the first holds', 'the second holds']);
+      const [c1, c2] = a.keys;
+      await prisma.project.update({
+        where: { id: a.id },
+        data: { nonCode: true, nonCodeSetBy: 'OWNER', nonCodeSetAt: new Date() },
+      });
+      await task(a.id, 'met', c1.key, 'DONE');
+      await task(a.id, 'open', c2.key);
+      const seal = (await acceptance.standardSetConfirmation(ownerId, a.id)).currentVersion.digest;
+      await acceptance.confirmStandardSet(ownerId, a.id, { criteriaDigest: seal });
+      const before = await acceptance.readProjectDoneCheck(ownerId, a.id);
+      assert.deepEqual(before.findings.map((f) => f.code), ['DONE_CRITERION_UNSATISFIED']);
+
+      await projects.moveCriterion(ownerId, a.id, c2.key, {
+        newProject: { title: 'Follow-up of A, last unmet', goal: 'Finish the second' },
+      });
+
+      // The move's post-commit re-projection has run; A is still the owner's to record.
+      const after = await prisma.project.findUniqueOrThrow({ where: { id: a.id } });
+      assert.equal(after.status, 'OPEN', 'Orbit does not record A done by itself');
+      assert.equal(after.doneBy, null);
+      assert.equal(after.doneAt, null);
+
+      // The card: one criterion, met, and nothing in the way — no refusal and no gap.
+      const check = await acceptance.readProjectDoneCheck(ownerId, a.id);
+      assert.deepEqual(check.criteria.map((c) => [c.stated.text, c.satisfied]), [['the first holds', true]]);
+      assert.deepEqual(check.findings, []);
+
+      // The owner's plain Record as done.
+      const done = await acceptance.recordProjectDone(ownerId, a.id, {
+        criteriaDigest: check.criteriaDigest,
+        acceptedGaps: [],
+      });
+      assert.equal(done.doneBy, 'OWNER');
+      assert.deepEqual(done.acceptedGaps, []);
+      const recorded = await prisma.project.findUniqueOrThrow({ where: { id: a.id } });
+      assert.equal(recorded.status, 'DONE');
+      assert.equal(recorded.doneBy, 'OWNER');
+      assert.deepEqual(recorded.acceptedGaps, []);
+      assert.equal(recorded.doneCriteriaDigest, check.criteriaDigest);
     });
   });
