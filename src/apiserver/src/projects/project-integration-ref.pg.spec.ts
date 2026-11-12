@@ -40,6 +40,7 @@ import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
 import { WorkspacesController } from '../workspaces/workspaces.controller';
 import { WorkspacesService } from '../workspaces/workspaces.service';
+import { MainCheckoutService } from '../workspaces/main-checkout.service';
 import { SessionAttemptService } from './session-attempt.service';
 import { TaskCheckpointService } from './task-checkpoint.service';
 
@@ -153,6 +154,8 @@ async function openDoor(stack: Stack): Promise<{ base: string; close: () => Prom
     providers: [
       { provide: ProjectsService, useValue: stack.projects },
       { provide: WorkspacesService, useValue: stack.workspaces },
+      // The main checkout's routes ride along on the workspace door; nothing here calls them.
+      { provide: MainCheckoutService, useValue: {} },
       { provide: ProjectAcceptanceService, useValue: {} },
       { provide: ProjectHandoffService, useValue: {} },
       { provide: SessionAttemptService, useValue: {} },
