@@ -176,12 +176,13 @@ extension AppModel {
     /// prose, a pasted page URL and a card's tap all land in the same place.
     ///
     /// `overConsole`: the link is in a phone's conversation, so what it opens is pushed over that
-    /// console and the back swipe returns to it (`openFromConversation`). Everything outside a
-    /// conversation — a URL, a notification, the wide shells — leaves it false and routes.
+    /// console and the back swipe returns to it (`openFromConversation`). `overPage`: the link is on
+    /// a wide shell, so a task opens over the page it was pressed on (owner decision 2026-11-12).
+    /// Everything outside a conversation — a URL, a notification — leaves both false and routes.
     @discardableResult
-    func openOrbitLink(_ url: URL, overConsole: Bool = false) -> Bool {
+    func openOrbitLink(_ url: URL, overConsole: Bool = false, overPage: Bool = false) -> Bool {
         guard let ref = orbitRef(for: url) else { return false }
-        openOrbitLink(ref, overConsole: overConsole)
+        openOrbitLink(ref, overConsole: overConsole, overPage: overPage)
         followRecord(in: url)
         return true
     }
@@ -197,17 +198,18 @@ extension AppModel {
 
     /// Where a link goes: every kind is known from the link alone — a task, a session, a task list, a
     /// wiki entry and a project each have a page in this app.
-    func openOrbitLink(_ ref: OrbitLinkRef, overConsole: Bool = false) {
-        open(OrbitLinkDestination.inApp(for: ref.target), overConsole: overConsole)
+    func openOrbitLink(_ ref: OrbitLinkRef, overConsole: Bool = false, overPage: Bool = false) {
+        open(OrbitLinkDestination.inApp(for: ref.target), overConsole: overConsole, overPage: overPage)
     }
 
     /// Every destination an Orbit link can have, applied in one place. A task, a session, a project
     /// or a wiki entry opened from a phone's conversation is pushed over it (`openFromConversation`,
-    /// `openProjectFromConversation`, `openWikiEntry`); a task list is a scope of the Tasks page
-    /// rather than a page of its own, so it routes there wherever the link is.
-    func open(_ destination: OrbitLinkDestination, overConsole: Bool = false) {
+    /// `openProjectFromConversation`, `openWikiEntry`); a task on a wide shell opens over the page it
+    /// was pressed on; a task list is a scope of the Tasks page rather than a page of its own, so it
+    /// routes there wherever the link is.
+    func open(_ destination: OrbitLinkDestination, overConsole: Bool = false, overPage: Bool = false) {
         switch destination {
-        case .task(let id):      openFromConversation(.task(id), overConsole: overConsole)
+        case .task(let id):      openFromConversation(.task(id), overConsole: overConsole, overPage: overPage)
         case .session(let id):   openFromConversation(.session(id), overConsole: overConsole)
         case .project(let id):   openProjectFromConversation(id, overConsole: overConsole)
         case .list(let id):      route(to: .list(id))

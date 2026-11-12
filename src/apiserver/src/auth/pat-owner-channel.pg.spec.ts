@@ -299,6 +299,13 @@ test('the owner channel refuses a personal access token door by door and field b
       login: 201,
       observe: async () => (await projectRow(toPause)).pausedAt,
     },
+    // A criterion the project does not state: a login is answered 404, and nothing moves.
+    {
+      route: 'POST /projects/:id/criteria/:criterionKey/move',
+      path: `/projects/${anyProject}/criteria/${nobody()}/move`,
+      body: { newProject: { title: 'a follow-up' } },
+      login: 404,
+    },
     // The project is OPEN, so a login is answered by the door's own refusal: PROJECT_STILL_OPEN.
     {
       route: 'POST /projects/:id/sessions/complete',

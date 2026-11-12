@@ -2,11 +2,11 @@
 // fed by the repo's ui-migration fixtures plus an ordinary conversation shaped like the owner's
 // 2026-11-12 screenshot (sample text): a question, five background-job turns, the last one the answer.
 import { chromium } from '/var/tmp/coord-fold-mock/today/node_modules/playwright/index.mjs';
-import { installFixtures, installFixedDate } from '/var/tmp/fold-rule-mock/proto/src/web/ui-migration/fixtures.mjs';
-import { SESSION, SESSION_PATH, WORKSPACE, RUNNER } from '/var/tmp/fold-rule-mock/proto/src/web/ui-migration/session-fixtures.mjs';
+import { installFixtures, installFixedDate } from '/var/tmp/fold-rule-mock/proto2/src/web/ui-migration/fixtures.mjs';
+import { SESSION, SESSION_PATH, WORKSPACE, RUNNER } from '/var/tmp/fold-rule-mock/proto2/src/web/ui-migration/session-fixtures.mjs';
 export { coordinatorEvents } from '/var/tmp/coord-fold-mock/lib.mjs';
 
-const BASE = 'http://127.0.0.1:5881';
+const BASE = process.env.BASE ?? 'http://127.0.0.1:5882';
 const ws = { ...WORKSPACE, name: 'data-pipeline' };
 
 const wake = (id, name, tail) => `<background-job-wake>
@@ -75,6 +75,9 @@ export function plainEvents() {
   bg(17, 'bgj_a4', 'Shard coverage per hour on 2026-11-10', '24/24 hours ≥ 0.95', [['mcp__orbit__bg_run', { name: 'Read the ready script' }, '{"id":"bgj_a5"}']],
     '最后一次尝试读脚本。回来后给你完整结论（已确认的部分：任务是活的、每 10 分钟成功一次、判定"未达标"才不推进）。');
   bg(20, 'bgj_a5', 'Try to read the ready script from the job container', 'No such file', [sql('Read the three ready-date stores')], REPORT);
+  bg(23, 'bgj_a7', 'Push the fix branch', 'pushed', [], '提交与推送均已完成，后台验证仍在跑。');
+  const dup = `Orbit Watch 01a17ddf-88ed-725b-8964-f01924cc7c97 matched at generation 1: SESSION_IDLE 1/1\n\nThis turn was queued by the watch, not typed by a person. What the watch recorded when its condition held:\n\n\`\`\`json\n${JSON.stringify({ watchId: '01a17ddf-88ed-725b-8964-f01924cc7c97', generation: 1, reason: 'SESSION_IDLE 1/1', changedTargets: [{ kind: 'SESSION', id: '0195c0de-0000-7000-8000-0000000000a1', state: 'IDLE' }] })}\n\`\`\``;
+  turn(25, { text: dup }, [['mcp__orbit__session_get', { sessionId: 's' }, '{…}']], '这是同一轮触发的重复通知，没有新内容。');
   const w6 = wake('bgj_a6', 'Clean up the scratch tables', 'dropped 3 tables');
   turn(29, { text: w6, controlPlaneNote: w6 }, [['mcp__orbit__bg_output', { id: 'bgj_a6' }, 'dropped 3 tables']], null);
   return ev;
@@ -92,7 +95,7 @@ export async function launch() {
     env: { ...process.env, FONTCONFIG_FILE: '/var/tmp/fold-rule-mock/fonts.conf' } });
 }
 
-export async function open(browser, { events, rules = [], coordinator = false, title, width = 1280, height = 3200 }) {
+export async function open(browser, { events, rules = [], coordinator = false, lengthRule = false, title, width = 1280, height = 3200 }) {
   const context = await browser.newContext({
     viewport: { width, height }, deviceScaleFactor: 2, colorScheme: 'light', locale: 'en-US',
     timezoneId: 'Asia/Shanghai', reducedMotion: 'reduce', serviceWorkers: 'block',
@@ -100,10 +103,10 @@ export async function open(browser, { events, rules = [], coordinator = false, t
   const page = await context.newPage();
   page.setDefaultNavigationTimeout(240_000);
   page.setDefaultTimeout(120_000);
-  await page.addInitScript(([r, c]) => { window.__foldRules = r; window.__mockCoordinator = c; Object.defineProperty(Navigator.prototype, 'platform', { get: () => 'MacIntel' }); }, [rules, coordinator]);
+  await page.addInitScript(([r, c, l]) => { window.__foldRules = r; window.__mockCoordinator = c; window.__lengthRule = l; Object.defineProperty(Navigator.prototype, 'platform', { get: () => 'MacIntel' }); }, [rules, coordinator, lengthRule]);
   await installFixedDate(page);
   await installFixtures(page, { theme: 'light' });
-  const row = sessionRow(title ? { title } : {});
+  const row = sessionRow({ ...(title ? { title } : {}), ...(coordinator ? { projectId: '0195c0de-0000-7000-8000-0000000000ff', projectTitle: 'Runner link v1' } : {}) });
   await page.route('**/api/**', async (route) => {
     const req = route.request();
     const path = new URL(req.url()).pathname;

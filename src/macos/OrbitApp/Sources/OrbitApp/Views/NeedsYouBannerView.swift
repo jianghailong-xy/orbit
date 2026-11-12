@@ -60,6 +60,10 @@ struct NeedsYouBannerView: View {
     /// Whether a project's sessions page opens in this shell's session column (an iPad's wide
     /// shell) rather than as a page of its own — where the merge into main's card is.
     var projectInColumn = false
+    /// Mounted over the Sessions list, which meets its nav bar with the soft scroll-edge effect
+    /// (`softTopEdgeEffect`). On iOS 26 the bar then stands on that same soft edge, drawn on down
+    /// under it, instead of on the page's colour: see `listSoftEdge`.
+    var overList = false
     /// The bar's own width, for the margin that lines it up with the nav bar's buttons.
     @State private var width: CGFloat = 0
 
@@ -173,7 +177,46 @@ struct NeedsYouBannerView: View {
                     .onChange(of: proxy.size.width) { _, now in width = now }
             }
         }
-        .background(floats ? Color.clear : Color(uiColor: .systemBackground))
+        .background { surface }
+    }
+
+    @ViewBuilder private var surface: some View {
+        if floats {
+            Color.clear
+        } else if overList {
+            if #available(iOS 26.0, *) { listSoftEdge } else { Color(uiColor: .systemBackground) }
+        } else {
+            Color(uiColor: .systemBackground)
+        }
+    }
+
+    /// The soft edge carried on down under the bar on the Sessions list (the owner, 2026-11-12,
+    /// option B of docs/mocks/ios-header-soft-edge/02-board.html). The system's soft effect sits
+    /// under the nav bar only: this bar is a top inset, not a `.safeAreaBar` (which stops the list
+    /// pulling to refresh, see `AgentPanes`), so on the page's colour the rows were cut off hard at
+    /// its lower edge. So it draws its own: a material blur and a wash of the page's colour, both
+    /// full from the top of the screen (up behind the nav bar, joining the system's) and fading to
+    /// nothing 20pt below the bar, so rows blur and fade into it rather than end at a line. It takes
+    /// no touches; the rows under it scroll as before.
+    private var listSoftEdge: some View {
+        let page = Color(uiColor: .systemBackground)
+        let fade = Gradient(stops: [
+            .init(color: .black, location: 0),
+            .init(color: .black, location: 0.6),
+            .init(color: .clear, location: 1),
+        ])
+        return ZStack {
+            Rectangle().fill(.ultraThinMaterial)
+                .mask(LinearGradient(gradient: fade, startPoint: .top, endPoint: .bottom))
+            LinearGradient(stops: [
+                .init(color: page.opacity(0.92), location: 0),
+                .init(color: page.opacity(0.7), location: 0.6),
+                .init(color: page.opacity(0), location: 1),
+            ], startPoint: .top, endPoint: .bottom)
+        }
+        .padding(.bottom, -20)
+        .ignoresSafeArea(edges: .top)
+        .allowsHitTesting(false)
     }
 }
 

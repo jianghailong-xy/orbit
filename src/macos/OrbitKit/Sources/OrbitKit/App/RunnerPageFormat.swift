@@ -819,6 +819,11 @@ public enum RunnerPageFormat {
         if RunnerAttention.compareRunnerVersions(version, latest) >= 0 {
             return version + RunnerPageCopy.RUNNER_LINE_SEPARATOR + RunnerPageCopy.RUNNER_VERSION_LATEST
         }
+        // Draining or restarting for a release: `0.1.253 · updating to 0.1.254`.
+        if let target = runner.selfUpdate?.targetVersion,
+           runner.selfUpdate?.phase == "draining" || runner.selfUpdate?.phase == "restarting" {
+            return version + RunnerPageCopy.RUNNER_LINE_SEPARATOR + RunnerPageCopy.runnerVersionUpdatingTo(version: target)
+        }
         let note: String?
         switch runner.selfUpdate?.state {
         case nil: note = runner.runsAsRoot == true ? RunnerPageCopy.RUNNER_VERSION_INSTALLS_WHEN_IDLE : nil
@@ -828,6 +833,99 @@ public enum RunnerPageFormat {
         }
         guard let note else { return version }
         return version + RunnerPageCopy.RUNNER_LINE_SEPARATOR + latest + " " + note
+    }
+
+    // MARK: the Update card (board 4)
+
+    /// A release this runner is behind, in the phase it reports — the web's `runnerUpdateCard`.
+    public struct UpdateCard: Equatable, Sendable {
+        public let phase: String
+        /// Amber while it holds work back or restarts; plain while work goes on as usual.
+        public let warn: Bool
+        public let title: String
+        public let tag: String
+        public let body: String
+        /// Draining only: `Waiting for 2 of 8 turns · 38 min`, and the share of those turns done.
+        public let progressLabel: String?
+        public let progress: Double?
+        /// Draining only: the reader's turns it waits for — session, title, `running 1 h 52 min`.
+        public var turns: [Turn] = []
+
+        public struct Turn: Equatable, Sendable {
+            public let id: String
+            public let title: String
+            public let running: String?
+        }
+    }
+
+    /// The card a runner's report calls for; nil with no phase (nothing waiting, or a runner too old
+    /// to say) or no version to name, and for a phase this client does not know.
+    public static func updateCard(_ runner: Runner, now: Date, timeZone: TimeZone = .current) -> UpdateCard? {
+        guard let report = runner.selfUpdate, let phase = report.phase, let version = report.targetVersion else {
+            return nil
+        }
+        switch phase {
+        case "available":
+            return UpdateCard(phase: phase, warn: false,
+                              title: RunnerPageCopy.runnerUpdateAvailableTitle(version: version),
+                              tag: RunnerPageCopy.RUNNER_UPDATE_TAG_AVAILABLE,
+                              body: RunnerPageCopy.RUNNER_UPDATE_AVAILABLE_BODY, progressLabel: nil, progress: nil)
+        case "draining":
+            let left = report.turnsInFlight ?? 0
+            let of = report.turnsAtDrain.map { max($0, left) }
+            let waited = report.drainingSince.flatMap { RelativeTime.parse($0) }.map {
+                updateWaited(minutes: max(0, Int(now.timeIntervalSince($0) / 60)))
+            }
+            let unit = (of ?? left) == 1 ? RunnerPageCopy.RUNNER_UPDATE_TURN : RunnerPageCopy.RUNNER_UPDATE_TURNS
+            let count = of.map { RunnerPageCopy.runnerUpdateWaitingForOf(left: left, of: $0, unit: unit) }
+                ?? RunnerPageCopy.runnerUpdateWaitingFor(left: left, unit: unit)
+            let since = report.availableSince.flatMap { updateClock($0, timeZone: timeZone) }
+            return UpdateCard(
+                phase: phase, warn: true,
+                title: RunnerPageCopy.runnerUpdateDrainingTitle(version: version),
+                tag: RunnerPageCopy.RUNNER_UPDATE_TAG_DRAINING,
+                body: since.map { RunnerPageCopy.runnerUpdateDrainingBody(version: version, since: $0) }
+                    ?? RunnerPageCopy.RUNNER_UPDATE_DRAINING_BODY_NO_SINCE,
+                progressLabel: waited.map { count + RunnerPageCopy.RUNNER_LINE_SEPARATOR + $0 } ?? count,
+                progress: of.map { $0 > 0 ? Double($0 - left) / Double($0) : 0 } ?? 0,
+                turns: (runner.updateTurns ?? []).map { turn in
+                    let title = turn.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    return UpdateCard.Turn(
+                        id: turn.id,
+                        title: title.isEmpty ? RunnerPageCopy.RUNNER_UPDATE_UNTITLED_TURN : title,
+                        running: turn.startedAt.flatMap { RelativeTime.parse($0) }.map {
+                            RunnerPageCopy.runnerUpdateTurnRunning(
+                                duration: updateWaited(minutes: max(0, Int(now.timeIntervalSince($0) / 60))))
+                        })
+                })
+        case "restarting":
+            return UpdateCard(phase: phase, warn: true,
+                              title: RunnerPageCopy.runnerUpdateRestartingTitle(version: version),
+                              tag: RunnerPageCopy.RUNNER_UPDATE_TAG_RESTARTING,
+                              body: RunnerPageCopy.RUNNER_UPDATE_RESTARTING_BODY, progressLabel: nil, progress: nil)
+        case "postponed":
+            guard let until = report.postponedUntil.flatMap({ updateClock($0, timeZone: timeZone) }) else { return nil }
+            return UpdateCard(phase: phase, warn: false,
+                              title: RunnerPageCopy.runnerUpdatePostponedTitle(version: version, until: until),
+                              tag: RunnerPageCopy.RUNNER_UPDATE_TAG_POSTPONED,
+                              body: RunnerPageCopy.runnerUpdatePostponedBody(until: until),
+                              progressLabel: nil, progress: nil)
+        default:
+            return nil
+        }
+    }
+
+    /// How long it has waited: `38 min`, `1 h 52 min`, `2 h`.
+    public static func updateWaited(minutes: Int) -> String {
+        if minutes < 60 { return RunnerPageCopy.runnerUpdateWaitedMinutes(minutes: minutes) }
+        let hours = minutes / 60, rest = minutes % 60
+        return rest > 0 ? RunnerPageCopy.runnerUpdateWaitedHoursMinutes(hours: hours, minutes: rest)
+            : RunnerPageCopy.runnerUpdateWaitedHours(hours: hours)
+    }
+
+    /// The clock time the card names, as the board writes it: `09:58`.
+    public static func updateClock(_ iso: String, timeZone: TimeZone = .current) -> String? {
+        RelativeTime.parse(iso).map { formatter("HH:mm", timeZone).string(from: $0) }
     }
 
     /// `Sep 20, 4:00 PM · 0.1.189 → 0.1.190`: when the runner last updated itself, in the reader's time

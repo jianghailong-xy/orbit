@@ -159,10 +159,11 @@ final class SessionMessageTests: XCTestCase {
         // A sender that runs no task links none, and an id that names nothing is no link at all.
         XCTAssertNil(SessionMessageCard.taskLink(SessionMessage(fromSessionId: Self.sender)))
         XCTAssertNil(SessionMessageCard.sessionLink(SessionMessage(fromSessionId: "not-an-id")))
-        XCTAssertEqual(SessionMessageCard.meta(), "Sent by another Orbit session, not by you")
+        // Who this is not is the sender line's help and label now; the foot line opens with the time.
+        XCTAssertEqual(SessionMessageCard.notYou, "Sent by another Orbit session, not by you")
+        XCTAssertNil(SessionMessageCard.meta())
         let now = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-10-01T15:42:00Z"))
-        XCTAssertTrue(SessionMessageCard.meta(ts: "2026-10-01T15:40:00.000Z", now: now)
-            .hasPrefix("Sent by another Orbit session, not by you · "))
+        XCTAssertEqual(SessionMessageCard.meta(ts: "2026-10-01T15:40:00.000Z", now: now), "2m ago")
     }
 
     // MARK: - (d) the block the card replaces

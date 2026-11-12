@@ -20,6 +20,7 @@ import { LinkPreviewsModule } from './link-previews/link-previews.module';
 import { WatchesModule } from './watches/watches.module';
 import { OwnerRequestsModule } from './owner-requests/owner-requests.module';
 import { ProjectsModule } from './projects/projects.module';
+import { ProjectCriterionConfirmationModule } from './projects/project-criterion-confirmation.module';
 import { RunnersModule } from './runners/runners.module';
 import { RunnerApiModule } from './runner-api/runner-api.module';
 import { AttachmentsModule } from './attachments/attachments.module';
@@ -64,6 +65,7 @@ import { EmailModule } from './email/email.module';
     WatchesModule,
     OwnerRequestsModule,
     ProjectsModule,
+    ProjectCriterionConfirmationModule,
     RunnersModule,
     RunnerApiModule,
     AttachmentsModule,

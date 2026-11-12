@@ -102,9 +102,6 @@ final class AgentsModel {
         api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
     }
 
-    var groups: [AgentGroup] {
-        AgentListLogic.sidebarGroups(items, runnerOrder: runnerOrder, machines: machinesToSetUp)
-    }
     var orderedItems: [Agent] { AgentListLogic.ordered(items, runnerOrder: runnerOrder) }
     /// What the workspace list shows where its rows would be: a failed fetch is never "no workspaces".
     var listPresentation: ListLoadPresentation {

@@ -214,6 +214,109 @@ export interface QueuedGate {
   queuedReason?: string | null;
   queuedActive?: number | null;
   queuedLimit?: number | null;
+  /** Beside queuedReason 'runner_updating' only: what the update is and what it waits for. */
+  queuedRunnerUpdate?: QueuedRunnerUpdate | null;
+}
+
+/** The server's account of a runner draining for a self-update (docs/runner-update-drain-design.md). */
+export interface QueuedRunnerUpdate {
+  /** The release it installs next; null from a runner that does not report it. */
+  targetVersion: string | null;
+  /** When the wait began: the drain's start, or this session's own wait where the runner names none. */
+  since: string | null;
+  /** The reader's own turns the drain waits for, oldest first. */
+  turns: Array<{ id: string; title: string | null }>;
+}
+
+export const RUNNER_UPDATING_TITLE = 'Runner updating';
+/** The foot-row tag under a message the drain holds: `Queued · ` then this, underlined, to open why. */
+export const RUNNER_UPDATING_TAG = 'runner updating';
+
+export function isRunnerUpdating(gate?: QueuedGate | null): boolean {
+  return gate?.queuedReason === 'runner_updating';
+}
+
+/** A run of the explanation: words, or a turn the reader can open. */
+export type RunnerUpdatingPart = string | { id: string; title: string };
+
+const turnTitle = (title: string | null) => title?.trim() || 'Untitled session';
+
+/** "2 turns finish" — the count is every turn in flight on the runner, the reader's or not. */
+function turnsFinish(count: number): string {
+  return count === 1 ? '1 turn finishes' : `${count} turns finish`;
+}
+
+/** The turns, named, joined as a sentence lists them: "A", "A and B", "A, B and C", with
+ *  "N more" for the turns that are not the reader's to name. */
+function namedTurns(gate: QueuedGate): RunnerUpdatingPart[] {
+  const named = gate.queuedRunnerUpdate?.turns ?? [];
+  const count = typeof gate.queuedActive === 'number' ? gate.queuedActive : named.length;
+  const items: RunnerUpdatingPart[] = named.map((t) => ({ id: t.id, title: turnTitle(t.title) }));
+  if (count > named.length) items.push(`${count - named.length} more`);
+  const parts: RunnerUpdatingPart[] = [];
+  items.forEach((item, i) => {
+    if (i > 0) parts.push(i === items.length - 1 ? ' and ' : ', ');
+    parts.push(item);
+  });
+  return parts;
+}
+
+function turnCount(gate: QueuedGate): number {
+  return typeof gate.queuedActive === 'number'
+    ? gate.queuedActive
+    : (gate.queuedRunnerUpdate?.turns.length ?? 0);
+}
+
+/**
+ * The queued page's explanation (board 2 ②): `studio-mac is updating to 0.1.254. It starts no new
+ * work until 2 turns finish: A and B. This session starts right after.` The turns are parts the page
+ * draws as links. A runner that names no release is "updating", and one with nothing left in flight
+ * is about to restart, so the sentence about turns goes.
+ */
+export function runnerUpdatingDescription(gate: QueuedGate, machine?: string | null): RunnerUpdatingPart[] {
+  const who = machine?.trim() || 'The runner';
+  const version = gate.queuedRunnerUpdate?.targetVersion;
+  const parts: RunnerUpdatingPart[] = [version ? `${who} is updating to ${version}. ` : `${who} is updating. `];
+  const count = turnCount(gate);
+  if (count > 0) {
+    parts.push(`It starts no new work until ${turnsFinish(count)}: `, ...namedTurns(gate), '. ');
+  }
+  parts.push('This session starts right after.');
+  return parts;
+}
+
+/**
+ * The popover a queued message's `runner updating` tag opens (board 2 ⑤): `studio-mac starts no new
+ * turns until 2 turns finish, then updates to 0.1.254. This message is sent right after.` The wait
+ * follows on its own line (runnerUpdatingWaited).
+ */
+export function runnerUpdatingMessageText(gate: QueuedGate, machine?: string | null): string {
+  const who = machine?.trim() || 'The runner';
+  const version = gate.queuedRunnerUpdate?.targetVersion;
+  const update = version ? `updates to ${version}` : 'updates';
+  const count = turnCount(gate);
+  const first = count > 0
+    ? `${who} starts no new turns until ${turnsFinish(count)}, then ${update}.`
+    : `${who} ${update} now.`;
+  return `${first} This message is sent right after.`;
+}
+
+/** `Waiting 38 min`, from the gate's clock; null when the server sent none it can be read from. */
+export function runnerUpdatingWaited(gate: QueuedGate, now: number): string | null {
+  const since = gate.queuedRunnerUpdate?.since;
+  if (!since) return null;
+  const at = Date.parse(since);
+  if (!Number.isFinite(at) || at > now) return null;
+  const minutes = Math.floor((now - at) / 60_000);
+  if (minutes < 1) return 'Waiting less than a minute';
+  if (minutes < 60) return `Waiting ${minutes} min`;
+  const rest = minutes % 60;
+  return `Waiting ${Math.floor(minutes / 60)} h${rest ? ` ${rest} min` : ''}`;
+}
+
+/** The parts as one plain line, for the places that draw no links (the one-line transcript note). */
+export function runnerUpdatingPlain(parts: readonly RunnerUpdatingPart[]): string {
+  return parts.map((p) => (typeof p === 'string' ? p : p.title)).join('');
 }
 
 /** Whether the transcript's queue notice should be visible at this instant. A missing reason is
@@ -238,6 +341,8 @@ export function pendingSlotDescription(
   active: number,
   maxConcurrent?: number | null,
   gate?: QueuedGate | null,
+  /** The runner's name, which the runner_updating sentence opens with. */
+  machine?: string | null,
 ): string {
   const starts = 'This session starts as soon as a slot frees up.';
   const counted =
@@ -258,6 +363,10 @@ export function pendingSlotDescription(
       // while nothing is polling for work. This is the one queued state with an action
       // attached, and it used to read as "waiting for a free slot" on an idle machine.
       return 'The assigned runner is offline. This session starts when it comes back.';
+    case 'runner_updating':
+      // Second only to offline, for the same reason: a draining runner claims nothing, so no count
+      // explains the wait. The queued page draws the turns as links (runnerUpdatingDescription).
+      return runnerUpdatingPlain(runnerUpdatingDescription(gate!, machine));
     case 'worktree_op_pending':
       return 'A merge or commit is finishing on this session’s checkout. It starts as soon as that settles.';
     // The server checked every gate and found none: nothing is contended, it simply has not been
@@ -286,6 +395,8 @@ export function queuedTitle(gate?: QueuedGate | null): string {
   switch (gate?.queuedReason) {
     case 'runner_offline':
       return 'Runner offline';
+    case 'runner_updating':
+      return RUNNER_UPDATING_TITLE;
     case 'worktree_op_pending':
       return 'Waiting for a git operation';
     case null:
@@ -300,6 +411,8 @@ export function queuedLabel(gate?: QueuedGate | null): string {
   switch (gate?.queuedReason) {
     case 'runner_offline':
       return 'Runner offline';
+    case 'runner_updating':
+      return RUNNER_UPDATING_TITLE;
     case null:
       return QUEUED_LABEL;
     default:

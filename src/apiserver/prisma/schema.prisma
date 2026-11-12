@@ -3151,6 +3151,18 @@ model Project {
   /// The gaps the owner accepted when recording it done, as the card sent them (`AcceptedGap[]`).
   acceptedGaps       Json      @default("[]") @map("accepted_gaps")
 
+  /// Non-code by an explicit mark, never inferred (migration 0535, owner decision 2026-11-11): the
+  /// coordinator sets it through project_update, the owner on the project page. A marked project
+  /// reads no landing (`project-done-derived.ts`, `project-done-request.ts`). The three columns
+  /// after it say who wrote it last, set or cleared — OWNER, or COORDINATOR with the conversation
+  /// it was written from — and when; null while nobody has.
+  nonCode                Boolean   @default(false) @map("non_code")
+  nonCodeSetBy           String?   @map("non_code_set_by")
+  nonCodeSetBySessionId  String?   @map("non_code_set_by_session_id") @db.Uuid
+  nonCodeSetAt           DateTime? @map("non_code_set_at") @db.Timestamptz(3)
+  /// The short reason given with the mark's last write (migration 0555); null when none was.
+  nonCodeReason          String?   @map("non_code_reason")
+
   /// The account owner's Reopen project (migration 0469): when they pressed it, and what it was
   /// pressed over, the seal of the criteria and each task serving one by a digest of its facts
   /// (`project-done-derived.ts`). While those have not moved, the projection does not store DONE over
@@ -3300,6 +3312,7 @@ model Project {
   acceptanceCriterionDefinitions ProjectAcceptanceCriterionDefinition[]
   standardSetConfirmations       ProjectStandardSetConfirmation[]
   criteriaAuthorship             ProjectCriteriaAuthorship[]
+  criterionConfirmations         ProjectCriterionConfirmation[]
   mergeEvidence   ProjectMergeEvidence[]
   mergeReceipts   SessionMergeReceipt[]
 
@@ -4185,9 +4198,84 @@ model ProjectAcceptanceCriterionDefinition {
   /// settles it — `Task.criterionDefinitionId` is a declaration, not a completion input.
   servingTasks Task[]
 
+  /// How this criterion is met (migration 0545): `TASKS` by the work filed under it (the rule
+  /// `project-criterion-satisfaction.ts` has always applied), `CONFIRMATION` by a standing
+  /// confirmation of its current revision from the owner, the coordinator or an Agent check. A
+  /// change of mode is a change of meaning: the definition trigger bumps `revision` and
+  /// `semanticRevision` and folds the mode into both hashes for a CONFIRMATION row.
+  satisfiedBy   CriterionSatisfiedBy           @default(TASKS) @map("satisfied_by")
+  confirmations ProjectCriterionConfirmation[]
+
   @@unique([projectId, ordinal], map: "project_acceptance_definition_ordinal_idx")
   @@index([projectId, contentHash], map: "project_acceptance_definition_content_idx")
   @@map("project_acceptance_criterion_definition")
+}
+
+/// How a project criterion is met (migration 0545).
+enum CriterionSatisfiedBy {
+  TASKS
+  CONFIRMATION
+
+  @@map("criterion_satisfied_by")
+}
+
+/// Who said a CONFIRMATION criterion holds.
+enum CriterionConfirmerKind {
+  OWNER
+  COORDINATOR
+  AGENT_CHECK
+
+  @@map("criterion_confirmer_kind")
+}
+
+/// Where one confirmation row stands. An owner's or a coordinator's row is CONFIRMED when it is
+/// written; an Agent check's row is PENDING while its check task runs, and the check's report
+/// settles it CONFIRMED (PASS) or FAILED (FAIL).
+enum CriterionConfirmationOutcome {
+  PENDING
+  CONFIRMED
+  FAILED
+
+  @@map("criterion_confirmation_outcome")
+}
+
+/// One confirmation of one revision of a CONFIRMATION criterion, or one Agent-check attempt at it
+/// (migration 0545). A criterion in CONFIRMATION mode is met exactly while a row of this criterion
+/// is CONFIRMED, names the criterion's CURRENT revision and is not withdrawn: a revision bump makes
+/// every row before it stale without touching it, and a withdrawal is a stamp, never a delete, so
+/// who confirmed and who took it back both stay on record.
+model ProjectCriterionConfirmation {
+  id           String                                @id @default(uuid(7)) @db.Uuid
+  ownerId      String                                @map("owner_id") @db.Uuid
+  projectId    String                                @map("project_id") @db.Uuid
+  project      Project                               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  definitionId String                                @map("definition_id") @db.Uuid
+  definition   ProjectAcceptanceCriterionDefinition  @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  /// The criterion revision this row is about.
+  revision     Int
+  confirmerKind CriterionConfirmerKind               @map("confirmer_kind")
+  outcome      CriterionConfirmationOutcome
+  /// The coordinator conversation that confirmed, or the Agent check's run. Null for the owner.
+  sessionId    String?                               @map("session_id") @db.Uuid
+  /// The Agent check's task, through which its run was dispatched. Null for the other two kinds.
+  checkTaskId  String?                               @map("check_task_id") @db.Uuid
+  /// What was checked: optional for every kind.
+  note         String?
+  attachmentIds String[]                             @default([]) @map("attachment_ids") @db.Uuid
+  /// The criterion's wording and verification method at `revision`, kept with the row (migration
+  /// 0555) so a stale confirmation can show what was confirmed. Null on an older row whose revision
+  /// had already moved when 0555 ran.
+  criterionText               String? @map("criterion_text")
+  criterionVerificationMethod String? @map("criterion_verification_method")
+  createdAt    DateTime                              @default(now()) @map("created_at")
+  /// When an Agent check reported its verdict. Equal to `createdAt` for the other two kinds.
+  settledAt    DateTime?                             @map("settled_at")
+  withdrawnAt  DateTime?                             @map("withdrawn_at")
+  withdrawnByKind CriterionConfirmerKind?            @map("withdrawn_by_kind")
+
+  @@index([definitionId, createdAt], map: "project_criterion_confirmation_definition_idx")
+  @@index([checkTaskId], map: "project_criterion_confirmation_check_task_idx")
+  @@map("project_criterion_confirmation")
 }
 
 /// The account owner saying, of ONE version of a project's stated criteria, that the complete set
