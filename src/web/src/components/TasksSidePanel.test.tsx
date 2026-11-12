@@ -126,11 +126,10 @@ describe('TasksSidePanel nav', () => {
     expect({ opened, prevented }).toEqual({ opened: 1, prevented: 1 });
     expect(handleNavActivation({ key: ' ', preventDefault: () => { prevented += 1; } },
       () => { opened += 1; })).toBe(false);
-    // The two surfaces, a wiki's row in the group under them, and the Projects group's quiet row, which opens the
-    // Projects page (docs/mocks/sidebar-projects-scroll, 03). The Wiki group has no Trash row: Trash opens from Wiki
-    // settings (docs/mocks/wiki-trash/02-trash-entry), so no row here is a button.
-    expect(source.match(/role="link"/g)).toHaveLength(4);
-    expect(source.match(/tabIndex=\{0\}/g)).toHaveLength(4);
+    // The two surfaces, and a wiki's row in the group under them. The Wiki group has no Trash row: Trash opens from
+    // Wiki settings (docs/mocks/wiki-trash/02-trash-entry), so no row here is a button.
+    expect(source.match(/role="link"/g)).toHaveLength(3);
+    expect(source.match(/tabIndex=\{0\}/g)).toHaveLength(3);
     expect(source.match(/role="button"\s+tabIndex=\{0\}/g)).toBeNull();
     expect(source.match(/aria-current=\{sel === t\.key \? 'page' : undefined\}/g)).toHaveLength(1);
     expect(source.match(/aria-current=\{railSel === t\.key \? 'page' : undefined\}/g)).toHaveLength(1);

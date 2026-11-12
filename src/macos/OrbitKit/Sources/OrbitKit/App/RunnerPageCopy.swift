@@ -105,6 +105,46 @@ public enum RunnerPageCopy {
     public static let RUNNER_ROOT_NO_BYPASS =
         "Runs as root, so sessions here can’t use Bypass permissions."
     public static func runnerUpdatedFromTo(from: String, to: String) -> String { "\(from) → \(to)" }
+    public static func runnerVersionUpdatingTo(version: String) -> String { "updating to \(version)" }
+
+    // MARK: the Update card (docs/runner-update-drain-design.md, board 4)
+
+    public static let RUNNER_UPDATE_TAG_AVAILABLE = "Available"
+    public static let RUNNER_UPDATE_TAG_DRAINING = "Not taking new work"
+    public static let RUNNER_UPDATE_TAG_RESTARTING = "Restarting"
+    public static let RUNNER_UPDATE_TAG_POSTPONED = "Postponed"
+    public static func runnerUpdateAvailableTitle(version: String) -> String { "\(version) is available" }
+    public static let RUNNER_UPDATE_AVAILABLE_BODY =
+        "It installs when no turn is running. If turns keep running for an hour, it stops taking new "
+        + "work so they can finish."
+    public static func runnerUpdateDrainingTitle(version: String) -> String { "Updating to \(version)" }
+    public static func runnerUpdateDrainingBody(version: String, since: String) -> String {
+        "\(version) has been waiting since \(since). After an hour it stopped taking new work so the turns "
+            + "in flight can finish; then it installs and restarts."
+    }
+    public static let RUNNER_UPDATE_DRAINING_BODY_NO_SINCE =
+        "It stopped taking new work so the turns in flight can finish; then it installs and restarts."
+    public static let RUNNER_UPDATE_TURN = "turn"
+    public static let RUNNER_UPDATE_TURNS = "turns"
+    public static func runnerUpdateWaitingForOf(left: Int, of: Int, unit: String) -> String {
+        "Waiting for \(left) of \(of) \(unit)"
+    }
+    public static func runnerUpdateWaitingFor(left: Int, unit: String) -> String { "Waiting for \(left) \(unit)" }
+    public static func runnerUpdateWaitedMinutes(minutes: Int) -> String { "\(minutes) min" }
+    public static func runnerUpdateWaitedHoursMinutes(hours: Int, minutes: Int) -> String {
+        "\(hours) h \(minutes) min"
+    }
+    public static func runnerUpdateWaitedHours(hours: Int) -> String { "\(hours) h" }
+    public static func runnerUpdateTurnRunning(duration: String) -> String { "running \(duration)" }
+    public static let RUNNER_UPDATE_UNTITLED_TURN = "Untitled session"
+    public static func runnerUpdateRestartingTitle(version: String) -> String { "Restarting into \(version)…" }
+    public static let RUNNER_UPDATE_RESTARTING_BODY = "Usually under a minute."
+    public static func runnerUpdatePostponedTitle(version: String, until: String) -> String {
+        "\(version) postponed until \(until)"
+    }
+    public static func runnerUpdatePostponedBody(until: String) -> String {
+        "Taking work as usual. At \(until) it waits for the turns in flight again, for up to an hour."
+    }
 
     public static let RUNNER_ROTATE_TOKEN = "Rotate Token…"
     public static let RUNNER_ROTATE_TOKEN_FOOTER =

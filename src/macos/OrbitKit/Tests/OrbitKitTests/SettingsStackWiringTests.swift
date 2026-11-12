@@ -105,7 +105,7 @@ final class SettingsStackWiringTests: XCTestCase {
     /// has no row for it, the Settings form has one that opens it — closing the Settings window (⌘,) when
     /// it is drawn there, so the page is what is left in front — and the page's toolbar goes back.
     func testMachinesAndModelsIsReachedFromSettingsOnTheMac() throws {
-        XCTAssertFalse(AppSection.visible(isAdmin: true).contains(.runners))
+        XCTAssertFalse(AppSection.workSections.contains(.runners))
         let form = code(try slice(try appSource("Views/SettingsAdminView.swift"),
                                   from: "struct SettingsView: View {", to: "Section(\"Preferences\")"))
         assertOrder(form, ["Section(\"Account\")", "model.selectedSection = .runners",

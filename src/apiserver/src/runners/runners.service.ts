@@ -18,6 +18,7 @@ import type {
   RunnerInstallState,
   RunnerLoginState,
   SlashCommandInfo,
+  RunnerUpdateTurn,
 } from '@orbit/shared';
 import { CLAUDE_REGION_UNSUPPORTED, CLAUDE_REGION_V1, LOGIN_FAILURE_REASONS } from '@orbit/shared';
 import { RunStatus } from '@prisma/client';
@@ -204,6 +205,7 @@ export class RunnersService {
     // Each account says how many sessions are at work on it, so that a client's "starts on" is the server's.
     const atWork = await activeSessionsOn(this.prisma, runners, new Date(now));
     const used = runners.map((runner) => engineHealthWithActiveSessions(usedRunnerEngines(runner), atWork.get(runner.id)));
+    const updateTurns = await this.updateTurnsOf(where.ownerId, runners);
     return runners.map(({
       availableCommands,
       availableSkills,
@@ -253,10 +255,44 @@ export class RunnersService {
       }),
       online: runnerIsOnline({ status: r.status, lastHeartbeatAt: r.lastHeartbeatAt, presence }, now),
       activeSessions: activeByRunner.get(r.id) ?? 0,
+      // Only on a runner draining for its self-update: the viewer's turns the drain waits for.
+      ...(updateTurns.has(r.id) ? { updateTurns: updateTurns.get(r.id) } : {}),
       // Surface the `/` autocomplete catalog under clean names (mirrors the heartbeat DTO).
       commands: (availableCommands ?? []) as unknown as SlashCommandInfo[],
       skills: (availableSkills ?? []) as unknown as SlashCommandInfo[],
     }));
+  }
+
+  /**
+   * The turns each draining runner's Update card names (docs/runner-update-drain-design.md §3.5,
+   * board 4): the viewer's RUNNING sessions on it, longest-running first, with when the current run
+   * was claimed. Only runners whose report says draining, or whose heartbeat does, are asked about,
+   * so a runner that is not updating costs nothing. Another owner's turns are not named here, as in
+   * queuedRunnerUpdate; the card's count (turnsInFlight) still covers them.
+   */
+  private async updateTurnsOf(
+    ownerId: string,
+    runners: Array<{ id: string; selfUpdate: unknown; heartbeatDraining: boolean | null }>,
+  ): Promise<Map<string, RunnerUpdateTurn[]>> {
+    const draining = runners
+      .filter((r) => r.heartbeatDraining === true || sanitizeRunnerSelfUpdate(r.selfUpdate)?.phase === 'draining')
+      .map((r) => r.id);
+    const turns = new Map<string, RunnerUpdateTurn[]>(draining.map((id) => [id, []]));
+    if (draining.length === 0) return turns;
+    const rows = await this.prisma.session.findMany({
+      where: { assignedRunnerId: { in: draining }, ownerId, status: RunStatus.RUNNING, deletedAt: null },
+      select: { id: true, title: true, assignedRunnerId: true, runClaimedAt: true, lastTurnAt: true },
+      orderBy: [{ runClaimedAt: { sort: 'asc', nulls: 'last' } }, { id: 'asc' }],
+    });
+    for (const row of rows) {
+      const startedAt = row.runClaimedAt ?? row.lastTurnAt;
+      turns.get(row.assignedRunnerId!)?.push({
+        id: row.id,
+        title: row.title || null,
+        startedAt: startedAt ? startedAt.toISOString() : null,
+      });
+    }
+    return turns;
   }
 
   /**

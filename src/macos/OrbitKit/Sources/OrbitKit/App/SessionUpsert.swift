@@ -176,7 +176,7 @@ public extension Session {
                          folderId: String?? = nil) -> Session {
         let mergedProjectId = projectId ?? self.projectId
         let mergedProjectTitle = mergedProjectId == nil ? nil : (projectTitle ?? self.projectTitle)
-        return Session(id: id,
+        var merged = Session(id: id,
                 title: title ?? self.title,
                 status: status ?? self.status,
                 runStatus: runStatus ?? self.runStatus,
@@ -250,5 +250,14 @@ public extension Session {
                 folderId: folderId ?? self.folderId,
                 confirmationUnderReview: confirmationUnderReview ?? self.confirmationUnderReview,
                 projectMembership: projectMembership ?? self.projectMembership)
+        // The queue's gate is the list query's alone, and no event carries it: kept while the row is
+        // still queued, and dropped once it is not, so a later queue does not read an old gate.
+        if merged.effectiveRunState == .queued {
+            merged.queuedReason = queuedReason
+            merged.queuedActive = queuedActive
+            merged.queuedLimit = queuedLimit
+            merged.queuedRunnerUpdate = queuedRunnerUpdate
+        }
+        return merged
     }
 }
