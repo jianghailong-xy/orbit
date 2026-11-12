@@ -53,7 +53,7 @@ func newBusyRunner(t *testing.T, limit time.Duration, chained time.Duration, len
 	r := &busyRunner{t: t, clock: clock, pool: newSessionPoolWithClock(len(lengths)+1, clock)}
 	r.check = updateWhenNoTurnInFlight(func(context.Context, string) (string, bool) {
 		return "0.1.252", true
-	}, r.pool, noOperations, selfUpdateCheckInterval, limit)
+	}, r.pool, noOperations, selfUpdateCheckInterval, limit, 0)
 	for i, length := range lengths {
 		s := registerPoolSession(t, r.pool, fmt.Sprintf("s%d", i), true)
 		parkPoolSession(r.pool, s)
@@ -222,7 +222,7 @@ func TestTheDrainWaitsForTheTurnInFlight(t *testing.T) {
 	s := registerPoolSession(t, p, "a", true)
 	check := updateWhenNoTurnInFlight(func(context.Context, string) (string, bool) {
 		return "0.1.252", true
-	}, p, noOperations, selfUpdateCheckInterval, selfUpdateDeferralLimit)
+	}, p, noOperations, selfUpdateCheckInterval, selfUpdateDeferralLimit, 0)
 
 	if _, ok := check(context.Background(), ""); ok {
 		t.Fatal("updated with a turn in flight")
@@ -257,7 +257,7 @@ func TestTheDrainWaitsForTheHeartbeatOperationsInFlight(t *testing.T) {
 	ops.Add(1)
 	check := updateWhenNoTurnInFlight(func(context.Context, string) (string, bool) {
 		return "0.1.252", true
-	}, p, ops.inFlight, selfUpdateCheckInterval, selfUpdateDeferralLimit)
+	}, p, ops.inFlight, selfUpdateCheckInterval, selfUpdateDeferralLimit, 0)
 
 	check(context.Background(), "")
 	clock.Advance(selfUpdateDeferralLimit)
@@ -284,7 +284,7 @@ func TestADrainingCheckDoesNotReadTheReleaseAgain(t *testing.T) {
 			return "", false
 		}
 		return "0.1.252", true
-	}, p, noOperations, selfUpdateCheckInterval, selfUpdateDeferralLimit)
+	}, p, noOperations, selfUpdateCheckInterval, selfUpdateDeferralLimit, 0)
 
 	check(context.Background(), "")
 	clock.Advance(selfUpdateDeferralLimit)
@@ -320,7 +320,7 @@ func TestAnIdleCheckBeforeTheLimitUpdatesWithoutADrain(t *testing.T) {
 	s := registerPoolSession(t, p, "a", true)
 	check := updateWhenNoTurnInFlight(func(context.Context, string) (string, bool) {
 		return "0.1.252", true
-	}, p, noOperations, selfUpdateCheckInterval, selfUpdateDeferralLimit)
+	}, p, noOperations, selfUpdateCheckInterval, selfUpdateDeferralLimit, 0)
 	check(context.Background(), "")
 	clock.Advance(selfUpdateCheckInterval)
 	parkPoolSession(p, s)
@@ -371,7 +371,7 @@ func TestAFollowUpIsHeldOnlyWhileDraining(t *testing.T) {
 	if startsNow(p, s) {
 		t.Fatal("a follow-up started while the pool drained for an update")
 	}
-	if n := p.closeForUpdate(); n != 0 {
+	if n, _ := p.closeForUpdate(0); n != 0 {
 		t.Fatalf("closeForUpdate with only a held follow-up = %d, want 0: it never started, so nothing is cut", n)
 	}
 }

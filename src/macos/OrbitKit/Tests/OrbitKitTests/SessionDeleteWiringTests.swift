@@ -90,8 +90,7 @@ final class SessionDeleteWiringTests: XCTestCase {
                      "projectCompletedSessions = projectCompletedSessions.mapValues { SessionFilter.removing(id, from: $0) }"] {
             XCTAssertTrue(hide.contains(part), "hiding writes `\(part)`")
         }
-        let iOS = try slice(hide, from: "#if os(iOS)", to: "#endif")
-        XCTAssertTrue(iOS.contains("projectSessions"), "the project page is iOS only")
+        XCTAssertFalse(hide.contains("#if os(iOS)"), "the project page is the iPad's and the Mac's column alike")
 
         let reveal = try slice(app, from: "private func revealTrashedSession(_ id: String) {", to: "\n    }\n")
         for part in ["guard trashingSessions.remove(id) != nil else { return }", "agents?.revealTrashedSession(id)",

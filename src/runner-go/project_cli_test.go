@@ -852,6 +852,60 @@ func TestProjectUpdateRefusesAnUnknownDeliveryMode(t *testing.T) {
 	}
 }
 
+func TestProjectUpdateSendsTheNonCodeMarkAsTheOwner(t *testing.T) {
+	for _, tc := range []struct {
+		flag string
+		want bool
+	}{{"true", true}, {"false", false}} {
+		var body map[string]interface{}
+		sawSessionHeader := true
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, sawSessionHeader = r.Header["X-Orbit-Session-Id"]
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			_, _ = w.Write([]byte(projectDetailJSON))
+		}))
+		configureCLITestRunner(t, srv.URL)
+		var out bytes.Buffer
+		err := cmdProjectCLI([]string{"update", "proj-1", "--non-code", tc.flag, "--json"}, strings.NewReader(""), &out)
+		srv.Close()
+		if err != nil {
+			t.Fatalf("project update --non-code %s: %v", tc.flag, err)
+		}
+		if len(body) != 1 || body["nonCode"] != tc.want {
+			t.Fatalf("project update --non-code %s body = %#v", tc.flag, body)
+		}
+		if sawSessionHeader {
+			t.Fatal("`orbit project update --non-code` sent a session header")
+		}
+	}
+	err := cmdProjectCLI([]string{"update", "proj-1", "--non-code", "yes"}, strings.NewReader(""), &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "--non-code must be true or false") {
+		t.Fatalf("project update --non-code yes = %v", err)
+	}
+}
+
+func TestProjectUpdateSendsTheNonCodeReasonOnlyWithTheMark(t *testing.T) {
+	var body map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(projectDetailJSON))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+	err := cmdProjectCLI([]string{"update", "proj-1", "--non-code", "true", "--non-code-reason", "Vendor accounts only.", "--json"},
+		strings.NewReader(""), &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("project update --non-code-reason: %v", err)
+	}
+	if len(body) != 2 || body["nonCode"] != true || body["nonCodeReason"] != "Vendor accounts only." {
+		t.Fatalf("project update --non-code-reason body = %#v", body)
+	}
+	err = cmdProjectCLI([]string{"update", "proj-1", "--non-code-reason", "alone"}, strings.NewReader(""), &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "--non-code-reason goes with --non-code") {
+		t.Fatalf("project update --non-code-reason alone = %v", err)
+	}
+}
+
 func TestProjectUpdatePreservesStructuredAcceptanceIdentity(t *testing.T) {
 	var body map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

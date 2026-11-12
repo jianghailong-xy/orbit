@@ -113,6 +113,8 @@ func init() {
 		dirProbeCapabilityV1,
 		createWorkDirCapabilityV1,
 		claudeRegionCapabilityV1,
+		selfUpdatePostponeCapabilityV1,
+		selfUpdateNowCapabilityV1,
 	}, cursorAccountCapabilities()...), declaredSteerCapabilities()...), ",")
 	// Where 0600 means something (secret_file_unix.go); a Windows runner is never handed a secret.
 	if secretFilesSupported {
@@ -475,14 +477,21 @@ var fetchCallTimeout = 35 * time.Second
 // claimSession is the session the control plane hands this runner, nil for none. It is asked once a hint says a session
 // waits (link_hints.go), and nil is the hint not coming as well. ids is the claim loop's request id over the link
 // (linkRequestIDs): a claim that got no answer goes again under it, as soon as the loop asks again.
-func (t *Transport) claimSession(ctx context.Context, ids *linkRequestIDs) (*ClaimedSession, error) {
+//
+// scope, when given, names the only sessions the claim may take (drainClaimScope); only a control
+// plane that says it honours it (HeartbeatResponse.DrainScopedClaims) is sent one.
+func (t *Transport) claimSession(ctx context.Context, ids *linkRequestIDs, scope ...string) (*ClaimedSession, error) {
 	if t.link != nil {
 		if due, err := t.link.gates.takeClaim(ctx, linkHintWait); !due {
 			return nil, err
 		}
 	}
 	var r ClaimedSession
-	err := t.do(ids.with(ctx), "GET", "/runner/sessions/claim", nil, &r, fetchCallTimeout)
+	path := "/runner/sessions/claim"
+	if len(scope) > 0 {
+		path = linkWithQuery(path, "drainScope", strings.Join(scope, ","))
+	}
+	err := t.do(ids.with(ctx), "GET", path, nil, &r, fetchCallTimeout)
 	ids.settle(err)
 	if ids.kept() {
 		t.link.gates.markClaim() // the question the claim asked is still open, which no hint may say
@@ -1860,6 +1869,31 @@ func (t *Transport) requestProjectDone(sessionID, id string, body map[string]int
 	var out json.RawMessage
 	err := t.doHeaders(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/done-requests", body,
 		&out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// criterionConfirmationCall is the coordinator's confirm, withdraw or start-a-check on one of its
+// project's CONFIRMATION criteria (migration 0545). The session header is the authority: the server
+// checks it against the project's own coordinator pointer.
+func (t *Transport) criterionConfirmationCall(sessionID, id, criterionID, path string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if err := validatePathSegmentID(criterionID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/criteria/"+
+		url.PathEscape(criterionID)+path, body, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// reportCriterionCheck is an Agent check's verdict, from the session running it: the server finds
+// the attempt through that session's task.
+func (t *Transport) reportCriterionCheck(sessionID string, body map[string]interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/criterion-checks/report", body, &out, taskOpTimeout,
+		sessionHeader(sessionID))
 	return out, err
 }
 

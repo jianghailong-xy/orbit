@@ -269,6 +269,9 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// Only on a runner draining for its self-update: the reader's turns the drain waits for, longest
     /// running first (shared `RunnerUpdateTurn`), which the runner page's Update card lists.
     public var updateTurns: [RunnerUpdateTurn]? = nil
+    /// Only while it drains for its self-update and something of the reader's waits on it (D3): how many
+    /// sessions and messages. Needs you's "studio-mac is updating — 1 session waiting" line reads it.
+    public var drainWaiting: RunnerDrainWaiting? = nil
     /// What the runner declared it can do on its last poll — `codex-account-move/v1` and
     /// `claude-account-move/v1` say it carries a session's conversation to another of its accounts;
     /// `antigravity-account-login/v1`, that it signs in Antigravity accounts of their own, which is all

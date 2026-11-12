@@ -770,6 +770,33 @@ button.toast--pill:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Shared with me (SharedWithMe): two lines — the title and when, then who shared it and how it stands. */
+.tp-item.tp-guest-session {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  height: auto;
+  padding: 6px 8px;
+}
+.tp-guest-session-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.tp-guest-session-time,
+.tp-guest-session-sub {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.tp-guest-session-time {
+  flex: none;
+}
+.tp-guest-session-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* Workspace identity and its runner now share one compact line. The runner is secondary metadata:
    it absorbs truncation first, while the workspace name keeps as much room as possible. */
 .tp-workspace-label {
@@ -1873,50 +1900,6 @@ button.toast--pill:focus-visible {
 }
 
 /* ---- Machines: Infrastructure's machine cards, a machine's page, Add a runner, Rotate token ---- */
-.runners-empty {
-  max-width: 920px;
-  margin: 24px auto 0;
-  color: var(--text-3);
-  font-size: 14px;
-}
-.runner-drag-handle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 28px;
-  margin-left: -5px;
-  padding: 0;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-4);
-  font-size: 15px;
-  cursor: grab;
-  touch-action: none;
-  flex: none;
-}
-.runner-drag-handle:hover,
-.runner-drag-handle:focus-visible {
-  background: var(--bg-hover-strong);
-  color: var(--text-2);
-  outline: none;
-}
-.runner-drag-handle:active {
-  cursor: grabbing;
-}
-.runner-drag-handle:disabled {
-  cursor: default;
-  opacity: 0.45;
-}
-.runner-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  flex: none;
-  align-self: flex-start;
-  margin-top: 5px;
-}
 .runner-sub {
   font-size: 12px;
   color: var(--text-3);
@@ -1945,28 +1928,6 @@ button.toast--pill:focus-visible {
 /* A spent quota window: the whole track red, even where its percent counts what is left and is 0. */
 .runner-util.spent .runner-util-fill {
   background: var(--error-solid);
-}
-/* The third line: what this machine needs a person for. When it wraps on a narrow screen, the
-   triangle stays with its first line. */
-.runner-attention {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  margin-top: 5px;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.35;
-}
-.runner-attention.bad {
-  color: var(--error);
-}
-.runner-attention.warn {
-  color: var(--warning);
-}
-.runner-attention .anticon {
-  flex: none;
-  margin-top: 2.5px;
-  font-size: 11px;
 }
 .runner-token-box {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -2133,34 +2094,9 @@ button.toast--pill:focus-visible {
   text-decoration: underline;
 }
 /* ---- Runner detail / settings page ---- */
-.rd-head {
-  margin-bottom: 8px;
-}
-.rd-back,
-.rd-link {
-  color: var(--text-2);
-  font-size: 13px;
-  cursor: pointer;
-}
-.rd-back:hover,
-.rd-link:hover {
-  color: var(--brand);
-}
-.rd-back .anticon {
-  margin-right: 4px;
-}
-.rd-title-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
 .rd-sub {
   font-size: 13px;
   color: var(--text-3);
-}
-.rd-page {
-  max-width: 920px;
-  margin: 0 auto;
 }
 .rd-section {
   margin-top: 28px;
@@ -2175,31 +2111,6 @@ button.toast--pill:focus-visible {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
-}
-/* A section heading with more than one control: they stay one group at the right edge
-   rather than pushing the title around. */
-.rd-section-actions {
-  display: flex;
-  gap: 8px;
-}
-/* The runner's identity line: status/slots/version/host as one scannable row, so the
-   agent list clears the fold instead of sitting under an eight-field grid. */
-.rd-metaline {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0 8px;
-  margin: 6px 0 0 19px;
-  font-size: 13px;
-  color: var(--text-3);
-}
-.rd-metaline > span + span::before {
-  content: '·';
-  margin-right: 8px;
-  color: var(--text-4);
-}
-.rd-meta-ok {
-  color: var(--success);
 }
 /* Needs Attention: one card per item, under the title and across both columns — two abreast on a
    desktop, one alone taking the row. Amber for a warning, red for what already stops sessions, grey
@@ -2323,6 +2234,43 @@ button.toast--pill:focus-visible {
 }
 /* The turns a drain waits for (board 4): one bordered list, a row each — the session, and how long
    it has run. */
+/* Update Now…'s confirmation (board 3 ⑧): the turns it interrupts, as the Update card lists them. */
+.runner-update-now p {
+  margin: 0 0 12px;
+}
+.runner-update-now .runner-update-now-jobs {
+  margin: 12px 0 0;
+}
+.runner-update-now-turns {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+.runner-update-now-turns > li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 14px;
+  font-size: 13px;
+  color: var(--text-1);
+}
+.runner-update-now-turns > li + li {
+  border-top: 1px solid var(--border-subtle);
+}
+.runner-update-now-turn-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.runner-update-now-turn-running {
+  flex: none;
+  color: var(--text-3);
+}
 .rd-update-turns {
   margin: 12px 0 0;
   padding: 0;
@@ -2356,18 +2304,65 @@ button.toast--pill:focus-visible {
   flex: none;
   color: var(--text-3);
 }
-/* The machine's contents on the left, its settings and facts in a narrower column on the right. */
-.rd-cols {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 290px;
-  gap: 0 24px;
-  align-items: start;
+/* Later ▾ and Update Now… under the card (board 3 ⑦), and under the queued page's wait. */
+.rd-update-actions,
+.runner-update-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
 }
-.rd-col {
+.runner-update-actions {
+  justify-content: center;
+}
+.runner-updating-pop .runner-update-actions {
+  justify-content: flex-start;
+}
+/* Board 3 ⑥: one line atop the conversation pane while the runner drains with the reader's work waiting. */
+.runner-drain-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  /* Edge to edge across the pane, over its top padding (board 3 ⑥); the header keeps its own spacing below. */
+  margin: -16px calc(-1 * var(--pane-gutter)) 16px;
+  padding: 10px var(--pane-gutter);
+  background: var(--warning-bg, #fdf3e3);
+  border-bottom: 1px solid var(--warning-border, #f3dcb5);
+  font-size: 13px;
+}
+.runner-drain-banner-icon {
+  color: var(--warning, #c47a00);
+  flex: none;
+}
+.runner-drain-banner-text {
+  flex: 1;
   min-width: 0;
 }
-/* A settings panel: label left, value or control right, hairlines between rows — Capacity and
-   About. */
+.runner-drain-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.runner-drain-banner-close {
+  border: 0;
+  background: none;
+  color: var(--text-tertiary, #8a8a8a);
+  cursor: pointer;
+  padding: 4px;
+}
+/* A Later row: what it does on the left, the clock time on the right in the meta voice. */
+.runner-update-later-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  min-width: 240px;
+}
+.runner-update-later-time {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+/* A panel with hairlines between its rows: abandoned checkouts. */
 .rd-box {
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
@@ -2375,37 +2370,6 @@ button.toast--pill:focus-visible {
 }
 .rd-box > * + * {
   border-top: 1px solid var(--border-subtle);
-}
-.rd-kv,
-.rd-kv-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 13px;
-}
-.rd-kv {
-  min-height: 42px;
-  padding: 7px 14px;
-}
-.rd-kv-label {
-  flex: none;
-  color: var(--text-2);
-}
-.rd-kv-value {
-  min-width: 0;
-  color: var(--text-1);
-  text-align: right;
-  overflow-wrap: anywhere;
-}
-.rd-kv-value small {
-  margin-left: 5px;
-  font-size: 12px;
-  color: var(--text-3);
-}
-.rd-kv-value small.warn {
-  color: var(--warning);
-  font-weight: 500;
 }
 .rd-inline-link {
   margin-left: 8px;
@@ -2490,87 +2454,6 @@ button.toast--pill:focus-visible {
   font-size: 11.5px;
   color: var(--text-3);
 }
-.rd-workspace-list {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--bg-raised);
-  overflow: hidden;
-}
-/* One panel with hairline dividers between rows, instead of boxing each row —
-   denser and faster to scan. */
-.rd-workspace-list > * + * {
-  border-top: 1px solid var(--border-subtle);
-}
-/* The row is the click target for its config — the settings it shows are the ones the
-   editor holds, so aiming at the row is the natural move. */
-.rd-workspace-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-.rd-workspace-row:hover,
-.rd-workspace-row.is-open {
-  background: var(--bg-hover);
-}
-.rd-workspace-row.is-disabled .rd-workspace-ico {
-  background: var(--fill-muted);
-  color: var(--text-4);
-}
-.rd-workspace-row.is-disabled .rd-workspace-name,
-.rd-workspace-row.is-disabled .rd-workspace-meta {
-  color: var(--text-4);
-}
-/* Quiet by default: the caret appears on hover, or stays while this row's editor is open,
-   so a resting list isn't a column of chevrons. */
-.rd-row-caret {
-  font-size: 11px;
-  color: var(--text-4);
-  opacity: 0;
-  transition:
-    opacity 0.15s ease,
-    transform 0.18s ease;
-}
-.rd-workspace-row:hover .rd-row-caret {
-  opacity: 1;
-}
-.rd-workspace-row.is-open .rd-row-caret {
-  opacity: 1;
-  color: var(--text-2);
-  transform: rotate(180deg);
-}
-.rd-workspace-ico {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: var(--brand-tint);
-  color: var(--brand);
-  flex: none;
-}
-.rd-workspace-main {
-  flex: 1;
-  min-width: 0;
-}
-.rd-workspace-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-1);
-}
-.rd-workspace-meta {
-  font-size: 12px;
-  color: var(--text-3);
-  margin-top: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 /* Sessions of this workspace running right now — the sidebar's own count. */
 .rd-workspace-running {
   flex: none;
@@ -2632,30 +2515,6 @@ button.toast--pill:focus-visible {
   color: var(--text-3);
   line-height: 1.55;
 }
-/* In-place agent editor card — replaces the old modal; lives inside the list. */
-.rd-workspace-form {
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--bg-raised);
-  padding: 16px 16px 14px;
-}
-.rd-workspace-form-new {
-  box-shadow: inset 3px 0 0 var(--brand);
-}
-/* Two-column grid for the short fields; long fields below span full width. */
-.rd-form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 16px;
-}
-.rd-form-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border-subtle);
-}
 /* Section headers inside the editor: Essentials / Defaults, with Advanced folded below. */
 .rd-form-section {
   font-size: 11px;
@@ -2681,11 +2540,6 @@ button.toast--pill:focus-visible {
   font-weight: 500;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11.5px;
-}
-.rd-dirty-note {
-  font-size: 12px;
-  color: var(--warning);
-  margin-right: 4px;
 }
 /* What the runner last saw at the agent's working directory — answered from its own disk, so a
    typo is caught here instead of when a session fails to start. */
@@ -2753,30 +2607,6 @@ button.toast--pill:focus-visible {
 .rd-history-choice .rd-set-desc {
   display: block;
 }
-.rd-history-removal {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 10px;
-}
-.rd-quiet-btn.orbit-button {
-  color: var(--text-3);
-}
-.rd-quiet-btn:hover {
-  color: var(--text-1);
-}
-/* Settings-row toggle: label + explanation left, control right-aligned. */
-.rd-set-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  padding: 11px 0;
-  border-top: 1px solid var(--border-subtle);
-}
-.rd-set-main {
-  flex: 1;
-  min-width: 0;
-}
 .rd-set-label {
   font-size: 13px;
   color: var(--text-1);
@@ -2786,10 +2616,6 @@ button.toast--pill:focus-visible {
   color: var(--text-3);
   margin-top: 3px;
   line-height: 1.5;
-}
-.rd-set-row .orbit-switch {
-  margin-top: 2px;
-  flex: none;
 }
 /* The engines smart selection may move a task run to (model routing §6), under the switch's own
    explanation: one chip per engine, the agent's own ticked and fixed. Qualified with .rd-engines-list
@@ -2846,44 +2672,6 @@ button.toast--pill:focus-visible {
   font-weight: 400;
   color: var(--text-3);
 }
-/* Advanced disclosure — folded by default, but it has to admit when it hides something. */
-.rd-adv-toggle {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  cursor: pointer;
-  user-select: none;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
-  color: var(--text-3);
-  margin-top: 16px;
-  padding: 6px 0;
-}
-.rd-adv-toggle:hover {
-  color: var(--text-1);
-}
-.rd-adv-caret {
-  font-size: 10px;
-  transition: transform 0.18s ease;
-}
-.rd-adv-toggle.open .rd-adv-caret {
-  transform: rotate(180deg);
-}
-.rd-adv-badge {
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: var(--fill-muted);
-  color: var(--text-3);
-}
-.rd-adv-body {
-  padding-top: 6px;
-}
 /* Which Codex account the workspace runs on: each option is the account, with its own quota and
    sign-in on a quieter line under it. */
 .rd-codex-account {
@@ -2895,85 +2683,10 @@ button.toast--pill:focus-visible {
   color: var(--text-3);
   margin-top: 1px;
 }
-@media (max-width: 600px) {
-  .rd-form-grid {
-    grid-template-columns: 1fr;
-  }
-}
-/* A phone's width: one column, in the order the iPhone's runner page reads — Needs Attention,
-   Capacity, Engines, Workspaces, About. The two column boxes step aside (display: contents) so
-   their sections can be ordered as one list. */
+/* A phone's width: Needs Attention's cards one to a row. */
 @media (max-width: 640px) {
   .rd-attention {
     grid-template-columns: minmax(0, 1fr);
-  }
-  .rd-cols {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .rd-col {
-    display: contents;
-  }
-  .rd-capacity {
-    order: 1;
-  }
-  .rd-engines {
-    order: 2;
-  }
-  .rd-workspaces {
-    order: 3;
-  }
-  .rd-about {
-    order: 4;
-  }
-}
-/* Edit-in-place: the clicked row stays as a header and the editor expands below
-   it, the two merged into one bordered card. */
-.rd-workspace-editing {
-  overflow: hidden;
-  box-shadow: inset 3px 0 0 var(--brand);
-}
-.rd-workspace-editing > .rd-workspace-row {
-  border: none;
-  border-radius: 0;
-  background: transparent;
-}
-.rd-workspace-editing > .rd-workspace-form-wrap > .rd-workspace-form {
-  border: none;
-  border-radius: 0;
-  border-top: 1px solid var(--border-subtle);
-}
-/* Create form sits inline at the top of the panel — shed its own card frame too. */
-.rd-workspace-list > .rd-workspace-form-wrap > .rd-workspace-form {
-  border: none;
-  border-radius: 0;
-  background: transparent;
-}
-/* Expand the editor open: grow its row track 0fr→1fr while fading in, so the
-   rows below slide down smoothly. (Collapse is immediate — React unmounts it.) */
-.rd-workspace-form-wrap {
-  display: grid;
-  grid-template-rows: 1fr;
-  animation: rd-form-expand 0.2s ease;
-}
-.rd-workspace-form-wrap > * {
-  min-height: 0;
-  overflow: hidden;
-}
-@keyframes rd-form-expand {
-  from {
-    grid-template-rows: 0fr;
-    opacity: 0;
-  }
-  to {
-    grid-template-rows: 1fr;
-    opacity: 1;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .rd-workspace-form-wrap {
-    animation: none;
   }
 }
 
@@ -5831,6 +5544,13 @@ button.toast--pill:focus-visible {
   display: inline-flex;
   flex: none;
   color: var(--success);
+  font-size: 12px;
+}
+/* People the owner invited can reply here (the row's `hasGuests`): two people beside the time. */
+.session-guests {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-3);
   font-size: 12px;
 }
 /* The conversation header's "Shared · Live": says the session is public, and opens its dialog. */
@@ -12550,7 +12270,9 @@ button.chat-jump-start:hover {
 }
 .project-done-criteria-list li {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  /* number · text · state (decided board ③): the state reads on the right. */
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
   gap: 8px;
   padding: 7px 10px;
   border-top: 1px solid var(--border-subtle);
@@ -12559,9 +12281,15 @@ button.chat-jump-start:hover {
 }
 .project-done-criteria-list li:first-child { border-top: 0; }
 .project-done-criterion-state {
-  grid-column: 2;
+  grid-column: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: end;
+  text-align: right;
   color: var(--text-3);
-  font-size: 11px;
+  font-size: 11.5px;
+  font-weight: 600;
 }
 .project-done-gap-list {
   margin: 0;
@@ -15344,6 +15072,203 @@ button.chat-jump-start:hover {
   flex: 1;
 }
 
+/* The task page led by the run (docs/mocks/task-detail-agent-first): Now, Evidence, the folded
+   brief, the plan in a sentence, the envelope as one line, and one Activity timeline. */
+.tdp-compose-target.orbit-segmented {
+  flex: none;
+  align-self: center;
+  font-size: 12px;
+}
+.tdp-link-button {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.tdp-link-button:hover {
+  color: var(--brand-strong);
+}
+.tdp-acceptance-head .tdp-link-button {
+  margin-left: auto;
+}
+.tdp-now {
+  border: 1px solid var(--brand-border);
+  background: var(--brand-tint);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.tdp-now-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tdp-now-who {
+  min-width: 0;
+}
+.tdp-now-title {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.tdp-now-sub,
+.tdp-now-when {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.tdp-now-progress {
+  margin-top: 10px;
+}
+.tdp-now-step {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 13px;
+}
+.tdp-now-step span {
+  color: var(--text-2);
+}
+.tdp-now-bar {
+  height: 6px;
+  margin: 6px 0;
+  border-radius: 3px;
+  background: var(--brand-tint-hover);
+  overflow: hidden;
+}
+.tdp-now-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--brand);
+}
+.tdp-now-message {
+  font-size: 13px;
+  color: var(--text-1);
+  background: var(--bg-raised);
+  border: 1px dashed var(--brand-border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  margin: 6px 0 4px;
+  overflow-wrap: anywhere;
+}
+.tdp-evidence {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.tdp-evidence.tone-green {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+.tdp-evidence.tone-amber {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.tdp-evidence-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.tdp-evidence-claim {
+  margin: 8px 0 4px;
+  padding-left: 10px;
+  border-left: 3px solid var(--border);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-1);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tdp-evidence-checks {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+.tdp-evidence-checks li {
+  display: flex;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  padding: 2px 0;
+  overflow-wrap: anywhere;
+}
+.tdp-evidence-mark {
+  flex: none;
+  width: 14px;
+  text-align: center;
+  color: var(--success);
+  font-weight: 700;
+}
+.tdp-evidence-mark.is-failed {
+  color: var(--error);
+}
+.tdp-evidence-gaps,
+.tdp-evidence-note {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--warning);
+}
+.tdp-brief {
+  margin-top: 14px;
+}
+.tdp-prose.is-folded {
+  max-height: 7.5em;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(#000 60%, transparent);
+  mask-image: linear-gradient(#000 60%, transparent);
+}
+.tdp-plan-say {
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.tdp-envelope {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tdp-envelope-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--fill-muted);
+  color: var(--text-1);
+  font-size: 12.5px;
+}
+.tdp-envelope-chip-label {
+  color: var(--text-3);
+  font-weight: 500;
+}
+.tdp-envelope-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.tdp-activity-row {
+  display: flex;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--text-1);
+}
+.tdp-activity-time {
+  flex: none;
+  min-width: 96px;
+  color: var(--text-3);
+  font-size: 12px;
+  padding-top: 1px;
+}
+
 /* Task comment @-mentions: highlighted chip in rendered comments + composer menu. */
 .tdp-mention {
   color: var(--brand);
@@ -16289,6 +16214,92 @@ button.chat-jump-start:hover {
   font-size: 13px;
 }
 
+/* The guest page (GuestSessionPage, docs/session-guests-design.md §4; board 10-session-guests-3). */
+.share-subtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+}
+.share-subtitle::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--text-4);
+}
+.guest-dock {
+  flex: none;
+  padding: 0 20px 16px;
+}
+.guest-dock-inner {
+  max-width: 760px;
+  margin: 0 auto;
+}
+.guest-waiting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+.guest-waiting i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warning);
+}
+.guest-composer {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  padding: 10px 12px;
+}
+.guest-composer-input {
+  display: block;
+  width: 100%;
+  min-height: 24px;
+  max-height: 200px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 14px;
+}
+.guest-composer-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.guest-composer-hint {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.guest-composer-hint.is-error {
+  color: var(--error);
+}
+.guest-composer-send {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  cursor: pointer;
+}
+.guest-composer-send:disabled {
+  background: var(--bg-sunken);
+  color: var(--text-4);
+  cursor: default;
+}
+
 /* ── Share dialog (ShareModal) ─────────────────────────────────────────────────
    docs/mocks/share-links/03-share-dialog: Access, the link, Includes with counts, the Live line,
    Expires, and a foot with the views and the two buttons. */
@@ -16511,39 +16522,68 @@ button.chat-jump-start:hover {
   color: var(--text-4);
 }
 
-/* ============================================================================
-   Infrastructure (InfrastructurePage) and provider
-   onboarding — logo gallery + guided add flow (ProviderGallery, ProviderConnectPage).
-   ========================================================================== */
-.prov-page-head {
+/* People who can reply (SessionGuests, docs/session-guests-design.md §3; board 10-session-guests-2). */
+.share-people-box {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.share-people-invite {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+}
+.share-people-invite .orbit-input {
+  flex: 1;
+  min-width: 0;
+}
+.share-people-error {
+  padding: 0 10px 8px;
+  color: var(--error);
+  font-size: 12.5px;
+}
+.share-person {
+  display: flex;
   align-items: center;
-  gap: 6px 12px;
+  gap: 10px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border-subtle);
 }
-.prov-page-sub {
-  flex-basis: 100%;
-  color: var(--text-3);
-  font-size: 12px;
+.share-person-main {
+  flex: 1;
+  min-width: 0;
 }
-/* Infrastructure's Add: each choice says what it makes under its name. */
-.infra-add {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  max-width: 300px;
-  padding: 3px 0;
-  white-space: normal;
-}
-.infra-add b {
-  font-weight: 600;
+.share-person-name {
   color: var(--text-1);
+  font-size: 13.5px;
 }
-.infra-add span {
-  font-size: 12px;
+.share-person-email {
   color: var(--text-3);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+.share-person-today {
+  flex: none;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.share-people-consequence {
+  margin-top: 8px;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+/* Auto, Don't ask or Bypass: the agent acts on a guest's message without asking. */
+.share-people-consequence.is-warn {
+  color: var(--warning);
+}
+.share-people-ack.orbit-choice {
+  margin-top: 8px;
+  font-size: 13px;
+}
+
 /* The model a key starts on, on its row in its vendor's card. */
 .infra-model {
   padding: 0 5px;
@@ -16730,25 +16770,6 @@ button.chat-jump-start:hover {
   border-top: 1px solid var(--border-subtle);
 }
 
-.provider-empty {
-  margin-top: 12px;
-  padding: 28px;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-}
-.provider-empty h3 {
-  margin: 0 0 4px;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-1);
-}
-.provider-empty p {
-  margin: 0 0 20px;
-  font-size: 14px;
-  color: var(--text-3);
-}
-
 /* A vendor whose CLI is already signed in on one of the user's machines — the cheaper route,
    pointed at in the brand colour so it reads as a hint rather than a status. */
 .provider-card .pc-sub.pc-local {
@@ -16756,83 +16777,28 @@ button.chat-jump-start:hover {
   font-weight: 500;
 }
 
-/* Infrastructure's API keys (ProviderKeyCards): a card per vendor, drawn as a machine's and a pool's are,
-   and a row per key — what it is and runs on, the model it starts on, whether it is on and when it was
-   last used, and its Edit and Delete. The name column gives way first; the model's keeps one width so
-   each card's rows line up. */
-.vk-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 236px 120px auto;
-  align-items: center;
-  gap: 10px 14px;
-  padding: 10px 14px;
-}
-.vk-row + .vk-row {
-  border-top: 1px solid var(--border-subtle);
-}
-.vk-id {
-  min-width: 0;
-}
-.vk-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-1);
-}
-.vk-model {
+/* One vendor's keys on its Settings page (ProviderKeyRows, docs/mocks/settings-redesign board-4): a
+   SettingsRow per key, its name over one line of what it runs on, the model it starts on, the pools it
+   is in and when it was last used; Edit and ⋯ on its right. */
+.vk-line {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 6px;
-  min-width: 0;
-  font-size: 11.5px;
-  color: var(--text-3);
+  gap: 2px 4px;
 }
-.vk-model .infra-model {
-  font-size: 11.5px;
-  color: var(--text-2);
-  white-space: normal;
+.vk-line .infra-model {
+  color: var(--text-1);
 }
-.vk-state {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-}
-/* When a session last ran on it; a key nobody has run on says so, a state rather than a time. */
 .vk-used {
-  font-size: 11.5px;
-  color: var(--text-3);
   white-space: nowrap;
 }
 .vk-act {
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
-  justify-content: flex-end;
-}
-.vk-loading {
-  display: grid;
-  place-items: center;
-  min-height: 64px;
-}
-/* A narrow card stacks the row: the key, then the model, then its state beside its buttons. */
-@container re-card (max-width: 620px) {
-  .vk-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .vk-id,
-  .vk-model {
-    grid-column: 1 / -1;
-  }
-  .vk-state {
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
-  }
 }
 
-/* The vendors with no key yet, in one line under the keys (ProviderPills). */
+/* The vendors with no key yet, in one line under a vendor's keys (ProviderPills). */
 .pv-more {
   display: flex;
   flex-wrap: wrap;
@@ -16841,9 +16807,6 @@ button.chat-jump-start:hover {
   margin-top: 12px;
   font-size: 12px;
   color: var(--text-3);
-}
-.pv-more-l {
-  margin-right: 2px;
 }
 .pv-pill {
   display: inline-flex;
@@ -16892,12 +16855,6 @@ button.chat-jump-start:hover {
   flex-basis: 100%;
   font-size: 12px;
   color: var(--text-3);
-}
-.re-sec-count {
-  margin-left: auto;
-  font-size: 11.5px;
-  color: var(--text-4);
-  white-space: nowrap;
 }
 
 .re-card {
@@ -16978,30 +16935,10 @@ button.chat-jump-start:hover {
   padding-left: 9px;
   white-space: nowrap;
 }
-.re-dot {
-  flex: none;
-  /* Onto the name's line rather than the middle of the two-line block it heads (see
-     .re-runner-card .re-toggle), and 9px with a ring of its own so it holds its own beside the
-     chevron instead of reading as a speck of dust. */
-  width: 9px;
-  height: 9px;
-  margin-top: 7px;
-  border-radius: 50%;
-  background: var(--dot-idle);
-  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--dot-idle) 20%, transparent);
-}
-.re-dot.on {
-  background: var(--success-solid);
-  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--success-solid) 20%, transparent);
-}
 .re-runner {
   font-size: 13px;
   font-weight: 650;
   color: var(--text-1);
-}
-.re-runner-meta {
-  font-size: 11.5px;
-  color: var(--text-3);
 }
 .re-head-sp {
   flex: 1;
@@ -17010,225 +16947,6 @@ button.chat-jump-start:hover {
   font-size: 12px;
   color: var(--brand);
   white-space: nowrap;
-}
-
-/* Identity expands the runner; its status and Manage link stay separate. */
-.re-runner-card .re-head {
-  /* What the handle stands against, in the card's left margin (below). */
-  position: relative;
-  flex-wrap: wrap;
-  gap: 0;
-  padding: 0;
-}
-/* What a machine's sessions can run on, a chip per engine on a line of its own under the name
-   (MachineChips) — amber for one with an account signed out. */
-.mc-row {
-  flex-basis: 100%;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  /* Under the name: past the chevron's column, the dot and the gaps beside them. */
-  padding: 0 14px 11px 71px;
-}
-.mc-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 22px;
-  padding: 0 8px 0 4px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-raised);
-  color: var(--text-2);
-  font-size: 12px;
-  white-space: nowrap;
-}
-.mc-n {
-  color: var(--text-3);
-}
-.mc-chip.out {
-  border-color: var(--warning-border);
-  background: var(--warning-bg);
-  color: var(--warning);
-}
-.mc-out {
-  font-weight: 600;
-}
-/* An offline machine's are what it last said, as its rows are. */
-.re-card.offline .mc-row {
-  opacity: 0.62;
-}
-.re-runner-card.offline .re-head {
-  background: var(--bg-subtle);
-}
-.re-runner-card .re-toggle {
-  flex: 1;
-  align-self: stretch;
-  /* The chevron and the dot lead the identity, which stacks a name over a host and version: a
-     mark centred on that block lands in the gap between the two lines, belonging to neither. */
-  align-items: flex-start;
-  gap: 10px;
-  min-height: 64px;
-  padding: 10px 14px;
-  border-radius: 11px 0 0 11px;
-}
-.re-runner-card .re-toggle:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: -3px;
-}
-.re-runner-card .re-chev {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* The column the engine rows put their icon in: the header and the rows under it then share one
-     grid, and the chevron never moves again with whatever a row's summary happens to say. */
-  width: 28px;
-  height: 24px;
-  color: var(--text-2);
-  transition: color 0.15s, transform 0.15s;
-}
-/* Lit wherever a press would fold the card — anywhere on its head but Details, the handle and ⋯. */
-.re-runner-card .re-chev.open,
-.re-runner-card .re-head:hover:not(:has(.re-manage:hover, .re-drag:hover, .re-machine-menu:hover)) .re-chev {
-  color: var(--brand);
-}
-.re-runner-copy {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
-.re-runner-copy .re-runner,
-.re-runner-copy .re-runner-meta {
-  overflow-wrap: anywhere;
-}
-.re-runner-copy .re-runner {
-  font-size: 15px;
-}
-.re-runner-copy .re-runner-meta {
-  font-size: 12px;
-}
-.re-runner-status {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-.re-runner-status .re-summary {
-  border-left: 0;
-  padding-left: 0;
-  font-size: 12px;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-.re-runner-status .re-summary.warn {
-  color: var(--warning);
-}
-.re-runner-status .re-summary .anticon {
-  margin-right: 5px;
-}
-.re-runner-card .re-manage {
-  display: flex;
-  flex: none;
-  align-items: center;
-  min-height: 44px;
-  margin: 0 4px 0 8px;
-}
-.re-runner-card .re-manage:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 3px;
-  border-radius: 4px;
-}
-/* The card is the machine too: it moves by the handle in its left margin, its own actions sit behind
-   the ⋯ at the end, and under its name are how busy it is and what it needs a person for. */
-.re-runner-card.dragging {
-  position: relative;
-  box-shadow: 0 8px 24px rgba(31, 35, 41, 0.16);
-}
-/* The handle stands in the card's own left margin, level with the chevron, and out of the head's
-   flow, where it pushed the chevron 22px right of the column the chevron leads: the one the engine
-   rows put their icon in. */
-.re-runner-card .re-drag {
-  position: absolute;
-  top: 8px;
-  left: 0;
-  margin: 0;
-}
-/* Where a pointer can hover, the handle comes up with the card under it, or with its own keyboard
-   focus; a touch screen shows it always, and so does a narrow card, which gives it a column of its
-   own (below). */
-@media (hover: hover) {
-  @container re-card (width > 600px) {
-    .re-runner-card .re-drag {
-      transition: opacity 0.15s;
-    }
-    .re-runner-card:not(:hover, .dragging) .re-drag:not(:focus-visible) {
-      opacity: 0;
-    }
-  }
-}
-.re-runner-copy .runner-util {
-  display: block;
-  margin-top: 3px;
-}
-.re-runner-copy .runner-attention {
-  margin-top: 2px;
-}
-.re-runner-card .re-machine-menu {
-  flex: none;
-  margin-right: 10px;
-}
-@container re-card (max-width: 600px) {
-  .re-runner-card .re-head {
-    position: static;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
-    column-gap: 8px;
-    padding: 0 14px 0 6px;
-  }
-  .re-runner-card .re-drag {
-    position: static;
-    grid-row: 1;
-    grid-column: 1;
-    align-self: start;
-    margin: 13px 0 0;
-  }
-  .re-runner-card .re-drag + .re-toggle {
-    border-radius: 0;
-  }
-  .re-runner-card .re-toggle {
-    grid-row: 1;
-    grid-column: 2 / -1;
-    align-items: flex-start;
-    min-height: 54px;
-    padding: 10px 0 0;
-    border-radius: 11px;
-  }
-  /* Under 600px the chevron stays where it has always been: the top-right of the row, beside
-     the name. Only the wide card leads with it. */
-  .re-runner-card .re-chev {
-    order: 2;
-  }
-  .re-runner-status {
-    grid-column: 2;
-    margin-left: 17px;
-  }
-  .re-runner-card .re-manage {
-    grid-column: 3;
-    margin: 0;
-  }
-  .re-runner-card .re-machine-menu {
-    grid-column: 4;
-    align-self: center;
-    margin: 0 -6px 0 0;
-  }
-  .mc-row {
-    grid-column: 2 / -1;
-    padding: 0 0 10px;
-  }
 }
 
 .re-row {
@@ -17804,31 +17522,6 @@ button.chat-jump-start:hover {
 .re-unreported {
   padding: 14px;
   font-size: 12.5px;
-  color: var(--text-3);
-}
-
-.re-empty {
-  padding: 26px;
-  text-align: center;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--bg-raised);
-}
-.re-empty-logos {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  margin-bottom: 14px;
-}
-.re-empty h4 {
-  margin: 0 0 4px;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-1);
-}
-.re-empty p {
-  margin: 0 0 16px;
-  font-size: 13px;
   color: var(--text-3);
 }
 
@@ -21327,6 +21020,11 @@ div.landing-jobs-open {
    the list. Styled as the quiet twisty it is rather than as a button: nothing about it should
    compete with the state sentence above it. */
 .acceptance-method {
+  /* How it's checked, and beside it the Met by menu (board 03 ③). */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
   margin-top: 5px;
   font-size: 12px;
   line-height: 1.55;
@@ -21359,6 +21057,9 @@ div.landing-jobs-open {
   text-decoration: none;
 }
 .acceptance-method-body {
+  /* Its own line under the toggle and the Met by menu, which share the row above it. */
+  flex-basis: 100%;
+  order: 1;
   margin-top: 4px;
   padding-inline-start: 10px;
   border-inline-start: 2px solid var(--border-subtle);
@@ -22165,10 +21866,6 @@ div.landing-jobs-open {
   max-width: 720px;
   margin: 0 auto;
 }
-.feishu-intro {
-  margin: 4px 0 20px;
-  color: var(--text-3);
-}
 .feishu-card {
   margin-bottom: 16px;
 }
@@ -22472,12 +22169,6 @@ div.landing-jobs-open {
 /* Settings → Access tokens (docs/personal-access-token-design.md §9). */
 .access-tokens-page {
   max-width: 1100px;
-}
-.access-tokens-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
 }
 .access-token-title {
   color: var(--text-1);
@@ -27657,11 +27348,13 @@ button.agent-progress-agent:hover {
 }
 
 .project-done-findings {
+  /* What Orbit cannot prove about where work landed: a warning, not a blocker (decided board ④). */
+  margin-top: 10px;
   padding: 10px 12px;
-  border: 1px solid var(--error);
+  border: 1px solid var(--warning-border);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--error) 8%, transparent);
-  color: var(--error);
+  background: var(--warning-bg);
+  color: var(--text-1);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -27734,3 +27427,94 @@ button.agent-progress-agent:hover {
   color: var(--text-2);
   font-size: 12.5px;
 }
+
+/* Done card follow-ups (docs/mocks/project-done-landing-untracked ③④, project-done-followups 01–03): rows read
+   number · text · state, the state green when met and red when not; "Ran without a branch" and a confirmation of an
+   earlier wording in the warning colour. What stands in the way is a red box naming its tasks; what Orbit cannot prove
+   about landing is a yellow one. */
+.project-done-criteria-list .project-done-gap-number { width: 18px; height: 18px; line-height: 18px; font-size: 10px;
+  background: transparent; color: var(--text-3); }
+.project-done-criterion-text { min-width: 0; color: var(--text-1); }
+.project-done-criterion-confirmed { display: block; margin-top: 2px; font-size: 11px; color: var(--text-3); }
+.project-done-criterion-state.is-met { color: var(--success); }
+.project-done-criterion-state.is-unmet { color: var(--error); }
+.project-done-criterion-state.is-warn { color: var(--warning); }
+.project-done-confirm { padding: 2px 8px; font-size: 11.5px; }
+.project-done-non-code { display: flex; gap: 9px; align-items: flex-start; margin: 8px 0 4px; padding: 9px 11px;
+  border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--bg-subtle); font-size: 12.5px;
+  line-height: 1.5; color: var(--text-2); }
+.project-done-non-code b { color: var(--text-1); font-weight: 650; }
+.project-done-non-code-icon { flex: none; width: 16px; height: 16px; margin-top: 2px; border: 1px solid var(--text-3);
+  border-radius: 50%; color: var(--text-3); font-size: 10px; font-weight: 700; font-style: italic; line-height: 14px; text-align: center; }
+.project-done-non-code-change { color: var(--brand); font-weight: 600; }
+.project-done-non-code-reason { display: block; margin-top: 2px; color: var(--text-2); }
+.project-done-moved-out, .acceptance-moved-out { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px;
+  font-size: 12px; color: var(--text-3); }
+.project-done-moved-out a, .acceptance-moved-out a, .acceptance-moved a { color: var(--brand); }
+.project-done-blockers { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--error); border-radius: 10px;
+  background: color-mix(in srgb, var(--error) 6%, transparent); font-size: 13px; line-height: 1.5; color: var(--text-1); }
+.project-done-blockers > b { display: block; margin-bottom: 6px; }
+.project-done-blockers ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.project-done-blocker-line { display: flex; gap: 8px; align-items: baseline; }
+.project-done-blocker-line .project-done-gap-number { width: 18px; height: 18px; line-height: 18px; font-size: 10px;
+  background: transparent; color: var(--text-3); }
+.project-done-blocker-task { display: flex; gap: 8px; align-items: center; margin: 6px 0 0 26px; padding: 6px 10px;
+  border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-raised); font-size: 12.5px; }
+.project-done-blocker-dot { color: var(--warning); font-size: 9px; }
+.project-done-blocker-task-title { flex: 1; min-width: 0; }
+.project-done-open { padding: 2px 10px; font-size: 12px; text-decoration: none; }
+.project-done-blocker-move { display: flex; gap: 10px; align-items: center; margin: 8px 0 0 26px; }
+.project-done-blocker-hint { font-size: 11.5px; color: var(--text-3); }
+.project-done-findings > b { display: block; margin-bottom: 4px; }
+/* Project page: the non-code line where the branch would be, the Delivers provenance, and Landing Off. */
+.project-integration-non-code .project-integration-facts { color: var(--text-2); font-size: 12.5px; }
+.project-run-non-code-by { margin-top: 6px; color: var(--text-1); }
+.project-run-non-code-reason { margin-top: 2px; color: var(--text-2); }
+.project-run-non-code-consequence { margin: 10px 0 0; color: var(--text-1); }
+/* Acceptance rows met by confirmation (board 03 ⑤⑥) and the Met by menu. */
+.acceptance-confirmation { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.acceptance-work-state.is-stale { color: var(--warning); }
+.acceptance-confirmation-note { margin-top: 4px; font-size: 12.5px; color: var(--text-2); }
+.acceptance-confirmation-note.is-failed { color: var(--error); }
+.acceptance-confirmation-actions { display: flex; gap: 6px; margin-top: 6px; }
+.acceptance-moved { margin-top: 2px; font-size: 12px; color: var(--text-3); }
+.acceptance-confirmation-shots { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+.acceptance-confirmation-shot { display: block; width: 44px; height: 44px; border: 1px solid var(--border-subtle); border-radius: 6px;
+  overflow: hidden; background: var(--bg-subtle); }
+.acceptance-confirmation-shot img { width: 100%; height: 100%; object-fit: cover; }
+.acceptance-confirmation-shot-count { font-size: 12px; color: var(--text-3); }
+.acceptance-what-changed { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; font-size: 12.5px; line-height: 1.5; }
+.acceptance-what-changed-side { padding: 8px 10px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-subtle); }
+.acceptance-what-changed-side.is-now { background: var(--bg-raised); }
+.acceptance-what-changed-label { margin-bottom: 3px; font-size: 11px; font-weight: 650; color: var(--text-3); }
+.acceptance-what-changed-text { color: var(--text-1); }
+.acceptance-what-changed-method, .acceptance-what-changed-missing { margin-top: 3px; color: var(--text-2); }
+.acceptance-mode-trigger { padding: 0; border: 0; background: none; font: inherit; font-size: 12px; color: var(--text-3); cursor: pointer; }
+.acceptance-mode-trigger b { color: var(--text-2); font-weight: 600; }
+.acceptance-mode-option { display: grid; gap: 2px; max-width: 320px; white-space: normal; }
+.acceptance-mode-hint { font-size: 12px; color: var(--text-3); }
+.acceptance-mode-held { display: block; margin-top: 4px; font-size: 12px; color: var(--warning); }
+/* Move to a follow-up and Confirm criterion dialogs. */
+.move-criterion-body, .confirm-criterion-body { display: grid; gap: 10px; font-size: 13px; line-height: 1.5; }
+.move-criterion-body p, .confirm-criterion-body p { margin: 0; }
+.move-criterion-label, .confirm-criterion-label { font-size: 11.5px; font-weight: 650; letter-spacing: .02em; text-transform: uppercase; color: var(--text-3); }
+.confirm-criterion-label { text-transform: none; letter-spacing: 0; font-size: 12.5px; color: var(--text-1); }
+.confirm-criterion-optional { font-weight: 400; color: var(--text-3); }
+.move-criterion-moves { padding: 9px 11px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-subtle); }
+.move-criterion-hint, .confirm-criterion-hint, .move-criterion-stays { font-size: 12px; color: var(--text-3); }
+.move-criterion-new, .move-criterion-existing { display: grid; gap: 6px; }
+.move-criterion-projects { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; }
+.move-criterion-projects li { display: flex; justify-content: space-between; gap: 10px; padding: 8px 11px; border-top: 1px solid var(--border-subtle); cursor: pointer; }
+.move-criterion-projects li:first-child { border-top: 0; }
+.move-criterion-projects li.is-picked { background: var(--brand-tint); }
+.move-criterion-meta { color: var(--text-3); font-size: 12px; }
+.confirm-criterion-text { padding: 9px 11px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-subtle); }
+.confirm-criterion-method { color: var(--text-2); }
+.confirm-criterion-drop { display: grid; gap: 2px; justify-items: center; padding: 14px 11px; border: 1px dashed var(--border-strong, var(--border-subtle));
+  border-radius: 8px; background: none; font: inherit; color: var(--text-3); cursor: pointer; }
+.confirm-criterion-drop:hover:not(:disabled) { border-color: var(--brand); }
+.confirm-criterion-drop-action { color: var(--brand); font-weight: 600; }
+.confirm-criterion-drop-hint { font-size: 12px; }
+.confirm-criterion-shot { display: flex; gap: 10px; align-items: flex-end; }
+.confirm-criterion-shot img { max-width: 220px; max-height: 140px; border: 1px solid var(--border-subtle); border-radius: 6px; }
+.acceptance-mode-row { margin-top: 4px; }

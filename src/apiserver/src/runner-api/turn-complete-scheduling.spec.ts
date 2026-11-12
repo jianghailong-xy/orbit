@@ -43,6 +43,8 @@ function makeController(
     onConversationTurnUpdateMany: async () => ({ count: 1 }),
   });
   const tx = {
+    // No Agent check is waiting on these runs (projects/criterion-check-ended.ts).
+    projectCriterionConfirmation: { findMany: async () => [] },
     $queryRaw: async () => [{ id: sessionId, leaseOwnerMatches: true }],
     $executeRaw: async () => {
       retireCalls++;
