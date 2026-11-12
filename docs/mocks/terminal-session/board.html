@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>在终端里直接敲 orbit 开会话 · 设计板</title>
+<style>
+  body { margin: 0; background: #f4f4f6; font: 15px/1.55 "Inter", "Noto Sans SC", "WenQuanYi Zen Hei", sans-serif; color: #1d1d1f; }
+  .b-part { width: 1400px; margin: 0 auto; padding: 36px 44px 40px; box-sizing: border-box; background: #fff; border-bottom: 1px solid #e3e3e8; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  h2 { font-size: 20px; margin: 0 0 14px; }
+  h3 { font-size: 16px; margin: 0 0 8px; }
+  .b-sub { color: #6e6e73; margin: 0 0 22px; }
+  .b-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .b-cols3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; }
+  .b-term { background: #1e1e22; color: #e6e6e6; border-radius: 10px; font: 13px/1.55 "DejaVu Sans Mono", "WenQuanYi Zen Hei Mono", monospace; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,.18); }
+  .b-term .bar { background: #34343a; padding: 6px 12px; color: #a1a1a6; font-size: 12px; }
+  .b-term .bar i { display: inline-block; width: 10px; height: 10px; border-radius: 5px; margin-right: 5px; vertical-align: -1px; }
+  .b-term pre { margin: 0; padding: 12px 14px; white-space: pre-wrap; font: inherit; }
+  .p { color: #7ee787; } .d { color: #8b8b93; } .y { color: #f2cc60; } .c { color: #79c0ff; } .r { color: #ff7b72; } .o { color: #d2a8ff; }
+  .b-box-ui { border: 1px solid #d1d1d6; border-radius: 12px; background: #fff; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,.08); font-size: 14px; }
+  .b-box-ui .hd { padding: 9px 14px; border-bottom: 1px solid #e5e5ea; font-weight: 600; }
+  .b-box-ui .hd small { font-weight: 400; color: #8e8e93; margin-left: 6px; }
+  .b-bub { margin: 10px 14px; }
+  .b-bub.u { text-align: right; }
+  .b-bub.u span { display: inline-block; background: #e9e9ee; border-radius: 14px; padding: 6px 12px; }
+  .b-bub.a { color: #1d1d1f; }
+  .b-tool { margin: 6px 14px; font: 12.5px "DejaVu Sans Mono", monospace; color: #6e6e73; }
+  .b-cmp { margin: 10px 14px 12px; border: 1px solid #d1d1d6; border-radius: 12px; padding: 8px 12px; color: #8e8e93; }
+  .b-note-ui { margin: 0 14px; padding: 6px 10px; font-size: 13px; color: #6e6e73; background: #f2f2f7; border-radius: 8px; }
+  .b-chip { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 9px; background: #e8f1ff; color: #0a64d6; margin-left: 6px; font-weight: 500; }
+  .b-n { display: inline-block; min-width: 22px; height: 22px; line-height: 22px; text-align: center; border-radius: 11px; background: #ff3b30; color: #fff; font-size: 13px; font-weight: 700; margin-right: 6px; font-family: "Inter", sans-serif; }
+  .b-notes { margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 28px; font-size: 14px; }
+  .b-notes p { margin: 0; }
+  .b-flow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 6px; }
+  .b-step { border: 1px solid #d1d1d6; border-radius: 10px; padding: 10px 12px; font-size: 14px; background: #fafafc; }
+  .b-step.new { border: 2px dashed #34a853; background: #f1fbf3; }
+  .b-step.chg { border: 2px dashed #ff9f0a; background: #fff8ec; }
+  .b-step b { display: block; margin-bottom: 4px; }
+  .b-mono { font-family: "DejaVu Sans Mono", monospace; font-size: 12.5px; }
+  .b-legend span { display: inline-block; margin-right: 18px; font-size: 13px; }
+  .b-legend i { display: inline-block; width: 14px; height: 14px; vertical-align: -2px; margin-right: 5px; border-radius: 3px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { border: 1px solid #e0e0e5; padding: 8px 10px; vertical-align: top; text-align: left; }
+  th { background: #f6f6f8; }
+  td.rec { background: #f1fbf3; }
+  .b-tag { display: inline-block; font-size: 12px; padding: 1px 7px; border-radius: 8px; background: #34a853; color: #fff; margin-left: 6px; }
+  .b-warn { border-left: 4px solid #ff9f0a; background: #fff8ec; padding: 10px 14px; border-radius: 6px; margin-top: 16px; font-size: 14px; }
+  ol.b-steps { margin: 0; padding-left: 22px; } ol.b-steps li { margin: 7px 0; }
+</style>
+</head>
+<body>
+
+<section class="b-part" id="part-1">
+  <h1>在终端里直接敲 <span class="b-mono" style="font-size:24px">orbit</span> 开一个会话（像 Claude Code 那样）</h1>
+  <p class="b-sub">① 今天 vs ② 建议默认态。终端里跑的就是 Claude Code 本身，Orbit 把对话实时同步到网页和手机。终端里的文字是产品文案，用英文。</p>
+  <div class="b-cols">
+    <div>
+      <h3>① 今天：只打印帮助</h3>
+      <div class="b-term"><div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>~/code/shop-api</div><pre><span class="p">~/code/shop-api $</span> orbit
+orbit — register a machine and run coding-agent tasks for an Orbit control plane
+
+Usage:
+  orbit register [options]   Register this machine + install the service
+  orbit run                  Start the runner loop in the foreground
+  orbit resume [session-id]  Resume a session in its engine's CLI
+  orbit task &lt;command&gt;       Manage Orbit tasks
+  …（还有 25 行）
+<span class="p">~/code/shop-api $</span> <span class="d">█</span></pre></div>
+      <div class="b-notes" style="grid-template-columns:1fr">
+        <p>· 要接着聊得先在网页里建会话，再 <span class="b-mono">orbit resume &lt;id&gt;</span>；在这个终端里聊的内容 <b>不会回到 Orbit</b>。</p>
+        <p>· <span class="b-mono">orbit session create</span> 只在后台跑，不进终端；用 <span class="b-mono">orbit login</span> 登录时还会被拒绝。</p>
+        <p>· <span class="b-mono">orbit session import</span> 只能把聊完的对话一次性拷进来。</p>
+      </div>
+    </div>
+    <div>
+      <h3>② 建议：敲 orbit 就进入对话</h3>
+      <div class="b-term"><div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>~/code/shop-api</div><pre><span class="p">~/code/shop-api $</span> orbit
+<span class="c">◆ Orbit</span> <span class="d">workspace</span> shop-api <span class="d">· runner</span> dev-laptop <span class="d">· Claude Code</span>   <span class="b-n">1</span>
+<span class="c">◆</span> <span class="d">Live in Orbit:</span> https://orbitd.io/sessions/3xK9pQ2mW   <span class="b-n">2</span>
+
+<span style="display:inline-block;border:1px solid #d2a8ff;border-radius:6px;padding:2px 12px;margin:2px 0">✻ Welcome to Claude Code
+  cwd: /Users/dev/code/shop-api</span>   <span class="b-n">3</span>
+<span class="d">&gt;</span> add rate limiting to the /login route
+
+⏺ I'll look at the login handler first.
+  ⎿ Read src/routes/login.ts (84 lines)
+⏺ Update(src/routes/login.ts)
+  ⎿ +12 −1   <span class="b-n">4</span>
+<span class="d">&gt;</span> <span class="d">█</span>
+<span class="d">  ? for shortcuts</span></pre></div>
+    </div>
+  </div>
+  <div class="b-notes">
+    <p><span class="b-n">1</span>Orbit 只加两行灰色前言：当前目录所在的 workspace、本机 runner、引擎。之后整个屏幕交给 Claude Code。</p>
+    <p><span class="b-n">2</span>会话链接：在手机和网页上同时能看到这条对话，内容实时同步（见 ③ 图）。</p>
+    <p><span class="b-n">3</span>这里就是 Claude Code 自己的界面：斜杠命令、审批、快捷键全部原样。Orbit 不另做一套 TUI（见 D1）。</p>
+    <p><span class="b-n">4</span>改动直接落在当前目录，不建 worktree，和直接敲 <span class="b-mono">claude</span> 一样（见 D4）。</p>
+  </div>
+</section>
+
+<section class="b-part" id="part-2">
+  <h2>③ 终端开着时，手机 / 网页上看到的样子</h2>
+  <div class="b-cols">
+    <div class="b-box-ui">
+      <div class="hd">add rate limiting to the /login route <span class="b-chip">In a terminal · dev-laptop</span></div>
+      <div class="b-bub u"><span>add rate limiting to the /login route</span></div>
+      <div class="b-bub a">I'll look at the login handler first.</div>
+      <div class="b-tool">Read src/routes/login.ts</div>
+      <div class="b-tool">Update src/routes/login.ts  +12 −1</div>
+      <div class="b-bub u"><span>also add a test</span></div>
+      <div class="b-note-ui">This session is open in a terminal on dev-laptop. Messages you send now run after the terminal closes.</div>
+      <div class="b-cmp">Message…</div>
+    </div>
+    <div class="b-notes" style="grid-template-columns:1fr; margin-top:0">
+      <p><span class="b-n">5</span>标题右侧加一个标签 <b>In a terminal · 机器名</b>，复用现有的状态标签样式，不新造外观。</p>
+      <p><span class="b-n">6</span>转录内容是从本机 <span class="b-mono">&lt;uuid&gt;.jsonl</span> 实时同步过来的，用的是 <span class="b-mono">session import</span> 现有的解析器。</p>
+      <p><span class="b-n">7</span>终端占着会话时，手机发的消息进队列，<b>等终端退出后</b>由本机 runner 用 <span class="b-mono">claude --resume</span> 接着跑（D6）。输入框上方用一行灰字说明。</p>
+      <p><span class="b-n">8</span>终端退出后标签消失，它就是一条普通的 Orbit 会话：任何客户端都能继续，也能再用 <span class="b-mono">orbit resume</span> 回到终端。</p>
+    </div>
+  </div>
+  <h2 style="margin-top:28px">边界情况</h2>
+  <div class="b-cols3">
+    <div>
+      <h3>当前目录不在任何 workspace 里（D3）</h3>
+      <div class="b-term"><pre><span class="p">~/scratch/demo $</span> orbit
+<span class="c">◆ Orbit</span> ~/scratch/demo is not in a workspace on this runner.
+  Add it as a workspace? [Y/n] <span class="d">█</span></pre></div>
+    </div>
+    <div>
+      <h3>这台机器没有注册 runner</h3>
+      <div class="b-term"><pre><span class="p">~/code/shop-api $</span> orbit
+<span class="r">✗</span> No runner is registered on this machine.
+  Run `orbit register` first, or start a
+  session in the Orbit app.</pre></div>
+    </div>
+    <div>
+      <h3>退出 Claude Code</h3>
+      <div class="b-term"><pre><span class="d">&gt;</span> /exit
+<span class="c">◆ Orbit</span> Session saved: https://orbitd.io/sessions/3xK9pQ2mW
+  Continue here with `orbit resume 3xK9pQ2mW`
+<span class="p">~/code/shop-api $</span> <span class="d">█</span></pre></div>
+    </div>
+  </div>
+</section>
+
+<section class="b-part" id="part-3">
+  <h2>④ 怎么跑起来：大部分是现有零件</h2>
+  <div class="b-legend"><span><i style="border:2px dashed #34a853;background:#f1fbf3"></i>新增</span><span><i style="border:2px dashed #ff9f0a;background:#fff8ec"></i>改动</span><span><i style="background:#fafafc;border:1px solid #d1d1d6"></i>现有，直接复用</span></div>
+  <div class="b-flow" style="margin-top:14px">
+    <div class="b-step"><b>1 找 workspace</b>按当前目录找本机包含它的 workspace，和 <span class="b-mono">session import</span> 按 cwd 找的是同一段逻辑。</div>
+    <div class="b-step chg"><b>2 建会话</b>用本机 runner 凭据建会话（import 已经这样建）；新增一个 <b>终端占用</b> 标记：租约 + 心跳。</div>
+    <div class="b-step new"><b>3 前台起 Claude</b><span class="b-mono">claude --session-id &lt;uuid&gt;</span>，带 Orbit MCP、<span class="b-mono">ORBIT_SESSION_ID</span>，以及会话记录的 <span class="b-mono">CLAUDE_CONFIG_DIR</span>。</div>
+    <div class="b-step new"><b>4 实时同步</b>tail <span class="b-mono">&lt;uuid&gt;.jsonl</span> → <span class="b-mono">parseImportTranscript</span> 的增量版 → 现有的事件上报通道。</div>
+    <div class="b-step chg"><b>5 退出交还</b>补发最后的记录，释放占用；排队的消息照常派给本机 runner，用 <span class="b-mono">claude --resume</span> 接着跑。</div>
+  </div>
+  <div class="b-warn">
+    <b>三个风险，落地时要先验证：</b><br>
+    ① <b>账号目录</b>：runner 可能把 Claude 会话跑在某个账号自己的 <span class="b-mono">CLAUDE_CONFIG_DIR</span> 里。终端必须用同一个目录启动，否则 runner 之后 <span class="b-mono">--resume</span> 找不到 jsonl。<br>
+    ② <b>两个进程同时写</b>：终端占着会话时，服务端绝不能把可执行的 turn 租给 runner。终端被 kill 掉时，占用要靠租约过期自动释放。<br>
+    ③ <b>同步保真</b>：import 会拒绝回放对不上的转录，实时同步要逐批做同样的校验；Claude 压缩对话（compact）之后要整体重新同步一次。
+  </div>
+  <p style="margin-top:14px;font-size:14px">附带收益：<span class="b-mono">orbit resume &lt;id&gt;</span> 也用同样的占用和同步，在恢复的终端里聊的内容不再从 Orbit 里消失。</p>
+</section>
+
+<section class="b-part" id="part-4">
+  <h2>待定 · 要你拍板</h2>
+  <table>
+    <tr><th style="width:52px"></th><th style="width:220px">问题</th><th>方案 A</th><th>方案 B</th></tr>
+    <tr><td>D1</td><td>终端里跑什么</td><td class="rec">Claude Code 自己的界面，Orbit 只负责实时同步 <span class="b-tag">建议</span><br><span style="color:#6e6e73">和 Claude Code 完全一样；先只支持 Claude，Codex 第二步做。</span></td><td>Orbit 自己写一个终端客户端，走 REST API<br><span style="color:#6e6e73">所有引擎、任何 runner 都能用，手机和终端可以同时发消息；但要从零做一个 TUI，体验也不等于 Claude Code。</span></td></tr>
+    <tr><td>D2</td><td>用谁的身份建会话</td><td class="rec">本机 runner 凭据，和 <span class="b-mono">session import</span> 一样 <span class="b-tag">建议</span><br><span style="color:#6e6e73">注册过 runner 就能用，不用另外登录。</span></td><td>必须先 <span class="b-mono">orbit login</span>（个人令牌）<br><span style="color:#6e6e73">会话归属更清楚，但多一步，而且现在这条路由对个人令牌是拒绝的。</span></td></tr>
+    <tr><td>D3</td><td>当前目录不在任何 workspace 里</td><td class="rec">问一句 <span class="b-mono">Add it as a workspace? [Y/n]</span>，回车就建 <span class="b-tag">建议</span></td><td>直接拒绝，并说明怎么添加 workspace<br><span style="color:#6e6e73">更省事：第一步可以先做 B，第四步再升级成 A。</span></td></tr>
+    <tr><td>D4</td><td>改动落在哪里</td><td class="rec">当前目录本身，不建 worktree（和 <span class="b-mono">claude</span> 一样） <span class="b-tag">建议</span></td><td>新建 Orbit worktree，和网页会话一样<br><span style="color:#6e6e73">（C：跟随 workspace 自己的设置）</span></td></tr>
+    <tr><td>D5</td><td>命令叫什么</td><td class="rec">在 TTY 里只敲 <span class="b-mono">orbit</span> 就开会话；非 TTY、<span class="b-mono">orbit help</span>、<span class="b-mono">--help</span> 仍然打印帮助 <span class="b-tag">建议</span></td><td>只用 <span class="b-mono">orbit chat</span>；只敲 <span class="b-mono">orbit</span> 还是打印帮助</td></tr>
+    <tr><td>D6</td><td>终端开着时手机发消息</td><td class="rec">进队列，终端退出后再跑；输入框上方用一行灰字说明 <span class="b-tag">建议</span></td><td>直接拒绝（409）</td></tr>
+  </table>
+  <h2 style="margin-top:28px">落地（按代价排）</h2>
+  <ol class="b-steps">
+    <li><b>CLI</b>：TTY 里敲 <span class="b-mono">orbit</span> → 找 workspace → 用 runner 凭据建会话 → 前台起 <span class="b-mono">claude --session-id</span>。先不做实时同步，退出时走 import 路径一次性补全转录。</li>
+    <li><b>服务端</b>：终端占用（租约 + 心跳）；占用期间的消息进队列；网页、iOS、Android 输入框上方的说明行和标题标签。</li>
+    <li><b>实时同步</b>：tail jsonl，增量上报事件；<span class="b-mono">orbit resume</span> 也接上。</li>
+    <li><b>D3</b> 从"拒绝"升级为"终端里直接建 workspace"。</li>
+    <li><b>其他引擎</b>：Codex（<span class="b-mono">codex resume</span> + rollout 文件），然后是 Kimi、OpenCode；DeepSeek Harness 和 Cursor 仍然拒绝，和 <span class="b-mono">orbit resume</span> 一致。</li>
+  </ol>
+</section>
+
+</body>
+</html>
