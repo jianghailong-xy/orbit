@@ -125,7 +125,7 @@ final class SessionMessageWiringTests: XCTestCase {
         XCTAssertTrue(card.contains("if let url = SessionMessageCard.sessionLink(card) {"),
                       "the sender's title is no longer a link to the sending session")
         XCTAssertTrue(card.contains("openURL(url)"), "the link opens nowhere")
-        XCTAssertTrue(card.contains("Text(SessionMessageCard.title(card))"))
+        XCTAssertTrue(card.contains { $0.contains("Text(SessionMessageCard.title(card))") })
         XCTAssertFalse(card.contains { $0.hasPrefix("#if os(") }, "the card differs by platform")
     }
 

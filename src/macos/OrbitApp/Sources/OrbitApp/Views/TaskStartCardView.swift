@@ -102,6 +102,7 @@ struct TaskStartCardView: View {
                 .tint.opacity(0.28),
                 style: StrokeStyle(lineWidth: 1, dash: queued ? [4, 3] : []))
         )
+        .orbitCardWidth()
     }
 
     /// The queue's own line at the card's foot, in the words a queued message already uses.

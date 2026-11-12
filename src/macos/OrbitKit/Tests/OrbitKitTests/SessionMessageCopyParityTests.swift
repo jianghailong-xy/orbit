@@ -127,14 +127,20 @@ final class SessionMessageCopyParityTests: XCTestCase {
                                                  text: "hi").label, "From Worker")
     }
 
-    /// The card puts the time and the task in the foot line the same way at both ends.
+    /// The foot line opens with the time, then the task, the same way at both ends; who this is not
+    /// is the sender line's tooltip (docs/mocks/session-message-bubble).
     func testTheFootLineIsBuiltTheSameWay() throws {
         let card = try flat(Self.webCard)
-        XCTAssertTrue(card.contains("{SESSION_MESSAGE_NOT_YOU}"), "the foot line no longer opens with who this is not")
-        XCTAssertTrue(card.contains("{ts ? ` · ${relTime(ts)}` : ''}"), "the foot line's time drifted")
-        XCTAssertTrue(SessionMessageCard.meta(ts: "2026-10-01T15:40:00.000Z",
-                                              now: Date(timeIntervalSince1970: 1_790_000_000))
-            .hasPrefix("\(SessionMessageCard.notYou) · "))
+        XCTAssertTrue(card.contains("title={SESSION_MESSAGE_NOT_YOU}"), "who this is not is no longer the sender line's tooltip")
+        XCTAssertTrue(card.contains("const sentAt = ts ? relTime(ts) : null;"), "the foot line's time drifted")
+        let foot = try section(card, from: "<div className=\"smc-meta\">", to: "</div>", Self.webCard)
+        let time = try XCTUnwrap(foot.range(of: "{sentAt && <span>{sentAt}</span>}"), "the foot line no longer opens with the time")
+        let task = try XCTUnwrap(foot.range(of: "{SESSION_MESSAGE_OPEN_TASK}"), "the foot line no longer links the task")
+        XCTAssertTrue(time.lowerBound < task.lowerBound, "the foot line's time and task swapped")
+        XCTAssertFalse(foot.contains("SESSION_MESSAGE_NOT_YOU"), "the foot line says who this is not again")
+        let now = Date(timeIntervalSince1970: 1_790_000_000)
+        XCTAssertEqual(SessionMessageCard.meta(ts: "2026-10-01T15:40:00.000Z", now: now),
+                       RelativeTime.format("2026-10-01T15:40:00.000Z", now: now))
     }
 
     /// A long message folds at the same height, to the same lines, behind the same words at both ends.
@@ -148,8 +154,8 @@ final class SessionMessageCopyParityTests: XCTestCase {
         XCTAssertTrue(card.contains("SESSION_MESSAGE_SHOW_LESS = '\(SessionMessageCard.showLess)'"))
         XCTAssertTrue(card.contains("el.scrollHeight > line * SESSION_MESSAGE_CLAMP_FROM"),
                       "the web no longer folds by measured height")
-        XCTAssertFalse(SessionMessageCard.folds(height: 240, lineHeight: 20), "twelve lines show whole")
-        XCTAssertTrue(SessionMessageCard.folds(height: 241, lineHeight: 20))
+        XCTAssertFalse(SessionMessageCard.folds(height: 120, lineHeight: 20), "six lines show whole")
+        XCTAssertTrue(SessionMessageCard.folds(height: 121, lineHeight: 20))
         XCTAssertFalse(SessionMessageCard.folds(height: 900, lineHeight: 0), "nothing measured folds nothing")
     }
 }
