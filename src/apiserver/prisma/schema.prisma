@@ -2308,7 +2308,7 @@ model Session {
   @@index([ownerId])
   @@index([ownerId, status, taskId], map: "session_owner_status_task_idx")
   @@index([status])
-  // The session's Settings panel (docs/mocks/session-settings, migration 0537). `env` is the
+  // The session's Settings panel (docs/mocks/session-settings, migration 0607). `env` is the
   // session's own variables, a string→string map laid over the workspace's when the engine starts;
   // null is none. `envChangedAt` is when it last changed, `envAppliedAt` when an engine last started
   // with it — the two tell the panel a restart is owed. The notify pair is null (follow the account
