@@ -7,6 +7,7 @@ import { Card } from '../components/ui/Card';
 import { Segmented } from '../components/ui/Segmented';
 import { Select } from '../components/ui/Select';
 import { Switch } from '../components/ui/Switch';
+import { TerminalsCard } from '../components/TerminalsCard';
 import type { Runner } from '../components/TasksSidePanel';
 import { isLoginPool } from '../lib/codexLogin';
 import { routeId } from '../lib/idCodec';
@@ -385,6 +386,8 @@ export function SettingsPage() {
           <Button onClick={() => navigate('/settings/access-tokens')}>Manage</Button>
         </Field>
       </Card>
+
+      <TerminalsCard />
 
       <IntegrationsCard />
 
