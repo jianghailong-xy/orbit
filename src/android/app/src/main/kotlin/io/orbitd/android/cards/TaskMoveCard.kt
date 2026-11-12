@@ -64,7 +64,7 @@ fun TaskMoveCard(batch: JsonObject, store: TaskMoveStore, now: Instant = Instant
                     withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(TaskMoves.fromTitle(batch)) }
                     TaskMoves.fromStatus(batch)?.let { withStyle(SpanStyle(color = secondary)) { append(" ($it)") } }
                 }, Modifier.testTag("$tag:from"), style = MaterialTheme.typography.bodyMedium)
-                Text(TaskMoves.askedLine(batch, now), Modifier.testTag("$tag:asked"), style = MaterialTheme.typography.bodySmall, color = secondary)
+                Text(TaskMoves.askedLine(batch), Modifier.testTag("$tag:asked"), style = MaterialTheme.typography.bodySmall, color = secondary)
             }
             if (expanded) moves.forEach { row ->
                 val id = row.text("id").orEmpty()

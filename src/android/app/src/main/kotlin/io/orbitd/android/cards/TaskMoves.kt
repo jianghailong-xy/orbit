@@ -63,11 +63,14 @@ object TaskMoves {
     fun title(batch: JsonObject) = "Move ${tasks(moves(batch).size)} into ${into(batch)}"
     fun from(title: String) = "From $title"
     fun askedBy(session: String) = "Asked by $session"
-    fun askedLine(batch: JsonObject, now: Instant): String {
+    fun askedLine(batch: JsonObject, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): String {
         val who = if (askedHere(batch)) askedByThis
             else askedBy(first(batch)?.obj("requestedBySession")?.text("title")?.trim()?.takeIf { it.isNotEmpty() } ?: io.orbitd.android.tasks.TaskDetailCopy.untitledSession)
-        return listOfNotNull(who, batch.text("since")?.let { OwnerReview.receiptTime(it, now) }).joinToString(" · ")
+        return listOfNotNull(who, batch.text("since")?.let { askedTime(it, zone) }).joinToString(" · ")
     }
+    /** When it was asked, as the board and iOS write it: "Nov 9, 08:31". */
+    fun askedTime(iso: String, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): String? =
+        runCatching { java.time.format.DateTimeFormatter.ofPattern("MMM d, HH:mm", java.util.Locale.US).format(Instant.parse(iso).atZone(zone)) }.getOrNull()
     /** A move's line under its title: the crossing card's two labels, and the criterion it asks to count towards. */
     fun moveLine(row: JsonObject): String {
         val criterion = row.obj("requestedCriterion") ?: return ProjectCrossings.moveSubjectLabel

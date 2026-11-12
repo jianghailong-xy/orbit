@@ -39,15 +39,15 @@ class TaskMovesTest {
     }
 
     @Test fun theWordsInTheTargetCoordinatorAndInTheSessionThatAsked() {
-        val now = Instant.parse("2026-11-11T10:00:00Z")
+        val utc = java.time.ZoneOffset.UTC
         val target = batch()
         assertEquals("Move 8 tasks into this project", TaskMoves.title(target))
         assertEquals("Runner link v1: runner ↔ control plane over WebSocket", TaskMoves.fromTitle(target))
         assertEquals("Done", TaskMoves.fromStatus(target))
-        assertTrue(TaskMoves.askedLine(target, now).startsWith("Asked by Runner link v1 coordinator · "))
+        assertEquals("Asked by Runner link v1 coordinator · Nov 9, 00:31", TaskMoves.askedLine(target, utc))
         val asker = batch(1, listOf("REQUESTER"))
         assertEquals("Move 1 task into Runner link hardening", TaskMoves.title(asker))
-        assertTrue(TaskMoves.askedLine(asker, now).startsWith("Asked here · "))
+        assertEquals("Asked here · Nov 9, 00:31", TaskMoves.askedLine(asker, utc))
         // Both at once (a coordinator moving work into its own project) reads as the target.
         assertEquals("Move 8 tasks into this project", TaskMoves.title(batch(drawnAs = listOf("REQUESTER", "TARGET_COORDINATOR"))))
         assertEquals("Approve 8 moves…", TaskMoves.approveAsk(8))
