@@ -76,7 +76,10 @@ final class ProjectsWiringTests: XCTestCase {
 
         let tasks = code(try appSource("Views/TasksView.swift"))
         let line = try slice(tasks, from: "private func projectLine(_ project: TaskProjectRef) -> some View {", to: "label: {")
-        XCTAssertTrue(line.contains("model.openTaskProject(project.id)"))
+        // The page's own press (owner decision 2026-11-12): over a page it first takes the task
+        // sheet down, then goes to the project as it always did; in the Tasks pane nothing is over
+        // the page, so that step is skipped and `model.openTaskProject` is still the line.
+        XCTAssertTrue(line.contains("openTaskProject(project.id)"))
 
         let app = code(try appSource("AppModel.swift"))
         let back = try slice(app, from: "func openTaskProject(_ id: String) {", to: "\n    }")

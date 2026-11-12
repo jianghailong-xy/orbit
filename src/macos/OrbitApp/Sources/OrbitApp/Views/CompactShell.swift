@@ -341,7 +341,7 @@ private struct CompactSections: View {
                             case .createdTasks(let sessionID):  CreatedTasksPage(sessionID: sessionID)
                             case .watches:                      FollowingListView(rowNavigation: .push)
                             case .watchDetail(let watchID):     WatchDetailView(watchID: watchID)
-                            case .wikiEntry(let entryID):       WikiEntryView(entryID: entryID)
+                            case .wikiEntry(let entryID):       WikiEntryView(entryID: entryID, rowNavigation: .push)
                             // The other sections' pages ride their own stacks, not this one.
                             default:                         EmptyView()
                             }
@@ -377,7 +377,10 @@ private struct CompactSections: View {
                     .drawerToggle(open: openDrawer)
                     .navigationDestination(for: NavNode.self) { node in
                         switch node {
-                        case .wikiEntry(let entryID): WikiEntryView(entryID: entryID)
+                        case .wikiEntry(let entryID): WikiEntryView(entryID: entryID, rowNavigation: .push)
+                        // A task cited by an entry's source or a document's footnote is pushed over
+                        // the page that cited it, so the back swipe returns to that page.
+                        case .taskDetail(let taskID): TaskDetailPage(taskID: taskID)
                         case .wikiReview:             WikiReviewView()
                         case .wikiActivity:           WikiActivityView()
                         case .wikiSettings:           WikiSettingsView()
@@ -389,7 +392,7 @@ private struct CompactSections: View {
                         case .wikiBrowse:             WikiBrowseScreen()
                         case .wikiIndex:              WikiIndexScreen()
                         case .wikiDoc(let slug, let section):
-                            WikiDocScreen(address: WikiDocAddress(slug: slug, section: section))
+                            WikiDocScreen(address: WikiDocAddress(slug: slug, section: section), rowNavigation: .push)
                         case .wikiPlan(let version):
                             WikiPlanScreen(address: WikiPlanAddress(version: version))
                         case .wikiPlanDoc(let slug, let version):

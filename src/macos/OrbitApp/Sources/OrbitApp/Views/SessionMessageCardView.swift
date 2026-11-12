@@ -33,6 +33,13 @@ struct SessionMessageCardView: View {
     var revealed: Bool = false
 
     @Environment(\.openURL) private var openURL
+    /// The app's own link door: the sender's session and its task are pushed over a phone's
+    /// conversation (see `opensPagesOverConsole`), so the back swipe returns to it.
+    @Environment(AppModel.self) private var app: AppModel?
+    @Environment(\.opensPagesOverConsole) private var overConsole
+    /// On a wide shell a task opens over the page instead of switching sections
+    /// (`opensTasksOverPage`, owner decision 2026-11-12).
+    @Environment(\.opensTasksOverPage) private var opensTasksOverPage
     @State private var expanded = false
     /// The "⊕ Orbit attached" line in the foot is open: what it names is drawn under the foot.
     @State private var attachedOpen = false
@@ -129,6 +136,13 @@ struct SessionMessageCardView: View {
             }
     }
 
+    /// One of this card's links through the app's own link door, told whether the card is in a
+    /// phone's conversation (there what it opens is pushed over it) or on a wide shell (there a
+    /// task opens over the page; anything else routes).
+    private func openLink(_ url: URL) {
+        if app?.openOrbitLink(url, overConsole: overConsole, overPage: opensTasksOverPage) != true { openURL(url) }
+    }
+
     /// The queue's own line while the message waits behind a running turn: how it stands, and Cancel.
     private func queuedFoot(_ cancel: @escaping () -> Void) -> some View {
         HStack(spacing: 8) {
@@ -148,7 +162,7 @@ struct SessionMessageCardView: View {
         Group {
             if let url = SessionMessageCard.sessionLink(card) {
                 Button {
-                    openURL(url)
+                    openLink(url)
                 } label: {
                     headText.multilineTextAlignment(.leading)
                 }
@@ -189,7 +203,7 @@ struct SessionMessageCardView: View {
             }
             if let url = task {
                 footItem(more: request || attached != nil) {
-                    Button(SessionMessageCard.openTask) { openURL(url) }
+                    Button(SessionMessageCard.openTask) { openLink(url) }
                         .buttonStyle(.plain)
                 }
             }
