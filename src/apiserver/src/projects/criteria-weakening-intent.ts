@@ -51,6 +51,8 @@ export interface ProposedCriterion {
   text: string;
   verificationMethod: string;
   completionCriterionOverrideReason: string | null;
+  /** Present only for a CONFIRMATION criterion (migration 0545); absent is TASKS. */
+  satisfiedBy?: 'CONFIRMATION';
 }
 
 /** Exactly what the caller asked for — the whole of what `actionDigest` is taken over. */

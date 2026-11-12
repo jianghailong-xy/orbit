@@ -138,4 +138,22 @@ final class AgentListLogicTests: XCTestCase {
             XCTAssertNil(AgentListLogic.newSessionTarget(currentAgentID: nil, list: list, firstOnlineMachine: "austin"))
         }
     }
+
+    func testSidebarRowsAreTheWorkspacesThenTheMachines() {
+        let rows = AgentListLogic.sidebarRows(
+            [agent(#"{"id":"1","name":"a","runnerId":"r1"}"#), agent(#"{"id":"2","name":"b"}"#)],
+            machines: [MachineToSetUp(id: "austin", name: "orbit@austin")])
+        XCTAssertEqual(rows.map(\.id), ["agent:1", "agent:2", "setup:austin"])
+    }
+
+    func testSidebarRowsWithNothingAreThePlaceholderAlone() {
+        XCTAssertEqual(AgentListLogic.sidebarRows([], machines: []), [.placeholder])
+    }
+
+    func testSidebarRowIDsAreUniqueAndKeepTheFirstRow() {
+        let a = agent(#"{"id":"1","name":"a","runnerId":"r1"}"#)
+        let m = MachineToSetUp(id: "m", name: "m")
+        let ids = AgentListLogic.sidebarRows([a, a], machines: [m, m]).map(\.id)
+        XCTAssertEqual(ids, ["agent:1", "setup:m"])
+    }
 }

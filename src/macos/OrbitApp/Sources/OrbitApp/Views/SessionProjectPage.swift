@@ -580,6 +580,17 @@ struct SessionProjectPage: View {
     private var progressCard: some View {
         VStack(spacing: 0) {
             progressLine
+            // A non-code project reads no landing (board 01 E): the mark, under the progress.
+            if doneSubject?.nonCode == true {
+                Text(ProjectDone.nonCodeProjectLine)
+                    .font(.orbitMeta)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 12)
+                    .padding(.top, -4)
+            }
             startLine
         }
         .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))

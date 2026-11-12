@@ -9,6 +9,26 @@ public struct AgentGroup: Equatable, Sendable, Identifiable {
     public var id: String { runnerId ?? "host" }
 }
 
+/// One row of the macOS sidebar's Workspaces section. The section draws exactly one view per row, so the
+/// outline list sees one flat, stable-id row set: an `if`/`else` swapping the placeholder for the rows,
+/// or a `ForEach` element yielding a varying number of rows, is the shape whose row reload
+/// NSOutlineView aborted on (beta.196, `-[NSLayoutConstraint setActive:]` under
+/// `reloadItem:reloadChildren:`).
+public enum SidebarWorkspaceRow: Equatable, Sendable, Identifiable {
+    case agent(Agent)
+    case setUp(MachineToSetUp)
+    /// Stands in for the rows while there are none: loading, failed, or empty.
+    case placeholder
+
+    public var id: String {
+        switch self {
+        case .agent(let a): return "agent:\(a.id)"
+        case .setUp(let m): return "setup:\(m.id)"
+        case .placeholder: return "placeholder"
+        }
+    }
+}
+
 /// Where New session goes (rule 11, board 03): the workspace in view, else the first machine that can
 /// start one, else Machines & models. Nothing while the workspace list hasn't answered.
 public enum NewSessionTarget: Equatable, Sendable {
@@ -63,6 +83,16 @@ public enum AgentListLogic {
         #else
         agents.filter { $0.runnerId != nil } + agents.filter { $0.runnerId == nil }
         #endif
+    }
+
+    /// The Mac sidebar's Workspaces rows: the workspaces in `ordered` order, then a Set up row per machine
+    /// with no workspace; the placeholder alone when there is neither. A row id seen twice keeps its first
+    /// row only, since a duplicate id is itself a row set the outline list can't reconcile.
+    public static func sidebarRows(_ ordered: [Agent], machines: [MachineToSetUp]) -> [SidebarWorkspaceRow] {
+        var seen = Set<String>()
+        let rows = (ordered.map(SidebarWorkspaceRow.agent) + machines.map(SidebarWorkspaceRow.setUp))
+            .filter { seen.insert($0.id).inserted }
+        return rows.isEmpty ? [.placeholder] : rows
     }
 
     /// Rule 9: the machines that get a Set up row, in the runner list's order. Online, with no
