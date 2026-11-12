@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """The restricted Docker channel (deploy/managed-runner/docker-channel/channel.py) against an
-in-memory Docker Engine fake, through its real HTTP server on a scratch unix socket.
+in-memory Docker Engine fake, through its real HTTP server on a scratch unix socket (and, for
+listen.allowPeers, on a loopback port).
 
-Covers what the channel decides: its configuration, the bearer token, the template and its safety
+Covers what the channel decides: its configuration (its listeners among them), the peers a TCP
+listener lets through, the bearer token, the template and its safety
 rules (an executable /tmp with a size limit among them), the refusal of every Docker parameter a
 request may not carry, the instance label on everything it touches, one container per data volume
 and a cap on all of them, credentials, the stop and removal of a container, volume removal (off
@@ -11,6 +13,7 @@ interrupted by the channel stopping. The Docker calls themselves are exercised o
 the Docker backend's integration run, not here.
 """
 
+import contextlib
 import copy
 import errno
 import hashlib
@@ -20,6 +23,7 @@ import io
 import json
 import os
 from pathlib import Path
+from re import escape as re_escape
 import socket
 import stat
 import sys
@@ -344,6 +348,67 @@ class ConfigurationTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, needle):
                     self.ch.parse_config(value)
 
+    def test_a_private_listen_address_needs_its_peers(self):
+        for host in ("10.66.0.3", "172.16.0.1", "172.31.255.254", "192.168.1.10", "100.64.0.1", "100.127.255.254"):
+            with self.subTest(host=host):
+                config = self.ch.parse_config({**self.valid(), "listen": {"tcp": {"host": host, "port": 7000}, "allowPeers": ["10.66.0.1"]}})
+                self.assertEqual(config["listen"]["allowPeers"], ["10.66.0.1"])
+        for listen, needle in (
+            ({"tcp": {"host": "0.0.0.0", "port": 7000}, "allowPeers": ["10.66.0.1"]}, "never 0.0.0.0 or a public address"),
+            ({"tcp": {"host": "8.8.8.8", "port": 7000}, "allowPeers": ["10.66.0.1"]}, "never 0.0.0.0 or a public address"),
+            ({"tcp": {"host": "172.32.0.1", "port": 7000}, "allowPeers": ["10.66.0.1"]}, "listen.tcp.host '172.32.0.1' is refused"),
+            ({"tcp": {"host": "100.128.0.1", "port": 7000}, "allowPeers": ["10.66.0.1"]}, "listen.tcp.host '100.128.0.1' is refused"),
+            ({"tcp": {"host": "::", "port": 7000}, "allowPeers": ["10.66.0.1"]}, "listen.tcp.host '::' is refused"),
+            ({"tcp": {"host": "fd00::1", "port": 7000}, "allowPeers": ["10.66.0.1"]}, "listen.tcp.host 'fd00::1' is refused"),
+            ({"tcp": {"host": "010.066.000.003", "port": 7000}, "allowPeers": ["10.66.0.1"]}, "is refused"),
+            ({"tcp": {"host": "10.66.0.3", "port": 7000}}, "listen.allowPeers is required with listen.tcp.host 10.66.0.3"),
+            ({"tcp": {"host": "10.66.0.3", "port": 7000}, "allowPeers": []}, "non-empty list"),
+            ({"tcp": {"host": "10.66.0.3", "port": 7000}, "allowPeers": "10.66.0.1"}, "non-empty list"),
+            ({"tcp": {"host": "10.66.0.3", "port": 7000}, "allowPeers": ["0.0.0.0"]}, re_escape('refused: ["0.0.0.0"]')),
+            ({"tcp": {"host": "10.66.0.3", "port": 7000}, "allowPeers": ["10.66.0.1", "1.1.1.1"]}, re_escape('refused: ["1.1.1.1"]')),
+            ({"tcp": {"host": "10.66.0.3", "port": 7000}, "allowPeers": ["fd00::1"]}, re_escape('refused: ["fd00::1"]')),
+            ({"tcp": {"host": "10.66.0.3", "port": 7000}, "allowPeers": ["10.66.0.0/24"]}, re_escape('refused: ["10.66.0.0/24"]')),
+            ({"tcp": {"host": "10.66.0.3", "port": 7000}, "allowPeers": [167903233]}, re_escape("refused: [167903233]")),
+            ({"tcp": {"host": "::1", "port": 7000}, "allowPeers": ["127.0.0.1"]}, "cannot be given with listen.tcp.host ::1"),
+            ({"tcp": {"host": "10.66.0.3", "port": 0}, "allowPeers": ["10.66.0.1"]}, "listen must be"),
+            ({"tcp": {"host": "10.66.0.3", "port": 7000}, "allowPeers": ["10.66.0.1"], "unixSocket": "/run/c.sock"}, "listen must be"),
+            ({"unixSocket": "/run/c.sock", "allowPeers": ["10.66.0.1"]}, "listen must be"),
+        ):
+            with self.subTest(listen=listen):
+                with self.assertRaisesRegex(ValueError, needle):
+                    self.ch.parse_config({**self.valid(), "listen": listen})
+
+    def test_check_config_refuses_a_public_or_wildcard_listener_in_english(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            token = Path(scratch) / "token"
+            token.write_text(TOKEN)
+            token.chmod(0o600)
+            path = Path(scratch) / "channel.json"
+            said = []
+            self.ch.log = said.append
+            for host in ("0.0.0.0", "203.0.113.7"):
+                with self.subTest(host=host):
+                    path.write_text(json.dumps({**self.valid(), "tokenFile": str(token),
+                                                "listen": {"tcp": {"host": host, "port": 7000}, "allowPeers": ["10.66.0.1"]}}))
+                    self.assertEqual(self.ch.main(["check-config", "--config", str(path)]), 1)
+                    self.assertIn(f"listen.tcp.host '{host}' is refused", said[-1])
+            path.write_text(json.dumps({**self.valid(), "tokenFile": str(token),
+                                        "listen": {"tcp": {"host": "10.66.0.3", "port": 7000}, "allowPeers": ["10.66.0.1"]}}))
+            with contextlib.redirect_stdout(io.StringIO()) as printed:
+                self.assertEqual(self.ch.main(["check-config", "--config", str(path)]), 0)
+            self.assertEqual(json.loads(printed.getvalue()), {"ok": True, "instanceId": "orbit-a"})
+
+    def test_loopback_and_unix_listeners_are_as_before(self):
+        for listen in ({"unixSocket": "/run/c.sock"}, {"tcp": {"host": "127.0.0.1", "port": 7000}}, {"tcp": {"host": "::1", "port": 65535}},
+                       {"tcp": {"host": "127.0.0.1", "port": 7000}, "allowPeers": ["127.0.0.1"]}):
+            with self.subTest(listen=listen):
+                self.assertEqual(self.ch.parse_config({**self.valid(), "listen": listen})["listen"], listen)
+        for listen in ({"unixSocket": "relative.sock"}, {"tcp": {"host": "127.0.0.1", "port": 70000}}, {"tcp": {"host": "localhost", "port": 7000}},
+                       {"unixSocket": "/run/c.sock", "tcp": {"host": "127.0.0.1", "port": 7000}}, {}, "/run/c.sock"):
+            with self.subTest(listen=listen):
+                with self.assertRaisesRegex(ValueError, "listen"):
+                    self.ch.parse_config({**self.valid(), "listen": listen})
+
     def test_the_token_file_must_be_private_and_long(self):
         with tempfile.TemporaryDirectory() as scratch:
             path = Path(scratch) / "token"
@@ -472,6 +537,83 @@ class AuthenticationAndRoutesTest(ChannelFixture):
         self.assertEqual((status, body["code"]), (400, "PARAMETER_REFUSED"))
         self.assertEqual(self.call("GET", f"/v1/fencing-receipts/{RUNNER}%0A")[1]["code"], "NAME_REFUSED")
         self.assertEqual(self.call("DELETE", f"/v1/credentials/{RUNNER}?uid={uuid.uuid4()}%0A")[1]["code"], "PARAMETER_REFUSED")
+
+
+def free_port():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+class TcpPeerFixture(ChannelFixture):
+    """The real TCP server on loopback, with the listen.allowPeers the subclass names."""
+    allow_peers = None
+
+    def setUp(self):
+        self.said = []
+        super().setUp()
+        self.ch.log = self.said.append
+
+    def config_value(self, root):
+        value = super().config_value(root)
+        value["listen"] = {"tcp": {"host": "127.0.0.1", "port": free_port()}}
+        if self.allow_peers is not None:
+            value["listen"]["allowPeers"] = self.allow_peers
+        return value
+
+    def call(self, method, path, body=None, token=TOKEN, raw=None):
+        tcp = self.config["listen"]["tcp"]
+        connection = http.client.HTTPConnection(tcp["host"], tcp["port"], timeout=10)
+        headers = {} if token is None else {"Authorization": f"Bearer {token}"}
+        connection.request(method, path, body=None if body is None else json.dumps(body).encode(), headers=headers)
+        response = connection.getresponse()
+        data = response.read()
+        connection.close()
+        return response.status, (json.loads(data) if data else None)
+
+
+class AcceptedPeerTest(TcpPeerFixture):
+    allow_peers = ["10.66.0.1", "127.0.0.1"]
+
+    def test_an_allowed_peer_is_served_with_the_token_only(self):
+        self.assertEqual(self.server.allow_peers, frozenset({"10.66.0.1", "127.0.0.1"}))
+        self.assertEqual(self.call("GET", "/v1/resources")[0], 200)
+        for token in (None, "", "wrong-token-" + "x" * 40, TOKEN + "x"):
+            with self.subTest(token=token):
+                status, body = self.call("GET", "/v1/resources", token=token)
+                self.assertEqual((status, body["code"]), (401, "UNAUTHENTICATED"))
+        self.assertFalse([line for line in self.said if "refused a connection" in line])
+
+
+class RefusedPeerTest(TcpPeerFixture):
+    allow_peers = ["10.66.0.1"]
+
+    def test_another_source_address_is_closed_before_its_request_is_read(self):
+        for token in (TOKEN, None):
+            with self.subTest(token=token):
+                with self.assertRaises((http.client.RemoteDisconnected, ConnectionResetError, BrokenPipeError)):
+                    self.call("GET", "/v1/resources", token=token)
+        refusals = [line for line in self.said if "refused a connection" in line]
+        self.assertEqual(refusals, ["refused a connection from 127.0.0.1: not in listen.allowPeers"] * 2)
+        self.assertFalse([line for line in self.said if "/v1/resources" in line], "no request line was ever read")
+        self.assertFalse([line for line in self.said if TOKEN in line])
+
+    def test_a_raw_connection_reads_nothing_back(self):
+        tcp = self.config["listen"]["tcp"]
+        with socket.create_connection((tcp["host"], tcp["port"]), timeout=10) as connection:
+            try:
+                connection.sendall(b"GET /v1/info HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer " + TOKEN.encode() + b"\r\n\r\n")
+                self.assertEqual(connection.recv(4096), b"")
+            except ConnectionResetError:
+                pass
+        self.assertFalse([line for line in self.said if "/v1/info" in line])
+
+
+class LoopbackWithoutPeersTest(TcpPeerFixture):
+    def test_a_loopback_listener_without_allow_peers_lets_any_local_peer_through_with_the_token(self):
+        self.assertIsNone(self.server.allow_peers)
+        self.assertEqual(self.call("GET", "/v1/resources")[0], 200)
+        self.assertEqual(self.call("GET", "/v1/resources", token=None)[0], 401)
 
 
 class VolumeTest(ChannelFixture):
