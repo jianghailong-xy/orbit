@@ -531,6 +531,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'POST /runners/:id/self-update/postpone': {
     request: (of) => ({ params: { id: of.runnerId }, body: { until: new Date(Date.now() + 3_600_000).toISOString(), timeZone: 'UTC' } }),
   },
+  'POST /runners/:id/self-update/now': {
+    request: (of) => ({ params: { id: of.runnerId }, body: { interruptTurns: true } }),
+  },
   'POST /runners/:id/region-check': { request: (of) => ({ params: { id: of.runnerId } }) },
   'POST /runners/:id/claude-history': { request: (of) => ({ params: { id: of.runnerId }, body: { workDir: '/census' } }) },
   'GET /runners/:id/claude-history': { request: (of) => ({ params: { id: of.runnerId }, query: { workDir: '/census' } }) },

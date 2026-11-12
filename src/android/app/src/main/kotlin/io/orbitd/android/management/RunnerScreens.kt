@@ -396,11 +396,18 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
             RunnerHead(runner, now)
             if (model.failed) model.error?.let { Text("⚠ $it", Modifier.padding(top = 8.dp), color = Ink.amber, style = MaterialTheme.typography.labelMedium) }
             RunnerPage.updateCard(runner, now)?.let { card ->
-                val laterActions: (@Composable () -> Unit)? = if (card.phase == "draining" || card.phase == "postponed") { {
-                    RunnerUpdateLaterButton(updateVersion, RunnerPage.displayName(runner), { until ->
+                // Update Now… interrupts the turns in flight on a runner that takes it (available, draining, postponed); an older one's
+                // postponed card keeps the Update Now… that ends the postponement through Update Runner Now.
+                val updateNow = RunnerUpdateNow.offered(runner)
+                val laterActions: (@Composable () -> Unit)? = if (card.phase == "draining" || card.phase == "postponed" || updateNow) { {
+                    if (card.phase == "draining" || card.phase == "postponed") RunnerUpdateLaterButton(updateVersion, RunnerPage.displayName(runner), { until ->
                         model.press { api.post(RunnerUpdateLater.path(id).joinToString("/"), RunnerUpdateLater.body(until)) }
                     }, change = card.phase == "postponed")
-                    if (card.phase == "postponed") OutlinedButton({ confirmingUpdateNow = true }, Modifier.testTag("runner-update-now")) {
+                    if (updateNow) RunnerUpdateNowButton(RunnerPage.displayName(runner), updateVersion.orEmpty(), { RunnerPage.updateTurns(runner, System.currentTimeMillis()) }, {
+                        model.press { api.post(RunnerUpdateNow.path(id).joinToString("/"), RunnerUpdateNow.request()) }
+                            .also { if (it == null) notice.show(RunnerUpdateNow.toast(updateVersion.orEmpty())) }
+                    })
+                    else if (card.phase == "postponed") OutlinedButton({ confirmingUpdateNow = true }, Modifier.testTag("runner-update-now")) {
                         Text(RunnerUpdateLater.UPDATE_NOW)
                     }
                 } } else null
@@ -1522,8 +1529,7 @@ internal fun AddRunnerDialog(api: ManagementApi, onDismiss: () -> Unit, open: (S
 }
 
 /** The Update card (board 4) above Needs Attention: title and phase tag, what happens, and while draining the turns it waits for
- * with a bar. [actions]: Later… while draining, Change… and Update Now… once postponed (Update Now… while draining comes with its
- * own task). */
+ * with a bar. [actions]: Later… while draining, Change… once postponed, and Update Now… on a runner that takes it. */
 @Composable
 internal fun UpdateCardView(card: RunnerPage.UpdateCard, actions: (@Composable () -> Unit)? = null, openSession: (String) -> Unit = {}) {
     val tint = if (card.warn) Ink.amber else Ink.muted
@@ -1536,7 +1542,7 @@ internal fun UpdateCardView(card: RunnerPage.UpdateCard, actions: (@Composable (
                 Spacer(Modifier.width(8.dp))
                 Text(card.tag, color = tint, style = MaterialTheme.typography.labelMedium, maxLines = 1)
             }
-            Text(card.body, color = Ink.muted, style = MaterialTheme.typography.bodySmall)
+            if (card.body.isNotEmpty()) Text(card.body, color = Ink.muted, style = MaterialTheme.typography.bodySmall)
             card.progressLabel?.let { label ->
                 Text(label, Modifier.padding(top = 4.dp), color = Ink.muted, style = MaterialTheme.typography.labelMedium)
                 LinearProgressIndicator(progress = { card.progress ?: 0f }, modifier = Modifier.fillMaxWidth(), color = Ink.amber)

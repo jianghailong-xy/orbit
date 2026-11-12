@@ -782,6 +782,16 @@ func (p *sessionPool) closeForUpdate(quiet time.Duration) (turnsInFlight int, qu
 	return 0, 0
 }
 
+// closeForUpdateNow is closeForUpdate for the owner's Update Now: the pool closes with the turns in
+// flight, which the stop that follows interrupts at once (stopDrainBudget), and reports how many there
+// were. Only the owner's explicit word gets here; an automatic update still waits (closeForUpdate).
+func (p *sessionPool) closeForUpdateNow() (turnsInFlight int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.closedForUpdate = true
+	return p.turnsInFlightLocked()
+}
+
 // markActivityLocked records a turn ending or a session or turn claimed now, for the quiet window
 // an automatic update waits for (closeForUpdate).
 func (p *sessionPool) markActivityLocked() {

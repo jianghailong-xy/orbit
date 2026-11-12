@@ -5,8 +5,8 @@ import OrbitKit
 // docs/mocks/runner-update-drain draws it on a phone: the queued page — why, the turns it waits for
 // and how long — while the conversation is empty, and otherwise `Queued · runner updating` on the
 // foot row of the reader's last message. The words are `RunnerUpdating`'s, which are the web's
-// (`runnerSlots.ts`). Both offer Later (`RunnerUpdateLaterControl`) for the session's runner; Update
-// Now… comes with its own task.
+// (`runnerSlots.ts`). Both offer Later (`RunnerUpdateLaterControl`) and, for a runner that declares
+// `self-update-now/v1`, Update Now… (`RunnerUpdateNowControl`) for the session's runner (board 5).
 
 /// What the foot-row tag needs: which bubble carries it, the session it explains and its runner.
 struct RunnerUpdatingFoot: Equatable {
@@ -62,6 +62,7 @@ struct RunnerUpdatingQueuedView: View {
                     RunnerUpdateLaterControl(runnerID: runnerID, version: session.queuedRunnerUpdate?.targetVersion,
                                              machine: machine)
                         .padding(.top, 8)
+                    RunnerUpdateNowControl(runnerID: runnerID, machine: machine)
                 }
             }
             .padding(.horizontal, 32)
@@ -124,6 +125,7 @@ struct RunnerUpdatingTagView: View {
                                              version: foot.session.queuedRunnerUpdate?.targetVersion,
                                              machine: foot.machine)
                         .padding(.top, 4)
+                    RunnerUpdateNowControl(runnerID: runnerID, machine: foot.machine)
                 }
             }
             .fixedSize(horizontal: false, vertical: true)

@@ -2323,6 +2323,43 @@ button.toast--pill:focus-visible {
 }
 /* The turns a drain waits for (board 4): one bordered list, a row each — the session, and how long
    it has run. */
+/* Update Now…'s confirmation (board 3 ⑧): the turns it interrupts, as the Update card lists them. */
+.runner-update-now p {
+  margin: 0 0 12px;
+}
+.runner-update-now .runner-update-now-jobs {
+  margin: 12px 0 0;
+}
+.runner-update-now-turns {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+.runner-update-now-turns > li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 14px;
+  font-size: 13px;
+  color: var(--text-1);
+}
+.runner-update-now-turns > li + li {
+  border-top: 1px solid var(--border-subtle);
+}
+.runner-update-now-turn-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.runner-update-now-turn-running {
+  flex: none;
+  color: var(--text-3);
+}
 .rd-update-turns {
   margin: 12px 0 0;
   padding: 0;

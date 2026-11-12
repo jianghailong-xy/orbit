@@ -163,6 +163,9 @@ type selfUpdateGate struct {
 	// cameDue: a postponement ran out, so this release waits for the turns in flight only, not for
 	// the quiet window, until it is taken or postponed again.
 	cameDue bool
+	// nowAsked: the owner's Update Now waits for the next check (updateNow); interrupting: that
+	// check took the release with turns in flight, which the stop interrupts (stopsForUpdateNow).
+	nowAsked, interrupting bool
 }
 
 func newSelfUpdateGate(check selfUpdateChecker, pool *sessionPool, operations func() int, interval, limit, quiet time.Duration) *selfUpdateGate {
@@ -193,11 +196,31 @@ func (g *selfUpdateGate) take(ctx context.Context, server string) (string, bool)
 		var ok bool
 		if remote, ok = g.check(ctx, server); !ok {
 			g.pool.forgetUpdateAskedByOwner()
+			if g.nowAsked {
+				logln("runner update now requested by the control plane; no update is waiting to install")
+			}
+			g.nowAsked = false
 			g.target = ""
 			return "", false
 		}
 	}
 	g.target = remote
+	if g.nowAsked {
+		// The owner's Update Now: the turns in flight are interrupted, not waited for — nor the quiet
+		// window or the heartbeat's operations, which the stop gives their own budget and hands back.
+		g.nowAsked = false
+		turns := g.pool.closeForUpdateNow()
+		g.restarting, g.interrupting = true, true
+		updateNowTarget.Store(&remote)
+		noteUpdateRestart(now, turns)
+		noteSelfUpdatePhase(selfUpdateStateEnabled, "", selfUpdatePhase{
+			phase: selfUpdatePhaseRestarting, targetVersion: remote,
+			availableSince: g.deferredSince, drainingSince: g.drainingSince,
+			interruptedTurns: turns,
+		})
+		logln(fmt.Sprintf("orbit %s update now, as the owner asked; interrupting the %d turn(s) in flight, then updating", remote, turns))
+		return remote, true
+	}
 	window := g.quiet
 	if g.draining != "" || g.cameDue || g.pool.updateIsAskedByOwner() {
 		window = 0
@@ -210,6 +233,7 @@ func (g *selfUpdateGate) take(ctx context.Context, server string) (string, bool)
 	}
 	if ops == 0 && turns == 0 && quietLeft == 0 {
 		g.restarting = true
+		noteUpdateRestart(now, 0)
 		// The heartbeat the check rides says so before the stop: the Update card's Restarting.
 		noteSelfUpdatePhase(selfUpdateStateEnabled, "", selfUpdatePhase{
 			phase: selfUpdatePhaseRestarting, targetVersion: remote,
@@ -283,6 +307,30 @@ func (g *selfUpdateGate) postpone(until time.Time) bool {
 	logln(fmt.Sprintf("orbit %s update postponed by the owner until %s (was draining: %t); taking work again",
 		g.target, until.Format(time.RFC3339), wasDraining))
 	return true
+}
+
+// updateNow is the owner's Update Now (HeartbeatResponse.SelfUpdateNow): the next check installs the
+// waiting release with the turns in flight interrupted (take), ending a postponement first. Reports
+// false once a release is already handed to the stop.
+func (g *selfUpdateGate) updateNow() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.restarting {
+		return false
+	}
+	g.nowAsked = true
+	if now := g.pool.clock.Now(); !g.postponedUntil.IsZero() && now.Before(g.postponedUntil) {
+		g.postponedUntil = now
+	}
+	return true
+}
+
+// stopsForUpdateNow is whether the release the last check took is the owner's Update Now, whose stop
+// interrupts the turns in flight (errRunnerUpdateNow).
+func (g *selfUpdateGate) stopsForUpdateNow() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.interrupting
 }
 
 // endPostponement is the owner's Update Runner Now while the release is postponed: the
@@ -1220,6 +1268,8 @@ func idleUsage(provider string, configured func(string) bool, engines *engineHea
 // update re-executes into, for a caller whose re-exec failed.
 func runLoop(cfg *RunnerConfig) (bool, func()) {
 	t := NewTransport(cfg.ServerURL, cfg.RunnerToken)
+	// The image an update restarted into is back: the Updated card's "Took 34 s" ends here.
+	markSelfUpdateBack(time.Now())
 
 	// Claude Code's cwd is per session: the server hands each claimed/reclaimed
 	// session the project directory of its agent. sessionExecDir resolves it, falling
@@ -1355,9 +1405,15 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		}
 		if reason == runLoopStopUpdate {
 			updateRequested.Store(true)
-			logln(fmt.Sprintf("orbit %s update available and no turn in flight; stopping claims and draining sessions", remote))
 			// The cause tells each session's drain that this stop re-executes, so its jobs are handed
-			// on rather than ended (handOffJobs).
+			// on rather than ended (handOffJobs) — and, for the owner's Update Now, that the turns in
+			// flight are cut at once (stopDrainBudget).
+			if updateGate != nil && updateGate.stopsForUpdateNow() {
+				logln(fmt.Sprintf("orbit %s update now; stopping claims and interrupting the turns in flight", remote))
+				stopLoop(errRunnerUpdateNow)
+				return
+			}
+			logln(fmt.Sprintf("orbit %s update available and no turn in flight; stopping claims and draining sessions", remote))
 			stopLoop(errRunnerSelfUpdate)
 			return
 		}
@@ -2128,6 +2184,22 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					case checkSelfUpdateNow <- struct{}{}:
 					default:
 					}
+				}
+			}
+			// The owner's Update Now: install the waiting release now, interrupting the turns in flight
+			// (selfUpdateGate.updateNow). The check it asks for takes it.
+			if resp.SelfUpdateNow {
+				switch {
+				case updateGate == nil:
+					logln("runner update now requested by the control plane; self-update is off:", selfUpdateDisabledReason())
+				case updateGate.updateNow():
+					logln("runner update now requested by the control plane; interrupting the turns in flight")
+					select {
+					case checkSelfUpdateNow <- struct{}{}:
+					default:
+					}
+				default:
+					logln("runner update now requested by the control plane; already restarting")
 				}
 			}
 			// The owner's Later: end the drain now and put the release off until the time named

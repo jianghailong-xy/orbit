@@ -15,6 +15,8 @@ const VERSION_MAX = 64;
 const TURNS_MAX = 10_000;
 /** A quiet window longer than a day is not one a runner means. */
 const QUIET_WINDOW_MAX_SECONDS = 86_400;
+/** A restart that took longer than a day is not one the Updated card names. */
+const LAST_UPDATE_MAX_SECONDS = 86_400;
 
 /**
  * Normalize the self-update report a runner sent (RunnerHeartbeatRequest.selfUpdate) — on the way
@@ -49,6 +51,10 @@ export function sanitizeRunnerSelfUpdate(value: unknown): RunnerSelfUpdate | nul
   const postponedUntil = phase ? isoTime(raw.postponedUntil) : undefined;
   const turnsInFlight = phase ? count(raw.turnsInFlight) : undefined;
   const turnsAtDrain = phase ? count(raw.turnsAtDrain) : undefined;
+  const interruptedTurns = phase ? count(raw.interruptedTurns) : undefined;
+  // The last update's restart, beside lastUpdatedAt: the Updated card's "Took 34 s".
+  const lastUpdateSeconds = wholeNumber(raw.lastUpdateSeconds, LAST_UPDATE_MAX_SECONDS);
+  const lastUpdateInterruptedTurns = count(raw.lastUpdateInterruptedTurns);
   // With or without a phase: About's "installs when the runner has been idle for …" reads it.
   const quietWindowSeconds = wholeNumber(raw.quietWindowSeconds, QUIET_WINDOW_MAX_SECONDS);
   return {
@@ -65,6 +71,9 @@ export function sanitizeRunnerSelfUpdate(value: unknown): RunnerSelfUpdate | nul
     ...(postponedUntil ? { postponedUntil } : {}),
     ...(turnsInFlight ? { turnsInFlight } : {}),
     ...(turnsAtDrain ? { turnsAtDrain } : {}),
+    ...(interruptedTurns ? { interruptedTurns } : {}),
+    ...(lastUpdateSeconds ? { lastUpdateSeconds } : {}),
+    ...(lastUpdateInterruptedTurns ? { lastUpdateInterruptedTurns } : {}),
     ...(quietWindowSeconds ? { quietWindowSeconds } : {}),
   };
 }

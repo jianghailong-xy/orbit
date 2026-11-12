@@ -136,6 +136,8 @@ import {
 } from '../lib/runnerCopy';
 import { runnerQuietMinutes, runnerUpdateCard } from '../lib/runnerUpdateCard';
 import { RunnerUpdateLaterMenu } from '../components/RunnerUpdateLater';
+import { RunnerUpdateNowButton } from '../components/RunnerUpdateNow';
+import { runnerTakesUpdateNow } from '../lib/runnerUpdateNow';
 import { useClaudeRegionCheckAgain } from '../lib/claudeRegion';
 import { CLAUDE_REGION_CHECK_AGAIN } from '../lib/claudeRegionCopy';
 import { ago } from '../lib/runnerEngines';
@@ -1346,7 +1348,10 @@ export function RunnerDetailPage() {
     const parts = [report.lastUpdatedAt ? fmtTime(report.lastUpdatedAt) : null, versions];
     return parts.filter(Boolean).join(RUNNER_LINE_SEPARATOR) || '—';
   })();
-  const canUpdateNow = runnerCanUpdateNow(runner, nowMs);
+  // The Update card's Update Now… (interrupting the turns in flight) replaces About's Update Runner Now,
+  // which only asks for an earlier check, on a runner that takes it.
+  const takesUpdateNow = runnerTakesUpdateNow(runner);
+  const canUpdateNow = runnerCanUpdateNow(runner, nowMs) && !takesUpdateNow;
   // Where a release it is behind stands, from a runner that says (null for one that doesn't).
   const updateCard = runnerUpdateCard(runner.selfUpdate, nowMs, runner.updateTurns);
   // An engine update shares the runner's one relay slot with an engine's install. Only a run in
@@ -1571,12 +1576,16 @@ export function RunnerDetailPage() {
               ))}
             </ul>
           )}
-          {/* Later ▾ while draining (board 3 ⑦); Change ▾ and Update Now… once postponed. Update Now… while
-              draining comes with its own task. */}
-          {(updateCard.phase === 'draining' || updateCard.phase === 'postponed') && (
+          {/* Later ▾ while draining (board 3 ⑦), Change ▾ once postponed; Update Now… (board 3 ⑧) in every
+              phase with a release waiting, on a runner that takes it. A runner too old for it keeps the
+              postponed card's Update Now…, which asks for an earlier check. */}
+          {(updateCard.phase === 'draining' || updateCard.phase === 'postponed' || (updateCard.phase === 'available' && takesUpdateNow)) && (
             <div className="rd-update-actions">
-              <RunnerUpdateLaterMenu runnerId={runner.id} change={updateCard.phase === 'postponed'} />
-              {updateCard.phase === 'postponed' && (
+              {updateCard.phase !== 'available' && (
+                <RunnerUpdateLaterMenu runnerId={runner.id} change={updateCard.phase === 'postponed'} />
+              )}
+              {takesUpdateNow && <RunnerUpdateNowButton runner={runner} machine={shownName} />}
+              {updateCard.phase === 'postponed' && !takesUpdateNow && (
                 <Button
                   loading={runnerUpdate.isPending}
                   onClick={() =>

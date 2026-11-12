@@ -114,6 +114,7 @@ func init() {
 		createWorkDirCapabilityV1,
 		claudeRegionCapabilityV1,
 		selfUpdatePostponeCapabilityV1,
+		selfUpdateNowCapabilityV1,
 	}, cursorAccountCapabilities()...), declaredSteerCapabilities()...), ",")
 	// Where 0600 means something (secret_file_unix.go); a Windows runner is never handed a secret.
 	if secretFilesSupported {

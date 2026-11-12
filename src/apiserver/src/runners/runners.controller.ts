@@ -13,7 +13,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import type { RunnerSelfUpdatePostponeRequest } from '@orbit/shared';
+import type { RunnerSelfUpdateNowRequest, RunnerSelfUpdatePostponeRequest } from '@orbit/shared';
 import { isLoginEngine } from '../common/runner-engines';
 import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -274,6 +274,18 @@ export class RunnersController {
     @Body() body: RunnerSelfUpdatePostponeRequest,
   ) {
     return this.runners.postponeSelfUpdate(user.userId, id, body);
+  }
+
+  // Update Now: install the waiting release now, interrupting the turns in flight (they resume after
+  // the restart). Owner-scoped like Update Runner Now, recorded, and only with interruptTurns: true.
+  @PatForbidden('RUNNER_CONTROL')
+  @Post(':id/self-update/now')
+  updateSelfNow(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() body: RunnerSelfUpdateNowRequest,
+  ) {
+    return this.runners.updateSelfNow(user.userId, id, body);
   }
 
   // Check again: have this machine check where its Claude connection to Anthropic comes out now

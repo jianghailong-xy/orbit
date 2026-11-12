@@ -37,8 +37,7 @@ internal fun rememberMinuteNow(): Instant {
 
 /**
  * The queued page of a session held by its runner's update (board 2 ②–③, board 5's phone; web `RunnerUpdatingQueued`): why, with the
- * turns it waits for as links, and how long it has waited, centred; then [later], Later… for the session's runner (Update Now… comes
- * with its own task).
+ * turns it waits for as links, and how long it has waited, centred; then [later], Later… and Update Now… for the session's runner.
  */
 @Composable
 internal fun RunnerUpdatingQueued(gate: QueuedGate, machine: String?, openSession: (String) -> Unit, modifier: Modifier = Modifier,
@@ -62,7 +61,7 @@ internal fun RunnerUpdatingQueued(gate: QueuedGate, machine: String?, openSessio
         Text(text, Modifier.testTag("runner-updating:description"), style = MaterialTheme.typography.bodyMedium, color = secondary,
             textAlign = TextAlign.Center)
         waited?.let { Text(it, Modifier.testTag("runner-updating:waited"), style = MaterialTheme.typography.bodySmall, color = secondary) }
-        later?.let { Box(Modifier.padding(top = 8.dp)) { it() } }
+        later?.let { Column(Modifier.padding(top = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) { it() } }
     }
 }
 

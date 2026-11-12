@@ -19,7 +19,12 @@ import {
   runnerUpdateDrainingTitle,
   runnerUpdatePostponedBody,
   runnerUpdatePostponedTitle,
+  runnerUpdateRestartingBodyInterrupted,
   runnerUpdateRestartingTitle,
+  RUNNER_UPDATE_TAG_UPDATED_HOURS,
+  runnerUpdateTook,
+  runnerUpdateUpdatedBody,
+  runnerUpdateUpdatedTitle,
   runnerUpdateTurnRunning,
   runnerUpdateWaitedHours,
   runnerUpdateWaitedHoursMinutes,
@@ -30,7 +35,8 @@ import {
 
 /** The runner page's Update card (docs/runner-update-drain-design.md §3.5, board 4). */
 export interface RunnerUpdateCard {
-  phase: RunnerSelfUpdatePhase;
+  /** The runner's phase, or `updated`: no release waiting, and one installed within the last day. */
+  phase: RunnerSelfUpdatePhase | 'updated';
   /** `warn` for the phases that hold work back or restart it; `quiet` for the others. */
   tone: 'warn' | 'quiet';
   title: string;
@@ -84,7 +90,8 @@ export function runnerUpdateCard(
 ): RunnerUpdateCard | null {
   const phase = report?.phase;
   const version = report?.targetVersion;
-  if (!phase || !version) return null;
+  if (!phase) return report ? updatedCard(report, nowMs) : null;
+  if (!version) return null;
   switch (phase) {
     case 'available':
       return {
@@ -125,7 +132,8 @@ export function runnerUpdateCard(
         tone: 'warn',
         title: runnerUpdateRestartingTitle(version),
         tag: RUNNER_UPDATE_TAG_RESTARTING,
-        body: RUNNER_UPDATE_RESTARTING_BODY,
+        // After the owner's Update Now, the turns it interrupted continue once it is back.
+        body: report.interruptedTurns ? runnerUpdateRestartingBodyInterrupted(report.interruptedTurns) : RUNNER_UPDATE_RESTARTING_BODY,
       };
     case 'postponed': {
       if (!report.postponedUntil) return null;
@@ -139,4 +147,25 @@ export function runnerUpdateCard(
       };
     }
   }
+}
+
+/**
+ * The Updated card (board 4): the last update, for a day after it was installed — how long the
+ * restart took and how many turns an Update Now interrupted for it, as far as the runner measured
+ * them. After that About's Last Update says it. Null with no update recorded, or an older one.
+ */
+function updatedCard(report: RunnerSelfUpdate, nowMs: number): RunnerUpdateCard | null {
+  const at = report.lastUpdatedAt ? Date.parse(report.lastUpdatedAt) : NaN;
+  if (!report.lastUpdatedTo || Number.isNaN(at)) return null;
+  if (nowMs - at > RUNNER_UPDATE_TAG_UPDATED_HOURS * 3_600_000 || at - nowMs > 60_000) return null;
+  return {
+    phase: 'updated',
+    tone: 'quiet',
+    title: runnerUpdateUpdatedTitle(report.lastUpdatedTo),
+    tag: runnerUpdateClock(report.lastUpdatedAt!),
+    body: runnerUpdateUpdatedBody(
+      report.lastUpdateSeconds ? runnerUpdateTook(report.lastUpdateSeconds) : null,
+      report.lastUpdateInterruptedTurns ?? 0,
+    ),
+  };
 }

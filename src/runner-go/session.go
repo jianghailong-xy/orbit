@@ -1153,7 +1153,18 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		defer cancelReport()
 		return flushWithContext(reportCtx)
 	})
-	bg.adoptJobs(pool.takeHostlessJobs(sessionID))
+	if adopted := pool.takeHostlessJobs(sessionID); len(adopted) > 0 {
+		bg.adoptJobs(adopted)
+		// Announced before this session's first inbox fetch: the control plane writes the turn it hands
+		// out with a <background-jobs> note, and a job last reported by the image before reads there as
+		// one whose runner went away, ended. The Update Now drill (2026-11-12) caught a Claude session
+		// told its adopted ticker had ended while the same jobs on a Codex session read as running.
+		flushCtx, cancelFlush := context.WithTimeout(context.Background(), bgHandedOnReportTimeout)
+		if err := flushWithContext(flushCtx); err != nil {
+			logln("could not report the background jobs adopted for", sessionID, "before its first turn:", err)
+		}
+		cancelFlush()
+	}
 	// Claude records background-shell completions in its transcript even while the session is
 	// idle, but only streams them to stdout on the next turn; tail the transcript so a shell
 	// that finishes between turns still clears from the "Background processes" tray. (Claude
@@ -2072,18 +2083,32 @@ func watchShutdownDrain(procCtx, shutdownCtx context.Context, pending <-chan str
 	pollCancel()
 	tk := time.NewTicker(drainPollInterval)
 	defer tk.Stop()
+	// The owner's Update Now cuts a turn in the engine at once (stopDrainBudget); a shell turn the
+	// runner runs itself — a `!cmd`, an acceptance command whose -1 would fail its task — still gets
+	// the whole drain.
+	turnDeadline := time.After(stopDrainBudget(shutdownCtx, timeout))
 	deadline := time.After(timeout)
 	for len(pending) > 0 || shells.Load() > 0 {
 		select {
 		case <-tk.C:
+			continue
 		case <-procCtx.Done():
 			return
+		case <-turnDeadline:
+			turnDeadline = nil
+			if len(pending) == 0 {
+				continue
+			}
 		case <-deadline:
-			emit(evInterrupt, map[string]interface{}{"reason": "runner_restart"})
-			logln("drain timeout for", sessionID+"; tearing down mid-turn")
-			procCancel()
-			return
 		}
+		emit(evInterrupt, stopInterruptPayload(shutdownCtx))
+		if stoppingForUpdateNow(shutdownCtx) {
+			logln("update now for", sessionID+"; interrupting the turn in flight")
+		} else {
+			logln("drain timeout for", sessionID+"; tearing down mid-turn")
+		}
+		procCancel()
+		return
 	}
 	procCancel()
 }

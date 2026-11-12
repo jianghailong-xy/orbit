@@ -148,6 +148,61 @@ public enum RunnerPageCopy {
     public static let RUNNER_UPDATE_UNTITLED_TURN = "Untitled session"
     public static func runnerUpdateRestartingTitle(version: String) -> String { "Restarting into \(version)…" }
     public static let RUNNER_UPDATE_RESTARTING_BODY = "Usually under a minute."
+    /// Restarting for the owner's Update Now: `2 interrupted turns continue once it is back. Usually under a minute.`
+    public static func runnerUpdateRestartingBodyInterrupted(turns: Int) -> String {
+        turns == 1
+            ? "1 interrupted turn continues once it is back. \(RUNNER_UPDATE_RESTARTING_BODY)"
+            : "\(turns) interrupted turns continue once it is back. \(RUNNER_UPDATE_RESTARTING_BODY)"
+    }
+
+    // The Updated card (board 4): shown for a day after the update, then About's Last Update says it.
+    public static let RUNNER_UPDATE_TAG_UPDATED_HOURS = 24
+    public static func runnerUpdateUpdatedTitle(version: String) -> String { "Updated to \(version)" }
+    /// `34 s`, `1 min 12 s`, `2 min`.
+    public static func runnerUpdateTook(seconds: Int) -> String {
+        if seconds < 60 { return "\(seconds) s" }
+        let rest = seconds % 60
+        return rest > 0 ? "\(seconds / 60) min \(rest) s" : "\(seconds / 60) min"
+    }
+    /// `Took 34 s. 2 interrupted turns resumed.`; either half alone when the runner measured only that.
+    public static func runnerUpdateUpdatedBody(took: String?, interruptedTurns: Int) -> String {
+        var parts: [String] = []
+        if let took { parts.append("Took \(took).") }
+        if interruptedTurns == 1 {
+            parts.append("1 interrupted turn resumed.")
+        } else if interruptedTurns > 1 {
+            parts.append("\(interruptedTurns) interrupted turns resumed.")
+        }
+        return parts.joined(separator: " ")
+    }
+
+    // Update Now… (board 3 ⑧ on the web; board 5's confirmation on iOS): install the waiting release
+    // now, interrupting the turns in flight, which continue once the runner is back.
+    public static func runnerUpdateNowTitle(runner: String) -> String { "Update \(runner) now?" }
+    /// The confirmation's first paragraph, by how many turns it interrupts.
+    public static func runnerUpdateNowBody(version: String, turns: Int) -> String {
+        if turns == 0 { return "No turn is running. It installs \(version) and restarts — usually under a minute." }
+        if turns == 1 {
+            return "It stops this turn, installs \(version) and restarts — usually under a minute. It then continues where it stopped, with a note that the update interrupted it."
+        }
+        return "It stops these turns, installs \(version) and restarts — usually under a minute. Each one then continues where it stopped, with a note that the update interrupted it."
+    }
+    /// Below the turns. A self-update re-execs the runner, which hands background jobs on; services stop.
+    public static let RUNNER_UPDATE_NOW_JOBS_NOTE =
+        "Background jobs in those sessions keep running; services they started are stopped. Waiting work starts once it is back."
+    /// The red button: `Interrupt 2 Turns and Update`; with nothing running, `Update Now`.
+    public static func runnerUpdateNowConfirm(turns: Int) -> String {
+        if turns == 0 { return "Update Now" }
+        return turns == 1 ? "Interrupt 1 Turn and Update" : "Interrupt \(turns) Turns and Update"
+    }
+    public static let RUNNER_UPDATE_NOW_FAILED = "Couldn’t update the runner"
+    /// The toast once the server took it.
+    public static func runnerUpdateNowToast(version: String) -> String { "Restarting into \(version)…" }
+
+    // The transcript (D4): the interrupt the update made.
+    public static func runnerUpdateInterruptedLine(version: String?) -> String {
+        version.map { "⊘ interrupted — the runner updated to \($0)" } ?? "⊘ interrupted — the runner updated"
+    }
     public static func runnerUpdatePostponedTitle(version: String, until: String) -> String {
         "\(version) postponed until \(until)"
     }

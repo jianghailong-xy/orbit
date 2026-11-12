@@ -1,6 +1,6 @@
 import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from '../sessions/run-question';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
-import { readMergeRecovery, mergeRecoveryReady, type MergeRecovery } from '@orbit/shared';
+import { readMergeRecovery, mergeRecoveryReady, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import {
   BadRequestException,
@@ -272,6 +272,7 @@ import {
   RUNTIME_STARTED_EVENT_TYPES,
   RUNTIME_STARTED_SYSTEM_SUBTYPE,
   buildResumeContinuation,
+  buildUpdateResumeContinuation,
 } from './resume-continuation';
 import { appendBackgroundJobsContext } from './background-jobs-context';
 import {
@@ -2452,6 +2453,7 @@ export class RunnerApiController {
     let refreshModelCatalog: RunnerHeartbeatResponse['refreshModelCatalog'];
     let checkSelfUpdate: RunnerHeartbeatResponse['checkSelfUpdate'];
     let postponeSelfUpdateUntil: RunnerHeartbeatResponse['postponeSelfUpdateUntil'];
+    let selfUpdateNow: RunnerHeartbeatResponse['selfUpdateNow'];
     let regionCheckRequest: RunnerHeartbeatResponse['regionCheckRequest'];
     try {
       cancelSessionIds = await this.realtime.drainCancellations(runner.id);
@@ -2512,6 +2514,7 @@ export class RunnerApiController {
       // The same kind of request, kept on the row the same way, so it goes last beside it.
       checkSelfUpdate = await this.drainSelfUpdateRequest(runner.id);
       postponeSelfUpdateUntil = await this.drainSelfUpdatePostpone(runner.id);
+      selfUpdateNow = await this.drainSelfUpdateNow(runner.id);
       // The owner's Check again, redelivered rather than claimed: a beat that skips it costs nothing, so it is last.
       regionCheckRequest = await this.drainRegionCheckRequest(runner.id, capabilities);
     } catch {
@@ -2571,6 +2574,7 @@ export class RunnerApiController {
       // which is what a runner draining for an update claims with. A runner that sees no such word sends none.
       ...(dto?.draining === true ? { drainScopedClaims: true } : {}),
       postponeSelfUpdateUntil,
+      selfUpdateNow,
       // Only when a claim holds a command for this process: an older runner's response stays the shape
       // it always was, and a direct caller comparing responses sees no new key.
       ...(codexRateLimitResetRequest ? { codexRateLimitResetRequest } : {}),
@@ -2956,6 +2960,23 @@ export class RunnerApiController {
       data: { selfUpdatePostponeUntil: null },
     });
     return claimed.count > 0 ? until.toISOString() : undefined;
+  }
+
+  /**
+   * The owner's Update Now (RunnersService.updateSelfNow), handed to one beat. Claimed like
+   * drainSelfUpdatePostpone — the clear is the claim, predicated on the time read, so a second press
+   * written between the read and the clear stays for the next beat — and the runner's `restarting`
+   * report is the answer.
+   */
+  private async drainSelfUpdateNow(runnerId: string): Promise<true | undefined> {
+    const row = await this.prisma.runner.findUnique({ where: { id: runnerId }, select: { selfUpdateNowRequestedAt: true } });
+    const at = row?.selfUpdateNowRequestedAt;
+    if (!at) return undefined;
+    const claimed = await this.prisma.runner.updateMany({
+      where: { id: runnerId, selfUpdateNowRequestedAt: at },
+      data: { selfUpdateNowRequestedAt: null },
+    });
+    return claimed.count > 0 ? true : undefined;
   }
 
   /**
@@ -5217,7 +5238,19 @@ export class RunnerApiController {
           select: { id: true },
         }));
         if (runtimeStarted) {
-          content = buildResumeContinuation(t.content);
+          // The owner's Update Now cut it (the runner's interrupt names runner_update): say so, and
+          // which release, so the engine and the transcript both read it as the update's (D4).
+          const updateCut = await tx.runEvent.findFirst({
+            where: { turnId: t.id, type: 'interrupt', payload: { path: ['reason'], equals: RUNNER_UPDATE_INTERRUPT_REASON } },
+            select: { payload: true },
+            orderBy: { seq: 'desc' },
+          });
+          if (updateCut) {
+            const target = (updateCut.payload as { targetVersion?: unknown } | null)?.targetVersion;
+            content = buildUpdateResumeContinuation(t.content, typeof target === 'string' && target ? target : null);
+          } else {
+            content = buildResumeContinuation(t.content);
+          }
         } else {
           externalSender = externalSenderOf(t) ?? undefined;
           const atts = await tx.attachment.findMany({

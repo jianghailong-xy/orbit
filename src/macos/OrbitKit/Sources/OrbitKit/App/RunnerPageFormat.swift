@@ -842,11 +842,13 @@ public enum RunnerPageFormat {
 
     /// A release this runner is behind, in the phase it reports — the web's `runnerUpdateCard`.
     public struct UpdateCard: Equatable, Sendable {
+        /// The runner's phase, or `updated`: no release waiting, and one installed within the last day.
         public let phase: String
         /// Amber while it holds work back or restarts; plain while work goes on as usual.
         public let warn: Bool
         public let title: String
         public let tag: String
+        /// Empty on an Updated card whose runner measured nothing about the restart: no body is drawn.
         public let body: String
         /// Draining only: `Waiting for 2 of 8 turns · 38 min`, and the share of those turns done.
         public let progressLabel: String?
@@ -874,9 +876,9 @@ public enum RunnerPageFormat {
     /// The card a runner's report calls for; nil with no phase (nothing waiting, or a runner too old
     /// to say) or no version to name, and for a phase this client does not know.
     public static func updateCard(_ runner: Runner, now: Date, timeZone: TimeZone = .current) -> UpdateCard? {
-        guard let report = runner.selfUpdate, let phase = report.phase, let version = report.targetVersion else {
-            return nil
-        }
+        guard let report = runner.selfUpdate else { return nil }
+        guard let phase = report.phase else { return updatedCard(report, now: now, timeZone: timeZone) }
+        guard let version = report.targetVersion else { return nil }
         switch phase {
         case "available":
             return UpdateCard(phase: phase, warn: false,
@@ -904,21 +906,16 @@ public enum RunnerPageFormat {
                     ?? RunnerPageCopy.RUNNER_UPDATE_DRAINING_BODY_NO_SINCE,
                 progressLabel: waited.map { count + RunnerPageCopy.RUNNER_LINE_SEPARATOR + $0 } ?? count,
                 progress: of.map { $0 > 0 ? Double($0 - left) / Double($0) : 0 } ?? 0,
-                turns: (runner.updateTurns ?? []).map { turn in
-                    let title = turn.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                    return UpdateCard.Turn(
-                        id: turn.id,
-                        title: title.isEmpty ? RunnerPageCopy.RUNNER_UPDATE_UNTITLED_TURN : title,
-                        running: turn.startedAt.flatMap { RelativeTime.parse($0) }.map {
-                            RunnerPageCopy.runnerUpdateTurnRunning(
-                                duration: updateWaited(minutes: max(0, Int(now.timeIntervalSince($0) / 60))))
-                        })
-                })
+                turns: updateTurns(runner, now: now))
         case "restarting":
+            // After the owner's Update Now, the turns it interrupted continue once it is back.
+            let interrupted = report.interruptedTurns ?? 0
             return UpdateCard(phase: phase, warn: true,
                               title: RunnerPageCopy.runnerUpdateRestartingTitle(version: version),
                               tag: RunnerPageCopy.RUNNER_UPDATE_TAG_RESTARTING,
-                              body: RunnerPageCopy.RUNNER_UPDATE_RESTARTING_BODY, progressLabel: nil, progress: nil)
+                              body: interrupted > 0 ? RunnerPageCopy.runnerUpdateRestartingBodyInterrupted(turns: interrupted)
+                                  : RunnerPageCopy.RUNNER_UPDATE_RESTARTING_BODY,
+                              progressLabel: nil, progress: nil)
         case "postponed":
             guard let until = report.postponedUntil.flatMap({ updateClock($0, timeZone: timeZone) }) else { return nil }
             return UpdateCard(phase: phase, warn: false,
@@ -928,6 +925,39 @@ public enum RunnerPageFormat {
                               progressLabel: nil, progress: nil)
         default:
             return nil
+        }
+    }
+
+    /// The Updated card (board 4): the last update, for a day after it was installed — how long the
+    /// restart took and how many turns an Update Now interrupted for it, as far as the runner measured
+    /// them (the web's `updatedCard`). Its body is empty when the runner measured neither. Nil with no
+    /// update recorded, or an older one.
+    static func updatedCard(_ report: RunnerSelfUpdate, now: Date, timeZone: TimeZone) -> UpdateCard? {
+        guard let to = report.lastUpdatedTo, let iso = report.lastUpdatedAt, let at = RelativeTime.parse(iso),
+              let tag = updateClock(iso, timeZone: timeZone) else { return nil }
+        let age = now.timeIntervalSince(at)
+        guard age <= Double(RunnerPageCopy.RUNNER_UPDATE_TAG_UPDATED_HOURS) * 3600, age >= -60 else { return nil }
+        let took = report.lastUpdateSeconds.flatMap { $0 > 0 ? RunnerPageCopy.runnerUpdateTook(seconds: $0) : nil }
+        return UpdateCard(phase: "updated", warn: false,
+                          title: RunnerPageCopy.runnerUpdateUpdatedTitle(version: to), tag: tag,
+                          body: RunnerPageCopy.runnerUpdateUpdatedBody(
+                              took: took, interruptedTurns: report.lastUpdateInterruptedTurns ?? 0),
+                          progressLabel: nil, progress: nil)
+    }
+
+    /// The reader's turns on the runner (`updateTurns`, longest running first): each one's session, its
+    /// title (`Untitled session` with none) and `running 1 h 52 min`. The draining card lists them, and
+    /// Update Now… names them as the turns it interrupts.
+    public static func updateTurns(_ runner: Runner, now: Date) -> [UpdateCard.Turn] {
+        (runner.updateTurns ?? []).map { turn in
+            let title = turn.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return UpdateCard.Turn(
+                id: turn.id,
+                title: title.isEmpty ? RunnerPageCopy.RUNNER_UPDATE_UNTITLED_TURN : title,
+                running: turn.startedAt.flatMap { RelativeTime.parse($0) }.map {
+                    RunnerPageCopy.runnerUpdateTurnRunning(
+                        duration: updateWaited(minutes: max(0, Int(now.timeIntervalSince($0) / 60))))
+                })
         }
     }
 

@@ -20,8 +20,13 @@ import type {
   SlashCommandInfo,
   RunnerUpdateTurn,
 } from '@orbit/shared';
-import { CLAUDE_REGION_UNSUPPORTED, CLAUDE_REGION_V1, LOGIN_FAILURE_REASONS, SELF_UPDATE_POSTPONE_V1 } from '@orbit/shared';
-import type { RunnerSelfUpdatePostponeRequest, RunnerSelfUpdatePostponeResponse } from '@orbit/shared';
+import { CLAUDE_REGION_UNSUPPORTED, CLAUDE_REGION_V1, LOGIN_FAILURE_REASONS, SELF_UPDATE_NOW_V1, SELF_UPDATE_POSTPONE_V1 } from '@orbit/shared';
+import type {
+  RunnerSelfUpdateNowRequest,
+  RunnerSelfUpdateNowResponse,
+  RunnerSelfUpdatePostponeRequest,
+  RunnerSelfUpdatePostponeResponse,
+} from '@orbit/shared';
 import { RunStatus } from '@prisma/client';
 import { generateToken, sha256 } from '../common/crypto.util';
 import { namedRunnerEngines, sanitizeRunnerEngines, usedPlanUsage, usedRunnerEngines } from '../common/runner-engines';
@@ -69,9 +74,13 @@ const FINISHED_SESSION_STATUSES = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunSta
 // cannot brute-force another user's pending enrollment code online.
 const DEVICE_LOOKUP_WINDOW_MS = 5 * 60_000;
 const DEVICE_LOOKUP_MAX = 20;
+/** The phases whose Update card offers Update Now…, whose confirm names the turns it interrupts. */
+const UPDATE_TURNS_PHASES = new Set<string>(['available', 'draining', 'postponed']);
 
 /** The activity row a Later writes (RunnersService.postponeSelfUpdate): who put which runner's update off, until when. */
 export const RUNNER_SELF_UPDATE_POSTPONED_ACTIVITY = 'runner.self_update.postponed';
+/** The activity row an Update Now writes (RunnersService.updateSelfNow): who had which runner interrupt which turns. */
+export const RUNNER_SELF_UPDATE_NOW_ACTIVITY = 'runner.self_update.now';
 
 @Injectable()
 export class RunnersService {
@@ -270,9 +279,10 @@ export class RunnersService {
 
   /**
    * The turns each draining runner's Update card names (docs/runner-update-drain-design.md §3.5,
-   * board 4): the viewer's RUNNING sessions on it, longest-running first, with when the current run
-   * was claimed. Only runners whose report says draining, or whose heartbeat does, are asked about,
-   * so a runner that is not updating costs nothing. Another owner's turns are not named here, as in
+   * board 4), and the turns Update Now's confirm says it interrupts (board 3 ⑧): the viewer's RUNNING
+   * sessions on it, longest-running first, with when the current run was claimed. Only runners whose
+   * heartbeat says draining, or whose report has a release waiting (available, draining, postponed),
+   * are asked about, so a runner that is not updating costs nothing. Another owner's turns are not named here, as in
    * queuedRunnerUpdate; the card's count (turnsInFlight) still covers them.
    */
   private async updateTurnsOf(
@@ -280,7 +290,7 @@ export class RunnersService {
     runners: Array<{ id: string; selfUpdate: unknown; heartbeatDraining: boolean | null }>,
   ): Promise<Map<string, RunnerUpdateTurn[]>> {
     const draining = runners
-      .filter((r) => r.heartbeatDraining === true || sanitizeRunnerSelfUpdate(r.selfUpdate)?.phase === 'draining')
+      .filter((r) => r.heartbeatDraining === true || UPDATE_TURNS_PHASES.has(sanitizeRunnerSelfUpdate(r.selfUpdate)?.phase ?? ''))
       .map((r) => r.id);
     const turns = new Map<string, RunnerUpdateTurn[]>(draining.map((id) => [id, []]));
     if (draining.length === 0) return turns;
@@ -1083,6 +1093,62 @@ export class RunnersService {
     await this.prisma.runner.update({ where: { id }, data: { selfUpdateRequestedAt: requestedAt } });
     this.realtime?.notifyRunnerWake(id);
     return { requestedAt: requestedAt.toISOString() };
+  }
+
+  /**
+   * Update Now (docs/runner-update-drain-design.md §4, D4): install the release this runner waits
+   * for now, interrupting the turns in flight. The runner stops them through its graceful stop, so
+   * each session stays resumable, installs, restarts and reclaims them; the control plane then hands
+   * each one its interrupted turn again as the update's continuation (dequeueTurn). Like Update
+   * Runner Now, the request is one timestamp the next heartbeat hands over (`selfUpdateNow`) and
+   * clears, and the runner's report — phase `restarting` with `interruptedTurns` — is the answer.
+   *
+   * The owner's alone, and only with `interruptTurns: true`: the owner's explicit word is what lets
+   * it interrupt a turn, which an automatic update never does. Each request is recorded as a
+   * `runner.self_update.now` activity, naming the owner's turns it interrupts, before it is stored. A
+   * runner that does not declare self-update-now/v1 would drop it unread, and is refused with Update
+   * Runner Now's "too old" sentence; one with no release waiting has nothing to install.
+   */
+  async updateSelfNow(
+    ownerId: string,
+    id: string,
+    body: RunnerSelfUpdateNowRequest | undefined,
+  ): Promise<RunnerSelfUpdateNowResponse> {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
+    if (!runner) throw new NotFoundException('runner not found');
+    if (body?.interruptTurns !== true) {
+      throw new BadRequestException('interruptTurns must be true: Update Now interrupts the turns in flight');
+    }
+    if (runner.status === 'OFFLINE') {
+      throw new BadRequestException('Runner is offline — it can only update while connected');
+    }
+    if (!runner.capabilities.includes(SELF_UPDATE_NOW_V1)) {
+      throw new BadRequestException('Runner is too old to update on request — it reports no self-update state');
+    }
+    const report = sanitizeRunnerSelfUpdate(runner.selfUpdate);
+    const phase = report?.phase;
+    if (phase !== 'available' && phase !== 'draining' && phase !== 'postponed') {
+      throw new BadRequestException('No update is waiting on this runner — there is nothing to install');
+    }
+    const turns = (await this.updateTurnsOf(ownerId, [{ id, selfUpdate: runner.selfUpdate, heartbeatDraining: true }])).get(id) ?? [];
+    const requestedAt = new Date();
+    await this.prisma.activity.create({
+      data: {
+        actorId: ownerId,
+        type: RUNNER_SELF_UPDATE_NOW_ACTIVITY,
+        payload: {
+          runnerId: id,
+          interruptTurns: true,
+          phase,
+          targetVersion: report?.targetVersion ?? null,
+          sessionIds: turns.map((turn) => turn.id),
+        },
+        credentialKind: 'LOGIN',
+      },
+    });
+    await this.prisma.runner.update({ where: { id }, data: { selfUpdateNowRequestedAt: requestedAt } });
+    this.realtime?.notifyRunnerWake(id);
+    return { requestedAt: requestedAt.toISOString(), turns: turns.length };
   }
 
   /**

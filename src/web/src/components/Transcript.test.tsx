@@ -2165,6 +2165,40 @@ describe('an interrupt row says what stopped the turn', () => {
   });
 });
 
+// The owner's Update Now (D4): the runner cuts the turn with `reason: runner_update` and the release, and
+// the updated runner is handed the turn back as Orbit's continuation — drawn as one Orbit line, never as a
+// bubble in the reader's name, with the background-jobs note delivery appended under it.
+describe('a turn the owner’s Update Now cut, and the turn Orbit sent to continue it', () => {
+  const continuation =
+    '[Orbit] The runner update interrupted this turn; continue. Orbit updated its runner to 0.1.254 at the owner’s request, ' +
+    'which stopped this turn; the conversation so far has been restored.\n\nThe interrupted message:\nBackfill the missing shard rows.';
+  const doc = () => new JSDOM(renderToStaticMarkup(
+    <Transcript
+      events={[
+        { seq: 1, type: 'user', turnId: 't1', ts: '2026-11-12T12:19:00.000Z', payload: { text: 'Backfill the missing shard rows.' } },
+        { seq: 2, type: 'assistant', turnId: 't1', ts: '2026-11-12T12:19:10.000Z', payload: { text: 'Step 3 of 8.' } },
+        { seq: 3, type: 'interrupt', turnId: 't1', ts: '2026-11-12T12:20:26.000Z', payload: { reason: 'runner_update', targetVersion: '0.1.254' } },
+        { seq: 4, type: 'user', turnId: 't1', ts: '2026-11-12T12:21:01.000Z',
+          payload: { text: continuation + '\n\n<background-jobs>\nnone\n</background-jobs>', controlPlaneNote: '\n\n<background-jobs>\nnone\n</background-jobs>' } },
+        { seq: 5, type: 'assistant', turnId: 't1', ts: '2026-11-12T12:21:05.000Z', payload: { text: 'Checking steps.log first.' } },
+        { seq: 6, type: 'interrupt', turnId: 't2', ts: '2026-11-12T12:30:00.000Z', payload: { reason: 'runner_update' } },
+      ]}
+    />,
+  )).window.document;
+
+  it('says the runner updated, and to which release', () => {
+    expect(doc().querySelector('.chat-note[data-seq="3"]')?.textContent).toBe('⊘ interrupted — the runner updated to 0.1.254');
+    expect(doc().querySelector('.chat-note[data-seq="6"]')?.textContent).toBe('⊘ interrupted — the runner updated');
+  });
+
+  it('draws the continuation as one Orbit line, not the reader’s bubble', () => {
+    const d = doc();
+    expect(d.querySelector('.runner-update-resume[data-seq="4"]')?.textContent).toBe('The runner update interrupted this turn; continue.');
+    expect(d.body.textContent).not.toContain('The interrupted message');
+    expect(d.body.textContent).toContain('Checking steps.log first.');
+  });
+});
+
 describe('runtime authentication help', () => {
   // The relay branch renders RunnerSignIn, which reads the query cache.
   const card = (provider: string) =>

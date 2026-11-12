@@ -447,6 +447,8 @@ import { Image } from './ui/Image';
 import { Menu, type MenuItem } from './ui/Menu';
 import { Popover } from './ui/Popover';
 import { RunnerUpdateLaterMenu } from './RunnerUpdateLater';
+import { RunnerUpdateNowButton } from './RunnerUpdateNow';
+import { runnerTakesUpdateNow } from '../lib/runnerUpdateNow';
 import { Select } from './ui/Select';
 import { Spinner } from './ui/Spinner';
 import { Textarea } from './ui/Textarea';
@@ -4300,7 +4302,7 @@ export function WorkspaceView({
           <RunnerUpdatingTag
             gate={runnerUpdatingGate}
             machine={machineName(runner)}
-            actions={<div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} /></div>}
+            actions={<div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} />{runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={machineName(runner)} />}</div>}
           />
         ),
       };
@@ -9852,7 +9854,7 @@ export function WorkspaceView({
                       gate={runnerUpdatingGate}
                       machine={machineName(runner)}
                       onOpenSession={(id) => navigate(sessionPath(id))}
-                      actions={<div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} /></div>}
+                      actions={<div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} />{runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={machineName(runner)} />}</div>}
                     />
                   ) : (
                     <>

@@ -1805,6 +1805,14 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("runners/\(id)/self-update")
     }
 
+    /// Update Now: the runner interrupts the owner's turns in flight, installs the waiting release and
+    /// restarts; each interrupted turn continues once it is back. Refused for a runner offline, too old
+    /// to honour it (no `self-update-now/v1`), or with nothing waiting.
+    @discardableResult
+    public func updateRunnerNow(_ id: String) async throws -> RunnerSelfUpdateNowResponse {
+        try await post("runners/\(id)/self-update/now", body: RunnerUpdateNow.request)
+    }
+
     /// Later: the runner ends its drain for the waiting release now and puts it off until `until`,
     /// capped at 09:00 tomorrow in `timeZone`. Refused for a runner offline, too old to honour it, or
     /// with nothing waiting.

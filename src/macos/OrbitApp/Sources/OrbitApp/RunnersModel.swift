@@ -138,6 +138,13 @@ final class RunnersModel {
         await press { _ = try await self.api.postponeRunnerSelfUpdate(id, until: until) }
     }
 
+    /// Update Now: the machine interrupts the reader's turns in flight, installs the waiting release and
+    /// restarts; each interrupted turn continues once it is back. Nil once taken; else why not.
+    @discardableResult
+    func updateNow(_ id: String) async -> String? {
+        await press { _ = try await self.api.updateRunnerNow(id) }
+    }
+
     /// The runners whose Check again is on its way (`checkRegion`): their presses hold until the check
     /// they asked for is answered.
     private(set) var regionChecking: Set<String> = []

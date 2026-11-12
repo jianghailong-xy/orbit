@@ -788,6 +788,9 @@ model Runner {
   // The owner's Later (0571): the time the waiting release is put off until, handed to the next
   // heartbeat as postponeSelfUpdateUntil and cleared there, like selfUpdateRequestedAt.
   selfUpdatePostponeUntil DateTime? @map("self_update_postpone_until")
+  // The owner's Update Now (0590): install the waiting release now, interrupting the turns in
+  // flight. Handed to the next heartbeat as selfUpdateNow and cleared there, like the two above.
+  selfUpdateNowRequestedAt DateTime? @map("self_update_now_requested_at")
   // Where this machine puts checkouts Orbit clones for it, reported each heartbeat. A clone of
   // `<owner>/<repo>` lands at `<reposRoot>/<owner>-<repo>`.
   // NULL means this runner has never reported one — a build too old to send it. That withdraws

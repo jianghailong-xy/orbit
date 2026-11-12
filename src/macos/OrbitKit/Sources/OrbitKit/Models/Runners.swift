@@ -491,6 +491,13 @@ public struct RunnerSelfUpdate: Codable, Equatable, Sendable {
     /// While draining: the turns still in flight, and how many there were when the drain began.
     public var turnsInFlight: Int? = nil
     public var turnsAtDrain: Int? = nil
+    /// While restarting for the owner's Update Now: how many turns it interrupted, which continue once
+    /// it is back. Nil for an update that waited for idle.
+    public var interruptedTurns: Int? = nil
+    /// The last update's restart: seconds from the stop to the new image starting, and how many turns
+    /// an Update Now interrupted for it. Nil when the runner did not measure them (an older one).
+    public var lastUpdateSeconds: Int? = nil
+    public var lastUpdateInterruptedTurns: Int? = nil
     /// How long, in seconds, the runner must have been quiet before an automatic update installs.
     /// Nil from a runner that doesn't wait for one, which keeps the page's wording from before.
     public var quietWindowSeconds: Int? = nil
@@ -507,6 +514,19 @@ public struct RunnerUpdateTurn: Codable, Equatable, Sendable {
 /// POST /runners/:id/self-update (Update Runner Now) acknowledges when the check was requested.
 public struct RunnerSelfUpdateRequest: Codable, Equatable, Sendable {
     public let requestedAt: String?
+}
+
+/// POST /runners/:id/self-update/now (Update Now, shared `RunnerSelfUpdateNowRequest`): the owner's
+/// explicit "interrupt these turns".
+public struct RunnerSelfUpdateNowRequest: Codable, Equatable, Sendable {
+    public let interruptTurns: Bool
+    public init(interruptTurns: Bool = true) { self.interruptTurns = interruptTurns }
+}
+
+/// Its answer: when it was asked, and how many of the owner's turns were running then.
+public struct RunnerSelfUpdateNowResponse: Codable, Equatable, Sendable {
+    public let requestedAt: String?
+    public let turns: Int?
 }
 
 /// POST /runners/:id/self-update/postpone (Later, shared `RunnerSelfUpdatePostponeRequest`): until when,
