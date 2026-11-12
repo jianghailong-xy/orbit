@@ -1,3 +1,5 @@
+import { ProjectCriterionConfirmationModule } from '../projects/project-criterion-confirmation.module';
+import { RunnerCriterionConfirmationController } from './runner-criterion-confirmation.controller';
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ProjectsModule } from '../projects/projects.module';
@@ -75,6 +77,7 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     TaskListsModule,
     ProvidersModule,
     ProjectsModule,
+    ProjectCriterionConfirmationModule,
     OutcomeReconcilerModule,
     // RunnerWatchesController reads and writes through the one WatchesService the user door uses.
     WatchesModule,
@@ -91,6 +94,7 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
   // RunnerApiController's static sessions/claim | sessions/reclaim routes.
   controllers: [
     RunnerApiController,
+    RunnerCriterionConfirmationController,
     RunnerTasksController,
     RunnerTaskCompletionEvidenceController,
     RunnerTaskOwnerConfirmationController,

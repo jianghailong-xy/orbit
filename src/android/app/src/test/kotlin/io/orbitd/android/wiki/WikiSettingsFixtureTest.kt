@@ -107,7 +107,7 @@ class WikiSettingsFixtureTest {
         assertEquals(listOf(trash.fstr("leaves"), bodies.first().fstr("text"), trash.fstr("kept")).joinToString("\n\n"),
             WikiModeCopy.trashMessage(bodies.first().fint("entries"), bodies.first().fint("documents"), null))
 
-        // The ways to Trash: the settings page's row, the first-wiki card's line and the picker's item.
+        // The ways to Trash: the settings page's row and the first-wiki card's line.
         assertEquals(trash.fstr("openTrash"), WikiModeCopy.openTrash)
         val counts = trash.farr("counts").map { it.jsonObject }
         assertTrue(counts.isNotEmpty())
@@ -115,7 +115,6 @@ class WikiSettingsFixtureTest {
             assertEquals(count.fstr("row"), WikiModeCopy.trashRowCount(count.fint("wikis")))
             assertEquals(count.fstr("empty"), WikiModeCopy.trashHoldsWhenEmpty(count.fint("wikis")))
         }
-        assertEquals(trash.fstr("pickerItem"), WikiModeCopy.trash)
 
         // Trash itself.
         val page = trash.fobj("page")

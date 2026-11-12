@@ -123,6 +123,11 @@ final class AppModel {
             if newValue { nav.openSettings() } else { nav.settingsPresented = false }
         }
     }
+    /// The task shown over the page on a wide shell — a task link pressed in a conversation, a wiki
+    /// footnote or a watch card (owner decision 2026-11-12). It is not a frame of any section's
+    /// stack: the page under it keeps its section, its stack and its scroll, and closing the task
+    /// is clearing this. Nil on a phone, which pushes the task over the console instead.
+    var taskOverPageID: String?
     /// The task whose detail fills the pane — and, in the three-column shell, the row drawn as
     /// selected. Kept under its old name so its readers (the pane, the deep-link route, the
     /// delete/404 guards, the scope switch) needed no change, with the difference that it is read
@@ -323,9 +328,8 @@ final class AppModel {
     /// blocked rows, not the list.
     private(set) var needsYouSessions: [Session] = []
     private(set) var agentNeedsYou: [String: Int] = [:]
-    #if os(iOS)
     /// Workspace ids with at least one Session that draws the shared running spinner. Cached beside
-    /// `agentNeedsYou` so the iPhone drawer and iPad sidebar never rescan Open once per row/render.
+    /// `agentNeedsYou` so the drawer, the iPad sidebar and the Mac sidebar never rescan Open once per row/render.
     private(set) var runningWorkspaceIDs: Set<String> = []
     /// Workspace ids with a background job in flight and nobody generating — read off the same
     /// glyph, so the two marks can never disagree about one row. Drawn quieter than the spinner.
@@ -333,7 +337,6 @@ final class AppModel {
     /// Each project's coordinator conversation as the Open list shows it, by project — what the
     /// drawer's project rows read beside their fetched summaries (`ProjectCoordinatorPulse`).
     private(set) var projectCoordinators: [String: ProjectCoordinatorPulse] = [:]
-    #endif
 
     let tokenStore: TokenStore
     let notifications = NotificationManager()
@@ -558,6 +561,9 @@ final class AppModel {
                                                                 maxAge: OrbitLinkCards.maxAge))
         let tasksModel = TasksModel(baseURL: url, tokenStore: tokenStore)
         tasksModel.onSelectedDetailMissing = { [weak self] id in
+            // A task deleted under either container closes it: the Tasks page pops the frame, the
+            // task opened over a page takes the sheet down.
+            if self?.taskOverPageID == id { self?.closeTaskOverPage() }
             guard self?.selectedTaskID == id else { return }
             self?.selectedTaskID = nil
         }
@@ -947,10 +953,10 @@ final class AppModel {
         sessions = []
         needsYouSessions = []
         agentNeedsYou = [:]
-        #if os(iOS)
         runningWorkspaceIDs = []
         jobWorkspaceIDs = []
         projectCoordinators = [:]
+        #if os(iOS)
         sessionFolders = []
         projectSessions = []
         projectSessionsAddress = nil
@@ -986,6 +992,7 @@ final class AppModel {
         nav = NavState()               // then clears every section's stack with it
         didResolveDefaultLanding = false
         provisionalLandingAgentID = nil
+        taskOverPageID = nil
         selectedTaskID = nil
         selectedAgentID = nil
     }
@@ -1852,13 +1859,9 @@ final class AppModel {
         // The ids are the same, so `filedSessions` keeps every entry it had.
         sessionDetails.reconcile(with: [row])
 
-        #if os(iOS)
         let activity = OpenListDerived.Activity(runningWorkspaceIDs: runningWorkspaceIDs,
                                                 jobWorkspaceIDs: jobWorkspaceIDs,
                                                 coordinatorPulses: projectCoordinators)
-        #else
-        let activity: OpenListDerived.Activity? = nil
-        #endif
         var derived = OpenListDerived(needsYou: needsYouSessions, agentNeedsYou: agentNeedsYou,
                                       menu: menuSummary, activity: activity)
         derived.replace(old, with: row, in: sessions)
@@ -1868,13 +1871,11 @@ final class AppModel {
         #endif
         if derived.needsYou != needsYouSessions { needsYouSessions = derived.needsYou }
         if derived.agentNeedsYou != agentNeedsYou { agentNeedsYou = derived.agentNeedsYou }
-        #if os(iOS)
         if let marks = derived.activity {
             if marks.runningWorkspaceIDs != runningWorkspaceIDs { runningWorkspaceIDs = marks.runningWorkspaceIDs }
             if marks.jobWorkspaceIDs != jobWorkspaceIDs { jobWorkspaceIDs = marks.jobWorkspaceIDs }
             if marks.coordinatorPulses != projectCoordinators { projectCoordinators = marks.coordinatorPulses }
         }
-        #endif
         agents?.applyOpenRow(sessions, workspaceIDs: [old.agent?.id ?? old.agentId, row.agent?.id ?? row.agentId])
         if old.confirmationUnderReview?.dueAt != row.confirmationUnderReview?.dueAt {
             scheduleReviewDueRefresh(sessions)
@@ -1911,11 +1912,9 @@ final class AppModel {
         sessions = list
         needsYouSessions = SessionGrouping.group(list).needsYou
         agentNeedsYou = NeedsYouLogic.byAgent(list)
-        #if os(iOS)
         runningWorkspaceIDs = WorkspaceActivityLogic.runningWorkspaceIDs(list)
         jobWorkspaceIDs = WorkspaceActivityLogic.jobWorkspaceIDs(list)
         projectCoordinators = ProjectAttention.coordinatorPulses(list)
-        #endif
         // The agent pane's Open list is this same snapshot narrowed to one agent, so hand it over
         // here instead of leaving it to fetch the identical payload on its own timer.
         agents?.applyOpenSnapshot(list)
@@ -3667,15 +3666,44 @@ final class AppModel {
     /// What a page opened from inside a conversation does — a link in it, a row of its Watching or
     /// Tasks created here card. On a phone (`overConsole`, which the console's own environment says;
     /// the model is not told its shell) a task or another session is pushed over the console, so the
-    /// back swipe returns to the conversation. Anything else, and every page on the wide shells,
-    /// goes where ``route(to:)`` sends it: their sidebar is the way back.
-    func openFromConversation(_ route: Route, overConsole: Bool) {
-        guard overConsole else { return self.route(to: route) }
-        switch route {
-        case .task(let id):    push(.taskDetail(taskID: id))
-        case .session(let id): pushConsole(id)
-        default:               self.route(to: route)
+    /// back swipe returns to the conversation. On a wide shell (`overPage`, which the shell's
+    /// environment says) a task opens over the page it was pressed on instead of switching
+    /// sections (owner decision 2026-11-12). Anything else goes where ``route(to:)`` sends it.
+    func openFromConversation(_ route: Route, overConsole: Bool, overPage: Bool = false) {
+        if overConsole {
+            switch route {
+            case .task(let id):    push(.taskDetail(taskID: id))
+            case .session(let id): pushConsole(id)
+            default:               self.route(to: route)
+            }
+            return
         }
+        if case .task(let id) = route, overPage { return openTaskOverPage(id) }
+        self.route(to: route)
+    }
+
+    /// Show `id`'s page over the page on screen, on a wide shell (owner decision 2026-11-12): the
+    /// task detail the Tasks section draws, over the conversation (or wiki entry, or watch card) the
+    /// link was pressed in — never a section switch, so closing it is the page as it was. The Tasks
+    /// detail store follows it, because that one slot is what every detail read loads into.
+    func openTaskOverPage(_ id: String) {
+        taskOverPageID = id
+        tasks?.setSelectedDetailID(id)
+    }
+
+    /// Take the task over the page down. The page under it never left, so the detail store goes
+    /// back to naming the stack's own task page.
+    func closeTaskOverPage() {
+        guard taskOverPageID != nil else { return }
+        taskOverPageID = nil
+        syncTaskDetailStore()
+    }
+
+    /// Whether `id`'s detail is the one on screen, in whichever container: the Tasks pane's page or
+    /// the task opened over a page. What the detail page's polls and 404 guards read.
+    func taskDetailIsOpen(_ id: String) -> Bool {
+        selectedTaskID.map(PublicID.storageKey) == PublicID.storageKey(id)
+            || taskOverPageID.map(PublicID.storageKey) == PublicID.storageKey(id)
     }
 
     /// The exact refresh a session opened from outside its list gets. The Open snapshot is already
