@@ -35,6 +35,7 @@ struct MainBranchPicker: View {
                 }
             }
             .listStyle(.plain)
+            .softTopEdgeEffect()
             #if os(iOS)
             .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
                         prompt: RunSettings.typeABranch)

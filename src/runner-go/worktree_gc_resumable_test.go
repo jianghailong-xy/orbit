@@ -3105,7 +3105,7 @@ func TestTheRunLoopCallsEverySideOfTheResumableSweep(t *testing.T) {
 	}
 	// One sweeper, for as long as the process runs, which starts it with no wait: that is what a restart forgetting
 	// the wait comes to, and nothing but sweepResumable may touch it.
-	if !strings.Contains(body, "worktreeGC := worktreeSweeper{interval: worktreeGCInterval, armed: reclaimed && !reclaimSkipped}\n") {
+	if !strings.Contains(body, "worktreeGC := worktreeSweeper{interval: worktreeGCInterval, armed: reclaimed && !reclaimSkipped && startupStarts.finished()}\n") {
 		t.Error("a runner must start with one sweeper and no wait")
 	}
 	if got := strings.Count(body, "worktreeGC := "); got != 1 {

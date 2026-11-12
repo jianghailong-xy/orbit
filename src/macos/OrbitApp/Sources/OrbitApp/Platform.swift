@@ -342,13 +342,10 @@ private struct KeyboardDismissInstaller: UIViewRepresentable {
                                shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
 
         // Ignore taps that land inside a text input, so tapping the composer field to move the cursor
-        // keeps focus instead of dismissing-then-refocusing (a keyboard flicker). And leave an empty
-        // search field focused: iOS ends search mode once an empty field loses focus, and search mode
-        // ends only at the field's own close button (`keepsEmptySearchOnScroll` holds off scrolls).
+        // keeps focus instead of dismissing-then-refocusing (a keyboard flicker).
         func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-            if let search = g.view?.firstResponder as? UISearchTextField, search.text?.isEmpty ?? true {
-                return false
-            }
+            // Every tap: the session search spots a press of its X with this (`BottomSearchMode`).
+            SearchCloseTap.record(touch)
             var view = touch.view
             while let current = view {
                 if current is UITextField || current is UITextView { return false }
@@ -356,17 +353,6 @@ private struct KeyboardDismissInstaller: UIViewRepresentable {
             }
             return true
         }
-    }
-}
-
-private extension UIView {
-    /// The first responder in this view's subtree — the focused text input, if any.
-    var firstResponder: UIView? {
-        if isFirstResponder { return self }
-        for subview in subviews {
-            if let found = subview.firstResponder { return found }
-        }
-        return nil
     }
 }
 #endif

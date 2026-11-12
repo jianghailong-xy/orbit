@@ -78,14 +78,10 @@ function toast(): WriteToast & { success: ReturnType<typeof vi.fn> } {
  * a retry, which spends a run to change a status. An open task is already open.
  */
 describe('the Reopen press in the task detail panel', () => {
-  for (const status of ['DONE', 'CANCELLED', 'FAILED']) {
-    it(`is offered on a ${status} task`, () => {
-      expect(headButtonLabels(task({ status }))).toContain(REOPEN_ACTION_LABEL);
-    });
-  }
-
-  for (const status of ['OPEN', 'IN_PROGRESS']) {
-    it(`is not offered on a ${status} task`, () => {
+  // Reopen is offered in ⋯ on the three stopped statuses (TaskDetailPanel.share.test.tsx); the
+  // header keeps its one press for what the task needs next.
+  for (const status of ['DONE', 'CANCELLED', 'FAILED', 'OPEN', 'IN_PROGRESS']) {
+    it(`is not in the header on a ${status} task`, () => {
       expect(headButtonLabels(task({ status }))).not.toContain(REOPEN_ACTION_LABEL);
     });
   }

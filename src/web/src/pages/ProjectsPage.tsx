@@ -109,8 +109,11 @@ import { useMediaQuery } from '../lib/useMediaQuery';
 import {
   updateProjectStatus,
   doneProvenance,
+  NON_CODE_BADGE,
+  NON_CODE_PROJECT_LINE,
   PROJECT_DONE_COPY,
   type ProjectDerivedDone,
+  type CriterionMovedOut,
   type ProjectDoneDocument,
 } from '../lib/projectDone';
 
@@ -210,6 +213,15 @@ interface ProjectDetail extends Omit<Project, 'integration'> {
    *  the other endpoint's payload. */
   integration?: ProjectIntegrationSettings;
   derivedDone?: ProjectDerivedDone;
+  /** The explicit non-code mark (migration 0535) and who set it, when: a marked project reads no
+   *  landing, so the page names the mark where it would name the branch. */
+  nonCode?: boolean;
+  nonCodeSetBy?: 'OWNER' | 'COORDINATOR' | null;
+  nonCodeSetAt?: string | null;
+  /** The short reason given with the mark (0555). */
+  nonCodeReason?: string | null;
+  /** The criteria this project moved out to a follow-up (board 02 G). */
+  criteriaMovedOut?: readonly CriterionMovedOut[];
 }
 
 export const STATUS_COLOR: Record<Project['status'], string> = {
@@ -1139,6 +1151,7 @@ export function ProjectDetailPage() {
               ) : (
                 <Badge tone={tagTone(STATUS_COLOR[p.status])}>{STATUS_LABEL[p.status]}</Badge>
               )}
+              {p.nonCode ? <Badge className="project-non-code-badge">{NON_CODE_BADGE}</Badge> : null}
               {p.status === 'OPEN' && doneRequest ? (
                 <Badge tone="gold">{PROJECT_DONE_COPY.readyToClose}</Badge>
               ) : null}
@@ -1190,7 +1203,16 @@ export function ProjectDetailPage() {
               it runs', below. A project nobody has started says the start decides the line; a
               started one with no line draws nothing here at all. */}
           <ProjectPageBlock name="integration-line">
-            <ProjectIntegrationLine projectId={id!} started={started} />
+            {/* A non-code project reads no landing (board 01 G): the mark, where the branch would be. */}
+            {p.nonCode ? (
+              <div className="project-integration project-integration-non-code">
+                <div className="project-integration-row">
+                  <span className="project-integration-facts">{NON_CODE_PROJECT_LINE}</span>
+                </div>
+              </div>
+            ) : (
+              <ProjectIntegrationLine projectId={id!} started={started} />
+            )}
           </ProjectPageBlock>
 
           {/* A refused delete, in the server's own words. 409 here is a downstream reference — the

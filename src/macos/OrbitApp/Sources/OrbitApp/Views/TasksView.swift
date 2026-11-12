@@ -770,6 +770,7 @@ struct TaskListsDirectoryView: View {
             }
         }
         .listStyle(.plain)
+        .softTopEdgeEffect()
         .navigationTitle(TaskListCopy.taskListsTitle)
         .navigationBarTitleDisplayMode(inSheet ? .inline : .large)
         .searchable(text: $query, prompt: TaskListCopy.searchLists)
@@ -1093,10 +1094,14 @@ struct TaskDetailView: View {
 struct TaskDetailPage: View {
     @Environment(AppModel.self) private var model
     let taskID: String
+    /// Drawn over another page rather than as a stack frame — the wide shells' sheet
+    /// (`TaskOverPageSheet`). The page's task presses then replace it instead of leaving the page
+    /// under it (owner decision 2026-11-12).
+    var overPage = false
 
     var body: some View {
         if let tasks = model.tasks {
-            TaskDetailContent(tasks: tasks, taskID: taskID).id(taskID)
+            TaskDetailContent(tasks: tasks, taskID: taskID, overPage: overPage).id(taskID)
         } else {
             ProgressView()
         }
@@ -1107,6 +1112,8 @@ private struct TaskDetailContent: View {
     @Environment(AppModel.self) private var model
     let tasks: TasksModel
     let taskID: String
+    /// Shown over another page (see `TaskDetailPage.overPage`).
+    var overPage = false
 
     @State private var newComment = ""
     @State private var confirmingDelete = false
@@ -1130,6 +1137,24 @@ private struct TaskDetailContent: View {
     @State private var routeWhy: TaskRouteWhy?
 
     private enum DependencyView: Hashable { case graph, list }
+
+    /// A press that leaves this page. Opened over a page (`overPage`, owner decision 2026-11-12), a
+    /// task — a dependency, the verifier — replaces the task on screen rather than stacking or
+    /// switching sections; anything else takes the page down and goes where it always did.
+    private func openRoute(_ route: Route) {
+        if overPage {
+            if case .task(let id) = route { return model.openTaskOverPage(id) }
+            model.closeTaskOverPage()
+        }
+        model.route(to: route)
+    }
+
+    /// The project line over the title. Over a page it is the way out to the project: the task goes
+    /// down and the project opens as it does from anywhere else.
+    private func openTaskProject(_ id: String) {
+        if overPage { model.closeTaskOverPage() }
+        model.openTaskProject(id)
+    }
 
     var body: some View {
         Group {
@@ -1213,8 +1238,9 @@ private struct TaskDetailContent: View {
                     .orbitConfirmation("Delete this task?", isPresented: $confirmingDelete) {
                         Button("Delete task", role: .destructive) {
                             Task {
-                                if await tasks.deleteTask(taskID), model.selectedTaskID == taskID {
-                                    model.selectedTaskID = nil
+                                if await tasks.deleteTask(taskID) {
+                                    if overPage { model.closeTaskOverPage() }
+                                    else if model.selectedTaskID == taskID { model.selectedTaskID = nil }
                                 }
                             }
                         }
@@ -1323,8 +1349,9 @@ private struct TaskDetailContent: View {
 
     private func loadDetail() async {
         let loaded = await tasks.loadDetail(taskID)
-        if !loaded, tasks.detailMissing, model.selectedTaskID == taskID {
-            model.selectedTaskID = nil
+        if !loaded, tasks.detailMissing, model.taskDetailIsOpen(taskID) {
+            if overPage { model.closeTaskOverPage() }
+            else { model.selectedTaskID = nil }
         }
     }
 
@@ -1346,7 +1373,7 @@ private struct TaskDetailContent: View {
         while !Task.isCancelled {
             do { try await Task.sleep(nanoseconds: 4_000_000_000) }
             catch { return }
-            guard model.selectedTaskID == taskID else { return }
+            guard model.taskDetailIsOpen(taskID) else { return }
             _ = await tasks.loadDetail(taskID)
             guard let current = tasks.detail, TaskListLogic.isBusy(current) else { return }
         }
@@ -1432,7 +1459,7 @@ private struct TaskDetailContent: View {
 
     private func projectLine(_ project: TaskProjectRef) -> some View {
         // Over that project's page (a row of it opened this task) it is the way back down to it.
-        Button { model.openTaskProject(project.id) } label: {
+        Button { openTaskProject(project.id) } label: {
             HStack(spacing: 5) {
                 Image(systemName: AppSection.projects.systemImage)
                 Text(project.title).lineLimit(1)
@@ -1553,7 +1580,7 @@ private struct TaskDetailContent: View {
                 { Task { await tasks.clearRunPin(id) } }
             }
             TaskRunHandoffCard(conflict: conflict,
-                               onOpenRun: { model.route(to: .session($0)) },
+                               onOpenRun: { openRoute(.session($0)) },
                                onClearPin: clearPin,
                                onDismiss: { tasks.clearRunConflict() })
         }
@@ -1618,7 +1645,7 @@ private struct TaskDetailContent: View {
     private func leadingButton(_ leading: TaskDetailActionRow.Leading, _ task: TaskItem) -> some View {
         switch leading {
         case .waitingForConfirmation(let sessionID):
-            Button { model.route(to: .session(sessionID)) } label: {
+            Button { openRoute(.session(sessionID)) } label: {
                 Label(OwnerConfirmations.waitingForConfirmation, systemImage: "arrow.turn.down.right")
                     .lineLimit(1)
                     .frame(maxWidth: .infinity)
@@ -1629,7 +1656,7 @@ private struct TaskDetailContent: View {
         case .underReview(let sessionID):
             // The same way to the card while its report is still with its reviewer — not orange:
             // nobody is asking the owner yet (contract §5 N3).
-            Button { model.route(to: .session(sessionID)) } label: {
+            Button { openRoute(.session(sessionID)) } label: {
                 Label(OwnerConfirmations.underReview, systemImage: "clock")
                     .lineLimit(1)
                     .frame(maxWidth: .infinity)
@@ -1685,7 +1712,7 @@ private struct TaskDetailContent: View {
         let button = Group {
             switch trailing {
             case .openRun(let sessionID):
-                Button { if let sessionID { model.route(to: .session(sessionID)) } } label: {
+                Button { if let sessionID { openRoute(.session(sessionID)) } } label: {
                     Label(TaskRunHandoff.openTheRun, systemImage: "arrow.right")
                         .lineLimit(1)
                         .frame(maxWidth: .infinity)
@@ -1752,7 +1779,7 @@ private struct TaskDetailContent: View {
                     Text(verifier.title ?? "Untitled task").font(.orbitSubtext).lineLimit(2)
                     TaskStatusPill(pill: TaskJudgment.pill(verifier))
                     Spacer(minLength: 8)
-                    Button(TaskJudgmentCopy.verifierCardEntry) { model.route(to: .task(verifier.id)) }
+                    Button(TaskJudgmentCopy.verifierCardEntry) { openRoute(.task(verifier.id)) }
                         .buttonStyle(.bordered)
                 }
             } else {
@@ -1784,7 +1811,7 @@ private struct TaskDetailContent: View {
             }
             .disabled(tasks.isMutating(task.id))
             if let source = task.creatorSession {
-                Button { model.route(to: .session(source.id)) } label: {
+                Button { openRoute(.session(source.id)) } label: {
                     detailRow(TaskDetailCopy.createdFromLabel, value: source.title ?? "Untitled session",
                               glyph: "chevron.right")
                 }
@@ -2088,7 +2115,7 @@ private struct TaskDetailContent: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 if showGraph {
-                    TaskDependencyGraphView(graph: graph) { model.route(to: .task($0)) }
+                    TaskDependencyGraphView(graph: graph) { openRoute(.task($0)) }
                 } else {
                     ForEach(TaskDetailLogic.dependencyRows(graph)) { row in dependencyRow(row) }
                 }
@@ -2117,7 +2144,7 @@ private struct TaskDetailContent: View {
     private func dependencyRow(_ row: TaskDependencyListRow) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Button {
-                if !row.isFocus { model.route(to: .task(row.id)) }
+                if !row.isFocus { openRoute(.task(row.id)) }
             } label: {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
@@ -2347,9 +2374,9 @@ private struct TaskDetailContent: View {
 
     private func open(_ link: TaskAttributionRow.Link) {
         switch link {
-        case .session(let id): model.route(to: .session(id))
-        case .task(let id): model.route(to: .task(id))
-        case .project(let id): model.openProject(id)
+        case .session(let id): openRoute(.session(id))
+        case .task(let id): openRoute(.task(id))
+        case .project(let id): openTaskProject(id)
         }
     }
 
@@ -2367,7 +2394,7 @@ private struct TaskDetailContent: View {
                 Text(TaskDetailCopy.nothingWatching).foregroundStyle(.secondary)
             } else {
                 ForEach(followers.live) { watch in
-                    Button { model.route(to: .watch(watch.id)) } label: {
+                    Button { openRoute(.watch(watch.id)) } label: {
                         FollowingRow(watch: watch, now: Date()).foregroundStyle(Color.primary)
                     }
                     .buttonStyle(.plain)
@@ -2398,7 +2425,7 @@ private struct TaskDetailContent: View {
             ForEach(sessions) { session in
                 // The row is the way into the run; ⓘ beside a routed one answers why instead.
                 HStack(spacing: 8) {
-                    Button { model.route(to: .session(session.id)) } label: { runRow(session, task) }
+                    Button { openRoute(.session(session.id)) } label: { runRow(session, task) }
                         .buttonStyle(.plain)
                     if let route = TaskDetailLogic.runRoute(session, smartSelection: smartSelection) {
                         let pick = TaskDetailLogic.routePick(route) { runModelName($0, task) }
@@ -2416,7 +2443,7 @@ private struct TaskDetailContent: View {
                         .accessibilityLabel(TaskDetailCopy.why(pick))
                     }
                     // The way in too, beside ⓘ rather than under it: the row's own press, again.
-                    Button { model.route(to: .session(session.id)) } label: {
+                    Button { openRoute(.session(session.id)) } label: {
                         Image(systemName: "chevron.right")
                             .font(.orbitLabel.weight(.semibold))
                             .foregroundStyle(Color.secondary.opacity(0.7))

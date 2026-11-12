@@ -1,10 +1,11 @@
-import { Suspense, lazy, useEffect, useState, type ReactNode } from 'react';
+import { lazy, useEffect, useState, type ReactNode } from 'react';
 import { MenuOutlined } from '@ant-design/icons';
 import { Outlet, useLocation } from 'react-router-dom';
 import { TasksSidePanel } from './TasksSidePanel';
 import { ImpersonationBanner } from './ImpersonationBanner';
 import { SessionSearch } from './SessionSearch';
 import { ControlPlaneProvider } from '../lib/useControlPlane';
+import { LazyBoundary } from './ErrorBoundary';
 import { isTaskHome, useTaskLinksOpenInPlace, useTaskOverPage } from '../lib/taskInPlace';
 
 // A task open over the page its link was pressed on (lib/taskInPlace). Lazy, like the project
@@ -53,9 +54,9 @@ export function AppShell() {
       <SessionSearch />
       <Outlet />
       {overPage && (
-        <Suspense fallback={null}>
+        <LazyBoundary fallback={null}>
           <LazyTaskOverPagePanel taskId={overPage} />
-        </Suspense>
+        </LazyBoundary>
       )}
     </div>
     </ControlPlaneProvider>

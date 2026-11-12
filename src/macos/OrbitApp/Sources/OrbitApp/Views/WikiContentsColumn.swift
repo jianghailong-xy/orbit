@@ -26,6 +26,7 @@ struct WikiContentsColumn: View {
                                  pick: select)
             }
             .listStyle(.plain)
+            .softTopEdgeEffect()
             .navigationTitle("")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -52,8 +53,7 @@ struct WikiContentsColumn: View {
                                 model.nav.popToRoot()
                                 wiki.selectedSlug = slug
                             },
-                            manage: { open(.wikiSettings) },
-                            trashed: wiki.trash.count, openTrash: { open(.wikiTrash) })
+                            manage: { open(.wikiSettings) })
             Spacer(minLength: 0)
         }
         .padding(.vertical, 4)
