@@ -2107,8 +2107,8 @@ export type SubagentTierSource =
 
 /**
  * The router's record of one choice (`subagent_run.decision`, docs/subagent-design.md §4.1, §4.2). Reasons are
- * English. While routing is in shadow (§8 P2) `applied` is false and the SubAgent runs on the parent's own
- * model, whatever engine, provider and model this names.
+ * English. `applied` is true since routing applies (§8 P3): the SubAgent runs on the engine, provider and model
+ * this names. Rows written while routing was in shadow (§8 P2) have it false: they ran on `runModel`, the parent's.
  */
 export interface SubagentDecision {
   level: SubagentSize | null;
@@ -2128,9 +2128,16 @@ export interface SubagentDecision {
   fallbacks?: SubagentCandidateTarget[];
   /** Whether the SubAgent runs on what this names. */
   applied: boolean;
-  /** What it runs on instead while `applied` is false: the parent's model and effort. Absent on older rows. */
+  /** What it runs on now, when that is not the pick: the parent's model on a shadow row, or the candidate a
+   *  limit moved it to (§4.3). Absent otherwise and on older rows. */
   runModel?: string | null;
   runEffort?: string | null;
+  /** Where the tier or model came from, in a few words: the Why line's first clause. Absent on older rows. */
+  tierNote?: string;
+  /** Why the pick, in a few words: its billing and headroom. Absent for a named model and on older rows. */
+  note?: string;
+  /** One short line per move after a usage limit or capacity (§4.3), e.g. `Moved to glm-5 after …`. */
+  moves?: string[];
 }
 
 /** One engine, provider, model and effort a SubAgent may run on. */
@@ -2139,6 +2146,8 @@ export interface SubagentCandidateTarget {
   provider: string;
   model: string;
   effort: string | null;
+  /** Its billing and headroom in a few words, as the Why line says it. */
+  note?: string;
 }
 
 /** How one attempt of a SubAgent run ended: still running, a usage-limit or capacity failure it moved on from, or the run's end. */
@@ -2150,6 +2159,9 @@ export interface SubagentAttempt extends SubagentCandidateTarget {
   outcome: SubagentAttemptOutcome;
   /** The engine's own words, for an attempt that hit a limit; truncated. */
   error?: string;
+  /** The account of an account pool it ran on, chosen for this SubAgent alone: never written onto the parent
+   *  session, whose own pool member stays as it was. */
+  poolMember?: { providerId: string; label: string };
   startedAt: string;
   endedAt?: string;
 }
@@ -2187,8 +2199,14 @@ export interface SubagentRunView {
   model: string | null;
   modelLabel: string | null;
   effort: string | null;
-  /** The router's reasons, English: the block's Why line. */
+  /** The router's full reasons, English: what the Why line's list opens to. */
   reasons: string[];
+  /** The Why line itself, one clause per part: where the tier came from, the pick and why, any move, and how
+   *  many candidates were removed — each provider named once. Null on rows from before it was kept, whose
+   *  Why is their reasons. */
+  why: string | null;
+  /** Every candidate the router removed, with its reason: the rest of what the Why line's list opens to. */
+  removed: Array<{ provider: string; engine: string | null; model: string | null; effort: string | null; reason: string }>;
   costUsd: number;
   /** What it handed back, truncated: the result of a background run, whose call only returned its receipt. */
   resultSummary: string | null;

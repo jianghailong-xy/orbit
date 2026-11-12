@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
-import { AgentProvider, openCodeKeyOf } from '@orbit/shared';
-import type { Prisma } from '@prisma/client';
+import { AgentProvider, openCodeKeyOf, type PlanUsageSnapshot } from '@orbit/shared';
+import type { ModelProvider, Prisma } from '@prisma/client';
+import type { UsageProviderRow } from '../providers/plan-usage.service';
 import {
   accountPoolRuntime,
   adminOnlyProviderRefusal,
@@ -10,6 +11,8 @@ import {
   type ModelProviderRow,
 } from '../providers/custom-provider';
 import { dispatchKeyRow } from '../providers/engine-provider';
+import { isPoolCandidate, poolUnavailableReason } from '../providers/pool-admission';
+import { choosePoolMember } from '../providers/pool-select';
 import { sessionEngine } from '../providers/session-engine';
 import type { QueueService } from '../queue/queue.service';
 import { ADMIN_ONLY_PROVIDER_ERROR, PROVIDER_UNAVAILABLE_ERROR } from './runner-provider-support';
@@ -22,16 +25,24 @@ import { ADMIN_ONLY_PROVIDER_ERROR, PROVIDER_UNAVAILABLE_ERROR } from './runner-
  * can run its credential, in the claim's words.
  *
  * With `target`, the same read for another engine, provider and model on this session's runner: a SubAgent's
- * next candidate after its account hit a limit (docs/subagent-design.md §4.3). A built-in engine's sign-in or a
- * key the owner configured; an account pool is refused, because choosing its member is written onto the
- * session it runs for, and this one is the parent's.
+ * routed pick, or its next candidate after its account hit a limit (docs/subagent-design.md §4.2, §4.3). A
+ * built-in engine's sign-in, a key the owner configured, or a Claude account pool of the owner's own, whose
+ * member is chosen for the SubAgent alone (subagentPoolMember) and handed back as `poolMember` for its
+ * `subagent_run` row — nothing is written onto the session, which is the parent's. A Codex pool is refused:
+ * its gateway sends each request on the account its session row names, so it cannot carry a member of its own.
  */
 export async function sessionProviderExec(
   tx: Prisma.TransactionClient,
   queue: Pick<QueueService, 'resolveLoginPool' | 'resolvePoolMember' | 'resolveSharedPool'>,
   sessionId: string,
   target?: { engine: string; provider: string; model: string },
-): Promise<{ exec?: ReturnType<typeof resolveProviderExec>; customRow?: ModelProviderRow | null; refusal?: string }> {
+  planUsage?: PoolMemberUsageReader | null,
+): Promise<{
+  exec?: ReturnType<typeof resolveProviderExec>;
+  customRow?: ModelProviderRow | null;
+  refusal?: string;
+  poolMember?: SubagentPoolMemberChoice;
+}> {
   const read = await tx.session.findUnique({
     where: { id: sessionId },
     select: {
@@ -97,12 +108,17 @@ export async function sessionProviderExec(
   // As on the claim: the key the slug names or a retired name of one, and a legacy built-in dsh
   // session's default DeepSeek key when its workspace holds no key itself.
   const keyRow = await dispatchKeyRow(tx, session, session.workspace?.env);
+  let poolMember: SubagentPoolMemberChoice | undefined;
+  let memberRow: ModelProvider | null = null;
   if (target && !keyRow && !isBuiltinProvider(session.provider, session.providerBuiltin)) {
-    return { refusal: `${target.provider} is an account pool, which a SubAgent cannot move to yet` };
+    const chosen = await subagentPoolMember(tx, session.ownerId, target.provider, planUsage ?? null);
+    if ('refusal' in chosen) return { refusal: chosen.refusal };
+    memberRow = chosen.row;
+    poolMember = { providerId: chosen.row.id, label: chosen.row.label };
   }
   const customRow = isBuiltinProvider(session.provider, session.providerBuiltin)
     ? keyRow
-    : (keyRow ??
+    : (keyRow ?? memberRow ??
       (await queue.resolveLoginPool(tx, session, session.provider!)) ??
       (await queue.resolvePoolMember(tx, session, session.provider!)) ??
       (await queue.resolveSharedPool(tx, session, session.provider!)));
@@ -145,5 +161,64 @@ export async function sessionProviderExec(
         : await unavailable(customRow),
     };
   }
-  return { exec, customRow };
+  return { exec, customRow, ...(poolMember ? { poolMember } : {}) };
+}
+
+/** The member of an account pool a SubAgent runs on, recorded on its `subagent_run` attempt. */
+export interface SubagentPoolMemberChoice {
+  providerId: string;
+  label: string;
+}
+
+/** What choosing a member reads of ProviderPlanUsageService: each member's cached quota and its standing. */
+export interface PoolMemberUsageReader {
+  snapshot(row: UsageProviderRow): PlanUsageSnapshot | null;
+  usageStanding(row: UsageProviderRow): string | null;
+}
+
+/**
+ * The member of the owner's own Claude account pool `slug` a SubAgent runs on, chosen as a claim would
+ * (choosePoolMember: the member with room whose window resets soonest, else the one spent the least) but
+ * with no member to stay on and nothing written: a SubAgent's choice is its own, not its parent session's.
+ * Refused, with why, for a slug that names no such pool, a Codex pool, or a pool none of whose members can run.
+ */
+export async function subagentPoolMember(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  slug: string,
+  planUsage: PoolMemberUsageReader | null,
+  now = new Date(),
+): Promise<{ row: ModelProvider } | { refusal: string }> {
+  const pool = await tx.providerPool.findFirst({
+    where: { slug, ownerId, shared: false },
+    select: {
+      label: true,
+      engine: true,
+      members: { where: { ownerId }, orderBy: { provider: { slug: 'asc' } }, select: { provider: true, pausedUntil: true } },
+    },
+  });
+  const codex = pool?.engine === AgentProvider.CODEX
+    || (!pool && (await tx.providerPool.count({ where: { slug, engine: AgentProvider.CODEX, people: { some: { userId: ownerId } } } })) > 0);
+  if (codex) {
+    return { refusal: `${slug} is a Codex account pool, whose gateway runs on the session's own account; a SubAgent cannot run on it` };
+  }
+  if (!pool) return { refusal: `${slug} names no provider or account pool this account has` };
+  const rows = pool.members.map((member) => ({ ...member.provider, pausedUntil: member.pausedUntil }));
+  const candidates = rows.filter(isPoolCandidate).map((row) => {
+    const standing = planUsage?.usageStanding(row) ?? null;
+    return {
+      row,
+      pausedUntil: row.pausedUntil,
+      usage: planUsage?.snapshot(row) ?? null,
+      refused: standing === 'KEY_REFUSED',
+      usageUnreadable: standing === 'USAGE_UNKNOWN',
+    };
+  });
+  const row = choosePoolMember(candidates, null, now);
+  if (row) return { row };
+  return {
+    refusal: candidates.some((c) => c.pausedUntil && c.pausedUntil > now)
+      ? `every account in the pool "${pool.label}" that can run is paused`
+      : poolUnavailableReason(pool.label, rows),
+  };
 }

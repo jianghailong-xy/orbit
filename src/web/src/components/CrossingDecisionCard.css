@@ -1,0 +1,61 @@
+/* A batch of cross-project requests as one decision card (CrossingDecisionCard.tsx): the criteria
+   card's orange tone, a compact preview that opens the review, and a receipt under it once answered. */
+.crossing-decision-wrap { margin: 10px 0; }
+.crossing-decision-preview {
+  gap: 8px; padding: 14px;
+  border: 1px solid var(--warning-border); border-radius: 12px;
+  background: var(--bg-raised);
+}
+.crossing-decision-preview.is-answered { border-color: var(--border-subtle); opacity: 0.62; }
+.crossing-decision-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.crossing-decision-icon {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 6px;
+  background: var(--warning-bg); color: var(--warning); font-size: 13px;
+}
+.crossing-decision-title {
+  flex: 1; min-width: 0; font-weight: 700; font-size: 15px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.crossing-decision-badge {
+  flex: none; padding: 2px 7px; border-radius: 10px;
+  background: var(--warning-bg); color: var(--warning);
+  font: 500 11.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.crossing-decision-summary { color: var(--text-2); font-size: 13px; line-height: 1.42; overflow-wrap: anywhere; }
+.crossing-decision-refused-note { color: var(--danger, #d4380d); font-size: 12.5px; }
+.crossing-decision-link {
+  display: flex; justify-content: space-between; margin: 2px -14px 0; padding: 10px 14px 0;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--accent, var(--brand)); font-size: 13.5px; font-weight: 600;
+}
+.crossing-decision-receipt { margin: 8px 0 0; text-align: center; font-size: 13.5px; color: var(--text-2); }
+.crossing-decision-verdict { color: var(--success); font-weight: 600; }
+.crossing-decision-body { padding: 10px 14px 4px; }
+.crossing-decision-body > p { margin: 0 0 8px; }
+.crossing-decision-waiting { color: var(--warning); font-weight: 600; font-size: 13px; }
+.crossing-decision-provenance { color: var(--text-3); font-size: 13px; }
+.crossing-decision-route { font-size: 14px; }
+.crossing-decision-route > span { color: var(--text-3); }
+.crossing-decision-label { color: var(--text-3); font-size: 13px; font-weight: 600; margin-top: 12px !important; }
+.crossing-decision-list {
+  list-style: none; margin: 0 0 8px; padding: 0 12px;
+  border-radius: 12px; background: var(--bg-sunken, var(--brand-tint));
+}
+.crossing-decision-item {
+  display: flex; flex-direction: column; gap: 1px; padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.crossing-decision-item:last-child { border-bottom: none; }
+.crossing-decision-item-title { font-size: 14px; overflow-wrap: anywhere; }
+.crossing-decision-item-crit { color: var(--text-3); font-size: 12px; }
+.crossing-decision-item-refused { color: var(--danger, #d4380d); font-size: 12px; }
+.crossing-decision-more {
+  padding: 0; border: 0; background: none; cursor: pointer; text-align: left;
+  color: var(--accent, var(--brand)); font: inherit; font-size: 14px;
+}
+.crossing-decision-quote {
+  padding: 8px 10px; border-radius: 10px; background: var(--brand-tint);
+  font-size: 13px; color: var(--text-2);
+}
+.crossing-decision-note { color: var(--text-3); font-size: 12.5px; line-height: 1.45; }

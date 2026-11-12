@@ -1,7 +1,7 @@
 /**
  * A SubAgent's move to the next candidate after its account hit a limit (docs/subagent-design.md §4.3), through
- * POST /runner/sessions/:id/subagents/:runId/fallback on a real PostgreSQL. Routing is in shadow, so the list the
- * run moves along is the decision it opened with:
+ * POST /runner/sessions/:id/subagents/:runId/fallback on a real PostgreSQL. The list the run moves along is the
+ * decision it opened with:
  *
  *   1. A usage-limit error on the first attempt moves the run to the tier's next candidate: the answer runs the
  *      child there, `subagent_run.attempts` holds two attempts — the first closed USAGE_LIMIT with the engine's
@@ -11,6 +11,8 @@
  *   3. A plain failure is not moved (SUBAGENT_NOT_A_LIMIT_FAILURE): one attempt, closed with the run's end.
  *   4. No candidate left is NO_SUBAGENT_PROVIDER, listing each provider's reason.
  *   5. Another account's runner is answered as for an id that names nothing.
+ *   6. An account pool is a fallback target: the run moves onto the pool's member with room, on that member's
+ *      own credential, recorded on the attempt — and the parent session's pool fields are unchanged.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/subagent-fallback.pg.spec.ts
  *
@@ -147,7 +149,7 @@ test('SubAgent quota fallback: moves, attempts, the reason, the bound and the re
     const moved = await subagents.nextSubagentCandidate(runner, sessionId, opened.runId, fallback(SESSION_LIMIT));
     t.diagnostic(`moved: attempt ${moved.attempt}, reason "${moved.reason}", exec ${moved.exec.provider}/${moved.exec.model}`);
     assert.equal(moved.attempt, 2);
-    assert.equal(moved.reason, "Moved to a-coder after claude-sonnet-5-5's account hit its limit");
+    assert.equal(moved.reason, `Moved to a-coder on ${first} after claude-sonnet-5-5's account hit its limit`);
     assert.equal(moved.exec.provider, 'claude');
     assert.equal(moved.exec.model, 'a-coder');
     assert.equal(moved.exec.env?.ANTHROPIC_BASE_URL, 'https://a.invalid/anthropic', "the next candidate's own credential");
@@ -160,7 +162,8 @@ test('SubAgent quota fallback: moves, attempts, the reason, the bound and the re
       [2, first, 'claude', 'a-coder', 'RUNNING'],
     ]);
     assert.equal(row.attempts[0].error, SESSION_LIMIT);
-    assert.equal(row.decision.reasons.at(-1), "Moved to a-coder after claude-sonnet-5-5's account hit its limit");
+    assert.equal(row.decision.reasons.at(-1), `Moved to a-coder on ${first} after claude-sonnet-5-5's account hit its limit`);
+    assert.deepEqual(row.decision.moves, [moved.reason], 'the Why line carries the move');
     assert.equal(row.decision.runModel, 'a-coder', 'the block names the model it now runs on');
 
     await subagents.updateSubagentRun(runner, sessionId, opened.runId, update({ status: 'DONE', resultSummary: 'fixed' }));
@@ -173,7 +176,7 @@ test('SubAgent quota fallback: moves, attempts, the reason, the bound and the re
     const one = await subagents.nextSubagentCandidate(runner, sessionId, opened.runId, fallback(SESSION_LIMIT));
     const two = await subagents.nextSubagentCandidate(runner, sessionId, opened.runId, fallback(USAGE_LIMIT));
     assert.deepEqual([one.attempt, two.attempt], [2, 3]);
-    assert.equal(two.reason, "Moved to b-coder after a-coder's account hit its limit");
+    assert.equal(two.reason, `Moved to b-coder on ${second} after a-coder's account hit its limit`);
     const spent = await refused(subagents.nextSubagentCandidate(runner, sessionId, opened.runId, fallback(WEEKLY_LIMIT)));
     t.diagnostic(`third limit: ${spent.code}: ${spent.message}`);
     assert.equal(spent.code, 'SUBAGENT_FALLBACK_SPENT');
@@ -225,5 +228,44 @@ test('SubAgent quota fallback: moves, attempts, the reason, the bound and the re
     assert.ok(none.message.includes(`- ${first}: Blocked in the SubAgents settings`));
     assert.ok(none.message.includes(`- ${second}: Blocked in the SubAgents settings`));
     assert.deepEqual((await rowOf(opened.runId)).attempts.map((a) => a.outcome), ['USAGE_LIMIT']);
+  });
+
+  await t.test("an account pool is a fallback target: its member's credential, recorded on the attempt, never on the parent", async () => {
+    await prisma.user.update({ where: { id: ownerId }, data: { preferences: { subagentBlockedProviders: [first, second] } } });
+    const member = await prisma.modelProvider.create({
+      data: { slug: `dana-${tag}`, label: 'Dana', runtime: 'claude', baseUrl: 'https://api.anthropic.com',
+        apiKeyEnc: encryptSecret(`sk-ant-oat01-dana-${tag}`), models: [], ownerId },
+    });
+    const pool = await prisma.providerPool.create({ data: { slug: `crew-${tag}`, label: 'Crew', ownerId, engine: 'claude' } });
+    await prisma.providerPoolMember.create({ data: { poolId: pool.id, providerId: member.id, ownerId } });
+    t.after(async () => {
+      await prisma.providerPool.deleteMany({ where: { id: pool.id } });
+      await prisma.modelProvider.deleteMany({ where: { id: member.id } });
+    });
+    // Dana's account has half its quota left: ranked after the runner's own sign-in at 10% used.
+    const resetsAt = new Date(Date.now() + 3_600_000).toISOString();
+    const planUsage = {
+      snapshot: (row: { id: string }) => (row.id === member.id ? { fiveHour: { utilization: 50, resetsAt } } : null),
+      usageStanding: () => null,
+    };
+    const withPools = new RunnerSubagentsController(prisma as never, silent(), planUsage as never);
+    const sessionId = await parentSession();
+    const poolFields = { poolMemberProviderId: true, poolKeyId: true, poolCodexAccountId: true, poolSwitchNotice: true, provider: true } as const;
+    const before = await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: poolFields });
+    const opened = await withPools.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_to_pool', size: 'M' }));
+    assert.equal(opened.decision.provider, 'claude', 'the sign-in first, with more room');
+    assert.deepEqual(opened.decision.fallbacks?.map((f) => f.provider), [pool.slug], 'then the pool');
+    const moved = await withPools.nextSubagentCandidate(runner, sessionId, opened.runId, fallback(SESSION_LIMIT));
+    t.diagnostic(`moved to the pool: ${moved.reason}; env names ${JSON.stringify(Object.keys(moved.exec.env ?? {}))}`);
+    assert.equal(moved.attempt, 2);
+    assert.ok(Object.values(moved.exec.env ?? {}).includes(`sk-ant-oat01-dana-${tag}`), "on Dana's own credential");
+    const row = await rowOf(opened.runId);
+    assert.deepEqual(row.attempts.map(brief), [
+      [1, 'claude', 'claude', 'claude-sonnet-5-5', 'USAGE_LIMIT'],
+      [2, pool.slug, 'claude', 'claude-sonnet-5-5', 'RUNNING'],
+    ]);
+    assert.deepEqual((row.attempts[1] as SubagentAttempt).poolMember, { providerId: member.id, label: 'Dana' });
+    assert.deepEqual(await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: poolFields }), before,
+      "the parent session's pool fields are unchanged");
   });
 });
