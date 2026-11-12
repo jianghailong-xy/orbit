@@ -1,6 +1,6 @@
 # 把账号从私有部署搬到 orbitd.io（设计稿）
 
-> 状态：草稿，2026-11-12，待 owner 拍板 §9 的 D1–D7。本文只做设计，不改代码。
+> 状态：已定，2026-11-12。owner 定 §9 的 D1–D7 全部按推荐（A），并追加一条约束：**orbitd.io 不允许把数据搬到外部站点**（§2.4、D8）。本文只做设计，不改代码。
 > 效果图：`docs/mocks/account-move/01-board.html` 与 `01-board-1.png` … `01-board-6.png`。
 > 相关：`self-hosting.md`、`postgres-backup-restore.md`、`public-id-migration-design.md`、`runner-link-design.md`、
 > `runner-update-drain-design.md`。
@@ -76,6 +76,25 @@ import`）。任务、项目、证据、wiki、附件、会话事件都留在旧
 - 搬家码过期或已用：要求在 orbitd.io 重新生成。
 - 旧服务器版本比 orbitd.io 新（极少见）：提示等 orbitd.io 升级。
 - 超出 orbitd.io 的存储配额：预览阶段就拦下，告诉差多少。
+
+### 2.4 只进不出：orbitd.io 不允许搬走（owner 2026-11-12）
+
+搬家分两个方向，各由一个部署开关控制：
+
+| 开关 | 含义 | 私有部署默认 | orbitd.io |
+|---|---|---|---|
+| `ORBIT_ACCOUNT_MOVE_OUT` | 本服务器的账号可以搬到别处 | on | **off** |
+| `ORBIT_ACCOUNT_MOVE_IN` | 本服务器可以签发搬家码、接收搬来的数据 | off | on |
+
+`MOVE_OUT` 为 off 时，所有搬出入口一起关，不留旁路：
+
+- Settings 里不显示 "Move to another Orbit"，也不显示下载搬家包；
+- 导出接口（预览、打包、推送、下载）一律回 403 `ACCOUNT_MOVE_OUT_DISABLED`，`orbit-admin account export` 同样拒绝；
+- 搬家码核对接口本来就在接收方，与此无关。
+
+`MOVE_IN` 在私有部署默认关，所以搬家码只能在 orbitd.io 上生成，私有部署之间不会互相搬，除非管理员自己打开。
+开关读环境变量，不放进库里的设置：改它要动部署文件，界面上没有人能把它打开。M0 的覆盖测试同时检查：每个导出
+路由都过这道开关。
 
 ## 3. 架构
 
@@ -188,14 +207,14 @@ import`）。任务、项目、证据、wiki、附件、会话事件都留在旧
 | 编号 | 内容 | 验收 |
 |---|---|---|
 | M0 | 登记表：174 张表逐张分类、归属条件、要改写的列；覆盖测试（新表未登记即红） | 测试在 main 上绿；故意加一张表变红 |
-| M1 | 导出：冻结、快照、包格式、manifest 核对；`orbit-admin account export` CLI | 真实库上导出一个账号，逐表计数与 SQL 一致 |
-| M2 | 导入：临时库补版本、改写归属、冲突、并入、回执 | 旧版本（落后 ≥ 20 个迁移）的包并入新库，逐表对数，抽样页面打开正常 |
+| M1 | 导出：冻结、快照、包格式、manifest 核对；`orbit-admin account export` CLI；`ORBIT_ACCOUNT_MOVE_OUT` 开关 | 真实库上导出一个账号，逐表计数与 SQL 一致；开关为 off 时每个导出路由回 403 |
+| M2 | 导入：临时库补版本、改写归属、冲突、并入、回执；`ORBIT_ACCOUNT_MOVE_IN` 开关 | 旧版本（落后 ≥ 20 个迁移）的包并入新库，逐表对数，抽样页面打开正常 |
 | M3 | 搬家码、推送通道（可续传）、下载/上传后备、两边的进度与预览界面（web） | 断网续传；搬家码过期、重复使用被拒 |
 | M4 | runner 交接指令（runner 发版）+ 旧 runner 的命令后备 | 进行中的 Claude 会话在交接后继续出事件，无丢失 |
 | M5 | 旧账号"已搬走"状态：只读、横幅、跳转、`ACCOUNT_MOVED`；iOS / macOS / Android 的提示 | 三端各一次真实登录旧服务器后被引到新服务器 |
 | M6 | 端到端演练：旧版本 compose 部署 → orbitd.io 的预发副本，含 2 台 runner、1 个进行中会话、附件、密钥 | 报告对数一致；runner 自动切换；回滚演练（中途失败两边不变） |
 
-## 9. 待定 · 要你拍板
+## 9. 决定（owner 2026-11-12：D1–D7 取 A，追加 D8）
 
 | # | 问题 | A | B | 推荐 |
 |---|---|---|---|---|
@@ -206,3 +225,4 @@ import`）。任务、项目、证据、wiki、附件、会话事件都留在旧
 | D5 | 旧账号搬完怎么办 | 只读 + 指路 + 用户手动删除 | 搬完立即删除 | **A**（给用户核对的余地，且旧链接还能跳转） |
 | D6 | 个人访问令牌 | 搬哈希，脚本改地址即可用 | 不搬，到 orbitd.io 重新签发 | **A** |
 | D7 | 目标账号已有数据 | 并到一起，预览里说明 | 只允许搬进空账号 | **A**（UUID 不会撞，并到一起没有风险） |
+| D8 | 搬出 | — | — | **orbitd.io 只进不出**：`ORBIT_ACCOUNT_MOVE_OUT=off`，见 §2.4 |
