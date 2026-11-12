@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>托管 runner 放到另一台 Docker 主机 · 架构板</title>
+<style>
+  body { margin: 0; background: #f4f4f6; font: 15px/1.55 "Inter", "Noto Sans SC", "WenQuanYi Zen Hei", sans-serif; color: #1d1d1f; }
+  .b-part { width: 1400px; margin: 0 auto; padding: 36px 44px 40px; box-sizing: border-box; background: #fff; border-bottom: 1px solid #e3e3e8; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  h2 { font-size: 20px; margin: 0 0 14px; }
+  .b-sub { color: #6e6e73; margin: 0 0 22px; }
+  .b-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .b-host { border: 2px solid #c7c7cc; border-radius: 14px; padding: 14px 16px 16px; background: #fafafc; position: relative; }
+  .b-host.prod { border-color: #0a84ff; }
+  .b-host.ch { border-color: #34a853; }
+  .b-host h3 { margin: 0 0 10px; font-size: 16px; }
+  .b-box { border: 1px solid #d1d1d6; background: #fff; border-radius: 9px; padding: 8px 11px; margin: 7px 0; font-size: 14px; }
+  .b-box.new { border: 2px dashed #34a853; background: #f1fbf3; }
+  .b-box.chg { border: 2px dashed #ff9f0a; background: #fff8ec; }
+  .b-box.off { color: #8e8e93; background: #f2f2f7; }
+  .b-mono { font-family: "DejaVu Sans Mono", monospace; font-size: 12.5px; }
+  .b-arrow { margin: 10px 0; padding: 8px 12px; border-radius: 9px; background: #eef5ff; font-size: 14px; }
+  .b-arrow.pub { background: #f1fbf3; }
+  .b-n { display: inline-block; min-width: 22px; height: 22px; line-height: 22px; text-align: center; border-radius: 11px; background: #ff3b30; color: #fff; font-size: 13px; font-weight: 700; margin-right: 6px; }
+  .b-notes { margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 28px; font-size: 14px; }
+  .b-notes p { margin: 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { border: 1px solid #e0e0e5; padding: 8px 10px; vertical-align: top; text-align: left; }
+  th { background: #f6f6f8; }
+  td.rec { background: #f1fbf3; }
+  .b-tag { display: inline-block; font-size: 12px; padding: 1px 7px; border-radius: 8px; background: #34a853; color: #fff; margin-left: 6px; }
+  .b-warn { border-left: 4px solid #ff9f0a; background: #fff8ec; padding: 10px 14px; border-radius: 6px; margin-top: 16px; font-size: 14px; }
+  .b-legend span { display: inline-block; margin-right: 18px; font-size: 13px; }
+  .b-legend i { display: inline-block; width: 14px; height: 14px; vertical-align: -2px; margin-right: 5px; border-radius: 3px; }
+  ol.b-steps { margin: 0; padding-left: 22px; }
+  ol.b-steps li { margin: 6px 0; }
+</style>
+</head>
+<body>
+
+<section class="b-part" id="part-1">
+  <h1>托管 runner 放到另一台 Docker 主机（10.66.0.3）</h1>
+  <p class="b-sub">已拍板：产品支持远端通道 · runner 走 https://orbitd.io · 所有账号都给 · 10.66.0.3 上的活由 workstation runner 会话来做。下面是 ① 今天 和 ② 建议的新结构。</p>
+  <div class="b-legend"><span><i style="border:2px dashed #34a853;background:#f1fbf3"></i>新增</span><span><i style="border:2px dashed #ff9f0a;background:#fff8ec"></i>改动</span><span><i style="background:#f2f2f7;border:1px solid #d1d1d6"></i>这台机器上不跑</span></div>
+  <h2 style="margin-top:18px">① 今天：所有东西必须在同一台机器上</h2>
+  <div class="b-cols">
+    <div class="b-host prod">
+      <h3>orbit-prod（10.66.0.1）· 8 核 / 23 GiB · 磁盘 94%</h3>
+      <div class="b-box">apiserver · profile.json：通道只能是 <span class="b-mono">socketPath</span> 或 <span class="b-mono">http://127.0.0.1</span></div>
+      <div class="b-box">docker-channel：只监听 unix socket / 127.0.0.1，直接拿本机 docker.sock</div>
+      <div class="b-box">managed-runner-firewall：本机 iptables</div>
+      <div class="b-box">/upgrade：在本机构建 runner 镜像，把镜像 ID 同时写进 channel.json 和 profile.json</div>
+      <div class="b-box">mr-&lt;uuid&gt; 容器 + mr-data 卷：在本机，经网关 2086 访问 apiserver</div>
+      <div class="b-box off">现状：ORBIT_MANAGED_RUNNERS_ENABLED 未设置，COMPOSE_PROFILES=runner-link → 托管 runner 关着</div>
+    </div>
+    <div class="b-host">
+      <h3>10.66.0.3（局域网 192.168.1.11，workstation）</h3>
+      <div class="b-box off">产品里没有任何办法把容器放到这里：通道和 apiserver 两头都强制同机</div>
+      <div class="b-box">8 核 / 62 GiB（可用 41）· NVMe 剩 347 G · Docker 29.7.2 · root</div>
+      <div class="b-box">已在跑：Nextcloud、qBittorrent、NFS/SMB 共享、autossh、workstation runner（root）</div>
+      <div class="b-box">能访问 https://orbitd.io（200）；http://10.66.0.1:2086 不通</div>
+    </div>
+  </div>
+</section>
+
+<section class="b-part" id="part-2">
+  <h2>② 建议：apiserver 留在 prod，通道 + 防火墙 + 镜像 + 容器放到 10.66.0.3</h2>
+  <div class="b-cols">
+    <div class="b-host prod">
+      <h3>orbit-prod（10.66.0.1）</h3>
+      <div class="b-box chg"><span class="b-n">1</span>apiserver · profile.json：<span class="b-mono">"remote": true</span>，<span class="b-mono">channel.url = http://10.66.0.3:&lt;port&gt;</span>，token 文件</div>
+      <div class="b-box chg"><span class="b-n">2</span>/upgrade：remote 时不在本机构建 runner 镜像，只报告通道当前的镜像 ID</div>
+      <div class="b-box off">本机不跑 docker-channel、不跑托管防火墙、没有托管容器</div>
+      <div class="b-box">网关 :443（orbitd.io）· link 网关（wss://c1.link.orbitd.io）—— 不变</div>
+    </div>
+    <div class="b-host ch">
+      <h3>10.66.0.3（通道主机）</h3>
+      <div class="b-box chg"><span class="b-n">3</span>docker-channel：只监听 <span class="b-mono">10.66.0.3:&lt;port&gt;</span>，<span class="b-mono">allowPeers: [10.66.0.1]</span>，其他来源直接断开；token 照旧必需</div>
+      <div class="b-box">managed-runner-firewall：原样复用 → runner 只能访问 DNS 和公网，访问不了本机、局域网、wg1、Nextcloud/NFS/SMB</div>
+      <div class="b-box new"><span class="b-n">4</span>deploy/managed-runner/remote-host/：Compose（channel + firewall）+ 脚本 install / upgrade &lt;sha&gt; / status，在这里构建镜像</div>
+      <div class="b-box">mr-&lt;uuid&gt; 容器 + mr-data 卷（每个 2 核 / 4 GiB / 20 GiB）</div>
+    </div>
+  </div>
+  <div class="b-arrow"><span class="b-n">5</span>apiserver → 通道：HTTP + Bearer token，走 wg1（WireGuard 加密并认证对端）。已验证 prod 的 apiserver 容器能连到 10.66.0.3。</div>
+  <div class="b-arrow pub"><span class="b-n">6</span>runner → 服务器：<span class="b-mono">https://orbitd.io</span> 和 <span class="b-mono">wss://c1.link.orbitd.io</span>，走公网 TLS；remote 时 profile 校验强制 serverUrl 必须是 https。</div>
+  <div class="b-notes">
+    <p><b>1</b> 新字段只在 remote 下放开私网地址；单机部署行为完全不变。</p>
+    <p><b>2</b> 镜像归谁见 D2；一次升级只改一边的文件。</p>
+    <p><b>3</b> 仍然拒绝 0.0.0.0 和公网地址；HPC（10.66.0.2）经 wg1 hub 也能连到 .3，所以要有 allowPeers。</p>
+    <p><b>4</b> 由 workstation runner 会话执行（root，已确认 sudo-ok、docker.sock 可用）。</p>
+  </div>
+  <div class="b-warn"><b>隔离提醒（你已接受）：</b>所有账号的容器和 10.66.0.3 共用内核。这台机器上还有 Nextcloud 数据、5 块 14.6 T 盘上的 NFS/SMB 共享，以及带你引擎登录态的 root runner。内核/容器运行时一旦被突破，这些都暴露；防火墙只挡网络路径，挡不住这条。</div>
+</section>
+
+<section class="b-part" id="part-3">
+  <h2>③ 一个账号的 runner 怎么起来（时序）</h2>
+  <ol class="b-steps">
+    <li>账号登录 → prod 的 manager 按 profile 申请：<span class="b-mono">GET http://10.66.0.3:&lt;port&gt;/v1/info</span>（检查 instanceId、镜像、主机容量）</li>
+    <li><span class="b-mono">PUT /v1/volumes/mr-data-&lt;uuid&gt;</span> → <span class="b-mono">PUT /v1/credentials/&lt;uuid&gt;</span> → <span class="b-mono">POST /v1/containers</span>（防火墙 status.json 必须是 enforced，否则 503 等待）</li>
+    <li>容器在 10.66.0.3 上启动，读 bootstrap 卷里的凭据，用 <span class="b-mono">https://orbitd.io</span> 注册、用 <span class="b-mono">wss://c1.link.orbitd.io</span> 建 link</li>
+    <li>READY → 接会话；空闲 1 小时 → manager 让它睡，容器删掉、卷保留，算力释放</li>
+    <li>prod 发版后：协调者在 workstation 上开会话跑 <span class="b-mono">remote-host upgrade &lt;sha&gt;</span>（D3），新代际的容器用新镜像</li>
+  </ol>
+  <h2 style="margin-top:24px">落地（按依赖顺序，每步依赖上一步）</h2>
+  <ol class="b-steps">
+    <li><b>通道</b>：私网地址监听 + allowPeers，配置校验和单测</li>
+    <li><b>apiserver</b>：remote profile、私网通道 URL、https serverUrl 规则、D2 的镜像模式，单测</li>
+    <li><b>通道主机套件 + /upgrade + 文档</b>，在 HPC 上做两台主机的实验室验证</li>
+    <li><b>生产上线</b>（要你点头）：workstation 会话在 .3 上 install → token 和 profile 拷到 prod → <span class="b-mono">ORBIT_MANAGED_RUNNERS_ENABLED=true</span> → 重建 apiserver → 第一个账号的 runner 到 READY 并跑通一个会话。回滚 = 开关改回 false 再重建（卷保留）</li>
+  </ol>
+</section>
+
+<section class="b-part" id="part-4">
+  <h2>待定 · 要你拍板</h2>
+  <table>
+    <tr><th style="width:13%"></th><th style="width:44%">方案 A</th><th>方案 B</th></tr>
+    <tr><td><b>D1 通道传输</b></td>
+      <td class="rec">HTTP + token 走 wg1，只监听 10.66.0.3，allowPeers 只放 10.66.0.1。WireGuard 本身加密并认证对端。<span class="b-tag">推荐</span></td>
+      <td>再加一层 TLS（固定自签证书）。能防一个被攻破的 wg1 对端伪造 10.66.0.1，代价是多一张证书要轮换。</td></tr>
+    <tr><td><b>D2 镜像归属</b></td>
+      <td class="rec">通道主机负责镜像。prod 的 profile.json 写 <span class="b-mono">"image": "channel"</span>，apiserver 用通道报告的镜像 ID，继续校验 instanceId。一次升级只改一个文件。<span class="b-tag">推荐</span></td>
+      <td>保持两边都写死镜像 ID。每次 .3 升级后要把新 ID 拷到 prod 并重建 apiserver；漏一次，所有新 runner 都起不来。</td></tr>
+    <tr><td><b>D3 通道主机怎么升级</b></td>
+      <td class="rec">每次 prod 发版后，协调者在 workstation runner 上开会话跑 <span class="b-mono">remote-host upgrade &lt;sha&gt;</span>，用刚部署的提交。<span class="b-tag">推荐</span></td>
+      <td>通道主机定时跟随 prod（读 /dl/version.json，变了就构建）。不用人管，但构建会在不确定的时间压到这台机器上。</td></tr>
+    <tr><td><b>D4 10.66.0.3 给多少算力</b></td>
+      <td class="rec">默认推导：主机减去四分之一 = 6 核 / 约 46 GiB；每个 runner 2 核 / 4 GiB → 同时醒着 3 个，最多 8 个容器；睡着的不占算力。<span class="b-tag">推荐</span></td>
+      <td>写死一个更小的池：4 核 / 16 GiB（同时醒 2 个），给 Nextcloud 和 root runner 多留余量。</td></tr>
+  </table>
+</section>
+
+</body>
+</html>
