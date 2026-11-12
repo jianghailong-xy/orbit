@@ -32,7 +32,7 @@ func land(_ model: AppModel) async {
     if let base = model.baseURL {
         model.user = try? await APIClient(baseURL: base, tokenStore: InMemoryTokenStore()).me()
     }
-    post("ME translationAvailable=\(String(describing: model.user?.translationAvailable)) translationEnabled=\(String(describing: model.user?.preferences?.translationEnabled)) language=\(String(describing: model.user?.preferences?.translationLanguage)) api=\(model.api != nil)")
+    post("ME translationAvailable=\(String(describing: model.user?.translationAvailable)) translationEnabled=\(String(describing: model.user?.preferences?.translationEnabled)) language=\(String(describing: model.user?.preferences?.translationLanguage))")
     // The shell restores its own landing as it comes up: open Settings a few times with a gap.
     for _ in 0..<3 {
         try? await Task.sleep(for: .seconds(2))
