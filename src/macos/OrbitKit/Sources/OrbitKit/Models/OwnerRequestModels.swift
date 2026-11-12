@@ -8,6 +8,8 @@ public enum OwnerRequestKind: String, Codable, Sendable, CaseIterable {
     case secret = "SECRET"
     case manualStep = "MANUAL_STEP"
     case confirm = "CONFIRM"
+    /// An agent asking the owner to create a wiki for its workspace's repository (docs/wiki-explicit-creation-design.md §3.6).
+    case wikiCreate = "WIKI_CREATE"
 }
 
 public enum OwnerRequestState: String, Codable, Sendable, CaseIterable {

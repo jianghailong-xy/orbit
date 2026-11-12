@@ -49,7 +49,7 @@ export interface AndroidPushPayload {
   sessionID?: string;
   projectID?: string;
   openItemID?: string;
-  /** `kind: 'owner-request'`: the request, and its kind (DECISION, SECRET, MANUAL_STEP or CONFIRM). */
+  /** `kind: 'owner-request'`: the request, and its kind (DECISION, SECRET, MANUAL_STEP, CONFIRM or WIKI_CREATE). */
   ownerRequestID?: string;
   ownerRequestKind?: string;
   taskID?: string;

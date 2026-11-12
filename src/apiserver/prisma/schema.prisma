@@ -7329,6 +7329,10 @@ model OwnerRequest {
   /// SECRET: `{ name, runnerId, envVar? , filePath? }` — never the value.
   secretSpec          Json?     @map("secret_spec")
   verifyHint          String?   @map("verify_hint")
+  /// WIKI_CREATE: the repository the wiki is for, normalized as `wiki_space.repo_url_norm` (migration 0531).
+  repoUrlNorm         String?   @map("repo_url_norm")
+  /// WIKI_CREATE: the asking session's workspace, which the wiki's maintenance reads. History, not a foreign key.
+  workspaceId         String?   @map("workspace_id") @db.Uuid
   expiresAt           DateTime? @map("expires_at") @db.Timestamptz(3)
   clientRequestId     String?   @map("client_request_id")
   resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)

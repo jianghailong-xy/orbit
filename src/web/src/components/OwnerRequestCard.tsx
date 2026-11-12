@@ -61,6 +61,7 @@ const PRIMARY: Readonly<Record<OwnerRequest['kind'], string>> = {
   SECRET: 'Provide key',
   MANUAL_STEP: 'Mark done',
   CONFIRM: 'Confirm',
+  WIKI_CREATE: 'Create wiki',
 };
 
 /** The runner a secret goes to, by the name the owner knows it by. */

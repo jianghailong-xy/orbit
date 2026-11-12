@@ -25,7 +25,7 @@ data class PushPayload(
     val watchId: String? = null,
     val generation: Int? = null,
     val wikiSpaceId: String? = null,
-    /** `owner-request`: the request, and its kind (DECISION, SECRET, MANUAL_STEP or CONFIRM), which names the notification's action. */
+    /** `owner-request`: the request, and its kind (DECISION, SECRET, MANUAL_STEP, CONFIRM or WIKI_CREATE), which names the notification's action. */
     val ownerRequestId: String? = null,
     val ownerRequestKind: String? = null,
 ) {

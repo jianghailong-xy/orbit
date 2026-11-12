@@ -1,13 +1,14 @@
 /**
  * Owner requests: an agent session asking the account owner to act (migration 0503).
  *
- * One model for the four things a session can need from a person: a DECISION it may not make, a
- * SECRET only the owner holds, a MANUAL_STEP only a person can do, and a yes/no CONFIRM. This file
+ * One model for the things a session can need from a person: a DECISION it may not make, a
+ * SECRET only the owner holds, a MANUAL_STEP only a person can do, a yes/no CONFIRM, and a WIKI_CREATE —
+ * a wiki for its repository, which only the owner makes (docs/wiki-explicit-creation-design.md §3.6). This file
  * is the rules with no database in them — what a filing must hold per kind, the state machine, and
  * the lock-screen copy — so they can be read and tested in one place.
  */
 
-export const OWNER_REQUEST_KINDS = ['DECISION', 'SECRET', 'MANUAL_STEP', 'CONFIRM'] as const;
+export const OWNER_REQUEST_KINDS = ['DECISION', 'SECRET', 'MANUAL_STEP', 'CONFIRM', 'WIKI_CREATE'] as const;
 export type OwnerRequestKind = (typeof OWNER_REQUEST_KINDS)[number];
 
 export const OWNER_REQUEST_STATES = ['PENDING', 'DONE', 'DECLINED', 'EXPIRED', 'WITHDRAWN'] as const;
@@ -39,6 +40,29 @@ export const OWNER_REQUEST_NOT_PENDING = 'OWNER_REQUEST_NOT_PENDING';
 export const OWNER_REQUEST_EXPIRED = 'OWNER_REQUEST_EXPIRED';
 export const OWNER_REQUEST_KEY_SPENT = 'OWNER_REQUEST_KEY_SPENT';
 export const OWNER_REQUEST_NOT_ASKER = 'OWNER_REQUEST_NOT_ASKER';
+/** A WIKI_CREATE filed for a repository whose card the owner already declined (design §3.6, D4). */
+export const WIKI_CREATE_DECLINED = 'WIKI_CREATE_DECLINED';
+/** A WIKI_CREATE filed from a workspace with no repository: there is nothing to make a wiki for. */
+export const WIKI_CREATE_NO_REPOSITORY = 'WIKI_CREATE_NO_REPOSITORY';
+
+/** The maintenance a wiki made from a WIKI_CREATE card starts with (design §3.6): the Create wiki form's defaults. */
+export const WIKI_CREATE_DAILY_RUN_LIMIT = 8;
+export const WIKI_CREATE_LOOKBACK_DAYS = 14;
+
+/** A repository's name as a wiki title reads it: its last path segment (`github.com/a/lfs-builder` is `lfs-builder`). */
+export function wikiRepositoryName(repository: string): string {
+  return repository.split('/').filter(Boolean).at(-1) ?? repository;
+}
+
+/** The card's title, which the server writes: the agent names no repository. */
+export function wikiCreateTitle(repository: string): string {
+  return `Create a wiki for ${wikiRepositoryName(repository)}?`;
+}
+
+/** The refusal of a filing after the owner declined a wiki for this repository, dated in UTC. */
+export function wikiCreateDeclinedMessage(declinedAt: Date): string {
+  return `The owner declined a wiki for this repository on ${declinedAt.toISOString().slice(0, 10)}.`;
+}
 
 export const MAX_OWNER_REQUEST_TITLE = 200;
 export const MAX_OWNER_REQUEST_WHY = 2_000;
@@ -78,7 +102,8 @@ export type OwnerRequestSecretSpecFiling = Omit<OwnerRequestSecretSpec, 'runnerI
 /** A filing as the caller sent it, after DTO validation. */
 export interface OwnerRequestFiling {
   kind: OwnerRequestKind;
-  title: string;
+  /** Every kind's but WIKI_CREATE's, whose title the server writes. */
+  title?: string;
   why: string;
   blocksTaskIds?: string[];
   ifUnanswered?: string;
@@ -94,6 +119,15 @@ export interface OwnerRequestFiling {
 
 /** A filing this kind cannot carry; the door answers 400 with its message. */
 export class OwnerRequestNotFileable extends Error {}
+
+/**
+ * What a WIKI_CREATE filing may not carry (design §3.6): only `why` and `ifUnanswered` are the agent's — the title and
+ * the repository the server reads from the asking session's workspace — beside the transport's own
+ * `clientRequestId` and the `projectId` it is filed under.
+ */
+const NOT_FOR_WIKI_CREATE = [
+  'title', 'blocksTaskIds', 'options', 'recommendedOption', 'steps', 'secretSpec', 'verifyHint', 'expiresAt',
+] as const satisfies readonly (keyof OwnerRequestFiling)[];
 
 /** A secret's environment variable (design §3.2). */
 export const SECRET_ENV_VAR = /^[A-Z][A-Z0-9_]{0,63}$/;
@@ -135,9 +169,18 @@ const trimmed = (value: string | undefined): string | undefined => {
 export function normalizeOwnerRequest(filing: OwnerRequestFiling, now: Date): OwnerRequestFiling & { expiresAtDate: Date | null } {
   const title = trimmed(filing.title);
   const why = trimmed(filing.why);
-  if (!title) throw new OwnerRequestNotFileable('title is required: the line the owner reads first');
-  if (!why) throw new OwnerRequestNotFileable('why is required: say what this unblocks');
   const { kind } = filing;
+  if (kind === 'WIKI_CREATE') {
+    const carried = NOT_FOR_WIKI_CREATE.find((field) => filing[field] !== undefined);
+    if (carried) {
+      throw new OwnerRequestNotFileable(
+        `${carried} is not for a WIKI_CREATE request: Orbit writes its title and repository, and it carries only why and ifUnanswered`,
+      );
+    }
+  } else if (!title) {
+    throw new OwnerRequestNotFileable('title is required: the line the owner reads first');
+  }
+  if (!why) throw new OwnerRequestNotFileable('why is required: say what this unblocks');
   const only = (field: keyof OwnerRequestFiling, owner: OwnerRequestKind): void => {
     if (filing[field] !== undefined && kind !== owner) {
       throw new OwnerRequestNotFileable(`${field} is only for a ${owner} request`);
@@ -231,6 +274,7 @@ const ALERT_TITLES: Readonly<Record<OwnerRequestKind, string>> = {
   SECRET: 'Secret needed',
   MANUAL_STEP: 'Action needed',
   CONFIRM: 'Please confirm',
+  WIKI_CREATE: 'Create a wiki?',
 };
 
 /** Longest body a lock screen shows without cutting it. */
@@ -276,6 +320,22 @@ export interface EndedOwnerRequest {
   resolvedAt: Date | null;
   /** SECRET: the grant the owner's value became, if any. Only what never changes once it was delivered. */
   secretGrant?: { exposure: string; expiresAt: Date } | null;
+  /** WIKI_CREATE: the repository the wiki was asked for. */
+  repoUrlNorm?: string | null;
+}
+
+/**
+ * A WIKI_CREATE's two answers, in the words the asking session reads (design §3.6): the wiki it can propose to now, or
+ * a repository it is not to ask about again. Its other endings read as any request's.
+ */
+function wikiCreateMeaning(request: EndedOwnerRequest): string | undefined {
+  if (request.kind !== 'WIKI_CREATE') return undefined;
+  if (request.state === 'DONE') {
+    const name = ((request.answer ?? {}) as { name?: string }).name ?? wikiRepositoryName(request.repoUrlNorm ?? '');
+    return `The owner created the wiki ${name}. You can propose to it now.`;
+  }
+  if (request.state === 'DECLINED') return 'The owner does not want a wiki for this repository. Do not ask again.';
+  return undefined;
 }
 
 /** What each ending means, in the turn's first line. */
@@ -328,6 +388,12 @@ export function ownerRequestResolutionPayload(request: EndedOwnerRequest): Recor
     };
     return payload;
   }
+  if (request.kind === 'WIKI_CREATE') {
+    const made = (request.answer ?? {}) as { spaceId?: string; name?: string };
+    payload.repository = request.repoUrlNorm ?? null;
+    if (request.state === 'DONE' && made.spaceId) payload.wiki = { spaceId: made.spaceId, name: made.name ?? null };
+    return payload;
+  }
   if (request.kind === 'DECISION' && answer.option !== undefined) {
     const options = (request.options ?? []) as OwnerRequestOption[];
     payload.chosenOption = { index: answer.option, label: options[answer.option]?.label ?? null };
@@ -342,9 +408,12 @@ export function ownerRequestResolutionPayload(request: EndedOwnerRequest): Recor
  * delivery writes the same bytes and a retry replays the turn already queued.
  */
 export function ownerRequestResolutionTurn(request: EndedOwnerRequest): string {
+  const wiki = wikiCreateMeaning(request);
   const meaning = ENDING_MEANING[request.state as Exclude<OwnerRequestState, 'PENDING'>] ?? 'it ended';
   const header = [
-    `Orbit owner request ${request.id} (${request.kind}) ended ${request.state}: ${meaning}.`,
+    wiki
+      ? `Orbit owner request ${request.id} (${request.kind}) ended ${request.state}. ${wiki}`
+      : `Orbit owner request ${request.id} (${request.kind}) ended ${request.state}: ${meaning}.`,
     '',
     'This turn was queued by Orbit when the request ended, not typed by a person. The request is final and will not wake this session again.',
   ].join('\n');

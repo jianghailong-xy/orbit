@@ -82,7 +82,9 @@ object OwnerRequests {
     const val SECRET = "SECRET"
     const val MANUAL_STEP = "MANUAL_STEP"
     const val CONFIRM = "CONFIRM"
-    val kinds = setOf(DECISION, SECRET, MANUAL_STEP, CONFIRM)
+    /** An agent asking the owner to create a wiki for its workspace's repository (docs/wiki-explicit-creation-design.md §3.6). */
+    const val WIKI_CREATE = "WIKI_CREATE"
+    val kinds = setOf(DECISION, SECRET, MANUAL_STEP, CONFIRM, WIKI_CREATE)
 
     const val waitingOnYou = "Waiting on you"
     const val holdingUp = "Holding up"
@@ -114,14 +116,14 @@ object OwnerRequests {
     const val later = "Later"
 
     /** The tag beside a card's title. */
-    fun kindTag(kind: String) = when (kind) { MANUAL_STEP -> "STEPS"; else -> kind }
+    fun kindTag(kind: String) = when (kind) { MANUAL_STEP -> "STEPS"; WIKI_CREATE -> "WIKI"; else -> kind }
     /** The card's primary button. */
-    fun primary(kind: String) = when (kind) { DECISION -> "Send answer"; SECRET -> "Provide key"; MANUAL_STEP -> "Mark done"; else -> "Confirm" }
+    fun primary(kind: String) = when (kind) { DECISION -> "Send answer"; SECRET -> "Provide key"; MANUAL_STEP -> "Mark done"; WIKI_CREATE -> "Create wiki"; else -> "Confirm" }
     /** An inbox row's button. */
     fun inboxAction(kind: String) = when (kind) { DECISION -> "Answer"; SECRET -> "Provide"; MANUAL_STEP -> "Open steps"; else -> "Review" }
     /** A push's primary action, which opens the card on its input. */
     fun pushAction(kind: String): String? = when (kind) {
-        SECRET -> "Provide key"; DECISION -> "Answer"; MANUAL_STEP -> "Mark done"; CONFIRM -> "Review"; else -> null
+        SECRET -> "Provide key"; DECISION -> "Answer"; MANUAL_STEP -> "Mark done"; CONFIRM, WIKI_CREATE -> "Review"; else -> null
     }
     fun declineLabel(kind: String) = if (kind == MANUAL_STEP) "Can’t do this…" else "Decline…"
 

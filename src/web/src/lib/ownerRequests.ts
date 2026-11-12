@@ -10,7 +10,7 @@ import { formatSpan, sameResourceId } from './watches';
  * waiting, and the one thing the server does not hold — a reminder for later.
  */
 
-export type OwnerRequestKind = 'DECISION' | 'SECRET' | 'MANUAL_STEP' | 'CONFIRM';
+export type OwnerRequestKind = 'DECISION' | 'SECRET' | 'MANUAL_STEP' | 'CONFIRM' | 'WIKI_CREATE';
 export type OwnerRequestState = 'PENDING' | 'DONE' | 'DECLINED' | 'EXPIRED' | 'WITHDRAWN';
 export type OwnerRequestListFilter = 'open' | 'done' | 'declined' | 'all';
 
@@ -91,6 +91,7 @@ export const KIND_TAGS: Readonly<Record<OwnerRequestKind, string>> = {
   SECRET: 'SECRET',
   MANUAL_STEP: 'STEPS',
   CONFIRM: 'CONFIRM',
+  WIKI_CREATE: 'WIKI',
 };
 
 const DEVICES: Readonly<Record<string, string>> = {

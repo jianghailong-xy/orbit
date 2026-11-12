@@ -445,7 +445,7 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
         ownerRequest: {
           select: {
             id: true, ownerId: true, askedBySessionId: true, kind: true, state: true, title: true,
-            options: true, secretSpec: true, answer: true, resolutionNote: true, resolvedAt: true,
+            options: true, secretSpec: true, answer: true, resolutionNote: true, resolvedAt: true, repoUrlNorm: true,
             secretGrant: { select: { exposure: true, expiresAt: true } },
           },
         },

@@ -16,6 +16,7 @@ public enum OwnerRequests {
         case .secret:     return "SECRET"
         case .manualStep: return "STEPS"
         case .confirm:    return "CONFIRM"
+        case .wikiCreate: return "WIKI"
         }
     }
 
@@ -26,6 +27,7 @@ public enum OwnerRequests {
         case .secret:     return "Provide key"
         case .manualStep: return "Mark done"
         case .confirm:    return "Confirm"
+        case .wikiCreate: return "Create wiki"
         }
     }
 
@@ -41,6 +43,7 @@ public enum OwnerRequests {
         case .secret:     return "Provide"
         case .manualStep: return "Open steps"
         case .confirm:    return "Review"
+        case .wikiCreate: return "Review"
         }
     }
 
@@ -51,6 +54,7 @@ public enum OwnerRequests {
         case .secret:     return "key.fill"
         case .manualStep: return "list.number"
         case .confirm:    return "checkmark.shield"
+        case .wikiCreate: return "books.vertical"
         }
     }
 
@@ -153,7 +157,7 @@ public enum OwnerRequests {
         switch request.kind {
         case .secret:   return draft.body != nil
         case .decision: return option != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        case .manualStep, .confirm: return true
+        case .manualStep, .confirm, .wikiCreate: return true
         }
     }
 
@@ -299,7 +303,7 @@ public enum OwnerRequests {
             return label.map { "decision · recommended: \($0)" } ?? "decision"
         case .confirm:
             return "confirmation"
-        case .secret:
+        case .secret, .wikiCreate:
             return nil
         }
     }
@@ -432,7 +436,7 @@ public enum OwnerRequestLink {
         switch kind {
         case .secret: return .secret
         case .decision: return .answer
-        case .manualStep, .confirm: return .primary
+        case .manualStep, .confirm, .wikiCreate: return .primary
         }
     }
 }

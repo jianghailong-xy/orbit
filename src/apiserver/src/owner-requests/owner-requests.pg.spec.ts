@@ -20,6 +20,17 @@
  *       X-Orbit-Client header (`ios/1.0` reads back `ios`, from the answer, by id and in the list);
  *       an unknown client, a bare kind with no version, or none, stores null, and a withdrawn or expired request reads null.
  *
+ * WIKI_CREATE (docs/wiki-explicit-creation-design.md §3.6, §5), its own test below:
+ *   (w1) filing from a workspace with no repository, or with a title, is refused and writes nothing;
+ *   (w2) filing from a workspace with a repository and no wiki: Orbit writes the title and the repository, the owner is told once;
+ *   (w3) filing again, from another session, answers the open card ({ created: false }) and the owner is not told again;
+ *   (w4) Create wiki pressed with a session header is refused WIKI_OWNER_CHANNEL_ONLY, and no wiki is made;
+ *   (w5) the owner's Create wiki makes the space with maintenance on (the filing workspace, 8 a day, 14 days), asks for the
+ *        plan's first draft, and settles the card DONE with the wiki, whose turn names it; the plain done door is refused;
+ *   (w6) filing for a repository that has a wiki is refused WIKI_SPACE_EXISTS;
+ *   (w7) a wiki made from the Create wiki form reads the waiting card DONE, by id and in the lists, with its turn;
+ *   (w8) after a decline, filing for that repository is refused WIKI_CREATE_DECLINED with the date, from any session.
+ *
  * Not destructive: every id is freshly generated and every assertion is scoped to its own account.
  */
 import assert from 'node:assert/strict';
@@ -57,6 +68,9 @@ import {
   type OwnerRequestState,
 } from './owner-request';
 import { OwnerRequestsController } from './owner-requests.controller';
+import { WikiRefusalError, WikiService } from '../wiki/wiki.service';
+import { wikiSpaceSettings } from '@orbit/shared';
+import { WIKI_CREATE_DECLINED, WIKI_CREATE_NO_REPOSITORY, ownerRequestResolutionTurn } from './owner-request';
 import { OwnerRequestsService, type OwnerRequestView } from './owner-requests.service';
 import { OwnerSecretsService } from './owner-secrets.service';
 import type { AuthUser } from '../common/current-user.decorator';
@@ -372,6 +386,190 @@ test('owner requests: any session files one, and every ending is final', {
       assert.equal((await owner.get(user, request.id)).resolvedClient, null);
       assert.equal(await stored(request.id), null);
     }
+  });
+});
+
+test('owner requests: WIKI_CREATE asks the owner for a wiki, and only the owner makes it', {
+  skip, concurrency: 1, timeout: 300_000,
+}, async (t) => {
+  const url = URL!;
+  assertCoordinatorPgUrlIsIsolated(url);
+  const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+  await sql.connect();
+  await verifyCoordinatorPgIdentity(sql);
+  const db = prismaClientFor(url);
+  t.after(async () => {
+    await db.$disconnect().catch(() => undefined);
+    await sql.end().catch(() => undefined);
+  });
+
+  const prisma = db as unknown as PrismaService;
+  const told: string[] = [];
+  const push = { notifyOwnerRequest: async (id: string) => { told.push(id); } } as unknown as PushService;
+  const realtime = new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService;
+  const wiki = new WikiService(prisma, realtime, {} as unknown as PushService);
+  const secrets = new OwnerSecretsService(prisma);
+  const service = new OwnerRequestsService(prisma, secrets, push, undefined, wiki);
+  const owner = new OwnerRequestsController(service, secrets);
+  const door = new RunnerOwnerRequestsController(prisma, service);
+
+  const a = await account(db, 'wiki-create');
+  const user = { userId: a.ownerId, email: 'owner@owner-requests.invalid', credential: { kind: 'LOGIN' } } as AuthUser;
+  const code = (error: unknown): string | undefined =>
+    ((error as HttpException).getResponse?.() as { code?: string } | undefined)?.code;
+  const message = (error: unknown): string | undefined =>
+    ((error as HttpException).getResponse?.() as { message?: string } | undefined)?.message;
+  const ask = (sessionId: string, body: Partial<FileOwnerRequestDto> = {}) =>
+    door.file(a.runner, sessionId, { kind: 'WIKI_CREATE', why: 'the owner asked for a wiki here', ...body } as FileOwnerRequestDto);
+  const counts = async () => ({
+    spaces: await db.wikiSpace.count({ where: { ownerId: a.ownerId } }),
+    requests: await db.ownerRequest.count({ where: { ownerId: a.ownerId, kind: 'WIKI_CREATE' } }),
+  });
+  const turn = async (id: string) => {
+    const row = await db.ownerRequest.findUniqueOrThrow({
+      where: { id },
+      select: { id: true, kind: true, state: true, title: true, options: true, secretSpec: true, answer: true,
+        resolutionNote: true, resolvedAt: true, repoUrlNorm: true },
+    });
+    return ownerRequestResolutionTurn(row);
+  };
+  const deliveries = (id: string) => db.watchDelivery.count({ where: { ownerRequestId: id } });
+  /** Another session in a workspace on `repoUrl`. */
+  const sessionOn = async (repoUrl: string | null, label: string): Promise<{ sessionId: string; workspaceId: string }> => {
+    const workspaceId = randomUUID();
+    await db.workspace.create({ data: { id: workspaceId, ownerId: a.ownerId, runnerId: a.runner.id, name: `wiki-create-${label}`, enabled: true, repoUrl } });
+    const sessionId = randomUUID();
+    await db.session.create({
+      data: {
+        id: sessionId, ownerId: a.ownerId, creatorId: a.ownerId, workspaceId, assignedRunnerId: a.runner.id,
+        title: label, prompt: label, provider: 'claude', status: RunStatus.RUNNING,
+        dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(),
+      },
+    });
+    return { sessionId, workspaceId };
+  };
+
+  const lfs = await sessionOn('git@github.com:jianghailong-xy/lfs-builder.git', 'lfs');
+  const lfsAgain = await sessionOn('https://github.com/jianghailong-xy/lfs-builder', 'lfs-again');
+  let card: OwnerRequestView & { created: boolean };
+
+  await t.test('(w1) no repository, or a title of its own: refused, and nothing is written', async () => {
+    const before = await counts();
+    await assert.rejects(ask(a.workerSessionId), (e) => e instanceof ConflictException && code(e) === WIKI_CREATE_NO_REPOSITORY);
+    await assert.rejects(ask(lfs.sessionId, { title: 'Make me a wiki' }), BadRequestException);
+    await assert.rejects(ask(lfs.sessionId, { blocksTaskIds: [a.taskId] }), BadRequestException);
+    assert.deepEqual(await counts(), before);
+  });
+
+  await t.test('(w2) filed from a workspace on a repository with no wiki: Orbit writes the title and the repository', async () => {
+    told.length = 0;
+    card = await ask(lfs.sessionId, { ifUnanswered: 'I carry on without a wiki' });
+    assert.equal(card.created, true);
+    assert.equal(card.kind, 'WIKI_CREATE');
+    assert.equal(card.state, 'PENDING');
+    assert.equal(card.title, 'Create a wiki for lfs-builder?');
+    assert.equal(card.repoUrlNorm, 'github.com/jianghailong-xy/lfs-builder');
+    assert.equal(card.workspaceId, lfs.workspaceId);
+    assert.equal(card.why, 'the owner asked for a wiki here');
+    assert.equal(card.ifUnanswered, 'I carry on without a wiki');
+    assert.deepEqual(told, [card.id], 'the owner is told once');
+    assert.equal((await service.get(a.ownerId, card.id)).state, 'PENDING');
+    assert.equal((await counts()).spaces, 0, 'filing makes no wiki');
+  });
+
+  await t.test('(w3) filing again answers the open card, untold', async () => {
+    told.length = 0;
+    const again = await ask(lfsAgain.sessionId, { why: 'a second session wants one too' });
+    assert.equal(again.id, card.id);
+    assert.equal(again.created, false);
+    assert.equal(again.state, 'PENDING');
+    const same = await ask(lfs.sessionId);
+    assert.equal(same.id, card.id);
+    assert.equal(same.created, false);
+    assert.deepEqual(told, [], 'no second push');
+    assert.equal((await counts()).requests, 1);
+  });
+
+  await t.test('(w4) Create wiki pressed with a session header is refused WIKI_OWNER_CHANNEL_ONLY', async () => {
+    await assert.rejects(
+      owner.createWiki(user, card.id, { headers: { 'x-orbit-session-id': lfs.sessionId } }, 'web/1.0'),
+      (e) => e instanceof WikiRefusalError && e.getStatus() === 403 && code(e) === 'WIKI_OWNER_CHANNEL_ONLY',
+    );
+    assert.equal((await counts()).spaces, 0, 'no wiki made');
+    assert.equal((await service.get(a.ownerId, card.id)).state, 'PENDING');
+  });
+
+  await t.test('(w5) the owner\'s Create wiki makes the wiki with maintenance on and a plan draft, and settles DONE', async () => {
+    await assert.rejects(service.complete(a.ownerId, card.id, {}), BadRequestException, 'the plain done door is not how this ends');
+    const done = await owner.createWiki(user, card.id, { headers: {} }, 'web/1.0');
+    assert.equal(done.state, 'DONE');
+    assert.equal(done.resolvedByUserId, a.ownerId);
+    assert.equal(done.resolvedClient, 'web');
+    const spaces = await db.wikiSpace.findMany({ where: { ownerId: a.ownerId } });
+    assert.equal(spaces.length, 1);
+    const [space] = spaces;
+    assert.equal(space.repoUrlNorm, 'github.com/jianghailong-xy/lfs-builder');
+    assert.equal(space.title, 'lfs-builder');
+    assert.deepEqual(done.answer, { spaceId: space.id, name: 'lfs-builder' });
+    const { maintenance } = wikiSpaceSettings(space.settings);
+    assert.deepEqual(
+      [maintenance.enabled, maintenance.workspaceId, maintenance.dailyRunLimit, maintenance.lookbackDays],
+      [true, lfs.workspaceId, 8, 14],
+      'maintenance on, reading the filing workspace, 8 runs a day over the last 14 days',
+    );
+    const jobs = await db.wikiPlanJob.findMany({ where: { ownerId: a.ownerId, spaceId: space.id } });
+    assert.deepEqual(jobs.map((j) => [j.kind, j.trigger, j.requestedByUserId]), [['draft', 'space_created', a.ownerId]]);
+    assert.equal(await deliveries(card.id), 1, 'the asking session is told once');
+    assert.match(await turn(card.id), /ended DONE\. The owner created the wiki lfs-builder\. You can propose to it now\./);
+    await assert.rejects(owner.createWiki(user, card.id, { headers: {} }, 'web/1.0'), ConflictException, 'pressed twice is refused');
+    assert.equal((await counts()).spaces, 1);
+  });
+
+  await t.test('(w6) filing for a repository that already has a wiki is refused', async () => {
+    const before = await counts();
+    await assert.rejects(ask(lfsAgain.sessionId), (e) => e instanceof ConflictException && code(e) === 'WIKI_SPACE_EXISTS');
+    assert.deepEqual(await counts(), before);
+  });
+
+  await t.test('(w7) a wiki made from the Create wiki form reads the waiting card DONE', async () => {
+    const docs = await sessionOn('https://gitlab.example.com/team/docs.git', 'docs');
+    const waiting = await ask(docs.sessionId);
+    assert.equal(waiting.state, 'PENDING');
+    // The form's own request: the owner, signed in, with no session (POST /wiki/spaces).
+    const made = await wiki.createSpace(a.ownerId, {
+      title: 'Team docs',
+      repoUrl: 'git@gitlab.example.com:team/docs.git',
+      maintenance: { enabled: true, workspaceId: docs.workspaceId },
+    });
+    const read = await owner.get(user, waiting.id);
+    assert.equal(read.state, 'DONE', 'read DONE by id');
+    assert.deepEqual(read.answer, { spaceId: made.id, name: 'Team docs' });
+    assert.ok(!(await owner.list(user, 'open')).requests.some((r) => r.id === waiting.id), 'not in the open list');
+    assert.ok((await owner.list(user, 'done')).requests.some((r) => r.id === waiting.id), 'in the done list');
+    assert.equal(await deliveries(waiting.id), 1);
+    assert.match(await turn(waiting.id), /The owner created the wiki Team docs\. You can propose to it now\./);
+    // And a card the owner never reads is settled by the sweep, not expired.
+    const other = await sessionOn('https://github.com/acme/sweep', 'sweep');
+    const swept = await ask(other.sessionId);
+    await wiki.createSpace(a.ownerId, { title: 'sweep', repoUrl: 'https://github.com/acme/sweep' });
+    await service.expireDue(new Date());
+    assert.equal((await db.ownerRequest.findUniqueOrThrow({ where: { id: swept.id } })).state, 'DONE');
+  });
+
+  await t.test('(w8) after a decline, filing for that repository is refused WIKI_CREATE_DECLINED', async () => {
+    const api = await sessionOn('https://github.com/acme/api.git', 'api');
+    const apiAgain = await sessionOn('git@github.com:acme/api.git', 'api-again');
+    const asked = await ask(api.sessionId);
+    const declined = await owner.decline(user, asked.id, { reason: 'Not for this repository' }, 'ios/1.0');
+    assert.equal(declined.state, 'DECLINED');
+    assert.match(await turn(asked.id), /ended DECLINED\. The owner does not want a wiki for this repository\. Do not ask again\./);
+    const before = await counts();
+    const date = declined.resolvedAt!.toISOString().slice(0, 10);
+    for (const sessionId of [api.sessionId, apiAgain.sessionId]) {
+      await assert.rejects(ask(sessionId), (e) => e instanceof ConflictException && code(e) === WIKI_CREATE_DECLINED
+        && message(e) === `The owner declined a wiki for this repository on ${date}.`);
+    }
+    assert.deepEqual(await counts(), before, 'nothing written');
   });
 });
 

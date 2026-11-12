@@ -12,6 +12,9 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /owner-requests/:id/secret',
   'POST /owner-requests/:id/secret/cancel',
   'POST /owner-requests/:id/secret/revoke',
+  // The owner's Create wiki on a WIKI_CREATE card (docs/wiki-explicit-creation-design.md §3.6): making a wiki is the
+  // owner's own act, as POST /wiki/spaces is; it also refuses an acting session, WIKI_OWNER_CHANNEL_ONLY.
+  'POST /owner-requests/:id/create-wiki',
   'GET /account-secrets',
   'PUT /account-secrets/:id',
   'DELETE /account-secrets/:id',
