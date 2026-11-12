@@ -50,6 +50,10 @@ final class TranslationShotTests: ProbeCase {
         claim("…not its English", !element(app, containing: "I'll check how the login page").exists)
         claim("Translated · Show original under them", element(app, containing: "Translated").exists
               && !buttons(app, beginning: "Show original").isEmpty)
+        let tools = element(app, containing: "Read 1 file")
+        if tools.exists { press(tools); settle(1) }
+        shot(app, "04b-tools-open")
+        write(app.debugDescription, "tree-04b-tools-open.txt")
         claim("the tool calls are drawn as they are (LoginPage.tsx)", element(app, containing: "LoginPage.tsx").exists)
         claim("the composer tag reads Chinese → English", element(app, containing: "Chinese → English").exists)
 
@@ -83,6 +87,9 @@ final class TranslationShotTests: ProbeCase {
         toTop(app)
         let thought = buttons(app, beginning: "Thought").first ?? element(app, containing: "Thought")
         if thought.exists { press(thought); settle(1) }
+        // A run of thinking folds into a row, and each block inside it into its own: open the block too.
+        let block = element(app, containing: "150 chars")
+        if block.exists { press(block); settle(1) }
         shot(app, "07-thinking-open")
         write(app.debugDescription, "tree-07-thinking-open.txt")
         claim("the thinking reads as the engine wrote it", element(app, containing: "Likely a popup blocker issue").exists)
@@ -108,8 +115,9 @@ final class TranslationShotTests: ProbeCase {
               element(app, containing: "Sent to the agent in English").exists
               && !buttons(app, beginning: "Show translation").isEmpty)
         claim("a reply flipped to its original, saying Original",
-              element(app, containing: "I'll check how the login page").exists
-              || element(app, containing: "Found it: Safari blocks popups").exists)
+              (element(app, containing: "check how the login page handles").exists
+               || element(app, containing: "Safari blocks popups").exists)
+              && element(app, containing: "Original").exists)
         claim("a message not pressed stays translated", element(app, containing: "好的，改吧").exists)
     }
 
@@ -118,7 +126,10 @@ final class TranslationShotTests: ProbeCase {
         let app = openConversation("retry")
         bring(app, element(app, containing: "Couldn't translate this reply"), between: 200, and: 640, "retry-row")
         settle(1)
-        let retry = buttons(app, beginning: "Retry").first(where: { $0.exists && $0.isHittable })
+        // The reply's own Retry: the one on the failure line's row, not a held message's in the tray.
+        let line = element(app, containing: "Couldn't translate this reply")
+        let retry = buttons(app, beginning: "Retry").filter { $0.exists && $0.isHittable }
+            .min(by: { abs($0.frame.midY - line.frame.midY) < abs($1.frame.midY - line.frame.midY) })
         claim("the failed reply has a Retry", retry != nil)
         if let retry { press(retry) }
         let swapped = appears(app, "改好了。现在点击会同步打开弹窗", timeout: 20)
