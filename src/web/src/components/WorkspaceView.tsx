@@ -319,7 +319,7 @@ import {
 } from './RunNeverStartedCard';
 import { claudeRegionHeld, claudeRegionHeldWords, useClaudeRegionCheckAgain } from '../lib/claudeRegion';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
-import { AntigravityRepairCard, antigravityRepair, AttachmentImage, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
+import { AntigravityRepairCard, antigravityRepair, AttachmentImage, QueuedFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
 import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
@@ -554,7 +554,13 @@ import {
   QUEUED_NOTICE_DELAY_MS,
   STARTING_NOTICE_DELAY_MS,
   type QueuedGate,
+  RUNNER_UPDATING_TAG,
+  RUNNER_UPDATING_TITLE,
+  isRunnerUpdating,
   pendingSlotDescription,
+  runnerUpdatingDescription,
+  runnerUpdatingMessageText,
+  runnerUpdatingWaited,
   queuedLabel,
   queuedNoticeVisible,
   queuedTitle,
@@ -1060,7 +1066,7 @@ const parkedWorkLabel = (s: any): ParkedWork | null => {
 // background process or a watch that will resume it, default = reply content.
 type SessionLine = {
   text: string;
-  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review';
+  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review' | 'warning';
 };
 // The line for a message the workspace hasn't answered yet, marked with who sent it (`sentBy`).
 // Prefixed, because the preview line is otherwise the workspace's voice: unmarked, a message and a
@@ -1225,7 +1231,12 @@ export const sessionLine = (
     if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
     return { text: 'Running…', tone: 'running' };
   }
-  if (live && state === 'QUEUED') return { text: claudeRegionHeldWords(s, machine) ?? queuedLabel(s), tone: 'queued' };
+  if (live && state === 'QUEUED') {
+    const held = claudeRegionHeldWords(s, machine);
+    // A runner draining for its update is the one queue word in the warning colour (board 2 ①): it
+    // can last hours, and only the owner can shorten it.
+    return { text: held ?? queuedLabel(s), tone: !held && isRunnerUpdating(s) ? 'warning' : 'queued' };
+  }
   // Parked (AWAITING_INPUT) but still doing background work — a sub-workspace and/or background
   // shells that outlive the turn — so it doesn't read as idle. A spawned sub-workspace parks the
   // parent at AWAITING_INPUT while it runs, so this (not the RUNNING branch) is what usually
@@ -1873,6 +1884,108 @@ function TranscriptSkeleton() {
  * compacting a conversation it can no longer fit, which is minutes and can retry). Neither the
  * copy nor the spinner can: both read identically at 3s and at 30m.
  */
+/** A clock that moves once a minute, for the waits counted in minutes. */
+function useMinuteNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return now;
+}
+
+/**
+ * The queued page of a session held by its runner's update (board 2 ②–③): why, with the turns it
+ * waits for as links, and how long it has waited. Later and Update Now… go below the wait once they
+ * do something (`actions`); until then nothing is drawn there.
+ */
+export function RunnerUpdatingQueued({
+  gate,
+  machine,
+  onOpenSession,
+  actions,
+}: {
+  gate: QueuedGate;
+  machine?: string | null;
+  onOpenSession: (id: string) => void;
+  actions?: ReactNode;
+}) {
+  const now = useMinuteNow();
+  const waited = runnerUpdatingWaited(gate, now);
+  return (
+    <>
+      <div className="chat-queued-title">{RUNNER_UPDATING_TITLE}</div>
+      <div className="chat-queued-desc chat-runner-updating-desc">
+        {runnerUpdatingDescription(gate, machine).map((part, i) =>
+          typeof part === 'string' ? (
+            <Fragment key={i}>{part}</Fragment>
+          ) : (
+            <a
+              key={i}
+              href={`/sessions/${encodeId(part.id)}`}
+              onClick={(e) => {
+                e.preventDefault();
+                onOpenSession(part.id);
+              }}
+            >
+              {part.title}
+            </a>
+          ),
+        )}
+      </div>
+      {waited && <div className="chat-queued-waited">{waited}</div>}
+      {actions}
+    </>
+  );
+}
+
+/**
+ * The foot-row tag under a message the update holds (board 2 ⑤): `Queued · runner updating`, in the
+ * meta voice, the reason dotted-underlined because a press opens why — the same words and the same
+ * slot for Later and Update Now… as the queued page.
+ */
+export function RunnerUpdatingTag({
+  gate,
+  machine,
+  actions,
+}: {
+  gate: QueuedGate;
+  machine?: string | null;
+  actions?: ReactNode;
+}) {
+  const now = useMinuteNow();
+  const waited = runnerUpdatingWaited(gate, now);
+  return (
+    <span className="chat-runner-updating">
+      Queued
+      <span className="chat-meta-sep">·</span>
+      <Popover
+        title={RUNNER_UPDATING_TITLE}
+        side="bottom"
+        align="end"
+        trigger={
+          <button type="button" className="chat-runner-updating-reason">
+            {RUNNER_UPDATING_TAG}
+          </button>
+        }
+      >
+        <div className="runner-updating-pop">
+          <p>
+            {runnerUpdatingMessageText(gate, machine)}
+            {waited && (
+              <>
+                <br />
+                {waited}.
+              </>
+            )}
+          </p>
+          {actions}
+        </div>
+      </Popover>
+    </span>
+  );
+}
+
 function WaitElapsed({ since }: { since?: string | null }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -3886,6 +3999,7 @@ export function WorkspaceView({
     activeSlots,
     runner.maxConcurrent,
     (selectedSession ?? selected) as QueuedGate | null,
+    machineName(runner),
   );
   const selectedStartingSession = selectedSession ?? selected;
   const selectedIsQueued = selected
@@ -3907,6 +4021,11 @@ export function WorkspaceView({
   );
   const showQueuedNotice =
     selectedIsQueued && queuedNoticeVisible(selectedStartingSession, delayedQueuedNotice);
+  // Held by its runner's update: the page and the message foot row explain it (board 2).
+  const runnerUpdatingGate: QueuedGate | null =
+    selectedIsQueued && isRunnerUpdating(selectedStartingSession)
+      ? (selectedStartingSession as QueuedGate)
+      : null;
   const selectedIsStarting = selected ? sessionIsStarting(selectedStartingSession) : false;
   // Starting or compacting — see waitingNoticeFor. Its `since` is the clock the notice counts from.
   const selectedWaiting = selected ? waitingNoticeFor(selectedStartingSession) : null;
@@ -4165,6 +4284,19 @@ export function WorkspaceView({
   // The event each of those rows is drawn from (`queuedTurnEvent`): the one its echo will be. Only
   // the rows the tray does not hold (`inPendingTray`): what Orbit queued, and a message whose
   // delivery settled undelivered, which is part of the conversation's record.
+  // The message a runner update holds: the last one the reader sent, whose foot row says why
+  // (board 2 ⑤). None while the session is not held by an update.
+  let queuedFoot: { seq: number; tag: ReactNode } | null = null;
+  if (runnerUpdatingGate) {
+    for (let i = transcriptEvents.length - 1; i >= 0; i--) {
+      if (transcriptEvents[i].type !== 'user') continue;
+      queuedFoot = {
+        seq: transcriptEvents[i].seq,
+        tag: <RunnerUpdatingTag gate={runnerUpdatingGate} machine={machineName(runner)} />,
+      };
+      break;
+    }
+  }
   const queuedTailEvents = useMemo(
     () =>
       visibleQueuedTurns
@@ -9706,8 +9838,18 @@ export function WorkspaceView({
                     <span />
                     <span />
                   </div>
-                  <div className="chat-queued-title">{queuedTitle(selectedSession ?? selected)}</div>
-                  <div className="chat-queued-desc">{slotWaitDescription}</div>
+                  {runnerUpdatingGate ? (
+                    <RunnerUpdatingQueued
+                      gate={runnerUpdatingGate}
+                      machine={machineName(runner)}
+                      onOpenSession={(id) => navigate(sessionPath(id))}
+                    />
+                  ) : (
+                    <>
+                      <div className="chat-queued-title">{queuedTitle(selectedSession ?? selected)}</div>
+                      <div className="chat-queued-desc">{slotWaitDescription}</div>
+                    </>
+                  )}
                 </div>
               )}
               {placeholder === 'starting' && showStartingNotice && !neverStarted && (
@@ -9728,10 +9870,12 @@ export function WorkspaceView({
                   conversation instead of a blank pane. */}
               {placeholder === 'skeleton' && <TranscriptSkeleton />}
               {/* The transcript, in the contexts its cards read (SessionConversation). */}
+              <QueuedFootCtx.Provider value={queuedFoot}>
               <SessionConversation
                 sessionId={selectedId}
                 stream={stream}
-                live={live && !selectedRegionHeld}
+                // Held for the region or by its runner's update: nothing is working on its message.
+                live={live && !selectedRegionHeld && !runnerUpdatingGate}
                 turnImages={turnImages}
                 inserts={transcriptInserts}
                 authErrorHelp={authErrorHelp}
@@ -9743,6 +9887,7 @@ export function WorkspaceView({
                 answeredQuestions={answeredQuestions}
                 wikiChat={wikiChatCards}
               />
+              </QueuedFootCtx.Provider>
               {/* The conversation's last row while it is at rest: its recap whole, the line its list
                   row reads in one (SessionRecapCard). Above the cards that ask the owner something,
                   which stay nearest the composer, and only once the transcript it sums up is drawn.
@@ -9906,6 +10051,8 @@ export function WorkspaceView({
                 !selectedTrashed &&
                 showQueuedNotice &&
                 !neverStarted &&
+                // The foot row of the waiting message says it instead (board 2 ⑤).
+                !queuedFoot &&
                 transcriptEvents.length > 0 && (
                 dshQueueRepair ? <DshRepairCard repair={dshQueueRepair} help={authErrorHelp} /> : antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-note chat-slot-wait">
                   <span>{queuedTitle(selectedSession ?? selected)}</span>

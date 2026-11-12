@@ -8074,6 +8074,36 @@ button.chat-jump-start:hover {
   line-height: 1;
   color: var(--text-3);
 }
+/* A message its runner's update holds (board 2 ⑤): `Queued · runner updating` in the meta voice,
+   always shown. No colour and no border — the bubble stays the visual centre; the reason is only
+   dotted-underlined, because a press opens why. */
+.chat-runner-updating {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text-3);
+}
+.chat-runner-updating-reason {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.runner-updating-pop {
+  max-width: 420px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.runner-updating-pop p {
+  margin: 0;
+}
 /* A message the engine never received, at the end of the meta row. Always visible (unlike the
    copy button and time before it): the whole point is that nobody has to hover to find out their
    message did not land. */
@@ -9115,6 +9145,19 @@ button.chat-jump-start:hover {
   line-height: 1.5;
   color: var(--text-3);
   max-width: 320px;
+}
+
+/* A runner draining for its update (board 2 ②–③): a longer sentence, naming the turns it waits for
+   as links, then how long it has waited. */
+.chat-queued-desc.chat-runner-updating-desc {
+  max-width: 560px;
+}
+.chat-runner-updating-desc a {
+  color: var(--brand);
+}
+.chat-queued-waited {
+  font-size: 13px;
+  color: var(--text-3);
 }
 
 /* An existing conversation can return to PENDING while it waits to reacquire a turn

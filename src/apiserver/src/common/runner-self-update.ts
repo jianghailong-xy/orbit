@@ -1,5 +1,6 @@
 import {
   RUNNER_SELF_UPDATE_STATES,
+  type QueuedRunnerUpdate,
   type RunnerSelfUpdate,
   type RunnerSelfUpdateState,
 } from '@orbit/shared';
@@ -28,10 +29,11 @@ export function sanitizeRunnerSelfUpdate(value: unknown): RunnerSelfUpdate | nul
   }
   const reason = text(raw.reason, REASON_MAX);
   const installDir = text(raw.installDir, DIR_MAX);
-  const at = text(raw.lastUpdatedAt, 64);
-  const lastUpdatedAt = at && !Number.isNaN(Date.parse(at)) ? new Date(at).toISOString() : undefined;
+  const lastUpdatedAt = isoTime(raw.lastUpdatedAt);
   const lastUpdatedFrom = text(raw.lastUpdatedFrom, VERSION_MAX);
   const lastUpdatedTo = text(raw.lastUpdatedTo, VERSION_MAX);
+  const targetVersion = text(raw.targetVersion, VERSION_MAX);
+  const drainingSince = isoTime(raw.drainingSince);
   return {
     state: state as RunnerSelfUpdateState,
     ...(reason ? { reason } : {}),
@@ -39,6 +41,34 @@ export function sanitizeRunnerSelfUpdate(value: unknown): RunnerSelfUpdate | nul
     ...(lastUpdatedAt ? { lastUpdatedAt } : {}),
     ...(lastUpdatedFrom ? { lastUpdatedFrom } : {}),
     ...(lastUpdatedTo ? { lastUpdatedTo } : {}),
+    ...(targetVersion ? { targetVersion } : {}),
+    ...(drainingSince ? { drainingSince } : {}),
+  };
+}
+
+function isoTime(value: unknown): string | undefined {
+  const at = text(value, 64);
+  return at && !Number.isNaN(Date.parse(at)) ? new Date(at).toISOString() : undefined;
+}
+
+/**
+ * The explanation a session held by queuedReason 'runner_updating' carries, from the columns the
+ * session list reads beside the gate. Null for any other row. The release and the drain's start come
+ * from the runner's own report when it sends them; without a drainingSince, the session's own wait is
+ * the clock.
+ */
+export function queuedRunnerUpdateOf(row: {
+  queuedReason: string | null;
+  queuedRunnerSelfUpdate: unknown;
+  queuedRunnerTurns: Array<{ id: string; title: string | null }> | null;
+  queuedSince: Date | null;
+}): QueuedRunnerUpdate | null {
+  if (row.queuedReason !== 'runner_updating') return null;
+  const report = sanitizeRunnerSelfUpdate(row.queuedRunnerSelfUpdate);
+  return {
+    targetVersion: report?.targetVersion ?? null,
+    since: report?.drainingSince ?? row.queuedSince?.toISOString() ?? null,
+    turns: row.queuedRunnerTurns ?? [],
   };
 }
 

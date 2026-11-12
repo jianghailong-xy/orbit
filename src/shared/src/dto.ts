@@ -847,6 +847,18 @@ export interface RunnerSelfUpdate {
   lastUpdatedAt?: string;
   lastUpdatedFrom?: string;
   lastUpdatedTo?: string;
+  /** The release it is waiting to install, and when it began taking no new work for it
+   *  (docs/runner-update-drain-design.md §4). Absent from a runner that does not report them. */
+  targetVersion?: string;
+  drainingSince?: string;
+}
+
+/** Why a queued session waits on its runner's self-update (queuedReason 'runner_updating'): the
+ *  release, the owner's turns the drain waits for, and when the wait began. */
+export interface QueuedRunnerUpdate {
+  targetVersion: string | null;
+  since: string | null;
+  turns: Array<{ id: string; title: string | null }>;
 }
 
 /** What the runner saw at one agent's working directory. Reported from the runner's own disk,
