@@ -201,6 +201,61 @@ class WikiStartLogicTest {
         assertEquals("left out is not in the wiki", workspaces.fstrings("inOrder"), offered(listOf(row("us", false)), null))
     }
 
+    // MARK: the form once a wiki exists, and the WIKI_CREATE card (docs/wiki-explicit-creation-design.md §3.4, §3.6)
+
+    private val hasWiki get() = start.fobj("hasWiki")
+
+    @Test fun aRepositoryWithAWikiIsGreyedAndNotOffered() {
+        val groups = WikiStartLogic.repositoryGroups(choices, hasWiki.fstrings("wikis"))
+        assertEquals(hasWiki.farr("groups").map { it.jsonObject }.map { Triple(it.fstr("repository"), it.fstrings("choices"), it["hasWiki"].bool()) },
+            groups.map { group -> Triple(group.repository, group.choices.map { it.id }, group.hasWiki) })
+        assertEquals(hasWiki.fstrings("offered"), WikiStartLogic.createOffered(groups).map { it.id })
+        // With no wiki named, no group has one: the form of an account's first wiki is unchanged.
+        assertTrue(WikiStartLogic.repositoryGroups(choices).none { it.hasWiki })
+        assertEquals(WikiStartLogic.repositoryGroups(choices).flatMap { it.choices }, WikiStartLogic.createOffered(WikiStartLogic.repositoryGroups(choices)))
+    }
+
+    @Test fun theFormOpensOnlyOnARepositoryWithNoWiki() {
+        val offered = WikiStartLogic.createOffered(WikiStartLogic.repositoryGroups(choices, hasWiki.fstrings("wikis")))
+        hasWiki.farr("defaults").map { it.jsonObject }.forEach { row ->
+            assertEquals(row.toString(), row["pick"].text(), WikiStartLogic.workspaceDefault(offered, row["current"].text(), row["from"].text()))
+        }
+        val all = hasWiki.fobj("allHaveWikis")
+        val none = WikiStartLogic.createOffered(WikiStartLogic.repositoryGroups(choices, all.fstrings("wikis")))
+        assertEquals(all.fstrings("offered"), none.map { it.id })
+        assertEquals(all["pick"].text(), WikiStartLogic.workspaceDefault(none, null, null))
+    }
+
+    @Test fun theNewWikiWordsAreTheFixtures() {
+        assertEquals(hasWiki.fstr("newWiki"), WikiStartCopy.newWiki)
+        assertEquals(hasWiki.fstr("label"), WikiStartCopy.hasAWiki)
+        // The refusal is the server's own sentence, which the form shows as it comes.
+        assertEquals("WIKI_SPACE_EXISTS", hasWiki.fobj("refusal").fstr("code"))
+    }
+
+    private val card get() = start.fobj("wikiCreateCard")
+
+    @Test fun theWikiCreateCardSaysWhatItWillMake() {
+        val cases = card.farr("cases").map { it.jsonObject }
+        assertEquals(3, cases.size)
+        cases.forEach { row ->
+            val request = row.fobj("request"); val facts = row.fobj("facts")
+            val ours = WikiStartLogic.createCardFacts(request["repoUrlNorm"].text(), request["workspaceId"].text(), choices)
+            assertEquals(row.toString(), WikiStartLogic.CreateCardFacts(facts["repository"].text(), facts["readsFrom"].text(), facts["offline"].bool() == true,
+                facts.fstr("maintenance")), ours)
+        }
+    }
+
+    @Test fun theWikiCreateCardsWordsAndButtonsAreTheFixtures() {
+        val labels = card.fobj("labels")
+        assertEquals(listOf(labels.fstr("repository"), labels.fstr("readsFrom"), labels.fstr("maintenance")),
+            listOf(WikiCreateCardCopy.repository, WikiCreateCardCopy.readsFrom, WikiCreateCardCopy.maintenance))
+        assertEquals(card.fstrings("buttons"), listOf(WikiCreateCardCopy.create, WikiCreateCardCopy.changeSettings, WikiCreateCardCopy.notHere))
+        assertEquals(WikiCreateCardCopy.create, io.orbitd.android.core.cards.OwnerRequests.primary(io.orbitd.android.core.cards.OwnerRequests.WIKI_CREATE))
+        assertEquals("Created the wiki lfs-builder", WikiCreateCardCopy.created("lfs-builder"))
+        assertEquals("Wiki created", WikiCreateCardCopy.created(null))
+    }
+
     // MARK: the words, as the web writes them
 
     private val web by lazy { WikiSharedFiles.file("src/web/src/lib/wikiStart.ts").readText() }
@@ -217,7 +272,10 @@ class WikiStartLogicTest {
             "WIKI_START_CONFIRM_TODO" to WikiStartCopy.confirmTodo, "WIKI_START_WRITE_TODO" to WikiStartCopy.writeTodo, "WIKI_START_CONNECTED" to WikiStartCopy.connected,
             "WIKI_START_DRAFTING_NOTE" to WikiStartCopy.draftingNote, "WIKI_START_NO_PLAN" to WikiStartCopy.noPlan, "WIKI_START_NOT_WRITTEN" to WikiStartCopy.notWritten,
             "WIKI_CREATE" to WikiStartCopy.create, "WIKI_CREATE_OPEN" to WikiStartCopy.createOpen, "WIKI_CREATE_NOTE" to WikiStartCopy.createNote,
-            "WIKI_WORKSPACE_OFFLINE" to WikiStartCopy.workspaceOffline).forEach { (name, ours) -> assertEquals(name, word(name), ours) }
+            "WIKI_WORKSPACE_OFFLINE" to WikiStartCopy.workspaceOffline, "WIKI_NEW" to WikiStartCopy.newWiki, "WIKI_HAS_A_WIKI" to WikiStartCopy.hasAWiki,
+            "WIKI_CREATE_REPOSITORY" to WikiCreateCardCopy.repository, "WIKI_CREATE_READS_FROM" to WikiCreateCardCopy.readsFrom,
+            "WIKI_CREATE_MAINTENANCE" to WikiCreateCardCopy.maintenance, "WIKI_CREATE_CHANGE_SETTINGS" to WikiCreateCardCopy.changeSettings,
+            "WIKI_CREATE_NOT_HERE" to WikiCreateCardCopy.notHere).forEach { (name, ours) -> assertEquals(name, word(name), ours) }
     }
 
     /** The sentences the web writes where it uses them, rendered with the web's own placeholders. */

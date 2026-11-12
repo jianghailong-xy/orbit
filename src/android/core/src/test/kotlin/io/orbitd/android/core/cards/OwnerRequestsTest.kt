@@ -37,6 +37,25 @@ class OwnerRequestsTest {
         assertFalse("saving needs a name", OwnerRequests.ready(secret, "sk", true, " ", null, null, ""))
     }
 
+    /** WIKI_CREATE (docs/wiki-explicit-creation-design.md §3.6): its repository and workspace are read off the card, and a DONE one names
+     * the wiki it made. */
+    @Test fun aWikiCreateCardReadsItsRepositoryAndNamesTheWikiItMade() {
+        val asked = request("""{"id":"w1","kind":"WIKI_CREATE","state":"PENDING","title":"Create a wiki for lfs-builder?","why":"You asked",
+            "repoUrlNorm":"github.com/sample/lfs-builder","workspaceId":"ws1","answer":null,"createdAt":"2026-11-10T07:58:00Z"}""")
+        assertEquals("github.com/sample/lfs-builder", asked.repoUrlNorm)
+        assertEquals("ws1", asked.workspaceId)
+        assertTrue(OwnerRequests.WIKI_CREATE in OwnerRequests.kinds)
+        assertEquals(listOf("WIKI", "Create wiki", "Review", "Review"), listOf(OwnerRequests.kindTag("WIKI_CREATE"), OwnerRequests.primary("WIKI_CREATE"),
+            OwnerRequests.inboxAction("WIKI_CREATE"), OwnerRequests.pushAction("WIKI_CREATE")))
+        val made = request("""{"id":"w1","kind":"WIKI_CREATE","state":"DONE","title":"Create a wiki for lfs-builder?",
+            "answer":{"spaceId":"sp1","name":"lfs-builder"},"resolvedByUserId":"u","createdAt":"2026-11-10T07:58:00Z"}""")
+        assertEquals("sp1", made.answer?.spaceId)
+        assertEquals("Created the wiki lfs-builder", OwnerRequests.outcomeLine(made, "mini"))
+        assertEquals("Wiki created", OwnerRequests.outcomeLine(made.copy(answer = null), "mini"))
+        assertEquals("Declined: “Not for this repository”",
+            OwnerRequests.outcomeLine(made.copy(state = "DECLINED", answer = null, resolutionNote = "Not for this repository"), "mini"))
+    }
+
     @Test fun theResolvedLineSaysHowWhoAndWhen() {
         val done = secret.copy(state = "DONE", resolvedAt = "2026-11-10T07:59:00Z", resolvedByUserId = "u", resolvedClient = "android")
         assertEquals("Delivered to mini as STRIPE_API_KEY", OwnerRequests.outcomeLine(done, "mini"))

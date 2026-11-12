@@ -47,6 +47,7 @@ import io.orbitd.android.projects.ProjectAttention
 import io.orbitd.android.projects.ProjectsScreen
 import io.orbitd.android.wiki.PageBar
 import io.orbitd.android.wiki.WikiDrawerCount
+import io.orbitd.android.wiki.WikiDrawerNewRow
 import io.orbitd.android.wiki.WikiDrawerRow
 import io.orbitd.android.wiki.WikiDestination
 import io.orbitd.android.wiki.wikiEntered
@@ -300,6 +301,10 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                     })
                             }
                             if (dest == Destination.WIKI) WikiDrawerRow(app, signedIn.handle, drawer.isOpen, row) else row()
+                        }
+                        // New wiki… (docs/wiki-explicit-creation-design.md §3.4): the Create wiki form; a wiki made opens in the Wiki.
+                        WikiDrawerNewRow(app, signedIn.handle, data, closeDrawer = { scope.launch { drawer.close() } }) {
+                            select("Wiki", OrbitRoute(Destination.WIKI, origin = Origin.DRAWER))
                         }
                         // What sessions asked the owner to do (web `WaitingOnYouPage`), with how many are waiting.
                         NavigationDrawerItem(label = { Text(WAITING_ON_YOU) }, selected = navigation.section == WAITING_ON_YOU,

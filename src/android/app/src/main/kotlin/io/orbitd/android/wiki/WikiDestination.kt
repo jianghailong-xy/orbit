@@ -7,13 +7,19 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import io.orbitd.android.OrbitApplication
+import io.orbitd.android.R
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.directory.DirectoryData
 import io.orbitd.android.navigation.*
@@ -120,6 +126,23 @@ fun WikiDrawerRow(app: OrbitApplication, handle: SessionHandle, drawerOpen: Bool
     val state by store.state.collectAsState()
     LaunchedEffect(store, drawerOpen) { if ((drawerOpen || !store.state.value.spacesState.hasLoaded) && store.live()) store.loadSpaces() }
     if (state.shown) row()
+}
+
+/** New wiki… under the drawer's Wiki row (docs/wiki-explicit-creation-design.md §3.4, board 46 part 4 ②): the way to another
+ * wiki, grey with a plus and no count, the drawer's counterpart of the web sidebar's last Wiki row — this drawer has one Wiki
+ * row, not a row per wiki. It is drawn once the account has a wiki; before that the Wiki's own first-wiki card makes one. It
+ * opens the Create wiki form over the page where the reader is ([closeDrawer] first), and [created] runs once a wiki is made,
+ * which the store has already put on screen. */
+@Composable
+fun WikiDrawerNewRow(app: OrbitApplication, handle: SessionHandle, data: DirectoryData, closeDrawer: () -> Unit, created: () -> Unit) {
+    val store = remember(handle) { WikiStore.of(app.session, handle, app.processScope) }
+    val state by store.state.collectAsState()
+    var creating by rememberSaveable { mutableStateOf(false) }
+    if (state.shown && state.spaces.isNotEmpty()) NavigationDrawerItem(
+        label = { Text(WikiStartCopy.newWiki, color = WikiPalette.secondary) }, selected = false,
+        icon = { Icon(painterResource(R.drawable.ic_plus), null, tint = WikiPalette.secondary) },
+        onClick = { closeDrawer(); creating = true }, modifier = Modifier.testTag("drawer:wiki-new"))
+    if (creating) WikiCreateSheet(store, data, created = created, close = { creating = false })
 }
 
 /** The drawer's Wiki row's amber number: what waits on the owner across every space — the proposals in Review and what

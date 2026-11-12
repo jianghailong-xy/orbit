@@ -33,7 +33,9 @@ data class OwnerRequestSecretGrant(val state: String, val endReason: String? = n
     val runnerOnline: Boolean = false, val runnerLastSeenAt: String? = null)
 
 @Serializable
-data class OwnerRequestAnswer(val option: Int? = null, val text: String? = null)
+data class OwnerRequestAnswer(val option: Int? = null, val text: String? = null,
+    /** WIKI_CREATE once DONE: the wiki made, by id and name. */
+    val spaceId: String? = null, val name: String? = null)
 
 @Serializable
 data class OwnerRequest(
@@ -52,6 +54,9 @@ data class OwnerRequest(
     val secretScope: String? = null,
     val secretGrant: OwnerRequestSecretGrant? = null,
     val verifyHint: String? = null,
+    /** WIKI_CREATE: the repository the wiki is asked for, and the asking session's workspace it would read it from. */
+    val repoUrlNorm: String? = null,
+    val workspaceId: String? = null,
     val expiresAt: String? = null,
     val askedBySessionId: String = "",
     val projectId: String? = null,
@@ -196,6 +201,7 @@ object OwnerRequests {
                     }
                 }
                 request.kind == CONFIRM -> "Confirmed"
+                request.kind == WIKI_CREATE -> request.answer?.name?.takeIf { it.isNotEmpty() }?.let { "Created the wiki $it" } ?: "Wiki created"
                 else -> "Marked done"
             }
         }
@@ -400,6 +406,9 @@ class OwnerRequestsApi(private val api: OrbitApi, private val handle: SessionHan
     })
 
     suspend fun decline(id: String, reason: String): OwnerRequest = post(id, listOf("decline"), buildJsonObject { put("reason", reason) })
+
+    /** WIKI_CREATE's Create wiki: the owner's door that makes the wiki with the card's settings and settles the card (design §3.6). */
+    suspend fun createWiki(id: String): OwnerRequest = post(id, listOf("create-wiki"), buildJsonObject { })
 
     /** The key itself, optionally saved under [saveAs]. */
     suspend fun provide(id: String, value: String, saveAs: String? = null): OwnerRequest =

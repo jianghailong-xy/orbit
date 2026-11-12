@@ -35,6 +35,10 @@ internal object WikiStartCopy {
     const val createSubmit = "Create"
     const val createNote = "A wiki describes one repository and stays up to date from its sessions, tasks and receipts. Runs on the server with this deployment’s ${WikiPlanCopy.drafterServer}."
     const val workspaceOffline = "offline"
+    /** The way to another wiki (docs/wiki-explicit-creation-design.md §3.4): the drawer's row under Wiki and the head picker's last item. */
+    const val newWiki = "New wiki…"
+    /** On a repository in the Create wiki form that already has a wiki in use: one repository, one wiki. */
+    const val hasAWiki = "Has a wiki"
 
     /** A done first step: where maintenance reads the repository from. */
     fun readsFrom(workspace: String?) = if (workspace.isNullOrEmpty()) connected else "Reads from $workspace"
@@ -173,11 +177,20 @@ internal object WikiStartLogic {
     fun choicesInOrder(choices: List<WikiWorkspaceChoice>) =
         choices.sortedWith(compareByDescending<WikiWorkspaceChoice> { it.online }.thenBy { it.label.lowercase() })
 
-    data class RepositoryGroup(val repository: String, val choices: List<WikiWorkspaceChoice>)
+    /** A repository the form that makes a wiki offers, with its workspaces; one that has a wiki already is greyed, not offered. */
+    data class RepositoryGroup(val repository: String, val choices: List<WikiWorkspaceChoice>, val hasWiki: Boolean = false)
 
-    /** The repositories the form that makes a wiki groups its workspaces under, by name. A workspace with none is left out. */
-    fun repositoryGroups(choices: List<WikiWorkspaceChoice>) = choicesInOrder(choices).filter { !it.repository.isNullOrEmpty() }
-        .groupBy { it.repository.orEmpty() }.toSortedMap().map { (repository, rows) -> RepositoryGroup(repository, rows) }
+    /** The repositories the form that makes a wiki groups its workspaces under, by name. A workspace with none is left out.
+     * [wikis] are the repositories of the wikis in use (`repoUrlNorm`, not Trash's): their groups are `hasWiki`, since a
+     * repository has one wiki (design §3.4) and the server refuses a second with 409 WIKI_SPACE_EXISTS. */
+    fun repositoryGroups(choices: List<WikiWorkspaceChoice>, wikis: List<String?> = emptyList()): List<RepositoryGroup> {
+        val made = wikis.filterNotNull().filter { it.isNotEmpty() }.toSet()
+        return choicesInOrder(choices).filter { !it.repository.isNullOrEmpty() }
+            .groupBy { it.repository.orEmpty() }.toSortedMap().map { (repository, rows) -> RepositoryGroup(repository, rows, repository in made) }
+    }
+
+    /** The workspaces the form that makes a wiki lets one pick: those of the repositories with no wiki yet. */
+    fun createOffered(groups: List<RepositoryGroup>) = groups.filter { !it.hasWiki }.flatMap { it.choices }
 
     /** What Set up maintenance offers, in order (mock 41): a wiki describes one repository, so only its own workspaces — the
      * ones the Workspaces section lists as in the wiki — and always the one in use ([current]); the workspaces of another
@@ -196,4 +209,29 @@ internal object WikiStartLogic {
         val offered = choicesInOrder(choices)
         return (offered.firstOrNull { sameWikiId(it.id, from) && it.online } ?: offered.firstOrNull { it.online } ?: offered.firstOrNull())?.id
     }
+
+    // MARK: the card an agent files for a wiki (WIKI_CREATE, design §3.6)
+
+    /** What a WIKI_CREATE card says it will make: the repository, the filing session's workspace as the forms name it — null
+     * when it is not among the workspaces read — whether that workspace's runner is offline, and the maintenance. */
+    data class CreateCardFacts(val repository: String?, val readsFrom: String?, val offline: Boolean, val maintenance: String)
+
+    fun createCardFacts(repoUrlNorm: String?, workspaceId: String?, choices: List<WikiWorkspaceChoice>): CreateCardFacts {
+        val workspace = workspaceId?.let { id -> choices.firstOrNull { sameWikiId(it.id, id) } }
+        return CreateCardFacts(repoUrlNorm, workspace?.label, workspace?.online == false, WikiCreateCardCopy.maintenanceText)
+    }
+}
+
+/** The WIKI_CREATE owner-request card's words (docs/wiki-explicit-creation-design.md §3.6, board 46 part 3; web `WIKI_CREATE_*`). */
+internal object WikiCreateCardCopy {
+    const val repository = "Repository"
+    const val readsFrom = "Reads from"
+    const val maintenance = "Maintenance"
+    const val create = WikiStartCopy.create
+    const val changeSettings = "Change settings…"
+    const val notHere = "Not for this repository"
+    /** The maintenance a wiki made from the card starts with: the Create wiki form's defaults, on. */
+    val maintenanceText = WikiMaintenanceSettings.default.let { "On · ${WikiModeCopy.runsADay(it.dailyRunLimit)} · last ${it.lookbackDays} days" }
+    /** A DONE card's line: the wiki it made, by name when the answer names it. */
+    fun created(name: String?) = if (name.isNullOrEmpty()) "Wiki created" else "Created the wiki $name"
 }

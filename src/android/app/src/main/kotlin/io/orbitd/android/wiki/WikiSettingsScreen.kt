@@ -362,8 +362,10 @@ private fun SettingsFallbackBanner(text: String) {
 // MARK: - Set up maintenance
 
 /** One choice in a Set up picker: a workspace, the words it is listed by, whether its runner is offline — listed last and said
- * so — and the heading it is listed under in the form that makes a wiki: its repository. */
-internal data class WikiPickerOption(val id: String, val label: String, val offline: Boolean = false, val group: String? = null)
+ * so — and the heading it is listed under in the form that makes a wiki: its repository, with [note] beside it. A choice that is
+ * not [enabled] is greyed and cannot be picked: a repository that has a wiki already (`Has a wiki`). */
+internal data class WikiPickerOption(val id: String, val label: String, val offline: Boolean = false, val group: String? = null,
+    val enabled: Boolean = true, val note: String? = null)
 
 /** What Set up / Edit writes: where the repository is read from, how many runs a day, and how far back the first one
  * reads — a pick, and the days `Last … days` reads. No provider: the deployment sets the System model (P11). */
@@ -416,8 +418,14 @@ internal fun WikiMaintenanceForm(title: String, note: String, submitLabel: Strin
                     if (picked == null) SettingsPickerItem(WikiModeCopy.noWorkspace, true, "wiki-settings-workspace:none") { done() }
                     workspaces.forEachIndexed { index, option ->
                         if (option.group != null && option.group != workspaces.getOrNull(index - 1)?.group)
-                            Text(option.group, Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = WikiType.label, color = WikiPalette.secondary)
-                        SettingsPickerItem(option.label, picked != null && sameWikiId(option.id, picked), "wiki-settings-workspace:${option.id}", option.offline) {
+                            Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp).testTag("wiki-settings-group:${option.group}"),
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(option.group, Modifier.weight(1f, fill = false), style = WikiType.label,
+                                    color = if (option.enabled) WikiPalette.secondary else WikiPalette.secondary.copy(alpha = 0.55f))
+                                option.note?.let { WikiHasAWikiTag(it) }
+                            }
+                        SettingsPickerItem(option.label, picked != null && sameWikiId(option.id, picked), "wiki-settings-workspace:${option.id}", option.offline,
+                            option.enabled) {
                             done(); choice = choice.copy(workspaceId = option.id)
                         }
                     }
@@ -474,9 +482,16 @@ private fun SettingsPickerRow(label: String, value: String, tag: String, menu: @
     }
 }
 
+/** The tag on a repository in the Create wiki form that has a wiki already (board 46 part 5). */
 @Composable
-private fun SettingsPickerItem(text: String, picked: Boolean, tag: String, offline: Boolean = false, onClick: () -> Unit) {
-    DropdownMenuItem(text = { Text(text, color = if (offline) WikiPalette.secondary else Color.Unspecified) }, onClick = onClick,
+private fun WikiHasAWikiTag(text: String) {
+    Text(text, Modifier.background(WikiPalette.secondary.copy(alpha = 0.12f), RoundedCornerShape(50)).padding(horizontal = 6.dp, vertical = 1.dp),
+        style = WikiType.meta, color = WikiPalette.secondary)
+}
+
+@Composable
+private fun SettingsPickerItem(text: String, picked: Boolean, tag: String, offline: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
+    DropdownMenuItem(text = { Text(text, color = if (offline) WikiPalette.secondary else Color.Unspecified) }, onClick = onClick, enabled = enabled,
         modifier = Modifier.semantics { selected = picked }.testTag(tag),
         leadingIcon = { if (picked) Icon(painterResource(R.drawable.ic_check), null) else Spacer(Modifier.size(24.dp)) },
         trailingIcon = if (offline) ({ Text(WikiStartCopy.workspaceOffline, style = WikiType.label, color = WikiPalette.secondary) }) else null)
@@ -589,21 +604,25 @@ internal fun WikiSetUpSheet(store: WikiStore, space: WikiSpace, data: DirectoryD
 
 /** Create wiki (the web's `WikiCreateDialog`, mock 41): the same form, its workspaces under their repositories. Choosing the
  * workspace chooses the repository, so there is no second field; a workspace on no repository has nothing to describe and is
- * not offered. The server makes the space, turns maintenance on and asks for the plan's first draft in the one request, which
- * is what the home then shows. */
+ * not offered. A repository with a wiki in use is listed greyed under `Has a wiki` and cannot be picked (design §3.4, board 46
+ * part 5); the default comes only from the others, [workspaceId] first — the WIKI_CREATE card's Change settings… — then the
+ * workspace the reader came from. The server makes the space, turns maintenance on and asks for the plan's first draft in the
+ * one request, which is what the home then shows; [created] runs once it has. */
 @Composable
-internal fun WikiCreateSheet(store: WikiStore, data: DirectoryData, close: () -> Unit) {
+internal fun WikiCreateSheet(store: WikiStore, data: DirectoryData, workspaceId: String? = null, created: () -> Unit = {}, close: () -> Unit) {
     val state by store.state.collectAsState()
     val choices = rememberWikiWorkspaceChoices(store, data).choices
     var refusal by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(store) { store.loadSystemModel() }
-    val groups = WikiStartLogic.repositoryGroups(choices)
-    val offered = groups.flatMap { it.choices }
+    LaunchedEffect(store) { if (!store.state.value.spacesState.hasLoaded) store.loadSpaces() }
+    val groups = WikiStartLogic.repositoryGroups(choices, state.spaces.map { it.repoUrlNorm })
+    val offered = WikiStartLogic.createOffered(groups)
     val maintenance = WikiMaintenanceSettings.default
     fun workspace(id: String?) = offered.firstOrNull { sameWikiId(it.id, id) }
     WikiMaintenanceForm(WikiStartCopy.create, WikiStartCopy.createNote, WikiStartCopy.createSubmit,
-        groups.flatMap { group -> group.choices.map { it.option(group.repository) } },
-        WikiStartLogic.workspaceDefault(offered, null, state.fromWorkspaceId),
+        groups.flatMap { group -> group.choices.map { it.option(group.repository).copy(enabled = !group.hasWiki,
+            note = WikiStartCopy.hasAWiki.takeIf { group.hasWiki }) } },
+        WikiStartLogic.workspaceDefault(offered, workspace(workspaceId)?.id, state.fromWorkspaceId),
         { id -> workspace(id)?.repository?.let(WikiStartCopy::createRepositoryNote) ?: WikiModeCopy.repoFromNote },
         WikiMaintenanceChoice(null, maintenance.dailyRunLimit, WikiModeLogic.lookbackChoice(maintenance.lookbackDays),
             WikiModeLogic.lookbackDaysOffered(maintenance.lookbackDays)),
@@ -614,6 +633,7 @@ internal fun WikiCreateSheet(store: WikiStore, data: DirectoryData, close: () ->
         if (repository == null || repoUrl == null) false else {
             val title = WikiStartLogic.repositoryTitle(repository)
             refusal = store.createSpace(title, wikiSpaceCreate(title, repoUrl, choice))
+            if (refusal == null) created()
             refusal == null
         }
     }

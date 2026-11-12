@@ -29,12 +29,20 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
 import io.orbitd.android.core.cards.OwnerRequest
 import io.orbitd.android.core.cards.OwnerRequestStep
 import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.core.cards.OwnerReview
+import io.orbitd.android.directory.rememberDirectoryData
 import io.orbitd.android.text.MarkdownText
+import io.orbitd.android.wiki.WikiCreateCardCopy
+import io.orbitd.android.wiki.WikiCreateSheet
+import io.orbitd.android.wiki.WikiStartCopy
+import io.orbitd.android.wiki.WikiStartLogic
+import io.orbitd.android.wiki.WikiStore
+import io.orbitd.android.wiki.rememberWikiWorkspaceChoices
 import io.orbitd.android.ui.LocalOrbitColors
 import java.time.Instant
 import kotlinx.coroutines.delay
@@ -133,6 +141,7 @@ fun OwnerRequestCard(request: OwnerRequest, store: OwnerRequestStore, runner: (S
             }
         }
 
+        if (request.kind == OwnerRequests.WIKI_CREATE) WikiCreateFacts(request, store, tag)
         if (request.kind == OwnerRequests.MANUAL_STEP) Steps(request.steps.orEmpty(), tag, open)
         if (request.kind == OwnerRequests.SECRET) request.secretSpec?.let { spec ->
             when {
@@ -206,7 +215,8 @@ fun OwnerRequestCard(request: OwnerRequest, store: OwnerRequestStore, runner: (S
         failure?.let { Text("${OwnerRequests.notRecorded}: $it", Modifier.testTag("$tag:error"), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.error) }
 
-        if (declining) {
+        if (request.kind == OwnerRequests.WIKI_CREATE) WikiCreateActions(request, store, tag, enabled = !busy && !closed, focus) { door -> press(door) }
+        else if (declining) {
             OutlinedTextField(reason, { reason = it.take(2000) }, Modifier.fillMaxWidth().testTag("$tag:reason"),
                 placeholder = { Text(OwnerRequests.declineReason) }, minLines = 2, maxLines = 6)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -240,6 +250,53 @@ fun OwnerRequestCard(request: OwnerRequest, store: OwnerRequestStore, runner: (S
             Text(AnnotatedString(OwnerRequests.ifNobodyAnswers + " " + it), Modifier.testTag("$tag:if-unanswered"),
                 style = MaterialTheme.typography.bodySmall, color = secondary)
         }
+    }
+}
+
+/** What a WIKI_CREATE card will make (docs/wiki-explicit-creation-design.md §3.6, board 46 part 3; web `WikiCreateFacts`): the
+ * repository, the asking session's workspace it reads it from — offline when its runner is — and the maintenance it starts with. */
+@Composable
+private fun WikiCreateFacts(request: OwnerRequest, store: OwnerRequestStore, tag: String) {
+    val app = LocalContext.current.applicationContext as OrbitApplication
+    val wiki = remember(store.handle) { WikiStore.of(app.session, store.handle, app.processScope) }
+    val data by rememberDirectoryData(app, store.handle)
+    val choices = rememberWikiWorkspaceChoices(wiki, data).choices
+    val facts = WikiStartLogic.createCardFacts(request.repoUrlNorm, request.workspaceId, choices)
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        facts.repository?.let { Fact(WikiCreateCardCopy.repository, "$tag:repository") { Text(it, style = MaterialTheme.typography.bodySmall) } }
+        Fact(WikiCreateCardCopy.readsFrom, "$tag:reads-from") {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(facts.readsFrom ?: "—", style = MaterialTheme.typography.bodySmall)
+                if (facts.offline) Text(WikiStartCopy.workspaceOffline, style = MaterialTheme.typography.bodySmall, color = secondary)
+            }
+        }
+        Fact(WikiCreateCardCopy.maintenance, "$tag:maintenance") { Text(facts.maintenance, style = MaterialTheme.typography.bodySmall) }
+    }
+}
+
+/** WIKI_CREATE's three answers (design §3.6): Create wiki, which makes it with the card's settings; Change settings…, the Create wiki
+ * form on the asking workspace — a wiki made there settles the card too, so the requests are read again; and Not for this
+ * repository, a decline after which the repository is never asked about again (D4). */
+@Composable
+private fun WikiCreateActions(request: OwnerRequest, store: OwnerRequestStore, tag: String, enabled: Boolean, focus: FocusRequester,
+    press: (suspend io.orbitd.android.core.cards.OwnerRequestsApi.() -> OwnerRequest) -> Unit) {
+    var changing by remember(request.id) { mutableStateOf(false) }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Button(onClick = { press { createWiki(request.id) } }, Modifier.focusRequester(focus).testTag("$tag:primary"), enabled = enabled) {
+            Text(OwnerRequests.primary(request.kind))
+        }
+        OutlinedButton(onClick = { changing = true }, Modifier.testTag("$tag:change-settings"), enabled = enabled) { Text(WikiCreateCardCopy.changeSettings) }
+        TextButton(onClick = { press { decline(request.id, WikiCreateCardCopy.notHere) } }, Modifier.testTag("$tag:decline"), enabled = enabled) {
+            Text(WikiCreateCardCopy.notHere)
+        }
+    }
+    if (changing) {
+        val app = LocalContext.current.applicationContext as OrbitApplication
+        val wiki = remember(store.handle) { WikiStore.of(app.session, store.handle, app.processScope) }
+        val data by rememberDirectoryData(app, store.handle)
+        WikiCreateSheet(wiki, data, workspaceId = request.workspaceId, created = { store.load(*store.state.value.lists.keys.toTypedArray()) },
+            close = { changing = false })
     }
 }
 

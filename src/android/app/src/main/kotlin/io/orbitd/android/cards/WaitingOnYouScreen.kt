@@ -135,6 +135,7 @@ private fun icon(kind: String) = when (kind) {
     OwnerRequests.SECRET -> R.drawable.ic_key
     OwnerRequests.MANUAL_STEP -> R.drawable.ic_reorder
     OwnerRequests.DECISION -> R.drawable.ic_question_bubble
+    OwnerRequests.WIKI_CREATE -> R.drawable.ic_wiki
     else -> R.drawable.ic_check_circle
 }
 
