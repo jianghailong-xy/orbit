@@ -1,0 +1,122 @@
+{
+ "today-1-session": {
+  "url": "/sessions/2zwQZ2hd93IvLb59t6p1c",
+  "w": 1600,
+  "h": 960,
+  "boxes": {
+   "link": {
+    "x": 823.46875,
+    "y": 183.3125,
+    "width": 187.359375,
+    "height": 19
+   }
+  }
+ },
+ "today-2-open": {
+  "url": "/projects/2zwQZ2hd93IvLb59t6p9d/tasks/2zwQZ2hd93IvLb59t6p5m",
+  "w": 1600,
+  "h": 960,
+  "boxes": {
+   "panel": {
+    "x": 820,
+    "y": 0,
+    "width": 780,
+    "height": 960
+   },
+   "projectLine": {
+    "x": 841,
+    "y": 18,
+    "width": 507.625,
+    "height": 19.640625
+   },
+   "close": {
+    "x": 1556,
+    "y": 18,
+    "width": 32,
+    "height": 32
+   }
+  }
+ },
+ "today-3-closed": {
+  "url": "/projects/2zwQZ2hd93IvLb59t6p9d",
+  "w": 1600,
+  "h": 960,
+  "boxes": {}
+ },
+ "proto-1-session": {
+  "url": "/sessions/2zwQZ2hd93IvLb59t6p1c",
+  "w": 1600,
+  "h": 960,
+  "boxes": {
+   "link": {
+    "x": 823.46875,
+    "y": 183.3125,
+    "width": 187.359375,
+    "height": 19
+   }
+  }
+ },
+ "proto-2-open": {
+  "url": "/sessions/2zwQZ2hd93IvLb59t6p1c?task=2zwQZ2hd93IvLb59t6p5m",
+  "w": 1600,
+  "h": 960,
+  "boxes": {
+   "panel": {
+    "x": 820,
+    "y": 0,
+    "width": 780,
+    "height": 960
+   },
+   "projectLine": {
+    "x": 841,
+    "y": 18,
+    "width": 507.625,
+    "height": 19.640625
+   },
+   "close": {
+    "x": 1556,
+    "y": 18,
+    "width": 32,
+    "height": 32
+   }
+  }
+ },
+ "proto-3-closed": {
+  "url": "/sessions/2zwQZ2hd93IvLb59t6p1c",
+  "w": 1600,
+  "h": 960,
+  "boxes": {}
+ },
+ "proto-phone-1-session": {
+  "url": "/sessions/2zwQZ2hd93IvLb59t6p1c",
+  "w": 430,
+  "h": 900,
+  "boxes": {
+   "link": {
+    "x": 216.46875,
+    "y": 195.703125,
+    "width": 187.359375,
+    "height": 19
+   }
+  }
+ },
+ "proto-phone-2-open": {
+  "url": "/sessions/2zwQZ2hd93IvLb59t6p1c?task=2zwQZ2hd93IvLb59t6p5m",
+  "w": 430,
+  "h": 900,
+  "boxes": {
+   "close": {
+    "x": 378,
+    "y": 18,
+    "width": 40,
+    "height": 40
+   }
+  }
+ },
+ "proto-phone-3-back": {
+  "url": "/sessions/2zwQZ2hd93IvLb59t6p1c",
+  "w": 430,
+  "h": 900,
+  "boxes": {}
+ }
+}
