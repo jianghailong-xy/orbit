@@ -107,6 +107,13 @@ test('Cross-workspace SubAgents: choice of workspace, refusals, hand-over, relay
         capabilitiesReportedAt: new Date(),
         engines: [{ engine: 'claude', installed: true, auth: 'yes' }],
         runtimeDefaultModels: { claude: 'claude-sonnet-5-5' },
+        // The catalogue a real runner reports: what routing picks from for a run on the parent's own machine (§8 P3).
+        modelCatalog: {
+          claude: [
+            { value: 'claude-opus-5-5', label: 'Opus 5.5', priority: 0 },
+            { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', priority: 2 },
+          ],
+        },
         ...(opts.claudeUsed === undefined ? {} : { planUsage: { claude: { fiveHour: { utilization: opts.claudeUsed, resetsAt: inAnHour } } } }),
       },
     })) as Runner;
