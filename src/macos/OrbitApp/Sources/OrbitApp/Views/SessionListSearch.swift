@@ -90,7 +90,7 @@ private struct BottomSearchMode: ViewModifier {
 }
 
 /// Whether the last tap in the app landed on the search field's own chrome — the X beside the
-/// bottom field above all — so `BottomSearchMode` can tell the reader closing search from iOS ending
+/// bottom field above all, in the floating bar it shares with the field — so `BottomSearchMode` can tell the reader closing search from iOS ending
 /// it. Fed by the window's tap recognizer (`KeyboardDismissInstaller`), which sees every tap.
 enum SearchCloseTap {
     private static var last: (at: Date, onSearch: Bool)?
@@ -99,7 +99,10 @@ enum SearchCloseTap {
         var view = touch.view
         var onSearch = false
         while let current = view, !onSearch {
-            onSearch = current is UISearchBar || String(describing: type(of: current)).contains("Search")
+            // The X is not a search view: on iOS 26.5 it is a `_UIButtonBarButton` in the bottom
+            // bar's `FloatingBarHostingView`, the same bar as the field (and nothing else there).
+            let name = String(describing: type(of: current))
+            onSearch = current is UISearchBar || name.contains("Search") || name.contains("FloatingBar")
             view = current.superview
         }
         last = (Date(), onSearch)
@@ -141,6 +144,9 @@ private struct BottomSearchScrollReveal: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            // As in Notes: reading on lowers the keyboard (a List alone keeps it up), and search mode
+            // stays — `BottomSearchMode` puts it back when iOS ends it for the lost focus.
+            .scrollDismissesKeyboard(.immediately)
             .onScrollPhaseChange { _, phase in
                 tracker.readerDriven = phase != .idle && phase != .animating
             }
