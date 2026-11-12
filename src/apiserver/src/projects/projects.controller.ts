@@ -26,6 +26,7 @@ import {
   DoneProjectDto,
   DecideCriteriaChangeDto,
   DecideProjectHandoffDto,
+  MoveCriterionDto,
   OpenProjectCoordinatorDto,
   RebindProjectCoordinatorDto,
   ReplaceProjectCoordinatorDto,
@@ -515,6 +516,24 @@ export class ProjectsController {
     @Headers('x-orbit-session-id') actingSessionId: string | undefined,
   ) {
     return this.projects.resume(user.userId, id, actingSessionId);
+  }
+
+  /**
+   * The done card's "Move to a follow-up…": one unmet criterion of this project, and its serving
+   * tasks that are not DONE or CANCELLED, moved to another open project or to a new one, in one
+   * transaction (`ProjectsService.moveCriterion`, `criterion-move.ts`). The owner's alone: a request
+   * made from a session is refused 403.
+   */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Post(':id/criteria/:criterionKey/move')
+  moveCriterion(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('criterionKey', PublicIdPipe) criterionKey: string,
+    @Body() dto: MoveCriterionDto,
+    @Headers('x-orbit-session-id') actingSessionId: string | undefined,
+  ) {
+    return this.projects.moveCriterion(user.userId, id, criterionKey, dto, actingSessionId, user.credential);
   }
 
   /**

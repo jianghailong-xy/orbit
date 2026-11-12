@@ -42,6 +42,9 @@ struct ConsoleView: View {
     @State private var bandOpened = false
     /// The folded pill comes and goes by fading alone under Reduce Motion.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// A wide shell: a task this conversation opens opens over it, not in the Tasks section
+    /// (`opensTasksOverPage`, owner decision 2026-11-12).
+    @Environment(\.opensTasksOverPage) private var opensTasksOverPage
     #if os(iOS)
     /// The ⋯ menu's Rename… (web double-clicks its header title). Seeded from the session's own
     /// title — not `SessionHeader.title`, whose agent-name fallback would otherwise be typed in as if
@@ -351,6 +354,12 @@ struct ConsoleView: View {
                 .environment(\.sessionImagePreview, sessionImagePreview(console))
                 // The workspace's background agents and workflows, for the cards that draw them.
                 .environment(\.taskActivity, taskActivity(console))
+                // A task link in this conversation — prose on the Mac, a card's own button —
+                // opens over the conversation on a wide shell (owner decision 2026-11-12). With
+                // the flag false (every phone) this is the app's own door, word for word.
+                .environment(\.openURL, OpenURLAction { url in
+                    appModel.openOrbitLink(url, overPage: opensTasksOverPage) ? .handled : .leaving(url)
+                })
                 .environment(\.openPromotionReview, { promotionID in
                     promotionReview = PromotionReviewTarget(id: promotionID)
                 })
@@ -593,7 +602,8 @@ struct ConsoleView: View {
                 if let taskID = session.taskId {
                     Section {
                         Button {
-                            appModel.openFromConversation(.task(taskID), overConsole: opensPagesOverConsole)
+                            appModel.openFromConversation(.task(taskID), overConsole: opensPagesOverConsole,
+                                                          overPage: opensTasksOverPage)
                         } label: {
                             Label("Open Task", systemImage: "arrow.up.right")
                         }
@@ -813,11 +823,34 @@ struct TranscriptView: View {
         ScrollViewReader { proxy in
             chrome(follows(rowsList, proxy), proxy)
         }
+        // Held by its runner's update (board 5 of docs/mocks/runner-update-drain): the foot row of
+        // the reader's last message says so, or, before there is one, the queued page does.
+        .environment(\.runnerUpdatingFoot, runnerUpdatingFoot)
+        .overlay { runnerUpdatingPage }
         // macOS shows the session state in this band. iOS gave the state up with the nav-bar title,
         // for reading space (see `ConsoleView`'s toolbar), so the band is retired there.
         #if os(macOS)
         .safeAreaInset(edge: .top, spacing: 0) { statusBar }
         #endif
+    }
+
+    /// The session as the list holds it, when its runner's update is what holds it.
+    private var runnerUpdatingSession: Session? {
+        guard let session = app.session(id: console.sessionID), RunnerUpdating.holds(session) else { return nil }
+        return session
+    }
+
+    private var runnerUpdatingFoot: RunnerUpdatingFoot? {
+        guard let session = runnerUpdatingSession,
+              let id = RunnerUpdating.footBubbleID(console.state.items) else { return nil }
+        return RunnerUpdatingFoot(bubbleID: id, session: session, machine: console.runnerName)
+    }
+
+    @ViewBuilder private var runnerUpdatingPage: some View {
+        if let session = runnerUpdatingSession, RunnerUpdating.footBubbleID(console.state.items) == nil {
+            RunnerUpdatingQueuedView(session: session, machine: console.runnerName,
+                                     onOpenSession: { app.route(to: .session($0)) })
+        }
     }
 
     /// Split out of `body`, and out of each other, because as one expression this chain is long

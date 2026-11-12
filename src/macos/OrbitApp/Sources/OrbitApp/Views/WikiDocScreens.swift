@@ -52,7 +52,13 @@ extension AppModel {
 /// One document of the confirmed plan, read by its slug; a 404 is a document the plan does not have.
 struct WikiDocScreen: View {
     @Environment(AppModel.self) private var model
+    /// A wide shell: a footnote's task opens over the document (owner decision 2026-11-12).
+    @Environment(\.opensTasksOverPage) private var opensTasksOverPage
     let address: WikiDocAddress
+    /// How a footnote's source navigates. The phone's stack pushes the task over the document, so the
+    /// back swipe returns to the sentence it was cited under; the wide shells open it over the page
+    /// instead (owner decision 2026-11-12).
+    var rowNavigation: SessionRowNavigation = .selection
 
     @State private var contentsShown = false
     /// When the reader last looked at this document before this visit — or, on a first one, when it began: a section
@@ -209,7 +215,12 @@ struct WikiDocScreen: View {
             if !model.openOrbitLink(SessionRecordLink.url(session: session, record: record)) {
                 model.open(.session(id: PublicID.toPublic(session)))
             }
-        case .task(let id):     model.open(.task(id: PublicID.toPublic(id)))
+        // A task opens over the document it was cited under: pushed on the phone's stack, so back
+        // returns to the footnote; over the document as the wide shells' panel elsewhere (owner
+        // decision 2026-11-12).
+        case .task(let id):
+            if rowNavigation == .push { model.push(.taskDetail(taskID: PublicID.toPublic(id))) }
+            else { model.open(.task(id: PublicID.toPublic(id)), overPage: opensTasksOverPage) }
         case .session(let id):  model.open(.session(id: PublicID.toPublic(id)))
         case .project(let id):  model.open(.project(id: PublicID.toPublic(id)))
         case .external(let url): model.openExternal(url)

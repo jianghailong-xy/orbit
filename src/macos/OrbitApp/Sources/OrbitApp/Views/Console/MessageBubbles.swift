@@ -44,6 +44,13 @@ struct UserBubbleView: View {
     // own where there's no console. Unused on macOS, where thumbnails aren't tappable.
     @State private var previewTarget: ImagePreviewTarget?
     @Environment(\.sessionImagePreview) private var sessionPreview
+    /// Set while the session is held by its runner's update, naming the bubble whose foot row says so.
+    @Environment(\.runnerUpdatingFoot) private var runnerUpdatingFoot
+    /// This bubble's `Queued · runner updating`, where it is the one the update holds.
+    private var heldFoot: RunnerUpdatingFoot? {
+        guard let foot = runnerUpdatingFoot, foot.bubbleID == bubble.id, !bubble.pending else { return nil }
+        return foot
+    }
 
     private var images: [TurnAttachment] { bubble.attachments.filter(\.isImage) }
     /// This bubble's images as viewer pages, keyed the way `SessionPreviewImages` keys them.
@@ -231,7 +238,7 @@ struct UserBubbleView: View {
     // to copy, so the row is suppressed unless it has a state or a note to show — web parity.
     @ViewBuilder
     private var meta: some View {
-        if !bubble.text.isEmpty || unconfirmed || bubble.attached != nil {
+        if !bubble.text.isEmpty || unconfirmed || bubble.attached != nil || heldFoot != nil {
             HStack(spacing: 6) {
                 if !bubble.text.isEmpty {
                     Button { copy() } label: {
@@ -297,6 +304,10 @@ struct UserBubbleView: View {
                     // can be shown on its own (see `copyShown` / `timeShown`).
                     Text(rel).font(.orbitMeta).foregroundStyle(.secondary)
                         .opacity(timeShown ? 1 : 0)
+                }
+                // What holds this message (web `QueuedFootCtx`): always shown, unlike the time.
+                if let heldFoot {
+                    RunnerUpdatingTagView(foot: heldFoot)
                 }
                 if let attached = bubble.attached {
                     // Named, not hidden: without it the agent answers about a quota outage nobody

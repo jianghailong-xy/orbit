@@ -69,11 +69,16 @@
     "binding": {
       "table": "wiki_space_workspace",
       "rule": "A workspace has at most one row (workspace_id is unique), and only to a space of its own owner (the composite foreign key refuses any other). A row is what the owner or a session said, and it outranks the repository.",
-      "automatic": "A workspace on a space's repository is in that space with no row: its repo_url normalizes to the space's repo_url_norm. Membership is read that way (wiki/wiki-workspaces.ts) rather than written, so a workspace joins however its repo_url came to be, and a space made after its workspaces has them all. A session of a workspace still writes a row on first use, which makes the space when its repository has none yet.",
+      "automatic": "A workspace on a space's repository is in that space with no row: its repo_url normalizes to the space's repo_url_norm. Membership is read that way (wiki/wiki-workspaces.ts) rather than written, so a workspace joins however its repo_url came to be, and a space made after its workspaces has them all. A session of a workspace still writes a row on first use, to a space in use for its repository only: no tool call makes a space (docs/wiki-explicit-creation-design.md §3.1), so a repository with none is answered as having no wiki (`unavailable`).",
       "manual": "A workspace with no repository is added by the owner in Wiki settings (POST /api/wiki/spaces/:id/workspaces). One on another repository is refused 400: that repository has its own space, and what its sessions teach would be dropped here as another repository's knowledge.",
       "leftOut": "The owner leaves a workspace out in Wiki settings (DELETE /api/wiki/spaces/:id/workspaces/:workspaceId): wiki_space_workspace.left_out_at is set, on a row made for it if it was in by its repository alone. Its sessions feed no maintenance run and are refused the wiki tools, what it already taught stays, and it does not rejoin by itself. The same POST turns it back on.",
       "ownerChannel": "Both writes are the account owner's: a session header is refused WIKI_OWNER_CHANNEL_ONLY and a personal access token OWNER_INTERACTIVE_CREDENTIAL_REQUIRED, because who is in a space is who reads its entries. Neither moves the cursor: a workspace that joins is read from the space's watermark on.",
-      "unbound": "A session whose workspace is in no space is refused WIKI_SPACE_UNBOUND, with one sentence saying how to bind it. A session of a workspace left out is refused the same code, saying so.",
+      "unbound": "A session whose workspace is in no space has no wiki: no row (or one naming a wiki in Trash), and no repository or no space in use for it. Its search answers 200 { q, semantic: false, hits: [], unavailable } (searchUnavailable: no_wiki, or wiki_in_trash when its repository's wiki, or the wiki its row names, is in Trash) and records no exposure; its get answers 404 WIKI_SPACE_UNBOUND, 'This workspace has no wiki.'; its propose, note and draft answer 409 WIKI_SPACE_UNBOUND with the sentence `unavailableWrites` gives. A session of a workspace left out is refused WIKI_SPACE_UNBOUND on every tool, saying so.",
+      "unavailableWrites": {
+        "no_wiki": "No wiki for this repository yet, so nothing was recorded. Only the owner can start one: the sentence goes on to name the owner-request kind that asks for one (docs/wiki-explicit-creation-design.md §3.3, NO_WIKI in wiki/wiki.service.ts), and otherwise to carry on without it.",
+        "wiki_in_trash": "The wiki for this repository is in Trash: the owner restores it from Trash.",
+        "wiki_in_trash_no_repository": "The wiki this workspace is in was moved to Trash: the owner restores it from Trash, or binds the workspace to another wiki in Wiki settings."
+      },
       "projects": "A project reaches its space through its codebase's canonical repository URL. There is no project-to-space table."
     },
     "workspaces": {
@@ -89,7 +94,7 @@
       "who": "The owner's alone, as all four Trash routes are: a request with a session header is refused WIKI_OWNER_CHANNEL_ONLY and a personal access token OWNER_INTERACTIVE_CREDENTIAL_REQUIRED. No agent tool and no CLI command reaches them.",
       "move": "One short transaction under the wiki's row lock (migration 0486): deleted_at now, purge_at 365 days on (the retention @orbit/shared exports to every client), its slug and repository set aside in trashed_slug and trashed_repo_url_norm and replaced by a placeholder and NULL, its maintenance turned off, and its unfinished wiki_job and wiki_plan_job rows dropped. Every other row stays.",
       "hidden": "A wiki in Trash is in no door: the list, every page and read by its id or by an id of anything in it, search across wikis, the review queue, link cards, the session tools and every scheduler answer it as one that does not exist. Its public link is paused (PAUSED, IN_TRASH, a visitor's 404) and opens again when it is restored.",
-      "sessions": "A row of wiki_space_workspace naming a wiki in Trash says nothing while it is there. A session on a repository uses the wiki in use for it, made empty by `binding.automatic` if there is none, and its workspace's row moves to that wiki. A session whose workspace has no repository and whose row names a wiki in Trash is refused WIKI_SPACE_UNBOUND, saying the wiki is in Trash.",
+      "sessions": "A row of wiki_space_workspace naming a wiki in Trash says nothing while it is there. A session on a repository uses the wiki in use for it, and its workspace's row moves to that wiki; with none in use it has no wiki (`binding.unbound`, unavailable wiki_in_trash) and none is made. A session whose workspace has no repository and whose row names a wiki in Trash has no wiki either: its search answers unavailable wiki_in_trash and its writes are refused WIKI_SPACE_UNBOUND, saying the wiki is in Trash.",
       "restore": "POST /api/wiki/spaces/:id/restore answers the wiki as GET /api/wiki/spaces/:id does: its slug back, or the next free one (-2, -3…) when a wiki in use took it; its repository back, refused 409 with what to do when a wiki in use holds it (\"A newer wiki for <repo> is in your wikis now. Move it to Trash first, then restore this one.\"); its settings with maintenance still off; everything it held, its public link, and the workspaces whose rows did not move to another wiki meanwhile. A wiki in use is answered as it is; one whose purge is due, or gone, is the 404.",
       "purge": "DELETE /api/wiki/spaces/:id/purge answers { spaceId }: purge_at becomes now and the wiki leaves Trash at once; a wiki not in Trash is the 404. The purge (WikiTrashPurge, on the process that runs the singleton sweeps, once a minute) takes each due wiki under a lease and deletes it a batch per statement — entries with every entry their supersede links reach, then every other table naming the wiki as the catalogue's foreign keys list it, then its row — for up to 30 s a pass; a pass cut short goes on where it stopped. A wiki is due 365 days after it was moved, or when the owner deletes it permanently.",
       "list": "GET /api/wiki/trash answers { spaces: [{ id, slug, title, repoUrlNorm, deletedAt, purgeAt, entries }] }: the owner's wikis in Trash and not yet due, the newest move first, each with the slug and repository it had and its active entries.",
@@ -945,6 +950,11 @@
     "path": "the query or paths parameter is a prefix of one of the entry's anchor paths or trigger paths"
   },
 
+  "searchUnavailable": {
+    "no_wiki": "the calling session's workspace has no wiki: hits is empty, and the runner tells the agent to carry on without it",
+    "wiki_in_trash": "the wiki for the session's repository, or the one its workspace's row names, is in Trash: hits is empty until the owner restores it"
+  },
+
   "limits": {
     "titleMaxChars": 120,
     "summaryMaxChars": 280,
@@ -1617,7 +1627,7 @@
         "build": "the documents of a confirmed version written section by section (wiki_job docs_build, docs.build.server), which the owner's confirmation asks for; a section whose material did not change since it was written is left as it is, so after a small change only what changed is written again"
       },
       "triggers": {
-        "space_created": "the space was created: through POST /api/wiki/spaces, or on the first proposal of a session whose workspace's repository had no space yet",
+        "space_created": "the space was created through POST /api/wiki/spaces, its one caller: a session's wiki tool never creates a space (docs/wiki-explicit-creation-design.md §3.1)",
         "owner": "the owner asked on the plan page: for a draft or a revision, POST /api/wiki/spaces/:id/plan/redraft; for a build, by confirming a version, POST /api/wiki/spaces/:id/plan/versions/:version/confirm, or by asking for the documents of the version in force again, POST /api/wiki/spaces/:id/plan/versions/:version/build (rebuild)",
         "support": "an administrator asked for the documents of the version in force again, for support: POST /api/admin/wiki/spaces/:id/plan/build, with a reason recorded in Activity (rebuild.support, migration 0429)"
       },
@@ -2866,7 +2876,7 @@
 
   "refusals": [
     { "code": "WIKI_DISABLED", "httpStatus": 404, "scope": "request", "when": "The wiki is off for this account (ORBIT_WIKI rollout)." },
-    { "code": "WIKI_SPACE_UNBOUND", "httpStatus": 409, "scope": "request", "when": "The calling session's workspace is in no space and could not be bound on first use, or the owner left it out. The message says which in one sentence." },
+    { "code": "WIKI_SPACE_UNBOUND", "httpStatus": 409, "scope": "request", "when": "The calling session's workspace has no wiki (space.binding.unbound), or the owner left it out. The message says which in one sentence. A write is the 409; GET /api/runner/wiki/entries/:id answers the same code as a 404, and search answers 200 with unavailable rather than this." },
     { "code": "WIKI_SCHEMA", "httpStatus": 400, "scope": "op", "when": "The op, its entry, its anchors or its sources do not have the shape this contract gives them: a kind's fields (KIND_SPECS), a limit, a phase-3 kind, an amend of a decision, a baseRevision where one is required or forbidden, a source ref of a kind in sourceInput.rowIdKinds that is neither spelling of an id, or an amend whose answersChallenge names anything but a pending challenge of the same entry (reviewModes.challenge). errors[] names every field that failed." },
     { "code": "WIKI_KIND_OWNER_ONLY", "httpStatus": 403, "scope": "op", "when": "A non-owner op adds, amends or supersedes a kind only the owner writes (kinds.<kind>.ownerOnlyOps)." },
     { "code": "WIKI_SOURCE_UNRESOLVED", "httpStatus": 422, "scope": "op", "when": "A source does not resolve among the owner's own rows (errors[] names it by its path), cites a wiki entry or view, or an op that must cite a source cites none." },

@@ -36,7 +36,8 @@ public enum SessionHeader {
         if s.confirmationUnderReview != nil { return OwnerConfirmations.underReview }
         switch s.effectiveRunState {
         case .queued:
-            return ClaudeRegion.heldWords(s, machine: machine) ?? "Queued"
+            return ClaudeRegion.heldWords(s, machine: machine)
+                ?? (RunnerUpdating.holds(s) ? RunnerUpdating.RUNNER_UPDATING_TITLE : "Queued")
         case .running:
             return "Running"
         case .awaitingInput:

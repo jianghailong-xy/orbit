@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>iPhone / Android 抽屉：只列活跃项目</title>
+<style>
+  body { margin: 0; background: #f2f2f5; color: #1f1f24; }
+  .b-part { font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; width: 1380px; padding: 28px 28px 34px; box-sizing: border-box; background: #f2f2f5; }
+  .b-part h2.b-h { font-size: 22px; letter-spacing: -.015em; margin: 0 0 6px; }
+  .b-sub { color: #4a4a52; margin: 0 0 20px; }
+  .b-row { display: flex; gap: 40px; align-items: flex-start; }
+  .b-col { flex: none; }
+  .b-cap { font-size: 14px; font-weight: 650; margin: 0 0 10px; line-height: 1.4; }
+  .b-cap .b-dim { display: block; font-weight: 500; color: #6a6a72; }
+  .b-tag { display: inline-block; font-size: 12.5px; font-weight: 650; padding: 1px 9px; border-radius: 999px; background: #e6e6ec; color: #3a3a40; margin-right: 6px; }
+  .b-tag.b-today { background: #fde2e2; color: #9b1c1c; }
+  .b-tag.b-new { background: #d7f2dd; color: #1d6b31; }
+  .b-notes { flex: 1; min-width: 0; }
+  .b-notes ol { list-style: none; margin: 0; padding: 0; }
+  .b-notes li { display: flex; gap: 10px; margin: 0 0 14px; font-size: 14.5px; }
+  .b-n { flex: none; width: 22px; height: 22px; border-radius: 50%; background: #f5222d; color: #fff; font: 600 12px/22px Inter, sans-serif; text-align: center; margin-top: 1px; }
+  .b-ring { position: absolute; border: 2px dashed #f5222d; border-radius: 10px; pointer-events: none; z-index: 20; }
+  .b-badge { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #f5222d; color: #fff;
+    font: 600 12px/22px Inter, sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; z-index: 21; }
+  .b-opt { background: #fff; border-radius: 16px; padding: 14px 18px 8px; margin: 0 0 14px; }
+  .b-opt.b-pick { box-shadow: 0 0 0 2px #52c41a inset; }
+  .b-opt h4 { font-size: 15px; margin: 0 0 4px; }
+  .b-opt p { margin: 4px 0 8px; font-size: 14px; }
+  .b-pro::before { content: '＋ '; color: #1d6b31; font-weight: 700; }
+  .b-con::before { content: '－ '; color: #b42318; font-weight: 700; }
+  ol.b-land { margin: 0; padding-left: 22px; font-size: 14.5px; }
+  ol.b-land li { margin: 0 0 8px; }
+  code { font: 13px "DejaVu Sans Mono", monospace; background: #e6e6ec; padding: 0 4px; border-radius: 4px; }
+
+  /* ── iPhone (393 × 852 pt), drawn after CompactShell.swift ── */
+  .ip { position: relative; width: 393px; height: 852px; border-radius: 54px; background: #f2f2f7; overflow: hidden;
+    box-shadow: 0 0 0 10px #1c1c1e, 0 0 0 11px #3a3a3c, 0 20px 50px rgba(0,0,0,.18); margin: 12px; font-family: Inter, "Noto Sans SC", sans-serif; }
+  .ip-status { height: 54px; display: flex; align-items: flex-end; justify-content: space-between; padding: 0 34px 6px 50px; font: 600 17px Inter; box-sizing: border-box; }
+  .ip-island { position: absolute; top: 11px; left: 50%; width: 124px; height: 36px; margin-left: -62px; border-radius: 20px; background: #000; z-index: 5; }
+  .ip-title { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px 8px 20px; }
+  .ip-title b { font-size: 28px; letter-spacing: -.01em; }
+  .ip-search { width: 44px; height: 44px; border-radius: 50%; background: #e3e3e8; display: grid; place-items: center; }
+  .ip-list { position: absolute; top: 120px; left: 0; right: 0; bottom: 34px; overflow: hidden; }
+  .ip-scroll { position: absolute; left: 0; right: 0; }
+  .ip-row { height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 16px 0 20px; font-size: 17px; white-space: nowrap; }
+  .ip-row .t { overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+  .ip-row .m { color: #8a8a8e; }
+  .ip-row.sel { margin: 0 8px; padding: 0 8px 0 12px; border-radius: 12px; background: #dfe6fb; color: #2f62e6; }
+  .ip-row.quiet { color: #8a8a8e; }
+  .ip-ico { width: 22px; flex: none; color: #3c3c43; display: grid; place-items: center; }
+  .ip-rule { height: 1px; background: #d1d1d6; margin: 6px 16px 0 20px; }
+  .ip-label { display: flex; gap: 8px; align-items: baseline; color: #8a8a8e; padding: 14px 0 4px 20px; }
+  .ip-label b { font-size: 15px; font-weight: 600; }
+  .ip-label span { font-size: 13px; }
+  .amber { font: 600 13px Inter; color: #c77800; background: rgba(255,149,0,.15); border-radius: 999px; padding: 1px 8px; }
+  .spin { width: 13px; height: 13px; border-radius: 50%; border: 1.6px solid #8a8a8e; border-right-color: transparent; transform: rotate(30deg); flex: none; }
+  .ip-bar { position: absolute; left: 16px; right: 16px; bottom: 38px; display: flex; justify-content: space-between; align-items: center; z-index: 6; }
+  .ip-new { background: #3478f6; color: #fff; font: 600 17px Inter; padding: 12px 20px; border-radius: 999px; box-shadow: 0 6px 18px rgba(52,120,246,.35); }
+  .ip-gear { width: 48px; height: 48px; border-radius: 50%; background: #fff; box-shadow: 0 4px 14px rgba(0,0,0,.12); display: grid; place-items: center; font-size: 22px; color: #3c3c43; }
+  .ip-thumb { position: absolute; right: 3px; width: 3px; border-radius: 3px; background: rgba(0,0,0,.35); z-index: 7; }
+  .ip-home { position: absolute; bottom: 8px; left: 50%; width: 134px; margin-left: -67px; height: 5px; border-radius: 3px; background: #000; z-index: 7; }
+
+  /* ── Android (412 × 892 dp), drawn after MainActivity.kt / DrawerProjects.kt (Material 3 drawer) ── */
+  .ad { position: relative; width: 412px; height: 892px; border-radius: 34px; background: #e9e9ee; overflow: hidden;
+    box-shadow: 0 0 0 9px #202124, 0 20px 50px rgba(0,0,0,.18); margin: 10px; font-family: Inter, "Noto Sans SC", sans-serif; }
+  .ad-sheet { position: absolute; top: 0; bottom: 0; left: 0; width: 336px; background: #f4f3f8; border-radius: 0 16px 16px 0; overflow: hidden; z-index: 2; }
+  .ad-scrim { position: absolute; inset: 0; background: rgba(0,0,0,.32); z-index: 1; }
+  .ad-status { position: relative; z-index: 3; background: #f4f3f8; height: 36px; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; font: 500 14px Inter; }
+  .ad-scroll { position: absolute; top: 36px; left: 0; right: 0; }
+  .ad-title { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px 8px 24px; }
+  .ad-title b { font-size: 28px; font-weight: 500; }
+  .ad-row { height: 56px; display: flex; align-items: center; gap: 12px; margin: 0 12px; padding: 0 16px; border-radius: 28px; font-size: 14.5px; font-weight: 500; color: #45464f; white-space: nowrap; }
+  .ad-row .t { overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; color: #1b1b21; }
+  .ad-row .two { display: flex; flex-direction: column; line-height: 1.25; flex: 1; min-width: 0; }
+  .ad-row .two small { font-size: 12.5px; color: #6a6a72; font-weight: 400; }
+  .ad-row.sel { background: #dbe1ff; }
+  .ad-row.quiet .t { color: #6a6a72; }
+  .ad-ico { width: 24px; flex: none; display: grid; place-items: center; color: #45464f; }
+  .ad-label { display: flex; gap: 8px; align-items: baseline; color: #45464f; padding: 12px 28px; font-size: 12.5px; font-weight: 500; }
+  .ad-label span { font-size: 11.5px; }
+  .ad-amber { font: 600 12.5px Inter; color: #b86b00; background: rgba(255,149,0,.15); border-radius: 999px; padding: 2px 7px; }
+  .ad-nav { position: absolute; bottom: 8px; left: 50%; width: 108px; margin-left: -54px; height: 4px; border-radius: 2px; background: #1b1b21; z-index: 7; }
+</style>
+</head>
+<body>
+
+<section class="b-part" id="part-1">
+  <h2 class="b-h">① iPhone 抽屉：Projects 只列活跃的，其余折成一行</h2>
+  <p class="b-sub">和 Web（板 03，11-12 已定 A1 + B，已在 main 13d2bae9f）同一条规则：等你的、在跑的、24 小时内动过的，加上正打开的那个；其余折成最后一行灰字「N quiet projects」，点开 Projects 页。抽屉本来就是一个滚动条，Projects 本来就在最下面，所以只改 Projects 这一组。图是按 <code>CompactShell.swift</code> 画的，数据和板 03 一样（39 个项目：2 个等你、6 个在跑、2 个今天动过、29 个几天没动），都滚到了 Projects 这一组。</p>
+  <div class="b-row">
+    <div class="b-col"><p class="b-cap"><span class="b-tag b-today">今天</span>滚到 Projects<span class="b-dim">39 行，要再往下滚 1300 pt 才到底</span></p><div id="ip-today"></div></div>
+    <div class="b-col"><p class="b-cap"><span class="b-tag b-new">改后</span>滚到底<span class="b-dim">10 行 + 1 行，整组一屏放得下</span></p><div id="ip-new"></div></div>
+    <div class="b-notes" style="padding-top: 40px;">
+      <ol>
+        <li><span class="b-n">1</span><span>今天：39 个项目全列，等你的 2 个排最前，后面 29 个是好几天没动的（右边什么记号都没有）。抽屉往下一直是它们，翻到底要滑好几屏。</span></li>
+        <li><span class="b-n">2</span><span>改后：只列 10 个——琥珀色数字（等你）、转圈（在跑）、今天动过的。组标题照旧写全部的数：<b>Projects 39</b>。</span></li>
+        <li><span class="b-n">3</span><span>最后一行「29 quiet projects」：灰字，和项目标题左对齐，不带记号；点它进 Projects 页（顶部那行 Projects 去的同一页），那里列全部。</span></li>
+        <li><span class="b-n">4</span><span>上半截（Projects · Tasks · Wiki · Waiting on you、Workspaces）、底部浮着的 New session 和齿轮，都不动。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="b-part" id="part-2">
+  <h2 class="b-h">② Android 抽屉：同一条规则</h2>
+  <p class="b-sub">按 <code>MainActivity.kt</code> 的抽屉和 <code>DrawerProjects.kt</code> 画（Material 3 的 NavigationDrawerItem，56 dp 一行）。Android 的抽屉也是一整列一起滚，Projects 在最下面，所以和 iPhone 一样只改这一组。</p>
+  <div class="b-row">
+    <div class="b-col"><p class="b-cap"><span class="b-tag b-today">今天</span>滚到 Projects<span class="b-dim">39 行，56 dp 一行，还有 1600 dp 才到底</span></p><div id="ad-today"></div></div>
+    <div class="b-col"><p class="b-cap"><span class="b-tag b-new">改后</span>滚到底<span class="b-dim">10 行 + 1 行</span></p><div id="ad-new"></div></div>
+    <div class="b-notes" style="padding-top: 40px;">
+      <ol>
+        <li><span class="b-n">5</span><span>今天：和 iPhone 一样全列 39 个，等你的是琥珀数字，在跑的是小转圈。</span></li>
+        <li><span class="b-n">6</span><span>改后：同样只列 10 个，规则和 Web、iPhone 一字不差（同一个 24 小时）。</span></li>
+        <li><span class="b-n">7</span><span>「29 quiet projects」是一行普通的抽屉项，字用次要颜色，没有图标和徽标；点它打开 Projects 页。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="b-part" id="part-3">
+  <h2 class="b-h">待定 · 要你拍板</h2>
+  <p class="b-sub"><span class="b-tag b-new">11-12 已定</span>移动端先不改：iPhone 和 Android 抽屉照旧全列。只有 Web 折叠（main 13d2bae9f）。</p>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0 26px;">
+    <div>
+      <h3 style="font-size: 16.5px; margin: 0 0 10px;">拍板 1：手机上照 Web 折叠吗</h3>
+      <div class="b-opt b-pick">
+        <h4><span class="b-tag b-new">推荐</span>A · 照 Web 折叠（上面的图）</h4>
+        <p class="b-pro">三端看到的是同一份项目清单，同一个「29 quiet projects」</p>
+        <p class="b-pro">手机抽屉短了 29 行，翻到底不用滑好几屏</p>
+        <p class="b-con">在手机上找一个安静的项目要多点一下（Projects 页里都在）</p>
+      </div>
+      <div class="b-opt">
+        <h4>B · 手机保持全列</h4>
+        <p class="b-con">Web 和手机不一样：Web 显示 10 个，手机 39 个</p>
+      </div>
+    </div>
+    <div>
+      <h3 style="font-size: 16.5px; margin: 0 0 10px;">拍板 2：组标题要不要像 Web 那样吸顶</h3>
+      <div class="b-opt b-pick">
+        <h4><span class="b-tag b-new">推荐</span>A · 不吸顶（今天这样）</h4>
+        <p class="b-pro">折叠以后 Projects 一组就 11 行，滚过去就看全了；手机抽屉只有 Workspaces、Projects 两个组标题，吸顶帮不上什么</p>
+        <p class="b-pro">两端都不用动列表结构</p>
+      </div>
+      <div class="b-opt">
+        <h4>B · 吸顶</h4>
+        <p class="b-con">iPhone 要把行改成 List 的 Section（行的样子和分隔都会变），Android 要改成 LazyColumn 的 stickyHeader，代价比折叠本身大</p>
+      </div>
+    </div>
+  </div>
+  <h3 style="font-size: 16.5px; margin: 10px 0 10px;">落地（按代价排）</h3>
+  <ol class="b-land">
+    <li>iPhone / iPad：<code>ProjectAttention</code> 加和 Web 一样的「活跃」判断（OrbitKit，带测试），<code>CompactShell.projectRows</code> 只画活跃的 + 一行 quiet，点它选 Projects。</li>
+    <li>Android：<code>ProjectAttention.kt</code> 同样的判断，<code>DrawerProjects</code> 同样的一行（单测 + DrawerProjectsDeviceTest）。</li>
+    <li>Mac 侧栏：同一个 OrbitKit 判断，跟着用。</li>
+  </ol>
+</section>
+
+<script>
+const WS = [['api-develop','build-01'],['api-prod','cloud-sg'],['ios-app','mac-mini'],['data-pipeline','workstation'],['web-develop','cloud-sg'],['web-prod','cloud-sg'],['build-01','build-01'],['ml-train','workstation'],['docs-site','workstation'],['security-audit','build-01'],['notify-service','cloud-sg'],['orbit','laptop']];
+const P = ['Checkout page redesign','SSO for enterprise plans','Billing export to CSV','Search results ranking','Settings redesign','Session guests','Runners on other hosts','Sub-agent routing','Onboarding emails','Dark mode for settings','API rate limits','Audit log retention','Android offline drafts','Release notes generator','Team invitations by link','Image upload resizing','Push notification digest','Database index cleanup','Error page copy pass','Calendar sync','CSV import validation','Usage dashboard charts','Webhook retries','Accessibility audit fixes','Mobile tab bar polish','Session timeout settings','Localization pipeline','Status page migration','Crawl data pipeline','Search index rebuild','Invoice PDF layout','Feature flag cleanup','Admin audit view','Password reset flow','Upload retry queue','Team billing page','Docs site search','Signup funnel metrics','Workspace templates'];
+const waiting = { 0: 1, 1: 2 }, running = new Set([2, 3, 4, 5, 6, 7]);
+const FOLDER = '<svg width="20" height="17" viewBox="0 0 20 17" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 3.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>';
+const TERM = '<svg width="22" height="18" viewBox="0 0 22 18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1" y="1" width="20" height="16" rx="2"/><path d="M5 6l3 3-3 3M10 12h5"/></svg>';
+const NAVI = { Projects: '<svg width="22" height="20" viewBox="0 0 22 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1" y="2" width="20" height="16" rx="2"/><path d="M1 6h20M6 10h10M6 14h7"/></svg>',
+  Tasks: '<svg width="22" height="20" viewBox="0 0 22 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4l2 2 3-3M2 11l2 2 3-3M10 5h10M10 12h10M2 17h18"/></svg>',
+  Wiki: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 2h11a2 2 0 0 1 2 2v14H5a2 2 0 0 1-2-2zM3 15a2 2 0 0 1 2-2h11"/></svg>',
+  'Waiting on you': '<svg width="22" height="20" viewBox="0 0 22 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 11l3-8h12l3 8v6H2zM2 11h5l1 2h6l1-2h5"/></svg>' };
+const live = (i) => i < 10;
+
+function ipRows(after) {
+  let h = '';
+  for (const n of ['Projects', 'Tasks', 'Wiki']) h += `<div class="ip-row"><span class="ip-ico">${NAVI[n]}</span><span class="t">${n}</span>${n === 'Projects' ? '<span class="amber">2</span>' : ''}</div>`;
+  h += `<div class="ip-row"><span class="ip-ico">${NAVI['Waiting on you']}</span><span class="t">Waiting on you</span><span class="amber">3</span></div>`;
+  h += '<div class="ip-rule"></div><div class="ip-label"><b>Workspaces</b><span>12</span></div>';
+  WS.forEach(([n, m], i) => { h += `<div class="ip-row ${i === 0 ? 'sel' : ''}"><span class="ip-ico" style="color:${i === 0 ? '#2f62e6' : '#3c3c43'}">${FOLDER}</span><span class="t">${n}<span class="m"> · ${m}</span></span>${i === 0 ? '<span class="spin" style="border-color:#2f62e6;border-right-color:transparent"></span>' : ''}</div>`; });
+  h += '<div class="ip-label" id="IPID-label"><b>Projects</b><span>39</span></div>';
+  P.forEach((t, i) => {
+    if (after && !live(i)) return;
+    const mark = waiting[i] ? `<span class="amber">${waiting[i]}</span>` : running.has(i) ? '<span class="spin"></span>' : '';
+    h += `<div class="ip-row" id="IPID-p${i}"><span class="t">${t}</span>${mark}</div>`;
+  });
+  if (after) h += '<div class="ip-row quiet" id="IPID-quiet"><span class="t">29 quiet projects</span></div>';
+  return h;
+}
+function iphone(id, after) {
+  const host = document.getElementById(id);
+  host.innerHTML = `<div class="ip"><div class="ip-island"></div><div class="ip-status"><span>9:41</span><span style="font-size:14px">●●● ▮</span></div>
+    <div class="ip-title"><b>Orbit</b><span class="ip-search"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#1c1c1e" stroke-width="2"><circle cx="8.5" cy="8.5" r="6"/><path d="M13 13l5 5"/></svg></span></div>
+    <div class="ip-list"><div class="ip-scroll">${ipRows(after).replaceAll('IPID', id)}</div></div>
+    <div class="ip-thumb"></div>
+    <div class="ip-bar"><span class="ip-new">✎ New session</span><span class="ip-gear">⚙</span></div><div class="ip-home"></div></div>`;
+  const list = host.querySelector('.ip-list'), scroll = host.querySelector('.ip-scroll');
+  const total = scroll.scrollHeight + 60, view = list.clientHeight;
+  // Today: scrolled so the Projects label sits near the top; after: scrolled to the end.
+  const label = host.querySelector(`#${id}-label`);
+  const y = after ? Math.max(0, total - view) : label.offsetTop - 8;
+  scroll.style.top = `${-y}px`;
+  const thumb = host.querySelector('.ip-thumb');
+  const th = Math.max(36, view * view / total);
+  thumb.style.height = `${th}px`;
+  thumb.style.top = `${120 + (view - th) * (y / (total - view))}px`;
+}
+
+function adRows(after) {
+  let h = '<div class="ad-title"><b>Orbit</b><svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="#1b1b21" stroke-width="2"><circle cx="8.5" cy="8.5" r="6"/><path d="M13 13l5 5"/></svg></div>';
+  for (const n of ['Projects', 'Tasks', 'Wiki']) h += `<div class="ad-row"><span class="ad-ico">${NAVI[n]}</span><span class="t">${n}</span>${n === 'Projects' ? '<span style="color:#ff9500;font:600 12px Inter">2</span>' : ''}</div>`;
+  h += '<div class="ad-label">Workspaces</div>';
+  WS.forEach(([n, m], i) => { h += `<div class="ad-row ${i === 0 ? 'sel' : ''}"><span class="ad-ico">${TERM}</span><span class="two"><span class="t">${n}</span><small>${m}${i === 0 ? ' · 1 running' : ''}</small></span></div>`; });
+  h += '<div class="ad-label" id="ADID-label">Projects <span>39</span></div>';
+  P.forEach((t, i) => {
+    if (after && !live(i)) return;
+    const mark = waiting[i] ? `<span class="ad-amber">${waiting[i]}</span>` : running.has(i) ? '<span class="spin" style="width:11px;height:11px"></span>' : '';
+    h += `<div class="ad-row" id="ADID-p${i}"><span class="t">${t}</span>${mark}</div>`;
+  });
+  if (after) h += '<div class="ad-row quiet" id="ADID-quiet"><span class="t">29 quiet projects</span></div>';
+  return h + '<div style="height:12px"></div>';
+}
+function android(id, after) {
+  const host = document.getElementById(id);
+  host.innerHTML = `<div class="ad"><div class="ad-scrim"></div><div class="ad-sheet"><div class="ad-status"><span>9:41</span><span>▾ ▮</span></div>
+    <div class="ad-scroll">${adRows(after).replaceAll('ADID', id)}</div></div><div class="ad-nav"></div></div>`;
+  const sheet = host.querySelector('.ad-sheet'), scroll = host.querySelector('.ad-scroll');
+  const view = sheet.clientHeight - 36, total = scroll.scrollHeight;
+  const label = host.querySelector(`#${id}-label`);
+  const y = after ? Math.max(0, total - view) : label.offsetTop - 8;
+  scroll.style.top = `${36 - y}px`;
+}
+
+function ring(hostId, fromId, toId, n, topCut, bottomCut) {
+  const host = document.getElementById(hostId);
+  const frame = host.firstElementChild;
+  const a = document.getElementById(fromId).getBoundingClientRect(), b = document.getElementById(toId).getBoundingClientRect();
+  const f = host.getBoundingClientRect();
+  const clip = frame.getBoundingClientRect();
+  const top = Math.max(a.top, clip.top + topCut) - f.top + 2, bottom = Math.min(b.bottom, clip.bottom - bottomCut) - f.top - 2;
+  const left = Math.min(a.left, b.left) - f.left - 4, right = Math.max(a.right, b.right) - f.left + 4;
+  const r = document.createElement('div'); r.className = 'b-ring';
+  Object.assign(r.style, { left: `${left}px`, top: `${top}px`, width: `${right - left}px`, height: `${bottom - top}px` });
+  const d = document.createElement('div'); d.className = 'b-badge'; d.textContent = n;
+  Object.assign(d.style, { left: `${left - 12}px`, top: `${top - 12}px` });
+  host.style.position = 'relative'; host.append(r, d);
+}
+window.drawMarks = () => {
+  document.querySelectorAll('.b-ring, .b-badge').forEach((e) => e.remove());
+  ring('ip-today', 'ip-today-p8', 'ip-today-p20', 1, 120, 96);
+  ring('ip-new', 'ip-new-p0', 'ip-new-p9', 2, 120, 96);
+  ring('ip-new', 'ip-new-quiet', 'ip-new-quiet', 3, 120, 96);
+  ring('ad-today', 'ad-today-p8', 'ad-today-p18', 5, 36, 20);
+  ring('ad-new', 'ad-new-p0', 'ad-new-p9', 6, 36, 20);
+  ring('ad-new', 'ad-new-quiet', 'ad-new-quiet', 7, 36, 20);
+};
+iphone('ip-today', false); iphone('ip-new', true);
+android('ad-today', false); android('ad-new', true);
+window.addEventListener('load', () => window.drawMarks());
+</script>
+</body>
+</html>

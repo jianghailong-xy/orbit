@@ -78,6 +78,11 @@ data class DirectorySession(
     val sessionKind: String? = null,
     /** What a LANDING row says about its subject, on `GET /sessions?projectId=&includeLanding=1` only; absent everywhere else. */
     val landing: SessionLandingSummary? = null,
+    /** Which gate the server found holding a queued row (web `QueuedGate`): `runner_updating` is the one this build words for itself
+     *  ([RunnerUpdating]). [queuedActive] is the turns in flight that gate judged on. All absent from an older server. */
+    val queuedReason: String? = null, val queuedActive: Int? = null, val queuedLimit: Int? = null,
+    /** Beside queuedReason `runner_updating` only, kept as the JSON it came as and read by [QueuedRunnerUpdate.of]. */
+    val queuedRunnerUpdate: JsonElement? = null,
 ) {
     /** Whether this row is a landing session (platform work), not a conversation. */
     val isLanding get() = sessionKind == "LANDING"

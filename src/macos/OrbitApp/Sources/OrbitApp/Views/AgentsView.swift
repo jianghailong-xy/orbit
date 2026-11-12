@@ -6,7 +6,7 @@ import UIKit
 
 // Batch D + Agents-in-sidebar refinement: the Workspace list now lives in the sidebar, folding away
 // the old middle column. iOS renders first-level Workspaces in the drawer (iPad's sidebar is the
-// same drawer); macOS retains its runner grouping (see `SectionSidebar`). What remains
+// same drawer); macOS's `SectionSidebar` draws the same rows. What remains
 // here is the selected agent's detail, split across the two right panes to mirror Open:
 //   • content column → the agent's sessions as a plain list; the window toolbar hosts the
 //                       Open/Completed/Trash scope switcher (principal), a New-session button
@@ -18,8 +18,7 @@ import UIKit
 // IA note: the web edits agents *inside* the Runner detail page (an agent belongs to a runner);
 // this surfaces a flatter Agents nav whose items are the agents themselves.
 
-#if os(iOS)
-/// The Workspace identity glyph shared by the iPhone drawer and iPad sidebar. Online/unknown is the
+/// The Workspace identity glyph shared by the iPhone drawer, the iPad sidebar and the Mac sidebar. Online/unknown is the
 /// calm native folder and stays decorative; an explicitly-offline Runner adds a small muted
 /// `wifi.slash` corner badge and exposes that state to VoiceOver.
 struct WorkspaceFolderIcon: View {
@@ -46,9 +45,10 @@ struct WorkspaceFolderIcon: View {
     }
 }
 
-/// The shared first-level Workspace row used by both iPhone and iPad navigation. Runner is
+/// The shared first-level Workspace row used by iPhone, iPad and Mac navigation. Runner is
 /// descriptive metadata, never a disclosure parent; the trailing slot carries at most one live
-/// state, with user attention taking precedence over background work.
+/// state, with user attention taking precedence over background work. On the Mac a row with no
+/// state shows its faint ⌘1…⌘9 shortcut there instead (`shortcut`, 0-based; nil on iOS).
 struct WorkspaceNavigationRow: View {
     let agent: Agent
     let runnerLabel: String
@@ -59,6 +59,7 @@ struct WorkspaceNavigationRow: View {
     /// `running` and never as the spinner: nobody is generating, something is happening anyway.
     var jobs: Bool = false
     let waiting: Int
+    var shortcut: Int? = nil
 
     var body: some View {
         let status = WorkspaceNavigationStatusLogic.resolve(
@@ -86,6 +87,10 @@ struct WorkspaceNavigationRow: View {
                 // be read as the spinner above it.
                 BreathingGlyph(systemImage: "terminal")
                     .accessibilityLabel("Background job running")
+            } else if let shortcut {
+                Text("⌘\(shortcut + 1)")
+                    .font(.orbitMeta).monospacedDigit()
+                    .foregroundStyle(.tertiary)
             }
         }
     }
@@ -127,48 +132,6 @@ struct NeedsYouCountCapsule: View {
             .accessibilityLabel("\(count) waiting for you")
     }
 }
-#endif
-
-#if os(macOS)
-/// A Workspace row in the macOS sidebar's Workspaces disclosure: the name over its provider and
-/// working directory, with the faint ⌘N shortcut where it has one. (iOS draws the drawer's
-/// `WorkspaceNavigationRow` on both iPhone and iPad.)
-struct AgentRowView: View {
-    let agent: Agent
-    var shortcutIndex: Int? = nil
-    var configuredProviders: [ConfiguredProvider] = []
-    var body: some View {
-        HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(agent.name).lineLimit(1)
-                    if agent.enabled == false {
-                        Text("disabled").font(.orbitMeta)
-                            .padding(.horizontal, 5).padding(.vertical, 1)
-                            .background(.quaternary, in: Capsule())
-                    }
-                }
-                // What its next session starts on, engine and credential in one phrase (board 7):
-                // "Claude Code", "Claude Code via DeepSeek".
-                Text(SessionProviderChoices.engineVia(engine: agent.defaultEngine(configured: configuredProviders),
-                                                      provider: agent.defaultProvider,
-                                                      configured: configuredProviders)
-                     + (agent.workDir.map { " · \($0)" } ?? ""))
-                    .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
-            }
-            if shortcutIndex != nil {
-                Spacer(minLength: 4)
-            }
-            if let shortcutIndex {
-                Text("⌘\(shortcutIndex + 1)")
-                    .font(.orbitMeta).monospacedDigit()
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .padding(.vertical, 2)
-    }
-}
-#endif
 
 /// How this list's rows navigate — a fact about the container the list is in, not about the rows
 /// (they are the same rows in both shells; see `AgentPanes.sessionRow`).
@@ -226,7 +189,14 @@ struct AgentContentColumn: View {
                 }
             }
             #else
-            workspaceList
+            // A project's sessions page takes the column, as on the iPad: the sidebar's project row
+            // opens it (docs/mocks/macos-sidebar, owner 2026-11-12), the detail beside it following
+            // the member picked.
+            if let address = app.projectSessionsColumn, rowNavigation == .selection {
+                SessionProjectPage(address: address, rowNavigation: rowNavigation)
+            } else {
+                workspaceList
+            }
             #endif
         }
         #if os(iOS)
@@ -277,10 +247,9 @@ struct AgentContentColumn: View {
                            fromBottom: SessionListPresentation.resolve(
                                isCompactWidth: horizontalSizeClass == .compact).searchesFromBottom,
                            isEnabled: app.projectSessionsColumn == nil || rowNavigation != .selection)
-        // The query used to be `AgentPanes`' own state, so switching workspace (`.id(a.id)`) dropped
-        // it. It outlives that rebuild now, so clear it here to land on the new workspace's sessions
-        // rather than on the old workspace's search results.
-        .onChange(of: app.selectedAgentID) { _, _ in searchQuery = "" }
+        // The query outlives `AgentPanes`' rebuild on a workspace switch (`.id(a.id)`), and a switch
+        // keeps it: search mode ends only at the field's close button, and the hits span every
+        // workspace anyway.
         #endif
     }
 
@@ -519,6 +488,7 @@ struct AgentPanes: View {
         // Plain style so the sections read as light headers over full-width rows (matching the
         // current list), not boxed inset-grouped cards.
         .listStyle(.plain)
+        .softTopEdgeEffect()
         .rowSwipeList(rowSwipe)
         // The phone's search field, in the bottom toolbar, gets out of the way while the list is read
         // downward (see the column's `sessionListSearch`).
@@ -580,7 +550,8 @@ struct AgentPanes: View {
                     .background(.bar)
                 }
                 NeedsYouBannerView(excluding: app.selectedAgentSessionID,
-                                   projectInColumn: rowNavigation == .selection)
+                                   projectInColumn: rowNavigation == .selection,
+                                   overList: true)
             }
         }
         #endif

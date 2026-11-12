@@ -2918,13 +2918,25 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0521_wiki_repo_snapshot_source',
       // 0530 swaps two CHECKs and lets a probe's wiki_repo_op name no job; no preserved rows, triggers or DONE fence change.
       '0530_wiki_repo_probe',
-      // 0531 adds statement triggers on owner_request and project_handoff_approval that call 0511's
+      // 0535 adds project's non-code mark, who wrote it and when, and one CHECK; no preserved rows, triggers or DONE
+      // fence change, and no row is written.
+      '0535_project_non_code_mark',
+      // 0545 adds criterion_satisfied_by on the criterion definition and the
+      // project_criterion_confirmation table, and restates 0234's normalize function with the mode
+      // as a third input (a TASKS row's hashes are computed exactly as before). No completion ledger,
+      // DONE fence, preserved trigger or function is changed, and no row is written.
+      '0545_criterion_confirmation',
+      // 0555 adds project.non_code_reason, the confirmed wording on project_criterion_confirmation
+      // (backfilled only on rows whose revision is still the criterion's) and two partial indexes on
+      // activity. No completion ledger, DONE fence, preserved trigger or function is changed.
+      '0555_project_done_card_records',
+      // 0591 adds statement triggers on owner_request and project_handoff_approval that call 0511's
       // `open_list_bump_owner`, so the Open list's version moves when an owner request or a task move
       // changes; they write `open_list_epoch` alone. No preserved rows, preserved triggers or DONE fence change.
-      '0531_open_list_owner_requests_and_moves',
-      // 0532 adds one partial index on owner_request (PENDING rows by asking session); no preserved rows,
+      '0591_open_list_owner_requests_and_moves',
+      // 0592 adds one partial index on owner_request (PENDING rows by asking session); no preserved rows,
       // triggers or DONE fence change.
-      '0532_pending_owner_question_indexes'],
+      '0592_pending_owner_question_indexes'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

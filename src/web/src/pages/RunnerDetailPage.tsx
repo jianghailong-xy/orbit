@@ -26,7 +26,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AgentProvider, ENGINE_CLI_NAMES, type LoginEngine, type RunnerRepoHealth } from '@orbit/shared';
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   api,
   askClaudeHistory,
@@ -125,9 +125,11 @@ import {
   runnerOfflineLastSeen,
   runnerRunningOf,
   runnerUpdatedFromTo,
+  runnerVersionUpdatingTo,
   runnerVersionTag,
   runnerWorkspaceRunning,
 } from '../lib/runnerCopy';
+import { runnerUpdateCard } from '../lib/runnerUpdateCard';
 import { useClaudeRegionCheckAgain } from '../lib/claudeRegion';
 import { CLAUDE_REGION_CHECK_AGAIN } from '../lib/claudeRegionCopy';
 import { ago } from '../lib/runnerEngines';
@@ -1309,6 +1311,12 @@ export function RunnerDetailPage() {
     const stuck = attention.find((item) => item.kind === 'cannotSelfUpdate');
     if (stuck) return { text: stuck.short, warn: true };
     if (compareRunnerVersions(version, latestVersion) >= 0) return { text: RUNNER_VERSION_LATEST, warn: false };
+    // Draining or restarting for a release: `0.1.253 · updating to 0.1.254`, in the card's amber.
+    const target = runner.selfUpdate?.targetVersion;
+    const phase = runner.selfUpdate?.phase;
+    if (target && (phase === 'draining' || phase === 'restarting')) {
+      return { text: runnerVersionUpdatingTo(target), warn: true };
+    }
     const state = runner.selfUpdate?.state;
     if (state === 'heldByRollout') return { text: RUNNER_VERSION_NOT_ROLLED_OUT, warn: false };
     if (state === 'enabled' || state === 'waitingForIdle') {
@@ -1329,6 +1337,8 @@ export function RunnerDetailPage() {
     return parts.filter(Boolean).join(RUNNER_LINE_SEPARATOR) || '—';
   })();
   const canUpdateNow = runnerCanUpdateNow(runner, nowMs);
+  // Where a release it is behind stands, from a runner that says (null for one that doesn't).
+  const updateCard = runnerUpdateCard(runner.selfUpdate, nowMs, runner.updateTurns);
   // An engine update shares the runner's one relay slot with an engine's install. Only a run in
   // `update` mode is Engines' news; an install's belongs to the row that started it.
   const relay = runner.install;
@@ -1519,6 +1529,42 @@ export function RunnerDetailPage() {
         {runner.hostname && <span>{runner.hostname}</span>}
       </div>
 
+      {/* The Update card (board 4): a release this runner is behind, in the phase it reports. */}
+      {updateCard && (
+        <section className={`rd-update-card ${updateCard.tone}`} aria-label={updateCard.title} data-phase={updateCard.phase}>
+          <div className="rd-update-head">
+            <div className="rd-update-title">{updateCard.title}</div>
+            <div className="rd-update-tag">{updateCard.tag}</div>
+          </div>
+          <div className="rd-update-body">{updateCard.body}</div>
+          {updateCard.progress && (
+            <>
+              <div className="rd-update-progress-label">{updateCard.progress.label}</div>
+              <div
+                className="rd-update-progress"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(updateCard.progress.done * 100)}
+              >
+                <span style={{ width: `${updateCard.progress.done * 100}%` }} />
+              </div>
+            </>
+          )}
+          {updateCard.turns && updateCard.turns.length > 0 && (
+            <ul className="rd-update-turns">
+              {updateCard.turns.map((turn) => (
+                <li key={turn.id}>
+                  <Link to={`/sessions/${encodeId(turn.id)}`}>{turn.title}</Link>
+                  {turn.running && <span>{turn.running}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {/* Later ▾ and Update Now… go here (their own tasks). */}
+        </section>
+      )}
+
       {/* Only when something needs a person, above both columns: each card says what happened,
           why it matters, and offers the one thing that fixes it. */}
       {attention.length > 0 && (
@@ -1676,14 +1722,13 @@ export function RunnerDetailPage() {
               <div className="rd-kv">
                 <span className="rd-kv-label">{RUNNER_MAX_CONCURRENT}</span>
                 {/* Saved on blur from around the field, so it runs after the field has settled what
-                    was typed (1–64, whole) — and on Enter, which the field settles first as well. */}
+                    was typed (1 or more, whole) — and on Enter, which the field settles first as well. */}
                 <span onBlur={commitMaxConcurrent}>
                   <NumberInput
                     className="rd-max-concurrent"
                     aria-label={RUNNER_MAX_CONCURRENT}
                     size="small"
                     min={1}
-                    max={64}
                     precision={0}
                     value={maxDraft ?? runner.maxConcurrent ?? null}
                     onValueChange={(v) => {

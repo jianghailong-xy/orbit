@@ -72,10 +72,11 @@ final class SessionMessageWiringTests: XCTestCase {
                        "the card is no longer the first thing a user turn is asked about")
         // The branch itself: the card, drawn from the turn's own words and note, and then on to the
         // readings every other turn has always had.
-        XCTAssertEqual(Array(user[(first + 1)...].prefix(5)), [
+        XCTAssertEqual(Array(user[(first + 1)...].prefix(6)), [
+            "let note = SessionMessageCard.splitNote(b.note)",
             "SessionMessageCardView(card: card, text: b.text, ts: b.ts,",
-            "undelivered: undelivered,",
-            "attached: b.attached, onCancelQueued: cancel,",
+            "undelivered: undelivered, narrower: note.narrower,",
+            "attached: note.attached, onCancelQueued: cancel,",
             "revealed: revealedItemID == b.id)",
             "} else if let card = b.itemCard {",
         ], "a turn with a sender is not drawn as the session-message card")
@@ -124,8 +125,12 @@ final class SessionMessageWiringTests: XCTestCase {
         let card = statements(try source(Self.cardPath))
         XCTAssertTrue(card.contains("if let url = SessionMessageCard.sessionLink(card) {"),
                       "the sender's title is no longer a link to the sending session")
-        XCTAssertTrue(card.contains("openURL(url)"), "the link opens nowhere")
-        XCTAssertTrue(card.contains("Text(SessionMessageCard.title(card))"))
+        // The title and "Its task" go through the app's own door, told by the console's
+        // `opensPagesOverConsole` that it is a phone's conversation, and fall back to the
+        // environment action elsewhere.
+        XCTAssertTrue(card.contains("private func openLink(_ url: URL) {"), "the link opens nowhere")
+        XCTAssertTrue(card.contains("if app?.openOrbitLink(url, overConsole: overConsole, overPage: opensTasksOverPage) != true { openURL(url) }"))
+        XCTAssertTrue(card.contains { $0.contains("Text(SessionMessageCard.title(card))") })
         XCTAssertFalse(card.contains { $0.hasPrefix("#if os(") }, "the card differs by platform")
     }
 

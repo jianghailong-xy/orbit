@@ -8,7 +8,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -79,7 +81,9 @@ fun WaitingOnYouScreen(store: OwnerRequestStore, runners: List<DirectoryRunner>,
     val state by store.state.collectAsState()
     val snoozes by OwnerRequestSnoozes.of(LocalContext.current).state.collectAsState()
     var tab by rememberSaveable { mutableStateOf(WaitingTab.OPEN) }
-    val expanded = remember { mutableStateMapOf<String, Boolean>() }
+    // Which cards are open outlives a page pushed over the inbox — the task a card holds up — so Back returns to the card it was
+    // pressed on (owner, 2026-11-12; iOS `OwnerRequestInboxView.expanded` stays alive under the pushed page).
+    val expanded = rememberSaveable(saver = openCards) { mutableStateMapOf<String, Boolean>() }
     LaunchedEffect(focused) { focused?.let { tab = WaitingTab.OPEN; expanded[OwnerRequests.key(it)] = true } }
     LaunchedEffect(tab, revision) { store.load(*setOf(OwnerRequestStore.OPEN, tab.filter).toTypedArray()) }
     LaunchedEffect(revision) { store.loadQuestions(items = true) }
@@ -130,6 +134,11 @@ fun WaitingOnYouScreen(store: OwnerRequestStore, runners: List<DirectoryRunner>,
         }
     }
 }
+
+/** The open cards as the keys of the requests they belong to: all a page needs to open them again. */
+private val openCards = listSaver<SnapshotStateMap<String, Boolean>, String>(
+    save = { cards -> cards.filterValues { it }.keys.toList() },
+    restore = { keys -> mutableStateMapOf<String, Boolean>().apply { keys.forEach { put(it, true) } } })
 
 private fun icon(kind: String) = when (kind) {
     OwnerRequests.SECRET -> R.drawable.ic_key

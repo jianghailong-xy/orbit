@@ -81,9 +81,9 @@ async function settle(): Promise<void> {
   }
 }
 
-async function mount(): Promise<void> {
+async function mount(over: Record<string, unknown> = {}, onDelete: () => void = () => {}): Promise<void> {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
-  client.setQueryData(['task', TASK], DETAIL);
+  client.setQueryData(['task', TASK], { ...DETAIL, ...over });
   container = document.createElement('div');
   document.body.appendChild(container);
   const next = createRoot(container);
@@ -92,7 +92,7 @@ async function mount(): Promise<void> {
     next.render(
       <MemoryRouter>
         <QueryClientProvider client={client}>
-          <TaskDetailPanel taskId={TASK} onOpenTask={() => {}} onClose={() => {}} onDelete={() => {}} deleting={false} />
+          <TaskDetailPanel taskId={TASK} onOpenTask={() => {}} onClose={() => {}} onDelete={onDelete} deleting={false} />
         </QueryClientProvider>
       </MemoryRouter>,
     );
@@ -171,8 +171,40 @@ describe('the task panel’s ⋯', { timeout: 60_000 }, () => {
     await mount();
     expect(getShareLink).not.toHaveBeenCalled();
     const items = await openMenu();
-    expect(items.map((el) => el.textContent)).toEqual(['Copy link', 'Share…', 'Copy as Markdown']);
+    // A DONE task: the presses its header no longer draws come first, Delete last.
+    expect(items.map((el) => el.textContent)).toEqual([
+      'Reopen task', 'Run again', 'Follow task', 'Copy link', 'Share…', 'Copy as Markdown', 'Delete task…',
+    ]);
     expect(getShareLink).toHaveBeenCalledWith('TASK', TASK);
+  });
+
+  for (const status of ['DONE', 'CANCELLED', 'FAILED']) {
+    it(`offers Reopen task on a ${status} task`, async () => {
+      vi.mocked(getShareLink).mockResolvedValue({ link: null, counts: { comments: 0, files: 0, transcripts: 1 } });
+      await mount({ status });
+      expect(item(await openMenu(), 'Reopen task')).toBeTruthy();
+    });
+  }
+
+  it('offers no Reopen on an open task, and Add a prerequisite on a task with no relations', async () => {
+    vi.mocked(getShareLink).mockResolvedValue({ link: null, counts: { comments: 0, files: 0, transcripts: 1 } });
+    await mount({ status: 'OPEN', dependsOn: [], dependedOnBy: [] });
+    const items = await openMenu();
+    expect(item(items, 'Reopen task')).toBeUndefined();
+    expect(item(items, 'Run again')).toBeUndefined();
+    expect(item(items, 'Add a prerequisite')).toBeTruthy();
+  });
+
+  it('asks before Delete task… deletes, and deletes on the answer', async () => {
+    vi.mocked(getShareLink).mockResolvedValue({ link: null, counts: { comments: 0, files: 0, transcripts: 1 } });
+    const onDelete = vi.fn();
+    await mount({}, onDelete);
+    await click(item(await openMenu(), 'Delete task…'), 'Delete task…');
+    expect(onDelete).not.toHaveBeenCalled();
+    const confirm = [...document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')]
+      .find((b) => b.textContent === 'Delete');
+    await click(confirm, 'the dialog’s Delete');
+    expect(onDelete).toHaveBeenCalledTimes(1);
   });
 
   it('Copy link copies the signed-in address, not a public one', async () => {

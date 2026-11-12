@@ -81,7 +81,7 @@ export async function returnWaitingSessionsToOpen(
   const ids = scope.sessionIds ? orderedIds([...scope.sessionIds]) : null;
   if (ids && ids.length === 0) return [];
   return withTransactionRetry(prisma, async (tx) => {
-    // Driven from the questions, which are a handful of rows read through partial indexes (0532's on
+    // Driven from the questions, which are a handful of rows read through partial indexes (0592's on
     // owner_request, 0386's on PENDING moves), and only then joined to the sessions they light: a filed session is most of
     // the table, and almost none of them has anything waiting.
     const waiting = await tx.$queryRaw<ReturnedSession[]>(Prisma.sql`

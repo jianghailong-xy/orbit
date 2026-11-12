@@ -39,7 +39,7 @@ data class SessionLine(val text: String, val tone: Tone) {
         WATCHING,
         /** Its report is with its reviewer: drawn, not counted, never amber. */
         REVIEW,
-        /** Amber words for a fact that asks nothing: a landing the server judged timed out. */
+        /** Amber words for a fact that asks nothing: a landing the server judged timed out, a runner updating. */
         WARNING,
     }
 
@@ -65,7 +65,13 @@ data class SessionLine(val text: String, val tone: Tone) {
                 s.lastAssistantText?.takeIf { it.isNotEmpty() }?.let { return SessionLine(plainPreview(it), Tone.PREVIEW) }
                 return SessionLine(SessionLineCopy.running, Tone.RUNNING)
             }
-            if (live && s.effectiveRunState == RunState.QUEUED) return SessionLine(ClaudeRegion.heldWords(s.regionHeld, machine) ?: SessionLineCopy.queued, Tone.QUEUED)
+            if (live && s.effectiveRunState == RunState.QUEUED) {
+                val held = ClaudeRegion.heldWords(s.regionHeld, machine)
+                // A runner draining for its update is the one queue word in the warning colour (board 2 ①): it can last hours, and
+                // only the owner can shorten it.
+                if (held == null && RunnerUpdating.isRunnerUpdating(s.queuedGate)) return SessionLine(RunnerUpdating.RUNNER_UPDATING_TITLE, Tone.WARNING)
+                return SessionLine(held ?: SessionLineCopy.queued, Tone.QUEUED)
+            }
             // Parked while a sub-agent or workflow it started works on: the workspace itself is still working.
             if (live) s.runningSubagentCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.ongoing(SessionLineCopy.subagentRunning(it)), Tone.RUNNING) }
             // Parked on a live watch that will resume it, in the Watching strip's own line.
@@ -156,7 +162,7 @@ internal object SessionHeader {
         if (s.pendingApprovals > 0) return waitingWord(s)
         if (s.confirmationUnderReview != null) return OwnerReview.underReview
         return when (s.effectiveRunState) {
-            RunState.QUEUED -> SessionLineCopy.queued
+            RunState.QUEUED -> if (RunnerUpdating.isRunnerUpdating(s.queuedGate)) RunnerUpdating.RUNNER_UPDATING_TITLE else SessionLineCopy.queued
             RunState.RUNNING -> SessionLineCopy.stateRunning
             RunState.AWAITING_INPUT -> when {
                 // A turn the runtime started for itself keeps the run parked for its whole duration.

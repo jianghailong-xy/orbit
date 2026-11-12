@@ -103,8 +103,8 @@ class ProjectDoneTest {
         assertEquals("a card nobody asked for answers no request: nothing is left out", 2, ProjectDone.openItemsCount(items(needsYou = listOf(row), start = start)))
         assertEquals(0, ProjectDone.openItemsCount(null))
         assertEquals(2, ProjectDone.runningCount(closeout(counts = """{"criteria":3,"met":3,"landed":1,"onMain":1,"byReason":{"IN_FLIGHT":2}}""")))
-        assertEquals(ProjectDone.recordAsDone, ProjectDone.recordLabel(ProjectDone.counts(closeout())))
-        assertEquals(ProjectDone.recordAsDoneAnyway, ProjectDone.recordLabel(j("""{"criteria":2,"met":1}""")))
+        assertEquals(ProjectDone.recordAsDone, ProjectDone.recordLabel(ProjectDone.counts(closeout()), asked = true, doneCheck = null))
+        assertEquals(ProjectDone.recordAsDoneAnyway, ProjectDone.recordLabel(j("""{"criteria":2,"met":1}"""), asked = true, doneCheck = null))
         assertEquals("Orbit checked: 1 of 2 criteria are met by their work · nothing running · no open items",
             ProjectDone.orbitCheckedLine(j("""{"criteria":2,"met":1}"""), null, 0, 0))
     }

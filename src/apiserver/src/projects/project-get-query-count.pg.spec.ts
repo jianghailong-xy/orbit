@@ -64,7 +64,7 @@ const sha = (nibble: string) => nibble.repeat(40);
 /**
  * What one project detail read costs, whatever is in the project.
  *
- * Thirty statements, and every one of them is per RELATION rather than per row:
+ * Thirty-two statements, and every one of them is per RELATION rather than per row:
  *
  *   4  the project document — the row, its coordinator members, its runtime, its criteria;
  *   1  the per-status task tally, read from `project_task_status_count` by project id. It replaced
@@ -98,7 +98,7 @@ const sha = (nibble: string) => nibble.repeat(40);
  *      serving tasks of the large fixture cost them what the one task of the small one does;
  *   1  the newest work session of each serving task, one more level of that same read, added
  *      2026-10-01 with each criterion's landing reason (`criterion-landing-reason.ts`): whether the
- *      work ever took a worktree branch is what tells CODELESS from NO_RECEIPT, and it is §1.1
+ *      work ever took a worktree branch is what tells NO_BRANCH from NO_RECEIPT, and it is §1.1
  *      `isCodeTask`'s half the landing fold deliberately does not read. A level, like the two
  *      above it, so it is one statement at either size;
  *   3  §1.1's repository condition at that same lane (revision 29, §10.5 O-L7), added 2026-10-29:
@@ -125,6 +125,12 @@ const sha = (nibble: string) => nibble.repeat(40);
  *      (`readMainBranchMemory`) — its binding, its coordination workspace and the owner's chosen
  *      upstreams joined in it — issued beside the reads above, and bounded by the owner's
  *      repositories rather than by anything the project holds.
+ *   1  the confirmations of the CONFIRMATION criteria (migration 0545), one more level of the
+ *      satisfaction read — the criterion's `confirmations` relation, a level like the serving work
+ *      beside it, so one statement at either size;
+ *   1  the criterion move record, added 2026-11-12 with `criteriaMovedOut` and each criterion's
+ *      `movedFrom` (board 02 G/I): one raw statement over the move activity rows, found by 0555's
+ *      two partial indexes and joined to the criterion and both projects (`criterion-move-record.ts`).
  *
  * Measured, not asserted from the code: the derivations are each written as ONE `findMany` (two,
  * for the lane below), and Prisma resolves a nested `select` with one statement per relation
@@ -160,7 +166,7 @@ const sha = (nibble: string) => nibble.repeat(40);
  * and fourth would BOTH be five statements at the large fixture and one at the small one if they
  * were written per criterion, and the equality assertion is what sees the difference.
  */
-const STATEMENTS_PER_READ = 30;
+const STATEMENTS_PER_READ = 32;
 
 test('the project detail read costs the same number of statements at either size', {
   skip, concurrency: 1, timeout: 300_000,
