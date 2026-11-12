@@ -38,12 +38,13 @@ final class RunnerUpdateCardTests: XCTestCase {
     }
 
     /// A runner on 0.1.253, as GET /runners answers it, reporting `selfUpdate`.
-    private func runner(_ selfUpdate: [String: Any]?) throws -> Runner {
+    private func runner(_ selfUpdate: [String: Any]?, updateTurns: [[String: Any]]? = nil) throws -> Runner {
         var json: [String: Any] = [
             "id": "0199a0c4-7a1e-7c3e-9d4f-2a6b8c0d1e31", "name": "studio-mac", "version": "0.1.253",
             "online": true, "runsAsRoot": false,
         ]
         if let selfUpdate { json["selfUpdate"] = selfUpdate }
+        if let updateTurns { json["updateTurns"] = updateTurns }
         return try JSONDecoder().decode(Runner.self, from: JSONSerialization.data(withJSONObject: json))
     }
 
@@ -64,13 +65,24 @@ final class RunnerUpdateCardTests: XCTestCase {
         let r = try runner(try report("draining") {
             $0["turnsInFlight"] = 2
             $0["turnsAtDrain"] = 8
-        })
+        }, updateTurns: [
+            ["id": "34w8a1Backfill00000001", "title": "Backfill missing shard rows", "startedAt": "2023-11-14T21:59:20Z"],
+            ["id": "34w8a1Metrics000000002", "title": "Why are 11-08 metrics zero", "startedAt": "2023-11-14T23:04:20Z"],
+            ["id": "34w8a1Untitled00000003", "title": NSNull(), "startedAt": NSNull()],
+        ])
         // 38 min after the drain began (23:13:20Z).
         let card = try XCTUnwrap(RunnerPageFormat.updateCard(r, now: try date("2023-11-14T23:51:20Z"), timeZone: Self.utc))
         XCTAssertEqual(card, .init(phase: "draining", warn: true, title: "Updating to 0.1.254", tag: "Not taking new work",
                                    body: "0.1.254 has been waiting since 22:13. After an hour it stopped taking new "
                                        + "work so the turns in flight can finish; then it installs and restarts.",
-                                   progressLabel: "Waiting for 2 of 8 turns · 38 min", progress: 0.75))
+                                   progressLabel: "Waiting for 2 of 8 turns · 38 min", progress: 0.75,
+                                   turns: [
+                                       .init(id: "34w8a1Backfill00000001", title: "Backfill missing shard rows",
+                                             running: "running 1 h 52 min"),
+                                       .init(id: "34w8a1Metrics000000002", title: "Why are 11-08 metrics zero",
+                                             running: "running 47 min"),
+                                       .init(id: "34w8a1Untitled00000003", title: "Untitled session", running: nil),
+                                   ]))
         XCTAssertEqual(RunnerPageFormat.versionValue(r, latest: "0.1.254"), "0.1.253 · updating to 0.1.254")
     }
 
@@ -83,6 +95,7 @@ final class RunnerUpdateCardTests: XCTestCase {
         XCTAssertEqual(card.body, RunnerPageCopy.RUNNER_UPDATE_DRAINING_BODY_NO_SINCE)
         XCTAssertEqual(card.progressLabel, "Waiting for 1 turn · 1 h 52 min")
         XCTAssertEqual(card.progress, 0)
+        XCTAssertEqual(card.turns, [], "a server too old to send updateTurns: the card, with no rows")
     }
 
     func testRestartingIsAmberWithNoBar() throws {
@@ -118,5 +131,7 @@ final class RunnerUpdateCardTests: XCTestCase {
                               encoding: .utf8)
         XCTAssertTrue(view.contains("if let card = RunnerPageFormat.updateCard(runner, now: now) {\n                updateSection(card)\n            }"),
                       "the runner page does not draw the Update card")
+        XCTAssertTrue(view.contains("ForEach(card.turns, id: \\.id) { turn in\n                Button { openSession(turn.id) } label: {"),
+                      "the Update card does not list the turns, each opening its session")
     }
 }

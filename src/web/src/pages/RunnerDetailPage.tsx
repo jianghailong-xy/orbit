@@ -26,7 +26,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AgentProvider, ENGINE_CLI_NAMES, type LoginEngine, type RunnerRepoHealth } from '@orbit/shared';
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   api,
   askClaudeHistory,
@@ -1338,7 +1338,7 @@ export function RunnerDetailPage() {
   })();
   const canUpdateNow = runnerCanUpdateNow(runner, nowMs);
   // Where a release it is behind stands, from a runner that says (null for one that doesn't).
-  const updateCard = runnerUpdateCard(runner.selfUpdate, nowMs);
+  const updateCard = runnerUpdateCard(runner.selfUpdate, nowMs, runner.updateTurns);
   // An engine update shares the runner's one relay slot with an engine's install. Only a run in
   // `update` mode is Engines' news; an install's belongs to the row that started it.
   const relay = runner.install;
@@ -1550,6 +1550,16 @@ export function RunnerDetailPage() {
                 <span style={{ width: `${updateCard.progress.done * 100}%` }} />
               </div>
             </>
+          )}
+          {updateCard.turns && updateCard.turns.length > 0 && (
+            <ul className="rd-update-turns">
+              {updateCard.turns.map((turn) => (
+                <li key={turn.id}>
+                  <Link to={`/sessions/${encodeId(turn.id)}`}>{turn.title}</Link>
+                  {turn.running && <span>{turn.running}</span>}
+                </li>
+              ))}
+            </ul>
           )}
           {/* Later ▾ and Update Now… go here (their own tasks). */}
         </section>

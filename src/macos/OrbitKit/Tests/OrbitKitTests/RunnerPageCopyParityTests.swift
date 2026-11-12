@@ -207,6 +207,7 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("RUNNER_UPDATE_TURN", RunnerPageCopy.RUNNER_UPDATE_TURN),
         ("RUNNER_UPDATE_TURNS", RunnerPageCopy.RUNNER_UPDATE_TURNS),
         ("RUNNER_UPDATE_RESTARTING_BODY", RunnerPageCopy.RUNNER_UPDATE_RESTARTING_BODY),
+        ("RUNNER_UPDATE_UNTITLED_TURN", RunnerPageCopy.RUNNER_UPDATE_UNTITLED_TURN),
     ]
 
     /// A rendered line with each number sentinel put back as the web's interpolation of it.
@@ -301,6 +302,7 @@ final class RunnerPageCopyParityTests: XCTestCase {
                                                                                              minutes: 90_002),
                                                [90_001: "hours", 90_002: "minutes"])),
         ("runnerUpdateWaitedHours", put(RunnerPageCopy.runnerUpdateWaitedHours(hours: 90_001), [90_001: "hours"])),
+        ("runnerUpdateTurnRunning", RunnerPageCopy.runnerUpdateTurnRunning(duration: "${duration}")),
         ("runnerUpdateRestartingTitle", RunnerPageCopy.runnerUpdateRestartingTitle(version: "${version}")),
         ("runnerUpdatePostponedTitle", RunnerPageCopy.runnerUpdatePostponedTitle(version: "${version}",
                                                                                  until: "${until}")),

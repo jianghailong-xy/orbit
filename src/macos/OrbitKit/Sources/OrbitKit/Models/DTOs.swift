@@ -266,6 +266,9 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// Where this runner's updates of itself stand, as it last reported. Nil from an older server or
     /// a runner too old to report it, which the Runners pages judge by `runsAsRoot` as they always have.
     public var selfUpdate: RunnerSelfUpdate? = nil
+    /// Only on a runner draining for its self-update: the reader's turns the drain waits for, longest
+    /// running first (shared `RunnerUpdateTurn`), which the runner page's Update card lists.
+    public var updateTurns: [RunnerUpdateTurn]? = nil
     /// What the runner declared it can do on its last poll — `codex-account-move/v1` and
     /// `claude-account-move/v1` say it carries a session's conversation to another of its accounts;
     /// `antigravity-account-login/v1`, that it signs in Antigravity accounts of their own, which is all

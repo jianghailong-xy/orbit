@@ -493,6 +493,14 @@ public struct RunnerSelfUpdate: Codable, Equatable, Sendable {
     public var turnsAtDrain: Int? = nil
 }
 
+/// One of the reader's turns a draining runner waits for (shared `RunnerUpdateTurn`): its session,
+/// title, and when the current run was claimed.
+public struct RunnerUpdateTurn: Codable, Equatable, Sendable {
+    public let id: String
+    public let title: String?
+    public let startedAt: String?
+}
+
 /// POST /runners/:id/self-update (Update Runner Now) acknowledges when the check was requested.
 public struct RunnerSelfUpdateRequest: Codable, Equatable, Sendable {
     public let requestedAt: String?
