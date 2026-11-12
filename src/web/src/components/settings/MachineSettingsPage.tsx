@@ -74,6 +74,10 @@ import {
   RUNNER_MAX_CONCURRENT,
   RUNNER_NEEDS_ATTENTION,
   RUNNER_OFFLINE,
+  RUNNER_UPDATE_NOW,
+  RUNNER_UPDATE_NOW_CONFIRM,
+  RUNNER_UPDATE_NOW_CONFIRM_BODY,
+  runnerUpdateNowConfirmTitle,
   RUNNER_ONLINE,
   RUNNER_REPAIR,
   RUNNER_ROOT_NO_BYPASS,
@@ -85,6 +89,7 @@ import {
   RUNNER_UPDATE_RUNNER_NOW,
   RUNNER_UPDATE_RUNNER_REQUESTED,
   RUNNER_VERSION_INSTALLS_WHEN_IDLE,
+  runnerVersionInstallsWhenQuiet,
   RUNNER_VERSION_LATEST,
   RUNNER_VERSION_NOT_ROLLED_OUT,
   attentionQuotaResets,
@@ -96,7 +101,10 @@ import {
   runnerVersionTag,
   runnerWorkspaceRunning,
 } from '../../lib/runnerCopy';
-import { runnerUpdateCard } from '../../lib/runnerUpdateCard';
+import { runnerQuietMinutes, runnerUpdateCard } from '../../lib/runnerUpdateCard';
+import { RunnerUpdateLaterMenu } from '../RunnerUpdateLater';
+import { RunnerUpdateNowButton } from '../RunnerUpdateNow';
+import { runnerTakesUpdateNow } from '../../lib/runnerUpdateNow';
 import { useClaudeRegionCheckAgain } from '../../lib/claudeRegion';
 import { CLAUDE_REGION_CHECK_AGAIN } from '../../lib/claudeRegionCopy';
 import { ago } from '../../lib/runnerEngines';
@@ -395,7 +403,11 @@ export function MachineSettingsPage() {
     const state = runner.selfUpdate?.state;
     if (state === 'heldByRollout') return { text: RUNNER_VERSION_NOT_ROLLED_OUT, warn: false };
     if (state === 'enabled' || state === 'waitingForIdle') {
-      return { text: RUNNER_VERSION_INSTALLS_WHEN_IDLE, warn: false };
+      const quiet = runner.selfUpdate?.quietWindowSeconds;
+      return {
+        text: quiet ? runnerVersionInstallsWhenQuiet(runnerQuietMinutes(quiet)) : RUNNER_VERSION_INSTALLS_WHEN_IDLE,
+        warn: false,
+      };
     }
     if (state) return null;
     return runner.runsAsRoot ? { text: RUNNER_VERSION_INSTALLS_WHEN_IDLE, warn: false } : null;
@@ -411,7 +423,10 @@ export function MachineSettingsPage() {
     const parts = [report.lastUpdatedAt ? fmtTime(report.lastUpdatedAt) : null, versions];
     return parts.filter(Boolean).join(RUNNER_LINE_SEPARATOR) || '—';
   })();
-  const canUpdateNow = runnerCanUpdateNow(runner, nowMs);
+  // The Update card's Update Now… (interrupting the turns in flight) replaces About's Update Runner Now,
+  // which only asks for an earlier check, on a runner that takes it.
+  const takesUpdateNow = runnerTakesUpdateNow(runner);
+  const canUpdateNow = runnerCanUpdateNow(runner, nowMs) && !takesUpdateNow;
   // Where a release it is behind stands, from a runner that says (null for one that doesn't).
   const updateCard = runnerUpdateCard(runner.selfUpdate, nowMs, runner.updateTurns);
   // An engine update shares the runner's one relay slot with an engine's install. Only a run in
@@ -661,7 +676,32 @@ export function MachineSettingsPage() {
               ))}
             </ul>
           )}
-          {/* Later ▾ and Update Now… go here (their own tasks). */}
+          {/* Later ▾ while draining (board 3 ⑦), Change ▾ once postponed; Update Now… (board 3 ⑧) in every
+              phase with a release waiting, on a runner that takes it. A runner too old for it keeps the
+              postponed card's Update Now…, which asks for an earlier check. */}
+          {(updateCard.phase === 'draining' || updateCard.phase === 'postponed' || (updateCard.phase === 'available' && takesUpdateNow)) && (
+            <div className="rd-update-actions">
+              {updateCard.phase !== 'available' && (
+                <RunnerUpdateLaterMenu runnerId={runner.id} change={updateCard.phase === 'postponed'} />
+              )}
+              {takesUpdateNow && <RunnerUpdateNowButton runner={runner} machine={shownName} />}
+              {updateCard.phase === 'postponed' && !takesUpdateNow && (
+                <Button
+                  loading={runnerUpdate.isPending}
+                  onClick={() =>
+                    void confirm({
+                      title: runnerUpdateNowConfirmTitle(runner.selfUpdate?.targetVersion ?? ''),
+                      description: RUNNER_UPDATE_NOW_CONFIRM_BODY,
+                      confirmText: RUNNER_UPDATE_NOW_CONFIRM,
+                      onConfirm: () => runnerUpdate.mutateAsync(),
+                    })
+                  }
+                >
+                  {RUNNER_UPDATE_NOW}
+                </Button>
+              )}
+            </div>
+          )}
         </section>
       )}
 

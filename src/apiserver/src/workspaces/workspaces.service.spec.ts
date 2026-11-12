@@ -4,6 +4,7 @@ import { AgentProvider } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { SessionsService } from '../sessions/sessions.service';
 import { WorkspacesService } from './workspaces.service';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 
 /** Records what reached the database; `$queryRaw` stands in for the derived-provider lookup. */
 function prismaStub(writes: Record<string, unknown>[]) {
@@ -320,8 +321,8 @@ test('GET /workspaces/:id says when the workspace was last used and how many con
       },
     },
     // The usage read is the one that names last_turn_at; the provider read answers nothing here.
-    $queryRaw: async (query: { strings?: readonly string[] }) =>
-      (query.strings ?? []).join('').includes('last_turn_at')
+    $queryRaw: async (...args: unknown[]) =>
+      renderRawQuery(args).text.includes('last_turn_at')
         ? [{ workspace_id: 'workspace-1', last_active_at: lastActive }]
         : [],
   } as unknown as PrismaService;
@@ -351,8 +352,8 @@ test('the workspace list carries when each was last used, and never counts sessi
         { id: 'workspace-2', name: 'never-used', runner: null },
       ],
     },
-    $queryRaw: async (query: { strings?: readonly string[] }) =>
-      (query.strings ?? []).join('').includes('last_turn_at')
+    $queryRaw: async (...args: unknown[]) =>
+      renderRawQuery(args).text.includes('last_turn_at')
         ? [{ workspace_id: 'workspace-1', last_active_at: lastActive }]
         : [],
   } as unknown as PrismaService;

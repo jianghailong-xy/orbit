@@ -258,6 +258,7 @@ async function mount(input: RunnerAttentionInput, refuse?: string) {
     if (method !== 'GET') {
       sent.push({ method, path });
       if (refuse && path.endsWith('/self-update')) throw new Error(refuse);
+      if (path.endsWith('/self-update/postpone')) return { until: (options as { body?: { until: string } }).body!.until };
       return path.endsWith('/self-update') ? { requestedAt: new Date(NOW).toISOString() } : {};
     }
     if (path === '/runners') return [runner];
@@ -405,6 +406,12 @@ describe('each selfUpdate state on a runner’s page', () => {
     expect(await aboutActions()).toEqual(['Update Runner Now']);
   });
 
+  it('enabled with a quiet window and no phase: About words the wait from the window', async () => {
+    await mount(reporting('selfUpdate enabled and behind', { state: 'enabled', quietWindowSeconds: 900 }));
+    expect(cards()).toEqual([]);
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when the runner has been idle for 15 min']);
+  });
+
   it('enabled: no card, though it runs as a regular user — it installs the release itself', async () => {
     await mount(inputOf('selfUpdate enabled and behind'));
     expect(cards()).toEqual([]);
@@ -529,6 +536,22 @@ describe('the Update card, one per phase the runner reports', () => {
     expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when no turn is running']);
   });
 
+  it('available from a runner that reports its quiet window: it installs once idle that long', async () => {
+    await mount(phase({ phase: 'available', availableSince: at(20), turnsInFlight: 3, quietWindowSeconds: 600 }));
+    expect(updateCard()?.body).toBe(
+      'It installs once the runner has been idle for 10 minutes. If it stays busy for an hour, it stops taking new work so its turns can finish.',
+    );
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when the runner has been idle for 10 min']);
+  });
+
+  it('the quiet window is worded from the value the runner sends, not a fixed 10', async () => {
+    await mount(phase({ phase: 'available', availableSince: at(20), quietWindowSeconds: 60 }));
+    expect(updateCard()?.body).toBe(
+      'It installs once the runner has been idle for 1 minute. If it stays busy for an hour, it stops taking new work so its turns can finish.',
+    );
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when the runner has been idle for 1 min']);
+  });
+
   it('draining: the turns it waits for, how long, a bar, and About says updating to', async () => {
     const since = at(98);
     await mount(
@@ -594,6 +617,46 @@ describe('the Update card, one per phase the runner reports', () => {
       done: null,
     });
     expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when no turn is running']);
+  });
+
+  // Later ▾ (board 3 ⑦) while draining; Change ▾ and Update Now… once postponed; nothing in the other phases.
+  const actions = () => $$('.rd-update-card .rd-update-actions button').map(text);
+  it('the actions: Later while draining, Change and Update Now… once postponed, none otherwise', async () => {
+    await mount(phase({ phase: 'draining', drainingSince: at(38), turnsInFlight: 2 }));
+    expect(actions()).toEqual(['Later']);
+    act(() => root?.unmount());
+    await mount(phase({ phase: 'postponed', postponedUntil: new Date(NOW + 3_600_000).toISOString() }));
+    expect(actions()).toEqual(['Change', 'Update Now…']);
+    act(() => root?.unmount());
+    await mount(phase({ phase: 'available', availableSince: at(20), turnsInFlight: 3 }));
+    expect(actions()).toEqual([]);
+    act(() => root?.unmount());
+    await mount(phase({ state: 'enabled', phase: 'restarting' }));
+    expect(actions()).toEqual([]);
+  });
+
+  it('Later → Postpone until tomorrow asks the server to postpone; the toast says until when', async () => {
+    const { sent } = await mount(phase({ phase: 'draining', drainingSince: at(38), turnsInFlight: 2 }));
+    await click($$('.rd-update-card .rd-update-actions button')[0]);
+    const rows = $$('[role="menu"] [role="menuitem"]');
+    expect(rows.map(text)).toEqual([
+      `Postpone 1 houruntil ${clock(new Date(NOW + 3_600_000).toISOString())}`,
+      'Postpone until tonight02:00',
+      'Postpone until tomorrow09:00',
+    ]);
+    await click(rows[2]);
+    expect(sent).toEqual([{ method: 'POST', path: `/runners/${RUNNER_ID}/self-update/postpone` }]);
+    expect(document.body.textContent).toContain('Update postponed until 09:00 — the runner takes work again.');
+  });
+
+  it('postponed → Update Now… confirms, then asks for Update Runner Now, which ends the postponement', async () => {
+    const { sent } = await mount(phase({ phase: 'postponed', postponedUntil: new Date(NOW + 3_600_000).toISOString() }));
+    await click($$('.rd-update-card .rd-update-actions button')[1]);
+    expect(document.body.textContent).toContain('Update to 0.1.197 now?');
+    expect(sent).toEqual([]);
+    const confirmButton = $$('button').find((b) => text(b) === 'Update Now')!;
+    await click(confirmButton);
+    expect(sent).toEqual([{ method: 'POST', path: `/runners/${RUNNER_ID}/self-update` }]);
   });
 
   it('a runner that sends no phase: no card, and today’s wording', async () => {

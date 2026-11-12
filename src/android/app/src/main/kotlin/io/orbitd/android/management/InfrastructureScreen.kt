@@ -143,6 +143,7 @@ internal fun InfrastructurePage(api: ManagementApi, revision: Long, open: (Orbit
                     when (val kind = item.kind) {
                         is Infrastructure.Kind.Offline -> runner(kind.runnerId)
                         is Infrastructure.Kind.NoCliSignedIn -> runner(kind.runnerId)
+                        is Infrastructure.Kind.Updating -> runner(kind.runnerId)
                         is Infrastructure.Kind.PoolUnavailable -> page(if (kind.own) "own:${kind.poolId}" else "shared:${kind.poolId}")
                     }
                 }
@@ -189,7 +190,7 @@ private fun NeedsYouSection(items: List<Infrastructure.Attention>, open: (Infras
                     Text(item.detail, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                 }
                 when (item.kind) {
-                    is Infrastructure.Kind.Offline, is Infrastructure.Kind.NoCliSignedIn ->
+                    is Infrastructure.Kind.Offline, is Infrastructure.Kind.NoCliSignedIn, is Infrastructure.Kind.Updating ->
                         OutlinedButton(onClick = { open(item) }) { Text(Infrastructure.DETAILS) }
                     is Infrastructure.Kind.PoolUnavailable -> OutlinedButton(onClick = { open(item) }) { Text(Infrastructure.MANAGE) }
                 }

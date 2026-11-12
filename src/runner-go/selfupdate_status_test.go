@@ -176,7 +176,7 @@ func TestSelfUpdateStatusWaitingForIdle(t *testing.T) {
 	registerWith(t, cp.srv.URL)
 	p := newSessionPool(2)
 	s := registerPoolSession(t, p, "a", true)
-	check := updateWhenNoTurnInFlight(availableSelfUpdate, p, noOperations, time.Minute, selfUpdateDeferralLimit)
+	check := updateWhenNoTurnInFlight(availableSelfUpdate, p, noOperations, time.Minute, selfUpdateDeferralLimit, 0)
 
 	if remote, ok := check(context.Background(), cp.srv.URL); ok || remote != "" {
 		t.Fatalf("check with a turn in flight = %q, %v; want it deferred", remote, ok)
@@ -344,6 +344,8 @@ func TestHeartbeatSerializesSelfUpdate(t *testing.T) {
 		"lastUpdatedAt":   "2026-10-06T06:00:00Z",
 		"lastUpdatedFrom": rolloutTestPrevious,
 		"lastUpdatedTo":   rolloutTestLatest,
+		// The quiet window rides every report: the runner page words "installs when idle" from it.
+		"quietWindowSeconds": float64(600),
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("selfUpdate = %v;\nwant %v", got, want)
@@ -401,7 +403,7 @@ func TestWaitForRunLoopStopChecksWhenAsked(t *testing.T) {
 		gated := updateWhenNoTurnInFlight(func(context.Context, string) (string, bool) {
 			noteSelfUpdate(selfUpdateStateEnabled, "", "/home/u/.orbit/bin")
 			return rolloutTestLatest, true
-		}, p, noOperations, time.Hour, selfUpdateDeferralLimit)
+		}, p, noOperations, time.Hour, selfUpdateDeferralLimit, 0)
 		check := func(ctx context.Context, server string) (string, bool) {
 			remote, ok := gated(ctx, server)
 			checked <- struct{}{}

@@ -447,6 +447,10 @@ import { useConfirm } from './ui/ConfirmDialog';
 import { Image } from './ui/Image';
 import { Menu, type MenuItem } from './ui/Menu';
 import { Popover } from './ui/Popover';
+import { RunnerDrainBanner } from './RunnerDrainBanner';
+import { RunnerUpdateLaterMenu } from './RunnerUpdateLater';
+import { RunnerUpdateNowButton } from './RunnerUpdateNow';
+import { runnerTakesUpdateNow } from '../lib/runnerUpdateNow';
 import { Select } from './ui/Select';
 import { Spinner } from './ui/Spinner';
 import { Textarea } from './ui/Textarea';
@@ -4311,7 +4315,13 @@ export function WorkspaceView({
       if (transcriptEvents[i].type !== 'user') continue;
       queuedFoot = {
         seq: transcriptEvents[i].seq,
-        tag: <RunnerUpdatingTag gate={runnerUpdatingGate} machine={machineName(runner)} />,
+        tag: (
+          <RunnerUpdatingTag
+            gate={runnerUpdatingGate}
+            machine={machineName(runner)}
+            actions={<div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} />{runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={machineName(runner)} />}</div>}
+          />
+        ),
       };
       break;
     }
@@ -9388,6 +9398,8 @@ export function WorkspaceView({
           )
         ) : (
         <>
+        {/* Board 3 ⑥: this runner drains for its update with something of the reader's waiting on it (D3). */}
+        <RunnerDrainBanner runner={runner} machine={machineName(runner)} />
         <div className="workspace-header">
           {isMobile && (
             <button
@@ -9868,6 +9880,7 @@ export function WorkspaceView({
                       gate={runnerUpdatingGate}
                       machine={machineName(runner)}
                       onOpenSession={(id) => navigate(sessionPath(id))}
+                      actions={<div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} />{runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={machineName(runner)} />}</div>}
                     />
                   ) : (
                     <>

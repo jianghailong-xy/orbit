@@ -139,6 +139,14 @@ test('a runner nobody asked is told nothing', async () => {
   assert.equal((await h.beat()).checkSelfUpdate, undefined);
 });
 
+// A runner draining for an update claims for the sessions whose engine is at work on it only when this
+// word is on the answer (runner-go drainClaimScope): an older server would ignore the scope.
+test('the answer to a draining beat says the claim takes a drain scope, and no other answer changes', async () => {
+  const h = heartbeatHarness();
+  assert.equal((await h.beat({ draining: true })).drainScopedClaims, true);
+  assert.equal((await h.beat()).drainScopedClaims, undefined);
+});
+
 // ── Update Runner Now, as the owner asks for it ───────────────────────────────────────────────
 
 function serviceHarness(runner: Record<string, unknown> | null) {
@@ -275,6 +283,16 @@ test('each phase the runner sends is kept, its times as ISO', () => {
 
 test('an old runner, which sends no phase, is returned as it was before the field', () => {
   assert.deepEqual(sanitizeRunnerSelfUpdate(phaseFixture().get('oldRunner')), { state: 'waitingForIdle' });
+});
+
+test('the quiet window is kept with or without a phase; a malformed one is dropped', () => {
+  assert.deepEqual(sanitizeRunnerSelfUpdate({ state: 'enabled', quietWindowSeconds: 600 }), {
+    state: 'enabled',
+    quietWindowSeconds: 600,
+  });
+  for (const bad of [0, -600, 600.5, '600', 86_401, null]) {
+    assert.deepEqual(sanitizeRunnerSelfUpdate({ state: 'enabled', quietWindowSeconds: bad }), { state: 'enabled' }, String(bad));
+  }
 });
 
 test('an unknown phase drops the card fields, keeping the release and drain start; malformed ones are dropped one by one', () => {

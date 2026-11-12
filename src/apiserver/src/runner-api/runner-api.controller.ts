@@ -1,6 +1,6 @@
 import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from '../sessions/run-question';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
-import { readMergeRecovery, mergeRecoveryReady, type MergeRecovery } from '@orbit/shared';
+import { readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import {
   BadRequestException,
@@ -272,6 +272,7 @@ import {
   RUNTIME_STARTED_EVENT_TYPES,
   RUNTIME_STARTED_SYSTEM_SUBTYPE,
   buildResumeContinuation,
+  buildUpdateResumeContinuation,
 } from './resume-continuation';
 import { appendBackgroundJobsContext } from './background-jobs-context';
 import {
@@ -463,6 +464,7 @@ import { loginCodeRelay } from '../runners/login-code-relay';
 import { readDirProbeResult } from '../runners/dir-probe';
 import { readRunnerRepoHealth, sanitizeRunnerRepoHealth } from '../common/runner-repo-health';
 import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
+import { claimDrainWaitingPush } from '../common/runner-drain-waiting';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
 import { orchestrationEnabled } from '../common/orchestration-switch';
@@ -1951,9 +1953,14 @@ export class RunnerApiController {
       }
     }
     if (verdict.answer !== 'FULL') {
+      // Work queuing behind a drain moves nothing a quiet beat reads, so a draining beat asks for the drain's push here
+      // too: at most one statement per beat, and only while the runner drains.
+      if (dto?.draining === true) await this.pushDrainWaiting(runnerId);
       // Whichever apiserver process holds them (cursor-key-check-relay.ts): the gateway forwards a beat to any.
       const cursorKeyChecks = await cursorKeyCheckRelay.takeAnywhere(runnerId);
-      return quietHeartbeatAnswer(row, { cursorKeyChecks, linkHints: this.linkHintsOf(runnerId, row, supervised) });
+      return quietHeartbeatAnswer(row, {
+        cursorKeyChecks, linkHints: this.linkHintsOf(runnerId, row, supervised), draining: dto?.draining === true,
+      });
     }
     // The full reconcile reads the runner row the guard would have read; the beat statement admitted it.
     const current = await this.prisma.runner.findUnique({ where: { id: runnerId } });
@@ -1962,6 +1969,19 @@ export class RunnerApiController {
       row,
       digests,
     });
+  }
+
+  /**
+   * A runner draining for its update with something of its owner's waiting on it: tell them, once per drain (D3). The
+   * claim is the guard — only the beat whose UPDATE matched pushes — and a failure costs the push, never the heartbeat.
+   */
+  private async pushDrainWaiting(runnerId: string): Promise<void> {
+    try {
+      const push = await claimDrainWaitingPush(this.prisma, runnerId);
+      if (push) void this.push.notifyRunnerDrainWaiting(push);
+    } catch (error) {
+      this.logger.warn(`runner ${runnerId}: drain push skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+    }
   }
 
   /** What a link heartbeat's answer says waits for the runner: the beat statement's HintState, and this process's own. */
@@ -2086,6 +2106,8 @@ export class RunnerApiController {
         // to send a leaseOwner or a draining flag writes NULL: no active lease, not draining.
         heartbeatLeaseOwner,
         heartbeatDraining: typeof dto?.draining === 'boolean' ? dto.draining : null,
+        // A beat that is not draining ends the drain's one push (migration 0595): the next drain pushes again.
+        ...(dto?.draining === true ? {} : { drainWaitingPushedAt: null }),
         // Per-engine health for Infrastructure. Sanitized on the way in as well as out, so a
         // malformed report can't be stored as a claim about this machine; an older runner omits
         // the field entirely and keeps whatever was last known.
@@ -2260,6 +2282,7 @@ export class RunnerApiController {
         void this.push.notifyEngineSignedOut(runner.id, current.engine);
       }
     }
+    if (dto?.draining === true) await this.pushDrainWaiting(runner.id);
     // A finished install stops being news the moment the probe confirms it: clear the slot so the
     // row goes back to speaking from engine health (which then says "signed out", with the sign-in
     // that actually comes next) rather than sitting on a terminal status nobody has to act on.
@@ -2449,6 +2472,8 @@ export class RunnerApiController {
     let dirProbeRequest: RunnerHeartbeatResponse['dirProbeRequest'];
     let refreshModelCatalog: RunnerHeartbeatResponse['refreshModelCatalog'];
     let checkSelfUpdate: RunnerHeartbeatResponse['checkSelfUpdate'];
+    let postponeSelfUpdateUntil: RunnerHeartbeatResponse['postponeSelfUpdateUntil'];
+    let selfUpdateNow: RunnerHeartbeatResponse['selfUpdateNow'];
     let regionCheckRequest: RunnerHeartbeatResponse['regionCheckRequest'];
     try {
       cancelSessionIds = await this.realtime.drainCancellations(runner.id);
@@ -2508,6 +2533,8 @@ export class RunnerApiController {
       refreshModelCatalog = await this.drainModelCatalogRefresh(runner.id);
       // The same kind of request, kept on the row the same way, so it goes last beside it.
       checkSelfUpdate = await this.drainSelfUpdateRequest(runner.id);
+      postponeSelfUpdateUntil = await this.drainSelfUpdatePostpone(runner.id);
+      selfUpdateNow = await this.drainSelfUpdateNow(runner.id);
       // The owner's Check again, redelivered rather than claimed: a beat that skips it costs nothing, so it is last.
       regionCheckRequest = await this.drainRegionCheckRequest(runner.id, capabilities);
     } catch {
@@ -2563,6 +2590,11 @@ export class RunnerApiController {
       repoCleanupRequest,
       refreshModelCatalog,
       checkSelfUpdate,
+      // To a draining beat: this server takes a claim scoped to named sessions (GET sessions/claim?drainScope=),
+      // which is what a runner draining for an update claims with. A runner that sees no such word sends none.
+      ...(dto?.draining === true ? { drainScopedClaims: true } : {}),
+      postponeSelfUpdateUntil,
+      selfUpdateNow,
       // Only when a claim holds a command for this process: an older runner's response stays the shape
       // it always was, and a direct caller comparing responses sees no new key.
       ...(codexRateLimitResetRequest ? { codexRateLimitResetRequest } : {}),
@@ -2929,6 +2961,40 @@ export class RunnerApiController {
     const claimed = await this.prisma.runner.updateMany({
       where: { id: runnerId, selfUpdateRequestedAt: { not: null } },
       data: { selfUpdateRequestedAt: null },
+    });
+    return claimed.count > 0 ? true : undefined;
+  }
+
+  /**
+   * The owner's Later (RunnersService.postponeSelfUpdate): the time this runner is to put its waiting
+   * release off until, handed to one beat. Claimed like drainSelfUpdateRequest — the clear is the claim,
+   * predicated on the time read, so a second Later written between the read and the clear stays for
+   * the next beat — and the runner's `postponed` report is the answer.
+   */
+  private async drainSelfUpdatePostpone(runnerId: string): Promise<string | undefined> {
+    const row = await this.prisma.runner.findUnique({ where: { id: runnerId }, select: { selfUpdatePostponeUntil: true } });
+    const until = row?.selfUpdatePostponeUntil;
+    if (!until) return undefined;
+    const claimed = await this.prisma.runner.updateMany({
+      where: { id: runnerId, selfUpdatePostponeUntil: until },
+      data: { selfUpdatePostponeUntil: null },
+    });
+    return claimed.count > 0 ? until.toISOString() : undefined;
+  }
+
+  /**
+   * The owner's Update Now (RunnersService.updateSelfNow), handed to one beat. Claimed like
+   * drainSelfUpdatePostpone — the clear is the claim, predicated on the time read, so a second press
+   * written between the read and the clear stays for the next beat — and the runner's `restarting`
+   * report is the answer.
+   */
+  private async drainSelfUpdateNow(runnerId: string): Promise<true | undefined> {
+    const row = await this.prisma.runner.findUnique({ where: { id: runnerId }, select: { selfUpdateNowRequestedAt: true } });
+    const at = row?.selfUpdateNowRequestedAt;
+    if (!at) return undefined;
+    const claimed = await this.prisma.runner.updateMany({
+      where: { id: runnerId, selfUpdateNowRequestedAt: at },
+      data: { selfUpdateNowRequestedAt: null },
     });
     return claimed.count > 0 ? true : undefined;
   }
@@ -3643,7 +3709,15 @@ export class RunnerApiController {
     /** A managed runner's authorized instance: the claim re-checks it where work is handed out. */
     @CurrentManagedRunnerInstance() managedInstance?: ManagedRunnerInstance,
     @CurrentRunnerLink() link?: RunnerLinkContext,
+    /**
+     * A runner draining for an update names the only sessions it claims for, comma-separated: those whose
+     * engine is running a turn on it (runner-go drainClaimScope). It sends one only to a server whose
+     * heartbeat answer says `drainScopedClaims`. Ids that are not UUIDs are dropped; none left claims none.
+     */
+    @Query('drainScope') drainScope?: string,
   ): Promise<ClaimedSession | null> {
+    const onlySessionIds = drainScope === undefined ? undefined : parseDrainScope(drainScope);
+    if (onlySessionIds?.length === 0) return null;
     // The claim outlives the request otherwise: a runner that stopped — a self-update re-exec, a
     // restart, its own claim timeout — leaves it going here, and the session it claims is answered
     // to nobody (see claimSessionForRunner). The response closing before anything was written to
@@ -3689,6 +3763,7 @@ export class RunnerApiController {
         ...(dshUnavailable ? { dshUnavailable } : {}),
         ...(managedInstance ? { managedInstance } : {}),
         ...(link?.requestId ? { claimRequestId: link.requestId } : {}),
+        ...(onlySessionIds ? { onlySessionIds } : {}),
       },
       hungUp,
     );
@@ -4743,6 +4818,8 @@ export class RunnerApiController {
     // A reload answered without being handed out, its environment one nothing can build any more: the
     // poll goes on to what was queued behind it.
     let reloadRefused = false;
+    // A turn a runner stop cut before its engine spoke, handed out again: its run's wait restarts here.
+    let restartRedelivered = false;
     // Retried whole. This is the inbox claim: it selects a queued turn under the Session row lock
     // and marks it in flight. A deadlock victim's claim never happened — the row is still queued —
     // so a re-run claims from the state that actually exists rather than reporting a turn it does
@@ -4753,6 +4830,7 @@ export class RunnerApiController {
       defaultRequeued = false;
       dispatchRequeued = false;
       reloadRefused = false;
+      restartRedelivered = false;
       // More than one inbox poller can briefly exist around a warm activation or runner
       // restart. Serialize them on the Session row so their NOT EXISTS(in-flight) checks
       // cannot both lease different messages from the same snapshot.
@@ -5183,8 +5261,44 @@ export class RunnerApiController {
           select: { id: true },
         }));
         if (runtimeStarted) {
-          content = buildResumeContinuation(t.content);
+          // The owner's Update Now cut it (the runner's interrupt names runner_update): say so, and
+          // which release, so the engine and the transcript both read it as the update's (D4).
+          const updateCut = await tx.runEvent.findFirst({
+            where: { turnId: t.id, type: 'interrupt', payload: { path: ['reason'], equals: RUNNER_UPDATE_INTERRUPT_REASON } },
+            select: { payload: true },
+            orderBy: { seq: 'desc' },
+          });
+          if (updateCut) {
+            const target = (updateCut.payload as { targetVersion?: unknown } | null)?.targetVersion;
+            content = buildUpdateResumeContinuation(t.content, typeof target === 'string' && target ? target : null);
+          } else {
+            content = buildResumeContinuation(t.content);
+          }
         } else {
+          // A runner restart or the owner's Update Now cut this turn before its engine said anything
+          // (interrupt runner_restart / runner_update), and this is the new process taking it again.
+          // The Starting notice counts from run_claimed_at, which the reclaim leaves at the first
+          // claim: counted from there, the runner's downtime would read as a start that takes minutes.
+          // The run's wait starts again from this delivery (task 34wNtnf94bNWNz0bmcieV); only while
+          // the engine has still not spoken, which is what the notice shows.
+          if (t.kind === 'message') {
+            const cut = await tx.runEvent.findFirst({
+              where: {
+                turnId: t.id,
+                type: 'interrupt',
+                OR: [RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON].map((reason) => ({
+                  payload: { path: ['reason'], equals: reason },
+                })),
+              },
+              select: { id: true },
+            });
+            if (cut) {
+              restartRedelivered = (await tx.$executeRaw`
+                UPDATE "session" SET "run_claimed_at" = now()
+                WHERE id = ${sessionId}::uuid AND status = 'RUNNING' AND "engine_started_at" IS NULL
+              `) > 0;
+            }
+          }
           externalSender = externalSenderOf(t) ?? undefined;
           const atts = await tx.attachment.findMany({
             where: { turnId: t.id },
@@ -5452,6 +5566,8 @@ export class RunnerApiController {
       // to this generation, so the poll is not answered with it again as a resend.
       return this.dequeueTurn(sessionId, runnerId, leaseGeneration, acceptsSteer, declaredCapabilities, redelivery, resend);
     }
+    // The run's wait moved (restartRedelivered): the clients read it off the session.
+    if (restartRedelivered) this.realtime.publishSessionUpdated(sessionId);
     return outcome ?? null;
   }
 
@@ -10662,4 +10778,13 @@ export class RunnerApiController {
     });
     return false;
   }
+}
+
+/** At most this many sessions in one drain-scoped claim: one runner's engines at work. */
+const DRAIN_SCOPE_MAX = 256;
+const DRAIN_SCOPE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The session ids of a `drainScope` claim parameter: the UUIDs in it, at most DRAIN_SCOPE_MAX. */
+export function parseDrainScope(raw: string): string[] {
+  return raw.split(',').map((id) => id.trim()).filter((id) => DRAIN_SCOPE_ID.test(id)).slice(0, DRAIN_SCOPE_MAX);
 }
