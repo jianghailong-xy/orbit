@@ -12,6 +12,7 @@ import {
 import { Prisma, ProjectStatus, RunStatus } from '@prisma/client';
 import {
   CONTINUE_MESSAGE,
+  RUNNER_UPDATE_INTERRUPT_REASON,
   RunEventType,
   isAccountEngine,
   isAuthErrorText,
@@ -25,6 +26,7 @@ import {
 import { createHash, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
+import { buildUpdateResumeContinuation } from '../runner-api/resume-continuation';
 import { postgresSqlState, taskRetirement } from '../tasks/task-supersession';
 import {
   TaskCompletionPolicyValue,
@@ -1470,6 +1472,15 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         ? { clientTurnId: openingTurnKey(sessionId), content }
         : null;
     const orbit = source && !senderSessionId && await this.wroteByOrbit(sessionId, source);
+    // A turn the owner's Update Now cut (the runner marked it interrupt {reason: runner_update}) whose
+    // runner then never came back in time: the reaper ended the run as 'runner offline', and this is
+    // its retry once the runner is back. The engine already worked on that message, so it is not
+    // re-sent as the person's words — that would run its side effects again — but as the update's
+    // continuation, as the reclaim would have handed it back (dequeueTurn, D4). Orbit's words.
+    const updateCut = chosenDurable ? await this.updateCutOf(chosenDurable.id) : undefined;
+    if (updateCut !== undefined) {
+      content = buildUpdateResumeContinuation(chosenDurable!.content, updateCut);
+    }
     // The turn THAT message came from, never merely the session's latest turn: pairing these words
     // with a later turn's images would re-send a message the user never wrote.
     return {
@@ -1483,8 +1494,21 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       senderSessionId,
       // ...and so is the request those words were, when they were one: it sits on that turn.
       turnId: chosenDurable?.id ?? null,
-      ...(orbit ? { orbit: true as const } : {}),
+      ...(orbit || updateCut !== undefined ? { orbit: true as const } : {}),
     };
+  }
+
+  /** The release the owner's Update Now cut this turn for (its runner_update interrupt), null when the
+   *  runner named none; undefined when no Update Now cut it. */
+  private async updateCutOf(turnId: string): Promise<string | null | undefined> {
+    const cut = await this.prisma.runEvent.findFirst({
+      where: { turnId, type: 'interrupt', payload: { path: ['reason'], equals: RUNNER_UPDATE_INTERRUPT_REASON } },
+      select: { payload: true },
+      orderBy: { seq: 'desc' },
+    });
+    if (!cut) return undefined;
+    const target = (cut.payload as { targetVersion?: unknown } | null)?.targetVersion;
+    return typeof target === 'string' && target ? target : null;
   }
 
   /**

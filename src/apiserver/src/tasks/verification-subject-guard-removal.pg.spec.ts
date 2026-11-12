@@ -77,10 +77,14 @@ const MANUAL_RUNNABLE = manualRunnableTaskSql('t');
  * because the relations and columns are absent, not because this assertion relaxed: what survived
  * is still pinned column for column, and an unrelated change that widened or narrowed it would
  * still fail here.
+ *
+ * `0545_criterion_confirmation` then added `satisfied_by` (TASKS or CONFIRMATION, owner decision
+ * 2026-11-11): how the criterion is met, authored with its text and folded into its revision and
+ * hashes. It names no verification subject and guards nothing, so it is pinned here with the rest.
  */
 const PROJECT_ACCEPTANCE_COLUMNS: Readonly<Record<string, string>> = {
   project_acceptance_criterion_definition:
-    'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!',
+    'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!, satisfied_by:criterion_satisfied_by!',
 };
 
 interface World {

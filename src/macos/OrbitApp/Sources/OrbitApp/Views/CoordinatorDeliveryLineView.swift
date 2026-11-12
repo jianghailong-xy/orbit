@@ -161,6 +161,13 @@ extension EnvironmentValues {
 struct CoordinatorDeliverySheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    /// The app's own link door, told by the console under the sheet whether this is a phone's
+    /// conversation: there the task is pushed over it, so the back swipe returns to it.
+    @Environment(AppModel.self) private var app: AppModel?
+    @Environment(\.opensPagesOverConsole) private var overConsole
+    /// On a wide shell a task opens over the page instead of switching sections
+    /// (`opensTasksOverPage`, owner decision 2026-11-12).
+    @Environment(\.opensTasksOverPage) private var opensTasksOverPage
     let told: CoordinatorDeliveryTold
 
     var body: some View {
@@ -179,7 +186,9 @@ struct CoordinatorDeliverySheet: View {
                         // Into the app's own `orbit-task:` door, once the sheet is out of the way.
                         Button(CoordinatorDeliveryCard.itsTask) {
                             dismiss()
-                            openURL(url)
+                            // The console's answer is read before the sheet goes: after this press
+                            // the card is gone, but the environment it was drawn in is not.
+                            if app?.openOrbitLink(url, overConsole: overConsole, overPage: opensTasksOverPage) != true { openURL(url) }
                         }
                         .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.tint)
                     }

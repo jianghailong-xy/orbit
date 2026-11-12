@@ -89,7 +89,7 @@ import type { TaskRunConflict } from '../lib/taskRunHandoff';
 import { WatchWakeCard, WatchWakeNamesCtx, watchWakeTitle } from './WatchWakeCard';
 import { BackgroundWakeCard, backgroundWakeName, backgroundWakeTitle } from './BackgroundWakeCard';
 import { OrbitExchangeGroup, OrbitExchangeSolo } from './OrbitExchangeFold';
-import { parseRunNotice, replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
+import { foldsAtLength, parseRunNotice, replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
 import { BackgroundJobsNote } from './BackgroundJobsNote';
 import { ReferencedTaskNote } from './ReferencedTaskNote';
 import { WikiContextNote } from './WikiContextNote';
@@ -100,6 +100,8 @@ import { EMPTY_LIVE_TASK_PROGRESS, endedTaskProgress, type LiveTaskProgress } fr
 import { TaskProgressBlock } from './TaskProgressBlock';
 import { parseWatchWake } from '../lib/watches';
 import { resolutionTurnLabel } from '../lib/ownerRequests';
+import { RUNNER_UPDATE_INTERRUPT_REASON, RUNNER_UPDATE_RESUME_NOTE } from '@orbit/shared';
+import { isRunnerUpdateResume, runnerUpdateInterruptedLine } from '../lib/runnerUpdateNow';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import { parseOpenItemDelivery } from '../lib/openItemDelivery';
 import type { OpenItemDeliveryCard as OpenItemDelivery, ProjectStartedCard as Started } from '@orbit/shared';
@@ -116,7 +118,7 @@ import type { TaskStartCard as TaskStart } from '@orbit/shared';
 import { TaskStartCard } from './TaskStartCard';
 import { parseProjectStarted } from '../lib/projectStarted';
 import { ProjectStartedCard } from './ProjectStartedCard';
-import { parseSessionMessage } from '../lib/sessionMessage';
+import { parseSessionMessage, splitSessionMessageNote } from '../lib/sessionMessage';
 import { externalSenderLabel, parseExternalSender } from '../lib/externalSender';
 import {
   parseConfirmationAnswers,
@@ -427,6 +429,10 @@ export interface SteerWithdrawHandle {
   withdrawing: ReadonlySet<string>;
   withdrawn: ReadonlySet<string>;
 }
+/** A tag for one user bubble's foot row, by the bubble's seq: what holds the message the reader sent
+ *  last (WorkspaceView's RunnerUpdatingTag). Null where nothing holds one. */
+export const QueuedFootCtx = createContext<{ seq: number; tag: ReactNode } | null>(null);
+
 export const SteerWithdrawCtx = createContext<SteerWithdrawHandle | null>(null);
 
 /**
@@ -607,6 +613,9 @@ type TextNode = {
   // beside the echo (`externalSender`, lib/externalSender): still a bubble, headed `From Feishu · <name>`
   // so it does not read as the owner's own.
   externalSender?: ExternalMessageFrom;
+  // The reader's own words on a page where the conversation is somebody else's — the guest page
+  // (pages/GuestSessionPage), which marks the guest's own echoes `sentByReader`: headed `You`.
+  sentByReader?: boolean;
   // The outcomes of this session's own requests the turn handed back, when the control plane
   // recorded them beside the echo (`sessionReplies`, lib/sessionRequest). Drawn as reply cards.
   sessionReplies?: SessionReply[];
@@ -630,7 +639,13 @@ type TextNode = {
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
 // `runnerRestart`: nobody pressed Stop — the runner cut the turn short while restarting.
-type MarkerNode = { kind: 'interrupt'; seq: number; runnerRestart?: boolean };
+type MarkerNode = {
+  kind: 'interrupt';
+  seq: number;
+  runnerRestart?: boolean;
+  /** The owner's Update Now cut it (`reason: runner_update`): the release it updated to, or null when unnamed. */
+  runnerUpdate?: string | null;
+};
 // The end of a finished turn (TurnFoot): when it ended, and the reply its copy button hands back —
 // the turn's last top-level assistant text, absent when it wrote none inside the loaded window.
 type DividerNode = { kind: 'divider'; seq: number; ts?: string; reply?: string };
@@ -932,6 +947,7 @@ const readersOwnWords = (node: TextNode): boolean =>
   && !node.sessionOpening
   && !parseWatchWake(node.text)
   && !resolutionTurnLabel(node.text)
+  && !isRunnerUpdateResume(node.text)
   && !parseBackgroundWake(node.note);
 
 function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): Node[] {
@@ -1288,6 +1304,7 @@ function buildTranscript(
             startedCard,
             sessionMessage,
             externalSender,
+            sentByReader: p.sentByReader === true || undefined,
             sessionReplies,
             reviewRequest,
             reviewReturn,
@@ -1460,7 +1477,14 @@ function buildTranscript(
         // A Stop's interrupt carries its `requestId` (or nothing, from engines without one); the
         // runner marks a turn it tore down on its way out with `reason: runner_restart`
         // (runner-go's watchShutdownDrain).
-        into(parent).push({ kind: 'interrupt', seq: ev.seq, runnerRestart: p.reason === 'runner_restart' });
+        into(parent).push({
+          kind: 'interrupt',
+          seq: ev.seq,
+          runnerRestart: p.reason === 'runner_restart',
+          ...(p.reason === RUNNER_UPDATE_INTERRUPT_REASON
+            ? { runnerUpdate: typeof p.targetVersion === 'string' && p.targetVersion ? p.targetVersion : null }
+            : {}),
+        });
         break;
       case 'error': {
         // The runner reports a signed-out engine as an error event rather than assistant text
@@ -1888,8 +1912,7 @@ const LOUD_DELIVERIES: ReadonlySet<string> = new Set(['TASK_DISPATCH_REFUSED', '
 
 /**
  * What a turn's opening node says happened, when Orbit opened the turn and it is one the reader
- * can be spared: a fact told to a coordinator, a watch or a background job coming back, another
- * session's reply. Null for everything else, and for those that went wrong — a refused start, a
+ * can be spared: a fact told to a coordinator, a watch or a background job coming back, another session's reply. Null for everything else, and for those that went wrong — a refused start, a
  * blocker, a stopped run, a failed target or job, a delivery nobody confirmed — which stay drawn.
  */
 function orbitTurnOf(
@@ -2014,8 +2037,10 @@ function foldOrbitExchanges(
       item.kind === 'node' && item.node.kind === 'assistant' && item.node.text.trim() ? [item.node.text] : [],
     );
     // An exchange is the turn and its answer: one the agent has not answered yet is already the
-    // single line its card draws, and folding it would only take that line away.
-    if (orbit && replies.length > 0 && !turnNeedsReader(turn)) {
+    // single line its card draws, and folding it would only take that line away. An answer long
+    // enough to say something stays drawn too (`foldsAtLength`).
+    const answered = replies.reduce((n, text) => n + text.length, 0);
+    if (orbit && replies.length > 0 && foldsAtLength(orbit.category, answered) && !turnNeedsReader(turn)) {
       const seqs = turn.flatMap((item) => (item.kind === 'steps' ? item.nodes : [item.node]).map((node) => node.seq));
       run.push({
         summary: {
@@ -2145,7 +2170,10 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // the reader's, so not the reader's bubble. Who sent it is what the control plane recorded
       // beside the echo (lib/sessionMessage), so it is asked first — before anything is read out of
       // the words themselves, which are the sending agent's to choose. No payload, the old reading.
+      // The block delivery appended only tells the agent what the card shows, so it is not folded
+      // under it a second time; what else rode along is (lib/sessionMessage).
       if (node.sessionMessage) {
+        const { rest, narrower } = splitSessionMessageNote(node.note);
         return (
           <SessionMessageCard
             card={node.sessionMessage}
@@ -2153,7 +2181,8 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             seq={seq}
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
-            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
+            narrower={narrower}
+            attached={rest && <ControlPlaneNote kind={describeNote(rest)} text={rest} />}
             queued={queued}
           />
         );
@@ -2204,6 +2233,17 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       }
       // The turn Orbit starts when an owner request ends: the card above says how it ended, and the
       // payload is written for the agent.
+      // The turn Orbit sends a session whose turn the owner's Update Now cut (D4): Orbit's words, written
+      // for the agent, so one Orbit line rather than a bubble in the reader's name (owner rule 10-27).
+      if (isRunnerUpdateResume(node.text)) {
+        // What delivery appended — the background jobs that ended while the runner was away — rides under it.
+        return (
+          <>
+            <div className="chat-note runner-update-resume" data-seq={seq} title={node.text}>{RUNNER_UPDATE_RESUME_NOTE}</div>
+            {node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
+          </>
+        );
+      }
       const ownerRequestEnding = resolutionTurnLabel(node.text);
       if (ownerRequestEnding) {
         return <div className="owner-request-turn-divider"><span>{ownerRequestEnding}</span></div>;
@@ -2429,7 +2469,9 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
     case 'interrupt':
       return (
         <div className="chat-note" data-seq={node.seq}>
-          {node.runnerRestart ? '⊘ interrupted — the runner restarted' : '⊘ interrupted'}
+          {node.runnerUpdate !== undefined
+            ? runnerUpdateInterruptedLine(node.runnerUpdate)
+            : node.runnerRestart ? '⊘ interrupted — the runner restarted' : '⊘ interrupted'}
         </div>
       );
     case 'diagnostic': {
@@ -3096,6 +3138,8 @@ function SteerState({ node, typed }: { node: TextNode; typed: string }) {
 function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   const exp = useContext(ExportCtx);
   const putBack = useContext(UndeliveredCtx);
+  const foot = useContext(QueuedFootCtx);
+  const held = foot && !queued && foot.seq === node.seq ? foot.tag : null;
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
   // What the runner echoed back is what it was *given*, which includes anything delivery appended
@@ -3144,6 +3188,7 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   return (
     <div className="chat-user-wrap">
       {node.externalSender && <div className="chat-user-from">{externalSenderLabel(node.externalSender)}</div>}
+      {node.sentByReader && <div className="chat-user-from">You</div>}
       <div
         className={queued ? 'chat-msg chat-user chat-queued' : 'chat-msg chat-user'}
         data-seq={queued ? undefined : node.seq}
@@ -3163,7 +3208,7 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
             : `Show ${(typed.length - USER_BUBBLE_TRUNCATE).toLocaleString()} more characters`}
         </button>
       )}
-      {(typed || status || note) && (
+      {(typed || status || note || held) && (
         <div className="chat-user-meta">
           {typed && (
             <button
@@ -3177,8 +3222,9 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
             </button>
           )}
           {typed && node.ts && <span className="chat-time">{relTime(node.ts)}</span>}
-          {typed && node.ts && (status || note) && <span className="chat-meta-sep">·</span>}
+          {typed && node.ts && (status || note || held) && <span className="chat-meta-sep">·</span>}
           {status}
+          {held}
           {/* Named, not hidden: without it the agent answers about a quota outage nobody appears
               to have raised. */}
           {note?.line}

@@ -384,7 +384,7 @@ func TestAnUndeliverableResultStopsCountingAsWorkInFlightAfterItsBudget(t *testi
 		t.Fatalf("the managed workload still reports %+v, want idle", got)
 	}
 	checker := func(context.Context, string) (string, bool) { return "v2", true }
-	if remote, ok := updateWhenNoTurnInFlight(checker, pool, func() int { return ops.inFlight() + install.inFlight() }, time.Minute, selfUpdateDeferralLimit)(context.Background(), "server"); !ok {
+	if remote, ok := updateWhenNoTurnInFlight(checker, pool, func() int { return ops.inFlight() + install.inFlight() }, time.Minute, selfUpdateDeferralLimit, 0)(context.Background(), "server"); !ok {
 		t.Fatal("the self-update gate still waits on the undeliverable result")
 	} else if remote != "v2" {
 		t.Fatalf("the update check returned %q, want the release it found", remote)

@@ -20,6 +20,7 @@ import { Radio, RadioGroup } from '../components/ui/Radio';
 import { Select } from '../components/ui/Select';
 import { Spinner } from '../components/ui/Spinner';
 import '../components/ui/Card.css';
+import { SettingsHeader } from '../components/settings';
 import { workspacesQuery } from '../lib/queries';
 import { useToast } from '../lib/toast';
 
@@ -69,8 +70,8 @@ export function FeishuConnectGroupPage() {
 
   if (!ticket || chats.isError || (chats.isSuccess && !chats.data.pending)) {
     return (
-      <div className="feishu-page">
-        <h1 className="page-title">Connect a Feishu group</h1>
+      <div className="settings-page feishu-page">
+        <SettingsHeader title="Connect a Feishu group" />
         <Alert
           type="warning"
           title="This link has expired or was already used"
@@ -84,7 +85,7 @@ export function FeishuConnectGroupPage() {
   }
   if (chats.isPending || workspaces.isPending) {
     return (
-      <div className="feishu-page">
+      <div className="settings-page feishu-page">
         <Spinner />
       </div>
     );
@@ -142,13 +143,17 @@ function ConnectForm({
   };
 
   return (
-    <div className="feishu-page">
-      <h1 className="page-title">Connect a Feishu group</h1>
-      <p className="feishu-intro">
-        Connect <strong>{pending.chatName ?? 'this group'}</strong> to Orbit, so that people in it can start sessions by
-        mentioning the bot. Their messages become instructions to agents on your machine, so choose carefully.
-        {pending.connected && ' This group is already connected: confirming replaces its settings.'}
-      </p>
+    <div className="settings-page feishu-page">
+      <SettingsHeader
+        title="Connect a Feishu group"
+        description={
+          <>
+            Connect <strong>{pending.chatName ?? 'this group'}</strong> to Orbit, so that people in it can start sessions by
+            mentioning the bot. Their messages become instructions to agents on your machine, so choose carefully.
+            {pending.connected && ' This group is already connected: confirming replaces its settings.'}
+          </>
+        }
+      />
       <form className="orbit-card feishu-card" onSubmit={submit} aria-label="Connect this group">
         <div className="orbit-card-body feishu-fields">
           <div className="admin-signin-field">

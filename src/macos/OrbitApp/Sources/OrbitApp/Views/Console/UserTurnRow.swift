@@ -80,9 +80,11 @@ struct UserTurnRow: View {
         // not from the moment a runner takes it, so the queue draws the same card. With no payload the
         // turn keeps its old reading — this is checked before the wakes, as the browser checks it.
         if let card = b.sessionMessage {
+            // Its own block only tells the agent what the card shows: not folded under it again.
+            let note = SessionMessageCard.splitNote(b.note)
             SessionMessageCardView(card: card, text: b.text, ts: b.ts,
-                                   undelivered: undelivered,
-                                   attached: b.attached, onCancelQueued: cancel,
+                                   undelivered: undelivered, narrower: note.narrower,
+                                   attached: note.attached, onCancelQueued: cancel,
                                    revealed: revealedItemID == b.id)
         } else if let card = b.itemCard {
             // The note the same turn carried rides inside the card (`b.attached`): nobody typed
@@ -192,6 +194,18 @@ struct UserTurnRow: View {
                 SessionReplyCardsView(replies: replies, ts: b.ts, attached: replyRest(b),
                                       undelivered: undelivered, onCancelQueued: cancel)
             }
+        } else if let line = RunnerUpdateNow.resumeLine(b.text) {
+            // The turn Orbit sent to continue a turn the owner's Update Now cut (D4): nobody typed it,
+            // so it is one grey Orbit line, not the owner's bubble (web parity: `.runner-update-resume`).
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: "smallcircle.filled.circle").font(.orbitMeta).foregroundStyle(.secondary)
+                Text(line)
+                    .font(.orbitSubtext)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .help(b.text)
+            }
+            .accessibilityIdentifier("runner-update-resume")
         } else if let wake = WatchWakeText.parse(b.text) {
             // A turn a watch queued is the watch's to show, not a message the user typed: it opens
             // with a raw UUID and carries the whole payload the agent read (web parity: NodeView).
@@ -226,8 +240,9 @@ struct UserTurnRow: View {
                 }
             }
         } else if let sender = b.externalSender {
-            // Somebody outside Orbit — a connected Feishu group's member — sent it (`externalSender`,
-            // `ExternalSender.parse`): still their words in a bubble, headed `From Feishu · <name>` so it
+            // Somebody other than the owner — a connected Feishu group's member, or a guest the owner
+            // invited — sent it (`externalSender`, `ExternalSender.parse`): still their words in a bubble,
+            // headed `From Feishu · <name>` or `From <name>` so it
             // does not read as the owner's own (web parity: `UserBubble`'s `.chat-user-from`).
             UserBubbleView(bubble: b, sender: sender, onCancelQueued: cancel, steer: steer, onPutBack: putBack)
         } else {

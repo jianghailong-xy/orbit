@@ -221,7 +221,8 @@ struct SessionFolderPage: View {
         }
         .sheet(item: $sharingSession) { s in
             if let baseURL = app.baseURL {
-                ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore)
+                ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore,
+                           guests: .of(s, agents: app.agents))
             }
         }
         .sheet(item: $movingSession) { s in
@@ -291,6 +292,9 @@ struct SessionFolderPage: View {
             }
         }
         .listStyle(.plain)
+        // The Sessions list's soft top edge, not the hard strip iOS 26 picks here (the owner,
+        // 2026-11-12, docs/mocks/ios-header-soft-edge/04-board.html).
+        .softTopEdgeEffect()
         .rowSwipeList(rowSwipe)
         .refreshable {
             await app.agents?.loadSessions(agentID: address.agentID, view: address.view)

@@ -35,7 +35,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom';
 import type {
   PlanUsage,
@@ -46,11 +46,14 @@ import type {
   RunnerModelCatalog,
   RunnerRegionView,
   RunnerSelfUpdate,
+  RunnerDrainWaiting,
+  RunnerUpdateTurn,
   RuntimeDefaultModels,
   SlashCommandInfo,
 } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
+import { SharedWithMeGroup } from './SharedWithMe';
 import { useIsMobile } from '../lib/useMediaQuery';
 import {
   avatarQuery,
@@ -59,7 +62,6 @@ import {
   projectDetailsQuery,
   sessionQuery,
   wikiSpacesQuery,
-  wikiTrashQuery,
   workspaceSessionCountsQuery,
 } from '../lib/queries';
 import { listPollMs, streamDown, streamPoll } from '../lib/listBudget';
@@ -77,7 +79,7 @@ import {
 } from '../lib/projectAttention';
 import { WIKI_PATH, wikiShown, wikiSpacePath, wikiWaitingOnYou, type WikiSpaceRow } from '../lib/wiki';
 import { WAITING_ON_YOU, useWaitingOnYouCount } from '../lib/ownerRequests';
-import { WIKI_SETTINGS_TITLE, WIKI_TRASH_OPEN, WIKI_TRASH_PAGE_TITLE, wikiSettingsPath } from '../lib/wikiReviewMode';
+import { WIKI_SETTINGS_TITLE, WIKI_TRASH_OPEN, wikiSettingsPath } from '../lib/wikiReviewMode';
 import {
   readWikiFromWorkspace,
   readWikiLastSpace,
@@ -91,7 +93,7 @@ import { SidebarNavIcon } from './SidebarNavIcon';
 import { Avatar } from './ui/Avatar';
 import { useConfirm } from './ui/ConfirmDialog';
 import { Menu, type MenuItem } from './ui/Menu';
-import { WikiTrashDialog, useMoveWikiToTrash } from './WikiTrashDialog';
+import { useMoveWikiToTrash } from './WikiTrashDialog';
 import { Tooltip } from './ui/Tooltip';
 
 const IS_MAC_PLATFORM =
@@ -265,6 +267,10 @@ export interface Runner {
   // latest release, and the last update it installed. undefined/null = a runner too old to report
   // it, which runnerAttention judges by runsAsRoot as it always has.
   selfUpdate?: RunnerSelfUpdate | null;
+  // Only on a runner draining for its self-update: the reader's turns the drain waits for (board 4).
+  updateTurns?: RunnerUpdateTurn[];
+  // Only while it drains and something of the reader's waits on it: the workspace banner (D3).
+  drainWaiting?: RunnerDrainWaiting | null;
   // Free-space floor in MB (PATCH minFreeDiskMb): below it this machine takes no new task runs.
   // null = no floor.
   minFreeDiskMb?: number | null;
@@ -364,10 +370,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const wikiRows = wikiSpaces.data ?? [];
   const wikiNames = useMemo(() => wikiSpaceNames(wikiSpaces.data ?? []), [wikiSpaces.data]);
   const [wikiOpen, setWikiOpen] = useState(true);
-  // The wikis in Trash (docs/mocks/wiki-trash): the Wiki group's last row while there are any, which opens Trash.
-  const wikiTrash = useQuery({ ...wikiTrashQuery(), enabled: !!me.data });
-  const wikiTrashCount = wikiTrash.data?.spaces?.length ?? 0;
-  const [wikiTrashOpen, setWikiTrashOpen] = useState(false);
 
   // The open workspace comes from /workspaces/<id>; behind a /sessions/<id> link, resolve
   // it from that session so its row highlights there too. The session query reuses
@@ -484,11 +486,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const [workspacesOpen, setWorkspacesOpen] = useState(true);
   const [editingWorkspaces, setEditingWorkspaces] = useState(false);
 
-  // Under the fixed entries, the groups scroll as one; while every Workspace and wiki fits with the
-  // Projects head still showing under them, those stay put and only Projects scrolls
-  // (docs/mocks/sidebar-projects-scroll, 02).
+  // Under the fixed entries, the groups scroll as one, each group's head held at the top while its
+  // rows pass under it (docs/mocks/sidebar-projects-scroll, 03).
   const listsRef = useRef<HTMLDivElement>(null);
-  const [pinWorkspaces, setPinWorkspaces] = useState(false);
 
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const saved = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
@@ -622,7 +622,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
               label: 'Configure',
               onSelect: () => {
                 onNavigate?.();
-                navigate(`/runners/${encodeId(runnerId)}?workspace=${encodeId(a.id)}`);
+                navigate(`/settings/workspaces/${encodeId(a.id)}`);
               },
             },
             { type: 'separator' as const, key: 'divider' },
@@ -676,31 +676,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
       onSelect: () => askMoveWikiToTrash(space, wikiNames.get(space.id) ?? space.title),
     },
   ];
-  // Measured before paint, and again whenever the list or the Workspaces group changes size. With no
-  // ResizeObserver (jsdom) the default stands: the two groups scroll as one.
   const hasWorkspaceRows = orderedWorkspaces.length > 0 || bareMachines.length > 0;
   const hasWikis = wikiRows.length > 0;
   const hasProjects = openProjects.length > 0;
-  useLayoutEffect(() => {
-    const lists = listsRef.current;
-    if (!lists || typeof ResizeObserver === 'undefined') return undefined;
-    const workspacesGroup = lists.querySelector<HTMLElement>(':scope > .tp-group-workspaces');
-    const wikiGroup = lists.querySelector<HTMLElement>(':scope > .tp-group-wiki');
-    const measure = () => {
-      const projectsHead = lists.querySelector<HTMLElement>(':scope > .tp-group-projects > .tp-group-head');
-      if (!workspacesGroup || !projectsHead) return setPinWorkspaces(false);
-      const room = lists.getBoundingClientRect().height;
-      const needed = projectsHead.getBoundingClientRect().bottom - workspacesGroup.getBoundingClientRect().top;
-      // A list with no height (the rail folded to its icons) has nothing to pin.
-      setPinWorkspaces(room > 0 && needed <= room);
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(lists);
-    if (workspacesGroup) observer.observe(workspacesGroup);
-    if (wikiGroup) observer.observe(wikiGroup);
-    return () => observer.disconnect();
-  }, [hasProjects, hasWikis]);
 
   const workspaceSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -833,7 +811,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     if (!lists || !row) return;
     const list = lists.getBoundingClientRect();
     const box = row.getBoundingClientRect();
-    if (box.top < list.top) lists.scrollTop -= list.top - box.top;
+    // Its group's head stays at the top while the rows pass under it, so a row is in view below it.
+    const head = row.closest('.tp-group')?.querySelector('.tp-group-head')?.getBoundingClientRect().height ?? 0;
+    if (box.top < list.top + head) lists.scrollTop -= list.top + head - box.top;
     else if (box.bottom > list.bottom) lists.scrollTop += box.bottom - list.bottom;
   }, [litWorkspaceId, sel]);
 
@@ -1017,7 +997,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
 
         <div
           ref={listsRef}
-          className={`tp-lists autohide-scrollbar${pinWorkspaces ? ' pin-workspaces' : ''}`}
+          className="tp-lists autohide-scrollbar"
         >
           <div className="tp-group tp-group-workspaces">
             {hasWorkspaceRows && (
@@ -1132,24 +1112,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     menu={wikiMenu(space)}
                   />
                 ))}
-              {wikiOpen && wikiTrashCount > 0 && (
-                <div
-                  className="tp-item tp-wiki-trash"
-                  onClick={() => setWikiTrashOpen(true)}
-                  onKeyDown={(event) => handleNavActivation(event, () => setWikiTrashOpen(true))}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <span className="tp-ico">
-                    <DeleteOutlined />
-                  </span>
-                  <span className="tp-label">{WIKI_TRASH_PAGE_TITLE}</span>
-                  <span className="tp-count">{wikiTrashCount}</span>
-                </div>
-              )}
             </div>
           )}
-          {wikiTrashOpen && <WikiTrashDialog onClose={() => setWikiTrashOpen(false)} />}
 
           {(hasWorkspaceRows || hasWikis) && hasProjects && <div className="tp-divider" />}
 
@@ -1158,7 +1122,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
               task lists that stood here are picked from the Tasks page's title now, as the phone
               picks them from its Tasks page. Closed projects are the Projects page's to list. */}
           {openProjects.length > 0 && (
-            <div className="tp-group tp-group-projects autohide-scrollbar">
+            <div className="tp-group tp-group-projects">
               <div className="tp-group-head" onClick={() => setProjectsOpen((o) => !o)}>
                 <span className="tp-group-name">Projects</span>
                 <span className="tp-count">{openProjects.length}</span>
@@ -1175,6 +1139,14 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                 ))}
             </div>
           )}
+
+          {/* Sessions other people invited you to reply in: the rail's last group (session guests §4). */}
+          <SharedWithMeGroup
+            onOpen={(path) => {
+              onNavigate?.();
+              navigate(path);
+            }}
+          />
         </div>
       </div>
 
@@ -1248,7 +1220,10 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
               key: 'machines',
               icon: <SidebarNavIcon name="runners" />,
               label: 'Machines & models',
-              onSelect: () => navigate('/infrastructure'),
+              onSelect: () => {
+                const first = runners.data?.[0];
+                navigate(first ? `/settings/machines/${encodeId(first.id)}` : '/settings/general');
+              },
             },
             {
               key: 'settings',

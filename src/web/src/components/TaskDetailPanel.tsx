@@ -3,12 +3,16 @@ import {
   CheckOutlined,
   CloseOutlined,
   DeleteOutlined,
+  EyeOutlined,
   FileMarkdownOutlined,
   GlobalOutlined,
   LinkOutlined,
   MoreOutlined,
   PlayCircleOutlined,
+  PlusOutlined,
   ProjectOutlined,
+  RedoOutlined,
+  RollbackOutlined,
   SafetyOutlined,
 } from '@ant-design/icons';
 import { MentionDeliveryNotes } from './MentionDeliveryNotes';
@@ -23,14 +27,13 @@ import { Button } from './ui/Button';
 import { Combobox } from './ui/Combobox';
 import { Dialog } from './ui/Dialog';
 import { Menu } from './ui/Menu';
-import { Popconfirm } from './ui/Popconfirm';
 import { Segmented } from './ui/Segmented';
 import { Select } from './ui/Select';
 import { Spinner } from './ui/Spinner';
 import { Switch } from './ui/Switch';
 import { Textarea } from './ui/Textarea';
 import { Tooltip } from './ui/Tooltip';
-import { Fragment, lazy, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, lazy, type MouseEvent as ReactMouseEvent, type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Markdown from './Markdown';
 import rehypeHighlight from 'rehype-highlight';
@@ -83,12 +86,13 @@ import { QUEUED_LABEL } from '../lib/runnerSlots';
 import { refreshTaskScheduleViews, scheduledStart } from '../lib/taskSchedule';
 import { MD } from './Transcript';
 import { LandingLink } from './LandingLink';
-import { TaskAttributionCard } from './TaskAttributionCard';
+import { TaskAttributionNotice } from './TaskAttributionCard';
 import { TaskDependencyList } from './TaskDependencyList';
 import { TaskScheduleEditor, type WriteToast } from './TaskScheduleEditor';
 import { ACCEPTANCE_EMPTY, TaskAcceptance } from '../pages/TaskDetailPage';
 import { ShareModal, shareLinkQueryKey } from './ShareModal';
 import { TaskFollowedBy } from './WatchRelations';
+import { WatchEditorModal } from './WatchEditor';
 import { LazyBoundary } from './ErrorBoundary';
 import {
   OWNER_CONFIRM_ACTION,
@@ -140,6 +144,89 @@ const fmt = (d?: string | null): string =>
     : '—';
 
 const initial = (name?: string | null): string => (name ?? '?').trim().charAt(0).toUpperCase();
+
+/** How long something has been going, from `fromIso` to `now`: `<1m`, `7m`, `1h 12m`. */
+export function elapsedLabel(fromIso: string | null | undefined, now: number): string | null {
+  if (!fromIso) return null;
+  const minutes = Math.floor((now - new Date(fromIso).getTime()) / 60_000);
+  if (!Number.isFinite(minutes) || minutes < 0) return null;
+  if (minutes < 1) return '<1m';
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  return minutes % 60 ? `${hours}h ${minutes % 60}m` : `${hours}h`;
+}
+
+/** A run's cost as the panel prints it, or null when nothing has been booked. */
+export function costLabel(usd: number | null | undefined): string | null {
+  if (usd == null || !(usd > 0)) return null;
+  return usd < 0.01 ? '<$0.01' : `$${usd.toFixed(2)}`;
+}
+
+/**
+ * The plan in one sentence, beside the graph that shows it: whether anything still blocks the task
+ * (only when the blocked notice above it is not already saying so), and which open task waits on it.
+ */
+export function planSentence({
+  dependsOn,
+  dependedOnBy,
+  blocked,
+}: {
+  dependsOn: ReadonlyArray<{ dependsOnTask: { status: string } }>;
+  dependedOnBy: ReadonlyArray<{ task: { title: string; status: string } }>;
+  blocked: boolean;
+}): string {
+  const parts: string[] = [];
+  if (!blocked) {
+    if (dependsOn.length === 0) parts.push('Nothing blocks this task.');
+    else if (dependsOn.length === 1) parts.push('Its prerequisite is done.');
+    else parts.push(`All ${dependsOn.length} prerequisites are done.`);
+  }
+  const waiting = dependedOnBy.filter((d) => !['DONE', 'CANCELLED'].includes(d.task.status));
+  if (waiting.length === 1) parts.push(`“${waiting[0].task.title}” waits on it.`);
+  else if (waiting.length > 1) parts.push(`“${waiting[0].task.title}” and ${waiting.length - 1} more wait on it.`);
+  return parts.join(' ');
+}
+
+/** One version of a task's completion evidence, as `GET /tasks/:id/evidence` lists it. */
+export interface TaskEvidenceRevision {
+  revision: string;
+  submittedAt: string;
+  evidence?: {
+    claim?: string;
+    gaps?: string[];
+    checks?: Array<{ kind: string; ref: string; command?: string; succeeded?: boolean }>;
+  } | null;
+  decision?: {
+    decision: 'CONFIRM' | 'SEND_BACK' | string;
+    note?: string | null;
+    decidedAt: string;
+    decidedByType: 'USER' | 'AGENT' | string;
+  } | null;
+}
+
+/** The evidence card's chip: its decision, or that none has been made yet. */
+export function evidenceOutcome(row: TaskEvidenceRevision): { label: string; tone: 'green' | 'amber' | 'muted' } {
+  if (row.decision?.decision === 'CONFIRM') return { label: 'Accepted', tone: 'green' };
+  if (row.decision?.decision === 'SEND_BACK') return { label: 'Sent back', tone: 'amber' };
+  return { label: 'Awaiting a decision', tone: 'muted' };
+}
+
+/** The line beside the chip: which version, and who decided it when, or when it was submitted. */
+export function evidenceMeta(row: TaskEvidenceRevision, when: (iso?: string | null) => string): string {
+  const decision = row.decision;
+  if (!decision) return `Evidence r${row.revision} · submitted ${when(row.submittedAt)}`;
+  const by = decision.decidedByType === 'USER' ? 'you' : 'a reviewing agent';
+  return `Evidence r${row.revision} · ${decision.decision === 'CONFIRM' ? 'accepted' : 'sent back'} by ${by} · ${when(decision.decidedAt)}`;
+}
+
+/** One cited check, in words: the command a tool call ran, or the kind and its reference. */
+export function evidenceCheckText(check: { kind: string; ref: string; command?: string }): string {
+  if (check.kind === 'TOOL_CALL') return check.command?.trim() || `Tool call ${check.ref}`;
+  if (check.kind === 'COMMIT') return `Commit ${check.ref.slice(0, 9)}`;
+  if (check.kind === 'ARTIFACT') return `Artifact ${check.ref}`;
+  if (check.kind === 'FILE') return `File ${check.ref}`;
+  return `${check.kind} ${check.ref}`;
+}
 
 /** The signed-in address of a task — what Copy link hands its owner, never the public one. */
 export const taskAppUrl = (taskId: string): string => `${window.location.origin}/tasks/${encodeId(taskId)}`;
@@ -662,6 +749,24 @@ export function TaskDetailPanel({
     return s >= TDP_WIDTH_MIN && s <= TDP_WIDTH_MAX ? s : null;
   });
   const [resizing, setResizing] = useState(false);
+  // The folds and dialogs of the reorganised page: the envelope's fields, the brief, the plan's
+  // graph, ⋯ → Add a prerequisite, ⋯ → Delete task, ⋯ → Follow task, and whom the composer writes to.
+  const [envelopeOpen, setEnvelopeOpen] = useState(false);
+  const [briefOpen, setBriefOpen] = useState(false);
+  const [briefOverflows, setBriefOverflows] = useState(false);
+  const briefRef = useRef<HTMLDivElement>(null);
+  const [planOpen, setPlanOpen] = useState(false);
+  const [addingPrereq, setAddingPrereq] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [followOpen, setFollowOpen] = useState(false);
+  const [composeTo, setComposeTo] = useState<'run' | 'comment' | null>(null);
+  useEffect(() => {
+    setEnvelopeOpen(false);
+    setBriefOpen(false);
+    setPlanOpen(false);
+    setAddingPrereq(false);
+    setComposeTo(null);
+  }, [taskId]);
 
   // /tasks/:id carries the full detail (description, comments, sessions) that the
   // list row lacks; show `summary` meanwhile so the header doesn't flash.
@@ -694,6 +799,15 @@ export function TaskDetailPanel({
     },
   });
   const task = q.data ?? summary;
+  // The task's completion evidence, newest last. Under ['task', taskId] so whatever refreshes the
+  // task refreshes this too.
+  const evidenceQ = useQuery({
+    queryKey: ['task', taskId, 'evidence'],
+    queryFn: () => api<TaskEvidenceRevision[]>(`/tasks/${taskId}/evidence`),
+    enabled: !!q.data,
+  });
+  const evidenceRows = evidenceQ.data ?? [];
+  const latestEvidence = evidenceRows.length > 0 ? evidenceRows[evidenceRows.length - 1] : null;
 
   // A task detail only carries adjacent dependency edges. The dedicated graph snapshot follows
   // the DAG in both directions so opening a root prerequisite or a middle task still shows the
@@ -987,7 +1101,7 @@ export function TaskDetailPanel({
     }
     const choice = pinCredentials.find((row) => row.slug === slug);
     if (choice?.unavailable) {
-      navigate(choice.fixHref ?? `/infrastructure?runner=${encodeId(assigneeRunner?.id ?? '')}&engine=${choice.fixEngine ?? runEngine}`);
+      navigate(choice.fixHref ?? `/settings/machines/${encodeId(assigneeRunner?.id ?? '')}?engine=${choice.fixEngine ?? runEngine}`);
       return;
     }
     if (slug !== pinnedProvider) updateRunTarget.mutate({ engine: runEngine, provider: slug, model: null });
@@ -1128,13 +1242,16 @@ export function TaskDetailPanel({
   });
 
   const addComment = useMutation({
-    mutationFn: (vars: { body: string; mentions: string[] }) =>
-      api(`/tasks/${taskId}/comments`, { method: 'POST', body: vars }),
+    // `toRun` is the composer's own: the run is reached by mentioning its workspace, which the
+    // mention delivery puts into that workspace's live run on this task.
+    mutationFn: ({ body, mentions }: { body: string; mentions: string[]; toRun?: string }) =>
+      api(`/tasks/${taskId}/comments`, { method: 'POST', body: { body, mentions } }),
     onSuccess: (_data, vars) => {
       setDraft('');
       setCaret(0);
       qc.invalidateQueries({ queryKey: ['task', taskId] });
-      notifyMentions(vars.mentions);
+      if (vars.toRun) message.success('Sent to the run');
+      notifyMentions(vars.mentions.filter((id) => id !== vars.toRun));
     },
     onError: (e: Error) => message.error("Couldn't send the comment", e.message),
   });
@@ -1145,7 +1262,8 @@ export function TaskDetailPanel({
     const body = draft.trim();
     if (!body) return;
     const mentions = workspaceList.filter((a) => mentionTokenRe(a.name).test(body)).map((a) => a.id);
-    addComment.mutate({ body, mentions });
+    const toRun = composeTarget === 'run' && runTarget ? runTarget : undefined;
+    addComment.mutate({ body, mentions: toRun && !mentions.includes(toRun) ? [...mentions, toRun] : mentions, toRun });
   };
 
   // ── `@` mention autocomplete ───────────────────────────────────────────────
@@ -1325,6 +1443,57 @@ export function TaskDetailPanel({
     onError: (e: Error) => message.error("Couldn't confirm the task", e.message),
   });
 
+  // The run going now, if any, and what it last reported (task_progress_report).
+  const liveRun: any = sessions.find((s: any) => isSessionBusy(s)) ?? null;
+  const liveRunning = liveRun != null && sessionRunStateOf(liveRun) === 'RUNNING';
+  const progress = q.data?.progress?.revision > 0 ? q.data.progress : null;
+  const progressStep = progress?.current != null
+    ? progress.total != null ? `Step ${progress.current} of ${progress.total}` : `Step ${progress.current}`
+    : null;
+  const progressPercent = progress?.current != null && progress?.total
+    ? Math.round((Math.min(progress.current, progress.total) / progress.total) * 100)
+    : null;
+  // One status, not two: an open task with a run going reads as Running, as its own node in the graph
+  // already did, rather than as Open beside a run that says otherwise.
+  const headline = liveRunning && ['OPEN', 'IN_PROGRESS'].includes(String(task?.status ?? ''))
+    ? { label: ['Running', elapsedLabel(liveRun.createdAt, Date.now())].filter(Boolean).join(' · '), tone: 'blue' }
+    : status;
+  const totalCost = costLabel(sessions.reduce((sum: number, s: any) => sum + (Number(s.costUsd) || 0), 0));
+  const latestModel: string | null = sessions.find((s: any) => s.model)?.model ?? null;
+  // A stopped task offers no Run in its header: Reopen and Run again are in ⋯.
+  const stopped = ['DONE', 'CANCELLED'].includes(String(task?.status ?? '')) && !completionOwned;
+  // Whom the composer writes to: the run, when one is going and has a workspace to mention.
+  const runTarget: string | null = liveRun && task?.assignee?.id ? task.assignee.id : null;
+  const composeTarget = runTarget ? (composeTo ?? 'run') : 'comment';
+  const planSentenceText = planSentence({ dependsOn, dependedOnBy, blocked });
+  const listTitle = (taskListsQ.data ?? []).find((l) => l.id === q.data?.listId)?.title ?? null;
+  const capital = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
+  const envelopeChips: Array<{ label: string; value: string }> = [
+    { label: 'Agent', value: task?.assignee?.name ?? 'Unassigned' },
+    ...(smartSelection && q.data?.modelHint ? [{ label: 'Tier', value: modelHintLabel(q.data.modelHint, modelHintOptions) }] : []),
+    { label: 'Engine', value: ENGINE_CLI_NAMES[runEngine] },
+    { label: 'Provider', value: pinnedProvider ? pinLabelOf(pinnedProvider) : capital(engineDefaultLabel) },
+    {
+      label: 'Model',
+      value: q.data?.model
+        ? modelLabel(q.data.model)
+        : smartSelection && assigneeWorkspace?.modelRouting ? SMART_SELECTION_PLACEHOLDER : 'Provider default',
+    },
+  ];
+  const inputCount = (q.data?.attachments ?? []).length;
+  const envelopeNote = [
+    listTitle ? `List: ${listTitle}` : 'No list',
+    scheduled ? `Starts ${scheduled.local}` : null,
+    inputCount ? `${inputCount} input ${inputCount === 1 ? 'file' : 'files'}` : 'No input files',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  // The brief folds only when it is long enough to need it.
+  useEffect(() => {
+    const el = briefRef.current;
+    if (el && !briefOpen) setBriefOverflows(el.scrollHeight > el.clientHeight + 4);
+  }, [q.data?.description, briefOpen]);
+
   // Drag the panel's left edge to resize; it sits on the right, so dragging left widens it.
   // Listeners live on document so a fast drag keeps tracking past the 1px handle.
   const startResize = (e: ReactMouseEvent): void => {
@@ -1350,6 +1519,178 @@ export function TaskDetailPanel({
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
   };
+
+  const runRow = (s: any) => {
+    const state = sessionRunStateOf(s);
+    const meta = sessionStatusMeta(s);
+    // The decision behind this run, when it named a tier (model routing §9). Applied,
+    // the run is on its pick; not, the run kept the Agent's own model and the pick is
+    // what smart selection would have made. With the account's switch off, there is none.
+    const route: TaskRunRoute | null = smartSelection && s.route?.level ? s.route : null;
+    const applied = route?.applied === true;
+    // What the run ran on: its own row, or the pick for a run not claimed yet.
+    const ranOn: string | null = s.model || (applied ? route?.model : null) || null;
+    const ranAt: string | null = s.effort || (applied ? route?.effort : null) || null;
+    const whyShown = route != null && whyOpen === s.id;
+    // The row is the way into the run; its tier answers why instead.
+    const toggleWhy = (e: ReactMouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setWhyOpen(whyShown ? null : s.id);
+    };
+    return (
+      <Fragment key={s.id}>
+        <Link
+          to={`/sessions/${encodeId(s.id)}`}
+          className={`tdp-session${state === 'FAILED' ? ' is-failed' : ''}`}
+        >
+          <span className={`tdp-dot ${state}`} />
+          <div className="tdp-session-main">
+            {/* Workspace leads — it's what tells two runs of the same task apart; the
+                system-generated title just repeats the task name. */}
+            <div className="tdp-session-title">
+              {s.workspace?.name || s.title || 'Untitled session'}
+            </div>
+            <div className="tdp-session-sub">
+              {fmt(s.createdAt)}
+              {ranOn && ` · ${modelLabel(ranOn)} · ${ranAt ?? 'default effort'}`}
+                {costLabel(s.costUsd) && ` · ${costLabel(s.costUsd)}`}
+              {route && applied && (
+                <button
+                  type="button"
+                  className={`tdp-route-tag${route.escalated ? ' is-up' : ''}`}
+                  aria-expanded={whyShown}
+                  onClick={toggleWhy}
+                >
+                  {routeTierTag(route)}
+                </button>
+              )}
+            </div>
+            {route && !applied && (
+              <button
+                type="button"
+                className="tdp-route-would"
+                aria-expanded={whyShown}
+                onClick={toggleWhy}
+              >
+                ✦ Smart selection would have picked {routePick(route)} ({route.level})
+              </button>
+            )}
+          </div>
+          <span className={`tdp-badge tone-${meta.tone}`}>{meta.label}</span>
+        </Link>
+        {route && whyShown && (
+          <div className="tdp-route-why">
+            <div className="tdp-route-why-title">Why {routePick(route)}</div>
+            <ul>
+              {route.reasons.map((reason, i) => {
+                const source = reason.match(/^\[(coordinator|rule|default|escalate|not-routed|classifier)\]\s*/);
+                return (
+                  <li key={i}>
+                    {source ? <><span className="tdp-route-source">[{source[1]}]</span>{' '}{reason.slice(source[0].length)}</> : reason}
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="tdp-route-why-foot">{routeWhyFooter(route)}</div>
+          </div>
+        )}
+      </Fragment>
+    );
+  };
+
+  const commentRow = (c: any) => (
+    <div key={c.id} className="tdp-comment">
+      <Avatar
+        size={24}
+        style={{ background: 'var(--brand-tint-hover)', color: 'var(--brand)', fontSize: 11, flex: 'none' }}
+      >
+        {initial(c.authorName)}
+      </Avatar>
+      <div className="tdp-comment-body">
+        <div className="tdp-comment-head">
+          <span className="tdp-comment-author">{c.authorName ?? 'Unknown'}</span>
+          <span className="tdp-comment-time">{fmt(c.createdAt)}</span>
+        </div>
+        <div className="tdp-comment-text md">
+          <Markdown
+            remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeHighlight, mentionPlugin]}
+            urlTransform={referenceUrlTransform}
+            components={{ a: ReferenceLink }}
+          >
+            {c.body}
+          </Markdown>
+        </div>
+        <MentionDeliveryNotes
+          deliveries={c.deliveries}
+          mentions={c.mentions}
+          agents={workspaceList}
+        />
+      </div>
+    </div>
+  );
+
+  // The Activity timeline, oldest first. Each entry keeps the markup its old section drew.
+  const activity: Array<{ key: string; at: number; node: ReactElement }> = [];
+  const at = (iso?: string | null): number => (iso ? new Date(iso).getTime() : 0);
+  if (task?.createdAt) {
+    activity.push({
+      key: 'filed',
+      at: at(task.createdAt),
+      node: (
+        <div className="tdp-activity-row">
+          <span className="tdp-activity-time">{fmt(task.createdAt)}</span>
+          <span>
+            <strong>Filed</strong>
+            {summary?.creatorName ? ` by ${summary.creatorName}` : ''}
+            {q.data?.creatorSession ? (
+              <>
+                {' from '}
+                <Link
+                  to={`/sessions/${encodeId(q.data.creatorSession.id)}`}
+                  className="tdp-field-link"
+                  title="Go to the session that created this task"
+                >
+                  {q.data.creatorSession.title || 'Untitled session'}
+                </Link>
+              </>
+            ) : null}
+          </span>
+        </div>
+      ),
+    });
+  }
+  for (const s of sessions) activity.push({ key: `run-${s.id}`, at: at(s.createdAt), node: runRow(s) });
+  for (const row of evidenceRows) {
+    activity.push({
+      key: `evidence-${row.revision}`,
+      at: at(row.submittedAt),
+      node: (
+        <div className="tdp-activity-row">
+          <span className="tdp-activity-time">{fmt(row.submittedAt)}</span>
+          <span><strong>Evidence r{row.revision} submitted</strong></span>
+        </div>
+      ),
+    });
+    if (row.decision) {
+      activity.push({
+        key: `decision-${row.revision}`,
+        at: at(row.decision.decidedAt),
+        node: (
+          <div className="tdp-activity-row">
+            <span className="tdp-activity-time">{fmt(row.decision.decidedAt)}</span>
+            <span>
+              <strong>Evidence r{row.revision} {row.decision.decision === 'CONFIRM' ? 'accepted' : 'sent back'}</strong>
+              {` by ${row.decision.decidedByType === 'USER' ? 'you' : 'a reviewing agent'}`}
+            </span>
+          </div>
+        ),
+      });
+    }
+  }
+  for (const c of comments) activity.push({ key: `comment-${c.id}`, at: at(c.createdAt), node: commentRow(c) });
+  activity.sort((a, b) => a.at - b.at);
 
   return (
     <aside
@@ -1379,7 +1720,7 @@ export function TaskDetailPanel({
           )}
           <div className="tdp-title">{task?.title ?? 'Loading…'}</div>
           <div className="tdp-meta">
-            <span className={`tdp-badge tone-${status.tone}`}>{status.label}</span>
+            <span className={`tdp-badge tone-${headline.tone}`}>{headline.label}</span>
             {/* DONE is not landed: the landing gets its own badge beside the status, never in it. */}
             {landing && (
               <span className={`tdp-badge tone-${landing.tone}`} data-landing-badge="">{landing.label}</span>
@@ -1394,7 +1735,8 @@ export function TaskDetailPanel({
                 {task.assignee.name}
               </span>
             )}
-            {task?.createdAt && <span className="tdp-meta-item muted">· {fmt(task.createdAt)}</span>}
+            {latestModel && <span className="tdp-meta-item muted">· {modelLabel(latestModel)}</span>}
+            {totalCost && <span className="tdp-meta-item muted">· {totalCost}</span>}
           </div>
           {/* How this row is judged, which nothing else on the page said: a row whose completion
               is owned by a check has no work of its own, and every other row names the method
@@ -1424,13 +1766,6 @@ export function TaskDetailPanel({
               {OWNER_CONFIRM_ACTION}
             </Button>
           ) : null}
-          {/* Terminal rows only, and deliberately not drawn as the row's primary press: it does not
-              start anything. Run is the button that spends a run; this one takes the status back. */}
-          {reopenable && (
-            <Button loading={reopen.isPending} onClick={() => setReopening(true)}>
-              {REOPEN_ACTION_LABEL}
-            </Button>
-          )}
           {/* A run of this task is going and this panel knows which one, so the header's press is
               the way into it. It replaces a disabled button reading "Running" — true, and the one
               thing a reader who wants to see it cannot act on. */}
@@ -1442,7 +1777,7 @@ export function TaskDetailPanel({
                 </Button>
               </Link>
             </Tooltip>
-          ) : (
+          ) : stopped ? null : (
             <Tooltip content={executeHint}>
               <span style={{ display: 'inline-flex' }}>
                 <Button
@@ -1469,16 +1804,6 @@ export function TaskDetailPanel({
             a phone has no room for four presses on one line, and the narrow-screen rule in
             index.css keeps exactly these two beside the title while the actions drop below it.
             The row's trash is hover-only, so without this a touch screen has no way to delete. */}
-        <Popconfirm
-          title="Delete this task?"
-          description="A run still in flight is stopped. This action cannot be undone."
-          confirmText="Delete"
-          cancelText="Cancel"
-          danger
-          confirmLoading={deleting}
-          onConfirm={onDelete}
-          trigger={<Button variant="text" danger icon={<DeleteOutlined />} loading={deleting} aria-label="Delete task" />}
-        />
         {/* Two words for two links (docs/share-links-design.md §8): Copy link is the signed-in
             address, for yourself; Share… is the public one. Copy as Markdown needs neither. */}
         <Menu
@@ -1486,6 +1811,52 @@ export function TaskDetailPanel({
           onOpenChange={setMenuOpen}
           popupClassName="tdp-more-menu"
           items={[
+              // Reopen and Run again: the presses a stopped task's header no longer draws.
+              ...(reopenable
+                ? [{
+                    key: 'reopen',
+                    icon: <RollbackOutlined />,
+                    label: REOPEN_ACTION_LABEL,
+                    onSelect: () => {
+                      setMenuOpen(false);
+                      setReopening(true);
+                    },
+                  }]
+                : []),
+              ...(stopped
+                ? [{
+                    key: 'run-again',
+                    icon: <RedoOutlined />,
+                    label: 'Run again',
+                    disabled: executeDisabled,
+                    onSelect: () => {
+                      setMenuOpen(false);
+                      execute.mutate({ triggerId: newRunRequestToken() });
+                    },
+                  }]
+                : []),
+              {
+                key: 'follow',
+                icon: <EyeOutlined />,
+                label: 'Follow task',
+                onSelect: () => {
+                  setMenuOpen(false);
+                  setFollowOpen(true);
+                },
+              },
+              ...(hasDependencyRelations
+                ? []
+                : [{
+                    key: 'add-prerequisite',
+                    icon: <PlusOutlined />,
+                    label: 'Add a prerequisite',
+                    disabled: !q.data,
+                    onSelect: () => {
+                      setMenuOpen(false);
+                      setAddingPrereq(true);
+                    },
+                  }]),
+              { type: 'separator', key: 'sep-copy' },
               {
                 key: 'copy-link',
                 icon: <LinkOutlined />,
@@ -1526,6 +1897,18 @@ export function TaskDetailPanel({
                   );
                 },
               },
+              { type: 'separator', key: 'sep-delete' },
+              // The row's trash is hover-only, so on a touch screen this is the way to delete.
+              {
+                key: 'delete',
+                icon: <DeleteOutlined />,
+                label: 'Delete task…',
+                danger: true,
+                onSelect: () => {
+                  setMenuOpen(false);
+                  setConfirmDelete(true);
+                },
+              },
           ]}
           trigger={<Button ref={moreButton} variant="text" icon={<MoreOutlined />} aria-label="More actions" />}
         />
@@ -1540,23 +1923,6 @@ export function TaskDetailPanel({
         <div className="tdp-empty">Failed to load task details.</div>
       ) : (
         <div className="tdp-body">
-          {/* Where the task's work stands after DONE (§2.7a): the newest landing attempt and why it
-              waits or where it stopped, apart from the status above. The one press is the way into
-              that segment's landing session — one link, because the task's read gives the newest
-              generation and the same segment's attempts share one session (§2.9 LS6, board v4 06). */}
-          {landing ? (
-            <section className="tdp-section" aria-label="Task landing">
-              <div className="tdp-section-title">Landing</div>
-              <LandTaskStatus integration={q.data.integration} taskStatus={q.data.status} main={mainBranch} />
-              {landingSessionId ? (
-                <div className="tdp-landing-open">
-                  <LandingLink className="tdp-landing-link" sessionId={landingSessionId} />
-                </div>
-              ) : null}
-            </section>
-          ) : null}
-          {/* The check that settles this row, under the row it checks — the relation the database
-              has always held and no surface showed. Its title, its own state and the way in. */}
           {showVerifierCard && (
             <section className="tdp-verifier">
               <div className="tdp-verifier-head">{VERIFIER_CARD_HEADING}</div>
@@ -1575,504 +1941,513 @@ export function TaskDetailPanel({
               )}
             </section>
           )}
-          <section className="tdp-section">
-            <div className="tdp-section-title">Details</div>
-            <div className="tdp-field">
-              <span className="tdp-field-label">Assignee</span>
-              <Combobox
-                className="tdp-assignee-select"
-                variant="borderless"
-                value={task?.assignee?.id ?? null}
-                placeholder="Unassigned"
-                clearable
-                loading={workspacesQ.isLoading || updateAssignee.isPending}
-                disabled={updateAssignee.isPending}
-                matchTriggerWidth={false}
-                options={workspaceList.map((a) => ({ value: a.id, label: a.name }))}
-                onValueChange={(val) => updateAssignee.mutate(val)}
-              />
-            </div>
-            {/* The tier the coordinator suggested (model routing §3.1), with the model and effort it
-                runs as and the reason it was given under it. A suggestion, not a pin: a failed run
-                still moves the next one up, and a model picked below wins over both. */}
-            {smartSelection && (
-              <div className="tdp-field">
-                <span className="tdp-field-label">Suggested</span>
-                <div className="tdp-field-stack">
-                  <Select<ModelHintPick['value']>
-                    className="tdp-assignee-select"
-                    popupClassName="tdp-hint-popup"
-                    variant="borderless"
-                    value={q.data?.modelHint ?? null}
-                    placeholder={NO_SUGGESTION}
-                    loading={updateModelHint.isPending}
-                    disabled={updateModelHint.isPending}
-                    matchTriggerWidth={false}
-                    options={modelHintPicks}
-                    renderValue={(value, option) => (
-                      <span className="tdp-hint-value">
-                        <span className={`tdp-hint-dot is-${String(value).toLowerCase()}`} />
-                        {option?.label ?? value}
-                      </span>
-                    )}
-                    renderOption={(option) => {
-                      const pick = modelHintPicks.find((row) => row.value === option.value)!;
-                      return (
-                        <div className={`tdp-hint-option${pick.value ? '' : ' is-none'}`}>
-                          {pick.value && <span className={`tdp-hint-dot is-${pick.value.toLowerCase()}`} />}
-                          <div>
-                            <div className="tdp-hint-option-name">{pick.label}</div>
-                            <div className="tdp-hint-option-detail">{pick.detail}</div>
-                          </div>
-                        </div>
-                      );
-                    }}
-                    onValueChange={(next) => {
-                      const level = next || null;
-                      if (level !== (q.data?.modelHint ?? null)) updateModelHint.mutate(level);
-                    }}
-                  />
-                  {q.data?.modelHint && q.data.modelHintReason && (
-                    <span className="tdp-field-note">Coordinator: {q.data.modelHintReason}</span>
-                  )}
+          {/* What the agent is doing now: the run that is going, and the position it last reported
+              (task_progress_report). A run that never reported shows its first line alone. */}
+          {liveRun && (
+            <section className="tdp-section" aria-label="Now">
+              <div className="tdp-section-title">Now</div>
+              <div className="tdp-now">
+                <div className="tdp-now-head">
+                  <Avatar size={24} style={{ background: 'var(--brand-tint-hover)', color: 'var(--brand)', fontSize: 11, flex: 'none' }}>
+                    {initial(liveRun.workspace?.name ?? task?.assignee?.name)}
+                  </Avatar>
+                  <div className="tdp-now-who">
+                    <div className="tdp-now-title">
+                      {liveRunning
+                        ? `${liveRun.workspace?.name ?? task?.assignee?.name ?? 'The agent'} is working`
+                        : QUEUED_LABEL}
+                    </div>
+                    <div className="tdp-now-sub">
+                      {[
+                        `Started ${fmt(liveRun.createdAt)}`,
+                        liveRun.model ? modelLabel(liveRun.model) : null,
+                        costLabel(liveRun.costUsd) ? `${costLabel(liveRun.costUsd)} so far` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            )}
-            <div className="tdp-field">
-              <span className="tdp-field-label">Engine</span>
-              <Combobox
-                className="tdp-assignee-select"
-                variant="borderless"
-                value={pinnedEngine as string | null}
-                // Unpinned is the normal case, so say what it actually does rather than "None": the
-                // assignee's engine — or, under a provider an older client pinned alone, that provider's.
-                placeholder={pinnedProvider ? ENGINE_CLI_NAMES[runEngine] : `Assignee's · ${ENGINE_CLI_NAMES[assigneeEngine]}`}
-                clearable
-                loading={updateRunTarget.isPending}
-                disabled={updateRunTarget.isPending}
-                matchTriggerWidth={false}
-                options={[
-                  { value: '', label: "Assignee's" },
-                  {
-                    label: '',
-                    // Cursor CLI once a runner of the account knows it (webShowsEngine).
-                    options: ALL_ENGINES.filter((engine) => webShowsEngine(engine, runnersQ.data)).map((engine) => ({
-                      value: engine,
-                      label: ENGINE_CLI_NAMES[engine],
-                    })),
-                  },
-                ]}
-                renderOption={(option) =>
-                  option.value ? (
-                    <span className="tdp-pin-option">
-                      <BrandMark choice={engineTitleFor(option.value as AgentProvider)} size={16} />
-                      {option.label}
-                    </span>
-                  ) : (
-                    <span className="tdp-pin-option">
-                      {option.label}
-                      <span className="tdp-pin-detail">{ENGINE_CLI_NAMES[assigneeEngine]}</span>
-                    </span>
-                  )
-                }
-                renderValue={(value, option) => (
-                  <span className="tdp-pin-option">
-                    {isEngine(value) && <BrandMark choice={engineTitleFor(value)} size={16} />}
-                    {option?.label ?? value}
-                  </span>
-                )}
-                onValueChange={(val) => pinEngine(isEngine(val) ? val : null)}
-              />
-            </div>
-            <div className="tdp-field">
-              <span className="tdp-field-label">Provider</span>
-              <Combobox
-                className="tdp-assignee-select"
-                variant="borderless"
-                value={pinnedProvider}
-                placeholder={`Engine default · ${engineDefaultLabel}`}
-                clearable
-                loading={providersQ.isLoading || updateRunTarget.isPending}
-                disabled={updateRunTarget.isPending}
-                matchTriggerWidth={false}
-                // Only what the engine runs (board 6 ②): "Engine default" first, then its pools and keys.
-                options={[
-                  { value: '', label: 'Engine default' },
-                  ...(pinnedOffList ? [{ value: pinnedOffList.slug, label: pinLabelOf(pinnedOffList.slug) }] : []),
-                  ...[
-                    { label: 'Account pools', rows: pinCredentials.filter((c) => c.kind === 'pool') },
-                    { label: runEngine === AgentProvider.DSH ? 'Your DeepSeek keys' : 'Your keys', rows: pinCredentials.filter((c) => c.kind === 'key') },
-                  ]
-                    .filter((group) => group.rows.length > 0)
-                    .map((group) => ({ label: group.label, options: group.rows.map((c) => ({ value: c.slug, label: c.label })) })),
-                ]}
-                renderOption={(option) => {
-                  if (!option.value) {
-                    return (
-                      <span className="tdp-pin-option">
-                        {option.label}
-                        <span className="tdp-pin-detail">
-                          {runEngine === AgentProvider.DSH ? 'first DeepSeek key' : runEngine === AgentProvider.OPENCODE ? 'own sign-in' : 'runner sign-in'}
-                        </span>
-                      </span>
-                    );
-                  }
-                  const choice = pinCredentials.find((row) => row.slug === option.value) ?? pinnedOffList;
-                  return (
-                    <span className="tdp-pin-option">
-                      {choice && (choice.kind === 'pool' || choice.kind === 'key') && <BrandMark choice={choice} size={16} />}
-                      {option.label}
-                      {choice?.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}
-                      {choice?.unavailable && <span className="tdp-pin-detail">{choice.unavailable} →</span>}
-                    </span>
-                  );
-                }}
-                renderValue={(value) => {
-                  const choice = pinCredentials.find((row) => row.slug === value) ?? pinnedOffList;
-                  return (
-                    <span className="tdp-pin-option">
-                      {choice && (choice.kind === 'pool' || choice.kind === 'key') && <BrandMark choice={choice} size={16} />}
-                      {pinLabelOf(value)}
-                      {choice?.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}
-                    </span>
-                  );
-                }}
-                onValueChange={(val) => pinProvider(val || null)}
-              />
-            </div>
-            <div className="tdp-field">
-              <span className="tdp-field-label">Model</span>
-              <Combobox
-                className="tdp-assignee-select"
-                variant="borderless"
-                value={q.data?.model ?? null}
-                // Unpinned on an assignee with smart selection on, each run's model is picked for it.
-                placeholder={
-                  smartSelection && assigneeWorkspace?.modelRouting ? SMART_SELECTION_PLACEHOLDER : 'Provider default'
-                }
-                clearable
-                loading={runnersQ.isLoading || updateRunTarget.isPending}
-                disabled={updateRunTarget.isPending}
-                matchTriggerWidth={false}
-                // A model the catalogue doesn't name (an id pinned by a workspace or the API) still
-                // has to render as itself rather than vanish from the box.
-                options={
-                  q.data?.model && !modelOptions.some((o) => o.value === q.data.model)
-                    ? [...modelOptions, { value: q.data.model, label: q.data.model }]
-                    : modelOptions
-                }
-                onValueChange={(val) => updateRunTarget.mutate({ model: val })}
-              />
-            </div>
-            <div className="tdp-field">
-              <span className="tdp-field-label">List</span>
-              <Combobox
-                className="tdp-assignee-select"
-                variant="borderless"
-                value={q.data?.listId ?? null}
-                placeholder="No list"
-                clearable
-                loading={taskListsQ.isLoading || updateList.isPending}
-                disabled={updateList.isPending}
-                matchTriggerWidth={false}
-                options={(taskListsQ.data ?? []).map((l) => ({ value: l.id, label: l.title }))}
-                onValueChange={(val) => updateList.mutate(val)}
-              />
-            </div>
-            {/* Last of the fields that can be changed, before the read-only provenance below.
-                Reads the server's own answer rather than the list-row summary, like every other
-                editable field here: the summary carries neither a schedule nor a project. */}
-            <TaskScheduleEditor taskId={taskId} runAt={q.data?.runAt} projectId={q.data?.projectId} />
-            <div className="tdp-field">
-              <span className="tdp-field-label">Created by</span>
-              <span className="tdp-field-value">{summary?.creatorName ?? '—'}</span>
-            </div>
-            {q.data?.creatorSession && (
-              <div className="tdp-field">
-                <span className="tdp-field-label">Created from</span>
-                <Link
-                  to={`/sessions/${encodeId(q.data.creatorSession.id)}`}
-                  className="tdp-field-value tdp-field-link"
-                  title="Go to the session that created this task"
-                >
-                  {q.data.creatorSession.title || 'Untitled session'}
-                </Link>
-              </div>
-            )}
-            <div className="tdp-field">
-              <span className="tdp-field-label">Created</span>
-              <span className="tdp-field-value">{fmt(task?.createdAt)}</span>
-            </div>
-          </section>
-
-          <section className="tdp-section">
-            <div className="tdp-dependency-head">
-              <div className="tdp-section-title">Dependencies</div>
-              {hasDependencyRelations && (
-                <span className="tdp-dependency-summary">
-                  {connectedCount} connected{dependencyGraph.truncated ? ' loaded' : ''} · {upstreamCount} upstream ·{' '}
-                  {downstreamCount} downstream
-                </span>
-              )}
-              {hasDependencyRelations && (
-                <Segmented<'graph' | 'list'>
-                  size="small"
-                  className="tdp-dependency-view"
-                  value={dependencyView}
-                  options={[
-                    { label: 'Graph', value: 'graph' },
-                    { label: 'List', value: 'list' },
-                  ]}
-                  onValueChange={setDependencyViewOverride}
-                  aria-label="Dependency view"
-                />
-              )}
-            </div>
-            {blocked && (
-              <div className={`tdp-dependency-notice${dependencyState === 'BLOCKED_FAILED' ? ' is-failed' : ''}`}>
-                {dependencyState === 'BLOCKED_FAILED'
-                  ? failedDirectPrerequisites === 1
-                    ? 'A direct prerequisite failed or was cancelled — resolve it before running.'
-                    : `${failedDirectPrerequisites} direct prerequisites failed or were cancelled — resolve them before running.`
-                  : `${completedDirectPrerequisites} of ${dependsOn.length} direct prerequisites complete. All are required.`}
-              </div>
-            )}
-            {dependencyGraphQ.isError && hasDependencyRelations && (
-              <div className="tdp-dependency-graph-error" role="alert">
-                The complete dependency graph could not be loaded. Showing direct relationships.
-              </div>
-            )}
-            {!hasDependencyRelations ? (
-              <div className="tdp-muted">No dependencies</div>
-            ) : dependencyView === 'graph' ? (
-              dependencyGraphQ.isLoading ? (
-                <div className="tdp-dependency-graph-loading"><Spinner size="small" /></div>
-              ) : (
-                <LazyBoundary fallback={<div className="tdp-dependency-graph-loading"><Spinner size="small" /></div>} failed={null}>
-                  <LazyTaskDependencyGraph
-                    graph={dependencyGraph}
-                    title={task?.title ?? 'Current task'}
-                    onOpenTask={onOpenTask}
-                    onRemoveDependency={(id) => removeDependency.mutate(id)}
-                    onExpandBranch={async (aggregate) => {
-                      await expandDependencyBranch.mutateAsync({
-                        aggregate,
-                        focusTaskId: taskId,
-                        baseStructureKey: dependencyGraphBaseStructureKey,
-                      });
-                    }}
-                    expandingBranchKey={
-                      expandDependencyBranch.isPending
-                        ? expandDependencyBranch.variables?.aggregate.branchKey ?? null
-                        : null
-                    }
-                    removingTaskId={removeDependency.isPending ? removeDependency.variables : null}
-                  />
-                </LazyBoundary>
-              )
-            ) : (
-              <TaskDependencyList
-                graph={dependencyGraph}
-                onOpenTask={onOpenTask}
-                onRemoveDependency={(id) => removeDependency.mutate(id)}
-                removingTaskId={removeDependency.isPending ? removeDependency.variables : null}
-              />
-            )}
-            {dependencyTruncationState && (
-              <div className="tdp-dependency-truncated">
-                {dependencyTruncationState === 'expandable'
-                  ? `The initial snapshot is limited to ${dependencyGraph.limits?.maxDepth ?? 8} hops or ${dependencyGraph.limits?.maxNodes ?? 100} tasks${dependencyGraph.limits?.maxEdges ? ` or ${dependencyGraph.limits.maxEdges} relationships` : ''}. Expand a collapsed branch to load the next batch.`
-                  : 'Graph expansion limit reached. Some branch connections remain collapsed.'}
-              </div>
-            )}
-            <Combobox
-              style={{ width: '100%', marginTop: 8 }}
-              placeholder="Add a prerequisite…"
-              value={null}
-              filter={false}
-              onSearch={setDependencyQuery}
-              loading={dependencyTasksQ.isLoading || addDependency.isPending}
-              matchTriggerWidth={false}
-              options={dependencyOptions}
-              onValueChange={(val) => {
-                if (val) addDependency.mutate(val);
-                setDependencyQuery('');
-              }}
-            />
-            {dependsOn.length > 0 && (
-              <div
-                style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 13 }}
-              >
-                <Switch
-                  size="small"
-                  checked={task?.autoRunWhenReady ?? true}
-                  loading={setAutoRun.isPending}
-                  onCheckedChange={(v) => setAutoRun.mutate(v)}
-                />
-                <span>Auto-run when all prerequisites finish</span>
-              </div>
-            )}
-          </section>
-
-          {q.data?.description && (
-            <section className="tdp-section">
-              <div className="tdp-section-title">Description</div>
-              {/* Descriptions are written as workspace-ready prompts — headings, lists, fenced code —
-                  so render them as Markdown. `breaks` because they're hand-laid-out text: the
-                  panel used to show them pre-wrapped, and CommonMark's soft break would collapse
-                  a plain multi-line description into one run-on paragraph. */}
-              <div className="tdp-prose">
-                <MD breaks>{q.data.description}</MD>
+                {progressStep || progress?.phase || progress?.message ? (
+                  <div className="tdp-now-progress">
+                    <div className="tdp-now-step">
+                      {progressStep && <strong>{progressStep}</strong>}
+                      {progress?.phase && <span>{progress.phase}</span>}
+                    </div>
+                    {progressPercent != null && (
+                      <div className="tdp-now-bar" role="progressbar" aria-valuenow={progressPercent} aria-valuemin={0} aria-valuemax={100}>
+                        <i style={{ width: `${progressPercent}%` }} />
+                      </div>
+                    )}
+                    {progress?.message && <div className="tdp-now-message">{progress.message}</div>}
+                    {progress?.lastProgressAt && (
+                      <div className="tdp-now-when">Last progress {fmt(progress.lastProgressAt)}</div>
+                    )}
+                  </div>
+                ) : null}
               </div>
             </section>
           )}
-
-          {/* What "done" means for this task, and who decides it: the criteria the completion
-              judgement reads, and the L0 command/exit-code pair that settles it with nobody in the
-              loop. Under the description, because it is the work's other statement about itself —
-              the description says what to do, this says what finishing it looks like — and above
-              the runs, because a reader about to start one is deciding against this. */}
-          <section className="tdp-section">
-            <div className="tdp-section-title">Acceptance</div>
-            <TaskAcceptance taskId={taskId} task={q.data} projectId={q.data?.projectId} />
-          </section>
-
-          {/* The files the WORK needs, directly under the description that refers to them. Above
-              the runs for the same reason the attribution card is: an input is a property of the
-              task, and a run that was dispatched without one is what seeing them here prevents. */}
-          <TaskInputs taskId={taskId} inputs={q.data?.attachments ?? []} />
-
-          {/* Unit L7: where this work counts, who noticed it, which acceptance reads it and what
-              is being asked or refused about it. Above the runs because it is about the WORK
-              rather than about an attempt at it — and because a run of a task filed under the
-              wrong goal is the thing this section exists to make catchable before it happens. */}
-          <TaskAttributionCard taskId={taskId} />
-
-          {/* Who is waiting on this task: the watches that name it, and the way to follow it. */}
-          <TaskFollowedBy taskId={taskId} />
-
-          <section className="tdp-section">
-            <div className="tdp-section-title">Runs ({sessions.length})</div>
-            {sessions.length === 0 ? (
-              <div className="tdp-muted">No runs yet</div>
-            ) : (
-              sessions.map((s: any) => {
-                const state = sessionRunStateOf(s);
-                const meta = sessionStatusMeta(s);
-                // The decision behind this run, when it named a tier (model routing §9). Applied,
-                // the run is on its pick; not, the run kept the Agent's own model and the pick is
-                // what smart selection would have made. With the account's switch off, there is none.
-                const route: TaskRunRoute | null = smartSelection && s.route?.level ? s.route : null;
-                const applied = route?.applied === true;
-                // What the run ran on: its own row, or the pick for a run not claimed yet.
-                const ranOn: string | null = s.model || (applied ? route?.model : null) || null;
-                const ranAt: string | null = s.effort || (applied ? route?.effort : null) || null;
-                const whyShown = route != null && whyOpen === s.id;
-                // The row is the way into the run; its tier answers why instead.
-                const toggleWhy = (e: ReactMouseEvent) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setWhyOpen(whyShown ? null : s.id);
-                };
-                return (
-                  <Fragment key={s.id}>
-                    <Link
-                      to={`/sessions/${encodeId(s.id)}`}
-                      className={`tdp-session${state === 'FAILED' ? ' is-failed' : ''}`}
-                    >
-                      <span className={`tdp-dot ${state}`} />
-                      <div className="tdp-session-main">
-                        {/* Workspace leads — it's what tells two runs of the same task apart; the
-                            system-generated title just repeats the task name. */}
-                        <div className="tdp-session-title">
-                          {s.workspace?.name || s.title || 'Untitled session'}
-                        </div>
-                        <div className="tdp-session-sub">
-                          {fmt(s.createdAt)}
-                          {ranOn && ` · ${modelLabel(ranOn)} · ${ranAt ?? 'default effort'}`}
-                          {route && applied && (
-                            <button
-                              type="button"
-                              className={`tdp-route-tag${route.escalated ? ' is-up' : ''}`}
-                              aria-expanded={whyShown}
-                              onClick={toggleWhy}
-                            >
-                              {routeTierTag(route)}
-                            </button>
-                          )}
-                        </div>
-                        {route && !applied && (
-                          <button
-                            type="button"
-                            className="tdp-route-would"
-                            aria-expanded={whyShown}
-                            onClick={toggleWhy}
-                          >
-                            ✦ Smart selection would have picked {routePick(route)} ({route.level})
-                          </button>
-                        )}
-                      </div>
-                      <span className={`tdp-badge tone-${meta.tone}`}>{meta.label}</span>
-                    </Link>
-                    {route && whyShown && (
-                      <div className="tdp-route-why">
-                        <div className="tdp-route-why-title">Why {routePick(route)}</div>
-                        <ul>
-                          {route.reasons.map((reason, i) => {
-                            const source = reason.match(/^\[(coordinator|rule|default|escalate|not-routed|classifier)\]\s*/);
-                            return (
-                              <li key={i}>
-                                {source ? <><span className="tdp-route-source">[{source[1]}]</span>{' '}{reason.slice(source[0].length)}</> : reason}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                        <div className="tdp-route-why-foot">{routeWhyFooter(route)}</div>
-                      </div>
-                    )}
-                  </Fragment>
-                );
-              })
-            )}
-          </section>
-
-          <section className="tdp-section">
-            <div className="tdp-section-title">Comments ({comments.length})</div>
-            {comments.length === 0 ? (
-              <div className="tdp-muted">No comments yet</div>
-            ) : (
-              comments.map((c: any) => (
-                <div key={c.id} className="tdp-comment">
-                  <Avatar
-                    size={24}
-                    style={{ background: 'var(--brand-tint-hover)', color: 'var(--brand)', fontSize: 11, flex: 'none' }}
-                  >
-                    {initial(c.authorName)}
-                  </Avatar>
-                  <div className="tdp-comment-body">
-                    <div className="tdp-comment-head">
-                      <span className="tdp-comment-author">{c.authorName ?? 'Unknown'}</span>
-                      <span className="tdp-comment-time">{fmt(c.createdAt)}</span>
-                    </div>
-                    <div className="tdp-comment-text md">
-                      <Markdown
-                        remarkPlugins={[remarkGfm]}
-                        rehypePlugins={[rehypeHighlight, mentionPlugin]}
-                        urlTransform={referenceUrlTransform}
-                        components={{ a: ReferenceLink }}
-                      >
-                        {c.body}
-                      </Markdown>
-                    </div>
-                    <MentionDeliveryNotes
-                      deliveries={c.deliveries}
-                      mentions={c.mentions}
-                      agents={workspaceList}
-                    />
-                  </div>
+          {/* What the work delivered, and on what grounds: the newest evidence version and its
+              decision. The header's "Judged by · submitted evidence" points here. */}
+          {latestEvidence && (
+            <section className="tdp-section" aria-label="Evidence">
+              <div className="tdp-section-title">{q.data?.status === 'DONE' ? 'Delivered' : 'Evidence'}</div>
+              <div className={`tdp-evidence tone-${evidenceOutcome(latestEvidence).tone}`}>
+                <div className="tdp-evidence-head">
+                  <span className={`tdp-badge tone-${evidenceOutcome(latestEvidence).tone}`}>
+                    {evidenceOutcome(latestEvidence).label}
+                  </span>
+                  <span className="tdp-evidence-meta">{evidenceMeta(latestEvidence, fmt)}</span>
                 </div>
-              ))
+                {latestEvidence.evidence?.claim?.trim() ? (
+                  <div className="tdp-evidence-claim">{latestEvidence.evidence.claim.trim()}</div>
+                ) : null}
+                {(latestEvidence.evidence?.checks ?? []).length > 0 && (
+                  <ul className="tdp-evidence-checks">
+                    {(latestEvidence.evidence?.checks ?? []).map((check, i) => (
+                      <li key={`${check.kind}-${check.ref}-${i}`}>
+                        <span className={`tdp-evidence-mark${check.succeeded === false ? ' is-failed' : ''}`}>
+                          {check.succeeded === false ? '✕' : check.succeeded === true ? '✓' : '•'}
+                        </span>
+                        <span>{evidenceCheckText(check)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {(latestEvidence.evidence?.gaps ?? []).length > 0 && (
+                  <div className="tdp-evidence-gaps">
+                    Not covered: {(latestEvidence.evidence?.gaps ?? []).join('; ')}
+                  </div>
+                )}
+                {latestEvidence.decision?.decision === 'SEND_BACK' && latestEvidence.decision.note ? (
+                  <div className="tdp-evidence-note">{latestEvidence.decision.note}</div>
+                ) : null}
+              </div>
+            </section>
+          )}
+          {landing ? (
+            <section className="tdp-section" aria-label="Task landing">
+              <div className="tdp-section-title">Landing</div>
+              <LandTaskStatus integration={q.data.integration} taskStatus={q.data.status} main={mainBranch} />
+              {landingSessionId ? (
+                <div className="tdp-landing-open">
+                  <LandingLink className="tdp-landing-link" sessionId={landingSessionId} />
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+          {/* The contract first: what done means and who decides it, then the instructions the agent
+              was given, folded — they are written for the agent, and they are long. */}
+          <section className="tdp-section">
+            <div className="tdp-section-title">Done means</div>
+            <TaskAcceptance taskId={taskId} task={q.data} projectId={q.data?.projectId} />
+            {q.data?.description && (
+              <div className="tdp-brief">
+                <div className="tdp-acceptance-head">
+                  <span className="tdp-acceptance-label">Brief for the agent</span>
+                  {(briefOverflows || briefOpen) && (
+                    <button type="button" className="tdp-link-button" aria-expanded={briefOpen} onClick={() => setBriefOpen(!briefOpen)}>
+                      {briefOpen ? 'Show less' : 'Show all'}
+                    </button>
+                  )}
+                </div>
+                {/* Written as workspace-ready prompts — headings, lists, fenced code — so rendered as
+                    Markdown, with `breaks` because they are hand-laid-out text. */}
+                <div ref={briefRef} className={`tdp-prose${briefOpen ? '' : ' is-folded'}`}>
+                  <MD breaks>{q.data.description}</MD>
+                </div>
+              </div>
             )}
+          </section>
+
+          {/* Where the task sits in the plan: a sentence first, the graph on demand. A task with no
+              relations has no section; ⋯ → Add a prerequisite opens it. */}
+          {(hasDependencyRelations || addingPrereq) && (
+            <section className="tdp-section">
+              <div className="tdp-dependency-head">
+                <div className="tdp-section-title">In the plan</div>
+                {hasDependencyRelations && (
+                  <span className="tdp-dependency-summary">
+                    {connectedCount} connected{dependencyGraph.truncated ? ' loaded' : ''} · {upstreamCount} upstream ·{' '}
+                    {downstreamCount} downstream
+                  </span>
+                )}
+                {hasDependencyRelations && (
+                  <button type="button" className="tdp-link-button" aria-expanded={planOpen} onClick={() => setPlanOpen(!planOpen)}>
+                    {planOpen ? 'Hide graph' : 'Show graph'}
+                  </button>
+                )}
+              </div>
+              {blocked && (
+                <div className={`tdp-dependency-notice${dependencyState === 'BLOCKED_FAILED' ? ' is-failed' : ''}`}>
+                  {dependencyState === 'BLOCKED_FAILED'
+                    ? failedDirectPrerequisites === 1
+                      ? 'A direct prerequisite failed or was cancelled — resolve it before running.'
+                      : `${failedDirectPrerequisites} direct prerequisites failed or were cancelled — resolve them before running.`
+                    : `${completedDirectPrerequisites} of ${dependsOn.length} direct prerequisites complete. All are required.`}
+                </div>
+              )}
+
+              {hasDependencyRelations && planSentenceText && <div className="tdp-plan-say">{planSentenceText}</div>}
+              {planOpen && (
+                <>
+                  <Segmented<'graph' | 'list'>
+                    size="small"
+                    className="tdp-dependency-view"
+                    value={dependencyView}
+                    options={[
+                      { label: 'Graph', value: 'graph' },
+                      { label: 'List', value: 'list' },
+                    ]}
+                    onValueChange={setDependencyViewOverride}
+                    aria-label="Dependency view"
+                  />
+
+                  {dependencyGraphQ.isError && hasDependencyRelations && (
+                    <div className="tdp-dependency-graph-error" role="alert">
+                      The complete dependency graph could not be loaded. Showing direct relationships.
+                    </div>
+                  )}
+                  {!hasDependencyRelations ? (
+                    <div className="tdp-muted">No dependencies</div>
+                  ) : dependencyView === 'graph' ? (
+                    dependencyGraphQ.isLoading ? (
+                      <div className="tdp-dependency-graph-loading"><Spinner size="small" /></div>
+                    ) : (
+                      <LazyBoundary fallback={<div className="tdp-dependency-graph-loading"><Spinner size="small" /></div>} failed={null}>
+                        <LazyTaskDependencyGraph
+                          graph={dependencyGraph}
+                          title={task?.title ?? 'Current task'}
+                          onOpenTask={onOpenTask}
+                          onRemoveDependency={(id) => removeDependency.mutate(id)}
+                          onExpandBranch={async (aggregate) => {
+                            await expandDependencyBranch.mutateAsync({
+                              aggregate,
+                              focusTaskId: taskId,
+                              baseStructureKey: dependencyGraphBaseStructureKey,
+                            });
+                          }}
+                          expandingBranchKey={
+                            expandDependencyBranch.isPending
+                              ? expandDependencyBranch.variables?.aggregate.branchKey ?? null
+                              : null
+                          }
+                          removingTaskId={removeDependency.isPending ? removeDependency.variables : null}
+                        />
+                      </LazyBoundary>
+                    )
+                  ) : (
+                    <TaskDependencyList
+                      graph={dependencyGraph}
+                      onOpenTask={onOpenTask}
+                      onRemoveDependency={(id) => removeDependency.mutate(id)}
+                      removingTaskId={removeDependency.isPending ? removeDependency.variables : null}
+                    />
+                  )}
+                  {dependencyTruncationState && (
+                    <div className="tdp-dependency-truncated">
+                      {dependencyTruncationState === 'expandable'
+                        ? `The initial snapshot is limited to ${dependencyGraph.limits?.maxDepth ?? 8} hops or ${dependencyGraph.limits?.maxNodes ?? 100} tasks${dependencyGraph.limits?.maxEdges ? ` or ${dependencyGraph.limits.maxEdges} relationships` : ''}. Expand a collapsed branch to load the next batch.`
+                        : 'Graph expansion limit reached. Some branch connections remain collapsed.'}
+                    </div>
+                  )}
+
+                </>
+              )}
+              {(planOpen || addingPrereq) && (
+                <>
+                  <Combobox
+                    style={{ width: '100%', marginTop: 8 }}
+                    placeholder="Add a prerequisite…"
+                    value={null}
+                    filter={false}
+                    onSearch={setDependencyQuery}
+                    loading={dependencyTasksQ.isLoading || addDependency.isPending}
+                    matchTriggerWidth={false}
+                    options={dependencyOptions}
+                    onValueChange={(val) => {
+                      if (val) addDependency.mutate(val);
+                      setDependencyQuery('');
+                    }}
+                  />
+
+                </>
+              )}
+              {dependsOn.length > 0 && (
+                <div
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 13 }}
+                >
+                  <Switch
+                    size="small"
+                    checked={task?.autoRunWhenReady ?? true}
+                    loading={setAutoRun.isPending}
+                    onCheckedChange={(v) => setAutoRun.mutate(v)}
+                  />
+                  <span>Auto-run when all prerequisites finish</span>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* The envelope a person sets once: who runs the task and on what. One line at rest; Edit
+              opens every field it had before. */}
+          <section className="tdp-section">
+            <div className="tdp-dependency-head">
+              <div className="tdp-section-title">Runs with</div>
+              <button type="button" className="tdp-link-button" aria-expanded={envelopeOpen} onClick={() => setEnvelopeOpen(!envelopeOpen)}>
+                {envelopeOpen ? 'Done' : 'Edit'}
+              </button>
+            </div>
+            {envelopeOpen ? (
+              <>
+                <div className="tdp-field">
+                  <span className="tdp-field-label">Assignee</span>
+                  <Combobox
+                    className="tdp-assignee-select"
+                    variant="borderless"
+                    value={task?.assignee?.id ?? null}
+                    placeholder="Unassigned"
+                    clearable
+                    loading={workspacesQ.isLoading || updateAssignee.isPending}
+                    disabled={updateAssignee.isPending}
+                    matchTriggerWidth={false}
+                    options={workspaceList.map((a) => ({ value: a.id, label: a.name }))}
+                    onValueChange={(val) => updateAssignee.mutate(val)}
+                  />
+                </div>
+                {/* The tier the coordinator suggested (model routing §3.1), with the model and effort it
+                    runs as and the reason it was given under it. A suggestion, not a pin: a failed run
+                    still moves the next one up, and a model picked below wins over both. */}
+                {smartSelection && (
+                  <div className="tdp-field">
+                    <span className="tdp-field-label">Suggested</span>
+                    <div className="tdp-field-stack">
+                      <Select<ModelHintPick['value']>
+                        className="tdp-assignee-select"
+                        popupClassName="tdp-hint-popup"
+                        variant="borderless"
+                        value={q.data?.modelHint ?? null}
+                        placeholder={NO_SUGGESTION}
+                        loading={updateModelHint.isPending}
+                        disabled={updateModelHint.isPending}
+                        matchTriggerWidth={false}
+                        options={modelHintPicks}
+                        renderValue={(value, option) => (
+                          <span className="tdp-hint-value">
+                            <span className={`tdp-hint-dot is-${String(value).toLowerCase()}`} />
+                            {option?.label ?? value}
+                          </span>
+                        )}
+                        renderOption={(option) => {
+                          const pick = modelHintPicks.find((row) => row.value === option.value)!;
+                          return (
+                            <div className={`tdp-hint-option${pick.value ? '' : ' is-none'}`}>
+                              {pick.value && <span className={`tdp-hint-dot is-${pick.value.toLowerCase()}`} />}
+                              <div>
+                                <div className="tdp-hint-option-name">{pick.label}</div>
+                                <div className="tdp-hint-option-detail">{pick.detail}</div>
+                              </div>
+                            </div>
+                          );
+                        }}
+                        onValueChange={(next) => {
+                          const level = next || null;
+                          if (level !== (q.data?.modelHint ?? null)) updateModelHint.mutate(level);
+                        }}
+                      />
+                      {q.data?.modelHint && q.data.modelHintReason && (
+                        <span className="tdp-field-note">Coordinator: {q.data.modelHintReason}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+                <div className="tdp-field">
+                  <span className="tdp-field-label">Engine</span>
+                  <Combobox
+                    className="tdp-assignee-select"
+                    variant="borderless"
+                    value={pinnedEngine as string | null}
+                    // Unpinned is the normal case, so say what it actually does rather than "None": the
+                    // assignee's engine — or, under a provider an older client pinned alone, that provider's.
+                    placeholder={pinnedProvider ? ENGINE_CLI_NAMES[runEngine] : `Assignee's · ${ENGINE_CLI_NAMES[assigneeEngine]}`}
+                    clearable
+                    loading={updateRunTarget.isPending}
+                    disabled={updateRunTarget.isPending}
+                    matchTriggerWidth={false}
+                    options={[
+                      { value: '', label: "Assignee's" },
+                      {
+                        label: '',
+                        // Cursor CLI once a runner of the account knows it (webShowsEngine).
+                        options: ALL_ENGINES.filter((engine) => webShowsEngine(engine, runnersQ.data)).map((engine) => ({
+                          value: engine,
+                          label: ENGINE_CLI_NAMES[engine],
+                        })),
+                      },
+                    ]}
+                    renderOption={(option) =>
+                      option.value ? (
+                        <span className="tdp-pin-option">
+                          <BrandMark choice={engineTitleFor(option.value as AgentProvider)} size={16} />
+                          {option.label}
+                        </span>
+                      ) : (
+                        <span className="tdp-pin-option">
+                          {option.label}
+                          <span className="tdp-pin-detail">{ENGINE_CLI_NAMES[assigneeEngine]}</span>
+                        </span>
+                      )
+                    }
+                    renderValue={(value, option) => (
+                      <span className="tdp-pin-option">
+                        {isEngine(value) && <BrandMark choice={engineTitleFor(value)} size={16} />}
+                        {option?.label ?? value}
+                      </span>
+                    )}
+                    onValueChange={(val) => pinEngine(isEngine(val) ? val : null)}
+                  />
+                </div>
+                <div className="tdp-field">
+                  <span className="tdp-field-label">Provider</span>
+                  <Combobox
+                    className="tdp-assignee-select"
+                    variant="borderless"
+                    value={pinnedProvider}
+                    placeholder={`Engine default · ${engineDefaultLabel}`}
+                    clearable
+                    loading={providersQ.isLoading || updateRunTarget.isPending}
+                    disabled={updateRunTarget.isPending}
+                    matchTriggerWidth={false}
+                    // Only what the engine runs (board 6 ②): "Engine default" first, then its pools and keys.
+                    options={[
+                      { value: '', label: 'Engine default' },
+                      ...(pinnedOffList ? [{ value: pinnedOffList.slug, label: pinLabelOf(pinnedOffList.slug) }] : []),
+                      ...[
+                        { label: 'Account pools', rows: pinCredentials.filter((c) => c.kind === 'pool') },
+                        { label: runEngine === AgentProvider.DSH ? 'Your DeepSeek keys' : 'Your keys', rows: pinCredentials.filter((c) => c.kind === 'key') },
+                      ]
+                        .filter((group) => group.rows.length > 0)
+                        .map((group) => ({ label: group.label, options: group.rows.map((c) => ({ value: c.slug, label: c.label })) })),
+                    ]}
+                    renderOption={(option) => {
+                      if (!option.value) {
+                        return (
+                          <span className="tdp-pin-option">
+                            {option.label}
+                            <span className="tdp-pin-detail">
+                              {runEngine === AgentProvider.DSH ? 'first DeepSeek key' : runEngine === AgentProvider.OPENCODE ? 'own sign-in' : 'runner sign-in'}
+                            </span>
+                          </span>
+                        );
+                      }
+                      const choice = pinCredentials.find((row) => row.slug === option.value) ?? pinnedOffList;
+                      return (
+                        <span className="tdp-pin-option">
+                          {choice && (choice.kind === 'pool' || choice.kind === 'key') && <BrandMark choice={choice} size={16} />}
+                          {option.label}
+                          {choice?.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}
+                          {choice?.unavailable && <span className="tdp-pin-detail">{choice.unavailable} →</span>}
+                        </span>
+                      );
+                    }}
+                    renderValue={(value) => {
+                      const choice = pinCredentials.find((row) => row.slug === value) ?? pinnedOffList;
+                      return (
+                        <span className="tdp-pin-option">
+                          {choice && (choice.kind === 'pool' || choice.kind === 'key') && <BrandMark choice={choice} size={16} />}
+                          {pinLabelOf(value)}
+                          {choice?.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}
+                        </span>
+                      );
+                    }}
+                    onValueChange={(val) => pinProvider(val || null)}
+                  />
+                </div>
+                <div className="tdp-field">
+                  <span className="tdp-field-label">Model</span>
+                  <Combobox
+                    className="tdp-assignee-select"
+                    variant="borderless"
+                    value={q.data?.model ?? null}
+                    // Unpinned on an assignee with smart selection on, each run's model is picked for it.
+                    placeholder={
+                      smartSelection && assigneeWorkspace?.modelRouting ? SMART_SELECTION_PLACEHOLDER : 'Provider default'
+                    }
+                    clearable
+                    loading={runnersQ.isLoading || updateRunTarget.isPending}
+                    disabled={updateRunTarget.isPending}
+                    matchTriggerWidth={false}
+                    // A model the catalogue doesn't name (an id pinned by a workspace or the API) still
+                    // has to render as itself rather than vanish from the box.
+                    options={
+                      q.data?.model && !modelOptions.some((o) => o.value === q.data.model)
+                        ? [...modelOptions, { value: q.data.model, label: q.data.model }]
+                        : modelOptions
+                    }
+                    onValueChange={(val) => updateRunTarget.mutate({ model: val })}
+                  />
+                </div>
+                <div className="tdp-field">
+                  <span className="tdp-field-label">List</span>
+                  <Combobox
+                    className="tdp-assignee-select"
+                    variant="borderless"
+                    value={q.data?.listId ?? null}
+                    placeholder="No list"
+                    clearable
+                    loading={taskListsQ.isLoading || updateList.isPending}
+                    disabled={updateList.isPending}
+                    matchTriggerWidth={false}
+                    options={(taskListsQ.data ?? []).map((l) => ({ value: l.id, label: l.title }))}
+                    onValueChange={(val) => updateList.mutate(val)}
+                  />
+                </div>
+                {/* Last of the fields that can be changed, before the read-only provenance below.
+                    Reads the server's own answer rather than the list-row summary, like every other
+                    editable field here: the summary carries neither a schedule nor a project. */}
+                <TaskScheduleEditor taskId={taskId} runAt={q.data?.runAt} projectId={q.data?.projectId} />
+                {/* Last of the fields that can be changed. Reads the server's own answer rather than
+                    the list-row summary: the summary carries neither a schedule nor a project. */}
+                <TaskScheduleEditor taskId={taskId} runAt={q.data?.runAt} projectId={q.data?.projectId} />
+                {sessions.some((s: any) => isSessionBusy(s)) && (
+                  <div className="tdp-envelope-note">Changes apply to the next run. The run going now keeps what it started with.</div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="tdp-envelope">
+                  {envelopeChips.map((chip) => (
+                    <span key={chip.label} className="tdp-envelope-chip">
+                      <span className="tdp-envelope-chip-label">{chip.label}</span>
+                      {chip.value}
+                    </span>
+                  ))}
+                </div>
+                <div className="tdp-envelope-note">{envelopeNote}</div>
+              </>
+            )}
+          </section>
+
+          {/* The files the WORK needs. Shown when there are some, or while the envelope is open. */}
+          {(envelopeOpen || (q.data?.attachments ?? []).length > 0) && (
+            <TaskInputs taskId={taskId} inputs={q.data?.attachments ?? []} />
+          )}
+
+          {/* Unit L7, only when it says something the header does not: a crossing, a blocker, or work
+              counting towards another project. */}
+          <TaskAttributionNotice taskId={taskId} projectId={q.data?.projectId} />
+
+          {/* Who is waiting on this task, when anything is. Follow task is in ⋯. */}
+          <TaskFollowedBy taskId={taskId} hideWhenEmpty />
+
+          {/* One timeline: when the task was filed, its runs, its evidence and decisions, and the
+              comments — oldest first, so the newest sits above the composer. */}
+          <section className="tdp-section">
+            <div className="tdp-section-title">Activity</div>
+            {activity.map((item) => (
+              <Fragment key={item.key}>{item.node}</Fragment>
+            ))}
           </section>
         </div>
       )}
@@ -2102,6 +2477,19 @@ export function TaskDetailPanel({
             ))}
           </div>
         )}
+        {runTarget && (
+          <Segmented<'run' | 'comment'>
+            size="small"
+            className="tdp-compose-target"
+            value={composeTarget}
+            options={[
+              { label: 'To the run', value: 'run' },
+              { label: 'Comment', value: 'comment' },
+            ]}
+            onValueChange={setComposeTo}
+            aria-label="Send to"
+          />
+        )}
         <Textarea
           ref={taRef}
           value={draft}
@@ -2110,7 +2498,11 @@ export function TaskDetailPanel({
             setCaret(e.target.selectionStart ?? e.target.value.length);
           }}
           onSelect={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
-          placeholder="Add a comment…  type @ to mention a workspace  (⌘/Ctrl + Enter to send)"
+          placeholder={
+            composeTarget === 'run'
+              ? `Message ${task?.assignee?.name ?? 'the agent'} while it works…`
+              : 'Add a comment…  type @ to mention a workspace  (⌘/Ctrl + Enter to send)'
+          }
           autoSize={{ minRows: 1, maxRows: 4 }}
           onKeyDown={(e) => {
             if (showMention) {
@@ -2182,6 +2574,35 @@ export function TaskDetailPanel({
           <Alert type="error" title="Task status was not changed" description={(reopen.error as Error).message} />
         ) : null}
       </Dialog>
+      <Dialog
+        open={confirmDelete}
+        title="Delete this task?"
+        onClose={() => setConfirmDelete(false)}
+        footer={
+          <>
+            <Button onClick={() => setConfirmDelete(false)}>Cancel</Button>
+            <Button
+              variant="primary"
+              danger
+              loading={deleting}
+              onClick={() => {
+                setConfirmDelete(false);
+                onDelete();
+              }}
+            >
+              Delete
+            </Button>
+          </>
+        }
+      >
+        <p>A run still in flight is stopped. This action cannot be undone.</p>
+      </Dialog>
+      {followOpen && (
+        <WatchEditorModal
+          mode={{ kind: 'create', targets: [{ kind: 'TASK', id: taskId }] }}
+          onClose={() => setFollowOpen(false)}
+        />
+      )}
       <ShareModal
         open={shareOpen}
         onClose={() => setShareOpen(false)}

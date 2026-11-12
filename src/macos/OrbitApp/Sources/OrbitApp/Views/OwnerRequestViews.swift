@@ -679,14 +679,14 @@ struct OwnerRequestInboxEntry: View {
                 requests.tab = .open
                 requests.inboxPresented = true
             } label: {
+                // The drawer's row: the count in amber, written like the Projects and Wiki rows above it.
                 HStack {
                     Label(OwnerRequests.waitingOnYou, systemImage: "hand.raised")
-                    Spacer()
+                    Spacer(minLength: 6)
                     if requests.waitingCount > 0 {
                         Text("\(requests.waitingCount)")
-                            .font(.orbitLabel.weight(.bold)).foregroundStyle(.white)
-                            .padding(.horizontal, 7).padding(.vertical, 1)
-                            .background(Color.ownerRequestAccent, in: Capsule())
+                            .font(.orbitMeta.weight(.semibold)).monospacedDigit()
+                            .foregroundStyle(.orange)
                     }
                 }
                 .contentShape(Rectangle())

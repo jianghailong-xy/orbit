@@ -18,6 +18,7 @@ import { retireSessionInboxGeneration } from '../common/session-inbox-fence';
 import { PrismaService } from '../prisma/prisma.service';
 import { postRunFailureComment, reclaimStalledTask } from '../tasks/reclaim-stalled-task';
 import { RealtimeService } from './realtime.service';
+import { readRuntimeStartupFacts, runtimeStartupClock, runtimeStartupOverdue } from './runtime-startup-clock';
 import {
   classifyTransactionFault,
   loggedRetry,
@@ -46,6 +47,7 @@ import {
   type RunnerBeats,
 } from '../runners/runner-presence';
 import { KEEPS_SESSION_IN_TRASH } from '../files/file-retention';
+import { reprojectAfterSettledChecks, settleChecksOfEndedRun } from '../projects/criterion-check-ended';
 import { ControlPlaneLeader } from './control-plane-leader';
 
 const REAP_INTERVAL_MS = 30_000;
@@ -614,7 +616,13 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           initializesRuntimeDynamically(provider) &&
           s.status === RunStatus.RUNNING &&
           !s.runtimeSessionId &&
-          now - lastTurn > runtimeStartupGrace
+          now - lastTurn > runtimeStartupGrace &&
+          // Not the time a runner restart or Update Now kept the turn waiting (runtime-startup-clock.ts).
+          runtimeStartupOverdue(
+            runtimeStartupClock(await readRuntimeStartupFacts(this.prisma, s.id, s.lastTurnAt)),
+            now,
+            runtimeStartupGrace,
+          )
         ) {
           await this.forceFinalize(
             s.id,
@@ -937,6 +945,12 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         where: { sessionId, status: { not: 'ANSWERED' } },
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
+      // An Agent check this run was, ended without its verdict (projects/criterion-check-ended.ts).
+      const checksSettled = retryAt != null ? [] : await settleChecksOfEndedRun(
+        tx,
+        { sessionId, taskId },
+        `its run was reaped as ${status} (${reason})`,
+      );
       // Reclaim a now-stalled IN_PROGRESS task so it stops showing as running.
       const taskReclaimed = taskId && status !== RunStatus.SUCCEEDED
         ? await reclaimStalledTask(
@@ -959,6 +973,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         currentWorkTerminalized,
         identityUnknown: delivered === 'IDENTITY_UNKNOWN',
         droppedWakeups,
+        checksSettled,
       };
     }, loggedRetry(this.log, 'reaper.forceFinalize'));
     if (!outcome.ok) {
@@ -970,6 +985,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     // The one-shot wakeups this reap dropped with the session it FAILED, retry unarmed: their owner is told,
     // once, now that the drop has committed (contract §4).
     signalDrainedWakeups(this.push, this.log, outcome.droppedWakeups ?? []);
+    if ('checksSettled' in outcome) await reprojectAfterSettledChecks(this.prisma, outcome.checksSettled, this.log);
     // The session summary refreshes the task's own running/queued overlay. A reclaimed status also
     // changes prerequisite dependents, whose complete reverse fan-out is not known here; the
     // compatibility helper deliberately emits an explicit resync for that rare abnormal path.

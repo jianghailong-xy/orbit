@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>从 GitHub 建 workspace · 03 规则、改动清单、分期、待你定</title>
+<link rel="stylesheet" href="board.css">
+<style>
+  .rules { width: 100%; border-collapse: collapse; font-size: 14px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 0 0 1px rgba(0,0,0,.05); }
+  .rules th, .rules td { text-align: left; vertical-align: top; padding: 11px 14px; border-top: 1px solid #ececf1; line-height: 1.6; }
+  .rules th { border-top: 0; background: #fafafc; color: #6a6a74; font-size: 13px; font-weight: 600; }
+  .rules td:first-child { width: 40px; color: #8a8a92; font-weight: 600; }
+  .rules td:nth-child(2) { width: 190px; font-weight: 650; }
+  .rules td:last-child { width: 440px; color: #4a4a54; }
+  .decided { background: #eef7f0; border-radius: 14px; padding: 14px 18px; margin-bottom: 18px; box-shadow: 0 0 0 1px rgba(26,127,55,.12); font-size: 14.5px; }
+  .decided b { color: #1a7f37; }
+  .decided ul { margin: 6px 0 0; padding-left: 20px; }
+  .layers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .layer { background: #fff; border-radius: 14px; padding: 14px 18px; box-shadow: 0 0 0 1px rgba(0,0,0,.05); font-size: 13.5px; line-height: 1.6; }
+  .layer h3 { font-size: 15px; margin: 0 0 6px; }
+  .layer ul { margin: 0; padding-left: 18px; }
+  .layer li { margin: 4px 0; }
+  .phases { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+  .phase { background: #fff; border-radius: 14px; padding: 14px 18px; box-shadow: 0 0 0 1px rgba(0,0,0,.05); font-size: 13.5px; line-height: 1.6; }
+  .phase h3 { font-size: 15px; margin: 0 0 2px; }
+  .phase .cost { color: #6a6a74; font-size: 12.5px; margin-bottom: 6px; }
+  .phase ul { margin: 0; padding-left: 18px; }
+  .q { background: #fff; border-radius: 14px; padding: 14px 18px; margin-bottom: 14px; box-shadow: 0 0 0 1px rgba(0,0,0,.05); }
+  .q h3 { font-size: 15.5px; margin: 0 0 8px; }
+  .opt2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; font-size: 14px; line-height: 1.6; }
+  .opt2 > div { border-radius: 10px; padding: 10px 14px; background: #f6f6f9; }
+  .opt2 > div.rec { background: #eef3ff; box-shadow: inset 0 0 0 1.5px #b8cdfc; }
+  .opt2 b { display: block; margin-bottom: 2px; }
+  .rectag { display: inline-block; font-size: 11.5px; font-weight: 700; color: #14428f; background: #d9e6ff; border-radius: 999px; padding: 0 8px; margin-left: 6px; vertical-align: 1px; }
+  .qgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
+</style>
+<body>
+<div class="board">
+<h1>从 GitHub 建 workspace · 03 规则、改动清单、分期、界面细节</h1>
+<div class="lede">01 和 02 画的是界面长什么样，这一张写规则。设计文档：<code>docs/github-workspace-design.md</code>。原则有两条：
+<b>凭据由 Orbit 负责，但只交给 runner 自己用</b>（不进 agent 的 shell，不落盘）；<b>clone 是 workspace 的一个状态，不是会话里的一次操作</b>（看得到进度、失败可以重试、不会留下半成品）。</div>
+
+<div class="decided"><b>已按推荐定下</b>（2026-11-11，你回的「按推荐」）
+<ul>
+  <li>用 <b>GitHub App</b>，不做 PAT 粘贴后备。</li>
+  <li>agent <b>不能</b>直接拿 token push，改动经 Orbit 落地推回 GitHub。</li>
+  <li>托管和自托管 runner <b>都支持</b>；自托管 runner 优先用机器自己的 git 凭据。</li>
+  <li>v1 就支持<b>私有仓库</b>。</li>
+</ul></div>
+
+<div class="section"><span class="sec after">规则</span><span class="sec-sub">web、iOS/macOS、Android 同一套</span></div>
+<table class="rules">
+<tr><th>#</th><th>场景</th><th>规则</th><th>为什么</th></tr>
+<tr><td>1</td><td>什么时候有 From GitHub</td><td>部署配好了 App（管理员打开开关，并且 ID 和密钥核对通过）。没配时完全不显示，界面和今天一样。</td><td>自建部署没有 App 就做不了这件事，显示一个点了也用不了的选项只会让人困惑。</td></tr>
+<tr><td>2</td><td>能选哪些仓库</td><td>只有<b>装了 App、并且当前用户有权限</b>的仓库，用 user token 现查。建 workspace 时服务端再查一遍。</td><td>不允许拿别人的 repoId 来建；用户在 GitHub 上收回授权后马上生效。</td></tr>
+<tr><td>3</td><td>clone 到哪</td><td><code>&lt;reposRoot&gt;/&lt;folder&gt;</code>，folder 默认是仓库名，规则和 newFolder 一样。目标必须不存在；先 clone 到临时目录，再 rename 到目标。</td><td>和 newFolder 的路径校验相同；中途失败不会留下半个仓库。</td></tr>
+<tr><td>4</td><td>什么时候 clone</td><td>建 workspace 时就把 <code>cloneState</code> 设为 PENDING，心跳把任务下发给 runner。会话已经建好，但在 READY 之前不派发。</td><td>clone 可能要几分钟，不能占着会话的 claim；失败要能单独重试。</td></tr>
+<tr><td>5</td><td>凭据顺序</td><td>先问机器上的凭据助手；没有答复，或认证失败，再向 apiserver 要 installation token 试一次。用了哪种凭据要上报。</td><td>自托管机器上已有的设置不能被 Orbit 抢掉；托管机器上只有 Orbit 的 token 可用。</td></tr>
+<tr><td>6</td><td>token 的范围</td><td>只对一个仓库，权限 <code>contents:write</code> 和 <code>metadata:read</code>，1 小时过期，只缓存在内存。只签给拥有这个 workspace 的那台 runner。</td><td>泄露时影响最小。</td></tr>
+<tr><td>7</td><td>agent 自己的 git</td><td>checkout 的 <code>.git/config</code> 和 remote URL 里都不写 token，引擎的环境变量里也没有。系统提示里告诉 agent：要推送，就走落地。</td><td>已定的第 2 项。agent 和 runner 是同一个 OS 用户，Orbit 只能承诺做得到的事。</td></tr>
+<tr><td>8</td><td>workspace 建好以后</td><td>仓库绑定（repoId、ref）v1 不能改。<code>repoUrl</code> 在建的时候就写好。删除连接不会删 workspace。</td><td>不能改，就不需要 workspace write card；项目的 Codebase 绑定马上能读到 repoUrl。</td></tr>
+<tr><td>9</td><td>失败</td><td>写成用户能处理的英文原因，带 Retry。会话在队列里显示 <code>WORKSPACE_CLONE_FAILED</code>。token 先脱敏再写日志（<code>ghs_</code> 前缀已经能识别）。</td><td>今天 clone 失败只能看到 agent 在对话里报错。</td></tr>
+<tr><td>10</td><td>文案</td><td>所有界面文案都用英文，写在 <code>machineSetupCopy.ts</code> 和新的 <code>githubCopy.ts</code> 里；原生端从同一处复制。</td><td>CLAUDE.md §5、copyLanguage 测试。</td></tr>
+</table>
+
+<div class="section"><span class="sec after">改动清单</span><span class="sec-sub">按层列出</span></div>
+<div class="layers">
+  <div class="layer"><h3>apiserver</h3><ul>
+    <li><code>schema.prisma</code> + 一次迁移：<code>github_app_config</code>、<code>github_connection</code>，Workspace 加 7 列</li>
+    <li>新增 <code>integrations/github/</code>：App 客户端（JWT、installation token、缓存）、连接流程、仓库列表</li>
+    <li>管理区 <code>/admin/integrations/github</code></li>
+    <li><code>sessions/new-workspace.ts</code>：加 <code>{ github }</code> 和拒绝码；<code>createInNewWorkspace</code></li>
+    <li>runner-api：<code>/runner/git-credential</code>、心跳里的 <code>cloneRequests</code> 和 <code>cloneReports</code></li>
+    <li>派发门槛：<code>WORKSPACE_CLONING</code> 和 <code>WORKSPACE_CLONE_FAILED</code>；clone 重试接口</li>
+    <li>租户隔离普查加新路由；PAT 的 scope</li>
+  </ul></div>
+  <div class="layer"><h3>runner-go · contracts · shared</h3><ul>
+    <li>新增 <code>clone_workdir.go</code>（capability <code>clone-workdir/v1</code>），复用 <code>orbitWorkDirTarget</code></li>
+    <li><code>network_git.go</code>：给助手加上 workspace 上下文；机器凭据失败后改用 Orbit token</li>
+    <li><code>main.go</code> 的 <code>git-credential-readonly</code>：<code>--workspace</code> 参数</li>
+    <li><code>runner_link.proto</code>：心跳的两个新字段</li>
+    <li><code>shared/dto.ts</code>：<code>NewWorkspaceRequest.github</code>，Workspace 的 clone 字段</li>
+    <li>runner 发版（bump + <code>runner-release.json</code>）</li>
+  </ul></div>
+  <div class="layer"><h3>Web（P2）· 原生（P3）</h3><ul>
+    <li><code>MachineSetupCard.tsx</code> 和 <code>machineSetupCopy.ts</code>：From GitHub 选项、仓库选择器</li>
+    <li><code>CreatedWorkspaceLine.tsx</code>：cloning、done、failed 三种状态</li>
+    <li><code>SettingsPage.tsx</code> 的 IntegrationsCard；新增 <code>GithubIntegrationPage.tsx</code></li>
+    <li><code>AdminIntegrationsPage.tsx</code>：GitHub App 卡片</li>
+    <li>"没开始"卡（RunNeverStarted）加两种原因</li>
+    <li>P3：iOS/macOS 的 <code>MachineSetupCard.swift</code>，Android 的 <code>MachineSetupCard.kt</code>，各自的设置页</li>
+  </ul></div>
+</div>
+
+<div class="section"><span class="sec after">分期</span><span class="sec-sub">每期单独可验收</span></div>
+<div class="phases">
+  <div class="phase"><h3>P0 · 连接</h3><div class="cost">apiserver + Web 设置页</div><ul><li>迁移</li><li>管理区配置并核对 App</li><li>用户连接、断开</li><li>仓库列表</li></ul><div class="cost" style="margin-top:6px">验收：用真实 App 授权，列出私有仓库</div></div>
+  <div class="phase"><h3>P1 · 建与签</h3><div class="cost">apiserver</div><ul><li><code>newWorkspace.github</code></li><li>git-credential 接口</li><li>心跳对账</li><li>派发门槛和重试</li></ul><div class="cost" style="margin-top:6px">验收：pg spec 和隔离普查都通过</div></div>
+  <div class="phase"><h3>P1r · runner</h3><div class="cost">runner-go 发版</div><ul><li>clone-workdir/v1</li><li>凭据顺序</li><li>重启后恢复</li></ul><div class="cost" style="margin-top:6px">验收：托管 runner 上 clone 私有仓库 → 会话 → 落地，在 GitHub 上看到 commit</div></div>
+  <div class="phase"><h3>P2 · Web</h3><div class="cost">按这三张板</div><ul><li>设置卡 From GitHub</li><li>会话第一行的状态</li><li>Settings 和管理区</li></ul></div>
+  <div class="phase"><h3>P3 · 原生</h3><div class="cost">iOS / macOS / Android</div><ul><li>同一套结构和文案</li><li>机器页的 Add workspace 也加上</li></ul></div>
+</div>
+
+<div class="section"><span class="sec now">界面细节</span><span class="sec-sub">2026-11-11 所有者定：四项都按推荐（A），01 和 02 画的就是 A</span></div>
+<div class="qgrid">
+<div class="q"><h3>1. From GitHub 放在哪</h3><div class="opt2">
+  <div class="rec"><b>A. 放在「A new folder」和「Another folder」之间<span class="rectag">推荐</span></b>和「新文件夹」挨着，因为两者都是"在 reposRoot 下建一个新目录"；位置固定，连没连接都一样。</div>
+  <div><b>B. 已连接时排第一</b>连了 GitHub 的人多半就是为了用它，但选项顺序会随状态变化。</div></div></div>
+<div class="q"><h3>2. 分支怎么选</h3><div class="opt2">
+  <div class="rec"><b>A. 默认分支，点 Other branch 才展开<span class="rectag">推荐</span></b>大多数情况不用选；会话本来就在自己的 worktree 分支上工作。</div>
+  <div><b>B. 总是显示分支下拉</b>一眼可见，但多一个要看的控件。</div></div></div>
+<div class="q"><h3>3. clone 进度怎么显示</h3><div class="opt2">
+  <div class="rec"><b>A. 进度条加百分比<span class="rectag">推荐</span></b>大仓库要几分钟，看到数字在动，用户就知道没卡住。大约 30 秒更新一次。</div>
+  <div><b>B. 只显示 Cloning… 和转圈</b>实现更简单，但大仓库时看不出是不是卡住了。</div></div></div>
+<div class="q"><h3>4. Settings 的 "Workspaces from GitHub" 列表</h3><div class="opt2">
+  <div class="rec"><b>A. 要，并写明每个用哪种凭据<span class="rectag">推荐</span></b>断开连接之前，能看到哪些 workspace 会受影响。</div>
+  <div><b>B. 不要</b>页面更短；凭据信息放到各自的 workspace 设置里。</div></div></div>
+</div>
+</div>
+</body>
+</html>

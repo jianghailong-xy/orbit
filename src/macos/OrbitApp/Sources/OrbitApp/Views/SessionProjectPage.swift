@@ -1,4 +1,3 @@
-#if os(iOS)
 import SwiftUI
 import OrbitKit
 
@@ -6,12 +5,18 @@ import OrbitKit
 /// A tap opens the coordinator on a phone and the project's sessions in the iPad's column; Open Session
 /// in the menu reaches the grouping target.
 struct SessionProjectRowView: View {
+    #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
     let row: SessionProjectRow
     let onOpen: () -> Void
 
     private var regular: Bool {
+        #if os(iOS)
         SessionListPresentation.resolve(isCompactWidth: horizontalSizeClass == .compact) == .regular
+        #else
+        true
+        #endif
     }
 
     var body: some View {
@@ -174,7 +179,9 @@ private struct SessionProjectProgressBar: View {
 /// action; a finished one in Open leads with Complete, which moves all its open sessions (§4.3).
 private struct SessionProjectRowActions: ViewModifier {
     @Environment(AppModel.self) private var app
+    #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
     let row: SessionProjectRow
     let view: SessionView
     let onOpen: () -> Void
@@ -183,6 +190,9 @@ private struct SessionProjectRowActions: ViewModifier {
     let onMove: () -> Void
 
     func body(content: Content) -> some View {
+        #if os(macOS)
+        content.contextMenu { menu }
+        #else
         if #available(iOS 26.0, *), horizontalSizeClass == .compact {
             content
                 .contextMenu { menu }
@@ -198,6 +208,7 @@ private struct SessionProjectRowActions: ViewModifier {
                 }
                 .contextMenu { menu }
         }
+        #endif
     }
 
     @ViewBuilder
@@ -265,10 +276,12 @@ struct SessionProjectPage: View {
     /// the page it opens lands on the conversation's stack rather than under the sheet.
     var leaveSheet: ((@escaping () -> Void) -> Void)? = nil
 
+    #if os(iOS)
     @State private var rowSwipe = RowSwipeState()
+    @State private var movingSession: Session?
+    #endif
     @State private var taggingSession: Session?
     @State private var sharingSession: Session?
-    @State private var movingSession: Session?
     @State private var promotionReview: PromotionReviewTarget?
     @State private var startSheet: StartSheet?
     /// The jobs a landing row counts, opened by pressing that row on a server that lists them.
@@ -404,8 +417,14 @@ struct SessionProjectPage: View {
             }
         }
         .listStyle(.plain)
+        // The Sessions list's soft top edge, not the hard strip iOS 26 picks here: the pinned
+        // section header floats on it with no line (the owner, 2026-11-12,
+        // docs/mocks/ios-header-soft-edge/04-board.html).
+        .softTopEdgeEffect()
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         .rowSwipeList(rowSwipe)
+        #endif
         .refreshable {
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { @MainActor in await app.loadProjectSessions(address) }
@@ -437,7 +456,7 @@ struct SessionProjectPage: View {
                 }
             }
             if rowNavigation == .selection {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: backPlacement) {
                     Button { app.leaveProjectSessions(address.projectID) } label: {
                         Label("Back", systemImage: "chevron.backward")
                     }
@@ -445,19 +464,22 @@ struct SessionProjectPage: View {
                 }
             }
             ToolbarItem(placement: .principal) { title }
-            ToolbarItem(placement: .topBarTrailing) { openProjectButton }
+            ToolbarItem(placement: openPlacement) { openProjectButton }
         }
         .sheet(item: $taggingSession) { SessionTagSheet(session: $0).environment(app) }
         .sheet(item: $sharingSession) { session in
             if let baseURL = app.baseURL {
-                ShareSheet(kind: .session, rootID: session.id, baseURL: baseURL, tokenStore: app.tokenStore)
+                ShareSheet(kind: .session, rootID: session.id, baseURL: baseURL, tokenStore: app.tokenStore,
+                           guests: .of(session, agents: app.agents))
             }
         }
+        #if os(iOS)
         .sheet(item: $movingSession) { session in
             if let agent = app.agents?.agent(session.agent?.id ?? session.agentId ?? address.agentID) {
                 SessionMoveSheet(session: session, workspace: agent, listed: sessions).environment(app)
             }
         }
+        #endif
         // Hosted here rather than by the card or the row, so a poll redrawing either cannot dismiss
         // what the owner is reading. The review is the coordinator conversation's own sheet.
         .sheet(item: $promotionReview) { target in
@@ -548,6 +570,22 @@ struct SessionProjectPage: View {
         }
     }
 
+    /// The way back to the workspace's list and the project's page, where each platform's bar puts them.
+    private var backPlacement: ToolbarItemPlacement {
+        #if os(iOS)
+        .topBarLeading
+        #else
+        .navigation
+        #endif
+    }
+    private var openPlacement: ToolbarItemPlacement {
+        #if os(iOS)
+        .topBarTrailing
+        #else
+        .primaryAction
+        #endif
+    }
+
     private var title: some View {
         VStack(spacing: 1) {
             Text(titleText).font(.headline).lineLimit(1)
@@ -590,6 +628,17 @@ struct SessionProjectPage: View {
     private var progressCard: some View {
         VStack(spacing: 0) {
             progressLine
+            // A non-code project reads no landing (board 01 E): the mark, under the progress.
+            if doneSubject?.nonCode == true {
+                Text(ProjectDone.nonCodeProjectLine)
+                    .font(.orbitMeta)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 12)
+                    .padding(.top, -4)
+            }
             startLine
         }
         .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
@@ -861,13 +910,22 @@ struct SessionProjectPage: View {
         switch rowNavigation {
         case .selection:
             row.sessionRowActions(session, scope: scope, onTag: { taggingSession = session },
-                                  onShare: { sharingSession = session }, onMove: { movingSession = session })
+                                  onShare: { sharingSession = session }, onMove: moveAction(session))
                 .tag(session.id)
         case .push:
             Button { openMember(session) } label: { row.foregroundStyle(.primary) }
                 .sessionRowActions(session, scope: scope, onTag: { taggingSession = session },
-                                   onShare: { sharingSession = session }, onMove: { movingSession = session })
+                                   onShare: { sharingSession = session }, onMove: moveAction(session))
         }
+    }
+
+    /// Move to a folder is the phone's and the iPad's (session folders are iOS's); the Mac's row has none.
+    private func moveAction(_ session: Session) -> (() -> Void)? {
+        #if os(iOS)
+        return { movingSession = session }
+        #else
+        return nil
+        #endif
     }
 }
 /// The merge into main as the project's sessions page draws it, under the progress card (owner
@@ -1295,7 +1353,9 @@ private struct RequestedStartProjectSheet: View {
                     .frame(maxWidth: 640)
                     .frame(maxWidth: .infinity)
             }
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -1363,5 +1423,3 @@ private struct RequestedStartProjectSheet: View {
         }
     }
 }
-
-#endif

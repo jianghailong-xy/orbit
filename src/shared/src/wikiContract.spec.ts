@@ -42,6 +42,7 @@ import {
   WIKI_REVIEW_MODES,
   WIKI_REVIEW_RULES,
   WIKI_SEARCH_MATCHES,
+  WIKI_SEARCH_UNAVAILABLE,
   WIKI_SLUG_PATTERN,
   WIKI_SOURCE_KINDS,
   WIKI_SOURCE_REFS,
@@ -491,6 +492,7 @@ describe('wiki contract', () => {
     expect(keysOf(CONTRACT.authorKinds)).toEqual([...WIKI_AUTHOR_KINDS]);
     expect(keysOf(CONTRACT.exposureChannels)).toEqual([...WIKI_EXPOSURE_CHANNELS]);
     expect(keysOf(CONTRACT.searchMatches)).toEqual([...WIKI_SEARCH_MATCHES]);
+    expect(keysOf(CONTRACT.searchUnavailable)).toEqual([...WIKI_SEARCH_UNAVAILABLE]);
     expect(CONTRACT.effectPolicy.decide.actions).toEqual([...WIKI_DECIDE_ACTIONS]);
     expect(CONTRACT.refusals.map((r: { code: string }) => r.code)).toEqual([...WIKI_REFUSAL_CODES]);
     expect(CONTRACT.space.slug.pattern).toBe(WIKI_SLUG_PATTERN);

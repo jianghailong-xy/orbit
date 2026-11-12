@@ -390,7 +390,9 @@ class ProjectSessionsShellTest {
         compose.onAllNodesWithTag("project-sessions-ending-settled").assertCountEquals(0)
         // The current read, recorded by the owner: the same ending, spelled by its badge.
         ProjectShell.doneCounts = true
-        await { exists(hasTestTag("project-sessions-ending-settled")) }
+        // Nothing announces the newer read: the page reads the ending again on its one-minute poll, so a wait of exactly one minute
+        // raced it (red 4 of 5 at host load ~40). Give it the poll and a margin.
+        compose.waitUntil(120_000) { exists(hasTestTag("project-sessions-ending-settled")) }
         compose.onNode(hasText("recorded by you") and hasAnyAncestor(hasTestTag("project-sessions-ending-settled")),
             useUnmergedTree = true).assertExists()
         compose.onAllNodesWithTag("project-sessions-progress").assertCountEquals(0)

@@ -439,7 +439,7 @@ export function engineProviders(engine: AgentProvider, sources: ChoiceSources): 
         (carried
           ? { unavailable: carried, fixEngine: engine }
           : pool.unavailable
-            ? { unavailable: pool.unavailable, fixHref: `/providers/pools/${encodeId(pool.id)}` }
+            ? { unavailable: pool.unavailable, fixHref: `/settings/providers/pools/${encodeId(pool.id)}` }
             : {})),
     }));
 

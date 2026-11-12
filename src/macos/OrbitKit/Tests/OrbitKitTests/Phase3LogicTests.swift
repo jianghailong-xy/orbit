@@ -181,6 +181,16 @@ final class Phase3LogicTests: XCTestCase {
         XCTAssertNil(Notifications.intent(actionId: Notifications.actionReply, userInfo: ui, responseText: "   "))
         XCTAssertNil(Notifications.intent(actionId: Notifications.actionAllow, userInfo: [:]))   // no session
 
+        // A runner draining for its update with the owner's work waiting (D3, kind runner-updating) names no
+        // session: a tap opens the runner's page, by the lists' spelling of its id. Other runner alerts stay untapped.
+        let drain = ["kind": "runner-updating", "runnerID": "019a0000-0000-7000-8000-000000000003"]
+        XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier", userInfo: drain),
+                       .open(.runner(PublicID.toPublic("019a0000-0000-7000-8000-000000000003"))))
+        XCTAssertNil(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
+                                          userInfo: ["kind": "runner-updating"]), "it names its runner")
+        XCTAssertNil(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
+                                          userInfo: ["kind": "engine-signed-out", "runnerID": "r1"]))
+
         // A merge into main waiting on the owner opens the project's page, where its card is
         // (owner decision 2026-10-06); every other owner item still opens the conversation.
         XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
