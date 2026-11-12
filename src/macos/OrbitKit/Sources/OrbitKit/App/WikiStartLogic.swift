@@ -40,6 +40,24 @@ public enum WikiStartCopy {
     public static let createAnswer = "Create"
     public static let createNote = "A wiki describes one repository and stays up to date from its sessions, tasks and receipts. Runs on the server with this deployment’s \(WikiPlanCopy.drafterServer)."   // WIKI_CREATE_NOTE
     public static let workspaceOffline = "offline"                            // WIKI_WORKSPACE_OFFLINE
+    /// The way to another wiki (docs/wiki-explicit-creation-design.md §3.4): the Wiki group's last row and the head
+    /// picker's last item.
+    public static let newWiki = "New wiki…"                                   // WIKI_NEW
+    /// On a repository in the Create wiki form that already has a wiki in use: one repository, one wiki.
+    public static let hasAWiki = "Has a wiki"                                 // WIKI_HAS_A_WIKI
+
+    // The card an agent files for a wiki (WIKI_CREATE, design §3.6).
+    public static let cardRepository = "Repository"                           // WIKI_CREATE_REPOSITORY
+    public static let cardReadsFrom = "Reads from"                            // WIKI_CREATE_READS_FROM
+    public static let cardMaintenance = "Maintenance"                         // WIKI_CREATE_MAINTENANCE
+    public static let changeSettings = "Change settings…"                     // WIKI_CREATE_CHANGE_SETTINGS
+    public static let notHere = "Not for this repository"                     // WIKI_CREATE_NOT_HERE
+    /// The maintenance a wiki made from the card starts with: the Create wiki form's defaults, on
+    /// (`WIKI_CREATE_MAINTENANCE_TEXT`).
+    public static let cardMaintenanceText =
+        "On · \(WikiModeCopy.runsADay(WikiMaintenanceSettings.default.dailyRunLimit)) · last \(WikiMaintenanceSettings.default.lookbackDays ?? 0) days"
+    /// A WIKI_CREATE card once it is DONE: the wiki it made, by name when the answer carries it.
+    public static func created(_ name: String?) -> String { name.map { "Created the wiki \($0)" } ?? "Wiki created" }
 
     /// A done first step: where maintenance reads the repository from (`wikiStartReadsFrom`).
     public static func readsFrom(_ workspace: String?) -> String { workspace.map { "Reads from \($0)" } ?? connected }
@@ -312,25 +330,39 @@ public enum WikiStartLogic {
     }
 
     /// The workspaces a form's menu lists under one head: a repository in the form that makes a wiki, none in Set up.
+    /// A repository that has a wiki in use already is greyed under `Has a wiki`, and its workspaces are not offered.
     public struct WorkspaceGroup: Equatable, Sendable, Identifiable {
         public let repository: String?
         public let choices: [WorkspaceChoice]
+        public let hasWiki: Bool
         public var id: String { repository ?? "" }
 
-        public init(repository: String?, choices: [WorkspaceChoice]) {
+        public init(repository: String?, choices: [WorkspaceChoice], hasWiki: Bool = false) {
             self.repository = repository
             self.choices = choices
+            self.hasWiki = hasWiki
         }
     }
 
     /// The repositories the form that makes a wiki groups its workspaces under, by name. A workspace with none is left
-    /// out (`wikiRepositoryGroups`).
-    public static func repositoryGroups(_ choices: [WorkspaceChoice]) -> [WorkspaceGroup] {
+    /// out (`wikiRepositoryGroups`). `wikis` are the repositories of the wikis in use (`repoUrlNorm`, not Trash's): their
+    /// groups are `hasWiki`, since a repository has one wiki (design §3.4) and the server refuses a second with 409
+    /// WIKI_SPACE_EXISTS.
+    public static func repositoryGroups(_ choices: [WorkspaceChoice], wikis: [String?] = []) -> [WorkspaceGroup] {
         var groups: [String: [WorkspaceChoice]] = [:]
         for choice in choicesInOrder(choices) {
             if let repository = choice.repository { groups[repository, default: []].append(choice) }
         }
-        return groups.sorted { $0.key < $1.key }.map { WorkspaceGroup(repository: $0.key, choices: $0.value) }
+        let made = Set(wikis.compactMap { $0 }.filter { !$0.isEmpty })
+        return groups.sorted { $0.key < $1.key }.map {
+            WorkspaceGroup(repository: $0.key, choices: $0.value, hasWiki: made.contains($0.key))
+        }
+    }
+
+    /// The workspaces the form that makes a wiki lets one pick: those of the repositories with no wiki yet
+    /// (`wikiCreateOffered`).
+    public static func createOffered(_ groups: [WorkspaceGroup]) -> [WorkspaceChoice] {
+        groups.filter { !$0.hasWiki }.flatMap(\.choices)
     }
 
     /// The workspace a form opens on: the one maintenance already reads from; else the one the reader came from, when
@@ -369,5 +401,38 @@ public enum WikiStartLogic {
     public static func createRequest(_ choice: WorkspaceChoice, maintenance: WikiMaintenanceUpdate) -> WikiSpaceCreate? {
         guard let repository = choice.repository, let repoUrl = choice.repoUrl else { return nil }
         return WikiSpaceCreate(title: repositoryTitle(repository), repoUrl: repoUrl, maintenance: maintenance)
+    }
+
+    // MARK: the card an agent files for a wiki (WIKI_CREATE, design §3.6)
+
+    /// What a WIKI_CREATE card says it will make: the repository, the workspace it reads it from, and the maintenance
+    /// (`WikiCreateCardFacts`).
+    public struct CardFacts: Equatable, Sendable {
+        public let repository: String?
+        /// The filing session's workspace as the forms name it; nil when it is not among the workspaces read.
+        public let readsFrom: String?
+        public let offline: Bool
+        public let maintenance: String
+
+        public init(repository: String?, readsFrom: String?, offline: Bool, maintenance: String) {
+            self.repository = repository
+            self.readsFrom = readsFrom
+            self.offline = offline
+            self.maintenance = maintenance
+        }
+    }
+
+    /// The card's facts, read against the workspaces the forms offer (`wikiCreateCardFacts`). Ids are compared in both
+    /// spellings, since the request and the workspace list may answer in different ones.
+    public static func cardFacts(repoUrlNorm: String?, workspaceId: String?, choices: [WorkspaceChoice]) -> CardFacts {
+        let workspace = workspaceId.flatMap { id in choices.first { $0.id == id } ?? choices.first { sameID($0.id, id) } }
+        return CardFacts(repository: repoUrlNorm, readsFrom: workspace?.label, offline: workspace.map { !$0.online } ?? false,
+                         maintenance: WikiStartCopy.cardMaintenanceText)
+    }
+
+    /// The workspace a WIKI_CREATE card's Change settings… opens the form on: the filing workspace when the form offers
+    /// it, spelled as its choices spell it.
+    public static func asked(_ offered: [WorkspaceChoice], workspaceId: String?) -> String? {
+        offered.first { sameID($0.id, workspaceId) }?.id
     }
 }

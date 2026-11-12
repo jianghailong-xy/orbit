@@ -135,6 +135,11 @@ final class OwnerRequestsModel {
         adopt(try await api.completeOwnerRequest(request.id, body))
     }
 
+    /// A WIKI_CREATE card's Create wiki: the server makes the wiki and answers with the card, DONE.
+    func createWiki(_ request: OwnerRequest) async throws {
+        adopt(try await api.createWikiFromOwnerRequest(request.id))
+    }
+
     func decline(_ request: OwnerRequest, reason: String) async throws {
         adopt(try await api.declineOwnerRequest(request.id, reason: reason))
     }

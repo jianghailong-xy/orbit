@@ -25,6 +25,8 @@ struct WikiHomeActions {
     var search: (String) async -> [WikiSearchHit] = { _ in [] }
     /// The space's Wiki settings: the gear in the bar (mock 12 ①) and Manage spaces.
     var openSettings: () -> Void = {}
+    /// New wiki…, the head picker's item under the spaces: the Create wiki form.
+    var createWiki: () -> Void = {}
     /// The Contents sheet — the directory — from the list button in the bar (mock 30 ③).
     var openContents: () -> Void = {}
     /// Activity, from the bar's history mark (design §12.3.2).
@@ -179,7 +181,8 @@ struct WikiHomePage: View {
                 .font(.largeTitle.bold())
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
-            WikiSpacePicker(space: space, spaces: spaces, pick: actions.pickSpace, manage: actions.openSettings)
+            WikiSpacePicker(space: space, spaces: spaces, pick: actions.pickSpace, manage: actions.openSettings,
+                            create: actions.createWiki)
         }
         .padding(.top, 4)
     }
@@ -605,13 +608,15 @@ struct WikiFirstStartPage: View {
 /// on a phone, the directory column's beside it. With one space it is a grey label and no control: no chevron,
 /// no menu. With several, a menu of every space, the current one ticked — a toggle per space, whose tick a menu
 /// draws in its own column, its name the title and the repository and documents the line under it — what waits
-/// in each in the row's icon cell, and Manage spaces at the foot, into Wiki settings. Trash is not in it: it opens
-/// from Wiki settings (docs/mocks/wiki-trash/02-trash-entry).
+/// in each in the row's icon cell, and under a divider New wiki… — the Create wiki form (docs/wiki-explicit-creation-
+/// design.md §3.4, board 46 part 4 ③) — then Manage spaces at the foot, into Wiki settings. Trash is not in it: it
+/// opens from Wiki settings (docs/mocks/wiki-trash/02-trash-entry).
 struct WikiSpacePicker: View {
     let space: WikiSpace
     let spaces: [WikiSpace]
     var pick: (String) -> Void = { _ in }
     var manage: () -> Void = {}
+    var create: () -> Void = {}
 
     var body: some View {
         let names = WikiSpaceLogic.names(spaces)
@@ -642,6 +647,10 @@ struct WikiSpacePicker: View {
                     }
                 }
                 Divider()
+                Button(action: create) {
+                    Label(WikiStartCopy.newWiki, systemImage: "plus")
+                }
+                .accessibilityIdentifier("wiki-picker-new-wiki")
                 Button(action: manage) {
                     Label(WikiCopy.manageSpaces, systemImage: "gearshape")
                 }

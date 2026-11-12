@@ -171,6 +171,7 @@ public enum Notifications {
         case .decision:   return "Answer"
         case .manualStep: return "Mark done"
         case .confirm:    return "Review"
+        case .wikiCreate: return "Review"
         }
     }
 

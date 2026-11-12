@@ -822,6 +822,12 @@ public final class APIClient: @unchecked Sendable {
         try await post("owner-requests/\(id)/decline", body: OwnerRequestDeclineBody(reason: reason))
     }
 
+    /// A WIKI_CREATE card's Create wiki (docs/wiki-explicit-creation-design.md §3.6): the owner's door that makes the
+    /// wiki with maintenance on and its plan's first draft asked for, and settles the card DONE.
+    public func createWikiFromOwnerRequest(_ id: String) async throws -> OwnerRequest {
+        try await postEmpty("owner-requests/\(id)/create-wiki")
+    }
+
     /// A SECRET request's key, in the body and nowhere else; the answer never carries it back.
     public func submitOwnerSecret(_ id: String, _ body: OwnerRequestSecretBody) async throws -> OwnerRequest {
         try await post("owner-requests/\(id)/secret", body: body)

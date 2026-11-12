@@ -89,9 +89,14 @@ public struct OwnerRequestSecretGrant: Codable, Equatable, Sendable {
 public struct OwnerRequestAnswer: Codable, Equatable, Sendable {
     public let option: Int?
     public let text: String?
-    public init(option: Int? = nil, text: String? = nil) {
+    /// WIKI_CREATE once DONE: the wiki made.
+    public let spaceId: String?
+    public let name: String?
+    public init(option: Int? = nil, text: String? = nil, spaceId: String? = nil, name: String? = nil) {
         self.option = option
         self.text = text
+        self.spaceId = spaceId
+        self.name = name
     }
 }
 
@@ -111,6 +116,9 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
     public let secretScope: String?
     public let secretGrant: OwnerRequestSecretGrant?
     public let verifyHint: String?
+    /// WIKI_CREATE: the repository the wiki is asked for, and the asking session's workspace it would read it from.
+    public let repoUrlNorm: String?
+    public let workspaceId: String?
     public let expiresAt: String?
     public let askedBySessionId: String
     public let projectId: String?
@@ -127,7 +135,8 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
                 options: [OwnerRequestOption]? = nil, recommendedOption: Int? = nil,
                 steps: [OwnerRequestStep]? = nil, secretSpec: OwnerRequestSecretSpec? = nil,
                 secretScope: String? = nil, secretGrant: OwnerRequestSecretGrant? = nil,
-                verifyHint: String? = nil, expiresAt: String? = nil, askedBySessionId: String,
+                verifyHint: String? = nil, repoUrlNorm: String? = nil, workspaceId: String? = nil,
+                expiresAt: String? = nil, askedBySessionId: String,
                 projectId: String? = nil, resolvedAt: String? = nil, resolvedByUserId: String? = nil,
                 resolutionNote: String? = nil, answer: OwnerRequestAnswer? = nil,
                 resolvedClient: String? = nil, createdAt: String) {
@@ -145,6 +154,8 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
         self.secretScope = secretScope
         self.secretGrant = secretGrant
         self.verifyHint = verifyHint
+        self.repoUrlNorm = repoUrlNorm
+        self.workspaceId = workspaceId
         self.expiresAt = expiresAt
         self.askedBySessionId = askedBySessionId
         self.projectId = projectId
@@ -158,7 +169,7 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
 
     private enum CodingKeys: String, CodingKey {
         case id, kind, state, title, why, blocksTaskIds, ifUnanswered, options, recommendedOption, steps
-        case secretSpec, secretScope, secretGrant, verifyHint, expiresAt, askedBySessionId, projectId
+        case secretSpec, secretScope, secretGrant, verifyHint, repoUrlNorm, workspaceId, expiresAt, askedBySessionId, projectId
         case resolvedAt, resolvedByUserId, resolutionNote, answer, resolvedClient, createdAt
     }
 
@@ -178,6 +189,8 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
         secretScope = try? c.decodeIfPresent(String.self, forKey: .secretScope)
         secretGrant = try? c.decodeIfPresent(OwnerRequestSecretGrant.self, forKey: .secretGrant)
         verifyHint = try? c.decodeIfPresent(String.self, forKey: .verifyHint)
+        repoUrlNorm = try? c.decodeIfPresent(String.self, forKey: .repoUrlNorm)
+        workspaceId = try? c.decodeIfPresent(String.self, forKey: .workspaceId)
         expiresAt = try? c.decodeIfPresent(String.self, forKey: .expiresAt)
         askedBySessionId = try c.decode(String.self, forKey: .askedBySessionId)
         projectId = try? c.decodeIfPresent(String.self, forKey: .projectId)

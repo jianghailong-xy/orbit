@@ -199,6 +199,10 @@ struct SectionSidebar: View {
                 if section != .wiki || model.wiki?.shown == true {
                     sectionRow(section)
                 }
+                // New wiki… under the Wiki row once there is a wiki (docs/wiki-explicit-creation-design.md §3.4).
+                if section == .wiki, model.wiki?.shown == true, model.wiki?.spaces.isEmpty == false {
+                    newWikiRow
+                }
             }
             // "Waiting on you", raised as a sheet over whatever is selected.
             OwnerRequestInboxEntry()
@@ -244,6 +248,20 @@ struct SectionSidebar: View {
         .task { await model.wiki?.loadSpaces() }
         // The Projects row counts the projects waiting on you, and the last group lists the open ones.
         .task { await model.projects?.load() }
+    }
+
+    /// New wiki…: grey, a plus and no count, as the drawer draws it; it raises the Create wiki form and selects nothing.
+    private var newWikiRow: some View {
+        Button {
+            model.wiki?.creating = true
+        } label: {
+            Label(WikiStartCopy.newWiki, systemImage: "plus")
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("sidebar-new-wiki")
     }
 
     /// Projects, Tasks or the Wiki, with the drawer's amber count of what waits on you there.

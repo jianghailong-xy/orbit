@@ -770,6 +770,9 @@ struct NavigationDrawer: View {
                         // (WIKI_DISABLED), as the web sidebar draws none: a row that led to a refusal
                         // would be worse than none.
                         if model.wiki?.shown == true { wikiRow }
+                        // New wiki… (docs/wiki-explicit-creation-design.md §3.4): once there is a wiki; before
+                        // that the Wiki's own page is the Set up your first wiki card.
+                        if model.wiki?.shown == true, model.wiki?.spaces.isEmpty == false { newWikiRow }
                     } else {
                         sectionRow(section)
                     }
@@ -1058,6 +1061,27 @@ struct NavigationDrawer: View {
         }
         .buttonStyle(.plain)
         .drawerRow()
+    }
+
+    /// New wiki…, under the Wiki row (board 46 part 4 ②): grey, a plus, no count. It raises the Create wiki form over
+    /// the shell and leaves the drawer where it is.
+    private var newWikiRow: some View {
+        Button {
+            model.wiki?.creating = true
+        } label: {
+            pill(selected: false) {
+                HStack(spacing: 12) {
+                    Image(systemName: "plus")
+                        .frame(width: 24)
+                    Text(WikiStartCopy.newWiki)
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .drawerRow()
+        .accessibilityIdentifier("drawer-new-wiki")
     }
 
     /// The rule and the group label that set the Workspaces apart from the work above them.

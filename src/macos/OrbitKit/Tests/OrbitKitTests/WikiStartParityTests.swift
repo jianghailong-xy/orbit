@@ -183,6 +183,68 @@ final class WikiStartParityTests: XCTestCase {
         let shown: [Shown]
         let repositories: [Repository]
         let workspaces: Workspaces
+        let hasWiki: HasWiki
+        let wikiCreateCard: WikiCreateCard
+
+        /// The Create wiki form once a wiki exists (design §3.4, board 46 parts 4-5).
+        struct HasWiki: Decodable {
+            struct Group: Decodable {
+                let repository: String
+                let choices: [String]
+                let hasWiki: Bool
+            }
+
+            struct AllHaveWikis: Decodable {
+                let wikis: [String]
+                let offered: [String]
+                let pick: String?
+            }
+
+            struct Refusal: Decodable {
+                let status: Int
+                let code: String
+                let message: String
+            }
+
+            let newWiki: String
+            let label: String
+            let wikis: [String]
+            let groups: [Group]
+            let offered: [String]
+            let defaults: [Workspaces.Default]
+            let allHaveWikis: AllHaveWikis
+            let refusal: Refusal
+        }
+
+        /// The WIKI_CREATE owner-request card (design §3.6).
+        struct WikiCreateCard: Decodable {
+            struct Labels: Decodable, Equatable {
+                let repository: String
+                let readsFrom: String
+                let maintenance: String
+            }
+
+            struct Case: Decodable {
+                struct Request: Decodable {
+                    let repoUrlNorm: String?
+                    let workspaceId: String?
+                }
+
+                struct Facts: Decodable, Equatable {
+                    let repository: String?
+                    let readsFrom: String?
+                    let offline: Bool
+                    let maintenance: String
+                }
+
+                let request: Request
+                let facts: Facts
+            }
+
+            let labels: Labels
+            let buttons: [String]
+            let cases: [Case]
+        }
     }
 
     private struct DocsFixture: Decodable {
@@ -426,6 +488,95 @@ final class WikiStartParityTests: XCTestCase {
         XCTAssertEqual(WikiStartLogic.workspaceDefault([], current: nil, from: nil), start.workspaces.none)
     }
 
+    // MARK: the Create wiki form once a wiki exists (design §3.4)
+
+    func testItNamesTheWayToAnotherWikiAndTheMarkOfARepositoryThatHasOne() throws {
+        let start = try startFixture()
+        XCTAssertEqual(WikiStartCopy.newWiki, start.hasWiki.newWiki)
+        XCTAssertEqual(WikiStartCopy.hasAWiki, start.hasWiki.label)
+    }
+
+    func testARepositoryThatHasAWikiIsGreyedAsAWholeGroup() throws {
+        let start = try startFixture()
+        let groups = WikiStartLogic.repositoryGroups(choices(start), wikis: start.hasWiki.wikis)
+        XCTAssertEqual(groups.map(\.repository), start.hasWiki.groups.map(\.repository))
+        XCTAssertEqual(groups.map { $0.choices.map(\.id) }, start.hasWiki.groups.map(\.choices))
+        XCTAssertEqual(groups.map(\.hasWiki), start.hasWiki.groups.map(\.hasWiki))
+    }
+
+    func testItOffersOnlyRepositoriesWithNoWikiAndOpensOnOneOfThem() throws {
+        let start = try startFixture()
+        let left = WikiStartLogic.createOffered(WikiStartLogic.repositoryGroups(choices(start), wikis: start.hasWiki.wikis))
+        XCTAssertEqual(left.map(\.id), start.hasWiki.offered)
+        for row in start.hasWiki.defaults {
+            XCTAssertEqual(WikiStartLogic.workspaceDefault(left, current: row.current, from: row.from), row.pick, "\(row)")
+        }
+    }
+
+    func testItOffersNothingWhenEveryRepositoryHasAWiki() throws {
+        let start = try startFixture()
+        let all = start.hasWiki.allHaveWikis
+        let left = WikiStartLogic.createOffered(WikiStartLogic.repositoryGroups(choices(start), wikis: all.wikis))
+        XCTAssertEqual(left.map(\.id), all.offered)
+        XCTAssertEqual(WikiStartLogic.workspaceDefault(left, current: nil, from: nil), all.pick)
+    }
+
+    func testItGreysNothingWithoutAWiki() throws {
+        let start = try startFixture()
+        XCTAssertTrue(WikiStartLogic.repositoryGroups(choices(start)).allSatisfy { !$0.hasWiki })
+        XCTAssertTrue(WikiStartLogic.repositoryGroups(choices(start), wikis: [nil, ""]).allSatisfy { !$0.hasWiki })
+    }
+
+    /// A submission that meets a wiki made meanwhile shows the server's message, read as every wiki refusal is.
+    func testAWikiMadeMeanwhileIsTheServersRefusal() throws {
+        let refusal = try startFixture().hasWiki.refusal
+        XCTAssertEqual(refusal.status, 409)
+        XCTAssertEqual(refusal.code, "WIKI_SPACE_EXISTS")
+        let body = String(decoding: try JSONSerialization.data(withJSONObject: ["code": refusal.code, "message": refusal.message]), as: UTF8.self)
+        let error = APIError.http(status: refusal.status, body: body)
+        XCTAssertEqual(APIClient.refusalCode(error), refusal.code)
+        XCTAssertEqual(APIClient.refusalString(error, "message"), refusal.message, "the form shows the server's message (WikiModel.refusal)")
+    }
+
+    /// Change settings… opens the form on the filing workspace only when the form offers it.
+    func testChangeSettingsOpensOnTheFilingWorkspaceWhenItIsOffered() throws {
+        let start = try startFixture()
+        let left = WikiStartLogic.createOffered(WikiStartLogic.repositoryGroups(choices(start), wikis: start.hasWiki.wikis))
+        XCTAssertEqual(WikiStartLogic.asked(left, workspaceId: "ba"), "ba")
+        XCTAssertNil(WikiStartLogic.asked(left, workspaceId: "sg"), "a repository with a wiki is not offered")
+        XCTAssertNil(WikiStartLogic.asked(left, workspaceId: nil))
+    }
+
+    // MARK: the WIKI_CREATE card (design §3.6)
+
+    func testTheCardSaysWhatItMakesUnderTheFixturesLabelsWithItsThreeButtons() throws {
+        let card = try startFixture().wikiCreateCard
+        XCTAssertEqual(StartFixture.WikiCreateCard.Labels(repository: WikiStartCopy.cardRepository, readsFrom: WikiStartCopy.cardReadsFrom,
+                                                          maintenance: WikiStartCopy.cardMaintenance), card.labels)
+        XCTAssertEqual([OwnerRequests.primaryLabel(.wikiCreate), WikiStartCopy.changeSettings, WikiStartCopy.notHere], card.buttons)
+        XCTAssertEqual(WikiStartCopy.create, OwnerRequests.primaryLabel(.wikiCreate))
+    }
+
+    func testTheCardReadsEachRequestAgainstTheWorkspaces() throws {
+        let start = try startFixture()
+        for row in start.wikiCreateCard.cases {
+            let facts = WikiStartLogic.cardFacts(repoUrlNorm: row.request.repoUrlNorm, workspaceId: row.request.workspaceId, choices: choices(start))
+            XCTAssertEqual(StartFixture.WikiCreateCard.Case.Facts(repository: facts.repository, readsFrom: facts.readsFrom,
+                                                                 offline: facts.offline, maintenance: facts.maintenance),
+                           row.facts, "\(row.request.repoUrlNorm ?? "-") from \(row.request.workspaceId ?? "-")")
+        }
+    }
+
+    func testTheCardReadsAWikiCreateRequestFromTheWire() throws {
+        let json = #"{"id":"r1","kind":"WIKI_CREATE","state":"DONE","title":"Create a wiki for billing-api?","why":"w","askedBySessionId":"s1","repoUrlNorm":"github.com/acme/billing-api","workspaceId":"ba","answer":{"spaceId":"sp1","name":"billing-api"},"createdAt":"2026-11-12T00:00:00.000Z"}"#
+        let request = try JSONDecoder().decode(OwnerRequest.self, from: Data(json.utf8))
+        XCTAssertEqual(request.kind, .wikiCreate)
+        XCTAssertEqual(request.repoUrlNorm, "github.com/acme/billing-api")
+        XCTAssertEqual(request.workspaceId, "ba")
+        XCTAssertEqual(request.answer?.name, "billing-api")
+        XCTAssertEqual(OwnerRequests.outcomeLine(request, runner: ""), "Created the wiki billing-api")
+    }
+
     /// The workspaces as this client reads them: the list's `repoUrl`, its runner's name, and offline only when the
     /// runner read says so. `GET /agents` is `GET /workspaces` by another name (`workspaces.controller.ts`).
     func testChoicesAreReadFromTheWorkspaceList() throws {
@@ -534,6 +685,10 @@ final class WikiStartParityTests: XCTestCase {
             ("WIKI_START_NO_PLAN", WikiStartCopy.noPlan), ("WIKI_START_NOT_WRITTEN", WikiStartCopy.notWritten),
             ("WIKI_CREATE", WikiStartCopy.create), ("WIKI_CREATE_OPEN", WikiStartCopy.createOpen),
             ("WIKI_WORKSPACE_OFFLINE", WikiStartCopy.workspaceOffline),
+            ("WIKI_NEW", WikiStartCopy.newWiki), ("WIKI_HAS_A_WIKI", WikiStartCopy.hasAWiki),
+            ("WIKI_CREATE_REPOSITORY", WikiStartCopy.cardRepository), ("WIKI_CREATE_READS_FROM", WikiStartCopy.cardReadsFrom),
+            ("WIKI_CREATE_MAINTENANCE", WikiStartCopy.cardMaintenance), ("WIKI_CREATE_CHANGE_SETTINGS", WikiStartCopy.changeSettings),
+            ("WIKI_CREATE_NOT_HERE", WikiStartCopy.notHere),
         ]
         for (name, value) in constants { assertDeclares(lib, name, value, in: Self.lib) }
 
@@ -642,7 +797,7 @@ final class WikiStartParityTests: XCTestCase {
         assertSays(dialog, "inWiki.length === 0 ? choices : choices.filter((choice) => sameId(choice.id, maintenance.workspaceId) || inWiki.some((row) => sameId(row.id, choice.id))),",
                    in: Self.dialog)
         assertSays(dialog, "const chosen = picked ?? wikiWorkspaceDefault(offered, { current, from: fromWorkspace(offered) });", in: Self.dialog)
-        assertSays(dialog, "const chosen = picked ?? wikiWorkspaceDefault(offered, { current: null, from: fromWorkspace(offered) });", in: Self.dialog)
+        assertSays(dialog, "const chosen = picked ?? wikiWorkspaceDefault(offered, { current: asked, from: fromWorkspace(offered) });", in: Self.dialog)
         assertSays(dialog, "workspaceNote={choice?.repository ? wikiCreateRepositoryNote(choice.repository) : WIKI_REPO_FROM_NOTE}", in: Self.dialog)
         assertOrder(dialog, ["title: wikiRepositoryTitle(choice!.repository!),", "repoUrl: choice!.repoUrl!,", "maintenance,"], "what makes a wiki")
 
@@ -650,9 +805,17 @@ final class WikiStartParityTests: XCTestCase {
         assertSays(settings, ".sheet(isPresented: $settingUp) { WikiSetUpSheet(wiki: wiki, space: space) }", in: "WikiSettingsView.swift")
         let form = try slice(settings, from: "struct WikiMaintenanceForm: View {", to: "struct WikiSetUpSheet: View {")
         assertOrder(form, ["private var chosen: String? { choice.workspaceID ?? opensOn }", "Text(WikiStartLogic.optionLabel(workspace)).tag(Optional(workspace.id))",
-                           "Picker(WikiModeCopy.repoFrom, selection: Binding(get: { chosen }, set: { choice.workspaceID = $0 })) {",
-                           "if chosen == nil { Text(WikiModeCopy.noWorkspace).tag(String?.none) }", "if let repository = group.repository {",
+                           "Picker(WikiModeCopy.repoFrom, selection: Binding(get: { chosen }, set: { id in",
+                           "if let id, offeredIDs.contains(id) { choice.workspaceID = id }",
+                           "if chosen == nil { Text(WikiModeCopy.noWorkspace).tag(String?.none) }",
+                           "if let repository = group.repository, group.hasWiki {",
+                           "Section(\"\\(repository) · \\(WikiStartCopy.hasAWiki)\") { greyed(group.choices) }",
+                           "} else if let repository = group.repository {",
                            "Section(repository) { options(group.choices) }"], "the form's picker")
+        assertSays(form, "private var offeredIDs: Set<String> { Set(groups.filter { !$0.hasWiki }.flatMap(\\.choices).map(\\.id)) }",
+                   in: "WikiSettingsView.swift")
+        let greyed = try slice(form, from: "private func greyed(", to: "var body: some View {")
+        assertOrder(greyed, [".foregroundStyle(.secondary)", ".selectionDisabled()", ".disabled(true)"], "a repository that has a wiki")
         assertOrder(form, ["if let refusal {", "Text(refusal).foregroundStyle(.red)", "Button(submitLabel) {"], "the form's end")
         let answer = try slice(form, from: "Button(submitLabel) {", to: ".disabled(saving || chosen == nil || probed?.canTurnOn == false)")
         assertOrder(answer, ["answer.workspaceID = chosen", "refusal = await submit(answer)", "saving = false", "if refusal == nil { dismiss() }"],
@@ -664,11 +827,19 @@ final class WikiStartParityTests: XCTestCase {
                             "await wiki.updateSpace(space, WikiSpaceUpdate(maintenance: choice.maintenance))", "await wiki.loadPlan()",
                             "model.showToast(WikiCopy.settingsSaved)", "await wiki.loadSpaceWorkspaces(space)"], "Set up maintenance")
         let create = try slice(settings, from: "struct WikiCreateSheet: View {", to: "struct WikiSettingsView: View {")
-        assertOrder(create, ["WikiStartLogic.repositoryGroups(model.wikiWorkspaceChoices)", "title: WikiStartCopy.create", "note: WikiStartCopy.createNote",
-                             "submitLabel: WikiStartCopy.createAnswer", "opensOn: WikiStartLogic.opensOn(offered, current: nil, from: wiki.fromWorkspaceID)",
+        assertSays(dialog, "const groups = wikiRepositoryGroups(choices, (spaces.data ?? []).map((space) => space.repoUrlNorm));", in: Self.dialog)
+        assertSays(dialog, "const offered = wikiCreateOffered(groups);", in: Self.dialog)
+        assertSays(dialog, "const asked = offered.find((row) => sameId(row.id, workspaceId))?.id ?? null;", in: Self.dialog)
+        assertOrder(create, ["WikiStartLogic.repositoryGroups(model.wikiWorkspaceChoices, wikis: wiki.spaces.map(\\.repoUrlNorm))",
+                             "let offered = WikiStartLogic.createOffered(groups)",
+                             "title: WikiStartCopy.create", "note: WikiStartCopy.createNote",
+                             "submitLabel: WikiStartCopy.createAnswer",
+                             "opensOn: WikiStartLogic.opensOn(offered, current: WikiStartLogic.asked(offered, workspaceId: workspaceID),",
+                             "from: wiki.fromWorkspaceID),",
                              "initial: WikiMaintenanceChoice(.default)", "workspaceNote: WikiStartLogic.createWorkspaceNote",
                              "WikiStartLogic.createRequest($0, maintenance: choice.maintenance)", "await wiki.createSpace(request)",
-                             "await wiki.loadSystemModel()"], "Create wiki")
+                             "if refusal == nil { await created() }",
+                             "await wiki.loadSystemModel()", "await wiki.loadSpaces()"], "Create wiki")
         XCTAssertFalse(settings.contains("WikiPickerOption"), "the forms offer `WikiStartLogic.WorkspaceChoice`")
 
         let model = try native("WikiModel.swift")
@@ -696,5 +867,66 @@ final class WikiStartParityTests: XCTestCase {
         let page = try slice(view, from: "struct WikiFirstStartPage: View {", to: "struct WikiSpacePicker: View {")
         assertOrder(page, ["Text(WikiCopy.title)", "WikiStartSection(card: card, act: act)"], "the no-wiki page")
         XCTAssertTrue(try native("WikiModel.swift").contains("WikiCopy.noSpaces"), "a write with no space on screen still says why")
+    }
+
+    /// New wiki… (design §3.4, board 46 part 4): a row under the drawer's and the sidebar's Wiki row once there is a
+    /// wiki, and the head picker's item under its divider, each raising the one Create wiki form over the shell.
+    func testNewWikiOpensTheCreateWikiForm() throws {
+        let sidebar = try web("src/web/src/components/TasksSidePanel.tsx")
+        assertOrder(sidebar, ["className=\"tp-item tp-wiki-new\"", "onClick={() => setCreatingWiki(true)}", "<PlusOutlined aria-hidden=\"true\" />",
+                              "<span className=\"tp-label\">{WIKI_NEW}</span>"], "the web's row")
+        let page = try web("src/web/src/pages/WikiPage.tsx")
+        assertOrder(page, ["<hr />", "<option value={NEW_WIKI_VALUE}>{WIKI_NEW}</option>"], "the web's picker")
+
+        let drawer = try native("Views/CompactShell.swift")
+        assertSays(drawer, "if model.wiki?.shown == true, model.wiki?.spaces.isEmpty == false { newWikiRow }", in: "CompactShell.swift")
+        let row = try slice(drawer, from: "private var newWikiRow: some View {", to: ".accessibilityIdentifier(\"drawer-new-wiki\")")
+        assertOrder(row, ["model.wiki?.creating = true", "Image(systemName: \"plus\")", "Text(WikiStartCopy.newWiki)", ".foregroundStyle(.secondary)"],
+                    "the drawer's row")
+        let sidebarNative = try native("Views/MainView.swift")
+        assertSays(sidebarNative, "if section == .wiki, model.wiki?.shown == true, model.wiki?.spaces.isEmpty == false {", in: "MainView.swift")
+        let macRow = try slice(sidebarNative, from: "private var newWikiRow: some View {", to: ".accessibilityIdentifier(\"sidebar-new-wiki\")")
+        assertOrder(macRow, ["model.wiki?.creating = true", "Label(WikiStartCopy.newWiki, systemImage: \"plus\")", ".foregroundStyle(.secondary)"],
+                    "the sidebar's row")
+
+        let view = try native("Views/WikiView.swift")
+        let picker = try slice(view, from: "struct WikiSpacePicker: View {", to: "private let wikiHomeHeadColor")
+        assertOrder(picker, ["ForEach(WikiSpaceLogic.menuRows(spaces, names: names)) { row in", "Divider()", "Button(action: create) {",
+                             "Label(WikiStartCopy.newWiki, systemImage: \"plus\")", "Button(action: manage) {"], "the head picker")
+        assertSays(view, "create: actions.createWiki)", in: "WikiView.swift")
+        assertSays(try native("Views/WikiScreens.swift"), "createWiki: { wiki.creating = true },", in: "WikiScreens.swift")
+        assertSays(try native("Views/WikiContentsColumn.swift"), "create: { wiki.creating = true })", in: "WikiContentsColumn.swift")
+
+        let settings = try native("Views/WikiSettingsView.swift")
+        let host = try slice(settings, from: "struct WikiCreateHost: ViewModifier {", to: "func wikiCreateHost(")
+        assertOrder(host, ["get: { model.wiki?.creating ?? false }", "set: { model.wiki?.creating = $0 }", "if let wiki = model.wiki { WikiCreateSheet(wiki: wiki) }"],
+                    "the form over the shell")
+        assertSays(try native("OrbitApp.swift"), ".wikiCreateHost(model)", in: "OrbitApp.swift")
+    }
+
+    /// The WIKI_CREATE card (design §3.6, board 46 part 3): its facts, then Create wiki, Change settings… and Not for this
+    /// repository, as the web's `OwnerRequestCard` draws them.
+    func testTheWikiCreateCardDrawsTheWebsFactsAndButtons() throws {
+        let web = try self.web("src/web/src/components/OwnerRequestCard.tsx")
+        assertOrder(web, ["<Fact label={WIKI_CREATE_REPOSITORY}>", "<Fact label={WIKI_CREATE_READS_FROM}>", "{WIKI_WORKSPACE_OFFLINE}",
+                          "<Fact label={WIKI_CREATE_MAINTENANCE}>"], "the web's facts")
+        assertOrder(web, ["onClick={() => end.mutate({ to: 'create-wiki', body: {} })}", "{WIKI_CREATE_CHANGE_SETTINGS}",
+                          "onClick={() => end.mutate({ to: 'decline', body: { reason: WIKI_CREATE_NOT_HERE } })}",
+                          "<WikiCreateDialog workspaceId={request.workspaceId ?? null}"], "the web's buttons")
+
+        let card = try native("Views/OwnerRequestViews.swift")
+        assertSays(card, "case .wikiCreate:\n            OwnerRequestWikiCreateFacts(request: request)", in: "OwnerRequestViews.swift")
+        let facts = try slice(card, from: "struct OwnerRequestWikiCreateFacts: View {", to: "struct OwnerRequestKindTag: View {")
+        assertOrder(facts, ["WikiStartLogic.cardFacts(repoUrlNorm: request.repoUrlNorm, workspaceId: request.workspaceId,",
+                            "Text(WikiStartCopy.cardRepository)", "Text(WikiStartCopy.cardReadsFrom)", "if facts.offline {",
+                            "Text(WikiStartCopy.workspaceOffline)", "Text(WikiStartCopy.cardMaintenance)", "Text(facts.maintenance)"], "the native facts")
+        assertSays(card, "if request.kind == .wikiCreate { wikiCreateActions } else { kindActions }", in: "OwnerRequestViews.swift")
+        let actions = try slice(card, from: "private var wikiCreateActions: some View {", to: "private var declineForm: some View {")
+        assertOrder(actions, ["try await model.createWiki(request)", "await appModel.wiki?.loadSpaces()", "Text(OwnerRequests.primaryLabel(request.kind)).bold()",
+                              ".buttonStyle(.borderedProminent)", "Button(WikiStartCopy.changeSettings) { changingSettings = true }",
+                              "Button(WikiStartCopy.notHere) { run { try await model.decline(request, reason: WikiStartCopy.notHere) } }",
+                              "WikiCreateSheet(wiki: wiki, workspaceID: request.workspaceId, created: { await model.load() })"], "the native buttons")
+        let requests = try native("OwnerRequestsModel.swift")
+        assertSays(requests, "adopt(try await api.createWikiFromOwnerRequest(request.id))", in: "OwnerRequestsModel.swift")
     }
 }

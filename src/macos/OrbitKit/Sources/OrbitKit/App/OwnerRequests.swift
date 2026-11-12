@@ -198,6 +198,7 @@ public enum OwnerRequests {
             if let label { return words.map { "\(label): “\($0)”" } ?? label }
             return words.map { "“\($0)”" } ?? "Answered"
         }
+        if request.kind == .wikiCreate { return WikiStartCopy.created(request.answer?.name) }
         return request.kind == .confirm ? "Confirmed" : "Marked done"
     }
 
