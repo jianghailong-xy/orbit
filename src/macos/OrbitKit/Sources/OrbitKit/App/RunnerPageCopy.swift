@@ -98,7 +98,11 @@ public enum RunnerPageCopy {
     public static let RUNNER_ABOUT_REGISTERED = "Registered"
     public static let RUNNER_ABOUT_LAST_UPDATE = "Last Update"
     public static let RUNNER_VERSION_LATEST = "Latest"
-    public static let RUNNER_VERSION_INSTALLS_WHEN_IDLE = "installs when the runner has been idle for 10 min"
+    public static let RUNNER_VERSION_INSTALLS_WHEN_IDLE = "installs when no turn is running"
+    /// The same, from a runner that reports its quiet window (`selfUpdate.quietWindowSeconds`, in whole minutes here).
+    public static func runnerVersionInstallsWhenQuiet(minutes: Int) -> String {
+        "installs when the runner has been idle for \(minutes) min"
+    }
     public static let RUNNER_VERSION_NOT_ROLLED_OUT = "not rolled out to it yet"
     public static let RUNNER_RUNS_AS_ROOT = "root"
     public static let RUNNER_RUNS_AS_REGULAR_USER = "regular user"
@@ -115,8 +119,13 @@ public enum RunnerPageCopy {
     public static let RUNNER_UPDATE_TAG_POSTPONED = "Postponed"
     public static func runnerUpdateAvailableTitle(version: String) -> String { "\(version) is available" }
     public static let RUNNER_UPDATE_AVAILABLE_BODY =
-        "It installs once the runner has been idle for 10 minutes. If it stays busy for an hour, "
-        + "it stops taking new work so its turns can finish."
+        "It installs when no turn is running. If turns keep running for an hour, it stops taking new "
+        + "work so they can finish."
+    /// The Available card's body for a runner that reports its quiet window; unit is RUNNER_UNIT_MINUTE(S).
+    public static func runnerUpdateAvailableBodyQuiet(minutes: Int, unit: String) -> String {
+        "It installs once the runner has been idle for \(minutes) \(unit). If it stays busy for an hour, "
+            + "it stops taking new work so its turns can finish."
+    }
     public static func runnerUpdateDrainingTitle(version: String) -> String { "Updating to \(version)" }
     public static func runnerUpdateDrainingBody(version: String, since: String) -> String {
         "\(version) has been waiting since \(since). After an hour it stopped taking new work so the turns "

@@ -491,6 +491,9 @@ public struct RunnerSelfUpdate: Codable, Equatable, Sendable {
     /// While draining: the turns still in flight, and how many there were when the drain began.
     public var turnsInFlight: Int? = nil
     public var turnsAtDrain: Int? = nil
+    /// How long, in seconds, the runner must have been quiet before an automatic update installs.
+    /// Nil from a runner that doesn't wait for one, which keeps the page's wording from before.
+    public var quietWindowSeconds: Int? = nil
 }
 
 /// One of the reader's turns a draining runner waits for (shared `RunnerUpdateTurn`): its session,

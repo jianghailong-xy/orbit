@@ -172,8 +172,13 @@ export const RUNNER_ABOUT_REGISTERED = 'Registered';
 /** The last update the runner installed into itself: when, and from which version to which. */
 export const RUNNER_ABOUT_LAST_UPDATE = 'Last Update';
 export const RUNNER_VERSION_LATEST = 'Latest';
-/** Behind the latest release on a runner that replaces itself: it waits until it has been idle for 10 minutes. */
-export const RUNNER_VERSION_INSTALLS_WHEN_IDLE = 'installs when the runner has been idle for 10 min';
+/** Behind the latest release on a runner that replaces itself: it waits for an idle moment. */
+export const RUNNER_VERSION_INSTALLS_WHEN_IDLE = 'installs when no turn is running';
+/** The same, from a runner that reports its quiet window (selfUpdate.quietWindowSeconds, in whole
+ *  minutes here): it waits until no turn has ended and nothing was claimed for that long. */
+export function runnerVersionInstallsWhenQuiet(minutes: number): string {
+  return `installs when the runner has been idle for ${minutes} min`;
+}
 /** Behind the latest release because its staged rollout hasn't reached this runner. */
 export const RUNNER_VERSION_NOT_ROLLED_OUT = 'not rolled out to it yet';
 /** About's Version note while the runner drains or restarts for a release: `updating to 0.1.254`. */
@@ -485,8 +490,12 @@ export function runnerUpdateAvailableTitle(version: string): string {
   return `${version} is available`;
 }
 export const RUNNER_UPDATE_AVAILABLE_BODY =
-  'It installs once the runner has been idle for 10 minutes. If it stays busy for an hour, ' +
-  'it stops taking new work so its turns can finish.';
+  'It installs when no turn is running. If turns keep running for an hour, it stops taking new ' +
+  'work so they can finish.';
+/** The Available card's body for a runner that reports its quiet window; unit is RUNNER_UNIT_MINUTE(S). */
+export function runnerUpdateAvailableBodyQuiet(minutes: number, unit: string): string {
+  return `It installs once the runner has been idle for ${minutes} ${unit}. If it stays busy for an hour, it stops taking new work so its turns can finish.`;
+}
 
 export function runnerUpdateDrainingTitle(version: string): string {
   return `Updating to ${version}`;

@@ -432,7 +432,7 @@ describe('a runner’s page, laid out as web.png', () => {
 
   it('says a root runner behind the release installs it when idle, and a regular user can’t update itself', async () => {
     await mount(machine('root and behind'));
-    expect(about()[2]).toEqual(['Version', '0.1.190', 'installs when the runner has been idle for 10 min']);
+    expect(about()[2]).toEqual(['Version', '0.1.190', 'installs when no turn is running']);
     expect(about()[3]).toEqual(['Runs As', 'root', null]);
 
     act(() => root?.unmount());

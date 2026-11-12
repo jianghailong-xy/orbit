@@ -146,6 +146,10 @@ type SelfUpdateReport struct {
 	// fewer than are in flight now), so the page can say "Waiting for 2 of 8 turns".
 	TurnsInFlight int `json:"turnsInFlight,omitempty"`
 	TurnsAtDrain  int `json:"turnsAtDrain,omitempty"`
+	// How long, in seconds, this runner must have been quiet (no turn ended, nothing claimed) before
+	// an automatic update installs (selfUpdateQuietWindow). Sent with every report; a runner that
+	// sends none installs at the first check with no turn in flight, and the clients keep that wording.
+	QuietWindowSeconds int `json:"quietWindowSeconds,omitempty"`
 }
 
 // AgentDirProbe is what the runner found at one agent's working directory: whether the path is

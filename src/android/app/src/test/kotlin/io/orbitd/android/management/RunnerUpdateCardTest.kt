@@ -36,11 +36,26 @@ class RunnerUpdateCardTest {
     private fun ms(iso: String) = Instant.parse(iso).toEpochMilli()
 
     @Test fun availableIsQuietAndSaysWhenItInstalls() {
-        val r = runner("available")
+        // A runner that sends no quiet window keeps today's wording exactly.
+        val r = runner("available") { remove("quietWindowSeconds") }
         assertEquals(RunnerPage.UpdateCard("available", false, "0.1.254 is available", "Available",
-            "It installs once the runner has been idle for 10 minutes. If it stays busy for an hour, it stops taking new work so its turns can finish."),
+            "It installs when no turn is running. If turns keep running for an hour, it stops taking new work so they can finish."),
             RunnerPage.updateCard(r, ms("2023-11-14T22:33:20Z"), utc))
+        assertEquals("0.1.253 · 0.1.254 installs when no turn is running", RunnerPage.versionValue(r, "0.1.254"))
+    }
+
+    @Test fun availableFromARunnerWithAQuietWindowSaysItInstallsOnceIdleThatLong() {
+        val r = runner("available")
+        assertEquals("It installs once the runner has been idle for 10 minutes. If it stays busy for an hour, it stops taking new work so its turns can finish.",
+            RunnerPage.updateCard(r, ms("2023-11-14T22:33:20Z"), utc)?.body)
         assertEquals("0.1.253 · 0.1.254 installs when the runner has been idle for 10 min", RunnerPage.versionValue(r, "0.1.254"))
+    }
+
+    @Test fun theQuietWindowIsWordedFromTheValueTheRunnerSends() {
+        val r = runner("available") { put("quietWindowSeconds", JsonPrimitive(60)) }
+        assertEquals("It installs once the runner has been idle for 1 minute. If it stays busy for an hour, it stops taking new work so its turns can finish.",
+            RunnerPage.updateCard(r, ms("2023-11-14T22:33:20Z"), utc)?.body)
+        assertEquals("0.1.253 · 0.1.254 installs when the runner has been idle for 1 min", RunnerPage.versionValue(r, "0.1.254"))
     }
 
     @Test fun drainingCountsTheTurnsAndTheTimeAndAboutSaysUpdatingTo() {
@@ -95,7 +110,7 @@ class RunnerUpdateCardTest {
     @Test fun anOldRunnerHasNoCardAndKeepsTodaysWording() {
         val r = runner("oldRunner")
         assertNull(RunnerPage.updateCard(r, System.currentTimeMillis(), utc))
-        assertEquals("0.1.253 · 0.1.254 installs when the runner has been idle for 10 min", RunnerPage.versionValue(r, "0.1.254"))
+        assertEquals("0.1.253 · 0.1.254 installs when no turn is running", RunnerPage.versionValue(r, "0.1.254"))
         assertNull(RunnerPage.updateCard(runner("oldRunner") { put("phase", JsonPrimitive("installing")); put("targetVersion", JsonPrimitive("0.1.254")) },
             System.currentTimeMillis(), utc))
     }

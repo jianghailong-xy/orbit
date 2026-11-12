@@ -348,6 +348,7 @@ func selfUpdateReport() *SelfUpdateReport {
 		DrainingSince:  rfc3339OrEmpty(phase.drainingSince),
 		PostponedUntil: rfc3339OrEmpty(phase.postponedUntil),
 		TurnsInFlight:  phase.turnsInFlight, TurnsAtDrain: phase.turnsAtDrain,
+		QuietWindowSeconds: int(selfUpdateQuietWindow / time.Second),
 	}
 }
 

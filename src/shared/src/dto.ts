@@ -861,6 +861,10 @@ export interface RunnerSelfUpdate {
   /** While draining: the turns still in flight, and how many there were when the drain began. */
   turnsInFlight?: number;
   turnsAtDrain?: number;
+  /** How long, in seconds, the runner must have been quiet (no turn ended, nothing claimed) before an
+   *  automatic update installs. Sent with every report by runners that wait for one; absent from older
+   *  runners, which install at the first check with no turn in flight, and keep that wording. */
+  quietWindowSeconds?: number;
 }
 
 /** One of the viewer's turns a runner draining for its self-update waits for: the runner page's

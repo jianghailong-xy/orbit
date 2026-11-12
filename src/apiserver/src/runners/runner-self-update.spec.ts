@@ -277,6 +277,16 @@ test('an old runner, which sends no phase, is returned as it was before the fiel
   assert.deepEqual(sanitizeRunnerSelfUpdate(phaseFixture().get('oldRunner')), { state: 'waitingForIdle' });
 });
 
+test('the quiet window is kept with or without a phase; a malformed one is dropped', () => {
+  assert.deepEqual(sanitizeRunnerSelfUpdate({ state: 'enabled', quietWindowSeconds: 600 }), {
+    state: 'enabled',
+    quietWindowSeconds: 600,
+  });
+  for (const bad of [0, -600, 600.5, '600', 86_401, null]) {
+    assert.deepEqual(sanitizeRunnerSelfUpdate({ state: 'enabled', quietWindowSeconds: bad }), { state: 'enabled' }, String(bad));
+  }
+});
+
 test('an unknown phase drops the card fields, keeping the release and drain start; malformed ones are dropped one by one', () => {
   // targetVersion and drainingSince also explain a queued session (queuedRunnerUpdateOf), phase or not.
   assert.deepEqual(

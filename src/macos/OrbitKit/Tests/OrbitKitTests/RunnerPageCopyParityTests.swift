@@ -223,6 +223,10 @@ final class RunnerPageCopyParityTests: XCTestCase {
     private static let templates: [(name: String, rendered: String)] = [
         ("runnerOfflineLastSeen", RunnerPageCopy.runnerOfflineLastSeen(when: "${when}")),
         ("runnerVersionTag", RunnerPageCopy.runnerVersionTag(version: "${version}")),
+        ("runnerVersionInstallsWhenQuiet", put(RunnerPageCopy.runnerVersionInstallsWhenQuiet(minutes: 90_001),
+                                               [90_001: "minutes"])),
+        ("runnerUpdateAvailableBodyQuiet", put(RunnerPageCopy.runnerUpdateAvailableBodyQuiet(minutes: 90_001, unit: "${unit}"),
+                                               [90_001: "minutes"])),
         ("runnerRunningOf", put(RunnerPageCopy.runnerRunningOf(active: 90_001, max: 90_002),
                                 [90_001: "active", 90_002: "max"])),
         ("runnerSlots", put(RunnerPageCopy.runnerSlots(active: 90_001, max: 90_002),

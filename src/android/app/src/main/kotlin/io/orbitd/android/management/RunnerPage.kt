@@ -25,8 +25,18 @@ internal object RunnerCopy {
     const val UPDATE_TAG_RESTARTING = "Restarting"
     const val UPDATE_TAG_POSTPONED = "Postponed"
     fun updateAvailableTitle(version: String) = "$version is available"
-    const val UPDATE_AVAILABLE_BODY = "It installs once the runner has been idle for 10 minutes. If it stays busy for an hour, " +
-        "it stops taking new work so its turns can finish."
+    const val UPDATE_AVAILABLE_BODY = "It installs when no turn is running. If turns keep running for an hour, it stops taking new " +
+        "work so they can finish."
+    /** The Available card's body for a runner that reports its quiet window (`selfUpdate.quietWindowSeconds`), in whole
+     * [minutes]; [unit] is "minute" or "minutes". OrbitKit RunnerPageCopy.runnerUpdateAvailableBodyQuiet. */
+    fun updateAvailableBodyQuiet(minutes: Int, unit: String) =
+        "It installs once the runner has been idle for $minutes $unit. If it stays busy for an hour, it stops taking new work so its turns can finish."
+    /** About's version note for a runner that reports its quiet window. OrbitKit RunnerPageCopy.runnerVersionInstallsWhenQuiet. */
+    fun versionInstallsWhenQuiet(minutes: Int) = "installs when the runner has been idle for $minutes min"
+    /** A quiet window in whole minutes, at least one. */
+    fun quietMinutes(seconds: Int): Int = maxOf(1, Math.round(seconds / 60.0).toInt())
+    /** The Available card's body for a runner with a quiet window of [seconds]. */
+    fun availableBodyQuiet(seconds: Int): String = quietMinutes(seconds).let { updateAvailableBodyQuiet(it, if (it == 1) "minute" else "minutes") }
     fun updateDrainingTitle(version: String) = "Updating to $version"
     fun updateDrainingBody(version: String, since: String) = "$version has been waiting since $since. After an hour it stopped taking " +
         "new work so the turns in flight can finish; then it installs and restarts."
@@ -1255,8 +1265,9 @@ internal object RunnerPage {
         val target = report?.str("targetVersion")
         if (target != null && report.str("phase") in setOf("draining", "restarting")) return version + RunnerCopy.SEP + RunnerCopy.versionUpdatingTo(target)
         val note = when (runner.obj("selfUpdate")?.str("state")) {
-            null -> if (runner.bool("runsAsRoot") == true) "installs when the runner has been idle for 10 min" else null
-            "enabled", "waitingForIdle" -> "installs when the runner has been idle for 10 min"
+            null -> if (runner.bool("runsAsRoot") == true) "installs when no turn is running" else null
+            "enabled", "waitingForIdle" -> runner.obj("selfUpdate")?.int("quietWindowSeconds")?.takeIf { it > 0 }
+                ?.let { RunnerCopy.versionInstallsWhenQuiet(RunnerCopy.quietMinutes(it)) } ?: "installs when no turn is running"
             "heldByRollout" -> "not rolled out to it yet"
             else -> null
         } ?: return version
@@ -1279,7 +1290,9 @@ internal object RunnerPage {
         val phase = report.str("phase") ?: return null
         val version = report.str("targetVersion") ?: return null
         return when (phase) {
-            "available" -> UpdateCard(phase, false, RunnerCopy.updateAvailableTitle(version), RunnerCopy.UPDATE_TAG_AVAILABLE, RunnerCopy.UPDATE_AVAILABLE_BODY)
+            // A runner that reports its quiet window waits for it; one that doesn't keeps the old wording.
+            "available" -> UpdateCard(phase, false, RunnerCopy.updateAvailableTitle(version), RunnerCopy.UPDATE_TAG_AVAILABLE,
+                report.int("quietWindowSeconds")?.takeIf { it > 0 }?.let { RunnerCopy.availableBodyQuiet(it) } ?: RunnerCopy.UPDATE_AVAILABLE_BODY)
             "draining" -> {
                 val left = report.int("turnsInFlight") ?: 0
                 val of = report.int("turnsAtDrain")?.let { maxOf(it, left) }

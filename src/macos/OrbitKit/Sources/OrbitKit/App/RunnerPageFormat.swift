@@ -805,7 +805,7 @@ public enum RunnerPageFormat {
     // MARK: About This Runner
 
     /// `0.1.197 · Latest`; a runner that is behind and installs the release itself says so
-    /// (`0.1.194 · 0.1.197 installs when the runner has been idle for 10 min`), and so does one a staged rollout holds
+    /// (`0.1.194 · 0.1.197 installs when no turn is running`), and so does one a staged rollout holds
     /// back (`0.1.194 · 0.1.197 not rolled out to it yet`). One that can't update itself is Needs
     /// Attention's to say, and here is just its version. A runner that reports where its updates stand
     /// says which it is; an older one is judged by `runsAsRoot`, as before.
@@ -825,9 +825,12 @@ public enum RunnerPageFormat {
             return version + RunnerPageCopy.RUNNER_LINE_SEPARATOR + RunnerPageCopy.runnerVersionUpdatingTo(version: target)
         }
         let note: String?
+        let quiet = runner.selfUpdate?.quietWindowSeconds.flatMap { $0 > 0 ? $0 : nil }
         switch runner.selfUpdate?.state {
         case nil: note = runner.runsAsRoot == true ? RunnerPageCopy.RUNNER_VERSION_INSTALLS_WHEN_IDLE : nil
-        case "enabled"?, "waitingForIdle"?: note = RunnerPageCopy.RUNNER_VERSION_INSTALLS_WHEN_IDLE
+        case "enabled"?, "waitingForIdle"?:
+            note = quiet.map { RunnerPageCopy.runnerVersionInstallsWhenQuiet(minutes: quietMinutes(seconds: $0)) }
+                ?? RunnerPageCopy.RUNNER_VERSION_INSTALLS_WHEN_IDLE
         case "heldByRollout"?: note = RunnerPageCopy.RUNNER_VERSION_NOT_ROLLED_OUT
         default: note = nil
         }
@@ -858,6 +861,16 @@ public enum RunnerPageFormat {
         }
     }
 
+    /// A runner's quiet window (`selfUpdate.quietWindowSeconds`) in whole minutes, at least one — the web's
+    /// `runnerQuietMinutes`.
+    public static func quietMinutes(seconds: Int) -> Int { max(1, Int((Double(seconds) / 60).rounded())) }
+
+    private static func availableBodyQuiet(seconds: Int) -> String {
+        let minutes = quietMinutes(seconds: seconds)
+        return RunnerPageCopy.runnerUpdateAvailableBodyQuiet(
+            minutes: minutes, unit: minutes == 1 ? RunnerPageCopy.RUNNER_UNIT_MINUTE : RunnerPageCopy.RUNNER_UNIT_MINUTES)
+    }
+
     /// The card a runner's report calls for; nil with no phase (nothing waiting, or a runner too old
     /// to say) or no version to name, and for a phase this client does not know.
     public static func updateCard(_ runner: Runner, now: Date, timeZone: TimeZone = .current) -> UpdateCard? {
@@ -869,7 +882,10 @@ public enum RunnerPageFormat {
             return UpdateCard(phase: phase, warn: false,
                               title: RunnerPageCopy.runnerUpdateAvailableTitle(version: version),
                               tag: RunnerPageCopy.RUNNER_UPDATE_TAG_AVAILABLE,
-                              body: RunnerPageCopy.RUNNER_UPDATE_AVAILABLE_BODY, progressLabel: nil, progress: nil)
+                              // A runner that reports its quiet window waits for it; one that doesn't keeps the old wording.
+                              body: report.quietWindowSeconds.flatMap { $0 > 0 ? availableBodyQuiet(seconds: $0) : nil }
+                                  ?? RunnerPageCopy.RUNNER_UPDATE_AVAILABLE_BODY,
+                              progressLabel: nil, progress: nil)
         case "draining":
             let left = report.turnsInFlight ?? 0
             let of = report.turnsAtDrain.map { max($0, left) }

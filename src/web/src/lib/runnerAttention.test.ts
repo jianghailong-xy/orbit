@@ -650,7 +650,7 @@ describe('runnerCopy', () => {
     expect(copy.ATTENTION_NO_CLI_SIGNED_IN).toBe('No coding CLI is signed in');
     expect(copy.ATTENTION_NO_CLI_SIGNED_IN_SHORT).toBe('No coding CLI signed in');
     expect(copy.RUNNER_VERSION_LATEST).toBe('Latest');
-    expect(copy.RUNNER_VERSION_INSTALLS_WHEN_IDLE).toBe('installs when the runner has been idle for 10 min');
+    expect(copy.RUNNER_VERSION_INSTALLS_WHEN_IDLE).toBe('installs when no turn is running');
     expect(copy.RUNNER_ROOT_NO_BYPASS).toBe('Runs as root, so sessions here can’t use Bypass permissions.');
   });
 

@@ -344,6 +344,8 @@ func TestHeartbeatSerializesSelfUpdate(t *testing.T) {
 		"lastUpdatedAt":   "2026-10-06T06:00:00Z",
 		"lastUpdatedFrom": rolloutTestPrevious,
 		"lastUpdatedTo":   rolloutTestLatest,
+		// The quiet window rides every report: the runner page words "installs when idle" from it.
+		"quietWindowSeconds": float64(600),
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("selfUpdate = %v;\nwant %v", got, want)

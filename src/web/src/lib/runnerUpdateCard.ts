@@ -10,6 +10,9 @@ import {
   RUNNER_UPDATE_TAG_RESTARTING,
   RUNNER_UPDATE_TURN,
   RUNNER_UPDATE_TURNS,
+  runnerUpdateAvailableBodyQuiet,
+  RUNNER_UNIT_MINUTE,
+  RUNNER_UNIT_MINUTES,
   RUNNER_UPDATE_UNTITLED_TURN,
   runnerUpdateAvailableTitle,
   runnerUpdateDrainingBody,
@@ -60,6 +63,16 @@ export function runnerUpdateClock(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
+/** A runner's quiet window (selfUpdate.quietWindowSeconds) in whole minutes, at least one. */
+export function runnerQuietMinutes(quietWindowSeconds: number): number {
+  return Math.max(1, Math.round(quietWindowSeconds / 60));
+}
+
+function availableBodyQuiet(quietWindowSeconds: number): string {
+  const minutes = runnerQuietMinutes(quietWindowSeconds);
+  return runnerUpdateAvailableBodyQuiet(minutes, minutes === 1 ? RUNNER_UNIT_MINUTE : RUNNER_UNIT_MINUTES);
+}
+
 /**
  * The card a runner's report calls for, or null: no phase (nothing waiting, or a runner too old to
  * say, which keeps About's wording) or no version to name.
@@ -79,7 +92,8 @@ export function runnerUpdateCard(
         tone: 'quiet',
         title: runnerUpdateAvailableTitle(version),
         tag: RUNNER_UPDATE_TAG_AVAILABLE,
-        body: RUNNER_UPDATE_AVAILABLE_BODY,
+        // A runner that reports its quiet window waits for it; one that doesn't keeps the old wording.
+        body: report.quietWindowSeconds ? availableBodyQuiet(report.quietWindowSeconds) : RUNNER_UPDATE_AVAILABLE_BODY,
       };
     case 'draining': {
       const left = report.turnsInFlight ?? 0;

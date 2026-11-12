@@ -13,6 +13,8 @@ const REASON_MAX = 1000;
 const DIR_MAX = 1024;
 const VERSION_MAX = 64;
 const TURNS_MAX = 10_000;
+/** A quiet window longer than a day is not one a runner means. */
+const QUIET_WINDOW_MAX_SECONDS = 86_400;
 
 /**
  * Normalize the self-update report a runner sent (RunnerHeartbeatRequest.selfUpdate) — on the way
@@ -47,6 +49,8 @@ export function sanitizeRunnerSelfUpdate(value: unknown): RunnerSelfUpdate | nul
   const postponedUntil = phase ? isoTime(raw.postponedUntil) : undefined;
   const turnsInFlight = phase ? count(raw.turnsInFlight) : undefined;
   const turnsAtDrain = phase ? count(raw.turnsAtDrain) : undefined;
+  // With or without a phase: About's "installs when the runner has been idle for …" reads it.
+  const quietWindowSeconds = wholeNumber(raw.quietWindowSeconds, QUIET_WINDOW_MAX_SECONDS);
   return {
     state: state as RunnerSelfUpdateState,
     ...(reason ? { reason } : {}),
@@ -61,6 +65,7 @@ export function sanitizeRunnerSelfUpdate(value: unknown): RunnerSelfUpdate | nul
     ...(postponedUntil ? { postponedUntil } : {}),
     ...(turnsInFlight ? { turnsInFlight } : {}),
     ...(turnsAtDrain ? { turnsAtDrain } : {}),
+    ...(quietWindowSeconds ? { quietWindowSeconds } : {}),
   };
 }
 
@@ -93,7 +98,12 @@ export function queuedRunnerUpdateOf(row: {
 
 /** A turn count: a whole number from 1 to TURNS_MAX; 0 is the same as absent. */
 function count(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= TURNS_MAX ? value : undefined;
+  return wholeNumber(value, TURNS_MAX);
+}
+
+/** A whole number from 1 to max; 0 is the same as absent. */
+function wholeNumber(value: unknown, max: number): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= max ? value : undefined;
 }
 
 function text(value: unknown, max: number): string | undefined {

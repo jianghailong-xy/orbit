@@ -374,11 +374,11 @@ describe('each selfUpdate state on a runner’s page', () => {
     );
   });
 
-  it('waitingForIdle: no card — About says it installs once the runner has been idle for 10 min', async () => {
+  it('waitingForIdle: no card — About says it installs once no turn is running', async () => {
     await mount(inputOf('selfUpdate waitingForIdle and behind'));
     expect(cards()).toEqual([]);
     expect(document.querySelector('.rd-attention')).toBeNull();
-    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when the runner has been idle for 10 min']);
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when no turn is running']);
     expect(aboutActions()).toEqual(['Update Runner Now']);
   });
 
@@ -389,10 +389,16 @@ describe('each selfUpdate state on a runner’s page', () => {
     expect(aboutActions()).toEqual(['Update Runner Now']);
   });
 
+  it('enabled with a quiet window and no phase: About words the wait from the window', async () => {
+    await mount(reporting('selfUpdate enabled and behind', { state: 'enabled', quietWindowSeconds: 900 }));
+    expect(cards()).toEqual([]);
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when the runner has been idle for 15 min']);
+  });
+
   it('enabled: no card, though it runs as a regular user — it installs the release itself', async () => {
     await mount(inputOf('selfUpdate enabled and behind'));
     expect(cards()).toEqual([]);
-    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when the runner has been idle for 10 min']);
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when no turn is running']);
     expect(aboutRow('Runs As')).toEqual(['Runs As', 'regular user', null]);
   });
 
@@ -463,7 +469,7 @@ describe('a runner too old to report it', () => {
   it('a root one behind still installs when idle, with no card', async () => {
     await mount(reporting('selfUpdate failed and behind', undefined));
     expect(cards()).toEqual([]);
-    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when the runner has been idle for 10 min']);
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when no turn is running']);
     expect(aboutRow('Last Update')).toBeNull();
     expect(aboutActions()).toEqual([]);
   });
@@ -506,11 +512,27 @@ describe('the Update card, one per phase the runner reports', () => {
       tone: 'quiet',
       title: '0.1.197 is available',
       tag: 'Available',
-      body: 'It installs once the runner has been idle for 10 minutes. If it stays busy for an hour, it stops taking new work so its turns can finish.',
+      body: 'It installs when no turn is running. If turns keep running for an hour, it stops taking new work so they can finish.',
       progress: null,
       done: null,
     });
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when no turn is running']);
+  });
+
+  it('available from a runner that reports its quiet window: it installs once idle that long', async () => {
+    await mount(phase({ phase: 'available', availableSince: at(20), turnsInFlight: 3, quietWindowSeconds: 600 }));
+    expect(updateCard()?.body).toBe(
+      'It installs once the runner has been idle for 10 minutes. If it stays busy for an hour, it stops taking new work so its turns can finish.',
+    );
     expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when the runner has been idle for 10 min']);
+  });
+
+  it('the quiet window is worded from the value the runner sends, not a fixed 10', async () => {
+    await mount(phase({ phase: 'available', availableSince: at(20), quietWindowSeconds: 60 }));
+    expect(updateCard()?.body).toBe(
+      'It installs once the runner has been idle for 1 minute. If it stays busy for an hour, it stops taking new work so its turns can finish.',
+    );
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when the runner has been idle for 1 min']);
   });
 
   it('draining: the turns it waits for, how long, a bar, and About says updating to', async () => {
@@ -577,12 +599,12 @@ describe('the Update card, one per phase the runner reports', () => {
       progress: null,
       done: null,
     });
-    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when the runner has been idle for 10 min']);
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when no turn is running']);
   });
 
   it('a runner that sends no phase: no card, and today’s wording', async () => {
     await mount(inputOf('selfUpdate waitingForIdle and behind'));
     expect(updateCard()).toBeNull();
-    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when the runner has been idle for 10 min']);
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when no turn is running']);
   });
 });

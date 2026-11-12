@@ -117,6 +117,7 @@ import {
   RUNNER_UPDATE_RUNNER_NOW,
   RUNNER_UPDATE_RUNNER_REQUESTED,
   RUNNER_VERSION_INSTALLS_WHEN_IDLE,
+  runnerVersionInstallsWhenQuiet,
   RUNNER_VERSION_LATEST,
   RUNNER_VERSION_NOT_ROLLED_OUT,
   RUNNER_WORKSPACES,
@@ -129,7 +130,7 @@ import {
   runnerVersionTag,
   runnerWorkspaceRunning,
 } from '../lib/runnerCopy';
-import { runnerUpdateCard } from '../lib/runnerUpdateCard';
+import { runnerQuietMinutes, runnerUpdateCard } from '../lib/runnerUpdateCard';
 import { useClaudeRegionCheckAgain } from '../lib/claudeRegion';
 import { CLAUDE_REGION_CHECK_AGAIN } from '../lib/claudeRegionCopy';
 import { ago } from '../lib/runnerEngines';
@@ -1320,7 +1321,11 @@ export function RunnerDetailPage() {
     const state = runner.selfUpdate?.state;
     if (state === 'heldByRollout') return { text: RUNNER_VERSION_NOT_ROLLED_OUT, warn: false };
     if (state === 'enabled' || state === 'waitingForIdle') {
-      return { text: RUNNER_VERSION_INSTALLS_WHEN_IDLE, warn: false };
+      const quiet = runner.selfUpdate?.quietWindowSeconds;
+      return {
+        text: quiet ? runnerVersionInstallsWhenQuiet(runnerQuietMinutes(quiet)) : RUNNER_VERSION_INSTALLS_WHEN_IDLE,
+        warn: false,
+      };
     }
     if (state) return null;
     return runner.runsAsRoot ? { text: RUNNER_VERSION_INSTALLS_WHEN_IDLE, warn: false } : null;
