@@ -1,5 +1,6 @@
 import { TaskStatus } from '@prisma/client';
 import type { CreatorType, Prisma as PrismaTypes, TaskEvidenceDecisionValue } from '@prisma/client';
+import type { EvidenceGapClause } from '@orbit/shared';
 import { type CoordinatorEvidencePlace, coordinatorHolds } from '../projects/coordinator-evidence-queue';
 import { ownerEvidenceCard, reviewerHolds, type OwnerEvidenceCard } from './evidence-review';
 import {
@@ -168,6 +169,10 @@ export interface PendingEvidenceJudgment {
   /** What the submitter says it did NOT establish. Carried on every row because it is the field
    *  most likely to change the answer; no client may drop it to save space. */
   gaps: string[];
+  /** Which of `gaps` name a clause of the task's standard, and the follow-up task for each; empty
+   *  when none do (`EvidenceGapClause` in @orbit/shared). A field of its own beside `gaps`, so a
+   *  client that does not know it still renders every gap as text. */
+  gapClauses: EvidenceGapClause[];
   /** One per cited check, in the submitted order, resolved against the rows as they are NOW. */
   citations: EvidenceCitation[];
   /** Whether the door would refuse every decision about this evidence, whoever is reading. */
@@ -504,6 +509,7 @@ export async function readPendingEvidenceJudgments(
       ageSeconds: ageSeconds(readAt, latest.submittedAt),
       claim: envelope?.claim ?? '',
       gaps: envelope?.gaps ?? [],
+      gapClauses: envelope?.gapClauses ?? [],
       citations: envelope
         ? await describeEvidenceCitations(tx, { ownerId, taskId: task.id }, envelope.checks)
         : [],

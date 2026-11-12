@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { base62ToUuid, uuidToBase62 } from '@orbit/shared';
+import { base62ToUuid, uuidToBase62, type EvidenceGapClause } from '@orbit/shared';
 import type { ImageSize } from '../files/image-size';
 import { testReportLine, type TestReportSummary } from '../files/test-report';
 
@@ -75,6 +75,13 @@ export interface EvidenceEnvelope {
   criterion?: { key: string; text: string };
   checks: EvidenceCheck[];
   gaps: string[];
+  /**
+   * Optional, parallel to `gaps`: which gap hits which clause of the task's standard, and the
+   * follow-up task that will prove it (`EvidenceGapClause`, documented in @orbit/shared). `gaps`
+   * itself stays an array of strings so released clients keep rendering it as text. Absent when the
+   * submission marked no gap; the decision door refuses CONFIRM while an entry has no follow-up.
+   */
+  gapClauses?: EvidenceGapClause[];
 }
 
 export interface EvidenceCitation {
@@ -161,11 +168,13 @@ const MAX_REF = 500;
 const MAX_COMMAND = 4_000;
 const MAX_GAPS = 50;
 const MAX_GAP = 1_000;
+const MAX_GAP_CLAUSE = 1_000;
 
 /** What a submission has to carry. `criterion` is no longer one of them: the server binds it. */
 const ENVELOPE_FIELDS = ['claim', 'checks', 'gaps'];
-/** What an envelope may carry: the required fields and the server-bound `criterion`. */
-const ENVELOPE_ALLOWED_FIELDS = ['claim', 'checks', 'criterion', 'gaps'];
+/** What an envelope may carry: the required fields, the optional `gapClauses` and the server-bound `criterion`. */
+const ENVELOPE_ALLOWED_FIELDS = ['claim', 'checks', 'criterion', 'gapClauses', 'gaps'];
+const GAP_CLAUSE_FIELDS = ['criterionClause', 'followUpTaskId', 'gap'];
 const CRITERION_FIELDS = ['key', 'text'];
 const CHECK_FIELDS = ['command', 'kind', 'ref', 'succeeded'];
 const STORED_FILE_CHECK_FIELDS = [...CHECK_FIELDS, 'height', 'sha256', 'width'];
@@ -288,7 +297,37 @@ export function parseEvidenceEnvelope(
   // unestablished. That is why the field is required even when there is nothing to put in it.
   const gaps = root.gaps.map((gap, index) => requireText(gap, `evidence.gaps[${index}]`, MAX_GAP));
 
-  return { claim, ...(criterion ? { criterion } : {}), checks, gaps };
+  // Optional and parallel to `gaps`, so `gaps` stays plain text for released clients. Its shape is
+  // checked here; whether each follow-up exists in the task's project is checked against the rows,
+  // at submit time and again at the decision door (`gapFollowUpRefusal`).
+  let gapClauses: EvidenceGapClause[] | undefined;
+  if (root.gapClauses !== undefined) {
+    if (!Array.isArray(root.gapClauses)) refuseShape('evidence.gapClauses must be an array');
+    const marked = new Set<number>();
+    gapClauses = root.gapClauses.map((entry, index) => {
+      const path = `evidence.gapClauses[${index}]`;
+      const object = requireExactFields(entry, path, ['criterionClause', 'gap']);
+      requireNoUnknownFields(object, path, GAP_CLAUSE_FIELDS);
+      const gap = object.gap;
+      if (typeof gap !== 'number' || !Number.isInteger(gap) || gap < 0 || gap >= gaps.length) {
+        refuseShape(`${path}.gap must be the index of one of evidence.gaps (0 to ${gaps.length - 1})`);
+      }
+      if (marked.has(gap as number)) refuseShape(`${path}.gap marks evidence.gaps[${gap}] a second time`);
+      marked.add(gap as number);
+      const clause: EvidenceGapClause = {
+        gap: gap as number,
+        criterionClause: requireText(object.criterionClause, `${path}.criterionClause`, MAX_GAP_CLAUSE),
+      };
+      if (object.followUpTaskId !== undefined) {
+        const ref = requireText(object.followUpTaskId, `${path}.followUpTaskId`, MAX_REF);
+        if (rowIdOf(ref) === null) refuseShape(`${path}.followUpTaskId must be a task id`);
+        clause.followUpTaskId = ref;
+      }
+      return clause;
+    });
+  }
+
+  return { claim, ...(criterion ? { criterion } : {}), checks, gaps, ...(gapClauses ? { gapClauses } : {}) };
 }
 
 /**
@@ -740,7 +779,7 @@ export function citedFilesBlock(files: ReadonlyArray<CitedFileLine>): string {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /** The row a public id names, or the UUID itself; null for anything else. */
-function rowIdOf(ref: string): string | null {
+export function rowIdOf(ref: string): string | null {
   if (UUID_RE.test(ref)) return ref;
   try {
     const id = base62ToUuid(ref);

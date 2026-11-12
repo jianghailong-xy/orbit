@@ -17,7 +17,9 @@ import {
 import {
   EVIDENCE_DECISIONS,
   EvidenceDecisionValue,
+  assertConfirmGapsFollowedUp,
   assertCriterionUnmoved,
+  assertGapFollowUpsValid,
   assertCurrentEvidenceRevision,
   assertDecidingSessionInTaskProject,
   assertDecisionMayReachRuns,
@@ -370,6 +372,8 @@ export class TaskCompletionEvidenceService {
       // the same receipt a first one gets. Both read only rows already inside this transaction's
       // scope, and both refuse by throwing, so nothing below runs for a refused envelope.
       const citations = await resolveEvidenceCitations(tx, { ownerId, taskId }, envelope, images);
+      // Known at submit time too: a follow-up a gap names has to be a task of this project now.
+      await assertGapFollowUpsValid(tx, { ownerId, taskId, projectId: task.projectId }, envelope.gapClauses);
       // The server binds the standard this revision is judged against: the one the task is held to
       // now, read under the Task mutex. Whatever `criterion` the submitter sent is dropped, never
       // checked (docs/evidence-always-has-an-addressee-design.md §2.2, D1). The decision door holds
@@ -867,6 +871,11 @@ export class TaskCompletionEvidenceService {
         // A replay answers with the receipt the first attempt got. Whatever that decision derived
         // was derived then, under this same lock, so nothing is re-derived here.
         return { decision: decisionResponse(existing), completed: false, projectId: task.projectId };
+      }
+      // A gap that names a clause of the standard is accepted only with a follow-up that proves it.
+      // After the replay above, so a CONFIRM recorded before this rule is still answered as it was.
+      if (input.decision === 'CONFIRM') {
+        await assertConfirmGapsFollowedUp(tx, { ownerId, taskId, projectId: task.projectId }, latest.evidence);
       }
 
       // The derivation, and the only thing this door writes outside its own row. It asks the

@@ -50,7 +50,7 @@ func TestEvidenceDecideNamesTheRefusalForATaskInAnotherProject(t *testing.T) {
 	tools := toolDescriptors(false, false)
 	description := mcpToolDescription(tools, "task_evidence_decide")
 	assertSaysAll(t, "the task_evidence_decide tool description", description,
-		"Six things are checked at decision time",
+		"Seven things are checked at decision time",
 		"a session that acts for one project — its coordinator, a judgment session opened for it, a run of one of its tasks — must not decide a task that is in another project (EVIDENCE_JUDGMENT_TASK_IN_ANOTHER_PROJECT",
 		"a task's evidence is decided from the project it is in now, and a task moved out takes its undecided evidence with it, so the project it left can no longer decide it",
 	)
@@ -394,4 +394,30 @@ func TestTaskEvidenceSubmitNeedsNoCriterion(t *testing.T) {
 			t.Errorf("call %d evidence = %#v, want %#v", i, body["evidence"], want)
 		}
 	}
+}
+
+// A gap may name the clause of the task's standard it leaves unproven (gapClauses), and a CONFIRM
+// is refused while such a gap has no follow-up task (EVIDENCE_JUDGMENT_GAP_WITHOUT_FOLLOW_UP). Both
+// tool texts and both help texts say so, so a submitter knows to mark it and a decider knows why.
+func TestEvidenceToolsDescribeGapClausesAndTheirFollowUp(t *testing.T) {
+	tools := toolDescriptors(false, false)
+	assertSaysAll(t, "the task_evidence_submit tool description", mcpToolDescription(tools, "task_evidence_submit"),
+		"`gapClauses` is the one optional field",
+	)
+	submitSchema, _ := json.Marshal(tools)
+	assertSaysAll(t, "the task_evidence_submit evidence schema", string(submitSchema),
+		"{gap, criterionClause, followUpTaskId?}",
+		"Evidence with a clause-naming gap and no followUpTaskId cannot be CONFIRMed, only sent back",
+	)
+	assertSaysAll(t, "the task_evidence_decide tool description", mcpToolDescription(tools, "task_evidence_decide"),
+		"a CONFIRM is refused while a gap names a clause of the task's standard in `gapClauses` without a followUpTaskId",
+		"EVIDENCE_JUDGMENT_GAP_WITHOUT_FOLLOW_UP",
+		"SEND_BACK is never blocked by gaps",
+	)
+	assertSaysAll(t, "`orbit task evidence-submit --help`", collapsedSpace(taskActionHelp["evidence-submit"]),
+		`"gapClauses": [{"gap": <index into gaps>, "criterionClause": ..., "followUpTaskId": ...}]`,
+	)
+	assertSaysAll(t, "`orbit task evidence-decide --help`", collapsedSpace(taskActionHelp["evidence-decide"]),
+		"(EVIDENCE_JUDGMENT_GAP_WITHOUT_FOLLOW_UP)",
+	)
 }
