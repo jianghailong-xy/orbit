@@ -51,6 +51,13 @@
 
   "space": {
     "identity": "One space per owner and codebase. owner_id is the hard boundary: nothing is ever read, written, listed or counted across owners.",
+    "create": {
+      "route": "POST /api/wiki/spaces",
+      "body": "{ title, repoUrl?, slug?, maintenance? }",
+      "answer": "201 with the space as GET /api/wiki/spaces/:id answers it; the space's first plan draft is asked for (plan.jobs.triggers.space_created).",
+      "who": "The account owner on the user door with no session header: a request with one is refused WIKI_OWNER_CHANNEL_ONLY whether or not it names maintenance, as a change of review mode is, and makes nothing. An agent asks the owner instead, with the owner-request kind that asks for a wiki (request_owner_action). A personal access token may create a space but not name maintenance (OWNER_INTERACTIVE_CREDENTIAL_REQUIRED). docs/wiki-explicit-creation-design.md section 3.1.",
+      "oneWikiPerRepository": "A repoUrl whose repository already has a wiki in use (repoUrlNorm.uniqueWithin) is refused 409 WIKI_SPACE_EXISTS with the message 'This repository already has a wiki.' and makes nothing; it is asked before the row is written, and two creates that race past the question meet the unique index and are answered the same refusal, never a 500. A wiki in Trash has set its repository aside and does not count (space.trash.move). docs/wiki-explicit-creation-design.md section 3.4."
+    },
     "slug": {
       "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
       "uniqueWithin": "owner"
@@ -2898,7 +2905,8 @@
     { "code": "WIKI_DOC_INVALID", "httpStatus": 422, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A document write does not have the shape docs.schema gives it: a field it does not name, a repository footnote with no sha or no lines, a record footnote with no id, a section the confirmed plan's document does not have, a via entry that is not an entry of the space. errors[] lists everything it found, each { path, message }, the first docs.rules.errorsMax. Nothing is written." },
     { "code": "WIKI_MAINTENANCE_RUNNING", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "POST /api/wiki/spaces/:id/maintenance/run while a maintain job of the space has not ended (queued, running or waiting): one run of a space at a time (maintenance.run). Nothing is made." },
     { "code": "WIKI_MAINTENANCE_DAILY_LIMIT", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "POST /api/wiki/spaces/:id/maintenance/run when the space has made settings.maintenance.dailyRunLimit runs since midnight UTC (wikiMaintenanceRunsToday): the owner's run counts against the day like any other. Nothing is made." },
-    { "code": "WIKI_MAINTENANCE_WRONG_REPOSITORY", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "PATCH /api/wiki/spaces/:id turning maintenance on, or naming another workspace while it is on, when the workspace's runner answers that its folder is another repository's checkout (maintenance.probe: wrong_repository or root_mismatch). The message is the probe's sentence. Nothing is written." }
+    { "code": "WIKI_MAINTENANCE_WRONG_REPOSITORY", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "PATCH /api/wiki/spaces/:id turning maintenance on, or naming another workspace while it is on, when the workspace's runner answers that its folder is another repository's checkout (maintenance.probe: wrong_repository or root_mismatch). The message is the probe's sentence. Nothing is written." },
+    { "code": "WIKI_SPACE_EXISTS", "httpStatus": 409, "scope": "request", "addedByThisContract": true, "when": "POST /api/wiki/spaces naming a repository that already has a wiki in use (space.create.oneWikiPerRepository). The message is 'This repository already has a wiki.' Nothing is written." }
   ],
   "refusalRules": {
     "order": ["changesetSize", "schema", "ownerOnlyKind", "sources", "redaction", "revision", "probe", "taint", "effect", "quota", "similar"],

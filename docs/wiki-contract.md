@@ -213,6 +213,10 @@ pg spec 用执行计划钉住了这一点。它声明为 IMMUTABLE（里面的 `
 - **身份**：owner × 代码库。`repo_url_norm` 是去掉协议、userinfo、结尾 `.git` 和 `/` 的远端地址：
   `git@github.com:a/b.git` 与 `https://github.com/a/b` 都读作 `github.com/a/b`。它在每个 owner 内唯一；
   NULL 表示背后没有仓库的 space，这种可以有任意多个。`root_commit_sha` 等 runner 补报后用来区分同一 URL 背后的两个仓库。
+- **新建**（`space.create`，`POST /api/wiki/spaces`）：只属于 owner。带会话头一律 403 `WIKI_OWNER_CHANNEL_ONLY`（带不带 `maintenance` 都一样），
+  agent 改发 `request_owner_action`（kind `WIKI_CREATE`）。仓库已有在用的 wiki 时先查、回 409 `WIKI_SPACE_EXISTS`，
+  消息 `This repository already has a wiki.`，什么都不写；并发撞上唯一索引的也回这个，不再 500。回收站里的 wiki 已让出仓库，不算
+  （`docs/wiki-explicit-creation-design.md` §3.1、§3.4）。
 - **slug**：`^[a-z0-9]+(?:-[a-z0-9]+)*$`，至多 64 字符，每个 owner 内唯一。主题的 slug 同形，在 space 内唯一。
 - **绑定**：一个 workspace 最多一行，且只能指向自己 owner 的 space（复合外键拒绝别的）。行代表 owner 或会话说过的话，优先于仓库。
   - 仓库和 space 相同的 workspace 不需要行就在这个 space 里：读取时比较规范化后的 `repo_url` 和 `repo_url_norm`（`wiki/wiki-workspaces.ts`），不写入。所以不管 `repo_url` 是怎么来的都会加入，后建的 space 也能拿到已有的 workspace。会话第一次调 wiki 工具时仍写一行，但只对这个仓库已有的、在用的 space 写；任何 wiki 工具调用都不建 space，也不排 plan 起草（`docs/wiki-explicit-creation-design.md` §3.1）。
