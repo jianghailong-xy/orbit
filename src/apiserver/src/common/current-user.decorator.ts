@@ -8,7 +8,8 @@ import { createParamDecorator, ExecutionContext } from '@nestjs/common';
  *
  * TERMINAL is `orbit` in a terminal (docs/terminal-session-design.md, "The terminal credential"): a credential the
  * owner approved in the app for one machine's runner, for 30 days. JwtAuthGuard admits it only to the routes that
- * declare @TerminalSelf (auth/terminal-credentials.ts) and refuses it 403 everywhere else.
+ * declare @TerminalRoute (auth/terminal-credentials.ts), each held to that runner's sessions and workspaces, and
+ * refuses it 403 everywhere else.
  *
  * FEISHU is not a request at all: an action a Feishu event asks for (docs/feishu-bot-design.md §7.2), which
  * feishu/feishu-router.ts hands straight to a service on the §7.2 allowlist (feishu/feishu-actions.ts), never

@@ -13,10 +13,10 @@
  *       login approves, the next poll by that runner (and no other) mints the credential, once, and it ends exactly
  *       30 days after the approval;
  *   (c) a live TERMINAL credential authenticates — GET /terminals/self answers its machine and account — and is
- *       refused 403 TERMINAL_ROUTE_NOT_ALLOWED on every ordinary route: POST /sessions, GET /sessions/:id,
- *       GET and POST project routes, an owner-channel route (an approval decision), its own account's list and the
- *       approval of another terminal; it writes nothing there, a login is answered by the same routes, and it is
- *       never taken from a URL;
+ *       refused 403 TERMINAL_ROUTE_NOT_ALLOWED on routes off its allowlist (terminal-routes.pg.spec.ts holds the
+ *       allowlist): the session list, a session's approval list on its own runner, GET and POST project routes, an owner-channel route (an
+ *       evidence decision), its own account's list and the approval of another terminal; it writes nothing there, a
+ *       login is answered by the same routes, and it is never taken from a URL;
  *   (d) denying tells the terminal so and mints nothing; approving a denied request is 409;
  *   (e) GET /terminals lists the owner's live terminals (machine name, created, last used, expires — never a hash)
  *       and no other account's; DELETE /terminals/:id revokes one and another account's is 404; a revoked
@@ -221,13 +221,16 @@ test('the TERMINAL credential: started by a runner, approved only by the owner\'
     });
     const before = await counts();
     const routes: Array<{ method: string; path: string; body?: unknown; login: number }> = [
-      { method: 'POST', path: '/sessions', body: { prompt: 'from a terminal', workspaceId: owner.workspaceId }, login: 201 },
-      { method: 'GET', path: `/sessions/${sessionId}`, login: 200 },
       { method: 'GET', path: '/sessions', login: 200 },
+      // A session route off the allowlist, on a session of the terminal's own runner.
+      { method: 'GET', path: `/sessions/${sessionId}/approvals`, login: 200 },
+      // An owner-channel door other than answering an approval card: a task's evidence decision (no such task).
+      {
+        method: 'POST', path: `/tasks/${randomUUID()}/evidence/decision`,
+        body: { decision: 'CONFIRM', evidenceRevision: '1', decidingSessionId: randomUUID() }, login: 404,
+      },
       { method: 'GET', path: `/projects/${projectId}`, login: 200 },
       { method: 'POST', path: '/projects', body: { title: 'from a terminal', acceptanceCriteriaItems: [{ text: 'x', verificationMethod: 'y' }] }, login: 201 },
-      // An owner-channel door: answering an approval card (no such card, so a login is answered 404 by the door).
-      { method: 'POST', path: `/sessions/${sessionId}/approvals/${randomUUID()}/decision`, body: { behavior: 'allow' }, login: 404 },
       { method: 'GET', path: '/users/me', login: 200 },
       { method: 'GET', path: '/terminals', login: 200 },
       { method: 'GET', path: '/access-tokens', login: 200 },

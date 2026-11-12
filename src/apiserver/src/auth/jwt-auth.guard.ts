@@ -23,7 +23,7 @@ import {
   patForbiddenBody,
 } from './pat-scope.decorator';
 import { PAT_PREFIX, type PatGrant, PatService } from './pat.service';
-import { TERMINAL_PREFIX, TerminalCredentials, terminalAdmitted, terminalRouteRefusal } from './terminal-credentials';
+import { TERMINAL_PREFIX, TerminalCredentials, terminalRouteOf, terminalRouteRefusal } from './terminal-credentials';
 
 /** How deep a request is searched for the ids it names. Past it, what it names is unknown and refused. */
 const MAX_ID_DEPTH = 32;
@@ -119,9 +119,11 @@ export class JwtAuthGuard implements CanActivate {
         credential: { kind: 'TERMINAL', terminalId: grant.terminalId, runnerId: grant.runnerId, machineName: grant.machineName },
       };
       req.user = user;
-      // Deny by default: only the routes that declare @TerminalSelf admit it, and it never reaches the login's
-      // authorization below. The routes a terminal is to drive are opened route by route (T2's allowlist).
-      if (!terminalAdmitted(this.reflector, context.getHandler())) throw terminalRouteRefusal();
+      // Deny by default: only the routes that declare @TerminalRoute admit it, each judged against the credential's
+      // runner, and it never reaches the login's authorization below.
+      const kind = terminalRouteOf(this.reflector, context.getHandler());
+      if (!kind) throw terminalRouteRefusal();
+      await this.terminals!.confine(req, kind, grant);
       return true;
     }
 

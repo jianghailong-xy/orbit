@@ -12,11 +12,11 @@ import { TerminalLoginService } from './terminal-login.service';
  *
  * Approving mints a credential, so it is the owner channel's (auth/pat-owner-channel-routes.ts): a personal access
  * token is refused it as OWNER_INTERACTIVE, a runner credential is not a credential this guard knows (401), and a
- * TERMINAL credential is refused it 403 as it is every route that does not declare @TerminalSelf. The handler holds the
- * same line once more: only the app's own login decides.
+ * TERMINAL credential is refused it 403 as it is every route that does not declare @TerminalRoute. The handler holds
+ * the same line once more: only the app's own login decides.
  *
  * The two `self` routes are the terminal acting on itself — reading what it is, revoking itself — and the only routes
- * a TERMINAL credential reaches until its allowlist opens more.
+ * here a TERMINAL credential reaches (terminal-route-coverage.spec.ts holds its whole allowlist).
  */
 @UseGuards(JwtAuthGuard)
 @Controller('terminals')
