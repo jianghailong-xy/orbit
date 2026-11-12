@@ -121,3 +121,17 @@ export function repoHealthForWorkspace(
 ): MainCheckoutRepoHealth | null {
   return reports.find((r) => r.agentIds?.includes(workspaceId)) ?? null;
 }
+
+/**
+ * The workspaces whose checkout reads differently between two stored snapshots — what a heartbeat tells the owner's
+ * clients about, so a Main checkout bar follows a commit, push, move or clean-up without a reload. Both sides are read
+ * through the same sanitizer, so key order and dropped garbage never read as a change.
+ */
+export function workspacesWithChangedRepoHealth(before: unknown, after: unknown): string[] {
+  const a = readRunnerRepoHealth(before);
+  const b = readRunnerRepoHealth(after);
+  const ids = new Set([...a, ...b].flatMap((r) => r.agentIds ?? []));
+  return [...ids].filter(
+    (id) => JSON.stringify(repoHealthForWorkspace(a, id)) !== JSON.stringify(repoHealthForWorkspace(b, id)),
+  );
+}

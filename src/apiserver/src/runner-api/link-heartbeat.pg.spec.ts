@@ -439,7 +439,16 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     await t3.test('repoCleanupRequest (WorkspacesService.requestRepoCleanup)', async () => {
       // The runner reports the checkout wedged: a report, written without a full reconcile.
       body = { ...body, repos: [{ root: workDir, branch: 'main', state: 'rebase', agentIds: [workspaceId] }] } as never;
+      // ... and the owner's clients are told that workspace's checkout moved, so a Main checkout bar follows it.
+      const told: Array<{ type: string; data: Record<string, unknown> }> = [];
+      const stream = realtime.streamForUser(ownerId).subscribe((e) => told.push(e as never));
       assert.equal(isFull((await beat()).answer), false);
+      await new Promise((r) => setTimeout(r, 200));
+      stream.unsubscribe();
+      assert.deepEqual(
+        told.filter((e) => e.type === 'agent.changed').map((e) => e.data),
+        [{ agentId: workspaceId, affectsTaskRows: false, repoHealth: true }],
+      );
       const cleanup = await untilSettled(() => workspaces.requestRepoCleanup(ownerId, workspaceId), (a) => a.repoCleanupRequest,
         () => sql.query(`UPDATE "runner" SET repo_cleanup_status = 'done' WHERE id = $1`, [runnerId]));
       assert.equal(cleanup?.root, workDir);
