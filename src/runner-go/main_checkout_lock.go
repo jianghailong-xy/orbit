@@ -12,8 +12,9 @@ import (
 // checkout at once. Two workspaces whose directories reach the same checkout through different
 // paths (a symlink, a subdirectory) share it, because the key is the resolved repo root.
 //
-// Lock order: mergeLock (when taken at all) before this one. The main checkout actions take only
-// this one, so an action on one checkout never waits for a merge into another.
+// Lock order: mergeLock (when taken at all) before this one. Move, Commit and Push take only this
+// one, so an action on one checkout never waits for a merge into another; Save & clean, like
+// Clean up checkout, takes mergeLock first.
 var mainCheckoutLocks sync.Map // real root → *sync.Mutex
 
 // mainCheckoutLockKey is the realpath of the repo root dir sits in, or dir itself, cleaned, when it
