@@ -2933,7 +2933,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0565 adds the terminal_login and terminal_credential tables, their indexes and foreign keys to "user" and
       // "runner" only (docs/terminal-session-design.md); no preserved rows, triggers or DONE fence change, and no row
       // is written.
-      '0565_terminal_credential'],
+      '0565_terminal_credential',
+      // 0600 widens approval_decided_via_chk to allow 'TERMINAL' (docs/terminal-session-design.md); approval only, no
+      // preserved rows, triggers or DONE fence change, and no row is written.
+      '0600_approval_decided_by_terminal'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
