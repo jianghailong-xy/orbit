@@ -65,6 +65,11 @@ export const RUN_LANDING = 'Landing';
 export const RUN_LANDING_OFF_HINT = 'Off for a non-code project: Tasks land on, Delivery, Main branch and Merge check don’t apply. Switch Delivers to Code to bring them back.';
 export const RUN_TO_NOT_CODE = 'The done card stops reading where work landed. Work already on {branch} stays there.';
 export const RUN_TO_CODE = 'The done card will check where work landed again. Work that ran without a branch will show as “Ran without a branch”.';
+/** The native clients write Delivers at the press, so they ask first (board 01 ③ D): these titles and presses over RUN_TO_*. */
+export const RUN_TO_NOT_CODE_TITLE = 'Mark as not code?';
+export const RUN_TO_NOT_CODE_ACTION = 'Mark as not code';
+export const RUN_TO_CODE_TITLE = 'Treat this project as code?';
+export const RUN_TO_CODE_ACTION = 'Mark as code';
 
 // The follow-up details (boards 01 B, 02 G/I, 03 Confirm sheet and stale row).
 /** The non-code mark's reason, quoted under "Marked by … · <when>". */
