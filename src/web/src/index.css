@@ -27593,3 +27593,75 @@ button.agent-progress-agent:hover {
   color: var(--text-2);
   font-size: 12.5px;
 }
+
+/* Done card follow-ups (docs/mocks/project-done-landing-untracked ③④, project-done-followups 01–03): rows read
+   number · text · state, the state green when met and red when not; "Ran without a branch" and a confirmation of an
+   earlier wording in the warning colour. What stands in the way is a red box naming its tasks; what Orbit cannot prove
+   about landing is a yellow one. */
+.project-done-criteria-list li { grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; }
+.project-done-criteria-list .project-done-gap-number { width: 18px; height: 18px; line-height: 18px; font-size: 10px;
+  background: transparent; color: var(--text-3); }
+.project-done-criterion-text { min-width: 0; color: var(--text-1); }
+.project-done-criterion-confirmed { display: block; margin-top: 2px; font-size: 11px; color: var(--text-3); }
+.project-done-criterion-state { grid-column: 3; display: inline-flex; align-items: center; gap: 8px; justify-self: end;
+  text-align: right; font-size: 11.5px; font-weight: 600; }
+.project-done-criterion-state.is-met { color: var(--success); }
+.project-done-criterion-state.is-unmet { color: var(--error); }
+.project-done-criterion-state.is-warn { color: var(--warning); }
+.project-done-confirm { padding: 2px 8px; font-size: 11.5px; }
+.project-done-non-code { display: flex; gap: 9px; align-items: flex-start; margin: 8px 0 4px; padding: 9px 11px;
+  border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--bg-subtle); font-size: 12.5px;
+  line-height: 1.5; color: var(--text-2); }
+.project-done-non-code b { color: var(--text-1); font-weight: 650; }
+.project-done-non-code-icon { flex: none; width: 16px; height: 16px; margin-top: 2px; border: 1px solid var(--text-3);
+  border-radius: 50%; color: var(--text-3); font-size: 10px; font-weight: 700; font-style: italic; line-height: 14px; text-align: center; }
+.project-done-non-code-change { color: var(--brand); font-weight: 600; }
+.project-done-blockers { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--error); border-radius: 10px;
+  background: color-mix(in srgb, var(--error) 6%, transparent); font-size: 13px; line-height: 1.5; color: var(--text-1); }
+.project-done-blockers > b { display: block; margin-bottom: 6px; }
+.project-done-blockers ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.project-done-blocker-line { display: flex; gap: 8px; align-items: baseline; }
+.project-done-blocker-line .project-done-gap-number { width: 18px; height: 18px; line-height: 18px; font-size: 10px;
+  background: transparent; color: var(--text-3); }
+.project-done-blocker-task { display: flex; gap: 8px; align-items: center; margin: 6px 0 0 26px; padding: 6px 10px;
+  border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-raised); font-size: 12.5px; }
+.project-done-blocker-dot { color: var(--warning); font-size: 9px; }
+.project-done-blocker-task-title { flex: 1; min-width: 0; }
+.project-done-open { padding: 2px 10px; font-size: 12px; text-decoration: none; }
+.project-done-blocker-move { display: flex; gap: 10px; align-items: center; margin: 8px 0 0 26px; }
+.project-done-blocker-hint { font-size: 11.5px; color: var(--text-3); }
+.project-done-findings { margin-top: 10px; border-color: var(--warning-border); background: var(--warning-bg); color: var(--text-1); }
+.project-done-findings > b { display: block; margin-bottom: 4px; }
+/* Project page: the non-code line where the branch would be, the Delivers provenance, and Landing Off. */
+.project-integration-non-code .project-integration-facts { color: var(--text-2); font-size: 12.5px; }
+.project-run-non-code-by { margin-top: 6px; color: var(--text-1); }
+.project-run-non-code-consequence { margin: 10px 0 0; color: var(--text-1); }
+/* Acceptance rows met by confirmation (board 03 ⑤⑥) and the Met by menu. */
+.acceptance-confirmation { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.acceptance-work-state.is-stale { color: var(--warning); }
+.acceptance-confirmation-note { margin-top: 4px; font-size: 12.5px; color: var(--text-2); }
+.acceptance-confirmation-note.is-failed { color: var(--error); }
+.acceptance-confirmation-actions { display: flex; gap: 6px; margin-top: 6px; }
+.acceptance-method { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+.acceptance-mode-trigger { padding: 0; border: 0; background: none; font: inherit; font-size: 12px; color: var(--text-3); cursor: pointer; }
+.acceptance-mode-trigger b { color: var(--text-2); font-weight: 600; }
+.acceptance-mode-option { display: grid; gap: 2px; max-width: 320px; white-space: normal; }
+.acceptance-mode-hint { font-size: 12px; color: var(--text-3); }
+.acceptance-mode-held { display: block; margin-top: 4px; font-size: 12px; color: var(--warning); }
+/* Move to a follow-up and Confirm criterion dialogs. */
+.move-criterion-body, .confirm-criterion-body { display: grid; gap: 10px; font-size: 13px; line-height: 1.5; }
+.move-criterion-body p, .confirm-criterion-body p { margin: 0; }
+.move-criterion-label, .confirm-criterion-label { font-size: 11.5px; font-weight: 650; letter-spacing: .02em; text-transform: uppercase; color: var(--text-3); }
+.confirm-criterion-label { text-transform: none; letter-spacing: 0; font-size: 12.5px; color: var(--text-1); }
+.confirm-criterion-optional { font-weight: 400; color: var(--text-3); }
+.move-criterion-moves { padding: 9px 11px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-subtle); }
+.move-criterion-hint, .confirm-criterion-hint, .move-criterion-stays { font-size: 12px; color: var(--text-3); }
+.move-criterion-new, .move-criterion-existing { display: grid; gap: 6px; }
+.move-criterion-projects { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; }
+.move-criterion-projects li { display: flex; justify-content: space-between; gap: 10px; padding: 8px 11px; border-top: 1px solid var(--border-subtle); cursor: pointer; }
+.move-criterion-projects li:first-child { border-top: 0; }
+.move-criterion-projects li.is-picked { background: var(--brand-tint); }
+.move-criterion-meta { color: var(--text-3); font-size: 12px; }
+.confirm-criterion-text { padding: 9px 11px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-subtle); }
+.confirm-criterion-method { color: var(--text-2); }
+.acceptance-mode-row { margin-top: 4px; }
