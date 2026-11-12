@@ -1,3 +1,4 @@
+import type { TurnTranslation } from '@orbit/shared';
 import type { TurnCards } from '../api';
 import { parseBackgroundWake } from './backgroundWake';
 
@@ -17,6 +18,8 @@ export interface AcceptedUserTurn extends TurnCards {
   text: string;
   acceptedAt: string;
   attachments: { id: string; mime?: string; name?: string }[];
+  /** Settings › Translation: the turn's translation, carried as the runner's echo will carry it. */
+  translation?: TurnTranslation;
 }
 
 /** Every field of `TurnCards`, which the compiler holds this list to: a card added there cannot be
@@ -140,6 +143,7 @@ export function acceptedUserTurnEvent(
     payload: {
       text: turn.text,
       ...(turn.attachments.length ? { attachments: turn.attachments } : {}),
+      ...(turn.translation ? { translation: turn.translation } : {}),
       // Beside the text, as the control plane records them on the runner's echo (readTurnCards,
       // turn-cards.ts): the words and the cards they are drawn as, one payload either way — so the
       // placeholder is drawn as the card, by the same parser, rather than as a bubble the card
@@ -157,6 +161,8 @@ interface QueuedTurnRow extends TurnCards {
   createdAt?: string;
   attachments?: { id: string; mimeType: string }[];
   authoredByOrbit?: true;
+  /** Settings › Translation: carried onto the event as the runner's echo will carry it. */
+  translation?: TurnTranslation;
 }
 
 /** Whether the queue listed this turn with the block it will be delivered with rather than with
@@ -204,6 +210,7 @@ export function queuedTurnEvent(turn: QueuedTurnRow): UserTurnEvent {
         : {}),
       ...(listedWithItsBlock(turn) ? { controlPlaneNote: turn.content } : {}),
       ...(turn.shell ? { shell: true } : {}),
+      ...(turn.translation ? { translation: turn.translation } : {}),
       ...turnCardsOf(turn),
     },
   };

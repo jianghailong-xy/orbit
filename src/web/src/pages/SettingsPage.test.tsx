@@ -197,10 +197,12 @@ describe('the order of the cards', () => {
     // The phones open with Machines & models instead and keep the session cards on a page of their own
     // (SettingsHome and SessionSettings in OrbitKit, docs/mocks/ios-settings-order); this page keeps its
     // order. Access tokens and Integrations come last: the web's alone until the apps have them too.
+    // Translation follows Session defaults (docs/mocks/session-translation, frame 1).
     const html = render({});
     const titles = [...html.matchAll(/<h2[^>]*>([^<]+)<\/h2>/g)].map((m) => m[1].replace(/&amp;/g, '&'));
     expect(titles).toEqual([
       'Session defaults',
+      'Translation',
       'Session orchestration',
       'Machines & models',
       'Notifications',

@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react';
+import { TRANSLATION_LANGUAGE_NAMES, TRANSLATION_LANGUAGES, type TranslationLanguage } from '@orbit/shared';
+import { useEffect, type ReactNode } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -16,6 +17,7 @@ import { noCliSignedIn, type AttentionWorkspace } from '../lib/runnerAttention';
 import { accountPoolList, poolAccessQuery, sharedPoolsQuery } from '../lib/sharedPools';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { useToast } from '../lib/toast';
+import { translationLanguageOf } from '../lib/translation';
 import { DEFAULT_PERMISSION_MODE, MODE_OPTIONS } from '../lib/workspaceDefaults';
 import { formatFileSize } from '../lib/worktreeFile';
 import { FEISHU_PLATFORM_NAMES, feishuIntegrationQuery } from './FeishuIntegrationPage';
@@ -225,6 +227,75 @@ function IntegrationsCard() {
   );
 }
 
+const TRANSLATION_LANGUAGE_OPTIONS = TRANSLATION_LANGUAGES.map((value) => ({
+  value,
+  label: TRANSLATION_LANGUAGE_NAMES[value],
+}));
+const AGENT_LANGUAGE_OPTIONS = [{ value: 'en', label: 'English' }];
+
+/**
+ * Settings › Translation (docs/mocks/session-translation, frames 1 and 2): one account-wide switch,
+ * absent = off, and the language the owner writes and reads in. Agents always work in English, so
+ * that row is shown and not offered. A server without a DeepSeek key cannot translate: everything is
+ * drawn disabled with frame 2's notice, whatever the preference says.
+ */
+function TranslationCard({
+  me,
+  prefs,
+  save,
+  saving,
+}: {
+  me: Me | undefined;
+  prefs: UserPreferences;
+  save: (patch: UserPreferences) => void;
+  saving: boolean;
+}) {
+  const unavailable = me !== undefined && me.translationAvailable !== true;
+  const language = translationLanguageOf(me);
+  return (
+    <div id="translation">
+      <Card title="Translation" style={{ marginBottom: 16 }}>
+        <Field
+          label="Translate conversations"
+          hint="Agents read and write in English; you write and read in your language. Your messages are translated before the agent gets them, its replies before you see them. Tool calls, output and code stay as they are."
+        >
+          <Switch
+            aria-label="Translate conversations"
+            checked={!unavailable && prefs.translationEnabled === true}
+            disabled={unavailable}
+            onCheckedChange={(v) => save({ translationEnabled: v })}
+            loading={saving}
+          />
+        </Field>
+        {unavailable && (
+          <div className="settings-translation-notice" role="note">
+            This server has no DeepSeek key, so it can't translate. Whoever runs it sets <code>DEEPSEEK_API_KEY</code> and
+            restarts it.
+          </div>
+        )}
+        <Field label="Your language" hint="What you write in, and what replies are shown in.">
+          <Select<TranslationLanguage>
+            aria-label="Your language"
+            style={{ width: 200 }}
+            value={language}
+            options={TRANSLATION_LANGUAGE_OPTIONS}
+            disabled={unavailable}
+            onValueChange={(v) => v !== null && save({ translationLanguage: v })}
+            loading={saving}
+          />
+        </Field>
+        <Field label="Agents work in" hint="What the agent receives and answers in.">
+          <Select aria-label="Agents work in" style={{ width: 200 }} value="en" options={AGENT_LANGUAGE_OPTIONS} disabled onValueChange={() => {}} />
+        </Field>
+        <div style={{ paddingTop: 4, color: 'var(--text-3)', fontSize: 12 }}>
+          Translated by the server's DeepSeek model. Applies to every session from its next message; what's already in a
+          conversation stays as it was.
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 // Personal preferences. Appearance is account-synced via the theme context; the permission
 // default is what a new session starts in when the composer names no mode (it used to live per
 // workspace — see common/permission-mode.ts for why the posture belongs to the run).
@@ -237,6 +308,13 @@ export function SettingsPage() {
   const prefs: UserPreferences = me.data?.preferences ?? {};
 
   const defaultMode = prefs.defaultPermissionMode ?? DEFAULT_PERMISSION_MODE;
+
+  // The composer's translation tag opens Settings › Translation: bring the card into view.
+  const { hash } = useLocation();
+  const loaded = me.data !== undefined;
+  useEffect(() => {
+    if (hash === '#translation' && loaded) document.getElementById('translation')?.scrollIntoView?.({ block: 'start' });
+  }, [hash, loaded]);
 
   const save = useMutation({
     mutationFn: (patch: UserPreferences) =>
@@ -308,6 +386,8 @@ export function SettingsPage() {
           />
         </Field>
       </Card>
+
+      <TranslationCard me={me.data} prefs={prefs} save={(patch) => save.mutate(patch)} saving={save.isPending} />
 
       {/* One switch for the whole account, not one per workspace: the server reads it live on
           every claim, spawn and call, so turning it off takes the tools away everywhere at once.

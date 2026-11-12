@@ -20,6 +20,7 @@ import {
   REPORT_CLAMP,
 } from './OwnerConfirmationCard';
 import { bashCommandRules } from '@orbit/shared';
+import { shownQuestions } from '../lib/translation';
 
 /**
  * What the card says once nothing is listening for its answer.
@@ -617,7 +618,10 @@ export function ApprovalPanel({
       />
     );
   }
-  const plan = isPlan(approval) ? planText(approval.input) : '';
+  // Settings › Translation (3A): the plan and a tool card's description as the owner reads them.
+  const shown = approval.translation && !approval.translation.failed ? approval.translation : undefined;
+  const plan = isPlan(approval) ? (shown?.plan || planText(approval.input)) : '';
+  const translatedDescription = shown?.description;
   const dag = isDagChange(approval) ? dagInput(approval.input) : null;
   const batch = isBatch(approval) ? batchPreview(approval.input) : null;
   const create = createInput(approval);
@@ -706,7 +710,10 @@ export function ApprovalPanel({
         ) : writing ? (
           <WorkspaceWriteBody input={writing} />
         ) : (
-          <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
+          <>
+            {translatedDescription && <div className="approval-translated-desc">{translatedDescription}</div>}
+            <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
+          </>
         )}
       </div>
       {!answerable && <UnanswerableNote />}
@@ -1266,7 +1273,9 @@ function QuestionForm({
   onChatAbout?: (id: string, question: string) => void;
 }): JSX.Element {
   const [reviewOpen, setReviewOpen] = useState(false);
-  const questions = questionsOf(approval.input);
+  // Shown in the owner's language once the server has translated the card (Settings › Translation, 3A).
+  // Answers are keyed by what is shown; the server maps them back to the English the engine asked in.
+  const questions = shownQuestions(questionsOf(approval.input), approval.translation);
   const [sel, setSel] = useState<Record<string, string[]>>({});
   // Free-text answers, keyed by question text — claude's AskUserQuestion always lets
   // the user type their own answer instead of picking a listed option.
