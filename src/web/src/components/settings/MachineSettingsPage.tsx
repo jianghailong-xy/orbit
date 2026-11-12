@@ -176,6 +176,27 @@ const ATTENTION_ICON: Record<AttentionKind, ReactNode> = {
  *
  * What was RunnerDetailPage's machine half; the rules and copy are runnerAttention's and runnerCopy's.
  */
+/**
+ * How often the machine page re-reads the runners: every 4 s while an engine install or an account
+ * removal on this machine is in flight, as the old engine card list did, since its progress lives on
+ * the runner row; every 15 s otherwise. A finished install (not an update) still counts: the row waits
+ * for the probe that retires it. So does a removal the machine reported done while it still reports
+ * the account.
+ */
+export function machinePagePollMs(runners: Runner[] | undefined, runnerId: string | null): number {
+  const r = runners?.find((one) => one.id === runnerId);
+  const inFlight =
+    !!r &&
+    (r.install?.status === 'pending' ||
+      r.install?.status === 'installing' ||
+      (r.install?.status === 'done' && r.install?.mode !== 'update') ||
+      r.accountRemove?.status === 'pending' ||
+      (r.accountRemove?.status === 'done' && !!r.online &&
+        !!r.engines?.some((e) => e.engine === r.accountRemove?.engine &&
+          e.accounts?.some((a) => a.id === r.accountRemove?.account))));
+  return inFlight ? 4_000 : 15_000;
+}
+
 export function MachineSettingsPage() {
   const runnerId = routeId(useParams().id);
   const navigate = useNavigate();
@@ -186,7 +207,7 @@ export function MachineSettingsPage() {
   const runners = useQuery({
     queryKey: ['runners'],
     queryFn: () => api<Runner[]>('/runners'),
-    refetchInterval: 15_000,
+    refetchInterval: (q) => machinePagePollMs(q.state.data, runnerId),
   });
   const runner = (runners.data ?? []).find((r) => r.id === runnerId) ?? null;
 

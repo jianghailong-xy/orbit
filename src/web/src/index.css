@@ -1898,20 +1898,6 @@ button.toast--pill:focus-visible {
 }
 
 /* ---- Machines: Infrastructure's machine cards, a machine's page, Add a runner, Rotate token ---- */
-.runners-empty {
-  max-width: 920px;
-  margin: 24px auto 0;
-  color: var(--text-3);
-  font-size: 14px;
-}
-.runner-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  flex: none;
-  align-self: flex-start;
-  margin-top: 5px;
-}
 .runner-sub {
   font-size: 12px;
   color: var(--text-3);
@@ -2110,10 +2096,6 @@ button.toast--pill:focus-visible {
   font-size: 13px;
   color: var(--text-3);
 }
-.rd-page {
-  max-width: 920px;
-  margin: 0 auto;
-}
 .rd-section {
   margin-top: 28px;
 }
@@ -2285,87 +2267,6 @@ button.toast--pill:focus-visible {
   font-size: 11.5px;
   color: var(--text-3);
 }
-.rd-workspace-list {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--bg-raised);
-  overflow: hidden;
-}
-/* One panel with hairline dividers between rows, instead of boxing each row —
-   denser and faster to scan. */
-.rd-workspace-list > * + * {
-  border-top: 1px solid var(--border-subtle);
-}
-/* The row is the click target for its config — the settings it shows are the ones the
-   editor holds, so aiming at the row is the natural move. */
-.rd-workspace-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-.rd-workspace-row:hover,
-.rd-workspace-row.is-open {
-  background: var(--bg-hover);
-}
-.rd-workspace-row.is-disabled .rd-workspace-ico {
-  background: var(--fill-muted);
-  color: var(--text-4);
-}
-.rd-workspace-row.is-disabled .rd-workspace-name,
-.rd-workspace-row.is-disabled .rd-workspace-meta {
-  color: var(--text-4);
-}
-/* Quiet by default: the caret appears on hover, or stays while this row's editor is open,
-   so a resting list isn't a column of chevrons. */
-.rd-row-caret {
-  font-size: 11px;
-  color: var(--text-4);
-  opacity: 0;
-  transition:
-    opacity 0.15s ease,
-    transform 0.18s ease;
-}
-.rd-workspace-row:hover .rd-row-caret {
-  opacity: 1;
-}
-.rd-workspace-row.is-open .rd-row-caret {
-  opacity: 1;
-  color: var(--text-2);
-  transform: rotate(180deg);
-}
-.rd-workspace-ico {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: var(--brand-tint);
-  color: var(--brand);
-  flex: none;
-}
-.rd-workspace-main {
-  flex: 1;
-  min-width: 0;
-}
-.rd-workspace-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-1);
-}
-.rd-workspace-meta {
-  font-size: 12px;
-  color: var(--text-3);
-  margin-top: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 /* Sessions of this workspace running right now — the sidebar's own count. */
 .rd-workspace-running {
   flex: none;
@@ -2427,30 +2328,6 @@ button.toast--pill:focus-visible {
   color: var(--text-3);
   line-height: 1.55;
 }
-/* In-place agent editor card — replaces the old modal; lives inside the list. */
-.rd-workspace-form {
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--bg-raised);
-  padding: 16px 16px 14px;
-}
-.rd-workspace-form-new {
-  box-shadow: inset 3px 0 0 var(--brand);
-}
-/* Two-column grid for the short fields; long fields below span full width. */
-.rd-form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 16px;
-}
-.rd-form-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border-subtle);
-}
 /* Section headers inside the editor: Essentials / Defaults, with Advanced folded below. */
 .rd-form-section {
   font-size: 11px;
@@ -2476,11 +2353,6 @@ button.toast--pill:focus-visible {
   font-weight: 500;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11.5px;
-}
-.rd-dirty-note {
-  font-size: 12px;
-  color: var(--warning);
-  margin-right: 4px;
 }
 /* What the runner last saw at the agent's working directory — answered from its own disk, so a
    typo is caught here instead of when a session fails to start. */
@@ -2548,30 +2420,6 @@ button.toast--pill:focus-visible {
 .rd-history-choice .rd-set-desc {
   display: block;
 }
-.rd-history-removal {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 10px;
-}
-.rd-quiet-btn.orbit-button {
-  color: var(--text-3);
-}
-.rd-quiet-btn:hover {
-  color: var(--text-1);
-}
-/* Settings-row toggle: label + explanation left, control right-aligned. */
-.rd-set-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  padding: 11px 0;
-  border-top: 1px solid var(--border-subtle);
-}
-.rd-set-main {
-  flex: 1;
-  min-width: 0;
-}
 .rd-set-label {
   font-size: 13px;
   color: var(--text-1);
@@ -2581,10 +2429,6 @@ button.toast--pill:focus-visible {
   color: var(--text-3);
   margin-top: 3px;
   line-height: 1.5;
-}
-.rd-set-row .orbit-switch {
-  margin-top: 2px;
-  flex: none;
 }
 /* The engines smart selection may move a task run to (model routing §6), under the switch's own
    explanation: one chip per engine, the agent's own ticked and fixed. Qualified with .rd-engines-list
@@ -2641,44 +2485,6 @@ button.toast--pill:focus-visible {
   font-weight: 400;
   color: var(--text-3);
 }
-/* Advanced disclosure — folded by default, but it has to admit when it hides something. */
-.rd-adv-toggle {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  cursor: pointer;
-  user-select: none;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
-  color: var(--text-3);
-  margin-top: 16px;
-  padding: 6px 0;
-}
-.rd-adv-toggle:hover {
-  color: var(--text-1);
-}
-.rd-adv-caret {
-  font-size: 10px;
-  transition: transform 0.18s ease;
-}
-.rd-adv-toggle.open .rd-adv-caret {
-  transform: rotate(180deg);
-}
-.rd-adv-badge {
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: var(--fill-muted);
-  color: var(--text-3);
-}
-.rd-adv-body {
-  padding-top: 6px;
-}
 /* Which Codex account the workspace runs on: each option is the account, with its own quota and
    sign-in on a quieter line under it. */
 .rd-codex-account {
@@ -2690,63 +2496,10 @@ button.toast--pill:focus-visible {
   color: var(--text-3);
   margin-top: 1px;
 }
-@media (max-width: 600px) {
-  .rd-form-grid {
-    grid-template-columns: 1fr;
-  }
-}
 /* A phone's width: Needs Attention's cards one to a row. */
 @media (max-width: 640px) {
   .rd-attention {
     grid-template-columns: minmax(0, 1fr);
-  }
-}
-/* Edit-in-place: the clicked row stays as a header and the editor expands below
-   it, the two merged into one bordered card. */
-.rd-workspace-editing {
-  overflow: hidden;
-  box-shadow: inset 3px 0 0 var(--brand);
-}
-.rd-workspace-editing > .rd-workspace-row {
-  border: none;
-  border-radius: 0;
-  background: transparent;
-}
-.rd-workspace-editing > .rd-workspace-form-wrap > .rd-workspace-form {
-  border: none;
-  border-radius: 0;
-  border-top: 1px solid var(--border-subtle);
-}
-/* Create form sits inline at the top of the panel — shed its own card frame too. */
-.rd-workspace-list > .rd-workspace-form-wrap > .rd-workspace-form {
-  border: none;
-  border-radius: 0;
-  background: transparent;
-}
-/* Expand the editor open: grow its row track 0fr→1fr while fading in, so the
-   rows below slide down smoothly. (Collapse is immediate — React unmounts it.) */
-.rd-workspace-form-wrap {
-  display: grid;
-  grid-template-rows: 1fr;
-  animation: rd-form-expand 0.2s ease;
-}
-.rd-workspace-form-wrap > * {
-  min-height: 0;
-  overflow: hidden;
-}
-@keyframes rd-form-expand {
-  from {
-    grid-template-rows: 0fr;
-    opacity: 0;
-  }
-  to {
-    grid-template-rows: 1fr;
-    opacity: 1;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .rd-workspace-form-wrap {
-    animation: none;
   }
 }
 
@@ -16241,39 +15994,6 @@ button.chat-jump-start:hover {
   color: var(--text-4);
 }
 
-/* ============================================================================
-   Infrastructure (InfrastructurePage) and provider
-   onboarding — logo gallery + guided add flow (ProviderGallery, ProviderConnectPage).
-   ========================================================================== */
-.prov-page-head {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: 6px 12px;
-}
-.prov-page-sub {
-  flex-basis: 100%;
-  color: var(--text-3);
-  font-size: 12px;
-}
-/* Infrastructure's Add: each choice says what it makes under its name. */
-.infra-add {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  max-width: 300px;
-  padding: 3px 0;
-  white-space: normal;
-}
-.infra-add b {
-  font-weight: 600;
-  color: var(--text-1);
-}
-.infra-add span {
-  font-size: 12px;
-  color: var(--text-3);
-}
 /* The model a key starts on, on its row in its vendor's card. */
 .infra-model {
   padding: 0 5px;
@@ -16458,25 +16178,6 @@ button.chat-jump-start:hover {
 .provider-adv-body {
   padding: 14px;
   border-top: 1px solid var(--border-subtle);
-}
-
-.provider-empty {
-  margin-top: 12px;
-  padding: 28px;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-}
-.provider-empty h3 {
-  margin: 0 0 4px;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-1);
-}
-.provider-empty p {
-  margin: 0 0 20px;
-  font-size: 14px;
-  color: var(--text-3);
 }
 
 /* A vendor whose CLI is already signed in on one of the user's machines — the cheaper route,
@@ -21567,10 +21268,6 @@ div.landing-jobs-open {
   max-width: 720px;
   margin: 0 auto;
 }
-.feishu-intro {
-  margin: 4px 0 20px;
-  color: var(--text-3);
-}
 .feishu-card {
   margin-bottom: 16px;
 }
@@ -21874,12 +21571,6 @@ div.landing-jobs-open {
 /* Settings → Access tokens (docs/personal-access-token-design.md §9). */
 .access-tokens-page {
   max-width: 1100px;
-}
-.access-tokens-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
 }
 .access-token-title {
   color: var(--text-1);

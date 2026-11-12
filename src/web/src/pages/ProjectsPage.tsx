@@ -513,10 +513,9 @@ export function ProjectsPage() {
     }
 
     // Keep the no-workspace route identical to DefaultLanding: registration for a new account,
-    // the machine page when there is only one choice, otherwise Infrastructure's machines.
+    // otherwise the first machine's Settings page.
     if (runnerList.length === 0) navigate('/runners/register');
-    else if (runnerList.length === 1) navigate(`/settings/machines/${encodeId(runnerList[0].id)}`);
-    else navigate('/infrastructure');
+    else navigate(`/settings/machines/${encodeId(runnerList[0].id)}`);
   };
 
   return (
