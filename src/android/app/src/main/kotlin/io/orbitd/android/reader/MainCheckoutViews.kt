@@ -169,7 +169,7 @@ internal fun MainCheckoutResultRow(result: MainCheckout.Result) {
         when (action) {
             "view-changes" -> model.open(MainCheckoutState.Sheet.WORKTREE_CHANGES)
             "push" -> model.push()
-            "open-in-new-session" -> model.workspaceId?.let(model.openDraft)
+            "open-in-new-session" -> model.workspaceId?.let { ws -> result.rescueBranch?.let { model.openDraft(ws, MainCheckout.rescuePrompt(it)) } }
             "review-again" -> model.open(MainCheckoutState.Sheet.REVIEW)
             "ask-agent-combine" -> model.prefill(MainCheckout.combinePrompt(result.paths, result.branch))
             "ask-agent-rebase-push" -> model.prefill(MainCheckout.rebasePushPrompt(result.root, result.branch, result.upstream))

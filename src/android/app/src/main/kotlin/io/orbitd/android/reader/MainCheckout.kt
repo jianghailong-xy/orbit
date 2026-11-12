@@ -327,6 +327,11 @@ internal object MainCheckout {
             "worktree's so both changes are kept, then clear those files from the main checkout${branch?.let { " (on $it)" } ?: ""}. " +
             "Tell me what you combined."
 
+    /** The first message of the session Save & clean's "Open in a new session" opens (the macOS client's words). */
+    fun rescuePrompt(rescueBranch: String) =
+        "The main checkout's uncommitted changes were saved to $rescueBranch. " +
+            "Look at what that branch holds compared with its parent and tell me what it contains."
+
     fun rebasePushPrompt(root: String, branch: String?, upstream: String?) =
         "Pushing ${branch ?: "the branch"} from the main checkout $root was rejected: ${upstream ?: "its upstream"} has commits it doesn't. " +
             "In the main checkout, rebase ${branch ?: "the branch"} onto ${upstream ?: "its upstream"}, resolve any conflicts, and push it again. " +

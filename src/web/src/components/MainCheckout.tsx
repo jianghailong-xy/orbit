@@ -22,6 +22,7 @@ import {
 import {
   askAboutChangesPrompt,
   askCombinePrompt,
+  rescueSessionPrompt,
   askRebasePushPrompt,
   useMainCheckoutHost,
   type MainCheckoutHost,
@@ -261,8 +262,9 @@ function linkHandler(
       return host.askAgent ? () => host.askAgent!(askCombinePrompt(r)) : null;
     case 'ask-agent-rebase-push':
       return host.askAgent ? () => host.askAgent!(askRebasePushPrompt(r)) : null;
+    case 'open-in-new-session':
+      return host.openNewSession && r.rescueBranch ? () => host.openNewSession!(rescueSessionPrompt(r)) : null;
     default:
-      // open-in-new-session: no door yet to start a session on a branch from here.
       return null;
   }
 }

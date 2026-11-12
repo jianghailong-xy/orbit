@@ -147,6 +147,12 @@ class MainCheckoutTest {
         }
     }
 
+    @Test fun openInANewSessionAsksAboutTheRescueBranchInTheMacOSClientsWords() {
+        assertEquals("The main checkout's uncommitted changes were saved to orbit/rescue-8c9454aa. " +
+            "Look at what that branch holds compared with its parent and tell me what it contains.",
+            MainCheckout.rescuePrompt("orbit/rescue-8c9454aa"))
+    }
+
     @Test fun theSuccessVariantsReadAsTheContractSays() {
         val move = MainCheckout.Result("r", "move", "/root/orbit", "done", branch = "main", fileCount = 2, remaining = 1,
             rescueBranch = "orbit/rescue-5f2c1a9", targetSessionId = "sess-2")

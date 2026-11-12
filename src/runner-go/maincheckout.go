@@ -134,7 +134,63 @@ func scanMainCheckout(ctx context.Context, dir string) (*mainCheckoutScan, error
 	snap.Files = mainCheckoutCounts(ctx, root, head, listed)
 	snap.FileCount = len(snap.Files)
 	snap.Truncated = truncated
+	rememberMainCheckoutReview(snap.Fingerprint, all)
 	return &mainCheckoutScan{Snapshot: snap, All: all}, nil
+}
+
+// mainCheckoutReviewLimit bounds how many served fingerprints the runner remembers the files of.
+const mainCheckoutReviewLimit = 32
+
+// mainCheckoutReviews remembers, by fingerprint, each changed file's status and content hash as a
+// snapshot served them, so a stale refusal can name what changed since that review (board 03). It
+// lives in memory: after a runner restart a refusal is still right, it just names no paths.
+var mainCheckoutReviews = struct {
+	sync.Mutex
+	files map[string]map[string]string // fingerprint → path → "status contentHash"
+	order []string
+}{files: map[string]map[string]string{}}
+
+func rememberMainCheckoutReview(fingerprint string, all []MainCheckoutFile) {
+	r := &mainCheckoutReviews
+	r.Lock()
+	defer r.Unlock()
+	if _, ok := r.files[fingerprint]; ok {
+		return
+	}
+	r.files[fingerprint] = mainCheckoutStateMap(all)
+	r.order = append(r.order, fingerprint)
+	if len(r.order) > mainCheckoutReviewLimit {
+		delete(r.files, r.order[0])
+		r.order = r.order[1:]
+	}
+}
+
+// mainCheckoutChangedSince is the paths whose status or content differs between the snapshot that
+// served fingerprint and now (appeared, gone or rewritten), in path byte order; nil when that
+// snapshot is not remembered.
+func mainCheckoutChangedSince(fingerprint string, now []MainCheckoutFile) []string {
+	r := &mainCheckoutReviews
+	r.Lock()
+	then, ok := r.files[fingerprint]
+	r.Unlock()
+	if !ok {
+		return nil
+	}
+	seen := make(map[string]bool, len(now))
+	var paths []string
+	for _, f := range now {
+		seen[f.Path] = true
+		if then[f.Path] != f.Status+" "+f.ContentHash {
+			paths = append(paths, f.Path)
+		}
+	}
+	for p := range then {
+		if !seen[p] {
+			paths = append(paths, p)
+		}
+	}
+	sort.Strings(paths)
+	return paths
 }
 
 // mainCheckoutState is inspectRepoRoot's classification without its porcelain `git diff`, which

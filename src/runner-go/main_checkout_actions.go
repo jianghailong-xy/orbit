@@ -225,6 +225,7 @@ func checkMainCheckoutFingerprint(r *MainCheckoutActionResult, want string, scan
 		r.Head = scan.Snapshot.Head
 		return mainCheckoutHeadMoved
 	}
+	r.Paths = mainCheckoutChangedSince(want, scan.All)
 	return mainCheckoutFingerprintStale
 }
 

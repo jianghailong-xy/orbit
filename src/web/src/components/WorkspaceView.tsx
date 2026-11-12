@@ -7452,6 +7452,24 @@ export function WorkspaceView({
     [consoleWorkspaceId, consoleRepoRoot],
   );
   const viewSessionChanges = useCallback(() => setOpenDiffSignal((n) => n + 1), []);
+  // The rescue line's Open in a new session: this workspace's new-session draft, the prompt waiting in it. The switch
+  // effect restores the 'new' draft on arrival, so the prompt is put there rather than into `text`.
+  const openMainCheckoutSession = useMemo(
+    () =>
+      consoleWorkspaceId
+        ? (prompt: string) => {
+            const kept = drafts.current.get('new')?.trim();
+            drafts.current.set('new', kept ? `${kept}\n\n${prompt}` : prompt);
+            navigateWithPaneSlide('push', () =>
+              navigate(`/workspaces/${encodeId(consoleWorkspaceId)}/new`, { state: stampFromList() }),
+            );
+            setTimeout(() => taRef.current?.focus(), 0);
+          }
+        : undefined,
+    // navigate, navigateWithPaneSlide and stampFromList read only refs and the router.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [consoleWorkspaceId],
+  );
   const mainCheckout = useMainCheckoutController({
     workspaceId: consoleWorkspaceId,
     sessionId: selectedId && !selectedTrashed && !selectedMissing ? selectedId : undefined,
@@ -7462,6 +7480,7 @@ export function WorkspaceView({
     health: (consoleWorkspace?.repoHealth as MainCheckoutRepoHealth | null | undefined) ?? null,
     targets: mainCheckoutTargets,
     askAgent: restoreUndelivered ?? undefined,
+    openNewSession: openMainCheckoutSession,
     cleanUp: mainCheckoutCleanUp,
     viewChanges: viewSessionChanges,
   });

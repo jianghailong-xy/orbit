@@ -59,7 +59,8 @@ internal class MainCheckoutModel(private val api: MainCheckoutTransport, val ses
 
     /** Composer prefill and openers the session supplies; the runner page leaves them unset. */
     var prefill: (String) -> Unit = {}
-    var openDraft: (String) -> Unit = {}
+    /** Opens the workspace's new-session draft with a prompt in it, nothing sent. */
+    var openDraft: (workspaceId: String, prompt: String) -> Unit = { _, _ -> }
 
     fun bind(workspaceId: String?) {
         if (workspaceId == null || workspaceId == this.workspaceId) return

@@ -174,10 +174,12 @@ func TestMainCheckoutCommitExternalWriteIsStale(t *testing.T) {
 	mcWrite(t, repo, "b.txt", "other\n")
 	scan := mustScan(t, repo)
 	mcWrite(t, repo, "b.txt", "written after review\n")
+	mcWrite(t, repo, "c.txt", "new after review\n")
 	before := readGitState(t, repo)
 
+	// The refusal names what changed since the review (board 03), not the file that didn't.
 	res := runCommit(t, commitCmd(scan, "x", "a.txt"))
-	if res.Status != mainCheckoutRefused || res.Code != mainCheckoutFingerprintStale {
+	if res.Status != mainCheckoutRefused || res.Code != mainCheckoutFingerprintStale || strings.Join(res.Paths, ",") != "b.txt,c.txt" {
 		t.Fatalf("result %+v", res)
 	}
 	if after := readGitState(t, repo); after != before {

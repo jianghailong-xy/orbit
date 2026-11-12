@@ -151,6 +151,7 @@ func commitMainCheckout(ctx context.Context, cmd MainCheckoutActionCommand) (Mai
 			res.Head = head
 			return refuse(mainCheckoutHeadMoved)
 		}
+		res.Paths = mainCheckoutChangedSince(cmd.Fingerprint, all)
 		return refuse(mainCheckoutFingerprintStale)
 	}
 	reviewed := map[string]MainCheckoutFile{}

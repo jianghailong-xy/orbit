@@ -42,6 +42,7 @@ import io.orbitd.android.realtime.restoredFields
 import io.orbitd.android.R
 import io.orbitd.android.composer.CreatedWorkspaceLine
 import io.orbitd.android.composer.CreatedWorkspaceLineView
+import io.orbitd.android.composer.DraftTarget
 import io.orbitd.android.composer.MachineSetupCopy
 import io.orbitd.android.composer.ProviderChoices
 import io.orbitd.android.composer.SessionComposer
@@ -166,7 +167,11 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // The main checkout of the session's workspace (docs/main-checkout-git-contract.md): its card, bar, review sheet and lines.
     val mainCheckout = remember(handle, route.id) { MainCheckoutModel(api.mainCheckoutTransport(), route.id!!, app.processScope).also { mc ->
         mc.prefill = { composer.putBack(it) }
-        mc.openDraft = { latestOpen(OrbitRoute(Destination.DRAFT, workspaceId = it)) }
+        mc.openDraft = { workspace, prompt ->
+            val target = DraftTarget(workspace)
+            app.composer(handle, target.key, target).putBackWhenLoaded(prompt)
+            latestOpen(OrbitRoute(Destination.DRAFT, workspaceId = workspace))
+        }
     } }
     val list = rememberLazyListState()
     var follow by rememberSaveable { mutableStateOf(route.recordId == null) }

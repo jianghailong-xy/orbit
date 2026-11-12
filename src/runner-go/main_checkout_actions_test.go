@@ -309,7 +309,7 @@ func TestMoveStaleFingerprintChangesNothing(t *testing.T) {
 	cmd := f.cmd(t, "a.txt")
 	mcWrite(t, f.repo, "a.txt", "written after the review\n")
 	res := f.move(t, cmd)
-	if res.Status != mainCheckoutRefused || res.Code != mainCheckoutFingerprintStale {
+	if res.Status != mainCheckoutRefused || res.Code != mainCheckoutFingerprintStale || strings.Join(res.Paths, ",") != "a.txt" {
 		t.Fatalf("result %+v", res)
 	}
 	requireFiles(t, "source", f.repo, map[string]string{"a.txt": "written after the review\n"})

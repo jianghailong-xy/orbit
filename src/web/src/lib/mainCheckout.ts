@@ -43,6 +43,8 @@ export interface MainCheckoutHost {
   cancel: (requestId: string) => void;
   /** Puts a prompt in the composer; nothing is sent. Absent where there is no composer. */
   askAgent?: (text: string) => void;
+  /** Opens this workspace's new-session draft with a prompt in it; nothing is sent (the rescue line's link). */
+  openNewSession?: (text: string) => void;
   /** Today's Clean up checkout (the CHECKOUT_BLOCKED line's link). */
   cleanUp?: () => void;
   /** Opens this session's own worktree diff (the move line's View changes). */
@@ -83,6 +85,14 @@ export function askCombinePrompt(r: MainCheckoutActionResult): string {
     `Moving ${paths} from the main checkout ${r.root} into this worktree was refused: this worktree changes the same lines. ` +
     `Combine the main checkout's version of ${(r.paths?.length ?? 0) === 1 ? 'that file' : 'those files'} with yours here, ` +
     `then tell me, so I can clean up the main checkout.`
+  );
+}
+
+/** The first message of the session Save & clean's "Open in a new session" opens (the macOS client's words). */
+export function rescueSessionPrompt(r: MainCheckoutActionResult): string {
+  return (
+    `The main checkout's uncommitted changes were saved to ${r.rescueBranch}. ` +
+    'Look at what that branch holds compared with its parent and tell me what it contains.'
   );
 }
 

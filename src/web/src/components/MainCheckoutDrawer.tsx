@@ -67,6 +67,7 @@ export interface MainCheckoutControllerOptions {
   /** Worktree sessions of this workspace a Move can target (the console's own first). */
   targets: MainCheckoutTarget[];
   askAgent?: (text: string) => void;
+  openNewSession?: (text: string) => void;
   cleanUp?: () => void;
   viewChanges?: () => void;
 }
@@ -255,12 +256,13 @@ export function useMainCheckoutController(o: MainCheckoutControllerOptions): {
             push: () => void push(),
             cancel,
             askAgent: o.askAgent,
+            openNewSession: o.openNewSession,
             cleanUp: o.cleanUp,
             viewChanges: o.viewChanges,
           }
         : null,
     [ws, o.sessionId, o.sessionTitle, o.sessionBranch, o.actionsSupported, o.health, o.targets, inFlight, run, push, cancel,
-      o.askAgent, o.cleanUp, o.viewChanges],
+      o.askAgent, o.openNewSession, o.cleanUp, o.viewChanges],
   );
 
   const drawer =

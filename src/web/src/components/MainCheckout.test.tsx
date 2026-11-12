@@ -73,6 +73,7 @@ function makeHost(over: Partial<MainCheckoutHost> = {}): MainCheckoutHost {
     push: vi.fn(),
     cancel: vi.fn(),
     askAgent: vi.fn(),
+    openNewSession: vi.fn(),
     cleanUp: vi.fn(),
     viewChanges: vi.fn(),
     ...over,
@@ -309,11 +310,17 @@ describe('result lines (board 03)', () => {
     expect(link).toBeNull();
   });
 
-  it('Saved: the rescue branch and the commit it returned to', async () => {
-    const { line } = await row({
+  it('Saved: the rescue branch and the commit it returned to; Open in a new session opens a draft about it', async () => {
+    const { line, link, host } = await row({
       ...BASE, requestId: 'r4', kind: 'rescue', status: 'done', fileCount: 3, rescueBranch: 'orbit/rescue-5f2c1a9', head: '62325fb000',
     });
-    expect(line.textContent).toContain('Saved 3 files to orbit/rescue-5f2c1a9 and returned the main checkout to 62325fb. Ignored files were left alone.');
+    expect(line.textContent).toBe(
+      'Saved 3 files to orbit/rescue-5f2c1a9 and returned the main checkout to 62325fb. Ignored files were left alone. Open in a new session',
+    );
+    expect(link?.textContent).toBe('Open in a new session');
+    await click(link);
+    expect(host.openNewSession).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(host.openNewSession!).mock.calls[0][0]).toContain('saved to orbit/rescue-5f2c1a9');
   });
 
   it('Nothing moved (stale): Review again reopens the drawer', async () => {
