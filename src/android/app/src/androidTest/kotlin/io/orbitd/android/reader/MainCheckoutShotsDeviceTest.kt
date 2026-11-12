@@ -12,6 +12,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -83,13 +85,15 @@ class MainCheckoutShotsDeviceTest {
 
     private fun show(content: @Composable (MainCheckoutModel) -> Unit) {
         val model = model()
-        compose.runOnUiThread { compose.activity.setContent { OrbitTheme { Surface(Modifier.fillMaxSize()) {
+        compose.runOnUiThread { compose.activity.setContent { OrbitTheme { Surface(Modifier.fillMaxSize().safeDrawingPadding()) {
             CompositionLocalProvider(LocalMainCheckout provides model) { content(model) }
         } } } }
         compose.waitForIdle()
     }
 
     @Test fun shots() {
+        // The activity's own first frame can land after a setContent made right at launch: let it settle before drawing ours.
+        compose.waitForIdle(); SystemClock.sleep(3_000)
         // Board 01: the card at the end of a turn, the bar under it.
         show { model ->
             Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -99,9 +103,9 @@ class MainCheckoutShotsDeviceTest {
                 MainCheckoutBar(model, "ws-1", isolated = true)
             }
         }
-        capture("01-card-and-bar")
+        capture("01-card-and-bar", "main-checkout-bar")
         compose.onNodeWithText("⋯").performClick()
-        capture("01b-card-more-menu")
+        capture("01b-card-more-menu", text = "Leave as is")
 
         // Board 02: the review sheet, a file's diff open.
         show { model ->
@@ -112,9 +116,9 @@ class MainCheckoutShotsDeviceTest {
         compose.waitUntil(10_000) { runCatching { compose.onNodeWithText("src/api/client.ts").assertExists(); true }.getOrDefault(false) }
         compose.onNodeWithText("src/api/client.ts").performClick()
         compose.waitUntil(10_000) { runCatching { compose.onNodeWithTag("main-checkout-diff").assertExists(); true }.getOrDefault(false) }
-        capture("02-review-sheet")
+        capture("02-review-sheet", "main-checkout-diff")
         compose.onNodeWithText("Move to a worktree ▾").performClick()
-        capture("02b-move-target-picker")
+        capture("02b-move-target-picker", text = "Bump eslint to 9")
 
         // Board 03: a success and a refusal, as lines in the conversation.
         show {
@@ -132,21 +136,29 @@ class MainCheckoutShotsDeviceTest {
                     "runnerName":"orbit-hpc","minutes":3,"finishedAt":"2026-11-12T08:00:00.000Z"}"""))
             }
         }
-        capture("03-result-lines")
+        capture("03-result-lines", "main-checkout-result")
 
         // Board 04: turning isolation on over a dirty main checkout.
         show {
             Text("Worktree isolation", Modifier.padding(16.dp))
             WorktreeIsolationDialog(MainCheckout.turnOnDialog(repo)!!, review = {}, cleanUp = {}, confirm = {}, cancel = {})
         }
-        capture("04-isolation-on-dirty")
+        capture("04-isolation-on-dirty", "worktree-isolation-dialog")
         show {
             WorktreeIsolationDialog(MainCheckout.turnOffDialog("/root/orbit", 2)!!, review = {}, cleanUp = {}, confirm = {}, cancel = {})
         }
-        capture("04b-isolation-off")
+        capture("04b-isolation-off", "worktree-isolation-dialog")
     }
 
-    private fun capture(name: String) {
+    /** Waits until the frame holds what it is meant to show ([tag] or [text]), then takes the whole screen, dialogs and sheets included. */
+    private fun capture(name: String, tag: String? = null, text: String? = null) {
+        compose.waitUntil(20_000) {
+            runCatching {
+                tag?.let { compose.onAllNodesWithTag(it).fetchSemanticsNodes().isNotEmpty() || error("no $it") }
+                text?.let { compose.onAllNodesWithText(it, substring = true).fetchSemanticsNodes().isNotEmpty() || error("no $it") }
+                true
+            }.getOrDefault(false)
+        }
         compose.waitForIdle()
         SystemClock.sleep(1_200)
         var bitmap: Bitmap? = null
