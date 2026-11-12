@@ -40,7 +40,7 @@ object CardRequests {
             val behavior = if (verb in setOf(CardVerb.DENY, CardVerb.KEEP_PLANNING, CardVerb.CHAT)) "deny" else "allow"
             // Create and start is Create task's yes that also starts the task; no other press names the key at all.
             val body = ApprovalDecision(behavior, if (verb == CardVerb.CHAT) note() else null, answers, rules,
-                startAfterCreate = if (verb == CardVerb.CREATE_AND_START) true else null)
+                startAfterCreate = if (verb == CardVerb.CREATE_AND_START) true else null, sendAsWritten = if (input.sendAsWritten) true else null)
             return request(listOf("sessions", card.sessionId, "approvals", card.objectId, "decision"), encoded(Wire.json.encodeToString(body)))
         }
         return when (verb) {

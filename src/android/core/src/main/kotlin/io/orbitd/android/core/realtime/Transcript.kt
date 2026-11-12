@@ -1,5 +1,6 @@
 package io.orbitd.android.core.realtime
 
+import io.orbitd.android.core.translation.Translation
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -28,7 +29,8 @@ data class Transcript(
      * any device. Never drawn as a row: the composer offers it. */
     val promptSuggestion: String? get() {
         for (event in events.asReversed()) when (event.type) {
-            "prompt_suggestion" -> return event.fields.text("text")?.trim()?.takeIf { it.isNotEmpty() }
+            // Settings › Translation (3A): offered in the owner's language once the server translated it.
+            "prompt_suggestion" -> return Translation.suggestionText(event.fields)
             "user", "turn_end" -> return null
         }
         return null
@@ -56,6 +58,9 @@ data class Transcript(
 
     fun apply(arrived: RunEvent): Transcript {
         if (arrived.type == "resync" || arrived.type == "ping") return this
+        // Settings › Translation (2A): a reply translated, or its translation failed — live-only at seq 0, so before the dedup, and
+        // folded into the event it translates as a replay would carry it. One outside the window waits for that replay.
+        if (arrived.type == "translation") return Translation.fold(events, arrived.payload)?.let { copy(events = it) } ?: this
         if (arrived.durable && events.any { it.seq == arrived.seq }) return this
         // A late event older than the trimmed window is available through history pagination.
         if (arrived.durable && hasMore && arrived.seq < (oldestSeq ?: 0)) return this

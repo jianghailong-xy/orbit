@@ -9,12 +9,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.Saver
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.core.translation.Translation
+import io.orbitd.android.translation.TranslationCopy
 import io.orbitd.android.tasks.TaskReopen
 import io.orbitd.android.tasks.TaskReopenCopy
 import io.orbitd.android.text.*
@@ -59,7 +62,9 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
             }
             put("title", editTitle.trim()); put("summary", editSummary.trim())
         }, reason = reason)
-    fun send(verb: CardVerb) = submit(verb, input)
+    // The press the door last answered, for Settings › Translation's way out of an answer it could not translate (1A).
+    var lastVerb by remember(card.key, card.binding) { mutableStateOf<CardVerb?>(null) }
+    fun send(verb: CardVerb) { lastVerb = verb; submit(verb, input) }
     val body: @Composable ColumnScope.() -> Unit = {
         if (!review) Text(card.title, style = MaterialTheme.typography.titleMedium)
         // A record's words are dimmed, still readable — and what opens (a fold, a task) still opens.
@@ -126,7 +131,16 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
     }
     val doors: @Composable ColumnScope.() -> Unit = doors@{
         if (batchPage != null) return@doors
-        result.message?.let { Text(it, Modifier.testTag("card-result"), color = if (result.uncertain) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
+        // Settings › Translation (3A, 1A): the answer's words could not be translated, so nothing was recorded — send it again, or as
+        // it was written (422 TRANSLATION_FAILED).
+        val untranslated = lastVerb?.takeIf { result.response?.text("code") == Translation.FAILED_CODE && !result.busy }
+        if (untranslated != null) Row(Modifier.testTag("card-translation-failed"), verticalAlignment = Alignment.CenterVertically) {
+            Text(TranslationCopy.SEND_FAILED, Modifier.weight(1f, fill = false), color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall)
+            TextButton(onClick = { submit(untranslated, input) }, enabled = fresh) { Text(TranslationCopy.RETRY) }
+            TextButton(onClick = { submit(untranslated, input.copy(sendAsWritten = true)) }, enabled = fresh) { Text(TranslationCopy.SEND_AS_WRITTEN) }
+        }
+        else result.message?.let { Text(it, Modifier.testTag("card-result"), color = if (result.uncertain) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
         result.response?.takeIf { it.text("code") in setOf("TASK_ALREADY_RUNNING", "TASK_RUN_PIN_CONFLICT", "TASK_RUN_PROVIDER_SWITCH_CONFIRMATION_REQUIRED") }
             ?.text("conflictingSessionId")?.takeIf { it.isNotBlank() }?.let { LinkButton("Open the run", "orbit-session:$it", open) }
         if (result.busy) LinearProgressIndicator(Modifier.fillMaxWidth())

@@ -305,6 +305,17 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
      * with it — the runner's jobs, a dev server or watcher among them, and the engine's own shells, Monitors and background workflows.
      * The session is not ended: its next turn runs in it. The one interrupt that asks for this; a bare one kills nothing. */
     fun stop() = control("interrupt", body = buildJsonObject { put("stopBackgroundWork", true) })
+    /** Settings › Translation's doors on one message (`turns/:id/translation/retry`, `…/send-as-written`, `events/:seq/translation/retry`):
+     * a press of their own, which neither waits for the box nor holds it — a message can be sent while another one's translation is
+     * retried — and goes once while it is out. What came of it arrives on the session's stream; a refusal is the box's error. */
+    private val translationPresses = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    fun translationAction(endpoint: String) {
+        if (!translationPresses.add(endpoint)) return
+        launch {
+            try { api.mutation(endpoint, null, HttpMethod.POST); refresh() }
+            finally { translationPresses.remove(endpoint) }
+        }
+    }
     fun control(endpoint: String, method: HttpMethod = HttpMethod.POST, body: JsonObject? = null) {
         if (state.value.busy || state.value.waiting) return
         mutable.update { it.copy(busy = true, error = null) }

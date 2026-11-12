@@ -12,6 +12,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -60,6 +61,8 @@ import io.orbitd.android.management.EngineAccounts
 import io.orbitd.android.management.LocalDefaultModels
 import io.orbitd.android.management.LocalRememberModel
 import io.orbitd.android.management.LocalSmartSelection
+import io.orbitd.android.management.LocalTranslation
+import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.management.personalPermissions
 import io.orbitd.android.reader.ComposerFold
@@ -75,7 +78,8 @@ import kotlinx.serialization.json.*
 @Composable
 internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: String, session: SessionState?, target: DraftTarget? = null, focusRequest: Int = 0,
     inputFocusChanged: (Boolean) -> Unit = {}, foldsChrome: Boolean = false,
-    openTask: ((String) -> Unit)? = null, openRunner: ((runner: String, engine: String) -> Unit)? = null) {
+    openTask: ((String) -> Unit)? = null, openRunner: ((runner: String, engine: String) -> Unit)? = null,
+    openTranslationSettings: (() -> Unit)? = null) {
     val model = remember(app, handle, sessionId) { app.composer(handle, sessionId, target) }
     val state by model.state.collectAsState()
     val context = LocalContext.current
@@ -145,6 +149,7 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
     // which fills the box and sends nothing (docs/prompt-suggestions-design.md §4). A message just sent answers
     // it before its `user` event arrives, so the one standing at the send is held back until the transcript moves on.
     val standing = session?.transcript?.promptSuggestion
+    val translation = LocalTranslation.current
     var spent by remember(model) { mutableStateOf<String?>(null) }
     LaunchedEffect(standing) { if (standing == null) spent = null }
     val suggestion = if (target != null || standing == spent) null else offeredPromptSuggestion(standing, detail,
@@ -244,6 +249,15 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                             else -> "Message…"
                         }, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     },
+                    // Settings › Translation (6A): while it is on, the box says which way its words go — "Chinese → English" —
+                    // and the tag opens Settings › Sessions, where the switch and the language are.
+                    trailingIcon = translation.takeIf { it.on }?.let { on -> {
+                        Text(Translation.tag(on.language), Modifier.padding(end = 8.dp).testTag("composer-translation-tag")
+                            .clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)
+                            .then(if (openTranslationSettings != null) Modifier.clickable(role = Role.Button, onClick = openTranslationSettings) else Modifier)
+                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } },
                     minLines = 1, maxLines = 4,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default))
             }

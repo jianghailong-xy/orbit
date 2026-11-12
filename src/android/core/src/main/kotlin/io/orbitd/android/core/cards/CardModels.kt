@@ -2,6 +2,7 @@ package io.orbitd.android.core.cards
 
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.SessionSnapshot
+import io.orbitd.android.core.translation.Translation
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 
@@ -26,7 +27,7 @@ data class CardQuestion(val question: String, val header: String? = null,
 @Serializable
 data class ApprovalDecision(val behavior: String, val message: String? = null,
     val answers: Map<String, List<String>>? = null, val rememberRules: List<PermissionRule>? = null,
-    val startAfterCreate: Boolean? = null)
+    val startAfterCreate: Boolean? = null, val sendAsWritten: Boolean? = null)
 @Serializable
 data class EvidenceDecision(val decidingSessionId: String, val evidenceRevision: String, val decision: String, val note: String? = null)
 @Serializable
@@ -85,7 +86,9 @@ data class InteractionCard(
 data class CardInput(val text: String = "", val selections: Map<String, List<String>> = emptyMap(),
     val custom: Map<String, String> = emptyMap(), val ownerAnswers: List<OwnerAnswer> = emptyList(),
     val option: Int? = null, val settings: ProjectStartSettings? = null,
-    val edited: JsonObject? = null, val reason: String? = null, val triggerId: String? = null)
+    val edited: JsonObject? = null, val reason: String? = null, val triggerId: String? = null,
+    /** Settings › Translation (1A): the answer again, untranslated, after the server could not translate it (422 TRANSLATION_FAILED). */
+    val sendAsWritten: Boolean = false)
 
 fun approvalFamily(tool: String): CardFamily = when (tool) {
     "AskUserQuestion" -> CardFamily.QUESTION
@@ -150,7 +153,9 @@ object CardCatalog {
                 CardFamily.WORKSPACE_WRITE -> WorkspaceWriteCards.title(approval.toolName)
                 else -> if (approval.toolName == SkipMergeCheckCards.tool) SkipMergeCheckCards.heading else approval.toolName
             }
-            add(InteractionCard("approval:${approval.id}", family, title, raw, id, projectId, approval.id,
+            // Settings › Translation (3A): the card shows its questions, description and plan in the owner's language once the server
+            // translated them; the binding stays the input the engine asked with, so a translation arriving changes no press.
+            add(InteractionCard("approval:${approval.id}", family, title, Translation.shownApproval(raw), id, projectId, approval.id,
                 approval.input.toString(), actions, if (unexpired) approval.status else "Expired"))
         }
         val standing = snapshot.standing

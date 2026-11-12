@@ -1,7 +1,10 @@
 package io.orbitd.android.management
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
@@ -13,6 +16,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -27,7 +32,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.orbitd.android.BuildConfig
 import io.orbitd.android.R
+import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.navigation.*
+import io.orbitd.android.translation.TranslationCopy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
@@ -126,6 +133,7 @@ private fun rememberPreferenceWrite(api: ManagementApi, record: PersonalRecord):
     val appearance = LocalAppearanceChanged.current
     val smartSelectionChanged = LocalSmartSelectionChanged.current
     val recapsChanged = LocalSessionRecapsChanged.current
+    val translationChanged = LocalTranslationChanged.current
     val scope = rememberCoroutineScope()
     return { key, value ->
         scope.launch {
@@ -135,6 +143,7 @@ private fun rememberPreferenceWrite(api: ManagementApi, record: PersonalRecord):
                 "theme" -> appearance(saved?.text("theme")?.ifBlank { null } ?: "system")
                 "modelRouting" -> smartSelectionChanged(smartModelSelection(saved))
                 "recaps" -> recapsChanged(sessionRecapsEnabled(saved))
+                "translationEnabled", "translationLanguage" -> translationChanged(AccountTranslation.of(record.value as? JsonObject))
             }
         }
     }
@@ -274,6 +283,9 @@ private fun SessionSettingsPage(api: ManagementApi, revision: Long) {
             SettingsPicker("Default permission", null, preferences.text("defaultPermissionMode").ifBlank { "auto" }, personalPermissions,
                 record.ready) { preference("defaultPermissionMode", JsonPrimitive(it)) }
         }
+        // Settings › Translation (docs/mocks/session-translation, frame 9): one account-wide switch, absent = off, and the language
+        // the owner writes and reads in; agents always work in English, shown and not offered.
+        TranslationGroup(record.value as? JsonObject, record.ready) { key, value -> preference(key, value) }
         SettingsGroup(null, footer = SESSION_ORCHESTRATION_HINT) {
             SettingsSwitch("Session orchestration", on("enableOrchestration"), record.ready) { preference("enableOrchestration", JsonPrimitive(it)) }
         }
@@ -354,4 +366,50 @@ private fun SettingsSwitch(title: String, checked: Boolean, enabled: Boolean, ch
     ListItem(headlineContent = { Text(title) }, colors = settingsRowColors(),
         trailingContent = { Switch(checked = checked, onCheckedChange = null, enabled = enabled) },
         modifier = Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = change))
+}
+
+/**
+ * The Sessions page's Translation group (board frame 9; web SettingsPage's Translation card, iOS SessionSettings' Translation
+ * section): the switch with what it does under it, Your language — a bottom sheet of the seven — and Agents work in, English and
+ * read-only. A server without a DeepSeek key cannot translate ([user]'s `translationAvailable`): every row is drawn disabled under
+ * frame 2's notice, whatever the preference says. Each row is written alone the moment it moves.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun TranslationGroup(user: JsonObject?, ready: Boolean, write: (String, JsonPrimitive) -> Unit) {
+    val preferences = user?.get("preferences") as? JsonObject
+    val unavailable = user != null && !Translation.available(user)
+    val enabled = ready && !unavailable
+    val language = Translation.language(preferences)
+    var picking by remember { mutableStateOf(false) }
+    SettingsGroup(TranslationCopy.TITLE, footer = TranslationCopy.FOOTER) {
+        val on = !unavailable && Translation.enabled(preferences)
+        ListItem(headlineContent = { Text(TranslationCopy.TRANSLATE_CONVERSATIONS) }, colors = settingsRowColors(),
+            supportingContent = { Text(TranslationCopy.TRANSLATE_CONVERSATIONS_HINT) },
+            trailingContent = { Switch(checked = on, onCheckedChange = null, enabled = enabled) },
+            modifier = Modifier.toggleable(value = on, enabled = enabled, role = Role.Switch) { write("translationEnabled", JsonPrimitive(it)) })
+        if (unavailable) Text(TranslationCopy.UNAVAILABLE, Modifier.padding(horizontal = 16.dp, vertical = 4.dp).fillMaxWidth()
+            .background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(8.dp)).padding(10.dp).testTag("translation-unavailable"),
+            color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
+        ListItem(headlineContent = { Text(TranslationCopy.YOUR_LANGUAGE) }, colors = settingsRowColors(),
+            supportingContent = { Text(Translation.name(language)) },
+            modifier = Modifier.clickable(enabled = enabled, role = Role.DropdownList) { picking = true }.alpha(if (unavailable) 0.5f else 1f))
+        ListItem(headlineContent = { Text(TranslationCopy.AGENTS_WORK_IN) }, colors = settingsRowColors(),
+            supportingContent = { Text(TranslationCopy.ENGLISH) }, modifier = Modifier.alpha(if (unavailable) 0.5f else 1f))
+    }
+    if (picking) ModalBottomSheet(onDismissRequest = { picking = false }) {
+        Text(TranslationCopy.YOUR_LANGUAGE, Modifier.padding(horizontal = 24.dp, vertical = 8.dp).semantics { heading() },
+            style = MaterialTheme.typography.titleMedium)
+        Column(Modifier.selectableGroup().padding(bottom = 24.dp)) {
+            Translation.LANGUAGES.forEach { (value, name) ->
+                Row(Modifier.fillMaxWidth().selectable(value == language, role = Role.RadioButton) {
+                    picking = false
+                    if (value != language) write("translationLanguage", JsonPrimitive(value))
+                }.padding(horizontal = 24.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = value == language, onClick = null)
+                    Text(name, Modifier.padding(start = 16.dp))
+                }
+            }
+        }
+    }
 }
