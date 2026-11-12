@@ -195,10 +195,10 @@ export function parseManagedRunnerProfile(value: unknown): ManagedRunnerProfileR
     else if (shape && !shape.test(v)) problems.push(`${path} ${why ?? 'is malformed'}`);
     return v;
   };
-  const count = (path: string, min: number, max: number): number => {
+  const count = (path: string, min: number, max = Infinity): number => {
     const v = at(path);
     if (typeof v !== 'number' || !Number.isInteger(v) || v < min || v > max) {
-      problems.push(`${path} must be an integer from ${min} to ${max}`);
+      problems.push(max === Infinity ? `${path} must be an integer of at least ${min}` : `${path} must be an integer from ${min} to ${max}`);
       return min;
     }
     return v;
@@ -259,7 +259,7 @@ export function parseManagedRunnerProfile(value: unknown): ManagedRunnerProfileR
     runner: {
       image: text('runner.image', PINNED_IMAGE, 'must be pinned by digest (<repository>@sha256:<64 hex>)'),
       serverUrl: https('runner.serverUrl', true),
-      maxConcurrent: count('runner.maxConcurrent', 1, 64),
+      maxConcurrent: count('runner.maxConcurrent', 1),
       tmpSizeLimit: text('runner.tmpSizeLimit', QUANTITY, 'is not a quantity'),
       resources: { runner: amounts('runner.resources.runner'), init: amounts('runner.resources.init') },
     },
@@ -347,10 +347,10 @@ function parseDockerRunnerProfile(value: Record<string, unknown>): ManagedRunner
     else if (shape && !shape.test(v)) problems.push(`${path} ${why ?? 'is malformed'}`);
     return v;
   };
-  const count = (path: string, min: number, max: number): number => {
+  const count = (path: string, min: number, max = Infinity): number => {
     const v = at(path);
     if (typeof v !== 'number' || !Number.isInteger(v) || v < min || v > max) {
-      problems.push(`${path} must be an integer from ${min} to ${max}`);
+      problems.push(max === Infinity ? `${path} must be an integer of at least ${min}` : `${path} must be an integer from ${min} to ${max}`);
       return min;
     }
     return v;
@@ -448,7 +448,7 @@ function parseDockerRunnerProfile(value: Record<string, unknown>): ManagedRunner
     runner: {
       image: text('runner.image', LOCAL_IMAGE_ID, 'must be the local image ID of the managed runner image (sha256:<64 hex>)'),
       serverUrl: serverUrl.replace(/\/+$/, ''),
-      maxConcurrent: count('runner.maxConcurrent', 1, 64),
+      maxConcurrent: count('runner.maxConcurrent', 1),
       tmpSizeLimit: text('runner.tmpSizeLimit', QUANTITY, 'is not a quantity'),
       resources: {
         cpu: text('runner.resources.cpu', QUANTITY, 'is not a quantity'),

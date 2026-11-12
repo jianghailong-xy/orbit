@@ -890,7 +890,7 @@ export class BatchExecuteDto {
   // When set, caps how many of THIS batch's tasks run at once. It applies only to this
   // batch (the claim queue gates the batch's live sessions on it) and never touches any
   // runner's persistent max_concurrent — independent of the per-runner cap. Rest queue.
-  @IsOptional() @IsInt() @Min(1) @Max(64) maxConcurrent?: number;
+  @IsOptional() @IsInt() @Min(1) maxConcurrent?: number;
 
   /** This press's identity, exactly as on `RunTaskDto` — one press, one run per task in it. */
   @IsOptional() @IsPublicId() triggerId?: string;

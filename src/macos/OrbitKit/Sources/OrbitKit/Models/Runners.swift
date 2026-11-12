@@ -217,7 +217,7 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
 }
 
 /// PATCH /runners/:id — `displayName` empty string clears the alias (falls back to machine name);
-/// nil omits. `maxConcurrent` 1…64. `minFreeDiskMb` is three-state because omitting it leaves the
+/// nil omits. `maxConcurrent` 1 or more. `minFreeDiskMb` is three-state because omitting it leaves the
 /// reserve alone while an explicit JSON null turns the reserve off.
 public struct UpdateRunnerRequest: Encodable, Sendable {
     public var displayName: String?
