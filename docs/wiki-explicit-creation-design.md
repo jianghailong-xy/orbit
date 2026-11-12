@@ -1,6 +1,7 @@
 # Orbit Wiki：wiki 只由 owner 建（2026-11-12）
 
-> 状态：设计，等 owner 定 D2–D4（D1 owner 11-12 定：agent 要建 wiki，至少要 owner 确认，或者是 owner 主动要求的）。它改的是 `docs/wiki-design.md` §2.1、§12.3.1，`docs/wiki-contract.md` §2.1（`:218`）和
+> 状态：设计，owner 2026-11-12 定。D1：agent 要建 wiki，至少要 owner 确认，或者是 owner 主动要求的（确认卡 `WIKI_CREATE`，§3.6）；
+> D2、D3、D4 都按推荐（A）。它改的是 `docs/wiki-design.md` §2.1、§12.3.1，`docs/wiki-contract.md` §2.1（`:218`）和
 > `plan.jobs.triggers` 里「会话提议时隐式建的 space」这一条；知识模型、审阅模式、维护、System model 都不变。
 >
 > 效果图：`docs/mocks/wiki/46-explicit-creation.html`（第 1–6 部分）。
@@ -195,7 +196,7 @@ owner 在会话里要求了，agent 发卡，owner 当场一按；owner 没要�
 
 ---
 
-## 7. 待定 · 要 owner 拍板
+## 7. owner 的决定（2026-11-12，D2–D4 都取 A）
 
 | | A（推荐） | B |
 |---|---|---|
