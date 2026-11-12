@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -50,6 +52,9 @@ func pushMainCheckout(ctx context.Context, cmd MainCheckoutActionCommand) (MainC
 	}
 	res.Root = root
 	defer lockMainCheckout(root)()
+	if pastDeadline(cmd.ExpiresAt) {
+		return res, errMainCheckoutExpired
+	}
 
 	finish := func() (MainCheckoutActionResult, error) {
 		res.FinishedAt = time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
@@ -108,8 +113,23 @@ func pushMainCheckout(ctx context.Context, cmd MainCheckoutActionCommand) (MainC
 	}
 	before := lsRemoteSha(out, merge)
 	res.RemoteBefore = before
+	journalPath := pushJournalPath(ctx, root, cmd.RequestID)
 	if before == head {
+		// The same request run again after its push went through (a runner restarted before it
+		// answered): the push it made is the answer, not NOTHING_TO_PUSH.
+		if j := readPushJournal(journalPath, cmd.RequestID); j != nil && j.Branch == branch && j.Head == head && j.Merge == merge {
+			if j.SetUpstream {
+				_, _ = mcGit(ctx, root, nil, "config", "branch."+branch+".remote", remote)
+				_, _ = mcGit(ctx, root, nil, "config", "branch."+branch+".merge", merge)
+			}
+			res.Status, res.RemoteBefore, res.RemoteAfter = mainCheckoutDone, j.RemoteBefore, head
+			return finish()
+		}
 		return refuse(mainCheckoutNothingToPush)
+	}
+	if journalPath != "" {
+		_ = writeJSONAtomic(journalPath, mainCheckoutPushJournal{RequestID: cmd.RequestID, Branch: branch,
+			Head: head, Merge: merge, RemoteBefore: before, SetUpstream: setUpstream})
 	}
 
 	args := []string{"push"}
@@ -138,8 +158,67 @@ func pushMainCheckout(ctx context.Context, cmd MainCheckoutActionCommand) (MainC
 		}
 		return refuse(mainCheckoutPushRejected)
 	}
+	if err := mainCheckoutPushStep("pushed"); err != nil {
+		return res, err
+	}
 	res.Status, res.RemoteAfter = mainCheckoutDone, head
 	return finish()
+}
+
+// mainCheckoutPushStep is called once the push went through; a test returns an error to stop
+// there, as a crash before the answer would.
+var mainCheckoutPushStep = func(step string) error { return nil }
+
+// mainCheckoutPushJournal is written just before a push goes out, under the git dir and keyed by
+// requestId, so the same request run again after the push went through answers done with the
+// range it pushed. It is a few hundred bytes per push and stays, like the commit journal.
+type mainCheckoutPushJournal struct {
+	RequestID    string `json:"requestId"`
+	Branch       string `json:"branch"`
+	Head         string `json:"head"`
+	Merge        string `json:"merge"`
+	RemoteBefore string `json:"remoteBefore"`
+	SetUpstream  bool   `json:"setUpstream,omitempty"`
+}
+
+// pushJournalPath is "" when the git dir can't be read (the push then runs without a journal).
+func pushJournalPath(ctx context.Context, root, requestID string) string {
+	gitDir, err := mcTrim(mcGit(ctx, root, nil, "rev-parse", "--absolute-git-dir"))
+	if err != nil || gitDir == "" || requestID == "" {
+		return ""
+	}
+	return filepath.Join(gitDir, "orbit-main-checkout", "push-"+shortHash(requestID)+".json")
+}
+
+func readPushJournal(path, requestID string) *mainCheckoutPushJournal {
+	if path == "" {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var j mainCheckoutPushJournal
+	if json.Unmarshal(data, &j) != nil || j.RequestID != requestID {
+		return nil
+	}
+	return &j
+}
+
+// writeJSONAtomic replaces path with v as JSON.
+func writeJSONAtomic(path string, v any) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	data, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // lsRemoteSha is the sha `ls-remote` lists for exactly ref, "" when the remote has no such ref.

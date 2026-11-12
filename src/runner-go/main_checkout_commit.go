@@ -86,6 +86,9 @@ func commitMainCheckout(ctx context.Context, cmd MainCheckoutActionCommand) (Mai
 	}
 	res.Root = root
 	defer lockMainCheckout(root)()
+	if pastDeadline(cmd.ExpiresAt) {
+		return res, errMainCheckoutExpired
+	}
 
 	finish := func(r MainCheckoutActionResult) (MainCheckoutActionResult, error) {
 		r.FinishedAt = time.Now().UTC().Format("2006-01-02T15:04:05.000Z")

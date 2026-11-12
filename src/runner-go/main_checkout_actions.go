@@ -13,13 +13,15 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
 // Main checkout actions on the runner (docs/main-checkout-git-contract.md §5, §6, §10): the
 // heartbeat hands out a read or an action once, the runner does it under the checkout's lock
 // (main_checkout_lock.go) and posts the answer. This file holds the relay's runner half, Move and
-// Save & clean; Commit and Push are their own tasks and plug into runMainCheckoutAction.
+// Save & clean; Commit (main_checkout_commit.go) and Push (main_checkout_push.go) are dispatched
+// from runMainCheckoutAction.
 //
 // Every action starts by recomputing the fingerprint of what the person reviewed. Any difference is
 // a refusal that changes nothing. Every step that writes leaves a recovery point first, and every
@@ -43,6 +45,35 @@ var mainCheckoutStep = func(step string) bool { return false }
 // errMainCheckoutStopped is what an action stopped by mainCheckoutStep returns.
 var errMainCheckoutStopped = errors.New("stopped by the test seam")
 
+// mainCheckoutSeen holds the requests this process has taken, by id, until their deadline: a
+// request delivered again while its first copy runs, or after it was answered, is not run again,
+// so each id gets one answer from this process. A runner that restarts forgets them; a request
+// redelivered then runs again, and every action's redo path (its journal, or a check that finds
+// the work already done) makes that a second run with no second change.
+var (
+	mainCheckoutSeenMu sync.Mutex
+	mainCheckoutSeen   = map[string]string{} // request id → its expiresAt
+)
+
+// takeMainCheckoutRequest reports whether id is new to this process, and records it.
+func takeMainCheckoutRequest(id, expires string) bool {
+	mainCheckoutSeenMu.Lock()
+	defer mainCheckoutSeenMu.Unlock()
+	for k, at := range mainCheckoutSeen {
+		if pastDeadline(at) {
+			delete(mainCheckoutSeen, k) // past its deadline a copy is never started anyway
+		}
+	}
+	if _, ok := mainCheckoutSeen[id]; ok {
+		return false
+	}
+	if expires == "" {
+		expires = time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano)
+	}
+	mainCheckoutSeen[id] = expires
+	return true
+}
+
 // handleMainCheckoutRequest answers one heartbeat-delivered read or action. It never starts work
 // after the request's deadline: the control plane has finished it with TIMEOUT by then.
 func handleMainCheckoutRequest(t *Transport, req MainCheckoutRunnerRequest, deps mainCheckoutDeps) {
@@ -52,6 +83,10 @@ func handleMainCheckoutRequest(t *Transport, req MainCheckoutRunnerRequest, deps
 	}
 	if pastDeadline(expires) {
 		logln(fmt.Sprintf("main checkout %s %s: past its deadline %s, not started", req.Op, req.ID, expires))
+		return
+	}
+	if !takeMainCheckoutRequest(req.ID, expires) {
+		logln(fmt.Sprintf("main checkout %s %s: delivered again, already taken", req.Op, req.ID))
 		return
 	}
 	switch req.Op {
@@ -122,13 +157,24 @@ func readMainCheckoutForRelay(req MainCheckoutRunnerRequest, deps mainCheckoutDe
 }
 
 // runMainCheckoutAction does one action and returns its contract result. An error means no result
-// is to be sent (a kind this runner does not do yet, or the test seam).
+// is to be sent (a kind this runner does not do, a git failure no code names, a deadline passed
+// while waiting for the lock, or a test seam).
 func runMainCheckoutAction(cmd MainCheckoutActionCommand, deps mainCheckoutDeps) (MainCheckoutActionResult, error) {
 	switch cmd.Kind {
 	case mainCheckoutMove:
 		return moveMainCheckoutFiles(cmd, deps)
 	case mainCheckoutRescue:
 		return saveAndCleanMainCheckout(cmd, deps)
+	case mainCheckoutCommit, mainCheckoutPush:
+		if root, err := mainCheckoutRoot(context.Background(), cmd.Root); err != nil || (deps.owns != nil && !deps.owns(root)) {
+			r := newMainCheckoutResult(cmd)
+			r.GitMessage = "that checkout isn't one this runner works in"
+			return refuseMainCheckout(r, mainCheckoutFingerprintStale), nil
+		}
+		if cmd.Kind == mainCheckoutCommit {
+			return commitMainCheckout(context.Background(), cmd)
+		}
+		return pushMainCheckout(context.Background(), cmd)
 	default:
 		return MainCheckoutActionResult{}, fmt.Errorf("this runner does not do %q yet", cmd.Kind)
 	}
@@ -194,6 +240,16 @@ func saveAndCleanMainCheckout(cmd MainCheckoutActionCommand, deps mainCheckoutDe
 		return refuseMainCheckout(r, mainCheckoutRescueFailed), nil
 	}
 	r.Branch = scan.Snapshot.Branch
+	journalPath := rescueJournalPath(root, cmd.RequestID)
+	if j := readRescueJournal(journalPath, cmd.RequestID); j != nil && j.Fingerprint == cmd.Fingerprint &&
+		scan.Snapshot.Fingerprint != cmd.Fingerprint && scan.Snapshot.Head == j.Head &&
+		len(scan.All) == 0 && scan.Snapshot.State == repoStateClean {
+		// The same request run again after it cleaned the checkout (a runner restarted before it
+		// answered): what it did is the answer.
+		n := j.FileCount
+		r.FileCount, r.Head, r.RescueBranch = &n, j.Head, j.RescueBranch
+		return finishMainCheckoutResult(r, mainCheckoutDone, ""), nil
+	}
 	if code := checkMainCheckoutFingerprint(&r, cmd.Fingerprint, scan); code != "" {
 		return refuseMainCheckout(r, code), nil
 	}
@@ -219,6 +275,14 @@ func saveAndCleanMainCheckout(cmd MainCheckoutActionCommand, deps mainCheckoutDe
 			before.Paths = append(before.Paths, f.Path)
 		}
 	}
+	// The rescue branch is named from the content, so saving here first and again inside the
+	// cleanup makes one branch; the journal names it for a redo that finds the checkout cleaned.
+	if journalPath != "" {
+		if branch, err := rescueWorkingTree(root, before); err == nil {
+			_ = writeJSONAtomic(journalPath, rescueJournal{RequestID: cmd.RequestID, Fingerprint: cmd.Fingerprint,
+				Head: scan.Snapshot.Head, RescueBranch: branch, FileCount: n})
+		}
+	}
 	out := cleanupRepoRootLocked(root, before)
 	r.RescueBranch = out.RescueBranch
 	if out.Status != "done" {
@@ -226,8 +290,45 @@ func saveAndCleanMainCheckout(cmd MainCheckoutActionCommand, deps mainCheckoutDe
 		r.State = out.State
 		return refuseMainCheckout(r, mainCheckoutRescueFailed), nil
 	}
+	if mainCheckoutStep("rescue-cleaned") {
+		return r, errMainCheckoutStopped
+	}
 	r.Head = headSha(root)
 	return finishMainCheckoutResult(r, mainCheckoutDone, ""), nil
+}
+
+// rescueJournal is what Save & clean writes before it cleans: a redo of the same request that
+// finds the checkout already clean at the same HEAD answers with it instead of FINGERPRINT_STALE.
+type rescueJournal struct {
+	RequestID    string `json:"requestId"`
+	Fingerprint  string `json:"fingerprint"`
+	Head         string `json:"head"`
+	RescueBranch string `json:"rescueBranch"`
+	FileCount    int    `json:"fileCount"`
+}
+
+// rescueJournalPath is "" when the git dir can't be read (the action then runs without a journal).
+func rescueJournalPath(root, requestID string) string {
+	gitDir, err := git(root, "rev-parse", "--absolute-git-dir")
+	if err != nil || gitDir == "" || requestID == "" {
+		return ""
+	}
+	return filepath.Join(gitDir, "orbit-main-checkout", "rescue-"+shortHash(requestID)+".json")
+}
+
+func readRescueJournal(path, requestID string) *rescueJournal {
+	if path == "" {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var j rescueJournal
+	if json.Unmarshal(data, &j) != nil || j.RequestID != requestID {
+		return nil
+	}
+	return &j
 }
 
 // ---------------------------------------------------------------------------------------------
