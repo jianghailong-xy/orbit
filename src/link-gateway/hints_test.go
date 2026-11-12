@@ -527,8 +527,9 @@ func TestWhatIsNotAHintIsCountedAndTheConnectionStays(t *testing.T) {
 
 func TestAFullQueueDropsAHintWithoutClosingTheConnection(t *testing.T) {
 	h := newHarness(t, nil)
-	// A connection whose writer never runs, so its queue only fills.
+	// A connection whose writer never runs, so its queue only fills: one is taken to be running, so none starts.
 	c := newConn(h.g, nil, &linkClaims{RunnerID: runnerA, LeaseOwner: processA}, "127.0.0.1")
+	c.queues.writing = true
 	hint := func() *linkpb.Frame {
 		return &linkpb.Frame{Body: &linkpb.Frame_Hint{Hint: &linkpb.Hint{Kind: &linkpb.Hint_Claim{Claim: &linkpb.ClaimHint{}}}}}
 	}
