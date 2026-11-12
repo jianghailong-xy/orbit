@@ -15,6 +15,7 @@ import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.auth.DataKind
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.ui.OrbitTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -43,6 +44,23 @@ val LocalSmartSelectionChanged = staticCompositionLocalOf<(Boolean) -> Unit> { {
  * the server has taken the change. */
 val LocalSessionRecaps = compositionLocalOf { true }
 val LocalSessionRecapsChanged = staticCompositionLocalOf<(Boolean) -> Unit> { {} }
+/** The account's Settings › Translation (`preferences.translationEnabled` / `translationLanguage`, and the server's
+ * `translationAvailable`), read with the theme from the same `users/me`. While it is on, a reply still streaming is greyed with its
+ * chip and the composer carries its tag (board frames 6 and 10). Settings' switch and picker set it the moment the server has taken
+ * the change. */
+val LocalTranslation = compositionLocalOf { AccountTranslation() }
+val LocalTranslationChanged = staticCompositionLocalOf<(AccountTranslation) -> Unit> { {} }
+
+/** [enabled]: the owner's switch; [available]: the server can translate; [language]: the owner's. */
+data class AccountTranslation(val enabled: Boolean = false, val available: Boolean = false, val language: String = Translation.DEFAULT_LANGUAGE) {
+    /** The owner's messages are being translated now: switched on, and the server able to. */
+    val on: Boolean get() = enabled && available
+    companion object {
+        fun of(user: JsonObject?): AccountTranslation = (user?.get("preferences") as? JsonObject).let {
+            AccountTranslation(Translation.enabled(it), Translation.available(user), Translation.language(it))
+        }
+    }
+}
 /** The model last picked for each engine and credential (`preferences.defaultModels`, keyed `<engine>:<provider>`; A07-19 (e), iOS
  * AppModel `defaultModels`), read with the theme from the same `users/me` — with this device's picks the server has not taken yet
  * over it. A new session starts on its engine and credential's. */
@@ -71,6 +89,8 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
     var appearanceVersion by remember(handle) { mutableLongStateOf(0L) }
     var smartSelectionVersion by remember(handle) { mutableLongStateOf(0L) }
     var sessionRecapsVersion by remember(handle) { mutableLongStateOf(0L) }
+    var translation by remember(handle) { mutableStateOf(AccountTranslation()) }
+    var translationVersion by remember(handle) { mutableLongStateOf(0L) }
     var savedModels by remember(handle) { mutableStateOf(emptyMap<String, String>()) }
     var pendingModels by remember(handle) { mutableStateOf(emptyMap<String, String>()) }
     var modelsVersion by remember(handle) { mutableLongStateOf(0L) }
@@ -92,6 +112,7 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
             val version = appearanceVersion
             val smartVersion = smartSelectionVersion
             val recapsVersion = sessionRecapsVersion
+            val translatedVersion = translationVersion
             val modelVersion = modelsVersion
             try {
                 val user = ManagementApi(app.session, handle).get("users/me") as JsonObject
@@ -99,6 +120,7 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
                 // A read that left before the switch was pressed does not take its answer back.
                 if (smartVersion == smartSelectionVersion) smartSelection = smartModelSelection(user["preferences"] as? JsonObject)
                 if (recapsVersion == sessionRecapsVersion) sessionRecaps = sessionRecapsEnabled(user["preferences"] as? JsonObject)
+                if (translatedVersion == translationVersion) translation = AccountTranslation.of(user)
                 if (modelVersion == modelsVersion) savedModels = defaultModels(user["preferences"] as? JsonObject)
             } catch (cancel: CancellationException) { throw cancel }
             catch (_: Exception) { /* Keep this account's last known preference until the next refresh. */ }
@@ -138,6 +160,7 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalAppearanceChanged provides { appearanceVersion++; theme = it }, LocalSmartSelection provides smartSelection,
         LocalSmartSelectionChanged provides { smartSelectionVersion++; smartSelection = it },
         LocalSessionRecaps provides sessionRecaps, LocalSessionRecapsChanged provides { sessionRecapsVersion++; sessionRecaps = it },
+        LocalTranslation provides translation, LocalTranslationChanged provides { translationVersion++; translation = it },
         LocalDefaultModels provides savedModels + pendingModels, LocalRememberModel provides rememberModel) {
         OrbitTheme(darkTheme = dark, content = content)
     }

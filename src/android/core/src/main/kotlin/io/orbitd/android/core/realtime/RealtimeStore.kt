@@ -475,7 +475,8 @@ class RealtimeStore(
                     // A durable frame the window kept as it was is one it held already (or one older than the trimmed window).
                     if (event.durable && witness?.enabled == true && state.value.session?.accessDenied == false)
                         witness.durable(id, event.seq, state.value.session?.transcript === before, "sse")
-                    if (event.durable) save()
+                    // A translation folded into an event the window holds is part of what the device keeps of it.
+                    if (event.durable || event.type == "translation") save()
                     if (event.type in SNAPSHOT_EVENTS) refreshSession()
                 })
             } catch (cancelled: CancellationException) { throw cancelled }

@@ -38,7 +38,13 @@ import io.orbitd.android.core.cards.withoutWakeBlocks
 import io.orbitd.android.cards.TranscriptCardView
 import io.orbitd.android.cards.isOrbitTurnCard
 import io.orbitd.android.cards.DetailFold
+import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.directory.ExternalSender
+import io.orbitd.android.translation.LocalShownOriginals
+import io.orbitd.android.translation.ReplyTranslationFoot
+import io.orbitd.android.translation.ShownOriginals
+import io.orbitd.android.translation.TranslationShown
+import io.orbitd.android.translation.UserTranslationFoot
 import io.orbitd.android.text.*
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.CancellationException
@@ -73,6 +79,18 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
     val result = fullResult ?: row.result
     val tool = event.type in setOf("tool_use", "tool_result")
     val cards = remember(shown) { transcriptCards(shown) }
+    // Settings › Translation (board frames 4–6): the owner's message as they wrote it and the agent's reply in their language, each
+    // with its own flip to the English, held by the reader so a recycled row keeps its side.
+    val shownOriginals = LocalShownOriginals.current
+    val turnTranslation = if (event.type == "user") Translation.turn(shown.fields["translation"]) else null
+    val replyTranslation = if (event.type == "assistant" && event.parent().isNullOrEmpty()) Translation.reply(shown.fields["translation"]) else null
+    val translationKey = if (event.type == "user") ShownOriginals.user(event.seq, event.turnId) else ShownOriginals.reply(event.seq)
+    val flipped = shownOriginals?.has(translationKey) == true
+    fun shownWords(source: RunEvent): String = when {
+        source.type == "user" -> TranslationShown.userWords(source.personWords(), Translation.turn(source.fields["translation"]), flipped)
+        source.type == "assistant" && source.parent().isNullOrEmpty() -> TranslationShown.replyWords(source.body(), Translation.reply(source.fields["translation"]), flipped)
+        else -> source.body()
+    }
     // The owner's answer handed to the coordinator: the row is its one line (`OwnerAnswerLineView`), not a message under a heading. So is
     // a fact told to this session (`CoordinatorDeliveryLineView`), also when the outcomes of this session's requests ride on the same
     // turn: the line first, then their reply cards (web `Transcript.tsx`'s session-replies branch).
@@ -90,7 +108,8 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             if (fullResult == null && row.result?.truncated == true) fullResult = model.full(row.result.seq)
             if (copy) {
                 val source = if (tool) fullResult ?: row.result ?: fullEvent ?: event else fullEvent ?: event
-                val value = (if (source.type == "user") source.personWords() else source.body()).ifBlank { source.fields["input"]?.toString() ?: source.payload.toString() }
+                // Copy copies the version on screen (board frame 5).
+                val value = shownWords(source).ifBlank { source.fields["input"]?.toString() ?: source.payload.toString() }
                 if (value.length > COPY_TEXT_LIMIT) copyOverflow = value else clipboard.setText(AnnotatedString(value))
             }
         } catch (cancel: CancellationException) { throw cancel }
@@ -258,12 +277,28 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             val note = (sessionNote?.rest ?: shown.fields.string("controlPlaneNote"))?.takeIf { it.isNotBlank() }
                 // A wake's blocks are its line (A08-11); only what else the note carried is an attached entry.
                 ?.let { if (cards.any { card -> card.key.endsWith(":wake") }) withoutWakeBlocks(it) else it }?.takeIf { it.isNotBlank() }
-            val words = if (shown.type == "user") shown.personWords() else shown.body()
-            if (cards.isEmpty() && !attachmentOnly) { if (note == null || words.isNotBlank()) MarkdownText(words.ifBlank { shown.payload.toString() }, open = open) }
+            val words = shownWords(shown)
+            // A reply still to be translated is the English greyed, with its chip under it (2A).
+            val pendingReply = replyTranslation == null && row.awaitsTranslation
+            if (cards.isEmpty() && !attachmentOnly) { if (note == null || words.isNotBlank()) {
+                if (pendingReply) CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
+                    MarkdownText(words.ifBlank { shown.payload.toString() }, open = open)
+                } else MarkdownText(words.ifBlank { shown.payload.toString() }, open = open)
+            } }
             // Another session's words are the turn's point: shown under its card, their first lines when long (SessionMessageBody).
             else if (shown.type == "user" && shown.fields["sessionMessage"] is JsonObject && words.isNotBlank())
                 SessionMessageBody(words, open, revealed = highlighted)
             else if (shown.body().isNotBlank()) DetailFold("Orbit attached") { MarkdownText(shown.body(), open = open) }
+            val doors = console?.composer
+            val toggle = { shownOriginals?.toggle(translationKey) ?: Unit }
+            turnTranslation?.let { turn ->
+                val turnId = event.turnId
+                UserTranslationFoot(turn, flipped, toggle,
+                    retry = if (doors != null && turnId != null) ({ doors.translationAction("turns/$turnId/translation/retry") }) else null,
+                    sendAsWritten = if (doors != null && turnId != null) ({ doors.translationAction("turns/$turnId/translation/send-as-written") }) else null)
+            }
+            if (event.type == "assistant") ReplyTranslationFoot(replyTranslation, pendingReply, flipped, toggle,
+                retry = if (doors != null && event.seq > 0) ({ doors.translationAction("events/${event.seq}/translation/retry") }) else null)
             atts.forEach { attachment -> attachment.string("id")?.let { id ->
                 val name = attachment.string("name") ?: "Attachment"
                 if (attachment.string("mime")?.startsWith("image/") == true) TranscriptImage("orbit-attachment:$id", name, open)

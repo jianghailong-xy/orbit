@@ -18,6 +18,8 @@ import io.orbitd.android.core.cards.objects
 import io.orbitd.android.core.cards.text
 import io.orbitd.android.core.cards.transcriptCards
 import io.orbitd.android.core.realtime.RunEvent
+import io.orbitd.android.core.translation.Translation
+import io.orbitd.android.translation.UserTranslationFoot
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.text.MarkdownText
 import kotlinx.serialization.json.*
@@ -31,14 +33,17 @@ import kotlinx.serialization.json.*
  * [readersOwn]: the reader's own words, named by their turn (web `returnsToComposer`) — not what Orbit queued: a brief, a delivery,
  * another session's message, a wake, which keeps its card in the tail. [shell] is a `!cmd`, [createdAt] when the server filed it.
  * [delivery], with its [deliveryCode] and [deliveryReason]: the server's durable receipt that a steer was not delivered (`failed`) or
- * not known to be read (`unconfirmed`) — over, and no turn of the queue's.
+ * not known to be read (`unconfirmed`) — over, and no turn of the queue's. [translation]: Settings › Translation's state of the owner's
+ * message; one still held for it (translating, or failed — 1A) is drawn here in the conversation with its chip or its way out, never in
+ * the tray (board frame 6, web `inPendingTray`).
  */
 internal data class QueuedTurn(val turnId: String?, val steer: Boolean, val event: RunEvent, val cards: List<InteractionCard>,
     val wake: JsonObject?, val watch: JsonObject? = null, val shell: Boolean = false, val createdAt: String? = null,
-    val readersOwn: Boolean = false, val delivery: String? = null, val deliveryCode: String? = null, val deliveryReason: String? = null) {
+    val readersOwn: Boolean = false, val delivery: String? = null, val deliveryCode: String? = null, val deliveryReason: String? = null,
+    val translation: Translation.Turn? = null) {
     /** The reader's own words still on their way — queued for the next turn, or a steer no runner has taken yet — which the tray above
      * the composer holds instead of the tail (docs/mocks/steer-tray; web `inPendingTray`, OrbitKit `PendingTray.holds`). */
-    val inTray: Boolean get() = readersOwn && delivery == null
+    val inTray: Boolean get() = readersOwn && delivery == null && translation?.held != true
     val cancelable: Boolean get() = turnId != null && !steer && delivery == null
     val key: String get() = "queued:" + (turnId?.let { ObjectId.canonical(it) ?: it } ?: event.fields.text("text").hashCode().toString())
 }
@@ -88,7 +93,8 @@ private fun listedTurn(row: JsonObject): QueuedTurn {
     return QueuedTurn(turnId, row.text("kind") == "steer", event, cards, wake, cards.firstOrNull { it.key.endsWith(":watch") }?.source,
         shell = row.text("kind") == "shell", createdAt = row.text("createdAt"),
         readersOwn = turnId != null && !orbits && cards.isEmpty() && wake == null,
-        delivery = row.text("delivery"), deliveryCode = row.text("deliveryCode"), deliveryReason = row.text("deliveryReason"))
+        delivery = row.text("delivery"), deliveryCode = row.text("deliveryCode"), deliveryReason = row.text("deliveryReason"),
+        translation = Translation.turn(row["translation"]))
 }
 
 /**
@@ -123,6 +129,8 @@ private fun echoPayload(row: JsonObject) = buildJsonObject {
     SteerDelivery.cardKeys.forEach { key -> row[key]?.takeIf { it != JsonNull }?.let { put(key, it) } }
     // Who outside Orbit sent it, which the listing carries beside the cards (turn-cards.ts): the accepted head says what its echo will.
     row["externalSender"]?.takeIf { it != JsonNull }?.let { put("externalSender", it) }
+    // And a translated message's own words and state, as the runner's echo will carry them (Settings › Translation).
+    row["translation"]?.takeIf { it != JsonNull }?.let { put("translation", it) }
     if (row.text("kind") == "steer") put("steer", true)
 }
 
@@ -167,6 +175,16 @@ internal fun QueuedTurnRow(turn: QueuedTurn, open: (String) -> Unit, cancelEnabl
                 }
                 QueuedAttachments(turn, open)
                 foot()
+            }
+            // The owner's message held for its translation (board frame 6): what they wrote, and the chip or the way out of a failure.
+            turn.translation?.held == true && turn.turnId != null -> {
+                val doors = LocalSessionConsole.current?.composer
+                Text("You", style = MaterialTheme.typography.labelMedium)
+                turn.translation.original.takeIf { it.isNotBlank() }?.let { MarkdownText(it, open = open) }
+                QueuedAttachments(turn, open)
+                UserTranslationFoot(turn.translation, flipped = false, onFlip = {},
+                    retry = doors?.let { { it.translationAction("turns/${turn.turnId}/translation/retry") } },
+                    sendAsWritten = doors?.let { { it.translationAction("turns/${turn.turnId}/translation/send-as-written") } })
             }
             else -> {
                 Text("You", style = MaterialTheme.typography.labelMedium)

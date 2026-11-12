@@ -3,6 +3,7 @@ package io.orbitd.android.reader
 import androidx.compose.runtime.Immutable
 import io.orbitd.android.core.cards.ClaudeRegion
 import io.orbitd.android.core.realtime.RunEvent
+import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.serialization.json.*
 
@@ -37,7 +38,7 @@ internal fun contentImages(value: JsonElement?): List<String> = when (value) {
 @Immutable
 internal data class TranscriptRow(val event: RunEvent, val result: RunEvent? = null, val children: List<TranscriptRow> = emptyList(),
     val folded: List<RunEvent> = emptyList(), val steer: SteerOutcome? = null, val steps: List<TranscriptRow> = emptyList(),
-    val exchanges: List<FoldedExchange> = emptyList()) {
+    val exchanges: List<FoldedExchange> = emptyList(), val awaitsTranslation: Boolean = false) {
     val key: String get() = "event:${event.seq}"
     fun contains(seq: Long): Boolean = event.seq == seq || result?.seq == seq || folded.any { it.seq == seq } || children.any { it.contains(seq) } ||
         steps.any { it.contains(seq) } || exchanges.any { ex -> ex.rows.any { it.contains(seq) } }
@@ -67,6 +68,7 @@ internal fun transcriptRows(events: List<RunEvent>, receipts: List<JsonObject> =
         }
     }
     val engine = EngineReading(events)
+    val awaiting = awaitingTranslation(events)
     val knownTools = events.filter { it.type == "tool_use" }.mapNotNull { it.toolId() }.toSet()
     fun parent(event: RunEvent) = event.parent()?.takeIf(knownTools::contains)
     val results = events.filter { it.type == "tool_result" && it.toolId() != null }
@@ -95,12 +97,32 @@ internal fun transcriptRows(events: List<RunEvent>, receipts: List<JsonObject> =
             result?.let { usedResults += it.seq }
             val id = e.toolId()
             val children = if (e.type == "tool_use" && id != null && id !in visited) rows(id, visited + id) else emptyList()
-            TranscriptRow(e, result, children, steer = steer(e))
+            TranscriptRow(e, result, children, steer = steer(e), awaitsTranslation = e.seq in awaiting)
         }.let(::foldThinking)
     }
     // Results may precede calls in a restored partial window; suppress matched results independent of order.
     events.filter { it.type == "tool_use" }.forEach { e -> results[parent(e) to e.toolId()]?.let { usedResults += it.seq } }
     return rows(null, emptySet())
+}
+
+/**
+ * Settings › Translation (2A, web `awaitsTranslation`): the agent's own replies in a turn opened by a message the owner wrote with
+ * translation on, that carry no translation yet — the server translates each once its block is stored, so one is on its way. A
+ * sub-agent's report to its caller is never translated.
+ */
+internal fun awaitingTranslation(events: List<RunEvent>): Set<Long> {
+    val awaiting = mutableSetOf<Long>()
+    var translated = false
+    events.forEach { e ->
+        when (e.type) {
+            "user" -> if (e.parent().isNullOrEmpty() && e.fields["steer"] != JsonPrimitive(true)) Translation.turn(e.fields["translation"])?.let {
+                translated = it.state == Translation.TurnState.DONE || it.state == Translation.TurnState.SENT_AS_WRITTEN
+            }
+            "assistant" -> if (translated && e.parent().isNullOrEmpty() && e.fields["translation"] == null) awaiting += e.seq
+            "turn_end" -> translated = false
+        }
+    }
+    return awaiting
 }
 
 /**
