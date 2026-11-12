@@ -3,8 +3,9 @@ import OrbitKit
 
 /// Later ▾ (docs/runner-update-drain-design.md §2): put the update a runner drains for off for an
 /// hour, until tonight 02:00 or until tomorrow 09:00. The Mac draws the web's menu (board 3 ⑦); iOS
-/// draws board 5's action sheet. `change` is the postponed card's Change ▾. The runner ends its drain
-/// at once; the runners are read again so the card and what waited move on.
+/// asks board 5's three choices through `orbitConfirmation`, an alert on a phone and a panel on a
+/// tablet. `change` is the postponed card's Change ▾. The runner ends its drain at once; the runners
+/// are read again so the card and what waited move on.
 struct RunnerUpdateLaterControl: View {
     @Environment(AppModel.self) private var app
     let runnerID: String
@@ -33,8 +34,10 @@ struct RunnerUpdateLaterControl: View {
     @ViewBuilder private var control: some View {
         Button { sheet = true } label: { Text(title + "…").frame(maxWidth: .infinity) }
             .buttonStyle(.bordered)
-            .confirmationDialog(RunnerUpdateLater.sheetMessage(version: version, machine: machine),
-                                isPresented: $sheet, titleVisibility: .visible) {
+            // Asked through the app's one confirmation style (ConfirmationStyle.swift): an alert on a
+            // phone, the anchored panel on a tablet.
+            .orbitConfirmation(RunnerUpdateLater.sheetMessage(version: version, machine: machine),
+                               isPresented: $sheet) {
                 ForEach(RunnerUpdateLater.sheetRows(now: Date()), id: \.choice) { row in
                     Button(row.label) { postpone(row.until) }
                 }

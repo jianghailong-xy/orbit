@@ -3,7 +3,7 @@ import XCTest
 @testable import OrbitKit
 
 /// Later (docs/runner-update-drain-design.md §2, D1): the three times in the reader's zone, the Mac's
-/// menu rows (the web's words, board 3 ⑦), iOS's action sheet (board 5) and the request body.
+/// menu rows (the web's words, board 3 ⑦), iOS's three choices (board 5's words) and the request body.
 final class RunnerUpdateLaterTests: XCTestCase {
     private var shanghai: Calendar {
         var calendar = Calendar(identifier: .gregorian)
@@ -66,7 +66,7 @@ final class RunnerUpdateLaterTests: XCTestCase {
     }
 
     /// The three surfaces draw the one control: the queued page, the queued message's popover and the
-    /// runner page's Update card (Change ▾ and Update Now… once postponed). iOS uses the action sheet.
+    /// runner page's Update card (Change ▾ and Update Now… once postponed). iOS asks through orbitConfirmation.
     func testTheThreeSurfacesDrawLater() throws {
         var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         while !FileManager.default.fileExists(atPath: dir.appendingPathComponent("src/macos/OrbitApp").path) {
@@ -77,7 +77,7 @@ final class RunnerUpdateLaterTests: XCTestCase {
         let read = { (name: String) in try String(contentsOf: app.appendingPathComponent(name), encoding: .utf8) }
         let control = try read("RunnerUpdateLaterControl.swift")
         XCTAssertTrue(control.contains("#if os(iOS)"))
-        XCTAssertTrue(control.contains(".confirmationDialog(RunnerUpdateLater.sheetMessage(version: version, machine: machine)"))
+        XCTAssertTrue(control.contains(".orbitConfirmation(RunnerUpdateLater.sheetMessage(version: version, machine: machine),"))
         XCTAssertTrue(control.contains("RunnerUpdateLater.sheetRows(now: Date())"))
         XCTAssertTrue(control.contains("RunnerUpdateLater.menuRows(now: Date())"))
         XCTAssertTrue(control.contains("app.runners?.postponeUpdate(runnerID, until: until)"))
