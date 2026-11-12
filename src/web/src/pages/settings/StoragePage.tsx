@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { SettingsCard, SettingsHeader, SettingsRow, SettingsSection } from '../../components/settings';
 import { storageUsageQuery, type StorageUsage } from '../../lib/queries';
 import { formatFileSize } from '../../lib/worktreeFile';
+import { PERSONAL_SETTINGS as S } from './settingsIndex';
 
 /** A week as its Monday reads, in the zone the server counted it in. */
 function weekLabel(weekStart: string): string {
@@ -37,10 +38,11 @@ export function StorageSettingsPage() {
       <SettingsHeader title="Storage" />
       <SettingsCard>
         <SettingsRow
-          title="Stored files"
+          anchor={S.storedFiles.anchor}
+          title={S.storedFiles.title}
           description={
             <>
-              Each file counts once, however many sessions use it. Files agents upload expire after 14 days unless evidence keeps them.
+              {S.storedFiles.description}
               {full && (
                 <div className="settings-storage-full" style={{ marginTop: 4, color: 'var(--warning)' }}>
                   Your storage is full, so new uploads are refused. Older uploads free up room as they expire.

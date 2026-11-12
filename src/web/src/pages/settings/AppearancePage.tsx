@@ -1,6 +1,7 @@
 import { SettingsCard, SettingsHeader, SettingsRow } from '../../components/settings';
 import { Segmented } from '../../components/ui/Segmented';
 import { useThemeMode, type ThemeMode } from '../../lib/theme';
+import { PERSONAL_SETTINGS as S } from './settingsIndex';
 
 /** Settings → Appearance: the theme, account-synced through the theme context. */
 export function AppearanceSettingsPage() {
@@ -10,8 +11,9 @@ export function AppearanceSettingsPage() {
       <SettingsHeader title="Appearance" />
       <SettingsCard>
         <SettingsRow
-          title="Theme"
-          description="Synced to your account across devices."
+          anchor={S.theme.anchor}
+          title={S.theme.title}
+          description={S.theme.description}
           control={
             <Segmented<ThemeMode>
               aria-label="Theme"

@@ -65,15 +65,18 @@ export function SettingsRow({
   description,
   control,
   tooltip,
+  anchor,
 }: {
   title: ReactNode;
   description?: ReactNode;
   control?: ReactNode;
   /** The full text, where the description is a shortened one: said when the pointer rests on the control. */
   tooltip?: string;
+  /** The row's name on its page: Settings' search opens the page at it and flashes it. */
+  anchor?: string;
 }) {
   return (
-    <div className="settings-row">
+    <div className="settings-row" data-setting-anchor={anchor}>
       <div className="settings-row-text">
         <div className="settings-row-title">{title}</div>
         {description != null && <div className="settings-row-description">{description}</div>}

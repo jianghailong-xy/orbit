@@ -794,6 +794,7 @@ export function MachineSettingsPage() {
       <SettingsSection title={RUNNER_ABOUT} className="machine-section-about">
         <SettingsCard>
           <SettingsRow
+            anchor="name"
             title={RUNNER_ABOUT_NAME}
             control={
               <span className="machine-about-value">
@@ -804,7 +805,7 @@ export function MachineSettingsPage() {
               </span>
             }
           />
-          <SettingsRow title={RUNNER_ABOUT_HOSTNAME} control={<span className="machine-about-value">{runner.hostname || '—'}</span>} />
+          <SettingsRow anchor="hostname" title={RUNNER_ABOUT_HOSTNAME} control={<span className="machine-about-value">{runner.hostname || '—'}</span>} />
           <SettingsRow
             title={RUNNER_ABOUT_VERSION}
             control={

@@ -211,6 +211,49 @@
   background: var(--dot-idle);
 }
 
+/* Search results (SettingsSearch), in place of the nav while there is a query. */
+.settings-search-hit {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.settings-search-hit:hover,
+.settings-search-hit.chosen {
+  background: var(--bg-hover);
+}
+.settings-search-hit.chosen {
+  background: var(--bg-hover-strong);
+}
+.settings-search-hit-label,
+.settings-search-hit-detail {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-search-hit-detail {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.settings-search-hit mark {
+  border-radius: 2px;
+  background: var(--brand-tint);
+  color: var(--text-1);
+}
+
 .settings-main {
   flex: 1;
   min-width: 0;
@@ -274,6 +317,46 @@
 }
 .settings-row-control {
   flex-shrink: 0;
+}
+/* The row a search result opened, lit for a moment across the card's width (useFoundRowFlash). */
+.settings-row--found {
+  animation: settings-row-found 2s ease-out;
+}
+@keyframes settings-row-found {
+  0%,
+  60% {
+    background: var(--brand-tint);
+    box-shadow:
+      -16px 0 0 var(--brand-tint),
+      16px 0 0 var(--brand-tint);
+  }
+  100% {
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
+/* Narrower than 760px (board-6): the nav is a page of its own at /settings, and a page opens full
+   width under "‹ Settings". SettingsLayout draws one or the other; these give each the window. */
+.settings-shell--narrow .settings-nav {
+  flex: 1 1 auto;
+  padding: 18px 16px 24px;
+  border-right: 0;
+  background: var(--bg-base);
+}
+.settings-shell--narrow .settings-nav-row,
+.settings-shell--narrow .settings-search-hit {
+  min-height: 40px;
+  font-size: 14px;
+}
+.settings-shell--narrow .settings-search {
+  height: 36px;
+}
+.settings-shell--narrow .settings-column {
+  padding: 14px 16px 48px;
+}
+.settings-back--list {
+  margin: 0 0 12px -8px;
 }
 .settings-empty {
   color: var(--text-2);

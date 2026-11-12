@@ -88,6 +88,7 @@ export function ProviderKeyRows({
         return (
           <SettingsRow
             key={row.id}
+            anchor={`key:${row.id}`}
             title={
               <span className="vk-name">
                 {row.label}

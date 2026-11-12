@@ -14,6 +14,7 @@ import { useFormFields } from '../components/ui/useFormFields';
 import { squareJpeg } from '../lib/avatar';
 import { accessTokensQuery, avatarQuery, meQuery, type Me } from '../lib/queries';
 import { useToast } from '../lib/toast';
+import { PERSONAL_SETTINGS as S } from './settings/settingsIndex';
 
 /** Under the name: who sees it besides you. The iOS edit-profile card says the same
  *  (`SettingsCopy.nameCaption`). */
@@ -127,7 +128,8 @@ export function ProfilePage() {
       <SettingsSection title="Basic information">
         <SettingsCard>
           <SettingsRow
-            title="Photo"
+            anchor={S.photo.anchor}
+            title={S.photo.title}
             control={
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <Avatar size={40} src={photo.data} style={{ background: 'var(--brand)', flex: 'none', fontSize: 18 }}>
@@ -156,7 +158,8 @@ export function ProfilePage() {
             }
           />
           <SettingsRow
-            title="Name"
+            anchor={S.name.anchor}
+            title={S.name.title}
             description={NAME_CAPTION}
             control={
               <div style={{ display: 'flex', gap: 8 }}>
@@ -177,7 +180,7 @@ export function ProfilePage() {
               </div>
             }
           />
-          <SettingsRow title="Email" control={<span style={{ color: 'var(--text-2)' }}>{me.data?.email ?? '—'}</span>} />
+          <SettingsRow anchor={S.email.anchor} title={S.email.title} control={<span style={{ color: 'var(--text-2)' }}>{me.data?.email ?? '—'}</span>} />
         </SettingsCard>
       </SettingsSection>
 

@@ -3,30 +3,31 @@ import { Select } from '../../components/ui/Select';
 import { Switch } from '../../components/ui/Switch';
 import { DEFAULT_PERMISSION_MODE, MODE_OPTIONS } from '../../lib/workspaceDefaults';
 import { usePreferences } from './preferences';
+import { PERSONAL_SETTINGS as S } from './settingsIndex';
 
 /*
- * Each row's hint is the one line the board (docs/mocks/settings-redesign, board-2) shortens it to; the
- * full text it had before is the control's tooltip.
+ * Each row's hint is the one line the board (docs/mocks/settings-redesign, board-2) shortens it to, kept
+ * in the Settings index with the row's title; the full text it had before is the control's tooltip.
  */
 export const GENERAL_HINTS = {
   defaultPermissionMode: {
-    short: 'The mode a new session starts in, unless the composer picks another.',
+    short: S.defaultPermissionMode.description,
     full: 'The mode a new session starts in, unless the composer picks another. Account-wide: the mode is a property of the run, not of the workspace it runs in.',
   },
   modelRouting: {
-    short: 'Coordinators suggest a tier for each task; Agents you turn this on for run on that tier.',
+    short: S.modelRouting.description,
     full: "Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before.",
   },
   promptSuggestions: {
-    short: "When a Claude turn ends, the empty message box offers what you'd probably type next.",
+    short: S.promptSuggestions.description,
     full: "When a Claude turn ends, the empty message box offers what you'd probably type next. Each suggestion is one more request on that session's Claude account.",
   },
   recaps: {
-    short: 'Session lists show a one-line summary of each conversation instead of its raw last reply.',
+    short: S.recaps.description,
     full: 'Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply, and the conversation ends with it. Off: the raw last reply, and no summary in the conversation.',
   },
   enableOrchestration: {
-    short: 'Sessions in every workspace can spawn and manage other sessions via the orbit MCP tools.',
+    short: S.enableOrchestration.description,
     full: 'Sessions in every workspace can spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused.',
   },
 } as const;
@@ -47,7 +48,8 @@ export function GeneralSettingsPage() {
       <SettingsSection title="New sessions">
         <SettingsCard>
           <SettingsRow
-            title="Default permission mode"
+            anchor={S.defaultPermissionMode.anchor}
+            title={S.defaultPermissionMode.title}
             description={h.defaultPermissionMode.short}
             tooltip={h.defaultPermissionMode.full}
             control={
@@ -63,7 +65,8 @@ export function GeneralSettingsPage() {
           />
           {/* Absent means OFF, unlike the switches below — only turning it on has to be written. */}
           <SettingsRow
-            title="Smart model selection"
+            anchor={S.modelRouting.anchor}
+            title={S.modelRouting.title}
             description={h.modelRouting.short}
             tooltip={h.modelRouting.full}
             control={
@@ -78,7 +81,8 @@ export function GeneralSettingsPage() {
           {/* Absent means on, like the switches below. The engine reads it when it starts, so a
               session already running keeps what it started with. */}
           <SettingsRow
-            title="Suggested replies"
+            anchor={S.promptSuggestions.anchor}
+            title={S.promptSuggestions.title}
             description={h.promptSuggestions.short}
             tooltip={h.promptSuggestions.full}
             control={
@@ -93,7 +97,8 @@ export function GeneralSettingsPage() {
           {/* Absent means on, like the switch above. Read by every client's session list, so turning
               it off holds on the phone and the Mac too — it is one account-wide answer. */}
           <SettingsRow
-            title="Session recaps"
+            anchor={S.recaps.anchor}
+            title={S.recaps.title}
             description={h.recaps.short}
             tooltip={h.recaps.full}
             control={
@@ -114,7 +119,8 @@ export function GeneralSettingsPage() {
       <SettingsSection title="Orchestration">
         <SettingsCard>
           <SettingsRow
-            title="Let sessions orchestrate"
+            anchor={S.enableOrchestration.anchor}
+            title={S.enableOrchestration.title}
             description={h.enableOrchestration.short}
             tooltip={h.enableOrchestration.full}
             control={

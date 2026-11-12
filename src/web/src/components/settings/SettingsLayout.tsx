@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
-import { NavLink, Outlet, useMatch, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
+import { NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   DndContext,
@@ -48,23 +48,32 @@ import {
 } from '../../lib/runnerAttention';
 import { settingsReturnPath } from '../../lib/settingsReturn';
 import { useToast } from '../../lib/toast';
+import { useMediaQuery } from '../../lib/useMediaQuery';
+import { PERSONAL_PAGES } from '../../pages/settings/settingsIndex';
 import { ControlPlaneProvider } from '../../lib/useControlPlane';
 import { ImpersonationBanner } from '../ImpersonationBanner';
 import { vendorName, vendorOf } from '../ProviderGallery';
 import type { Runner } from '../TasksSidePanel';
+import { around, searchSettings, type SettingsHit, type SettingsHitGroup } from './settingsSearch';
 import './Settings.css';
 
-/** Personal's rows, in the board's order (docs/mocks/settings-redesign, board-2). */
-const PERSONAL: ReadonlyArray<{ to: string; label: string; icon: ReactNode }> = [
-  { to: '/settings/general', label: 'General', icon: <SettingOutlined /> },
-  { to: '/settings/notifications', label: 'Notifications', icon: <BellOutlined /> },
-  { to: '/settings/appearance', label: 'Appearance', icon: <SunOutlined /> },
-  { to: '/settings/profile', label: 'Profile', icon: <UserOutlined /> },
-  { to: '/settings/storage', label: 'Storage', icon: <DatabaseOutlined /> },
-  { to: '/settings/shared-links', label: 'Shared links', icon: <LinkOutlined /> },
-  { to: '/settings/access-tokens', label: 'Access tokens', icon: <KeyOutlined /> },
-  { to: '/settings/integrations/feishu', label: 'Feishu', icon: <ApiOutlined /> },
-];
+/** Personal's rows' icons; the rows themselves, in the board's order, are the Settings index's pages. */
+const PERSONAL_ICONS: Record<(typeof PERSONAL_PAGES)[number]['path'], ReactNode> = {
+  '/settings/general': <SettingOutlined />,
+  '/settings/notifications': <BellOutlined />,
+  '/settings/appearance': <SunOutlined />,
+  '/settings/profile': <UserOutlined />,
+  '/settings/storage': <DatabaseOutlined />,
+  '/settings/shared-links': <LinkOutlined />,
+  '/settings/access-tokens': <KeyOutlined />,
+  '/settings/integrations/feishu': <ApiOutlined />,
+};
+
+/** Below this width (board-6) the nav is a page of its own at /settings, and each page opens full width. */
+export const NARROW_SETTINGS_QUERY = '(max-width: 759.98px)';
+
+/** How long a row search opened stays lit. */
+export const FOUND_ROW_MS = 2000;
 
 type MachineState = 'online' | 'attention' | 'offline';
 const MACHINE_STATE_LABEL: Record<MachineState, string> = {
@@ -101,41 +110,101 @@ const runnerName = (runner: Pick<Runner, 'name' | 'displayName'>): string =>
  * The Settings window (owner's choice A1): Settings takes over the whole window, the app's own sidebar
  * gone, with a nav of four groups on the left — Personal, Machines, Providers, Workspaces — and the
  * chosen page in a centred column on the right. "Back to Orbit" and Esc go back to the page Settings
- * was opened from.
+ * was opened from; Esc clears a search first.
+ *
+ * Narrower than 760px (board-6) the two stop sitting side by side: /settings is the nav alone, and a
+ * page opens full width with "‹ Settings" above it to go back to the list.
  */
 export function SettingsLayout() {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const narrow = useMediaQuery(NARROW_SETTINGS_QUERY);
+  const atList = pathname.replace(/\/+$/, '') === '/settings';
+  const [query, setQuery] = useState('');
+  useFoundRowFlash();
 
-  // Esc leaves Settings, unless something drawn over it (a dialog, a drawer, an open menu) takes the key.
+  // Esc clears the search, then leaves Settings, unless something drawn over it (a dialog, a drawer,
+  // an open menu) takes the key.
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
+    const onKey = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
       const overlay = document.querySelector(
         '[role="dialog"], [role="alertdialog"], [aria-modal="true"], [role="menu"], [role="listbox"]',
       );
       if (overlay) return;
+      if (query) {
+        setQuery('');
+        return;
+      }
       navigate(settingsReturnPath());
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [navigate]);
+  }, [navigate, query]);
 
   return (
     <ControlPlaneProvider>
       <ImpersonationBanner />
-      <div className="settings-shell">
-        <SettingsNav />
-        <main className="settings-main">
-          <div className="settings-column">
-            <Outlet />
-          </div>
-        </main>
+      <div className={narrow ? 'settings-shell settings-shell--narrow' : 'settings-shell'}>
+        {(!narrow || atList) && <SettingsNav query={query} onQuery={setQuery} />}
+        {/* At /settings in a narrow window the list is the page: the index route, which opens General
+            beside the nav, is not drawn until the window is wide again. */}
+        {(!narrow || !atList) && (
+          <main className="settings-main">
+            <div className="settings-column">
+              {narrow && (
+                <button type="button" className="settings-back settings-back--list" onClick={() => navigate('/settings')}>
+                  <LeftOutlined />
+                  <span>Settings</span>
+                </button>
+              )}
+              <Outlet />
+            </div>
+          </main>
+        )}
       </div>
     </ControlPlaneProvider>
   );
 }
 
-function SettingsNav() {
+/**
+ * A page opened from a search result is told which row matched (`state.settingsAnchor`): when that row
+ * is drawn — at once, or when the page's data arrives — it is scrolled into view and lit for a moment.
+ */
+function useFoundRowFlash(): void {
+  const location = useLocation();
+  const anchor = (location.state as { settingsAnchor?: string } | null)?.settingsAnchor;
+  useEffect(() => {
+    if (!anchor) return undefined;
+    let lit: HTMLElement | null = null;
+    let unlight: ReturnType<typeof setTimeout> | undefined;
+    const find = (): boolean => {
+      const row = [...document.querySelectorAll<HTMLElement>('[data-setting-anchor]')].find(
+        (element) => element.dataset.settingAnchor === anchor,
+      );
+      if (!row) return false;
+      row.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+      row.classList.add('settings-row--found');
+      lit = row;
+      unlight = setTimeout(() => row.classList.remove('settings-row--found'), FOUND_ROW_MS);
+      return true;
+    };
+    // Not drawn yet: watch for it a few seconds, then give up.
+    const observer = new MutationObserver(() => {
+      if (find()) observer.disconnect();
+    });
+    const giveUp = setTimeout(() => observer.disconnect(), 5000);
+    if (!find()) observer.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      observer.disconnect();
+      clearTimeout(giveUp);
+      clearTimeout(unlight);
+      lit?.classList.remove('settings-row--found');
+    };
+  }, [anchor, location.key]);
+}
+
+function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: string) => void }) {
   const navigate = useNavigate();
   const runners = (useQuery(runnersQuery()).data ?? []) as Runner[];
   const workspaces = (useQuery(workspacesQuery()).data ?? []) as SettingsWorkspace[];
@@ -178,51 +247,153 @@ function SettingsNav() {
         <span>Back to Orbit</span>
       </button>
       <h1 className="settings-title">Settings</h1>
-      <label className="settings-search">
-        <SearchOutlined />
-        <input type="search" placeholder="Search settings" aria-label="Search settings" />
-      </label>
+      <SettingsSearch
+        query={query}
+        onQuery={onQuery}
+        groups={searchSettings(query, {
+          runners,
+          keys: providers.data ?? [],
+          workspaces: workspaces.map((workspace) => ({ ...workspace, machine: machineOf(workspace) })),
+        })}
+      />
+      {/* While there is a query its results are the nav; the groups stay mounted, as they were left. */}
+      <div className="settings-nav-groups" hidden={query.trim() !== ''}>
+        <NavGroup title="Personal">
+          {PERSONAL_PAGES.map((page) => (
+            <NavRow key={page.path} to={page.path} icon={PERSONAL_ICONS[page.path]} label={page.label} />
+          ))}
+        </NavGroup>
 
-      <NavGroup title="Personal">
-        {PERSONAL.map((item) => (
-          <NavRow key={item.to} to={item.to} icon={item.icon} label={item.label} />
-        ))}
-      </NavGroup>
+        <NavGroup title="Machines" add={{ label: 'Register a machine', onClick: () => navigate('/runners/register') }}>
+          <MachineRows runners={runners} stateOf={stateOf} />
+        </NavGroup>
 
-      <NavGroup title="Machines" add={{ label: 'Register a machine', onClick: () => navigate('/runners/register') }}>
-        <MachineRows runners={runners} stateOf={stateOf} />
-      </NavGroup>
-
-      <NavGroup title="Providers" add={{ label: 'Connect a provider', onClick: () => navigate('/settings/providers/new') }}>
-        {vendors.size === 0 && poolCount === 0 ? (
-          // With no key and no pool at all, the group is the one way to connect a provider.
-          <NavRow to="/settings/providers/new" icon={<PlusOutlined />} label="Connect a provider" />
-        ) : (
-          <>
-            {[...vendors].map(([vendor, count]) => (
+        <NavGroup title="Providers" add={{ label: 'Connect a provider', onClick: () => navigate('/settings/providers/new') }}>
+          {vendors.size === 0 && poolCount === 0 ? (
+            // With no key and no pool at all, the group is the one way to connect a provider.
+            <NavRow to="/settings/providers/new" icon={<PlusOutlined />} label="Connect a provider" />
+          ) : (
+            <>
+              {[...vendors].map(([vendor, count]) => (
+                <NavRow
+                  key={vendor}
+                  to={`/settings/providers/${vendor}`}
+                  icon={<CloudOutlined />}
+                  label={vendorName(vendor)}
+                  trailing={<span className="settings-nav-meta">{count === 1 ? '1 key' : `${count} keys`}</span>}
+                />
+              ))}
               <NavRow
-                key={vendor}
-                to={`/settings/providers/${vendor}`}
-                icon={<CloudOutlined />}
-                label={vendorName(vendor)}
-                trailing={<span className="settings-nav-meta">{count === 1 ? '1 key' : `${count} keys`}</span>}
+                to="/settings/providers/pools"
+                icon={<BlockOutlined />}
+                label="Account pools"
+                trailing={poolCount > 0 ? <span className="settings-nav-meta">{poolCount}</span> : undefined}
               />
-            ))}
-            <NavRow
-              to="/settings/providers/pools"
-              icon={<BlockOutlined />}
-              label="Account pools"
-              trailing={poolCount > 0 ? <span className="settings-nav-meta">{poolCount}</span> : undefined}
-            />
-          </>
-        )}
-      </NavGroup>
+            </>
+          )}
+        </NavGroup>
 
-      <NavGroup title="Workspaces" add={{ label: 'New workspace', onClick: addWorkspace }}>
-        <WorkspaceRows workspaces={workspaces} machineOf={machineOf} />
-      </NavGroup>
+        <NavGroup title="Workspaces" add={{ label: 'New workspace', onClick: addWorkspace }}>
+          <WorkspaceRows workspaces={workspaces} machineOf={machineOf} />
+        </NavGroup>
+      </div>
     </nav>
   );
+}
+
+/**
+ * The search box and, while it holds a query, its results in place of the nav: grouped as the nav is,
+ * the matching words marked. A click, or Enter on the chosen one (the arrows move it, the first to
+ * start with), opens the page at the row that matched.
+ */
+function SettingsSearch({
+  query,
+  onQuery,
+  groups,
+}: {
+  query: string;
+  onQuery: (query: string) => void;
+  groups: SettingsHitGroup[];
+}) {
+  const navigate = useNavigate();
+  const [chosen, setChosen] = useState(0);
+  const hits = groups.flatMap((group) => group.hits);
+  const at = Math.min(chosen, Math.max(hits.length - 1, 0));
+  const open = (hit: SettingsHit) => {
+    onQuery('');
+    navigate(hit.to, { state: hit.anchor ? { settingsAnchor: hit.anchor } : null });
+  };
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.nativeEvent.isComposing) return;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (hits.length > 0) setChosen((at + (event.key === 'ArrowDown' ? 1 : hits.length - 1)) % hits.length);
+    } else if (event.key === 'Enter' && hits[at]) {
+      event.preventDefault();
+      open(hits[at]);
+    }
+  };
+  const searching = query.trim() !== '';
+  return (
+    <>
+      <label className="settings-search">
+        <SearchOutlined />
+        <input
+          type="search"
+          placeholder="Search settings"
+          aria-label="Search settings"
+          value={query}
+          onChange={(event) => {
+            onQuery(event.target.value);
+            setChosen(0);
+          }}
+          onKeyDown={onKeyDown}
+        />
+      </label>
+      {searching && hits.length === 0 && <div className="settings-nav-none">Nothing in Settings matches.</div>}
+      {searching &&
+        groups.map((group) => (
+          <div key={group.title} className="settings-nav-group" role="group" aria-label={`${group.title} results`}>
+            <div className="settings-nav-heading">
+              <span>{group.title}</span>
+            </div>
+            {group.hits.map((hit) => (
+              <button
+                key={hit.key}
+                type="button"
+                className={hit === hits[at] ? 'settings-search-hit chosen' : 'settings-search-hit'}
+                onClick={() => open(hit)}
+              >
+                <span className="settings-search-hit-label">
+                  <Marked text={hit.label} query={query} />
+                </span>
+                {hit.detail && (
+                  <span className="settings-search-hit-detail">
+                    <Marked text={around(hit.detail, query)} query={query} />
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        ))}
+    </>
+  );
+}
+
+/** The text with each place it says the query marked. */
+function Marked({ text, query }: { text: string; query: string }) {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return <>{text}</>;
+  const parts: ReactNode[] = [];
+  const lower = text.toLowerCase();
+  let from = 0;
+  for (let at = lower.indexOf(needle); at >= 0; at = lower.indexOf(needle, from)) {
+    if (at > from) parts.push(text.slice(from, at));
+    parts.push(<mark key={at}>{text.slice(at, at + needle.length)}</mark>);
+    from = at + needle.length;
+  }
+  if (from < text.length) parts.push(text.slice(from));
+  return <>{parts}</>;
 }
 
 /**

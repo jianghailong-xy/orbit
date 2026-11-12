@@ -423,6 +423,7 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
       <SettingsSection title="Location" className="workspace-section-location">
         <SettingsCard>
           <SettingsRow
+            anchor="name"
             title="Name"
             control={
               <TextSetting label="Name" value={workspace.name} maxLength={60} onCommit={(name) => save({ name })} />
@@ -442,6 +443,7 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
             }
           />
           <SettingsRow
+            anchor="workDir"
             title="Working directory"
             description={
               pathHint && (

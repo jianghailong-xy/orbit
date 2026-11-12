@@ -1,6 +1,7 @@
 import { SettingsCard, SettingsHeader, SettingsRow } from '../../components/settings';
 import { Switch } from '../../components/ui/Switch';
 import { usePreferences } from './preferences';
+import { PERSONAL_SETTINGS as S } from './settingsIndex';
 
 /** Settings → Notifications: which of a session's moments alert your devices. Each switch saves when changed. */
 export function NotificationsSettingsPage() {
@@ -10,8 +11,9 @@ export function NotificationsSettingsPage() {
       <SettingsHeader title="Notifications" />
       <SettingsCard>
         <SettingsRow
-          title="When a session finishes"
-          description="Alert your devices when a run finishes on its own or fails for good."
+          anchor={S.notifySessionFinished.anchor}
+          title={S.notifySessionFinished.title}
+          description={S.notifySessionFinished.description}
           control={
             <Switch
               aria-label="When a session finishes"
@@ -22,8 +24,9 @@ export function NotificationsSettingsPage() {
           }
         />
         <SettingsRow
-          title="When an agent asks for you"
-          description="Let a running agent alert your devices itself — to ask something only you can answer, or to report what you were waiting for. At most one per session per minute."
+          anchor={S.notifyAgentMessage.anchor}
+          title={S.notifyAgentMessage.title}
+          description={S.notifyAgentMessage.description}
           control={
             <Switch
               aria-label="When an agent asks for you"
