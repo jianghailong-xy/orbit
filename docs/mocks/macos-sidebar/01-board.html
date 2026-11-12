@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>macOS 侧栏 — 照 iPad 的结构，用 Mac 的手感（效果图）</title>
+<style>
+:root {
+  --tint: #2E6BFF;           /* AccentColor */
+  --amber: #FF9500;
+  --label: #1d1d1f;
+  --label-2: rgba(0,0,0,.50);
+  --label-3: rgba(0,0,0,.28);
+  --drawer: #F9F9F9;         /* iPad drawerSurface */
+  --macside: #E8E9EB;        /* Mac sidebar material, sampled off the owner's screenshot */
+  --macsel: rgba(0,0,0,.10); /* Mac sidebar selection as the screenshot shows it */
+  --mark: rgba(255,59,48,.9);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #e4e4e9; color: #16161a; width: 1500px;
+  font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+.b-part { padding: 36px 40px 40px; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; }
+h1 { font-size: 28px; letter-spacing: -.02em; margin: 0 0 6px; }
+h2 { font-size: 21px; margin: 0 0 8px; }
+h3 { font-size: 16px; margin: 0 0 6px; }
+.lede { color: #55555e; margin: 0 0 22px; font-size: 15.5px; max-width: 1380px; }
+.b-tag { display: inline-block; font-size: 13px; font-weight: 600; border-radius: 999px; padding: 2px 11px; margin: 0 0 10px; }
+.b-tag.now { background: #ffd9d4; color: #8f1d13; }
+.b-tag.ref { background: #e5e5ea; color: #3a3a40; }
+.b-tag.after { background: #d6e4ff; color: #14428f; }
+.b-num { display: inline-flex; width: 20px; height: 20px; border-radius: 50%; background: var(--mark); color: #fff;
+  font-size: 12px; font-weight: 700; align-items: center; justify-content: center; vertical-align: 1px; flex: none; }
+.b-row { display: flex; gap: 36px; align-items: flex-start; }
+.b-cap { font-size: 13px; color: #6a6a72; margin-top: 10px; }
+.b-notes { background: #fff; border-radius: 16px; padding: 20px 26px 12px; box-shadow: 0 0 0 1px rgba(0,0,0,.06);
+  font-size: 15px; line-height: 1.62; color: #4a4a52; }
+.b-notes ol { margin: 0; padding: 0; list-style: none; }
+.b-notes li { margin: 0 0 13px; padding-left: 32px; position: relative; }
+.b-notes li .b-num { position: absolute; left: 0; top: 2px; }
+.b-notes b { color: #16161a; }
+.b-notes .same { color: #2a7a3a; font-weight: 600; }
+.b-notes .diff { color: #b25000; font-weight: 600; }
+
+/* ── a frame: a sidebar column, with an optional strip of the window beside it ── */
+.fr { position: relative; border-radius: 14px; overflow: hidden; box-shadow: 0 14px 34px rgba(0,0,0,.15), 0 0 0 1px rgba(0,0,0,.10); background: #fff; }
+.fold { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--mark); z-index: 6; }
+.fold span { position: absolute; right: 6px; top: -21px; font-size: 11.5px; font-weight: 600; color: #c0261b; background: rgba(255,255,255,.92); padding: 0 6px; border-radius: 4px; }
+.below { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(255,59,48,.06); z-index: 5; pointer-events: none; }
+
+/* Mac sidebar (source list) */
+.mac { width: 300px; background: var(--macside); color: var(--label); font: 13px/16px Inter, "Noto Sans SC", sans-serif;
+  display: flex; flex-direction: column; position: relative; height: 100%; }
+.mac .tb { height: 52px; flex: none; display: flex; align-items: center; padding: 0 12px 0 16px; gap: 8px; }
+.mac .tl { display: flex; gap: 8px; }
+.mac .tl i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+.mac .tbtn { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,.75); box-shadow: 0 0 0 .5px rgba(0,0,0,.12), 0 1px 3px rgba(0,0,0,.08); color: #333; }
+.mac .list { flex: 1; min-height: 0; overflow: hidden; padding: 0 10px 10px; }
+.mac .r { height: 30px; border-radius: 8px; display: flex; align-items: center; gap: 8px; padding: 0 10px; white-space: nowrap; }
+.mac .r.tall { height: 44px; }
+.mac .r.sec { height: 32px; }
+.mac .r.sel { background: var(--macsel); }
+.mac .r.hov { background: rgba(0,0,0,.05); }
+.mac .r .ic { width: 20px; flex: none; display: flex; justify-content: center; color: var(--tint); }
+.mac .r .ic.grey { color: rgba(0,0,0,.55); }
+.mac .r .nm { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.mac .r .nm.keep { flex: none; }
+.mac .r .meta { color: var(--label-2); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.mac .r .sp { flex: 1 1 auto; min-width: 6px; }
+.mac .r .two { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.mac .r .two .s { font-size: 11px; color: var(--label-2); overflow: hidden; text-overflow: ellipsis; }
+.mac .r .sc { font-size: 11px; color: var(--label-3); font-variant-numeric: tabular-nums; flex: none; }
+.mac .r .amb { font-size: 11px; font-weight: 600; color: var(--amber); font-variant-numeric: tabular-nums; flex: none; }
+.mac .r .badge { font-size: 11px; font-weight: 700; color: #fff; background: var(--amber); border-radius: 999px; padding: 1px 7px; flex: none; }
+.mac .hdr { height: 28px; margin-top: 10px; display: flex; align-items: center; padding: 0 10px; font-size: 11px; font-weight: 600; color: rgba(0,0,0,.45); gap: 6px; }
+.mac .hdr .n { font-weight: 400; }
+.mac .hdr .sp { flex: 1; }
+.mac .hdr .hide { color: rgba(0,0,0,.45); display: flex; align-items: center; }
+.mac .glab { height: 26px; display: flex; align-items: center; padding: 0 10px 0 38px; font-size: 11px; color: var(--label-2); }
+.mac .disc { height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 0; }
+.mac .foot { flex: none; border-top: .5px solid rgba(0,0,0,.12); height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 12px 0 16px; background: rgba(255,255,255,.35); }
+.mac .av { width: 28px; height: 28px; border-radius: 50%; background: var(--tint); color: #fff; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; flex: none; }
+.mac .foot .who { font-weight: 600; flex: 1; }
+.mac .foot .gear { width: 28px; height: 28px; border-radius: 7px; display: flex; align-items: center; justify-content: center; color: #444; }
+.mac.dark { --label: #f2f2f7; --label-2: rgba(255,255,255,.55); --label-3: rgba(255,255,255,.3); --macsel: rgba(255,255,255,.14); background: #2b2b2e; }
+.mac.dark .tbtn { background: rgba(255,255,255,.12); color: #ddd; box-shadow: 0 0 0 .5px rgba(255,255,255,.12); }
+.mac.dark .hdr, .mac.dark .hdr .hide { color: rgba(255,255,255,.45); }
+.mac.dark .r .ic.grey { color: rgba(255,255,255,.6); }
+.mac.dark .foot { background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.1); }
+.mac.dark .foot .gear { color: #ccc; }
+
+/* iPad drawer (same view as the iPhone's) */
+.ipd { width: 318px; height: 100%; background: var(--drawer); color: #000; font: 17px/20px Inter, "Noto Sans SC", sans-serif; display: flex; flex-direction: column; position: relative;
+  box-shadow: inset -1px 0 0 rgba(60,60,67,.13); }
+.ipd .bar { height: 54px; flex: none; display: flex; align-items: center; padding: 0 16px 0 22px; gap: 14px; }
+.ipd .bar .t { font-size: 22px; font-weight: 700; flex: 1; }
+.ipd .list { flex: 1; padding: 0 10px; }
+.ipd .r { height: 42px; margin: 1px 0; border-radius: 10px; display: flex; align-items: center; gap: 12px; padding: 0 12px; white-space: nowrap; }
+.ipd .r.sel { background: rgba(46,107,255,.14); }
+.ipd .r .ic { width: 24px; flex: none; display: flex; justify-content: center; }
+.ipd .r .nm { flex: none; }
+.ipd .r .meta { color: rgba(0,0,0,.5); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ipd .r .sp { flex: 1 1 auto; min-width: 6px; }
+.ipd .r .amb { font-size: 12px; font-weight: 600; color: var(--amber); }
+.ipd .rule { height: .5px; background: rgba(60,60,67,.29); margin: 8px 0 0 12px; }
+.ipd .glab { font-size: 15px; font-weight: 600; color: rgba(60,60,67,.6); padding: 14px 12px 4px; }
+.ipd .glab .n { font-size: 12px; font-weight: 400; margin-left: 8px; }
+.ipd .fab { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; align-items: center; z-index: 3; }
+.ipd .fab .ns { background: var(--tint); color: #fff; font-weight: 600; font-size: 16px; border-radius: 999px; padding: 11px 18px; display: flex; gap: 8px; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+.ipd .fab .sp { flex: 1; }
+.ipd .fab .gd { width: 44px; height: 44px; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.14); display: flex; align-items: center; justify-content: center; }
+
+.cap { flex: none; font-size: 11px; line-height: 13px; font-weight: 600; font-variant-numeric: tabular-nums;
+  color: var(--amber); background: rgba(255,149,0,.15); border-radius: 999px; padding: 2px 7px; }
+.ipd .cap { font-size: 12px; }
+.spin { flex: none; }
+.breathe { flex: none; color: rgba(0,0,0,.45); }
+
+/* context menu / popover */
+.menu { position: absolute; z-index: 8; background: rgba(246,246,248,.97); border-radius: 10px; padding: 5px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.22), 0 0 0 .5px rgba(0,0,0,.18); font: 13px/16px Inter, "Noto Sans SC", sans-serif; color: #1d1d1f; min-width: 220px; }
+.menu .mi { height: 24px; display: flex; align-items: center; padding: 0 10px; border-radius: 5px; gap: 8px; }
+.menu .mi .k { margin-left: auto; color: rgba(0,0,0,.4); padding-left: 18px; }
+.menu .mi.hi { background: var(--tint); color: #fff; }
+.menu .mi.hi .k { color: rgba(255,255,255,.8); }
+.menu .mi.dim { color: rgba(0,0,0,.45); font-size: 12px; }
+.menu .sep { height: 1px; background: rgba(0,0,0,.1); margin: 4px 8px; }
+
+/* a strip of the window to the sidebar's right, so the frame reads as a Mac window */
+.win { display: flex; }
+.win .rest { width: 170px; background: #fff; border-left: .5px solid rgba(0,0,0,.08); position: relative; }
+.win .rest .ph { position: absolute; left: 16px; right: 16px; height: 10px; border-radius: 5px; background: #eeeef0; }
+
+/* rings */
+.mk { position: absolute; border: 1.6px dashed var(--mark); border-radius: 8px; pointer-events: none; z-index: 7; }
+.mk .b-num { position: absolute; top: -11px; right: -11px; }
+.mk.l .b-num { right: auto; left: -11px; }
+
+/* tables */
+table.cmp { border-collapse: collapse; width: 100%; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 0 0 1px rgba(0,0,0,.06); font-size: 14px; }
+table.cmp th, table.cmp td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid #ececf0; }
+table.cmp th { background: #f4f4f7; font-size: 13px; color: #55555e; }
+table.cmp td:first-child { font-weight: 600; white-space: nowrap; }
+table.cmp .same { color: #2a7a3a; font-weight: 600; }
+table.cmp .diff { color: #b25000; font-weight: 600; }
+.opt { background: #fff; border-radius: 16px; padding: 18px 22px; box-shadow: 0 0 0 1px rgba(0,0,0,.06); flex: 1; }
+.opt.rec { box-shadow: 0 0 0 2px #2E6BFF; }
+.opt .rec-tag { font-size: 12px; font-weight: 700; color: #fff; background: #2E6BFF; border-radius: 999px; padding: 1px 9px; margin-left: 8px; }
+.opt p { margin: 8px 0 0; color: #4a4a52; font-size: 14.5px; }
+.q { background: #fff7e6; border: 1px solid #ffd591; border-radius: 14px; padding: 14px 20px; margin: 26px 0 14px; }
+.q h3 { margin: 0; }
+ol.land { margin: 0; padding-left: 22px; list-style: decimal !important; }
+.b-notes ol.land li { padding-left: 4px; }
+ol.land li { margin-bottom: 8px; }
+code { font: 13px "DejaVu Sans Mono", monospace; background: #f0f0f4; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<section class="b-part" id="part-1">
+  <h1>macOS 侧栏 — 照 iPad 的结构，用 Mac 的手感</h1>
+  <p class="lede">今天 Mac 的侧栏还是老的「Workspaces 展开组 + 一排板块」：工作区占满上半截、每行两行字，Projects / Tasks / Waiting on you 被挤到最底下；行上也没有「等你 / 在跑」的状态。iPad 的侧栏就是 iPhone 抽屉的同一个视图，结构已经定下来了。建议 Mac 照搬它的<b>结构、顺序、状态记号</b>，但<b>尺寸、选中样式、新建入口、设置入口</b>按 Mac 的习惯来。三张图用同一份示例数据：两台机器 12 个工作区、3 个进行中的项目。红色虚线是 Mac 默认窗口高度 720pt。</p>
+  <div class="b-row" id="p1-frames"></div>
+  <div class="b-row" style="margin-top: 30px;">
+    <div class="b-notes" style="flex: 1;">
+      <ol>
+        <li><span class="b-num">1</span><b>工作的入口放最上面：Projects · Tasks · Wiki · Waiting on you</b>，和 iPad 的顺序一样。「等你」的数字统一用 iPad 的琥珀色数字（今天 Mac 只有 Waiting on you 带一个实心橙色胶囊，Projects 和 Wiki 没有计数）。<span class="same">同 iPad</span></li>
+        <li><span class="b-num">2</span><b>Workspaces 是 Mac 原生的可折叠分组标题</b>：小号灰字，鼠标移上去右侧出现 Hide / Show（系统 <code>Section(isExpanded:)</code> 的行为），不再是一个可选中的「Workspaces」行 + 展开三角。机器名不再单独占一行分组标题。<span class="diff">Mac 习惯</span></li>
+        <li><span class="b-num">3</span><b>工作区一行：文件夹 · 名字 · 机器</b>，和 iPad 同一种写法（同名的 orbit 靠机器区分）。引擎和目录从行里拿掉，放进鼠标悬停的提示（<code>.help</code>）。行高 44 → 30pt：12 个工作区从 528pt 变成 360pt。<span class="same">同 iPad</span>，行高按 Mac</li>
+        <li><span class="b-num">4</span><b>右侧只有一个状态位</b>，优先级同 iPad：等你的数量（琥珀胶囊）＞ 正在生成（转圈）＞ 后台任务（呼吸的终端图标）。都没有时，前 9 个工作区显示淡灰的 ⌘1…⌘9 —— 保留 Mac 已有的快捷键提示。<span class="same">同 iPad</span> + <span class="diff">Mac 保留 ⌘N</span></li>
+        <li><span class="b-num">5</span><b>进行中的项目接在最后</b>，和 iPad 一样：等你的排前面，然后按最近活动；点开是项目的会话页。<span class="same">同 iPad</span></li>
+        <li><span class="b-num">6</span><b>新建会话和搜索放在侧栏顶部的工具栏</b>（和「备忘录」「邮件」的写新邮件按钮同一个位置），对应 ⌘N 和 ⌘K。iPad 底部那条浮动「New session」胶囊不搬过来：Mac 上新建是工具栏 + 快捷键的事。<span class="diff">Mac 习惯</span>（待定 ①）</li>
+        <li><span class="b-num">7</span><b>底部保留账户行，右侧加一个齿轮</b>：齿轮 = 打开设置（同 iPad 的齿轮），点头像弹账户菜单。<b>Following、Settings、Admin 三行从侧栏拿掉</b>——iPad 本来就没有这三行：Settings 是齿轮，Admin 在设置和账户菜单里，Following 从会话里的卡片和链接进，菜单栏「Go」里也留一个。<span class="same">同 iPad</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="b-part" id="part-2">
+  <h2>Mac 才有的手感：悬停、右键、折叠、深色</h2>
+  <p class="lede">这些 iPad 上没有（或者是长按），Mac 上用户会自然去试。都用系统控件，不新造外观。</p>
+  <div class="b-row" id="p2-frames"></div>
+  <div class="b-row" style="margin-top: 26px;">
+    <div class="b-notes" style="flex: 1;">
+      <ol>
+        <li><span class="b-num">1</span><b>悬停</b>：分组标题右侧出现 Hide；工作区行悬停弹出提示，补回行里拿掉的两样东西：<i>Claude Code via DeepSeek · ~/dev/billing-api</i>。</li>
+        <li><span class="b-num">2</span><b>右键工作区</b>：New Session（在这个工作区新建）、Open Sessions、Workspace Settings…、Copy Path、Show Machine。iPhone / iPad 的长按菜单以后可以用同一组。</li>
+        <li><span class="b-num">3</span><b>折叠 Workspaces</b>：工作区很多时一下收起，Projects 组直接上来。折叠状态记住（<code>@AppStorage</code>），和今天的 <code>agentsExpanded</code> 同一个作用，只是换成系统分组。</li>
+        <li><span class="b-num">4</span><b>账户菜单</b>：邮箱、Settings…（⌘,）、Admin（仅管理员）、Following、Sign out。这样 Admin 和 Following 拿掉侧栏行之后还有固定入口。</li>
+        <li><span class="b-num">5</span><b>深色模式</b>：琥珀色和转圈在深色侧栏上照样读得出；选中行用系统的选中色，不用 iPad 的浅蓝底。</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="b-part" id="part-3">
+  <h2>逐行对照：iPad · Mac 今天 · 建议</h2>
+  <table class="cmp">
+    <tr><th style="width: 160px;">项</th><th>iPad（= iPhone 抽屉）</th><th>Mac 今天</th><th>建议的 Mac</th></tr>
+    <tr><td>顺序</td><td>Projects · Tasks · Wiki · Waiting on you ｜ Workspaces ｜ 进行中的项目</td><td>Workspaces（展开组）· Projects · Tasks · Wiki · Following · Settings · Admin · Waiting on you</td><td><span class="same">同 iPad</span></td></tr>
+    <tr><td>工作区行</td><td>一行：文件夹 名字 · 机器</td><td>两行：名字 / 引擎 · 目录；机器是分组小标题</td><td><span class="same">同 iPad</span>；引擎和目录进悬停提示</td></tr>
+    <tr><td>行状态</td><td>等你数（琥珀胶囊）/ 转圈 / 后台任务</td><td>无</td><td><span class="same">同 iPad</span>；空闲时显示 ⌘1–9 <span class="diff">Mac 保留</span></td></tr>
+    <tr><td>计数</td><td>Projects、Wiki、Waiting on you：琥珀数字</td><td>只有 Waiting on you：实心橙胶囊</td><td><span class="same">同 iPad</span></td></tr>
+    <tr><td>进行中的项目</td><td>列在最后，带状态</td><td>无</td><td><span class="same">同 iPad</span>（待定 ③）</td></tr>
+    <tr><td>行高 / 字号</td><td>44pt / 17pt</td><td>32–44pt / 13pt</td><td><span class="diff">Mac 尺寸</span> 30pt / 13pt（系统侧栏中号）</td></tr>
+    <tr><td>选中样式</td><td>浅蓝圆角底</td><td>系统灰色圆角底</td><td><span class="diff">Mac 系统选中</span></td></tr>
+    <tr><td>分组标题</td><td>分隔线 + 灰色「Workspaces」</td><td>可选中的展开行</td><td><span class="diff">Mac 系统可折叠分组</span>（悬停 Hide）</td></tr>
+    <tr><td>新建会话</td><td>底部浮动蓝色胶囊</td><td>仅 ⌘N / 会话列表工具栏</td><td><span class="diff">侧栏工具栏按钮 + ⌘N</span>（待定 ①）</td></tr>
+    <tr><td>搜索</td><td>标题栏放大镜</td><td>仅 ⌘K</td><td>侧栏工具栏放大镜 + ⌘K <span class="same">同 iPad</span></td></tr>
+    <tr><td>设置</td><td>底部齿轮 → 设置</td><td>侧栏 Settings 行</td><td>底部齿轮 → 设置页 <span class="same">同 iPad</span>；⌘, 不变</td></tr>
+    <tr><td>Admin / Following</td><td>无侧栏行（在设置里 / 从卡片进）</td><td>各占一行</td><td><span class="same">无侧栏行</span>；账户菜单 + Go 菜单</td></tr>
+    <tr><td>账户</td><td>无（在设置里）</td><td>底部头像 + 名字，点开菜单</td><td><span class="diff">保留</span>，菜单加 Settings / Admin / Following</td></tr>
+    <tr><td>右键 / 悬停</td><td>—</td><td>无</td><td><span class="diff">Mac 新增</span> 右键菜单、悬停提示</td></tr>
+  </table>
+</section>
+
+<section class="b-part" id="part-4">
+  <h2>待定 · 要你拍板</h2>
+
+  <div class="q"><h3>① 新建会话放哪</h3></div>
+  <div class="b-row">
+    <div class="opt rec"><h3>方案 A：侧栏顶部工具栏<span class="rec-tag">推荐</span></h3><div id="q1a" style="margin-top: 10px;"></div>
+      <p>和「备忘录」「邮件」「Xcode」一样，新建是工具栏上的一个图标按钮，悬停有「New Session ⌘N」提示。侧栏底部只留账户和齿轮，列表一直滚到底。</p></div>
+    <div class="opt"><h3>方案 B：照搬 iPad 底部浮动胶囊</h3><div id="q1b" style="margin-top: 10px;"></div>
+      <p>和 iPad 一模一样，但在 Mac 上这种浮动大按钮不常见，还会盖住最后一行，账户行要么拿掉、要么叠在一起。</p></div>
+  </div>
+
+  <div class="q"><h3>② 工作区行写一行还是两行</h3></div>
+  <div class="b-row">
+    <div class="opt rec"><h3>方案 A：一行「名字 · 机器」<span class="rec-tag">推荐</span></h3><div id="q2a" style="margin-top: 10px;"></div>
+      <p>同 iPad。12 个工作区 360pt，720pt 的窗口里能同时看到上面四个入口和全部工作区。引擎和目录在悬停提示里。</p></div>
+    <div class="opt"><h3>方案 B：保留两行（名字 / 引擎 · 目录）</h3><div id="q2b" style="margin-top: 10px;"></div>
+      <p>信息多，但 12 个工作区要 528pt；你截图里的 16 个要 704pt，项目组一定在窗口外。而且长引擎名（ModelHub SG DeepSeek）总是被截断，看不到目录。</p></div>
+  </div>
+
+  <div class="q"><h3>③ 项目组：全部列出，还是只列活跃的</h3></div>
+  <div class="b-row">
+    <div class="opt rec"><h3>方案 A：同 iPad，全部进行中的项目<span class="rec-tag">推荐</span></h3>
+      <p>你要求参照 iOS / iPad，手机上 11-12 也定了先不折叠，那 Mac 先和它们一致。工作区多的时候用 ② 的折叠 Workspaces 解决。</p></div>
+    <div class="opt"><h3>方案 B：同网页，安静的项目折成一行</h3>
+      <p>网页侧栏 11-12 起只列 24 小时内有动静的项目，其余折成「N quiet projects」。Mac 也是大屏，适合这样；但会和 iPad 不一致。可以等手机也改的时候一起改。</p></div>
+  </div>
+
+  <h2 style="margin-top: 34px;">落地（按代价排）</h2>
+  <div class="b-notes">
+    <ol class="land">
+      <li><b>顺序和行</b>：Mac 的 <code>SectionSidebar</code> 改成 iPad 的顺序，工作区行换成 iOS 已有的 <code>WorkspaceNavigationRow</code>（现在包在 <code>#if os(iOS)</code> 里，放开给 macOS），机器名不再做分组标题。复用 <code>NeedsYouCountCapsule</code>、<code>SpinnerGlyph</code>、<code>BreathingGlyph</code>，不新造外观。</li>
+      <li><b>计数</b>：Projects / Wiki / Waiting on you 的琥珀数字，数据源和 iPad 一样（<code>projects.needsYouCount</code>、<code>wiki.waiting</code>、<code>ownerRequests.waitingCount</code>），侧栏挂载时一起拉。</li>
+      <li><b>进行中的项目组</b>：用 iPad 的 <code>drawerProjects(coordinators:)</code>，点开走项目会话页。</li>
+      <li><b>拿掉 Following / Settings / Admin 行</b>：底部加齿轮（选中设置页，⌘, 不变）、账户菜单加 Settings / Admin / Following，Go 菜单加 Following。</li>
+      <li><b>工具栏</b>：侧栏列加 New Session 和搜索两个按钮。</li>
+      <li><b>Mac 手感</b>：系统可折叠分组、悬停提示、右键菜单。</li>
+    </ol>
+    <p style="margin: 6px 0 8px; color: #6a6a72; font-size: 14px;">只动 macOS 的侧栏；iPhone / iPad 不变。SwiftUI 在这台机器上编不了，做完要在 Mac 上实机截图对照这张图。</p>
+  </div>
+</section>
+
+<script>
+/* ── glyphs (SF Symbol look-alikes, 1.6 stroke) ── */
+const G = {
+  grid: '<rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="11" y="3" width="6" height="6" rx="1.5"/><rect x="3" y="11" width="6" height="6" rx="1.5"/><rect x="11" y="11" width="6" height="6" rx="1.5"/>',
+  check: '<path d="M3 5.5l1.6 1.6L7.5 4"/><path d="M10 5.5h7"/><circle cx="5" cy="13.5" r="2"/><path d="M10 13.5h7"/>',
+  book: '<path d="M5 3h10v14H5a1.5 1.5 0 0 1-1.5-1.5v-11A1.5 1.5 0 0 1 5 3z"/><path d="M3.5 14.5A1.5 1.5 0 0 1 5 13h10"/>',
+  hand: '<path d="M7 10V4.5a1.2 1.2 0 0 1 2.4 0V9"/><path d="M9.4 9V3.5a1.2 1.2 0 0 1 2.4 0V9"/><path d="M11.8 9V4.5a1.2 1.2 0 0 1 2.4 0V11"/><path d="M7 10V7.5a1.2 1.2 0 0 0-2.4 0v4.5c0 3 2.2 5 5.2 5h.6c2.6 0 3.8-2 3.8-5"/>',
+  eye: '<path d="M1.5 10S5 4.5 10 4.5 18.5 10 18.5 10 15 15.5 10 15.5 1.5 10 1.5 10z"/><circle cx="10" cy="10" r="2.6"/>',
+  gear: '<circle cx="10" cy="10" r="2.6"/><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4"/><circle cx="10" cy="10" r="5.3"/>',
+  shield: '<path d="M10 2.5l6 2.2v4.6c0 4-2.7 6.7-6 8.2-3.3-1.5-6-4.2-6-8.2V4.7z"/><rect x="7.6" y="9" width="4.8" height="3.8" rx=".8"/><path d="M8.6 9V7.8a1.4 1.4 0 0 1 2.8 0V9"/>',
+  people: '<circle cx="7.5" cy="7" r="2.6"/><path d="M2.5 16c.4-2.8 2.4-4.4 5-4.4s4.6 1.6 5 4.4"/><circle cx="13.6" cy="6.6" r="2.2"/><path d="M13.8 11.2c2 .1 3.4 1.5 3.7 3.8"/>',
+  folder: '<path d="M2.5 5.5A1.5 1.5 0 0 1 4 4h3.6l1.8 1.8H16a1.5 1.5 0 0 1 1.5 1.5v7.2A1.5 1.5 0 0 1 16 16H4a1.5 1.5 0 0 1-1.5-1.5z"/>',
+  compose: '<path d="M9 4H4.5A1.5 1.5 0 0 0 3 5.5v10A1.5 1.5 0 0 0 4.5 17h10a1.5 1.5 0 0 0 1.5-1.5V11"/><path d="M15.2 2.8l2 2L10 12l-2.7.7.7-2.7z"/>',
+  search: '<circle cx="8.5" cy="8.5" r="5"/><path d="M12.3 12.3L17 17"/>',
+  side: '<rect x="2.5" y="4" width="15" height="12" rx="2.5"/><path d="M8 4v12"/><path d="M4.6 7h1.6M4.6 9.2h1.6"/>',
+  chevD: '<path d="M5 8l5 5 5-5"/>',
+  chevR: '<path d="M8 5l5 5-5 5"/>',
+  term: '<rect x="2.5" y="4" width="15" height="12" rx="2"/><path d="M6 8.5l2.2 1.8L6 12.1M10 12.3h4"/>',
+  plus: '<path d="M10 4v12M4 10h12"/>',
+};
+const ic = (k, s = 18, sw = 1.6) => `<svg width="${s}" height="${s}" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${G[k]}</svg>`;
+const spin = (c = 'rgba(0,0,0,.45)') => { let s = ''; for (let i = 0; i < 8; i++) { const a = i * 45 * Math.PI / 180;
+  s += `<line x1="${7 + 3 * Math.sin(a)}" y1="${7 - 3 * Math.cos(a)}" x2="${7 + 6 * Math.sin(a)}" y2="${7 - 6 * Math.cos(a)}" stroke="${c}" stroke-width="1.6" stroke-linecap="round" opacity="${.25 + i * .1}"/>`; }
+  return `<svg class="spin" width="14" height="14" viewBox="0 0 14 14">${s}</svg>`; };
+
+/* ── sample data (public repo: no real titles) ── */
+const WS = [
+  { n: 'orbit', m: 'mac-studio', e: 'Claude Code', d: '~/dev/orbit', sel: true },
+  { n: 'orbit-web', m: 'mac-studio', e: 'Claude Code', d: '~/dev/orbit-web' },
+  { n: 'data-pipeline', m: 'mac-studio', e: 'Codex', d: '~/dev/data-pipeline', st: 'run' },
+  { n: 'billing-api', m: 'mac-studio', e: 'Claude Code via DeepSeek', d: '~/dev/billing-api', st: 2 },
+  { n: 'analytics', m: 'mac-studio', e: 'Claude Code', d: '~/dev/analytics' },
+  { n: 'docs-site', m: 'mac-studio', e: 'Claude Code', d: '~/dev/docs-site' },
+  { n: 'ml-notebooks', m: 'mac-studio', e: 'Codex', d: '~/dev/ml-notebooks' },
+  { n: 'infra', m: 'mac-studio', e: 'Claude Code', d: '~/dev/infra', st: 1 },
+  { n: 'orbit', m: 'hpc-01', e: 'Claude Code via DeepSeek', d: '/data/orbit' },
+  { n: 'train-jobs', m: 'hpc-01', e: 'Codex', d: '/data/train-jobs', st: 'jobs' },
+  { n: 'eval-suite', m: 'hpc-01', e: 'Claude Code', d: '/data/eval-suite' },
+  { n: 'cluster-tools', m: 'hpc-01', e: 'Claude Code', d: '/data/cluster-tools' },
+];
+const PJ = [
+  { n: 'Session guests', st: 1 },
+  { n: 'Runner update drain', st: 'run' },
+  { n: 'Settings redesign' },
+];
+
+/* ── Mac sidebar today (SectionSidebar) ── */
+function macToday() {
+  let h = `<div class="mac" id="today"><div class="tb"><div class="tl"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div><div style="flex:1"></div><div class="tbtn">${ic('side', 17)}</div></div><div class="list">`;
+  h += `<div class="disc"><span style="color:rgba(0,0,0,.45);display:flex">${ic('chevD', 12, 2)}</span><span class="ic" style="color:var(--tint);display:flex">${ic('people')}</span><span>Workspaces</span></div>`;
+  let i = 0, last = '';
+  for (const w of WS) {
+    if (w.m !== last) { h += `<div class="glab">${w.m}</div>`; last = w.m; }
+    h += `<div class="r tall${w.sel ? ' sel' : ''}" style="padding-left:38px"><div class="two"><span class="nm">${w.n}</span><span class="s">${w.e} · ${w.d}</span></div>${i < 9 ? `<span class="sc">⌘${i + 1}</span>` : ''}</div>`;
+    i++;
+  }
+  for (const [k, t] of [['grid', 'Projects'], ['check', 'Tasks'], ['book', 'Wiki'], ['eye', 'Following'], ['gear', 'Settings'], ['shield', 'Admin']])
+    h += `<div class="r sec"${t === 'Following' ? ' id="t-fol"' : ''}${t === 'Projects' ? ' id="t-proj"' : ''}><span class="ic">${ic(k)}</span><span>${t}</span></div>`;
+  h += `<div class="r sec" id="t-wait"><span class="ic">${ic('hand')}</span><span>Waiting on you</span><span class="sp"></span><span class="badge">4</span></div>`;
+  h += `</div><div class="foot"><div class="av">S</div><div class="who">sample.user</div></div></div>`;
+  return h;
+}
+
+/* ── iPad sidebar today (NavigationDrawer, inSidebarColumn) ── */
+function ipadToday() {
+  let h = `<div class="ipd" id="ipad"><div class="bar">${ic('side', 22)}<span class="t">Orbit</span><span style="color:var(--tint);display:flex">${ic('search', 20)}</span></div><div class="list">`;
+  const sec = [['grid', 'Projects', 1], ['check', 'Tasks'], ['book', 'Wiki', 3], ['hand', 'Waiting on you', 4]];
+  for (const [k, t, n] of sec) h += `<div class="r"><span class="ic">${ic(k, 20)}</span><span class="nm">${t}</span><span class="sp"></span>${n ? `<span class="amb">${n}</span>` : ''}</div>`;
+  h += `<div class="rule"></div><div class="glab">Workspaces</div>`;
+  for (const w of WS) {
+    const st = typeof w.st === 'number' ? `<span class="cap">${w.st}</span>` : w.st === 'run' ? spin() : w.st === 'jobs' ? `<span class="breathe">${ic('term', 16)}</span>` : '';
+    h += `<div class="r${w.sel ? ' sel' : ''}"><span class="ic" style="color:${w.sel ? 'var(--tint)' : '#000'}">${ic('folder', 20)}</span><span class="nm">${w.n}</span><span class="meta">&nbsp;· ${w.m}</span><span class="sp"></span>${st}</div>`;
+  }
+  h += `<div class="glab">Projects<span class="n">${PJ.length}</span></div>`;
+  for (const p of PJ) {
+    const st = typeof p.st === 'number' ? `<span class="cap">${p.st}</span>` : p.st === 'run' ? spin() : '';
+    h += `<div class="r"><span class="nm">${p.n}</span><span class="sp"></span>${st}</div>`;
+  }
+  h += `<div style="height:70px"></div></div><div class="fab"><div class="ns">${ic('compose', 18)}New session</div><span class="sp"></span><div class="gd">${ic('gear', 22)}</div></div></div>`;
+  return h;
+}
+
+/* ── proposed Mac sidebar ── */
+function macNew(o = {}) {
+  const id = o.id || 'new';
+  const dark = o.dark ? ' dark' : '';
+  const ws = o.ws || WS;
+  let h = `<div class="mac${dark}" id="${id}"><div class="tb"><div class="tl"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div><div style="flex:1"></div>`;
+  if (o.fab) h += `<div class="tbtn">${ic('side', 17)}</div></div>`;
+  else h += `<div class="tbtn" id="${id}-tb" style="width:auto;padding:0 8px;gap:12px;border-radius:999px;display:flex"><span style="display:flex">${ic('search', 16)}</span><span style="display:flex">${ic('compose', 16)}</span><span style="display:flex">${ic('side', 17)}</span></div></div>`;
+  h += `<div class="list">`;
+  if (!o.noTop) {
+    h += `<div id="${id}-top">`;
+    for (const [k, t, n] of [['grid', 'Projects', 1], ['check', 'Tasks'], ['book', 'Wiki', 3], ['hand', 'Waiting on you', 4]])
+      h += `<div class="r"><span class="ic">${ic(k)}</span><span class="nm keep">${t}</span><span class="sp"></span>${n ? `<span class="amb">${n}</span>` : ''}</div>`;
+    h += `</div>`;
+  }
+  h += `<div class="hdr" id="${id}-hdr">Workspaces<span class="sp"></span>${o.hoverHdr ? `<span class="hide">${o.wsFolded ? 'Show' : 'Hide'}</span>` : ''}</div>`;
+  if (!o.wsFolded) {
+    h += `<div id="${id}-ws">`;
+    ws.forEach((w, i) => {
+      const st = typeof w.st === 'number' ? `<span class="cap">${w.st}</span>` : w.st === 'run' ? spin(o.dark ? 'rgba(255,255,255,.6)' : undefined) : w.st === 'jobs' ? `<span class="breathe" style="${o.dark ? 'color:rgba(255,255,255,.55)' : ''}">${ic('term', 15)}</span>` : (i < 9 ? `<span class="sc">⌘${i + 1}</span>` : '');
+      const cls = (w.sel ? ' sel' : '') + (o.hov === i ? ' hov' : '') + (o.ctx === i ? ' hov' : '');
+      h += `<div class="r${cls}" id="${id}-w${i}"><span class="ic grey">${ic('folder')}</span><span class="nm keep">${w.n}</span><span class="meta">&nbsp;· ${w.m}</span><span class="sp"></span>${st}</div>`;
+    });
+    h += `</div>`;
+  }
+  h += `<div class="hdr" id="${id}-phdr">Projects<span class="n">${PJ.length}</span></div><div id="${id}-pj">`;
+  for (const p of PJ) {
+    const st = typeof p.st === 'number' ? `<span class="cap">${p.st}</span>` : p.st === 'run' ? spin(o.dark ? 'rgba(255,255,255,.6)' : undefined) : '';
+    h += `<div class="r"><span class="ic grey">${ic('grid', 16)}</span><span class="nm">${p.n}</span><span class="sp"></span>${st}</div>`;
+  }
+  h += `</div>`;
+  if (o.fab) h += `<div style="height:60px"></div>`;
+  h += `</div>`;
+  if (o.fab) h += `<div style="position:absolute;left:10px;right:10px;bottom:62px;display:flex"><div style="background:var(--tint);color:#fff;font-weight:600;border-radius:999px;padding:8px 14px;display:flex;gap:6px;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.15)">${ic('compose', 15)}New session</div></div>`;
+  h += `<div class="foot" id="${id}-foot"><div class="av">S</div><div class="who">sample.user</div><div class="gear" id="${id}-gear">${ic('gear', 18)}</div></div></div>`;
+  return h;
+}
+
+function frame(inner, { h, fold = 720, cap, tag, tagCls, win = false, id }) {
+  return `<figure style="margin:0"><span class="b-tag ${tagCls}">${tag}</span>
+    <div class="fr${win ? ' win' : ''}" id="${id || ''}" style="height:${h}px;width:${inner.includes('class="ipd') ? 318 : 300}px">${inner}${win ? '<div class="rest"><div class="ph" style="top:70px;width:110px"></div><div class="ph" style="top:100px"></div><div class="ph" style="top:124px;width:90px"></div></div>' : ''}
+    ${fold && fold < h ? `<div class="fold" style="top:${fold}px"><span>720pt 默认窗口：线下要滚动</span></div><div class="below" style="top:${fold}px"></div>` : ''}</div>
+    ${cap ? `<div class="b-cap" style="max-width:${win ? 470 : 318}px">${cap}</div>` : ''}</figure>`;
+}
+
+/* part 1 */
+document.getElementById('p1-frames').innerHTML =
+  frame(macToday(), { h: 1010, tag: '① Mac 今天', tagCls: 'now', cap: 'Projects 在 ~790pt 处，默认窗口里看不到；Waiting on you 在最底下。' }) +
+  frame(ipadToday(), { h: 1010, fold: 0, tag: '② iPad 今天（参照）', tagCls: 'ref', cap: 'iPhone 抽屉同一个视图：工作入口在上，工作区一行，项目在最后，底部浮动 New session + 齿轮。' }) +
+  frame(macNew(), { h: 1010, tag: '③ 建议的 Mac', tagCls: 'after', id: 'f-new', cap: '同 iPad 的结构；Mac 尺寸、系统分组和选中、工具栏新建。720pt 内能看到四个入口和全部工作区。底部账户行固定在窗口底边（这里画在框底）。' });
+
+/* part 2 */
+const P2 = [
+  frame(macNew({ id: 'hv', hoverHdr: true, hov: 3 }) + `<div class="menu" id="tip" style="left:150px;top:${0}px;min-width:0;padding:4px 8px;font-size:12px;border-radius:6px;white-space:nowrap">Claude Code via DeepSeek · ~/dev/billing-api</div>`, { h: 560, fold: 0, tag: '悬停', tagCls: 'after', id: 'f-hv' }),
+  frame(macNew({ id: 'cx', ctx: 4 }) + `<div class="menu" id="ctxm"><div class="mi hi">New Session<span class="k">⌘N</span></div><div class="mi">Open Sessions</div><div class="sep"></div><div class="mi">Workspace Settings…</div><div class="mi">Copy Path</div><div class="mi">Show Machine</div></div>`, { h: 560, fold: 0, tag: '右键工作区', tagCls: 'after', id: 'f-cx' }),
+  frame(macNew({ id: 'fd', hoverHdr: true, wsFolded: true }) + `<div class="menu" id="acct" style="left:14px;bottom:58px"><div class="mi dim">sample.user@example.com</div><div class="sep"></div><div class="mi">Settings…<span class="k">⌘,</span></div><div class="mi">Admin</div><div class="mi">Following</div><div class="sep"></div><div class="mi" style="color:#d70015">Sign out</div></div>`, { h: 560, fold: 0, tag: 'Workspaces 折叠 + 账户菜单', tagCls: 'after', id: 'f-fd' }),
+  frame(macNew({ id: 'dk', dark: true, ws: WS.slice(0, 8) }), { h: 560, fold: 0, tag: '深色', tagCls: 'after', id: 'f-dk' }),
+];
+document.getElementById('p2-frames').innerHTML = P2.join('');
+document.getElementById('p2-frames').style.gap = '22px';
+for (const id of ['f-hv', 'f-cx', 'f-fd', 'f-dk']) { const f = document.getElementById(id); f.style.width = '300px'; }
+
+/* part 4 small frames */
+document.getElementById('q1a').innerHTML = `<div class="fr" style="height:300px;width:300px">${macNew({ id: 'qa', ws: WS.slice(0, 3), noTop: false })}</div>`;
+document.getElementById('q1b').innerHTML = `<div class="fr" style="height:300px;width:300px">${macNew({ id: 'qb', ws: WS.slice(0, 3), fab: true })}</div>`;
+const twoRows = WS.slice(0, 4).map((w, i) => `<div class="r tall${w.sel ? ' sel' : ''}"><span class="ic grey">${ic('folder')}</span><div class="two"><span class="nm">${w.n} <span style="color:var(--label-2)">· ${w.m}</span></span><span class="s">${w.e} · ${w.d}</span></div>${typeof w.st === 'number' ? `<span class="cap">${w.st}</span>` : w.st === 'run' ? spin() : `<span class="sc">⌘${i + 1}</span>`}</div>`).join('');
+const oneRows = WS.slice(0, 4).map((w, i) => `<div class="r${w.sel ? ' sel' : ''}"><span class="ic grey">${ic('folder')}</span><span class="nm keep">${w.n}</span><span class="meta">&nbsp;· ${w.m}</span><span class="sp"></span>${typeof w.st === 'number' ? `<span class="cap">${w.st}</span>` : w.st === 'run' ? spin() : `<span class="sc">⌘${i + 1}</span>`}</div>`).join('');
+document.getElementById('q2a').innerHTML = `<div class="fr mac" style="width:300px;padding:10px">${oneRows}<div style="font-size:12px;color:#888;padding:8px 10px 0">4 行 = 120pt</div></div>`;
+document.getElementById('q2b').innerHTML = `<div class="fr mac" style="width:300px;padding:10px">${twoRows}<div style="font-size:12px;color:#888;padding:8px 10px 0">4 行 = 176pt</div></div>`;
+
+/* ── rings ── */
+function ring(frameId, el, n, pad = 3, left = false) {
+  const f = document.getElementById(frameId), e = typeof el === 'string' ? document.getElementById(el) : el;
+  if (!f || !e) return;
+  const a = f.getBoundingClientRect(), b = e.getBoundingClientRect();
+  const m = document.createElement('div'); m.className = 'mk' + (left ? ' l' : '');
+  m.style.left = (b.left - a.left - pad) + 'px'; m.style.top = (b.top - a.top - pad) + 'px';
+  m.style.width = (b.width + 2 * pad) + 'px'; m.style.height = (b.height + 2 * pad) + 'px';
+  m.innerHTML = `<span class="b-num">${n}</span>`; f.appendChild(m);
+}
+function place() {
+  // tooltip under the hovered row, context menu beside the right-clicked one
+  const hv = document.getElementById('f-hv'), hr = document.getElementById('hv-w3'), tip = document.getElementById('tip');
+  tip.style.top = (hr.getBoundingClientRect().bottom - hv.getBoundingClientRect().top + 4) + 'px'; tip.style.left = '14px';
+  const cx = document.getElementById('f-cx'), cr = document.getElementById('cx-w4'), cm = document.getElementById('ctxm');
+  cm.style.top = (cr.getBoundingClientRect().top - cx.getBoundingClientRect().top + 14) + 'px'; cm.style.left = '70px';
+}
+window.drawMarks = function () {
+  place();
+  ring('f-new', 'new-top', 1, 3, true);
+  ring('f-new', 'new-hdr', 2, 2, true);
+  ring('f-new', 'new-w0', 3, 2, true);
+  ring('f-new', document.querySelector('#new-w3 .cap'), 4, 4);
+  ring('f-new', 'new-pj', 5, 3, true);
+  ring('f-new', 'new-tb', 6, 3, true);
+  ring('f-new', 'new-gear', 7, 3);
+  ring('f-hv', 'hv-hdr', 1, 2, true);
+  ring('f-hv', 'tip', 1, 3);
+  ring('f-cx', 'ctxm', 2, 3);
+  ring('f-fd', 'fd-hdr', 3, 2, true);
+  ring('f-fd', 'acct', 4, 3);
+  ring('f-dk', 'dk-ws', 5, 3, true);
+};
+</script>
+</body>
+</html>
