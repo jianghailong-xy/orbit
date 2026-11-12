@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Account move to orbitd.io · board 01</title>
+<style>
+  :root { --ink:#1d1d1f; --mute:#6e6e73; --line:#d2d2d7; --bg:#f5f5f7; --red:#d70015; --redbg:#fff0f0;
+          --green:#1a7f37; --greenbg:#eefaf1; --blue:#0a66d8; --bluebg:#eef4fd; --amber:#9a5b00; --amberbg:#fff6e5; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#e8e8ed; color:var(--ink); }
+  .b-part { width:1600px; margin:0 auto 24px; padding:40px 48px; background:#fff;
+            font: 15px/1.6 Inter, "Noto Sans SC", "WenQuanYi Zen Hei", sans-serif; }
+  h1 { font-size:30px; margin:0 0 6px; } h2 { font-size:24px; margin:0 0 4px; } h3 { margin:0 0 10px; font-size:17px; }
+  .b-sub { color:var(--mute); margin:0 0 22px; }
+  .b-tag { display:inline-block; font-size:12px; font-weight:600; padding:2px 8px; border-radius:10px; margin-right:6px; }
+  .t-red { background:var(--redbg); color:var(--red); } .t-green { background:var(--greenbg); color:var(--green); }
+  .t-blue { background:var(--bluebg); color:var(--blue); } .t-amber { background:var(--amberbg); color:var(--amber); }
+  code { font-family:"JetBrains Mono","DejaVu Sans Mono",monospace; font-size:13px; background:var(--bg); padding:1px 5px; border-radius:4px; }
+  .b-two { display:grid; grid-template-columns:1fr 1fr; gap:28px; }
+  .b-three { display:grid; grid-template-columns:1fr 1fr 1fr; gap:24px; }
+  .b-box { border:1px solid var(--line); border-radius:12px; padding:20px 24px; }
+  .b-num { display:inline-flex; width:22px; height:22px; border-radius:50%; background:var(--red); color:#fff; font-size:12px; font-weight:700;
+           align-items:center; justify-content:center; margin-right:4px; vertical-align:1px; flex:none; }
+  .b-notes { display:grid; grid-template-columns:1fr 1fr; gap:10px 32px; margin-top:20px; font-size:14px; }
+  .b-notes div { display:flex; gap:6px; align-items:flex-start; }
+  table.b-t { width:100%; border-collapse:collapse; font-size:14px; }
+  table.b-t th { text-align:left; background:var(--bg); padding:9px 12px; border-bottom:1px solid var(--line); }
+  table.b-t td { padding:9px 12px; border-bottom:1px solid #eee; vertical-align:top; }
+  .b-rec { color:var(--green); font-weight:700; }
+  .ok { color:var(--green); } .no { color:var(--red); } .warn { color:var(--amber); }
+
+  /* drawn app window */
+  .w { border:1px solid #c9c9ce; border-radius:12px; overflow:hidden; background:#fff; box-shadow:0 6px 24px rgba(0,0,0,.08); position:relative; }
+  .w-bar { height:34px; background:#ececf0; display:flex; align-items:center; gap:8px; padding:0 12px; font-size:12px; color:var(--mute); }
+  .w-bar i { width:11px; height:11px; border-radius:50%; background:#d0d0d5; display:inline-block; }
+  .w-url { margin-left:14px; background:#fff; border-radius:6px; padding:2px 10px; flex:1; max-width:360px; font-family:"DejaVu Sans Mono",monospace; font-size:11.5px; }
+  .w-body { display:grid; grid-template-columns:170px 1fr; min-height:440px; font-size:13.5px; }
+  .w-nav { background:#f7f7f9; border-right:1px solid #e5e5ea; padding:14px 10px; color:#444; }
+  .w-nav div { padding:5px 8px; border-radius:6px; margin-bottom:2px; }
+  .w-nav .on { background:#e3e3e8; font-weight:600; color:#111; }
+  .w-nav .h { font-size:11px; color:var(--mute); text-transform:uppercase; letter-spacing:.04em; padding-top:10px; }
+  .w-main { padding:20px 24px; position:relative; }
+  .w-main h4 { margin:0 0 4px; font-size:17px; }
+  .w-help { color:var(--mute); font-size:12.5px; margin:0 0 14px; }
+  .card { border:1px solid #e1e1e6; border-radius:10px; padding:14px 16px; margin-bottom:12px; }
+  .row { display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #f0f0f3; }
+  .row:last-child { border-bottom:0; }
+  .row .k { color:#333; } .row .v { color:var(--mute); font-variant-numeric:tabular-nums; }
+  .btn { display:inline-block; padding:6px 14px; border-radius:7px; font-size:13px; font-weight:600; border:1px solid #d2d2d7; background:#fff; color:#111; }
+  .btn.p { background:#111; color:#fff; border-color:#111; }
+  .btn.d { color:var(--red); }
+  .field { border:1px solid #c9c9ce; border-radius:7px; padding:7px 10px; font-family:"DejaVu Sans Mono",monospace; font-size:12.5px; background:#fff; }
+  .code { font-family:"DejaVu Sans Mono",monospace; font-size:15px; letter-spacing:.02em; background:var(--bg); border-radius:8px; padding:12px 14px; }
+  .muted { color:var(--mute); } .small { font-size:12px; }
+  .bar { height:6px; border-radius:3px; background:#e5e5ea; overflow:hidden; margin:6px 0 2px; }
+  .bar b { display:block; height:100%; background:#111; }
+  .steps > div { display:flex; gap:10px; align-items:center; padding:5px 0; font-size:13px; }
+  .dot { width:18px; height:18px; border-radius:50%; border:2px solid #c9c9ce; flex:none; display:inline-flex; align-items:center; justify-content:center; font-size:11px; color:#fff; }
+  .dot.done { background:var(--green); border-color:var(--green); }
+  .dot.now { border-color:#111; background:radial-gradient(#111 40%, #fff 45%); }
+  .banner { padding:9px 14px; font-size:13px; display:flex; justify-content:space-between; align-items:center; }
+  .banner.a { background:var(--amberbg); color:#5a3a00; border-bottom:1px solid #f0d29a; }
+  .banner.g { background:var(--greenbg); color:#0f5323; border-bottom:1px solid #a8dcb7; }
+  .rcard { border:1px solid #e1e1e6; border-radius:10px; padding:10px 14px; display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .pill { font-size:11.5px; font-weight:600; padding:2px 8px; border-radius:10px; }
+  .p-g { background:var(--greenbg); color:var(--green); } .p-a { background:var(--amberbg); color:var(--amber); } .p-m { background:var(--bg); color:var(--mute); }
+  .mk { position:absolute; width:24px; height:24px; border-radius:50%; background:var(--red); color:#fff; font:700 12px/24px Inter, sans-serif; text-align:center; box-shadow:0 0 0 3px #fff; z-index:3; }
+  .ring { position:absolute; border:2.5px dashed var(--red); border-radius:10px; z-index:2; pointer-events:none; }
+  .scrim { position:absolute; inset:34px 0 0 0; background:rgba(0,0,0,.28); }
+  .dlg { position:absolute; left:50%; top:52px; transform:translateX(-50%); width:560px; background:#fff; border-radius:14px; box-shadow:0 18px 50px rgba(0,0,0,.25); padding:20px 22px; font-size:13.5px; }
+  .dlg h4 { margin:0 0 6px; font-size:17px; }
+  .grp { font-size:11.5px; font-weight:700; color:var(--mute); text-transform:uppercase; letter-spacing:.04em; margin:12px 0 4px; }
+
+  /* phone */
+  .phone { width:300px; height:620px; border-radius:42px; border:10px solid #1d1d1f; background:#f2f2f7; position:relative; overflow:hidden; font-size:13px; margin:0 auto; }
+  .sheet { position:absolute; left:0; right:0; bottom:0; background:#fff; border-radius:18px 18px 0 0; padding:22px 20px 34px; text-align:center; }
+  .sheet .btn { display:block; margin-top:10px; padding:11px; border-radius:12px; font-size:14px; }
+
+  /* sequence */
+  .seq { display:grid; grid-template-columns:repeat(4, 1fr); gap:0; border:1px solid var(--line); border-radius:12px; overflow:hidden; font-size:13px; }
+  .seq .h { background:var(--bg); font-weight:700; padding:10px 12px; border-bottom:1px solid var(--line); border-left:1px solid #eee; }
+  .seq .c { padding:8px 12px; border-left:1px solid #eee; border-bottom:1px solid #f0f0f3; min-height:44px; }
+  .seq .c b { display:block; }
+</style>
+</head>
+<body>
+
+<!-- ───────── PART 1 ───────── -->
+<section class="b-part" id="part-1">
+  <h1>把账号从私有部署搬到 orbitd.io · 01</h1>
+  <p class="b-sub">设计稿 <code>docs/account-move-design.md</code> · 2026-11-12 · 本图只画方案，没有改代码</p>
+  <h2>① 今天 vs 搬家后</h2>
+  <p class="b-sub">今天能带走的只有 git 里的代码和 Claude 的原始记录；方案要做到"换个域名，其余都在"。</p>
+  <div class="b-two">
+    <div class="b-box">
+      <h3><span class="b-tag t-red">今天</span>手动换过去</h3>
+      <table class="b-t">
+        <tr><th>东西</th><th>结果</th></tr>
+        <tr><td>代码、分支</td><td class="ok">在自己的 git 里，不受影响</td></tr>
+        <tr><td>Claude 会话</td><td class="warn">逐个 <code>orbit session import</code>，变成新 id，审批、工具调用、用量丢失</td></tr>
+        <tr><td>Codex / Cursor 等会话</td><td class="no">带不走</td></tr>
+        <tr><td>任务、项目、证据、验收记录</td><td class="no">带不走，只能手抄重建</td></tr>
+        <tr><td>wiki、附件、监视、服务商密钥</td><td class="no">带不走，密钥要重新填</td></tr>
+        <tr><td>runner</td><td class="warn">每台机器 <code>orbit unregister</code> + <code>orbit register</code>，会话和 runner 的关联断掉</td></tr>
+        <tr><td>旧链接、手机 App</td><td class="no">全部失效，要自己去改服务器地址</td></tr>
+      </table>
+    </div>
+    <div class="b-box">
+      <h3><span class="b-tag t-green">搬家后</span>一个搬家码</h3>
+      <table class="b-t">
+        <tr><th>东西</th><th>结果</th></tr>
+        <tr><td>代码、分支</td><td class="ok">不动</td></tr>
+        <tr><td>所有会话（任何引擎）</td><td class="ok">原样，<b>id 不变</b>，事件、审批、用量都在</td></tr>
+        <tr><td>任务、项目、证据、验收记录</td><td class="ok">原样，依赖、落地回执、裁决都在</td></tr>
+        <tr><td>wiki、附件、监视、服务商密钥</td><td class="ok">原样；密钥重新加密，不用重填</td></tr>
+        <tr><td>runner</td><td class="ok">自动改连 orbitd.io，同一个 runner、同一批工作区，进行中的会话接着跑</td></tr>
+        <tr><td>旧链接、手机 App</td><td class="ok">旧链接跳到新地址；App 提示"已搬到 orbitd.io"并预填地址</td></tr>
+        <tr><td>不搬的</td><td class="muted">托管 runner、实例设置、与别人共享的账号池，预览里逐条说明</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="b-notes">
+    <div><span class="b-num">1</span><span><b>为什么 id 能不变：</b>主键全是 UUIDv7，两个库合并不会撞号；public id 是 UUID 的 base62，所以 <code>orbitd.io/sessions/&lt;id&gt;</code> 和旧链接只差域名。</span></div>
+    <div><span class="b-num">2</span><span><b>唯一要改写的是"这个账号是谁"：</b>来源账号 id 换成 orbitd.io 上当前账号的 id，其余 id 全不动。</span></div>
+  </div>
+</section>
+
+<!-- ───────── PART 2 ───────── -->
+<section class="b-part" id="part-2">
+  <h2>② 第一步：在 orbitd.io 生成搬家码</h2>
+  <p class="b-sub">Settings → Account 里新增一个小节。搬家码只能把数据搬进<b>生成它的这个账号</b>，24 小时有效，用一次即失效。</p>
+  <div class="b-two" style="grid-template-columns:1.25fr 1fr">
+    <div class="w" id="w2">
+      <div class="w-bar"><i></i><i></i><i></i><span class="w-url">https://orbitd.io/settings/account</span></div>
+      <div class="w-body">
+        <div class="w-nav"><div class="h">Settings</div><div class="on">Account</div><div>Runners</div><div>Providers</div><div>Access tokens</div><div>Notifications</div><div>Storage</div></div>
+        <div class="w-main">
+          <h4>Account</h4><p class="w-help">jamie@example.com · Signed in with Google</p>
+          <div class="card"><div class="row"><span class="k">Name</span><span class="v">Jamie</span></div><div class="row"><span class="k">Password</span><span class="v">Change…</span></div></div>
+          <div class="card" id="s2-move">
+            <b>Move from another Orbit</b>
+            <p class="w-help" style="margin-top:4px">Bring sessions, tasks, projects, wiki and files from a self-hosted Orbit into this account. Paste this code on that server under Settings → Account → Move to another Orbit.</p>
+            <div class="code">orbit-move:7Kq2-FvX9-mT4d-Rr8a-Wz1c</div>
+            <p class="small muted" style="margin:8px 0 10px">Expires in 23 h 58 min · works once · only moves data into jamie@example.com</p>
+            <span class="btn">Copy</span> <span class="btn d">Revoke</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="b-box" style="margin-bottom:16px">
+        <h3>没生成时这一节长这样</h3>
+        <div class="card" style="font-size:13.5px"><b>Move from another Orbit</b><p class="w-help" style="margin:4px 0 10px">Bring sessions, tasks, projects, wiki and files from a self-hosted Orbit into this account.</p><span class="btn p">Create move code</span></div>
+      </div>
+      <div class="b-notes" style="grid-template-columns:1fr; margin-top:0">
+        <div><span class="b-num">1</span><span><b>码里带着"搬进谁"。</b>旧服务器拿着它去 orbitd.io 核对，orbitd.io 只认它的签发账号，所以不需要在旧服务器上再登录 orbitd.io。</span></div>
+        <div><span class="b-num">2</span><span><b>码也是密钥的来源。</b>服务商密钥用它派生的一次性密钥封装后才离开旧服务器（设计稿 §6）。所以码要当密码对待，界面上提供 Revoke。</span></div>
+        <div><span class="b-num">3</span><span><b>不能出网的旧服务器</b>（例如只在内网的部署）：同一节里还有 "Upload a move file"，接收旧服务器下载下来的包，格式相同。</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── PART 3 ───────── -->
+<section class="b-part" id="part-3">
+  <h2>③ 第二步：在旧服务器上贴码，看清会搬什么</h2>
+  <p class="b-sub">旧服务器先连 orbitd.io 核对搬家码，再给出预览。按下按钮之前，什么都没有发生。</p>
+  <div class="b-two" style="grid-template-columns:1.35fr 1fr">
+    <div class="w" id="w3" style="min-height:800px">
+      <div class="w-bar"><i></i><i></i><i></i><span class="w-url">https://orbit.example.com/settings/account</span></div>
+      <div class="w-body" style="min-height:766px">
+        <div class="w-nav"><div class="h">Settings</div><div class="on">Account</div><div>Runners</div><div>Providers</div></div>
+        <div class="w-main"><h4>Account</h4><p class="w-help">jamie@example.com</p><div class="card"><b>Move to another Orbit</b><p class="w-help">Paste the move code from the Orbit you are moving to.</p><div class="field">orbit-move:7Kq2-FvX9-mT4d-Rr8a-Wz1c</div></div></div>
+      </div>
+      <div class="scrim"></div>
+      <div class="dlg" style="width:600px">
+        <h4>Move to orbitd.io</h4>
+        <p class="w-help" style="margin:0">Into <b style="color:#111">jamie@example.com</b> on orbitd.io. Your orbitd.io account already has 1 workspace; moved data is added next to it.</p>
+        <div class="grp">Moves</div>
+        <div class="row"><span class="k">Workspaces</span><span class="v">4</span></div>
+        <div class="row"><span class="k">Sessions, with their history</span><span class="v">1,284 · 2.3 GB</span></div>
+        <div class="row"><span class="k">Tasks and task lists</span><span class="v">312 · 9 lists</span></div>
+        <div class="row"><span class="k">Projects, evidence and landings</span><span class="v">6</span></div>
+        <div class="row"><span class="k">Wiki spaces</span><span class="v">2 · 418 entries</span></div>
+        <div class="row"><span class="k">Files</span><span class="v">1,906 · 1.9 GB</span></div>
+        <div class="row"><span class="k">Providers and their keys, watches, access tokens</span><span class="v">5 · 11 · 3</span></div>
+        <div class="row"><span class="k">Runners (switch to orbitd.io by themselves)</span><span class="v">3</span></div>
+        <div class="grp" id="s3-stay">Stays here</div>
+        <div class="row"><span class="k">Managed runner <span class="muted">mr-build</span></span><span class="v">belongs to this server</span></div>
+        <div class="row"><span class="k">Feishu app <span class="muted">Team bot</span></span><span class="v">moved, turned off until you reconnect it</span></div>
+        <div class="row"><span class="k">Shared key pool <span class="muted">Team pool</span></span><span class="v">2 other members stay here</span></div>
+        <div class="grp" id="s3-run">Running now</div>
+        <div class="row"><span class="k">2 sessions are running</span><span class="v"><span class="btn" style="padding:3px 10px; border-color:#111">Move when they finish</span> <span class="btn" style="padding:3px 10px">Interrupt and move now</span></span></div>
+        <p class="small muted" style="margin:12px 0 10px">While moving, this account is paused here: no new turns start. If anything fails, nothing changes on either server.</p>
+        <div style="display:flex; justify-content:flex-end; gap:8px"><span class="btn">Cancel</span><span class="btn p">Move to orbitd.io</span></div>
+      </div>
+    </div>
+    <div class="b-notes" style="grid-template-columns:1fr; margin-top:0; align-content:start">
+      <div><span class="b-num">1</span><span><b>先说清楚搬进谁。</b>目标账号已有数据时直接说"会并到一起"（D7 推荐 A：UUID 不会撞，并在一起没有风险）。</span></div>
+      <div><span class="b-num">2</span><span><b>Moves 每类给条数和大小。</b>搬完后 orbitd.io 上的报告用同一张表逐类对数，用户能一眼核对。</span></div>
+      <div><span class="b-num">3</span><span><b>Stays here 写原因，不写表名。</b>托管 runner 属于这台服务器；飞书应用的回调地址要在 orbitd.io 重新接；与别人共享的账号池，其他成员不随你走（D3）。</span></div>
+      <div><span class="b-num">4</span><span><b>正在跑的会话默认等它跑完。</b>与 runner 更新的"等 turn 结束"同一个语义（<code>runner-update-drain-design.md</code>）；也可以选打断，打断的会话搬到 orbitd.io 后自动接着跑。</span></div>
+      <div><span class="b-num">5</span><span><b>按下前再确认一次身份。</b>按钮会要求再输一次密码或重新走 Google 登录，防止被盗的会话把数据搬给别人（图里省略）。</span></div>
+      <div><span class="b-num">6</span><span><b>版本：</b>旧服务器不必和 orbitd.io 同版本，只要不比它新（D2）。旧服务器必须升级到带这个功能的版本，这是唯一的前提。</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── PART 4 ───────── -->
+<section class="b-part" id="part-4">
+  <h2>④ 第三步：进度与 runner 自动切换</h2>
+  <p class="b-sub">搬家在服务器上进行，网页可以关；结束后发邮件和推送。runner 不用人碰机器。</p>
+  <div class="b-two">
+    <div class="w">
+      <div class="w-bar"><i></i><i></i><i></i><span class="w-url">https://orbit.example.com/settings/account</span></div>
+      <div class="w-body" style="min-height:400px">
+        <div class="w-nav"><div class="h">Settings</div><div class="on">Account</div><div>Runners</div></div>
+        <div class="w-main">
+          <h4>Moving to orbitd.io</h4><p class="w-help">Started 14:02 · you can close this page; we'll email you when it's done.</p>
+          <div class="card steps">
+            <div><span class="dot done">✓</span>Pausing work <span class="muted small">2 sessions finished their turns</span></div>
+            <div><span class="dot done">✓</span>Packing <span class="muted small">174 tables checked · 4.3 GB</span></div>
+            <div style="display:block"><div style="display:flex; gap:10px; align-items:center"><span class="dot now"></span>Sending <span class="muted small">2.1 of 4.3 GB · about 6 min left</span></div><div class="bar" style="margin-left:28px"><b style="width:49%"></b></div></div>
+            <div><span class="dot"></span><span class="muted">Checking on orbitd.io</span></div>
+            <div><span class="dot"></span><span class="muted">Switching runners</span></div>
+          </div>
+          <span class="btn">Cancel move</span>
+        </div>
+      </div>
+    </div>
+    <div class="w">
+      <div class="w-bar"><i></i><i></i><i></i><span class="w-url">https://orbit.example.com/runners</span></div>
+      <div class="w-body" style="min-height:400px">
+        <div class="w-nav"><div class="h">Workspace</div><div>Sessions</div><div>Tasks</div><div class="on">Runners</div></div>
+        <div class="w-main" id="s4-runners">
+          <h4>Runners</h4><p class="w-help">Switching runners · 1 of 3 done</p>
+          <div class="rcard"><span><b>build-01</b> <span class="muted small">0.1.262 · 2 sessions</span></span><span class="pill p-g">Moved to orbitd.io</span></div>
+          <div class="rcard"><span><b>laptop</b> <span class="muted small">0.1.262</span></span><span class="pill p-m">Offline · switches when it's back</span></div>
+          <div class="rcard" style="display:block"><div style="display:flex; justify-content:space-between"><span><b>gpu-box</b> <span class="muted small">0.1.231</span></span><span class="pill p-a">Too old to switch by itself</span></div>
+            <p class="small muted" style="margin:6px 0 4px">Run this on gpu-box:</p><div class="field">orbit register --server https://orbitd.io --move-code 9fQ2-7cLm</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="b-notes">
+    <div><span class="b-num">1</span><span><b>失败即回到原样。</b>任何一步失败：旧账号恢复可写，runner 不切换，orbitd.io 上什么都没并入。错误是一句人话加 "Try again"。</span></div>
+    <div><span class="b-num">2</span><span><b>runner 怎么换（D4 推荐 A）：</b>orbitd.io 给每台 runner 签一份新凭据，旧服务器经 runner 链路下发"去 orbitd.io"，runner 改写 <code>~/.orbit/config.json</code> 后重连。runner id、工作区、检出目录都不变。</span></div>
+    <div><span class="b-num">3</span><span><b>离线的</b>上线时执行，旧服务器一直保留这条指令。</span></div>
+    <div><span class="b-num">4</span><span><b>太旧的</b>先走已有的自更新；仍不行才给一行命令，命令里的码只能认领这一台 runner。</span></div>
+  </div>
+</section>
+
+<!-- ───────── PART 5 ───────── -->
+<section class="b-part" id="part-5">
+  <h2>⑤ 搬完以后：两边各自看到什么</h2>
+  <p class="b-sub">旧账号只读并指路，不自动删除（D5）；新账号给一份可核对的报告。</p>
+  <div class="b-three" style="grid-template-columns:1fr 1fr 340px">
+    <div>
+      <h3>旧服务器</h3>
+      <div class="w">
+        <div class="w-bar"><i></i><i></i><i></i><span class="w-url">orbit.example.com/sessions/3xT…</span></div>
+        <div class="banner a"><span>This account moved to orbitd.io on Nov 12. It is read-only here.</span><span class="btn" style="padding:3px 10px">Open orbitd.io</span></div>
+        <div class="w-body" style="grid-template-columns:120px 1fr; min-height:300px">
+          <div class="w-nav"><div class="on">Sessions</div><div>Tasks</div><div>Projects</div></div>
+          <div class="w-main"><h4>Fix login redirect</h4><p class="w-help">Session · build-01</p>
+            <div class="card muted" style="font-size:12.5px">…transcript, read-only…</div>
+            <div class="field muted" style="font-family:inherit">Read-only: this account moved to orbitd.io</div>
+            <p class="small" style="margin-top:12px"><a style="color:var(--blue)">Open this session on orbitd.io →</a></p></div>
+        </div>
+      </div>
+      <p class="small muted">Settings 里多一项 <b>Delete this account's data here</b>，输入邮箱确认后才删。分享链接 302 到 orbitd.io 上同一个 id。</p>
+    </div>
+    <div>
+      <h3>orbitd.io</h3>
+      <div class="w">
+        <div class="w-bar"><i></i><i></i><i></i><span class="w-url">orbitd.io/sessions</span></div>
+        <div class="banner g"><span>Moved from orbit.example.com · 1,284 sessions, 312 tasks, 6 projects</span><span class="btn" style="padding:3px 10px">View report</span></div>
+        <div class="w-body" style="grid-template-columns:120px 1fr; min-height:300px">
+          <div class="w-nav"><div class="on">Sessions</div><div>Tasks</div><div>Projects</div></div>
+          <div class="w-main" style="padding:14px 16px">
+            <table class="b-t" style="font-size:12.5px"><tr><th>Moved</th><th>Packed</th><th>Arrived</th></tr>
+              <tr><td>Sessions</td><td>1,284</td><td class="ok">1,284</td></tr><tr><td>Session events</td><td>914,206</td><td class="ok">914,206</td></tr>
+              <tr><td>Tasks</td><td>312</td><td class="ok">312</td></tr><tr><td>Files</td><td>1,906</td><td class="ok">1,906</td></tr>
+              <tr><td>Runners</td><td>3</td><td class="warn">2 online · 1 waiting</td></tr></table>
+          </div>
+        </div>
+      </div>
+      <p class="small muted">横幅关掉后，报告留在 Settings → Account → Move from another Orbit 里。</p>
+    </div>
+    <div>
+      <h3>手机 / Mac（登录的是旧服务器）</h3>
+      <div class="phone">
+        <div style="padding:46px 16px 0; color:var(--mute)">Sessions</div>
+        <div style="position:absolute; inset:0; background:rgba(0,0,0,.3)"></div>
+        <div class="sheet">
+          <div style="font-size:17px; font-weight:700; margin-bottom:6px">Your account moved to orbitd.io</div>
+          <div class="muted" style="font-size:13px">orbit.example.com now keeps a read-only copy. Sign in to orbitd.io to keep working; everything you had is there.</div>
+          <span class="btn p">Sign in to orbitd.io</span>
+          <span class="btn">Keep reading here</span>
+        </div>
+      </div>
+      <p class="small muted">服务器回 <code>ACCOUNT_MOVED</code>，三端同一个提示，地址预填。<code>orbit</code> CLI 收到同样的码，改写 <code>user.json</code> 的地址并提示一次。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── PART 6 ───────── -->
+<section class="b-part" id="part-6">
+  <h2>⑥ 背后怎么做 · 落地 · 待定</h2>
+  <p class="b-sub">旧服务器推，新服务器在临时库里补齐版本后一次并入；174 张表逐张登记。</p>
+  <div class="seq">
+    <div class="h">用户</div><div class="h">旧服务器</div><div class="h">orbitd.io</div><div class="h">runner</div>
+    <div class="c"><b>生成搬家码</b>orbitd.io Settings</div><div class="c"></div><div class="c">存码的哈希，绑定当前账号</div><div class="c"></div>
+    <div class="c"><b>贴码，看预览</b></div><div class="c">核对码 → 统计各类条数</div><div class="c">回：目标账号、配额余量、版本</div><div class="c"></div>
+    <div class="c"><b>Move</b>（再确认身份）</div><div class="c"><b>冻结账号</b>等 turn 结束；写接口回 <code>ACCOUNT_MOVING</code></div><div class="c"></div><div class="c">跑完手上的 turn</div>
+    <div class="c"></div><div class="c"><b>快照</b>一个 REPEATABLE READ 事务，逐表 COPY；密钥用码派生的密钥封装</div><div class="c"></div><div class="c"></div>
+    <div class="c"></div><div class="c"><b>分块推送</b>64 MB/块，可续传，每块 sha256</div><div class="c">收进临时存储</div><div class="c"></div>
+    <div class="c"></div><div class="c"></div><div class="c"><b>临时库</b>迁到来源版本 → 灌入 → 迁到自己的版本 → 改写账号 id → 查冲突</div><div class="c"></div>
+    <div class="c"></div><div class="c"></div><div class="c"><b>一个事务并入正式库</b>blob 按 sha256 去重写入；签发 runner 新凭据</div><div class="c"></div>
+    <div class="c"></div><div class="c"><b>标记已搬走</b>只读、横幅、跳转</div><div class="c">回执：逐表条数、runner 凭据</div><div class="c"></div>
+    <div class="c">收到邮件和推送</div><div class="c">经链路下发交接指令</div><div class="c"></div><div class="c"><b>改写 config.json，重连 orbitd.io</b>会话接着跑</div>
+  </div>
+
+  <div class="b-two" style="margin-top:24px">
+    <div>
+      <h3>落地（按依赖排）</h3>
+      <table class="b-t">
+        <tr><th>#</th><th>内容</th><th>验收</th></tr>
+        <tr><td>M0</td><td>登记表：174 张表逐张分类（搬 / 改写 / 不搬）+ 覆盖测试</td><td>新加一张表不登记即红</td></tr>
+        <tr><td>M1</td><td>导出：冻结、快照、包格式</td><td>真实库导出一个账号，逐表对数</td></tr>
+        <tr><td>M2</td><td>导入：临时库补版本、改写、并入、回执</td><td>落后 ≥ 20 个迁移的包并入成功</td></tr>
+        <tr><td>M3</td><td>搬家码、推送通道、上传后备、web 两边界面</td><td>断网续传；过期码、重用码被拒</td></tr>
+        <tr><td>M4</td><td>runner 交接指令（runner 发版）+ 命令后备</td><td>进行中的会话交接后继续出事件</td></tr>
+        <tr><td>M5</td><td>"已搬走"状态 + iOS / macOS / Android 提示</td><td>三端从旧服务器被引到新服务器</td></tr>
+        <tr><td>M6</td><td>端到端演练：旧版本 compose → orbitd.io 预发副本</td><td>报告对数一致；中途失败两边不变</td></tr>
+      </table>
+    </div>
+    <div>
+      <h3>待定 · 要你拍板</h3>
+      <table class="b-t">
+        <tr><th>#</th><th>问题</th><th>A</th><th>B</th><th>推荐</th></tr>
+        <tr><td>D1</td><td>怎么过去</td><td>旧服务器凭码直接推；不能出网时下载包再上传</td><td>只做下载、上传</td><td class="b-rec">A</td></tr>
+        <tr><td>D2</td><td>版本不同</td><td>orbitd.io 临时库补齐，来源只要不比它新</td><td>要求同版本</td><td class="b-rec">A</td></tr>
+        <tr><td>D3</td><td>搬多少</td><td>按账号，一人一码</td><td>整个实例一次搬</td><td class="b-rec">A</td></tr>
+        <tr><td>D4</td><td>runner</td><td>下发新凭据，自动改连</td><td>每台机器手动重新注册</td><td class="b-rec">A</td></tr>
+        <tr><td>D5</td><td>旧账号</td><td>只读 + 指路 + 手动删</td><td>搬完立即删</td><td class="b-rec">A</td></tr>
+        <tr><td>D6</td><td>访问令牌</td><td>搬哈希，脚本改地址即用</td><td>不搬，重新签发</td><td class="b-rec">A</td></tr>
+        <tr><td>D7</td><td>目标已有数据</td><td>并在一起</td><td>只能搬进空账号</td><td class="b-rec">A</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>
