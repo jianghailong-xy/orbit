@@ -73,9 +73,7 @@ class OrbitExchangeFoldTest {
         assertEquals("Watch triggered", watched.whatInTask)
         assertEquals(OrbitExchangeFold.Target("SESSION", runOfB4, "B4 run"), watched.target)
         val ended = job.replace("STATUS", "completed")
-        // A job folds only in a coordinator: anywhere else its turns are the agent's answer to the reader (owner, 2026-11-12).
-        assertNull(OrbitExchangeFold.turnOf(user { put("text", ended); put("controlPlaneNote", ended) }))
-        val woke = OrbitExchangeFold.turnOf(user { put("text", ended); put("controlPlaneNote", ended) }, coordinator = true)!!
+        val woke = OrbitExchangeFold.turnOf(user { put("text", ended); put("controlPlaneNote", ended) })!!
         assertEquals("Background job finished: Wait for runner 0.1.237 to reach main", woke.what)
         assertNull(woke.target)
         val replied = OrbitExchangeFold.turnOf(user {
@@ -83,6 +81,14 @@ class OrbitExchangeFoldTest {
         })!!
         assertEquals("Reply from B4 run", replied.what)
         assertEquals("reply", replied.category)
+    }
+
+    @Test fun onlyAShortAnswerFolds() {
+        assertEquals(listOf(true, false), listOf(OrbitExchangeFold.foldsAtLength("watch", 219), OrbitExchangeFold.foldsAtLength("watch", 220)))
+        listOf("evidence", "ready", "project", "job", "notice", "message").forEach { kind ->
+            assertEquals(kind, listOf(true, false), listOf(OrbitExchangeFold.foldsAtLength(kind, 79), OrbitExchangeFold.foldsAtLength(kind, 80)))
+        }
+        assertFalse(OrbitExchangeFold.foldsAtLength("reply", 0))
     }
 
     @Test fun aStoppedRunARunNoticeAndATaskRunsMessageFoldUnderTheirTasks() {

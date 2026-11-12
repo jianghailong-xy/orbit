@@ -1888,9 +1888,6 @@ final class ConsoleModel {
     /// in costs no request.
     private(set) var exchangeGraph: ProjectDependencyGraph?
     private var exchangeGraphAsked = false
-    /// The session coordinates a project, as the view last read it: only there do background jobs
-    /// fold, so a record link's rows are cut as the list cuts them.
-    @ObservationIgnored var coordinates = false
 
     func wantExchangeTree(projectID: String?) {
         guard !exchangeGraphAsked, let projectID, !projectID.isEmpty else { return }
@@ -1908,8 +1905,7 @@ final class ConsoleModel {
         guard let itemID = TranscriptRecordAnchor.itemID(for: anchor, page: page, in: state.items) else { return }
         revealedItemID = itemID
         let rows = TranscriptRows.build(state: state, statusCards: localStatusCards, canPageOlder: false,
-                                        showWorkingIndicator: false, decisionCards: decisionCards,
-                                        coordinator: coordinates)
+                                        showWorkingIndicator: false, decisionCards: decisionCards)
         scrollTick += 1
         recordRequest = ScrollRequest(rowID: TranscriptRecordAnchor.rowID(containing: itemID, in: rows) ?? itemID,
                                       tick: scrollTick)

@@ -49,7 +49,7 @@ internal data class FoldedExchange(val summary: OrbitExchangeFold.Summary, val r
 internal object ExchangeFold {
     private val asksTheOwner = Regex("(^|__|\\.)(ask_owner|request_owner_action)$")
 
-    fun fold(rows: List<TranscriptRow>, wakeName: (String, JsonObject) -> String? = { _, _ -> null }, coordinator: Boolean = false): List<TranscriptRow> {
+    fun fold(rows: List<TranscriptRow>, wakeName: (String, JsonObject) -> String? = { _, _ -> null }): List<TranscriptRow> {
         val turns = mutableListOf<MutableList<TranscriptRow>>()
         rows.forEach { row ->
             val opens = row.event.type == "user" && row.event.fields["steer"] != JsonPrimitive(true)
@@ -62,9 +62,11 @@ internal object ExchangeFold {
             run = mutableListOf()
         }
         turns.forEachIndexed { index, turn ->
-            val head = if (index < turns.lastIndex) OrbitExchangeFold.turnOf(turn.first().event, coordinator, wakeName) else null
+            val head = if (index < turns.lastIndex) OrbitExchangeFold.turnOf(turn.first().event, wakeName) else null
             val replies = turn.filter { it.event.type == "assistant" && it.event.body().isNotBlank() }
-            if (head != null && replies.isNotEmpty() && !needsReader(turn)) {
+            // An answer long enough to say something stays drawn (OrbitExchangeFold.foldsAtLength), counted as the browser counts it.
+            val answered = replies.sumOf { it.event.body().length }
+            if (head != null && replies.isNotEmpty() && OrbitExchangeFold.foldsAtLength(head.category, answered) && !needsReader(turn)) {
                 run += FoldedExchange(OrbitExchangeFold.Summary(turn.first().event.seq, turn.maxOf { it.newestSeq }, turn.first().event.ts,
                     head.what, head.whatInTask, OrbitExchangeFold.replyGist(replies.last().event.body()), head.category, head.target), turn)
                 return@forEachIndexed

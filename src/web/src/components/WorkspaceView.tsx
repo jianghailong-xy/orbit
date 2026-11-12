@@ -5077,9 +5077,8 @@ export function WorkspaceView({
         taskTitle: graph.taskTitle,
       },
       want: wantExchangeTree,
-      coordinator: Boolean(coordinatedProjectId),
     };
-  }, [exchangeGraph.data, sessionsQ.data, wantExchangeTree, coordinatedProjectId]);
+  }, [exchangeGraph.data, sessionsQ.data, wantExchangeTree]);
 
   // Allow/deny a pending tool-permission request; optimistically drop it (the
   // approval_resolved SSE also removes it), re-fetching to resync on failure.
