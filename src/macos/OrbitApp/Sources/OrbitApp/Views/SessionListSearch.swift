@@ -21,6 +21,15 @@ extension View {
         }
     }
 
+    /// Search mode ends only at the field's own close button. iOS ends it by itself once an empty
+    /// field loses focus, and scrolling a list under a search field lowers the keyboard, so while the
+    /// query is empty a scroll leaves the keyboard (and the search) where they are. With a query the
+    /// keyboard may go: a field holding text stays in search mode without focus. The other way focus
+    /// was lost, a tap on the background, is held off in `KeyboardDismissInstaller`.
+    func keepsEmptySearchOnScroll(query: String) -> some View {
+        scrollDismissesKeyboard(query.isEmpty ? .never : .automatic)
+    }
+
     /// Hides the bottom search field while the list scrolls down and brings it back as soon as the
     /// list heads up again (`BottomSearchReveal`). Applied to the scrolling list itself, and a no-op
     /// wherever the field isn't at the bottom — pass the same `fromBottom` as `sessionListSearch`.
