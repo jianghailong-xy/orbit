@@ -69,6 +69,33 @@ final class ListHeaderEdgeWiringTests: XCTestCase {
         XCTAssertTrue(edge.contains(".allowsHitTesting(false)"), "taking no touches")
     }
 
+    /// The iPhone drawer, the same treatment (the owner, 2026-11-12, 03-board.html, D1–D3 = A): its
+    /// header floats over the rail on a soft edge instead of sitting above it on a solid strip, the
+    /// action bar stands on the same edge from the bottom up, and the title stays bold.
+    func testTheDrawerHeaderAndActionBarStandOnSoftEdges() throws {
+        let shell = try source(views + "CompactShell.swift")
+        let drawer = section(shell, from: "struct NavigationDrawer: View {", to: "private var drawerTitle: some View {")
+        XCTAssertFalse(drawer.contains("if !inSidebarColumn {\n                HStack {"),
+                       "the header no longer sits above the list")
+        XCTAssertTrue(drawer.contains(".safeAreaInset(edge: .top, spacing: 0) {\n                if !inSidebarColumn { drawerHeader }"))
+        XCTAssertTrue(drawer.contains("SoftEdgeLayer(solidAt: .bottom, color: drawerSurface)"), "under the action bar")
+        let header = section(drawer, from: "private var drawerHeader: some View {", to: "\n    }\n")
+        XCTAssertTrue(header.contains("SoftEdgeLayer(solidAt: .top, color: drawerSurface)"))
+        XCTAssertTrue(header.contains(".ignoresSafeArea(edges: .top)"), "up behind the status bar")
+        XCTAssertTrue(header.contains(".allowsHitTesting(false)"))
+        let title = section(shell, from: "private var drawerTitle: some View {", to: "}")
+        XCTAssertTrue(title.contains(".font(.title2.weight(.bold))"), "the drawer's title stays bold")
+    }
+
+    func testTheNeedsYouBarAndTheDrawerShareOneSoftEdge() throws {
+        let banner = try source(views + "NeedsYouBannerView.swift")
+        XCTAssertTrue(banner.contains("SoftEdgeLayer(solidAt: .top, color: Color(uiColor: .systemBackground))"))
+        let identity = try source(views + "AgentIdentity.swift")
+        let layer = section(identity, from: "struct SoftEdgeLayer: View {", to: "\n}\n")
+        XCTAssertTrue(layer.contains("Rectangle().fill(.ultraThinMaterial)"), "a blur")
+        XCTAssertTrue(layer.contains("color.opacity(0)"), "fading to nothing")
+    }
+
     func testBareBarTitlesAreBodyMedium() throws {
         let identity = try source(views + "AgentIdentity.swift")
         XCTAssertTrue(identity.contains("static let barTitle = Font.body.weight(.medium)"))
