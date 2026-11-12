@@ -507,11 +507,15 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
   skip, concurrency: 1, timeout: 300_000,
 }, async (t) => {
   const stack = await connect();
-  const door = await openDoor(stack);
+  // Registered before the door opens: a door that fails to start (a provider Nest cannot resolve)
+  // must not leave the pool and the client open, or the process never exits and the spec hangs.
+  let opened: Awaited<ReturnType<typeof openDoor>> | undefined;
   t.after(async () => {
-    await door.close();
+    await opened?.close();
     await disconnect(stack);
   });
+  const door = await openDoor(stack);
+  opened = door;
 
   await t.test('explicit integration settings read back', async () => {
     const f = await project(stack, 'explicit');
