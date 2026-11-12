@@ -116,7 +116,7 @@ import type { TaskStartCard as TaskStart } from '@orbit/shared';
 import { TaskStartCard } from './TaskStartCard';
 import { parseProjectStarted } from '../lib/projectStarted';
 import { ProjectStartedCard } from './ProjectStartedCard';
-import { parseSessionMessage } from '../lib/sessionMessage';
+import { parseSessionMessage, splitSessionMessageNote } from '../lib/sessionMessage';
 import { externalSenderLabel, parseExternalSender } from '../lib/externalSender';
 import {
   parseConfirmationAnswers,
@@ -2151,7 +2151,10 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // the reader's, so not the reader's bubble. Who sent it is what the control plane recorded
       // beside the echo (lib/sessionMessage), so it is asked first — before anything is read out of
       // the words themselves, which are the sending agent's to choose. No payload, the old reading.
+      // The block delivery appended only tells the agent what the card shows, so it is not folded
+      // under it a second time; what else rode along is (lib/sessionMessage).
       if (node.sessionMessage) {
+        const { rest, narrower } = splitSessionMessageNote(node.note);
         return (
           <SessionMessageCard
             card={node.sessionMessage}
@@ -2159,7 +2162,8 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             seq={seq}
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
-            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
+            narrower={narrower}
+            attached={rest && <ControlPlaneNote kind={describeNote(rest)} text={rest} />}
             queued={queued}
           />
         );
