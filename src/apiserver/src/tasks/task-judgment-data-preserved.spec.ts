@@ -2929,7 +2929,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0555 adds project.non_code_reason, the confirmed wording on project_criterion_confirmation
       // (backfilled only on rows whose revision is still the criterion's) and two partial indexes on
       // activity. No completion ledger, DONE fence, preserved trigger or function is changed.
-      '0555_project_done_card_records'],
+      '0555_project_done_card_records',
+      // 0585 adds project_orphan_notice, the orphan sweep's ledger: one new table, no existing row read
+      // or rewritten. No completion ledger, DONE fence, preserved trigger or function is changed.
+      '0585_project_orphan_notice'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

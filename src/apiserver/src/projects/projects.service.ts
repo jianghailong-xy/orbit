@@ -73,6 +73,7 @@ import {
   UpdateProjectDto,
   type UpdateProjectAcceptanceCriterionDto,
 } from './dto';
+import { type PendingAddresseeRead, readPendingAddressees } from './pending-addressees';
 import { planCriterionMove, readCriterionMoveFacts, writeCriterionMove } from './criterion-move';
 import { readCriterionMoveRecord } from './criterion-move-record';
 import { settleTaskSegmentAfterMove } from './landing-session';
@@ -5512,6 +5513,18 @@ export class ProjectsService {
    * Every absent fact is `null` beside a closed-set reason rather than dropped. `ELSEWHERE` is
    * deliberately not modelled: it is a property of the request body, and this endpoint takes none.
    */
+  /**
+   * `GET /projects/:id/pending-addressees`: for each unfinished task, the item it waits on, who can
+   * move it and when they were told, and whether it is an orphan
+   * (docs/evidence-always-has-an-addressee-design.md §4, `pending-addressees.ts`). A read: it writes
+   * nothing, and the orphan sweep reports what it finds here.
+   */
+  async pendingAddressees(ownerId: string, projectId: string): Promise<PendingAddresseeRead> {
+    const read = await readPendingAddressees(this.prisma, ownerId, projectId);
+    if (!read) throw new NotFoundException('project not found');
+    return read;
+  }
+
   async coordinatorStatus(ownerId: string, projectId: string): Promise<ProjectCoordinatorStatus> {
     const readAt = new Date();
     const project = await this.prisma.project.findFirst({

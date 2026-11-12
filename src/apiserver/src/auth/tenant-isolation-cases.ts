@@ -388,6 +388,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'POST /projects/:id/coordinator': { request: (of, mine) => ({ params: { id: of.projectId }, body: { workspaceId: mine.workspaceId } }) },
   'POST /projects/:id/coordinator/replace': { request: (of) => ({ params: { id: of.projectId } }) },
   'GET /projects/:id/coordinator/status': { request: (of) => ({ params: { id: of.projectId } }) },
+  'GET /projects/:id/pending-addressees': { request: (of) => ({ params: { id: of.projectId } }) },
   'POST /projects/:id/coordinator/rebind': {
     request: (of, mine) => ({ params: { id: of.projectId }, body: { workspaceId: mine.workspaceId } }),
   },

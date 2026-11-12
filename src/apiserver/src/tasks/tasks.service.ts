@@ -10,6 +10,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { PushService } from '../push/push.service';
+import { ProjectOrphanSweepService } from '../projects/project-orphan-sweep.service';
 import {
   CreatorType,
   Prisma,
@@ -2132,6 +2133,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     @Optional() private readonly evidenceReviews?: EvidenceReviewService,
     @Optional() private readonly confirmationReviews?: OwnerConfirmationReviewService,
     @Optional() private readonly push?: PushService,
+    /**
+     * The orphan sweep (docs/evidence-always-has-an-addressee-design.md §4), on the reconcile timer.
+     * `@Optional()` and last for the places that build this service directly: they run no sweep.
+     */
+    @Optional() private readonly orphanSweep?: ProjectOrphanSweepService,
   ) {
     this.handoffs = handoffs ?? new ProjectHandoffService(prisma);
     this.files = files ?? new FilesService(prisma);
@@ -2582,7 +2588,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       .then(() => this.confirmationReviews?.deliverPendingFor())
       .catch((e) =>
         this.logger.error(`waiting evidence sweep failed: ${e instanceof Error ? e.message : e}`),
-      );
+      )
+      // The orphan sweep, last and on this timer for the reason at the top of this block: it reads
+      // what the sweeps before it have just delivered, so it does not report as untold what this
+      // same tick handed over. It runs every few ticks (`ORPHAN_SWEEP_INTERVAL_MS`) and never rejects.
+      .then(() => this.orphanSweep?.tick());
   }
 
   onModuleDestroy(): void {
