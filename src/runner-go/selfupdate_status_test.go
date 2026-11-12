@@ -28,6 +28,7 @@ func resetSelfUpdateStatus(t *testing.T) {
 		selfUpdateStatus.mu.Lock()
 		defer selfUpdateStatus.mu.Unlock()
 		selfUpdateStatus.state, selfUpdateStatus.reason, selfUpdateStatus.installDir = "", "", ""
+		selfUpdateStatus.phase = selfUpdatePhase{}
 	}
 	clearStatus()
 	t.Cleanup(clearStatus)

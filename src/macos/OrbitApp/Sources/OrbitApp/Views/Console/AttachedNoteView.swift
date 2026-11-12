@@ -203,6 +203,13 @@ struct BackgroundJobsNoteView: View {
 struct ReferencedTaskNoteView: View {
     let tasks: [ReferencedTask]
     @Environment(\.openURL) private var openURL
+    /// The app's own link door: over a phone's conversation the task is pushed over it (see
+    /// `opensPagesOverConsole`), so the back swipe returns to the conversation.
+    @Environment(AppModel.self) private var app: AppModel?
+    @Environment(\.opensPagesOverConsole) private var overConsole
+    /// On a wide shell a task opens over the page instead of switching sections
+    /// (`opensTasksOverPage`, owner decision 2026-11-12).
+    @Environment(\.opensTasksOverPage) private var opensTasksOverPage
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -226,7 +233,8 @@ struct ReferencedTaskNoteView: View {
                 }
                 // The title is the row, and tapping it opens the task the block could only name.
                 Button {
-                    if let url = ReferencedTaskNote.link(task) { openURL(url) }
+                    if let url = ReferencedTaskNote.link(task),
+                       app?.openOrbitLink(url, overConsole: overConsole, overPage: opensTasksOverPage) != true { openURL(url) }
                 } label: {
                     Text(task.title)
                         .font(.orbitLabel)

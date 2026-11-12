@@ -46,6 +46,7 @@ import type {
   RunnerModelCatalog,
   RunnerRegionView,
   RunnerSelfUpdate,
+  RunnerUpdateTurn,
   RuntimeDefaultModels,
   SlashCommandInfo,
 } from '@orbit/shared';
@@ -69,7 +70,6 @@ import { setupTitle } from '../lib/machineSetupCopy';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { useToast } from '../lib/toast';
 import {
-  projectIsLive,
   projectIsWorking,
   projectNeedsYouCount,
   sidebarProjects,
@@ -265,6 +265,8 @@ export interface Runner {
   // latest release, and the last update it installed. undefined/null = a runner too old to report
   // it, which runnerAttention judges by runsAsRoot as it always has.
   selfUpdate?: RunnerSelfUpdate | null;
+  // Only on a runner draining for its self-update: the reader's turns the drain waits for (board 4).
+  updateTurns?: RunnerUpdateTurn[];
   // Free-space floor in MB (PATCH minFreeDiskMb): below it this machine takes no new task runs.
   // null = no floor.
   minFreeDiskMb?: number | null;
@@ -425,17 +427,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
       ? `project:${projectPageId}`
       : null;
   const litWorkspaceId = projectPageKey ? null : activeWorkspaceId;
-  // The group names the live projects only (docs/mocks/sidebar-projects-scroll, 03), and the one
-  // open on a page, so its row can still be lit; the quiet rest are its last row, which opens the
-  // Projects page.
-  const listedProjects = useMemo(() => {
-    const now = Date.now();
-    return openProjects.filter((p) => {
-      const key = encodeId(p.id);
-      return key === openProjectId || key === projectPageId || projectIsLive(p, now);
-    });
-  }, [openProjects, openProjectId, projectPageId]);
-  const quietProjects = openProjects.length - listedProjects.length;
 
   // Where this tab is, for the space `/wiki` opens (design §12.3.4): the active workspace, or on a
   // project's page or its sessions page the workspace the project's coordinator runs in. A page that
@@ -1134,7 +1125,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                 <CaretDownOutlined className={`tp-caret ${projectsOpen ? '' : 'collapsed'}`} />
               </div>
               {projectsOpen &&
-                listedProjects.map((project) => (
+                openProjects.map((project) => (
                   <ProjectRow
                     key={project.id}
                     project={project}
@@ -1142,30 +1133,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     onOpen={openProject}
                   />
                 ))}
-              {projectsOpen && quietProjects > 0 && (
-                <div
-                  className="tp-item tp-project-quiet"
-                  onClick={() => {
-                    onNavigate?.();
-                    navigate('/projects');
-                  }}
-                  onKeyDown={(event) =>
-                    handleNavActivation(event, () => {
-                      onNavigate?.();
-                      navigate('/projects');
-                    })
-                  }
-                  role="link"
-                  tabIndex={0}
-                >
-                  <span className="tp-ico tp-project-mark">
-                    <MoreOutlined rotate={90} aria-hidden="true" />
-                  </span>
-                  <span className="tp-label">
-                    {quietProjects} quiet {quietProjects === 1 ? 'project' : 'projects'}
-                  </span>
-                </div>
-              )}
             </div>
           )}
         </div>

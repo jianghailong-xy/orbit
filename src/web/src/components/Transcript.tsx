@@ -430,6 +430,10 @@ export interface SteerWithdrawHandle {
   withdrawing: ReadonlySet<string>;
   withdrawn: ReadonlySet<string>;
 }
+/** A tag for one user bubble's foot row, by the bubble's seq: what holds the message the reader sent
+ *  last (WorkspaceView's RunnerUpdatingTag). Null where nothing holds one. */
+export const QueuedFootCtx = createContext<{ seq: number; tag: ReactNode } | null>(null);
+
 export const SteerWithdrawCtx = createContext<SteerWithdrawHandle | null>(null);
 
 /**
@@ -3121,6 +3125,8 @@ function SteerState({ node, typed }: { node: TextNode; typed: string }) {
 function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   const exp = useContext(ExportCtx);
   const putBack = useContext(UndeliveredCtx);
+  const foot = useContext(QueuedFootCtx);
+  const held = foot && !queued && foot.seq === node.seq ? foot.tag : null;
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
   // What the runner echoed back is what it was *given*, which includes anything delivery appended
@@ -3188,7 +3194,7 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
             : `Show ${(typed.length - USER_BUBBLE_TRUNCATE).toLocaleString()} more characters`}
         </button>
       )}
-      {(typed || status || note) && (
+      {(typed || status || note || held) && (
         <div className="chat-user-meta">
           {typed && (
             <button
@@ -3202,8 +3208,9 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
             </button>
           )}
           {typed && node.ts && <span className="chat-time">{relTime(node.ts)}</span>}
-          {typed && node.ts && (status || note) && <span className="chat-meta-sep">·</span>}
+          {typed && node.ts && (status || note || held) && <span className="chat-meta-sep">·</span>}
           {status}
+          {held}
           {/* Named, not hidden: without it the agent answers about a quota outage nobody appears
               to have raised. */}
           {note?.line}

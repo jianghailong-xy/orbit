@@ -61,15 +61,14 @@ final class MachineSetupWiringTests: XCTestCase {
                           "the row is board 03's")
     }
 
-    /// The Mac: a group per machine, an empty one with its header and this row, selected through the
-    /// source list's one selection.
-    func testTheMacsSidebarGroupsByMachine() throws {
+    /// The Mac: the drawer's flat order, the Set up rows after every workspace, selected through the
+    /// source list's one selection (docs/mocks/macos-sidebar, 01).
+    func testTheMacsSidebarListsTheSetUpRowsLast() throws {
         let main = try app("Views/MainView.swift")
-        let sidebar = try slice(main, from: "private func agentsDisclosure(", to: "struct AccountFooter")
-        try assertInOrder(sidebar, ["!agents.groups.isEmpty", "ForEach(agents.groups)", "agents.runnerLabel(group.runnerId)",
-                                    "ForEach(group.agents)", "if let machine = group.setUp", "setUpRow(machine)",
+        let sidebar = try slice(main, from: "private func workspaceRows(", to: "struct AccountFooter")
+        try assertInOrder(sidebar, ["ForEach(agents.orderedItems)", "ForEach(agents.machinesToSetUp)", "setUpRow(machine)",
                                     ".tag(SidebarSelection.machine(machine.id))"],
-                          "the group and its row")
+                          "the workspaces, then the machines to set up")
         let row = try slice(main, from: "private func setUpRow(_ machine: MachineToSetUp) -> some View {", to: "\n    }\n")
         try assertInOrder(row, ["model.machineDraftRunnerID == machine.id ? AnyShapeStyle(.primary) : AnyShapeStyle(Color.accentColor)",
                                 "MachineSetupCopy.setupTitle(machine: machine.name)", "Image(systemName: \"folder.badge.plus\")"],
@@ -77,8 +76,6 @@ final class MachineSetupWiringTests: XCTestCase {
         XCTAssertTrue(main.contains("if let runnerID = model.machineDraftRunnerID { return .machine(runnerID) }"),
                       "the selection reads the page on screen")
         XCTAssertTrue(main.contains("case .machine(let runnerID):\n                    model.openMachineDraft(runnerID)"))
-        let model = try app("AgentsModel.swift")
-        XCTAssertTrue(model.contains("AgentListLogic.sidebarGroups(items, runnerOrder: runnerOrder, machines: machinesToSetUp)"))
     }
 
     /// The page is the same one on every shell.

@@ -265,22 +265,51 @@ const (
 	selfUpdateStateHeldByRollout = "heldByRollout"
 )
 
+// The phases of a release this runner is behind (SelfUpdateReport.Phase), mirroring @orbit/shared
+// RunnerSelfUpdatePhase.
+const (
+	// Waiting for the turns in flight to end, under the deferral limit: work goes on as usual.
+	selfUpdatePhaseAvailable = "available"
+	// Past the limit: no new work is taken until the turns in flight end (drainForUpdate).
+	selfUpdatePhaseDraining = "draining"
+	// Nothing in flight: stopping to install the release and start again.
+	selfUpdatePhaseRestarting = "restarting"
+	// The owner put the release off until PostponedUntil; work goes on as usual.
+	selfUpdatePhasePostponed = "postponed"
+)
+
+// selfUpdatePhase is the part of the report about a waiting release; the zero value is none.
+type selfUpdatePhase struct {
+	phase, targetVersion                          string
+	availableSince, drainingSince, postponedUntil time.Time
+	turnsInFlight, turnsAtDrain                   int
+}
+
 // selfUpdateStatus is where this runner's updates of itself stand, for the heartbeat: set by the
 // update at startup, by every release check, and by the install that follows a drain.
 var selfUpdateStatus struct {
 	mu                        sync.Mutex
 	state, reason, installDir string
+	phase                     selfUpdatePhase
 }
 
 // noteSelfUpdate records what the latest look at this runner's updates found. An empty installDir
-// keeps the one recorded before.
+// keeps the one recorded before. It clears the phase: a look that found no release waiting, or a
+// failure, ends whatever the Update card said (noteSelfUpdatePhase sets one).
 func noteSelfUpdate(state, reason, installDir string) {
+	noteSelfUpdatePhase(state, reason, selfUpdatePhase{})
+	if installDir != "" {
+		selfUpdateStatus.mu.Lock()
+		selfUpdateStatus.installDir = installDir
+		selfUpdateStatus.mu.Unlock()
+	}
+}
+
+// noteSelfUpdatePhase records a state together with where the waiting release stands.
+func noteSelfUpdatePhase(state, reason string, phase selfUpdatePhase) {
 	selfUpdateStatus.mu.Lock()
 	defer selfUpdateStatus.mu.Unlock()
-	selfUpdateStatus.state, selfUpdateStatus.reason = state, reason
-	if installDir != "" {
-		selfUpdateStatus.installDir = installDir
-	}
+	selfUpdateStatus.state, selfUpdateStatus.reason, selfUpdateStatus.phase = state, reason, phase
 }
 
 // selfUpdateStateOf is what one release check found. An install directory this user cannot write
@@ -305,6 +334,7 @@ func selfUpdateStateOf(installable bool, checkErr error, heldBack bool) (state, 
 func selfUpdateReport() *SelfUpdateReport {
 	selfUpdateStatus.mu.Lock()
 	state, reason, dir := selfUpdateStatus.state, selfUpdateStatus.reason, selfUpdateStatus.installDir
+	phase := selfUpdateStatus.phase
 	selfUpdateStatus.mu.Unlock()
 	if state == "" {
 		return nil
@@ -313,7 +343,19 @@ func selfUpdateReport() *SelfUpdateReport {
 	return &SelfUpdateReport{
 		State: state, Reason: reason, InstallDir: dir,
 		LastUpdatedAt: last.At, LastUpdatedFrom: last.From, LastUpdatedTo: last.To,
+		Phase: phase.phase, TargetVersion: phase.targetVersion,
+		AvailableSince: rfc3339OrEmpty(phase.availableSince),
+		DrainingSince:  rfc3339OrEmpty(phase.drainingSince),
+		PostponedUntil: rfc3339OrEmpty(phase.postponedUntil),
+		TurnsInFlight:  phase.turnsInFlight, TurnsAtDrain: phase.turnsAtDrain,
 	}
+}
+
+func rfc3339OrEmpty(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
 }
 
 // selfUpdateRecord is the last update this runner installed into itself. Kept on disk next to the

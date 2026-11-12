@@ -74,6 +74,7 @@ import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitRoute
+import io.orbitd.android.navigation.Origin
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -391,6 +392,7 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
             RunnerHead(runner, now)
             if (model.failed) model.error?.let { Text("⚠ $it", Modifier.padding(top = 8.dp), color = Ink.amber, style = MaterialTheme.typography.labelMedium) }
+            RunnerPage.updateCard(runner, now)?.let { UpdateCardView(it) { session -> open(OrbitRoute(Destination.SESSION, session, origin = Origin.LINK)) } }
             if (items.isNotEmpty()) FormSection(RunnerCopy.NEEDS_ATTENTION) {
                 items.forEachIndexed { index, item ->
                     if (index > 0) HorizontalDivider()
@@ -1500,6 +1502,43 @@ internal fun AddRunnerDialog(api: ManagementApi, onDismiss: () -> Unit, open: (S
                         }
                     }
                     message?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.red) }
+                }
+            }
+        }
+    }
+}
+
+/** The Update card (board 4) above Needs Attention: title and phase tag, what happens, and while draining the turns it waits for
+ * with a bar. Later ▾ and Update Now… join it in their own tasks. */
+@Composable
+internal fun UpdateCardView(card: RunnerPage.UpdateCard, openSession: (String) -> Unit = {}) {
+    val tint = if (card.warn) Ink.amber else Ink.muted
+    Surface(Modifier.fillMaxWidth().padding(top = 16.dp).testTag("runner-update-card"), shape = RoundedCornerShape(12.dp),
+        color = if (card.warn) Ink.amber.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceContainerLow,
+        border = androidx.compose.foundation.BorderStroke(1.dp, tint.copy(alpha = 0.3f))) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(card.title, Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.width(8.dp))
+                Text(card.tag, color = tint, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+            }
+            Text(card.body, color = Ink.muted, style = MaterialTheme.typography.bodySmall)
+            card.progressLabel?.let { label ->
+                Text(label, Modifier.padding(top = 4.dp), color = Ink.muted, style = MaterialTheme.typography.labelMedium)
+                LinearProgressIndicator(progress = { card.progress ?: 0f }, modifier = Modifier.fillMaxWidth(), color = Ink.amber)
+            }
+            // The turns it waits for (board 4): one bordered list, each row opening its session.
+            if (card.turns.isNotEmpty()) Surface(Modifier.fillMaxWidth().padding(top = 6.dp), shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surface, border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                Column {
+                    card.turns.forEachIndexed { index, turn ->
+                        if (index > 0) HorizontalDivider()
+                        Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { openSession(turn.id) }.padding(horizontal = 12.dp, vertical = 10.dp)
+                            .testTag("runner-update-turn"), verticalAlignment = Alignment.CenterVertically) {
+                            Text(turn.title, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                            turn.running?.let { Spacer(Modifier.width(8.dp)); Text(it, color = Ink.muted, style = MaterialTheme.typography.labelMedium, maxLines = 1) }
+                        }
+                    }
                 }
             }
         }
