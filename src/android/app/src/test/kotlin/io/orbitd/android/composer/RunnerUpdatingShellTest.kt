@@ -50,8 +50,8 @@ class RunnerUpdatingShellTest : ComposerShellTest() {
         assertEquals("Waiting 38 min", text("runner-updating:waited"))
         assertFalse("no foot row with no message to put it under", has(hasTestTag("runner-updating-foot"), unmerged = true))
         assertFalse(shows("No messages yet"))
-        // Nothing to press yet: Later and Update Now come in later tasks.
-        assertFalse(shows("Later…")); assertFalse(shows("Update Now…"))
+        // Later… is on the page for the session's runner; Update Now… comes with its own task.
+        assertTrue(shows("Later…")); assertFalse(shows("Update Now…"))
         shot("android-runner-updating-empty")
     }
 
