@@ -823,11 +823,34 @@ struct TranscriptView: View {
         ScrollViewReader { proxy in
             chrome(follows(rowsList, proxy), proxy)
         }
+        // Held by its runner's update (board 5 of docs/mocks/runner-update-drain): the foot row of
+        // the reader's last message says so, or, before there is one, the queued page does.
+        .environment(\.runnerUpdatingFoot, runnerUpdatingFoot)
+        .overlay { runnerUpdatingPage }
         // macOS shows the session state in this band. iOS gave the state up with the nav-bar title,
         // for reading space (see `ConsoleView`'s toolbar), so the band is retired there.
         #if os(macOS)
         .safeAreaInset(edge: .top, spacing: 0) { statusBar }
         #endif
+    }
+
+    /// The session as the list holds it, when its runner's update is what holds it.
+    private var runnerUpdatingSession: Session? {
+        guard let session = app.session(id: console.sessionID), RunnerUpdating.holds(session) else { return nil }
+        return session
+    }
+
+    private var runnerUpdatingFoot: RunnerUpdatingFoot? {
+        guard let session = runnerUpdatingSession,
+              let id = RunnerUpdating.footBubbleID(console.state.items) else { return nil }
+        return RunnerUpdatingFoot(bubbleID: id, session: session, machine: console.runnerName)
+    }
+
+    @ViewBuilder private var runnerUpdatingPage: some View {
+        if let session = runnerUpdatingSession, RunnerUpdating.footBubbleID(console.state.items) == nil {
+            RunnerUpdatingQueuedView(session: session, machine: console.runnerName,
+                                     onOpenSession: { app.route(to: .session($0)) })
+        }
     }
 
     /// Split out of `body`, and out of each other, because as one expression this chain is long

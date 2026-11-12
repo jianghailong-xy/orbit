@@ -2266,6 +2266,96 @@ button.toast--pill:focus-visible {
 .rd-attention-action {
   margin-top: 9px;
 }
+/* The Update card (board 4): a release this runner is behind, across both columns. Amber while it
+   holds work back or restarts, plain while work goes on as usual. */
+.rd-update-card {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+}
+.rd-update-card.warn {
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+.rd-update-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.rd-update-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-1);
+}
+.rd-update-tag {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.rd-update-card.warn .rd-update-tag {
+  color: var(--warning);
+  font-weight: 500;
+}
+.rd-update-body {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.rd-update-progress-label {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.rd-update-progress {
+  margin-top: 8px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--fill-muted);
+  overflow: hidden;
+}
+.rd-update-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--warning);
+}
+/* The turns a drain waits for (board 4): one bordered list, a row each — the session, and how long
+   it has run. */
+.rd-update-turns {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+.rd-update-turns > li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 14px;
+  font-size: 13px;
+}
+.rd-update-turns > li + li {
+  border-top: 1px solid var(--border-subtle);
+}
+.rd-update-turns a {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+}
+.rd-update-turns a:hover {
+  text-decoration: underline;
+}
+.rd-update-turns span {
+  flex: none;
+  color: var(--text-3);
+}
 /* The machine's contents on the left, its settings and facts in a narrower column on the right. */
 .rd-cols {
   display: grid;
@@ -8067,6 +8157,36 @@ button.chat-jump-start:hover {
   line-height: 1;
   color: var(--text-3);
 }
+/* A message its runner's update holds (board 2 ⑤): `Queued · runner updating` in the meta voice,
+   always shown. No colour and no border — the bubble stays the visual centre; the reason is only
+   dotted-underlined, because a press opens why. */
+.chat-runner-updating {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text-3);
+}
+.chat-runner-updating-reason {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.runner-updating-pop {
+  max-width: 420px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.runner-updating-pop p {
+  margin: 0;
+}
 /* A message the engine never received, at the end of the meta row. Always visible (unlike the
    copy button and time before it): the whole point is that nobody has to hover to find out their
    message did not land. */
@@ -9108,6 +9228,19 @@ button.chat-jump-start:hover {
   line-height: 1.5;
   color: var(--text-3);
   max-width: 320px;
+}
+
+/* A runner draining for its update (board 2 ②–③): a longer sentence, naming the turns it waits for
+   as links, then how long it has waited. */
+.chat-queued-desc.chat-runner-updating-desc {
+  max-width: 560px;
+}
+.chat-runner-updating-desc a {
+  color: var(--brand);
+}
+.chat-queued-waited {
+  font-size: 13px;
+  color: var(--text-3);
 }
 
 /* An existing conversation can return to PENDING while it waits to reacquire a turn

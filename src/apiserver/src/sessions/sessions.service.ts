@@ -163,6 +163,7 @@ import {
   treeActiveTurns,
   treeCeiling,
 } from '../common/session-tree-sql';
+import { queuedRunnerUpdateOf } from '../common/runner-self-update';
 import { QueueService } from '../queue/queue.service';
 import { mergeDispatchGate } from '../projects/task-checkpoint.service';
 import {
@@ -3846,6 +3847,9 @@ export class SessionsService {
       queuedReason: string | null;
       queuedActive: number | null;
       queuedLimit: number | null;
+      queuedRunnerSelfUpdate: Prisma.JsonValue;
+      queuedRunnerTurns: Array<{ id: string; title: string | null }> | null;
+      queuedSince: Date | null;
     };
     const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`
       SELECT
@@ -4015,7 +4019,25 @@ export class SessionsService {
         ) END AS "landing",
         q.reason  AS "queuedReason",
         q.active  AS "queuedActive",
-        q."limit" AS "queuedLimit"
+        q."limit" AS "queuedLimit",
+        -- What the runner_updating explanation names (docs/runner-update-drain-design.md §3): the
+        -- release it is updating to, the owner's turns it waits for, and the clock "Waiting 38 min"
+        -- counts from. Read only for a row that gate holds; every other row pays nothing for it.
+        CASE WHEN q.reason = 'runner_updating' THEN r.self_update END AS "queuedRunnerSelfUpdate",
+        CASE WHEN q.reason = 'runner_updating' THEN COALESCE((
+          SELECT json_agg(json_build_object('id', busy.id, 'title', busy.title)
+                          ORDER BY busy.last_turn_at, busy.id)
+            FROM "session" busy
+           WHERE busy.assigned_runner_id = s.assigned_runner_id
+             AND busy.status = 'RUNNING'
+             -- Named only to their owner; the count in queuedActive still covers every turn.
+             AND busy.owner_id = s.owner_id
+             AND busy.deleted_at IS NULL
+        ), '[]'::json) END AS "queuedRunnerTurns",
+        -- The runner names the drain's start once it reports one; until then the session's own
+        -- wait is the nearest clock: last_turn_at moved when it went PENDING.
+        CASE WHEN q.reason = 'runner_updating'
+          THEN COALESCE(s.last_turn_at, s.created_at) END AS "queuedSince"
       FROM session s
       LEFT JOIN workspace a  ON a.id = s.workspace_id
       LEFT JOIN runner r ON r.id = s.assigned_runner_id
@@ -4040,6 +4062,11 @@ export class SessionsService {
               -- offline there.
               WHEN r.id IS NULL OR ${runnerOfflineSql('r')}
                 THEN 'runner_offline'
+              -- Second, for the offline gate's reason: a runner draining for a self-update claims
+              -- nothing whatever its counts say (runner drainForUpdate), so naming a capacity gate
+              -- here would send the reader to the wrong cause. Ends only when the update does.
+              WHEN r.heartbeat_draining IS TRUE
+                THEN 'runner_updating'
               WHEN ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)} >= r.max_concurrent
                 THEN 'runner_at_capacity'
               WHEN s.root_session_id IS NOT NULL
@@ -4064,6 +4091,8 @@ export class SessionsService {
         LATERAL (
           SELECT
             CASE g.reason
+              -- The turns the drain waits for: every one in flight on the runner.
+              WHEN 'runner_updating'    THEN g.runner_active
               WHEN 'runner_at_capacity' THEN g.runner_active
               WHEN 'tree_at_capacity'   THEN g.tree_active
               WHEN 'batch_at_capacity'  THEN g.batch_active
@@ -4168,6 +4197,8 @@ export class SessionsService {
         queuedReason: r.queuedReason,
         queuedActive: r.queuedActive == null ? null : Number(r.queuedActive),
         queuedLimit: r.queuedLimit == null ? null : Number(r.queuedLimit),
+        // Only beside queuedReason 'runner_updating'; null on every other row.
+        queuedRunnerUpdate: queuedRunnerUpdateOf(r),
       }),
     );
     // A turn blocked on a permission prompt keeps the session generating, so the list can't tell
