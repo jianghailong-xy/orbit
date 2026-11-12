@@ -17,6 +17,7 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'DELETE /account-secrets/:id',
   'POST /tasks/:taskId/owner-confirmation',
   'POST /tasks/:taskId/evidence/decision',
+  'POST /tasks/:taskId/evidence/:revision/restart',
   'POST /sessions/:id/approvals/:approvalId/decision',
   'POST /projects/:id/acceptance/confirmation',
   'POST /projects/:id/acceptance/criteria-decisions/:intentId',

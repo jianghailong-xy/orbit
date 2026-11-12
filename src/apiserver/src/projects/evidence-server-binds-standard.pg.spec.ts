@@ -410,7 +410,7 @@ test('(1) task D\'s revision 1 — another project criterion quoted — is decid
       assert.equal(wake.sessionId, w.coordinatorSessionId);
       const row = await pendingRow(stack, w, t, 'coordinator');
       assert.ok(row, 'the pending read does not list the revision');
-      assert.deepEqual(row.decidability, { decidable: true, refusal: null, requiredAction: null });
+      assert.deepEqual(row.decidability, { decidable: true, refusal: null, requiredAction: null, addressee: null });
       assert.deepEqual(row.criterion, ownStandard);
 
       // And the coordinator's CONFIRM settles it.

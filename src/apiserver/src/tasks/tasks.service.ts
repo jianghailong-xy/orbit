@@ -135,13 +135,7 @@ import type { RunStop } from '../projects/task-run-stopped.producer';
 import { refreshProjectDone } from '../projects/project-done-request';
 import { completionEvidenceRevisedFact } from '../projects/completion-input';
 import { criterionStandingRefusal, quotedCriterion } from './task-evidence-decision';
-import {
-  arrivalMessage,
-  movedEvidenceTurnId,
-  resubmitMessage,
-  resubmitStandard,
-  type MovedEvidence,
-} from './moved-task-evidence';
+import { tellEvidenceUndecidable } from './undecidable-evidence';
 import {
   planPreflightRefusalBody,
   planPreflightRefusals,
@@ -6719,7 +6713,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * A confirmed move's evidence hand-over (`moved-task-evidence.ts` says what and why), after the
+   * A confirmed move's evidence hand-over (`undecidable-evidence.ts` says what and why), after the
    * move's commit and from the rows it committed, the way every other delivery of that edge is.
    *
    * Nothing is said when there is nothing undecided: a task that is not EVIDENCE_JUDGMENT, one that
@@ -6728,10 +6722,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    *
    * A revision the decision door would take in the target is routed through the evidence door again,
    * keyed with the target (`completionEvidenceRevisedFact`'s `movedFromProjectId`). One it would
-   * refuse is sent back: each live run of the task is told what to quote instead, written into the
-   * turn it is running where it can be, and an Automatic target's live coordinator is told the task
-   * arrived owing a new revision. Each message is keyed by the revision and the target, so a repeat
-   * says nothing twice; neither revives a conversation that has ended.
+   * refuse takes the shared undecidable path (`tellEvidenceUndecidable`): each live run of the task
+   * is steered with the standard it is held to now, and an Automatic target's live coordinator is
+   * told the task arrived owing a new revision. Each message is keyed by the revision and the
+   * standard, so a repeat says nothing twice; neither revives a conversation that has ended.
    *
    * Like every delivery on this edge, a failure is logged and never reported as a failed move: the
    * move committed. What a failed hand-over leaves is the state before this unit existed — the
@@ -6792,95 +6786,26 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
-      const projects = await this.prisma.project.findMany({
-        where: { id: { in: [move.fromProjectId, move.toProjectId] }, ownerId },
-        select: {
-          id: true,
-          title: true,
-          coordinatorEnabled: true,
-          coordinatorSessionId: true,
-          coordinatorSession: { select: SESSION_ENDING_SELECT },
+      // Not decidable there: the one shared path every undecidable revision takes
+      // (`undecidable-evidence.ts`) — the live runs are steered, an Automatic target's coordinator
+      // is told, each once per revision and standard.
+      const from = await this.prisma.project.findFirst({
+        where: { id: move.fromProjectId, ownerId },
+        select: { id: true, title: true },
+      });
+      if (!from) return;
+      await tellEvidenceUndecidable(this.prisma, this.sessions, {
+        ownerId,
+        taskId: task.id,
+        cause: {
+          kind: 'MOVED',
+          from,
+          withdrawnCriterionDefinitionId: move.withdrawnCriterionDefinitionId,
         },
       });
-      const from = projects.find((project) => project.id === move.fromProjectId);
-      const to = projects.find((project) => project.id === move.toProjectId);
-      if (!from || !to) return;
-      const declared = task.criterionDefinitionId
-        ? await this.prisma.projectAcceptanceCriterionDefinition.findFirst({
-            where: { id: task.criterionDefinitionId, projectId: move.toProjectId },
-            select: { id: true, text: true },
-          })
-        : null;
-      const moved: MovedEvidence = {
-        taskId: task.id,
-        title: task.title,
-        revision: latest.revision.toString(),
-        from: { id: from.id, title: from.title },
-        to: { id: to.id, title: to.title },
-        quoted: quotedCriterion(latest.evidence),
-        withdrawnCriterionDefinitionId: move.withdrawnCriterionDefinitionId,
-        standard: resubmitStandard({ id: task.id, acceptanceCriteria: task.acceptanceCriteria, declared }),
-      };
-
-      const runs = (await this.prisma.session.findMany({
-        where: { ownerId, taskId: task.id },
-        select: { id: true, ...SESSION_ENDING_SELECT },
-        orderBy: { id: 'asc' },
-      })).filter((run) => !sessionHasEnded(run));
-      const told: string[] = [];
-      for (const run of runs) {
-        if (await this.tellMovedEvidence(ownerId, run.id, {
-          clientTurnId: movedEvidenceTurnId('run', latest.id, move.toProjectId),
-          content: resubmitMessage(moved),
-          steerIfLive: true,
-        })) told.push(run.id);
-      }
-      // The coordinator of an Automatic target, as the evidence door itself would reach it: a project
-      // whose switch is off is told no evidence fact, and an ended conversation is not revived.
-      if (to.coordinatorEnabled && to.coordinatorSessionId && to.coordinatorSession
-        && !sessionHasEnded(to.coordinatorSession)) {
-        await this.tellMovedEvidence(ownerId, to.coordinatorSessionId, {
-          clientTurnId: movedEvidenceTurnId('coordinator', latest.id, move.toProjectId),
-          content: arrivalMessage(moved, told),
-          steerIfLive: false,
-        });
-      }
     } catch (error) {
       this.logger.warn(`evidence of task ${move.taskId} was not handed over to project `
         + `${move.toProjectId} after its move: ${error instanceof Error ? error.message : error}`);
-    }
-  }
-
-  /**
-   * One message of the hand-over above, as a platform turn under a key derived from the revision.
-   * True when it is on the conversation; false when the conversation refused it for a state of the
-   * world (gone, ended, busy being written, unable to run) — the refusals every delivery here takes
-   * as such. A fault is raised to the caller, which logs it.
-   */
-  private async tellMovedEvidence(
-    ownerId: string,
-    sessionId: string,
-    turn: { clientTurnId: string; content: string; steerIfLive: boolean },
-  ): Promise<boolean> {
-    try {
-      await this.sessions.createTurn(ownerId, sessionId, {
-        clientTurnId: turn.clientTurnId,
-        content: turn.content,
-        intent: 'NEXT_TURN',
-      }, turn.steerIfLive ? { steerIfLive: true } : undefined);
-      return true;
-    } catch (error) {
-      if (
-        error instanceof NotFoundException
-        || error instanceof ConflictException
-        || error instanceof ForbiddenException
-        || error instanceof BadRequestException
-      ) {
-        this.logger.log(`moved-evidence message to session ${sessionId} was not written: `
-          + `${error.message}`);
-        return false;
-      }
-      throw error;
     }
   }
 

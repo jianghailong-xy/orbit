@@ -691,6 +691,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
       body: { decidingSessionId: of.sessionId, decision: 'SEND_BACK', evidenceRevision: '1', note: 'the census' },
     }),
   },
+  'POST /tasks/:taskId/evidence/:revision/restart': {
+    request: (of) => ({ params: { taskId: of.evidenceTaskId, revision: '1' }, body: {} }),
+  },
   'POST /tasks/:taskId/evidence/legacy-import': {
     request: (of) => ({
       params: { taskId: of.evidenceTaskId },
@@ -1325,6 +1328,9 @@ export const TENANT_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /tasks/:id/execute body triggerId':
     'an idempotency key the caller makes up for one press, not a thing it names: it keys only the caller\'s own '
     + 'run receipt, (owner_id, action_kind, request_token) — tasks.service.ts:12779',
+  'POST /tasks/:taskId/evidence/:revision/restart body triggerId':
+    'the Run press\'s idempotency key, made up by the caller and handed to TasksService.execute as is: it keys only the '
+    + 'caller\'s own run receipt, (owner_id, action_kind, request_token) — tasks.service.ts:14771, as POST /tasks/:id/execute body triggerId does',
   'POST /tasks/batch-execute body triggerId':
     'the same press key, for a bulk Run: the caller\'s own receipt, keyed by owner — tasks.service.ts:12779',
   'POST /push/register body installationId':

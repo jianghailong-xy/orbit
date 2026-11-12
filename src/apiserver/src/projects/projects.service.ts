@@ -135,6 +135,7 @@ import {
   type TaskRunOverlay,
 } from '../sessions/task-work-carrier';
 import { SessionsService, type SessionReceiveBlockedReason } from '../sessions/sessions.service';
+import { tellEvidenceUndecidable } from '../tasks/undecidable-evidence';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorEvidenceQueueService } from './coordinator-evidence-queue.service';
 import { coordinatorFuseUsage, readCoordinatorWakeups } from './coordinator-progress';
@@ -2144,6 +2145,9 @@ export class ProjectsService {
     // that could not be recomputed must not undo a decision that was. Only for an APPROVE — a
     // REJECT moved no criterion, so there is nothing whose projection could have changed.
     if (decided.row.decision === 'APPROVE') await this.reprojectProjectStatus(ownerId, projectId);
+    // An approved edit may have reworded or deleted a criterion some task's unanswered evidence is
+    // bound to: those revisions are told to whoever can file them again, after the commit.
+    if (decided.row.decision === 'APPROVE') await this.tellUndecidableEvidenceOfProject(ownerId, projectId);
 
     // After the commit too: the session that asked for this change is waiting on the answer, and
     // what to tell it is settled now (`criteria-decision-reply.ts`). A reply that could not be sent
@@ -2174,6 +2178,42 @@ export class ProjectsService {
       confirmation: await this.acceptance.standardSetConfirmation(ownerId, projectId),
       reply,
     };
+  }
+
+  /**
+   * After a criteria edit committed (`replaceAcceptanceDefinitions`): every unsettled task of the
+   * project that declares one of its criteria and whose latest revision is unanswered goes through
+   * the shared undecidable path (`tellEvidenceUndecidable`), which says nothing about a revision
+   * that is still decidable and nothing twice about one whose standard it has already said. So a
+   * rewording, a deletion and an edit that touched neither all take the same call.
+   *
+   * Never raised: the edit committed, and a lost notice leaves the owner's read as it was.
+   */
+  private async tellUndecidableEvidenceOfProject(ownerId: string, projectId: string): Promise<void> {
+    if (!this.sessions) return;
+    try {
+      const tasks = await this.prisma.task.findMany({
+        where: {
+          ownerId,
+          projectId,
+          // A declaration, live or deleted (`heldToProjectCriterion`): the tasks a criteria edit can reach.
+          criterionRevision: { not: null },
+          completionCriterion: 'EVIDENCE_JUDGMENT',
+          status: { in: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS] },
+          completionEvidence: { some: {} },
+        },
+        select: { id: true },
+        orderBy: { id: 'asc' },
+      });
+      for (const task of tasks) {
+        await tellEvidenceUndecidable(this.prisma, this.sessions, {
+          ownerId, taskId: task.id, cause: { kind: 'CRITERIA_CHANGED' },
+        });
+      }
+    } catch (error) {
+      this.logger.warn(`undecidable evidence of project ${projectId} was not told after its criteria changed: `
+        + `${error instanceof Error ? error.message : error}`);
+    }
   }
 
   /**
@@ -3984,6 +4024,9 @@ export class ProjectsService {
       // So is the non-code mark: a marked project's criteria are no longer withheld for landing.
       if ((dto.acceptanceCriteriaItems !== undefined && !held) || nonCodeWriter) {
         await this.reprojectProjectStatus(ownerId, id);
+        // And the same applied edit may have reworded or deleted a criterion some task's unanswered
+        // evidence is bound to: told to whoever can file it again, after the commit.
+        await this.tellUndecidableEvidenceOfProject(ownerId, id);
       }
       // Spread rather than nested, and only when there IS one: a caller whose edit was applied
       // sees exactly the response it saw before this existed, and a caller whose edit was held

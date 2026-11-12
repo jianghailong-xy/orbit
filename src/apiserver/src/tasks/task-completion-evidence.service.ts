@@ -31,6 +31,11 @@ import {
 } from './task-completion-criterion';
 import { readPendingEvidenceJudgments } from './pending-evidence-judgments';
 import {
+  RESTART_TASK_ACTION,
+  unansweredUndecidableRevision,
+  undecidableAddressees,
+} from './undecidable-evidence';
+import {
   EvidenceCitation,
   EvidenceCriterionMatch,
   bindCitedFiles,
@@ -270,6 +275,9 @@ function decisionResponse(row: DecisionRow): TaskEvidenceDecisionDto {
  * immutable. After their commits both re-project the status of the task's project, because a
  * revision and its decision are inputs to it (`reprojectProjectStatus`).
  */
+/** A Restart press on a row that no longer offers it. */
+export const EVIDENCE_RESTART_NOT_OFFERED_CODE = 'EVIDENCE_RESTART_NOT_OFFERED';
+
 @Injectable()
 export class TaskCompletionEvidenceService {
   private readonly logger = new Logger(TaskCompletionEvidenceService.name);
@@ -1046,6 +1054,44 @@ export class TaskCompletionEvidenceService {
     });
     if (!session) throw new NotFoundException('deciding session not found');
     return readPendingEvidenceJudgments(this.prisma, ownerId, session);
+  }
+
+  /**
+   * Restart the task, pressed on the owner's pending row that offers it (`ownerAction:
+   * RESTART_TASK`): the task's latest revision is unanswered and undecidable, it has no live run,
+   * and no Automatic coordinator was told to act on it. Asked again here, at the press, by the same
+   * predicates the read placed the row with, so a press that is no longer the owner's to make is
+   * refused 409 with nothing started. Then it is the owner's own Run (`TasksService.execute`), so a
+   * repeat of one press (`triggerId`) is the same run, and every rule that press already has holds.
+   */
+  async restartFromEvidence(ownerId: string, taskId: string, revision: string, triggerId?: string) {
+    if (!this.tasks) throw new Error('restartFromEvidence needs the tasks service');
+    const task = await this.prisma.task.findFirst({ where: { id: taskId, ownerId }, select: { id: true } });
+    if (!task) throw new NotFoundException('task not found');
+    const found = await unansweredUndecidableRevision(this.prisma, ownerId, taskId);
+    const notOffered = (why: string, extra: Record<string, unknown> = {}) => new ConflictException({
+      code: EVIDENCE_RESTART_NOT_OFFERED_CODE,
+      requiredAction: 'READ_THE_PENDING_EVIDENCE_AGAIN',
+      taskId,
+      evidenceRevision: revision,
+      ...extra,
+      message: `${why}; nothing was started`,
+    });
+    if (!found) {
+      throw notOffered('this task has no unanswered evidence revision that cannot be decided, so there is nothing to restart it for');
+    }
+    const latest = found.latest.revision.toString();
+    if (latest !== revision) {
+      throw notOffered(`this task's latest evidence revision is ${latest}, not ${revision}`, { currentRevision: latest });
+    }
+    const placed = (await undecidableAddressees(this.prisma, ownerId, [found.task])).get(taskId)!;
+    if (placed.addressee !== 'OWNER') {
+      throw notOffered(placed.addressee === 'RUN'
+        ? 'a run of this task is live and has been told to submit the revision again'
+        : 'this project\'s coordinator has been told to act on this revision', { addressee: placed.addressee });
+    }
+    const started = await this.tasks.execute(ownerId, taskId, undefined, triggerId);
+    return { taskId, evidenceRevision: revision, action: RESTART_TASK_ACTION, started };
   }
 
   async list(ownerId: string, taskId: string) {
