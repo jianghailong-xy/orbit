@@ -1258,7 +1258,7 @@ private fun LazyListScope.crossingsSection(state: ProjectPageState, connected: B
  * A question offers two presses; the second names the subject and both ends, says what the answer does, shows the crossing key it
  * echoes, and sends it. A refusal stays on its row with the door's own code and reason, the second press still open. */
 @Composable
-private fun CrossingRow(row: JsonObject, confirming: Boolean?, busy: Boolean, locked: Boolean, connected: Boolean, refusal: ProjectCrossings.Refusal?,
+internal fun CrossingRow(row: JsonObject, confirming: Boolean?, busy: Boolean, locked: Boolean, connected: Boolean, refusal: ProjectCrossings.Refusal?,
     ask: (Boolean) -> Unit, cancel: () -> Unit, answer: (Boolean) -> Unit) {
     val id = row.text("id")
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant

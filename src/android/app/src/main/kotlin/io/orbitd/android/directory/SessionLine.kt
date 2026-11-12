@@ -11,9 +11,11 @@ import io.orbitd.android.core.cards.CoordinatorDeliveryLine
 import io.orbitd.android.tasks.TaskDetailCopy
 import io.orbitd.android.watch.WatchSessionSummary
 import java.time.Instant
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 
 /**
  * The line under a session's title (OrbitKit `SessionLine`, a port of web's `sessionLine`): for a live session that is
@@ -182,7 +184,25 @@ internal object SessionHeader {
         "START_REQUEST" -> StartProjectCopy.readyToStart
         "DONE_REQUEST" -> ProjectDone.readyToClose
         "RECORD_AS_DONE" -> ProjectDone.recordAsDoneRow
+        "OWNER_REQUEST", "MOVE_REQUEST" -> OwnerRequestRowWords.word(s.waitingKind, s.ownerRequests, s.taskMoves) ?: SessionLineCopy.unnamedWord
         else -> SessionLineCopy.unnamedWord
+    }
+}
+
+/** What a row waiting on a session's own question says (`@orbit/shared` `ownerRequestRowWord`, held to it word for word by
+ * SessionLineTest): an open owner request by its kind, and task moves by how many wait. A row the server calls `OWNER_REQUEST` holds
+ * requests of one kind only; two kinds are a mix, which the server sends under another kind and the row keeps "Waiting for approval". */
+internal object OwnerRequestRowWords {
+    val requestWords = mapOf("DECISION" to "Decision for you", "SECRET" to "Key needed", "MANUAL_STEP" to "Steps for you",
+        "CONFIRM" to "Confirm for you")
+    fun taskMoves(moves: Int) = if (moves == 1) "Approve task move" else "Approve $moves task moves"
+
+    /** The word, or null when the kind is neither or the list it needs is missing or empty (an older control plane). */
+    fun word(kind: String?, ownerRequests: JsonArray?, taskMoves: JsonArray?): String? = when (kind) {
+        "OWNER_REQUEST" -> ((ownerRequests?.firstOrNull() as? JsonObject)?.get("kind") as? JsonPrimitive)?.contentOrNull?.let(requestWords::get)
+        "MOVE_REQUEST" -> taskMoves.orEmpty().sumOf { ((it as? JsonObject)?.get("count") as? JsonPrimitive)?.intOrNull ?: 0 }
+            .takeIf { it > 0 }?.let(::taskMoves)
+        else -> null
     }
 }
 

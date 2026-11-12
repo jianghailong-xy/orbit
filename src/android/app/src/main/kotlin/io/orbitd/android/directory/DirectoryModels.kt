@@ -68,6 +68,10 @@ data class DirectorySession(
     val completedAt: String? = null, val deletedAt: String? = null, val lastToolUse: String? = null,
     val runningBgCount: Int? = null, val runningSubagentCount: Int? = null, val engineTurnActive: Boolean? = null,
     val waitingKind: String? = null, val ownerItems: JsonArray? = null,
+    /** `OWNER_REQUEST`'s and `MOVE_REQUEST`'s lists (`@orbit/shared` `SessionOwnerRequest`, `SessionTaskMoveGroup`): the open
+     *  requests this session asked, and the waiting task-move groups it draws — what the row's word names ([SessionHeader.waitingWord]).
+     *  Kept as the JSON they came as; absent from an older server. */
+    val ownerRequests: JsonArray? = null, val taskMoves: JsonArray? = null,
     /** The project this session belongs to in any role; null for an ordinary conversation and from an older server. */
     val projectMembership: SessionProjectMembership? = null,
     /** `LANDING` for platform work with no engine (contract §2.9 LS6), `CONVERSATION` otherwise; absent from an older server. */

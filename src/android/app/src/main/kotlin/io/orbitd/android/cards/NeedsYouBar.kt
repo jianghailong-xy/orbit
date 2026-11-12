@@ -159,7 +159,7 @@ private fun NeedsYouAge(since: String) {
 }
 
 /** The drawable for each mark (iOS `NeedsYouGlyph.symbol`). */
-private val NeedsYouGlyph.drawable: Int get() = when (this) {
+internal val NeedsYouGlyph.drawable: Int get() = when (this) {
     NeedsYouGlyph.MERGE -> R.drawable.ic_merge
     NeedsYouGlyph.QUESTION -> R.drawable.ic_question_bubble
     NeedsYouGlyph.WARNING -> R.drawable.ic_warning
