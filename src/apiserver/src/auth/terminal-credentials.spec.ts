@@ -50,7 +50,10 @@ workspaces.set(runnerlessWorkspace, { ownerId: userId, runnerId: null, deletedAt
 workspaces.set(deletedWorkspace, { ownerId: userId, runnerId, deletedAt: new Date() });
 
 /** The fields a refusal names, or 'admitted'. */
-async function verdict(kind: Parameters<TerminalCredentials['confine']>[1], req: { params?: Record<string, unknown>; body?: unknown }) {
+async function verdict(
+  kind: Parameters<TerminalCredentials['confine']>[1],
+  req: { params?: Record<string, unknown>; query?: unknown; body?: unknown },
+) {
   try {
     await terminals.confine(req, kind, grant);
     return 'admitted';
@@ -94,7 +97,22 @@ test('creating a session admits this runner and its workspaces, and refuses anot
   assert.deepEqual(await create({ prompt: 'x', assignedRunnerId: 42 }), ['assignedRunnerId']);
 });
 
-test('the terminal acting on itself and the narrowed workspace list judge nothing in the request', async () => {
+test('an upload admits a session of the account on the credential\'s runner by ?sessionId, and nothing else', async () => {
+  const upload = (query: unknown) => verdict('SESSION_UPLOAD', { query });
+  assert.equal(await upload({ sessionId: ownSession }), 'admitted');
+  assert.equal(await upload({ sessionId: toPublicId(ownSession) }), 'admitted');
+  for (const sessionId of [otherRunnerSession, unassignedSession, otherAccountSession, randomUUID(), 'not-an-id']) {
+    assert.deepEqual(await upload({ sessionId }), ['sessionId'], `session ${sessionId}`);
+  }
+  assert.deepEqual(await upload({}), ['sessionId'], 'no session');
+  assert.deepEqual(await upload(undefined), ['sessionId'], 'no query');
+  assert.deepEqual(await upload({ taskId: randomUUID() }), ['taskId', 'sessionId'], 'a task input');
+  assert.deepEqual(await upload({ sessionId: ownSession, taskId: randomUUID() }), ['taskId'], 'both');
+});
+
+test('the terminal acting on itself and the narrowed lists judge nothing in the request', async () => {
   assert.equal(await verdict('SELF', { params: { id: otherRunnerSession } }), 'admitted');
-  assert.equal(await verdict('WORKSPACE_LIST', { body: { workspaceId: otherRunnerWorkspace } }), 'admitted');
+  for (const kind of ['WORKSPACE_LIST', 'RUNNER_LIST', 'PROVIDER_LIST'] as const) {
+    assert.equal(await verdict(kind, { body: { workspaceId: otherRunnerWorkspace }, query: { sessionId: otherRunnerSession } }), 'admitted');
+  }
 });

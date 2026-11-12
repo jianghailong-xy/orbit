@@ -97,8 +97,9 @@ export class RunnersService {
     this.deviceLookups.set(userId, recent);
   }
 
-  async listRunners(ownerId: string) {
-    return this.runnerViews({ ownerId });
+  /** `onlyRunner`: that one runner, the list a TERMINAL credential reads (`terminalRunnerOf`). */
+  async listRunners(ownerId: string, onlyRunner?: string) {
+    return this.runnerViews(onlyRunner ? { ownerId, id: onlyRunner } : { ownerId });
   }
 
   /** One of this owner's runners, in exactly the shape the list gives each of them. */

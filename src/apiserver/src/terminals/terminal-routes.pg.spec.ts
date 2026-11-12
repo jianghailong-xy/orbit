@@ -9,7 +9,10 @@
  *       or a task;
  *   (b) GET /workspaces and GET /agents answer runner A's workspaces and none of B's;
  *   (c) every owner-channel route (pat-owner-channel-routes.ts) but the approval decision, and the ordinary routes a
- *       terminal has no business on, refuse it 403 TERMINAL_ROUTE_NOT_ALLOWED before reading anything.
+ *       terminal has no business on, refuse it 403 TERMINAL_ROUTE_NOT_ALLOWED before reading anything;
+ *   (d) POST /attachments takes a file for runner A's session, and is refused 403 with no session, with B's or
+ *       another account's session, or as a task's input, storing nothing; GET /runners answers runner A alone, never
+ *       B; GET /providers answers the account's providers with no key and no endpoint in it.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/terminals/terminal-routes.pg.spec.ts
  *
@@ -17,6 +20,7 @@
  */
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
+import http from 'node:http';
 import { test } from 'node:test';
 
 import { JwtService } from '@nestjs/jwt';
@@ -82,6 +86,13 @@ test('a TERMINAL credential drives only its own runner\'s sessions, and is refus
       approvedAt, expiresAt: TerminalCredentials.expiryOf(approvedAt),
     },
   });
+  // A provider of the owner's, with a key and an endpoint GET /providers must never carry.
+  const providerSlug = `terminal-routes-${RUN}`;
+  const providerKey = `iv:tag:secret-${randomUUID()}`;
+  const providerUrl = `https://secret-endpoint-${RUN}.test`;
+  await db.modelProvider.create({
+    data: { slug: providerSlug, label: 'terminal routes', runtime: 'claude', ownerId: owner.id, baseUrl: providerUrl, apiKeyEnc: providerKey, enabled: true },
+  });
   server = await startApiserver(url, jwtSecret);
 
   const api = (method: string, path: string, bearer?: string, body?: unknown): Promise<Reply> =>
@@ -100,6 +111,29 @@ test('a TERMINAL credential drives only its own runner\'s sessions, and is refus
     const body = expect(reply, 403, what);
     assert.equal(body.code, 'TERMINAL_ROUTE_NOT_ALLOWED', `${what}: ${reply.text}`);
   };
+  /** POST /attachments as the clients send it: multipart/form-data with one `file`. */
+  const upload = (query: string, bearer: string): Promise<Reply> => new Promise((resolve, reject) => {
+    const boundary = `----terminal-routes-${randomUUID()}`;
+    const payload = Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="note.txt"\r\nContent-Type: text/plain\r\n\r\n`
+        + `a file from a terminal\r\n--${boundary}--\r\n`,
+    );
+    const req = http.request({
+      host: '127.0.0.1', port: server!.port, path: `/api/attachments${query}`, method: 'POST', agent: false,
+      headers: { authorization: `Bearer ${bearer}`, 'content-type': `multipart/form-data; boundary=${boundary}`, 'content-length': payload.length },
+    }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (c: Buffer) => chunks.push(c));
+      res.on('end', () => {
+        const text = Buffer.concat(chunks).toString('utf8');
+        let json: unknown;
+        try { json = JSON.parse(text); } catch { json = undefined; }
+        resolve({ status: res.statusCode ?? 0, json, text, headers: res.headers });
+      });
+    });
+    req.on('error', reject);
+    req.end(payload);
+  });
   /** A session the account's login opens in a workspace, with a pending approval card on it. */
   const sessionIn = async (who: { login: string }, workspaceId: string) => {
     const id = toUuid(expect(await api('POST', '/sessions', who.login, { prompt: 'opened by the app', workspaceId }), 201, 'a login opening a session').id);
@@ -192,7 +226,8 @@ test('a TERMINAL credential drives only its own runner\'s sessions, and is refus
     const ordinary = [
       'GET /sessions', `GET /sessions/${onA.id}/approvals`, `POST /sessions/${onA.id}/end`, `PATCH /sessions/${onA.id}/config`,
       `DELETE /sessions/${onA.id}`, `POST /sessions/${onA.id}/merge`, `GET /sessions/${onA.id}/diff`, 'POST /workspaces',
-      `PATCH /workspaces/${owner.a.workspaceId}`, 'GET /tasks', 'POST /tasks', 'GET /projects', 'POST /projects', 'GET /runners',
+      `PATCH /workspaces/${owner.a.workspaceId}`, 'GET /tasks', 'POST /tasks', 'GET /projects', 'POST /projects', `GET /runners/${owner.a.runnerId}`,
+      'GET /providers/mine', 'GET /attachments/usage',
       'GET /users/me', 'GET /terminals', 'GET /access-tokens', 'GET /terminals/requests',
     ];
     for (const knock of ordinary) {
@@ -201,5 +236,37 @@ test('a TERMINAL credential drives only its own runner\'s sessions, and is refus
     }
     assert.equal(await db.session.count({ where: { ownerId: owner.id } }), sessionsBefore, 'nothing was written');
     assert.equal((await db.session.findUniqueOrThrow({ where: { id: onA.id } })).deletedAt, null, 'A\'s session is not deleted');
+  });
+  await t.test('(d) attachments to A\'s sessions only; GET /runners is runner A alone; GET /providers carries no secret', async () => {
+    const stored = () => db.attachment.count({ where: { ownerId: owner.id } });
+    const before = await stored();
+    const ok = await upload(`?sessionId=${onA.id}`, terminal);
+    assert.ok(ok.status === 200 || ok.status === 201, `a file for A's session answered ${ok.status}: ${ok.text}`);
+    const attached = await db.attachment.findUniqueOrThrow({ where: { id: toUuid((ok.json as { id: string }).id) } });
+    assert.equal(attached.sessionId, onA.id);
+    assert.equal(await stored(), before + 1);
+
+    outOfScope(await upload(`?sessionId=${onB.id}`, terminal), 'a file for runner B\'s session', ['sessionId']);
+    outOfScope(await upload(`?sessionId=${strangers.id}`, terminal), 'a file for another account\'s session', ['sessionId']);
+    outOfScope(await upload('', terminal), 'a file for no session', ['sessionId']);
+    outOfScope(await upload(`?taskId=${randomUUID()}`, terminal), 'a task\'s input', ['taskId', 'sessionId']);
+    assert.equal(await stored(), before + 1, 'no refused upload stored a file');
+    const byLogin = await upload(`?sessionId=${onB.id}`, owner.login);
+    assert.ok(byLogin.status === 200 || byLogin.status === 201, `the login's file for B's session answered ${byLogin.status}`);
+
+    const runners = (expect(await api('GET', '/runners', terminal), 200, 'a terminal listing runners') as Array<{ id: string }>).map((r) => toUuid(r.id));
+    assert.deepEqual(runners, [owner.a.runnerId], 'a terminal sees its own runner and never B');
+    const all = (expect(await api('GET', '/runners', owner.login), 200, 'the login listing runners') as Array<{ id: string }>).map((r) => toUuid(r.id));
+    assert.deepEqual(all.sort(), [owner.a.runnerId, owner.b.runnerId].sort(), 'the login sees both');
+
+    const providers = await api('GET', '/providers', terminal);
+    const rows = expect(providers, 200, 'a terminal listing providers') as Array<Record<string, unknown>>;
+    const mine = rows.find((r) => r.slug === providerSlug);
+    assert.ok(mine, 'the owner\'s provider is listed');
+    for (const secret of [providerKey, providerUrl]) assert.ok(!providers.text.includes(secret), `the answer carries ${secret}`);
+    for (const row of rows) {
+      const fields = Object.keys(row).filter((k) => /apikey|secret|token|baseurl|password/i.test(k));
+      assert.deepEqual(fields, [], `provider ${String(row.slug)} carries ${fields.join(', ')}`);
+    }
   });
 });

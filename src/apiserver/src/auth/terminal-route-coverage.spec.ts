@@ -28,9 +28,14 @@ const TERMINAL_ALLOWED: Readonly<Record<string, TerminalRouteKind>> = {
   'GET /sessions/:id/events/page': 'SESSION',
   'GET /sessions/:id/events': 'SESSION',
   'POST /sessions/:id/approvals/:approvalId/decision': 'SESSION',
+  // A file attached to a turn: to a session on this machine, by `?sessionId`, and never a task's input.
+  'POST /attachments': 'SESSION_UPLOAD',
   // Which workspace the cwd is in: the workspaces on this machine's runner, and no other.
   'GET /workspaces': 'WORKSPACE_LIST',
   'GET /agents': 'WORKSPACE_LIST',
+  // The engine and model pickers: this machine alone, and the account's providers without a key or an endpoint.
+  'GET /runners': 'RUNNER_LIST',
+  'GET /providers': 'PROVIDER_LIST',
   // The terminal acting on itself.
   'GET /terminals/self': 'SELF',
   'DELETE /terminals/self': 'SELF',
@@ -140,12 +145,15 @@ test('every owner-channel route but the approval decision refuses a TERMINAL cre
   }
 });
 
-test('what each allowed route is held to fits the route: a session in its path, a session made, a list narrowed', async () => {
+test('what each allowed route is held to fits the route: a session in its path, a session made or attached to, a list narrowed', async () => {
   const wrong = Object.entries(TERMINAL_ALLOWED).filter(([route, kind]) => {
     const path = route.split(' ')[1];
     if (kind === 'SESSION') return !path.startsWith('/sessions/:id');
     if (kind === 'CREATE_SESSION') return route !== 'POST /sessions';
-    if (kind === 'WORKSPACE_LIST') return !route.startsWith('GET ') || path.includes(':');
+    if (kind === 'SESSION_UPLOAD') return route !== 'POST /attachments';
+    if (kind === 'WORKSPACE_LIST') return route !== 'GET /workspaces' && route !== 'GET /agents';
+    if (kind === 'RUNNER_LIST') return route !== 'GET /runners';
+    if (kind === 'PROVIDER_LIST') return route !== 'GET /providers';
     return !path.startsWith('/terminals/self');
   });
   assert.deepEqual(wrong, []);

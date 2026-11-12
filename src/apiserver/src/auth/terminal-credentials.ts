@@ -39,10 +39,18 @@ export const TERMINAL_ROUTE = 'terminalRoute';
  *                   names (`workspaceId`, or the pre-rename `agentId`) lives on that runner, and it names at least one
  *                   of the two. A new workspace (`newWorkspace`) needs `assignedRunnerId` already. It may not name a
  *                   task: a terminal opens conversations, and starting a task's work stays in the app.
+ *   SESSION_UPLOAD  POST /attachments: `?sessionId` names a session of the account on the credential's runner; with
+ *                   none, or with `?taskId` (a task's input), it is refused.
  *   WORKSPACE_LIST  a list its handler narrows to the workspaces on the credential's runner (`terminalRunnerOf`).
+ *   RUNNER_LIST     a list its handler narrows to the credential's runner alone: the engines installed on this machine.
+ *   PROVIDER_LIST   the account's model providers as every client's picker reads them, keyless and endpointless
+ *                   (ProvidersService.listPublic); it names nothing on a runner, so there is nothing to judge.
  */
-export type TerminalRouteKind = 'SELF' | 'SESSION' | 'CREATE_SESSION' | 'WORKSPACE_LIST';
-export const TERMINAL_ROUTE_KINDS: readonly TerminalRouteKind[] = ['SELF', 'SESSION', 'CREATE_SESSION', 'WORKSPACE_LIST'];
+export type TerminalRouteKind =
+  | 'SELF' | 'SESSION' | 'CREATE_SESSION' | 'SESSION_UPLOAD' | 'WORKSPACE_LIST' | 'RUNNER_LIST' | 'PROVIDER_LIST';
+export const TERMINAL_ROUTE_KINDS: readonly TerminalRouteKind[] = [
+  'SELF', 'SESSION', 'CREATE_SESSION', 'SESSION_UPLOAD', 'WORKSPACE_LIST', 'RUNNER_LIST', 'PROVIDER_LIST',
+];
 
 /**
  * A TERMINAL credential reaches this route, judged as `kind` says. On a handler, never on a controller;
@@ -148,17 +156,28 @@ export class TerminalCredentials {
    * neither names nothing on the runner and is refused with the rest.
    */
   async confine(
-    req: { params?: Record<string, unknown>; body?: unknown },
+    req: { params?: Record<string, unknown>; query?: unknown; body?: unknown },
     kind: TerminalRouteKind,
     grant: Pick<TerminalGrant, 'userId' | 'runnerId'>,
   ): Promise<void> {
-    if (kind === 'SELF' || kind === 'WORKSPACE_LIST') return;
-    if (kind === 'SESSION') {
-      const id = asUuid(req.params?.id);
+    if (kind === 'SELF' || kind === 'WORKSPACE_LIST' || kind === 'RUNNER_LIST' || kind === 'PROVIDER_LIST') return;
+    const onRunner = async (value: unknown) => {
+      const id = asUuid(value);
       const session = id
         ? await this.prisma.session.findFirst({ where: { id, ownerId: grant.userId }, select: { assignedRunnerId: true } })
         : null;
-      if (session?.assignedRunnerId !== grant.runnerId) throw terminalRunnerRefusal([':id']);
+      return session?.assignedRunnerId === grant.runnerId;
+    };
+    if (kind === 'SESSION') {
+      if (!(await onRunner(req.params?.id))) throw terminalRunnerRefusal([':id']);
+      return;
+    }
+    if (kind === 'SESSION_UPLOAD') {
+      const query = (req.query && typeof req.query === 'object' ? req.query : {}) as Record<string, unknown>;
+      const outside: string[] = [];
+      if (query.taskId !== undefined) outside.push('taskId');
+      if (!(await onRunner(query.sessionId))) outside.push('sessionId');
+      if (outside.length > 0) throw terminalRunnerRefusal(outside);
       return;
     }
     const body = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown>;

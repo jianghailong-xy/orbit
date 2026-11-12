@@ -18,6 +18,7 @@ import { PublicIdPipe } from '../common/public-id';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatScope } from '../auth/pat-scope.decorator';
+import { TerminalRoute } from '../auth/terminal-credentials';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { FileUploadCleanupInterceptor } from '../files/file-upload-cleanup.interceptor';
 import { FILE_UPLOAD_STORAGE, type FileUpload } from '../files/file-upload-storage';
@@ -36,6 +37,8 @@ export class AttachmentsController {
   // and is hashed on the way (FILE_UPLOAD_STORAGE), never held in memory whole; `limits.fileSize`
   // bounds what it may write, and FileUploadCleanupInterceptor removes it however the request ends.
   @PatScope('tasks:write', { workspaceConfinable: false })
+  // A terminal attaches a file to a session on its own machine, and to nothing else (no task inputs).
+  @TerminalRoute('SESSION_UPLOAD')
   @Post()
   @UseInterceptors(
     FileUploadCleanupInterceptor,
