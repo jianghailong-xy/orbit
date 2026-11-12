@@ -199,24 +199,10 @@ struct NeedsYouBannerView: View {
     /// nothing 20pt below the bar, so rows blur and fade into it rather than end at a line. It takes
     /// no touches; the rows under it scroll as before.
     private var listSoftEdge: some View {
-        let page = Color(uiColor: .systemBackground)
-        let fade = Gradient(stops: [
-            .init(color: .black, location: 0),
-            .init(color: .black, location: 0.6),
-            .init(color: .clear, location: 1),
-        ])
-        return ZStack {
-            Rectangle().fill(.ultraThinMaterial)
-                .mask(LinearGradient(gradient: fade, startPoint: .top, endPoint: .bottom))
-            LinearGradient(stops: [
-                .init(color: page.opacity(0.92), location: 0),
-                .init(color: page.opacity(0.7), location: 0.6),
-                .init(color: page.opacity(0), location: 1),
-            ], startPoint: .top, endPoint: .bottom)
-        }
-        .padding(.bottom, -20)
-        .ignoresSafeArea(edges: .top)
-        .allowsHitTesting(false)
+        SoftEdgeLayer(solidAt: .top, color: Color(uiColor: .systemBackground))
+            .padding(.bottom, -20)
+            .ignoresSafeArea(edges: .top)
+            .allowsHitTesting(false)
     }
 }
 
