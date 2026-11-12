@@ -2859,6 +2859,37 @@ final class AppModel {
         }
     }
 
+    // MARK: main checkout Git (docs/main-checkout-git-contract.md)
+
+    /// A review model with no console behind it: the worktree isolation dialog's Review files, opened
+    /// from a workspace's settings rather than a session.
+    func makeMainCheckoutModel() -> MainCheckoutModel? {
+        api.map { MainCheckoutModel(sessionID: "", api: $0) }
+    }
+
+    /// Sessions of a workspace still on a worktree of their own, as the Open list knows them: what
+    /// turning worktree isolation off leaves where it is.
+    func worktreeSessionCount(inWorkspace workspaceID: String) -> Int {
+        sessions.filter { ($0.agent?.id ?? $0.agentId) == workspaceID && ($0.branch?.isEmpty == false) }.count
+    }
+
+    /// A new session in a workspace, its composer holding `text` to read, change and send.
+    func openNewSession(inWorkspace workspaceID: String, text: String) {
+        consoleRegistry?.pendingDraftText[workspaceID] = text
+        show(.compose(agentID: workspaceID, folderID: nil), agent: workspaceID)
+    }
+
+    /// Re-read the workspace list a few times after a main checkout action, so the bar follows the
+    /// runner's next heartbeats (60 s apart) without waiting on the list's own refresh.
+    func refreshMainCheckoutSoon() {
+        Task { @MainActor [weak self] in
+            for seconds in [5, 30, 70] as [UInt64] {
+                try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+                await self?.agents?.load()
+            }
+        }
+    }
+
     /// Each landing session's job, as the last integration read described it — what a landing page
     /// opened while the server cannot be reached draws its frozen placeholder from instead of a
     /// blank page. Filled by every successful integration read, on both shells.

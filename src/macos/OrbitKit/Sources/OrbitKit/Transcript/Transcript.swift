@@ -32,6 +32,10 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
     /// went on (Codex failing to refresh its model catalog, say). Quieter than a notice, as web's
     /// `.chat-notice.chat-diagnostic` draws it: only the mark keeps the warning tone.
     case diagnostic(DiagnosticNotice)
+    /// A main checkout line (docs/main-checkout-git-contract.md §7): the card for files that appeared in
+    /// the main checkout during a worktree turn, or one action's result. Read from a `system` event's
+    /// `noticeKind`, so it never falls back to the generic notice row.
+    case mainCheckout(MainCheckoutNoticeItem)
 
     public var id: String {
         switch self {
@@ -45,7 +49,32 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
         case .autoRetry(let n): return n.id
         case .notice(let id, _): return id
         case .diagnostic(let d): return d.id
+        case .mainCheckout(let m): return m.id
         }
+    }
+}
+
+/// One `main-checkout-changed` or `main-checkout-action-result` event, decoded.
+public struct MainCheckoutNoticeItem: Equatable, Sendable, Codable, Identifiable {
+    public static let changedKind = "main-checkout-changed"
+    public static let resultKind = "main-checkout-action-result"
+
+    public let id: String
+    public let seq: Int
+    /// The event's own sentence, for anywhere that draws only text.
+    public let notice: String
+    /// Set for the card.
+    public let changed: MainCheckoutChangedNotice?
+    /// Set for a result line.
+    public let result: MainCheckoutActionResult?
+
+    public init(id: String, seq: Int, notice: String, changed: MainCheckoutChangedNotice? = nil,
+                result: MainCheckoutActionResult? = nil) {
+        self.id = id
+        self.seq = seq
+        self.notice = notice
+        self.changed = changed
+        self.result = result
     }
 }
 

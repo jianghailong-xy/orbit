@@ -329,7 +329,9 @@ public struct TranscriptReducer: Sendable, Codable {
             }
             // A deliberate heads-up (see `TranscriptItem.notice`) — the turn itself was fine. Never
             // sent beside stderr; if it ever were, it wins, as on web. One row per event, unfolded.
-            if let notice = nonEmpty(str(ev, "notice")) {
+            if let item = mainCheckoutNotice(ev) {
+                state.items.append(.mainCheckout(item))
+            } else if let notice = nonEmpty(str(ev, "notice")) {
                 state.items.append(.notice(id: nextID(), message: notice))
             } else if let diagnostic = recoverableDiagnostic(ev) {
                 // Current runners attach impact metadata to known startup/auxiliary failures. Keep
@@ -346,6 +348,22 @@ public struct TranscriptReducer: Sendable, Codable {
         case .resync:           break
         case .unknown:          break          // lifecycle noise — no transcript item
         }
+    }
+
+    /// A main checkout card or result line (contract §7), by the event's `noticeKind`. A payload that
+    /// doesn't decode is nil, so its `notice` sentence still shows as a plain notice row.
+    private mutating func mainCheckoutNotice(_ ev: RunEvent) -> MainCheckoutNoticeItem? {
+        let kind = str(ev, "noticeKind")
+        guard kind == MainCheckoutNoticeItem.changedKind || kind == MainCheckoutNoticeItem.resultKind,
+              let data = try? JSONEncoder().encode(ev.payload) else { return nil }
+        let notice = str(ev, "notice") ?? ""
+        if kind == MainCheckoutNoticeItem.changedKind {
+            guard let changed = try? JSONDecoder().decode(MainCheckoutChangedNotice.self, from: data) else { return nil }
+            return MainCheckoutNoticeItem(id: nextID(), seq: ev.seq, notice: notice, changed: changed)
+        }
+        struct Envelope: Decodable { let result: MainCheckoutActionResult }
+        guard let envelope = try? JSONDecoder().decode(Envelope.self, from: data) else { return nil }
+        return MainCheckoutNoticeItem(id: nextID(), seq: ev.seq, notice: notice, result: envelope.result)
     }
 
     /// Read a structured diagnostic that is explicitly recoverable/degraded: its label, the logged
@@ -626,6 +644,7 @@ public struct TranscriptReducer: Sendable, Codable {
         case .autoRetry(let n):         seq = n.seq
         case .user, .error, .authError: seq = nil
         case .notice, .diagnostic:      seq = nil
+        case .mainCheckout(let m):      seq = m.seq
         }
         return (seq ?? 0) > 0 ? seq : nil
     }

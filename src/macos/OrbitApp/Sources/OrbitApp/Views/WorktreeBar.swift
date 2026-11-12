@@ -34,6 +34,23 @@ struct WorktreeBar: View {
         // focus state (see `startStreaming`), NOT a view `.task` here, so it keeps running even when this
         // pushed detail's lifecycle churns on iPhone and freezes an on-screen `.task`.
         VStack(spacing: 0) {
+            // The workspace's main checkout, for Shared and Worktree sessions alike (boards 01⑤, 02④):
+            // above this session's own bar, because it is about the checkout every session shares.
+            MainCheckoutBarView(console: console)
+            sessionBar
+        }
+        // The main checkout's review sheet, opened from this bar, the card or a result line.
+        .sheet(item: Binding(get: { console.mainCheckout.reviewWorkspaceID.map(ReviewTarget.init) },
+                             set: { if $0 == nil { console.mainCheckout.reviewWorkspaceID = nil } })) { target in
+            MainCheckoutReviewSheet(model: console.mainCheckout, workspaceID: target.id, console: console)
+        }
+    }
+
+    private struct ReviewTarget: Identifiable { let id: String }
+
+    /// This session's own worktree: the branch, its diff and Commit / Merge, or the no-git notice.
+    private var sessionBar: some View {
+        VStack(spacing: 0) {
             let d = console.worktree.detail
             let files = d?.changedFiles ?? []
             switch WorktreeBarLogic.mode(isolationStatus: d?.isolationStatus, branch: d?.branch,
@@ -997,6 +1014,88 @@ private struct BackgroundRow: View {
         case "failed":    Image(systemName: "xmark.circle.fill").font(.orbitLabel).foregroundStyle(.red)
         case "killed":    Image(systemName: "stop.circle").font(.orbitLabel).foregroundStyle(.secondary)
         default:          Image(systemName: "minus.circle").font(.orbitLabel).foregroundStyle(.secondary)
+        }
+    }
+}
+
+// MARK: - main checkout bar
+
+/// "● Main checkout  main  3 uncommitted files   Review" — or "Clean · 1 commit not pushed   Push to
+/// origin/main". Read from the workspace's heartbeat counts (`MainCheckoutBar`): absent while the
+/// checkout is clean with nothing to push, or while an older runner reports no counts; without the
+/// runner's capability it still says what it sees, with no buttons. Dirty isn't broken: grey, never red.
+struct MainCheckoutBarView: View {
+    @Environment(AppModel.self) private var app
+    let console: ConsoleModel
+
+    var body: some View {
+        let ctx = MainCheckoutContext(app: app, console: console)
+        if let workspaceID = ctx.workspaceID,
+           let bar = MainCheckoutBar.make(health: ctx.workspace?.repoHealth,
+                                          isolationStatus: console.worktree.detail?.isolationStatus,
+                                          isolated: ctx.isolated, actionsSupported: ctx.actionsSupported) {
+            let model = console.mainCheckout
+            HStack(spacing: 8) {
+                Button { if ctx.actionsSupported { model.openReview(workspaceID: workspaceID) } } label: {
+                    // Whole words first; a phone's narrower row takes the short status, then drops the
+                    // label, and only then truncates (the branch never gives way to the status).
+                    ViewThatFits(in: .horizontal) {
+                        summary(bar, label: true, status: bar.status)
+                        summary(bar, label: true, status: bar.shortStatus)
+                        summary(bar, label: false, status: bar.shortStatus)
+                        summary(bar, label: false, status: bar.shortStatus, truncates: true)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .layoutPriority(1)
+                if let review = bar.reviewLabel {
+                    WTPillButton(title: review) { model.openReview(workspaceID: workspaceID) }.fixedSize()
+                }
+                if let push = bar.pushLabel {
+                    WTPillButton(title: push, disabled: model.sending) {
+                        Task { await model.push(workspaceID: workspaceID); app.refreshMainCheckoutSoon() }
+                    }
+                    .fixedSize()
+                }
+            }
+            .frame(minHeight: 24)
+            .padding(.horizontal, 10).padding(.vertical, 3)
+            .composerBandCard()
+            .padding(.bottom, .composerBandGap)
+            .accessibilityIdentifier("main-checkout-bar")
+            // A branch a project lands on: Push says so first, and never blocks.
+            .orbitConfirmation(bar.pushLabel ?? MainCheckoutCopy.label,
+                               isPresented: Binding(get: { model.pushWarning != nil },
+                                                    set: { if !$0 { model.pushWarning = nil } })) {
+                Button(bar.pushLabel ?? "Push") {
+                    if let read = model.pushWarning {
+                        Task { await model.push(read, workspaceID: workspaceID); app.refreshMainCheckoutSoon() }
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(model.pushWarning?.managedBranch.map { MainCheckoutCopy.managedBranchWarning(projectTitle: $0.projectTitle) } ?? "")
+            }
+        }
+    }
+
+    private func summary(_ bar: MainCheckoutBar, label: Bool, status: String, truncates: Bool = false) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(bar.dirty ? Color.orange : Color.secondary.opacity(0.6))
+                .frame(width: 6, height: 6)
+            if label {
+                Text(MainCheckoutCopy.label).font(.orbitLabel).foregroundStyle(.secondary)
+                    .lineLimit(1).fixedSize()
+            }
+            if let branch = bar.branch {
+                Text(branch).font(.orbitMono).lineLimit(1).fixedSize()
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.secondary.opacity(0.35)))
+            }
+            Text(status).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(1)
+                .fixedSize(horizontal: !truncates, vertical: false)
+            Spacer(minLength: 4)
         }
     }
 }

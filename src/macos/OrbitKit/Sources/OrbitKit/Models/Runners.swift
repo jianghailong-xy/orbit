@@ -661,6 +661,15 @@ public struct RunnerRepoHealth: Codable, Equatable, Sendable {
     public let state: String?
     public let branch: String?
     public let paths: [String]?
+    // The main checkout counts a runner with `main-checkout-git/v1` adds (docs/main-checkout-git-contract.md §4).
+    // Counts and the fingerprint only; nil from an older runner, which the Main checkout bar reads as unknown.
+    public var head: String? = nil
+    public var upstream: String? = nil
+    public var ahead: Int? = nil
+    public var behind: Int? = nil
+    public var fileCount: Int? = nil
+    public var truncated: Bool? = nil
+    public var fingerprint: String? = nil
 }
 
 /// Last word from the repo-cleanup relay attached to a GET /workspaces row.

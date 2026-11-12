@@ -17,7 +17,7 @@ public protocol TranscriptPersisting: Sendable {
 public struct FileTranscriptStore: TranscriptPersisting {
     public let directory: URL
     private let maxFiles: Int
-    private static let schemaVersion = 8
+    private static let schemaVersion = 9
 
     public init(directory: URL, maxFiles: Int = 200) {
         self.directory = directory
@@ -47,6 +47,8 @@ public struct FileTranscriptStore: TranscriptPersisting {
     /// v8: a recoverable diagnostic is a `.diagnostic` row, grey and folded into one row per incident,
     /// and a failed model-catalog refresh is one whatever its cause. Old snapshots keep those as
     /// orange notices, a row each, or as red error rows, and never reclassify them, so re-fetch.
+    /// v9: a main checkout notice (`noticeKind` main-checkout-*) is a `.mainCheckout` card or result line.
+    /// Old snapshots keep it as a plain notice with no buttons, so re-fetch.
     private struct Envelope: Codable { var version: Int; var reducer: TranscriptReducer }
 
     public func load(sessionID: String) -> TranscriptReducer? {
