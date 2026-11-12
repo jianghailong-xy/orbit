@@ -7,9 +7,9 @@
  *
  *   1. Nothing switches it: the administrators' route is gone, and what 0446 made is still there for a server rolled back
  *      to a build that reads it, holding what it held.
- *   2. Each of the 48 daemon routes, read off the controller, answers an HTTPS call that names no caller 426
+ *   2. Each of the 50 daemon routes, read off the controller, answers an HTTPS call that names no caller 426
  *      UPGRADE_REQUIRED, saying to run `orbit upgrade`, with no row in the switch's table and with one that says off, and
- *      the 40 no other process calls answer the same to a call that names one. A token the runner guard refuses is still
+ *      the 42 no other process calls answer the same to a call that names one. A token the runner guard refuses is still
  *      answered 401.
  *   3. A runner of 0.1.246 as it starts: its wake is 426 on HTTPS and over the link, never the 404 that ends its wake loop;
  *      `/complete` is gone on both doors, and its calls on the link are served.
@@ -145,8 +145,8 @@ test('the daemon routes refuse HTTPS, and serve the link and the callers that na
     await sql.end().catch(() => undefined);
   });
 
-  assert.equal(ROUTES.length, 55, `RunnerApiController has ${ROUTES.length} routes; runner-link-required.spec.ts holds the census`);
-  assert.equal(DAEMON_ROUTES.length, 48);
+  assert.equal(ROUTES.length, 57, `RunnerApiController has ${ROUTES.length} routes; runner-link-required.spec.ts holds the census`);
+  assert.equal(DAEMON_ROUTES.length, 50);
   assert.equal(DAEMON_ROUTES.filter((r) => r.named).length, 8);
 
   // ── accounts, the machine, its checkout and a session on it ──────────────────────────────────────────────────────
