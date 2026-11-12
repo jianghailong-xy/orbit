@@ -97,18 +97,23 @@ fun TaskMoveCard(batch: JsonObject, store: TaskMoveStore, now: Instant = Instant
                 }, style = MaterialTheme.typography.labelMedium)
             }
         }
+        // The board's two presses: a grey one and the amber one, each half the card, with room for "Approve 8 moves…".
+        val quiet = ButtonDefaults.filledTonalButtonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.primary)
+        val tight = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (asking == null) {
-                FilledTonalButton(onClick = { store.ask(batch, false) }, Modifier.weight(1f).testTag("$tag:refuse"), enabled = !locked) {
+                FilledTonalButton(onClick = { store.ask(batch, false) }, Modifier.weight(1f).testTag("$tag:refuse"), enabled = !locked,
+                    colors = quiet, contentPadding = tight) {
                     Text(TaskMoves.refuseAsk, color = if (locked) androidx.compose.ui.graphics.Color.Unspecified else MaterialTheme.colorScheme.error)
                 }
-                Button(onClick = { store.ask(batch, true) }, Modifier.weight(1f).testTag("$tag:approve"), enabled = !locked,
+                Button(onClick = { store.ask(batch, true) }, Modifier.weight(1f).testTag("$tag:approve"), enabled = !locked, contentPadding = tight,
                     colors = ButtonDefaults.buttonColors(containerColor = tone, contentColor = androidx.compose.ui.graphics.Color.Black)) {
                     Text(TaskMoves.approveAsk(n), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             } else {
-                FilledTonalButton(onClick = store::cancel, Modifier.weight(1f).testTag("$tag:cancel"), enabled = !busy) { Text(ProjectCrossings.cancel) }
-                Button(onClick = { store.answer(batch, asking) }, Modifier.weight(1f).testTag("$tag:answer"), enabled = !busy && !locked,
+                FilledTonalButton(onClick = store::cancel, Modifier.weight(1f).testTag("$tag:cancel"), enabled = !busy, colors = quiet, contentPadding = tight) { Text(ProjectCrossings.cancel) }
+                Button(onClick = { store.answer(batch, asking) }, Modifier.weight(1f).testTag("$tag:answer"), enabled = !busy && !locked, contentPadding = tight,
                     colors = ButtonDefaults.buttonColors(containerColor = if (asking) tone else MaterialTheme.colorScheme.error,
                         contentColor = if (asking) androidx.compose.ui.graphics.Color.Black else MaterialTheme.colorScheme.onError)) {
                     if (busy) { CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp); Spacer(Modifier.width(6.dp)) }

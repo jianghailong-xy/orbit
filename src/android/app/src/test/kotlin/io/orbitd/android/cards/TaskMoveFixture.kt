@@ -108,11 +108,12 @@ internal class TaskMoveFixture(count: Int = 8, drawnAs: List<String> = listOf("T
         val CRITERIA = (4..11).map { "Criterion $it: the runner link survives what used to cut it (case $it)" }
 
         private fun JsonObject.s(key: String) = (get(key) as? JsonPrimitive)?.contentOrNull
+        private fun sha256(text: String) = java.security.MessageDigest.getInstance("SHA-256").digest(text.encodeToByteArray()).joinToString("") { "%02x".format(it) }
 
         fun move(i: Int, asked: Instant = Instant.parse("2026-11-09T00:31:00Z")) = buildJsonObject {
             val id = "34uMove0000000000000%03d".format(i)
             put("id", id); put("kind", "MOVE_TASK"); put("state", "PENDING"); put("fromProjectId", FROM); put("toProjectId", TO)
-            put("title", TITLES[(i - 1) % TITLES.size]); put("crossingKey", "%064x".format(java.math.BigInteger.valueOf(0xd81f99d9L * i)))
+            put("title", TITLES[(i - 1) % TITLES.size]); put("crossingKey", sha256("move-$i"))
             put("subjectTaskId", "34uTask0000000000000%03d".format(i)); put("requestedBySessionId", ASKER)
             put("requestedAt", asked.plusSeconds(i.toLong()).toString()); put("decidedAt", JsonNull)
             putJsonObject("fromProject") { put("title", "Runner link v1: runner ↔ control plane over WebSocket"); put("status", "DONE") }

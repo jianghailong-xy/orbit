@@ -40,7 +40,7 @@ class TaskMoveCardDeviceTest : IncrementDeviceTest() {
     )
     private val askedAt = Instant.now().minusSeconds(4 * 3600)
     private fun moveId(i: Int) = "01a0d6a9-d763-70e1-b4cf-8793e971c%03d".format(i)
-    private fun key(i: Int) = "%064x".format(java.math.BigInteger.valueOf(0xd81f99d9L * (i + 7)))
+    private fun key(i: Int) = java.security.MessageDigest.getInstance("SHA-256").digest("move-$i".encodeToByteArray()).joinToString("") { "%02x".format(it) }
 
     private fun move(i: Int) = """{"id":"${moveId(i)}","kind":"MOVE_TASK","state":"${decided?.first ?: "PENDING"}","fromProjectId":"$source",
         "toProjectId":"$project","title":${quote(titles[i - 1])},"crossingKey":"${key(i)}","subjectTaskId":"${moveId(i + 100)}",
