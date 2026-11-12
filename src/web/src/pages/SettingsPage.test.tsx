@@ -208,6 +208,7 @@ describe('the order of the cards', () => {
       'Storage',
       'Sharing',
       'Access tokens',
+      'Terminals',
       'Integrations',
     ]);
   });
