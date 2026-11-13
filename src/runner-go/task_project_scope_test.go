@@ -213,8 +213,9 @@ func TestMCPTaskListTakesAProjectID(t *testing.T) {
 }
 
 func TestMCPTaskListSendsTheProjectIDToTheServer(t *testing.T) {
+	// The default (summary) read pages through /runner/tasks/page, as the server answers it.
 	srv, seen := captureQueries(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`[{"id":"t1"}]`))
+		_, _ = w.Write([]byte(`{"items":[{"id":"t1"}],"nextCursor":null}`))
 	})
 
 	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
@@ -236,7 +237,7 @@ func TestMCPTaskListSendsTheProjectIDToTheServer(t *testing.T) {
 // empty list — the tool must pass that through as a result rather than dressing it as a failure.
 func TestMCPTaskListAnswersAnUnknownProjectAsAnEmptyList(t *testing.T) {
 	srv, _ := captureQueries(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`[]`))
+		_, _ = w.Write([]byte(`{"items":[],"nextCursor":null}`))
 	})
 
 	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
@@ -245,7 +246,7 @@ func TestMCPTaskListAnswersAnUnknownProjectAsAnEmptyList(t *testing.T) {
 		t.Fatalf("an empty project read as an error: %#v", res["content"])
 	}
 	content, _ := res["content"].([]map[string]interface{})
-	if text, _ := content[0]["text"].(string); !strings.Contains(text, "[]") {
+	if text, _ := content[0]["text"].(string); !strings.HasPrefix(text, "0 task(s)") || !strings.Contains(text, "This is the last page.") {
 		t.Fatalf("task_list result = %q", text)
 	}
 }

@@ -844,8 +844,25 @@ test('the coordinator asks the owner, and the answer reaches the coordinator of 
     assert.ok(arrived.some((turn) => turn.content.includes(OPTIONS[1]!.label)));
     assert.ok(!arrived.some((turn) => turn.content.includes('keep it')),
       'an answer its asker already read, blocking nothing, is not replayed');
-    assert.equal((await answerTurns(stack, w.coordinatorSessionId)).length, 2,
-      'and the conversation that already had them is not written to a second time');
+    const told = await answerTurns(stack, w.coordinatorSessionId);
+    assert.equal(told.length, 2, 'and the conversation that already had them is not written to a second time');
+    const { resolvedAt: askerWords } = await stack.db.projectOpenItem.findUniqueOrThrow({
+      where: { id: standalone.itemId }, select: { resolvedAt: true },
+    });
+    assert.ok(told.some((turn) => turn.content === 'From Orbit · owner answer: you asked '
+      + `"Should this project keep its integration line after the last task lands?". `
+      + `The owner answered: keep it (${askerWords!.toISOString()}).`),
+      'the conversation that asked is told in the words it always was, byte for byte');
+    const byItem = (itemId: string) => arrived.find((turn) => turn.clientTurnId.includes(itemId))!.content;
+    for (const itemId of [blocking.itemId, unread.itemId]) {
+      assert.match(byItem(itemId), /^From Orbit · owner answer: a previous coordinator of this project asked "/,
+        'the new coordinator did not ask, so it is not told it did');
+      assert.ok(!byItem(itemId).includes('you asked'));
+    }
+    assert.ok(byItem(blocking.itemId).endsWith(' That question still blocks unfinished tasks.'),
+      'the answer to a question holding up an open task says so');
+    assert.ok(byItem(unread.itemId).endsWith(' That question no longer blocks any unfinished task.'),
+      'and one that blocks nothing says that');
 
     await doors.deliverOwed!.call(items, w.projectId, w.coordinatorSessionId);
     assert.equal((await answerTurns(stack, next)).length, 2,
