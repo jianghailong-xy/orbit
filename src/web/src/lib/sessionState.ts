@@ -1,3 +1,5 @@
+import type { SessionActivity } from '@orbit/shared';
+
 /**
  * A session has two independent product dimensions:
  *
@@ -64,6 +66,9 @@ export interface SessionStateSource {
   /** The run's SOURCE (project-source-contract §6.1). See sessionSourceRefused. */
   sourceState?: string | null;
   sourceRefusalCode?: string | null;
+  /** What the session is doing beyond its status (SessionActivity, decided by the server). See
+   *  sessionActivityOf. Absent from an older control plane. */
+  activity?: string | null;
 }
 
 /**
@@ -201,6 +206,28 @@ export function sessionLifecycleStateOf(
 export const sessionLifecycleLabel = (state: SessionLifecycleState): string =>
   state === 'COMPLETED' ? 'Completed' : state === 'TRASH' ? 'Trash' : 'Open';
 
+const SESSION_ACTIVITIES: ReadonlySet<string> = new Set<SessionActivity>(['TURN', 'BACKGROUND_JOB', 'WAITING']);
+
+/**
+ * What a parked session is still doing, as the server decided it (`activity`, SessionActivity): a turn
+ * the engine started for itself or a sub-agent (TURN), a `bg_run` job it will be woken by
+ * (BACKGROUND_JOB), or a watch, scheduled wake-up or auto-retry that will resume it (WAITING). Null when
+ * it is not parked, or parked with nothing in flight — the only AWAITING_INPUT that is really waiting
+ * on its next message. Read this rather than the run state alone wherever "is it idle?" is the question.
+ */
+export const sessionActivityOf = (session: SessionStateSource): SessionActivity | null => {
+  if (sessionRunStateOf(session) !== 'AWAITING_INPUT') return null;
+  const value = (session.activity ?? '').toUpperCase();
+  return SESSION_ACTIVITIES.has(value) ? (value as SessionActivity) : null;
+};
+
+/** The words for a parked session's activity, shared by every surface that says it. */
+export const SESSION_ACTIVITY_WORD: Record<SessionActivity, string> = {
+  TURN: 'Running',
+  BACKGROUND_JOB: 'Running in background',
+  WAITING: 'Waiting to resume',
+};
+
 /** How a run stands, in the words a run's badge uses for anyone's run (TaskDetailPanel) rather than
  *  the owner's own header, which asks its reader for a reply. */
 const SESSION_RUN_WORD: Record<SessionRunState, string> = {
@@ -218,9 +245,16 @@ const SESSION_RUN_WORD: Record<SessionRunState, string> = {
  * A filed session says where it is filed, Completed, as the app's own header does; until then it
  * says how its latest run stands.
  */
-export function sessionStateWord(session: SessionStateSource): string {
+export function sessionStateWord(session: SessionStateSource, opts: { canReply?: boolean } = {}): string {
   if (sessionLifecycleStateOf(session) === 'COMPLETED') return sessionLifecycleLabel('COMPLETED');
-  return SESSION_RUN_WORD[sessionRunStateOf(session)];
+  // Parked is not idle: say what it is still doing (sessionActivityOf).
+  const activity = sessionActivityOf(session);
+  if (activity) return SESSION_ACTIVITY_WORD[activity];
+  // Really idle. "Awaiting reply" asks its reader for one, which only someone who can send it can give;
+  // a public link's reader cannot (`canReply: false`), so it is told whose move it is.
+  const state = sessionRunStateOf(session);
+  if (state === 'AWAITING_INPUT' && opts.canReply === false) return 'Waiting for owner';
+  return SESSION_RUN_WORD[state];
 }
 
 /**
@@ -283,6 +317,11 @@ export const isSessionLive = (session: SessionStateSource): boolean =>
   ['QUEUED', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'].includes(sessionRunStateOf(session));
 
 export const isSessionTerminal = (session: SessionStateSource): boolean => !isSessionLive(session);
+
+/** Whether the engine is producing output for this session now: a dispatched turn, or one it started
+ *  for itself while parked (activity TURN). */
+export const isSessionWorking = (session: SessionStateSource): boolean =>
+  isSessionBusy(session) || sessionActivityOf(session) === 'TURN';
 
 /** Task execution is busy only while waiting for a runner or actively generating. */
 export const isSessionBusy = (session: SessionStateSource): boolean =>

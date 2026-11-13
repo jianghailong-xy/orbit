@@ -2408,7 +2408,24 @@ function mainSyncNextStep(
 function fixOfATaskBranch(doors: Pick<OpenItemDoorMessageNames, 'resolveMcp'>): string {
   return 'When that task is DONE its branch becomes a candidate of its own, with its own check and its own card for the account owner. '
     + 'Its landing leaves this candidate and this item as they are and does not bring this item back to you: '
-    + `once this task’s work is on the project’s main branch, close this item with ${doors.resolveMcp}.`;
+    + `once this task’s work is on the project’s main branch, close this item with ${doors.resolveMcp}. `
+    + 'Closing the last item about this candidate ends the candidate too, and its card leaves the account owner’s page (M-T14).';
+}
+
+/**
+ * M-T13 said to the coordinator of a task branch's failed candidate: work it already put on the
+ * upstream as other commits — a cherry-pick, a rebase or a squash by hand — is answered by the receipt
+ * that names the commit carrying it. Without that receipt nothing can see the work landed: the commit
+ * is a different one, the card stays in front of the owner, and the task reads as not landed
+ * (2026-11-13, orbit/task-ai-c49d3a).
+ */
+function workAlreadyOnUpstream(doors: Pick<OpenItemDoorMessageNames, 'mergeReceiptMcp'>): string | null {
+  if (doors.mergeReceiptMcp == null) return null;
+  return 'If this task’s work is already on the project’s main branch as other commits — cherry-picked, rebased or squashed there by hand — '
+    + `there is nothing to resolve: record the commit there that carries it with ${doors.mergeReceiptMcp} (result: ALREADY_MERGED, `
+    + 'sessionId: the task’s work session, sourceBranch: this task’s branch, sourceSha: that commit, targetBranch: the project’s main branch). '
+    + 'The receipt ends this candidate, its card and this item, and the task reads as landed. Do this whenever you put a task’s work on '
+    + 'that branch by hand, before anything fails: a card that is still asking ends the same way.';
 }
 
 /**
@@ -2441,6 +2458,7 @@ function promotionNextStep(
     // The re-check is not named here: a conflict's cell holds no such door, and the sync task below
     // is the one that answers it.
     return about + lines(
+      taskBranch ? workAlreadyOnUpstream(doors) : null,
       // A task's branch lands by a rebase (M6), so the project branch's recipe would fail here: a
       // resolution in a merge commit is dropped by the replay, which then meets the same conflict.
       taskBranch
@@ -2467,6 +2485,7 @@ function promotionNextStep(
     : `If the merge-check command or its time limit has to change, or there is another trade-off only the account owner can decide, ask with ${doors.askOwnerMcp}`
       + ', giving at least two options, with the reason in the recommended one.';
   return about + lines(
+    taskBranch ? workAlreadyOnUpstream(doors) : null,
     taskBranch
       ? `First work out whose red it is. If it is a code problem on this task’s branch, file a fix task with ${doors.taskCreateMcp} and attach it to this item with fixesOpenItemId: ${itemId}. `
         + 'A fix does not change this candidate: it runs on a branch of its own, so it has to carry this task’s work with it. '

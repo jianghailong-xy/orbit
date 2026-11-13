@@ -313,6 +313,17 @@ struct ConsoleView: View {
                 // carries — the session's two kinds of output, together.
                 CreatedTasksCard(console: console)
                 WorktreeBar(console: console)
+                // Where a forked task's run took its checkout from (SR18), beside the branch the
+                // bar above names: the server's sentence, as it is.
+                if let fork = console.sessionForkSource {
+                    Text(fork)
+                        .font(.orbitMeta).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.bottom, .composerBandGap)
+                        .accessibilityIdentifier("session-fork-source")
+                }
             }
             .modifier(TypingFold(folded: foldsChrome(console)))
             // The landing this conversation's work fed, at the session's own bottom (owner
@@ -1291,7 +1302,7 @@ struct TranscriptView: View {
         case .steps(let items):
             // No `AnchorRow`: a steps line is never the "Your question" the sticky header names,
             // so it has no business moving that anchor.
-            StepsRowView(items: items, fullPayload: console.fullPayload)
+            StepsRowView(items: items, live: console.state.status == .running, fullPayload: console.fullPayload)
         case .exchanges(let turns):
             // No `AnchorRow`, for the steps line's reason: a fold over turns Orbit opened is no
             // "Your question". Opened, it draws each turn's rows through this same function.
@@ -2097,9 +2108,9 @@ struct TranscriptItemView: View {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red).textSelection(.enabled)
             }
-        case .authError(_, let message):
+        case .authError(let id, let message):
             if let console {
-                AuthErrorCardView(console: console, message: message)
+                AuthErrorCardView(console: console, message: message, settled: console.settlement.auth[id])
             } else {
                 // No console to act through (a preview / detached render): the diagnosis alone,
                 // which is what the runtime said in the first place.
@@ -2115,13 +2126,27 @@ struct TranscriptItemView: View {
                 Label(notice.message, systemImage: "clock.fill")
                     .foregroundStyle(.secondary).textSelection(.enabled)
             }
-        case .notice(_, let message):
+        case .notice(let id, let message, _):
             // A heads-up, not a failure — web's `.chat-notice`: the warning tone at label size,
-            // behind the triangle.
+            // behind the triangle. An account switch the conversation has moved past is history,
+            // muted with the sign-in card it came with.
             Label(message, systemImage: "exclamationmark.triangle.fill")
-                .font(.orbitLabel).foregroundStyle(.orange).textSelection(.enabled)
+                .font(.orbitLabel)
+                .foregroundStyle(console?.settlement.settledNotices.contains(id) == true ? Color.secondary : Color.orange)
+                .textSelection(.enabled)
         case .diagnostic(let notice):
             DiagnosticNoticeRow(notice: notice)
+        case .mainCheckout(let item):
+            // The main checkout's card (board 01) or one action's line (board 03). Without a console to
+            // act through, the event's own sentence, as the notice it used to be.
+            if let console, let changed = item.changed {
+                MainCheckoutCardView(console: console, item: item, notice: changed)
+            } else if let console, let result = item.result {
+                MainCheckoutResultRow(console: console, result: result)
+            } else {
+                Label(item.notice, systemImage: "exclamationmark.triangle.fill")
+                    .font(.orbitLabel).foregroundStyle(.orange).textSelection(.enabled)
+            }
         }
     }
 

@@ -400,9 +400,9 @@ final class AppModel {
     /// Entries are released in `applySessionSnapshot` the moment a snapshot without the row lands:
     /// from then on the row isn't in `lastSnapshot` either, so no later diff can announce it.
     private var filedSessions: Set<String> = []
-    /// Sessions being moved to Trash from this device. Delete takes the row out of every loaded list
-    /// on the tap (`hideTrashedSession`), and these stay out of every list written until the move has
-    /// settled — a read that left before the server had the move would put the row back for a beat,
+    /// Sessions being moved to Trash, or completed, from this device. Delete and Complete take the
+    /// row out of every loaded list on the tap (`hideTrashedSession`), and these stay out of every
+    /// list written until the move has settled — a read that left before the server had the move would put the row back for a beat,
     /// and so would the re-read the delete before it started, when rows are deleted one after
     /// another. Released (`revealTrashedSession`) once the lists have been read again behind the
     /// move, at once if the server refuses it, and by an Undo that brings the row back.
@@ -2186,6 +2186,11 @@ final class AppModel {
         NeedsYouLogic.banner(waiting: needsYouSessions, excluding: focused)
     }
 
+    /// The banner unfolded: one line per waiting conversation, the first the one the banner names.
+    func needsYouEntries(excluding focused: String?) -> [NeedsYouBanner] {
+        NeedsYouLogic.entries(waiting: needsYouSessions, excluding: focused)
+    }
+
     /// Open the session the banner points at. The same navigation as a Recents tap, minus the origin
     /// that says "drawer": a banner tap didn't come from the drawer, so the console it lands on keeps
     /// the system back-swipe instead of yielding the edge to the drawer gesture. An earlier Recents
@@ -2349,17 +2354,21 @@ final class AppModel {
             return
         }
         filedSessions.insert(id)
+        hideTrashedSession(id)
+        dropIfOpen(id)
         Task { @MainActor in
             defer { filedSessions.remove(id) }
             do {
                 try await api.completeSession(id)
             } catch {
+                revealTrashedSession(id)
                 errorText = "Couldn't complete the session."
+                await reloadSessionLists()
                 return
             }
             sessionDetails.remove(id)
-            dropIfOpen(id)
             await loadSessions()
+            revealTrashedSession(id)
         }
     }
 
@@ -2554,7 +2563,9 @@ final class AppModel {
         }
     }
 
-    /// Complete a session, drop it from any open pane and offer Undo.
+    /// Complete a session, drop it from any open pane and offer Undo. Like Delete, the row leaves
+    /// every list on the tap rather than once the server has answered and the lists have been read
+    /// again (`hideTrashedSession`); a refusal brings it back.
     func completeSession(_ id: String) {
         guard let api else { return }
         guard session(id: id)?.capabilities?.canComplete != false else {
@@ -2563,18 +2574,22 @@ final class AppModel {
         }
         let name = toastSessionTitle(id)
         filedSessions.insert(id)
+        hideTrashedSession(id)
+        dropIfOpen(id)
         Task { @MainActor in
             defer { filedSessions.remove(id) }
             do { try await api.completeSession(id) }
             catch {
+                revealTrashedSession(id)
                 showToast("Couldn't complete the session", sessionID: id, sessionTitle: name,
                           detail: Self.toastDetail(error), tone: .error)
+                await reloadSessionLists()
                 return
             }
             sessionDetails.remove(id)
-            dropIfOpen(id)
-            await reloadSessionLists()
             showToast("Session completed", sessionID: id, sessionTitle: name, canUndo: true)
+            await reloadSessionLists()
+            revealTrashedSession(id)
         }
     }
 
@@ -2837,6 +2852,37 @@ final class AppModel {
                           key: "keep-shared-\(workspaceID)")
             }
             await agents?.load()
+        }
+    }
+
+    // MARK: main checkout Git (docs/main-checkout-git-contract.md)
+
+    /// A review model with no console behind it: the worktree isolation dialog's Review files, opened
+    /// from a workspace's settings rather than a session.
+    func makeMainCheckoutModel() -> MainCheckoutModel? {
+        api.map { MainCheckoutModel(sessionID: "", api: $0) }
+    }
+
+    /// Sessions of a workspace still on a worktree of their own, as the Open list knows them: what
+    /// turning worktree isolation off leaves where it is.
+    func worktreeSessionCount(inWorkspace workspaceID: String) -> Int {
+        sessions.filter { ($0.agent?.id ?? $0.agentId) == workspaceID && ($0.branch?.isEmpty == false) }.count
+    }
+
+    /// A new session in a workspace, its composer holding `text` to read, change and send.
+    func openNewSession(inWorkspace workspaceID: String, text: String) {
+        consoleRegistry?.pendingDraftText[workspaceID] = text
+        show(.compose(agentID: workspaceID, folderID: nil), agent: workspaceID)
+    }
+
+    /// Re-read the workspace list a few times after a main checkout action, so the bar follows the
+    /// runner's next heartbeats (60 s apart) without waiting on the list's own refresh.
+    func refreshMainCheckoutSoon() {
+        Task { @MainActor [weak self] in
+            for seconds in [5, 30, 70] as [UInt64] {
+                try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+                await self?.agents?.load()
+            }
         }
     }
 

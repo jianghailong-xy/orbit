@@ -222,7 +222,8 @@ export function WikiChatPanel({
   // A chat's first message, kept from the create until its own conversation draws it.
   const [opening, setOpening] = useState<{ sessionId: string; message: ChatOpening } | null>(null);
 
-  const style: CSSProperties = layout === 'sheet' ? {} : { top, width: width ?? undefined };
+  // A column stands from the window's top (board wiki-rail 03 Ⓑ); only a panel over the page keeps under the head.
+  const style: CSSProperties = layout === 'sheet' ? {} : layout === 'over' ? { top, width: width ?? undefined } : { width: width ?? undefined };
   return (
     <aside
       className={`wk-chat-panel is-${layout}${layout === 'sheet' && sheetFull ? ' is-full' : ''}`}

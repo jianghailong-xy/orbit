@@ -92,8 +92,8 @@ and Go are not required for the Compose install.
 ```bash
 git clone https://github.com/jianghailong-xy/orbit.git
 cd orbit
-# Optional but recommended: pin a reviewed release, for example:
-# git checkout v0.1.2-beta.138
+# Optional but recommended: pin a reviewed release tag (the package version with a v prefix):
+# git checkout vX.Y.Z
 scripts/install-server.sh
 docker compose ps
 ```
@@ -263,17 +263,21 @@ Orbit is a pre-1.0 open-source project under active development. Pin deployments
 upgrade notes before changing versions. The latest published release receives best-effort security fixes; `main`
 is a development branch and older releases are not supported.
 
-At this commit the release story is still being reconciled: the runner source version in the root
-`package.json` is `0.1.198`, while the newest repository tag is `v0.1.2-beta.138`. Treat this checkout as
-development, and verify the tag, runner manifest, web image, and native artifacts together before a production
-upgrade. The open issue and proposed sequence are tracked in [Project maturity and roadmap](docs/project-maturity.md).
+The root `package.json` version is the version of record. A release tag is that version with a `v` prefix,
+and the GitHub Release, macOS DMG, TestFlight build, Android APK, runner binaries and update feeds all
+derive from it. The rules, support window, release notes and checklist are in
+[Release process](docs/release-process.md); run `node scripts/release-identity.mjs check-tag <tag>` to check
+one release's identity. Every release also publishes `SHA256SUMS`, a CycloneDX SBOM, an in-toto/SLSA
+provenance statement and a GitHub artifact attestation; [Verifiable release supply chain](docs/supply-chain.md)
+gives the commands that verify them and the signing identities behind them. Tags published before this rule
+do not share the package version; treat them as history, not as a pattern.
 
 ## Roadmap (direction, not dates)
 
 The roadmap is intentionally a set of adoption gates rather than a promise of delivery dates.
 
 - **Now:** make the clean-install smoke test repeatable, keep the README/demo/security claims in sync, and
-  reconcile one version scheme across server, web, runner, and native artifacts.
+  keep one version scheme across server, web, runner, and native artifacts.
 - **Next:** screenshot-led onboarding, an operator configuration reference, a public roadmap/changelog with
   checksums and upgrade notes, and stronger project-owned community/release operations.
 - **Later:** recurring schedules and inbound task sources (ticket/chat ingestion), which are designed for but not

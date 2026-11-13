@@ -127,7 +127,8 @@ async function world(db: PrismaClient, label: string, online = true): Promise<Wo
     },
   });
   await db.workspace.create({
-    data: { id: workspaceId, ownerId, runnerId, name: `${label}-workspace`, enabled: true, workDir: '/repo' },
+    // Worktrees on, as on the workspaces merges come from: a repair session must still get none.
+    data: { id: workspaceId, ownerId, runnerId, name: `${label}-workspace`, enabled: true, workDir: '/repo', enableWorktree: true },
   });
   return { ownerId, runnerId, workspaceId };
 }
@@ -196,7 +197,7 @@ function repairsOf(db: PrismaClient, parentId: string) {
     orderBy: { createdAt: 'asc' },
     select: {
       id: true, status: true, prompt: true, workspaceId: true, assignedRunnerId: true, deletedAt: true,
-      finishedAt: true, completedAt: true, endReason: true, cancelRequestedAt: true,
+      finishedAt: true, completedAt: true, endReason: true, cancelRequestedAt: true, branch: true,
     },
   });
 }
@@ -356,6 +357,8 @@ test('S2 the merge repair door hands the next step to the same repair session on
       assert.equal(opened.prompt, mergeRecoveryPrompt(rec), label);
       assert.equal(opened.workspaceId, w.workspaceId, label);
       assert.equal(opened.assignedRunnerId, w.runnerId, label);
+      // It works in the recovery's own repair worktree, so it gets no branch or worktree of its own.
+      assert.equal(opened.branch, null, `${label}: no branch of its own`);
       if (old) {
         assert.deepEqual(await turnsOf(db, old), oldTurns, `${label}: the old one is sent nothing`);
         assert.equal(repairs[0].status, (row?.status ?? RunStatus.AWAITING_INPUT), `${label}: and left as it was`);

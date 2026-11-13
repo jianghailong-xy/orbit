@@ -1181,10 +1181,22 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if err := requireRunnerTaskCompletionDeclaration(body); err != nil {
 			return toolResult(err.Error(), true)
 		}
+		// The snapshot is taken at the start of the call, before the card (design §2.1): the task
+		// starts from what this session had when it asked, and the card shows the fork it will carry.
+		var fork *forkSnapshot
+		if getBool(args, "forkFromSession") {
+			var err error
+			if fork, err = takeForkSnapshot(s.sessionID, title); err != nil {
+				return toolResult(err.Error(), true)
+			}
+			body["fork"] = fork.payload()
+		}
 		declined, startAfterCreate, err := askBeforeTaskCreate(s.t, s.sessionID, body)
 		if err != nil {
+			fork.release()
 			return toolResult(err.Error(), true)
 		} else if declined != "" {
+			fork.release()
 			return toolResult("the human rejected this task: "+declined, false)
 		}
 		// The owner's "Create and start" does what startNow does. It is their later and explicit
@@ -1194,6 +1206,9 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		raw, err := s.t.createTask(s.agentID, s.sessionID, body)
 		if err != nil {
+			if createRefused(err) {
+				fork.release()
+			}
 			// Verbatim, plus how to ASK when the refusal is the one whose own requiredAction says
 			// a handoff may be requested. This is the door where asking gets somewhere.
 			return toolResult("create task failed: "+err.Error()+
@@ -1214,6 +1229,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult(fmt.Sprintf("tasks accepts at most %d items per call", maxTaskBatchCreate), true)
 		}
 		bodies := make([]map[string]interface{}, 0, len(items))
+		var forking []int
 		for i, raw := range items {
 			item, ok := raw.(map[string]interface{})
 			if !ok {
@@ -1247,6 +1263,25 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: %s", i, err), true)
 			}
 			bodies = append(bodies, body)
+			if getBool(item, "forkFromSession") {
+				forking = append(forking, i)
+			}
+		}
+		// One snapshot for the call, shared by every item that forks (design §2.1). Not for a dry run,
+		// which writes nothing: its items are judged without the fork.
+		var fork *forkSnapshot
+		if len(forking) > 0 && !getBool(args, "dryRun") {
+			title := getString(bodies[forking[0]], "title")
+			if len(forking) > 1 {
+				title = fmt.Sprintf("%s (and %d more)", title, len(forking)-1)
+			}
+			var err error
+			if fork, err = takeForkSnapshot(s.sessionID, title); err != nil {
+				return toolResult(err.Error(), true)
+			}
+			for _, i := range forking {
+				bodies[i]["fork"] = fork.payload()
+			}
 		}
 		// Unit L7: a dry run writes nothing, so there is nothing to ask a person about. It goes
 		// straight through rather than through `createBatchWithApproval`, whose whole subject is
@@ -1255,7 +1290,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if getBool(args, "dryRun") {
 			return s.createBatchNow(map[string]interface{}{"tasks": bodies, "dryRun": true})
 		}
-		return s.createBatchWithApproval(bodies)
+		return s.createBatchWithApproval(bodies, fork)
 
 	case "task_batch_pin":
 		body := map[string]interface{}{}
@@ -1569,6 +1604,9 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		body := map[string]interface{}{"prompt": prompt}
 		copyIfPresent(body, args, "title", "model", "engine", "provider", "permissionMode")
+		if v, ok := args["worktree"].(bool); ok && !v {
+			body["worktree"] = false
+		}
 		// Route to a target agent: an explicit agentId wins; else an @-mentioned agentName
 		// (resolved to that owner's agent server-side); else default to the current agent.
 		if id := getString(args, "agentId"); id != "" {
@@ -2207,15 +2245,33 @@ func askBeforeBatch(t *Transport, agentID, sessionID string, bodies []map[string
 // while looking like the least: fifty titles say nothing, and what actually happens is some number
 // of runs starting within the minute. This deployment has the cautionary case — one session
 // created 43 lists and ~21,500 tasks before anybody looked.
-func (s *mcpServer) createBatchWithApproval(bodies []map[string]interface{}) map[string]interface{} {
+func (s *mcpServer) createBatchWithApproval(bodies []map[string]interface{}, fork *forkSnapshot) map[string]interface{} {
 	declined, err := askBeforeBatch(s.t, s.agentID, s.sessionID, bodies)
 	if err != nil {
+		fork.release()
 		return toolResult(err.Error(), true)
 	}
 	if declined != "" {
+		fork.release()
 		return toolResult("the human rejected this batch: "+declined, false)
 	}
-	return s.createBatchNow(map[string]interface{}{"tasks": bodies})
+	raw, err := s.t.createTasksBatch(s.agentID, s.sessionID, map[string]interface{}{"tasks": bodies})
+	if err != nil {
+		if createRefused(err) {
+			fork.release()
+		}
+		return toolResult("create tasks failed: "+err.Error()+
+			crossProjectCrossingGuidance(err), true)
+	}
+	return toolResult(prettyJSON(raw), false)
+}
+
+// createRefused reports whether a create failed with the server's answer, so nothing was written and a
+// fork's keep-alive ref has no task to keep alive. A request that may have reached the server and been
+// lost on the way back keeps the ref: the gc removes it once no open task names it.
+func createRefused(err error) bool {
+	var httpErr *transportHTTPError
+	return errors.As(err, &httpErr) && httpErr.statusCode >= 400 && httpErr.statusCode < 500
 }
 
 func (s *mcpServer) createBatchNow(body map[string]interface{}) map[string]interface{} {
@@ -3336,6 +3392,15 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		"an assigneeId if it should be able to run, since a check with no assignee waits for somebody " +
 		"to hand it one."
 
+	// SR55 (docs/task-fork-from-session-design.md §2.1): start the task from a snapshot of THIS
+	// session's checkout. It takes no id: the only checkout this process can read is its own session's.
+	forkFromSessionProp := map[string]interface{}{
+		"type": "boolean",
+		"description": "Start this task from what this session has now: its branch tip, plus the edits it has not " +
+			"committed yet. The task still gets its own checkout and branch — it never shares this session's " +
+			"directory — and it runs on this machine only, so its assignee must be a workspace on this machine. " +
+			"Not allowed for a task in a project with a code binding. Always this session; there is no id to pass.",
+	}
 	// The fields of one new task, shared by task_create and every task_create_batch item.
 	// A fresh map per call so a caller can extend its copy without touching the other's.
 	taskCreateProps := func() map[string]interface{} {
@@ -3420,7 +3485,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"project, or has already been replaced (two racing replacements give one winner " +
 					"and one error, never a pointer that depends on timing).",
 			},
-			"labels": labelsProp,
+			"labels":          labelsProp,
+			"forkFromSession": forkFromSessionProp,
 		}
 	}
 	taskBatchItemProps := func() map[string]interface{} {
@@ -3648,7 +3714,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"`targetShaBefore`, else `origin/<targetBranch>`. The receipt is refused when it is " +
 				"not, and when git cannot tell (fetch first, or run from inside the repository). " +
 				"Work that landed by cherry-pick or rebase is a DIFFERENT commit on the target: name " +
-				"that commit, never the original branch tip. A receipt's sourceSha goes into every " +
+				"that commit, never the original branch tip. A receipt for a task's branch also ends " +
+				"the account owner's merge card still offering that branch (asking or blocked): after " +
+				"you cherry-pick, rebase or squash a task's work onto its line by hand, record it at " +
+				"once with that task's work session and sourceBranch = the task's branch, or the owner " +
+				"keeps being asked to merge work that is already there. A receipt's sourceSha goes into every " +
 				"dependent task's dependency closure, and one the target does not contain keeps them " +
 				"refused DEPENDENCY_BASE_NOT_LANDED, because a receipt cannot be taken back. " +
 				"`rebaseBaseSha` is the field people skip and the one that decides " +
@@ -4408,7 +4478,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"rewritten: an ending is final. An item whose kind has a press of its own, a merge " +
 				"card or a paused project, is refused here: it is decided by confirming, declining or " +
 				"resuming, and closing it by hand would leave what it is about with no card in front " +
-				"of anybody.",
+				"of anybody. Closing the last failure item about a task branch's blocked merge " +
+				"candidate ends that candidate too, and its card leaves the owner's page; when the " +
+				"work went in as other commits, record merge_receipt for the task's branch as well.",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
 					"type":        "string",
@@ -5131,6 +5203,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"enum":        offeredPermissionModes(),
 						"description": strings.TrimSpace("How much the sub-session may do without a human: \"plan\" investigates and proposes without touching anything, \"default\" asks before each unapproved action, \"acceptEdits\" pre-approves file edits only, \"auto\" lets the model decide when to ask and is the mode for unattended work that has to run commands, \"dontAsk\" never asks but refuses anything not already approved, commands and background jobs included, \"bypassPermissions\" never asks and allows everything. Omit to use the owner's account default. It can never be wider than this session's own mode: a wider mode is refused, and when the default is wider the sub-session runs in this session's own mode. A mode that asks parks the sub-session on an approval card until a human answers, so pick one only if someone is watching. " + rootWithheldPermissionModeNote()),
 					},
+					"worktree":  map[string]interface{}{"type": "boolean", "description": "Pass false to run the session in the agent's own checkout, with no branch and no worktree, even when the agent isolates each session in a worktree. For work that changes no code (investigating, reading logs, answering a question, read-only queries): it leaves no unmerged branch behind. Not for code changes: the session edits the checkout every other non-isolated session shares, and has no branch to merge. Omit it to follow the agent's own setting; true cannot turn isolation on for an agent that has it off."},
 					"wait":      map[string]interface{}{"type": "boolean", "description": "Wait for the new session's first turn to settle and return its full state inline: up to about 10 minutes, less when this session was itself spawned by a wait. The wait is recorded on Orbit's server as a watch before it starts, so when that time runs out or the connection drops, the call returns the session as last seen with the watch under \"watch\", and the watch wakes this session when the turn settles; end your turn then instead of polling. If the server does not record the watch, the result says no server-held watch backs the wait, and a refused watch returns at once. Default false: returns immediately. Whatever happens while waiting, the session is created: an answer that has not settled names it under \"wait\" with session_get as the next step, never session_create."},
 					"requestId": map[string]interface{}{"type": "string", "description": "Leave it out on a first call. When a call failed with an UNKNOWN outcome and its answer named a requestId, send the same arguments again with that requestId: Orbit answers with what that request created, or creates it once, so a lost answer never becomes a duplicate. The same requestId with different arguments is refused."},
 				}, "prompt"),
