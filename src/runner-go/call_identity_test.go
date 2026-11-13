@@ -33,7 +33,12 @@ type keyedDoor struct {
 	inProgress int
 	// inProgressBody is that answer's body.
 	inProgressBody string
-	srv            *httptest.Server
+	// failAfterCommit answers this many deliveries with failStatus/failBody AFTER applying the
+	// effect: a server that wrote and then failed to say so.
+	failAfterCommit int
+	failStatus      int
+	failBody        string
+	srv             *httptest.Server
 }
 
 func newKeyedDoor(t *testing.T, idField, mismatch string) *keyedDoor {
@@ -86,7 +91,16 @@ func (d *keyedDoor) serve(w http.ResponseWriter, r *http.Request) {
 	if lose {
 		d.loseAnswers--
 	}
+	fail := d.failAfterCommit > 0
+	if fail {
+		d.failAfterCommit--
+	}
 	d.mu.Unlock()
+	if fail {
+		w.WriteHeader(d.failStatus)
+		_, _ = w.Write([]byte(d.failBody))
+		return
+	}
 	if lose {
 		conn, _, err := w.(http.Hijacker).Hijack()
 		if err == nil {
@@ -272,7 +286,7 @@ func TestTaskStartMismatchIsAnsweredNotReplayed(t *testing.T) {
 	}
 	text := resultText(res)
 	if !strings.Contains(text, "TASK_RUN_REQUEST_MISMATCH") || strings.Contains(text, "replay:") ||
-		!strings.Contains(text, "task_start without triggerId") {
+		!strings.Contains(text, `task_start {"taskId":"t1"} (without triggerId)`) {
 		t.Fatalf("a mismatch must say: answered, make a new request:\n%s", text)
 	}
 	if door.effectCount() != 0 {
@@ -306,7 +320,7 @@ func TestTaskCLIStartReplaysWithTriggerIDAndNamesItInTheError(t *testing.T) {
 		t.Fatalf("a lost answer was reported as success")
 	}
 	id := idFromError(t, err.Error(), "triggerId")
-	if !strings.Contains(err.Error(), "orbit task start task-1 --trigger-id "+id) {
+	if !strings.Contains(err.Error(), `"task","start","task-1","--trigger-id","`+id+`"]`) {
 		t.Fatalf("the CLI error does not hand back its replay:\n%v", err)
 	}
 
@@ -425,7 +439,7 @@ func TestMCPSessionInterruptWithMessageIsKeyedAndPlainIsNot(t *testing.T) {
 	}
 	text := resultText(res)
 	key := idFromError(t, text, "clientTurnId")
-	if key != allSame(t, door.ids()) || !strings.Contains(text, "session_interrupt with the same message") {
+	if key != allSame(t, door.ids()) || !strings.Contains(text, `session_interrupt {"clientTurnId":"`+key+`","sessionId":"child"} plus the same "message"`) {
 		t.Fatalf("the error does not hand back the replay:\n%s", text)
 	}
 	res = mcp.callTool("session_interrupt", map[string]interface{}{"sessionId": "child", "message": "stop; do X", "clientTurnId": key})
@@ -473,7 +487,7 @@ func TestMCPProjectSendIsKeyedAndNotResent(t *testing.T) {
 	}
 	text := resultText(res)
 	key := idFromError(t, text, "clientTurnId")
-	if key != door.ids()[0] || !strings.Contains(text, `project_send with the same message, projectId "p1"`) {
+	if key != door.ids()[0] || !strings.Contains(text, `project_send {"clientTurnId":"`+key+`","projectId":"p1"} plus the same "message"`) {
 		t.Fatalf("the error does not hand back the replay:\n%s", text)
 	}
 	res = mcp.callTool("project_send", map[string]interface{}{"projectId": "p1", "message": "hi", "clientTurnId": key})
@@ -500,7 +514,7 @@ func TestSessionCLISendAndInterruptAreKeyedAndNameTheKeyInTheError(t *testing.T)
 			}
 			key := idFromError(t, err.Error(), "clientTurnId")
 			if key != allSame(t, door.ids()) ||
-				!strings.Contains(err.Error(), "orbit session "+verb+" child with the same message and --client-turn-id "+key) {
+				!strings.Contains(err.Error(), `"session","`+verb+`","child","--message-file","-","--client-turn-id","`+key+`"], with the same message on stdin`) {
 				t.Fatalf("the error does not hand back the replay:\n%v", err)
 			}
 			if len(door.ids()) != runRequestResendAttempts {
@@ -579,4 +593,188 @@ func stripEchoedCallID(out, requestBody string) string {
 		}
 	}
 	return out
+}
+
+// ---- a failure that may have written is never answered with "make a new request" -------------
+
+// committedThenFailed are server answers that come AFTER the write committed (or might have): the
+// contract reads each as an unknown outcome, so the only safe next step is the same id again.
+var committedThenFailed = []struct {
+	name, body string
+	status     int
+}{
+	{"gateway 502", `<html><body>502 Bad Gateway</body></html>`, http.StatusBadGateway},
+	{"gateway 504", `<html><body>504 Gateway Time-out</body></html>`, http.StatusGatewayTimeout},
+	{"plain 500", `{"statusCode":500,"message":"Internal server error"}`, http.StatusInternalServerError},
+	{"500 not retryable", `{"statusCode":500,"message":"Internal server error","retryable":false}`, http.StatusInternalServerError},
+	{"explicit UNKNOWN", `{"statusCode":409,"code":"SOMETHING_HAPPENED","message":"x","recovery":{"effect":"UNKNOWN"}}`, http.StatusConflict},
+	{"explicit SAME_REQUEST_ID", `{"statusCode":409,"code":"SOMETHING_HAPPENED","message":"x","recovery":{"effect":"UNKNOWN","retryPolicy":"SAME_REQUEST_ID"}}`, http.StatusConflict},
+}
+
+func assertSameIDGuidance(t *testing.T, text, field, id string) {
+	t.Helper()
+	if got := idFromError(t, text, field); got != id {
+		t.Fatalf("the error names %q, the wire carried %q:\n%s", got, id, text)
+	}
+	if strings.Contains(text, "without") || strings.Contains(text, "next:") {
+		t.Fatalf("a failure that may have written was answered with a new request:\n%s", text)
+	}
+	if !strings.Contains(text, "replay:") || !strings.Contains(text, "SAME "+field) ||
+		!strings.Contains(text, `"`+id+`"`) {
+		t.Fatalf("the error does not hand back a replay under the same %s:\n%s", field, text)
+	}
+}
+
+func TestTaskStartFailureThatMayHaveWrittenKeepsTheIDOnBothSurfaces(t *testing.T) {
+	recordWaits(t)
+	for _, tc := range committedThenFailed {
+		t.Run("mcp "+tc.name, func(t *testing.T) {
+			door := newKeyedDoor(t, "triggerId", runMismatchBody)
+			door.failAfterCommit, door.failStatus, door.failBody = 99, tc.status, tc.body
+			mcp := &mcpServer{taskID: "t1", t: NewTransport(door.srv.URL, "tok")}
+
+			res := mcp.callTool("task_start", map[string]interface{}{})
+			if res["isError"] != true {
+				t.Fatalf("a failed start reported success")
+			}
+			id := allSame(t, door.ids())
+			assertSameIDGuidance(t, resultText(res), "triggerId", id)
+
+			door.mu.Lock()
+			door.failAfterCommit = 0
+			door.mu.Unlock()
+			if res := mcp.callTool("task_start", map[string]interface{}{"triggerId": id}); res["isError"] == true {
+				t.Fatalf("the replay failed: %s", resultText(res))
+			}
+			if allSame(t, door.ids()) != id || door.effectCount() != 1 {
+				t.Fatalf("ids %v, effects %d", door.ids(), door.effectCount())
+			}
+		})
+		t.Run("cli "+tc.name, func(t *testing.T) {
+			door := newKeyedDoor(t, "triggerId", runMismatchBody)
+			door.failAfterCommit, door.failStatus, door.failBody = 99, tc.status, tc.body
+			configureCLITestRunner(t, door.srv.URL)
+
+			var out bytes.Buffer
+			err := cmdTaskCLI([]string{"start", "task-1", "--json"}, strings.NewReader(""), &out)
+			if err == nil {
+				t.Fatalf("a failed start reported success")
+			}
+			id := allSame(t, door.ids())
+			assertSameIDGuidance(t, err.Error(), "triggerId", id)
+			if !strings.Contains(err.Error(), `"task","start","task-1","--trigger-id","`+id+`"]`) {
+				t.Fatalf("the CLI replay is not an argv:\n%v", err)
+			}
+
+			door.mu.Lock()
+			door.failAfterCommit = 0
+			door.mu.Unlock()
+			if err := cmdTaskCLI([]string{"start", "task-1", "--trigger-id", id, "--json"}, strings.NewReader(""), &out); err != nil {
+				t.Fatal(err)
+			}
+			if allSame(t, door.ids()) != id || door.effectCount() != 1 {
+				t.Fatalf("ids %v, effects %d", door.ids(), door.effectCount())
+			}
+		})
+	}
+}
+
+func TestSessionMessageFailureThatMayHaveWrittenKeepsTheKeyOnBothSurfaces(t *testing.T) {
+	recordWaits(t)
+	for _, tool := range []string{"session_send", "session_interrupt"} {
+		verb := map[string]string{"session_send": "send", "session_interrupt": "interrupt"}[tool]
+		for _, tc := range committedThenFailed {
+			t.Run("mcp "+tool+" "+tc.name, func(t *testing.T) {
+				door := newKeyedDoor(t, "clientTurnId", turnMismatchBody)
+				door.failAfterCommit, door.failStatus, door.failBody = 99, tc.status, tc.body
+				mcp := keyedOrchestratingMCP(door.srv.URL)
+
+				res := mcp.callTool(tool, map[string]interface{}{"sessionId": "child", "message": "do X"})
+				if res["isError"] != true {
+					t.Fatalf("a failed %s reported success", tool)
+				}
+				key := allSame(t, door.ids())
+				assertSameIDGuidance(t, resultText(res), "clientTurnId", key)
+
+				door.mu.Lock()
+				door.failAfterCommit = 0
+				door.mu.Unlock()
+				if res := mcp.callTool(tool, map[string]interface{}{"sessionId": "child", "message": "do X", "clientTurnId": key}); res["isError"] == true {
+					t.Fatalf("the replay failed: %s", resultText(res))
+				}
+				if allSame(t, door.ids()) != key || door.effectCount() != 1 {
+					t.Fatalf("ids %v, effects %d", door.ids(), door.effectCount())
+				}
+			})
+			t.Run("cli "+tool+" "+tc.name, func(t *testing.T) {
+				door := newKeyedDoor(t, "clientTurnId", turnMismatchBody)
+				door.failAfterCommit, door.failStatus, door.failBody = 99, tc.status, tc.body
+				configureCLITestRunner(t, door.srv.URL)
+				t.Setenv(envMCPOrchestration, "true")
+				t.Setenv("ORBIT_SESSION_ID", "parent-session")
+				t.Setenv(envOrchestrationToken, "session-token")
+
+				var out bytes.Buffer
+				err := cmdSessionCLI([]string{verb, "child", "--message", "do X", "--json"}, strings.NewReader(""), &out)
+				if err == nil {
+					t.Fatalf("a failed %s reported success", verb)
+				}
+				key := allSame(t, door.ids())
+				assertSameIDGuidance(t, err.Error(), "clientTurnId", key)
+
+				door.mu.Lock()
+				door.failAfterCommit = 0
+				door.mu.Unlock()
+				// The replay exactly as the error's argv says: the message on stdin.
+				if err := cmdSessionCLI([]string{verb, "child", "--message-file", "-", "--client-turn-id", key, "--json"},
+					strings.NewReader("do X"), &out); err != nil {
+					t.Fatal(err)
+				}
+				if allSame(t, door.ids()) != key || door.effectCount() != 1 {
+					t.Fatalf("ids %v, effects %d", door.ids(), door.effectCount())
+				}
+			})
+		}
+	}
+}
+
+func TestCLIReplayIsAnArgvThatCarriesHostileIDsAsData(t *testing.T) {
+	// A target or id with shell syntax in it stays one JSON string in one argv slot: nothing in the
+	// hint is ever re-parsed by a shell.
+	hostile := `x"; rm -rf ~ #`
+	text := taskStartReplayError(io.ErrUnexpectedEOF, false, hostile, hostile).Error()
+	m := regexp.MustCompile(`argv (\[[^\n]*?\])\.`).FindStringSubmatch(text)
+	if m == nil {
+		t.Fatalf("no argv in:\n%s", text)
+	}
+	var argv []string
+	if err := json.Unmarshal([]byte(m[1]), &argv); err != nil {
+		t.Fatalf("the argv is not a JSON array: %v\n%s", err, m[1])
+	}
+	want := []string{"task", "start", hostile, "--trigger-id", hostile}
+	if len(argv) != len(want)+1 || strings.Join(argv[1:], "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("argv = %q, want [<orbit> %q]", argv, want)
+	}
+}
+
+func TestCallGuidanceFollowsTheRecoveryContract(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want int
+	}{
+		{"no answer", io.ErrUnexpectedEOF, replayGuidance},
+		{"in progress", &transportHTTPError{statusCode: 409, body: `{"code":"TASK_RUN_REQUEST_IN_PROGRESS"}`}, replayGuidance},
+		{"gateway", &transportHTTPError{statusCode: 502, body: `<html>bad gateway</html>`}, replayGuidance},
+		{"plain 500", &transportHTTPError{statusCode: 500, body: `{"statusCode":500}`}, replayGuidance},
+		{"500 not retryable", &transportHTTPError{statusCode: 500, body: `{"statusCode":500,"retryable":false}`}, verifyGuidance},
+		{"explicit committed", &transportHTTPError{statusCode: 409, body: `{"code":"X","recovery":{"effect":"COMMITTED"}}`}, committedGuidance},
+		{"run mismatch", &transportHTTPError{statusCode: 409, body: runMismatchBody}, freshGuidance},
+		{"turn mismatch", &transportHTTPError{statusCode: 409, body: turnMismatchBody}, freshGuidance},
+		{"validation", &transportHTTPError{statusCode: 400, body: `{"statusCode":400,"message":["bad"]}`}, freshGuidance},
+	} {
+		if got := callGuidance(tc.err); got != tc.want {
+			t.Errorf("%s: guidance %d, want %d (%+v)", tc.name, got, tc.want, recoveryOf(tc.err, true))
+		}
+	}
 }

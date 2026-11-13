@@ -227,14 +227,30 @@ following for each one:
   or the server's `retryAfterSeconds`, whichever is longer, capped at 5 s. There are at most 4
   deliveries in total. `project_send` is not resent automatically, because the coordinator it
   resolves to can change between deliveries.
-- **Exhausted or unanswered: keep the id.** The error keeps the server's text first, then adds
-  `  triggerId: ID` (or `  clientTurnId: ID`) and a `replay:` line naming the exact call to make
-  with the same id. The message is never copied into that call: the caller already has it.
-- **Answered (a mismatch or any other refusal): do not replay.** The `next:` line says to make a new
-  request without the id once whatever the refusal names has changed. The server's mismatch check
-  still stops one id from naming two payloads.
+- **What the error says next is the contract's decision, not the resend rule's.** The error keeps
+  the server's text first, then adds `  triggerId: ID` (or `  clientTurnId: ID`). The next step is
+  read from `recoveryOf(err, true)`, the envelope normalized with the request id present:
+  - The effect is not `NONE` (no answer, a gateway page, a plain 5xx, or an explicit `UNKNOWN`), or
+    the policy is `SAME_REQUEST_ID` or `SAFE`: a `replay:` line with the exact call under the
+    **same** id.
+  - The policy is `VERIFY_THEN_RETRY`: check whether the write took effect, and if it did not,
+    replay under the same id.
+  - The effect is `COMMITTED`: do not send it again.
+  - Otherwise, the server answered and nothing was written (a mismatch, or a refusal that holds
+    until something changes): a `next:` line saying to make a new request without the id once
+    that has changed.
+
+  So a failure that may have written is never answered with "make a new request". The server's
+  mismatch check still stops one id from naming two payloads.
+- **The replay is data, not a command line.** The MCP form is the tool name and its arguments as
+  JSON. The CLI form is `argv [...]`: a JSON array whose argv[0] is this binary's own path, run as
+  written with no shell. Messages are read from stdin (`--message-file -`), so neither the message
+  nor any id or target the caller supplied is ever pasted into shell text.
 - `TASK_RUN_REQUEST_IN_PROGRESS` carries `retryAfterSeconds` (2) next to its `triggerId`.
 
 Tests: `src/runner-go/call_identity_test.go` covers a lost answer, concurrent deliveries,
-IN_PROGRESS, mismatch, an exhausted bound, and an agent replaying the id read from the error, over
-MCP and the CLI.
+IN_PROGRESS, mismatch, an exhausted bound, a failure that may have written (gateway 5xx, plain
+500, explicit `UNKNOWN`), and an agent replaying the id read from the error, over MCP and the CLI.
+`src/apiserver/src/sessions/client-turn-id-replay.pg.spec.ts` holds the server's half on
+PostgreSQL: racing deliveries and replays of one clientTurnId leave one turn (one interrupt and one
+follow-up), and a different payload under the same key writes nothing.

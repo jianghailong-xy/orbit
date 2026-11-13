@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -121,59 +122,121 @@ func withCallID(raw json.RawMessage, field, id string) json.RawMessage {
 	return json.RawMessage(head + string(rest))
 }
 
+// What a failed keyed call tells its caller to do next. The decision is the recovery contract's
+// (recoveryOf, normalized with the request id present), never the auto-resend predicate: which
+// failures this call resent on its own is one question, what the caller may do after it gave up is
+// another, and a failure that might have written must never be answered with "make a new request".
+const (
+	// replayGuidance: the write may have happened, or the server asked for the same id. Replay under
+	// the SAME id; the server answers it from the first delivery.
+	replayGuidance = iota
+	// verifyGuidance: the outcome is unknown and the contract says verify first. Read the state;
+	// if the write is not there, replay under the SAME id.
+	verifyGuidance
+	// committedGuidance: the write stands. Do not send it again.
+	committedGuidance
+	// freshGuidance: the server answered and nothing was written (a mismatch, or a refusal that
+	// holds until something changes). A later attempt is a new request without the id.
+	freshGuidance
+)
+
+// callGuidance reads the failure through the recovery contract.
+func callGuidance(err error) int {
+	env := recoveryOf(err, true)
+	switch {
+	case env.Effect == "COMMITTED":
+		return committedGuidance
+	case env.Retry.Policy == "VERIFY_THEN_RETRY":
+		return verifyGuidance
+	case env.Effect != "NONE", env.Retry.Policy == "SAME_REQUEST_ID", env.Retry.Policy == "SAFE":
+		// UNKNOWN (no answer, a gateway page, a plain 5xx, a server that says so), the server's
+		// own "ask again with this id", and a refusal that wrote nothing and may simply be sent
+		// again: in every case the same logical request, so the same id.
+		return replayGuidance
+	}
+	return freshGuidance
+}
+
 // replayableCallError is a keyed call that failed. It keeps the error the call got, unchanged and
 // first, and adds the id and what to do with it.
 type replayableCallError struct {
 	err error
 	// field is "triggerId" or "clientTurnId", and id its value.
 	field, id string
-	// unanswered says the outcome is unknown or still being answered, so the call must be replayed
-	// under the same id. Otherwise the server answered, and a new attempt is a new call.
-	unanswered bool
+	guidance  int
 	// replay is the exact call that replays this one; fresh is how to make a new one.
 	replay, fresh string
 }
 
 func (e *replayableCallError) Error() string {
 	text := e.err.Error() + "\n  " + e.field + ": " + e.id + "\n"
-	if e.unanswered {
-		return text + "  replay:  the outcome is not known yet. Replay with the SAME " + e.field +
-			", never a new one: " + e.replay + ". The server answers a replay from the first " +
-			"delivery, so it never acts twice.\n"
+	switch e.guidance {
+	case verifyGuidance:
+		return text + "  replay:  the outcome is not known. Check whether it took effect; if it did not, replay with " +
+			"the SAME " + e.field + ", never a new one: " + e.replay + ". The server answers a replay from the " +
+			"first delivery, so it never acts twice.\n"
+	case committedGuidance:
+		return text + "  next:    the server recorded this request. Do not send it again.\n"
+	case freshGuidance:
+		return text + "  next:    the server answered this request and nothing was written, so replaying it returns " +
+			"the same answer. Once what it names has changed, make a new request: " + e.fresh + ".\n"
 	}
-	return text + "  next:    the server answered this request, so replaying it returns the same answer. " +
-		"Once what it names has changed, make a new request: " + e.fresh + ".\n"
+	return text + "  replay:  the outcome is not known yet. Replay with the SAME " + e.field +
+		", never a new one: " + e.replay + ". The server answers a replay from the first " +
+		"delivery, so it never acts twice.\n"
 }
 
 func (e *replayableCallError) Unwrap() error { return e.err }
 
+// jsonText is v as JSON: every value a caller may have supplied is quoted by the encoder, never
+// pasted into the text.
+func jsonText(v interface{}) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return `"<unencodable>"`
+	}
+	return string(b)
+}
+
+// cliArgv is a command line as an argv array in JSON, run as written with no shell: argv[0] is this
+// binary's own path, then the words of the command. Nothing in it is ever re-parsed by a shell, so
+// an id or a target the caller supplied cannot become a second command.
+func cliArgv(words ...string) string {
+	exe := "orbit"
+	if path, err := os.Executable(); err == nil && path != "" {
+		exe = path
+	}
+	return "argv " + jsonText(append([]string{exe}, words...))
+}
+
 // taskStartReplayError wraps a failed task_start with its triggerId. mcp says which surface the
 // replay is written for.
 func taskStartReplayError(err error, mcp bool, taskID, triggerID string) error {
-	replay := `task_start {"taskId":` + strconv.Quote(taskID) + `,"triggerId":` + strconv.Quote(triggerID) + `}`
-	fresh := "task_start without triggerId"
+	replay := "task_start " + jsonText(map[string]string{"taskId": taskID, "triggerId": triggerID})
+	fresh := "task_start " + jsonText(map[string]string{"taskId": taskID}) + " (without triggerId)"
 	if !mcp {
-		replay = "orbit task start " + taskID + " --trigger-id " + triggerID
-		fresh = "orbit task start " + taskID + " without --trigger-id"
+		replay = cliArgv("task", "start", taskID, "--trigger-id", triggerID)
+		fresh = cliArgv("task", "start", taskID) + " (without --trigger-id)"
 	}
 	return &replayableCallError{err: err, field: "triggerId", id: triggerID,
-		unanswered: isResendableRunFailure(err), replay: replay, fresh: fresh}
+		guidance: callGuidance(err), replay: replay, fresh: fresh}
 }
 
-// messageReplayError wraps a failed keyed message with its clientTurnId. tool is the MCP tool or
-// CLI command, and target names the field and value that address it. The message itself is never
-// copied into the replay: the caller still has it, and a command line built from user text is
-// unsafe.
+// messageReplayError wraps a failed keyed message with its clientTurnId. For MCP, tool is the tool
+// and targetField names the argument that addresses it; for the CLI, tool is the command ("orbit
+// session send"). The message itself is never copied into the replay: the caller still has it, and
+// the CLI form reads it from stdin.
 func messageReplayError(err error, mcp bool, tool, targetField, target, clientTurnID string) error {
 	var replay, fresh string
 	if mcp {
-		replay = tool + ` with the same message, ` + targetField + ` ` + strconv.Quote(target) +
-			` and "clientTurnId":` + strconv.Quote(clientTurnID)
-		fresh = tool + " without clientTurnId"
+		replay = tool + " " + jsonText(map[string]string{targetField: target, "clientTurnId": clientTurnID}) +
+			` plus the same "message"`
+		fresh = tool + " " + jsonText(map[string]string{targetField: target}) + ` plus the "message" (without clientTurnId)`
 	} else {
-		replay = tool + " " + target + " with the same message and --client-turn-id " + clientTurnID
-		fresh = tool + " without --client-turn-id"
+		words := append(strings.Fields(tool)[1:], target, "--message-file", "-")
+		replay = cliArgv(append(words, "--client-turn-id", clientTurnID)...) + ", with the same message on stdin"
+		fresh = cliArgv(words...) + ", with the message on stdin (without --client-turn-id)"
 	}
 	return &replayableCallError{err: err, field: "clientTurnId", id: clientTurnID,
-		unanswered: isUnansweredSessionWrite(err), replay: replay, fresh: fresh}
+		guidance: callGuidance(err), replay: replay, fresh: fresh}
 }
