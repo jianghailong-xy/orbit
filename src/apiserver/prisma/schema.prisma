@@ -2715,6 +2715,9 @@ model Approval {
   /// (approval_decided_via_chk).
   decidedFeishuOpenId    String? @map("decided_feishu_open_id")
   decidedFeishuMessageId String? @map("decided_feishu_message_id")
+  /// The machine name of the TERMINAL credential that decided it (0663), when `decidedCredentialKind` is `TERMINAL`,
+  /// and only then (approval_decided_via_chk). Copied, so it outlives a revoked or expired credential.
+  decidedTerminalMachineName String? @map("decided_terminal_machine_name")
   createdAt    DateTime  @default(now()) @map("created_at")
   decidedAt    DateTime? @map("decided_at")
 
@@ -3169,8 +3172,8 @@ model Activity {
   type           String
   payload        Json?
   /// The door the write came in through (docs/personal-access-token-design.md §6.4): `LOGIN` |
-  /// `PAT` | `FEISHU` (the account's Feishu bot, docs/feishu-bot-design.md §7.2, 0499). NULL on a row no user
-  /// credential wrote.
+  /// `PAT` | `FEISHU` (the account's Feishu bot, docs/feishu-bot-design.md §7.2, 0499) | `GUEST` (0560) | `TERMINAL`
+  /// (an approval answered from `orbit` in a terminal, 0663). NULL on a row no user credential wrote.
   credentialKind String?  @map("credential_kind")
   /// The personal access token's id when `credentialKind` is `PAT`, and only then
   /// (activity_credential_chk, 0384). No FK, like actorId: the record outlives the token.

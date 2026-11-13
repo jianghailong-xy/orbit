@@ -8762,7 +8762,9 @@ export class SessionsService {
    *  (docs/feishu-bot-design.md §7.2): its clicker's open_id and the card's message_id are recorded
    *  beside it, and it carries only a plain allow or deny — "always allow" widens a standing grant and
    *  "Create and start" starts work, both of which stay in the app — so either is refused before anything
-   *  is written. */
+   *  is written. A TERMINAL one is `orbit` in a terminal (docs/terminal-session-design.md, "The terminal
+   *  credential"): its machine name is recorded beside it (0663), and it answers as the app does, "always
+   *  allow" included. Either one's decision that lands also writes an Activity row. */
   async decideApproval(
     ownerId: string,
     id: string,
@@ -8771,6 +8773,7 @@ export class SessionsService {
     credential?: AuthCredential,
   ): Promise<ApprovalInfo> {
     const feishu = credential?.kind === 'FEISHU' ? credential : null;
+    const terminal = credential?.kind === 'TERMINAL' ? credential : null;
     if (feishu && (dto.rememberRules !== undefined || dto.startAfterCreate !== undefined)) {
       throw new BadRequestException('a decision from a Feishu card is a plain allow or deny: "always allow" and "Create and start" stay in Orbit');
     }
@@ -8824,7 +8827,8 @@ export class SessionsService {
       select: { toolName: true, input: true },
     });
     // Only the first decision on a still-PENDING approval applies (idempotent). A Feishu card's
-    // decision is also an Activity row (docs/feishu-bot-design.md §7.2): written in the same
+    // decision is also an Activity row (docs/feishu-bot-design.md §7.2), and so is a terminal's
+    // (docs/human-only-authority.md, the TERMINAL row): written in the same
     // transaction, and only by the decision that lands, so a replayed event or a stale card's
     // click records nothing more.
     const decide = async (db: Prisma.TransactionClient) => {
@@ -8849,6 +8853,7 @@ export class SessionsService {
         decidedCredentialKind: credential?.kind ?? null,
         decidedFeishuOpenId: feishu?.openId ?? null,
         decidedFeishuMessageId: feishu?.messageId ?? null,
+        decidedTerminalMachineName: terminal?.machineName ?? null,
         decidedAt: new Date(),
       },
     });
@@ -8861,6 +8866,19 @@ export class SessionsService {
             payload: {
               sessionId: id, approvalId, behavior: dto.behavior,
               appId: feishu.appId, openId: feishu.openId, messageId: feishu.messageId ?? null,
+            } as Prisma.InputJsonValue,
+          },
+        });
+      }
+      if (terminal && landed.count > 0) {
+        await db.activity.create({
+          data: {
+            actorId: ownerId,
+            type: 'terminal.approval.decided',
+            credentialKind: 'TERMINAL',
+            payload: {
+              sessionId: id, approvalId, behavior: dto.behavior,
+              terminalId: terminal.terminalId, runnerId: terminal.runnerId, machineName: terminal.machineName,
             } as Prisma.InputJsonValue,
           },
         });

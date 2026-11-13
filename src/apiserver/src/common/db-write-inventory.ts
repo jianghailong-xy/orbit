@@ -763,12 +763,12 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503; the administrator asks again, and the switch either happened or did not.',
   },
   // A person's allow or deny on a pending approval; a Feishu card's also records its Activity row
-  // (docs/feishu-bot-design.md §7.2, task F2-1, migration 0500).
+  // (docs/feishu-bot-design.md §7.2, task F2-1, migration 0500), and so does a terminal's (0663).
   {
     at: 'sessions/sessions.service.ts#decideApproval',
     shape: 'TX_RETRIED',
-    locks: "The approval row: one UPDATE by id and session predicated on status PENDING, so of two decisions only the first applies; then, only when that UPDATE took the row and the decision came from a Feishu card, one INSERT into activity (type feishu.approval.decided, credential_kind FEISHU), which has no foreign key and no trigger. approval has no trigger.",
-    identity: "The approval, its session and the decision (behavior, message, answers, remember rules, the credential with a Feishu card's open_id and message_id), all fixed before the closure.",
+    locks: "The approval row: one UPDATE by id and session predicated on status PENDING, so of two decisions only the first applies; then, only when that UPDATE took the row and the decision came from a Feishu card, one INSERT into activity (type feishu.approval.decided, credential_kind FEISHU), or, when it came from a terminal, one (type terminal.approval.decided, credential_kind TERMINAL); activity has no foreign key and no trigger. approval has no trigger.",
+    identity: "The approval, its session and the decision (behavior, message, answers, remember rules, the credential with a Feishu card's open_id and message_id or a terminal's machine name), all fixed before the closure.",
     isolation: '',
     attempts: 4,
     replay: "A re-run decides against what committed: if a concurrent decision landed first, the UPDATE takes no row and no activity row is written. A decision whose event is handled again, or a click on a stale card, finds the row decided and writes nothing.",

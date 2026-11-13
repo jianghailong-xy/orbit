@@ -2981,7 +2981,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0662 adds two nullable columns to conversation_turn, sender_client and sender_client_detail (which client
       // sent the turn, sessions/turn-sender-client.ts); no preserved rows, triggers or DONE fence change, and no row
       // is written.
-      '0662_turn_sender_client'],
+      '0662_turn_sender_client',
+      // 0663 adds the nullable approval.decided_terminal_machine_name, ties it to a TERMINAL decision in
+      // approval_decided_via_chk and lets activity_credential_chk say TERMINAL; no preserved rows, triggers or DONE
+      // fence change, and no row is written.
+      '0663_approval_decided_terminal_machine'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
