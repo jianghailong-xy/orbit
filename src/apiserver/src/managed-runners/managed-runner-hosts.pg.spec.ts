@@ -281,7 +281,8 @@ test('several Docker channel hosts: one manager per host, separate pools, placem
 
     // C goes down; its manager's next pass over its READY runner finds it so.
     channelC.down = true;
-    assert.equal(await hostC.manager.reconcile((await mappingOf(c1.ownerId)).id), 'READY');
+    await hostC.manager.reconcile((await mappingOf(c1.ownerId)).id);
+    assert.equal((await mappingOf(c1.ownerId)).managementState, 'READY', 'unanswered: the runner stays as it was');
     assert.equal(hostC.manager.backend.unreachable, true, 'the pass marked C unreachable');
     const c = await pool2('orbit-host-c');
     const d = await pool2('orbit-host-d');
@@ -291,7 +292,7 @@ test('several Docker channel hosts: one manager per host, separate pools, placem
 
     // C answers again on its manager's next pass.
     channelC.down = false;
-    assert.equal(await hostC.manager.reconcile((await mappingOf(c1.ownerId)).id), 'READY');
+    await hostC.manager.reconcile((await mappingOf(c1.ownerId)).id);
     assert.equal(hostC.manager.backend.unreachable, false, 'an answer clears it');
     const c2 = await placed(service, 'reach-c2');
     assert.equal(c2.namespace, 'orbit-host-c', 'C is placed on again once it answers');
@@ -300,7 +301,7 @@ test('several Docker channel hosts: one manager per host, separate pools, placem
     channelC.down = true;
     channelD.down = true;
     await runtime.worker.drain();
-    assert.equal(await hostC.manager.reconcile((await mappingOf(c1.ownerId)).id), 'READY');
+    await hostC.manager.reconcile((await mappingOf(c1.ownerId)).id);
     await hostD.manager.reconcile((await mappingOf(d1.ownerId)).id);
     assert.deepEqual([hostC.manager.backend.unreachable, hostD.manager.backend.unreachable], [true, true]);
     const all = await placed(service, 'reach-all');
@@ -310,6 +311,8 @@ test('several Docker channel hosts: one manager per host, separate pools, placem
     // The hosts come back: every runner, the last one's included, comes up where it was placed.
     channelC.down = false;
     channelD.down = false;
+    // Their retry time comes (the outage put the waiting ones on a backoff).
+    await db.managedRunner.updateMany({ where: { ownerId: { in: [c1.ownerId, d1.ownerId, c2.ownerId, all.ownerId] } }, data: { nextAttemptAt: new Date() } });
     await untilReady(runtime, [c1.ownerId, d1.ownerId, c2.ownerId, all.ownerId]);
     const last = await mappingOf(all.ownerId);
     assert.equal(last.namespace, all.namespace, 'it stays on its host');
