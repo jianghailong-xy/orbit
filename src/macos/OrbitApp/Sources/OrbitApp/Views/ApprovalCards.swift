@@ -267,6 +267,12 @@ struct ToolApprovalCard: View {
         approval.input.flatMap { Approvals.workspaceWritePreview(toolName: approval.toolName ?? "", from: $0) }
     }
 
+    /// Adding, changing or deleting one of the owner's providers: the fields by name and the models one
+    /// a row. Without it the plain card drew the call's JSON.
+    private var provider: ProviderWritePreview? {
+        approval.input.flatMap { Approvals.providerWritePreview(toolName: approval.toolName ?? "", from: $0) }
+    }
+
     /// The field written for the agent that will execute the task, folded to a line that carries its
     /// length. It is the longest thing on the card by an order of magnitude — 1.4k to 3.9k characters
     /// across the last twenty single creates in this deployment — and the one field nobody decides
@@ -529,6 +535,46 @@ struct ToolApprovalCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        } else if let provider {
+            // The header stays on one line, so the provider's name takes the row under it and wraps.
+            ApprovalHeader(symbol: "powerplug", title: provider.heading, tone: .orange, badge: provider.badge)
+            VStack(alignment: .leading, spacing: 6) {
+                if !provider.name.isEmpty {
+                    Text(provider.name).font(provider.verb == .add ? Font.orbitProse : Font.orbitMono)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                ForEach(provider.fields) { field in
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text(field.caption).font(.orbitLabel).foregroundStyle(.secondary)
+                        Text(field.value).font(field.mono ? Font.orbitMono : Font.orbitProse)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                if let models = provider.models {
+                    Text(provider.modelsCaption).font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+                    ForEach(models) { model in
+                        VStack(alignment: .leading, spacing: 2) {
+                            (Text(model.value).font(.orbitMono)
+                                + Text(model.isDefault ? "  · default" : "").font(.orbitLabel).foregroundColor(.secondary))
+                            if !model.detail.isEmpty {
+                                Text(model.detail).font(.orbitLabel).foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                if let note = provider.note {
+                    Text(note).font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             ApprovalHeader(symbol: "hand.raised.fill", title: "Approve tool call",
                            tone: .orange, badge: approval.toolName ?? "Tool")
@@ -541,6 +587,8 @@ struct ToolApprovalCard: View {
                     .font(.orbitMono).foregroundStyle(.secondary)
                     .lineLimit(3).truncationMode(.middle)   // a path keeps its root AND its filename
                     .frame(maxWidth: .infinity, alignment: .leading)
+            } else if let raw = approval.input.flatMap(Approvals.rawInput) {
+                workspaceWriteBlock(raw)
             }
         }
     }
@@ -595,6 +643,7 @@ struct ToolApprovalCard: View {
         if mergeCheck != nil { return MergeCheckChangePreview.action }
         if deleting != nil { return Approvals.deleteAction }
         if let writing { return writing.action }
+        if let provider { return provider.action }
         return "Allow"
     }
     /// The single-task card's second yes, offered only when nothing would start the task otherwise and
