@@ -1925,6 +1925,10 @@ export interface SessionDetail {
   sourceRef?: string | null;
   sourceRefusalCode?: string | null;
   sourceRefusalDetail?: Record<string, unknown> | null;
+  /** The SOURCE line of the task this session runs when that task was forked from a session
+   *  (docs/task-fork-from-session-design.md §2.3), as the server words it; null otherwise.
+   *  Optional, because an older server does not send it. */
+  forkSource?: string | null;
   /** On an account pool: the member its last claim dispatched on (null before the first). */
   poolMemberProviderId?: string | null;
   /** On a shared pool: the key its last claim chose (null before the first, or when none could run). */

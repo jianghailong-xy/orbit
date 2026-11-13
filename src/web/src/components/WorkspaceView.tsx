@@ -9606,6 +9606,11 @@ export function WorkspaceView({
               )}
             </div>
             <div className="workspace-sub">{headSub}</div>
+            {/* A run of a task forked from a session says where its checkout came from, in the
+                server's own words (docs/task-fork-from-session-design.md §2.3). */}
+            {!composing && detailForSelected?.forkSource && (
+              <div className="workspace-sub" data-fork-source="">{detailForSelected.forkSource}</div>
+            )}
           </div>
           {selected && !composing && (
             <>

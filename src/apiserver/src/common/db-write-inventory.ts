@@ -103,6 +103,15 @@ export interface TransactionUnit {
  */
 export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
+    at: 'tasks/task-dispatch-refusal.ts#recordForkDispatchRefusal', shape: 'TX_RETRIED',
+    locks: 'task FOR UPDATE (rank 50), plain reads of its workspace and its project\'s primary project_codebase, then one UPDATE of that task\'s dispatch_refusal (a column no trigger\'s column list names) and at most one task_comment INSERT whose task foreign key re-checks the row this unit already holds.',
+    identity: 'The task and the refusal code with the facts it was decided on (assignee, its runner, project, binding): a re-run, or a second automatic door refused on the same facts, finds that refusal recorded and writes nothing.',
+    isolation: '', attempts: 4,
+    replay: 'Every attempt re-locks the task and re-reads the facts and the recorded refusal inside the closure; a rolled-back attempt leaves neither the refusal nor its comment.',
+    effects: 'None inside. Called by TasksService.execute after an automatic start was refused by SessionsService.create; a failure here is logged and the start\'s own 409 is what the caller sees.',
+    answer: 'Typed 503 after retry exhaustion, logged by the caller; the next automatic pass meets the same refusal and records it then.',
+  },
+  {
     at: 'projects/project-open-item.service.ts#askOwner', shape: 'TX_RETRIED',
     locks: 'Open item insert (rank 60), then the OPEN session_request CAS (rank 60); neither references the other with a foreign key.',
     identity: 'Project and clientQuestionId dedupe key; the same request is linked to the same item on replay.', isolation: '', attempts: 4,
@@ -3576,6 +3585,7 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   {"table":"task","trigger":"task_dispatch_epoch_seed","event":"AFTER INSERT","kind":"ROW/STATEMENT","since":"0137_task_run_request_receipt","takes":["task_dispatch_epoch WRITE"]},
   {"table":"task","trigger":"task_dispatch_epoch_update","event":"AFTER UPDATE","kind":"ROW/STATEMENT","since":"0137_task_run_request_receipt","takes":["task_dispatch_epoch LOCK"]},
   {"table":"task","trigger":"task_done_canonical_writer_fence","event":"BEFORE UPDATE OF \"status\", \"completion_fence_revision\"","kind":"ROW/STATEMENT","since":"0193_task_done_writer_fence","takes":[]},
+  {"table":"task","trigger":"task_fork_guard","event":"BEFORE UPDATE OF \"fork_session_id\", \"fork_runner_id\", \"fork_sha\", \"fork_base_head\", \"fork_includes_uncommitted\", \"fork_changed_files\"","kind":"ROW/STATEMENT","since":"0617_task_fork_changed_files","takes":[]},
   {"table":"task","trigger":"task_list_task_count_delete","event":"AFTER DELETE","kind":"ROW/STATEMENT","since":"0280_task_list_task_count","takes":["task_list WRITE"]},
   {"table":"task","trigger":"task_list_task_count_insert","event":"AFTER INSERT","kind":"ROW/STATEMENT","since":"0280_task_list_task_count","takes":["task_list WRITE"]},
   {"table":"task","trigger":"task_list_task_count_relist","event":"AFTER UPDATE","kind":"ROW/STATEMENT","since":"0280_task_list_task_count","takes":["task_list WRITE"]},

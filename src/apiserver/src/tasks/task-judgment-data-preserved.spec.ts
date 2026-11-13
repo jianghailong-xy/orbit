@@ -2959,7 +2959,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0612 adds a nullable `model_provider.spent_until` only; no preserved row, trigger or DONE fence changes.
       '0612_model_provider_spent_until',
       // 0613 creates `key_gateway_usage` only; no existing table, trigger or DONE fence is touched.
-      '0613_key_gateway_usage'],
+      '0613_key_gateway_usage',
+      // 0615 adds five nullable task fork columns, their CHECK and an immutability trigger on them alone,
+      // and swaps four session SOURCE CHECKs; no preserved rows, triggers or DONE fence change.
+      '0615_task_session_fork',
+      // 0616 only validates 0615's five CHECKs.
+      '0616_task_session_fork_checks',
+      // 0617 adds `task.fork_changed_files` (TEXT[] NOT NULL DEFAULT '{}', catalog-only) and restates 0615's fork
+      // guard to cover it; no preserved rows, triggers or DONE fence change, and no row is written.
+      '0617_task_fork_changed_files'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
