@@ -954,9 +954,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// run_event held the message. Keep the last one so finalize can carry it.
 	var lastErrMu sync.Mutex
 	lastErrorMessage := ""
-	// Baseline for the shared-checkout warning below, taken before this session runs anything
-	// so pre-existing dirt is never blamed on it. Nil unless the session is isolated.
-	sharedDirt := watchSharedCheckout(job.WT)
+	// Baseline for the main-checkout card below, taken before this session runs anything so
+	// pre-existing changes are never blamed on it. Nil unless the session is isolated.
+	mainCheckout := watchMainCheckout(job.WT)
 	// The session's background work (newBgTailer below), declared ahead of emitThrough, which
 	// announces its runner-hosted jobs again behind every `resumed` handshake.
 	var bg *bgTailer
@@ -1061,6 +1061,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	emit := emitOn(emissionGate)
 	// Where a file left out of a commit for holding a secret is told about (secretUnstagedWarning).
 	defer registerSecretWarnings(sessionID, emit)()
+	// Where a main checkout result line the control plane queued as a `notice` turn is written (main_checkout_notice.go).
+	defer registerMainCheckoutNotices(sessionID, emitFor)()
 
 	// What the stream still holds, left in the spool by an earlier process or not yet seen stored for an
 	// earlier supervisor of the session, is stored before this supervisor emits anything: it was written
@@ -1260,12 +1262,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// terminal are persisted but no longer broadcast — the notice would exist and nobody
 		// would see it. Every runtime's turn ends through this one function, so this covers all
 		// of them; non-isolated sessions have no watch and skip it entirely.
-		if paths := sharedDirt.newlyDirty(); len(paths) > 0 {
-			emit(evSystem, map[string]interface{}{
-				"notice":     sharedCheckoutNotice(job.WT.RepoDir, effectiveBranch(job.WT), paths),
-				"noticeKind": "shared-checkout-dirty",
-				"paths":      paths,
-			})
+		if notice := mainCheckout.changed(); notice != nil {
+			emit(evSystem, notice.payload())
 		}
 		completionCtx := turnAckCtx
 		cancelCompletion := func() {}
@@ -1871,6 +1869,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	}
 	if runtimeProvider(job) == providerClaude {
 		finalizeRequest.ClaudeSessionID = job.SessionUUID
+	}
+	// A codeless run's detached checkout goes, or becomes job.WT on its branch, before the report is made.
+	if job.Detached != nil {
+		finalizeCodelessCheckout(job)
 	}
 	if job.WT != nil {
 		finalizeWorktreeReport(&finalizeRequest, job.SessionID, job.WT, status)
