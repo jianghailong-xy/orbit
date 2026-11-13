@@ -370,9 +370,10 @@ struct SectionSidebar: View {
         }
     }
 
-    /// The workspace's own session list, off any project's sessions page that covered it.
+    /// The workspace's own session list, off any project's sessions page or folder page that covered it.
     private func openWorkspace(_ id: String) {
         if model.selectedAgentID == id, model.projectSessionsColumn != nil { model.leaveProjectSessions() }
+        if model.selectedAgentID == id, model.folderColumn != nil { model.leaveFolder() }
         model.openAgent(id)
     }
 

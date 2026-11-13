@@ -94,13 +94,13 @@ struct SettingsView: View {
                             Image(systemName: "chevron.right").foregroundStyle(.tertiary)
                         }
                     } label: {
-                        Label(SettingsHome.title(.infrastructure), systemImage: SettingsHome.systemImage(.infrastructure))
+                        Label(SettingsHome.title(.machinesAndModels), systemImage: SettingsHome.systemImage(.machinesAndModels))
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             } footer: {
-                Text(Infrastructure.subtitle)
+                Text(MachinesAndModels.subtitle)
             }
 
             Section("Preferences") {
@@ -206,8 +206,8 @@ struct SettingsView: View {
     /// Needs you holds, or with none how many machines are online — only once the server has answered.
     private var machinesValue: (text: String, needsYou: Bool)? {
         guard let runners = model.runners, runners.loadState.hasLoaded else { return nil }
-        let needsYou = InfrastructureLists(model).attention.count
-        return (SettingsHome.infrastructureValue(needsYou: needsYou, runners: runners.runners), needsYou > 0)
+        let needsYou = MachinesAndModelsLists(model).attention.count
+        return (SettingsHome.machinesAndModelsValue(needsYou: needsYou, runners: runners.runners), needsYou > 0)
     }
 
     private func saveName() {

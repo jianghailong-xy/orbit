@@ -1,16 +1,16 @@
 import SwiftUI
 import OrbitKit
 
-// The Infrastructure page's own sections (docs/mocks/infrastructure-page/03-ios.png) — Needs you, Account
+// The Machines & models page's own sections (docs/mocks/infrastructure-page/03-ios.png) — Needs you, Account
 // pools and API keys — around the machines `RunnersListView` lists between them. Each draws what it is
 // handed and says what a press means through the closure it is given, so the page a phone pushes from
 // Settings and the Mac's section column share them. What the block at the top says, and when, is
-// OrbitKit's (`Infrastructure`), tested there.
+// OrbitKit's (`MachinesAndModels`), tested there.
 
 /// The lists the page is read from, as `AppModel` holds them: the machines, the pools the account is in
 /// and its own — a Codex one with its people and keys read beside its accounts, once they are — and the
 /// account's own keys.
-struct InfrastructureLists {
+struct MachinesAndModelsLists {
     let runners: [Runner]
     /// The account's workspaces, read with the machines: whether one runs on a key decides whether a machine
     /// with no coding CLI signed in can run anything.
@@ -37,8 +37,8 @@ struct InfrastructureLists {
         settled = states.allSatisfy { state in state.map { $0.hasLoaded || $0.lastLoadFailed } ?? false }
     }
 
-    var attention: [Infrastructure.Attention] {
-        Infrastructure.attention(runners: runners, workspaces: workspaces,
+    var attention: [MachinesAndModels.Attention] {
+        MachinesAndModels.attention(runners: runners, workspaces: workspaces,
                                  memberPools: memberPools.map(SharedPools.asProviderPool), ownPools: ownPools)
     }
 
@@ -52,32 +52,32 @@ struct InfrastructureLists {
 
 /// A line for each thing that waits on a person, in the web's words, each with its way out: a machine's
 /// record, a pool's page.
-struct InfrastructureNeedsYouSection: View {
-    let items: [Infrastructure.Attention]
+struct MachinesAndModelsNeedsYouSection: View {
+    let items: [MachinesAndModels.Attention]
     /// Whether a pool's line opens its page — the Mac has no pool pages, so there the line only says why.
     var opensPools = true
-    let open: (Infrastructure.Attention) -> Void
+    let open: (MachinesAndModels.Attention) -> Void
 
     var body: some View {
         Section {
             ForEach(items) { item in
-                InfrastructureAttentionRow(item: item, open: opens(item) ? open : nil)
+                MachinesAndModelsAttentionRow(item: item, open: opens(item) ? open : nil)
             }
         } header: {
-            RunnerSectionHeader(Infrastructure.needsYou)
+            RunnerSectionHeader(MachinesAndModels.needsYou)
         }
     }
 
-    private func opens(_ item: Infrastructure.Attention) -> Bool {
+    private func opens(_ item: MachinesAndModels.Attention) -> Bool {
         if case .poolUnavailable = item.kind { return opensPools }
         return true
     }
 }
 
 /// One line: a dot, what happened with its names in bold, what it means under it, and its press.
-private struct InfrastructureAttentionRow: View {
-    let item: Infrastructure.Attention
-    let open: ((Infrastructure.Attention) -> Void)?
+private struct MachinesAndModelsAttentionRow: View {
+    let item: MachinesAndModels.Attention
+    let open: ((MachinesAndModels.Attention) -> Void)?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -85,7 +85,7 @@ private struct InfrastructureAttentionRow: View {
                 .fill(dot)
                 .frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 2) {
-                Text(infrastructureBold(item.line, item.names))
+                Text(machinesAndModelsBold(item.line, item.names))
                 Text(item.detail)
                     .font(.orbitListSubtitle)
                     .foregroundStyle(Color.secondary)
@@ -109,17 +109,17 @@ private struct InfrastructureAttentionRow: View {
     @ViewBuilder private func press(_ action: @escaping () -> Void) -> some View {
         switch item.kind {
         case .offline, .noCliSignedIn, .updating:
-            Button(Infrastructure.details, action: action)
+            Button(MachinesAndModels.details, action: action)
                 .buttonStyle(.bordered)
         case .poolUnavailable:
-            Button(Infrastructure.manage, action: action)
+            Button(MachinesAndModels.manage, action: action)
                 .buttonStyle(.bordered)
         }
     }
 }
 
 /// `text` with each of `names` set in bold, the way the web's lines set them.
-func infrastructureBold(_ text: String, _ names: [String]) -> AttributedString {
+func machinesAndModelsBold(_ text: String, _ names: [String]) -> AttributedString {
     var out = AttributedString(text)
     var from = out.startIndex
     for name in names where !name.isEmpty {
@@ -134,7 +134,7 @@ func infrastructureBold(_ text: String, _ names: [String]) -> AttributedString {
 
 /// The pools the account is in, then its own: a row each, saying where it stands. A row opens the pool's
 /// page where there is one to open (`open` set) — not on the Mac, which has no pool pages.
-struct InfrastructurePoolsSection: View {
+struct MachinesAndModelsPoolsSection: View {
     let memberPools: [SharedPool]
     let ownPools: [ProviderPool]
     let open: ((NavNode) -> Void)?
@@ -265,12 +265,12 @@ enum PoolTone {
 /// engines it runs on (board iOS 1 ③) — and Disabled for one that is switched off. A DeepSeek key's row
 /// ends with its account's balance, and opens the key's page where there is one to open (`open` set) —
 /// not on the Mac. Keys are added and changed on the web.
-struct InfrastructureKeysSection: View {
+struct MachinesAndModelsKeysSection: View {
     let keys: [ConfiguredProvider]
     /// Each DeepSeek key's balance by provider id, as last read.
     var balances: [String: ProviderBalanceReading] = [:]
     /// The model a Cursor key's session starts on: Cursor CLI's Auto, by its catalogue's name
-    /// (`Infrastructure.cursorModel`) — a Cursor key has no model list of its own.
+    /// (`MachinesAndModels.cursorModel`) — a Cursor key has no model list of its own.
     var cursorModel = "Auto"
     var open: ((NavNode) -> Void)? = nil
 
@@ -320,9 +320,9 @@ struct InfrastructureKeysSection: View {
         HStack(spacing: 12) {
             ProviderMark(provider: key.slug, size: 26, brandKey: key.presetSlug, label: key.label)
             VStack(alignment: .leading, spacing: 1) {
-                Text(Infrastructure.keyLabel(key.label, presetSlug: key.presetSlug))
+                Text(MachinesAndModels.keyLabel(key.label, presetSlug: key.presetSlug))
                     .lineLimit(1)
-                if let model = CursorRuntime.isKey(key) ? cursorModel : Infrastructure.defaultModel(key) {
+                if let model = CursorRuntime.isKey(key) ? cursorModel : MachinesAndModels.defaultModel(key) {
                     Text(model)
                         .font(.orbitListSubtitle)
                         .foregroundStyle(.secondary)
@@ -335,7 +335,7 @@ struct InfrastructureKeysSection: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if key.enabled == false {
-                Text(Infrastructure.disabled)
+                Text(MachinesAndModels.disabled)
                     .foregroundStyle(.secondary)
             } else if CursorRuntime.keyCheck(key) == .rejected {
                 Text(CursorRuntime.keyRejectedTag)

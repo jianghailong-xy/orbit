@@ -28,13 +28,13 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 
 /**
- * The lists the Infrastructure page is read from (iOS InfrastructureLists): the machines with their workspaces (RunnersModel), the
+ * The lists the Machines & models page is read from (iOS MachinesAndModelsLists): the machines with their workspaces (RunnersModel), the
  * account's own keys (GET providers/mine) with each DeepSeek key's balance, its own pools (GET providers/pools) — a Codex one with who
  * can use it read beside its accounts — and the pools it is in (GET providers/shared-pools). Each is its own read, best-effort: a failed
  * one keeps what was read before.
  */
 @Stable
-internal class InfrastructureModel(private val api: ManagementApi) {
+internal class MachinesAndModelsModel(private val api: ManagementApi) {
     val machines = RunnersModel(api)
     var keys by mutableStateOf<List<JsonObject>>(emptyList()); private set
     /** Why the last read of the keys failed, while none has been read. */
@@ -87,17 +87,17 @@ internal class InfrastructureModel(private val api: ManagementApi) {
     }
 
     fun attention(runners: List<JsonObject>, workspaces: List<JsonObject>, nowMs: Long) =
-        Infrastructure.attention(runners, workspaces, memberPools(nowMs), ownPools(nowMs), nowMs)
+        MachinesAndModels.attention(runners, workspaces, memberPools(nowMs), ownPools(nowMs), nowMs)
 }
 
 /**
- * The Infrastructure page (iOS RunnersListView, docs/mocks/infrastructure-page/03-ios.png), Settings › Infrastructure: what needs a person,
+ * The Machines & models page (iOS RunnersListView, docs/mocks/infrastructure-page/03-ios.png), Settings › Machines & models: what needs a person,
  * the machines (each opening its record; reordered and removed here), Add Runner, then the account pools and the API keys. Every way out
  * stays in the app: an engine is signed in on its page, a machine on its record, a pool on its page, a DeepSeek key on its page.
  */
 @Composable
-internal fun InfrastructurePage(api: ManagementApi, revision: Long, open: (OrbitRoute) -> Unit) {
-    val model = remember(api) { InfrastructureModel(api) }
+internal fun MachinesAndModelsPage(api: ManagementApi, revision: Long, open: (OrbitRoute) -> Unit) {
+    val model = remember(api) { MachinesAndModelsModel(api) }
     val machines = model.machines
     val resumed = rememberResumed()
     val now = rememberNow()
@@ -117,7 +117,7 @@ internal fun InfrastructurePage(api: ManagementApi, revision: Long, open: (Orbit
         while (true) { delay(15_000); machines.load() }
     }
     fun runner(id: String) = open(OrbitRoute(Destination.RUNNER, id))
-    fun page(record: String) = open(OrbitRoute(Destination.SETTINGS, "infrastructure", recordId = record))
+    fun page(record: String) = open(OrbitRoute(Destination.SETTINGS, "machines-and-models", recordId = record))
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
             when {
@@ -141,15 +141,15 @@ internal fun InfrastructurePage(api: ManagementApi, revision: Long, open: (Orbit
                 val attention = model.attention(machines.runners, machines.workspaces, now)
                 if (attention.isNotEmpty()) NeedsYouSection(attention) { item ->
                     when (val kind = item.kind) {
-                        is Infrastructure.Kind.Offline -> runner(kind.runnerId)
-                        is Infrastructure.Kind.NoCliSignedIn -> runner(kind.runnerId)
-                        is Infrastructure.Kind.Updating -> runner(kind.runnerId)
-                        is Infrastructure.Kind.PoolUnavailable -> page(if (kind.own) "own:${kind.poolId}" else "shared:${kind.poolId}")
+                        is MachinesAndModels.Kind.Offline -> runner(kind.runnerId)
+                        is MachinesAndModels.Kind.NoCliSignedIn -> runner(kind.runnerId)
+                        is MachinesAndModels.Kind.Updating -> runner(kind.runnerId)
+                        is MachinesAndModels.Kind.PoolUnavailable -> page(if (kind.own) "own:${kind.poolId}" else "shared:${kind.poolId}")
                     }
                 }
             }
             if (machines.loaded && machines.runners.isNotEmpty()) {
-                FormSection(Infrastructure.MACHINES, Infrastructure.machinesCount(machines.runners), Infrastructure.MACHINES_DETAIL) {
+                FormSection(MachinesAndModels.MACHINES, MachinesAndModels.machinesCount(machines.runners), MachinesAndModels.MACHINES_DETAIL) {
                     MachineRows(machines, now, ::runner) { removing = it }
                 }
             }
@@ -177,22 +177,22 @@ internal fun InfrastructurePage(api: ManagementApi, revision: Long, open: (Orbit
 
 /** A line for each thing that waits on a person, in the web's words, each with its way out: a machine's record, a pool's page. */
 @Composable
-private fun NeedsYouSection(items: List<Infrastructure.Attention>, open: (Infrastructure.Attention) -> Unit) {
-    FormSection(Infrastructure.NEEDS_YOU) {
+private fun NeedsYouSection(items: List<MachinesAndModels.Attention>, open: (MachinesAndModels.Attention) -> Unit) {
+    FormSection(MachinesAndModels.NEEDS_YOU) {
         items.forEachIndexed { index, item ->
             if (index > 0) HorizontalDivider()
             Row(Modifier.fillMaxWidth().padding(vertical = 8.dp).testTag("needs-you:${item.id}"), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 // Grey for a machine that is away, amber for the rest — the web's two dots.
-                Dot(if (item.kind is Infrastructure.Kind.Offline) IDLE_DOT else Ink.amber)
+                Dot(if (item.kind is MachinesAndModels.Kind.Offline) IDLE_DOT else Ink.amber)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(bold(item.line, item.names))
                     Text(item.detail, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                 }
                 when (item.kind) {
-                    is Infrastructure.Kind.Offline, is Infrastructure.Kind.NoCliSignedIn, is Infrastructure.Kind.Updating ->
-                        OutlinedButton(onClick = { open(item) }) { Text(Infrastructure.DETAILS) }
-                    is Infrastructure.Kind.PoolUnavailable -> OutlinedButton(onClick = { open(item) }) { Text(Infrastructure.MANAGE) }
+                    is MachinesAndModels.Kind.Offline, is MachinesAndModels.Kind.NoCliSignedIn, is MachinesAndModels.Kind.Updating ->
+                        OutlinedButton(onClick = { open(item) }) { Text(MachinesAndModels.DETAILS) }
+                    is MachinesAndModels.Kind.PoolUnavailable -> OutlinedButton(onClick = { open(item) }) { Text(MachinesAndModels.MANAGE) }
                 }
             }
         }
@@ -214,7 +214,7 @@ private fun bold(text: String, names: List<String>): AnnotatedString = buildAnno
 @Composable
 private fun PoolsSection(memberPools: List<Pool>, ownPools: List<Pool>, now: Long, page: (String) -> Unit) {
     if (memberPools.isEmpty() && ownPools.isEmpty()) return
-    FormSection(Infrastructure.ACCOUNT_POOLS, footer = Infrastructure.ACCOUNT_POOLS_DETAIL) {
+    FormSection(MachinesAndModels.ACCOUNT_POOLS, footer = MachinesAndModels.ACCOUNT_POOLS_DETAIL) {
         val rows = memberPools.map { "shared:${it.id}" to it } + ownPools.map { "own:${it.id}" to it }
         rows.forEachIndexed { index, (record, pool) ->
             if (index > 0) HorizontalDivider()
@@ -245,14 +245,14 @@ private fun PoolsSection(memberPools: List<Pool>, ownPools: List<Pool>, now: Lon
  * Cursor key's, which says Rejected there once Cursor refused it (iOS 4 ①②) and starts a session on Auto. Keys are added and changed
  * on the web. */
 @Composable
-private fun KeysSection(model: InfrastructureModel, page: (String) -> Unit) {
-    FormSection(Infrastructure.API_KEYS, footer = Infrastructure.API_KEYS_DETAIL + " " + DeepSeekBalance.EDIT_ON_WEB) {
+private fun KeysSection(model: MachinesAndModelsModel, page: (String) -> Unit) {
+    FormSection(MachinesAndModels.API_KEYS, footer = MachinesAndModels.API_KEYS_DETAIL + " " + DeepSeekBalance.EDIT_ON_WEB) {
         when {
             // A read that failed is not a list with nothing in it.
             !model.keysLoaded -> model.keysError?.let { error ->
                 Text(error, Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.labelMedium, color = Ink.red)
             } ?: Text("Loading…", Modifier.padding(vertical = 8.dp), color = Ink.muted)
-            model.keys.isEmpty() -> Text(Infrastructure.NO_KEYS, Modifier.padding(vertical = 8.dp), color = Ink.muted)
+            model.keys.isEmpty() -> Text(MachinesAndModels.NO_KEYS, Modifier.padding(vertical = 8.dp), color = Ink.muted)
         }
         KeyEngines.byVendor(model.keys).forEachIndexed { index, key ->
             if (index > 0) HorizontalDivider()
@@ -265,14 +265,14 @@ private fun KeysSection(model: InfrastructureModel, page: (String) -> Unit) {
                 Column(Modifier.weight(1f)) {
                     Text(key.str("label") ?: key.text("slug"), maxLines = 1)
                     // A Cursor key has no model list of its own: its sessions start on Cursor CLI's default, Auto unless a runner names another.
-                    (if (cursor != null) Infrastructure.cursorModel(model.machines.runners.filter { it.bool("online") == true })
-                        else Infrastructure.defaultModel(key))?.let {
+                    (if (cursor != null) MachinesAndModels.cursorModel(model.machines.runners.filter { it.bool("online") == true })
+                        else MachinesAndModels.defaultModel(key))?.let {
                         Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                     }
                     // Every engine it runs on: one key, under each engine that can spend it.
                     KeyEngines.line(key)?.let { Text(it, Modifier.testTag("key-engines"), style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
                 }
-                if (key.bool("enabled") == false) Text(Infrastructure.DISABLED, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
+                if (key.bool("enabled") == false) Text(MachinesAndModels.DISABLED, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                 else if (deepSeek != null) DeepSeekBalance.rowValue(DeepSeekBalance.state(model.balances[deepSeek]))?.let {
                     Text(it.label, color = poolTone(it.tone), style = MaterialTheme.typography.bodySmall)
                 }

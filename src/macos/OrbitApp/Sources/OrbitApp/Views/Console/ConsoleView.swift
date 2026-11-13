@@ -45,6 +45,10 @@ struct ConsoleView: View {
     /// A wide shell: a task this conversation opens opens over it, not in the Tasks section
     /// (`opensTasksOverPage`, owner decision 2026-11-12).
     @Environment(\.opensTasksOverPage) private var opensTasksOverPage
+    /// Move… — the ⋯ menu's on iOS, the window toolbar's on the Mac, and the region card's on both —
+    /// and the session's workspace list the Move panel counts its folders over.
+    @State private var movingSession: Session?
+    @State private var moveListed: [Session] = []
     #if os(iOS)
     /// The ⋯ menu's Rename… (web double-clicks its header title). Seeded from the session's own
     /// title — not `SessionHeader.title`, whose agent-name fallback would otherwise be typed in as if
@@ -52,8 +56,6 @@ struct ConsoleView: View {
     @State private var renaming = false
     @State private var renameDraft = ""
     @State private var taggingSession: Session?
-    @State private var movingSession: Session?
-    @State private var moveListed: [Session] = []
     @State private var confirmPurge = false
     /// Gates the "needs you" banner to the compact shell — see the `safeAreaInset` below.
     @Environment(\.horizontalSizeClass) private var hSize
@@ -489,6 +491,35 @@ struct ConsoleView: View {
                 .environment(appModel)
                 .task { await appModel.loadSessionTags() }
         }
+        #else
+        // The same link on macOS, from the window toolbar: a detail pane's own actions sit at
+        // `.primaryAction` there, as the project and task pages' menus do.
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                // No Share on a landing session (LS6): it is platform work, not a conversation,
+                // and its page's own ⋯ menu is the whole of what it offers.
+                if appModel.session(id: sessionID)?.isLanding != true {
+                    Button { showShare = true } label: {
+                        Label("Share session", systemImage: "square.and.arrow.up")
+                    }
+                    .help("Share a read-only link to this session")
+                }
+            }
+            // Move…, the iPhone's ⋯ menu item, beside Share: the same Move panel the list's rows
+            // open. None on a landing session (LS6), nor in Trash, where there is nothing to file.
+            ToolbarItem(placement: .primaryAction) {
+                if let session = appModel.session(id: sessionID), session.isLanding != true,
+                   session.effectiveLifecycleState != .trash {
+                    Button { openMove(session) } label: {
+                        Label("Move…", systemImage: "folder")
+                    }
+                    .help("Move this session to a folder or another workspace")
+                    .disabled(sessionWorkspace(session) == nil)
+                }
+            }
+        }
+        #endif
+        // The Move panel, from Move… or the region card (docs/session-folders-move-design.md §4).
         .sheet(item: $movingSession) { session in
             if let workspace = sessionWorkspace(session) {
                 SessionMoveSheet(session: session, workspace: workspace, listed: moveListed)
@@ -505,22 +536,6 @@ struct ConsoleView: View {
                     }
             }
         }
-        #else
-        // The same link on macOS, from the window toolbar: a detail pane's own actions sit at
-        // `.primaryAction` there, as the project and task pages' menus do.
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                // No Share on a landing session (LS6): it is platform work, not a conversation,
-                // and its page's own ⋯ menu is the whole of what it offers.
-                if appModel.session(id: sessionID)?.isLanding != true {
-                    Button { showShare = true } label: {
-                        Label("Share session", systemImage: "square.and.arrow.up")
-                    }
-                    .help("Share a read-only link to this session")
-                }
-            }
-        }
-        #endif
         .sheet(isPresented: $showShare) {
             if let baseURL = appModel.baseURL {
                 ShareSheet(kind: .session, rootID: sessionID, baseURL: baseURL, tokenStore: appModel.tokenStore,
@@ -529,18 +544,12 @@ struct ConsoleView: View {
         }
     }
 
-    /// The region card's Move to another machine: the ⋯ menu's Move… (`SessionMoveSheet`). The Mac's
-    /// console has no Move — that sheet is the phone's and the iPad's — so there the card leaves it out.
+    /// The region card's Move to another machine: Move… (`SessionMoveSheet`), on every platform.
     private var moveFromCard: (() -> Void)? {
-        #if os(iOS)
         guard let session = appModel.session(id: sessionID), sessionWorkspace(session) != nil else { return nil }
         return { openMove(session) }
-        #else
-        return nil
-        #endif
     }
 
-    #if os(iOS)
     private func sessionWorkspace(_ session: Session) -> Agent? {
         appModel.agents?.items.first { $0.id == (session.agent?.id ?? session.agentId) }
     }
@@ -556,6 +565,7 @@ struct ConsoleView: View {
         movingSession = session
     }
 
+    #if os(iOS)
     private func sessionMenu(_ session: Session) -> some View {
         Menu {
             if session.effectiveLifecycleState == .trash {
