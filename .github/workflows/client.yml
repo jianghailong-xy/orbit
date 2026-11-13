@@ -213,7 +213,7 @@ jobs:
       - name: Stage the harness at the repository root
         run: |
           mkdir -p .sr-probe
-          cp -R docs/evidence/source-refused-native/probe-harness/. .sr-probe/
+          cp -R docs/evidence/session-settings-native/probe-harness/. .sr-probe/
       - name: Build, drive and capture
         id: capture
         continue-on-error: true
@@ -266,7 +266,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: out
-      - name: Push to probe/source-refused-mac-shots-results
+      - name: Push to probe/session-settings-native-shots
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -284,4 +284,4 @@ jobs:
           git add -A
           git commit -q -m "source-refused probe results for ${{ github.sha }} (run ${{ github.run_id }})"
           git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
-            results:refs/heads/probe/source-refused-mac-shots-results
+            results:refs/heads/probe/session-settings-native-shots
