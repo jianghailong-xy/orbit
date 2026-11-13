@@ -101,3 +101,32 @@ describe('a session held by its runner’s update', () => {
     expect([...(pop?.querySelectorAll('.runner-update-actions button') ?? [])].map((b) => b.textContent?.trim())).toEqual(['Later']);
   });
 });
+
+// docs/mocks/runner-stopping: the runner drains because its process is stopping, not for a release.
+describe('a session held by a runner that is stopping', () => {
+  const stopping: QueuedGate = { ...gate, queuedRunnerUpdate: { ...gate.queuedRunnerUpdate!, stopping: true, targetVersion: null } };
+
+  it('reads Runner stopping in the list, in the warning colour', () => {
+    const row = { status: 'PENDING', ...stopping };
+    expect(sessionLine(row, true)).toEqual({ text: 'Runner stopping', tone: 'warning' });
+    expect(statusLabel(row)).toBe('Runner stopping');
+  });
+
+  it('titles the queued page Runner stopping and says it starts once the runner is back', () => {
+    const el = mount(<RunnerUpdatingQueued gate={stopping} machine="HPC" onOpenSession={() => {}} />);
+    expect(el.querySelector('.chat-queued-title')?.textContent).toBe('Runner stopping');
+    expect(el.querySelector('.chat-queued-desc')?.textContent).toBe(
+      'HPC is stopping. It starts no new work until 2 turns finish: Backfill missing shard rows and Why are 11-08 metrics zero. This session starts once HPC is back.',
+    );
+  });
+
+  it('tags the waiting message `Queued · runner stopping`, and the popover says why', async () => {
+    const el = mount(<RunnerUpdatingTag gate={stopping} machine="HPC" />);
+    expect(el.textContent).toBe('Queued·runner stopping');
+    await act(async () => (el.querySelector('button.chat-runner-updating-reason') as HTMLButtonElement).click());
+    expect(document.querySelector('.runner-updating-pop')?.textContent).toBe(
+      'HPC starts no new turns until 2 turns finish, then stops. This message is sent once it is back.Waiting 38 min.',
+    );
+    expect(document.body.textContent).toContain('Runner stopping');
+  });
+});

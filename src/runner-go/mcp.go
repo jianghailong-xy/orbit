@@ -375,6 +375,30 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if err != nil {
 			return toolResult(err.Error(), true)
 		}
+		cursor := getString(args, "cursor")
+		if summaryRequested(args) {
+			if _, named := args["limit"]; !named {
+				limit = defaultTaskSummaryLimit
+			}
+			text, err := boundedTaskSummary(func(n int) (json.RawMessage, string, error) {
+				return s.t.listTaskPage(getString(args, "status"), getString(args, "listId"), getString(args, "projectId"), getStringSlice(args, "labels"), n, cursor, minPriority)
+			}, limit)
+			if err != nil {
+				return toolResult("list tasks failed: "+err.Error(), true)
+			}
+			return toolResult(text, false)
+		}
+		if cursor != "" {
+			items, next, err := s.t.listTaskPage(getString(args, "status"), getString(args, "listId"), getString(args, "projectId"), getStringSlice(args, "labels"), limit, cursor, minPriority)
+			if err != nil {
+				return toolResult("list tasks failed: "+err.Error(), true)
+			}
+			more := "This is the last page."
+			if next != "" {
+				more = fmt.Sprintf("More: cursor=%q.", next)
+			}
+			return toolResult(more+"\n"+prettyJSON(items), false)
+		}
 		raw, err := s.t.listTasks(getString(args, "status"), getString(args, "listId"), getString(args, "projectId"), getStringSlice(args, "labels"), limit, minPriority)
 		if err != nil {
 			return toolResult("list tasks failed: "+err.Error(), true)
@@ -412,7 +436,15 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if err != nil {
 			return toolResult("list task evidence failed: "+err.Error(), true)
 		}
-		return toolResult(prettyJSON(raw), false)
+		revision, before := numberArgString(args, "revision"), numberArgString(args, "before")
+		if !summaryRequested(args) && revision == "" {
+			return toolResult(prettyJSON(raw), false)
+		}
+		text, err := renderEvidenceView(raw, revision, before)
+		if err != nil {
+			return toolResult(err.Error(), true)
+		}
+		return toolResult(text, false)
 
 	case "task_evidence_submit":
 		id, ok := s.resolveTaskID(args)
@@ -1144,10 +1176,22 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if err := requireRunnerTaskCompletionDeclaration(body); err != nil {
 			return toolResult(err.Error(), true)
 		}
+		// The snapshot is taken at the start of the call, before the card (design §2.1): the task
+		// starts from what this session had when it asked, and the card shows the fork it will carry.
+		var fork *forkSnapshot
+		if getBool(args, "forkFromSession") {
+			var err error
+			if fork, err = takeForkSnapshot(s.sessionID, title); err != nil {
+				return toolResult(err.Error(), true)
+			}
+			body["fork"] = fork.payload()
+		}
 		declined, startAfterCreate, err := askBeforeTaskCreate(s.t, s.sessionID, body)
 		if err != nil {
+			fork.release()
 			return toolResult(err.Error(), true)
 		} else if declined != nil {
+			fork.release()
 			return toolResult(declinedCardRefusal(taskCreateApprovalToolName, "this task", declined), false)
 		}
 		// The owner's "Create and start" does what startNow does. It is their later and explicit
@@ -1157,6 +1201,9 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		raw, err := s.t.createTask(s.agentID, s.sessionID, body)
 		if err != nil {
+			if createRefused(err) {
+				fork.release()
+			}
 			// Verbatim, plus how to ASK when the refusal is the one whose own requiredAction says
 			// a handoff may be requested. This is the door where asking gets somewhere.
 			return toolResult("create task failed: "+err.Error()+
@@ -1177,6 +1224,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult(fmt.Sprintf("tasks accepts at most %d items per call", maxTaskBatchCreate), true)
 		}
 		bodies := make([]map[string]interface{}, 0, len(items))
+		var forking []int
 		for i, raw := range items {
 			item, ok := raw.(map[string]interface{})
 			if !ok {
@@ -1210,6 +1258,25 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: %s", i, err), true)
 			}
 			bodies = append(bodies, body)
+			if getBool(item, "forkFromSession") {
+				forking = append(forking, i)
+			}
+		}
+		// One snapshot for the call, shared by every item that forks (design §2.1). Not for a dry run,
+		// which writes nothing: its items are judged without the fork.
+		var fork *forkSnapshot
+		if len(forking) > 0 && !getBool(args, "dryRun") {
+			title := getString(bodies[forking[0]], "title")
+			if len(forking) > 1 {
+				title = fmt.Sprintf("%s (and %d more)", title, len(forking)-1)
+			}
+			var err error
+			if fork, err = takeForkSnapshot(s.sessionID, title); err != nil {
+				return toolResult(err.Error(), true)
+			}
+			for _, i := range forking {
+				bodies[i]["fork"] = fork.payload()
+			}
 		}
 		// Unit L7: a dry run writes nothing, so there is nothing to ask a person about. It goes
 		// straight through rather than through `createBatchWithApproval`, whose whole subject is
@@ -1218,7 +1285,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if getBool(args, "dryRun") {
 			return s.createBatchNow(map[string]interface{}{"tasks": bodies, "dryRun": true})
 		}
-		return s.createBatchWithApproval(bodies)
+		return s.createBatchWithApproval(bodies, fork)
 
 	case "task_batch_pin":
 		body := map[string]interface{}{}
@@ -1532,6 +1599,9 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		body := map[string]interface{}{"prompt": prompt}
 		copyIfPresent(body, args, "title", "model", "engine", "provider", "permissionMode")
+		if v, ok := args["worktree"].(bool); ok && !v {
+			body["worktree"] = false
+		}
 		// Route to a target agent: an explicit agentId wins; else an @-mentioned agentName
 		// (resolved to that owner's agent server-side); else default to the current agent.
 		if id := getString(args, "agentId"); id != "" {
@@ -1585,7 +1655,14 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if err != nil {
 			return toolResult("get session failed: "+err.Error(), true)
 		}
-		return toolResult(prettyJSON(raw), false)
+		if !summaryRequested(args) {
+			return toolResult(prettyJSON(raw), false)
+		}
+		text, err := boundSessionRecord(raw)
+		if err != nil {
+			return toolResult("get session failed: "+err.Error(), true)
+		}
+		return toolResult(text, false)
 
 	case "session_send":
 		if !s.orchestrationEnabled() {
@@ -2170,15 +2247,33 @@ func askBeforeBatch(t *Transport, agentID, sessionID string, bodies []map[string
 // while looking like the least: fifty titles say nothing, and what actually happens is some number
 // of runs starting within the minute. This deployment has the cautionary case — one session
 // created 43 lists and ~21,500 tasks before anybody looked.
-func (s *mcpServer) createBatchWithApproval(bodies []map[string]interface{}) map[string]interface{} {
+func (s *mcpServer) createBatchWithApproval(bodies []map[string]interface{}, fork *forkSnapshot) map[string]interface{} {
 	declined, err := askBeforeBatch(s.t, s.agentID, s.sessionID, bodies)
 	if err != nil {
+		fork.release()
 		return toolResult(err.Error(), true)
 	}
 	if declined != nil {
+		fork.release()
 		return toolResult(declinedCardRefusal(batchApprovalToolName, "this batch", declined), false)
 	}
-	return s.createBatchNow(map[string]interface{}{"tasks": bodies})
+	raw, err := s.t.createTasksBatch(s.agentID, s.sessionID, map[string]interface{}{"tasks": bodies})
+	if err != nil {
+		if createRefused(err) {
+			fork.release()
+		}
+		return toolResult("create tasks failed: "+err.Error()+
+			crossProjectCrossingGuidance(err), true)
+	}
+	return toolResult(prettyJSON(raw), false)
+}
+
+// createRefused reports whether a create failed with the server's answer, so nothing was written and a
+// fork's keep-alive ref has no task to keep alive. A request that may have reached the server and been
+// lost on the way back keeps the ref: the gc removes it once no open task names it.
+func createRefused(err error) bool {
+	var httpErr *transportHTTPError
+	return errors.As(err, &httpErr) && httpErr.statusCode >= 400 && httpErr.statusCode < 500
 }
 
 func (s *mcpServer) createBatchNow(body map[string]interface{}) map[string]interface{} {
@@ -3249,6 +3344,15 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		"an assigneeId if it should be able to run, since a check with no assignee waits for somebody " +
 		"to hand it one."
 
+	// SR55 (docs/task-fork-from-session-design.md §2.1): start the task from a snapshot of THIS
+	// session's checkout. It takes no id: the only checkout this process can read is its own session's.
+	forkFromSessionProp := map[string]interface{}{
+		"type": "boolean",
+		"description": "Start this task from what this session has now: its branch tip, plus the edits it has not " +
+			"committed yet. The task still gets its own checkout and branch — it never shares this session's " +
+			"directory — and it runs on this machine only, so its assignee must be a workspace on this machine. " +
+			"Not allowed for a task in a project with a code binding. Always this session; there is no id to pass.",
+	}
 	// The fields of one new task, shared by task_create and every task_create_batch item.
 	// A fresh map per call so a caller can extend its copy without touching the other's.
 	taskCreateProps := func() map[string]interface{} {
@@ -3333,7 +3437,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"project, or has already been replaced (two racing replacements give one winner " +
 					"and one error, never a pointer that depends on timing).",
 			},
-			"labels": labelsProp,
+			"labels":          labelsProp,
+			"forkFromSession": forkFromSessionProp,
 		}
 	}
 	taskBatchItemProps := func() map[string]interface{} {
@@ -3361,7 +3466,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	tools := []map[string]interface{}{
 		{
 			"name":        "task_list",
-			"description": "List the caller's newest tasks, without their descriptions (task_get returns one task in full). Optionally filter by status, listId, projectId, labels or minPriority. Rows carry projectId, parentTaskId, acceptanceCriteria and priority, so which project a task belongs to, what it is part of, what would settle it and where it stands in its list's queue are readable without fetching each task.",
+			"description": fmt.Sprintf("List the caller's newest tasks, without their descriptions (task_get returns one task in full). Optionally filter by status, listId, projectId, labels or minPriority. By default it answers one compact row per task — id, title, status, projectId, parentTaskId, assigneeId, listId, labels, priority, updatedAt — held under %d characters, with a first line naming the cursor of the next page; so which project a task belongs to, what it is part of and where it stands in its list's queue are readable without fetching each task. summary=false answers full rows, acceptanceCriteria included.", toolResultBudget),
 			"inputSchema": obj(map[string]interface{}{
 				"status": status,
 				"listId": str,
@@ -3384,7 +3489,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"maximum":     taskPriorityMax,
 					"description": "Only tasks whose priority is at least this. 1 is \"the ones somebody raised\" with task_update's priority, so listId + status OPEN + minPriority 1 is a list's raised queue in one call — where finding them otherwise means paging through the whole list. 0 includes everything nobody touched, and a negative floor reaches the tasks somebody lowered. Omit for no floor.",
 				},
-				"limit": map[string]interface{}{"type": "integer", "minimum": 1, "maximum": maxTaskListLimit, "description": fmt.Sprintf("Maximum tasks to return (default %d, server cap %d).", defaultTaskListLimit, maxTaskListLimit)},
+				"limit":   map[string]interface{}{"type": "integer", "minimum": 1, "maximum": maxTaskListLimit, "description": fmt.Sprintf("Maximum tasks to return (default %d in summary form, %d with summary=false; server cap %d). A summary page that would pass %d characters comes back smaller, with the cursor that continues it.", defaultTaskSummaryLimit, defaultTaskListLimit, maxTaskListLimit, toolResultBudget)},
+				"summary": map[string]interface{}{"type": "boolean", "description": fmt.Sprintf("Default true: one compact row per task (id, title, status, projectId, parentTaskId, assigneeId, listId, labels, priority, updatedAt), the page held under %d characters, and a first line naming the cursor of the next page. false returns full rows, as large as they are.", toolResultBudget)},
+				"cursor":  map[string]interface{}{"type": "string", "description": "Continue a listing: the cursor the previous call's first line named, with the same filters."},
 			}),
 		},
 		{
@@ -3401,8 +3508,13 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_evidence_list",
-			"description": "List the task's explicit structured completion-evidence revisions in stable task-local order, each carrying its decision — a SEND_BACK's note included — once it has been answered. This reads the evidence ledger directly; comments, final replies and Session lifecycle state are not evidence.",
-			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
+			"description": fmt.Sprintf("List the task's explicit structured completion-evidence revisions in stable task-local order, each carrying its decision — a SEND_BACK's note included — once it has been answered. This reads the evidence ledger directly; comments, final replies and Session lifecycle state are not evidence. By default it answers the newest %d revisions in summary form (claim and decision note shortened, checks and gaps counted), under %d characters; revision=<n> answers one revision in full, before=<n> the page before it, and summary=false the whole ledger.", evidenceSummaryPageSize, toolResultBudget),
+			"inputSchema": obj(map[string]interface{}{
+				"taskId":   taskIDProp,
+				"summary":  map[string]interface{}{"type": "boolean", "description": "Default true: the newest page in summary form. false returns every revision in full."},
+				"revision": map[string]interface{}{"type": "string", "description": "One revision, in full, as the summary's `revision` names it."},
+				"before":   map[string]interface{}{"type": "string", "description": "The summary page of revisions older than this one — the value the previous page's first line names."},
+			}),
 		},
 		{
 			"name":        "task_evidence_submit",
@@ -3554,7 +3666,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"`targetShaBefore`, else `origin/<targetBranch>`. The receipt is refused when it is " +
 				"not, and when git cannot tell (fetch first, or run from inside the repository). " +
 				"Work that landed by cherry-pick or rebase is a DIFFERENT commit on the target: name " +
-				"that commit, never the original branch tip. A receipt's sourceSha goes into every " +
+				"that commit, never the original branch tip. A receipt for a task's branch also ends " +
+				"the account owner's merge card still offering that branch (asking or blocked): after " +
+				"you cherry-pick, rebase or squash a task's work onto its line by hand, record it at " +
+				"once with that task's work session and sourceBranch = the task's branch, or the owner " +
+				"keeps being asked to merge work that is already there. A receipt's sourceSha goes into every " +
 				"dependent task's dependency closure, and one the target does not contain keeps them " +
 				"refused DEPENDENCY_BASE_NOT_LANDED, because a receipt cannot be taken back. " +
 				"`rebaseBaseSha` is the field people skip and the one that decides " +
@@ -4313,7 +4429,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"rewritten: an ending is final. An item whose kind has a press of its own, a merge " +
 				"card or a paused project, is refused here: it is decided by confirming, declining or " +
 				"resuming, and closing it by hand would leave what it is about with no card in front " +
-				"of anybody.",
+				"of anybody. Closing the last failure item about a task branch's blocked merge " +
+				"candidate ends that candidate too, and its card leaves the owner's page; when the " +
+				"work went in as other commits, record merge_receipt for the task's branch as well.",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
 					"type":        "string",
@@ -5036,7 +5154,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"enum":        offeredPermissionModes(),
 						"description": strings.TrimSpace("How much the sub-session may do without a human: \"plan\" investigates and proposes without touching anything, \"default\" asks before each unapproved action, \"acceptEdits\" pre-approves file edits only, \"auto\" lets the model decide when to ask and is the mode for unattended work that has to run commands, \"dontAsk\" never asks but refuses anything not already approved, commands and background jobs included, \"bypassPermissions\" never asks and allows everything. Omit to use the owner's account default. It can never be wider than this session's own mode: a wider mode is refused, and when the default is wider the sub-session runs in this session's own mode. A mode that asks parks the sub-session on an approval card until a human answers, so pick one only if someone is watching. " + rootWithheldPermissionModeNote()),
 					},
-					"wait": map[string]interface{}{"type": "boolean", "description": "Wait for the new session's first turn to settle and return its full state inline: up to about 10 minutes, less when this session was itself spawned by a wait. The wait is recorded on Orbit's server as a watch before it starts, so when that time runs out or the connection drops, the call returns the session as last seen with the watch under \"watch\", and the watch wakes this session when the turn settles; end your turn then instead of polling. If the server does not record the watch, the result says no server-held watch backs the wait, and a refused watch returns at once. Default false: returns immediately."},
+					"worktree": map[string]interface{}{"type": "boolean", "description": "Pass false to run the session in the agent's own checkout, with no branch and no worktree, even when the agent isolates each session in a worktree. For work that changes no code (investigating, reading logs, answering a question, read-only queries): it leaves no unmerged branch behind. Not for code changes: the session edits the checkout every other non-isolated session shares, and has no branch to merge. Omit it to follow the agent's own setting; true cannot turn isolation on for an agent that has it off."},
+					"wait":     map[string]interface{}{"type": "boolean", "description": "Wait for the new session's first turn to settle and return its full state inline: up to about 10 minutes, less when this session was itself spawned by a wait. The wait is recorded on Orbit's server as a watch before it starts, so when that time runs out or the connection drops, the call returns the session as last seen with the watch under \"watch\", and the watch wakes this session when the turn settles; end your turn then instead of polling. If the server does not record the watch, the result says no server-held watch backs the wait, and a refused watch returns at once. Default false: returns immediately."},
 				}, "prompt"),
 			},
 			map[string]interface{}{
@@ -5054,8 +5173,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			map[string]interface{}{
 				"name":        "session_get",
-				"description": "Get one session's current status and latest output (to collect a spawned sub-task's result). To wait for a session, call session_await instead of calling this in a loop.",
-				"inputSchema": obj(map[string]interface{}{"sessionId": sessionIDProp}, "sessionId"),
+				"description": fmt.Sprintf("Get one session's current status and latest output (to collect a spawned sub-task's result). To wait for a session, call session_await instead of calling this in a loop. A record over %d characters is shortened to fit: the prompt first, then changedFiles, lastToolUse, lastUserText and error; lastAssistantText and result stay whole unless nothing else is left to shorten. What was shortened is named in truncatedFields; summary=false returns the full record.", toolResultBudget),
+				"inputSchema": obj(map[string]interface{}{
+					"sessionId": sessionIDProp,
+					"summary":   map[string]interface{}{"type": "boolean", "description": "Default true: the record held under the budget. false returns it in full."},
+				}, "sessionId"),
 			},
 			map[string]interface{}{
 				"name":        "session_send",
@@ -5528,6 +5650,23 @@ func sessionSettled(status string) bool {
 	default:
 		return true // AWAITING_INPUT, SUCCEEDED, FAILED, CANCELLED, INTERRUPTED
 	}
+}
+
+// summaryRequested is the bounded views' switch (bounded_views.go): on unless summary is false.
+func summaryRequested(args map[string]interface{}) bool {
+	v, ok := args["summary"].(bool)
+	return !ok || v
+}
+
+// numberArgString reads an argument a caller may send as a number or a string, as a string.
+func numberArgString(args map[string]interface{}, key string) string {
+	switch v := args[key].(type) {
+	case float64:
+		return strconv.FormatInt(int64(v), 10)
+	case string:
+		return strings.TrimSpace(v)
+	}
+	return ""
 }
 
 func getBool(args map[string]interface{}, key string) bool {

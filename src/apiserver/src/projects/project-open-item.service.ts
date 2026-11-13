@@ -119,7 +119,7 @@ import {
   isApprovalId,
   notAnApprovalId,
 } from './project-integration-skip-check';
-import { requeuePromotionCheck } from './project-promotion.service';
+import { requeuePromotionCheck, retireCandidateAfterHandledItem } from './project-promotion.service';
 import {
   INTEGRATION_OBSERVE_COORDINATOR_ONLY,
   INTEGRATION_OBSERVE_REASON_REQUIRED,
@@ -1864,6 +1864,14 @@ export class ProjectOpenItemService {
       // press is told to read again rather than reporting a close it did not make.
       throw notOpen();
     }
+    // M-T14: the last failure item about a BLOCKED task-branch candidate was closed by hand, so the
+    // card about it ends too. Its own transaction, after the close committed; it re-reads the
+    // candidate and the items still open about it.
+    if (item.promotionId && (INTEGRATION_ITEM_KINDS as readonly string[]).includes(item.kind)) {
+      await retireCandidateAfterHandledItem(this.prisma, { projectId, promotionId: item.promotionId })
+        .catch((error) => this.logger.warn(
+          `retiring candidate ${item.promotionId} after item ${itemId} closed failed: ${(error as Error)?.message ?? error}`));
+    }
     // §2.9 LS3 rule 4: the segment's last OPEN integration item was closed by hand (a fix task was
     // filed for it), and the segment neither landed nor has an attempt still moving — so it settles
     // HANDLED. Its own transaction, after the close committed; the rule re-checks all of that under
@@ -2730,6 +2738,7 @@ export class ProjectOpenItemService {
         resolvedAt: true,
         payload: true,
         answer: true,
+        askedBySessionId: true,
         project: { select: { coordinatorSessionId: true } },
       },
     });
@@ -2738,10 +2747,16 @@ export class ProjectOpenItemService {
     const sessionId = item.project.coordinatorSessionId;
     if (!sessionId) return null;
     const clientTurnId = ownerAnswerTurnId(item.id, sessionId);
+    const question = item.payload as unknown as CoordinatorQuestion;
+    // §5.2 R11: told to a conversation that did not ask, it says who did and whether it still blocks.
+    const redelivered = item.askedBySessionId && item.askedBySessionId !== sessionId
+      ? { stillBlocks: await this.blocksUnsettledWork(item.ownerId, question.blocksTaskIds) }
+      : undefined;
     const content = ownerAnswerMessage(
-      item.payload as unknown as CoordinatorQuestion,
+      question,
       item.answer as unknown as OwnerAnswer,
       item.resolvedAt,
+      redelivered,
     );
     try {
       const turn = await this.sessions.createTurn(item.ownerId, sessionId, {

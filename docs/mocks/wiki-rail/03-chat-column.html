@@ -1,0 +1,115 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="board.css">
+<style>body{width:1900px}.frame{width:1778px;height:900px}.notes{width:1778px}
+.nav{position:absolute;left:0;top:0;bottom:0;width:264px;border-right:1px solid var(--border-subtle);background:#fff;padding:14px 10px}
+.nav .r{display:flex;align-items:center;height:32px;padding:0 10px;border-radius:6px;font-size:13.5px;color:var(--text-1)}
+.nav .h{margin:14px 10px 4px;font-size:12px;font-weight:600;color:var(--text-3)}
+.nav .r.on{background:var(--brand-tint);color:var(--brand);font-weight:600}
+.cnt{margin-left:auto;font-size:12px;font-weight:600;color:var(--warning)}
+.ghost{color:var(--text-4)!important;font-style:italic}
+.foot{position:absolute;left:265px;width:283px;bottom:0;height:56px;border-top:1px solid var(--border-subtle);background:var(--bg-subtle);display:flex;align-items:center;gap:8px;padding:0 16px}
+</style></head><body>
+<style>
+.rail2{position:absolute;top:0;bottom:0;width:56px;border-right:1px solid var(--border-subtle);background:#fff}
+.rail2 i{display:block;width:28px;height:28px;margin:14px auto 0;border-radius:7px;background:var(--fill-muted)}
+.rail2 i.on{background:var(--brand-tint)}
+.chatcol{position:absolute;top:0;bottom:0;border-left:1px solid var(--border-subtle);background:#fff;padding:14px 18px}
+.chatcol .h{font-weight:600;font-size:14px;display:flex;justify-content:space-between}
+.chatcol .gl{color:var(--text-3);font-size:13px;margin:22px 0 10px}
+.chatcol .ln{height:10px;border-radius:5px;background:var(--fill-muted);margin:12px 0}
+.chatcol .comp{position:absolute;left:14px;right:14px;bottom:14px;height:110px;border:1px solid var(--border);border-radius:12px;padding:12px;color:var(--text-4);font-size:13px}
+.float{position:absolute;border:1px solid var(--border);border-top-left-radius:10px;background:#fff;box-shadow:-10px 0 28px rgba(15,23,42,.14);padding:14px 18px}
+.lbl{position:absolute;background:#e5484d;color:#fff;font-size:13px;font-weight:600;padding:3px 10px;border-radius:12px}
+.col-lbl{position:absolute;top:-30px;font-size:13px;color:#4b5058;font-weight:600}
+</style>
+<h2 class="cap">聊天：从「浮在页面上」改成「单独的一栏」</h2>
+<p class="cap">手绘稿，窗口宽度、Wiki 栏和正文的内容沿用上一张图 ③。</p>
+
+<h2 class="cap">Ⓐ 今天：聊天是浮在页面上的面板</h2>
+<p class="cap">面板是一个盖在页面右边的浮层（<code>position: fixed</code>），正文靠右边留出一段空白给它让位。它有自己的阴影和圆角，顶部要单独计算（躲开页头），窄窗口下直接盖住正文。</p>
+<div class="frame" id="a"></div>
+
+<h2 class="cap">Ⓑ 改后：聊天是页面里的第四栏（建议）</h2>
+<p class="cap">应用侧栏 | Wiki 栏 | 正文 | 聊天，四栏并排，都从窗口顶到底，栏与栏之间是同样的一条细线。聊天栏是页面布局的一部分：不盖东西，不用算顶部位置，正文的宽度就是剩下的宽度。关掉聊天，这一栏消失，正文变宽；左边拖动可以改宽度（今天就有）。</p>
+<div class="frame" id="b"></div>
+
+<h2 class="cap">Ⓒ 窗口窄（1300 宽）时放不下四栏：要你选一个</h2>
+<p class="cap">四栏都留，正文只剩约 320 px，读不了文档。所以这一档要收起一栏，两个选法：</p>
+<div style="display:flex;gap:30px;align-items:flex-start">
+<div><p class="cap"><b>C1（建议）</b>：Wiki 栏收进 Contents 按钮，Wiki · orbit 和搜索回到正文上方。应用侧栏不动。正文约 560 px。</p><div class="frame" id="c1" style="width:1300px;transform:scale(.66);transform-origin:0 0;margin-bottom:-280px"></div></div>
+</div>
+<div><p class="cap"><b>C2</b>：应用侧栏收成图标条（Workspaces、Projects 变成图标），Wiki 栏保留。正文约 470 px。</p><div class="frame" id="c2" style="width:1300px;transform:scale(.66);transform-origin:0 0;margin-bottom:-280px"></div></div>
+<div class="notes"><h3>说明</h3><ul>
+<li>窗口 1440 以上：Ⓑ 的四栏。</li>
+<li>1200–1439：Ⓒ 里选一个。<span class="rec">建议 C1</span>，应用侧栏一直不动，和其他页面一致。</li>
+<li>1200 以下（小窗口、平板）：放不下一栏，仍像今天一样从右边滑出盖住正文；手机仍是底部的半屏。</li>
+</ul></div>
+<script>
+const toc = () => {
+  const top = [['⌂','Home'],['▦','Browse by category'],['↓','A–Z index'],['☰','Plan']].map(([i,t])=>`<div class="wk-toc-item"><span class="ic">${i}</span>${t}</div>`).join('');
+  const cats = [['产品概览与架构',[['1.1','产品定位与核心能力',1],['1.2','系统架构与数据流'],['1.3','自部署与首次运行']]],
+    ['任务与项目',[['2.1','任务生命周期与依赖'],['2.2','项目启动与协调'],['2.3','完成判据与验收'],['2.4','项目集成线与落地']]],
+    ['会话与交互',[['3.1','Session 运行与恢复'],['3.2','实时流与推送'],['3.3','Session 搜索与消息路由']]],
+    ['Runner 与运行时',[['4.1','Runner 注册与排障'],['4.2','引擎接入与 provider 管理'],['4.3','Runner CLI 与自动化']]],
+    ['Watch 与后台作业',[['5.1','Watch 语义与谓词'],['5.2','Watch 运维与灰度']]]];
+  const subs = ['开篇：Orbit 解决的问题','核心能力全景','三个 Launch Scenario','Task Graph 与 Session 的分工','Worktree 隔离与信任边界','支持的 Runtime 与账号模型','当前边界与"还不做什么"'];
+  return `<div class="wk-toc">${top}<div class="wk-toc-sep"></div>` + cats.map(([c,rows])=>`<div class="wk-toc-cat">${c}</div>`+rows.map(([n,t,a])=>
+    `<div class="wk-toc-item${a?' active':''}"><span class="no">${n}</span>${t}</div>`+(a?subs.map((s,i)=>`<div class="wk-toc-item sub${i==0?' active':''}"><span class="no">${i+1}</span>${s}</div>`).join(''):'')).join('')).join('')+'</div>';
+};
+const actions = `<div style="display:flex;gap:8px;align-items:center"><span class="btn">◷ Activity<span class="badge">2</span></span><span class="btn">⚙ Settings</span><span class="pill">◍ Shared · Live</span></div>`;
+const head = `<span class="page-title">Wiki</span><span class="wk-select">orbit <span class="caret">▾</span></span>`;
+const search = (w) => `<div class="wk-search"${w?` style="width:${w}px"`:''}><span>⌕</span><span class="grow">Search the wiki</span><span class="wk-kbd">⌘K</span></div>`;
+const status = `<div class="wk-status-row"><span><b>19,671</b> entries</span><span class="sep">·</span><span class="warn"><b class="warn">2</b> to review</span><span class="sep">·</span><span class="err"><span class="dot" style="background:var(--error)"></span>Maintenance failed</span><span class="sep">·</span><span>last success 1d ago</span><span class="sep">·</span><span>930 to catch up</span><span class="sep">·</span><span class="warn"><span class="dot" style="background:var(--warning-solid)"></span>System model unreachable</span><span class="sep">·</span><span class="link">View run</span></div>`;
+const article = `<div class="crumb">Wiki<span>›</span>产品概览与架构</div><div class="t-title">产品定位与核心能力</div>
+<div class="chips"><span class="b">产品概览与架构</span><span>7 sections</span><span>19 footnotes</span><span>1 session quote</span><span>18 code &amp; doc quotes</span></div>
+<div class="meta">◷ Updated Nov 2 at 8b1915d · written by Wiki maintenance from plan v44 · 45 sentences · <span class="warn">2 not verified</span></div>
+<div class="qbox"><b style="color:var(--text-3);font-weight:400;margin-right:40px">Question</b><b>我是谁，Orbit 能帮我做什么，哪些事它现在还做不了</b><br><span style="margin-right:22px">Written for</span>· 产品新用户与决策者：读完能确认 Orbit 解决的问题、适用场景与当前能力边界<br><span style="margin-right:62px"></span>&nbsp;&nbsp;&nbsp;· 开发者：读完能理解 task graph、session、worktree 隔离与支持的 runtime</div>
+<h3 class="sec"><span>1</span>开篇：Orbit 解决的问题</h3>
+<div class="prose">Orbit 是一个为私有、多运行时 agent 工作设计的控制平面，解决编码任务超出单个上下文窗口、多 agent 并行产生 worktree 冲突以及 agent 需访问私有基础设施的问题。它通过持久化 task graph 存储计划、依赖与审批历史，使工作在上下文耗尽或用户缺席后依然可续接。agent 运行于用户自有机器，直接访问内部 CLI 和集群凭证，且登录信息不离开这些环境。</div>`;
+const chat = `<div class="chat"><div class="h"><span>中文会话标题与标签 ▾</span><span style="color:var(--text-3)">＋ → ✕</span></div><div class="gl">Worked for 3m 3s</div>${'<div class="ln"></div>'.repeat(3)}<div class="ln" style="width:70%"></div><div class="gl">Ran 2 shell commands, read 1 file, edited 1 file</div>${'<div class="ln"></div>'.repeat(9)}<div class="ln" style="width:55%"></div><div class="comp">Ask about this page, or say what should change</div></div>`;
+const at = (x,y,html,extra='') => `<div style="position:absolute;left:${x}px;top:${y}px;${extra}">${html}</div>`;
+const mark = (x,y,w,h,n) => `<div class="mark" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px"><i>${n}</i></div>`;
+
+
+const navR=(t,c='',cnt='')=>`<div class="r ${c}">${t}${cnt?`<span class="cnt">${cnt}</span>`:''}</div>`;
+const nav=`<div class="nav"><div style="font-weight:700;font-size:15px;padding:4px 10px 8px">Orbit</div>`
+ +navR('Sessions','ghost')+navR('Tasks','ghost')+navR('Wiki','on','2')
+ +`<div class="h">Workspaces</div>`+navR('orbit','ghost')+navR('wikova','ghost')
+ +`<div class="h">Wiki</div>`+navR('orbit','on','2')+navR('wikova','ghost')
+ +`<div class="h">Projects</div>`+navR('Project rows by workspace','ghost')+navR('List freshness','ghost')+`</div>`;
+const toc2=()=>toc().replace('<div class="wk-toc-sep">','<div class="wk-toc-item"><span class="ic">◷</span>Activity<span class="dot" style="background:var(--error);margin:0 6px 0 auto"></span><span class="cnt" style="margin-left:0;margin-right:4px">2</span></div><div class="wk-toc-sep">');
+
+const navR3=(t,c='',cnt='')=>`<div class="r ${c}">${t}${cnt?`<span class="cnt">${cnt}</span>`:''}</div>`;
+const nav3=`<div class="nav"><div style="font-weight:700;font-size:15px;padding:4px 10px 8px">Orbit</div>`+navR3('Projects','ghost')+navR3('Tasks','ghost')+navR3('Wiki','on')+`<div class="h">Workspaces</div>`+navR3('orbit','ghost')+`<div class="h">Wiki</div>`+navR3('orbit','on')+`<div class="h">Projects</div>`+navR3('Orbit UI migration','ghost')+`</div>`;
+const toc3=()=>toc().replace('<div class="wk-toc-sep">','<div class="wk-toc-item"><span class="ic">◷</span>Activity<span class="dot" style="background:var(--error);margin:0 6px 0 auto"></span></div><div class="wk-toc-sep">');
+const rail=(R,H)=>`<div style="position:absolute;left:${R+1}px;top:0;bottom:0;width:283px;border-right:1px solid var(--border-subtle);background:var(--bg-subtle)"></div>`
+ + at(R+24,22,`<div style="display:flex;align-items:center;gap:12px">${head}</div>`) + at(R+24,72,search(248))
+ + at(R+16,120,toc3(),`width:264px;height:${H-178}px;overflow:hidden`)
+ + `<div class="foot" style="left:${R+1}px">${'<span class="btn">⚙ Settings</span><span class="pill">◍ Shared · Live</span>'}</div>`;
+const chatBody=`<div class="h"><span>中文会话标题与标签 ▾</span><span style="color:var(--text-3)">＋ → ✕</span></div><div class="gl">Worked for 3m 3s</div>${'<div class="ln"></div>'.repeat(3)}<div class="ln" style="width:70%"></div><div class="gl">Ran 2 shell commands, read 1 file, edited 1 file</div>${'<div class="ln"></div>'.repeat(9)}<div class="ln" style="width:55%"></div><div class="comp">Ask about this page, or say what should change</div>`;
+// A: today
+document.getElementById('a').innerHTML = nav3
+ + at(296,22,`<div style="display:flex;align-items:center;gap:12px;width:1450px">${head}<div style="margin-left:auto">${actions}</div></div>`)
+ + at(296,74,search(760)) + at(296,118,`<div style="width:760px">${status}</div>`)
+ + at(288,176,toc(),'width:224px;height:724px;overflow:hidden') + at(576,176,article,'width:480px')
+ + `<div class="chatcol float" style="left:1086px;right:0;top:66px;bottom:0">${chatBody}</div>`
+ + `<div class="lbl" style="left:1100px;top:30px">浮层：盖在页面上，正文给它留白</div>`
+ + mark(1080,60,698,840,'A');
+// B: column
+const R3=264, CW=470, MAIN0=R3+316, MW=1778-CW-MAIN0-32;
+document.getElementById('b').innerHTML = nav3 + rail(R3,900)
+ + at(MAIN0,28,article,`width:${MW}px`)
+ + `<div class="chatcol" style="right:0;width:${CW}px">${chatBody}</div>`
+ + `<div class="lbl" style="left:${1778-CW+20}px;top:56px">第四栏：从顶到底，和其他栏一样</div>`
+ + mark(4,4,256,892,'1')+mark(R3+4,4,276,892,'2')+mark(MAIN0-12,4,MW+24,892,'3')+mark(1778-CW+4,4,CW-8,892,'4');
+// C1: rail folded
+const CW2=433;
+document.getElementById('c1').innerHTML = nav3
+ + at(296,22,`<div style="display:flex;align-items:center;gap:12px">${head}<span class="btn">☰</span></div>`)
+ + at(296,72,search(1300-CW2-296-32))
+ + at(296,128,article,`width:${1300-CW2-296-32}px`)
+ + `<div class="chatcol" style="right:0;width:${CW2}px">${chatBody}</div>`;
+// C2: app sidebar icons
+document.getElementById('c2').innerHTML = `<div class="rail2"><i class="on"></i><i></i><i></i><i class="on"></i><i></i></div>` + rail(56,900)
+ + at(56+316,28,article,`width:${1300-CW2-56-316-28}px`)
+ + `<div class="chatcol" style="right:0;width:${CW2}px">${chatBody}</div>`;
+</script></body></html>

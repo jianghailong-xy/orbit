@@ -78,6 +78,7 @@ export class RunnerTasksController {
     @Body() dto: CreateTaskDto,
   ) {
     RunnerTasksController.refuseImplicitEvidenceJudgment(dto);
+    if (dto.fork) await this.tasks.assertForkCallerOnRunner(runner.ownerId, runner.id, sessionId);
     const creator = await this.tasks.resolveAgentCreator(runner.ownerId, actingWorkspaceId(workspaceId, legacyAgentId));
     // The machine credential is the agent's credential: this create must name the acting session
     // and be the one that session's answered card covers, whichever surface asked for it
@@ -106,6 +107,10 @@ export class RunnerTasksController {
     @Body() dto: CreateTasksBatchDto,
   ) {
     RunnerTasksController.refuseImplicitEvidenceJudgmentBatch(dto);
+    // SR55: a fork comes from the session making the call, on this credential — one check for the batch.
+    if (dto.tasks?.some((item) => item.fork)) {
+      await this.tasks.assertForkCallerOnRunner(runner.ownerId, runner.id, sessionId);
+    }
     const creator = await this.tasks.resolveAgentCreator(runner.ownerId, actingWorkspaceId(workspaceId, legacyAgentId));
     // The write that starts work in bulk takes the same acting session and answered card as the
     // single create — and a dry run writes nothing, so it asks nobody

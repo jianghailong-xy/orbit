@@ -804,6 +804,16 @@ public enum RunnerPageFormat {
 
     // MARK: About This Runner
 
+    /// Whether a newer release than this runner's own is out — the case About This Runner's Update
+    /// Runner Now is there for. False when either version isn't known, so nothing is offered on a guess.
+    public static func isBehindLatest(_ runner: Runner, latest: String?) -> Bool {
+        guard let version = runner.version?.trimmingCharacters(in: .whitespacesAndNewlines), !version.isEmpty,
+              let latest = latest?.trimmingCharacters(in: .whitespacesAndNewlines), !latest.isEmpty else {
+            return false
+        }
+        return RunnerAttention.compareRunnerVersions(version, latest) < 0
+    }
+
     /// `0.1.197 · Latest`; a runner that is behind and installs the release itself says so
     /// (`0.1.194 · 0.1.197 installs when no turn is running`), and so does one a staged rollout holds
     /// back (`0.1.194 · 0.1.197 not rolled out to it yet`). One that can't update itself is Needs
@@ -816,7 +826,7 @@ public enum RunnerPageFormat {
         guard let latest = latest?.trimmingCharacters(in: .whitespacesAndNewlines), !latest.isEmpty else {
             return version
         }
-        if RunnerAttention.compareRunnerVersions(version, latest) >= 0 {
+        if !isBehindLatest(runner, latest: latest) {
             return version + RunnerPageCopy.RUNNER_LINE_SEPARATOR + RunnerPageCopy.RUNNER_VERSION_LATEST
         }
         // Draining or restarting for a release: `0.1.253 · updating to 0.1.254`.

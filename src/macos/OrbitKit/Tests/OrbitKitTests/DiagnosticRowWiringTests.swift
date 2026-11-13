@@ -45,9 +45,9 @@ final class DiagnosticRowWiringTests: XCTestCase {
     func testTheTranscriptDrawsANoticeAndADiagnosticApart() throws {
         let item = try section(try source(Self.console), from: "struct TranscriptItemView: View {",
                                to: "private func steerControls(")
-        let notice = try section(item, from: "case .notice(_, let message):", to: "case .diagnostic(let notice):")
+        let notice = try section(item, from: "case .notice(let id, let message, _):", to: "case .diagnostic(let notice):")
         XCTAssertTrue(notice.contains(#"Label(message, systemImage: "exclamationmark.triangle.fill")"#)
-                      && notice.contains(".font(.orbitLabel).foregroundStyle(.orange)"),
+                      && notice.contains(": Color.orange)"),
                       "a notice keeps the warning tone on its whole line")
         XCTAssertTrue(item.contains("case .diagnostic(let notice):\n            DiagnosticNoticeRow(notice: notice)"),
                       "a diagnostic is drawn by its own row")

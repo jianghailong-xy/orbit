@@ -39,13 +39,14 @@ class SessionLineCopyParityTest {
         listOf(SessionLineCopy.running, SessionLineCopy.queued).forEach { assertLiteral(line, "SessionLine.swift", it) }
         listOf(SessionLineCopy.queued, SessionLineCopy.stateRunning, SessionLineCopy.waitingForReply, SessionLineCopy.succeeded,
             SessionLineCopy.retrying, SessionLineCopy.disconnected, SessionLineCopy.failed, SessionLineCopy.interrupted, SessionLineCopy.ended,
+            SessionLineCopy.waitingToResume,
         ).forEach { assertLiteral(header, "SessionHeader.swift", it) }
         assertDeclares(header, "SessionHeader.swift", "unnamedWord", SessionLineCopy.unnamedWord)
         // Every constant of the copy object is held by one of the lines above: a word added here and not there fails.
         val declared = SessionLineCopy::class.java.declaredFields.filter { it.type == String::class.java }
             .map { it.isAccessible = true; it.get(null) as String }
         assertTrue("a SessionLineCopy word is in neither Swift source: $declared", declared.all { both.contains("\"$it\"") })
-        assertEquals(13, declared.size)
+        assertEquals(14, declared.size)
     }
 
     @Test fun everyBuiltLineIsOneSwiftLiteral() {

@@ -633,49 +633,7 @@
   font-weight: 500;
 }
 
-/* Workspaces (board-5): the nav group's Show all and its filter, and a workspace's own page. */
-.settings-nav-filter {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 28px;
-  margin: 2px 0 4px;
-  padding: 0 8px;
-  border-radius: 6px;
-  background: var(--fill-muted);
-  color: var(--text-3);
-}
-.settings-nav-filter input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  outline: none;
-  background: none;
-  color: var(--text-1);
-  font: inherit;
-  font-size: 12.5px;
-}
-.settings-nav-filter:focus-within {
-  box-shadow: 0 0 0 2px var(--brand-border);
-}
-.settings-nav-more {
-  display: block;
-  width: 100%;
-  height: 30px;
-  padding: 0 8px 0 34px;
-  border: 0;
-  border-radius: 6px;
-  background: none;
-  color: var(--text-2);
-  font: inherit;
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-}
-.settings-nav-more:hover {
-  background: var(--bg-hover);
-  color: var(--text-1);
-}
+/* Workspaces (board-5): a workspace's own page. */
 .settings-nav-none {
   padding: 4px 8px 4px 34px;
   font-size: 12.5px;
@@ -736,4 +694,51 @@
   align-items: center;
   gap: 8px;
   margin-top: 20px;
+}
+
+/* Admin, drawn as Settings is (AdminLayout, docs/mocks/admin-settings-style): text fields 300px wide in a row's
+   control, a value or a code line in place of one, and one Save under the page's sections. Narrower than 760px a
+   row with a field or a picker puts it under the row's text, full width. */
+.admin-form .settings-row-control .admin-row-input {
+  width: 300px;
+}
+.admin-row-code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  word-break: break-all;
+}
+.admin-form-note {
+  margin-top: 10px;
+}
+.admin-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+.admin-email-ok {
+  color: var(--success);
+}
+.settings-shell--narrow .admin-form .settings-row:has(.admin-row-input, [role="combobox"]) {
+  flex-wrap: wrap;
+}
+.settings-shell--narrow .admin-form .settings-row:has(.admin-row-input, [role="combobox"]) .settings-row-control {
+  width: 100%;
+}
+/* Over the picker's own inline width. */
+.settings-shell--narrow .admin-form .settings-row:has(.admin-row-input, [role="combobox"]) .settings-row-control > * {
+  width: 100% !important;
+}
+/* Admin → Users: the search across the column, the table in a card as Settings' are. */
+.admin-users-page .admin-users-search {
+  width: 100%;
+  margin-bottom: 12px;
+}
+.admin-users-page .admin-users-frame {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.admin-users-page .admin-users-frame tbody tr:last-child td {
+  border-bottom: 0;
 }

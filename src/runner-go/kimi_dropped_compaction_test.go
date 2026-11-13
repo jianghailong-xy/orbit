@@ -41,7 +41,7 @@ func TestKimiTurnFailedByADroppedCompactionIsToldApart(t *testing.T) {
 	wire, from := write(kimiDroppedCompactionTurn)
 	want := kimiTurnOutcome{read: true, ran: true, compactionDropped: true,
 		failure: "Kimi Code failed this turn (internal): [object Object]"}
-	if got := readKimiTurnOutcome(ctx, wire, from); got != want {
+	if got := readKimiTurnOutcome(ctx, wire, from, nil); got != want {
 		t.Fatalf("the dropped compaction's turn = %+v, want %+v", got, want)
 	}
 
@@ -51,7 +51,7 @@ func TestKimiTurnFailedByADroppedCompactionIsToldApart(t *testing.T) {
 	ranAfter = append(ranAfter, map[string]interface{}{"type": "llm.request", "agentId": "main", "kind": "loop"},
 		kimiDroppedCompactionTurn[5])
 	wire, from = write(ranAfter)
-	if got := readKimiTurnOutcome(ctx, wire, from); got.compactionDropped || got.failure == "" {
+	if got := readKimiTurnOutcome(ctx, wire, from, nil); got.compactionDropped || got.failure == "" {
 		t.Fatalf("a turn whose model ran after the cancel = %+v", got)
 	}
 
@@ -59,7 +59,7 @@ func TestKimiTurnFailedByADroppedCompactionIsToldApart(t *testing.T) {
 	other := append([]map[string]interface{}{}, kimiDroppedCompactionTurn...)
 	other[3] = map[string]interface{}{"type": "full_compaction.cancel", "agentId": "sub-1"}
 	wire, from = write(other)
-	if got := readKimiTurnOutcome(ctx, wire, from); got.compactionDropped {
+	if got := readKimiTurnOutcome(ctx, wire, from, nil); got.compactionDropped {
 		t.Fatalf("a sub-agent's cancel = %+v", got)
 	}
 
@@ -67,7 +67,7 @@ func TestKimiTurnFailedByADroppedCompactionIsToldApart(t *testing.T) {
 	fine := append([]map[string]interface{}{}, kimiDroppedCompactionTurn[:5]...)
 	fine = append(fine, map[string]interface{}{"type": "turn.ended", "agentId": "main", "turnId": 111, "reason": "completed"})
 	wire, from = write(fine)
-	if got := readKimiTurnOutcome(ctx, wire, from); got != (kimiTurnOutcome{read: true, ran: true}) {
+	if got := readKimiTurnOutcome(ctx, wire, from, nil); got != (kimiTurnOutcome{read: true, ran: true}) {
 		t.Fatalf("a completed turn after a cancel = %+v", got)
 	}
 }
