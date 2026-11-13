@@ -13264,7 +13264,7 @@ button.chat-jump-start:hover {
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--bg);
+  background: var(--bg-base);
   font-size: 13.5px;
   cursor: pointer;
 }
@@ -26308,7 +26308,7 @@ button.agent-progress-agent:hover {
 .wt-recovery pre { white-space: pre-wrap; max-height: 400px; overflow: auto; font-size: 11px; }
 .wt-recovery-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 .wt-recovery-actions button { padding: 5px 10px; border-radius: 6px; cursor: pointer; }
-.wt-recovery-actions button:not(.wt-merge-btn) { border: 1px solid var(--border); background: var(--bg); color: var(--text-1); font: inherit; }
+.wt-recovery-actions button:not(.wt-merge-btn) { border: 1px solid var(--border); background: var(--bg-base); color: var(--text-1); font: inherit; }
 .wt-recovery-actions button:disabled { opacity: .55; cursor: default; }
 .wt-recovery-repair-status { display: flex; align-items: center; gap: 10px; width: 100%; margin: 10px 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-raised); color: var(--text-1); text-align: left; cursor: pointer; font: inherit; }
 .wt-recovery-repair-status.is-running { border-color: color-mix(in srgb, var(--brand) 38%, var(--border)); background: color-mix(in srgb, var(--brand) 8%, var(--bg-raised)); }
