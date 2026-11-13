@@ -3350,20 +3350,24 @@ export function WorkspaceView({
   const projectSearch = openProjectId
     ? `?project=${encodeId(openProjectId)}${listProjectId && effectiveView === 'completed' ? '&view=completed' : ''}${folderParam ? `&folder=${encodeURIComponent(folderParam)}` : ''}` : '';
   const listSearch = listProjectId ? projectSearch : folderSearch;
-  // The project each project row of the list stands for, by its coordinator.
-  const listedCoordinatorProjects = useMemo(() => new Map(folderListing.entries.flatMap((entry) =>
-    entry.kind === 'project' && entry.coordinator ? [[entry.coordinator.id, entry.projectId] as const] : [])), [folderListing]);
-  // Wider than a phone an open column follows the selection (owner 2026-11-11, board 3): a member of
-  // its project keeps it, a project row's coordinator switches it to that project, and any other
-  // session closes it. With no column open, only a project row's own click opens one.
+  // The project each project row of the list stands for, by its coordinator, and the project of each
+  // member row marked with one (a member whose coordinator runs in another workspace).
+  const listedSessionProjects = useMemo(() => new Map(folderListing.entries.flatMap((entry) =>
+    entry.kind === 'project'
+      ? entry.coordinator ? [[entry.coordinator.id, entry.projectId] as const] : []
+      : entry.projectMark ? [[entry.id, entry.projectMark.projectId] as const] : [])), [folderListing]);
+  // Wider than a phone an open column follows the selection (owner 2026-11-11, board 3; 2026-11-13): a
+  // member of its project keeps it, a project row's coordinator or another project's member switches it
+  // to that project, and a session in no project closes it. With no column open, only a project row's
+  // own click opens one.
   const searchFor = useCallback((id: string): string => {
     if (isMobile || !openProjectId) return listSearch;
     if (allProjectMembers.some((s) => s.id === id)) return projectSearch;
-    const rowProjectId = listedCoordinatorProjects.get(id);
+    const rowProjectId = listedSessionProjects.get(id);
     return rowProjectId
       ? `?project=${encodeId(rowProjectId)}${folderParam ? `&folder=${encodeURIComponent(folderParam)}` : ''}`
       : listSearch;
-  }, [isMobile, listSearch, openProjectId, allProjectMembers, projectSearch, listedCoordinatorProjects, folderParam]);
+  }, [isMobile, listSearch, openProjectId, allProjectMembers, projectSearch, listedSessionProjects, folderParam]);
   const sessionPath = useCallback((id: string, search?: string) => `/sessions/${encodeId(id)}${search ?? searchFor(id)}`,
     [searchFor]);
   const sessionItemPath = useCallback((session: { id: string; ownerItems?: Array<{ itemId?: string; since?: string }> }, search = searchFor(session.id)) => {
@@ -3501,8 +3505,9 @@ export function WorkspaceView({
   }, [columnProjectId, selectedId]);
   // The column stands beside a conversation of its project. An address naming the project over no
   // session or another one's (a project row with no coordinator, a link) opens the coordinator, else the
-  // project's latest member. A selection that moves to a session outside the project closes the column,
-  // or, onto a project's coordinator, switches it to that project (owner 2026-11-11, board 3).
+  // project's latest member. A selection that moves to a session in no project closes the column, and
+  // onto another project's coordinator or member switches it to that project (owner 2026-11-11, board 3;
+  // 2026-11-13).
   useEffect(() => {
     if (!columnProjectId || landingsProjectId || composingRoute) return;
     if (!projectSessionsQ.isSuccess || !completedProjectSessionsQ.isSuccess) return;
@@ -3514,7 +3519,7 @@ export function WorkspaceView({
       if (!columnEntered.current) {
         setSearchParams((current) => {
           const next = new URLSearchParams(current);
-          if (membership?.role === 'COORDINATOR') next.set('project', encodeId(membership.projectId));
+          if (membership) next.set('project', encodeId(membership.projectId));
           else next.delete('project');
           next.delete('view');
           return next;

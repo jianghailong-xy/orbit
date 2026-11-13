@@ -766,6 +766,78 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
     await until(() => expect(column()).toBeNull());
   });
 
+  // Owner 2026-11-13: a member of another project selected from the list switches the column to that
+  // project, as that project's own row does. Beta's coordinator runs in another workspace, so its member
+  // here is a row of its own, marked with Beta, just below Alpha's row.
+  const BETA_ID = pid(840);
+  const betaMembership = (role: string) => ({ projectId: BETA_ID, projectTitle: 'Project Beta', projectStatus: 'OPEN', role });
+  const betaCoordinator = remote(841, 'Coordinate Beta', { projectMembership: betaMembership('COORDINATOR'),
+    projectId: BETA_ID, projectTitle: 'Project Beta', lastTurnAt: '2026-10-02T08:00:00Z' });
+  const betaMember = row(842, 'Index the archive', { projectMembership: betaMembership('TASK'), lastTurnAt: '2026-10-03T09:00:00Z' });
+  const withBeta = (): void => {
+    rows = [LOOSE, COORDINATOR, TASK, betaMember];
+    remoteRows = [betaCoordinator];
+    projects = [project(), project({ id: BETA_ID, title: 'Project Beta', lastActivityAt: betaMember.lastTurnAt,
+      coordinatorActivity: { working: false, lastTurnAt: betaCoordinator.lastTurnAt } })];
+  };
+  const listRow = (title: string): HTMLElement | undefined => [...listColumn().querySelectorAll<HTMLElement>('.session-row:not(.session-project-row)')]
+    .find((el) => el.querySelector('.session-title')?.textContent === title);
+  const activeColumnTitles = (): string[] => [...column()!.querySelectorAll('.session-row.active .session-title')].map((el) => el.textContent ?? '');
+  const expectBetaColumn = async (): Promise<void> => {
+    await until(() => expect(location).toBe(`/sessions/${betaMember.id}?project=${BETA_ID}`));
+    await until(() => expect(columnTitles()).toEqual([betaCoordinator.title, betaMember.title]));
+    expect(column()!.querySelector('.session-project-page-header')?.textContent).toContain('Project Beta');
+    expect(activeColumnTitles()).toEqual([betaMember.title]);
+    // The conversation pane is the member's.
+    await until(() => expect(vi.mocked(apiModule.getSession).mock.calls.some(([id]) => id === betaMember.id)).toBe(true));
+    await until(() => expect(mounted().querySelector('.workspace-view')?.textContent).toContain(betaMember.title));
+    await settle();
+    expect(location).toBe(`/sessions/${betaMember.id}?project=${BETA_ID}`);
+    expect(projectRow().classList.contains('active')).toBe(false);
+  };
+
+  it('switches the column to another project when that project’s member is clicked in the list', async () => {
+    withBeta();
+    await mount(() => expect(listRow(betaMember.title)).toBeTruthy());
+    await click(projectRow(), 'Project Alpha’s row');
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+    await click(listRow(betaMember.title), 'Beta’s member in the list');
+    await expectBetaColumn();
+  });
+
+  it('switches the column to another project when the arrow keys step onto that project’s member', async () => {
+    withBeta();
+    await mount(() => expect(listRow(betaMember.title)).toBeTruthy());
+    await click(projectRow(), 'Project Alpha’s row');
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+    // The list is Alpha's row, Beta's member, then the loose session.
+    await press('ArrowDown');
+    await expectBetaColumn();
+    // On to a session in no project, the column closes.
+    await press('ArrowDown');
+    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    expect(column()).toBeNull();
+  });
+
+  it('switches the column to another project’s member reached some other way, and still closes it for a session in no project', async () => {
+    withBeta();
+    await mount(() => expect(listRow(betaMember.title)).toBeTruthy());
+    await click(projectRow(), 'Project Alpha’s row');
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+    // A member of Alpha keeps Alpha's column.
+    await act(async () => routerNavigate(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
+    await settle();
+    expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`);
+    expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]);
+    // A member of Beta under Alpha's address switches the column to Beta.
+    await act(async () => routerNavigate(`/sessions/${betaMember.id}?project=${PROJECT_ID}`));
+    await expectBetaColumn();
+    // A session in no project closes it.
+    await click(listRow(LOOSE.title), 'the loose session in the list');
+    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    expect(column()).toBeNull();
+  });
+
   it('keeps the phone’s page in the list’s place, with no column', async () => {
     mobile = true;
     await mount();
