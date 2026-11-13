@@ -357,6 +357,18 @@ func localShortText(value string) string {
 	return value
 }
 
+// localDigestRE is a model digest as Ollama spells it: "sha256:" and 64 hex digits, or any other short token of the
+// same alphabet. It keys the /api/show cache and is never reported.
+var localDigestRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9:._+-]{0,127}$`)
+
+func localDigest(value string) string {
+	value = strings.TrimSpace(value)
+	if !localDigestRE.MatchString(value) {
+		return ""
+	}
+	return value
+}
+
 func isLocalCloudModel(name string) bool {
 	name = strings.ToLower(strings.TrimSpace(name))
 	return strings.HasSuffix(name, "-cloud") || strings.HasSuffix(name, ":cloud")
@@ -529,7 +541,7 @@ func (p *localProber) probe(ctx context.Context, target LocalProviderTarget, liv
 				ParameterSize: localShortText(m.Details.ParameterSize),
 				Quantization:  localShortText(m.Details.QuantizationLevel),
 			},
-			digest: localShortText(m.Digest),
+			digest: localDigest(m.Digest),
 		}
 		order = append(order, name)
 	}
@@ -577,21 +589,31 @@ func (p *localProber) probe(ctx context.Context, target LocalProviderTarget, liv
 		}
 	}
 
+	// Cached facts are read first, on this goroutine, before any /api/show call starts: from then on facts is
+	// written only by those calls, under factsMu, and read here only after they have all returned.
 	facts := make(map[string]localShowFacts, len(toShow))
-	var factsMu sync.Mutex
-	sem := make(chan struct{}, localProbeShowParallel)
-	var wg sync.WaitGroup
+	type showJob struct{ name, key string }
+	var misses []showJob
 	for _, name := range toShow {
-		key := ep.origin + "\x00" + name + "\x00" + byName[name].digest
+		digest := byName[name].digest
+		key := ep.origin + "\x00" + name + "\x00" + digest
 		if live != nil {
 			live[key] = true
 		}
-		if f, ok := p.cache.get(key); ok && byName[name].digest != "" {
-			facts[name] = f
-			continue
+		if digest != "" {
+			if f, ok := p.cache.get(key); ok {
+				facts[name] = f
+				continue
+			}
 		}
+		misses = append(misses, showJob{name: name, key: key})
+	}
+	var factsMu sync.Mutex
+	sem := make(chan struct{}, localProbeShowParallel)
+	var wg sync.WaitGroup
+	for _, job := range misses {
 		wg.Add(1)
-		go func(name, key string) {
+		go func(name, key string, cacheable bool) {
 			defer wg.Done()
 			select {
 			case sem <- struct{}{}:
@@ -603,7 +625,9 @@ func (p *localProber) probe(ctx context.Context, target LocalProviderTarget, liv
 			f := localShowFacts{}
 			if failed := localCall(ctx, client, ep.origin, http.MethodPost, "/api/show", map[string]string{"model": name}, localProbeShowLimit, p.showTimeout, &answer); failed == nil {
 				f = showFactsOf(answer)
-				p.cache.put(key, f)
+				if cacheable {
+					p.cache.put(key, f)
+				}
 			} else if failed.status == http.StatusNotFound {
 				// Listed a moment ago and gone now: removed between the two calls.
 				f.missing = true
@@ -611,7 +635,7 @@ func (p *localProber) probe(ctx context.Context, target LocalProviderTarget, liv
 			factsMu.Lock()
 			facts[name] = f
 			factsMu.Unlock()
-		}(name, key)
+		}(job.name, job.key, byName[job.name].digest != "")
 	}
 	wg.Wait()
 

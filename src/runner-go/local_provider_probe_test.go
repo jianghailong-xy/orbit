@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -23,6 +26,13 @@ type fakeOllamaModel struct {
 	tools   bool
 	context int
 	removed bool // listed by /api/tags, 404 from /api/show
+	rev     int  // part of the digest: a new rev is a re-pulled model
+}
+
+// digestOf is a digest as Ollama spells it: "sha256:" and 64 hex digits.
+func (m fakeOllamaModel) digestOf() string {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%d", m.name, m.rev)))
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 type fakeOllama struct {
@@ -31,6 +41,7 @@ type fakeOllama struct {
 	models    []fakeOllamaModel
 	override  map[string]http.HandlerFunc
 	showCalls atomic.Int32
+	showsOf   sync.Map // model name → *atomic.Int32
 	showBody  sync.Map // the bodies /api/show was sent
 }
 
@@ -51,7 +62,7 @@ func (f *fakeOllama) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		for _, m := range f.models {
 			list = append(list, map[string]any{
-				"name": m.name, "model": m.name, "digest": "sha256:" + strings.Repeat("a", 12) + m.name,
+				"name": m.name, "model": m.name, "digest": m.digestOf(),
 				"size": 1234, "modified_at": "2026-11-01T00:00:00Z",
 				"details": map[string]any{"parameter_size": "27.3B", "quantization_level": "Q4_K_M", "family": "qwen3", "format": "gguf", "parent_model": localProbePrivate},
 			})
@@ -66,6 +77,8 @@ func (f *fakeOllama) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Model string `json:"model"`
 		}
 		_ = json.Unmarshal(body, &req)
+		n, _ := f.showsOf.LoadOrStore(req.Model, new(atomic.Int32))
+		n.(*atomic.Int32).Add(1)
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		for _, m := range f.models {
@@ -471,6 +484,109 @@ func TestLocalProbeIgnoresProxyEnvironment(t *testing.T) {
 	}
 	if proxied.Load() {
 		t.Fatal("the probe went through the environment's proxy")
+	}
+}
+
+// Several models, some cached and some not, in one probe: the cached ones are not shown again, a re-pulled model
+// (new digest) and a new one are, concurrently, and each model ends up with its own facts. Run with -race.
+func TestLocalProbeShowCacheMixesHitsAndMisses(t *testing.T) {
+	models := []fakeOllamaModel{
+		{name: "qwen3.8:27b", tools: true, context: 131072},
+		{name: "llama3:latest", tools: true, context: 65536},
+		{name: "gemma3:4b", tools: false, context: 131072},
+		{name: "mistral:7b", tools: true, context: 32768},
+	}
+	fake := newFakeOllama(models...)
+	url := startOn(t, "tcp4", "127.0.0.1:0", fake)
+	if d := models[0].digestOf(); len(d) != 71 || localDigest(d) != d {
+		t.Fatalf("a real digest %q (%d bytes) is not kept as a cache key", d, len(d))
+	}
+	shows := func(name string) int32 {
+		if n, ok := fake.showsOf.Load(name); ok {
+			return n.(*atomic.Int32).Load()
+		}
+		return 0
+	}
+	p := loopbackProber()
+	target := []LocalProviderTarget{{ProviderID: "a", BaseURL: url, Models: []string{"qwen3.8:27b", "llama3"}}}
+	byName := func(got []LocalProviderProbe) map[string]LocalInstanceModel {
+		out := map[string]LocalInstanceModel{}
+		for _, m := range got[0].Models {
+			out[m.Value] = m
+		}
+		return out
+	}
+
+	first := p.probeAll(context.Background(), target)
+	if first[0].State != localStateReady || fake.showCalls.Load() != 4 {
+		t.Fatalf("first probe: %s, %d shows", first[0].State, fake.showCalls.Load())
+	}
+
+	// gemma3 is re-pulled with tools now (new digest), and a fifth model arrives; the other three are unchanged.
+	fake.mu.Lock()
+	fake.models[2] = fakeOllamaModel{name: "gemma3:4b", tools: true, context: 131072, rev: 1}
+	fake.models = append(fake.models, fakeOllamaModel{name: "phi4:14b", tools: true, context: 16384})
+	fake.mu.Unlock()
+	for i := 0; i < 20; i++ {
+		got := p.probeAll(context.Background(), target)
+		models := byName(got)
+		if got[0].State != localStateReady || len(models) != 5 {
+			t.Fatalf("round %d: %s %+v", i, got[0].State, got[0].Models)
+		}
+		if m := models["gemma3:4b"]; m.Tools == nil || !*m.Tools {
+			t.Fatalf("round %d: the re-pulled model kept its old facts: %+v", i, m)
+		}
+		if m := models["phi4:14b"]; m.Tools == nil || !*m.Tools || m.ContextWindow != 16384 {
+			t.Fatalf("round %d: the new model: %+v", i, m)
+		}
+		if m := models["mistral:7b"]; m.Tools == nil || !*m.Tools || m.ContextWindow != 32768 {
+			t.Fatalf("round %d: a cached model lost its facts: %+v", i, m)
+		}
+	}
+	for name, want := range map[string]int32{"qwen3.8:27b": 1, "llama3:latest": 1, "mistral:7b": 1, "gemma3:4b": 2, "phi4:14b": 1} {
+		if got := shows(name); got != want {
+			t.Errorf("%s shown %d times, want %d", name, got, want)
+		}
+	}
+	if n := len(p.cache.entries); n != 5 {
+		t.Errorf("cache holds %d entries, want 5 (the old gemma3 digest dropped)", n)
+	}
+
+	// The first model the row names is re-pulled and the second is cached: its /api/show runs while the cached one
+	// is read. Each round re-pulls it again, so every round mixes a miss and a hit.
+	for i := 0; i < 10; i++ {
+		fake.mu.Lock()
+		fake.models[0].rev++
+		fake.models[0].context = 131072 + i
+		fake.mu.Unlock()
+		got := byName(p.probeAll(context.Background(), []LocalProviderTarget{{ProviderID: "a", BaseURL: url, Models: []string{"qwen3.8:27b", "llama3"}}}))
+		if m := got["qwen3.8:27b"]; m.ContextWindow != 131072+i {
+			t.Fatalf("round %d: the re-pulled model reads %+v", i, m)
+		}
+		if m := got["llama3:latest"]; m.Tools == nil || !*m.Tools || m.ContextWindow != 65536 {
+			t.Fatalf("round %d: the cached model reads %+v", i, m)
+		}
+	}
+	if got := shows("qwen3.8:27b"); got != 11 {
+		t.Errorf("qwen3.8:27b shown %d times, want 11", got)
+	}
+	if got := shows("llama3:latest"); got != 1 {
+		t.Errorf("llama3:latest shown %d times, want 1", got)
+	}
+
+	// A digest that is not one is no cache key: that model is shown every time, and nothing is cached for it.
+	odd := newFakeOllama(fakeOllamaModel{name: "odd:1b", tools: true, context: 65536})
+	odd.set("/api/tags", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"models":[{"name":"odd:1b","digest":"not a digest!"}]}`))
+	})
+	oddURL := startOn(t, "tcp4", "127.0.0.1:0", odd)
+	q := loopbackProber()
+	for i := 0; i < 2; i++ {
+		q.probeAll(context.Background(), []LocalProviderTarget{{ProviderID: "o", BaseURL: oddURL}})
+	}
+	if n := odd.showCalls.Load(); n != 2 || len(q.cache.entries) != 0 {
+		t.Fatalf("an unusable digest: %d shows, %d cached", n, len(q.cache.entries))
 	}
 }
 
