@@ -503,6 +503,8 @@ import {
   isSessionBusy,
   isSessionLive,
   isSessionTerminal,
+  SESSION_ACTIVITY_WORD,
+  sessionActivityOf,
   sessionEndedBanner,
   sessionIsStarting,
   sessionLifecycleLabel,
@@ -1059,6 +1061,13 @@ export const isGenerating = (s: any, state: string): boolean =>
 // JOB with an end (backgroundWorkIsActive). A job is work the agent started and is waiting on; a
 // `service` is the thing that made this static. Nothing else about the row moves.
 type ParkedWork = { text: string; kind: OutlivingWork; active: boolean };
+
+// The words for a wait that will resume this parked session: the caller's own for the watches it
+// holds (`watching`), else the server's word when it says something else will (activity WAITING — a
+// scheduled wake-up, an armed auto-retry, a watch the caller did not hand in). Null when nothing
+// will, which is the only parked session that is really waiting for your reply.
+const resumeWords = (s: any, watching?: string | null): string | null =>
+  watching ?? (sessionActivityOf(s) === 'WAITING' ? SESSION_ACTIVITY_WORD.WAITING : null);
 const parkedWorkLabel = (s: any): ParkedWork | null => {
   const kind = outlivingSessionWork(s);
   if (!kind) return null;
@@ -1255,7 +1264,8 @@ export const sessionLine = (
   // Parked on a live watch that will resume it: not idle, not waiting on you, and — whatever else it
   // left running — not a background process (contract §9.2). Said in the strip's own line, so the row
   // and the strip above its composer read the same.
-  if (live && watching && state === 'AWAITING_INPUT') return { text: watching.line, tone: 'watching' };
+  const resume = resumeWords(s, watching?.line);
+  if (live && resume && state === 'AWAITING_INPUT') return { text: resume, tone: 'watching' };
   if (parked) return { text: `${parked.text}…`, tone: 'background' };
   // A message that never got an answer — the turn was interrupted, or failed, before any reply
   // landed — outranks the previous turn's reply: it's the newer of the two, and it's what the
@@ -1655,7 +1665,7 @@ export function statusLabel(session: any, watching?: string | null, machine?: st
     // the wait is said in the watch's own words before the tray's.
     const parked = parkedWorkLabel(session);
     if (parked?.kind === 'subagent') return parked.text;
-    return watching ?? parked?.text ?? 'Waiting for your reply';
+    return resumeWords(session, watching) ?? parked?.text ?? 'Waiting for your reply';
   }
   if (state === 'FAILED') {
     if (sessionRetryPending(session)) return 'Retrying';
@@ -1781,9 +1791,10 @@ export function StatusIcon({ session, watching, machine }: { session: any; watch
     // Parked on a live watch, below a sub-workspace and above a left-up process: a wake is coming,
     // so neither the reply bubble nor the terminal fits — a watch is not a process (contract §9.2).
     // The strip's eye, still, because nothing here is running.
-    if (watching && work?.kind !== 'subagent')
+    const resume = resumeWords(session, watching);
+    if (resume && work?.kind !== 'subagent')
       return (
-        <Tooltip content={watching}>
+        <Tooltip content={resume}>
           <EyeOutlined style={{ color: 'var(--text-3)', fontSize }} />
         </Tooltip>
       );
