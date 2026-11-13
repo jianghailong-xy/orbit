@@ -130,25 +130,44 @@ Both parsers apply the same normalization (`normalizeRecovery`) after every fiel
 steps run in this order, and the contract lists them under `invariants.rules`. *Has a request id*
 means the client sent one, or the answer names one (a `REQUEST` resource).
 
-1. `COMMITTED_NEVER_RESENT`: if the effect is `COMMITTED`, the policy is `NEVER` and the action is
-   never `RETRY` or `RETRY_SAME_REQUEST`.
-2. `UNKNOWN_VERIFIES_FIRST`: if the effect is `UNKNOWN`, the policy stays `SAME_REQUEST_ID` only when
+1. `UNKNOWN_VERIFIES_FIRST`: if the effect is `UNKNOWN`, the policy stays `SAME_REQUEST_ID` only when
    it already was and there is a request id. Anything else (`SAFE`, `NEVER`, `AFTER_STATE_CHANGE`,
    or `SAME_REQUEST_ID` without an id) becomes `VERIFY_THEN_RETRY`. The action is the policy's own:
    `VERIFY_STATE` or `RETRY_SAME_REQUEST`. A `500` with `retryable: false` therefore says verify
    first, not `FIX_REQUEST`.
-3. `SAME_REQUEST_ID_NEEDS_AN_ID`: with no request id, `SAME_REQUEST_ID` becomes `VERIFY_THEN_RETRY`.
-4. `CONFIRMATION_BLOCKS_AUTOMATIC_RESEND`: if `userConfirmation` is `REQUIRED`, `SAFE` and
+2. `SAME_REQUEST_ID_NEEDS_AN_ID`: with no request id, `SAME_REQUEST_ID` becomes `VERIFY_THEN_RETRY`.
+3. `CONFIRMATION_BLOCKS_AUTOMATIC_RETRY`: if `userConfirmation` is `REQUIRED`, `SAFE` and
    `SAME_REQUEST_ID` become `AFTER_STATE_CHANGE` (or `VERIFY_THEN_RETRY` when the effect is
-   `UNKNOWN`), and a resend action becomes `AWAIT_OWNER_DECISION`.
-5. `RESEND_ACTION_MATCHES_POLICY`: a resend action that does not match the final policy is dropped.
-   The policy's default then fills an empty action, except for `COMMITTED` and 2xx answers.
-6. `NEVER_HAS_NO_WAIT`: if the policy is `NEVER`, `afterSeconds` is `null`.
+   `UNKNOWN`), and an automatic-retry action becomes `AWAIT_OWNER_DECISION`.
+4. `AUTOMATIC_RETRY_MATCHES_POLICY`: an automatic-retry action that does not match the final policy
+   is dropped. The policy's default then fills an empty action, except on 2xx answers.
+5. `NEVER_HAS_NO_WAIT`: if the policy is `NEVER`, `afterSeconds` is `null`.
+6. `COMMITTED_IS_FINAL`: this step runs last and overrides every step before it. If the effect is
+   `COMMITTED`, the policy is `NEVER`, there is no wait, and the action survives only if it is
+   read-only (`VERIFY_STATE`). Any action that may lead to another write is removed, whether it was
+   stated, came from the legacy code table, was a token `requiredAction`, or was produced by step 3.
 
-As a result, `SAFE` survives only on effect `NONE`. Every envelope satisfies the checks in
-`invariants.holdsOnEveryEnvelope`. Both test suites check them on every fixture, and on all 4,860
-combinations a server block can state (effect × policy × action × confirmation × request id × status
-× `retryable`).
+As a result, `SAFE` survives only on effect `NONE`, and a committed write never advises another
+write.
+
+**Action semantics.** Each action in the registry declares two flags:
+
+- `automaticRetry`: carrying it out resends the identical request with nobody in between. This is
+  true for `RETRY` and `RETRY_SAME_REQUEST` only.
+- `mayWrite`: carrying it out can end in another write. That covers a resend, a changed request
+  (`FIX_REQUEST`), a request under a new id (`USE_NEW_REQUEST_ID`), answering advice
+  (`ANSWER_ADVICE`), writing again after a decision (`AWAIT_OWNER_DECISION`), or a handoff
+  (`FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF`).
+
+Only `VERIFY_STATE` has `mayWrite: false`. A token the registry does not list counts as
+`mayWrite: true`. The contract derives `automaticRetryActionCodes` and `readOnlyActionCodes` from
+these flags. Steps 3 and 4 use the first list, and step 6 uses the second.
+
+Every envelope satisfies the checks in `invariants.holdsOnEveryEnvelope`. Both test suites check
+them on every fixture, and on all 5,400 combinations a server block can state (effect × policy ×
+action, including one unregistered token, × confirmation × request id × status × `retryable`).
+The check reads `mayWrite` and `automaticRetry` from the contract file itself rather than from the
+parser's tables, so if the parser misclassifies an action, the check still catches it.
 
 ## 4. Action codes: semantic, never a tool or a command
 
@@ -160,7 +179,7 @@ tool name in any case.
 
 The action code comes from the first of these that applies: `recovery.actionCode`, then
 `legacyCodes`, then a token `requiredAction`, then the policy's default. The result is held to §3.1.
-A 2xx response or a `COMMITTED` effect gets no default. The defaults are:
+A 2xx response gets no default, and a `COMMITTED` effect keeps only a read-only action. The defaults are:
 
 | Policy | Default action |
 | --- | --- |

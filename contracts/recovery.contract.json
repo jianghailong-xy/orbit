@@ -64,14 +64,46 @@
   },
   "actionCodePattern": "^[A-Z][A-Z0-9_]*$",
   "actionCodes": {
-    "RETRY": "Send the identical request again, after retry.afterSeconds when there is one.",
-    "RETRY_SAME_REQUEST": "Send the identical request again under the same request id; the first answer is read back, never applied twice.",
-    "VERIFY_STATE": "Read the resource the request was about; send it again only if the write is not there.",
-    "FIX_REQUEST": "Change the request: as sent it is never accepted.",
-    "USE_NEW_REQUEST_ID": "The request id already names a different request: draw a new id for this one.",
-    "ANSWER_ADVICE": "Answer the advice: change what it questions, or send the request again with the override it names.",
-    "AWAIT_OWNER_DECISION": "A person has to decide first. Wait for that decision, then send the request again.",
-    "FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF": "Write into the caller's own project, or ask for the crossing with a handoff declaration."
+    "RETRY": {
+      "meaning": "Send the identical request again, after retry.afterSeconds when there is one.",
+      "automaticRetry": true,
+      "mayWrite": true
+    },
+    "RETRY_SAME_REQUEST": {
+      "meaning": "Send the identical request again under the same request id; the first answer is read back, never applied twice.",
+      "automaticRetry": true,
+      "mayWrite": true
+    },
+    "VERIFY_STATE": {
+      "meaning": "Read the resource the request was about. Reading is all this action does; whether anything is sent afterwards is the retry policy's to say, and on COMMITTED it says nothing is.",
+      "automaticRetry": false,
+      "mayWrite": false
+    },
+    "FIX_REQUEST": {
+      "meaning": "Change the request and send the changed one: as sent it is never accepted.",
+      "automaticRetry": false,
+      "mayWrite": true
+    },
+    "USE_NEW_REQUEST_ID": {
+      "meaning": "The request id already names a different request: send this one under a new id.",
+      "automaticRetry": false,
+      "mayWrite": true
+    },
+    "ANSWER_ADVICE": {
+      "meaning": "Answer the advice: change what it questions, or send the request again with the override it names.",
+      "automaticRetry": false,
+      "mayWrite": true
+    },
+    "AWAIT_OWNER_DECISION": {
+      "meaning": "A person has to decide first. Wait for that decision, then send the request again.",
+      "automaticRetry": false,
+      "mayWrite": true
+    },
+    "FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF": {
+      "meaning": "Write into the caller's own project, or send the write again with a handoff declaration.",
+      "automaticRetry": false,
+      "mayWrite": true
+    }
   },
   "defaultActionByPolicy": {
     "SAFE": "RETRY",
@@ -80,24 +112,10 @@
     "AFTER_STATE_CHANGE": null,
     "NEVER": "FIX_REQUEST"
   },
-  "resendActionCodes": [
-    "RETRY",
-    "RETRY_SAME_REQUEST"
-  ],
   "requestIdResourceType": "REQUEST",
   "invariants": {
-    "note": "Applied after every field is resolved, stated or inferred, in this order, by both parsers (normalizeRecovery). hasRequestId = the client sent a request id, or resources names one of type requestIdResourceType.",
+    "note": "Applied after every field is resolved, stated or inferred, in this order, by both parsers (normalizeRecovery). hasRequestId = the client sent a request id, or resources names one of type requestIdResourceType. COMMITTED_IS_FINAL runs last and overrides everything before it.",
     "rules": [
-      {
-        "id": "COMMITTED_NEVER_RESENT",
-        "when": {
-          "effect": "COMMITTED"
-        },
-        "then": {
-          "retryPolicy": "NEVER",
-          "actionCodeNotIn": "resendActionCodes"
-        }
-      },
       {
         "id": "UNKNOWN_VERIFIES_FIRST",
         "when": {
@@ -119,7 +137,7 @@
         }
       },
       {
-        "id": "CONFIRMATION_BLOCKS_AUTOMATIC_RESEND",
+        "id": "CONFIRMATION_BLOCKS_AUTOMATIC_RETRY",
         "when": {
           "userConfirmation": "REQUIRED",
           "retryPolicy": [
@@ -129,13 +147,13 @@
         },
         "then": {
           "retryPolicy": "AFTER_STATE_CHANGE (VERIFY_THEN_RETRY when effect is UNKNOWN)",
-          "resendActionCodeBecomes": "AWAIT_OWNER_DECISION"
+          "automaticRetryActionBecomes": "AWAIT_OWNER_DECISION"
         }
       },
       {
-        "id": "RESEND_ACTION_MATCHES_POLICY",
+        "id": "AUTOMATIC_RETRY_MATCHES_POLICY",
         "when": {
-          "actionCodeIn": "resendActionCodes",
+          "actionCodeIn": "automaticRetryActionCodes",
           "actionCodeNot": "defaultActionByPolicy[retryPolicy]"
         },
         "then": {
@@ -150,14 +168,25 @@
         "then": {
           "afterSeconds": null
         }
+      },
+      {
+        "id": "COMMITTED_IS_FINAL",
+        "when": {
+          "effect": "COMMITTED"
+        },
+        "then": {
+          "retryPolicy": "NEVER",
+          "afterSeconds": null,
+          "actionCode": "kept only if in readOnlyActionCodes, else null"
+        }
       }
     ],
     "holdsOnEveryEnvelope": [
-      "effect COMMITTED => retryPolicy NEVER and actionCode not in resendActionCodes",
+      "effect COMMITTED => retryPolicy NEVER, afterSeconds null, and actionCode is null or an action whose mayWrite is false",
       "effect UNKNOWN => retryPolicy in [VERIFY_THEN_RETRY, SAME_REQUEST_ID] and actionCode == defaultActionByPolicy[retryPolicy]",
       "retryPolicy SAFE => effect NONE",
       "retryPolicy SAME_REQUEST_ID => hasRequestId",
-      "userConfirmation REQUIRED => retryPolicy not in [SAFE, SAME_REQUEST_ID] and actionCode not in resendActionCodes",
+      "userConfirmation REQUIRED => retryPolicy not in [SAFE, SAME_REQUEST_ID] and actionCode is not an automaticRetry action",
       "actionCode RETRY => retryPolicy SAFE; actionCode RETRY_SAME_REQUEST => retryPolicy SAME_REQUEST_ID",
       "retryPolicy NEVER => afterSeconds null"
     ]
@@ -251,5 +280,17 @@
   "localValidationCodePrefix": "LOCAL_",
   "noAnswerCode": "TRANSPORT_NO_ANSWER",
   "unknownCode": "UNKNOWN_ERROR",
-  "uncodedHttpCodePrefix": "HTTP_"
+  "uncodedHttpCodePrefix": "HTTP_",
+  "actionSemantics": {
+    "automaticRetry": "The action sends the identical request again with no change and no person in between.",
+    "mayWrite": "Carrying the action out can end in another write: a resend, a changed request, a request under a new id, or a request sent after a decision. false only for actions that read and nothing else.",
+    "unregistered": "An action token not in this registry is treated as automaticRetry false and mayWrite true."
+  },
+  "automaticRetryActionCodes": [
+    "RETRY",
+    "RETRY_SAME_REQUEST"
+  ],
+  "readOnlyActionCodes": [
+    "VERIFY_STATE"
+  ]
 }

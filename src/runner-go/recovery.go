@@ -209,8 +209,26 @@ func newRecoveryEnvelope(code, message, kind, effect, policy string) recoveryEnv
 	}
 }
 
-// The actions that send the same request again: only a write known not to have happened may lead to one.
-var recoveryResendActionCodes = []string{"RETRY", "RETRY_SAME_REQUEST"}
+// recoveryActionSemantics is what carrying an action out can do (contract `actionCodes[*]`). automaticRetry:
+// it sends the identical request again with nobody in between. mayWrite: it can end in another write at all —
+// a resend, a changed request, a request under a new id, or one sent after a decision. Only an action that
+// reads and nothing else has mayWrite false; a token not in this registry counts as mayWrite true.
+var recoveryActionSemantics = map[string]struct{ AutomaticRetry, MayWrite bool }{
+	"RETRY":                                  {AutomaticRetry: true, MayWrite: true},
+	"RETRY_SAME_REQUEST":                     {AutomaticRetry: true, MayWrite: true},
+	"VERIFY_STATE":                           {AutomaticRetry: false, MayWrite: false},
+	"FIX_REQUEST":                            {AutomaticRetry: false, MayWrite: true},
+	"USE_NEW_REQUEST_ID":                     {AutomaticRetry: false, MayWrite: true},
+	"ANSWER_ADVICE":                          {AutomaticRetry: false, MayWrite: true},
+	"AWAIT_OWNER_DECISION":                   {AutomaticRetry: false, MayWrite: true},
+	"FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF": {AutomaticRetry: false, MayWrite: true},
+}
+
+// The actions that resend the identical request with nobody in between.
+var recoveryAutomaticRetryActionCodes = []string{"RETRY", "RETRY_SAME_REQUEST"}
+
+// The only actions a COMMITTED envelope may carry: they read, and never lead to another write.
+var recoveryReadOnlyActionCodes = []string{"VERIFY_STATE"}
 
 // The resource type that names a request id the server can read an earlier answer back by.
 const recoveryRequestIDResourceType = "REQUEST"
@@ -226,8 +244,8 @@ type recoveryCandidate struct {
 	success          bool // a 2xx answer, never given a default action
 }
 
-func recoveryIsResend(action string) bool {
-	for _, a := range recoveryResendActionCodes {
+func recoveryIn(list []string, action string) bool {
+	for _, a := range list {
 		if a == action {
 			return true
 		}
@@ -237,12 +255,11 @@ func recoveryIsResend(action string) bool {
 
 // normalizeRecovery applies the contract's cross-field invariants (contracts/recovery.contract.json
 // `invariants`), the same steps in the same order as src/shared/src/recovery.ts normalizeRecovery: no
-// combination of fields, stated or inferred, may advise a resend that could apply a write twice.
+// combination of fields, stated or inferred, may advise a resend that could apply a write twice, and a
+// COMMITTED write is left with no action that may lead to another write.
 func normalizeRecovery(c recoveryCandidate) (policy, action string, afterSeconds *int) {
 	policy, action = c.policy, c.actionCode
 	switch {
-	case c.effect == "COMMITTED":
-		policy = "NEVER"
 	case c.effect == "UNKNOWN":
 		if policy != "SAME_REQUEST_ID" || !c.hasRequestID {
 			policy = "VERIFY_THEN_RETRY"
@@ -261,14 +278,14 @@ func normalizeRecovery(c recoveryCandidate) (policy, action string, afterSeconds
 	if c.effect == "UNKNOWN" {
 		action = recoveryDefaultActionByPolicy[policy]
 	} else {
-		if action != "" && recoveryIsResend(action) {
+		if action != "" && recoveryIn(recoveryAutomaticRetryActionCodes, action) {
 			if confirm {
 				action = "AWAIT_OWNER_DECISION"
 			} else if action != recoveryDefaultActionByPolicy[policy] {
 				action = ""
 			}
 		}
-		if action == "" && c.effect != "COMMITTED" && !c.success {
+		if action == "" && !c.success {
 			action = recoveryDefaultActionByPolicy[policy]
 			if action == "" && confirm {
 				action = "AWAIT_OWNER_DECISION"
@@ -277,6 +294,13 @@ func normalizeRecovery(c recoveryCandidate) (policy, action string, afterSeconds
 	}
 	if policy != "NEVER" {
 		afterSeconds = c.afterSeconds
+	}
+	// COMMITTED_IS_FINAL: the write stands, whatever the steps above produced.
+	if c.effect == "COMMITTED" {
+		policy, afterSeconds = "NEVER", nil
+		if action != "" && !recoveryIn(recoveryReadOnlyActionCodes, action) {
+			action = ""
+		}
 	}
 	return policy, action, afterSeconds
 }

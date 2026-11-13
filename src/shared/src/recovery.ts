@@ -194,8 +194,28 @@ function actionCodeOf(v: unknown): string | null {
   return typeof v === 'string' && RECOVERY_ACTION_CODE_PATTERN.test(v) ? v : null;
 }
 
-/** The actions that send the same request again. Only a write known not to have happened may lead to one. */
-export const RECOVERY_RESEND_ACTION_CODES: readonly string[] = ['RETRY', 'RETRY_SAME_REQUEST'];
+/**
+ * What carrying an action out can do (contract `actionCodes[*]`). `automaticRetry`: it sends the identical
+ * request again with nobody in between. `mayWrite`: it can end in another write at all — a resend, a changed
+ * request, a request under a new id, or one sent after a decision. Only an action that reads and nothing else
+ * has `mayWrite: false`; a token not in this registry counts as `mayWrite: true`.
+ */
+export const RECOVERY_ACTION_SEMANTICS: Record<string, { automaticRetry: boolean; mayWrite: boolean }> = {
+  RETRY: { automaticRetry: true, mayWrite: true },
+  RETRY_SAME_REQUEST: { automaticRetry: true, mayWrite: true },
+  VERIFY_STATE: { automaticRetry: false, mayWrite: false },
+  FIX_REQUEST: { automaticRetry: false, mayWrite: true },
+  USE_NEW_REQUEST_ID: { automaticRetry: false, mayWrite: true },
+  ANSWER_ADVICE: { automaticRetry: false, mayWrite: true },
+  AWAIT_OWNER_DECISION: { automaticRetry: false, mayWrite: true },
+  FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF: { automaticRetry: false, mayWrite: true },
+};
+
+/** The actions that resend the identical request with nobody in between. */
+export const RECOVERY_AUTOMATIC_RETRY_ACTION_CODES: readonly string[] = ['RETRY', 'RETRY_SAME_REQUEST'];
+
+/** The only actions a COMMITTED envelope may carry: they read, and never lead to another write. */
+export const RECOVERY_READ_ONLY_ACTION_CODES: readonly string[] = ['VERIFY_STATE'];
 
 /** The resource type that names a request id the server can read an earlier answer back by. */
 export const RECOVERY_REQUEST_ID_RESOURCE_TYPE = 'REQUEST';
@@ -219,24 +239,24 @@ export interface RecoveryCandidate {
  * (contract `invariants`). Each field may be stated or inferred on its own; their combination must never
  * advise a resend that could apply a write twice. So, in this order:
  *
- * 1. COMMITTED: the write stands. Policy NEVER, and no resend action.
- * 2. UNKNOWN: nobody can tell whether it was written. SAME_REQUEST_ID is kept only when it was the policy
+ * 1. UNKNOWN: nobody can tell whether it was written. SAME_REQUEST_ID is kept only when it was the policy
  *    and a request id provably exists; everything else becomes VERIFY_THEN_RETRY. The action is the
  *    policy's own (VERIFY_STATE or RETRY_SAME_REQUEST).
- * 3. SAME_REQUEST_ID without a provable request id becomes VERIFY_THEN_RETRY.
- * 4. userConfirmation REQUIRED: no automatic resend. SAFE and SAME_REQUEST_ID become AFTER_STATE_CHANGE
- *    (VERIFY_THEN_RETRY when the effect is UNKNOWN), and a resend action becomes AWAIT_OWNER_DECISION.
- * 5. A resend action that does not match the final policy is dropped, then the policy's default fills
- *    an empty action (never for COMMITTED or a 2xx).
- * 6. NEVER carries no wait.
+ * 2. SAME_REQUEST_ID without a provable request id becomes VERIFY_THEN_RETRY.
+ * 3. userConfirmation REQUIRED: no automatic retry. SAFE and SAME_REQUEST_ID become AFTER_STATE_CHANGE
+ *    (VERIFY_THEN_RETRY when the effect is UNKNOWN), and an automatic-retry action becomes AWAIT_OWNER_DECISION.
+ * 4. An automatic-retry action that does not match the final policy is dropped, then the policy's default
+ *    fills an empty action (never for a 2xx).
+ * 5. NEVER carries no wait.
+ * 6. COMMITTED is final: the write stands, so the policy is NEVER, there is no wait, and the action is kept
+ *    only if it is read-only (VERIFY_STATE) — every action that may lead to another write is removed,
+ *    whichever step above produced it.
  *
  * SAFE is therefore only ever left standing on effect NONE.
  */
 export function normalizeRecovery(c: RecoveryCandidate): { policy: RecoveryRetryPolicy; actionCode: string | null; afterSeconds: number | null } {
   let { policy, actionCode } = c;
-  if (c.effect === 'COMMITTED') {
-    policy = 'NEVER';
-  } else if (c.effect === 'UNKNOWN') {
+  if (c.effect === 'UNKNOWN') {
     policy = policy === 'SAME_REQUEST_ID' && c.hasRequestId ? 'SAME_REQUEST_ID' : 'VERIFY_THEN_RETRY';
   } else if (policy === 'SAME_REQUEST_ID' && !c.hasRequestId) {
     policy = 'VERIFY_THEN_RETRY';
@@ -248,15 +268,21 @@ export function normalizeRecovery(c: RecoveryCandidate): { policy: RecoveryRetry
   if (c.effect === 'UNKNOWN') {
     actionCode = RECOVERY_DEFAULT_ACTION_BY_POLICY[policy];
   } else {
-    if (actionCode !== null && RECOVERY_RESEND_ACTION_CODES.includes(actionCode)) {
+    if (actionCode !== null && RECOVERY_AUTOMATIC_RETRY_ACTION_CODES.includes(actionCode)) {
       if (confirm) actionCode = 'AWAIT_OWNER_DECISION';
       else if (actionCode !== RECOVERY_DEFAULT_ACTION_BY_POLICY[policy]) actionCode = null;
     }
-    if (actionCode === null && c.effect !== 'COMMITTED' && !c.success) {
+    if (actionCode === null && !c.success) {
       actionCode = RECOVERY_DEFAULT_ACTION_BY_POLICY[policy] ?? (confirm ? 'AWAIT_OWNER_DECISION' : null);
     }
   }
-  return { policy, actionCode, afterSeconds: policy === 'NEVER' ? null : c.afterSeconds };
+  let afterSeconds = policy === 'NEVER' ? null : c.afterSeconds;
+  if (c.effect === 'COMMITTED') {
+    policy = 'NEVER';
+    afterSeconds = null;
+    if (actionCode !== null && !RECOVERY_READ_ONLY_ACTION_CODES.includes(actionCode)) actionCode = null;
+  }
+  return { policy, actionCode, afterSeconds };
 }
 
 interface EnvelopeFields {

@@ -23,18 +23,23 @@ type recoveryContractCase struct {
 }
 
 type recoveryContractFile struct {
-	ContractVersion       int                           `json:"contractVersion"`
-	EnvelopeFields        []string                      `json:"envelopeFields"`
-	Enums                 map[string][]string           `json:"enums"`
-	ActionCodePattern     string                        `json:"actionCodePattern"`
-	ActionCodes           map[string]string             `json:"actionCodes"`
-	DefaultActionByPolicy map[string]*string            `json:"defaultActionByPolicy"`
-	LegacyCodes           map[string]recoveryLegacyCode `json:"legacyCodes"`
-	LegacyOwnerToActor    map[string]string             `json:"legacyOwnerToActor"`
-	LegacyResourceKeys    [][2]string                   `json:"legacyResourceKeys"`
-	ResendActionCodes     []string                      `json:"resendActionCodes"`
-	RequestIDResourceType string                        `json:"requestIdResourceType"`
-	Invariants            struct {
+	ContractVersion   int                 `json:"contractVersion"`
+	EnvelopeFields    []string            `json:"envelopeFields"`
+	Enums             map[string][]string `json:"enums"`
+	ActionCodePattern string              `json:"actionCodePattern"`
+	ActionCodes       map[string]struct {
+		Meaning        string `json:"meaning"`
+		AutomaticRetry bool   `json:"automaticRetry"`
+		MayWrite       bool   `json:"mayWrite"`
+	} `json:"actionCodes"`
+	DefaultActionByPolicy     map[string]*string            `json:"defaultActionByPolicy"`
+	LegacyCodes               map[string]recoveryLegacyCode `json:"legacyCodes"`
+	LegacyOwnerToActor        map[string]string             `json:"legacyOwnerToActor"`
+	LegacyResourceKeys        [][2]string                   `json:"legacyResourceKeys"`
+	AutomaticRetryActionCodes []string                      `json:"automaticRetryActionCodes"`
+	ReadOnlyActionCodes       []string                      `json:"readOnlyActionCodes"`
+	RequestIDResourceType     string                        `json:"requestIdResourceType"`
+	Invariants                struct {
 		Rules []struct {
 			ID string `json:"id"`
 		} `json:"rules"`
@@ -131,16 +136,30 @@ func TestRecoveryContractTablesMatchTheContract(t *testing.T) {
 		!reflect.DeepEqual(contract.StatusPolicies.AfterStateChange, recoveryStatusAfterStateChg) {
 		t.Errorf("statusPolicies: contract %+v", contract.StatusPolicies)
 	}
-	if !reflect.DeepEqual(contract.ResendActionCodes, recoveryResendActionCodes) ||
+	if !reflect.DeepEqual(contract.AutomaticRetryActionCodes, recoveryAutomaticRetryActionCodes) ||
+		!reflect.DeepEqual(contract.ReadOnlyActionCodes, recoveryReadOnlyActionCodes) ||
 		contract.RequestIDResourceType != recoveryRequestIDResourceType {
-		t.Errorf("resendActionCodes %v / requestIdResourceType %q", contract.ResendActionCodes, contract.RequestIDResourceType)
+		t.Errorf("automaticRetry %v / readOnly %v / requestIdResourceType %q", contract.AutomaticRetryActionCodes,
+			contract.ReadOnlyActionCodes, contract.RequestIDResourceType)
+	}
+	for code, sem := range contract.ActionCodes {
+		got := recoveryActionSemantics[code]
+		if got.AutomaticRetry != sem.AutomaticRetry || got.MayWrite != sem.MayWrite {
+			t.Errorf("action %s: contract %+v, Go %+v", code, sem, got)
+		}
+		if sem.AutomaticRetry != recoveryIn(recoveryAutomaticRetryActionCodes, code) || sem.MayWrite == recoveryIn(recoveryReadOnlyActionCodes, code) {
+			t.Errorf("action %s: its lists disagree with its semantics", code)
+		}
+	}
+	if len(recoveryActionSemantics) != len(contract.ActionCodes) {
+		t.Errorf("action semantics: Go %d, contract %d", len(recoveryActionSemantics), len(contract.ActionCodes))
 	}
 	var ruleIDs []string
 	for _, r := range contract.Invariants.Rules {
 		ruleIDs = append(ruleIDs, r.ID)
 	}
-	wantRules := []string{"COMMITTED_NEVER_RESENT", "UNKNOWN_VERIFIES_FIRST", "SAME_REQUEST_ID_NEEDS_AN_ID",
-		"CONFIRMATION_BLOCKS_AUTOMATIC_RESEND", "RESEND_ACTION_MATCHES_POLICY", "NEVER_HAS_NO_WAIT"}
+	wantRules := []string{"UNKNOWN_VERIFIES_FIRST", "SAME_REQUEST_ID_NEEDS_AN_ID", "CONFIRMATION_BLOCKS_AUTOMATIC_RETRY",
+		"AUTOMATIC_RETRY_MATCHES_POLICY", "NEVER_HAS_NO_WAIT", "COMMITTED_IS_FINAL"}
 	if !reflect.DeepEqual(ruleIDs, wantRules) {
 		t.Errorf("invariant rules: contract %v, Go %v", ruleIDs, wantRules)
 	}
@@ -306,14 +325,40 @@ func TestRecoveryOfReadsEveryErrorThisClientMeets(t *testing.T) {
 	}
 }
 
+// recoveryOracle is the invariant check's own reading of what each action does, taken from the contract
+// file's registry rather than from the parser's tables, so a classification the parser gets wrong cannot
+// also blind the check. A token the registry does not list may write.
+type recoveryOracle struct {
+	actions map[string]struct {
+		Meaning        string `json:"meaning"`
+		AutomaticRetry bool   `json:"automaticRetry"`
+		MayWrite       bool   `json:"mayWrite"`
+	}
+}
+
+func loadRecoveryOracle(t *testing.T) recoveryOracle {
+	t.Helper()
+	var contract recoveryContractFile
+	loadRecoveryJSON(t, "../../contracts/recovery.contract.json", &contract)
+	return recoveryOracle{actions: contract.ActionCodes}
+}
+
+func (o recoveryOracle) mayWrite(action string) bool {
+	sem, known := o.actions[action]
+	return action != "" && (!known || sem.MayWrite)
+}
+
+func (o recoveryOracle) automaticRetry(action string) bool {
+	return action != "" && o.actions[action].AutomaticRetry
+}
+
 // recoveryInvariantViolations is contract `invariants.holdsOnEveryEnvelope`, as checks.
-func recoveryInvariantViolations(e recoveryEnvelope, requestIDSent bool) []string {
+func (o recoveryOracle) violations(e recoveryEnvelope, requestIDSent bool) []string {
 	var out []string
 	action := ""
 	if e.ActionCode != nil {
 		action = *e.ActionCode
 	}
-	resend := recoveryIsResend(action)
 	hasRequestID := requestIDSent
 	for _, r := range e.Resources {
 		if r.Type == recoveryRequestIDResourceType {
@@ -321,8 +366,8 @@ func recoveryInvariantViolations(e recoveryEnvelope, requestIDSent bool) []strin
 		}
 	}
 	p := e.Retry.Policy
-	if e.Effect == "COMMITTED" && (p != "NEVER" || resend) {
-		out = append(out, "COMMITTED resent")
+	if e.Effect == "COMMITTED" && (p != "NEVER" || e.Retry.AfterSeconds != nil || o.mayWrite(action)) {
+		out = append(out, "COMMITTED may lead to another write")
 	}
 	if e.Effect == "UNKNOWN" && !((p == "VERIFY_THEN_RETRY" || p == "SAME_REQUEST_ID") && action == recoveryDefaultActionByPolicy[p]) {
 		out = append(out, "UNKNOWN not verified first")
@@ -333,8 +378,8 @@ func recoveryInvariantViolations(e recoveryEnvelope, requestIDSent bool) []strin
 	if p == "SAME_REQUEST_ID" && !hasRequestID {
 		out = append(out, "SAME_REQUEST_ID without a request id")
 	}
-	if e.UserConfirmation == "REQUIRED" && (p == "SAFE" || p == "SAME_REQUEST_ID" || resend) {
-		out = append(out, "automatic resend past a confirmation")
+	if e.UserConfirmation == "REQUIRED" && (p == "SAFE" || p == "SAME_REQUEST_ID" || o.automaticRetry(action)) {
+		out = append(out, "automatic retry past a confirmation")
 	}
 	if action == "RETRY" && p != "SAFE" {
 		out = append(out, "RETRY off SAFE")
@@ -349,12 +394,13 @@ func recoveryInvariantViolations(e recoveryEnvelope, requestIDSent bool) []strin
 }
 
 func TestRecoveryInvariantsHoldOnEveryFixture(t *testing.T) {
+	oracle := loadRecoveryOracle(t)
 	for _, c := range loadRecoveryFixtures(t) {
 		env, ok := parseRecovery(c.Input)
 		if !ok {
 			continue
 		}
-		if v := recoveryInvariantViolations(env, c.Input.RequestIDSent); len(v) > 0 {
+		if v := oracle.violations(env, c.Input.RequestIDSent); len(v) > 0 {
 			t.Errorf("%s: %v", c.Name, v)
 		}
 	}
@@ -364,7 +410,9 @@ func TestRecoveryInvariantsHoldOnEveryFixture(t *testing.T) {
 // id, one sent by the client, or one named by the answer, on a 409, a 503 and a 201, with and without
 // `retryable: true`: the same enumeration as recovery.spec.ts's.
 func TestRecoveryInvariantsHoldOnEveryServerBlockCombination(t *testing.T) {
-	actions := append([]string{""}, recoveryActionCodes...)
+	oracle := loadRecoveryOracle(t)
+	// Every registered action, none, and one token the registry has never heard of.
+	actions := append(append([]string{""}, recoveryActionCodes...), "SOME_FUTURE_ACTION")
 	checked := 0
 	for _, status := range []int{409, 503, 201} {
 		for _, retryable := range []bool{false, true} {
@@ -391,7 +439,7 @@ func TestRecoveryInvariantsHoldOnEveryServerBlockCombination(t *testing.T) {
 								if !ok {
 									t.Fatalf("%s: no envelope", data)
 								}
-								if v := recoveryInvariantViolations(env, obs.RequestIDSent); len(v) > 0 {
+								if v := oracle.violations(env, obs.RequestIDSent); len(v) > 0 {
 									t.Fatalf("%s -> %+v: %v", data, env, v)
 								}
 								checked++
@@ -402,7 +450,7 @@ func TestRecoveryInvariantsHoldOnEveryServerBlockCombination(t *testing.T) {
 			}
 		}
 	}
-	if want := 3 * 2 * len(recoveryEffects) * len(recoveryRetryPolicies) * len(actions) * len(recoveryUserConfirmations) * 3; checked != want || want != 4860 {
-		t.Errorf("checked %d combinations, want %d (4860)", checked, want)
+	if want := 3 * 2 * len(recoveryEffects) * len(recoveryRetryPolicies) * len(actions) * len(recoveryUserConfirmations) * 3; checked != want || want != 5400 {
+		t.Errorf("checked %d combinations, want %d (5400)", checked, want)
 	}
 }

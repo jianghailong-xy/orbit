@@ -933,6 +933,237 @@
         "resources": []
       },
       "legacyText": "  refused: X_RETRYABLE_BUT_UNKNOWN\n  what:    safe to send again\n"
+    },
+    {
+      "name": "committed: COMMITTED + SAFE + RETRY + a required confirmation advises no later write",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"X_COMMITTED_CONFIRM\",\"message\":\"saved; confirm and send it again\",\"recovery\":{\"effect\":\"COMMITTED\",\"retryPolicy\":\"SAFE\",\"actionCode\":\"RETRY\",\"userConfirmation\":\"REQUIRED\",\"actor\":\"USER\",\"retryAfterSeconds\":5}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_COMMITTED_CONFIRM",
+        "message": "saved; confirm and send it again",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "COMMITTED",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "USER",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "REQUIRED",
+        "resources": []
+      },
+      "legacyText": "  refused: X_COMMITTED_CONFIRM\n  what:    saved; confirm and send it again\n"
+    },
+    {
+      "name": "committed: a stated AWAIT_OWNER_DECISION on a committed write is dropped",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"X_COMMITTED_AWAIT\",\"message\":\"saved; wait for the owner, then send it again\",\"recovery\":{\"effect\":\"COMMITTED\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"actionCode\":\"AWAIT_OWNER_DECISION\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_COMMITTED_AWAIT",
+        "message": "saved; wait for the owner, then send it again",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "COMMITTED",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": []
+      },
+      "legacyText": "  refused: X_COMMITTED_AWAIT\n  what:    saved; wait for the owner, then send it again\n"
+    },
+    {
+      "name": "committed: a legacy crossing code on a committed write keeps its confirmation but advises no write",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"CROSS_PROJECT_APPROVAL_REQUIRED\",\"message\":\"the task was filed; the crossing still needs approval\",\"crossingId\":\"X5\",\"recovery\":{\"effect\":\"COMMITTED\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "CROSS_PROJECT_APPROVAL_REQUIRED",
+        "message": "the task was filed; the crossing still needs approval",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "COMMITTED",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "USER",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "REQUIRED",
+        "resources": [
+          {
+            "type": "CROSSING",
+            "id": "X5"
+          }
+        ]
+      },
+      "legacyText": "  refused: CROSS_PROJECT_APPROVAL_REQUIRED\n  what:    the task was filed; the crossing still needs approval\n"
+    },
+    {
+      "name": "committed: ANSWER_ADVICE (from the legacy advice code) on a committed write is dropped",
+      "input": {
+        "source": "HTTP",
+        "status": 201,
+        "body": "{\"id\":\"T9\",\"code\":\"TASK_CRITERION_SHAPE_ADVICE\",\"kind\":\"ADVISORY\",\"advisory\":true,\"message\":\"filed; the criterion reads like a check\",\"taskId\":\"T9\",\"recovery\":{\"effect\":\"COMMITTED\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "TASK_CRITERION_SHAPE_ADVICE",
+        "message": "filed; the criterion reads like a check",
+        "kind": "ADVISORY",
+        "status": 201,
+        "effect": "COMMITTED",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "TASK",
+            "id": "T9"
+          }
+        ]
+      },
+      "legacyText": "  advice: TASK_CRITERION_SHAPE_ADVICE\n  what:    filed; the criterion reads like a check\n"
+    },
+    {
+      "name": "committed: USE_NEW_REQUEST_ID on a committed write is dropped",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"X_COMMITTED_NEW_ID\",\"message\":\"saved; send it under a new id\",\"triggerId\":\"trg_c\",\"recovery\":{\"effect\":\"COMMITTED\",\"actionCode\":\"USE_NEW_REQUEST_ID\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_COMMITTED_NEW_ID",
+        "message": "saved; send it under a new id",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "COMMITTED",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "REQUEST",
+            "id": "trg_c"
+          }
+        ]
+      },
+      "legacyText": "  refused: X_COMMITTED_NEW_ID\n  what:    saved; send it under a new id\n"
+    },
+    {
+      "name": "committed: FIX_REQUEST on a committed write is dropped",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"X_COMMITTED_FIX\",\"message\":\"saved; fix it and send it again\",\"recovery\":{\"effect\":\"COMMITTED\",\"retryPolicy\":\"NEVER\",\"actionCode\":\"FIX_REQUEST\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_COMMITTED_FIX",
+        "message": "saved; fix it and send it again",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "COMMITTED",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": []
+      },
+      "legacyText": "  refused: X_COMMITTED_FIX\n  what:    saved; fix it and send it again\n"
+    },
+    {
+      "name": "committed: a token requiredAction (FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF) on a committed write is dropped",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"PROJECT_SCOPE_MISMATCH\",\"message\":\"filed at home; the crossing was not asked\",\"owner\":\"COORDINATOR\",\"requiredAction\":\"FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF\",\"recovery\":{\"effect\":\"COMMITTED\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "PROJECT_SCOPE_MISMATCH",
+        "message": "filed at home; the crossing was not asked",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "COMMITTED",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "COORDINATOR",
+        "owner": "COORDINATOR",
+        "actionCode": null,
+        "requiredAction": "FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": []
+      },
+      "legacyText": "  refused: PROJECT_SCOPE_MISMATCH\n  what:    filed at home; the crossing was not asked\n  owner:   COORDINATOR\n  do:      FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF\n"
+    },
+    {
+      "name": "committed: an action token the registry has never heard of is treated as a possible write and dropped",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"X_COMMITTED_FUTURE\",\"message\":\"saved\",\"recovery\":{\"effect\":\"COMMITTED\",\"actionCode\":\"SOME_FUTURE_ACTION\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_COMMITTED_FUTURE",
+        "message": "saved",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "COMMITTED",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": []
+      },
+      "legacyText": "  refused: X_COMMITTED_FUTURE\n  what:    saved\n"
     }
   ]
 }

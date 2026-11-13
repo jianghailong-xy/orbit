@@ -13,7 +13,9 @@ import {
   RECOVERY_LEGACY_OWNER_TO_ACTOR,
   RECOVERY_LEGACY_RESOURCE_KEYS,
   RECOVERY_REQUEST_ID_RESOURCE_TYPE,
-  RECOVERY_RESEND_ACTION_CODES,
+  RECOVERY_ACTION_SEMANTICS,
+  RECOVERY_AUTOMATIC_RETRY_ACTION_CODES,
+  RECOVERY_READ_ONLY_ACTION_CODES,
   RECOVERY_RETRY_POLICIES,
   RECOVERY_STATUS_AFTER_STATE_CHANGE,
   RECOVERY_STATUS_SAFE,
@@ -76,7 +78,14 @@ describe('recovery contract', () => {
     expect(CONTRACT.statusPolicies.SAFE).toEqual(RECOVERY_STATUS_SAFE);
     expect(CONTRACT.statusPolicies.AFTER_STATE_CHANGE).toEqual(RECOVERY_STATUS_AFTER_STATE_CHANGE);
     expect(new RegExp(CONTRACT.actionCodePattern).source).toBe(RECOVERY_ACTION_CODE_PATTERN.source);
-    expect(CONTRACT.resendActionCodes).toEqual(RECOVERY_RESEND_ACTION_CODES);
+    expect(Object.fromEntries(Object.entries(CONTRACT.actionCodes).map(([k, v]) => {
+      const { automaticRetry, mayWrite } = v as { automaticRetry: boolean; mayWrite: boolean };
+      return [k, { automaticRetry, mayWrite }];
+    }))).toEqual(RECOVERY_ACTION_SEMANTICS);
+    expect(CONTRACT.automaticRetryActionCodes).toEqual(RECOVERY_AUTOMATIC_RETRY_ACTION_CODES);
+    expect(CONTRACT.automaticRetryActionCodes).toEqual(Object.keys(CONTRACT.actionCodes).filter((k) => CONTRACT.actionCodes[k].automaticRetry));
+    expect(CONTRACT.readOnlyActionCodes).toEqual(RECOVERY_READ_ONLY_ACTION_CODES);
+    expect(CONTRACT.readOnlyActionCodes).toEqual(Object.keys(CONTRACT.actionCodes).filter((k) => !CONTRACT.actionCodes[k].mayWrite));
     expect(CONTRACT.requestIdResourceType).toBe(RECOVERY_REQUEST_ID_RESOURCE_TYPE);
     expect(CONTRACT.invariants.rules.map((r: { id: string }) => r.id)).toEqual(INVARIANT_RULE_IDS);
   });
@@ -134,6 +143,7 @@ describe('recovery contract', () => {
       checked++;
     }
     expect(checked).toBe(SERVER_BLOCK_COMBINATIONS);
+    expect(SERVER_BLOCK_COMBINATIONS).toBe(5400);
   });
 
   it('decides the branch from stable fields only: rewording the prose changes nothing', () => {
@@ -146,25 +156,36 @@ describe('recovery contract', () => {
 });
 
 const INVARIANT_RULE_IDS = [
-  'COMMITTED_NEVER_RESENT',
   'UNKNOWN_VERIFIES_FIRST',
   'SAME_REQUEST_ID_NEEDS_AN_ID',
-  'CONFIRMATION_BLOCKS_AUTOMATIC_RESEND',
-  'RESEND_ACTION_MATCHES_POLICY',
+  'CONFIRMATION_BLOCKS_AUTOMATIC_RETRY',
+  'AUTOMATIC_RETRY_MATCHES_POLICY',
   'NEVER_HAS_NO_WAIT',
+  'COMMITTED_IS_FINAL',
 ];
+
+/**
+ * The oracle's own reading of what an action does, taken from the contract file's registry rather than from
+ * the parser's constants, so a classification the parser gets wrong cannot also blind the check. A token the
+ * registry does not list may write.
+ */
+const mayWrite = (action: string | null): boolean => action !== null && CONTRACT.actionCodes[action]?.mayWrite !== false;
+const automaticRetry = (action: string | null): boolean => action !== null && CONTRACT.actionCodes[action]?.automaticRetry === true;
 
 /** contract `invariants.holdsOnEveryEnvelope`, as checks. */
 function invariantViolations(e: RecoveryEnvelope, requestIdSent: boolean): string[] {
   const out: string[] = [];
-  const resend = e.actionCode !== null && RECOVERY_RESEND_ACTION_CODES.includes(e.actionCode);
   const hasRequestId = requestIdSent || e.resources.some((r) => r.type === RECOVERY_REQUEST_ID_RESOURCE_TYPE);
-  if (e.effect === 'COMMITTED' && (e.retry.policy !== 'NEVER' || resend)) out.push('COMMITTED resent');
+  if (e.effect === 'COMMITTED' && (e.retry.policy !== 'NEVER' || e.retry.afterSeconds !== null || mayWrite(e.actionCode))) {
+    out.push('COMMITTED may lead to another write');
+  }
   if (e.effect === 'UNKNOWN' && !(['VERIFY_THEN_RETRY', 'SAME_REQUEST_ID'].includes(e.retry.policy)
     && e.actionCode === RECOVERY_DEFAULT_ACTION_BY_POLICY[e.retry.policy])) out.push('UNKNOWN not verified first');
   if (e.retry.policy === 'SAFE' && e.effect !== 'NONE') out.push('SAFE without NONE');
   if (e.retry.policy === 'SAME_REQUEST_ID' && !hasRequestId) out.push('SAME_REQUEST_ID without a request id');
-  if (e.userConfirmation === 'REQUIRED' && (['SAFE', 'SAME_REQUEST_ID'].includes(e.retry.policy) || resend)) out.push('automatic resend past a confirmation');
+  if (e.userConfirmation === 'REQUIRED' && (['SAFE', 'SAME_REQUEST_ID'].includes(e.retry.policy) || automaticRetry(e.actionCode))) {
+    out.push('automatic retry past a confirmation');
+  }
   if (e.actionCode === 'RETRY' && e.retry.policy !== 'SAFE') out.push('RETRY off SAFE');
   if (e.actionCode === 'RETRY_SAME_REQUEST' && e.retry.policy !== 'SAME_REQUEST_ID') out.push('RETRY_SAME_REQUEST off SAME_REQUEST_ID');
   if (e.retry.policy === 'NEVER' && e.retry.afterSeconds !== null) out.push('NEVER with a wait');
@@ -177,7 +198,8 @@ function invariantViolations(e: RecoveryEnvelope, requestIdSent: boolean): strin
  * `retryable: true`. The same enumeration as recovery_test.go's.
  */
 const STATUSES = [409, 503, 201];
-const ACTIONS: Array<string | undefined> = [undefined, ...RECOVERY_ACTION_CODES];
+/** Every registered action, none, and one token the registry has never heard of. */
+const ACTIONS: Array<string | undefined> = [undefined, ...RECOVERY_ACTION_CODES, 'SOME_FUTURE_ACTION'];
 const SERVER_BLOCK_COMBINATIONS = STATUSES.length * 2 * RECOVERY_EFFECTS.length * RECOVERY_RETRY_POLICIES.length
   * ACTIONS.length * RECOVERY_USER_CONFIRMATIONS.length * 3;
 function* serverBlockCombinations(): Generator<{ obs: Extract<RecoveryObservation, { source: 'HTTP' }> }> {
