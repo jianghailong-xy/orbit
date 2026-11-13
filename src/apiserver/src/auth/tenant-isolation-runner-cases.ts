@@ -925,6 +925,11 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     }),
     heldRow: (of) => ['codex_rate_limit_reset_operation', of.runner.codexOperationId] as const,
   },
+  // The batch takeover: B's own process, taking A's session over among its own.
+  'POST /runner/sessions/takeover-leases body sessions[].sessionId': {
+    as: RUNNER,
+    request: (of, mine) => ({ params: {}, body: { leaseOwner: mine.runner.leaseOwner, sessions: [{ sessionId: of.runner.takeoverSessionId }] } }),
+  },
   'POST /runner/sessions/:id/artifacts/result body requestId': {
     as: RUNNER,
     request: (of, mine) => ({ params: { id: mine.runner.machineSessionId }, body: { requestId: of.runner.artifactRequestId, status: 'missing' } }),

@@ -97,7 +97,7 @@
     "cli": {
       "default": false,
       "useFor": ["bulk input from file/stdin", "shell composition and pipes", "operations with no MCP tool", "headless or service-token automation", "work that must outlive the turn"],
-      "capabilities": "orbit capabilities --json (schemaVersion 2; context-dependent)",
+      "capabilities": "orbit capabilities --json (schemaVersion 2; context-dependent). Since 1.1.0 each entry also carries object, intent, risk, approval/approvalKey/approvalDetail, destructive, idempotency, retry, successEvidence, nextStep, returns and availability, and the document carries catalogVersion and catalogHash.",
       "capabilitiesByContext": {"sessionOrchestrationOn": 87, "sessionOrchestrationOff": 64, "headless": 53},
       "discoveryToday": "one ~255 KB document in the fullest context (64 capabilities / ~214 KB with orchestration off, 53 / ~177 KB headless); no graded discovery",
       "jsonOutput": "entity document on stdout only; hints on stderr",
@@ -109,8 +109,10 @@
       "refusal": {"code": "TASK_WRITE_NEEDS_OWNER_CARD", "actions": ["ASK_THROUGH_THE_SAME_TOOL", "USE_A_PERSONAL_ACCESS_TOKEN"]}
     },
     "parity": {
-      "mcpOnlyTools": ["ask_owner", "bg_kill", "bg_list", "bg_output", "bg_run", "integration_abandon", "integration_observe", "integration_retry", "open_item_hand_over", "open_item_resolve", "permission_prompt", "request_owner_action", "schedule_wakeup", "withdraw_owner_request"],
+      "note": "Since 1.1.0 the operation catalogue (src/runner-go/operation_catalog.go) is the single declaration; these are its current declared gaps, each with a reason in the catalogue row.",
+      "mcpOnlyTools": ["ask_owner", "bg_kill", "bg_list", "bg_output", "bg_run", "criterion_check_report", "criterion_check_start", "criterion_confirm", "criterion_confirmation_withdraw", "integration_abandon", "integration_observe", "integration_retry", "open_item_hand_over", "open_item_resolve", "permission_prompt", "request_owner_action", "schedule_wakeup", "withdraw_owner_request"],
       "cliOnlyCapabilities": ["session_import", "wiki_import", "wiki_verify"],
+      "cliOnlyAccountCommands": ["api", "login", "logout", "whoami"],
       "invariants": ["authorization", "approval", "attribution", "identity and ids", "output", "failure"]
     }
   },
@@ -188,9 +190,9 @@
     {"id": "G3", "gap": "write receipts are unversioned text; start outcome split; no structuredContent", "owner": "P0-04"},
     {"id": "G4", "gap": "declined card is a non-error MCP result and a non-zero CLI error", "owner": "P0-03 (closed); P0-04 for the remaining receipt format", "status": "CLOSED", "closedBy": "P0-03", "closedAt": "2026-11-13", "note": "both surfaces return the same APPROVAL_DECLINED document; the transport difference (tool result vs non-zero exit) is the surface's, not the outcome's"},
     {"id": "G5", "gap": "task creates take no caller idempotency key", "owner": "P0-04"},
-    {"id": "G6", "gap": "no project list surface on either agent surface", "owner": "P0-02/P1-01"},
+    {"id": "G6", "gap": "no project list surface on either agent surface", "owner": "P0-02/P1-01", "status": "decided", "resolution": "recorded as a deliberate absence in the operation catalogue; graded discovery, projects included, belongs to P1-01"},
     {"id": "G7", "gap": "one 255 KB capabilities document; no graded discovery", "owner": "P1-01"},
-    {"id": "G8", "gap": "MCP and CLI surfaces differ by 14 and 3 operations; no single operation catalogue", "owner": "P0-02"},
+    {"id": "G8", "gap": "MCP and CLI surfaces differ by 14 and 3 operations; no single operation catalogue", "owner": "P0-02", "status": "satisfied", "resolution": "operation_catalog.go declares every operation once; tools/list and capabilities are projections; every deliberate one-surface gap carries a reason; a mandatory test executes every advertised argv/helpArgv"},
     {"id": "G9", "gap": "permission-mode behaviour for Orbit calls is not uniform: no runner gate; Codex plan refuses all MCP calls, Codex default/acceptEdits cards every MCP call, Claude plan policy unmeasured", "owner": "P1-02"},
     {"id": "G10", "gap": "no black-box evaluation for the eight scenarios", "owner": "P2-01"},
     {"id": "G11", "gap": "autoRunWhenReady defaults to true and the create tool's top-level description does not lead with it: file-it-for-later can start work once the project starts unless the agent passes false", "owner": "P0-05"}

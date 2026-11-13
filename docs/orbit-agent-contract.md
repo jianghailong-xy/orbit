@@ -1,11 +1,12 @@
 # Orbit Agent Contract v1
 
 > **Status:** frozen at v1.2.0, 2026-11-13 (v1.0.0 review record in §11; the 1.1.0 and 1.2.0 changes
-> are in §10). This file is the authority for how an in-session Claude or Codex agent uses Orbit:
-> which object an intent belongs to, whether it travels over MCP or the CLI, what a person must
-> approve, how failures and retries are handled, and what counts as a success receipt. The
-> implementation tasks P0-02 … P2-01 work from this file. If the code conflicts with it, change this
-> file first and say why.
+> are in §10). v1.1.0 adds the operation catalogue and changes no routing rule; v1.2.0 closes the
+> card-free task-write door on the runner's machine credential. This file is the authority for how an
+> in-session Claude or Codex agent uses Orbit: which object an intent belongs to, whether it travels
+> over MCP or the CLI, what a person must approve, how failures and retries are handled, and what
+> counts as a success receipt. The implementation tasks P0-02 … P2-01 work from this file. If the code
+> conflicts with it, change this file first and say why.
 >
 > **Machine-readable index:** [`contracts/orbit-agent.contract.json`](../contracts/orbit-agent.contract.json)
 > carries the same version, the route table, the scenario ids and the baseline verdicts.
@@ -192,8 +193,16 @@ deliberate and is stated in §4.5.
   state the defaults, the required declarations and the dangerous combinations.
 - CLI: `orbit capabilities --json` is the catalogue (`id`, `argv`, `helpArgv`, `usage`, `arguments`,
   `description`, `mcpInputSchema`, `mutates`, `available`, plus `cliVersion`, `sourceSha`, `context`,
-  `identity`). Run the returned `argv` with the absolute path, never a hand-written guess. Today
-  there is no graded discovery — the document is one 255 KB blob in the fullest context and 177 KB headless (§8.2), which is why P1-01 exists.
+  `identity`). Run the returned `argv` with the absolute path, never a hand-written guess. Since
+  v1.1.0 every entry also states `object`, `intent`, `risk`, `approval` (with `approvalKey` and
+  `approvalDetail`), `destructive`, `idempotency`, `retry`, `successEvidence`, `nextStep`, `returns`
+  and `availability`, and the document carries `catalogVersion` and `catalogHash` naming the
+  operation catalogue it was projected from (`src/runner-go/operation_catalog.go`, rendered for a
+  person as [`operation-catalog.md`](./operation-catalog.md)). The same catalogue produces the MCP
+  `tools/list` payload and records why an operation is deliberately absent from one surface; a
+  mandatory test executes every advertised `argv` and `helpArgv` through the CLI's own router. There
+  is still no graded discovery — the document remains one ~300 KB blob in the fullest context
+  (§8.2), which is why P1-01 exists.
 
 ---
 
@@ -619,17 +628,21 @@ exact byte count moves by a few dozen with them; the counts are stable.
 
 | Measurement (CLI) | Value |
 | --- | --- |
-| Per-capability fields | `id`, `argv`, `helpArgv`, `usage`, `arguments`, `description`, `mcpInputSchema`, `mutates`, `available` |
-| Missing fields (P0-02/P0-04 targets) | no `risk`, no `approval`, no `successEvidence`, no graded discovery (`--summary` / `--family` / `--id` / guide) |
-| MCP-only tools, orchestration-on context (no CLI capability) | 14 on Claude, 13 on Codex (which has no `permission_prompt`): `ask_owner`, `bg_kill`, `bg_list`, `bg_output`, `bg_run`, `integration_abandon`, `integration_observe`, `integration_retry`, `open_item_hand_over`, `open_item_resolve`, `permission_prompt`, `request_owner_action`, `schedule_wakeup`, `withdraw_owner_request` |
-| CLI-only capabilities, same context (no MCP tool) | 3: `session_import`, `wiki_import`, `wiki_verify` |
+| Per-capability fields | legacy: `id`, `argv`, `helpArgv`, `usage`, `arguments`, `description`, `mcpInputSchema`, `mutates`, `available`; since v1.1.0 also `object`, `intent`, `risk`, `approval`/`approvalKey`/`approvalDetail`, `destructive`, `idempotency`, `retry`, `successEvidence`, `nextStep`, `returns`, `availability` |
+| Document identity | `schemaVersion` 2 (unchanged: the new fields are additive), plus `catalogVersion` and a 64-hex `catalogHash` over the whole operation catalogue |
+| Fields the catalogue now supplies (P0-02) | `risk`, `approval`, `successEvidence`, `nextStep`, `object`, `intent`, `idempotency`, `retry`; graded discovery (`--summary` / `--family` / `--id` / guide) remains P1-01 |
+| Every advertised command | `<argv> --help` prints that command's leaf help, and `<argv>` reaches its own flag parser; `operation_catalog_test.go` executes each one (it found four commands advertised in capabilities with no reachable leaf help, now fixed) |
+| MCP-only tools, orchestration-on context (no CLI capability) | 18 on the current `main` (the v1.0.0 baseline measured 14 before the four `criterion_*` tools landed): `ask_owner`, `bg_kill`, `bg_list`, `bg_output`, `bg_run`, `criterion_check_report`, `criterion_check_start`, `criterion_confirm`, `criterion_confirmation_withdraw`, `integration_abandon`, `integration_observe`, `integration_retry`, `open_item_hand_over`, `open_item_resolve`, `permission_prompt`, `request_owner_action`, `schedule_wakeup`, `withdraw_owner_request`. Each is declared with its reason in the operation catalogue |
+| CLI-only capabilities, same context (no MCP tool) | 3 agent-facing (`session_import`, `wiki_import`, `wiki_verify`), plus the person's four HeadlessOnly account commands (`login`, `logout`, `whoami`, `api`); all seven are declared with their reason |
 | Orchestration-gated families | 22 tools: `session_*` (12), `agent_*` (4), `runner_*` (4), `project_send`, `project_ensure_coordinator` |
 
 Other measured facts:
 
 - **No project listing surface.** `project_get` takes an id, and neither MCP nor the CLI offers a
   project list. Project ids come from a task row (`projectId`), a session/project page, or the REST
-  `GET /projects` route — which the in-session CLI does not expose as a command.
+  `GET /projects` route — which the in-session CLI does not expose as a command. P0-02 records this
+  as a deliberate absence in the operation catalogue rather than adding a tool one surface would
+  have and the other would not; graded discovery, projects included, belongs to P1-01.
 - **MCP results are a single text content block**; a successful read or write puts the entity JSON in
   it, while a refusal puts the refusal prose there. There is no `structuredContent` and no envelope
   version (`mcp.go` `toolResult`). The result is parseable but not machine-typed.
@@ -673,9 +686,9 @@ Other measured facts:
 | G3 | Write receipts are unversioned text blocks; a start outcome is split across document and prose/stderr; no `structuredContent`. | P0-04 |
 | G4 | ~~A declined card is a non-error MCP result and a non-zero CLI error — the same refusal, two shapes.~~ **Closed by P0-03 (v1.1.0):** both surfaces return the same `APPROVAL_DECLINED` document; the transport difference stays, the outcome does not differ. | P0-03 (closed); P0-04 owns the remaining receipt format |
 | G5 | Task creates take no caller idempotency key; a retry in a later turn can duplicate work. | P0-04 |
-| G6 | No project list surface on either agent surface. | P0-02 / P1-01 |
+| G6 | No project list surface on either agent surface. | P0-02 / P1-01 (P0-02 records it as deliberately absent; graded discovery belongs to P1-01) |
 | G7 | The catalogue is one 255 KB document in the fullest context (214 KB with orchestration off, 177 KB headless); there is no graded discovery (`summary`/`family`/`id`/guide). | P1-01 |
-| G8 | MCP and CLI surfaces differ by 14 and 3 operations; there is no single operation catalogue. | P0-02 |
+| G8 | **Satisfied by P0-02.** `src/runner-go/operation_catalog.go` is the single versioned catalogue: one row per operation with object, intent, input schema, availability, mutates, approval, destructive, idempotency, retry, success evidence and next step. MCP `tools/list`, `orbit capabilities` (with `catalogVersion` and `catalogHash`) and the public catalogue document are projected from it, every deliberate one-surface absence carries its reason in the row, and a mandatory test executes every advertised `argv`/`helpArgv`. | P0-02 |
 | G9 | Permission-mode behaviour for Orbit calls is not uniform: the runner adds no gate of its own; Codex `plan` refuses every MCP call (reads included), Codex `default`/`acceptEdits` cards every MCP call, and Claude's own plan policy is unmeasured. | P1-02 |
 | G10 | No black-box evaluation exists for the eight scenarios on either engine. | P2-01 |
 | G11 | `autoRunWhenReady` defaults to true and the create tool's top-level description does not lead with it: "file it for later" can start work once the project starts unless the agent passes false. | P0-05 |
@@ -702,8 +715,8 @@ Other measured facts:
 
 | Version | Date | Change |
 | --- | --- | --- |
-| 1.2.0 | 2026-11-13 | P0-03 revision: the machine credential has no card-free task write. `POST /runner/tasks`, `/runner/tasks/batch-create` and `/runner/task-lists/:id/dag-apply` now require a usable acting session (this runner's, this account's, not ended) as well as the answered card covering the exact write; a request naming no session, a forged id or an ended one is refused `TASK_WRITE_NEEDS_OWNER_CARD` with `USE_A_PERSONAL_ACCESS_TOKEN`, because `x-orbit-session-id` is attribution and an agent can unset it. The card-free door is a person's own credential on the user routes, stated as deliberate in the new §4.5. §2.2, §2.4, §4.4 updated; the CLI copy no longer offers a headless machine-credential create. |
-| 1.1.0 | 2026-11-13 | P0-03. The approval row is enforced by the control plane, by caller: a session's `task_create`, `task_create_batch` (including one that starts work at once) and `task-list propose-dag --apply` each require an ALLOWED card covering that exact write, refused otherwise as `TASK_WRITE_NEEDS_OWNER_CARD`. The in-session CLI's DAG restructure now asks on the same card as the MCP tool (it previously applied with no approval); the injected primer no longer says the two surfaces are interchangeable, and says instead that they take the same approval. A declined card is one document, `APPROVAL_DECLINED` (G4 closed). §0 rule 8, §2.4, §6.1–2, §8.3, §8.4 updated. |
+| 1.2.0 | 2026-11-13 | P0-03. The approval row is enforced by the control plane, by caller: a session's `task_create`, `task_create_batch` (including one that starts work at once) and `task-list propose-dag --apply` each require an ALLOWED card covering that exact write, refused otherwise as `TASK_WRITE_NEEDS_OWNER_CARD`. The in-session CLI's DAG restructure now asks on the same card as the MCP tool (it previously applied with no approval); the injected primer no longer says the two surfaces are interchangeable, and says instead that they take the same approval. A declined card is one document, `APPROVAL_DECLINED` (G4 closed). §0 rule 8, §2.4, §6.1–2, §8.3, §8.4 updated. Revision 2 closes the machine-credential door itself: there is no card-free task write on it. `POST /runner/tasks`, `/runner/tasks/batch-create` and `/runner/task-lists/:id/dag-apply` now require a usable acting session (this runner's, this account's, not ended) as well as the answered card covering the exact write; a request naming no session, a forged id or an ended one is refused `TASK_WRITE_NEEDS_OWNER_CARD` with `USE_A_PERSONAL_ACCESS_TOKEN`, because `x-orbit-session-id` is attribution and an agent can unset it. The card-free door is a person's own credential on the user routes, stated as deliberate in the new §4.5. §2.2, §2.4, §4.4 updated; the CLI copy no longer offers a headless machine-credential create. |
+| 1.1.0 | 2026-11-13 | P0-02: the operation catalogue. `orbit capabilities` gains per-operation `object`, `intent`, `risk`, `approval`, `destructive`, `idempotency`, `retry`, `successEvidence`, `nextStep`, `returns` and `availability`, and the document gains `catalogVersion`/`catalogHash` (all additive; `schemaVersion` stays 2). MCP `tools/list` and the CLI capabilities are both projections of the catalogue, every deliberate surface gap is declared with a reason, and every advertised `argv`/`helpArgv` is executed by a mandatory test. G8 is satisfied; G6 is recorded as deliberately absent. |
 | 1.0.0 | 2026-11-13 | First frozen version: object model, routing, surfaces, create/start, permissions, errors, receipts, eight scenarios, baseline. |
 
 ---

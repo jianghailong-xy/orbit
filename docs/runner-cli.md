@@ -12,6 +12,14 @@ The document also names the binary itself: `cliVersion` and `sourceSha`, the com
 or `dev-local` for a build that named none. `orbit status` prints both on its first line once a runner is
 registered.
 
+Each capability also carries the operation's contract: `object` and `intent` (what it acts on and the
+question it answers), `risk`, `approval` (`none`, `card` or `owner`, with the card's `approvalKey` and
+any `approvalDetail`), `destructive`, `idempotency` and `retry` (how a retry is made safe),
+`successEvidence` and `returns` (what proves it worked and what it hands back), `nextStep`, and
+`availability` (how the MCP and CLI surfaces reach it). The whole document is projected from one
+versioned operation catalogue, identified by `catalogVersion` and `catalogHash`; the same catalogue
+rendered for a person is the [operation catalogue](operation-catalog.md).
+
 ## Tasks and task lists
 
 ```bash

@@ -81,35 +81,6 @@ func copySessionRequestArgs(body, args map[string]interface{}) {
 	}
 }
 
-// sessionReplyDescriptor is the recipient's tool: the answer to a request it was sent.
-func sessionReplyDescriptor(obj func(map[string]interface{}, ...string) map[string]interface{}) map[string]interface{} {
-	return map[string]interface{}{
-		"name": "session_reply",
-		"description": "Answer a run question (<orbit-run-question>) with answers, one entry per question: " +
-			"{question: index, option: index}, {question: index, options: [indices]} for multiple choice, or {question: index, text: words}. " +
-			"If the decision belongs to the owner, use ask_owner with forRunQuestion and your recommendation first. " +
-			"For a run question the answer resolves the blocked question tool; it does not queue a reply turn. " +
-			"Otherwise answer a request another Orbit session sent you — a message whose " +
-			"<orbit-session-message> block carries request-id and asks for a reply. Give `option` (the index " +
-			"of the answer you choose) when it offered options, `message`, or both; without options, " +
-			"`message` is required. If you cannot do what was asked, say so here: an answer is better than " +
-			"none. The asker gets it as a turn of its own. Only the session the request was sent to can " +
-			"answer it, and only once — a request that already has an outcome is refused with " +
-			"REQUEST_CLOSED (send an ordinary session_send to add something after that).",
-		"inputSchema": obj(map[string]interface{}{
-			"answers": map[string]interface{}{"type": "array", "items": obj(map[string]interface{}{
-				"question": map[string]interface{}{"type": "integer", "minimum": 0},
-				"option":   map[string]interface{}{"type": "integer", "minimum": 0},
-				"options":  map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "integer", "minimum": 0}},
-				"text":     map[string]interface{}{"type": "string"},
-			}, "question")},
-			"requestId": map[string]interface{}{"type": "string", "description": "The request-id from the <orbit-session-message> or <orbit-run-question> block."},
-			"message":   map[string]interface{}{"type": "string", "description": "Your answer, in words."},
-			"option":    map[string]interface{}{"type": "integer", "minimum": 0, "maximum": 3, "description": "The index of the option you choose, when the request offered options."},
-		}, "requestId"),
-	}
-}
-
 // sessionReplyBody is what session_reply sends: message and option, each only when given.
 func sessionReplyBody(message string, messageSet bool, option *int) map[string]interface{} {
 	body := map[string]interface{}{}
