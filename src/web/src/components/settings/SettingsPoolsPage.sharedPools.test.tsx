@@ -189,6 +189,28 @@ describe("a shared pool on Settings' Account pools page and on its own page", { 
   const button = (words: string, scope: ParentNode = document.body) =>
     Array.from(scope.querySelectorAll<HTMLButtonElement>('button')).find((el) => el.textContent?.trim() === words) ??
     null;
+  const menuItems = () =>
+    Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).map((el) => el.textContent?.trim() ?? '');
+  /** Opens the ⋯ of `name`'s row on the pool's page (settings-buttons board 02) and waits for its items. */
+  const openMenu = async (name: string) => {
+    await click(container.querySelector(`.pool-detail [aria-label="More for ${name}"]`));
+    await act(async () => {
+      await vi.waitFor(() => {
+        if (menuItems().length === 0) throw new Error(`no menu for ${name} yet`);
+      });
+    });
+  };
+  /** What `name`'s ⋯ holds, read and closed again. */
+  const menuOf = async (name: string) => {
+    await openMenu(name);
+    const items = menuItems();
+    await click(container.querySelector(`.pool-detail [aria-label="More for ${name}"]`));
+    return items;
+  };
+  const pressMenu = async (name: string, label: string) => {
+    await openMenu(name);
+    await click(Array.from(document.querySelectorAll('[role="menuitem"]')).find((el) => el.textContent?.trim() === label));
+  };
   const labelled = (label: string, scope: ParentNode = document.body) =>
     Array.from(scope.querySelectorAll<HTMLElement>('[aria-label]')).filter((el) => el.getAttribute('aria-label') === label);
   const dialog = () => {
@@ -286,14 +308,14 @@ describe("a shared pool on Settings' Account pools page and on its own page", { 
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
   });
 
-  it("heads the pools with the shared one: Codex, SHARED, its people, and the key a session starts on next", async () => {
+  it("heads the pools with the shared one: Codex, Shared, its people, and the key a session starts on next", async () => {
     await mount('/settings/providers/pools');
     const cards = container.querySelectorAll<HTMLElement>('.pool-sec .pool-card');
     expect(cards).toHaveLength(2);
     const [card, claude] = cards;
     const head = card.querySelector<HTMLElement>('.re-head')!;
     expect(head.querySelector('.re-runner')?.textContent).toBe('Team Codex');
-    expect(head.querySelector('.pool-shared-chip')?.textContent).toBe('SHARED');
+    expect(head.querySelector('.pool-shared-chip')?.textContent).toBe('Shared');
     expect(head.querySelectorAll('.pool-people .pool-av')).toHaveLength(4);
     // Its maker reads every key as one of the pool's accounts, and the gauge as their own next session's.
     expect(head.querySelector('.re-summary')?.textContent).toBe('2 of 5 accounts available');
@@ -385,7 +407,7 @@ describe("a shared pool on Settings' Account pools page and on its own page", { 
     // Somebody its maker added reads whose the pool is and the keys they run on — its people and its
     // gauge are on its page.
     const head = container.querySelector<HTMLElement>('.pool-sec .pool-card .re-head')!;
-    expect(head.querySelector('.pool-shared-chip')?.textContent).toBe('SHARED');
+    expect(head.querySelector('.pool-shared-chip')?.textContent).toBe('Shared');
     expect(head.querySelector('.re-summary')?.textContent).toBe('Wikova’s · 5 keys you can run on');
     expect(head.querySelector('.pool-people')).toBeNull();
     expect(head.querySelector('.pool-gauge')).toBeNull();
@@ -433,7 +455,7 @@ describe("a shared pool on Settings' Account pools page and on its own page", { 
   it("gives its maker the whole page: every key's removal, their own keys' switch, who can use it, and deleting it", async () => {
     await mount(`/settings/providers/pools/${POOL_ID}`);
     expect(container.querySelector('.pool-page-title h1')?.textContent).toBe('Team Codex');
-    expect(container.querySelector('.pool-page-title .pool-shared-chip')?.textContent).toBe('SHARED');
+    expect(container.querySelector('.pool-page-title .pool-shared-chip')?.textContent).toBe('Shared');
     // A pool made on the shared pools page holds no ChatGPT account: everybody, its maker too, runs on keys.
     expect(container.querySelector('.pool-sub')?.textContent).toBe(
       'Codex pool · Me and 3 people · 2 of 5 accounts available · each session starts on the key with the most room, and stays on it until that one runs out.',
@@ -442,10 +464,11 @@ describe("a shared pool on Settings' Account pools page and on its own page", { 
     // both).
     expect(button('Add account')).not.toBeNull();
     expect(container.querySelector('.pool-detail .re-runner')?.textContent).toBe('Accounts5');
-    expect(container.querySelectorAll('[aria-label^="Remove "]')).toHaveLength(5);
-    expect(container.querySelectorAll('[aria-label^="Disable "]')).toHaveLength(2);
-    expect(labelled('Disable orbit-org-1')).toHaveLength(1);
-    expect(labelled('Disable wikova-backup')).toHaveLength(1);
+    // Each key's ⋯ (settings-buttons board 02): its maker takes any key out, and switches off their own.
+    expect(container.querySelectorAll('.pool-detail [aria-label^="More for "]')).toHaveLength(5);
+    expect(await menuOf('orbit-org-1')).toEqual(['Pause…', 'Disable', 'Remove from pool']);
+    expect(await menuOf('wikova-backup')).toEqual(['Pause…', 'Disable', 'Remove from pool']);
+    expect(await menuOf('zhang-old')).toEqual(['Pause…', 'Remove from pool']);
 
     // Who can use it: what each put in and ran, everyone's share, and a menu on everyone but its maker.
     const who = container.querySelector<HTMLElement>('.who-card')!;
@@ -466,7 +489,7 @@ describe("a shared pool on Settings' Account pools page and on its own page", { 
     const [membersCanAdd] = who.querySelectorAll<HTMLElement>('[role="switch"]');
     expect(membersCanAdd.getAttribute('aria-disabled')).not.toBe('true');
     await click(membersCanAdd);
-    await click(labelled('Disable orbit-org-1')[0]);
+    await pressMenu('orbit-org-1', 'Disable');
     expect(sent).toEqual([
       { method: 'PATCH', path: AT, body: { membersCanAdd: false } },
       { method: 'PATCH', path: `${AT}/keys/${id(11)}`, body: { enabled: false } },
@@ -474,8 +497,8 @@ describe("a shared pool on Settings' Account pools page and on its own page", { 
 
     // Taking somebody else's key out asks first.
     sent = [];
-    await click(labelled('Remove zhang-old from this pool')[0]);
-    await click(button('Remove', document.body.querySelector('[role="dialog"]')!));
+    await pressMenu('zhang-old', 'Remove from pool');
+    await click(button('Remove', document.body.querySelector('[role="alertdialog"]')!));
     expect(sent).toEqual([{ method: 'DELETE', path: `${AT}/keys/${id(15)}` }]);
 
     expect(button('Delete pool')).not.toBeNull();
@@ -492,8 +515,8 @@ describe("a shared pool on Settings' Account pools page and on its own page", { 
       'Codex pool · Wikova’s · 4 people · 2 of 5 keys you can run on available · your sessions run on the API keys, your own first.',
     );
     expect(container.querySelector('.pool-detail .re-runner')?.textContent).toBe('Accounts');
-    expect(container.querySelectorAll('[aria-label^="Remove "]')).toHaveLength(0);
-    expect(container.querySelectorAll('[aria-label^="Disable "]')).toHaveLength(0);
+    // Nothing of anybody else's to pause, switch or take out: no key's row has a ⋯.
+    expect(container.querySelectorAll('.pool-detail [aria-label^="More for "]')).toHaveLength(0);
     expect(container.querySelectorAll('[aria-label^="Manage "]')).toHaveLength(0);
     expect(button('Replace key')).toBeNull();
     expect(button('Add people')).toBeNull();
