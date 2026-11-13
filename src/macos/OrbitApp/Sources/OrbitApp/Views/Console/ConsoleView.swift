@@ -45,6 +45,10 @@ struct ConsoleView: View {
     /// A wide shell: a task this conversation opens opens over it, not in the Tasks section
     /// (`opensTasksOverPage`, owner decision 2026-11-12).
     @Environment(\.opensTasksOverPage) private var opensTasksOverPage
+    /// Move… — the ⋯ menu's on iOS, the window toolbar's on the Mac, and the region card's on both —
+    /// and the session's workspace list the Move panel counts its folders over.
+    @State private var movingSession: Session?
+    @State private var moveListed: [Session] = []
     #if os(iOS)
     /// The ⋯ menu's Rename… (web double-clicks its header title). Seeded from the session's own
     /// title — not `SessionHeader.title`, whose agent-name fallback would otherwise be typed in as if
@@ -52,8 +56,6 @@ struct ConsoleView: View {
     @State private var renaming = false
     @State private var renameDraft = ""
     @State private var taggingSession: Session?
-    @State private var movingSession: Session?
-    @State private var moveListed: [Session] = []
     @State private var confirmPurge = false
     /// Gates the "needs you" banner to the compact shell — see the `safeAreaInset` below.
     @Environment(\.horizontalSizeClass) private var hSize
@@ -490,6 +492,35 @@ struct ConsoleView: View {
                 .environment(appModel)
                 .task { await appModel.loadSessionTags() }
         }
+        #else
+        // The same link on macOS, from the window toolbar: a detail pane's own actions sit at
+        // `.primaryAction` there, as the project and task pages' menus do.
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                // No Share on a landing session (LS6): it is platform work, not a conversation,
+                // and its page's own ⋯ menu is the whole of what it offers.
+                if appModel.session(id: sessionID)?.isLanding != true {
+                    Button { showShare = true } label: {
+                        Label("Share session", systemImage: "square.and.arrow.up")
+                    }
+                    .help("Share a read-only link to this session")
+                }
+            }
+            // Move…, the iPhone's ⋯ menu item, beside Share: the same Move panel the list's rows
+            // open. None on a landing session (LS6), nor in Trash, where there is nothing to file.
+            ToolbarItem(placement: .primaryAction) {
+                if let session = appModel.session(id: sessionID), session.isLanding != true,
+                   session.effectiveLifecycleState != .trash {
+                    Button { openMove(session) } label: {
+                        Label("Move…", systemImage: "folder")
+                    }
+                    .help("Move this session to a folder or another workspace")
+                    .disabled(sessionWorkspace(session) == nil)
+                }
+            }
+        }
+        #endif
+        // The Move panel, from Move… or the region card (docs/session-folders-move-design.md §4).
         .sheet(item: $movingSession) { session in
             if let workspace = sessionWorkspace(session) {
                 SessionMoveSheet(session: session, workspace: workspace, listed: moveListed)
@@ -506,22 +537,6 @@ struct ConsoleView: View {
                     }
             }
         }
-        #else
-        // The same link on macOS, from the window toolbar: a detail pane's own actions sit at
-        // `.primaryAction` there, as the project and task pages' menus do.
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                // No Share on a landing session (LS6): it is platform work, not a conversation,
-                // and its page's own ⋯ menu is the whole of what it offers.
-                if appModel.session(id: sessionID)?.isLanding != true {
-                    Button { showShare = true } label: {
-                        Label("Share session", systemImage: "square.and.arrow.up")
-                    }
-                    .help("Share a read-only link to this session")
-                }
-            }
-        }
-        #endif
         .sheet(isPresented: $showShare) {
             if let baseURL = appModel.baseURL {
                 ShareSheet(kind: .session, rootID: sessionID, baseURL: baseURL, tokenStore: appModel.tokenStore,
@@ -530,18 +545,12 @@ struct ConsoleView: View {
         }
     }
 
-    /// The region card's Move to another machine: the ⋯ menu's Move… (`SessionMoveSheet`). The Mac's
-    /// console has no Move — that sheet is the phone's and the iPad's — so there the card leaves it out.
+    /// The region card's Move to another machine: Move… (`SessionMoveSheet`), on every platform.
     private var moveFromCard: (() -> Void)? {
-        #if os(iOS)
         guard let session = appModel.session(id: sessionID), sessionWorkspace(session) != nil else { return nil }
         return { openMove(session) }
-        #else
-        return nil
-        #endif
     }
 
-    #if os(iOS)
     private func sessionWorkspace(_ session: Session) -> Agent? {
         appModel.agents?.items.first { $0.id == (session.agent?.id ?? session.agentId) }
     }
@@ -557,6 +566,7 @@ struct ConsoleView: View {
         movingSession = session
     }
 
+    #if os(iOS)
     private func sessionMenu(_ session: Session) -> some View {
         Menu {
             if session.effectiveLifecycleState == .trash {
@@ -1282,7 +1292,7 @@ struct TranscriptView: View {
         case .steps(let items):
             // No `AnchorRow`: a steps line is never the "Your question" the sticky header names,
             // so it has no business moving that anchor.
-            StepsRowView(items: items, fullPayload: console.fullPayload)
+            StepsRowView(items: items, live: console.state.status == .running, fullPayload: console.fullPayload)
         case .exchanges(let turns):
             // No `AnchorRow`, for the steps line's reason: a fold over turns Orbit opened is no
             // "Your question". Opened, it draws each turn's rows through this same function.
@@ -1505,8 +1515,8 @@ struct TranscriptView: View {
     private var statusBar: some View {
         HStack(spacing: 8) {
             Circle().fill(console.connected ? .green : .orange).frame(width: 7, height: 7)
-            Text(headerStatus)
-                .font(.caption).foregroundStyle(.secondary)
+            headerStatus
+                .font(.caption)
             if let session = app.session(id: console.sessionID) {
                 SessionCoordinatorBadge(session: session)
             }
@@ -1515,23 +1525,44 @@ struct TranscriptView: View {
                 Label("\(console.state.pendingApprovals.count) pending", systemImage: "hand.raised.fill")
                     .font(.caption).foregroundStyle(.orange)
             }
-            if !console.state.background.isEmpty {
-                Label("\(console.state.background.count) background", systemImage: "gearshape.2")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+            // No count of background processes here: the Background processes tray above the
+            // composer already says how many, and it is the one that opens them.
         }
         .padding(.horizontal, 16).padding(.vertical, 6)
         .background(.bar)
+        // The band is a shade off the transcript's white; the hairline is what says where it ends.
+        // Wrapped in a stack so the bare `Divider()` draws horizontally (see `stickyQuestion`).
+        .overlay(alignment: .bottom) { VStack(spacing: 0) { Divider() } }
     }
 
-    private var headerStatus: String {
+    /// "run state · lifecycle · when", the run state leading in the colour the session's status
+    /// glyph has in the list (amber when it needs a decision, red when it failed, …) and semibold,
+    /// so the one word that says what to do next is not the same faint grey as the timestamp.
+    private var headerStatus: Text {
         let watching = app.watches?.summary(for: console.sessionID)
+        let now = Date()
         // The machine by name: a session held for the Claude region says Anthropic is unavailable there.
-        if let subtitle = SessionHeader.subtitle(for: app.session(id: console.sessionID), watching: watching,
-                                                 machine: console.runnerName) {
-            return subtitle
+        guard let session = app.session(id: console.sessionID),
+              let subtitle = SessionHeader.subtitle(for: session, watching: watching, now: now,
+                                                    machine: console.runnerName) else {
+            return Text(console.state.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
+                .foregroundColor(.secondary)
         }
-        return console.state.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized
+        let word = SessionHeader.statusWord(for: session, watching: watching, now: now, machine: console.runnerName)
+        guard subtitle.hasPrefix(word) else { return Text(subtitle).foregroundColor(.secondary) }
+        let tone = SessionStatusGlyph.make(for: session, watching: watching, now: now, machine: console.runnerName).tone
+        return Text(word).fontWeight(.semibold).foregroundColor(Self.statusWordColor(tone))
+            + Text(subtitle.dropFirst(word.count)).foregroundColor(.secondary)
+    }
+
+    private static func statusWordColor(_ tone: SessionStatusGlyph.Tone) -> Color {
+        switch tone {
+        case .brand:   return .blue
+        case .success: return .green
+        case .warning: return .orange
+        case .error:   return .red
+        case .neutral: return .primary
+        }
     }
     #endif
 }
@@ -2092,6 +2123,17 @@ struct TranscriptItemView: View {
                 .font(.orbitLabel).foregroundStyle(.orange).textSelection(.enabled)
         case .diagnostic(let notice):
             DiagnosticNoticeRow(notice: notice)
+        case .mainCheckout(let item):
+            // The main checkout's card (board 01) or one action's line (board 03). Without a console to
+            // act through, the event's own sentence, as the notice it used to be.
+            if let console, let changed = item.changed {
+                MainCheckoutCardView(console: console, item: item, notice: changed)
+            } else if let console, let result = item.result {
+                MainCheckoutResultRow(console: console, result: result)
+            } else {
+                Label(item.notice, systemImage: "exclamationmark.triangle.fill")
+                    .font(.orbitLabel).foregroundStyle(.orange).textSelection(.enabled)
+            }
         }
     }
 

@@ -111,7 +111,7 @@ class SessionMenuTest {
         signIn(); open("orbit-session:${NavShell.SESSION}")
         menu()
         item("Open Task").performClick()
-        await { compose.onAllNodesWithTag("task-assignee").fetchSemanticsNodes().isNotEmpty() }
+        await { compose.onAllNodesWithTag("task-runs-with").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("Back").assertExists()
     }
 

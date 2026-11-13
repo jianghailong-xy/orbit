@@ -25,6 +25,8 @@ import { PublicIdPipe } from '../common/public-id';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { codexLoginView, codexPoolUnavailableReason, maskedAccount, POOL_LOGIN_SELECT } from './codex-login';
+import { engineTableOptions, revokeKeyGatewayTokens } from './key-gateway';
+import { claudeCodexLoginEnabled, poolTableOptions } from './codex-login-claude';
 import { CreateModelProviderDto, CreateProviderPoolDto, UpdateModelProviderDto } from './dto';
 import { decryptSecret, encryptSecret } from './provider-crypto';
 import { catalogDefaultModel, catalogModels, presetCatalog } from './model-catalog';
@@ -127,7 +129,7 @@ function cursorKeyCheckAnswer(outcome: CursorKeyCheckOutcome, why: CursorKeyChec
 /** The engines a key's row runs on (shared providerEngines.ts): its protocol, its preset and endpoint,
  *  and whether its key is a Claude subscription token — which only this side can say, holding the key. */
 function keyEngines(row: { runtime: string; presetSlug: string | null; baseUrl: string; apiKeyEnc: string }): AgentProvider[] {
-  return credentialEngines(keyCredential(row));
+  return credentialEngines(keyCredential(row), engineTableOptions(row.baseUrl));
 }
 
 /** What uses a key, per engine (docs/provider-engine-contract.md §3.6): the open sessions spending it and
@@ -472,7 +474,7 @@ export class ProvidersService {
         OR: [{ ownerId, shared: false }, { engine: AgentProvider.CODEX, people: { some: { userId: ownerId } } }],
       },
       orderBy: { createdAt: 'asc' },
-      select: { slug: true, label: true, shared: true, engine: true },
+      select: { slug: true, label: true, shared: true, engine: true, ownerId: true },
     });
     return [
       // A built-in engine carries no label: the slug is the engine's name, and it runs on itself.
@@ -493,9 +495,12 @@ export class ProvidersService {
       // OpenAI's own endpoint, whose models are the Codex CLI's; so does a pool of one's own that holds
       // a ChatGPT login the server signed in (migration 0323) — it is Codex throughout, and its account
       // is what a session on it spends.
-      ...pools.map(({ shared, engine, ...pool }) => {
+      // With ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY on, a Codex pool of the caller's own also runs Claude Code, after
+      // Codex (codex-login-claude.ts); a shared pool, or one somebody else made, never does.
+      ...pools.map(({ shared, engine, ownerId: poolOwnerId, ...pool }) => {
         const runtime = shared || engine === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
-        return { ...pool, runtime, engines: [runtime], builtin: false };
+        const ownLogin = runtime === AgentProvider.CODEX && !shared && poolOwnerId === ownerId;
+        return { ...pool, runtime, engines: credentialEngines({ kind: 'pool', engine: runtime, ownLogin }, poolTableOptions()), builtin: false };
       }),
     ];
   }
@@ -681,6 +686,8 @@ export class ProvidersService {
       data.keyCheckState = null;
       data.keyCheckedAt = null;
     }
+    // So is a budget OpenAI said was spent (the /api/gw/anthropic gateway's, migration 0612): a new key's.
+    if (apiKeyEnc) data.spentUntil = null;
     await this.assertPoolMemberEdit(current, {
       ...current,
       runtime: dto.runtime ?? current.runtime,
@@ -697,7 +704,7 @@ export class ProvidersService {
       const runs = credentialEngines(keyCredential(
         { runtime, presetSlug: current.presetSlug, baseUrl: dto.baseUrl ?? current.baseUrl, apiKeyEnc: apiKeyEnc ?? current.apiKeyEnc },
         dto.apiKey,
-      ));
+      ), engineTableOptions(dto.baseUrl ?? current.baseUrl));
       const stranded = (await readKeyUsage(this.prisma, current)).engines.filter((e) => !runs.includes(e.engine));
       if (stranded.length > 0) {
         throw dialectInUse(current.label, stranded, protocolMoves ? 'protocol' : endpointMoves ? 'endpoint' : 'key');
@@ -705,6 +712,13 @@ export class ProvidersService {
       await this.recordSessionEngines(current);
     }
     const row = await this.prisma.modelProvider.update({ where: { id }, data });
+    // A key switched off, given a new secret or moved to another endpoint or protocol: the tokens Claude Code
+    // sessions on it run with through the gateway stop at once (docs/claude-engine-openai-gateway-design.md
+    // §4.2). The session's next claim mints a token on the key as it now is.
+    // Only an OpenAI key ever has such tokens.
+    if (keyDialect(current.runtime) === 'openai' && (dto.enabled === false || apiKeyEnc || protocolMoves || endpointMoves)) {
+      await revokeKeyGatewayTokens(this.prisma, row.id);
+    }
     this.publishChanged(ownerId, row.id);
     return this.desensitize(row);
   }
@@ -1259,6 +1273,11 @@ export class ProvidersService {
             account?.userId === ownerId,
           ),
           members: [],
+          // With ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY on, the engines this pool of the owner's own runs, Codex first
+          // (codex-login-claude.ts): what the pickers offer Claude Code on. Absent with it off, as before.
+          ...(claudeCodexLoginEnabled()
+            ? { engines: credentialEngines({ kind: 'pool', engine: AgentProvider.CODEX, ownLogin: true }, poolTableOptions()) }
+            : {}),
         };
       }
       const quota = members.map(({ provider: row, pausedUntil }) => {

@@ -156,6 +156,9 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let workDirTotalBytes: Int64?
     public let repoHealth: RunnerRepoHealth?
     public let repoCleanup: RunnerRepoCleanup?
+    /// Its runner declares `main-checkout-git/v1`: the Main checkout bar and card draw their buttons.
+    /// Nil from an older server, read as no.
+    public var mainCheckoutActions: Bool? = nil
     /// The repository its directory is a checkout of, as the runner reported it; nil for a workspace on none.
     public let repoUrl: String?
 
@@ -167,7 +170,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         case autoInitGit, codexAccount, claudeAccount, antigravityAccount, kimiAccount, cursorAccount
         case enableWorktree, modelRouting, modelRoutingOptimizeFor, subagentsEnabled, subagentsMaxRunning
         case workDirExists, workDirIsGit
-        case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup
+        case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup, mainCheckoutActions
     }
 
     public init(from decoder: Decoder) throws {
@@ -212,6 +215,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         workDirTotalBytes = c.flexibleInt64(forKey: .workDirTotalBytes)
         repoHealth = try c.decodeIfPresent(RunnerRepoHealth.self, forKey: .repoHealth)
         repoCleanup = try c.decodeIfPresent(RunnerRepoCleanup.self, forKey: .repoCleanup)
+        mainCheckoutActions = try? c.decodeIfPresent(Bool.self, forKey: .mainCheckoutActions)
         repoUrl = try c.decodeIfPresent(String.self, forKey: .repoUrl)
     }
 }
@@ -507,8 +511,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// minutes. nil from an older control plane, in which case the row shows no elapsed time.
     public let currentTurnStartedAt: String?
     /// When this session was pinned to the top of its list (ISO-8601 string), or nil if unpinned.
-    /// The list payload already sorts pinned sessions first; the row draws a leading accent bar to
-    /// mark the state at rest, mirroring web's `.session-row.pinned`.
+    /// The list payload already sorts pinned sessions first, under a "Pinned" section; as on web,
+    /// the row itself draws no pin mark at rest.
     public let pinnedAt: String?
     /// The session's stored config. A LIVE session's composer shows these (the server's
     /// choice); before the session exists the pills reflect local picks instead.

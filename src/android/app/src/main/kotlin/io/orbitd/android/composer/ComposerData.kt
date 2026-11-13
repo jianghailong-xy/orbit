@@ -69,10 +69,11 @@ enum class CredentialKind { LOGIN, OPENCODE, POOL, KEY }
  * beside it (`opencode auth`; Antigravity's Google account or env key). [fixEngine] is the engine whose page on the runner fixes
  * [unavailable] (OrbitKit `ProviderChoice.fixEngine`), null when none can. [regionBlocked]: [unavailable] is the runner's Claude region
  * (docs/claude-region-check-contract.md §8), which nothing on the page fixes, so the row names no fix — the machine's Claude Code page
- * ([fixEngine]) explains (OrbitKit `ProviderChoice.regionBlocked`). */
+ * ([fixEngine]) explains (OrbitKit `ProviderChoice.regionBlocked`). [notice] is what picking it risks, said under it: a Codex pool
+ * under Claude Code ([EngineCopy.CODEX_POOL_ON_CLAUDE_NOTICE]; OrbitKit `ProviderChoice.notice`). */
 data class ProviderOption(val id: String, val label: String, val kind: CredentialKind,
     val models: List<JsonObject>, val unavailable: String? = null, val detail: String? = null, val fixEngine: String? = null,
-    val regionBlocked: Boolean = false)
+    val regionBlocked: Boolean = false, val notice: String? = null)
 
 /** An engine as the new session's Engine list shows it (web `EngineChoice`): every credential it runs on here, and the one a pick
  * of it lands on — none for DeepSeek Harness before a DeepSeek key is connected, whose row offers the connection instead. */
@@ -94,6 +95,10 @@ object EngineCopy {
     const val DEEPSEEK_CONNECT_PATH = "/providers/new/deepseek"
     const val PROVIDER = "Provider"
     const val ACCOUNT_POOLS = "Account pools"
+    /** Under a Codex pool of one's own listed under Claude Code, which runs on its ChatGPT account through Orbit's gateway rather
+     * than the Codex CLI (web `CODEX_POOL_ON_CLAUDE_NOTICE`, OrbitKit `SessionProviderChoices.codexPoolOnClaudeNotice`). */
+    const val CODEX_POOL_ON_CLAUDE_NOTICE =
+        "Runs Claude Code on your ChatGPT account outside the official Codex CLI. OpenAI may restrict the account."
     const val API_KEYS = "API keys"
     const val THIS_SESSIONS_KEY = "This session's key"
     const val KEY_DELETED = "Key deleted"
@@ -456,7 +461,10 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
                 else ClaudeRegion.Credential.Key(row.text("presetSlug")))
             return ProviderOption(row.text("slug")!!, row.text("label") ?: row.text("slug")!!, kind, models(engine, row.text("slug")!!),
                 if (region) ClaudeRegionCopy.CLAUDE_REGION_NOT_SUPPORTED else carried ?: row.text("unavailable"),
-                fixEngine = if (region) engine else fix, regionBlocked = region)
+                fixEngine = if (region) engine else fix, regionBlocked = region,
+                notice = EngineCopy.CODEX_POOL_ON_CLAUDE_NOTICE.takeIf {
+                    kind == CredentialKind.POOL && engine == ProviderEngines.CLAUDE && row.text("runtime") == ProviderEngines.CODEX
+                })
         }
         return own + runs.filter(::isPool).map { option(it, CredentialKind.POOL) } + runs.filterNot(::isPool).map { option(it, CredentialKind.KEY) }
     }

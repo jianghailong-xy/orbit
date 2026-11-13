@@ -634,6 +634,14 @@ public final class APIClient: @unchecked Sendable {
         try await post("tasks/\(taskID)/evidence/decision", body: req)
     }
 
+    /// Restart the task from the owner's pending row that offers it (`EvidenceRestart`). A Run press:
+    /// `triggerId` is drawn at the gesture (`PublicID.newToken`) and names it.
+    public func restartTaskFromEvidence(taskID: String, evidenceRevision: String,
+                                        triggerId: String) async throws -> EvidenceRestartResult {
+        try await post(EvidenceRestart.path(taskID: taskID, evidenceRevision: evidenceRevision),
+                       body: EvidenceRestartRequest(triggerId: triggerId))
+    }
+
     /// What one version of a task's evidence cites, a page at a time, for the card that shows it
     /// (`EvidenceFiles.swift`): read from rows, so a file reads the same after it has expired. The
     /// first page leaves the offset out, as web's read does.
@@ -1300,6 +1308,9 @@ public final class APIClient: @unchecked Sendable {
     /// `GET /tasks/:id/attribution`: where this work counts, where it was noticed, which crossing
     /// touches it and what blocks it — the detail page's Attribution block.
     public func taskAttribution(_ id: String) async throws -> TaskAttribution { try await get("tasks/\(id)/attribution") }
+    /// `GET /tasks/:id/evidence`: every version of the task's completion evidence, oldest first,
+    /// each with its decision once it has one.
+    public func taskEvidence(_ id: String) async throws -> [TaskEvidenceRevision] { try await get("tasks/\(id)/evidence") }
     /// `GET /tasks/:id/dependency-graph`, asked the way the browser's panel asks it: both directions,
     /// up to 500 tasks, unary chains paired.
     public func taskDependencyGraph(_ id: String) async throws -> TaskDependencyGraph {
@@ -1951,6 +1962,26 @@ public final class APIClient: @unchecked Sendable {
     /// Ask the runner that owns this workspace to rescue and clean its shared checkout.
     public func repoCleanup(workspaceId: String) async throws -> Agent {
         try await postEmpty("workspaces/\(workspaceId)/repo-cleanup")
+    }
+
+    // MARK: main checkout Git (docs/main-checkout-git-contract.md §10.4)
+
+    /// The main checkout as its runner sees it now, with the patches of `diff` (repeated `diff=` per file,
+    /// at most 20).
+    public func mainCheckout(workspaceId: String, diff: [String] = []) async throws -> MainCheckoutRead {
+        try await get("workspaces/\(workspaceId)/main-checkout",
+                      query: diff.prefix(20).map { URLQueryItem(name: "diff", value: $0) })
+    }
+
+    /// Move, commit, push or rescue. Pending until the runner answers; the outcome is a line in the
+    /// session named by `initiatedFromSessionId`.
+    public func mainCheckoutAction(workspaceId: String, _ post: MainCheckoutActionPost) async throws -> MainCheckoutActionAnswer {
+        try await self.post("workspaces/\(workspaceId)/main-checkout/actions", body: post)
+    }
+
+    /// Cancel an action its runner hasn't been handed yet (the waiting line's Cancel).
+    public func cancelMainCheckoutAction(workspaceId: String, requestId: String) async throws -> MainCheckoutActionAnswer {
+        try await postEmpty("workspaces/\(workspaceId)/main-checkout/actions/\(requestId)/cancel")
     }
 
     // MARK: turns / lifecycle (Phase 2)

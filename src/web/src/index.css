@@ -625,7 +625,10 @@ button.toast--pill:focus-visible {
   flex: 1;
   min-width: 0;
   height: var(--app-vh);
-  overflow: hidden;
+  /* clip, not hidden: a hidden box is still a scroll container, so a scrollIntoView inside it (the
+     sticky `↑` bar's jump to a turn near the tail) scrolled the whole region up once the transcript
+     ran out of room, hiding the header and the list's top under a gap below the composer. */
+  overflow: clip;
 }
 /* A view fills the main region. .app-view--doc adds the page gutter and owns its
    scroll; the bare class is full-bleed (the agent console / runner install guide). */
@@ -8897,6 +8900,13 @@ button.chat-jump-start:hover {
   font-size: 12px;
   line-height: 1.5;
 }
+/* The one press an owner row offers (Restart the task): its sentence, then its action. */
+.evidence-restart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+}
 /* A PENDING session before its first event: instead of a lonely top-left note in a
    blank pane, fill the transcript area with a calm, centered "waiting to run" state. */
 .chat-queued-state {
@@ -12796,6 +12806,42 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   white-space: nowrap;
 }
+/* A provider write's fields: caption and value side by side, so a short write reads as one line. */
+.provider-write-fields {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 18px;
+  margin: 0 0 12px;
+  font-size: 12.5px;
+}
+.provider-write-fields > div {
+  display: contents;
+}
+.provider-write-fields dt {
+  color: var(--text-2);
+}
+.provider-write-fields dd {
+  margin: 0;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+.provider-write-models li {
+  padding: 4px 0;
+}
+.provider-write-model {
+  color: var(--text-2);
+  text-align: right;
+}
+.provider-write-default {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 5px;
+  border: 1px solid var(--brand-border);
+  background: var(--brand-tint);
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 600;
+}
 .dag-approval-foot {
   margin: 0;
   color: var(--text-3);
@@ -15901,41 +15947,6 @@ button.chat-jump-start:hover {
   background: var(--success-solid);
   box-shadow: 0 0 0 3px var(--success-bg);
 }
-.share-download {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg-sunken);
-  color: var(--text-1);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s, border-color 0.15s;
-}
-.share-download:hover:not(:disabled) {
-  background: var(--bg-hover-strong);
-}
-.share-download:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.share-download-icon {
-  flex: none;
-}
-.share-download-spin {
-  flex: none;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  border: 2px solid var(--border);
-  border-top-color: var(--text-1);
-  animation: runner-spin 0.7s linear infinite;
-}
 .share-badge {
   padding: 1px 8px;
   border-radius: 999px;
@@ -15962,9 +15973,8 @@ button.chat-jump-start:hover {
   font-size: 12px;
   color: var(--text-3);
 }
-/* Phone: the header runs out of room, so tighten it and collapse the download
-   button to a square icon — the title keeps the space instead of the action. Read-only
-   goes too: the footer says it. */
+/* Phone: the header runs out of room, so tighten it — the title keeps the space.
+   Read-only goes: the footer says it. */
 @media (max-width: 600px) {
   .share-header {
     gap: 10px;
@@ -15974,15 +15984,6 @@ button.chat-jump-start:hover {
     gap: 8px;
   }
   .share-right .share-badge {
-    display: none;
-  }
-  .share-download {
-    width: 40px;
-    height: 40px;
-    padding: 0;
-    justify-content: center;
-  }
-  .share-download-label {
     display: none;
   }
 }
@@ -16865,35 +16866,6 @@ button.chat-jump-start:hover {
   gap: 8px;
 }
 
-/* The vendors with no key yet, in one line under a vendor's keys (ProviderPills). */
-.pv-more {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-  font-size: 12px;
-  color: var(--text-3);
-}
-.pv-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding: 0 10px 0 4px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-raised);
-  color: var(--text-2);
-  font-size: 12px;
-  white-space: nowrap;
-  text-decoration: none;
-}
-.pv-pill:hover {
-  border-color: var(--brand-border);
-  color: var(--brand);
-}
-
 /* ============================================================================
    Infrastructure → "Machines": the engine CLIs signed in on each machine (the
    same rows on a machine's own page). A different kind of identity from the API
@@ -17089,8 +17061,10 @@ button.chat-jump-start:hover {
   /* Too narrow for those floors (665px, 663 inside the border), as above: name and status, then
      quota and actions. */
   @container re-card (max-width: 662px) {
+    /* The right column keeps the wide layout's status width as its floor, so a long status such as
+       "Spent · resets 16:20" does not shorten that one row's quota bars against its neighbours'. */
     .re-runner-card .re-row {
-      grid-template-columns: minmax(0, 1fr) max-content;
+      grid-template-columns: minmax(0, 1fr) minmax(168px, max-content);
     }
     .re-runner-card .re-row > :nth-child(2) {
       justify-self: end;
@@ -19035,6 +19009,17 @@ button.chat-jump-start:hover {
   min-width: 0;
 }
 /* The one sentence under OpenCode's keys, for the key it cannot run (board 4 ⑤). */
+/* The task pin's Provider list: what a pool's row risks, under the options (TaskDetailPanel pinNotices). */
+.tdp-pin-foot {
+  padding: 6px 10px 8px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.tdp-pin-foot p {
+  margin: 0;
+}
 .composer-provider-foot {
   display: block;
   max-width: 280px;
@@ -25482,6 +25467,34 @@ button.project-open-item-action:disabled {
   .wk-layout > .wk-dir-col { position: sticky; top: 0; max-height: calc(var(--app-vh, 100vh) - 48px); overflow-y: auto;
                              overscroll-behavior: contain; margin-left: -8px; scrollbar-width: thin; }
   .wk-layout > .wk-dir-col > .wk-toc { margin-left: 0; }
+  /* The head, the search and the directory as one column from the window's top to its foot (board
+     docs/mocks/wiki-rail ③): the title and the space, the search, then the rows, which scroll on their own, and
+     Settings and Share at the foot. The head row and the search line above it give way to it; the main column
+     starts at the top, the home's line first. */
+  .wk-page--railed { display: grid; grid-template-columns: 248px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
+                     column-gap: 32px; align-items: start; }
+  .wk-page--railed > .wk-title-row, .wk-page--railed > .wk-search { display: none; }
+  /* The home's line was the head's; Activity has its own head and status row (as on a phone). */
+  .wk-page--railed.wk-page--activity > .wk-home-state { display: none; }
+  .wk-page--railed > .wk-layout { display: contents; }
+  .wk-page--railed > .wk-home-state, .wk-page--railed > .wk-layout > .wk-main { grid-column: 2; }
+  .wk-page--railed > .wk-layout > .wk-dir-col { grid-column: 1; grid-row: 1 / span 2; display: flex; flex-direction: column;
+                                                top: -24px; height: var(--app-vh, 100vh); max-height: none; overflow: hidden;
+                                                margin: -24px 0 -24px -32px; padding: 16px 0 0 24px;
+                                                border-right: 1px solid var(--border-subtle); background: var(--bg-subtle); }
+  .wk-rail-top { flex: none; padding: 0 16px 10px 0; }
+  .wk-rail-head { display: flex; align-items: center; gap: 12px; height: 32px; }
+  .wk-rail-head .wk-select .v, .wk-rail-head .wk-space-tag { max-width: 150px; }
+  .wk-rail-top > .wk-search { margin-top: 14px; }
+  .wk-page--railed > .wk-layout > .wk-dir-col > .wk-toc { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+                                                         padding: 0 10px 12px 0; scrollbar-width: thin; }
+  .wk-rail-foot { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 16px 12px 0;
+                  border-top: 1px solid var(--border-subtle); }
+  .wk-rail-foot > .session-shared-pill { height: 32px; padding: 0 12px; font-size: 13px; }
+  .wk-toc-alarm { flex: none; width: 7px; height: 7px; margin-left: 6px; border-radius: 50%; }
+  .wk-toc-alarm--error { background: var(--error); }
+  .wk-toc-alarm--warn { background: var(--warning-solid); }
+  .wk-toc-alarm + .tp-count { margin-left: 6px; }
   .wk-layout.home > .wk-main { container: wk-home / inline-size; }
   .wk-home { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
   .wk-home > .wk-pl-cat { margin: 0; padding: 12px 18px 4px; border: 1px solid var(--border-subtle); border-radius: 10px;
@@ -25552,7 +25565,7 @@ button.project-open-item-action:disabled {
   .wk-maint-wide { display: none; }
   .wk-maint-narrow { display: contents; }
   .wk-maint-spin { display: none; }
-  .wk-page--reading > .wk-title-row, .wk-page--reading > .wk-search, .wk-page--reading > .wk-status-row { display: none; }
+  .wk-page--reading > .wk-title-row, .wk-page--reading > .wk-search { display: none; }
   /* The head's space sits beside its buttons (mock 30 ③). */
   .wk-title-row > .page-title { flex: 1; min-width: 0; }
   /* The home ends on the ways to everything else (mock 31 ①); a desktop has them atop the directory. */
@@ -25563,8 +25576,7 @@ button.project-open-item-action:disabled {
   .wk-page--activity > .wk-home-state { display: none; }
   /* Review's own head is the one its mock draws on a phone (09): `← Wiki` over the title, no Wiki head. */
   .wk-page:has(> .wk-body > .rv-page) > .wk-title-row,
-  .wk-page:has(> .wk-body > .rv-page) > .wk-search,
-  .wk-page:has(> .wk-body > .rv-page) > .wk-status-row { display: none; }
+  .wk-page:has(> .wk-body > .rv-page) > .wk-search { display: none; }
   .wk-crumb--back .ic, .wk-crumb--back > span { display: none; }
   .wk-crumb--back .back { display: inline-flex; margin-right: 4px; }
   .wk-act-head { margin-top: 2px; }
@@ -27126,17 +27138,33 @@ button.agent-progress-agent:hover {
 
 /* ── the wiki chat (docs/wiki-chat-design.md §3–§4, board 42 ⓪ ①) ──────────────────────────────────────────
    The round button at the window's bottom right, the panel it opens, the composer's chips and a document's Ask
-   (components/WikiChat*.tsx). Both the button and the panel are fixed to the window: the button floats over the
-   entry drawer (z 5) and its scrim (z 4); the panel stands beside the drawer, which opens to its left. A docked
-   panel pushes everything under the Wiki's head over by its width (`--wk-chat-w`), the head's buttons staying
-   where they are (board 42 ①); narrower than 1440 the directory folds into the Contents drawer. The page's foot
-   keeps 88 clear so the button never sits on its last line. */
+   (components/WikiChat*.tsx). The button is fixed to the window and floats over the entry drawer (z 5) and its scrim
+   (z 4). From 1200 the panel is a column of the page (board docs/mocks/wiki-rail 03 Ⓑ), the entry drawer opening to
+   its left; narrower than 1440 the app sidebar shows as its icon rail for it (C2). Narrower than 1200 the panel lies
+   over the page and the directory folds into the Contents drawer. The page's foot keeps 88 clear so the button never
+   sits on its last line. */
 .wk-chat-host.has-fab .wk-page,
 .wk-chat-host.has-fab .wk-drawer { padding-bottom: 88px; }
-.wk-chat-host.is-docked .wk-page > :not(.wk-title-row) { margin-right: var(--wk-chat-w, 400px); }
+/* Beside the directory's column the clearance is the main column's: on the page it would stop the column short of the
+   window's foot when the page scrolls to its end. */
+.wk-chat-host.has-fab .wk-page--railed { padding-bottom: 0; }
+.wk-chat-host.has-fab .wk-page--railed .wk-main { padding-bottom: 88px; }
+/* Where it docks the panel is a column of the page (board docs/mocks/wiki-rail 03 Ⓑ): beside the page, from the window's
+   top to its foot as the directory's column is, held there while the page scrolls; before the chats are read an empty
+   slot of its width keeps the page from moving when it comes. */
+.wk-chat-frame.is-columned { display: flex; align-items: flex-start; }
+.wk-chat-frame.is-columned > .wk-chat-host { flex: 1; min-width: 0; }
+.wk-chat-frame.is-columned > .wk-chat-panel,
+.wk-chat-frame.is-columned > .wk-chat-slot { position: sticky; top: -24px; right: auto; bottom: auto; flex: none; box-sizing: border-box;
+                                             height: var(--app-vh, 100vh); margin: -24px -32px -24px 32px;
+                                             border: 0; border-left: 1px solid var(--border-subtle); border-radius: 0; }
 .wk-chat-host.is-open:not(.is-sheet) .wk-drawer,
 .wk-chat-host.is-open:not(.is-sheet) .wk-with-drawer .wk-scrim { right: var(--wk-chat-w, 400px); }
 .wk-chat-host.is-fold .wk-layout { display: block; }
+/* Folded, the column is gone with the directory: the head row and the search line are back over the page. */
+.wk-chat-host.is-fold .wk-page--railed { display: block; }
+.wk-chat-host.is-fold .wk-page--railed > .wk-title-row { display: flex; }
+.wk-chat-host.is-fold .wk-page--railed > .wk-search { display: flex; }
 .wk-chat-host.is-fold .wk-dir-col { display: none; }
 .wk-chat-host.is-fold .wk-page .wk-contents-btn { display: inline-flex; }
 .wk-chat-host .wk-dc-page { position: relative; }
@@ -27568,6 +27596,342 @@ button.agent-progress-agent:hover {
   display: block;
   color: var(--text-3);
   font-size: 11.5px;
+}
+
+/* Main checkout Git (docs/mocks/main-checkout-git boards 01–04): the card a worktree turn leaves when files
+   appear in the main checkout, its result lines, its bar above the worktree bar, the review drawer's
+   extras and the worktree isolation dialogs. */
+.mck-card {
+  margin: 10px 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+.mck-card-head {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px 10px;
+}
+.mck-card-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border: 1px solid var(--warning-border);
+  border-radius: 50%;
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+.mck-card-heading {
+  min-width: 0;
+}
+.mck-card-title {
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 600;
+}
+.mck-card-sub {
+  margin-top: 2px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.mck-card-sub code,
+.mck-card-hint code,
+.mck-result-text code,
+.wt-iso-body code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.95em;
+  color: var(--text-1);
+}
+.mck-card-files {
+  padding: 6px 14px 8px 42px;
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-subtle);
+}
+.mck-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--text-1);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.mck-file:disabled {
+  cursor: default;
+}
+.mck-file:hover:not(:disabled) .mck-file-path {
+  text-decoration: underline;
+}
+.mck-file-st {
+  flex: none;
+  width: 12px;
+  color: var(--warning-solid);
+}
+.mck-file-st.st-a {
+  color: var(--success-solid);
+}
+.mck-file-st.st-d {
+  color: var(--error-solid);
+}
+.mck-file-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mck-file-stat {
+  display: inline-flex;
+  gap: 6px;
+}
+.mck-file-stat .add {
+  color: var(--success-solid);
+}
+.mck-file-stat .del {
+  color: var(--error-solid);
+}
+.mck-card-more {
+  padding: 2px 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.mck-card-actions {
+  padding: 10px 14px 12px 42px;
+}
+/* A handled card: history, its buttons unpressable and this line under them. */
+.mck-card-handled {
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.mck-card-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.mck-card-hint {
+  margin-top: 8px;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.mck-btn {
+  flex: none;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font-size: 13px;
+  cursor: pointer;
+}
+.mck-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.mck-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.mck-btn-primary {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
+}
+.mck-btn-primary:hover:not(:disabled) {
+  background: var(--brand-strong);
+}
+.mck-btn-more {
+  border-color: transparent;
+  background: none;
+  color: var(--text-3);
+}
+/* Board 01④ / 02②: the hints wrap under their item at the board's width. */
+.orbit-menu.mck-menu {
+  max-width: min(420px, var(--available-width));
+}
+.mck-menu .orbit-menu-item {
+  white-space: normal;
+}
+.mck-menu-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  white-space: normal;
+}
+.mck-menu-label {
+  color: var(--text-1);
+}
+.mck-menu-hint {
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.mck-menu-branch {
+  color: var(--text-3);
+  font-size: 12px;
+}
+/* A target running a turn: listed, not choosable (board 02②). */
+.mck-menu [data-disabled] .mck-menu-label {
+  color: var(--orbit-control-disabled-text);
+}
+.mck-result {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin: 6px 0;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.mck-result-icon {
+  flex: none;
+  font-size: 12px;
+}
+.mck-result-ok .mck-result-icon {
+  color: var(--success-solid);
+}
+.mck-result-refused .mck-result-icon,
+.mck-result-waiting .mck-result-icon {
+  color: var(--warning-solid);
+}
+.mck-result-text strong {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.mck-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  cursor: pointer;
+}
+.mck-link:hover {
+  text-decoration: underline;
+}
+.mck-bar .wt-row {
+  gap: 8px;
+}
+.mck-bar-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warning-solid);
+}
+.mck-bar-label {
+  color: var(--text-2);
+}
+.mck-bar-branch {
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-raised);
+  font-size: 11.5px;
+}
+.mck-bar-status {
+  color: var(--text-3);
+}
+.mck-drawer-file {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.mck-drawer-file .session-file-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.mck-drawer-head {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.mck-drawer-title {
+  font-weight: 600;
+}
+.mck-chip {
+  padding: 1px 8px;
+  border-radius: 6px;
+  background: var(--fill-muted);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 400;
+}
+.mck-chip-warn {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.mck-drawer-checked {
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 400;
+}
+.mck-drawer-choose {
+  padding: 4px 8px 6px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.mck-choose-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.mck-drawer-error {
+  color: var(--error);
+}
+.mck-drawer-note {
+  margin-top: auto;
+  padding: 8px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.mck-drawer-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+.mck-managed {
+  color: var(--warning);
+  font-size: 12.5px;
+}
+.mck-drawer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mck-commit-msg {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.wt-iso-body p {
+  margin: 0 0 10px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+.wt-iso-body p:last-child {
+  margin-bottom: 0;
 }
 
 /* Done card follow-ups (docs/mocks/project-done-landing-untracked ③④, project-done-followups 01–03): rows read

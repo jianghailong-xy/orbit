@@ -298,7 +298,7 @@ final class ConsoleModel {
         if let key = keys?.first(where: { $0.slug == sessionProvider }), let id = key.providerID {
             return api.baseURL.appendingPathComponent("providers/\(id)")
         }
-        let page = api.baseURL.appendingPathComponent("infrastructure")
+        let page = api.baseURL.appendingPathComponent("machines-and-models")
         var keysSection = URLComponents(url: page, resolvingAgainstBaseURL: false)
         keysSection?.fragment = "keys"
         return keysSection?.url ?? page
@@ -1069,6 +1069,8 @@ final class ConsoleModel {
     /// The worktree status bar's own model (detail snapshot + diffs + commit/merge actions) —
     /// see `WorktreeModel`. Wired back to this console for the live status + the status line.
     let worktree: WorktreeModel
+    /// The workspace's main checkout as this session reviews and acts on it (card, bar, review sheet).
+    let mainCheckout: MainCheckoutModel
     /// The "Tasks created here" card's own model — see `CreatedTasksModel`. Polled with the stream.
     let createdTasks: CreatedTasksModel
 
@@ -1171,6 +1173,7 @@ final class ConsoleModel {
         let api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
         self.api = api
         self.worktree = WorktreeModel(sessionID: sessionID, api: api)
+        self.mainCheckout = MainCheckoutModel(sessionID: sessionID, api: api)
         self.createdTasks = CreatedTasksModel(sessionID: sessionID, api: api)
         // Live SSE transport on both macOS and iOS — `URLSessionEventStream` is available on both
         // (see EventStream's `#if os(macOS) || os(iOS)` guard). A draft console never starts its
@@ -1207,6 +1210,7 @@ final class ConsoleModel {
         // Inert for a draft (its guards see the empty sessionID); real work starts once the created
         // session's live console replaces this one.
         self.worktree = WorktreeModel(sessionID: "", api: api)
+        self.mainCheckout = MainCheckoutModel(sessionID: "", api: api)
         self.createdTasks = CreatedTasksModel(sessionID: "", api: api)
         // Live SSE transport on both macOS and iOS — `URLSessionEventStream` is available on both
         // (see EventStream's `#if os(macOS) || os(iOS)` guard). A draft console never starts its
@@ -1291,6 +1295,7 @@ final class ConsoleModel {
     private func wireWorktree() {
         worktree.isSessionLive = { [weak self] in self?.sessionStatus.isLive ?? false }
         worktree.onOutcome = { [weak self] request in self?.onToast(request) }
+        mainCheckout.onOutcome = { [weak self] request in self?.onToast(request) }
     }
 
     /// Show a fleeting, informational message — the native equivalent of web's `message.success`
@@ -2098,7 +2103,7 @@ final class ConsoleModel {
         case .assistant(let b): return b.isFinalized
         case .thinking(let b):  return b.isFinalized
         case .toolCall(let c):  return c.status != .running
-        case .user, .interrupt, .error, .authError, .autoRetry, .notice, .diagnostic: return true   // the agent still owes a reply
+        case .user, .interrupt, .error, .authError, .autoRetry, .notice, .diagnostic, .mainCheckout: return true   // the agent still owes a reply
         }
     }
 
@@ -5442,6 +5447,14 @@ final class ConsoleModel {
             engagedEvidence.insert(DeliveredDecisionCard(kind: kind).id)
             deliver(kind)
         }
+        // A revision nobody else can move, offering the owner Restart the task, is drawn on the same
+        // card at the same address: a card that was a question becomes the restart offer in place.
+        for row in EvidenceRestart.rows(queue: queue) {
+            let kind = DeliveredDecisionCard.Kind.evidenceDecision(taskID: row.taskId,
+                                                                   evidenceRevision: row.evidenceRevision)
+            engagedEvidence.insert(DeliveredDecisionCard(kind: kind).id)
+            deliver(kind)
+        }
         // Delivery receipts share the evidence card's address.
         for sent in EvidenceDecisions.sentRows(queue: queue, projectId: projectID) {
             deliver(.evidenceDecision(taskID: sent.taskId, evidenceRevision: sent.evidenceRevision))
@@ -5477,6 +5490,22 @@ final class ConsoleModel {
             statusMessage = "That decision was not recorded — \(APIClient.failureReason(error))."
         }
         await refreshRulerQuestions(force: true)
+    }
+
+    /// Restart the task from a card offering it (`EvidenceRestart`): one Run press, named at the
+    /// gesture. Nil is a start; otherwise the refusal, for the card to show. The read is asked again
+    /// either way: a started task leaves the owner's group, and a refusal means the read moved.
+    func restartFromEvidence(_ row: EvidenceDecisionRow) async -> Error? {
+        var failure: Error?
+        do {
+            _ = try await api.restartTaskFromEvidence(taskID: row.taskId,
+                                                      evidenceRevision: row.evidenceRevision,
+                                                      triggerId: PublicID.newToken())
+        } catch {
+            failure = error
+        }
+        await refreshEvidenceDecisions(force: true)
+        return failure
     }
 
     /// Where this console's read of what one version of evidence cites stands: the card and the page it

@@ -392,6 +392,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'POST /projects/:id/coordinator': { request: (of, mine) => ({ params: { id: of.projectId }, body: { workspaceId: mine.workspaceId } }) },
   'POST /projects/:id/coordinator/replace': { request: (of) => ({ params: { id: of.projectId } }) },
   'GET /projects/:id/coordinator/status': { request: (of) => ({ params: { id: of.projectId } }) },
+  'GET /projects/:id/pending-addressees': { request: (of) => ({ params: { id: of.projectId } }) },
   'POST /projects/:id/coordinator/rebind': {
     request: (of, mine) => ({ params: { id: of.projectId }, body: { workspaceId: mine.workspaceId } }),
   },
@@ -711,6 +712,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
       body: { decidingSessionId: of.sessionId, decision: 'SEND_BACK', evidenceRevision: '1', note: 'the census' },
     }),
   },
+  'POST /tasks/:taskId/evidence/:revision/restart': {
+    request: (of) => ({ params: { taskId: of.evidenceTaskId, revision: '1' }, body: {} }),
+  },
   'POST /tasks/:taskId/evidence/legacy-import': {
     request: (of) => ({
       params: { taskId: of.evidenceTaskId },
@@ -841,6 +845,19 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
  * that shows the route finds its object only under the caller's own account. Kept as short as it can be.
  */
 export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  // ── main checkout (0534) ──
+  'GET /workspaces/:id/main-checkout':
+    'the workspace is read by (id, the caller, not deleted) before anything else, so another account\'s id answers 404 and nothing is queued (workspaces/main-checkout.service.ts:535); main-checkout.pg.spec.ts "actions are the owner\'s" sends it',
+  'POST /workspaces/:id/main-checkout/actions':
+    'a repeated requestId is looked up by (the caller, requestId) only; otherwise the workspace is read by (id, the caller, not deleted), 404 for another account\'s, before any row is written (workspaces/main-checkout.service.ts:170, :535); main-checkout.pg.spec.ts "actions are the owner\'s" sends it and counts no row written',
+  'POST /workspaces/:id/main-checkout/actions/:requestId/cancel':
+    'the request is read by (the caller, requestId) and must be of this workspace, 404 otherwise; the write is a compare-and-set on that row (workspaces/main-checkout.service.ts:276-280)',
+  'GET /agents/:id/main-checkout':
+    'the workspace is read by (id, the caller, not deleted) before anything else, so another account\'s id answers 404 and nothing is queued (workspaces/main-checkout.service.ts:535); main-checkout.pg.spec.ts "actions are the owner\'s" sends it',
+  'POST /agents/:id/main-checkout/actions':
+    'a repeated requestId is looked up by (the caller, requestId) only; otherwise the workspace is read by (id, the caller, not deleted), 404 for another account\'s, before any row is written (workspaces/main-checkout.service.ts:170, :535); main-checkout.pg.spec.ts "actions are the owner\'s" sends it and counts no row written',
+  'POST /agents/:id/main-checkout/actions/:requestId/cancel':
+    'the request is read by (the caller, requestId) and must be of this workspace, 404 otherwise; the write is a compare-and-set on that row (workspaces/main-checkout.service.ts:276-280)',
   // Session guests (docs/session-guests-design.md §7).
   'GET /guest-sessions/:id':
     "every guest route reads the caller's live session_guest row on that session first (session-guests/session-guests.service.ts:236) and answers the one 404 without it, so a session B was never invited to — A's included — is refused before anything is read or written; A, its owner, is no guest of it either, so neither account's request can be stood up from the census fixture. session-guests.pg.spec.ts (1) sends the invited guest's and a stranger's",
@@ -1351,6 +1368,14 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
 
 /** Ids a request carries that name nothing of an account's to reach, each with why and where that is so. */
 export const TENANT_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
+  'POST /workspaces/:id/main-checkout/actions body targetSessionId':
+    'read by (id, the caller, not deleted) and required to be a session of this workspace before anything is written, so another account\'s is the 404 of one that does not exist (workspaces/main-checkout.service.ts:553); main-checkout.pg.spec.ts "move: the target must be…" sends one that does not exist',
+  'POST /workspaces/:id/main-checkout/actions body initiatedFromSessionId':
+    'read by (id, the caller, not deleted) and required to be of this workspace before anything is written: another account\'s answers 404 (workspaces/main-checkout.service.ts:553); main-checkout.pg.spec.ts "actions are the owner\'s" sends another account\'s and counts no row written',
+  'POST /agents/:id/main-checkout/actions body targetSessionId':
+    'read by (id, the caller, not deleted) and required to be a session of this workspace before anything is written, so another account\'s is the 404 of one that does not exist (workspaces/main-checkout.service.ts:553); main-checkout.pg.spec.ts "move: the target must be…" sends one that does not exist',
+  'POST /agents/:id/main-checkout/actions body initiatedFromSessionId':
+    'read by (id, the caller, not deleted) and required to be of this workspace before anything is written: another account\'s answers 404 (workspaces/main-checkout.service.ts:553); main-checkout.pg.spec.ts "actions are the owner\'s" sends another account\'s and counts no row written',
   'POST /projects/:id/criteria/:criterionId/confirmations body attachmentIds[]':
     'counted among the caller\'s own uploads (attachment by id and owner) before anything is written; one that is not answers 404 (projects/project-criterion-confirmation.service.ts:281)',
   'POST /projects/:id/criteria/:criterionId/checks body workspaceId':
@@ -1360,6 +1385,9 @@ export const TENANT_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /tasks/:id/execute body triggerId':
     'an idempotency key the caller makes up for one press, not a thing it names: it keys only the caller\'s own '
     + 'run receipt, (owner_id, action_kind, request_token) — tasks.service.ts:12779',
+  'POST /tasks/:taskId/evidence/:revision/restart body triggerId':
+    'the Run press\'s idempotency key, made up by the caller and handed to TasksService.execute as is: it keys only the '
+    + 'caller\'s own run receipt, (owner_id, action_kind, request_token) — tasks.service.ts:14771, as POST /tasks/:id/execute body triggerId does',
   'POST /tasks/batch-execute body triggerId':
     'the same press key, for a bulk Run: the caller\'s own receipt, keyed by owner — tasks.service.ts:12779',
   'POST /push/register body installationId':
