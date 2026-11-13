@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>项目栏第 2 版：概览 + 下钻，代替标签</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.ov { background: #fafafb; border: 1px solid #ececf0; border-radius: 10px; padding: 9px 11px; margin-bottom: 10px; }
+.ovh { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; font-weight: 650; margin-bottom: 6px; }
+.ovh .all { color: #2f6bff; font-weight: 500; font-size: 12px; }
+.ovh .cnt { color: #8a8a92; font-weight: 500; margin-left: 4px; }
+.mini { display: flex; gap: 8px; align-items: center; font-size: 12px; padding: 3px 0; color: #3a3a40; }
+.mini .ic { width: 14px; line-height: 16px; }
+.mini b { font-weight: 500; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bars { display: flex; flex-direction: column; gap: 4px; }
+.bar2 { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #5a5a62; }
+.bar2 span.n { flex: 1; font-family: ui-monospace, "DejaVu Sans Mono", monospace; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar2 i { display: block; height: 6px; border-radius: 3px; background: linear-gradient(90deg,#2da44e var(--a),#cf222e var(--a)); }
+.thumbs { display: flex; gap: 6px; margin: 4px 0 6px; }
+.th { width: 56px; height: 40px; border-radius: 6px; background: linear-gradient(135deg,#dfe7ff,#f4f6fb); border: 1px solid #e3e3e8; position: relative; }
+.th.ph { background: linear-gradient(160deg,#e9e9ee,#fafafa); }
+.th.more { display: flex; align-items: center; justify-content: center; font-size: 11px; color: #5a5a62; background: #f2f2f5; }
+.th::after { content: ''; position: absolute; left: 8px; right: 8px; top: 8px; height: 5px; border-radius: 3px; background: rgba(47,107,255,.25); }
+.th.more::after, .th.ph::after { display: none; }
+.back { color: #2f6bff; font-size: 12.5px; margin-bottom: 8px; display: flex; gap: 4px; align-items: center; }
+.grid4 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.grid4 .th { width: auto; height: 62px; }
+.cap2 { font-size: 11px; color: #5a5a62; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rep { display: flex; gap: 8px; align-items: center; border: 1px solid #e3e3e8; border-radius: 8px; padding: 6px 8px; font-size: 12px; margin-top: 6px; }
+.rep .ok { color: #1a7f37; font-weight: 600; }
+.sk { width: 300px; min-height: 380px; background: #fff; border-radius: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 10px 30px rgba(0,0,0,.08); padding: 14px; position: relative; font-size: 12.5px; }
+.sk .rail { position: absolute; right: 0; top: 0; bottom: 0; width: 40px; border-left: 1px solid #ececf0; display: flex; flex-direction: column; align-items: center; gap: 14px; padding-top: 16px; color: #8a8a92; font-size: 15px; }
+.sk .rail .on { color: #2f6bff; background: #eef3ff; border-radius: 7px; width: 28px; text-align: center; }
+.sk .dd { border: 1px solid #e3e3e8; border-radius: 8px; padding: 4px 10px; display: inline-block; margin-bottom: 8px; }
+.sk .menu { position: absolute; left: 14px; top: 80px; width: 180px; background: #fff; border: 1px solid #e3e3e8; border-radius: 9px; box-shadow: 0 8px 24px rgba(0,0,0,.12); padding: 4px; }
+.sk .menu div { padding: 5px 9px; border-radius: 6px; } .sk .menu div.on { background: #eef3ff; }
+.ln2 { height: 9px; border-radius: 5px; background: #f1f1f4; margin: 9px 0; }
+</style></head><body>
+<h1>项目栏第 2 版：首页是“概览”，每类资源点进去看全部（代替标签）</h1>
+<p class="lede">第 1 版用“Tasks | Changes”两个标签；你指出标签装不下更多种资源。项目产出的东西至少有四类：<b>任务、代码改动、文件（截图 / 测试报告 / 文件包，Orbit Files 已按任务记录）、合入记录</b>，以后可能还有更多。<br>
+<b>建议：项目栏首页是一张概览，每类资源一段（摘要 + 最重要的几条 + “全部 →”）；点“全部 →”在栏内推进到这类资源的完整页，左上角返回。加一类资源 = 多一段，不受标签数限制。</b>这也是 Codex 任务侧栏的做法：计划、来源、产物、摘要上下排成段，而不是标签。数据为样例，界面文字为将上线的英文。</p>
+
+<!-- 1. overview home + drill pages -->
+<section class="b-part">
+ <div class="b-row">
+  <div>
+   <div class="b-cap"><span class="b-tag b-new">首页</span>概览：每类资源一段</div>
+   <div class="win">
+    <div class="col" style="width:350px">
+     <div class="ch"><span class="x">✕</span><div class="tt"><b>Move search to the new index</b><span>Project · 12 tasks</span></div><span class="grid">⊞</span></div>
+     <div class="card"><div class="pb"><i style="width:75%"></i></div>9/12 done · 6 on main · 1 running</div>
+     <div class="r"><span class="ic">◌</span><div class="m"><div class="ti"><b>Coordinator</b><span class="coordb">Coordinator</span><i>2m</i></div><div class="sub">T7 is back; waiting on the landing check</div></div></div>
+     <div class="ov" data-mk="1" style="margin-top:8px">
+      <div class="ovh"><span>Tasks<span class="cnt">12</span></span><span class="all">All tasks →</span></div>
+      <div class="mini"><span class="ic" style="color:#d97706">●</span><b>Production deploy: new index live</b><span class="chip amber">Needs you</span></div>
+      <div class="mini"><span class="ic" style="color:#2f6bff">◐</span><b>T8 Shard plan for the new index</b><span class="chip">Running</span></div>
+      <div class="mini"><span class="ic" style="color:#d97706">⟳</span><b>T7 Replay comparison</b><span class="chip amber">Landing</span></div>
+      <div class="mini" style="color:#7a7a82"><span class="ic" style="color:#1a7f37">✓</span><b style="color:#7a7a82">6 on main · 2 done, landing next</b></div>
+     </div>
+     <div class="ov" data-mk="2">
+      <div class="ovh"><span>Changes<span class="cnt">24 files</span></span><span class="all">All changes →</span></div>
+      <div style="font-size:12px;margin-bottom:6px"><span class="p">+1,204</span> <span class="d">−318</span> · 18 on main, 6 not yet</div>
+      <div class="bars">
+       <div class="bar2"><span class="n">src/search/index-v2/</span><i style="width:90px;--a:92%"></i><span>8</span></div>
+       <div class="bar2"><span class="n">src/apiserver/src/search/</span><i style="width:64px;--a:60%"></i><span>6</span></div>
+       <div class="bar2"><span class="n">src/web/src/pages/</span><i style="width:30px;--a:70%"></i><span>3</span></div>
+      </div>
+     </div>
+     <div class="ov" data-mk="3">
+      <div class="ovh"><span>Files<span class="cnt">31</span></span><span class="all">All files →</span></div>
+      <div class="thumbs"><div class="th"></div><div class="th"></div><div class="th ph"></div><div class="th"></div><div class="th more">+23</div></div>
+      <div style="font-size:12px;color:#5a5a62">14 screenshots · 9 test reports · 6 bundles · 2 docs</div>
+     </div>
+     <div class="ov" data-mk="4">
+      <div class="ovh"><span>Landings<span class="cnt">7</span></span><span class="all">All landings →</span></div>
+      <div class="mini"><span class="ic" style="color:#1a7f37">✓</span><b>6 tasks on main · last 9a2dc8b, 18h ago</b></div>
+      <div class="mini"><span class="ic" style="color:#d97706">⟳</span><b>T7 waiting on the landing check</b></div>
+     </div>
+    </div>
+   </div>
+   <ul class="b-notes" style="width:380px">
+    <li class="n" data-n="1"><b>Tasks</b>：只列要注意的（等你、进行中、合并中），已完成的收成一行计数。</li>
+    <li class="n" data-n="2"><b>Changes</b>：总改动量 + 改得最多的几个目录（绿红条是加减比例）。</li>
+    <li class="n" data-n="3"><b>Files</b>：项目里各任务上传的文件：缩略图一行 + 按类型计数。</li>
+    <li class="n" data-n="4"><b>Landings</b>：已合入 main 的和正在合并的（取代今天单独的 Landings 行）。</li>
+   </ul>
+  </div>
+
+  <div>
+   <div class="b-cap"><span class="b-tag b-new">下钻</span>点“All tasks →”</div>
+   <div class="win"><div class="col" style="width:350px">
+    <div class="back" data-mk="1">‹ Move search to the new index</div>
+    <div class="ch"><div class="tt"><b>Tasks</b><span>12 · 1 needs you · 1 running</span></div></div>
+    <div class="sec"><span>Needs you</span><em>1</em></div>
+    <div class="r"><span class="ic" style="color:#d97706">●</span><div class="m"><div class="ti"><b class="two">Production deploy: new index live</b><i>18h</i></div><div class="meta"><span class="chip amber">Waiting for your confirmation</span></div></div></div>
+    <div class="sec"><span>Running</span><em>1</em></div>
+    <div class="r"><span class="ic" style="color:#2f6bff">◐</span><div class="m"><div class="ti"><b class="two">T8 Shard plan for the new index</b><i>3m</i></div><div class="meta"><span class="chip"><span class="p">+184</span> <span class="d">−12</span> · 5 files</span><span class="chip">📎 2</span></div></div></div>
+    <div class="sec"><span>Landing</span><em>1</em></div>
+    <div class="r"><span class="ic" style="color:#d97706">⟳</span><div class="m"><div class="ti"><b class="two">T7 Replay comparison</b><i>22m</i></div><div class="meta"><span class="chip"><span class="p">+412</span> <span class="d">−37</span> · 9 files</span><span class="chip">📎 6</span><span class="chip blue">3 runs ▾</span></div></div></div>
+    <div class="sec"><span>On main</span><em>6</em></div>
+    <div class="r"><span class="ic" style="color:#1a7f37">✓</span><div class="m"><div class="ti"><b>T6 Replay tool</b><i>20h</i></div><div class="meta"><span class="chip"><span class="p">+268</span> <span class="d">−4</span> · 4 files</span><span class="chip">📎 4</span></div></div></div>
+    <div class="more">+ 5 more on main</div>
+   </div></div>
+   <ul class="b-notes" style="width:380px">
+    <li class="n" data-n="1">栏内推进，左上角返回概览；就是第 1 版方案 A 的任务列表，每行多一个 📎 文件数。</li>
+   </ul>
+  </div>
+
+  <div>
+   <div class="b-cap"><span class="b-tag b-new">下钻</span>点“All files →”</div>
+   <div class="win"><div class="col" style="width:350px">
+    <div class="back">‹ Move search to the new index</div>
+    <div class="ch"><div class="tt"><b>Files</b><span>31 · uploaded by 9 tasks</span></div></div>
+    <div class="scope" data-mk="1"><span class="sel">All types ▾</span><span>By task ▾</span></div>
+    <div class="sec"><span>T7 Replay comparison</span><em>6</em></div>
+    <div class="grid4">
+     <div><div class="th"></div><div class="cap2">replay-412.png</div></div>
+     <div><div class="th"></div><div class="cap2">compare-dark.png</div></div>
+     <div><div class="th ph"></div><div class="cap2">phone-sheet.png</div></div>
+    </div>
+    <div class="rep" data-mk="2"><span>🧪</span><span style="flex:1">vitest-report.xml</span><span class="ok">412 passed</span><span style="color:#cf222e">18 failed</span></div>
+    <div class="rep"><span>📦</span><span style="flex:1">replay-logs · 14 files</span><span style="color:#8a8a92">2.1 MB</span></div>
+    <div class="sec" style="margin-top:12px"><span>T6 Replay tool</span><em>4</em></div>
+    <div class="grid4">
+     <div><div class="th"></div><div class="cap2">tool-cli.png</div></div>
+     <div><div class="th"></div><div class="cap2">tool-report.png</div></div>
+     <div><div class="th more">+2</div><div class="cap2">&nbsp;</div></div>
+    </div>
+   </div></div>
+   <ul class="b-notes" style="width:380px">
+    <li class="n" data-n="1">按任务分组（默认）或按类型；点图片看大图，点报告看结果（复用证据卡片已有的文件预览）。</li>
+    <li class="n" data-n="2">测试报告直接显示通过 / 失败数，文件包显示文件数和大小。</li>
+   </ul>
+  </div>
+ </div>
+</section>
+
+<!-- 2. alternatives -->
+<section class="b-part">
+ <h1 style="font-size:22px">还能怎么代替标签（对比）</h1>
+ <div class="b-row" style="gap:28px">
+  <div>
+   <div class="b-cap"><span class="b-tag b-new">A</span>概览 + 下钻<span class="b-rec">推荐</span></div>
+   <div class="sk">
+    <b>Move search to the new index</b>
+    <div class="ov" style="margin-top:8px"><div class="ovh"><span>Tasks 12</span><span class="all">All →</span></div><div class="ln2"></div><div class="ln2" style="width:70%"></div></div>
+    <div class="ov"><div class="ovh"><span>Changes 24</span><span class="all">All →</span></div><div class="ln2"></div></div>
+    <div class="ov"><div class="ovh"><span>Files 31</span><span class="all">All →</span></div><div class="ln2" style="width:80%"></div></div>
+    <div class="ov"><div class="ovh"><span>Landings 7</span><span class="all">All →</span></div><div class="ln2" style="width:60%"></div></div>
+   </div>
+   <ul class="b-notes" style="width:300px">
+    <li>打开就看到全局，等你的事不会藏在别的标签里。</li>
+    <li>加一类资源 = 加一段，不改导航。</li>
+    <li>代价：看完整列表多点一下。</li>
+   </ul>
+  </div>
+  <div>
+   <div class="b-cap"><span class="b-tag b-new">B</span>右侧图标栏（像 VS Code 的活动栏）</div>
+   <div class="sk" style="padding-right:54px">
+    <b>Tasks</b>
+    <div class="ln2"></div><div class="ln2" style="width:80%"></div><div class="ln2"></div><div class="ln2" style="width:60%"></div><div class="ln2"></div><div class="ln2" style="width:75%"></div>
+    <div class="rail"><div class="on">☰</div><div>±</div><div>🖼</div><div>⤓</div><div>⋯</div></div>
+   </div>
+   <ul class="b-notes" style="width:300px">
+    <li>能放很多类（图标竖排），切换一下就到。</li>
+    <li>代价：图标要认，每次只看到一类；320px 的栏再让出 40px。</li>
+   </ul>
+  </div>
+  <div>
+   <div class="b-cap"><span class="b-tag b-new">C</span>标题下拉切换</div>
+   <div class="sk">
+    <div class="dd">Tasks ▾</div>
+    <div class="ln2"></div><div class="ln2" style="width:80%"></div><div class="ln2"></div><div class="ln2" style="width:60%"></div><div class="ln2"></div>
+    <div class="menu"><div class="on">Tasks · 12</div><div>Changes · 24</div><div>Files · 31</div><div>Landings · 7</div></div>
+   </div>
+   <ul class="b-notes" style="width:300px">
+    <li>不限数量，最省地方。</li>
+    <li>代价：别的类完全看不见，有没有新东西也看不出来。</li>
+   </ul>
+  </div>
+ </div>
+</section>
+
+<!-- 3. phone -->
+<section class="b-part">
+ <div class="b-row">
+  <div>
+   <div class="b-cap"><span class="b-tag b-new">手机</span>底部弹窗：同一张概览，点“All →”在弹窗里推进</div>
+   <div class="phone"><div class="top"><b>Move search…</b> &nbsp; ⊞ 12</div>
+    <div class="sheet"><div class="grab"></div><div class="col">
+     <div class="ch"><span class="x">✕</span><div class="tt"><b>Move search to the new index</b><span>Project · 12 tasks</span></div><span class="grid">⊞</span></div>
+     <div class="ov"><div class="ovh"><span>Tasks<span class="cnt">12</span></span><span class="all">All →</span></div>
+      <div class="mini"><span class="ic" style="color:#d97706">●</span><b>Production deploy: new index live</b></div>
+      <div class="mini"><span class="ic" style="color:#2f6bff">◐</span><b>T8 Shard plan for the new index</b></div></div>
+     <div class="ov"><div class="ovh"><span>Changes<span class="cnt">24 files</span></span><span class="all">All →</span></div><div style="font-size:12px"><span class="p">+1,204</span> <span class="d">−318</span> · 18 on main</div></div>
+     <div class="ov"><div class="ovh"><span>Files<span class="cnt">31</span></span><span class="all">All →</span></div><div class="thumbs"><div class="th"></div><div class="th"></div><div class="th ph"></div><div class="th more">+28</div></div></div>
+     <div class="ov"><div class="ovh"><span>Landings<span class="cnt">7</span></span><span class="all">All →</span></div><div class="mini"><span class="ic" style="color:#1a7f37">✓</span><b>6 on main · last 18h ago</b></div></div>
+    </div></div></div>
+  </div>
+  <div style="width:700px">
+   <div class="b-box" style="width:700px;margin-top:34px"><h2>待定 · 要你拍板</h2><ul class="b-notes">
+    <li><b>导航方式</b>：A 概览 + 下钻<span class="b-rec">推荐</span> / B 图标栏 / C 下拉切换。</li>
+    <li><b>概览里放哪几类</b>：Tasks、Changes、Files、Landings 四类<span class="b-rec">推荐</span>；以后可加 Docs（设计稿 / 文档）、Deploys（上线记录）。</li>
+    <li><b>Files 默认分组</b>：按任务<span class="b-rec">推荐</span> / 按类型。</li>
+   </ul></div>
+   <div class="b-box" style="width:700px"><h2>落地（按代价排）</h2><ul class="b-notes">
+    <li><b>Web 概览 + Tasks 下钻</b>：用现有数据（任务、会话、分支统计），即第 1 版方案 A。</li>
+    <li><b>Landings 段</b>：现有合入记录，搬进概览。</li>
+    <li><b>Files 段</b>：Orbit Files 已按任务、会话记录文件，加一个“按项目列文件”的读接口即可。</li>
+    <li><b>Changes 段</b>：新增“项目分支相对 main 的文件差异”接口（第 1 版方案 B）。</li>
+    <li><b>iOS / Android</b>：同一结构，用系统列表的分组和推进页。</li>
+   </ul></div>
+  </div>
+ </div>
+</section>
+<script>
+window.drawMarks = () => {
+  document.querySelectorAll('.mk').forEach((e) => e.remove());
+  for (const el of document.querySelectorAll('[data-mk]')) {
+    const win = el.closest('.win'); const w = win.getBoundingClientRect(); const r = el.getBoundingClientRect();
+    const m = document.createElement('div'); m.className = 'mk';
+    Object.assign(m.style, { left: (r.left - w.left - 4) + 'px', top: (r.top - w.top - 4) + 'px', width: (r.width + 8) + 'px', height: (r.height + 8) + 'px' });
+    m.innerHTML = '<b>' + el.dataset.mk + '</b>'; win.appendChild(m);
+  }
+};
+window.drawMarks();
+</script>
+</body></html>
