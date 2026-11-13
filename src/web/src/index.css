@@ -25586,9 +25586,16 @@ button.project-open-item-action:disabled {
                                                                   height: 100%; z-index: 5; cursor: col-resize; }
   .wk-page--railed > .wk-layout > .wk-dir-col > .wk-dir-resizer:hover { background: rgba(51, 112, 255, 0.12); }
   .wk-rail-top { flex: none; padding: 0 16px 10px 0; }
-  .wk-rail-head { display: flex; align-items: center; gap: 12px; height: 32px; }
-  .wk-rail-head .wk-select .v, .wk-rail-head .wk-space-tag { max-width: 150px; }
-  .wk-rail-top > .wk-search { margin-top: 14px; }
+  /* The space's name is the column's title (board docs/mocks/wiki-rail-name B): the heading's type, no box, and with more
+     than one space a picker drawn as the Tasks title's scope picker (.tasks-scope-trigger). */
+  .wk-rail-head { display: flex; align-items: center; height: 32px; min-width: 0; }
+  .wk-rail-head .wk-select, .wk-rail-head .wk-space-tag { height: auto; max-width: 100%; margin-left: -6px; padding: 2px 6px; gap: 6px;
+                                                         border: 0; border-radius: 6px; background: transparent; font: inherit; color: inherit; }
+  .wk-rail-head .wk-space-tag { display: block; }
+  .wk-rail-head .wk-select .v { max-width: 190px; }
+  .wk-rail-head .wk-select:hover { background: var(--bg-hover); }
+  .wk-rail-head .wk-select:focus-within { box-shadow: 0 0 0 2px var(--brand-tint); }
+  .wk-rail-head .wk-select .ic.caret { position: static; font-size: 12px; color: var(--text-3); }
   .wk-page--railed > .wk-layout > .wk-dir-col > .wk-toc { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
                                                          padding: 0 10px 12px 0; }
   .wk-rail-foot { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 16px 12px 0;

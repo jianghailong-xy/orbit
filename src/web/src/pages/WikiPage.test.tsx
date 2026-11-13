@@ -513,6 +513,18 @@ describe('the Wiki head', () => {
     expect(html).toContain('class="tp-rail-badge needs-you" title="7 waiting on you" aria-label="7 waiting on you">7</span>');
   });
 
+  it('heads the directory column with the space’s name alone: no Wiki title, no search line (board wiki-rail-name B)', () => {
+    for (const spaces of [undefined, THREE_SPACES]) {
+      const html = paint('home', '/wiki/orbit', spaces ? { spaces } : {});
+      const rail = html.slice(html.indexOf('class="wk-rail-top"'), html.indexOf('class="wk-toc'));
+      expect(rail).toMatch(/^class="wk-rail-top"><h1 class="page-title wk-rail-head"><span class="(wk-space-tag|wk-select)"/);
+      expect(rail).not.toContain('>Wiki<');
+      expect(rail).not.toContain('wk-search');
+      // The search line above the column stays, for a phone and a docked chat that folds the column away.
+      expect(html.indexOf('class="wk-search"')).toBeLessThan(html.indexOf('class="wk-dir-col"'));
+    }
+  });
+
   it('draws no badge at zero', () => {
     const html = paint('home', '/wiki/orbit', { spaces: [{ ...SPACE, pendingOps: 0, planWaiting: 0 }] });
     expect(html).toContain('wk-activity-btn');
