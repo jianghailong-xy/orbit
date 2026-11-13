@@ -200,6 +200,7 @@ export class RunnerSessionsController {
       engine?: string;
       provider?: string;
       permissionMode?: string;
+      worktree?: boolean;
     },
   ) {
     if (isHeadlessCaller(parentSessionId)) {
