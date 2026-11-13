@@ -2971,6 +2971,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0618 adds a nullable email_outbox.session_id, its foreign key and index, two CHECKs and a wider unique index
       // only; no preserved rows, triggers or DONE fence change, and no row is written.
       '0618_email_outbox_session_invite',
+      // 0641 adds statement triggers on session_scheduled_wakeup and watch that bump the Open list's epoch, and the
+      // function one of them calls; no preserved rows, no preserved table's triggers or DONE fence change, and no row
+      // is written.
+      '0641_open_list_epoch_session_waits',
       // 0646 adds model_provider scope/auth_mode (NOT NULL with constant defaults), a nullable runner_id with its
       // foreign key and index, five nullable probe columns and five CHECKs on model_provider alone; no preserved
       // rows, triggers or DONE fence change, and no row is written.

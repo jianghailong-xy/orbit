@@ -128,6 +128,7 @@ import {
   type WikiChatContext,
 } from '@orbit/shared';
 import { agentProviderSeed, lastProviderByWorkspace } from '../workspaces/workspace-provider';
+import { assertLocalProviderStartable } from '../providers/local-provider';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   reprojectAfterSettledChecks,
@@ -1245,6 +1246,12 @@ export class SessionsService {
     const { provider, providerBuiltin } = resolved;
     // The model as asked; an old OpenCode request's `orbit-<key>/<model>` is stored as its bare id.
     const model = resolved.model ?? undefined;
+    // A local provider (a runner-scoped key) starts only on its own runner, which has to say Ollama is
+    // answering, recently, with this model and what Claude Code needs: refused here with the code dispatch
+    // would hold it with, rather than written to wait (providers/local-provider.ts).
+    if (resolved.credential.kind === 'key') {
+      await assertLocalProviderStartable(this.prisma, resolved.credential.row, { runnerId: assignedRunnerId, model });
+    }
     // A key or an account pool brings its own credential; only an engine's own sign-in is the runner's.
     const bringsOwnCredentials = resolved.credential.kind !== 'login';
     await this.assertOwnedRefs(ownerId, { workspaceId: dto.workspaceId, assignedRunnerId });

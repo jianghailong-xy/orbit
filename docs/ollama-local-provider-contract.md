@@ -123,7 +123,9 @@ The probe states and `STALE` are defined in §6.
 
 On its own runner, the engine gets `ANTHROPIC_BASE_URL` = the row's `baseUrl` and
 `ANTHROPIC_AUTH_TOKEN` = `LOCAL_AUTH_PLACEHOLDER`. The placeholder is built into the job's environment at
-dispatch and stored nowhere. It is needed because Claude Code given no token would send the runner's own
+dispatch. The control plane persists it nowhere: no provider row, session, turn or task holds it, and no real
+secret is stored for a local provider at all. On the runner it exists only in the session's runtime configuration:
+the engine's environment and the temporary `--settings` file in the session's scratch directory (§7). It is needed because Claude Code given no token would send the runner's own
 Claude sign-in to the endpoint.
 
 The claim SQL claims a session on a runner-scoped row only on `runner_id`. The claim's late check and the
@@ -134,10 +136,7 @@ waits; it is never turned into a built-in Claude or Codex session on the runner'
 
 ## 5. Left to later phases
 
-- Phase 3: affinity scheduling that assigns a new session to the provider's runner, the capability gate
-  (refusing an `UNKNOWN` runner before dispatch), `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, zero cost,
-  readable PENDING reasons, and the provider-switch door, which today refuses a local provider for a session
-  not yet on its runner.
+- Phase 3 is §7. Zero cost for local rows is still open.
 - Phases 4A/4B: the connect flow and pickers. The web gallery leaves runner-scoped presets out until 4A
   draws a runner chooser; native clients show the generic mark.
 
@@ -206,3 +205,149 @@ response body, a prompt or a key. The catalogue keeps a name, `contextWindow`, `
   cannot widen this list.
 - No proxy (the environment's `HTTP_PROXY` is ignored). No redirect is followed. No transparent decompression.
   Response headers are capped at 16 KiB.
+
+## 7. Dispatch readiness and failing closed (phase 3)
+
+Task `34DuK8hgYpZdMfSAydDJ0`. One rule, `localProviderReadiness` (`@orbit/shared` localProvider.ts), decides whether a
+session may run on a runner-scoped provider now. Every door applies it, with the runner the session is (or would be)
+on and the model it would run:
+
+| Door | Where | On refusal |
+| --- | --- | --- |
+| Session create (also task start, a mention reply) | `SessionsService.create` → `assertLocalProviderStartable` | 400 with the code; nothing written |
+| Task create, and a task edit that moves the provider, model or assignee | `TasksService.assertLocalPinStartable` | 400 with the code; nothing written |
+| Claim | `QueueService.pausedPendingSessions` holds it before the claim; `resolveProviderExec` refuses it at the build | stays PENDING, `error` = the sentence |
+| Reclaim (runner restart) | `RunnerApiController.reclaim` → `resolveProviderExec` | left out, PENDING ones marked with the sentence |
+| Provider switch, any config change | `SessionsService.updateConfig` → `resolveProviderExec` | 400 with the code |
+| Reload (a switch's respawn) | `reloadProviderEnv` → `resolveProviderExec` | not handed out; refusal is the sentence |
+
+The checks, in order, each with a stable code (`LOCAL_PROVIDER_REFUSAL_CODES`):
+
+| Code | When | Clears on its own |
+| --- | --- | --- |
+| `LOCAL_PROVIDER_NO_RUNNER` | no runner bound, or it is no longer the row owner's | no |
+| `LOCAL_PROVIDER_ELSEWHERE` | the session is on any other runner, or none | no |
+| `LOCAL_PROVIDER_RUNNER_OUTDATED` | the runner has not declared both `ollama-probe/v1` and `ollama-run/v1` | no |
+| `LOCAL_PROVIDER_UNPROBED` | no probe yet | yes |
+| `LOCAL_PROVIDER_STALE` | the probe is older than `LOCAL_PROBE_STALE_MS` | yes |
+| `LOCAL_PROVIDER_UNREACHABLE` | the probe got no answer: stopped, cold-starting, busy | yes |
+| `LOCAL_PROVIDER_MISCONFIGURED` | `MALFORMED`, `REFUSED`, `CLOUD_ENABLED`, or a `-cloud` model | no |
+| `LOCAL_PROVIDER_NO_MODELS` | the instance serves no local model | no |
+| `LOCAL_PROVIDER_MODEL_MISSING` | the model is not in the instance's catalogue, or nothing names one | no |
+| `LOCAL_PROVIDER_CAPABILITY_MISSING` | the model lacks `tools`, or its context is unknown or under 65,536 | no |
+
+A disabled or deleted row is answered before this gate by the refusals every provider meets: `provider not
+available: "<slug>"` at session and task create, `provider not available` at a switch onto it, `provider is disabled`
+at a config change of a session already on it, and `Provider is unavailable; check its configuration` as the claim's
+hold. The gate also refuses a disabled row (`LOCAL_PROVIDER_DISABLED`) as a backstop, but no door answers with it.
+
+The model is the session's own, else the row's default, else the first it lists (`localTargetModel`): never the
+built-in Claude default. `llama3` matches `llama3:latest`. A row-level `MODEL_MISSING`/`CAPABILITY_MISSING` about
+another model the row names does not refuse a session whose own model is fine.
+
+A held session waits PENDING with a sentence beginning `Local provider ` (`LOCAL_PROVIDER_ERROR_PREFIX`), which the
+claim clears when it finally claims it. A hold is re-judged on each poll from the stored probe; nothing re-sends it
+on a timer, so neither kind of hold is a retry loop. No refusal moves the session onto another runner, another
+credential or the runner's own Claude sign-in.
+
+**What a claim hands the runner** on a local row: Claude Code and the model, with:
+
+- `ANTHROPIC_BASE_URL` = the row's `baseUrl`, `ANTHROPIC_AUTH_TOKEN` = `LOCAL_AUTH_PLACEHOLDER` (built at dispatch;
+  persisted in no control-plane or task data, present only in the session's environment and its temporary
+  `--settings` file), `ANTHROPIC_MODEL`, and the model again in `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`,
+  `ANTHROPIC_SMALL_FAST_MODEL` and `CLAUDE_CODE_SUBAGENT_MODEL`, so background and subagent requests ask the instance
+  for a model it serves;
+- `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`;
+- every known cloud route named empty (`LOCAL_CLAUDE_CLEARED_ENV`: `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`,
+  `CLAUDE_CODE_USE_{BEDROCK,VERTEX,FOUNDRY}`, their `SKIP_*_AUTH`, the Bedrock/Vertex/Foundry base URLs, projects
+  and keys, AWS and Google credentials);
+- the workspace environment without any routing variable (`isClaudeRoutingVar`, below);
+- `ORBIT_LOCAL_PROVIDER=1`, which tells the runner to isolate the run. It is reserved: `resolveProviderExec` takes
+  it out of every job's workspace environment, on every path (a cloud key, an engine's sign-in, OpenCode), so only
+  the runner-scoped branch can set it and a workspace that types it in gets an ordinary job.
+
+**The runner's half** (`runner-go/claude_local_provider.go`, declared as `ollama-run/v1`). A claude process takes
+routing from the runner's own environment, from the `env` of the settings files it loads (the user's
+`CLAUDE_CONFIG_DIR/settings.json`, the checkout's `.claude/settings.json` and `.claude/settings.local.json`, then
+the `--settings` flag file the runner writes, which outranks the other three), and from the job. For a marked job
+the runner:
+
+1. drops every routing variable it inherited unless the job sets it (exec keeps the last value of a key, so the
+   job's own empty values win as well);
+2. writes into the flag settings file an `env` that pins every routing variable: the job's value where it sets one,
+   and `""` for each routing variable a lower settings file sets;
+3. sets `CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST=1`, Claude Code's own switch for a host that supplies the provider.
+   With it the CLI ignores every provider variable a settings file names, the managed policy file included, and
+   sends no `apiKeyHelper` or settings-file credential (measured on 2.1.321, 2.1.323 and 2.1.325: a managed file
+   setting another base URL, token, custom headers, Bedrock, Vertex, a model, `apiKeyHelper` and the switch itself
+   to `0` changed nothing about where the request went or what it carried);
+4. does not start the session at all if it cannot write that file;
+5. never passes the marker on to the engine.
+
+**`ollama-run/v1` is measured, not assumed.** The binary does not declare it. When the runner daemon starts,
+before its first call to the control plane, it runs one check (`claude_local_provider_verify.go`). The check is two
+runs of the installed `claude`, each started exactly as a local session's spawn starts it (the same environment
+filter, the host-managed switch, the pinned flag settings file) and each pointed at a loopback listener of the
+runner's own. Both runs have to pass.
+
+1. **The hostile run** proves what the binary does. The check writes hostile settings into every source the CLI
+   loads: a temporary user config (`HOME`, `CLAUDE_CONFIG_DIR`), a checkout's `.claude/settings.json` and
+   `.claude/settings.local.json`, and a managed policy file (`CLAUDE_CODE_MANAGED_SETTINGS_PATH`). Each one names a
+   second loopback listener as the base URL, the Bedrock/Vertex/Foundry base URLs and the HTTP(S) proxy. Each also
+   sets its own token, API key, OAuth token and model, a custom header, Bedrock, Vertex and Foundry on, the
+   host-managed switch to `0`, and an `apiKeyHelper`. Every credential-bearing value carries the check's sentinel.
+2. **The machine run** measures what this machine's own settings and environment do: the real managed policy, the
+   runner's user config, a proxy in its environment.
+
+The local listener answers a model request with a minimal valid Messages reply (streamed when the request asks for
+a stream), so an isolated `claude -p --max-turns 1` finishes its turn and exits by itself. The check watches the
+CLI's whole life, both listeners throughout, until it exits. A request to the hostile listener at any moment fails
+the run at once, and so does a CLI still running at the check's deadline or one that exits other than cleanly. A
+run passes only if every request reaches the local listener with the check's nonce as `Authorization`, no
+`X-Api-Key`, and no header named or valued by a settings file, and the hostile listener receives nothing. A CLI that
+honours any of those settings, ignores the switch, sends a helper's key or sends nothing fails. The installed CLI's
+version is never consulted, only its behaviour.
+
+The result is keyed by the SHA-256 of the resolved `claude` binary's contents (so a replacement of the same size
+with its modification time restored is a new binary) and of the contents of every managed policy file. The
+hostile run covers every other settings source, because it shows the binary ignores them. The managed files are
+the one source the runner cannot override, and the machine run measures them, so they stay in the key. Claude
+Code's documented locations (https://code.claude.com/docs/en/managed-settings) are watched:
+`/etc/claude-code/managed-settings.json`, `/Library/Application Support/ClaudeCode/managed-settings.json` and
+`C:\Program Files\ClaudeCode\managed-settings.json`, each with its `managed-settings.d` drop-ins, plus
+`CLAUDE_CODE_MANAGED_SETTINGS_PATH` when it is set. A local spawn after the key has changed checks again (Claude
+Code updates itself), and a local session is not started if the check fails.
+
+**The declaration follows the check.** `ollama-run/v1` is part of what the runner declares only while its last
+check passed (`runnerCapabilities`):
+
+- Every check, whether at start, from the watch or at a spawn, updates the declaration. So does the minute-by-minute
+  watch, which checks again whenever the `claude` binary's or a managed file's size or modification time moved.
+- A runner whose check stops passing leaves `ollama-run/v1` out of its very next HTTPS heartbeat. Its link opens its
+  next connection at once (make before break), so the Hello the gateway forwards says so too. The control plane
+  stores the declaration from that beat, and the gate then refuses a new local session with
+  `LOCAL_PROVIDER_RUNNER_OUTDATED` before anything is handed out: session create, claim (held PENDING with the
+  sentence), reclaim and switch alike.
+- A local session claimed in the moment between the check failing and that beat is refused at spawn with an error
+  starting `LOCAL_PROVIDER_RUNNER_OUTDATED:`.
+- A check that passes again declares the capability again.
+
+A routing variable is matched by prefix, so a platform added later is covered: `ANTHROPIC_*`, `CLAUDE_CODE_USE_*`,
+`CLAUDE_CODE_SKIP_*_AUTH`, `AWS_*`, `VERTEX_REGION_*`, plus `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_SUBAGENT_MODEL`,
+`CLOUD_ML_REGION`, `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT` and `GCLOUD_PROJECT`. An unmarked job (a
+cloud key, a sign-in) is spawned exactly as before. A provider switch stays on the session's engine: Claude Code may move between a cloud key and a local
+provider on its own runner; another engine is `PROVIDER_ENGINE_INCOMPATIBLE`.
+
+**Failures during a run.** `isRetryableApiErrorText` (`@orbit/shared` events.ts) does not re-send what Ollama says
+can never succeed, whatever the status (`LOCAL_SERVER_FATAL_ERROR_MARKERS`): `requires more system memory`,
+`llama runner process has terminated`, `cudamalloc failed`, `try pulling it first`. Each is Ollama's or llama.cpp's
+own wording, so no cloud provider's error changes class: a cloud 500 that says "out of memory" stays retryable. A
+busy server (503), an overloaded one, a timeout during a cold load and a bare 500 stay retryable, within
+`MAX_API_ERROR_RETRIES` (3).
+
+The task auto-run ladder (`TasksService.autoRunHoldOff`, 2 min to 120 min, at most 5 failures) reads the same
+markers. A task whose latest failed run ended on one is held with `LOCAL_SERVER_REFUSED` until somebody starts it,
+rather than re-run into the same answer. A later failure of any other kind puts it back on the ladder.
+
+Tests: `src/shared/src/localProviderReadiness.spec.ts`, and `src/apiserver/src/providers/local-provider-dispatch.pg.spec.ts`,
+which runs every door against a fake Ollama on loopback.

@@ -8,7 +8,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { AgentProvider, LOCAL_AUTH_PLACEHOLDER, OLLAMA_PROBE_CAPABILITY, providerPreset } from '@orbit/shared';
+import { AgentProvider, LOCAL_AUTH_PLACEHOLDER, LOCAL_PROVIDER_RUN_CAPABILITY, OLLAMA_PROBE_CAPABILITY, providerPreset } from '@orbit/shared';
 import { assertRunnerScope, resolveProviderExec } from './custom-provider';
 import { createScope, providerScopeFields, updateScope } from './local-provider';
 import { encryptSecret } from './provider-crypto';
@@ -205,9 +205,15 @@ test('dispatch of a runner-scoped row', async (t) => {
     scope: 'runner',
     authMode: 'none',
     runnerId: MY_RUNNER,
+    // What the runner's probe last found (phase 2): answering, a moment ago, the model there with tools.
+    probeState: 'READY',
+    probedAt: new Date(),
+    instanceModels: [{ value: 'qwen3.8:27b', contextWindow: 262144, tools: true }],
   };
+  const probing = { engines: null, defaultRemoved: null, accountPauses: null, planUsage: null,
+    capabilities: [OLLAMA_PROBE_CAPABILITY, LOCAL_PROVIDER_RUN_CAPABILITY], capabilitiesReportedAt: new Date() };
   const resolve = (customRow: typeof local | null, runnerId: string | null | undefined, engine = AgentProvider.CLAUDE) =>
-    resolveProviderExec({ engine, declaredProvider: 'ollama', declaredProviderBuiltin: false, customRow, sessionModel: null, runnerId });
+    resolveProviderExec({ engine, declaredProvider: 'ollama', declaredProviderBuiltin: false, customRow, sessionModel: null, runnerId, runner: probing });
   const code = (run: () => unknown) => {
     try {
       run();
@@ -249,6 +255,30 @@ test('dispatch of a runner-scoped row', async (t) => {
     for (const engine of [AgentProvider.OPENCODE, AgentProvider.DSH, AgentProvider.CODEX]) {
       assert.equal(code(() => resolve(local, MY_RUNNER, engine)), 'PROVIDER_ENGINE_INCOMPATIBLE');
     }
+  });
+
+  await t.test('a workspace cannot forge the local marker: a cloud key, a sign-in and Codex never carry it', () => {
+    const forged = { ORBIT_LOCAL_PROVIDER: '1', orbit_local_provider: '1', KEEP_ME: 'yes', ANTHROPIC_BASE_URL: 'https://cloud.example' };
+    const keyed = { ...local, scope: 'account', authMode: 'bearer', runnerId: null as never, apiKeyEnc: encryptSecret('sk-real'), presetSlug: null as never };
+    const runs = [
+      resolveProviderExec({ engine: AgentProvider.CLAUDE, declaredProvider: 'mine', declaredProviderBuiltin: false, customRow: keyed, workspaceEnv: forged, runnerId: MY_RUNNER }),
+      resolveProviderExec({ engine: AgentProvider.CLAUDE, declaredProvider: AgentProvider.CLAUDE, declaredProviderBuiltin: true, customRow: null, workspaceEnv: forged, runnerId: MY_RUNNER }),
+      resolveProviderExec({ engine: AgentProvider.CODEX, declaredProvider: AgentProvider.CODEX, declaredProviderBuiltin: true, customRow: null, workspaceEnv: forged, runnerId: MY_RUNNER }),
+    ];
+    for (const exec of runs) {
+      const names = Object.keys(exec.env ?? {}).map((name) => name.toUpperCase());
+      assert.ok(!names.includes('ORBIT_LOCAL_PROVIDER'), `the marker reached a ${exec.provider} job`);
+      assert.equal(exec.env?.KEEP_ME, 'yes', 'the rest of the workspace env was dropped');
+    }
+    // The cloud key's job keeps its own routing exactly: no isolation applied to it.
+    assert.equal(runs[0].env?.ANTHROPIC_AUTH_TOKEN, 'sk-real');
+    assert.equal(runs[0].env?.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, undefined);
+    // The built-in sign-in keeps the workspace's own base URL, as before.
+    assert.equal(runs[1].env?.ANTHROPIC_BASE_URL, 'https://cloud.example');
+    // And the local job is marked by dispatch, whatever the workspace said.
+    const own = resolveProviderExec({ engine: AgentProvider.CLAUDE, declaredProvider: 'ollama', declaredProviderBuiltin: false, customRow: local,
+      workspaceEnv: { ORBIT_LOCAL_PROVIDER: '0' }, runnerId: MY_RUNNER, runner: probing });
+    assert.equal(own.env?.ORBIT_LOCAL_PROVIDER, '1');
   });
 
   await t.test('an account-scoped key dispatches exactly as before, on any runner, with its own key', () => {

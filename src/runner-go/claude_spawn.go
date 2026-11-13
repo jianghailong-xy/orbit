@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -234,6 +235,22 @@ func spawnClaude(ctx context.Context, job *ClaimedSession, execDir string, args 
 	// A claude that does not talk to Anthropic runs while the region check answers blocked, with its nonessential
 	// traffic off: that keeps a Claude login stored here from going to Anthropic with it (claude_region.go).
 	cmd.Env = claudeQuietEnv(cmd.Env, job.Agent.Env)
+	// A session on a local model server reaches that server alone: no inherited cloud routing, and every
+	// routing variable pinned in the flag settings layer over the user's and the checkout's settings
+	// (claude_local_provider.go). Not started at all when that cannot be done.
+	cmd.Env = localProviderProcessEnv(cmd.Env, job.Agent.Env)
+	if isLocalProviderJob(job.Agent.Env) {
+		// Checked again here, not only when the runner started: Claude Code updates itself, and a managed
+		// settings file can change under a running runner. Re-measured only when one of them has.
+		if err := ensureLocalProviderRun(ctx); err != nil {
+			// The capability went with the check (runnerCapabilities), so the control plane holds the next one as
+			// LOCAL_PROVIDER_RUNNER_OUTDATED; this one, claimed in between, says the same code.
+			return nil, fmt.Errorf("LOCAL_PROVIDER_RUNNER_OUTDATED: this runner cannot keep a local provider's session on its local endpoint: %w", err)
+		}
+	}
+	if err := pinLocalProviderSettings(args, job.Agent.Env, execDir); err != nil {
+		return nil, err
+	}
 	sp := &claudeSpawn{cmd: cmd}
 	var err error
 	if sp.stdin, err = cmd.StdinPipe(); err != nil {

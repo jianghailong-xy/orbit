@@ -179,6 +179,7 @@ import {
   type ExternalMessageFrom,
   type OrbitMessageFrom,
   type SessionMessageFrom,
+  isLocalProviderRefusalCode,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
@@ -3958,7 +3959,8 @@ export class RunnerApiController {
         assignedRunner: {
           select: {
             runtimeDefaultModels: true, modelCatalog: true, engines: true, defaultRemoved: true, accountPauses: true,
-            planUsage: true,
+            // A local provider's gate reads what the runner declared (localProviderReadiness).
+            planUsage: true, capabilities: true, capabilitiesReportedAt: true,
           },
         },
         // The account-level permission default and orchestration switch, which replaced the
@@ -4106,9 +4108,10 @@ export class RunnerApiController {
         // A credential its engine cannot run — a key whose protocol was changed under it — is left
         // out with the reason the claim holds it with (QueueService.pausedPendingSessions).
         const refusal = (error as { getResponse?: () => { code?: string; message?: string } }).getResponse?.();
-        // So is a local provider this runner is not the one for (LOCAL_PROVIDER_*): never rebuilt here.
-        const held = ['PROVIDER_ENGINE_INCOMPATIBLE', 'LOCAL_PROVIDER_ELSEWHERE', 'LOCAL_PROVIDER_NO_RUNNER'];
-        if (!held.includes(refusal?.code ?? '') || !refusal?.message) throw error;
+        // So is a local provider that may not run here now (LOCAL_PROVIDER_*: another runner's, a runner too
+        // old to probe, Ollama down or stale, the model gone): never rebuilt here, and never on a cloud engine.
+        const held = refusal?.code === 'PROVIDER_ENGINE_INCOMPATIBLE' || isLocalProviderRefusalCode(refusal?.code);
+        if (!held || !refusal?.message) throw error;
         await this.markProviderUpgradeRequired(runner.id, { id: s.id }, refusal.message,
           s.status === RunStatus.PENDING ? [{ id: s.id, error: s.error }] : []);
         continue;
@@ -5976,7 +5979,8 @@ export class RunnerApiController {
         assignedRunner: {
           select: {
             runtimeDefaultModels: true, modelCatalog: true, engines: true, defaultRemoved: true, accountPauses: true,
-            planUsage: true,
+            // A local provider's gate reads what the runner declared (localProviderReadiness).
+            planUsage: true, capabilities: true, capabilitiesReportedAt: true,
           },
         },
       },
@@ -6043,7 +6047,7 @@ export class RunnerApiController {
       if (!(error instanceof BadRequestException)) throw error;
       const refusal = error.getResponse() as { code?: string; message?: string };
       return {
-        refusal: refusal.code === 'PROVIDER_ENGINE_INCOMPATIBLE' && refusal.message
+        refusal: (refusal.code === 'PROVIDER_ENGINE_INCOMPATIBLE' || isLocalProviderRefusalCode(refusal.code)) && refusal.message
           ? refusal.message
           : await unavailable(customRow),
       };

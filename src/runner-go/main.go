@@ -700,6 +700,9 @@ func finishRegister(runnerID, runnerToken, name string, server string, labels []
 		// repeat registration and re-issue the credential from the original argv.
 		os.Args = []string{os.Args[0], "run"}
 		clearInheritedSessionContext()
+		// Before the first call to the control plane, so every call this process makes declares the same
+		// capabilities: whether it may run a local provider's sessions is measured (claude_local_provider_verify.go).
+		declareLocalProviderRun()
 		runWithSelfUpdates(cfg, selfUpdate, func() (bool, func()) { return runLoop(cfg) })
 	}
 }
@@ -896,6 +899,9 @@ func cmdRun() {
 	// anything runs Git there, it looks at what the last stop left.
 	recoverManagedRepositories()
 	logManagedVolumeSyncs()
+	// Before the first call to the control plane, so every call this process makes declares the same
+	// capabilities: whether it may run a local provider's sessions is measured (claude_local_provider_verify.go).
+	declareLocalProviderRun()
 	runWithSelfUpdates(cfg, selfUpdate, func() (bool, func()) { return runLoop(cfg) })
 	// Its Pod ends Failed, not Succeeded: the instance did not finish, it was retired or fenced.
 	if managedInstanceRevokedSeen.Load() {

@@ -537,7 +537,12 @@ func noProxyCovers(list, host string) bool {
 // the CLI adds to its environment, or nil when there is none to read. A number or a boolean there is the text
 // the CLI's environment ends up holding.
 func claudeSettingsEnv(dir string) map[string]string {
-	b, err := os.ReadFile(filepath.Join(dir, "settings.json"))
+	return claudeSettingsFileEnv(filepath.Join(dir, "settings.json"))
+}
+
+// claudeSettingsFileEnv is the `env` of the Claude Code settings file at path, read as claudeSettingsEnv reads it.
+func claudeSettingsFileEnv(path string) map[string]string {
+	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil
 	}

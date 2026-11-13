@@ -32,7 +32,7 @@ import test from 'node:test';
 
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
-import { AgentProvider, LOCAL_AUTH_PLACEHOLDER, OLLAMA_PROBE_CAPABILITY, type ClaimedSession } from '@orbit/shared';
+import { AgentProvider, LOCAL_AUTH_PLACEHOLDER, LOCAL_PROVIDER_RUN_CAPABILITY, OLLAMA_PROBE_CAPABILITY, type ClaimedSession } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { sha256 } from '../common/crypto.util';
@@ -118,7 +118,7 @@ suite('a runner-scoped local provider, on real PostgreSQL', { timeout: 600_000 }
   }
 
   interface Machine { runnerId: string; workspaceId: string }
-  async function machine(ownerId: string, label: string, capabilities: string[] | null = [OLLAMA_PROBE_CAPABILITY]): Promise<Machine> {
+  async function machine(ownerId: string, label: string, capabilities: string[] | null = [OLLAMA_PROBE_CAPABILITY, LOCAL_PROVIDER_RUN_CAPABILITY]): Promise<Machine> {
     const runnerId = randomUUID();
     const workspaceId = randomUUID();
     await db.runner.create({
@@ -162,6 +162,12 @@ suite('a runner-scoped local provider, on real PostgreSQL', { timeout: 600_000 }
     models: [MODEL], defaultModel: MODEL.value,
   })) as { id: string; slug: string };
   const slug = created.slug;
+  // What the runner's probe reports with Ollama up and the model on it (phase 2). Dispatch runs a local row on
+  // that report alone (phase 3, local-provider-dispatch.pg.spec.ts), and a rebind clears it.
+  const probed = () => db.modelProvider.update({
+    where: { id: created.id },
+    data: { probeState: 'READY', probedAt: new Date(), instanceModels: [{ value: MODEL.value, contextWindow: 65536, tools: true }] },
+  });
 
   await t.test('(1) a local Ollama needs no key, and only the caller\'s own runner; every other provider still needs its key', async () => {
     const row = await db.modelProvider.findUniqueOrThrow({ where: { id: created.id } });
@@ -271,7 +277,7 @@ suite('a runner-scoped local provider, on real PostgreSQL', { timeout: 600_000 }
       const old = (await providers.listMine(owner)).find((p) => p.id === created.id)!;
       assert.deepEqual([old.local?.capability, old.local?.state], ['UNKNOWN', 'UNKNOWN']);
     } finally {
-      await db.runner.update({ where: { id: home.runnerId }, data: { capabilities: [OLLAMA_PROBE_CAPABILITY], capabilitiesReportedAt: new Date() } });
+      await db.runner.update({ where: { id: home.runnerId }, data: { capabilities: [OLLAMA_PROBE_CAPABILITY, LOCAL_PROVIDER_RUN_CAPABILITY], capabilitiesReportedAt: new Date() } });
     }
     const probed = (await providers.listMine(owner)).find((p) => p.id === created.id)!;
     assert.equal(probed.local?.state, 'READY');
@@ -295,6 +301,7 @@ suite('a runner-scoped local provider, on real PostgreSQL', { timeout: 600_000 }
   });
 
   await t.test('(5) it runs on its own runner and nowhere else; disabled, deleted or runner-less it runs nowhere', async () => {
+    await probed();
     const onHome = await sessionOn(owner, home, slug);
     const claimed = await claimOn(home);
     assert.equal(claimed?.sessionId, onHome);
@@ -339,6 +346,7 @@ suite('a runner-scoped local provider, on real PostgreSQL', { timeout: 600_000 }
     assert.equal(await claimOn(laptop), null);
     assert.equal(await statusOf(whileUnbound), RunStatus.PENDING);
     await providers.update(owner, created.id, { runnerId: home.runnerId });
+    await probed();
     assert.equal((await claimOn(home))?.sessionId, whileUnbound);
 
     // Deleted: sessions naming it wait; none becomes a Claude session on the runner's own sign-in.

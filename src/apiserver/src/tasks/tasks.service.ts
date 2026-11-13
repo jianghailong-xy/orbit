@@ -33,6 +33,7 @@ import {
   SessionEndReason,
   TaskStatus,
   USAGE_LIMIT_ERROR_MARKERS,
+  LOCAL_SERVER_FATAL_ERROR_MARKERS,
   uuidToBase62,
   type ControlTaskChanged,
   type PlanUsage,
@@ -314,8 +315,10 @@ import {
   usableProviderScope,
   usableProviderSql,
 } from '../providers/custom-provider';
+import { assertLocalProviderStartable } from '../providers/local-provider';
 import {
   credentialPairLabels,
+  keyRowForSlug,
   resolvedCredentialEngines,
   resolveEngineProvider,
   resolveTaskPin,
@@ -1337,6 +1340,10 @@ const AUTO_RUN_SKIPPED_REQUIRED_ACTION = {
   RETRY_LIMIT_REACHED:
     `find out why its runs fail, then start it by hand (Run Now / task_start): they have failed ` +
     `${MAX_AUTO_RUN_FAILURES} times, and the sweep does not retry it again`,
+  LOCAL_SERVER_REFUSED:
+    'fix what its local model server said, then start it by hand (Run Now / task_start): its last run ' +
+    'failed because the server cannot serve the request at all (the model does not fit in memory, its ' +
+    'process died loading it, or it is not on the server), and the sweep does not re-run into that',
   QUOTA_EXHAUSTED:
     'nothing: the provider quota resets at retryAt, and the sweep retries the task then. Runs the ' +
     'quota killed do not count toward the retry limit',
@@ -2667,6 +2674,30 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  /**
+   * A task pinned to a local provider (a runner-scoped key) is refused now, with the code its run would be
+   * refused with, when that run could not start: its assignee is on another runner, or the provider's runner
+   * cannot say Ollama is answering, recently, with the pinned model and what Claude Code needs
+   * (providers/local-provider.ts assertLocalProviderStartable). With no assignee, only the provider's own
+   * runner is asked; the session's create door checks the runner it lands on. Any other pin passes untouched.
+   */
+  private async assertLocalPinStartable(
+    ownerId: string,
+    pin: { provider?: string | null; model?: string | null; assigneeId?: string | null },
+  ): Promise<void> {
+    // An engine's own sign-in is never a local provider: no row to read.
+    if (!pin.provider || isBuiltinProvider(pin.provider, true)) return;
+    const row = await keyRowForSlug(this.prisma, ownerId, pin.provider);
+    if (!row || row.scope !== 'runner') return;
+    const runnerId = pin.assigneeId
+      ? ((await this.prisma.workspace.findFirst({
+          where: { id: pin.assigneeId, ownerId, deletedAt: null },
+          select: { runnerId: true },
+        }))?.runnerId ?? null)
+      : undefined;
+    await assertLocalProviderStartable(this.prisma, row, { runnerId, model: pin.model });
+  }
+
   /** A task may only be filed under a list the same user owns (cf. assertOwnedWorkspace). */
   private async assertOwnedList(ownerId: string, listId?: string | null): Promise<void> {
     if (!listId) return;
@@ -3904,6 +3935,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // The engine, provider and model pins, resolved together and stored as resolved: a provider alone
     // carries the engine it runs on by default, a retired name its key, an old OpenCode model its key.
     dto = { ...dto, ...(await this.resolvePins(ownerId, dto, null, true)) };
+    await this.assertLocalPinStartable(ownerId, { provider: dto.provider, model: dto.model, assigneeId: dto.assigneeId });
     // Link to the originating session only when it's one this owner has (the runner
     // injects its own session id, so this is a guard, not a trust boundary). A stale id
     // would otherwise fail the FK insert.
@@ -9846,6 +9878,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const pins = dto.engine !== undefined || dto.provider !== undefined || dto.model !== undefined
       ? await this.resolvePins(ownerId, dto, { engine: before.engine, provider: before.provider })
       : {};
+    // A write that moves the provider pin, the model pin or the assignee is held to a local provider's gate
+    // as it leaves them, the way a new task is.
+    if (dto.provider !== undefined || dto.model !== undefined || dto.assigneeId !== undefined) {
+      await this.assertLocalPinStartable(ownerId, {
+        provider: pins.provider !== undefined ? pins.provider : before.provider,
+        model: pins.model !== undefined ? pins.model : before.model,
+        assigneeId: dto.assigneeId !== undefined ? dto.assigneeId : before.assigneeId,
+      });
+    }
     // Unit L3 §4. An update never re-files a task on its own — a write that does not mention the
     // project leaves it exactly where it is — so this binds nothing and only refuses: it is what
     // stops a coordinator editing work inside another project's goal (R6), moving work across the
@@ -12431,7 +12472,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   private async autoRunHoldOff(
     taskIds: string[],
     quotaBlindTaskIds: ReadonlySet<string>,
-    { countUnrequestedEnds = false }: { countUnrequestedEnds?: boolean } = {},
+    { countUnrequestedEnds = false, localServerRefused }: {
+      countUnrequestedEnds?: boolean;
+      /** Filled with the held tasks whose latest failure is a local model server's final answer. */
+      localServerRefused?: Set<string>;
+    } = {},
   ): Promise<Map<string, Date | null>> {
     const held = new Map<string, Date | null>();
     const uniqueIds = [...new Set(taskIds)];
@@ -12493,7 +12538,29 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         });
         spend(cancels);
       }
+      // A run whose engine was told by its local model server that the request can never succeed — the
+      // model does not fit in memory, its process died loading it, it is not on the server
+      // (LOCAL_SERVER_FATAL_ERROR_MARKERS) — is not re-run on the ladder: the next run would meet the same
+      // answer. Held for a person while it is the task's latest failure; a later failure of any other kind
+      // puts the task back on the ladder.
+      const fatal = await this.prisma.session.groupBy({
+        by: ['taskId'],
+        where: {
+          taskId: { in: ids },
+          status: RunStatus.FAILED,
+          OR: LOCAL_SERVER_FATAL_ERROR_MARKERS.map((marker) => ({
+            error: { contains: marker, mode: Prisma.QueryMode.insensitive },
+          })),
+        },
+        _max: { createdAt: true },
+      });
+      const fatalAt = new Map(fatal.map((row) => [row.taskId, row._max.createdAt?.getTime()]));
       for (const [taskId, { failed, lastFailedAt }] of spent) {
+        if (lastFailedAt !== undefined && fatalAt.get(taskId) === lastFailedAt) {
+          held.set(taskId, null);
+          localServerRefused?.add(taskId);
+          continue;
+        }
         if (failed >= MAX_AUTO_RUN_FAILURES) {
           held.set(taskId, null);
           continue;
@@ -12608,10 +12675,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       },
     }));
     const { blocked, blind } = await this.quotaGate(assigned);
+    const localServerRefused = new Set<string>();
     const heldOff = await this.autoRunHoldOff(
       assigned.map((t) => t.id),
       blind,
-      { countUnrequestedEnds: true },
+      { countUnrequestedEnds: true, localServerRefused },
     );
     for (const t of assigned) {
       const quotaResetsAt = blocked.get(t.id);
@@ -12623,7 +12691,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           t.id,
           until
             ? { code: 'RETRY_BACKOFF', retryAt: until }
-            : { code: 'RETRY_LIMIT_REACHED', retryAt: null },
+            : { code: localServerRefused.has(t.id) ? 'LOCAL_SERVER_REFUSED' : 'RETRY_LIMIT_REACHED', retryAt: null },
         );
       } else {
         decisions.set(t.id, { code: 'RETRY', retryAt: null });

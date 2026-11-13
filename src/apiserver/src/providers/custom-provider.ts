@@ -8,7 +8,13 @@ import {
   isEngineCompatible,
   isRetiredModel,
   keyDialect,
+  isClaudeRoutingVar,
   LOCAL_AUTH_PLACEHOLDER,
+  LOCAL_CLAUDE_CLEARED_ENV,
+  LOCAL_PROVIDER_MARKER_VAR,
+  LOCAL_PROVIDER_ERROR_PREFIX,
+  localProviderReadiness,
+  localTargetModel,
   modelForProvider,
   OPENCODE_DIALECT_NPM,
   openCodeBaseUrl,
@@ -133,6 +139,10 @@ export interface ModelProviderRow {
   runnerId?: string | null;
   /** `none`: the endpoint takes no key and none is stored; the engine gets LOCAL_AUTH_PLACEHOLDER. */
   authMode?: string;
+  /** What the bound runner's last probe found (migration 0646; phase 2), read by localProviderReadiness. */
+  probeState?: string | null;
+  probedAt?: Date | string | null;
+  instanceModels?: unknown;
 }
 
 /** The row's own entry for `model`, as its owner wrote it. */
@@ -640,16 +650,41 @@ export function assertRunnerScope(
   if (!row.runnerId) {
     throw new BadRequestException({
       code: 'LOCAL_PROVIDER_NO_RUNNER',
-      message: `provider "${slug}" runs only on its own runner, and it has none; bind it to one of your runners`,
+      message: `${LOCAL_PROVIDER_ERROR_PREFIX}"${slug}" runs only on its own runner, and it has none; bind it to one of your runners`,
       provider: slug,
     });
   }
   if (runnerId !== row.runnerId) {
     throw new BadRequestException({
       code: 'LOCAL_PROVIDER_ELSEWHERE',
-      message: `provider "${slug}" runs only on the runner it is bound to`,
+      message: `${LOCAL_PROVIDER_ERROR_PREFIX}"${slug}" runs only on the runner it is bound to; start this session on that runner`,
       provider: slug,
     });
+  }
+}
+
+/**
+ * Refuse a session on a runner-scoped row unless it may run there now (shared localProviderReadiness): on the
+ * row's own runner, that runner new enough to probe, a fresh probe that found Ollama answering, and `model` on
+ * the instance with tool calling and enough context. The refusal carries a stable `code` and whether it clears
+ * on its own (`transient`); it names the provider and the model, never the endpoint. A row that is not
+ * runner-scoped passes untouched.
+ */
+export function assertLocalProviderReady(
+  row: Pick<ModelProviderRow, 'scope' | 'slug' | 'enabled' | 'runnerId' | 'probeState' | 'probedAt' | 'instanceModels'>,
+  target: {
+    runnerId: string | null | undefined;
+    runner: { capabilities?: readonly string[] | null; capabilitiesReportedAt?: Date | string | null } | null | undefined;
+    model: string | null | undefined;
+  },
+  declared?: string | null,
+  now: number = Date.now(),
+): void {
+  if (row.scope !== 'runner') return;
+  const slug = row.slug ?? declared ?? '';
+  const refusal = localProviderReadiness({ ...row, slug, runnerId: row.runnerId ?? null }, target, now);
+  if (refusal) {
+    throw new BadRequestException({ code: refusal.code, message: refusal.message, provider: slug, transient: refusal.transient });
   }
 }
 
@@ -742,7 +777,11 @@ export function resolveProviderExec(args: {
    *  (declaredReasoningLevels): what every door that hands the engine an effort maps it onto. */
   reasoningLevels?: string[];
 } {
-  const { customRow, sessionModel, workspaceModel, workspaceEnv } = args;
+  const { customRow, sessionModel, workspaceModel } = args;
+  // The local-provider marker is the control plane's word to the runner, never a workspace's: taken out of
+  // every job's environment here, so only the runner-scoped branch below can set it, and a cloud key, a
+  // sign-in or OpenCode with the marker typed into its workspace is spawned exactly as it would be without.
+  const workspaceEnv = withoutReservedEnv(args.workspaceEnv);
   if (customRow && !customRow.enabled) {
     throw new BadRequestException('provider is disabled');
   }
@@ -777,12 +816,19 @@ export function resolveProviderExec(args: {
     // A custom provider's model space is its own; never coerce it through the claude/gpt
     // prefix guard. Workspace.model is only a rolling-deploy bridge for model-less sessions made
     // by old replicas; current clients put their choice directly on Session.model.
-    const model =
-      (retired ? undefined : pin) ||
-      firstNonBlank(legacyInheritance && space !== AgentProvider.DSH ? workspaceModel : undefined) ||
-      runtimeCatalogDefault(customRow, space, args) ||
-      (space !== AgentProvider.DSH ? presetDefaultModel(customRow) : undefined) ||
-      DEFAULT_MODEL_BY_PROVIDER[space];
+    const local = customRow.scope === 'runner';
+    // A local provider runs a model its instance serves, or nothing: it has no catalogue default, and the
+    // built-in Claude default is not a model Ollama has (localTargetModel).
+    const model = local
+      ? (localTargetModel(customRow, pin) ?? '')
+      : (retired ? undefined : pin) ||
+        firstNonBlank(legacyInheritance && space !== AgentProvider.DSH ? workspaceModel : undefined) ||
+        runtimeCatalogDefault(customRow, space, args) ||
+        (space !== AgentProvider.DSH ? presetDefaultModel(customRow) : undefined) ||
+        DEFAULT_MODEL_BY_PROVIDER[space];
+    // The rest of the gate, now that the model is known: the runner can say whether Ollama is up, it said so
+    // recently, and the model is there with what Claude Code needs.
+    if (local) assertLocalProviderReady(customRow, { runnerId: args.runnerId, runner: args.runner, model }, args.declaredProvider);
     const reasoningLevels = declaredReasoningLevels(customRow, model, engine);
     if (engine === AgentProvider.OPENCODE) {
       // OpenCode spends the key as a provider of its own, named for it, and is told the model by that
@@ -810,10 +856,12 @@ export function resolveProviderExec(args: {
       // Provider env wins over any user-set workspace env (e.g. a hand-typed ANTHROPIC_BASE_URL).
       // The kimi runtime also reads the model from here, so it can only be built once the
       // model above is resolved.
-      env: {
-        ...(workspaceEnv ?? {}),
-        ...injectedEnv(engine, customRow, model, apiKey, customRow.codexLogin ? catalogWindow(args.modelCatalog, model) : undefined),
-      },
+      env: local
+        ? localClaudeEnv(workspaceEnv, injectedEnv(engine, customRow, model, apiKey), model)
+        : {
+          ...(workspaceEnv ?? {}),
+          ...injectedEnv(engine, customRow, model, apiKey, customRow.codexLogin ? catalogWindow(args.modelCatalog, model) : undefined),
+        },
       ...(retired ? { retiredPin: true } : {}),
       ...(reasoningLevels ? { reasoningLevels } : {}),
     };
@@ -892,6 +940,44 @@ export function resolveProviderExec(args: {
     model,
     env,
     ...(retired ? { retiredPin: true } : {}),
+  };
+}
+
+/** `env` without the variables only dispatch may set (LOCAL_PROVIDER_MARKER_VAR), in any case. Null stays null. */
+function withoutReservedEnv(env: Record<string, string> | null | undefined): Record<string, string> | null | undefined {
+  if (!env) return env;
+  const reserved = Object.keys(env).filter((name) => name.toUpperCase() === LOCAL_PROVIDER_MARKER_VAR);
+  if (!reserved.length) return env;
+  return Object.fromEntries(Object.entries(env).filter(([name]) => !reserved.includes(name)));
+}
+
+/**
+ * A local session's environment (docs/ollama-local-provider-contract.md §7). It reaches the local endpoint and
+ * nothing else: the workspace's routing variables are dropped (isClaudeRoutingVar); every known cloud route is
+ * named empty (LOCAL_CLAUDE_CLEARED_ENV), so the runner's own environment cannot supply one; the endpoint, the
+ * placeholder token and the model are the provider's; Claude Code's background model slots run the session's
+ * model, which the instance serves, rather than a Claude model it does not; its nonessential traffic is off; and
+ * the job is marked for the runner (LOCAL_PROVIDER_MARKER_VAR), which drops inherited routing and pins all of it
+ * in the session's flag settings layer (runner-go/claude_local_provider.go).
+ */
+function localClaudeEnv(
+  workspaceEnv: Record<string, string> | null | undefined,
+  injected: Record<string, string>,
+  model: string,
+): Record<string, string> {
+  const kept = Object.fromEntries(Object.entries(workspaceEnv ?? {}).filter(([name]) => !isClaudeRoutingVar(name)));
+  const cleared = Object.fromEntries(LOCAL_CLAUDE_CLEARED_ENV.map((name) => [name, '']));
+  return {
+    ...kept,
+    ...cleared,
+    ...injected,
+    ANTHROPIC_DEFAULT_OPUS_MODEL: model,
+    ANTHROPIC_DEFAULT_SONNET_MODEL: model,
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: model,
+    ANTHROPIC_SMALL_FAST_MODEL: model,
+    CLAUDE_CODE_SUBAGENT_MODEL: model,
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+    [LOCAL_PROVIDER_MARKER_VAR]: '1',
   };
 }
 

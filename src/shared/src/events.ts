@@ -193,6 +193,29 @@ export function isRateLimitApiErrorText(text: string | null | undefined): boolea
 }
 
 /**
+ * What a local model server (Ollama, docs/ollama-local-provider-contract.md) says when the request can never
+ * succeed as sent: the model does not fit in the machine's memory, its runner process died loading it, or the
+ * model is not on the server. Ollama answers the first two with a 500, which the status rule below would
+ * otherwise re-send three times into the same wall. A cold load, a busy server (503) and a timeout are not
+ * here: those clear on their own, and stay retryable within MAX_API_ERROR_RETRIES.
+ *
+ * Plain lowercase substrings, each one Ollama's or llama.cpp's own wording that no cloud provider prints, so the
+ * rule changes nothing for any other provider: a cloud 500 that says "out of memory" or "model not found" is still
+ * judged by its status.
+ */
+export const LOCAL_SERVER_FATAL_ERROR_MARKERS = [
+  // "model requires more system memory (31.2 GiB) than is available (12.0 GiB)"
+  'requires more system memory',
+  // "llama runner process has terminated: … out of memory", "llama runner process has terminated: exit status 2"
+  'llama runner process has terminated',
+  // llama.cpp's own allocator failure as Ollama relays it: "cudaMalloc failed: out of memory". Not a bare
+  // "out of memory", which a cloud provider's transient 500 may say too and must stay retryable.
+  'cudamalloc failed',
+  // "model \"qwen3:8b\" not found, try pulling it first"
+  'try pulling it first',
+];
+
+/**
  * Is this API error the transient kind — the provider being briefly unable to answer, rather
  * than anything about the message? Such a failure carries no information about the work: the
  * same message sent a minute later usually succeeds, which is what makes it safe to re-send
@@ -205,6 +228,9 @@ export function isRateLimitApiErrorText(text: string | null | undefined): boolea
 export function isRetryableApiErrorText(text: string | null | undefined): boolean {
   if (!text) return false;
   const opening = text.trimStart().toLowerCase();
+  // A local model server's own verdict on the request is final whatever status carries it (Ollama sends
+  // an out-of-memory load as a 500): a re-send loads the same model into the same memory.
+  if (isApiErrorText(text) && LOCAL_SERVER_FATAL_ERROR_MARKERS.some((marker) => opening.includes(marker))) return false;
   if (RETRYABLE_ENGINE_ERROR_PREFIXES.some((prefix) => opening.startsWith(prefix))) return true;
   // An edge block or a dropped socket is the one 403 a re-send does fix: the connection clears on
   // its own, as it did within minutes on 2026-11-13. A credential 403 below stays non-retryable.
