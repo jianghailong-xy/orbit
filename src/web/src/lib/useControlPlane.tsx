@@ -70,11 +70,17 @@ export function useRefreshSessionLists(): () => void {
 const isOpenList = (queryKey: readonly unknown[]): boolean =>
   queryKey[0] === 'sessions' && queryKey.length === 6 && (queryKey[3] === 'open' || queryKey[3] === null);
 
-/** A read of a project page's panorama: what useControlPlane re-reads on the events that move it. */
+/** A read of a project page: its panorama, its task tree (root and children), or the project itself
+ *  (the detail, whose `tasksByStatus` counts ride the same two-segment key). What useControlPlane
+ *  re-reads on the events that move it. */
 const isProjectPageRead = (queryKey: readonly unknown[], projectId: string): boolean =>
   queryKey[0] === 'project' &&
   (!projectId || queryKey[1] === projectId) &&
-  (queryKey[2] === 'panorama' || queryKey[2] === 'dependency-graph' || queryKey[2] === 'coordinator');
+  (queryKey.length === 2 ||
+    queryKey[2] === 'panorama' ||
+    queryKey[2] === 'tasks' ||
+    queryKey[2] === 'dependency-graph' ||
+    queryKey[2] === 'coordinator');
 
 /** The ids a `task.changed` names: `taskIds`, and `taskId` from an older server. */
 const taskIdsOf = (data: { taskId?: unknown; taskIds?: unknown } | null | undefined): string[] => [
