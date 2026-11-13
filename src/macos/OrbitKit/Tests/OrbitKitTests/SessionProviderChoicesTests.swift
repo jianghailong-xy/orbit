@@ -591,6 +591,31 @@ final class SessionProviderChoicesTests: XCTestCase {
         XCTAssertNil(tile?.note)
     }
 
+    /// A Codex pool of one's own runs Claude Code only where the server lists `claude` among its
+    /// `engines` (ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY), and says what that risks; a shared pool never does.
+    func testACodexPoolOfOnesOwnRunsClaudeCodeOnlyWhereTheServerSaysSo() throws {
+        let json = #"{"id":"mine","slug":"my-chatgpt","label":"My ChatGPT","engine":"codex","engines":["codex","claude"]}"#
+        let listed = try JSONDecoder().decode(ProviderPool.self, from: Data(json.utf8))
+        XCTAssertEqual(listed.engines, ["codex", "claude"])
+        let plain = ProviderPool(id: "mine", slug: "my-chatgpt", label: "My ChatGPT", engine: "codex")
+        XCTAssertNil(plain.engines)
+
+        XCTAssertFalse(providers("claude", sources(withPools([], [plain]), pools: [plain])).contains { $0.slug == "my-chatgpt" })
+        let underClaude = providers("claude", sources(withPools([], [listed]), pools: [listed])).first { $0.slug == "my-chatgpt" }
+        XCTAssertEqual(underClaude?.kind, .pool)
+        XCTAssertEqual(underClaude?.notice, SessionProviderChoices.codexPoolOnClaudeNotice)
+        XCTAssertEqual(underClaude?.brandKey, "openai")
+        let underCodex = providers("codex", sources(withPools([], [listed]), pools: [listed])).first { $0.slug == "my-chatgpt" }
+        XCTAssertNotNil(underCodex)
+        XCTAssertNil(underCodex?.notice)
+
+        let team = ProviderPool(id: "team", slug: "team-codex", label: "Team Codex",
+                                shared: SharedPool(id: "team", slug: "team-codex", label: "Team Codex"),
+                                engine: "codex", engines: ["codex", "claude"])
+        XCTAssertFalse(providers("claude", sources(withPools([], [team]), pools: [team])).contains { $0.slug == "team-codex" })
+        XCTAssertTrue(providers("codex", sources(withPools([], [team]), pools: [team])).contains { $0.slug == "team-codex" })
+    }
+
     /// "0 of N available" because every account is spent is not unavailable: the server takes the pool
     /// and a session on it waits for the first reset. So it stays pickable, and says when that is where
     /// its model would be.

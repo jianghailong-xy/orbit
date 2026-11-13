@@ -502,6 +502,7 @@ import {
 } from '../projects/session-source';
 import { providerDispatchWhereOn } from '../providers/custom-provider';
 import { dispatchKeyRow } from '../providers/engine-provider';
+import { gatewayBooksSpend, withKeyGatewayToken } from '../providers/key-gateway';
 import { cursorKeyCheckRelay } from '../providers/cursor-key-check-relay';
 import { CursorKeyCheckDto, CursorKeyCheckResultDto } from '../providers/dto';
 import { ProvidersService } from '../providers/providers.service';
@@ -3947,13 +3948,14 @@ export class RunnerApiController {
       const declaredIsBuiltin = isBuiltinProvider(declared, s.providerBuiltin);
       // As on the claim (QueueService.buildSession): the key the slug names or a retired name of one,
       // and a legacy built-in dsh session's default DeepSeek key when its workspace holds no key itself.
-      const keyRow = await dispatchKeyRow(
+      // Claude Code on an OpenAI key is rebuilt on a token minted for this reclaim, as the claim mints one.
+      const keyRow = await withKeyGatewayToken(this.prisma, s, engines.get(s.id), await dispatchKeyRow(
         this.prisma, { ownerId: s.ownerId, provider: declared, providerBuiltin: s.providerBuiltin }, workspace?.env,
-      );
+      ));
       const customRow = declaredIsBuiltin
         ? keyRow
         : (keyRow ??
-          (await this.queue.resolveLoginPool(this.prisma, s, declared!)) ??
+          (await this.queue.resolveLoginPool(this.prisma, s, declared!, false, engines.get(s.id))) ??
           (await this.queue.resolvePoolMember(this.prisma, s, declared!)) ??
           (await this.queue.resolveSharedPool(this.prisma, s, declared!)));
       // As on the claim: a Claude pool of the owner's own that none of its members can run is rebuilt on
@@ -5689,11 +5691,12 @@ export class RunnerApiController {
     if (!engine) return { refusal: await unavailable(null) };
     // As on the claim: the key the slug names or a retired name of one, and a legacy built-in dsh
     // session's default DeepSeek key when its workspace holds no key itself.
-    const keyRow = await dispatchKeyRow(tx, session, session.workspace?.env);
+    // Claude Code on an OpenAI key re-spawns on a token minted for this reload, as the claim mints one.
+    const keyRow = await withKeyGatewayToken(tx, session, engine, await dispatchKeyRow(tx, session, session.workspace?.env));
     const customRow = isBuiltinProvider(session.provider, session.providerBuiltin)
       ? keyRow
       : (keyRow ??
-        (await this.queue.resolveLoginPool(tx, session, session.provider!)) ??
+        (await this.queue.resolveLoginPool(tx, session, session.provider!, false, engine)) ??
         (await this.queue.resolvePoolMember(tx, session, session.provider!)) ??
         (await this.queue.resolveSharedPool(tx, session, session.provider!)));
     // As on the claim: a Claude pool of the owner's own that none of its members can run re-spawns on
@@ -6745,6 +6748,11 @@ export class RunnerApiController {
         : null;
       const turnCostUsd = totalsBase ? ownCost(dto.costUsd, totalsBase) : (dto.costUsd ?? 0);
       const noEngineTurnRan = dto.numTurns === 0 && turnCostUsd === 0;
+      // Claude Code on an OpenAI key (design §5.5, D8): the gateway booked each answer's priced usage as it
+      // passed, so the CLI's own figure — its guess from Anthropic's prices — is not booked again. Its totals
+      // are still kept below, for the next completion to be measured from.
+      const gatewayBooked = totalsBase !== null
+        && (await gatewayBooksSpend(tx, { id: sessionId, provider: current.provider, engine: current.engine }));
       const settledByItsRun =
         completedTurn?.senderSessionId != null && dto.status === RunStatus.SUCCEEDED && !noEngineTurnRan;
       const unanswered =
@@ -7276,7 +7284,7 @@ export class RunnerApiController {
           runtimeSessionId: dto.runtimeSessionId ?? undefined,
           lastTurnAt: new Date(),
           numTurns: { increment: turnInc },
-          costUsd: { increment: turnCostUsd },
+          costUsd: { increment: gatewayBooked ? 0 : turnCostUsd },
           // The totals this turn was measured to, for the next completion to be measured from.
           ...(totalsBase ? { engineUsageTotals: bookedAfter(dto) } : {}),
           // Folded into the park for the same reason the merge-state clear is: one write, and
@@ -7388,7 +7396,7 @@ export class RunnerApiController {
           },
         });
       }
-      if (totalsBase) {
+      if (totalsBase && !gatewayBooked) {
         // Each model's own share of this turn; a model the turn did not use writes no row.
         const rows = Object.entries(ownModelUsage(dto.modelUsage ?? {}, totalsBase)).map(([model, mu]) => ({
           sessionId,
@@ -7400,7 +7408,7 @@ export class RunnerApiController {
           costUsd: mu.costUSD ?? 0,
         }));
         if (rows.length > 0) await tx.llmUsage.createMany({ data: rows });
-      } else if (dto.usage && current.model) {
+      } else if (!totalsBase && dto.usage && current.model) {
         // Codex reports tokenUsage.last, not the resumed thread's cumulative total.
         await tx.llmUsage.create({
           data: {
