@@ -1964,6 +1964,26 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("workspaces/\(workspaceId)/repo-cleanup")
     }
 
+    // MARK: main checkout Git (docs/main-checkout-git-contract.md §10.4)
+
+    /// The main checkout as its runner sees it now, with the patches of `diff` (repeated `diff=` per file,
+    /// at most 20).
+    public func mainCheckout(workspaceId: String, diff: [String] = []) async throws -> MainCheckoutRead {
+        try await get("workspaces/\(workspaceId)/main-checkout",
+                      query: diff.prefix(20).map { URLQueryItem(name: "diff", value: $0) })
+    }
+
+    /// Move, commit, push or rescue. Pending until the runner answers; the outcome is a line in the
+    /// session named by `initiatedFromSessionId`.
+    public func mainCheckoutAction(workspaceId: String, _ post: MainCheckoutActionPost) async throws -> MainCheckoutActionAnswer {
+        try await self.post("workspaces/\(workspaceId)/main-checkout/actions", body: post)
+    }
+
+    /// Cancel an action its runner hasn't been handed yet (the waiting line's Cancel).
+    public func cancelMainCheckoutAction(workspaceId: String, requestId: String) async throws -> MainCheckoutActionAnswer {
+        try await postEmpty("workspaces/\(workspaceId)/main-checkout/actions/\(requestId)/cancel")
+    }
+
     // MARK: turns / lifecycle (Phase 2)
 
     public func withdrawTurn(sessionID: String, turnId: String) async throws {

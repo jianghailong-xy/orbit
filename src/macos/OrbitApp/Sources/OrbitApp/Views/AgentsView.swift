@@ -2041,6 +2041,9 @@ struct AgentFormContent: View {
                 }
 
                 Toggle("Enabled", isOn: $enabled)
+                // Takes effect at once (board 04), apart from Done: it asks first when the main checkout
+                // holds what new sessions would no longer see.
+                WorktreeIsolationSwitch(workspace: agent)
             }
 
             Section("Instructions") {

@@ -79,6 +79,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'rootSessionId',
   'creatorSessionId',
   'authorSessionId',
+  // A main checkout request's initiating session (migration 0534): where its result line is written.
+  'initiatedFromSessionId',
   // An exception item, the work it is about and the rows other tasks of the integration-line contract
   // attach to it (migration 0273). Every one of them addresses a row a caller may be handed and hand
   // back: the item in `GET /projects/:id/open-items`, and the job, promotion or pause behind it.
@@ -652,6 +654,11 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // session page's From Wiki label opens. A history reference with no foreign key, so it may 404 —
   // never a fence.
   'wikiChatSpaceId',
+  // A forked task's session and that session's machine (migration 0615, SR55): addresses a reader follows to the
+  // session the task started from and the runner its snapshot is on. History references with no foreign key — never a
+  // fence: the fork's placement is decided on the task's own row.
+  'forkSessionId',
+  'forkRunnerId',
   // A wiki chat's cards (migration 0483, contract `chat.drafts`): the card a drafting tool answers (`draftId`), which the
   // panel draws and `GET /wiki/chat-drafts/:id` reads, and the card a newer one replaced (`replacesId`, a history
   // reference with no foreign key). Addresses a reader follows — never a fence: a press is decided on the card's row.

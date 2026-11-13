@@ -52,6 +52,7 @@ import { RunnersModule } from '../runners/runners.module';
 import { RunnerWriteProtocolInterceptor } from './runner-write-protocol';
 import { IntegrationJobRelay } from './integration-job-relay';
 import { WikiRepoOps } from '../wiki-worker/wiki-repo-ops';
+import { MainCheckoutService } from '../workspaces/main-checkout.service';
 import { OutcomeReconcilerModule } from '../outcome-reconciler/outcome-reconciler.module';
 import { WatchesModule } from '../watches/watches.module';
 import { OwnerRequestsModule } from '../owner-requests/owner-requests.module';
@@ -167,6 +168,7 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     WorkspacesService,
     IntegrationJobRelay,
     WikiRepoOps,
+    MainCheckoutService,
   ],
 })
 export class RunnerApiModule {}

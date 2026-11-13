@@ -103,6 +103,15 @@ export interface TransactionUnit {
  */
 export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
+    at: 'tasks/task-dispatch-refusal.ts#recordForkDispatchRefusal', shape: 'TX_RETRIED',
+    locks: 'task FOR UPDATE (rank 50), plain reads of its workspace and its project\'s primary project_codebase, then one UPDATE of that task\'s dispatch_refusal (a column no trigger\'s column list names) and at most one task_comment INSERT whose task foreign key re-checks the row this unit already holds.',
+    identity: 'The task and the refusal code with the facts it was decided on (assignee, its runner, project, binding): a re-run, or a second automatic door refused on the same facts, finds that refusal recorded and writes nothing.',
+    isolation: '', attempts: 4,
+    replay: 'Every attempt re-locks the task and re-reads the facts and the recorded refusal inside the closure; a rolled-back attempt leaves neither the refusal nor its comment.',
+    effects: 'None inside. Called by TasksService.execute after an automatic start was refused by SessionsService.create; a failure here is logged and the start\'s own 409 is what the caller sees.',
+    answer: 'Typed 503 after retry exhaustion, logged by the caller; the next automatic pass meets the same refusal and records it then.',
+  },
+  {
     at: 'projects/project-open-item.service.ts#askOwner', shape: 'TX_RETRIED',
     locks: 'Open item insert (rank 60), then the OPEN session_request CAS (rank 60); neither references the other with a foreign key.',
     identity: 'Project and clientQuestionId dedupe key; the same request is linked to the same item on replay.', isolation: '', attempts: 4,
@@ -766,6 +775,18 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: "None inside. After commit, the standing grant of an allow that carried remember rules (rememberForWorkspace) and the APPROVAL_RESOLVED publish, both only when the decision landed.",
     answer: 'Typed 503 from the global boundary; the person, or the Feishu inbox, asks again, and the decision either landed or did not.',
   },
+  // A session guest's invitation (docs/session-guests-design.md §7) and its one email (migration 0618, D7 = A).
+  {
+    at: 'session-guests/session-guests.service.ts#invite',
+    shape: 'TX_RETRIED',
+    locks: "One INSERT into session_guest ... ON CONFLICT (session_id, user_id) WHERE removed_at IS NULL DO NOTHING, its foreign keys taking FOR KEY SHARE on the session and the user rows; then, only when it inserted a row, a plain read of email_settings and one INSERT into email_outbox ... ON CONFLICT DO NOTHING under its unique NULLS NOT DISTINCT (kind, user_id, session_id), its foreign keys taking FOR KEY SHARE on the same user and session rows. Neither table has a trigger. It waits only on a concurrent insert of the same live invitation or the same outbox key, until that transaction ends.",
+    identity: "The session and the invited account, fixed before the closure: the live invitation's partial unique key and the SESSION_INVITE row's (kind, user_id, session_id).",
+    isolation: '',
+    attempts: 4,
+    replay: "Both INSERTs do nothing on a conflict, so a re-run after a discarded attempt writes the invitation and its email row once; a re-run after a concurrent invite committed inserts nothing and queues nothing. Inviting again after a removal is a new session_guest row (docs/session-guests-design.md §7) and no new email row: the first one is still there.",
+    effects: "None inside. The email is sent later by EmailOutboxWorker, from the committed row.",
+    answer: 'Typed 503 from the global boundary; the owner invites again, and the invitation either landed or did not.',
+  },
   // A session guest's invitation ending — the owner's remove, or the guest's leave — with the guest's queued turns
   // (docs/session-guests-design.md §6 rule 6).
   {
@@ -881,12 +902,12 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: "None inside. The welcome email is sent later by EmailOutboxWorker, from the committed row.",
     answer: "A unique violation reaches the global boundary as a 500, as before the transaction existed (the read before it answers an existing address with 409 first); a transient conflict is the typed 503, with nothing written.",
   },
-  // The welcome email's send (docs/welcome-email-design.md §3.3, migration 0517): one due outbox row claimed, sent, settled.
+  // The outbox's send (docs/welcome-email-design.md §3.3, migrations 0517 and 0618): one due row claimed, sent, settled.
   {
     at: 'email/email-outbox.ts#sendOne',
     shape: 'TX_BARE',
-    locks: "One email_outbox row: SELECT … FOR UPDATE SKIP LOCKED of the earliest due PENDING row, so a row another worker holds is skipped, never waited on. Then plain reads of `user` (the account and the administrator who created it), the HTTP call to Resend with the row lock held (at most 10 seconds), one UPDATE of the row already held, and, when it is SENT or FAILED, one INSERT into `activity`, which has no foreign key and no trigger. email_outbox has no trigger, and the UPDATE changes no key column, so its foreign key re-checks nothing. Nothing locks an email_outbox row before another table's row.",
-    identity: "The outbox row, and the Idempotency-Key `welcome/<user id>/<generation>/<key_attempt>` read from it.",
+    locks: "One email_outbox row: SELECT … FOR UPDATE SKIP LOCKED of the earliest due PENDING row, so a row another worker holds is skipped, never waited on. Then plain reads — for a WELCOME row of `user` (the account and the administrator who created it); for a SESSION_INVITE row of the live session_guest row with its session and owner — the HTTP call to Resend with the row lock held (at most 10 seconds), one UPDATE of the row already held (SKIPPED, with no send, when a SESSION_INVITE's invitation is no longer live or its session is in the Trash), and, when it is SENT or FAILED, one INSERT into `activity`, which has no foreign key and no trigger. email_outbox has no trigger, and the UPDATE changes no key column, so its foreign keys re-check nothing. Nothing locks an email_outbox row before another table's row.",
+    identity: "The outbox row, and the Idempotency-Key read from it: `welcome/<user id>/<generation>/<key_attempt>` for a WELCOME row, `session-invite/<row id>/<generation>/<key_attempt>` for a SESSION_INVITE row.",
     isolation: '',
     attempts: 1,
     replay: "Not retried within the pass: a transaction that fails rolls back, the row stays PENDING with the same key_attempt, and the next pass claims it again and sends under the same Idempotency-Key, which Resend answers with the first result if the first request had been taken. SKIP LOCKED means two workers never hold, and so never send, the same row.",
@@ -2537,6 +2558,51 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'None inside. A settled subject and its container\'s terminal status commit together or not at all; the next fact-driven compensation point re-runs the unit.',
     answer: 'Typed 503 from the global boundary; the edge that called it runs from the fact it had already committed, and the conditional write makes a second attempt a no-op.',
   },
+  // The main checkout relay (migration 0534, docs/main-checkout-git-contract.md §10): an outcome and its line.
+  {
+    at: 'workspaces/main-checkout.service.ts#act',
+    shape: 'TX_RETRIED',
+    locks: 'An action queued for the runner: first one autocommit INSERT of its main_checkout_request row (workspace (60) FOR KEY SHARE), unique on (owner_id, request_id) and, while unfinished, on (runner_id, root) by the partial index main_checkout_request_in_flight_key — the unique violation the caller answers with the first request or ACTION_IN_FLIGHT (#finishNew). Then, only while its runner is quiet, the RUNNER_OFFLINE waiting line in this unit: writeLine alone. When the request names an initiating session, that session row (60) by SELECT … FOR UPDATE — the request row before the session, the one order every writer of the line takes them in — and then either one conversation_turn INSERT (the `notice` turn, seq max+1 read under that lock, unique on (session_id, client_turn_id)) or one run_event INSERT at max(seq)+1 read under the same lock.',
+    identity: "The request row's id, which keys the notice turn (`main-checkout:v1:<row>:waiting`); the direct run_event path is written once per call, and the call is made once, right after the INSERT that created the row.",
+    isolation: '',
+    attempts: 4,
+    replay: "The session's state, runner capability and max(seq) are read inside the closure under the session lock, so a re-run decides the path and the seq afresh.",
+    effects: 'None inside. After commit the event is published, or the runner hinted that a notice waits in the inbox.',
+    answer: 'Typed 503 from the global boundary; the runner resends its result and the person presses again, both answered idempotently by the request row.',
+  },
+  {
+    at: 'workspaces/main-checkout.service.ts#actionResult',
+    shape: 'TX_RETRIED',
+    locks: "A late result (after TIMEOUT or CANCELLED): the request row's result read, then the row (60) by one UPDATE predicated on state = finished and late_result IS NULL — the compare-and-set that keeps one late result. Then, when the request names an initiating session, that session row (60) by SELECT … FOR UPDATE — the request row before the session, the one order every writer of the line takes them in — and then either one conversation_turn INSERT (the `notice` turn, seq max+1 read under that lock, unique on (session_id, client_turn_id)) or one run_event INSERT at max(seq)+1 read under the same lock.",
+    identity: 'The request row: late_result is written once, so a late result sent twice is kept and lined once.',
+    isolation: '',
+    attempts: 4,
+    replay: "The row's result and late_result are re-read inside the closure; a re-run after a commit matches nothing and writes no line.",
+    effects: 'None inside. After commit the event is published, or the inbox hinted.',
+    answer: 'Typed 503 from the global boundary; the runner resends its result and the person presses again, both answered idempotently by the request row.',
+  },
+  {
+    at: 'workspaces/main-checkout.service.ts#finish',
+    shape: 'TX_RETRIED',
+    locks: 'The request row (60) first, by one UPDATE predicated on its state still being one of those it may leave (pending/claimed): the compare-and-set that finishes it once. Then, when the request names an initiating session, that session row (60) by SELECT … FOR UPDATE — the request row before the session, the one order every writer of the line takes them in — and then either one conversation_turn INSERT (the `notice` turn, seq max+1 read under that lock, unique on (session_id, client_turn_id)) or one run_event INSERT at max(seq)+1 read under the same lock.',
+    identity: "The request row and its state: whoever wins the compare-and-set writes the outcome and the line; every other answer — the runner's twice, the runner's against the timeout — matches nothing.",
+    isolation: '',
+    attempts: 4,
+    replay: "The compare-and-set re-matches inside the closure, and the session's path and seq are read under its lock, so a re-run either finishes it as the first attempt would have or finds it finished and writes nothing.",
+    effects: 'None inside. After commit the event is published, or the inbox hinted.',
+    answer: 'Typed 503 from the global boundary; the runner resends its result and the person presses again, both answered idempotently by the request row.',
+  },
+  {
+    at: 'workspaces/main-checkout.service.ts#finishNew',
+    shape: 'TX_RETRIED',
+    locks: 'A request refused before it was queued (ACTION_IN_FLIGHT, CHECKOUT_NOT_REPORTED): one INSERT of the request row already finished (workspace (60) FOR KEY SHARE through its foreign key), unique on (owner_id, request_id). Then, when the request names an initiating session, that session row (60) by SELECT … FOR UPDATE — the request row before the session, the one order every writer of the line takes them in — and then either one conversation_turn INSERT (the `notice` turn, seq max+1 read under that lock, unique on (session_id, client_turn_id)) or one run_event INSERT at max(seq)+1 read under the same lock.',
+    identity: '(owner_id, request_id): a second refusal of the same requestId is a unique violation and answers with the first.',
+    isolation: '',
+    attempts: 4,
+    replay: "Nothing is read before the closure that the writes depend on; the session's path and seq are read under its lock.",
+    effects: 'None inside. After commit the event is published, or the inbox hinted.',
+    answer: 'Typed 503 from the global boundary; the runner resends its result and the person presses again, both answered idempotently by the request row.',
+  },
 ];
 
 export interface TransactionParticipant {
@@ -2562,6 +2628,9 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // A new account's welcome email row (docs/welcome-email-design.md §3.3): a plain read of email_settings, then one
   // INSERT into email_outbox under its unique (kind, user_id) and its foreign key to the account just inserted.
   { at: 'email/email-outbox.ts#enqueueWelcome', under: 'auth/google-login.service.ts#link (a SIGNUP) and users/users.util.ts#createOrResetUser (a new account)' },
+  // A session guest's invitation email row (migration 0618): a plain read of email_settings, then one INSERT into
+  // email_outbox ... ON CONFLICT DO NOTHING under its unique NULLS NOT DISTINCT (kind, user_id, session_id).
+  { at: 'email/email-outbox.ts#enqueueSessionInvite', under: 'session-guests/session-guests.service.ts#invite (a new live invitation)' },
   { at: 'sessions/run-notify.ts#recordRunNotify', under: 'sessions.createTurn onTurnWritten, under the recipient Session lock (rank 30). One session_request INSERT (rank 60), whose recipient foreign key names that locked row. The request id and clientTurnId are minted before the retried transaction; a replay of a committed turn never reaches the hook. Turn and request roll back together, with no external effects. A refused or exhausted createTurn is caught by notifyAgentMessage and falls back to the owner after rollback.' },
   // An owner request's ending delivered to the session that asked (migration 0504): its watch_delivery row.
   { at: 'owner-requests/owner-request-endings.ts#enqueueResolutions', under: 'owner-requests/owner-requests.service.ts#settle and #expireDue, and owner-requests/owner-secrets.service.ts#ack' },
@@ -2903,6 +2972,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // `session_request` has none to the asker.
   { at: 'sessions/session-message.ts#chargeSessionMessage', under: "sessions.createTurn and sessions.resume (its revive) through participateSendTransaction, and sessions.interrupt through participateFollowUpTransaction, for the three session-to-session doors (runnerSessions.sendMessage, runnerSessions.interruptSession, projects.sendToCoordinator) — under the rank-30 Session lock of the RECIPIENT those transactions already hold, before the turn row is written. A DELETE of this pair's session_message_charge rows whose 5-minute window is over, a count of the rest, and one INSERT when the message is admitted (rank 60, its one foreign key that same session row), so it takes no lock outside the one its caller holds; a replay of a committed clientTurnId never reaches it, and a refusal after it rolls it back with the turn" },
   // Test-only, and reachable only from the harness's own transaction.
+  { at: 'workspaces/main-checkout.service.ts#writeLine', under: 'workspaces/main-checkout.service.ts#finish, #finishNew, #actionResult and #act — the initiating session row FOR UPDATE, then its notice turn or its run_event at max(seq)+1, after the request row its caller already wrote' },
 ];
 
 /** The recurring shapes an autocommit write takes. */
@@ -3192,7 +3262,6 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "providers/providers.service.ts#update", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "providers/providers.service.ts#setModelTier", class: "ONE_ROW_BY_KEY", statements: 1, note: "The owner's SubAgent tier for one model of one of their own keys (migration 0526, docs/subagent-design.md §7): after a scoped read of the row, one hand-written UPDATE by id whose jsonb operators set or remove only that model's key of `model_tiers`, so two tiers set at once on one key cannot overwrite each other. No trigger names the column and no foreign key is re-checked; re-issuing it writes the same key again." },
   { at: "providers/shared-pools.service.ts#addKey", class: "INSERT", statements: 1, note: "One key of a shared pool (migration 0321). Its composite foreign key names the contributor's provider_pool_person row, so a contributor who is not in the pool fails the insert itself; `pool_api_key_pool_id_key_fingerprint_key` refuses a second add of the same key to the pool, a P2002 answered as the 409 a check before it gives." },
-  { at: "session-guests/session-guests.service.ts#invite", class: "INSERT", statements: 1, note: "One INSERT into session_guest ... ON CONFLICT (session_id, user_id) WHERE removed_at IS NULL DO NOTHING, so inviting someone already invited leaves their live row as it was. Its foreign keys take FOR KEY SHARE on the session and the user rows; session_guest has no trigger. Inviting again after a removal is a new row (docs/session-guests-design.md §7)." },
   { at: "session-guests/session-guests.service.ts#get", class: "ONE_ROW_CAS", statements: 1, note: "The guest's first open of the session: one UPDATE of their session_guest row by its id predicated on opened_at IS NULL, so only the first read stamps it and a concurrent one changes nothing. No foreign key changes and no trigger." },
   { at: "providers/shared-pools.service.ts#addPerson", class: "INSERT", statements: 1, note: "One INSERT ... ON CONFLICT DO NOTHING (createMany with skipDuplicates) on the person's primary key, so adding someone already in leaves their row, and their role, as it was. The pool may be a shared one or a Codex pool of its owner's own (migration 0358); either way the row's foreign keys are the pool and the user, and nothing else is written." },
   { at: "providers/shared-pools.service.ts#create", class: "INSERT", statements: 1, note: "One nested create: the shared pool and its creator's ADMIN row go in as one Prisma write. The slug guard and the P2002 re-pick are the ones providers.service.ts#create's entry describes." },
@@ -3255,7 +3324,6 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "runner-api/runner-api.controller.ts#drainSelfUpdatePostpone", class: "ONE_ROW_CAS", statements: 1, note: "Later (migration 0571), handed over the way drainSelfUpdateRequest hands Update Runner Now: after an unlocked read of `self_update_postpone_until` by key, the clear is the claim, predicated on the time read, so two beats racing hand the runner one postpone and a second Later written between the read and the clear stays for the next beat. The column is not in the UPDATE OF list of 0118's runner availability trigger." },
   { at: "runner-api/runner-api.controller.ts#drainSelfUpdateNow", class: "ONE_ROW_CAS", statements: 1, note: "Update Now (migration 0590), handed over the way drainSelfUpdatePostpone hands Later: after an unlocked read of `self_update_now_requested_at` by key, the clear is the claim, predicated on the time read, so two beats racing hand the runner one Update Now and a second press written between the read and the clear stays for the next beat. The column is not in the UPDATE OF list of 0118's runner availability trigger." },
   { at: "runner-api/runner-api.controller.ts#drainSelfUpdateRequest", class: "ONE_ROW_CAS", statements: 1, note: "Update Runner Now (migration 0385), handed over the way drainModelCatalogRefresh hands a refresh: the clear is the claim, predicated on `self_update_requested_at IS NOT NULL`, so two beats racing hand the runner one check. The column is not in the UPDATE OF list of 0118's runner availability trigger." },
-  { at: "common/runner-drain-waiting.ts#claimDrainWaitingPush", class: "ONE_ROW_CAS", statements: 1, note: "The drain's one push (migration 0595, docs/runner-update-drain-design.md D3): one UPDATE of `drain_waiting_pushed_at` on the runner by key, only while its heartbeat says draining, the column is NULL and one of its owner's sessions is PENDING on it, counted in the same statement. The predicate is the claim: two beats racing cannot both match, and only the one that matched sends the push, after the statement. The heartbeat's runner write clears the column on a beat that is not draining. No trigger names the column." },
   { at: "runner-api/runner-api.controller.ts#reconcileHeartbeat", class: "MANY_ROWS", statements: 5, note: "Five separate statements, deliberately: a heartbeat that half-lands is a heartbeat, and making them atomic would put the hot runner row in a transaction with a multi-row workspace sweep. The fifth drops a settled commit error the runner reports expired, matched on its exact operation id so a newer click or a later failure is never the one cleared. The full reconcile of every HTTPS heartbeat, and of a link heartbeat that has to reconcile (link-heartbeat.ts): there the runner row is written only when something written there changed, and otherwise only its own record of the beat, by key, once that is RUNNER_DURABLE_BEAT_EVERY_MS old." },
   { at: "runner-api/runner-api.controller.ts#installResult", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "runner-api/runner-api.controller.ts#loginResult", class: "ONE_ROW_CAS", statements: 1, note: "One step of the sign-in relay, as the runner reports it. The predicate is the start the report names (`login_at`), not just the runner id: a report about a sign-in the row has moved past — cancelled, or replaced by another account's — matches no row and is dropped. A runner too old to name its start is applied by the runner id alone, as before. The same statement writes how long the relayed link lasts and why a failed sign-in failed (`login_expires_at`, `login_reason`, migration 0427), which startLogin and cancelLogin clear with the rest of the slot." },
@@ -3370,7 +3438,7 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "users/users.controller.ts#updateProfile", class: "ONE_ROW_BY_KEY", statements: 1 },
   // Admin → Email (docs/welcome-email-design.md §3.1, migration 0516), and an administrator's Send welcome email (§3.5).
   { at: "email/email-settings.service.ts#update", class: "ONE_ROW_BY_KEY", statements: 1, note: "An administrator's save of the email setting: one INSERT … ON CONFLICT (id) DO UPDATE of the one `email_settings` row (id 1), keyed by its primary key. The table has no foreign key and no trigger, so the statement takes that row and nothing else. Two saves racing both land, the later one whole." },
-  { at: "email/email-outbox.ts#resendWelcome", class: "ONE_ROW_CAS", statements: 1, note: "One UPDATE of the account's WELCOME row by its unique (kind, user_id), predicated on status FAILED or SKIPPED, back to PENDING with attempts cleared and generation + 1; the read after it is a plain SELECT. A worker holding the row FOR UPDATE makes it wait until that send commits, after which the row is SENT or PENDING and the predicate matches nothing. email_outbox's foreign key is to `user` and the UPDATE changes no key column, so no parent is re-checked; no trigger." },
+  { at: "email/email-outbox.ts#resendWelcome", class: "ONE_ROW_CAS", statements: 1, note: "One UPDATE of the account's WELCOME row by its unique (kind, user_id), predicated on status FAILED or SKIPPED, back to PENDING with attempts cleared and generation + 1; the read after it is a plain SELECT. A worker holding the row FOR UPDATE makes it wait until that send commits, after which the row is SENT or PENDING and the predicate matches nothing. email_outbox's foreign keys are to `user` and `session` and the UPDATE changes no key column, so no parent is re-checked; no trigger." },
   { at: "watches/watch-delivery.service.ts#claimDue", class: "MANY_ROWS", statements: 1, note: "The delivery lease: a batch of due PENDING deliveries moved to IN_FLIGHT, each under its own lease generation. `FOR UPDATE SKIP LOCKED` passes over a row another claim or settlement holds instead of waiting for it, so the statement has no wait edge; a delivery it skips is still due on the next pass." },
   { at: "watches/watch-delivery.service.ts#defer", class: "ONE_ROW_CAS", statements: 1, note: "A wake a continuous watch may not give yet, put back to PENDING until its window ends, only while the claim's lease generation is still the row's. No attempt is counted; a lost CAS means a takeover holds the row and settles it." },
   { at: "watches/watch-delivery.service.ts#fail", class: "ONE_ROW_CAS", statements: 1, note: "A failed attempt, recorded only while the claim's lease generation is still the row's: back to PENDING on the backoff, or a dead letter at the attempt cap or on a refusal. A lost CAS means a takeover holds the row and settles it. Its caller announces `watch.changed` for the attempt that made the row a dead letter, and for none that still has a retry to come." },
@@ -3427,6 +3495,10 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: 'managed-runners/managed-runner.service.ts#wake', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'An owner\'s explicit wake records demand (recordManagedDemand) and then the request\'s idempotency key on the mapping by id and owner.' },
   // A managed runner's volume as its backend measured it (migration 0480).
   { at: 'managed-runners/managed-runner-manager.ts#recordVolumeMeasurement', class: 'ONE_ROW_CAS', statements: 1, note: 'What the backend measured of the recorded volume, kept for the runner\'s heartbeat: `volume_measurement` on the mapping by id, only while this replica holds its lease, and only when the figures differ from the ones the pass read. A predicate write of its own column: it leaves `revision` alone, so no step\'s compare-and-set misses for it. A lease lost meanwhile matches nothing, and the next pass reads the volume again.' },
+  { at: 'workspaces/main-checkout.service.ts#read', class: 'INSERT', statements: 1, note: 'A snapshot read queued for the runner: one INSERT of a main_checkout_request row (op snapshot), its workspace FOR KEY SHARE through the foreign key. A read asked twice is two reads; each expires on its own.' },
+  { at: 'workspaces/main-checkout.service.ts#dispatch', class: 'MANY_ROWS', statements: 1, note: "The heartbeat's claim: one UPDATE of every pending, unexpired request of the runner to claimed. A row is claimed once — the second replica's UPDATE re-checks state = pending after the first commits and matches nothing." },
+  { at: 'workspaces/main-checkout.service.ts#snapshotAnswer', class: 'ONE_ROW_CAS', statements: 1, note: "A runner's snapshot answer: one UPDATE by (id, runner_id, op) predicated on the read not being finished. Twice is once." },
+  { at: 'workspaces/main-checkout.service.ts#expire', class: 'ONE_ROW_CAS', statements: 1, note: 'A snapshot read past its deadline: one UPDATE by id predicated on it not being finished, so its waiter answers 504 instead of waiting. (Actions past theirs go through #finish.)' },
 ];
 
 export interface TriggerWriteSource {
@@ -3610,6 +3682,7 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   {"table":"task","trigger":"task_dispatch_epoch_seed","event":"AFTER INSERT","kind":"ROW/STATEMENT","since":"0137_task_run_request_receipt","takes":["task_dispatch_epoch WRITE"]},
   {"table":"task","trigger":"task_dispatch_epoch_update","event":"AFTER UPDATE","kind":"ROW/STATEMENT","since":"0137_task_run_request_receipt","takes":["task_dispatch_epoch LOCK"]},
   {"table":"task","trigger":"task_done_canonical_writer_fence","event":"BEFORE UPDATE OF \"status\", \"completion_fence_revision\"","kind":"ROW/STATEMENT","since":"0193_task_done_writer_fence","takes":[]},
+  {"table":"task","trigger":"task_fork_guard","event":"BEFORE UPDATE OF \"fork_session_id\", \"fork_runner_id\", \"fork_sha\", \"fork_base_head\", \"fork_includes_uncommitted\", \"fork_changed_files\"","kind":"ROW/STATEMENT","since":"0617_task_fork_changed_files","takes":[]},
   {"table":"task","trigger":"task_list_task_count_delete","event":"AFTER DELETE","kind":"ROW/STATEMENT","since":"0280_task_list_task_count","takes":["task_list WRITE"]},
   {"table":"task","trigger":"task_list_task_count_insert","event":"AFTER INSERT","kind":"ROW/STATEMENT","since":"0280_task_list_task_count","takes":["task_list WRITE"]},
   {"table":"task","trigger":"task_list_task_count_relist","event":"AFTER UPDATE","kind":"ROW/STATEMENT","since":"0280_task_list_task_count","takes":["task_list WRITE"]},

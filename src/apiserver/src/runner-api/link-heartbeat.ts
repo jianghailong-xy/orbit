@@ -175,6 +175,11 @@ export const HEARTBEAT_DELIVERIES = {
     ],
   },
   repoCleanupRequest: { how: 'MARKED', writers: ['workspaces/workspaces.service.ts#requestRepoCleanup'], pending: 'a clean-up pending' },
+  mainCheckoutRequests: {
+    how: 'MARKED',
+    writers: ['workspaces/main-checkout.service.ts#read', 'workspaces/main-checkout.service.ts#act'],
+    pending: 'a main checkout read or action of the runner not yet handed out',
+  },
   refreshModelCatalog: { how: 'MARKED', writers: ['runners/runners.service.ts#requestModelCatalogRefresh'], pending: 'until a beat claims it' },
   checkSelfUpdate: { how: 'MARKED', writers: ['runners/runners.service.ts#requestSelfUpdate'], pending: 'until a beat claims it' },
   drainScopedClaims: {
@@ -239,6 +244,10 @@ export const HEARTBEAT_DELIVERIES = {
       'owner-requests/owner-secrets.service.ts#sweep',
     ],
     pending: 'a grant of the runner being removed (readLinkReconcilePending)',
+  },
+  forkSnapshotsOpen: {
+    how: 'FULL_ONLY',
+    reads: 'the open forked tasks of the runner, on every full reconcile (at least every five minutes); a quiet answer leaves it out, which the runner reads as "delete nothing"',
   },
   linkHints: { how: 'EVERY_BEAT', reads: 'readRunnerLinkHints in the beat statement; watchers and the release in this process' },
 } as const satisfies Record<keyof Required<RunnerHeartbeatResponse> | 'linkHints', HeartbeatDelivery>;
@@ -844,6 +853,10 @@ export async function readLinkReconcilePending(prisma: Pick<PrismaService, '$que
          WHERE sr."target_runner_id" = ${runnerId}::uuid AND sr."status" = 'RUNNING'
       )
       OR EXISTS (
+        SELECT 1 FROM "main_checkout_request" m
+         WHERE m."runner_id" = ${runnerId}::uuid AND m."state" = 'pending'
+      )
+      OR EXISTS (
         SELECT 1 FROM "wiki_repo_op" o
           JOIN "workspace" w ON w."id" = o."workspace_id"
          WHERE w."runner_id" = ${runnerId}::uuid AND o."state" IN ('queued', 'running')
@@ -879,6 +892,7 @@ export function heartbeatAnswerHandsOut(answer: RunnerHeartbeatResponse): boolea
     || (answer.wikiRepoOps?.length ?? 0) > 0
     || (answer.remoteSubagentRuns?.length ?? 0) > 0
     || (answer.stopSubagentRunIds?.length ?? 0) > 0
+    || (answer.mainCheckoutRequests?.length ?? 0) > 0
     || (answer.cursorKeyChecks?.length ?? 0) > 0
     || (answer.secretGrantsRemoving?.length ?? 0) > 0
     || answer.loginRequest !== undefined

@@ -156,6 +156,9 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let workDirTotalBytes: Int64?
     public let repoHealth: RunnerRepoHealth?
     public let repoCleanup: RunnerRepoCleanup?
+    /// Its runner declares `main-checkout-git/v1`: the Main checkout bar and card draw their buttons.
+    /// Nil from an older server, read as no.
+    public var mainCheckoutActions: Bool? = nil
     /// The repository its directory is a checkout of, as the runner reported it; nil for a workspace on none.
     public let repoUrl: String?
 
@@ -167,7 +170,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         case autoInitGit, codexAccount, claudeAccount, antigravityAccount, kimiAccount, cursorAccount
         case enableWorktree, modelRouting, modelRoutingOptimizeFor, subagentsEnabled, subagentsMaxRunning
         case workDirExists, workDirIsGit
-        case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup
+        case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup, mainCheckoutActions
     }
 
     public init(from decoder: Decoder) throws {
@@ -212,6 +215,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         workDirTotalBytes = c.flexibleInt64(forKey: .workDirTotalBytes)
         repoHealth = try c.decodeIfPresent(RunnerRepoHealth.self, forKey: .repoHealth)
         repoCleanup = try c.decodeIfPresent(RunnerRepoCleanup.self, forKey: .repoCleanup)
+        mainCheckoutActions = try? c.decodeIfPresent(Bool.self, forKey: .mainCheckoutActions)
         repoUrl = try c.decodeIfPresent(String.self, forKey: .repoUrl)
     }
 }
@@ -594,6 +598,11 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// §10.1's fifth column with `fixAction` folded in — what the refusal was about, in the ref's
     /// and the runner's own words.
     public let sourceRefusalDetail: SourceRefusalDetail?
+    /// SR18's sentence for a session of a task forked from another session
+    /// (docs/task-fork-from-session-design.md §2.3), finished by the server — "Forked from session
+    /// «title» at abc1234 (includes uncommitted changes)" — and drawn as it is. The detail read's
+    /// only: nil on a list row, on a task that was not forked, and from an older server.
+    public let forkSource: String?
     /// When the server will re-send the message a self-healing failure killed — a spent quota, a
     /// 529, a runner that vanished mid-turn — or nil when nothing is armed. What makes a FAILED
     /// row not yet an outcome: the run continues on its own when this fires, so `isSettled` (and
@@ -761,6 +770,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         sourceRefusalCode = try values.decodeIfPresent(String.self, forKey: .sourceRefusalCode)
         sourceRefusalDetail = try? values.decodeIfPresent(SourceRefusalDetail.self,
                                                           forKey: .sourceRefusalDetail)
+        forkSource = try? values.decodeIfPresent(String.self, forKey: .forkSource)
         retryAt = try values.decodeIfPresent(String.self, forKey: .retryAt)
         agent = try values.decodeIfPresent(SessionAgentRef.self, forKey: .agent)
         tags = try values.decodeIfPresent([SessionTag].self, forKey: .tags)
@@ -796,7 +806,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 engineTurnActive: Bool? = nil,
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
                 sourceState: String? = nil, sourceRefusalCode: String? = nil,
-                sourceRefusalDetail: SourceRefusalDetail? = nil,
+                sourceRefusalDetail: SourceRefusalDetail? = nil, forkSource: String? = nil,
                 pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil,
                 currentTurnStartedAt: String? = nil,
                 tags: [SessionTag]? = nil, retryAt: String? = nil,
@@ -878,6 +888,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.sourceState = sourceState
         self.sourceRefusalCode = sourceRefusalCode
         self.sourceRefusalDetail = sourceRefusalDetail
+        self.forkSource = forkSource
         self.retryAt = retryAt
         self.agent = agent
         self.pinnedAt = pinnedAt

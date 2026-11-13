@@ -8,6 +8,11 @@ import { Button } from './ui/Button';
 import { Checkbox } from './ui/Checkbox';
 import { Input } from './ui/Input';
 
+/** When an invitation's email went out, as the row says it: the hour and minute, local time. */
+function clockTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+}
+
 /** The session's permission mode as the consequence line says it (docs/session-guests-design.md §3). */
 const MODE_WORDS: Record<string, string> = {
   default: 'Default',
@@ -130,7 +135,11 @@ export function SessionGuestsSection({
               <div className="share-person-email">{guest.email}</div>
             </div>
             <span className="share-person-today">
-              {guest.opened || guest.messagesToday > 0 ? `${countOf(guest.messagesToday, 'message')} today` : 'Not opened yet'}
+              {guest.opened || guest.messagesToday > 0
+                ? `${countOf(guest.messagesToday, 'message')} today`
+                : guest.emailSentAt
+                  ? `Invited by email · ${clockTime(guest.emailSentAt)}`
+                  : 'Not opened yet'}
             </span>
             <Button
               size="small"

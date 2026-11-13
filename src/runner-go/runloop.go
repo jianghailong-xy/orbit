@@ -653,6 +653,8 @@ func claimedSessionFromReclaim(r ReclaimSession) *ClaimedSession {
 		WorkDir:            r.WorkDir,
 		Branch:             r.Branch,
 		AutoInitGit:        r.AutoInitGit,
+		CodelessCheckout:   r.CodelessCheckout,
+		CodelessBranch:     r.CodelessBranch,
 		CreateWorkDir:      r.CreateWorkDir,
 		MergeTarget:        r.MergeTarget,
 		AgentID:            r.AgentID,
@@ -1198,17 +1200,76 @@ type worktreeCommandRelease manualWorktreeOperationKey
 type runnerAgentList struct {
 	mu     sync.Mutex
 	agents []RunnerAgent
+	// sessionDirs are workDirs of sessions started here that the last listing did not have: a
+	// workspace made after that listing (which repeats only every five minutes). Kept until a listing
+	// read after they were noted replaces them, so its main checkout is on the heartbeat as soon as
+	// its first session runs rather than minutes later.
+	sessionDirs []notedWorkDir
+}
+
+type notedWorkDir struct {
+	agentWorkDir
+	at time.Time
 }
 
 // refresh re-reads the list; a failed read keeps the last one.
 func (l *runnerAgentList) refresh(t *Transport) {
+	asked := time.Now()
 	me, err := t.me()
 	if err != nil {
 		return
 	}
+	l.set(me.Agents, asked)
+}
+
+// set replaces the list with one read at asked, dropping the session dirs noted before then: that
+// listing has their workspace if it still exists.
+func (l *runnerAgentList) set(agents []RunnerAgent, asked time.Time) {
 	l.mu.Lock()
-	l.agents = append([]RunnerAgent(nil), me.Agents...)
-	l.mu.Unlock()
+	defer l.mu.Unlock()
+	l.agents = append([]RunnerAgent(nil), agents...)
+	kept := l.sessionDirs[:0]
+	for _, d := range l.sessionDirs {
+		if d.at.After(asked) {
+			kept = append(kept, d)
+		}
+	}
+	l.sessionDirs = kept
+}
+
+// noteSessionDir adds a starting session's workDir to what the repo-health scan reads, reporting
+// whether it is new to the list — a workspace the last listing did not have.
+func (l *runnerAgentList) noteSessionDir(agentID, dir string) bool {
+	if dir == "" {
+		return false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, a := range l.agents {
+		if a.ID == agentID && a.WorkDir == dir {
+			return false
+		}
+	}
+	for _, d := range l.sessionDirs {
+		if d.AgentID == agentID && d.Dir == dir {
+			return false
+		}
+	}
+	l.sessionDirs = append(l.sessionDirs, notedWorkDir{agentWorkDir{AgentID: agentID, Dir: dir}, time.Now()})
+	return true
+}
+
+// reportSessionCheckout makes a starting session's main checkout known to the control plane at once
+// when its workspace is new to this runner: the turn-end card offers Move straight away, and the
+// apiserver acts only on a checkout a heartbeat has reported.
+func reportSessionCheckout(agents *runnerAgentList, probe *repoHealthProbe, beatNow func(), agentID, dir string) {
+	if !agents.noteSessionDir(agentID, dir) {
+		return
+	}
+	go func() {
+		probe.refreshNow()
+		beatNow()
+	}()
 }
 
 func (l *runnerAgentList) snapshot() []RunnerAgent {
@@ -1234,6 +1295,11 @@ func (l *runnerAgentList) repoDirs() []agentWorkDir {
 	for _, a := range l.snapshot() {
 		dirs = append(dirs, agentWorkDir{AgentID: a.ID, Dir: a.WorkDir})
 	}
+	l.mu.Lock()
+	for _, d := range l.sessionDirs {
+		dirs = append(dirs, d.agentWorkDir)
+	}
+	l.mu.Unlock()
 	return dirs
 }
 
@@ -1309,6 +1375,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	defer runnerSecretStore.Store(nil)
 	// Heartbeat answers are applied here, and the ledger's expiries are checked every minute.
 	secretSync := newSecretReconciler(secrets)
+	forkRefs := newForkRefSweeper()
 	secretCtx, stopSecrets := context.WithCancel(context.Background())
 	defer stopSecrets()
 	go secretSync.run(secretCtx, secretExpiryInterval)
@@ -1789,6 +1856,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			// Owner-request secrets: fetch what is newly listed and remove what is not. Off this goroutine, which
 			// the fetches must not hold up; one reconcile runs at a time, in the order the answers came.
 			secretSync.post(resp.SecretGrants, resp.SecretGrantsRemoving)
+			// Fork keep-alive refs no open task names any more (design §2.6). Only on a beat that states
+			// both the open snapshots and the workspaces' directories, which is a full reconcile.
+			forkRefs.post(resp.ForkSnapshotsOpen, resp.AgentDirs)
 			// The legacy half of the scratch sweep: builds before the move staged a job's
 			// throwaway worktree beside its workspace, and only the control plane knows those
 			// directories. Once, before this response's jobs are launched, the parent of every
@@ -2249,6 +2319,20 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				}
 				repoHealth.refresh() // report the repaired state on the next heartbeat, not in a minute
 			}
+			// Main checkout reads and actions (main_checkout_actions.go). Each is handed out once
+			// and runs on its own goroutine, so a Move of many files never holds the heartbeat up;
+			// the checkout's lock serializes the ones on one checkout, and with merges into it.
+			for _, mr := range resp.MainCheckoutRequests {
+				go func(mr MainCheckoutRunnerRequest) {
+					handleMainCheckoutRequest(t, mr, mainCheckoutDeps{
+						owns:        func(root string) bool { return runnerOwnsCheckout(repoHealth.dirs(), root) },
+						turnRunning: pool.turnRunning,
+					})
+					if mr.Op == "action" {
+						repoHealth.refresh() // the bar shows the new state on the next heartbeat
+					}
+				}(mr)
+			}
 			// Remove an account slot the user asked to be rid of. Carried out here, on the
 			// heartbeat's own goroutine, for the reason the repair above is: it is a directory
 			// removal, and the request is redelivered until we report, so a second one racing the
@@ -2402,6 +2486,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		rememberMergeTarget(job.SessionID, job.MergeTarget)
 		execDir := pool.setupSupervisorCheckout(job, sessionExecDir(job.WorkDir), initiallyActive)
 		settleSessionCheckout(job, execDir)
+		reportSessionCheckout(&runnerAgents, repoHealth, beatNow, job.AgentID, job.WorkDir)
 		jobCtx, cancel := context.WithCancel(context.Background())
 		s, added := pool.register(job, cancel, initiallyActive)
 		if !added {
