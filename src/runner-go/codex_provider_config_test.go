@@ -142,8 +142,9 @@ func TestCodexProviderArgsLoadInTheInstalledCodex(t *testing.T) {
 // 0.169.0 (codexCustomProviderAppsOffConfig). The probe above runs in an empty home, which has no
 // connectors to leak, so this one borrows the machine's: it skips unless that home holds a ChatGPT
 // login, and unless a control run without the override shows the login has connectors to send, so a
-// pass is never a home with nothing in it. --ephemeral and a scratch sqlite_home keep the run out of
-// that home's history. The model is one codex does not know, so its tools go inline rather than
+// pass is never a home with nothing in it. --ephemeral keeps the run out of that home's history. It
+// keeps the home's own SQLite state: a scratch sqlite_home beside a home with history makes codex
+// backfill all of it first, which measured 90 s and more without a request. The model is one codex does not know, so its tools go inline rather than
 // behind tool_search, as they do on a local model.
 func TestCodexCustomProviderSendsNoConnectorToolsFromALoggedInHome(t *testing.T) {
 	t.Parallel()
@@ -182,7 +183,6 @@ func TestCodexCustomProviderSendsNoConnectorToolsFromALoggedInHome(t *testing.T)
 			args = kept
 		}
 		args = append(args[:len(args)-1:len(args)-1], "--ephemeral",
-			"-c", fmt.Sprintf("sqlite_home=%q", filepath.Join(dir, "state")),
 			"-c", "model_providers.orbit.request_max_retries=0", "-c", "model_providers.orbit.stream_max_retries=0", "-")
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
@@ -197,12 +197,16 @@ func TestCodexCustomProviderSendsNoConnectorToolsFromALoggedInHome(t *testing.T)
 		}
 		return connectorTools(t, rec.body())
 	}
-	if control := run(t, true); len(control) == 0 {
+	control := run(t, true)
+	if len(control) == 0 {
 		t.Skipf("the ChatGPT login in %s sends no connector tools even without %s; nothing to prove", home, codexCustomProviderAppsOffConfig)
 	}
-	if apps := run(t, false); len(apps) > 0 {
+	t.Logf("control without %s sent %d connector tools: %v", codexCustomProviderAppsOffConfig, len(control), control)
+	apps := run(t, false)
+	if len(apps) > 0 {
 		t.Errorf("Orbit's custom-provider argv sent the endpoint the login's connector tools: %v", apps)
 	}
+	t.Logf("Orbit's argv sent %d connector tools", len(apps))
 }
 
 // connectorTools names the mcp__codex_apps__ tools in a captured Responses request body.
