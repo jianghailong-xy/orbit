@@ -673,6 +673,10 @@ object TaskDetailLogic {
         return TaskActionRow(leading, trailing)
     }
 
+    /** The server's finished SOURCE sentence of a task forked from a session (task-fork-from-session §2.3, SR18), shown verbatim;
+     * a session's detail carries the same field. Null when absent, null or empty: older servers do not send it. */
+    fun forkSource(row: JsonObject): String? = row.text("forkSource")?.takeUnless { it.isBlank() }
+
     /** Asked first like the browser's: a gate row is not waiting on a prerequisite or a workspace. */
     fun runDisabledHint(task: JsonObject, assigneeHasRunner: Boolean): String? = when {
         TaskJudgment.isGateRow(task) -> TaskJudgment.gateHint(task.text("verificationState"))

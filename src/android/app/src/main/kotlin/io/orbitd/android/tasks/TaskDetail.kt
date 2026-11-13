@@ -651,6 +651,8 @@ private fun DetailsSection(task: JsonObject, data: TaskDetailData, workspaces: L
         DetailRow(TaskDetailCopy.startAtLabel, TaskDetailLogic.scheduleValue(task.text("runAt")), "⌄", enabled, "task-start-at") { edit("schedule") }
         task.obj("creatorSession")?.let { source -> DetailRow(TaskDetailCopy.createdFromLabel, source.text("title") ?: TaskDetailCopy.untitledSession, "›", true, "task-created-from") {
             source.text("id")?.let { open(OrbitRoute(Destination.SESSION, it)) } } }
+        TaskDetailLogic.forkSource(task)?.let { Text(it, Modifier.testTag("task-fork-source"), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant) }
         if (smartSelection) TaskDetailLogic.modelHintNote(task)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         val creator = task.text("creatorName") ?: workspaces.firstOrNull { task.text("creatorType") == "AGENT" && ObjectId.same(it.text("id"), task.text("creatorId")) }?.text("name")
         TaskDetailLogic.createdFootnote(creator, task.text("createdAt"))?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
