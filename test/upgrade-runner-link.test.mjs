@@ -16,7 +16,7 @@ const repo = path.resolve(import.meta.dirname, '..');
 const UPGRADES = ['.claude/skills/upgrade/upgrade.sh', '.agents/skills/upgrade/scripts/upgrade.sh'];
 const INSTALL = 'scripts/install-server.sh';
 const COPIED = [
-  ...UPGRADES, INSTALL, '.env.example', '.gitignore', 'docker-compose.yml', 'gateway/nginx.conf', 'scripts/pg-backup.sh',
+  ...UPGRADES, INSTALL, 'deploy/managed-runner/host.sh', '.env.example', '.gitignore', 'docker-compose.yml', 'gateway/nginx.conf', 'scripts/pg-backup.sh',
   'scripts/runner-link/door-check.js', 'deploy/runner-link/behind-web-gateway.env',
 ];
 const SECRET_NAMES = [

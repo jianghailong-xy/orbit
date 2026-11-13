@@ -4,6 +4,7 @@ import { ProjectAttributionModule } from '../projects/project-attribution.module
 import { ProjectHandoffModule } from '../projects/project-handoff.module';
 import { SessionsModule } from '../sessions/sessions.module';
 import { PushModule } from '../push/push.module';
+import { ProjectOrphanSweepService } from '../projects/project-orphan-sweep.service';
 import { TaskListsModule } from '../task-lists/task-lists.module';
 import { TasksController } from './tasks.controller';
 import { ReferenceExpansionService } from './reference-expansion';
@@ -55,6 +56,8 @@ import { TaskModelRoutingReportService } from './task-model-routing-report.servi
     TaskProgressService,
     SessionCreatedTasksService,
     TaskModelRoutingReportService,
+    // Rides TasksService's reconcile timer; provided here, once, for the reason the `exports` note gives.
+    ProjectOrphanSweepService,
   ],
   // Exported so RunnerApiModule can reuse this single instance. Providing TasksService
   // in a second module would construct a second one, and its onModuleInit would start a

@@ -8897,6 +8897,13 @@ button.chat-jump-start:hover {
   font-size: 12px;
   line-height: 1.5;
 }
+/* The one press an owner row offers (Restart the task): its sentence, then its action. */
+.evidence-restart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+}
 /* A PENDING session before its first event: instead of a lonely top-left note in a
    blank pane, fill the transcript area with a calm, centered "waiting to run" state. */
 .chat-queued-state {
