@@ -506,6 +506,8 @@ var linkDaemonRoutes = []string{
 	"POST /runner/wiki/repo-ops/:id/fragments",
 	"POST /runner/wiki/repo-ops/:id/result",
 	"POST /runner/codex-rate-limit-reset-result",
+	"POST /runner/main-checkout/:id/snapshot",
+	"POST /runner/main-checkout/:id/result",
 	"POST /runner/repo-cleanup-result",
 	"POST /runner/claude-history-result",
 	"POST /runner/dir-probe-result",

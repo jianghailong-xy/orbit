@@ -497,6 +497,23 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
     assert.equal(moved.json.runState, 'RUNNING');
   });
 
+  await t.test('(g) the card names the link for a chat app, is no view, and a token that opens nothing is the one 404', async () => {
+    const views = async () => Number((await sql.query(
+      'SELECT view_count AS n FROM share_link WHERE token = $1', [token],
+    )).rows[0].n);
+    const before = await views();
+    const card = await visit(at('/card'));
+    assert.equal(card.status, 200, card.body.toString());
+    assert.match(String(card.headers['content-type']), /^text\/html/);
+    const head = card.body.toString('utf8');
+    assert.match(head, /<title>Draw the mock and show me<\/title>/);
+    assert.match(head, /<meta property="og:description" content="A conversation shared from Orbit" \/>/);
+    assert.match(head, /<meta property="og:image" content="[^"]*\/icon-512\.png" \/>/);
+    assert.equal(await views(), before, 'a chat fetching the card counted as a view');
+
+    assert.equal((await visit(`${encodeURIComponent(newToken())}/card`)).status, 404);
+  });
+
   await t.test('(c) …and so did every other /shared answer this run received', () => {
     const statuses = new Set(surface.map((a) => a.status));
     for (const status of [200, 400, 404, 429]) assert.ok(statuses.has(status), `no ${status} was collected`);

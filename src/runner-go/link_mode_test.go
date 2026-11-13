@@ -430,10 +430,10 @@ func TestLinkDaemonRoutesAreTheControllersGuardedRoutes(t *testing.T) {
 	// Cursor key check's answer, a session's own key check and a background job's alert), since 2026-10-31 the
 	// directory probe's answer (docs/first-workspace-contract.md §2.4), since 2026-11-01 the Claude region check
 	// (docs/claude-region-check-contract.md §3), and since 2026-11-02 the upload of a file an agent keeps
-	// (docs/orbit-files-design.md §2.3), and since 2026-11-05 the abandoned-checkout inventory; less /complete, since the
-	// cleanup after the cut-over.
-	if n := len(guarded) + len(open); n != 55 {
-		t.Errorf("the controller has %d routes; 55 since the cleanup after the cut-over and the abandoned-checkout inventory", n)
+	// (docs/orbit-files-design.md §2.3), since 2026-11-05 the abandoned-checkout inventory, and since 2026-11-12 the two
+	// main checkout answers (docs/main-checkout-git-contract.md §10); less /complete, since the cleanup after the cut-over.
+	if n := len(guarded) + len(open); n != 57 {
+		t.Errorf("the controller has %d routes; 57 since the two main checkout answers", n)
 	}
 }
 

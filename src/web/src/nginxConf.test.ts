@@ -55,6 +55,27 @@ describe('nginx: a public share page', () => {
     // Every other path still falls back to the shell.
     expect(locationDirectives('/')).toContain('try_files $uri $uri/ /index.html');
   });
+
+  it('names its link in the shell\'s head for a chat app, and only there', () => {
+    // index.html's SSI include of /api/shared/<token>/card: WeChat read only "Orbit" off the bare shell.
+    // Through `location /share-card/`, whose every refusal is empty: through /api/ a 404 wrote its JSON
+    // into the head instead of the stub (nginx:alpine, 2026-11-13).
+    expect(share).toContain('ssi on');
+    expect(share).toContain('ssi_silent_errors on');
+    expect(locationDirectives('/')).not.toContain('ssi on');
+    const shell = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+    expect(shell).toContain(
+      '<!--# block name="bare_title" --><title>Orbit</title><!--# endblock -->' +
+        '<!--# include virtual="/share-card/${share_token}/card" stub="bare_title" -->',
+    );
+    const card = locationDirectives('/share-card/');
+    expect(card).toContain('internal');
+    expect(card).toContain('proxy_pass http://apiserver:3000/api/shared/');
+    expect(card).toContain('proxy_intercept_errors on');
+    expect(card).toContain('error_page 400 403 404 429 500 502 503 504 = @no_share_card');
+    expect(locationDirectives('@no_share_card')).toEqual(['return 204']);
+    expect(conf).toMatch(/map \$request_uri \$share_token \{/);
+  });
 });
 
 describe('nginx: hashed assets', () => {

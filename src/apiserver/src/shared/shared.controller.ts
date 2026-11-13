@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Controller,
   Get,
+  Header,
   NotFoundException,
   Param,
   Query,
@@ -12,12 +13,14 @@ import {
 import type { Response } from 'express';
 import { PublicIdPipe } from '../common/public-id';
 import { AttachmentsService } from '../attachments/attachments.service';
+import { publicOrigin } from '../email/email-settings.service';
 import { streamable } from '../files/files.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { parseMaxPayload } from '../sessions/truncate-payload';
 import { linkNotFound, withoutToolOutput } from '../share-links/share-link';
 import { type OpenLink, ShareLinksService } from '../share-links/share-links.service';
 import { PublicSurfaceGuard } from './public-surface.guard';
+import { shareCardHead } from './share-card';
 
 const num = (s?: string): number | undefined => {
   const n = Number(s);
@@ -71,6 +74,18 @@ export class SharedController {
           : { ...head, ...(await this.links.projectPage(link)) };
     if (preview !== '1') await this.links.recordView(link.id);
     return body;
+  }
+
+  /**
+   * The head lines of the link's page — its title, a line saying what kind of thing it is, the app
+   * icon — for a chat app that reads a link's page without running it (shared/share-card.ts).
+   * web/nginx.conf includes this into `/s/<token>`; on the one 404 the page keeps its bare title.
+   * Not a view: a chat fetching the page is not a person reading it.
+   */
+  @Get(':token/card')
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  async card(@Param('token') token: string): Promise<string> {
+    return shareCardHead(await this.links.cardOf(token), publicOrigin());
   }
 
   /**
