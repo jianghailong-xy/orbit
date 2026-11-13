@@ -19,6 +19,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { returnWaitingSessionsToOpen } from '../sessions/return-to-open';
 import { postRunFailureComment, reclaimStalledTask } from '../tasks/reclaim-stalled-task';
 import { RealtimeService } from './realtime.service';
+import { readRuntimeStartupFacts, runtimeStartupClock, runtimeStartupOverdue } from './runtime-startup-clock';
 import {
   classifyTransactionFault,
   loggedRetry,
@@ -633,7 +634,13 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           initializesRuntimeDynamically(provider) &&
           s.status === RunStatus.RUNNING &&
           !s.runtimeSessionId &&
-          now - lastTurn > runtimeStartupGrace
+          now - lastTurn > runtimeStartupGrace &&
+          // Not the time a runner restart or Update Now kept the turn waiting (runtime-startup-clock.ts).
+          runtimeStartupOverdue(
+            runtimeStartupClock(await readRuntimeStartupFacts(this.prisma, s.id, s.lastTurnAt)),
+            now,
+            runtimeStartupGrace,
+          )
         ) {
           await this.forceFinalize(
             s.id,

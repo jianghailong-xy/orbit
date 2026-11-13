@@ -88,7 +88,8 @@ public struct ProjectCrossing: Decodable, Equatable, Sendable, Identifiable {
     public let publicId: String?
     public let fromProjectId: String
     public let fromProjectPublicId: String?
-    public let toProjectId: String
+    /// Nil for a `MOVE_TASK` that takes its task out of its project, filed under no project.
+    public let toProjectId: String?
     public let toProjectPublicId: String?
     /// The two ends by name. Absent from a server that joined neither.
     public let fromProject: ProjectEnd?
@@ -121,7 +122,7 @@ public struct ProjectCrossing: Decodable, Equatable, Sendable, Identifiable {
     public let expiresAt: String?
 
     public init(id: String, publicId: String? = nil, fromProjectId: String,
-                fromProjectPublicId: String? = nil, toProjectId: String, toProjectPublicId: String? = nil,
+                fromProjectPublicId: String? = nil, toProjectId: String?, toProjectPublicId: String? = nil,
                 fromProject: ProjectEnd? = nil, toProject: ProjectEnd? = nil, kind: String,
                 subjectTaskId: String? = nil, subjectTaskPublicId: String? = nil,
                 subjectTask: SubjectTask? = nil, requestedBySession: AskSession? = nil,
@@ -161,8 +162,9 @@ public struct ProjectCrossing: Decodable, Equatable, Sendable, Identifiable {
         case requestedAt, decidedAt, expiresAt
     }
 
-    /// What a row cannot be answered without is required: which row, its two ends, what it is and
-    /// where it stands, and the key an answer echoes. Everything the card only reads is decoded one
+    /// What a row cannot be answered without is required: which row, its source, what it is and
+    /// where it stands, and the key an answer echoes. The target may be none: a move that takes its
+    /// task out of its project. Everything the card only reads is decoded one
     /// field at a time, so an older server's row — no joined titles, no subject read, no criteria —
     /// is a row with less on it, never a list that fails to decode.
     public init(from decoder: Decoder) throws {
@@ -171,7 +173,7 @@ public struct ProjectCrossing: Decodable, Equatable, Sendable, Identifiable {
         publicId = try? c.decodeIfPresent(String.self, forKey: .publicId)
         fromProjectId = try c.decode(String.self, forKey: .fromProjectId)
         fromProjectPublicId = try? c.decodeIfPresent(String.self, forKey: .fromProjectPublicId)
-        toProjectId = try c.decode(String.self, forKey: .toProjectId)
+        toProjectId = try c.decodeIfPresent(String.self, forKey: .toProjectId)
         toProjectPublicId = try? c.decodeIfPresent(String.self, forKey: .toProjectPublicId)
         fromProject = try? c.decodeIfPresent(ProjectEnd.self, forKey: .fromProject)
         toProject = try? c.decodeIfPresent(ProjectEnd.self, forKey: .toProject)
@@ -193,6 +195,9 @@ public struct ProjectCrossing: Decodable, Equatable, Sendable, Identifiable {
 
     /// A request to move a task that already exists — the kind whose yes IS the move.
     public var isMove: Bool { kind == ProjectCrossings.moveKind }
+
+    /// A move that takes its task out of its project, to be filed under no project.
+    public var isToNoProject: Bool { toProjectId == nil }
 }
 
 /// The two answers a person gives a crossing.
@@ -225,6 +230,8 @@ public enum ProjectCrossings {
     public static let unreadable = "Crossings could not be loaded"
     /// A project end the server sent no title for.
     public static let unnamedProject = "unnamed project"
+    /// The target end of a move that takes its task out of its project.
+    public static let noProject = "no project"
     public static let arrow = " → "
     public static let approveAsk = "Approve…"
     public static let refuseAsk = "Refuse…"
@@ -257,6 +264,9 @@ public enum ProjectCrossings {
     public static let moveCriterionGone = "The target project no longer states this criterion."
     public static let moveApproveConsequence =
         "Confirming is the move: the task joins the target project as soon as you answer, and nobody has to send the request again."
+    /// `moveApproveConsequence` for a move to no project, which no target project receives.
+    public static let moveOutApproveConsequence =
+        "Confirming takes the task out of this project; no project's acceptance counts it any more."
     public static let moveDenyConsequence =
         "Refusing is final for this request, and the task stays where it is. If you change your mind, move the task yourself."
 
@@ -314,7 +324,7 @@ public enum ProjectCrossings {
     }
 
     public static func toID(_ row: ProjectCrossing) -> String {
-        row.toProjectPublicId ?? row.toProjectId
+        row.toProjectPublicId ?? row.toProjectId ?? noProject
     }
 
     /// The task a move moves, by id.
@@ -355,10 +365,11 @@ public enum ProjectCrossings {
     public static func prompt(_ row: ProjectCrossing, _ decision: ProjectCrossingDecision) -> Prompt {
         let verb = decision == .approve ? "Approve" : "Refuse"
         let from = row.fromProject?.title ?? fromID(row)
-        let to = row.toProject?.title ?? toID(row)
+        let to = row.isToNoProject ? noProject : row.toProject?.title ?? toID(row)
         if row.isMove {
             return Prompt(verb: verb, from: from, to: to, subject: subjectTitle(row),
-                          consequence: decision == .approve ? moveApproveConsequence : moveDenyConsequence)
+                          consequence: decision == .deny ? moveDenyConsequence
+                              : row.isToNoProject ? moveOutApproveConsequence : moveApproveConsequence)
         }
         return Prompt(verb: verb, from: from, to: to, subject: row.title,
                       consequence: decision == .approve ? fileApproveConsequence : fileDenyConsequence)

@@ -523,7 +523,8 @@ struct ConsoleView: View {
         #endif
         .sheet(isPresented: $showShare) {
             if let baseURL = appModel.baseURL {
-                ShareSheet(kind: .session, rootID: sessionID, baseURL: baseURL, tokenStore: appModel.tokenStore)
+                ShareSheet(kind: .session, rootID: sessionID, baseURL: baseURL, tokenStore: appModel.tokenStore,
+                           guests: appModel.session(id: sessionID).map { .of($0, agents: appModel.agents) })
             }
         }
     }
@@ -843,12 +844,12 @@ struct TranscriptView: View {
     private var runnerUpdatingFoot: RunnerUpdatingFoot? {
         guard let session = runnerUpdatingSession,
               let id = RunnerUpdating.footBubbleID(console.state.items) else { return nil }
-        return RunnerUpdatingFoot(bubbleID: id, session: session, machine: console.runnerName)
+        return RunnerUpdatingFoot(bubbleID: id, session: session, machine: console.runnerName, runnerID: console.runnerID)
     }
 
     @ViewBuilder private var runnerUpdatingPage: some View {
         if let session = runnerUpdatingSession, RunnerUpdating.footBubbleID(console.state.items) == nil {
-            RunnerUpdatingQueuedView(session: session, machine: console.runnerName,
+            RunnerUpdatingQueuedView(session: session, machine: console.runnerName, runnerID: console.runnerID,
                                      onOpenSession: { app.route(to: .session($0)) })
         }
     }
@@ -1516,8 +1517,8 @@ struct TranscriptView: View {
     private var statusBar: some View {
         HStack(spacing: 8) {
             Circle().fill(console.connected ? .green : .orange).frame(width: 7, height: 7)
-            Text(headerStatus)
-                .font(.caption).foregroundStyle(.secondary)
+            headerStatus
+                .font(.caption)
             if let session = app.session(id: console.sessionID) {
                 SessionCoordinatorBadge(session: session)
             }
@@ -1526,23 +1527,44 @@ struct TranscriptView: View {
                 Label("\(console.state.pendingApprovals.count) pending", systemImage: "hand.raised.fill")
                     .font(.caption).foregroundStyle(.orange)
             }
-            if !console.state.background.isEmpty {
-                Label("\(console.state.background.count) background", systemImage: "gearshape.2")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+            // No count of background processes here: the Background processes tray above the
+            // composer already says how many, and it is the one that opens them.
         }
         .padding(.horizontal, 16).padding(.vertical, 6)
         .background(.bar)
+        // The band is a shade off the transcript's white; the hairline is what says where it ends.
+        // Wrapped in a stack so the bare `Divider()` draws horizontally (see `stickyQuestion`).
+        .overlay(alignment: .bottom) { VStack(spacing: 0) { Divider() } }
     }
 
-    private var headerStatus: String {
+    /// "run state · lifecycle · when", the run state leading in the colour the session's status
+    /// glyph has in the list (amber when it needs a decision, red when it failed, …) and semibold,
+    /// so the one word that says what to do next is not the same faint grey as the timestamp.
+    private var headerStatus: Text {
         let watching = app.watches?.summary(for: console.sessionID)
+        let now = Date()
         // The machine by name: a session held for the Claude region says Anthropic is unavailable there.
-        if let subtitle = SessionHeader.subtitle(for: app.session(id: console.sessionID), watching: watching,
-                                                 machine: console.runnerName) {
-            return subtitle
+        guard let session = app.session(id: console.sessionID),
+              let subtitle = SessionHeader.subtitle(for: session, watching: watching, now: now,
+                                                    machine: console.runnerName) else {
+            return Text(console.state.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
+                .foregroundColor(.secondary)
         }
-        return console.state.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized
+        let word = SessionHeader.statusWord(for: session, watching: watching, now: now, machine: console.runnerName)
+        guard subtitle.hasPrefix(word) else { return Text(subtitle).foregroundColor(.secondary) }
+        let tone = SessionStatusGlyph.make(for: session, watching: watching, now: now, machine: console.runnerName).tone
+        return Text(word).fontWeight(.semibold).foregroundColor(Self.statusWordColor(tone))
+            + Text(subtitle.dropFirst(word.count)).foregroundColor(.secondary)
+    }
+
+    private static func statusWordColor(_ tone: SessionStatusGlyph.Tone) -> Color {
+        switch tone {
+        case .brand:   return .blue
+        case .success: return .green
+        case .warning: return .orange
+        case .error:   return .red
+        case .neutral: return .primary
+        }
     }
     #endif
 }
@@ -2057,10 +2079,16 @@ struct TranscriptItemView: View {
         case .assistant(let b): AssistantBubbleView(bubble: b)
         case .thinking(let b):  ThinkingView(block: b)
         case .toolCall(let c):  ToolCardView(card: c, fullPayload: fullPayload)
-        case .interrupt(_, _, let runnerRestart):
-            // Nobody pressed Stop on a turn the runner's restart cut off: the row says what did (web parity).
-            Label(runnerRestart ? "Interrupted — the runner restarted" : "Interrupted", systemImage: "stop.circle")
-                .font(.orbitLabel).foregroundStyle(.secondary)
+        case .interrupt(_, _, let runnerRestart, let runnerUpdate):
+            if let runnerUpdate {
+                // The owner's Update Now cut it: the web's line, its ⊘ included (D4).
+                Text(RunnerPageCopy.runnerUpdateInterruptedLine(version: runnerUpdate.targetVersion))
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+            } else {
+                // Nobody pressed Stop on a turn the runner's restart cut off: the row says what did (web parity).
+                Label(runnerRestart ? "Interrupted — the runner restarted" : "Interrupted", systemImage: "stop.circle")
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+            }
         case .error(_, let message):
             if let console, console.executesDsh, let repair = DshRuntime.repair(message) {
                 DshRepairCardView(console: console, repair: repair)

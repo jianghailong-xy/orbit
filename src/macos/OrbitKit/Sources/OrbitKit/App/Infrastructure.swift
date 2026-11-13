@@ -37,6 +37,22 @@ public enum Infrastructure {
 
     public static func poolLine(pool: String) -> String { "\(pool) is unavailable" }
 
+    /// A machine draining for its update with the reader's work waiting on it (board 5's note, D3):
+    /// "studio-mac is updating — 1 session and 1 message waiting".
+    public static func updatingLine(machine: String, waiting: RunnerDrainWaiting) -> String {
+        var parts: [String] = []
+        if waiting.sessions > 0 { parts.append(waiting.sessions == 1 ? "1 session" : "\(waiting.sessions) sessions") }
+        if waiting.messages > 0 { parts.append(waiting.messages == 1 ? "1 message" : "\(waiting.messages) messages") }
+        return "\(machine) is updating — \(parts.joined(separator: " and ")) waiting"
+    }
+
+    /// "Updating to 0.1.254 · it starts no new work until 2 turns finish".
+    public static func updatingDetail(targetVersion: String?, turns: Int) -> String {
+        let updating = targetVersion.map { "Updating to \($0)" } ?? "Updating"
+        if turns <= 0 { return updating + " · it restarts once nothing is running" }
+        return updating + " · it starts no new work until " + (turns == 1 ? "1 turn finishes" : "\(turns) turns finish")
+    }
+
     /// "No account can run · no session can start on it" — the pool's own reason first.
     public static func poolDetail(reason: String) -> String { "\(reason) · no session can start on it" }
 
@@ -58,6 +74,9 @@ public enum Infrastructure {
             case offline(runnerID: String)
             /// A machine online with no coding CLI signed in and nothing on a key: its record, which signs one in.
             case noCliSignedIn(runnerID: String)
+            /// A machine draining for its update with the reader's work waiting on it: its record, where
+            /// Later and Update Now are.
+            case updating(runnerID: String)
             /// A pool no session can start on: its page — one of the account's own, or one it is in.
             case poolUnavailable(poolID: String, own: Bool)
         }
@@ -74,6 +93,7 @@ public enum Infrastructure {
             switch kind {
             case .offline(let runnerID): return "offline:\(runnerID)"
             case .noCliSignedIn(let runnerID): return "nocli:\(runnerID)"
+            case .updating(let runnerID): return "updating:\(runnerID)"
             case .poolUnavailable(let poolID, _): return "pool:\(poolID)"
             }
         }
@@ -101,6 +121,16 @@ public enum Infrastructure {
             return Attention(kind: .noCliSignedIn(runnerID: runner.id), line: noCliLine(machine: machine),
                              names: [machine], detail: RunnerAttention.noCliSignedInDetail(engines))
         }
+        // Draining for its update while something of the reader's waits on it: GET /runners sends
+        // drainWaiting only then (D3).
+        let updating = runners.filter { $0.online == true }.compactMap { runner -> Attention? in
+            guard let waiting = runner.drainWaiting, waiting.sessions + waiting.messages > 0 else { return nil }
+            let machine = RunnerPageFormat.displayName(runner)
+            let turns = runner.selfUpdate?.turnsInFlight ?? runner.updateTurns?.count ?? 0
+            return Attention(kind: .updating(runnerID: runner.id), line: updatingLine(machine: machine, waiting: waiting),
+                             names: [machine],
+                             detail: updatingDetail(targetVersion: runner.selfUpdate?.targetVersion, turns: turns))
+        }
         let pools = memberPools.map { (pool: $0, own: false) } + ownPools.map { (pool: $0, own: true) }
         let unavailable = pools.compactMap { entry -> Attention? in
             guard let reason = entry.pool.unavailable else { return nil }
@@ -108,7 +138,7 @@ public enum Infrastructure {
                              line: poolLine(pool: entry.pool.label), names: [entry.pool.label],
                              detail: poolDetail(reason: reason))
         }
-        return offline + noCli + unavailable
+        return offline + noCli + updating + unavailable
     }
 
     // MARK: - A key's model and name

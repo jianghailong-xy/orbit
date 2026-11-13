@@ -114,7 +114,9 @@ function harness(options: {
       },
     },
     runEvent: {
-      findFirst: async () => options.started ? { id: 'event-1' } : null,
+      // The runtime-started read; no turn here was cut by the owner's Update Now (no runner_update interrupt).
+      findFirst: async (args?: { where?: { type?: unknown } }) =>
+        options.started && args?.where?.type !== 'interrupt' ? { id: 'event-1' } : null,
     },
     attachment: { findMany: async () => [] },
   };

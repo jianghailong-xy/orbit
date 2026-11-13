@@ -36,6 +36,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import { ProjectHandoffService } from '../projects/project-handoff.service';
 import { SessionTagsService } from '../session-tags/session-tags.service';
 import { ShareLinksService } from '../share-links/share-links.service';
+import { SessionGuestsService } from '../session-guests/session-guests.service';
 import { WatchesService } from '../watches/watches.service';
 import { WatchEvaluatorService } from '../watches/watch-evaluator.service';
 import { ProvidersService } from '../providers/providers.service';
@@ -53,7 +54,7 @@ import {
  *   bash scripts/run-pg-spec.sh src/apiserver/src/sessions/engine-session-guard.pg.spec.ts
  *
  * What it holds:
- *   • every door in `ENGINE_SESSION_DOORS` — the 35 user routes and 32 runner routes derived from
+ *   • every door in `ENGINE_SESSION_DOORS` — the 37 user routes and 32 runner routes derived from
  *     the tenant-isolation registries — refuses a LANDING session with 409
  *     SESSION_IS_PLATFORM_DRIVEN, and the six body/query field cases do the same;
  *   • Trash is refused (and the row is untouched);
@@ -97,6 +98,7 @@ interface Stack {
   tags: SessionTagsService;
   shares: ShareLinksService;
   handoffs: ProjectHandoffService;
+  guests: SessionGuestsService;
   attachments: AttachmentsService;
   watches: WatchesService;
   receipts: MergeReceiptService;
@@ -147,6 +149,7 @@ async function connect(): Promise<Stack> {
     tags: new SessionTagsService(prisma, realtime),
     shares: new ShareLinksService(prisma),
     handoffs: new ProjectHandoffService(prisma),
+    guests: new SessionGuestsService(prisma, sessions),
     attachments: new AttachmentsService(prisma),
     watches: new WatchesService(prisma, {
       rollout: { mode: 'on', canaryOwners: new Set<string>(), problems: [] },
@@ -312,6 +315,8 @@ const USER_DRIVERS: Readonly<Record<string, Drive>> = {
   'DELETE /sessions/:id/share': (s, w, id) => s.shares.turnOff(w.ownerId, 'SESSION', id),
   'POST /sessions/:id/task-moves/decision': (s, w, id) =>
     s.handoffs.decideBatch(w.ownerId, w.ownerId, id, 'DENY', [{ handoffId: randomUUID(), crossingKey: 'a'.repeat(64) }], new Date()),
+  'POST /sessions/:id/guests': (s, w, id) => s.guests.invite(w.ownerId, id, 'nobody@engine-session-guard.invalid'),
+  'DELETE /sessions/:id/guests/:userId': (s, w, id) => s.guests.remove(w.ownerId, id, randomUUID()),
 };
 
 /** The runner door's per-route drivers, keyed exactly as the route census keys them. */

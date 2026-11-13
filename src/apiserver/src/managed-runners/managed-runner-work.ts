@@ -83,7 +83,8 @@ function workSql(runner: Prisma.Sql) {
       r."login_status" = ANY (${LOGIN_IN_FLIGHT}) OR r."install_status" IN ('pending', 'installing')
       OR r."repo_cleanup_status" = 'pending' OR r."codex_account_remove_status" = 'pending'
       OR r."claude_history_status" = 'pending' OR r."dir_probe_status" = 'pending' OR r."model_catalog_refresh_at" IS NOT NULL
-      OR r."self_update_requested_at" IS NOT NULL))`,
+      OR r."self_update_requested_at" IS NOT NULL OR r."self_update_postpone_until" IS NOT NULL
+      OR r."self_update_now_requested_at" IS NOT NULL))`,
   } satisfies Record<ManagedRunnerWork, Prisma.Sql>;
 }
 

@@ -255,7 +255,13 @@ final class PoolAccessCopyParityTests: XCTestCase {
         assertSays(card, "onClick={() => setSharing(true)}> \(WhoCanUseIt.addPeople) </Button>", in: Self.sharedPool)
         assertSays(card, "{ value: 'me', label: '\(WhoCanUseIt.Mode.justMe.label)' }, { value: 'people', label: '\(WhoCanUseIt.Mode.withPeople.label)' },",
                    in: Self.sharedPool)
-        assertSays(card, "{people ? `\(WhoCanUseIt.theySee("${pool.label}"))` : '\(WhoCanUseIt.nobodyElse)'}", in: Self.sharedPool)
+        // The Settings redesign moved the web's sentence to "under Account pools in their Settings"; this client
+        // still says "on their Machines & models page" (a native/web mismatch, reported on task
+        // 34w4fYtdRJeh7xnroLXzr rather than changed here). Pin each half until the native copy follows.
+        assertSays(card, "{people ? `They see ${pool.label} under Account pools in their Settings and in the session picker.` : '\(WhoCanUseIt.nobodyElse)'}",
+                   in: Self.sharedPool)
+        XCTAssertEqual(WhoCanUseIt.theySee("Codex Pool"),
+                       "They see Codex Pool on their Machines & models page and in the session picker.")
         assertSays(card, "{person.creator ? ( <span className=\"re-chip\">\(WhoCanUseIt.ownerChip)</span> ) : ( person.role === 'ADMIN' && <span className=\"re-chip\">\(SharedPoolPage.adminChip)</span> )}",
                    in: Self.sharedPool)
         assertSays(card, "const everything = accounts !== null && accounts > 0;", in: Self.sharedPool)
@@ -288,7 +294,10 @@ final class PoolAccessCopyParityTests: XCTestCase {
                 assertExpects(spec, line.runs.map { "\($0) · \(line.rest)" } ?? line.rest, in: Self.whoSpec)
             }
         }
-        assertExpects(spec, shared.modeHint, in: Self.whoSpec)
+        // The mode hint is theySee, which the web no longer says (see above): the spec's new sentence, and ours.
+        assertExpects(spec, "They see Codex Pool under Account pools in their Settings and in the session picker.",
+                      in: Self.whoSpec)
+        XCTAssertEqual(shared.modeHint, "They see Codex Pool on their Machines & models page and in the session picker.")
         assertExpects(spec, PoolAccessBoards.ownersPage(people: [], keys: []).access!.whoCanUseIt(accounts: 2).modeHint,
                       in: Self.whoSpec)
         assertExpects(spec, WhoCanUseIt.footLead + WhoCanUseIt.footRest, in: Self.whoSpec)
@@ -351,7 +360,12 @@ final class PoolAccessCopyParityTests: XCTestCase {
         let keyed = pool("{pool.label}", keys: [oneKey])
         let facts = SharePool.facts(keyed, accounts: nil)
         XCTAssertEqual(facts.count, 4)
-        assertSays(dialog, "<b>\(facts[0].lead)</b>\(facts[0].rest) </li>", in: Self.sharedPool)
+        // The first fact's rest: the web now says "under Account pools in their Settings", this client still
+        // "on their Machines & models page" (a native/web mismatch, reported on task 34w4fYtdRJeh7xnroLXzr
+        // rather than changed here). Pin each half until the native copy follows.
+        assertSays(dialog, "<b>\(facts[0].lead)</b> under Account pools in their Settings and in the session picker, and can start sessions on it. </li>",
+                   in: Self.sharedPool)
+        XCTAssertEqual(facts[0].rest, " on their Machines & models page and in the session picker, and can start sessions on it.")
         // No account of its owner's: the keys are the whole answer, as they always were.
         assertSays(dialog, "<b>\(facts[1].lead)</b>\(asWeb(facts[1].rest, ", which is ", ", which {pool.keys.length === 1 ? 'is' : 'are'} "))",
                    in: Self.sharedPool)
@@ -376,7 +390,11 @@ final class PoolAccessCopyParityTests: XCTestCase {
         let oneKeyPool = PoolAccessBoards.access(PoolAccessBoards.jiang, people: [], keys: ["orbit-org-1"])
         assertExpects(spec, SharePool.title(oneKeyPool), in: Self.whoSpec)
         assertExpects(spec, SharePool.emailsLabel, in: Self.whoSpec)
-        for fact in SharePool.facts(oneKeyPool, accounts: 2) {
+        let spoken = SharePool.facts(oneKeyPool, accounts: 2)
+        // The first is the mismatch above: the spec's new sentence, and ours.
+        assertExpects(spec, "\(spoken[0].lead) under Account pools in their Settings and in the session picker, and can start sessions on it.",
+                      in: Self.whoSpec)
+        for fact in spoken.dropFirst() {
             assertExpects(spec, fact.lead + fact.rest, in: Self.whoSpec)
         }
         let risk = SharePool.risk(PoolAccessBoards.access(PoolAccessBoards.jiang, people: [], keys: []), accounts: 2)

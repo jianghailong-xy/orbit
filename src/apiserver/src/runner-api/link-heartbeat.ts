@@ -177,6 +177,12 @@ export const HEARTBEAT_DELIVERIES = {
   repoCleanupRequest: { how: 'MARKED', writers: ['workspaces/workspaces.service.ts#requestRepoCleanup'], pending: 'a clean-up pending' },
   refreshModelCatalog: { how: 'MARKED', writers: ['runners/runners.service.ts#requestModelCatalogRefresh'], pending: 'until a beat claims it' },
   checkSelfUpdate: { how: 'MARKED', writers: ['runners/runners.service.ts#requestSelfUpdate'], pending: 'until a beat claims it' },
+  drainScopedClaims: {
+    how: 'EVERY_BEAT',
+    reads: "the beat's own draining flag: a word about this server, which the quiet answer to a draining beat carries as the full one does",
+  },
+  postponeSelfUpdateUntil: { how: 'MARKED', writers: ['runners/runners.service.ts#postponeSelfUpdate'], pending: 'until a beat claims it' },
+  selfUpdateNow: { how: 'MARKED', writers: ['runners/runners.service.ts#updateSelfNow'], pending: 'until a beat claims it' },
   codexRateLimitResetRequest: {
     how: 'MARKED',
     writers: ['runners/codex-rate-limit-reset.service.ts#create'],
@@ -495,7 +501,7 @@ export function linkBeatVerdict(
  */
 export function quietHeartbeatAnswer(
   row: Pick<LinkBeatRow, 'maxConcurrent' | 'minFreeDiskMb'>,
-  extra: Pick<RunnerHeartbeatResponse, 'cursorKeyChecks'> & { linkHints?: RunnerLinkHints },
+  extra: Pick<RunnerHeartbeatResponse, 'cursorKeyChecks'> & { linkHints?: RunnerLinkHints; draining?: boolean },
 ): RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints } {
   return {
     cancelSessionIds: [],
@@ -505,6 +511,9 @@ export function quietHeartbeatAnswer(
     mergeRequests: [],
     commitRequests: [],
     artifactRequests: [],
+    // As the full answer says it, to a draining beat: a runner draining for an update reads its absence as an
+    // older server (runner-go drainClaimScope).
+    ...(extra.draining ? { drainScopedClaims: true } : {}),
     ...(extra.cursorKeyChecks && extra.cursorKeyChecks.length > 0 ? { cursorKeyChecks: extra.cursorKeyChecks } : {}),
     ...(extra.linkHints ? { linkHints: extra.linkHints } : {}),
   };
@@ -835,7 +844,9 @@ export async function readLinkReconcilePending(prisma: Pick<PrismaService, '$que
              OR r."claude_history_status" IN ('pending', 'scanning')
              OR r."dir_probe_status" IN ('pending', 'probing')
              OR r."model_catalog_refresh_at" IS NOT NULL
-             OR r."self_update_requested_at" IS NOT NULL)
+             OR r."self_update_requested_at" IS NOT NULL
+             OR r."self_update_postpone_until" IS NOT NULL
+             OR r."self_update_now_requested_at" IS NOT NULL)
       )
     ) AS "pending"
   `;
@@ -866,6 +877,8 @@ export function heartbeatAnswerHandsOut(answer: RunnerHeartbeatResponse): boolea
     || answer.managedSleep !== undefined
     || answer.refreshModelCatalog === true
     || answer.checkSelfUpdate === true
+    || answer.postponeSelfUpdateUntil !== undefined
+    || answer.selfUpdateNow === true
   );
 }
 

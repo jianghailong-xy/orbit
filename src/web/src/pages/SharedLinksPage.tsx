@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CopyOutlined, WarningOutlined } from '@ant-design/icons';
 import { useSearchParams } from 'react-router-dom';
 import { putShareLink, turnOffShareLinks, type ShareLink, type ShareLinkState } from '../api';
+import { SettingsHeader } from '../components/settings';
 import { canShareKind, ShareModal } from '../components/ShareModal';
 import { taskStatusLabel } from '../components/TaskStatusPill';
 import { Button } from '../components/ui/Button';
@@ -123,14 +124,11 @@ export function SharedLinksPage() {
   };
 
   return (
-    <div className="following-page shared-links-page">
-      <header className="following-head">
-        <h1 className="page-title">Shared links</h1>
-        <p className="following-sub">
-          Everything you’ve made viewable by link. Anyone who has one of these links can open what it
-          includes — no sign-in.
-        </p>
-      </header>
+    <div className="settings-page settings-page--wide shared-links-page">
+      <SettingsHeader
+        title="Shared links"
+        description="Everything you’ve made viewable by link. Anyone who has one of these links can open what it includes — no sign-in."
+      />
       <div className="following-tabs" role="tablist" aria-label="Shared links">
         {TABS.map(({ key, state, label }) => (
           <button

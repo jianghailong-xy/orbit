@@ -2930,13 +2930,35 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // (backfilled only on rows whose revision is still the criterion's) and two partial indexes on
       // activity. No completion ledger, DONE fence, preserved trigger or function is changed.
       '0555_project_done_card_records',
+      // 0560 adds the session_guest table and widens three CHECKs (external sender, its session-row preview, the
+      // activity credential kind); no preserved rows, triggers or DONE fence change.
+      '0560_session_guest',
+      // 0571 adds one nullable TIMESTAMP(3) `self_update_postpone_until` on `runner` (no default, catalog-only); no
+      // preserved rows, triggers or DONE fence change, and no row is written.
+      '0571_runner_self_update_postpone',
+      // 0572 adds session_guest's daily message count (two columns); no preserved rows, triggers or DONE fence change.
+      '0572_session_guest_daily_turns',
+      // 0585 adds project_orphan_notice, the orphan sweep's ledger: one new table, no existing row read
+      // or rewritten. No completion ledger, DONE fence, preserved trigger or function is changed.
+      '0585_project_orphan_notice',
+      // 0590 adds one nullable TIMESTAMP(3) `self_update_now_requested_at` on `runner` (no default, catalog-only); no
+      // preserved rows, triggers or DONE fence change, and no row is written.
+      '0590_runner_self_update_now',
       // 0591 adds statement triggers on owner_request and project_handoff_approval that call 0511's
       // `open_list_bump_owner`, so the Open list's version moves when an owner request or a task move
       // changes; they write `open_list_epoch` alone. No preserved rows, preserved triggers or DONE fence change.
       '0591_open_list_owner_requests_and_moves',
       // 0592 adds one partial index on owner_request (PENDING rows by asking session); no preserved rows,
       // triggers or DONE fence change.
-      '0592_pending_owner_question_indexes'],
+      '0592_pending_owner_question_indexes',
+      // 0595 adds one nullable TIMESTAMP(3) `drain_waiting_pushed_at` on `runner` (no default, catalog-only); no
+      // preserved rows, triggers or DONE fence change, and no row is written.
+      '0595_runner_drain_waiting_push',
+      // 0610 lets project_handoff_approval.to_project_id be NULL for a MOVE_TASK (one CHECK),
+      // rebuilds 0386's pending-move index NULLS NOT DISTINCT, and restates 0389's
+      // task_claimed_project_move_guard with the target compared IS NOT DISTINCT FROM. No preserved
+      // rows, triggers or DONE fence change, and no row is written.
+      '0610_project_handoff_move_out'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

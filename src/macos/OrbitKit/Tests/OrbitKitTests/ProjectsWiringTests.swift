@@ -235,13 +235,13 @@ final class ProjectsWiringTests: XCTestCase {
     /// system's sidebar toggle, and a work row only switches section, as the source list did: the list
     /// column is on screen anyway, and the detail keeps the page it had.
     /// The Mac's source list is the drawer's rail (the owner's picks on docs/mocks/macos-sidebar, 01, 2026-11-12):
-    /// the work first with its amber counts, Waiting on you, the Workspaces one line each with the drawer's
+    /// the work first with its amber counts, then the Workspaces one line each with the drawer's
     /// row and a ⌘ hint, then every open project. No New session in the rail, and no Following, Settings
     /// or Admin rows: the footer's gear and account menu reach them.
     func testTheMacSidebarIsTheDrawersRail() throws {
         let main = code(try appSource("Views/MainView.swift"))
         let sidebar = try slice(main, from: "struct SectionSidebar: View {", to: "struct AccountFooter: View {")
-        try assertInOrder(sidebar, ["ForEach(AppSection.workSections) { section in", "OwnerRequestInboxEntry()",
+        try assertInOrder(sidebar, ["ForEach(AppSection.workSections) { section in",
                                     "Section(AppSection.agents.title, isExpanded: $workspacesExpanded)",
                                     "ForEach(openProjects) { project in"],
                           "the drawer's order")

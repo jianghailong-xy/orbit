@@ -241,6 +241,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     snippet: "// A move card is drawn in a conversation, never in the platform's landing container (§2.9 LS6).\n    assertEngineSession(session);",
     note: 'POST /sessions/:id/task-moves/decision',
   },
+  'SessionGuestsService.ownedSession': {
+    file: 'session-guests/session-guests.service.ts',
+    snippet: '// Nobody is invited into the platform\'s landing record: it runs no engine turn (§2.9 LS6).\n    if (opts.write) assertEngineSession(session);',
+    note: 'POST /sessions/:id/guests and DELETE /sessions/:id/guests/:userId',
+  },
   'ShareLinksService.turnOff': {
     file: 'share-links/share-links.service.ts',
     snippet: 'if (kind === \'SESSION\') assertEngineSession(root);\n    await this.end({ ownerId, ...rootColumn(kind, rootId) }, new Date());',
@@ -285,7 +290,7 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
 
 /** Every derived door and the guard site that refuses a LANDING for it. */
 export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
-  // ── the user door (35) ────────────────────────────────────────────────────────────────────────
+  // ── the user door (37) ────────────────────────────────────────────────────────────────────────
   'PATCH /sessions/:id': 'SessionsService.rename',
   'DELETE /sessions/:id': 'SessionsService.transitionEnd',
   'DELETE /sessions/:id/purge': 'SessionsService.purge',
@@ -321,6 +326,8 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'PUT /sessions/:id/share': 'ShareLinksService.put',
   'DELETE /sessions/:id/share': 'ShareLinksService.turnOff',
   'POST /sessions/:id/task-moves/decision': 'ProjectHandoffService.decideBatch',
+  'POST /sessions/:id/guests': 'SessionGuestsService.ownedSession',
+  'DELETE /sessions/:id/guests/:userId': 'SessionGuestsService.ownedSession',
 
   // ── the runner door (32) ──────────────────────────────────────────────────────────────────────
   'POST /runner/sessions/:id/source/pin': 'RunnerApiController.assertEngineSessionById',

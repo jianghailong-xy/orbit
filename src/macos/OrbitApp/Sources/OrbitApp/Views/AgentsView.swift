@@ -48,7 +48,9 @@ struct WorkspaceFolderIcon: View {
 /// The shared first-level Workspace row used by iPhone, iPad and Mac navigation. Runner is
 /// descriptive metadata, never a disclosure parent; the trailing slot carries at most one live
 /// state, with user attention taking precedence over background work. On the Mac a row with no
-/// state shows its faint ⌘1…⌘9 shortcut there instead (`shortcut`, 0-based; nil on iOS).
+/// state shows its faint ⌘1…⌘9 shortcut there while ⌘ is held (`shortcut`, 0-based; nil otherwise).
+/// An empty `runnerLabel` leaves the runner off the row (the Mac names it only where two workspaces
+/// share a name).
 struct WorkspaceNavigationRow: View {
     let agent: Agent
     let runnerLabel: String
@@ -69,9 +71,11 @@ struct WorkspaceNavigationRow: View {
             HStack(spacing: 0) {
                 workspaceName
                 disabledBadge
-                Text(" · \(runnerLabel)")
-                    .lineLimit(1)
-                    .foregroundStyle(.secondary)
+                if !runnerLabel.isEmpty {
+                    Text(" · \(runnerLabel)")
+                        .lineLimit(1)
+                        .foregroundStyle(.secondary)
+                }
             }
             Spacer(minLength: 6)
             if case .needsYou(let count) = status {
@@ -376,9 +380,10 @@ struct AgentPanes: View {
     @FocusState private var listFocused: Bool
 
     var body: some View {
-        // Option B: the column is just the session list. The scope switcher and New-session action
-        // live in the window toolbar (below) — like Finder/Mail hosting view controls in the toolbar
-        // rather than stacking chrome bands above the list.
+        // The column is the session list with its Open / Completed / Trash scope over it (macOS: a
+        // top inset; regular iPad: the same picker in its refresh-safe top inset). The scope used to
+        // ride the window toolbar's centre on the Mac, where it sat over the detail pane and read as
+        // a control of the conversation rather than of this list. New session stays in the toolbar.
         //
         // The selection is for the three-column shape only: it is what fills the detail pane beside
         // this column. Compact's rows push their own pages onto the section's `NavigationStack`, so
@@ -581,6 +586,17 @@ struct AgentPanes: View {
                 await agents.loadSessions(agentID: agent.id, view: view)
             }
         }
+        #if os(macOS)
+        // The scope over the list it filters, centred and content-width; the pane's own surface
+        // shows behind it, so it adds no band of chrome.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            scopePicker
+                .fixedSize()
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+        }
+        #endif
         .toolbar {
             #if os(iOS)
             // iPhone keeps scope in this compact menu. Regular iPad exposes scope in the persistent
@@ -631,8 +647,7 @@ struct AgentPanes: View {
                 }
             }
             #else
-            // macOS: the wide window toolbar keeps the platform-idiomatic layout — New Session
-            // (leading), a compact centered segmented scope switcher (principal), and a settings gear.
+            // macOS: New Session (leading) and a settings gear; the scope is over the list (above).
             ToolbarItem(placement: .navigation) {
                 Button {
                     app.startComposingSession()
@@ -640,14 +655,6 @@ struct AgentPanes: View {
                     Label("New session", systemImage: "square.and.pencil")
                 }
                 .help("Start a new session with \(agent.name)")
-            }
-            ToolbarItem(placement: .principal) {
-                Picker("View", selection: $view) {
-                    ForEach(SessionView.pickerCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
             }
             ToolbarItem(placement: .primaryAction) {
                 Button { showSettings = true } label: {
@@ -670,7 +677,8 @@ struct AgentPanes: View {
         // list-owned like the tag picker above. iOS only, as the rows' Share is.
         .sheet(item: $sharingSession) { s in
             if let baseURL = app.baseURL {
-                ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore)
+                ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore,
+                           guests: .of(s, agents: app.agents))
             }
         }
         // The Move panel for the row whose Move was tapped: the folders of this workspace, counted
@@ -709,6 +717,18 @@ struct AgentPanes: View {
         }
     }
 
+    /// Open / Completed / Trash, over the list on the Mac and on regular iPad. This is deliberately
+    /// content-width, not fixed-width, so it continues to fit the middle column at larger Dynamic
+    /// Type sizes.
+    private var scopePicker: some View {
+        Picker("Session scope", selection: $view) {
+            ForEach(SessionView.pickerCases) { Text($0.title).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .accessibilityLabel("Session scope")
+    }
+
     /// What the List's selection is bound to: the projection onto the section's stack in the
     /// three-column shape, nothing at all in the compact one (whose rows carry their own
     /// destinations). Written as its own property so its type is decided here, not at the call site.
@@ -721,17 +741,6 @@ struct AgentPanes: View {
     /// width opts into the iPhone treatment, matching the app root's shell switch.
     private var listPresentation: SessionListPresentation {
         SessionListPresentation.resolve(isCompactWidth: horizontalSizeClass == .compact)
-    }
-
-    /// Open / Completed / Trash stay visible on regular iPad. This is deliberately content-width,
-    /// not fixed-width, so it continues to fit the middle column at larger Dynamic Type sizes.
-    private var scopePicker: some View {
-        Picker("Session scope", selection: $view) {
-            ForEach(SessionView.pickerCases) { Text($0.title).tag($0) }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .accessibilityLabel("Session scope")
     }
 
     /// One options menu serves both iOS shells. Compact includes lifecycle scope exactly as before;

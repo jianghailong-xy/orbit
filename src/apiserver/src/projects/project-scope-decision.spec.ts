@@ -221,6 +221,38 @@ test('unclear target: work that names no project is refused and handed to a pers
   );
 });
 
+test('out of every project: a declared move from home is a question, and only a yes takes it out', () => {
+  const out = (over: Overrides = {}) => handoff({ targetProjectId: null, ...over });
+  const asked = decide(out());
+  assert.equal(asked.code, 'CROSS_PROJECT_APPROVAL_REQUIRED');
+  assert.equal(asked.rule, 'R10_NO_APPROVAL');
+  assert.deepEqual(asked.ends, { from: A, to: null });
+  assert.equal(asked.crossing, true);
+
+  const yes = approval({ toProjectId: null });
+  assert.equal(decide(out({ world: { approval: yes } })).rule, 'R14_HANDOFF_APPROVED');
+  assert.equal(decide(out({ world: { approval: { ...yes, state: 'PENDING' } } })).rule, 'R11_APPROVAL_PENDING');
+  // A yes to moving it into B is not a yes to taking it out.
+  assert.equal(decide(out({ world: { approval: approval() } })).rule, 'R9_APPROVAL_TARGET_MISMATCH');
+
+  // No session holds "no project", so only the project the task leaves may ask.
+  const bystander = decide(out({ currentProjectId: B }));
+  assert.equal(bystander.rule, 'R6_OUT_OF_SCOPE');
+
+  // Undeclared, it is still R4; and a create naming no project has no task to ask about.
+  assert.equal(decide(write({ operation: 'UPDATE_TASK', taskId: TASK, currentProjectId: A,
+    targetProjectId: null })).rule, 'R4_NO_TARGET_PROJECT');
+  assert.equal(decide(write({ operation: 'HANDOFF_TASK', targetProjectId: null })).rule,
+    'R4_NO_TARGET_PROJECT');
+
+  // Out of a settled project: only a task none of its criteria count.
+  const settled = { projectStatus: { [A]: 'DONE' as const, [B]: 'OPEN' as const } };
+  assert.equal(decide(out({ world: { ...settled, servesSourceCriterion: true } })).rule,
+    'R8B_SETTLED_CRITERION_SERVED');
+  assert.equal(decide(out({ world: { ...settled, servesSourceCriterion: false } })).rule,
+    'R10_NO_APPROVAL');
+});
+
 test('DONE project: a settled project takes no new work, and no approval buys a way in', () => {
   const intoDone = decide(write({ world: { projectStatus: { [A]: 'DONE', [B]: 'OPEN' } } }));
   assert.equal(intoDone.code, 'PROJECT_REOPEN_REQUIRED');

@@ -82,6 +82,28 @@ class InfrastructureTest {
         assertEquals("New box is offline · Never checked in · its subscriptions are unavailable until it’s back", says(attention(listOf(never))[0]))
     }
 
+    /** A machine draining for its update with the reader's work waiting on it (board 5's note, D3): a line that opens its record, where
+     * Later and Update Now are (OrbitKit testAMachineUpdatingWithWorkWaitingIsALine). Not draining, or nothing waiting: no line. */
+    @Test fun aMachineUpdatingWithWorkWaitingIsALine() {
+        val studio = obj("""{"id":"studio","name":"studio-mac","online":true,"activeSessions":2,"maxConcurrent":4,
+            "lastHeartbeatAt":"2026-10-07T08:59:50.000Z",
+            "selfUpdate":{"state":"waitingForIdle","phase":"draining","targetVersion":"0.1.254","turnsInFlight":2},
+            "drainWaiting":{"sessions":1,"messages":1}}""")
+        val lines = attention(listOf(hpc, studio))
+        assertEquals(listOf(Infrastructure.Kind.Updating("studio")), lines.map { it.kind })
+        assertEquals("updating:studio", lines[0].id)
+        assertEquals(listOf("studio-mac"), lines[0].names)
+        assertEquals("studio-mac is updating — 1 session and 1 message waiting · Updating to 0.1.254 · it starts no new work until 2 turns finish",
+            says(lines[0]))
+        val one = obj("""{"id":"studio","name":"studio-mac","online":true,"selfUpdate":{"state":"waitingForIdle","phase":"draining",
+            "targetVersion":"0.1.254","turnsInFlight":1},"drainWaiting":{"sessions":1,"messages":0}}""")
+        assertEquals("studio-mac is updating — 1 session waiting · Updating to 0.1.254 · it starts no new work until 1 turn finishes",
+            says(attention(listOf(one))[0]))
+        val nothingWaits = obj("""{"id":"studio","name":"studio-mac","online":true,"selfUpdate":{"state":"waitingForIdle",
+            "phase":"draining","targetVersion":"0.1.254","turnsInFlight":2}}""")
+        assertEquals("a drain nothing waits on needs nobody", emptyList<Infrastructure.Attention>(), attention(listOf(nothingWaits)))
+    }
+
     /** A pool no session can start on: its own reason, and its page — the account's own, or one it is in, which come first. */
     @Test fun aPoolNoSessionCanStartOnIsALine() {
         val lines = attention(fleet, own = listOf(claudePool(unavailable = "No account can run")))
