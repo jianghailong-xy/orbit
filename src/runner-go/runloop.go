@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -941,6 +942,16 @@ func reclaimSessions(
 		retrySnapshot := false
 		skippedAny := false
 		lastID := ""
+		// The rows this pass takes over, in ascending id order. They are taken over in chunks of
+		// takeoverBatchSize, one request each, and each row's answer is judged in that order as the
+		// one request per row was judged; a conflict that refreshes the snapshot leaves the rest of
+		// its chunk's answers unread, and their takeovers are ended with the pass's.
+		type takeoverCandidate struct {
+			job          *ClaimedSession
+			locallyKnown bool
+			status       string
+		}
+		var candidates []takeoverCandidate
 		for i := range sessions {
 			r := sessions[i]
 			if r.SessionID == "" || r.SessionID == lastID {
@@ -970,50 +981,82 @@ func reclaimSessions(
 				idle = append(idle, job)
 				continue
 			}
-			endTakeover := func() {}
-			if prepareTakeover != nil {
-				prepared, prepareErr := prepareTakeover(job)
-				if prepareErr != nil {
-					endTakeoversExcept(nil)
-					return nil, nil, false, prepareErr
-				}
-				endTakeover = prepared
-				begun[r.SessionID] = prepared
+			candidates = append(candidates, takeoverCandidate{job: job, locallyKnown: locallyKnown, status: r.Status})
+		}
+	chunks:
+		for start := 0; start < len(candidates); {
+			end := start + t.takeoverBatchSize()
+			if end > len(candidates) {
+				end = len(candidates)
 			}
-			status, takeoverErr := takeoverClaimedSession(ctx, t, job)
-			if takeoverErr != nil {
-				// 409 means another process advanced the snapshot owner or the server
-				// is fail-closing the row (e.g. a fenced worktree operation); 403 means
-				// the assignment changed after reclaim. Refresh the whole ordered set —
-				// a bounded number of times per session, so one persistently rejected
-				// row cannot livelock this loop and starve the claim loop.
-				if isTransportHTTPStatus(takeoverErr, 409) || isTransportHTTPStatus(takeoverErr, 403) {
-					conflicts[r.SessionID]++
-					if conflicts[r.SessionID] >= takeoverConflictLimit {
-						logln(fmt.Sprintf("reclaim: setting session %s aside after %d takeover conflicts (last: %v); retrying on a later reclaim",
-							r.SessionID, conflicts[r.SessionID], takeoverErr))
-						skippedAny = true
-						continue
+			chunk := candidates[start:end]
+			jobs := make([]*ClaimedSession, len(chunk))
+			endTakeovers := make([]func(), len(chunk))
+			for k, c := range chunk {
+				jobs[k] = c.job
+				endTakeovers[k] = func() {}
+				if prepareTakeover != nil {
+					prepared, prepareErr := prepareTakeover(c.job)
+					if prepareErr != nil {
+						endTakeoversExcept(nil)
+						return nil, nil, false, prepareErr
 					}
-					logln(fmt.Sprintf("reclaim: takeover conflict for %s: %v; refreshing snapshot", r.SessionID, takeoverErr))
-					retrySnapshot = true
-					break
+					endTakeovers[k] = prepared
+					begun[c.job.SessionID] = prepared
 				}
+			}
+			rows, chunkErr := takeoverChunk(ctx, t, jobs)
+			if errors.Is(chunkErr, errTakeoverBatchUnsupported) {
+				// A control plane older than the batch takeover: nothing was taken over. The chunk is
+				// taken over again one session at a time, as it was before there was one.
+				for k, c := range chunk {
+					endTakeovers[k]()
+					delete(begun, c.job.SessionID)
+				}
+				continue
+			}
+			if chunkErr != nil {
 				endTakeoversExcept(nil)
-				return nil, nil, false, takeoverErr
+				return nil, nil, false, chunkErr
 			}
-			if !reclaimStatusOpen(status) {
-				continue
+			for k, c := range chunk {
+				job := c.job
+				status, takeoverErr := rows[k].status, rows[k].err
+				if takeoverErr != nil {
+					// 409 means another process advanced the snapshot owner or the server
+					// is fail-closing the row (e.g. a fenced worktree operation); 403 means
+					// the assignment changed after reclaim. Refresh the whole ordered set —
+					// a bounded number of times per session, so one persistently rejected
+					// row cannot livelock this loop and starve the claim loop.
+					if isTransportHTTPStatus(takeoverErr, 409) || isTransportHTTPStatus(takeoverErr, 403) {
+						conflicts[job.SessionID]++
+						if conflicts[job.SessionID] >= takeoverConflictLimit {
+							logln(fmt.Sprintf("reclaim: setting session %s aside after %d takeover conflicts (last: %v); retrying on a later reclaim",
+								job.SessionID, conflicts[job.SessionID], takeoverErr))
+							skippedAny = true
+							continue
+						}
+						logln(fmt.Sprintf("reclaim: takeover conflict for %s: %v; refreshing snapshot", job.SessionID, takeoverErr))
+						retrySnapshot = true
+						break chunks
+					}
+					endTakeoversExcept(nil)
+					return nil, nil, false, takeoverErr
+				}
+				if !reclaimStatusOpen(status) {
+					continue
+				}
+				if c.locallyKnown && !reclaimInitiallyActive(status) {
+					continue
+				}
+				pending = append(pending, reclaimedStart{
+					job:             job,
+					initiallyActive: reclaimInitiallyActive(status),
+					endTakeover:     endTakeovers[k],
+					status:          c.status,
+				})
 			}
-			if locallyKnown && !reclaimInitiallyActive(status) {
-				continue
-			}
-			pending = append(pending, reclaimedStart{
-				job:             job,
-				initiallyActive: reclaimInitiallyActive(status),
-				endTakeover:     endTakeover,
-				status:          r.Status,
-			})
+			start = end
 		}
 		if !retrySnapshot {
 			endTakeoversExcept(pending)
@@ -2681,6 +2724,10 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}
 			return endTakeover, status, nil
 		}
+		// The idle phase takes its sessions over a chunk per request (takeoverClaimedSessions), each
+		// prepared locally first as the single takeover above prepares one.
+		startupStarts.batchSize = t.takeoverBatchSize
+		startupStarts.takeoverMany = batchIdleTakeover(loopCtx, t, prepareTakeover)
 		startupStarts.onStarted = func(id string) { reclaimDeferred.started(id, beatNow) }
 		startupStarts.run(reclaimStartWorkers, func() {
 			idleHanded, idleTook := startupStarts.idlePhase()

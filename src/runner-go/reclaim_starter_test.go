@@ -46,6 +46,9 @@ func TestReclaimStartsRunningThenPendingThenIdleNewestFirst(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/runner/sessions/reclaim":
 			_ = json.NewEncoder(w).Encode(ReclaimResponse{Sessions: snapshot})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/runner/sessions/takeover-leases":
+			// A control plane from before the batch takeover.
+			http.NotFound(w, r)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/takeover-leases"):
 			parts := strings.Split(r.URL.Path, "/")
 			id := parts[len(parts)-2]

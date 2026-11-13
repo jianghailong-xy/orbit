@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -46,6 +47,12 @@ type reclaimStarter struct {
 	// success the func it returns ends the local takeover, and the status is the server's answer. Set
 	// before run whenever there are idle sessions.
 	takeover func(job *ClaimedSession) (endTakeover func(), status string, err error)
+	// takeoverMany, if set, makes several idle sessions' takeovers in one request, as takeover makes one:
+	// an answer per job, in order. errTakeoverBatchUnsupported says none was made and they are to be made
+	// one at a time; batchSize, which must be set with it, then answers 1. Unset, takeOverIdle makes one
+	// takeover at a time with takeover.
+	takeoverMany func(jobs []*ClaimedSession) ([]idleTakeover, error)
+	batchSize    func() int
 
 	mu   sync.Mutex
 	cond *sync.Cond
@@ -68,6 +75,13 @@ type reclaimStarter struct {
 	idleHanded           int
 	idleBegan, idleEnded time.Time
 	idleSetAside         bool
+}
+
+// idleTakeover is one idle session's answer from takeoverMany: what takeover returns for it.
+type idleTakeover struct {
+	endTakeover func()
+	status      string
+	err         error
 }
 
 type reclaimEntryState int
@@ -248,8 +262,9 @@ func (r *reclaimStarter) takeoverInline(e *reclaimStartEntry) (handed bool, err 
 }
 
 // takeOverIdle is the startup reclaim's idle phase: it makes the takeovers of the idle sessions
-// newReclaimStarter was given, one at a time and in ascending id order, the order every process takes
-// rows over in, and hands each to the workers as it answers. It returns once none is left.
+// newReclaimStarter was given, in ascending id order, the order every process takes rows over in, and
+// hands each to the workers as it answers. With takeoverMany they are made a chunk (batchSize) per
+// request, in that order; without it, one at a time. It returns once none is left.
 //
 // A 409 or 403 is handled as reclaimMissingSessions handles one: the snapshot is read again (refresh),
 // and the sessions still waiting take their lease owner from it, or are given up if it no longer lists
@@ -272,41 +287,87 @@ func (r *reclaimStarter) takeOverIdle(ctx context.Context, refresh func(context.
 	delay := 250 * time.Millisecond
 	conflicts := map[string]int{}
 	for {
-		e := r.takeNextIdle()
-		if e == nil {
+		size := 1
+		if r.takeoverMany != nil {
+			size = r.batchSize()
+		}
+		chunk := r.takeNextIdleChunk(size)
+		if len(chunk) == 0 {
 			return nil
 		}
-		id := e.pending.job.SessionID
-		handed, err := r.takeoverInline(e)
-		if err == nil {
-			if handed {
-				r.mu.Lock()
-				r.idleHanded++
-				r.mu.Unlock()
+		replaced := make([]string, len(chunk))
+		for k, e := range chunk {
+			replaced[k] = e.pending.job.LeaseOwner
+		}
+		answers, err := r.takeoverEntries(chunk, size)
+		if errors.Is(err, errTakeoverBatchUnsupported) {
+			// None was taken over: back to waiting, to be taken over one at a time.
+			r.mu.Lock()
+			for _, e := range chunk {
+				e.state = entryAwaitingTakeover
 			}
+			r.cond.Broadcast()
+			r.mu.Unlock()
 			continue
 		}
-		if !isTransportHTTPStatus(err, 409) && !isTransportHTTPStatus(err, 403) {
-			r.giveUp(e)
+		if err != nil {
+			for _, e := range chunk {
+				r.giveUp(e)
+			}
 			r.giveUpIdle()
 			return err
 		}
-		conflicts[id]++
-		if conflicts[id] >= takeoverConflictLimit {
-			logln(fmt.Sprintf("reclaim: setting session %s aside after %d takeover conflicts (last: %v); retrying on a later reclaim",
-				id, conflicts[id], err))
+		refreshNow := false
+		var failed error
+		for k, e := range chunk {
+			a := answers[k]
+			id := e.pending.job.SessionID
+			if failed != nil {
+				// The reclaim has failed: a session taken over beside the failure is given up with the rest.
+				if a.err == nil {
+					a.endTakeover()
+				}
+				r.giveUp(e)
+				continue
+			}
+			if a.err == nil {
+				if r.handOver(e, replaced[k], a.endTakeover, a.status) {
+					r.mu.Lock()
+					r.idleHanded++
+					r.mu.Unlock()
+				}
+				continue
+			}
+			if !isTransportHTTPStatus(a.err, 409) && !isTransportHTTPStatus(a.err, 403) {
+				r.giveUp(e)
+				failed = a.err
+				continue
+			}
+			conflicts[id]++
+			if conflicts[id] >= takeoverConflictLimit {
+				logln(fmt.Sprintf("reclaim: setting session %s aside after %d takeover conflicts (last: %v); retrying on a later reclaim",
+					id, conflicts[id], a.err))
+				r.mu.Lock()
+				r.idleSetAside = true
+				r.mu.Unlock()
+				r.giveUp(e)
+				continue
+			}
+			logln(fmt.Sprintf("reclaim: takeover conflict for %s: %v; refreshing snapshot", id, a.err))
+			// Back to waiting, where a claim may take it meanwhile.
 			r.mu.Lock()
-			r.idleSetAside = true
+			e.state = entryAwaitingTakeover
+			r.cond.Broadcast()
 			r.mu.Unlock()
-			r.giveUp(e)
+			refreshNow = true
+		}
+		if failed != nil {
+			r.giveUpIdle()
+			return failed
+		}
+		if !refreshNow {
 			continue
 		}
-		logln(fmt.Sprintf("reclaim: takeover conflict for %s: %v; refreshing snapshot", id, err))
-		// Back to waiting, where a claim may take it meanwhile.
-		r.mu.Lock()
-		e.state = entryAwaitingTakeover
-		r.cond.Broadcast()
-		r.mu.Unlock()
 		select {
 		case <-ctx.Done():
 			r.giveUpIdle()
@@ -325,17 +386,72 @@ func (r *reclaimStarter) takeOverIdle(ctx context.Context, refresh func(context.
 	}
 }
 
-// takeNextIdle takes the first idle entry still waiting for its takeover, in ascending id order.
-func (r *reclaimStarter) takeNextIdle() *reclaimStartEntry {
+// batchIdleTakeover is the idle phase's takeoverMany as the run loop wires it: each job is prepared
+// locally as the single takeover prepares one, then all of them are taken over in one request
+// (takeoverClaimedSessions). A job the server refused has its local takeover ended at once.
+func batchIdleTakeover(ctx context.Context, t *Transport, prepare func(*ClaimedSession) (func(), error)) func([]*ClaimedSession) ([]idleTakeover, error) {
+	return func(jobs []*ClaimedSession) ([]idleTakeover, error) {
+		ends := make([]func(), 0, len(jobs))
+		endAll := func() {
+			for _, end := range ends {
+				end()
+			}
+		}
+		for _, job := range jobs {
+			endTakeover, err := prepare(job)
+			if err != nil {
+				endAll()
+				return nil, err
+			}
+			ends = append(ends, endTakeover)
+		}
+		rows, err := takeoverClaimedSessions(ctx, t, jobs)
+		if err != nil {
+			endAll()
+			return nil, err
+		}
+		answers := make([]idleTakeover, len(rows))
+		for k, row := range rows {
+			if row.err != nil {
+				ends[k]()
+				answers[k] = idleTakeover{err: row.err}
+				continue
+			}
+			answers[k] = idleTakeover{endTakeover: ends[k], status: row.status}
+		}
+		return answers, nil
+	}
+}
+
+// takeoverEntries makes the takeovers of chunk, held in entryTakingOver: in one request with
+// takeoverMany while the batch size is more than one, else the one entry's with takeover.
+func (r *reclaimStarter) takeoverEntries(chunk []*reclaimStartEntry, size int) ([]idleTakeover, error) {
+	jobs := make([]*ClaimedSession, len(chunk))
+	for k, e := range chunk {
+		jobs[k] = e.pending.job
+	}
+	if r.takeoverMany != nil && size > 1 {
+		return r.takeoverMany(jobs)
+	}
+	endTakeover, status, err := r.takeover(jobs[0])
+	return []idleTakeover{{endTakeover: endTakeover, status: status, err: err}}, nil
+}
+
+// takeNextIdleChunk takes up to n idle entries still waiting for their takeovers, in ascending id order.
+func (r *reclaimStarter) takeNextIdleChunk(n int) []*reclaimStartEntry {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	var chunk []*reclaimStartEntry
 	for _, e := range r.idle {
+		if len(chunk) == n {
+			break
+		}
 		if e.state == entryAwaitingTakeover {
 			e.state = entryTakingOver
-			return e
+			chunk = append(chunk, e)
 		}
 	}
-	return nil
+	return chunk
 }
 
 // refreshIdle brings the idle entries still waiting up to a fresh snapshot: each takes its row's lease

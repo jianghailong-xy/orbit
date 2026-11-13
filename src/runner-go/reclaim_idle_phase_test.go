@@ -28,6 +28,13 @@ type idleFakeServer struct {
 	entered map[string]chan struct{}
 	// conflict answers every takeover of these sessions 409.
 	conflict map[string]bool
+	// batch serves POST /runner/sessions/takeover-leases; unset, it answers 404 as a control plane from
+	// before it does. batches records the sessions each batch named, in the order they were named.
+	batch   bool
+	batches [][]string
+	// batchRefusals counts the batch takeovers answered 404, singles the single takeovers answered.
+	batchRefusals int
+	singles       int
 
 	answered  []string
 	reclaims  int
@@ -59,6 +66,8 @@ func (s *idleFakeServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		s.mu.Unlock()
 		_ = json.NewEncoder(w).Encode(ReclaimResponse{Sessions: rows})
+	case r.Method == http.MethodPost && r.URL.Path == "/api/runner/sessions/takeover-leases":
+		s.serveBatch(w, r)
 	case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/takeover-leases"):
 		parts := strings.Split(r.URL.Path, "/")
 		id := parts[len(parts)-2]
@@ -92,6 +101,7 @@ func (s *idleFakeServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		s.owner[id] = body.LeaseOwner
 		s.answered = append(s.answered, id)
+		s.singles++
 		answer := s.status[id]
 		if answer == stPending {
 			answer = stRunning
@@ -110,6 +120,55 @@ func (s *idleFakeServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// serveBatch is the batch takeover: every row judged as the single takeover judges it, one request.
+func (s *idleFakeServer) serveBatch(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	batch := s.batch
+	s.mu.Unlock()
+	if !batch {
+		s.mu.Lock()
+		s.batchRefusals++
+		s.mu.Unlock()
+		http.NotFound(w, r)
+		return
+	}
+	var body struct {
+		LeaseOwner string `json:"leaseOwner"`
+		Sessions   []struct {
+			SessionID          string  `json:"sessionId"`
+			ExpectedLeaseOwner *string `json:"expectedLeaseOwner"`
+		} `json:"sessions"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	time.Sleep(s.delay)
+	results := make([]map[string]interface{}, 0, len(body.Sessions))
+	named := make([]string, 0, len(body.Sessions))
+	s.mu.Lock()
+	for _, row := range body.Sessions {
+		id := row.SessionID
+		named = append(named, id)
+		expected := ""
+		if row.ExpectedLeaseOwner != nil {
+			expected = *row.ExpectedLeaseOwner
+		}
+		if s.conflict[id] || expected != s.owner[id] {
+			results = append(results, map[string]interface{}{"sessionId": id,
+				"error": map[string]interface{}{"statusCode": 409, "message": "inbox lease owner changed; refresh the session snapshot"}})
+			continue
+		}
+		s.owner[id] = body.LeaseOwner
+		s.answered = append(s.answered, id)
+		answer := s.status[id]
+		if answer == stPending {
+			answer = stRunning
+		}
+		results = append(results, map[string]interface{}{"sessionId": id, "status": answer})
+	}
+	s.batches = append(s.batches, named)
+	s.mu.Unlock()
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "results": results})
 }
 
 func (s *idleFakeServer) takeoversAnswered() []string {
@@ -187,6 +246,8 @@ func startStartupReclaim(t *testing.T, srv *httptest.Server, maxConcurrent int) 
 		}
 		return endTakeover, status, nil
 	}
+	rig.starter.batchSize = rig.tr.takeoverBatchSize
+	rig.starter.takeoverMany = batchIdleTakeover(ctx, rig.tr, rig.prepare)
 	rig.starter.run(reclaimStartWorkers, nil)
 	go func() {
 		rig.idleErr <- rig.starter.takeOverIdle(ctx, func(ctx context.Context) ([]ReclaimSession, error) {
