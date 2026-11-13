@@ -30,6 +30,11 @@ with:
 node scripts/release-identity.mjs check-tag vX.Y.Z[-beta.N]
 ```
 
+Workspace package versions (`src/shared`, `src/apiserver`, `src/web`) and the iOS XcodeGen placeholders are
+build-system bookkeeping, not release versions: the web build hashes the root version into
+`X-Orbit-Client`, the apiserver image carries the root `package.json`, and `release.yml` overrides the Apple
+build settings from the tag.
+
 Tags before this rule are historical exceptions, not a pattern: `v0.1.2-beta.245` carried `package.json`
 `0.1.254`, and `/dl` published `0.1.256` from untagged commits. Do not repeat or "fix" them by retagging;
 releases after this rule follow it.
@@ -52,6 +57,9 @@ releases after this rule follow it.
   commit count as `versionCode`.
 - Artifact names follow the tag: `Orbit-v<version>-arm64.dmg` and `.zip`, `orbit-android-<version>.apk`, and
   the runner assets named in `/dl/version.json`'s `assets` map.
+- Pin deployments to a tag. `main` is a development branch and is not a supported release line.
+- The [messaging brief](messaging-brief.md) owns the public positioning and the wording for known
+  boundaries; this page owns the operational release rules and checklist.
 
 ## Support window
 
