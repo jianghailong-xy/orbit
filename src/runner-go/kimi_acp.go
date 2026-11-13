@@ -1130,6 +1130,10 @@ type kimiActiveTurn struct {
 	seenTools      map[string]bool
 	doneTools      map[string]bool
 	plans          int // plan updates seen this turn; makes each one a distinct tool id
+	// unsent is closed by an interrupt (under activeMu) so a prompt still waiting on a turn Kimi
+	// runs by itself is not sent at all (waitKimiOwnTurn).
+	unsent       chan struct{}
+	unsentClosed bool
 }
 
 // Kimi's deltas carry no ordering across kinds, so the transcript's order is the runner's to
@@ -1447,22 +1451,31 @@ type kimiTurnOutcome struct {
 	// compactionDropped is true when the turn failed because Kimi dropped the compaction it was
 	// waiting on, before its model was asked anything (kimiTurnRecord.compactionDropped).
 	compactionDropped bool
+	// text is what the turn answered, as its record holds it. ACP streams nothing of a prompt Kimi
+	// queued behind a turn of its own (kimiTurnLedger), so this is the only place that answer is.
+	text string
 }
 
 // readKimiTurnOutcome reads the outcome of the turn this prompt opened, waiting up to
 // kimiTurnOutcomeWait for its end record. A record that reaches the wire a moment after the answer
-// is waited for; one that never does, with the prompt answered, is a turn that never opened.
-func readKimiTurnOutcome(ctx context.Context, wire string, from int64) kimiTurnOutcome {
+// is waited for; one that never does, with the prompt answered, is a turn that never opened. While
+// a turn is open on the wire (turns, nil when nothing follows it) the wait goes on: Kimi queued
+// this prompt behind a turn of its own and runs it when that one ends.
+func readKimiTurnOutcome(ctx context.Context, wire string, from int64, turns *kimiTurnLedger) kimiTurnOutcome {
 	if wire == "" {
 		return kimiTurnOutcome{}
 	}
-	deadline := time.Now().Add(kimiTurnOutcomeWait)
+	began := time.Now()
+	deadline := began.Add(kimiTurnOutcomeWait)
 	for {
 		if ended, ok := kimiTurnEnded(wire, from); ok {
 			if ended.Reason != "failed" {
-				return kimiTurnOutcome{read: true, ran: true}
+				return kimiTurnOutcome{read: true, ran: true, text: ended.text}
 			}
-			return kimiTurnOutcome{read: true, ran: true, failure: kimiFailureSentence(ended.Error), compactionDropped: ended.compactionDropped}
+			return kimiTurnOutcome{read: true, ran: true, failure: kimiFailureSentence(ended.Error), compactionDropped: ended.compactionDropped, text: ended.text}
+		}
+		if turns.running() && time.Since(began) < kimiQueuedTurnWait {
+			deadline = time.Now().Add(kimiTurnOutcomeWait)
 		}
 		if !time.Now().Before(deadline) {
 			// Answered `end_turn` with no turn on the wire behind it: the engine's agent was not idle
@@ -1540,6 +1553,22 @@ type kimiTurnRecord struct {
 	Reason  string          `json:"reason"`
 	Error   *kimiTurnError  `json:"error"`
 	Kind    string          `json:"kind"`
+	// Origin is what opened a turn.prompt: "user" for a prompt sent over ACP, "task" for a
+	// background task's notification Kimi answers by itself. Absent on older records.
+	Origin *struct {
+		Kind string `json:"kind"`
+	} `json:"origin"`
+	// Event is a context.append_loop_event's event; only its text parts are read (text).
+	Event *struct {
+		Type   string          `json:"type"`
+		TurnID json.RawMessage `json:"turnId"`
+		Part   *struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"part"`
+	} `json:"event"`
+	// text is the answer the turn wrote: its text parts, in order.
+	text string
 	// compactionDropped: a full compaction of the main agent was cancelled in this turn and no model
 	// request of the turn's own (an llm.request of kind "loop") came after it. Kimi 2.5.3 starts an
 	// automatic compaction as a turn opens and makes the turn wait on it; when a message lands in the
@@ -1551,7 +1580,8 @@ type kimiTurnRecord struct {
 
 // kimiTurnEnded reads, from the whole lines of wire past from, the turn.ended of the main agent's turn
 // that opens there: the one its first turn.prompt names. By number, because the end of the turn before
-// can be written after from too, when it took longer to reach the wire than it was waited for. False
+// can be written after from too, when it took longer to reach the wire than it was waited for. A turn
+// Kimi opened by itself (an origin other than "user") is not the prompt's, and is passed over. False
 // while it is not there yet.
 func kimiTurnEnded(wire string, from int64) (kimiTurnRecord, bool) {
 	f, err := os.Open(wire)
@@ -1569,10 +1599,11 @@ func kimiTurnEnded(wire string, from int64) (kimiTurnRecord, bool) {
 		return kimiTurnRecord{}, false
 	}
 	var turn json.RawMessage
+	var text strings.Builder
 	dropped := false
 	for _, line := range bytes.Split(data[:end], []byte{'\n'}) {
 		if !bytes.Contains(line, []byte(`"turn.`)) && !bytes.Contains(line, []byte(`"full_compaction.cancel"`)) &&
-			!bytes.Contains(line, []byte(`"llm.request"`)) {
+			!bytes.Contains(line, []byte(`"llm.request"`)) && !bytes.Contains(line, []byte(`"content.part"`)) {
 			continue
 		}
 		var rec kimiTurnRecord
@@ -1580,15 +1611,23 @@ func kimiTurnEnded(wire string, from int64) (kimiTurnRecord, bool) {
 			continue
 		}
 		switch {
+		case rec.Type == "context.append_loop_event":
+			if ev := rec.Event; turn != nil && ev != nil && ev.Type == "content.part" && ev.Part != nil &&
+				ev.Part.Type == "text" && strings.Trim(string(ev.TurnID), `"`) == strings.Trim(string(turn), `"`) {
+				text.WriteString(ev.Part.Text)
+			}
 		case rec.Type == "full_compaction.cancel" && turn != nil:
 			dropped = true
 		case rec.Type == "llm.request" && rec.Kind == "loop" && turn != nil:
 			dropped = false
 		case len(rec.TurnID) == 0:
 		case rec.Type == "turn.prompt" && turn == nil:
-			turn = rec.TurnID
+			if rec.Origin == nil || rec.Origin.Kind == "" || rec.Origin.Kind == "user" {
+				turn = rec.TurnID
+			}
 		case rec.Type == "turn.ended" && turn != nil && bytes.Equal(rec.TurnID, turn):
 			rec.compactionDropped = dropped && rec.Reason == "failed"
+			rec.text = strings.TrimSpace(text.String())
 			return rec, true
 		}
 	}
@@ -1704,11 +1743,15 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 		emit(evError, map[string]interface{}{"message": kimiAuthMessage(err)})
 		return stFailed, true, false
 	}
+	// Read from before the resume: Kimi opens its turns for the background tasks its previous
+	// process lost while resuming (kimiTurnLedger).
+	turns := newKimiTurnLedger(realHome, job.RuntimeSessionID)
 	sessionID, err := app.startOrResumeSession(ctx, job, execDir)
 	if err != nil {
 		emit(evError, map[string]interface{}{"message": kimiAuthMessage(err)})
 		return stFailed, true, false
 	}
+	turns.setSession(sessionID)
 	job.RuntimeSessionID = sessionID
 	expectedSessionID.Store(sessionID)
 	writeKimiSessionMeta(scratchDir, job, execDir)
@@ -1801,6 +1844,12 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 					status, subtype, errorText, numTurns = stFailed, "error", kimiNoTurn, 0
 				}
 			}
+		}
+		// A prompt Kimi queued behind a turn of its own ran with nothing streamed (kimiTurnLedger):
+		// its answer is the one its record holds.
+		if done.outcome.ran && done.outcome.text != "" && kimiTurnSaidNothing(turn) {
+			turn.text.WriteString(done.outcome.text)
+			resultText = done.outcome.text
 		}
 		// Whatever the turn was in the middle of when it ended is the only stretch not yet
 		// persisted; everything earlier landed where the stream moved past it.
@@ -1922,6 +1971,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 						orbitTurnID: resp.TurnID,
 						seenTools:   map[string]bool{},
 						doneTools:   map[string]bool{},
+						unsent:      make(chan struct{}),
 					}
 				}
 				activeMu.Unlock()
@@ -1940,20 +1990,55 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 				emit(evUser, userEvent)
 				turnID := resp.TurnID
 				interruptRequested = false
-				app.beginPermissionTurn()
 				prompt := map[string]interface{}{
 					"sessionId": sessionID,
 					"prompt":    prepared.blocks,
 				}
-				wire, wireFrom := kimiTurnWire(realHome, sessionID)
-				pending, writeAck, promptErr := app.queueRequest("session/prompt", prompt)
-				if promptErr != nil {
-					promptDone <- kimiPromptResult{turnID: turnID, err: promptErr}
-					continue
-				}
+				unsent := active.unsent
 				app.wg.Add(1)
 				go func() {
 					defer app.wg.Done()
+					// A prompt sent while Kimi runs a turn of its own is queued behind it and answered
+					// at once without running (kimiTurnLedger): it goes when that turn has ended.
+					waited, ownTurnErr := waitKimiOwnTurn(ctx, app.done, unsent, turns)
+					if ownTurnErr != nil {
+						done := kimiPromptResult{turnID: turnID, err: ownTurnErr}
+						if ownTurnErr == errKimiPromptUnsent {
+							done = kimiPromptResult{turnID: turnID, result: map[string]interface{}{"stopReason": "cancelled"}}
+						}
+						select {
+						case promptDone <- done:
+						case <-ctx.Done():
+						}
+						return
+					}
+					if waited >= kimiForeignTurnPoll {
+						logln("kimi ran a turn of its own; prompt for", job.SessionID, "sent after", waited.Round(time.Millisecond))
+					}
+					// Under activeMu, with an interrupt's check of unsent: a Stop pressed while the
+					// prompt waited is never followed by the prompt itself.
+					activeMu.Lock()
+					select {
+					case <-unsent:
+						activeMu.Unlock()
+						select {
+						case promptDone <- kimiPromptResult{turnID: turnID, result: map[string]interface{}{"stopReason": "cancelled"}}:
+						case <-ctx.Done():
+						}
+						return
+					default:
+					}
+					app.beginPermissionTurn()
+					wire, wireFrom := kimiTurnWire(realHome, sessionID)
+					pending, writeAck, promptErr := app.queueRequest("session/prompt", prompt)
+					activeMu.Unlock()
+					if promptErr != nil {
+						select {
+						case promptDone <- kimiPromptResult{turnID: turnID, err: promptErr}:
+						case <-ctx.Done():
+						}
+						return
+					}
 					var result map[string]interface{}
 					var waitErr error
 					var outcome kimiTurnOutcome
@@ -1975,7 +2060,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 						}
 						// A failed turn is answered as end_turn, and only then is its record read.
 						if waitErr == nil && strings.EqualFold(firstString(result, "stopReason", "stop_reason"), "end_turn") {
-							outcome = readKimiTurnOutcome(ctx, wire, wireFrom)
+							outcome = readKimiTurnOutcome(ctx, wire, wireFrom, turns)
 						}
 						// A turn failed only by the compaction Kimi dropped never reached its model: the
 						// same prompt is sent once more, as part of the same Orbit turn, and it is that
@@ -2038,6 +2123,12 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 				stopBackgroundWorkForTurn(bg, resp)
 				emit(evInterrupt, map[string]interface{}{})
 				interruptRequested = true
+				activeMu.Lock()
+				if active != nil && !active.unsentClosed {
+					close(active.unsent)
+					active.unsentClosed = true
+				}
+				activeMu.Unlock()
 				app.cancelPermissions()
 				ack, cancelErr := app.queueNotify("session/cancel", map[string]interface{}{"sessionId": sessionID})
 				if cancelErr != nil {

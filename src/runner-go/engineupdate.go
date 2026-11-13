@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // The runner execs whatever `claude`/`codex`/`kimi` is on PATH; nothing else keeps those CLIs
@@ -445,6 +446,53 @@ func (o *engineOutput) progress() string {
 	return "it printed " + humanSize(o.written) + ", last " + time.Since(o.lastByte).Round(time.Second).String() + " ago"
 }
 
+// How much of a stopped command's tail the failure message quotes. Three lines, because the line
+// that explains a prompt is the question and the two under it are the choices: the last line
+// alone would read "No".
+const (
+	engineOutputQuoteLines = 3
+	// Under the apiserver's 400-rune cap on a record's message (runner-engines.ts), with room for
+	// the version step and the command name in front of it: a quote that fills the cap would be
+	// the part cut off, and it is the part that explains the failure.
+	engineOutputQuoteRunes = 200
+)
+
+// ansiEscapeRe matches what a CLI writes for a screen it believes it has: colours and cursor
+// moves (CSI), window titles (OSC), and the short escapes.
+var ansiEscapeRe = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[\x40-\x5a\x5c\x5f]`)
+
+// lastLines quotes the end of what the command said, cleaned for a one-line message: terminal
+// escapes gone, whitespace collapsed, at most n lines and maxRunes runes.
+//
+// Size and "how long ago" cannot tell a slow download from a wedge, and there is one wedge shape
+// they misread completely: an updater that decides it cannot recognise its own install and asks
+// a question ("Install anyways?"). Unattended, nobody answers, so it sits there writing nothing
+// for the rest of the ceiling. The question itself is the whole explanation, and it has to
+// survive into the record — live on vmi3129740, `opencode upgrade` did this every 30 minutes for
+// a month and every pass reported the same unreadable "printed 543 B".
+func (o *engineOutput) lastLines(n, maxRunes int) string {
+	o.mu.Lock()
+	text := ansiEscapeRe.ReplaceAllString(string(o.tail), "")
+	o.mu.Unlock()
+	var lines []string
+	for _, line := range strings.FieldsFunc(text, func(r rune) bool { return r == '\n' || r == '\r' }) {
+		line = strings.Join(strings.Fields(line), " ")
+		// A prompt's last line is its closing rule ("└"), and one line further back is a choice.
+		// Lines with no letter or digit in them are the frame, not the command's words.
+		if !strings.ContainsFunc(line, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }) {
+			continue
+		}
+		lines = append(lines, line)
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return clip(strings.Join(lines, " · "), maxRunes)
+}
+
 func humanSize(n int64) string {
 	switch {
 	case n >= 1<<20:
@@ -600,10 +648,13 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 			// long before its own, and "still running after 5m" would be a lie about a command
 			// that got 40 seconds because a wedged engine ahead of it ate the rest.
 			ran := time.Since(started).Round(time.Second)
-			progress := out.progress()
+			progress := out.progress() + "."
+			if last := out.lastLines(engineOutputQuoteLines, engineOutputQuoteRunes); last != "" {
+				progress += ` Last output: "` + last + `".`
+			}
 			logln("engine-update:", spec.name, "timed out after", ran, "—", progress)
 			rec := recordEngineUpdate(spec.bin, updateFailed,
-				step+"`"+cmdStr+"` was still running after "+ran.String()+" and was stopped — "+progress+".", facts)
+				step+"`"+cmdStr+"` was still running after "+ran.String()+" and was stopped — "+progress, facts)
 			return rec, spec.name + " — update timed out after " + ran.String()
 		case context.Canceled:
 			// Runner shutting down mid-update — not a failure, and not this machine's news.
