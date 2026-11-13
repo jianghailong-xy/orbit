@@ -17003,8 +17003,10 @@ button.chat-jump-start:hover {
   /* Too narrow for those floors (665px, 663 inside the border), as above: name and status, then
      quota and actions. */
   @container re-card (max-width: 662px) {
+    /* The right column keeps the wide layout's status width as its floor, so a long status such as
+       "Spent · resets 16:20" does not shorten that one row's quota bars against its neighbours'. */
     .re-runner-card .re-row {
-      grid-template-columns: minmax(0, 1fr) max-content;
+      grid-template-columns: minmax(0, 1fr) minmax(168px, max-content);
     }
     .re-runner-card .re-row > :nth-child(2) {
       justify-self: end;
