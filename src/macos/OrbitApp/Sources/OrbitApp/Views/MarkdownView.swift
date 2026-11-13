@@ -75,7 +75,7 @@ struct MarkdownView: View, Equatable {
                         .frame(maxWidth: fillWidth ? .infinity : nil, alignment: .leading)
                         .modifier(BubbleProseInset(active: inset))
                 case .block(let block):
-                    MarkdownBlockView(block: block, base: base, ink: ink)
+                    MarkdownBlockView(block: block, base: base, ink: ink, fillWidth: fillWidth)
                         .modifier(BubbleProseInset(active: inset))
                 case .card(let ref):
                     OrbitLinkCardView(ref: ref, inBubble: inBubble)
@@ -90,7 +90,7 @@ struct MarkdownView: View, Equatable {
             ForEach(blocks.indices, id: \.self) { i in
                 switch blocks[i] {
                 case .markdown(let block):
-                    MarkdownBlockView(block: block, base: base, ink: ink)
+                    MarkdownBlockView(block: block, base: base, ink: ink, fillWidth: fillWidth)
                         .modifier(BubbleProseInset(active: inset))
                 case .card(let ref):
                     OrbitLinkCardView(ref: ref, inBubble: inBubble)
@@ -301,6 +301,11 @@ private struct MarkdownBlockView: View {
     // iOS selectable-leaf styling threaded from MarkdownView; unused on macOS (which keeps `Text`).
     let base: ProseRole
     let ink: ProseInk
+    /// `MarkdownView.fillWidth`: off in the person's bubble, where each prose block hugs its words —
+    /// a block pinned to `maxWidth: .infinity` would stretch the bubble's tint across the whole row
+    /// however short the message.
+    var fillWidth: Bool = true
+    private var proseWidth: CGFloat? { fillWidth ? .infinity : nil }
 
     var body: some View {
         switch block {
@@ -314,7 +319,7 @@ private struct MarkdownBlockView: View {
         case .paragraph(let text):
             inlineMarkdown(text)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: proseWidth, alignment: .leading)
 
         case .list(let items):
             VStack(alignment: .leading, spacing: 6) {
@@ -323,7 +328,7 @@ private struct MarkdownBlockView: View {
                         marker(items[i]).foregroundStyle(.secondary)
                         inlineMarkdown(items[i].text)
                             .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .frame(maxWidth: proseWidth, alignment: .leading)
                     }
                     .padding(.leading, CGFloat(items[i].indent) * 16)
                 }
@@ -344,11 +349,11 @@ private struct MarkdownBlockView: View {
                 RoundedRectangle(cornerRadius: 1.5).fill(Color.secondary.opacity(0.4)).frame(width: 3)
                 #if os(iOS)
                 SelectableText(text: text, role: base, ink: .secondary, markdown: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: proseWidth, alignment: .leading)
                 #else
                 inlineMarkdown(text).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: proseWidth, alignment: .leading)
                 #endif
             }
 

@@ -728,14 +728,24 @@ export function answerInWords(question: CoordinatorQuestion, answer: OwnerAnswer
  * given, the moment it was answered — because a replay under the same key compares the content byte
  * for byte, and a conversation that already read it must not be told a second, differently worded
  * version of the same answer.
+ *
+ * `redelivered` is set when the conversation told is not the one that asked (§5.2 R11): "you asked"
+ * would be false there, and the new coordinator needs to know whether the answer still holds work up.
+ * Whether it still blocks is read at delivery, once per conversation; the asker's words never carry it.
  */
 export function ownerAnswerMessage(
   question: CoordinatorQuestion,
   answer: OwnerAnswer,
   answeredAt: Date,
+  redelivered?: { stillBlocks: boolean },
 ): string {
-  return `From Orbit · owner answer: you asked "${question.question}". `
+  const asked = redelivered ? 'a previous coordinator of this project asked' : 'you asked';
+  const told = `From Orbit · owner answer: ${asked} "${question.question}". `
     + `The owner answered: ${answerInWords(question, answer)} (${answeredAt.toISOString()}).`;
+  if (!redelivered) return told;
+  return told + (redelivered.stillBlocks
+    ? ' That question still blocks unfinished tasks.'
+    : ' That question no longer blocks any unfinished task.');
 }
 
 /** The columns "has this conversation ended" is decided from. */
