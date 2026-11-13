@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>项目栏：一行一个任务 + 改动页</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; width: max-content; padding: 36px 44px 44px; background: #e9e9ee; color: #16161a;
+  font: 15px/1.55 Inter, "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+h1 { font-size: 25px; margin: 0 0 6px; letter-spacing: -.01em; }
+h2 { font-size: 19px; margin: 0 0 6px; }
+p.lede { color: #4a4a52; margin: 0 0 22px; width: 1500px; }
+section.b-part { padding: 14px 16px 30px; }
+.b-row { display: flex; gap: 34px; align-items: flex-start; }
+.b-cap { font-size: 14px; font-weight: 650; color: #3a3a40; margin: 0 0 10px; display: flex; gap: 8px; align-items: center; }
+.b-tag { font-size: 12.5px; font-weight: 700; border-radius: 999px; padding: 1px 10px; }
+.b-now { background: #ffd9d4; color: #8f1d13; } .b-new { background: #d6e4ff; color: #14428f; }
+ul.b-notes { margin: 12px 0 0; padding: 0; list-style: none; font-size: 14px; color: #2a2a30; }
+ul.b-notes li { margin: 5px 0; padding-left: 26px; position: relative; }
+ul.b-notes li::before { content: '•'; position: absolute; left: 9px; color: #8a8a92; }
+ul.b-notes li.n::before { content: attr(data-n); left: 0; top: 2px; width: 18px; height: 18px; border-radius: 50%;
+  background: #f5222d; color: #fff; font: 600 11px/18px Inter, sans-serif; text-align: center; }
+.b-box { background: #fff; border-radius: 16px; padding: 18px 24px 14px; margin-bottom: 16px; width: 1500px; }
+.b-rec { display: inline-block; background: #d9f7be; color: #135200; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 0 8px; margin-left: 6px; }
+code { font: 12.5px ui-monospace, "DejaVu Sans Mono", monospace; background: rgba(0,0,0,.06); padding: 1px 5px; border-radius: 5px; }
+
+/* --- app look (approximates the console's tokens) --- */
+.win { position: relative; background: #fff; border-radius: 12px; overflow: visible; display: inline-flex; vertical-align: top;
+  box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 10px 30px rgba(0,0,0,.08); }
+.conv { width: 300px; border-right: 1px solid #ececf0; padding: 22px 20px; color: #9a9aa2; font-size: 13px; }
+.conv .t { color: #16161a; font-weight: 650; font-size: 16px; margin: 6px 0 4px; }
+.conv .bar { height: 10px; border-radius: 5px; background: #f1f1f4; margin: 14px 0; }
+.col { width: 340px; padding: 16px 14px 18px; font-size: 13px; color: #16161a; }
+.ch { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
+.ch .x { color: #6a6a72; font-size: 15px; line-height: 20px; }
+.ch .tt { flex: 1; min-width: 0; } .ch .tt b { display: block; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ch .tt span { color: #8a8a92; font-size: 12px; }
+.ch .grid { color: #6a6a72; font-size: 15px; }
+.card { background: #f2f2f5; border-radius: 10px; padding: 9px 12px; display: flex; align-items: center; gap: 10px; margin-bottom: 12px; color: #4a4a52; font-size: 12.5px; }
+.pb { width: 72px; height: 5px; border-radius: 3px; background: #d7d7dc; overflow: hidden; } .pb i { display: block; height: 100%; background: #23a149; }
+.sec { color: #8a8a92; font-size: 12px; font-weight: 600; margin: 12px 2px 4px; display: flex; justify-content: space-between; }
+.sec em { font-style: normal; font-weight: 500; }
+.r { display: flex; gap: 10px; padding: 8px 6px; border-bottom: 1px solid #f1f1f4; border-radius: 8px; }
+.r.sel { background: #eef3ff; }
+.ic { width: 18px; flex: none; text-align: center; font-size: 13px; line-height: 19px; }
+.m { flex: 1; min-width: 0; }
+.ti { display: flex; gap: 6px; } .ti b { font-weight: 500; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ti b.two { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.ti i { font-style: normal; color: #9a9aa2; font-size: 11.5px; white-space: nowrap; }
+.sub { color: #7a7a82; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+.meta { display: flex; gap: 6px; margin-top: 4px; align-items: center; flex-wrap: wrap; }
+.chip { font-size: 11px; border: 1px solid #e3e3e8; border-radius: 6px; padding: 0 6px; color: #5a5a62; line-height: 17px; white-space: nowrap; }
+.chip .p { color: #1a7f37; } .chip .d { color: #cf222e; }
+.chip.amber { border-color: #f3d19e; background: #fff8eb; color: #a15c07; }
+.chip.blue { border-color: #c9dafc; background: #f2f6ff; color: #2f5fd0; }
+.chip.green { border-color: #cdebd5; background: #f1faf3; color: #1a7f37; }
+.coordb { font-size: 10.5px; color: #2f6bff; border: 1px solid #b9cdfb; background: #eef3ff; border-radius: 999px; padding: 0 6px; }
+.runs { margin: 6px 0 2px 28px; border-left: 2px solid #e6e6eb; padding-left: 10px; }
+.runs .rr { display: flex; gap: 8px; color: #5a5a62; font-size: 12px; padding: 3px 0; }
+.runs .rr span:first-child { width: 14px; text-align: center; }
+.more { color: #7a7a82; font-size: 12px; padding: 6px 6px; }
+.tabs { display: flex; gap: 4px; background: #f2f2f5; border-radius: 9px; padding: 3px; margin: 0 0 12px; }
+.tabs div { flex: 1; text-align: center; font-size: 12.5px; padding: 4px 0; border-radius: 7px; color: #5a5a62; }
+.tabs div.on { background: #fff; color: #16161a; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.scope { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #5a5a62; margin-bottom: 8px; }
+.sel { border: 1px solid #e3e3e8; border-radius: 7px; padding: 2px 8px; color: #16161a; }
+.tot { font-size: 12.5px; color: #3a3a40; margin-bottom: 8px; }
+.dir { color: #8a8a92; font-size: 11.5px; margin: 10px 2px 2px; font-family: ui-monospace, "DejaVu Sans Mono", monospace; }
+.f { display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-radius: 7px; font-size: 12.5px; }
+.f.sel2 { background: #eef3ff; }
+.f .fn { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, "DejaVu Sans Mono", monospace; font-size: 12px; }
+.f .st { font-size: 11.5px; white-space: nowrap; } .p { color: #1a7f37; } .d { color: #cf222e; }
+.tk { font-size: 10.5px; color: #6a6a72; background: #f2f2f5; border-radius: 5px; padding: 0 4px; }
+.newb { font-size: 10px; color: #1a7f37; border: 1px solid #cdebd5; border-radius: 4px; padding: 0 3px; }
+.drawer { width: 520px; border-left: 1px solid #ececf0; font: 12px/1.6 ui-monospace, "DejaVu Sans Mono", monospace; }
+.drawer .dh { padding: 12px 14px; border-bottom: 1px solid #ececf0; font-family: Inter, "Noto Sans SC", sans-serif; font-size: 13px; display: flex; justify-content: space-between; }
+.drawer .ln { padding: 0 14px; white-space: pre; } .drawer .a { background: #e9f8ee; } .drawer .x { background: #fdecee; } .drawer .h { color: #8a8a92; background: #f6f6f8; }
+.mk { position: absolute; border: 2.5px dashed #f5222d; border-radius: 10px; pointer-events: none; }
+.mk b { position: absolute; top: -11px; right: -11px; z-index: 2; width: 22px; height: 22px; border-radius: 50%; background: #f5222d; color: #fff;
+  font: 700 12px/22px Inter, sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; }
+.phone { width: 393px; height: 852px; border-radius: 34px; border: 9px solid #1b1b1d; background: #8e8e93; position: relative; overflow: hidden; box-sizing: content-box; }
+.phone .top { background: #fff; height: 260px; padding: 50px 18px; opacity: .55; font-size: 14px; }
+.phone .sheet { position: absolute; left: 0; right: 0; bottom: 0; top: 230px; background: #fff; border-radius: 14px 14px 0 0; }
+.phone .grab { width: 36px; height: 5px; background: #d0d0d6; border-radius: 3px; margin: 7px auto 2px; }
+.phone .col { width: 100%; }
+</style></head><body>
+<h1>项目栏：从“一行一个会话”改成“一行一个任务”，再加一个“改动”页</h1>
+<p class="lede">右侧项目栏（及手机的底部弹窗）现在按会话列：同一任务的重跑、同步合并、平台的判定会话各占一行，按“昨天 / 2–7 天前”分组，看不出谁在等你、谁已在 main、改了什么。<br>
+<b>方案 A：一行一个任务，按状态分组，每行带改动量；重跑与判定收进任务行。方案 B：栏顶加“任务 | 改动”两个标签，“改动”像 Codex 的审查面板，列项目分支对 main 的文件差异。</b>
+图里数据是样例（“Move search to the new index”）；界面文字为将上线的英文，标注为中文。</p>
+
+<!-- 1. today vs A -->
+<section class="b-part">
+ <div class="b-row">
+  <div>
+   <div class="b-cap"><span class="b-tag b-now">今天</span>一行一个会话，按时间分组</div>
+   <div class="win" id="w-today">
+    <div class="conv"><div>← Move search to the new index</div><div class="t">Move search to the new index</div><div class="bar"></div><div class="bar" style="width:70%"></div><div class="bar" style="width:85%"></div></div>
+    <div class="col">
+     <div class="ch"><span class="x">✕</span><div class="tt"><b>Move search to the new index</b><span>Project · 15 sessions</span></div><span class="grid">⊞</span></div>
+     <div class="card"><div class="pb"><i style="width:75%"></i></div>9/12 done · 1 running</div>
+     <div class="sec">Coordinator</div>
+     <div class="r"><span class="ic">◌</span><div class="m"><div class="ti"><b>Move search to the new…</b><i>2m</i></div><div class="sub">T7 is back; waiting on the…</div></div></div>
+     <div class="sec">Today</div><div data-mk="1">
+     <div class="r"><span class="ic">◐</span><div class="m"><div class="ti"><b>Task: T8 Shard plan for the n…</b><i>3m</i></div><div class="sub">Running Bash…</div></div></div>
+     <div class="r"><span class="ic">💬</span><div class="m"><div class="ti"><b>Judgment: Move search to th…</b><i>11m</i></div><div class="sub">Judged task 34wc… as fine to…</div></div></div>
+     <div class="r"><span class="ic">✓</span><div class="m"><div class="ti"><b>Task: T7 Replay comparison</b><i>22m</i></div><div class="sub">Merged main into the task bra…</div></div></div>
+     <div class="r"><span class="ic">💬</span><div class="m"><div class="ti"><b>Judgment: Move search to th…</b><i>40m</i></div><div class="sub">Started a new run of the task…</div></div></div>
+     <div class="r"><span class="ic">✓</span><div class="m"><div class="ti"><b>Task: T7 Replay comparison</b><i>1h</i></div><div class="sub">Replay closed at 412/430; ev…</div></div></div></div>
+     <div class="sec" data-mk="2">Yesterday</div>
+     <div class="r"><span class="ic">✓</span><div class="m"><div class="ti"><b>Task: Production deploy: new…</b><i>18h</i></div><div class="sub">Deployed; waiting for the co…</div></div></div>
+     <div class="r"><span class="ic">✓</span><div class="m"><div class="ti"><b>Task: T6 Replay tool</b><i>20h</i></div><div class="sub">Delivered; the coordinator ac…</div></div></div>
+     <div class="r"><span class="ic">💬</span><div class="m"><div class="ti"><b>Judgment: Move search to th…</b><i>20h</i></div><div class="sub">Checked the project: none of…</div></div></div>
+     <div class="sec">2–7 days ago</div>
+     <div class="r"><span class="ic">✓</span><div class="m"><div class="ti"><b>Task: T5 Old index read-only</b><i>11/10</i></div><div class="sub">Delivered; the coordinator ac…</div></div></div>
+     <div class="r"><span class="ic">✓</span><div class="m"><div class="ti"><b>Task: T4 Search endpoint sw…</b><i>11/10</i></div><div class="sub">Delivered.</div></div></div>
+     <div class="more">… 4 more</div>
+    </div>
+   </div>
+   <ul class="b-notes" style="width:660px">
+    <li class="n" data-n="1">同一任务多行（T7 两行：重跑和同步合并各开一个会话），平台的 <b>Judgment</b> 会话和工作会话混在一起；“Task:”“Judgment:”前缀把标题挤到 20 多个字。</li>
+    <li class="n" data-n="2">按时间分组；绿勾都一样：分不清“做完但没合入”和“已在 main”，也看不出谁在等你。改了什么要点进会话、翻到底部分支条才看得到。</li>
+   </ul>
+  </div>
+
+  <div>
+   <div class="b-cap"><span class="b-tag b-new">方案 A</span>一行一个任务，按状态分组</div>
+   <div class="win" id="w-a">
+    <div class="conv"><div>← Move search to the new index</div><div class="t">Move search to the new index</div><div class="bar"></div><div class="bar" style="width:70%"></div><div class="bar" style="width:85%"></div></div>
+    <div class="col">
+     <div class="ch"><span class="x">✕</span><div class="tt"><b>Move search to the new index</b><span>Project · 12 tasks</span></div><span class="grid">⊞</span></div>
+     <div class="tabs" data-mk="1"><div class="on">Tasks 12</div><div>Changes 24</div></div>
+     <div class="card"><div class="pb"><i style="width:75%"></i></div>9/12 done · 6 on main · 1 running</div>
+     <div class="r"><span class="ic">◌</span><div class="m"><div class="ti"><b>Coordinator</b><span class="coordb">Coordinator</span><i>2m</i></div><div class="sub">T7 is back; waiting on the landing check</div></div></div>
+     <div class="sec" data-mk="2"><span>Needs you</span><em>1</em></div>
+     <div class="r"><span class="ic" style="color:#d97706">●</span><div class="m"><div class="ti"><b class="two">Production deploy: new index live</b><i>18h</i></div>
+       <div class="meta"><span class="chip amber">Waiting for your confirmation</span><span class="chip">Criterion 5</span></div></div></div>
+     <div class="sec"><span>Running</span><em>1</em></div>
+     <div class="r"><span class="ic" style="color:#2f6bff">◐</span><div class="m"><div class="ti"><b class="two">T8 Shard plan for the new index</b><i>3m</i></div>
+       <div class="meta" data-mk="3"><span class="chip"><span class="p">+184</span> <span class="d">−12</span> · 5 files</span><span class="chip">Criterion 3</span></div><div class="sub">Running Bash…</div></div></div>
+     <div class="sec"><span>Landing</span><em>1</em></div>
+     <div class="r sel"><span class="ic" style="color:#d97706">⟳</span><div class="m"><div class="ti"><b class="two">T7 Replay comparison</b><i>22m</i></div>
+       <div class="meta"><span class="chip"><span class="p">+412</span> <span class="d">−37</span> · 9 files</span><span class="chip amber">Check re-queued</span><span class="chip blue">3 runs ▾</span></div>
+       </div></div>
+     <div class="runs" data-mk="4">
+      <div class="rr"><span>↩</span><span>Run 1 · sent back: count mismatch · 11/12</span></div>
+      <div class="rr"><span>✓</span><span>Run 2 · confirmed · 11/12</span></div>
+      <div class="rr"><span>⇄</span><span>Run 3 · merged main in · 22m</span></div>
+      <div class="rr"><span>⚖</span><span>2 judgments by Orbit</span></div>
+     </div>
+     <div class="sec"><span>On main</span><em>6</em></div>
+     <div class="r"><span class="ic" style="color:#1a7f37">✓</span><div class="m"><div class="ti"><b>T6 Replay tool</b><i>20h</i></div><div class="meta"><span class="chip"><span class="p">+268</span> <span class="d">−4</span> · 4 files</span><span class="chip green">On main</span></div></div></div>
+     <div class="r"><span class="ic" style="color:#1a7f37">✓</span><div class="m"><div class="ti"><b>T5 Old index read-only</b><i>11/10</i></div><div class="meta"><span class="chip"><span class="p">+41</span> <span class="d">−9</span> · 2 files</span><span class="chip green">On main</span></div></div></div>
+     <div class="more">+ 4 more on main</div>
+    </div>
+   </div>
+   <ul class="b-notes" style="width:660px">
+    <li class="n" data-n="1">栏顶两个标签：<b>Tasks</b>（默认）和 <b>Changes</b>（见方案 B）。数字是任务数和改动的文件数。</li>
+    <li class="n" data-n="2">按状态分组，顺序固定：<b>Needs you → Running → Landing → On main</b>（另有 Failed / Cancelled 时排在最后）。等你的放最上，颜色只用在状态上。</li>
+    <li class="n" data-n="3">每行：去掉“Task:”前缀的标题（最多两行）、改动量 <code>+412 −37 · 9 files</code>、状态小标、对应第几条验收标准。点改动量直接跳到 Changes 里只看这个任务。</li>
+    <li class="n" data-n="4">同一任务的多次运行和平台判定收进这一行：<b>3 runs ▾</b> 展开看每次运行的结果（退回 / 确认 / 同步合并）和判定次数；点某次运行打开它的会话。默认收起，列表里一个任务只占一行。</li>
+   </ul>
+  </div>
+ </div>
+</section>
+
+<!-- 2. B changes tab -->
+<section class="b-part">
+ <div class="b-cap"><span class="b-tag b-new">方案 B</span>Changes 页：项目分支对 main 的改动（参考 Codex 的审查面板），点文件在右侧看 diff</div>
+ <div class="win" id="w-b">
+  <div class="conv"><div>← Move search to the new index</div><div class="t">Move search to the new index</div><div class="bar"></div><div class="bar" style="width:70%"></div><div class="bar" style="width:85%"></div></div>
+  <div class="col">
+   <div class="ch"><span class="x">✕</span><div class="tt"><b>Move search to the new index</b><span>Project · 12 tasks</span></div><span class="grid">⊞</span></div>
+   <div class="tabs"><div>Tasks 12</div><div class="on">Changes 24</div></div>
+   <div class="scope" data-mk="1"><span class="sel">Project branch vs main ▾</span><span>All tasks ▾</span></div>
+   <div class="tot"><b>24 files</b> · <span class="p">+1,204</span> <span class="d">−318</span> · 18 on main, 6 not yet</div>
+   <div class="dir">src/search/index-v2/</div>
+   <div class="f"><span class="fn">mapping.ts</span><span class="tk">T1</span><span class="st"><span class="p">+142</span> <span class="d">−0</span></span><span class="newb">new</span></div>
+   <div class="f sel2" data-mk="2"><span class="fn">replay.ts</span><span class="tk">T6</span><span class="tk">T7</span><span class="st"><span class="p">+211</span> <span class="d">−18</span></span></div>
+   <div class="f" data-mk="3"><span class="fn">shard-plan.ts</span><span class="tk">T8</span><span class="st"><span class="p">+96</span> <span class="d">−4</span></span><span class="chip amber" style="font-size:10px">not on main</span></div>
+   <div class="dir">src/apiserver/src/search/</div>
+   <div class="f"><span class="fn">search.controller.ts</span><span class="tk">T4</span><span class="st"><span class="p">+38</span> <span class="d">−51</span></span></div>
+   <div class="f"><span class="fn">search.service.ts</span><span class="tk">T2</span><span class="tk">T4</span><span class="st"><span class="p">+120</span> <span class="d">−77</span></span></div>
+   <div class="dir">src/apiserver/prisma/migrations/</div>
+   <div class="f"><span class="fn">0472_search_v2/migration.sql</span><span class="tk">T3</span><span class="st"><span class="p">+59</span> <span class="d">−0</span></span><span class="newb">new</span></div>
+   <div class="dir">src/web/src/pages/</div>
+   <div class="f"><span class="fn">SearchPage.tsx</span><span class="tk">T4</span><span class="st"><span class="p">+33</span> <span class="d">−12</span></span></div>
+   <div class="more">+ 17 more files in 6 folders</div>
+  </div>
+  <div class="drawer">
+   <div class="dh" data-mk="4"><span><b>src/search/index-v2/replay.ts</b> &nbsp;<span class="p">+211</span> <span class="d">−18</span> · T6, T7</span><span>✕</span></div>
+   <div class="ln h">@@ -40,12 +40,31 @@ export async function replay(queries: Query[]) {</div>
+   <div class="ln">   const results: ReplayResult[] = [];</div>
+   <div class="ln">   for (const q of queries) {</div>
+   <div class="ln x">-    const old = await oldIndex.search(q);</div>
+   <div class="ln a">+    const [old, next] = await Promise.all([</div>
+   <div class="ln a">+      oldIndex.search(q),</div>
+   <div class="ln a">+      newIndex.search(q, { shards: plan.shards }),</div>
+   <div class="ln a">+    ]);</div>
+   <div class="ln a">+    results.push(compare(old, next));</div>
+   <div class="ln">   }</div>
+   <div class="ln h">@@ -88,6 +107,14 @@ function compare(a: Hit[], b: Hit[]) {</div>
+   <div class="ln a">+  const overlap = intersect(a, b).length / Math.max(a.length, 1);</div>
+   <div class="ln a">+  return { overlap, missing: diff(a, b), extra: diff(b, a) };</div>
+   <div class="ln">   }</div>
+  </div>
+ </div>
+ <ul class="b-notes" style="width:1180px">
+  <li class="n" data-n="1">范围选择，默认 <b>Project branch vs main</b>（整个项目的改动），可切到 <b>Last landing</b>（最近一次合入项目分支的改动）；右边按任务过滤（从方案 A 点某行的改动量进来时，自动选上这个任务）。</li>
+  <li class="n" data-n="2">文件按目录分组，每个文件标出改它的任务（T6、T7），加减行数；新文件标 <b>new</b>。</li>
+  <li class="n" data-n="3">还没进 main 的文件标 <b>not on main</b>（还在项目分支上），一眼看出哪些改动还没上线。</li>
+  <li class="n" data-n="4">点文件，右侧打开现有的 diff 抽屉（会话页已有的那个），抽屉头写这个文件属于哪些任务。<b>只读</b>：不提供 Codex 那种暂存 / 撤销按钮——项目的合并由平台和协调者做。</li>
+ </ul>
+</section>
+
+<!-- 3. phone -->
+<section class="b-part">
+ <div class="b-row">
+  <div>
+   <div class="b-cap"><span class="b-tag b-new">方案</span>手机：底部弹窗里是同一块内容</div>
+   <div class="b-row" style="gap:24px">
+    <div class="phone"><div class="top"><b>Move search…</b> &nbsp; ⊞ 12<br><br>T7 is back; waiting on the landing check.</div>
+     <div class="sheet"><div class="grab"></div><div class="col">
+      <div class="ch"><span class="x">✕</span><div class="tt"><b>Move search to the new index</b><span>Project · 12 tasks</span></div><span class="grid">⊞</span></div>
+      <div class="tabs"><div class="on">Tasks 12</div><div>Changes 24</div></div>
+      <div class="sec"><span>Needs you</span><em>1</em></div>
+      <div class="r"><span class="ic" style="color:#d97706">●</span><div class="m"><div class="ti"><b class="two">Production deploy: new index live</b><i>18h</i></div><div class="meta"><span class="chip amber">Waiting for your confirmation</span></div></div></div>
+      <div class="sec"><span>Running</span><em>1</em></div>
+      <div class="r"><span class="ic" style="color:#2f6bff">◐</span><div class="m"><div class="ti"><b class="two">T8 Shard plan for the new index</b><i>3m</i></div><div class="meta"><span class="chip"><span class="p">+184</span> <span class="d">−12</span> · 5 files</span></div></div></div>
+      <div class="sec"><span>Landing</span><em>1</em></div>
+      <div class="r"><span class="ic" style="color:#d97706">⟳</span><div class="m"><div class="ti"><b class="two">T7 Replay comparison</b><i>22m</i></div><div class="meta"><span class="chip"><span class="p">+412</span> <span class="d">−37</span> · 9 files</span><span class="chip blue">3 runs ▾</span></div></div></div>
+      <div class="sec"><span>On main</span><em>6</em></div>
+      <div class="r"><span class="ic" style="color:#1a7f37">✓</span><div class="m"><div class="ti"><b>T6 Replay tool</b><i>20h</i></div></div></div>
+     </div></div></div>
+    <div class="phone"><div class="top"><b>Move search…</b> &nbsp; ⊞ 12</div>
+     <div class="sheet"><div class="grab"></div><div class="col">
+      <div class="ch"><span class="x">✕</span><div class="tt"><b>Move search to the new index</b><span>Project · 12 tasks</span></div><span class="grid">⊞</span></div>
+      <div class="tabs"><div>Tasks 12</div><div class="on">Changes 24</div></div>
+      <div class="scope"><span class="sel">Project branch vs main ▾</span><span>All tasks ▾</span></div>
+      <div class="tot"><b>24 files</b> · <span class="p">+1,204</span> <span class="d">−318</span></div>
+      <div class="dir">src/search/index-v2/</div>
+      <div class="f"><span class="fn">mapping.ts</span><span class="tk">T1</span><span class="st"><span class="p">+142</span></span></div>
+      <div class="f"><span class="fn">replay.ts</span><span class="tk">T6</span><span class="tk">T7</span><span class="st"><span class="p">+211</span> <span class="d">−18</span></span></div>
+      <div class="f"><span class="fn">shard-plan.ts</span><span class="tk">T8</span><span class="st"><span class="p">+96</span> <span class="d">−4</span></span></div>
+      <div class="dir">src/apiserver/src/search/</div>
+      <div class="f"><span class="fn">search.service.ts</span><span class="tk">T2</span><span class="st"><span class="p">+120</span> <span class="d">−77</span></span></div>
+     </div></div></div>
+   </div>
+  </div>
+  <ul class="b-notes" style="width:520px;margin-top:40px">
+   <li>手机上的弹窗与桌面右栏是同一块内容：两个标签、按状态分组、每行改动量。</li>
+   <li>在手机上点 Changes 里的文件，推进到全屏 diff 页（返回回到列表），不做左右分栏。</li>
+   <li>iOS / Android 照这套布局各自用原生控件（分段控件做标签，系统列表做分组）。</li>
+  </ul>
+ </div>
+</section>
+
+<!-- 4. decisions -->
+<section class="b-part">
+ <h1 style="font-size:22px">待定 · 要你拍板</h1>
+ <div class="b-box"><h2>1. 先做哪个</h2><ul class="b-notes">
+  <li><b>先 A 后 B</b><span class="b-rec">推荐</span>：A 基本只改前端（会话本来就记着属于哪个任务，每个会话的改动统计也有）；B 要新增一个“项目分支对 main 的 diff”接口，工作量中等。</li>
+  <li><b>A、B 一起</b>：一次到位，但 B 的接口会拖慢 A 上线。</li></ul></div>
+ <div class="b-box"><h2>2. 平台的判定会话（Judgment）怎么放</h2><ul class="b-notes">
+  <li><b>收进任务行</b><span class="b-rec">推荐</span>：在 “3 runs ▾” 里显示“2 judgments by Orbit”，展开可点开。</li>
+  <li><b>完全不显示</b>：最干净，但想追查“为什么被退回”时要去任务页找。</li></ul></div>
+ <div class="b-box"><h2>3. Changes 页默认范围</h2><ul class="b-notes">
+  <li><b>Project branch vs main</b><span class="b-rec">推荐</span>：整个项目到底改了什么，未合入的单独标出。</li>
+  <li><b>Last landing</b>：只看最近一次合入的改动，适合跟进中途。</li></ul></div>
+ <div class="b-box"><h2>落地（按代价排）</h2><ul class="b-notes">
+  <li><b>Web A</b>：项目栏的数据从“项目的会话”改成“项目的任务 + 各自的会话”；去掉前缀、按状态分组、每行改动量（取各任务最新运行会话的分支统计）、多次运行收起。手机弹窗同一块内容。</li>
+  <li><b>服务端 B</b>：新增“项目分支相对 main 的文件差异”接口（文件列表 + 每文件加减 + 由哪些任务改动 + 是否已在 main），以及按文件取 diff。</li>
+  <li><b>Web B</b>：Changes 标签、范围与任务过滤、文件列表、复用现有 diff 抽屉。</li>
+  <li><b>iOS / Android</b>：跟进 A、B 的同一布局（各一个任务，先 iOS 再 Android）。</li></ul></div>
+</section>
+<script>
+window.drawMarks = () => {
+  document.querySelectorAll('.mk').forEach((e) => e.remove());
+  for (const el of document.querySelectorAll('[data-mk]')) {
+    const win = el.closest('.win'); const w = win.getBoundingClientRect(); const r = el.getBoundingClientRect();
+    const m = document.createElement('div'); m.className = 'mk';
+    Object.assign(m.style, { left: (r.left - w.left - 4) + 'px', top: (r.top - w.top - 4) + 'px', width: (r.width + 8) + 'px', height: (r.height + 8) + 'px' });
+    m.innerHTML = '<b>' + el.dataset.mk + '</b>'; win.appendChild(m);
+  }
+};
+window.drawMarks();
+</script></body></html>
