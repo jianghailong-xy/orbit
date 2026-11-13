@@ -9,6 +9,7 @@ import {
   gracefulEndStatus,
   isApiErrorText,
   isAuthErrorText,
+  isConnectionFailureText,
 } from '@orbit/shared';
 import { randomUUID } from 'crypto';
 import { initializesRuntimeDynamically } from '../common/runtime-provider';
@@ -656,12 +657,12 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           continue;
         }
         // Backstop for a task run whose last turn ended in a Claude API error (e.g.
-        // content filtering) or an expired sign-in: the SDK reports it as a successful
-        // turn, so an older runner parks the session at AWAITING_INPUT and the task stays
-        // IN_PROGRESS with nothing watching. (Current runners flag the turn FAILED at the
-        // source, so this only catches sessions a stale runner left behind — which outlive
-        // a release, since a runner only self-updates at startup.) Finalize FAILED and
-        // reclaim the task as FAILED. Task-bound, online, not-being-cancelled only.
+        // content filtering), a failure of the connection to the API, or an expired sign-in:
+        // the SDK reports it as a successful turn, so an older runner parks the session at
+        // AWAITING_INPUT and the task stays IN_PROGRESS with nothing watching. (Current runners
+        // flag the turn FAILED at the source, so this only catches sessions a stale runner left
+        // behind — which outlive a release, since a runner only self-updates at startup.) Finalize
+        // FAILED and reclaim the task as FAILED. Task-bound, online, not-being-cancelled only.
         if (s.status === RunStatus.AWAITING_INPUT && s.taskId && !s.cancelRequestedAt) {
           const last = await this.prisma.runEvent.findFirst({
             where: { sessionId: s.id, type: RunEventType.ASSISTANT },
@@ -669,7 +670,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
             select: { payload: true },
           });
           const text = (last?.payload as { text?: string } | null)?.text;
-          if (isApiErrorText(text) || isAuthErrorText(text)) {
+          if (isApiErrorText(text) || isAuthErrorText(text) || isConnectionFailureText(text)) {
             const why = isAuthErrorText(text) ? 'run failed (sign-in expired)' : 'run failed (API error)';
             await this.forceFinalize(s.id, s.assignedRunnerId, s.taskId, why, {
               resetTaskTo: TaskStatus.FAILED,

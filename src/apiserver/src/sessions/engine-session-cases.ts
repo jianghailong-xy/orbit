@@ -46,7 +46,7 @@ export const ENGINE_SESSION_USER_ROUTES = routesNamingSession(TENANT_ISOLATION_C
 export const ENGINE_SESSION_RUNNER_ROUTES = routesNamingSession(RUNNER_ISOLATION_CASES, '/runner/sessions');
 
 /**
- * The doors whose session id rides in the body or the query rather than the path (6). Each is held
+ * The doors whose session id rides in the body or the query rather than the path (7). Each is held
  * to the field case of the same name in the isolation registries, so the two lists cannot drift.
  */
 export const ENGINE_SESSION_FIELD_CASES: Readonly<Record<string, { guard: string; note: string }>> = {
@@ -73,6 +73,10 @@ export const ENGINE_SESSION_FIELD_CASES: Readonly<Record<string, { guard: string
   'POST /runner/heartbeat body expiredCommitErrors[].sessionId': {
     guard: 'RunnerApiController.assertNoLandingSessionNamed',
     note: 'an expired commit attempt belongs to a session this runner hosts',
+  },
+  'POST /runner/sessions/takeover-leases body sessions[].sessionId': {
+    guard: 'RunnerApiController.takeoverLeasesBatch',
+    note: 'each row of the batch takeover is the single takeover door, answered per row',
   },
 };
 
@@ -280,6 +284,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     file: 'runner-api/runner-api.controller.ts',
     snippet: 'return assertEngineSessionRowById(this.prisma, sessionId, ownerId);',
     note: 'the runner doors that name the session only by id: leases, pin, credential, reporting routes',
+  },
+  'RunnerApiController.takeoverLeasesBatch': {
+    file: 'runner-api/runner-api.controller.ts',
+    snippet: "// The single route's first refusal, on the caller's own account: a landing is the platform's (§2.9 LS6).",
+    note: 'every row of the batch takeover, refused per row as the single takeover refuses it',
   },
   'RunnerApiController.assertNoLandingSessionNamed': {
     file: 'runner-api/runner-api.controller.ts',

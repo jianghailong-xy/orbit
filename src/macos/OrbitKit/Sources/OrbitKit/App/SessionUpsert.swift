@@ -232,6 +232,8 @@ public extension Session {
                 // The same: the list's count, which no event carries.
                 runningSubagentCount: runningSubagentCount,
                 engineTurnActive: engineTurnActive,
+                // The list's, which no event carries either.
+                activity: activity,
                 error: error,
                 endReason: endReason,
                 agent: agent ?? self.agent,

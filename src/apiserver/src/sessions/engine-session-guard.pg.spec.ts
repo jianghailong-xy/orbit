@@ -482,6 +482,15 @@ test('the body and query field cases refuse a LANDING session too', { skip }, as
           stack.api.heartbeat({ id: w.runnerId, ownerId: w.ownerId, version: null } as never, {
             expiredCommitErrors: [{ sessionId: landing, operationId: randomUUID() }],
           } as never),
+        // Answered per row: the landing's row carries the single route's refusal, raised here as it would be there.
+        'POST /runner/sessions/takeover-leases body sessions[].sessionId': async () => {
+          const answer = await stack.api.takeoverLeasesBatch({ id: w.runnerId, ownerId: w.ownerId } as never, {
+            leaseOwner: randomUUID(), sessions: [{ sessionId: landing }],
+          });
+          const refused = answer.results[0]?.error;
+          if (refused) throw new ConflictException({ code: refused.code, message: refused.message });
+          return answer;
+        },
       };
       try {
         await expectPlatformDriven(drive[key](), `${key} (${field.guard})`);

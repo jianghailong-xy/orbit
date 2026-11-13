@@ -305,7 +305,11 @@ public struct OrbitLinkCardContent: Equatable, Sendable {
                                 engineTurnActive: session.engineTurnActive == true,
                                 error: session.error,
                                 retryPending: session.retryPending(now: now),
-                                watchingLabel: session.watchingLabel,
+                                // A wait the server reports beyond the watches counted here — a
+                                // wake-up, a retry — reads as the row does (`Session.resumesOnItsOwn`).
+                                watchingLabel: session.watchingLabel
+                                    ?? (session.effectiveRunState == .awaitingInput && session.activity == "WAITING"
+                                        ? SessionHeader.waitingToResume : nil),
                                 waitingKind: session.waitingKind)
     }
 

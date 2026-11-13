@@ -400,9 +400,9 @@ final class AppModel {
     /// Entries are released in `applySessionSnapshot` the moment a snapshot without the row lands:
     /// from then on the row isn't in `lastSnapshot` either, so no later diff can announce it.
     private var filedSessions: Set<String> = []
-    /// Sessions being moved to Trash from this device. Delete takes the row out of every loaded list
-    /// on the tap (`hideTrashedSession`), and these stay out of every list written until the move has
-    /// settled — a read that left before the server had the move would put the row back for a beat,
+    /// Sessions being moved to Trash, or completed, from this device. Delete and Complete take the
+    /// row out of every loaded list on the tap (`hideTrashedSession`), and these stay out of every
+    /// list written until the move has settled — a read that left before the server had the move would put the row back for a beat,
     /// and so would the re-read the delete before it started, when rows are deleted one after
     /// another. Released (`revealTrashedSession`) once the lists have been read again behind the
     /// move, at once if the server refuses it, and by an Undo that brings the row back.
@@ -2196,6 +2196,11 @@ final class AppModel {
         NeedsYouLogic.banner(waiting: needsYouSessions, excluding: focused)
     }
 
+    /// The banner unfolded: one line per waiting conversation, the first the one the banner names.
+    func needsYouEntries(excluding focused: String?) -> [NeedsYouBanner] {
+        NeedsYouLogic.entries(waiting: needsYouSessions, excluding: focused)
+    }
+
     /// Open the session the banner points at. The same navigation as a Recents tap, minus the origin
     /// that says "drawer": a banner tap didn't come from the drawer, so the console it lands on keeps
     /// the system back-swipe instead of yielding the edge to the drawer gesture. An earlier Recents
@@ -2359,17 +2364,21 @@ final class AppModel {
             return
         }
         filedSessions.insert(id)
+        hideTrashedSession(id)
+        dropIfOpen(id)
         Task { @MainActor in
             defer { filedSessions.remove(id) }
             do {
                 try await api.completeSession(id)
             } catch {
+                revealTrashedSession(id)
                 errorText = "Couldn't complete the session."
+                await reloadSessionLists()
                 return
             }
             sessionDetails.remove(id)
-            dropIfOpen(id)
             await loadSessions()
+            revealTrashedSession(id)
         }
     }
 
@@ -2564,7 +2573,9 @@ final class AppModel {
         }
     }
 
-    /// Complete a session, drop it from any open pane and offer Undo.
+    /// Complete a session, drop it from any open pane and offer Undo. Like Delete, the row leaves
+    /// every list on the tap rather than once the server has answered and the lists have been read
+    /// again (`hideTrashedSession`); a refusal brings it back.
     func completeSession(_ id: String) {
         guard let api else { return }
         guard session(id: id)?.capabilities?.canComplete != false else {
@@ -2573,18 +2584,22 @@ final class AppModel {
         }
         let name = toastSessionTitle(id)
         filedSessions.insert(id)
+        hideTrashedSession(id)
+        dropIfOpen(id)
         Task { @MainActor in
             defer { filedSessions.remove(id) }
             do { try await api.completeSession(id) }
             catch {
+                revealTrashedSession(id)
                 showToast("Couldn't complete the session", sessionID: id, sessionTitle: name,
                           detail: Self.toastDetail(error), tone: .error)
+                await reloadSessionLists()
                 return
             }
             sessionDetails.remove(id)
-            dropIfOpen(id)
-            await reloadSessionLists()
             showToast("Session completed", sessionID: id, sessionTitle: name, canUndo: true)
+            await reloadSessionLists()
+            revealTrashedSession(id)
         }
     }
 
@@ -3231,6 +3246,32 @@ final class AppModel {
     }
 
     // MARK: session folders (docs/session-folders-move-design.md §3–4)
+
+    #if os(iOS)
+    /// A member picked in the project sessions sheet over a phone's conversation (board 5): its
+    /// conversation takes the place of the one the sheet was opened over (`NavState.switchConsole`).
+    func openProjectMemberFromSheet(_ session: Session) {
+        sessionDetails.store(session)
+        nav.switchConsole(to: .console(sessionID: session.id, origin: .list))
+    }
+
+    /// The project's session count, read by both the project sessions button and the page's
+    /// "Project · N sessions" (`SessionProjectSheet.sessionCount`). Nil until the page's read has
+    /// answered for this project.
+    func projectSessionCount(_ projectID: String) -> Int? {
+        SessionProjectSheet.sessionCount(
+            projectID: projectID,
+            page: projectSessionsAddress.map { ($0.projectID, projectSessions) },
+            answered: projectSessionsReadAt != nil)
+    }
+
+    /// The sessions page a conversation's project sessions button reads and opens
+    /// (`SessionProjectSheet.address`).
+    func projectSheetAddress(_ projectID: String, session: Session?) -> SessionProjectAddress {
+        SessionProjectSheet.address(projectID: projectID, shown: projectSessionsAddress,
+                                    agentID: session?.agent?.id ?? session?.agentId ?? selectedAgentID ?? "")
+    }
+    #endif
 
     /// Load the owner's folder library: when a workspace's session list appears, and again when
     /// `folder.changed` says one was created, renamed or deleted, here or on another device.

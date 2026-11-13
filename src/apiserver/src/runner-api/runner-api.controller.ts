@@ -1,5 +1,6 @@
 import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from '../sessions/run-question';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
+import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
 import { readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import {
@@ -140,6 +141,10 @@ import {
   SourcePinResponse,
   TakeoverTurnLeasesRequest,
   TakeoverTurnLeasesResponse,
+  BATCH_TAKEOVER_TURN_LEASES_MAX,
+  type BatchTakeoverTurnLeasesRequest,
+  type BatchTakeoverTurnLeasesResponse,
+  type BatchTakeoverTurnLeasesResult,
   TurnAttachment,
   TurnCompleteRequest,
   type WikiRepoOpCommand,
@@ -166,6 +171,7 @@ import {
   type NormalizedRunEvent,
   toUuid,
   CLAUDE_REGION_V1,
+  TASK_FORK_V1,
   CLAUDE_REGION_REFUSED_SUBTYPE,
   CLAUDE_REGION_STOPPED_SUBTYPE,
   type ClaudeRegionCheckRequest,
@@ -218,6 +224,7 @@ import {
   APPROVAL_ABANDONED_STATUS,
   reapApprovalsOfEndedTurns,
   reapApprovalsOfReplacedSupervisor,
+  reapApprovalsOfReplacedSupervisors,
   reapApprovalsOfReturnedCalls,
   reapApprovalsOfReturnedCallsIn,
 } from '../sessions/abandoned-approvals';
@@ -466,7 +473,6 @@ import { loginCodeRelay } from '../runners/login-code-relay';
 import { readDirProbeResult } from '../runners/dir-probe';
 import { readRunnerRepoHealth, sanitizeRunnerRepoHealth, workspacesWithChangedRepoHealth } from '../common/runner-repo-health';
 import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
-import { claimDrainWaitingPush } from '../common/runner-drain-waiting';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
 import { orchestrationEnabled } from '../common/orchestration-switch';
@@ -498,7 +504,7 @@ import {
 import { coordinatorCreateAllowedBy } from './unstarted-project-create';
 import {
   freezeSessionSourcePin,
-  sessionSourceSnapshot,
+  forkAuthorityBindings, sessionSourceSnapshot,
 } from '../projects/session-source';
 import { providerDispatchWhereOn } from '../providers/custom-provider';
 import { dispatchKeyRow } from '../providers/engine-provider';
@@ -1264,6 +1270,21 @@ export function runnerSupportsCapability(
  *  here; the runner retries as it does every refused takeover. */
 const LEASE_WRITE_REFUSED = 'the inbox lease was not written; retry';
 
+/** A batch takeover row's refusal, as the single route would have answered it: its status code, its
+ *  message and the code it carries. Only a refusal (an HttpException) is a row's answer; anything else
+ *  is a fault and is raised as it is. */
+function takeoverRowRefusal(error: unknown): { statusCode: number; message: string; code?: string } {
+  if (!(error instanceof HttpException)) throw error;
+  const body = error.getResponse();
+  if (typeof body === 'string') return { statusCode: error.getStatus(), message: body };
+  const { message, code } = body as { message?: unknown; code?: unknown };
+  return {
+    statusCode: error.getStatus(),
+    message: Array.isArray(message) ? message.join('; ') : String(message ?? error.message),
+    ...(typeof code === 'string' ? { code } : {}),
+  };
+}
+
 /** The repository operations' refusal as a status (contract `repoOps`): 409 for a claim that was taken
  *  over or a row already settled, 404 for one this runner cannot see, 400 for a body that is not a
  *  result. Anything else is a real fault and is raised as it is, so it is logged as one. */
@@ -1973,9 +1994,6 @@ export class RunnerApiController {
       }
     }
     if (verdict.answer !== 'FULL') {
-      // Work queuing behind a drain moves nothing a quiet beat reads, so a draining beat asks for the drain's push here
-      // too: at most one statement per beat, and only while the runner drains.
-      if (dto?.draining === true) await this.pushDrainWaiting(runnerId);
       // Whichever apiserver process holds them (cursor-key-check-relay.ts): the gateway forwards a beat to any.
       const cursorKeyChecks = await cursorKeyCheckRelay.takeAnywhere(runnerId);
       return quietHeartbeatAnswer(row, {
@@ -1989,19 +2007,6 @@ export class RunnerApiController {
       row,
       digests,
     });
-  }
-
-  /**
-   * A runner draining for its update with something of its owner's waiting on it: tell them, once per drain (D3). The
-   * claim is the guard — only the beat whose UPDATE matched pushes — and a failure costs the push, never the heartbeat.
-   */
-  private async pushDrainWaiting(runnerId: string): Promise<void> {
-    try {
-      const push = await claimDrainWaitingPush(this.prisma, runnerId);
-      if (push) void this.push.notifyRunnerDrainWaiting(push);
-    } catch (error) {
-      this.logger.warn(`runner ${runnerId}: drain push skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
-    }
   }
 
   /** What a link heartbeat's answer says waits for the runner: the beat statement's HintState, and this process's own. */
@@ -2134,8 +2139,6 @@ export class RunnerApiController {
         // to send a leaseOwner or a draining flag writes NULL: no active lease, not draining.
         heartbeatLeaseOwner,
         heartbeatDraining: typeof dto?.draining === 'boolean' ? dto.draining : null,
-        // A beat that is not draining ends the drain's one push (migration 0595): the next drain pushes again.
-        ...(dto?.draining === true ? {} : { drainWaitingPushedAt: null }),
         // Per-engine health for Infrastructure. Sanitized on the way in as well as out, so a
         // malformed report can't be stored as a claim about this machine; an older runner omits
         // the field entirely and keeps whatever was last known.
@@ -2329,7 +2332,6 @@ export class RunnerApiController {
         void this.push.notifyEngineSignedOut(runner.id, current.engine);
       }
     }
-    if (dto?.draining === true) await this.pushDrainWaiting(runner.id);
     // A finished install stops being news the moment the probe confirms it: clear the slot so the
     // row goes back to speaking from engine health (which then says "signed out", with the sign-in
     // that actually comes next) rather than sitting on a terminal status nobody has to act on.
@@ -2522,6 +2524,7 @@ export class RunnerApiController {
     let postponeSelfUpdateUntil: RunnerHeartbeatResponse['postponeSelfUpdateUntil'];
     let selfUpdateNow: RunnerHeartbeatResponse['selfUpdateNow'];
     let regionCheckRequest: RunnerHeartbeatResponse['regionCheckRequest'];
+    let forkSnapshotsOpen: RunnerHeartbeatResponse['forkSnapshotsOpen'];
     try {
       cancelSessionIds = await this.realtime.drainCancellations(runner.id);
       // Manual git mutations are fail-closed: a runner must advertise its process owner,
@@ -2584,6 +2587,9 @@ export class RunnerApiController {
       selfUpdateNow = await this.drainSelfUpdateNow(runner.id);
       // The owner's Check again, redelivered rather than claimed: a beat that skips it costs nothing, so it is last.
       regionCheckRequest = await this.drainRegionCheckRequest(runner.id, capabilities);
+      // A listing, read on every full beat like agentDirs; a beat that fails before it states nothing, which the
+      // runner reads as "delete nothing".
+      forkSnapshotsOpen = await this.forkSnapshotsOpen(updated.ownerId, runner.id, capabilities);
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
@@ -2662,6 +2668,8 @@ export class RunnerApiController {
       ...(cursorKeyChecks.length > 0 ? { cursorKeyChecks } : {}),
       // Only while the owner's Check again waits, and only to a process that declared claude-region/v1.
       ...(regionCheckRequest ? { regionCheckRequest } : {}),
+      // Only to a process that declared task-fork/v1: an older runner's response keeps its shape.
+      ...(forkSnapshotsOpen ? { forkSnapshotsOpen } : {}),
       // Only to a runner that declared owner-secret/v1: ids and expiries, never a value.
       ...(secretReconcile ?? {}),
       // Only on a link call, which the gateway takes it out of: an HTTPS response keeps its shape.
@@ -3045,6 +3053,26 @@ export class RunnerApiController {
       data: { selfUpdateNowRequestedAt: null },
     });
     return claimed.count > 0 ? true : undefined;
+  }
+
+  /**
+   * The snapshots this runner's open forked tasks start from (docs/task-fork-from-session-design.md §2.6, SR55): the
+   * distinct `fork_sha` of every OPEN or IN_PROGRESS task forked on this runner. The runner deletes each keep-alive ref
+   * whose snapshot is not listed, so a task that closed lets its snapshot go. Only to a process that declares
+   * task-fork/v1; undefined otherwise, which deletes nothing. Reads only, through the owner's status index.
+   */
+  private async forkSnapshotsOpen(
+    ownerId: string,
+    runnerId: string,
+    capabilities: string | string[] | undefined,
+  ): Promise<string[] | undefined> {
+    if (!runnerSupportsCapability(capabilities, TASK_FORK_V1)) return undefined;
+    const rows = await this.prisma.task.findMany({
+      where: { ownerId, status: { in: ['OPEN', 'IN_PROGRESS'] }, forkRunnerId: runnerId, forkSha: { not: null } },
+      select: { forkSha: true },
+      distinct: ['forkSha'],
+    });
+    return rows.map((r) => r.forkSha as string);
   }
 
   /**
@@ -3874,7 +3902,7 @@ export class RunnerApiController {
   async reclaim(
     // runsAsRoot rides the authenticated row (RunnerAuthGuard loads it whole): the claim below has
     // to withdraw Bypass for the machine that is about to spawn the process, not for some other.
-    @CurrentRunner() runner: { id: string; ownerId: string; runsAsRoot?: boolean | null },
+    @CurrentRunner() runner: { id: string; ownerId: string; runsAsRoot?: boolean | null; capabilities?: string[] | null },
     @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
   ): Promise<ReclaimResponse> {
     const sessions = await this.prisma.session.findMany({
@@ -3974,6 +4002,8 @@ export class RunnerApiController {
         sourceBindings.set(binding.id, binding);
       }
     }
+    // A fork's authority is the machine its task's snapshot is on (SR55), not a binding's.
+    const forkBindings = await forkAuthorityBindings(this.prisma, sessions);
     // Reclaim never mutates lifecycle/lease ownership. The runner takes each row over with an
     // expected-owner CAS after receiving the snapshot; therefore a timed-out, delayed request
     // cannot retire a generation activated from a newer response. The only writes below are an
@@ -4179,6 +4209,8 @@ export class RunnerApiController {
         agent: workspaceCfg,
         workDir: workspace?.workDir ?? undefined,
         branch: s.branch ?? undefined,
+        // cf. the claim path: a codeless run with no branch yet goes back to its detached checkout.
+        ...codelessClaimFields(s, workspace, runner.capabilities),
         autoInitGit: workspace?.autoInitGit ?? undefined,
         // cf. the claim path: a folder Orbit made the workspace in is made on the machine if it is missing.
         ...(workspace?.autoCreateWorkDir ? { createWorkDir: true } : {}),
@@ -4204,7 +4236,8 @@ export class RunnerApiController {
         // that happens to have the same id.
         source: sessionSourceSnapshot(
           s,
-          s.sourceCodebaseId ? (sourceBindings.get(s.sourceCodebaseId) ?? null) : null,
+          forkBindings.get(s.id)
+            ?? (s.sourceCodebaseId ? (sourceBindings.get(s.sourceCodebaseId) ?? null) : null),
         ),
       });
     }
@@ -4443,6 +4476,206 @@ export class RunnerApiController {
     }
     this.realtime.notifyInbox(sessionId);
     return { ok: true, status: taken.status as SharedRunStatus };
+  }
+
+  /**
+   * The takeover above for every session a reclaim handed back, in one request and one transaction.
+   *
+   * Each row is judged by the same fences, read under the same row lock, and answered with what the
+   * single route would answer: its status, or the 403/409 it would refuse with — and one row's
+   * refusal refuses none of the others. The writes are set-based: one locking read, one lease
+   * write, one generation insert, one turn expiry and one approval reap for the whole batch, so a
+   * restart's few hundred takeovers cost a handful of statements instead of a request each.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/takeover-leases')
+  @HttpCode(200)
+  async takeoverLeasesBatch(
+    @CurrentRunner() runner: { id: string },
+    @Body() dto: BatchTakeoverTurnLeasesRequest,
+    @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
+  ): Promise<BatchTakeoverTurnLeasesResponse> {
+    const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
+    if (!leaseOwner) throw new BadRequestException('leaseOwner is required');
+    const rows = dto?.sessions;
+    if (!Array.isArray(rows) || rows.length === 0) throw new BadRequestException('sessions is required');
+    if (rows.length > BATCH_TAKEOVER_TURN_LEASES_MAX) {
+      throw new BadRequestException(`at most ${BATCH_TAKEOVER_TURN_LEASES_MAX} sessions per takeover`);
+    }
+    const asked = rows.map((row) => {
+      let sessionId: string;
+      try {
+        if (typeof row?.sessionId !== 'string' || row.sessionId === '') throw new Error('no id');
+        sessionId = toUuid(row.sessionId);
+      } catch {
+        throw new BadRequestException('invalid sessionId');
+      }
+      return { sessionId, expectedLeaseOwner: parseLeaseGeneration(row?.expectedLeaseOwner ?? undefined) };
+    });
+    const ids = asked.map((row) => row.sessionId);
+    if (new Set(ids).size !== ids.length) throw new BadRequestException('a session is named twice');
+
+    // The single route's first refusal, on the caller's own account: a landing is the platform's (§2.9 LS6).
+    const refusedBeforeLock = new Map<string, BatchTakeoverTurnLeasesResult['error']>();
+    const ownerId = (runner as { ownerId?: string }).ownerId;
+    const kinds = await this.prisma.session.findMany({
+      where: { id: { in: ids }, ...(ownerId ? { ownerId } : {}) },
+      select: { id: true, sessionKind: true },
+    });
+    for (const row of kinds) {
+      try {
+        assertEngineSessionRow(row);
+      } catch (error) {
+        refusedBeforeLock.set(row.id, takeoverRowRefusal(error));
+      }
+    }
+
+    const taken = await withTransactionRetry(this.prisma, async (tx) => {
+      const answers = new Map<string, BatchTakeoverTurnLeasesResult>();
+      const lockable = ids.filter((id) => !refusedBeforeLock.has(id));
+      // Locked in id order, as every batch takes them, so two batches cannot deadlock on each other.
+      const locked = lockable.length === 0 ? [] : await tx.$queryRaw<
+        Array<{
+          id: string;
+          provider: string;
+          providerBuiltin: boolean;
+          engine: string | null;
+          ownerId: string;
+          inboxLeaseGeneration: string | null;
+          inboxLeaseOwner: string | null;
+          status: RunStatus;
+          mergeStatus: string | null;
+          mergeOperationId: string | null;
+          mergeOperationOwner: string | null;
+          mergeRequestedAt: Date | null;
+          commitStatus: string | null;
+          commitOperationId: string | null;
+          commitOperationOwner: string | null;
+          commitRequestedAt: Date | null;
+        }>
+      >`
+        SELECT id, provider, "provider_builtin" AS "providerBuiltin", engine, "owner_id" AS "ownerId", "inbox_lease_generation" AS "inboxLeaseGeneration",
+               "inbox_lease_owner" AS "inboxLeaseOwner", status,
+               "merge_status" AS "mergeStatus",
+               "merge_operation_id" AS "mergeOperationId",
+               "merge_operation_owner" AS "mergeOperationOwner",
+               "merge_requested_at" AS "mergeRequestedAt",
+               "commit_status" AS "commitStatus",
+               "commit_operation_id" AS "commitOperationId",
+               "commit_operation_owner" AS "commitOperationOwner",
+               "commit_requested_at" AS "commitRequestedAt"
+        FROM "session"
+        WHERE id = ANY(${lockable}::uuid[]) AND "assigned_runner_id" = ${runner.id}::uuid
+        ORDER BY id
+        FOR UPDATE
+      `;
+      const byId = new Map(locked.map((row) => [row.id, row]));
+      const writes: Array<{ id: string; fence: string; predecessor: string | null; status: RunStatus; declared: string | null }> = [];
+      for (const { sessionId, expectedLeaseOwner } of asked) {
+        const refused = refusedBeforeLock.get(sessionId);
+        if (refused) {
+          answers.set(sessionId, { sessionId, error: refused });
+          continue;
+        }
+        const row = byId.get(sessionId);
+        if (!row) {
+          answers.set(sessionId, { sessionId, error: { statusCode: 403, message: 'session does not belong to this runner' } });
+          continue;
+        }
+        let declared: string | null;
+        try {
+          declared = await assertDeclaredLeaseSupport(tx, runner.id, row, providerHeader);
+        } catch (error) {
+          answers.set(sessionId, { sessionId, error: takeoverRowRefusal(error) });
+          continue;
+        }
+        const conflict = (message: string) => answers.set(sessionId, { sessionId, error: { statusCode: 409, message } });
+        if (!OPEN.includes(row.status)) {
+          conflict('session is no longer open');
+          continue;
+        }
+        const currentOwner = row.inboxLeaseOwner;
+        if (currentOwner === leaseOwner) {
+          answers.set(sessionId, { sessionId, status: row.status as SharedRunStatus });
+          continue;
+        }
+        if (
+          pendingWorktreeOperationMayBeExecuting(row.mergeStatus, row.mergeOperationId, row.mergeOperationOwner, row.mergeRequestedAt) ||
+          pendingWorktreeOperationMayBeExecuting(row.commitStatus, row.commitOperationId, row.commitOperationOwner, row.commitRequestedAt)
+        ) {
+          conflict('wait for the pending worktree operation to finish');
+          continue;
+        }
+        if (currentOwner !== expectedLeaseOwner) {
+          conflict('inbox lease owner changed; refresh the session snapshot');
+          continue;
+        }
+        writes.push({ id: sessionId, fence: row.inboxLeaseGeneration ?? randomUUID(), predecessor: currentOwner, status: row.status, declared });
+      }
+
+      const orphanedApprovals: Array<{ sessionId: string; id: string }> = [];
+      if (writes.length > 0) {
+        // The single route's writes, once for the batch. The lease write goes first here so a row a
+        // guard refuses (it skips the row rather than raising) retires nothing and reaps nothing —
+        // what the single route gets by rolling its whole transaction back.
+        await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+        const acquiredRows = await tx.$queryRaw<Array<{ id: string }>>`
+          UPDATE "session" AS s
+          SET "inbox_lease_generation" = w.fence,
+              "inbox_lease_owner" = ${leaseOwner}::uuid,
+              "running_bg_shells" = '{}'::text[],
+              "running_bg_jobs" = '{}'::text[],
+              "running_bg_job_activity" = '{}'::jsonb,
+              "running_subagents" = '{}'::text[],
+              "engine_turn_active" = false
+          FROM unnest(${writes.map((w) => w.id)}::uuid[], ${writes.map((w) => w.fence)}::uuid[]) AS w(id, fence)
+          WHERE s.id = w.id
+          RETURNING s.id
+        `;
+        const acquired = new Set(acquiredRows.map((row) => row.id));
+        const landed = writes.filter((w) => acquired.has(w.id));
+        for (const w of writes) {
+          answers.set(w.id, acquired.has(w.id)
+            ? { sessionId: w.id, status: w.status as SharedRunStatus }
+            : { sessionId: w.id, error: { statusCode: 409, message: w.declared ?? LEASE_WRITE_REFUSED } });
+        }
+        if (landed.length > 0) {
+          await tx.$executeRaw`
+            INSERT INTO "inbox_lease_generation"
+              ("generation", "session_id", "lease_owner", "retired_at")
+            SELECT g.fence, g.session_id, g.owner, now()
+            FROM unnest(${landed.map((w) => w.fence)}::uuid[], ${landed.map((w) => w.id)}::uuid[],
+                        ${landed.map((w) => w.predecessor)}::uuid[]) AS g(fence, session_id, owner)
+            ON CONFLICT ("generation") DO UPDATE
+              SET "retired_at" = COALESCE("inbox_lease_generation"."retired_at", now())
+            WHERE "inbox_lease_generation"."session_id" = EXCLUDED."session_id"
+          `;
+          await tx.$executeRaw`
+            UPDATE "conversation_turn"
+            SET "lease_deadline_at" = now() - interval '1 second'
+            WHERE "session_id" = ANY(${landed.map((w) => w.id)}::uuid[])
+              AND kind IN ('message', 'shell')
+              AND status = 'IN_FLIGHT'
+          `;
+          const replaced = landed.filter((w) => w.predecessor).map((w) => w.id);
+          if (replaced.length > 0) {
+            orphanedApprovals.push(...await reapApprovalsOfReplacedSupervisors(tx, replaced));
+          }
+        }
+      }
+      return { results: ids.map((id) => answers.get(id)!), orphanedApprovals };
+    }, loggedRetry(this.logger, 'runnerApi.takeoverLeasesBatch'));
+
+    for (const { sessionId, id } of taken.orphanedApprovals) {
+      this.realtime.publish(sessionId, {
+        seq: 0,
+        type: RunEventType.APPROVAL_RESOLVED,
+        payload: { id, status: APPROVAL_ABANDONED_STATUS },
+        ts: new Date().toISOString(),
+      });
+    }
+    for (const row of taken.results) if (row.status) this.realtime.notifyInbox(row.sessionId);
+    return { ok: true, results: taken.results };
   }
 
   /** Activate one freshly reserved engine as this session's sole inbox consumer. */
@@ -9077,6 +9310,9 @@ export class RunnerApiController {
       const current = await tx.session.findUniqueOrThrow({
         where: { id: sessionId },
       });
+      // A branch the session was not created with is accepted only from a codeless task's run, which makes
+      // its branch at finalize (design §3, B2); any other such report is not written (codeless-checkout.ts).
+      dto.branch = await acceptedFinalizeBranch(tx, current, dto.branch);
 
       // If cancel/end won the row lock, its reason is authoritative regardless of what
       // the runner reports. TASK_DONE settles SUCCEEDED; task-cancel/user-end/idle and

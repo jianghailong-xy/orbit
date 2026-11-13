@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Runner stopping · 效果图</title>
+<style>
+  :root { --border:#dee0e3; --t1:#1f2329; --t2:#646a73; --t3:#8f959e; --brand:#3370ff; --tint:#eaf1ff; --bborder:#bcd3ff; --warn:#c2710c; --warnbg:#fff6e8; --warnbd:#f5d7a8; --danger:#d83931; }
+  body { margin:0; background:#f4f4f6; font:15px/1.55 "Inter","Noto Sans SC","WenQuanYi Zen Hei",sans-serif; color:#1d1d1f; }
+  .b-part { width:1440px; margin:0 auto; padding:36px 44px 40px; box-sizing:border-box; background:#fff; border-bottom:1px solid #e3e3e8; font:15px/1.55 "Inter","Noto Sans SC","WenQuanYi Zen Hei",sans-serif; }
+  h1 { font-size:26px; margin:0 0 6px; } h2 { font-size:20px; margin:0 0 14px; } h3 { font-size:16px; margin:0 0 8px; }
+  .b-sub { color:#6e6e73; margin:0 0 20px; }
+  .b-cols { display:grid; grid-template-columns:1fr 1fr; gap:28px; }
+  .b-cols3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:22px; }
+  .b-cap { font-size:14px; font-weight:700; margin:0 0 8px; }
+  .b-cap.old { color:#8e8e93; } .b-cap.new { color:#1f8a3b; }
+  .b-n { display:inline-block; min-width:22px; height:22px; line-height:22px; text-align:center; border-radius:11px; background:#ff3b30; color:#fff; font-size:13px; font-weight:700; margin-right:6px; font-style:normal; }
+  .b-pin { position:absolute; z-index:5; }
+  .b-notes { margin-top:16px; display:grid; grid-template-columns:1fr 1fr; gap:6px 28px; font-size:14px; }
+  .b-notes p { margin:0; }
+  .b-mono { font-family:"DejaVu Sans Mono",monospace; font-size:12.5px; }
+  .b-warn { border-left:4px solid #ff9f0a; background:#fff8ec; padding:10px 14px; border-radius:6px; margin-top:14px; font-size:14px; }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th,td { border:1px solid #e0e0e5; padding:8px 10px; vertical-align:top; text-align:left; }
+  th { background:#f6f6f8; } td.rec { background:#f1fbf3; }
+  .b-tag { display:inline-block; font-size:12px; padding:1px 7px; border-radius:8px; background:#34a853; color:#fff; margin-left:6px; }
+
+  /* state machine */
+  .sm { display:flex; align-items:stretch; gap:0; margin:8px 0 6px; }
+  .sm-node { flex:1; border:2px solid #c7c7cc; border-radius:12px; padding:12px 14px; background:#fafafc; font-size:14px; position:relative; }
+  .sm-node b { font-size:15px; display:block; margin-bottom:4px; }
+  .sm-node.hot { border-color:#ff9f0a; background:#fff8ec; }
+  .sm-node.new { border:2px dashed #34a853; background:#f1fbf3; }
+  .sm-arrow { width:56px; display:flex; align-items:center; justify-content:center; color:#8e8e93; font-size:12px; text-align:center; }
+  .sm-arrow span { display:block; }
+  .who { font-size:12.5px; color:#6e6e73; margin-top:6px; }
+
+  /* web app frame */
+  .win { border:1px solid #d6d7da; border-radius:12px; overflow:hidden; background:#fff; box-shadow:0 6px 24px rgba(0,0,0,.07); position:relative; }
+  .win-top { height:30px; background:#f3f4f6; border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 12px; gap:6px; }
+  .win-top i { width:11px; height:11px; border-radius:6px; background:#d0d2d6; display:inline-block; }
+  .app { display:grid; grid-template-columns:230px 1fr; min-height:440px; }
+  .side { border-right:1px solid var(--border); background:#fafbfc; padding:10px 8px; font-size:13px; }
+  .side .ws { font-size:11.5px; color:var(--t3); text-transform:uppercase; letter-spacing:.04em; margin:6px 8px; }
+  .row { padding:7px 8px; border-radius:7px; margin-bottom:2px; display:flex; justify-content:space-between; gap:6px; align-items:center; color:var(--t1); position:relative; }
+  .row.sel { background:#e8edf7; }
+  .row .nm { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .chip { font-size:11px; color:var(--t3); white-space:nowrap; }
+  .chip.run { color:var(--brand); }
+  .chip.upd { color:var(--warn); }
+  .pane { display:flex; flex-direction:column; position:relative; }
+  .pane-head { height:44px; border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 18px; font-weight:600; font-size:14px; color:var(--t1); gap:8px; }
+  .pane-head .st { font-weight:400; color:var(--t3); font-size:12.5px; }
+  .pane-head .st.upd { color:var(--warn); }
+  .pane-body { flex:1; padding:18px 22px; display:flex; flex-direction:column; gap:12px; background:#fff; }
+  .composer { margin:10px 18px 16px; border:1px solid var(--border); border-radius:12px; height:54px; color:var(--t3); font-size:13px; padding:10px 14px; box-sizing:border-box; }
+  .q-state { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; text-align:center; }
+  .dots { display:flex; gap:6px; } .dots span { width:7px; height:7px; border-radius:4px; background:#c3c7cd; }
+  .q-title { font-size:15px; font-weight:600; color:var(--t1); }
+  .q-desc { font-size:13px; color:var(--t3); max-width:340px; line-height:1.5; }
+  .q-desc.wide { max-width:420px; }
+  .q-desc a, .lnk { color:var(--brand); text-decoration:none; }
+  .q-meta { font-size:12px; color:var(--t3); }
+  .btns { display:flex; gap:8px; justify-content:center; align-items:center; }
+  .btn { font-size:13px; border:1px solid var(--border); border-radius:8px; padding:5px 12px; background:#fff; color:var(--t1); white-space:nowrap; }
+  .btn.pri { background:var(--brand); border-color:var(--brand); color:#fff; }
+  .btn.dng { background:var(--danger); border-color:var(--danger); color:#fff; }
+  .btn .car { color:var(--t3); margin-left:4px; font-size:11px; }
+  .bubble-u { align-self:flex-end; max-width:70%; background:#f2f3f5; border-radius:14px; padding:9px 13px; font-size:13.5px; color:var(--t1); }
+  .bubble-q { align-self:flex-end; max-width:70%; background:var(--tint); border:1px dashed var(--bborder); border-radius:14px; padding:9px 13px; font-size:13.5px; color:var(--t1); }
+  .foot { align-self:flex-end; font-size:12px; color:var(--t3); margin-top:-6px; position:relative; }
+  .foot .upd { color:var(--warn); border-bottom:1px dotted var(--warn); }
+  .asst { font-size:13.5px; color:var(--t1); max-width:86%; line-height:1.6; }
+  .pop { position:absolute; background:#fff; border:1px solid var(--border); border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.14); padding:14px 16px; font-size:13px; color:var(--t1); z-index:3; }
+  .pop .h { font-weight:600; font-size:14px; margin-bottom:6px; }
+  .pop .d { color:var(--t2); line-height:1.5; margin-bottom:10px; }
+  .menu { position:absolute; background:#fff; border:1px solid var(--border); border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.14); padding:5px; font-size:13px; z-index:4; min-width:200px; }
+  .menu div { padding:6px 10px; border-radius:6px; display:flex; justify-content:space-between; gap:16px; }
+  .menu div.hi { background:#e8edf7; }
+  .menu div span { color:var(--t3); }
+  .banner { display:flex; align-items:center; gap:10px; padding:8px 14px 8px 18px; background:var(--warnbg); border-bottom:1px solid var(--warnbd); font-size:13px; color:var(--t1); }
+  .banner .ic { width:16px; height:16px; border-radius:8px; border:2px solid var(--warn); box-sizing:border-box; position:relative; flex:none; }
+  .banner .ic:after { content:""; position:absolute; left:5px; top:2px; width:2px; height:6px; background:var(--warn); }
+  .banner .tx { flex:1; }
+  .banner .btn { padding:3px 10px; font-size:12.5px; }
+  .tline { font-size:12.5px; color:var(--t3); text-align:center; }
+  .scrim { position:absolute; inset:30px 0 0 0; background:rgba(15,20,30,.32); z-index:2; }
+  .dlg { position:absolute; left:50%; top:52%; transform:translate(-50%,-50%); width:440px; background:#fff; border-radius:14px; box-shadow:0 18px 50px rgba(0,0,0,.25); padding:20px 22px 18px; z-index:3; font-size:13.5px; color:var(--t1); }
+  .dlg .h { font-size:16px; font-weight:650; margin-bottom:8px; }
+  .dlg .d { color:var(--t2); line-height:1.55; margin-bottom:10px; }
+  .dlg ul { margin:0 0 12px; padding:0; list-style:none; border:1px solid var(--border); border-radius:10px; }
+  .dlg li { padding:8px 12px; border-top:1px solid var(--border); display:flex; justify-content:space-between; gap:12px; }
+  .dlg li:first-child { border-top:0; }
+  .dlg li span { color:var(--t3); font-size:12.5px; white-space:nowrap; }
+  .dlg .act { display:flex; justify-content:flex-end; gap:8px; margin-top:6px; }
+
+  /* runner page */
+  .rp { padding:20px 26px; background:#fff; }
+  .rp-h { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+  .rp-h b { font-size:18px; } .rp-h .on { font-size:12px; color:#1f8a3b; background:#e9f7ee; border-radius:9px; padding:1px 8px; }
+  .card { border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-bottom:14px; font-size:13.5px; color:var(--t1); position:relative; }
+  .card.upd { border-color:var(--warnbd); background:#fffbf4; }
+  .card .ct { font-weight:650; font-size:14.5px; margin-bottom:4px; display:flex; justify-content:space-between; align-items:center; }
+  .card .cs { color:var(--t2); margin-bottom:10px; line-height:1.5; }
+  .bar { height:6px; border-radius:3px; background:#eceef1; overflow:hidden; margin:6px 0 10px; }
+  .bar i { display:block; height:100%; background:var(--warn); }
+  .kv { display:grid; grid-template-columns:150px 1fr; gap:6px 10px; font-size:13px; }
+  .kv .k { color:var(--t3); }
+  .turns { border:1px solid var(--border); border-radius:9px; margin:8px 0 12px; background:#fff; }
+  .turns div { padding:7px 12px; border-top:1px solid var(--border); display:flex; justify-content:space-between; font-size:13px; }
+  .turns div:first-child { border-top:0; }
+  .turns span { color:var(--t3); }
+
+  /* phone */
+  .phone { width:393px; height:852px; border-radius:54px; border:10px solid #1c1c1e; background:#f2f2f7; position:relative; overflow:hidden; box-sizing:content-box; font-family:"Inter","Noto Sans SC",sans-serif; }
+  .ph-status { height:54px; display:flex; justify-content:space-between; align-items:flex-end; padding:0 34px 6px; font-size:15px; font-weight:600; }
+  .ph-nav { height:44px; display:flex; align-items:center; padding:0 16px; gap:8px; font-size:16px; font-weight:600; justify-content:center; position:relative; }
+  .ph-nav .bk { position:absolute; left:16px; color:#007aff; font-weight:400; font-size:17px; }
+  .ph-nav .sub { display:block; font-size:12px; font-weight:400; color:#c2710c; text-align:center; }
+  .ph-body { padding:12px 16px; }
+  .ph-card { background:#fff; border-radius:14px; padding:14px 16px; font-size:15px; margin-bottom:14px; }
+  .ph-card .t { font-weight:600; font-size:16px; margin-bottom:6px; }
+  .ph-card .d { color:#6e6e73; font-size:14px; line-height:1.45; }
+  .ph-btn { display:block; text-align:center; padding:11px 0; border-radius:12px; font-size:16px; margin-top:10px; background:#e9e9ee; color:#007aff; }
+  .ph-btn.pri { background:#007aff; color:#fff; }
+  .ph-grp { font-size:13px; color:#6e6e73; text-transform:uppercase; margin:18px 16px 6px; }
+  .ph-list { background:#fff; border-radius:12px; margin:0 0 6px; }
+  .ph-list div { padding:11px 16px; border-top:.5px solid #d1d1d6; display:flex; justify-content:space-between; font-size:15px; }
+  .ph-list div:first-child { border-top:0; }
+  .ph-list span { color:#8a8a8d; }
+  .ph-sheet { position:absolute; left:0; right:0; bottom:0; background:#f2f2f7; border-radius:14px 14px 0 0; padding:8px 8px 34px; box-shadow:0 -8px 30px rgba(0,0,0,.18); }
+  .ph-sheet .grp { background:#fff; border-radius:13px; overflow:hidden; margin-bottom:8px; }
+  .ph-sheet .grp div { padding:15px; text-align:center; color:#007aff; font-size:18px; border-top:.5px solid #d1d1d6; }
+  .ph-sheet .grp div:first-child { border-top:0; }
+  .ph-sheet .grp .ttl { font-size:13px; color:#8a8a8d; padding:12px 16px; }
+  .ph-sheet .grp .red { color:#ff3b30; }
+  .ph-dim { position:absolute; inset:0; background:rgba(0,0,0,.3); }
+  .ph-strip { margin:0 0 12px; background:#fff6e8; border:1px solid #f5d7a8; border-radius:12px; padding:10px 14px; font-size:14px; color:#1f2329; }
+
+  .chip.stp, .pane-head .st.stp { color:var(--warn); }
+  .foot .stp { color:var(--warn); border-bottom:1px dotted var(--warn); }
+  .x { color:var(--t3); font-size:15px; padding:0 4px; }
+  .gone { text-decoration:line-through; color:#c0392b; }
+  .b-strike { position:relative; }
+  .mac .win-top { height:36px; background:#ececee; }
+  .mac .win-top i:nth-child(1){background:#ff5f57}.mac .win-top i:nth-child(2){background:#febc2e}.mac .win-top i:nth-child(3){background:#28c840}
+  .mac .side { background:#e9e9ec; }
+  .mac .btn { border-radius:6px; box-shadow:0 .5px 1px rgba(0,0,0,.15); }
+  .and { border-radius:36px; background:#fdfbff; }
+  .and .ph-status { padding:0 26px 6px; }
+  .and .ph-nav { justify-content:flex-start; padding-left:56px; font-size:20px; font-weight:500; }
+  .and .ph-nav .bk { color:#1d1b20; font-size:22px; left:18px; }
+  .and .ph-nav .sub { text-align:left; }
+  .and .mbtn { display:block; text-align:center; padding:10px 0; border-radius:20px; font-size:15px; margin-top:10px; border:1px solid #79747e; color:#6750a4; }
+  .q-ph { position:absolute; top:150px; left:0; right:0; padding:0 26px; text-align:center; }
+  .q-ph .t { font-weight:600; font-size:19px; margin:14px 0 8px; }
+  .q-ph .d { color:#6e6e73; font-size:15px; line-height:1.45; }
+  .q-ph .d a { color:#007aff; text-decoration:none; }
+  .and .q-ph .d a { color:#6750a4; }
+  .q-ph .w { color:#8a8a8d; font-size:14px; margin-top:12px; }
+  .ph-dots { display:flex; gap:6px; justify-content:center; } .ph-dots span { width:8px; height:8px; border-radius:4px; background:#c3c7cd; }
+  .flow { display:flex; gap:0; align-items:stretch; margin:10px 0 4px; }
+  .flow .sm-node { font-size:13.5px; }
+</style>
+</head>
+<body>
+<!-- ============ PART 1 ============ -->
+<section class="b-part">
+<h1>Runner 停止时不再说「正在更新」· 四端效果图</h1>
+<p class="b-sub">起因：HPC 已经是最新版 0.1.256，没有任何更新可装，却显示「Runner updating」和 Later ▾，也没有 Update Now。原因是 runner 进程<strong>收到停止信号</strong>（systemctl restart / stop、重启机器、SIGTERM）后，会先把手上的 turn 跑完再退出，这段时间心跳也报 <span class="b-mono">draining</span>；服务端把所有 draining 都当成「更新中」。</p>
+
+<h2>① 今天 vs 建议：排队的 session（Web）</h2>
+<div class="b-cols">
+  <div>
+    <div class="b-cap old">今天</div>
+    <div class="win"><div class="win-top"><i></i><i></i><i></i></div>
+      <div class="app">
+        <div class="side"><div class="ws">orbit-develop</div>
+          <div class="row sel"><span class="nm">Draft the release notes</span><span class="chip upd">Runner updating</span></div>
+          <div class="row"><span class="nm">Backfill missing shard rows</span><span class="chip run">Running</span></div>
+          <div class="row"><span class="nm">Why are 11-08 metrics zero</span><span class="chip run">Running</span></div>
+        </div>
+        <div class="pane">
+          <div class="pane-head">Draft the release notes <span class="st upd">· Runner updating</span></div>
+          <div class="q-state">
+            <div class="dots"><span></span><span></span><span></span></div>
+            <div class="q-title">Runner updating</div>
+            <div class="q-desc wide">HPC is updating. It starts no new work until 2 turns finish: <a>Backfill missing shard rows</a> and <a>Why are 11-08 metrics zero</a>. This session starts right after.</div>
+            <div class="q-meta">Waiting less than a minute</div>
+            <div class="btns"><span class="btn">Later<span class="car">▾</span></span></div>
+          </div>
+          <div class="composer">Reply…</div>
+        </div>
+      </div>
+    </div>
+    <p style="font-size:14px;color:#6e6e73;margin:10px 0 0">没有版本号（「is updating.」后面什么都没有）就是线索：根本没有待装的版本。Later ▾ 是去「推迟一个不存在的更新」，点了也没用；Update Now 因为没有目标版本而被隐藏 —— 所以你看到的就是这张。</p>
+  </div>
+  <div>
+    <div class="b-cap new">建议</div>
+    <div class="win"><div class="win-top"><i></i><i></i><i></i></div>
+      <div class="app">
+        <div class="side"><div class="ws">orbit-develop</div>
+          <div class="row sel"><span class="nm">Draft the release notes</span><span class="chip stp" id="m1">Runner stopping</span></div>
+          <div class="row"><span class="nm">Backfill missing shard rows</span><span class="chip run">Running</span></div>
+          <div class="row"><span class="nm">Why are 11-08 metrics zero</span><span class="chip run">Running</span></div>
+        </div>
+        <div class="pane">
+          <div class="pane-head">Draft the release notes <span class="st stp">· Runner stopping</span></div>
+          <div class="q-state">
+            <div class="dots"><span></span><span></span><span></span></div>
+            <div class="q-title" id="m2">Runner stopping</div>
+            <div class="q-desc wide" id="m3">HPC is stopping. It starts no new work until 2 turns finish: <a>Backfill missing shard rows</a> and <a>Why are 11-08 metrics zero</a>. This session starts once HPC is back.</div>
+            <div class="q-meta">Waiting less than a minute</div>
+            <div class="btns" id="m4" style="min-height:30px;min-width:120px;border:1.5px dashed #c7c7cc;border-radius:8px;color:#aeaeb2;font-size:12px">（没有按钮）</div>
+          </div>
+          <div class="composer">Reply…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="b-notes">
+  <p><i class="b-n">1</i>列表、标题栏的状态从「Runner updating」改成「Runner stopping」，仍用 warning 色。</p>
+  <p><i class="b-n">2</i>标题说实话：它在停，不是在更新。</p>
+  <p><i class="b-n">3</i>后半句从「starts right after」改成「starts once HPC is back」：停了之后要等它重新上线（systemd 拉起、你手动启动），不一定马上。</p>
+  <p><i class="b-n">4</i>Later ▾ 和 Update Now… 都不画：没有更新可推迟，也没有更新可立即装。runner 停的过程中没有什么可让你按的。</p>
+</div>
+
+<h2 style="margin-top:28px">接下来会发生什么（不新增状态，沿用已有的）</h2>
+<div class="flow">
+  <div class="sm-node hot"><b>Runner stopping</b>手上的 turn 跑完前，不接新活<div class="who">本次新增的说法</div></div>
+  <div class="sm-arrow"><span>turn 跑完<br>进程退出</span></div>
+  <div class="sm-node"><b>Runner offline</b>已有的「离线」排队说明<div class="who">今天就有，不改</div></div>
+  <div class="sm-arrow"><span>runner<br>重新上线</span></div>
+  <div class="sm-node"><b>Running</b>排队的 session / 消息自动开始<div class="who">今天就有，不改</div></div>
+</div>
+</section>
+
+<!-- ============ PART 2 ============ -->
+<section class="b-part">
+<h2>② Web：已在 HPC 上的 session，后续消息被挡住 + 顶部提示条</h2>
+<div class="b-cols">
+  <div>
+    <div class="b-cap old">今天</div>
+    <div class="win"><div class="win-top"><i></i><i></i><i></i></div>
+      <div class="pane" style="min-height:470px">
+        <div class="pane-head">Cluster repair checklist</div>
+        <div class="banner"><span class="ic"></span><span class="tx">HPC is updating — 1 message is waiting for 2 turns to finish.</span><span class="btn">Later<span class="car">▾</span></span><span class="x">×</span></div>
+        <div class="pane-body">
+          <div class="asst">Done — the three failing nodes are drained and the checklist is updated. Want me to run the health probe next?</div>
+          <div class="bubble-q">Yes, run it and post the summary.</div>
+          <div class="foot">11:41 · Queued · <span class="upd">runner updating</span></div>
+          <div class="pop" style="right:22px;top:246px;width:330px">
+            <div class="h">Runner updating</div>
+            <div class="d">HPC starts no new turns until 2 turns finish, then updates. This message is sent right after.<br>Waiting less than a minute.</div>
+            <div class="btns" style="justify-content:flex-start"><span class="btn">Later<span class="car">▾</span></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="b-cap new">建议</div>
+    <div class="win"><div class="win-top"><i></i><i></i><i></i></div>
+      <div class="pane" style="min-height:470px">
+        <div class="pane-head">Cluster repair checklist</div>
+        <div class="banner" id="m5"><span class="ic"></span><span class="tx">HPC is stopping — 1 message is waiting for 2 turns to finish.</span><span class="x">×</span></div>
+        <div class="pane-body">
+          <div class="asst">Done — the three failing nodes are drained and the checklist is updated. Want me to run the health probe next?</div>
+          <div class="bubble-q">Yes, run it and post the summary.</div>
+          <div class="foot" id="m6">11:41 · Queued · <span class="stp">runner stopping</span></div>
+          <div class="pop" style="right:22px;top:246px;width:330px" id="m7">
+            <div class="h">Runner stopping</div>
+            <div class="d">HPC starts no new turns until 2 turns finish, then stops. This message is sent once it is back.<br>Waiting less than a minute.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="b-notes">
+  <p><i class="b-n">5</i>提示条只换说法，去掉 Later ▾，保留 ×。推送同一句话：「HPC is stopping — 1 message is waiting for 2 turns to finish.」</p>
+  <p><i class="b-n">6</i>气泡下的灰字：「Queued · runner stopping」，仍可点开。</p>
+  <p><i class="b-n">7</i>浮层：同样的原因，没有按钮。turn 都跑完、只差退出时说「HPC stops now. This message is sent once it is back.」</p>
+  <p>Machine settings 的 Update 卡片按 <span class="b-mono">selfUpdate.phase</span> 画，本来就只在真的更新时出现，不受影响。</p>
+</div>
+</section>
+
+<!-- ============ PART 3 ============ -->
+<section class="b-part">
+<h2>③ macOS：排队页 + Machines &amp; models 的 Needs you</h2>
+<div class="b-cols mac">
+  <div>
+    <div class="b-cap new">建议 · 排队的 session</div>
+    <div class="win"><div class="win-top"><i></i><i></i><i></i></div>
+      <div class="app" style="grid-template-columns:210px 1fr">
+        <div class="side"><div class="ws">orbit-develop</div>
+          <div class="row sel"><span class="nm">Draft the release notes</span></div>
+          <div class="row"><span class="nm">Backfill missing shard rows</span></div>
+          <div class="row"><span class="nm">Why are 11-08 metrics zero</span></div>
+        </div>
+        <div class="pane">
+          <div class="pane-head">Draft the release notes <span class="st stp">Runner stopping</span></div>
+          <div class="q-state">
+            <div class="dots"><span></span><span></span><span></span></div>
+            <div class="q-title">Runner stopping</div>
+            <div class="q-desc wide">HPC is stopping. It starts no new work until 2 turns finish: <a>Backfill missing shard rows</a> and <a>Why are 11-08 metrics zero</a>. This session starts once HPC is back.</div>
+            <div class="q-meta">Waiting less than a minute</div>
+          </div>
+          <div class="composer">Reply…</div>
+        </div>
+      </div>
+    </div>
+    <p style="font-size:14px;color:#6e6e73;margin:10px 0 0">今天这里画的是「Runner updating」+ Later 菜单（Mac 上 Later 没有任何条件，只要知道是哪台 runner 就画）。</p>
+  </div>
+  <div>
+    <div class="b-cap new">建议 · Machines &amp; models</div>
+    <div class="win"><div class="win-top"><i></i><i></i><i></i></div>
+      <div class="rp" style="min-height:440px">
+        <div class="rp-h"><b>Machines &amp; models</b></div>
+        <div style="font-size:12px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Needs you</div>
+        <div class="card upd" id="m8">
+          <div class="ct">HPC is stopping — 1 session waiting <span class="btn">Details</span></div>
+          <div class="cs" style="margin:0">Not taking new work · it stops once 2 turns finish</div>
+        </div>
+        <div style="font-size:12px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin:18px 0 6px">Machines</div>
+        <div class="turns">
+          <div>HPC <span>0.1.256 · online</span></div>
+          <div>studio-mac <span>0.1.256 · online</span></div>
+          <div>workstation <span>0.1.256 · online</span></div>
+        </div>
+      </div>
+    </div>
+    <p style="font-size:14px;color:#6e6e73;margin:10px 0 0"><i class="b-n">8</i>今天：「HPC is updating — 1 session waiting」/「Updating · it starts no new work until 2 turns finish」。</p>
+  </div>
+</div>
+</section>
+
+<!-- ============ PART 4 ============ -->
+<section class="b-part">
+<h2>④ iPhone 与 Android：同样的话，同样不给按钮</h2>
+<div class="b-cols3">
+  <div>
+    <div class="b-cap old">iPhone · 今天</div>
+    <div class="phone">
+      <div class="ph-status"><span>11:42</span><span>●●● ▮</span></div>
+      <div class="ph-nav"><span class="bk">‹</span><span>Draft the release notes<span class="sub">Runner updating</span></span></div>
+      <div class="q-ph">
+        <div class="ph-dots"><span></span><span></span><span></span></div>
+        <div class="t">Runner updating</div>
+        <div class="d">HPC is updating. It starts no new work until 2 turns finish: <a>Backfill missing shard rows</a> and <a>Why are 11-08 metrics zero</a>. This session starts right after.</div>
+        <div class="w">Waiting less than a minute</div>
+        <span class="ph-btn">Later…</span>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="b-cap new">iPhone · 建议</div>
+    <div class="phone">
+      <div class="ph-status"><span>11:42</span><span>●●● ▮</span></div>
+      <div class="ph-nav"><span class="bk">‹</span><span>Draft the release notes<span class="sub">Runner stopping</span></span></div>
+      <div class="q-ph">
+        <div class="ph-dots"><span></span><span></span><span></span></div>
+        <div class="t">Runner stopping</div>
+        <div class="d">HPC is stopping. It starts no new work until 2 turns finish: <a>Backfill missing shard rows</a> and <a>Why are 11-08 metrics zero</a>. This session starts once HPC is back.</div>
+        <div class="w">Waiting less than a minute</div>
+      </div>
+      <div style="position:absolute;left:16px;right:16px;bottom:40px">
+        <div class="ph-grp" style="margin-left:4px">Machines &amp; models · Needs you</div>
+        <div class="ph-strip"><b>HPC is stopping — 1 session waiting</b><br><span style="color:#6e6e73;font-size:13px">Not taking new work · it stops once 2 turns finish</span></div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="b-cap new">Android · 建议</div>
+    <div class="phone and">
+      <div class="ph-status"><span>11:42</span><span>▾ ▮</span></div>
+      <div class="ph-nav"><span class="bk">←</span><span>Draft the release notes<span class="sub">Runner stopping</span></span></div>
+      <div class="q-ph">
+        <div class="ph-dots"><span></span><span></span><span></span></div>
+        <div class="t">Runner stopping</div>
+        <div class="d">HPC is stopping. It starts no new work until 2 turns finish: <a>Backfill missing shard rows</a> and <a>Why are 11-08 metrics zero</a>. This session starts once HPC is back.</div>
+        <div class="w">Waiting less than a minute</div>
+      </div>
+      <div style="position:absolute;left:16px;right:16px;bottom:40px">
+        <div class="ph-grp" style="margin-left:4px">Machines &amp; models · Needs you</div>
+        <div class="ph-strip" style="border-radius:16px"><b>HPC is stopping — 1 session waiting</b><br><span style="color:#6e6e73;font-size:13px">Not taking new work · it stops once 2 turns finish</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+<p style="font-size:14px;color:#6e6e73;margin:14px 0 0">底部的 Needs you 条是 Machines &amp; models 页里的那一项，这里叠画在一起只为省一张图。Android 的 Later… 按钮和 iPhone 一样去掉。</p>
+</section>
+
+<!-- ============ PART 5 ============ -->
+<section class="b-part">
+<h2>⑤ 规则、文案、改哪里，以及要你拍板的一件事</h2>
+<h3>什么时候算「更新」，什么时候算「停止」</h3>
+<table>
+<tr><th style="width:34%">runner 心跳</th><th style="width:22%">今天</th><th>建议</th></tr>
+<tr><td>draining，<span class="b-mono">phase = draining / restarting</span>（真的在等装 0.1.x）</td><td>Runner updating</td><td class="rec">不变：Runner updating · updating to 0.1.x · Later ▾ · Update Now…</td></tr>
+<tr><td>draining，没有 phase（已是最新版，进程在停）</td><td>Runner updating，无版本号，只有 Later ▾</td><td class="rec">Runner stopping，无按钮 ← 你截图里的情况</td></tr>
+<tr><td>draining，<span class="b-mono">phase = available / postponed</span>（有新版在等，但这次 drain 是因为进程在停）</td><td>Runner updating + Later ▾ + Update Now…</td><td class="rec">Runner stopping，无按钮（这时按 Update Now 也没用：进程正在退出）</td></tr>
+</table>
+
+<h3 style="margin-top:22px">文案（四端同一张表，parity 测试守住）</h3>
+<table>
+<tr><th style="width:20%">位置</th><th>停止时的英文</th></tr>
+<tr><td>列表 / 标题栏 / 排队页标题</td><td class="b-mono">Runner stopping</td></tr>
+<tr><td>排队页正文</td><td class="b-mono">HPC is stopping. It starts no new work until 2 turns finish: A and B. This session starts once HPC is back.<br>（turn 已跑完：HPC is stopping. This session starts once HPC is back.）</td></tr>
+<tr><td>消息灰字 / 浮层</td><td class="b-mono">Queued · runner stopping<br>HPC starts no new turns until 2 turns finish, then stops. This message is sent once it is back.</td></tr>
+<tr><td>Web 提示条 / 推送</td><td class="b-mono">HPC is stopping — 1 message is waiting for 2 turns to finish.<br>（turn 已跑完：… is waiting for it to come back.）</td></tr>
+<tr><td>Needs you（Mac / iOS / Android）</td><td class="b-mono">HPC is stopping — 1 session waiting<br>Not taking new work · it stops once 2 turns finish</td></tr>
+</table>
+
+<h3 style="margin-top:22px">怎么区分（只改服务端一处判断 + 四端读一个字段）</h3>
+<p style="font-size:14px;margin:0">服务端：心跳 draining 但 <span class="b-mono">self_update.phase</span> 不是 draining / restarting，就是「停止」。session 行的 <span class="b-mono">queuedRunnerUpdate</span> 和 runner 的 <span class="b-mono">drainWaiting</span> 各加一个 <span class="b-mono">stopping: true</span>；<span class="b-mono">queuedReason</span> 仍是 <span class="b-mono">runner_updating</span>，所以还没升级的 iOS / Mac / Android 老版本照旧显示今天的样子，不会出错。runner 不用发新版本。</p>
+
+<h3 style="margin-top:22px">待定 · 要你拍板</h3>
+<table>
+<tr><th style="width:14%"></th><th>方案</th><th style="width:40%">代价</th></tr>
+<tr><td class="rec"><b>A（推荐）</b></td><td class="rec">叫 <b>Runner stopping</b>。runner 只知道自己收到了停止信号，不知道会不会被重新拉起（systemctl restart 和 stop 发的是同一个信号）。说「停」永远是真的，后面那句「once HPC is back」把「要等它回来」说清楚。</td><td>你在 HPC 上 restart 的时候，看到的是「stopping」而不是「restarting」，稍显冷。</td></tr>
+<tr><td><b>B</b></td><td>叫 <b>Runner restarting</b>，更贴近最常见的情况（重启服务、发新版）。</td><td>如果是真停（stop 或关机），这句话就是错的，而且 session 会一直等。</td></tr>
+</table>
+
+<h3 style="margin-top:22px">落地（一个提交，四端 + 服务端）</h3>
+<table>
+<tr><th style="width:16%">端</th><th>文件</th></tr>
+<tr><td>服务端</td><td class="b-mono">common/runner-self-update.ts（queuedRunnerUpdateOf）· common/runner-drain-waiting.ts（drainWaiting + 推送那句话）· runners.service.ts · shared/src/dto.ts</td></tr>
+<tr><td>Web</td><td class="b-mono">lib/runnerSlots.ts · lib/runnerDrainBanner.ts · components/WorkspaceView.tsx（排队页 / 灰字 / 列表）· components/RunnerDrainBanner.tsx</td></tr>
+<tr><td>macOS + iOS</td><td class="b-mono">OrbitKit/App/RunnerUpdating.swift · MachinesAndModels.swift · SessionLine.swift · SessionHeader.swift · OrbitApp/Views/Console/RunnerUpdatingViews.swift · ConsoleView.swift · DTOs.swift</td></tr>
+<tr><td>Android</td><td class="b-mono">directory/RunnerUpdating.kt · SessionLine.kt · reader/RunnerUpdatingViews.kt · reader/SessionReader.kt · management/MachinesAndModels.kt</td></tr>
+<tr><td>测试</td><td class="b-mono">各端现有的 runnerUpdating / parity 测试各加「停止」的用例；服务端 queued-runner-updating.pg.spec.ts、runner-drain-waiting-push.pg.spec.ts</td></tr>
+</table>
+</section>
+
+<script>
+window.drawMarks = () => {
+  const map = {m1:1,m2:2,m3:3,m4:4,m5:5,m6:6,m7:7,m8:8};
+  for (const [id,n] of Object.entries(map)) {
+    const el = document.getElementById(id); if (!el) continue;
+    const r = el.getBoundingClientRect();
+    const b = document.createElement('i'); b.className='b-n b-pin'; b.textContent=n;
+    b.style.left = (r.right + window.scrollX - 6) + 'px'; b.style.top = (r.top + window.scrollY - 14) + 'px';
+    b.style.position='absolute'; document.body.appendChild(b);
+  }
+};
+</script>
+</body></html>

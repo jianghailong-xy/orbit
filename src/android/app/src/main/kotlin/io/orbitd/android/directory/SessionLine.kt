@@ -69,13 +69,15 @@ data class SessionLine(val text: String, val tone: Tone) {
                 val held = ClaudeRegion.heldWords(s.regionHeld, machine)
                 // A runner draining for its update is the one queue word in the warning colour (board 2 ①): it can last hours, and
                 // only the owner can shorten it.
-                if (held == null && RunnerUpdating.isRunnerUpdating(s.queuedGate)) return SessionLine(RunnerUpdating.RUNNER_UPDATING_TITLE, Tone.WARNING)
+                if (held == null && RunnerUpdating.isRunnerUpdating(s.queuedGate)) return SessionLine(RunnerUpdating.runnerUpdatingTitle(s.queuedGate), Tone.WARNING)
                 return SessionLine(held ?: SessionLineCopy.queued, Tone.QUEUED)
             }
             // Parked while a sub-agent or workflow it started works on: the workspace itself is still working.
             if (live) s.runningSubagentCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.ongoing(SessionLineCopy.subagentRunning(it)), Tone.RUNNING) }
             // Parked on a live watch that will resume it, in the Watching strip's own line.
             if (live && watching != null && s.effectiveRunState == RunState.AWAITING_INPUT) return SessionLine(watching.rowLine, Tone.WATCHING)
+            // The same place for a wait the server reports and this caller holds no watch for (OrbitKit `resumesOnItsOwn`).
+            if (live && s.resumesOnItsOwn) return SessionLine(SessionLineCopy.waitingToResume, Tone.WATCHING)
             // Parked, with a background process still up: not idle, not the agent working either.
             if (live) s.runningBgCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.ongoing(SessionLineCopy.bgRunning(it)), Tone.BACKGROUND) }
             // A message that never got an answer is newer than the reply before it, and what the session waits on.
@@ -145,6 +147,8 @@ internal object SessionLineCopy {
     // The run's own word (`SessionHeader.statusWord`), when there is nothing to preview.
     const val stateRunning = "Running"
     const val waitingForReply = "Waiting for your reply"
+    /** A wait the server reports that will resume the session by itself (OrbitKit `Session.waitingToResume`). */
+    const val waitingToResume = "Waiting to resume"
     const val succeeded = "Succeeded"
     const val retrying = "Retrying"
     const val disconnected = "Disconnected"
@@ -163,13 +167,15 @@ internal object SessionHeader {
         if (s.pendingApprovals > 0) return waitingWord(s)
         if (s.confirmationUnderReview != null) return OwnerReview.underReview
         return when (s.effectiveRunState) {
-            RunState.QUEUED -> if (RunnerUpdating.isRunnerUpdating(s.queuedGate)) RunnerUpdating.RUNNER_UPDATING_TITLE else SessionLineCopy.queued
+            RunState.QUEUED -> if (RunnerUpdating.isRunnerUpdating(s.queuedGate)) RunnerUpdating.runnerUpdatingTitle(s.queuedGate) else SessionLineCopy.queued
             RunState.RUNNING -> SessionLineCopy.stateRunning
             RunState.AWAITING_INPUT -> when {
                 // A turn the runtime started for itself keeps the run parked for its whole duration.
                 s.isGenerating -> SessionLineCopy.stateRunning
                 (s.runningSubagentCount ?: 0) > 0 -> SessionLineCopy.subagentRunning(s.runningSubagentCount ?: 0)
                 watching != null -> watching.word
+                // Something else will resume it — a wake-up, a retry, a watch this caller holds none of.
+                s.resumesOnItsOwn -> SessionLineCopy.waitingToResume
                 (s.runningBgCount ?: 0) > 0 -> SessionLineCopy.bgRunning(s.runningBgCount ?: 0)
                 else -> SessionLineCopy.waitingForReply
             }
@@ -239,6 +245,10 @@ internal val DirectorySession.regionHeld: Boolean get() = effectiveRunState == R
 /** Whether to draw it as working: dispatched, or a turn the runtime started for itself while parked (`isGenerating`). */
 internal val DirectorySession.isGenerating: Boolean get() = effectiveRunState.let { it == RunState.RUNNING || (it == RunState.AWAITING_INPUT && engineTurnActive == true) }
 
+/** Parked, and something will resume it by itself — a watch it observes, a scheduled wake-up, an armed auto-retry (the server's
+ * `activity` WAITING; OrbitKit `Session.resumesOnItsOwn`). Not waiting for your reply. */
+internal val DirectorySession.resumesOnItsOwn: Boolean get() = effectiveRunState == RunState.AWAITING_INPUT && activity == "WAITING"
+
 /** A failure the server is about to undo by itself: FAILED with a retry armed, and not more than two minutes past due (`retryPending`). */
 internal fun DirectorySession.retryPending(now: Instant): Boolean {
     if (effectiveRunState != RunState.FAILED) return false
@@ -270,7 +280,7 @@ internal fun DirectorySession.isRunning(): Boolean {
  * louder — no spinner, and no watch, whose eye takes the place. */
 internal fun DirectorySession.isRunningJob(watching: WatchSessionSummary? = null): Boolean {
     if (pendingApprovals > 0 || confirmationUnderReview != null || effectiveRunState != RunState.AWAITING_INPUT) return false
-    if (engineTurnActive == true || (runningSubagentCount ?: 0) > 0 || watching != null) return false
+    if (engineTurnActive == true || (runningSubagentCount ?: 0) > 0 || watching != null || resumesOnItsOwn) return false
     return (runningBgCount ?: 0) > 0 && runningBgJobCount > 0
 }
 

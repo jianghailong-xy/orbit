@@ -2320,39 +2320,80 @@ button.toast--pill:focus-visible {
 .runner-updating-pop .runner-update-actions {
   justify-content: flex-start;
 }
-/* Board 3 ⑥: one line atop the conversation pane while the runner drains with the reader's work waiting. */
-.runner-drain-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+/* docs/mocks/runner-update-indicator: a quiet pill left of the header's ⋯ while the runner drains with the
+   reader's work waiting; its popover holds the rest. */
+.runner-update-pill {
+  display: inline-flex;
   flex: none;
-  /* Edge to edge across the pane, over its top padding (board 3 ⑥); the header keeps its own spacing below. */
-  margin: -16px calc(-1 * var(--pane-gutter)) 16px;
-  padding: 10px var(--pane-gutter);
-  background: var(--warning-bg, #fdf3e3);
-  border-bottom: 1px solid var(--warning-border, #f3dcb5);
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--fill-muted);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.runner-update-pill:hover,
+.runner-update-pill[data-popup-open] {
+  background: var(--bg-hover-strong);
+}
+.runner-update-pill-short {
+  display: none;
+}
+@media (max-width: 640px) {
+  .runner-update-pill { padding: 0 8px; }
+  .runner-update-pill-label { display: none; }
+  .runner-update-pill-short { display: inline; }
+}
+.runner-update-popover {
+  width: 380px;
   font-size: 13px;
 }
-.runner-drain-banner-icon {
-  color: var(--warning, #c47a00);
-  flex: none;
+.runner-update-popover-body,
+.runner-update-popover-waits {
+  margin: 0 0 10px;
+  color: var(--text-2);
 }
-.runner-drain-banner-text {
-  flex: 1;
+.runner-update-popover-turns {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+.runner-update-popover-turns li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.runner-update-popover-turns li:last-child {
+  border-bottom: 0;
+}
+.runner-update-popover-turns a {
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.runner-drain-banner-actions {
+.runner-update-popover-turns span,
+.runner-update-popover-more {
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.runner-update-popover-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: none;
 }
-.runner-drain-banner-close {
-  border: 0;
-  background: none;
-  color: var(--text-tertiary, #8a8a8a);
-  cursor: pointer;
-  padding: 4px;
+.runner-update-popover-open {
+  margin-left: auto;
 }
 /* A Later row: what it does on the left, the clock time on the right in the meta voice. */
 .runner-update-later-item {
@@ -2934,6 +2975,7 @@ button.toast--pill:focus-visible {
 /* ---- Agent console: two-pane master-detail (session list | conversation) ---- */
 .workspace-split {
   display: flex;
+  position: relative;
   height: 100%;
   min-height: 0;
   /* One gutter token drives every horizontal gap. It lives on the panes (.session-col /
@@ -2950,6 +2992,65 @@ button.toast--pill:focus-visible {
   flex-direction: column;
   min-height: 0;
   padding: 24px var(--pane-gutter);
+}
+/* The project column unfolded on demand in a window too narrow for it beside the conversation:
+   it lies over the conversation's right edge rather than squeezing it under 480px. */
+.session-project-column-over {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  background: var(--bg-raised);
+  border-left: 1px solid var(--border-subtle);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.08);
+}
+/* At phone width the project's sessions page comes up as a bottom sheet over the conversation
+   (owner 2026-11-11, board 5): the shared bottom drawer, rounded on top, its title kept for the
+   reader only (the page head inside draws it), and a grabber that drags it between medium and full. */
+.project-sessions-sheet {
+  border-radius: 14px 14px 0 0;
+  background: var(--bg-raised);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .project-sessions-sheet:not(.dragging) { transition: translate .3s, height .25s; }
+}
+.project-sessions-sheet > .orbit-overlay-header {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  border: 0;
+}
+.project-sessions-sheet > .orbit-overlay-body {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+.project-sessions-sheet-grabber {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 6px;
+  cursor: grab;
+  touch-action: none;
+}
+.project-sessions-sheet-grabber > span {
+  width: 36px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--text-4);
+  opacity: 0.6;
+}
+/* Portalled out of .workspace-split, so it sets the phone's pane gutter itself. */
+.project-sessions-sheet-page {
+  --pane-gutter: 14px;
+  flex: 1;
+  min-height: 0;
+  padding: 0 var(--pane-gutter);
 }
 /* Draggable divider between the session list and the conversation. The visible
    1px line matches the old column border; ::before widens the grab area. */
@@ -3246,6 +3347,11 @@ button.toast--pill:focus-visible {
   padding-bottom: 16px;
   border-bottom: 1px solid var(--border-subtle);
 }
+/* The title bar's Project sessions button (docs/mocks/project-sessions-column, boards 2-4): a text
+   button, tinted like a selected row while the project column is open, plain grey while it is folded. */
+.workspace-header-project { flex: none; color: var(--text-2); }
+.workspace-header-project[aria-pressed='true'],
+.workspace-header-project[aria-pressed='true']:hover:where(:not(:disabled)) { color: var(--brand); background: var(--brand-tint); }
 .workspace-status-dot {
   width: 9px;
   height: 9px;
@@ -9396,6 +9502,38 @@ button.chat-jump-start:hover {
   flex-wrap: wrap;
   gap: 8px;
 }
+/* A sign-in card the session has moved past: one muted row, the runtime's words behind it. */
+.chat-notice-settled {
+  color: var(--text-3);
+}
+.chat-authfix-settled {
+  margin: 6px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+.chat-authfix-settled > summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+.chat-authfix-settled > summary::-webkit-details-marker {
+  display: none;
+}
+.chat-authfix-settled > summary::after {
+  content: '›';
+  margin-left: auto;
+}
+.chat-authfix-settled[open] > summary::after {
+  content: '⌄';
+}
+.chat-authfix-settled-ok {
+  color: var(--success);
+}
 /* Browser-driven runner sign-in, inside the sign-in card. */
 /* No panel of its own: the card is already the container, and buttons are self-delimiting —
    boxing them only drew a second frame inside the first. Quoted content still gets one
@@ -13620,6 +13758,13 @@ button.chat-jump-start:hover {
   font-size: 12.5px;
   color: var(--text-3);
 }
+/* Where a task forked from a session took its checkout from, under its meta row. */
+.tdp-fork-source {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+  word-break: break-word;
+}
 /* How this row is judged, under its title. One pill either way: the judgment method on a row that
    has its own work, and the plain statement that a gate row has none. */
 .tdp-judgment {
@@ -15506,6 +15651,34 @@ button.chat-jump-start:hover {
   .workspace-split.show-conversation .workspace-header {
     padding-bottom: 10px;
   }
+  /* Beside ←, the Project sessions button and ⋯, a title sharing its row with the Coordinator badge
+     and the watch chips is left a few letters. Here the title takes the row to itself and the badges
+     and chips drop onto the status line under it: the title line's box steps aside (display:
+     contents) so its children wrap in the header column, the title a full row. The status text
+     follows the badges while it fits beside them and takes the next line when it does not. */
+  .workspace-header-main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 2px;
+  }
+  .workspace-header-main > .workspace-title-line {
+    display: contents;
+  }
+  .workspace-header-main > .workspace-header-task,
+  .workspace-title-line > .workspace-name,
+  .workspace-title-line > .workspace-name-input {
+    flex: 0 0 100%;
+  }
+  .workspace-header-main > .workspace-sub {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-top: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   /* In-pane back button: leaves the open conversation for the session list. */
   .workspace-back-mobile {
     display: flex;
@@ -16215,7 +16388,12 @@ button.chat-jump-start:hover {
   font-size: 13px;
 }
 
-/* The guest page (GuestSessionPage, docs/session-guests-design.md §4; board 10-session-guests-3). */
+/* The guest view (GuestSessionPage, docs/session-guests-design.md §4; boards 10-session-guests-3, 11-guest-one-link-2):
+   drawn inside the app's own main pane at /sessions/<id>, so it fills that pane rather than the window. */
+.share-page.guest-view {
+  height: 100%;
+  min-height: 0;
+}
 .share-subtitle {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -21735,51 +21913,7 @@ div.landing-jobs-open {
   font-size: 12px;
 }
 
-/* The admin area: its sections side by side (AdminNav), and the Sign-in settings (AdminSignInPage). */
-.admin-nav {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-.admin-nav-link {
-  margin-bottom: -1px;
-  padding: 8px 12px;
-  border-bottom: 2px solid transparent;
-  color: var(--text-2);
-  font-weight: 500;
-  text-decoration: none;
-}
-.admin-nav-link:hover {
-  color: var(--text-1);
-}
-.admin-nav-link.active {
-  border-bottom-color: var(--brand);
-  color: var(--brand);
-}
-.admin-nav-link:focus-visible {
-  border-radius: 4px;
-  outline: 2px solid var(--brand);
-  outline-offset: 1px;
-}
-/* One width for every admin page, so their shared tabs stay put between them: wide enough for the
-   user list's columns. */
-.admin-page {
-  max-width: 1200px;
-  margin: 0 auto;
-}
-.admin-page > .page-title {
-  margin-bottom: 16px;
-}
-/* Its form is a card (the class names of components/ui/Card, which a form root cannot render). */
-.admin-signin {
-  max-width: 640px;
-  margin-bottom: 16px;
-}
-.admin-signin-fields {
-  display: grid;
-  gap: 20px;
-}
+/* The admin area's Sign-in settings (AdminSignInPage), whose label, hint and row classes other pages reuse. */
 .admin-signin-row {
   display: flex;
   align-items: center;
@@ -21799,7 +21933,7 @@ div.landing-jobs-open {
   font-size: 12px;
 }
 .admin-signin-note {
-  margin-top: -12px;
+  margin-top: 10px;
   color: var(--warning);
   font-size: 12px;
 }
@@ -21818,32 +21952,8 @@ div.landing-jobs-open {
   background: var(--warning-bg);
   color: var(--warning);
 }
-.admin-signin-redirect {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-.admin-signin-redirect code {
-  min-width: 0;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: var(--fill-muted);
-  color: var(--text-1);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 12.5px;
-  overflow-wrap: anywhere;
-}
-.admin-signin-actions {
-  display: flex;
-  justify-content: flex-end;
-}
 .admin-signin-error {
   color: var(--error);
-}
-/* Admin → Integrations: how many Feishu apps accounts have connected. */
-.admin-feishu-count {
-  color: var(--text-2);
 }
 /* Settings → Integrations → Feishu (FeishuIntegrationPage): the account's own app, then the steps in Feishu's
    console. Its fields reuse the admin Sign-in settings' rows, labels and hints. */
@@ -21956,29 +22066,6 @@ div.landing-jobs-open {
    Orbit, since when — and its actions: the one most often wanted in sight, the rest in its menu
    (docs/mocks/admin-users-redesign, direction A). Columns give way as the table's own box narrows,
    whatever the side nav's width: Created first, then Sign-in, Status and Last active. */
-.admin-users-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-.admin-users-head .page-title {
-  margin: 0;
-}
-.admin-users-sub {
-  margin-top: 4px;
-  color: var(--text-3);
-  font-size: 13px;
-}
-.admin-users-tools {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.admin-users-search {
-  width: 240px;
-}
 .admin-users-frame {
   container: admin-users / inline-size;
 }
@@ -22131,16 +22218,6 @@ div.landing-jobs-open {
 @container admin-users (max-width: 479px) {
   .admin-users-who-text {
     max-width: 200px;
-  }
-}
-@media (max-width: 768px) {
-  .admin-users-head {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .admin-users-search {
-    flex: 1;
-    width: auto;
   }
 }
 /* Add user: the fields stacked 8px apart. */
@@ -25398,7 +25475,7 @@ button.project-open-item-action:disabled {
   /* Prose: 47 Chinese characters to the line at .wk-art's size, where 880px is 55. */
   .wk-page--reading > .wk-layout > .wk-main > .wk-art-page { max-width: 760px; }
   .wk-layout > .wk-dir-col { position: sticky; top: 0; max-height: calc(var(--app-vh, 100vh) - 48px); overflow-y: auto;
-                             overscroll-behavior: contain; margin-left: -8px; scrollbar-width: thin; }
+                             overscroll-behavior: contain; margin-left: -8px; }
   .wk-layout > .wk-dir-col > .wk-toc { margin-left: 0; }
   /* The head, the search and the directory as one column from the window's top to its foot (board
      docs/mocks/wiki-rail ③): the title and the space, the search, then the rows, which scroll on their own, and
@@ -25414,13 +25491,13 @@ button.project-open-item-action:disabled {
   .wk-page--railed > .wk-layout > .wk-dir-col { grid-column: 1; grid-row: 1 / span 2; display: flex; flex-direction: column;
                                                 top: -24px; height: var(--app-vh, 100vh); max-height: none; overflow: hidden;
                                                 margin: -24px 0 -24px -32px; padding: 16px 0 0 24px;
-                                                border-right: 1px solid var(--border-subtle); background: var(--bg-subtle); }
+                                                border-right: 1px solid var(--border-subtle); background: var(--bg-raised); }
   .wk-rail-top { flex: none; padding: 0 16px 10px 0; }
   .wk-rail-head { display: flex; align-items: center; gap: 12px; height: 32px; }
   .wk-rail-head .wk-select .v, .wk-rail-head .wk-space-tag { max-width: 150px; }
   .wk-rail-top > .wk-search { margin-top: 14px; }
   .wk-page--railed > .wk-layout > .wk-dir-col > .wk-toc { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
-                                                         padding: 0 10px 12px 0; scrollbar-width: thin; }
+                                                         padding: 0 10px 12px 0; }
   .wk-rail-foot { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 16px 12px 0;
                   border-top: 1px solid var(--border-subtle); }
   .wk-rail-foot > .session-shared-pill { height: 32px; padding: 0 12px; font-size: 13px; }
@@ -27387,61 +27464,18 @@ button.agent-progress-agent:hover {
   line-height: 1.5;
 }
 .project-done-findings ul { list-style: none; padding: 0; margin: 0; }
-/* Admin → Email (AdminEmailPage, docs/welcome-email-design.md §3.1): the Sign-in card's rows, with From and
-   Reply-To side by side, the test email's answer beside its buttons, and the last week under a rule. */
-.admin-email-off {
-  margin-top: -8px;
-}
-.admin-email-pair {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-@media (max-width: 600px) {
-  .admin-email-pair {
-    grid-template-columns: 1fr;
-  }
-}
-.admin-email-divided {
-  padding-top: 20px;
-  border-top: 1px solid var(--border-subtle, var(--border));
-}
-.admin-email-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.admin-email-buttons {
-  display: flex;
-  gap: 8px;
-  margin-left: auto;
-}
+/* Admin → Email (AdminEmailPage, docs/welcome-email-design.md §3.1): the unreadable-key alert, failed counts and
+   the last week's failures. */
 .admin-email-result {
   padding: 8px 12px;
   border: 1px solid;
   border-radius: 6px;
   overflow-wrap: anywhere;
 }
-.admin-email-result-ok {
-  border-color: var(--success-border);
-  background: var(--success-bg);
-  color: var(--success);
-}
 .admin-email-result-error {
   border-color: var(--error-border);
   background: var(--error-bg);
   color: var(--error);
-}
-.admin-email-week {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border-subtle, var(--border));
-  color: var(--text-2);
 }
 .admin-email-failed {
   color: var(--error);
@@ -27449,7 +27483,7 @@ button.agent-progress-agent:hover {
 .admin-email-failures {
   display: grid;
   gap: 6px;
-  margin: -8px 0 0;
+  margin: 4px 0 0;
   padding: 0;
   list-style: none;
   color: var(--text-2);
@@ -27882,3 +27916,9 @@ button.agent-progress-agent:hover {
 .confirm-criterion-shot { display: flex; gap: 10px; align-items: flex-end; }
 .confirm-criterion-shot img { max-width: 220px; max-height: 140px; border: 1px solid var(--border-subtle); border-radius: 6px; }
 .acceptance-mode-row { margin-top: 4px; }
+
+/* A coordinator question still waiting on the owner: orange and heavier-edged, the colour of the
+   `open question below` capsule that points at it (the owner's pick, 2026-11-13). */
+.approval-card.coordinator-question {
+  border: 1.5px solid var(--warning-solid);
+}

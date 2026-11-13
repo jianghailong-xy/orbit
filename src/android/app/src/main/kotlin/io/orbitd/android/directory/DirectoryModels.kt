@@ -71,6 +71,9 @@ data class DirectorySession(
     val runStatus: String? = null, val endReason: String? = null, val error: String? = null, val retryAt: String? = null,
     val completedAt: String? = null, val deletedAt: String? = null, val lastToolUse: String? = null,
     val runningBgCount: Int? = null, val runningSubagentCount: Int? = null, val engineTurnActive: Boolean? = null,
+    /** What a parked session is still doing (`TURN`, `BACKGROUND_JOB`, `WAITING`), as the server decides it; null when none and
+     *  from an older server. See [resumesOnItsOwn]. */
+    val activity: String? = null,
     val waitingKind: String? = null, val ownerItems: JsonArray? = null,
     /** `OWNER_REQUEST`'s and `MOVE_REQUEST`'s lists (`@orbit/shared` `SessionOwnerRequest`, `SessionTaskMoveGroup`): the open
      *  requests this session asked, and the waiting task-move groups it draws — what the row's word names ([SessionHeader.waitingWord]).

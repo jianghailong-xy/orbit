@@ -253,6 +253,41 @@ public enum NeedsYouLogic {
                               since: target.lastTurnAt ?? target.updatedAt ?? target.createdAt)
     }
 
+    /// At most this many capsules unfolded (the owner, 2026-11-13); the last says "+N" for the rest.
+    public static let unfoldedLimit = 5
+
+    /// The bar unfolded: one line per waiting conversation, in the order the folded bar picks its
+    /// target by, so the first is always the one the folded bar names (the owner, 2026-11-13, option
+    /// B of `docs/mocks/needs-you-capsule/03-expand.html`). The conversations waiting on an owner
+    /// item come first, oldest item first, each named by its own oldest item; then the blocked tool
+    /// calls, longest-waiting first. Each line is a bar for one conversation (`count` 1, no "+N").
+    public static func entries(waiting: [Session], excluding focused: String? = nil) -> [NeedsYouBanner] {
+        let elsewhere = waiting.filter { $0.id != focused }
+        var owned: [(banner: NeedsYouBanner, at: Date, index: Int)] = []
+        var plain: [(session: Session, index: Int)] = []
+        for (index, session) in elsewhere.enumerated() {
+            if let item = oldestOwnerItem([session])?.item {
+                owned.append((NeedsYouBanner(count: 1, target: session, text: ownerItemWord(item),
+                                             detail: named(session.projectTitle), since: item.since,
+                                             ownerItem: item),
+                              RelativeTime.parse(item.since) ?? Date.distantFuture, index))
+            } else {
+                plain.append((session, index))
+            }
+        }
+        // Ties keep the snapshot's order, as the folded bar's first-found minimum does.
+        let items = owned.sorted { ($0.at, $0.index) < ($1.at, $1.index) }.map(\.banner)
+        let sessions = plain.sorted {
+            (RecentsLogic.recency($0.session), $0.index) < (RecentsLogic.recency($1.session), $1.index)
+        }.map { entry in
+            let s = entry.session
+            return NeedsYouBanner(count: 1, target: s, text: text(count: 1, target: s),
+                                  detail: detail(count: 1, target: s),
+                                  since: s.lastTurnAt ?? s.updatedAt ?? s.createdAt)
+        }
+        return items + sessions
+    }
+
     /// The owner item that has waited longest across these conversations, with the one it is on.
     ///
     /// A kind this build does not know is skipped rather than named: the count already includes it
