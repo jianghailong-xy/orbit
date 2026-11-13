@@ -2957,8 +2957,6 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0595 adds one nullable TIMESTAMP(3) `drain_waiting_pushed_at` on `runner` (no default, catalog-only); no
       // preserved rows, triggers or DONE fence change, and no row is written.
       '0595_runner_drain_waiting_push',
-      // 0605 adds five nullable subagent_run columns, an index and the subagent_relay_event table; no preserved row, trigger or DONE fence change.
-      '0605_subagent_run_remote',
       // 0610 lets project_handoff_approval.to_project_id be NULL for a MOVE_TASK (one CHECK),
       // rebuilds 0386's pending-move index NULLS NOT DISTINCT, and restates 0389's
       // task_claimed_project_move_guard with the target compared IS NOT DISTINCT FROM. No preserved
@@ -2980,7 +2978,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0617_task_fork_changed_files',
       // 0618 adds a nullable email_outbox.session_id, its foreign key and index, two CHECKs and a wider unique index
       // only; no preserved rows, triggers or DONE fence change, and no row is written.
-      '0618_email_outbox_session_invite'],
+      '0618_email_outbox_session_invite',
+      // 0619 adds five nullable subagent_run columns, an index and the subagent_relay_event table; no preserved row, trigger or DONE fence change.
+      '0619_subagent_run_remote'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
