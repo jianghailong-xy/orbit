@@ -52,6 +52,16 @@ def nat_table():
             "builtin": {"PREROUTING", "INPUT", "OUTPUT", "POSTROUTING"}}
 
 
+def raw_table():
+    return {"chains": {"PREROUTING": [], "OUTPUT": []}, "builtin": {"PREROUTING", "OUTPUT"}}
+
+
+def routing_table(family):
+    """`ip -j rule show` of a fresh network namespace."""
+    rules = [{"priority": 0, "src": "all", "table": "local"}, {"priority": 32766, "src": "all", "table": "main"}]
+    return rules + ([{"priority": 32767, "src": "all", "table": "default"}] if family == 4 else [])
+
+
 def docker_nat():
     """The nat table as Docker leaves it: DOCKER for local destinations, appended to PREROUTING."""
     table = nat_table()
@@ -114,6 +124,8 @@ class FakeHost:
     def __init__(self, docker_backend="nft", legacy=None, ipv6_docker=True):
         self.tables = {}
         self.nat = {}
+        self.raw = {}
+        self.routing = {4: routing_table(4), 6: routing_table(6)}
         for family in (4, 6):
             if docker_backend and (family == 4 or ipv6_docker):
                 self.tables[(docker_backend, family)] = docker_table()
@@ -123,12 +135,13 @@ class FakeHost:
                 self.tables.setdefault((backend, family), {"chains": {"INPUT": [], "FORWARD": [], "OUTPUT": []},
                                                            "builtin": {"INPUT", "FORWARD", "OUTPUT"}})
                 self.nat.setdefault((backend, family), nat_table())
+                self.raw[(backend, family)] = raw_table()
         self.legacy_present = docker_backend == "legacy" if legacy is None else legacy
         self.calls = []
         self.fail = None  # a binary name whose every call fails
 
     def table(self, backend, family, name="filter"):
-        return (self.tables if name == "filter" else self.nat)[(backend, family)]
+        return {"filter": self.tables, "nat": self.nat, "raw": self.raw}[name][(backend, family)]
 
     def save_text(self, backend, family, name="filter"):
         table = self.table(backend, family, name)
@@ -144,6 +157,8 @@ class FakeHost:
         binary = argv[0]
         if self.fail and binary == self.fail:
             return 1, "", f"{binary}: failing as the test asked"
+        if binary == "ip":
+            return self.ip(argv[1:])
         family = 6 if binary.startswith("ip6") else 4
         backend = "nft" if "-nft" in binary else "legacy"
         if binary.endswith("-save"):
@@ -157,7 +172,7 @@ class FakeHost:
         return self.command(backend, family, args)
 
     def restore(self, backend, family, payload):
-        tables = {name: copy.deepcopy(self.table(backend, family, name)) for name in ("filter", "nat")}
+        tables = {name: copy.deepcopy(self.table(backend, family, name)) for name in ("filter", "nat", "raw")}
         chains = None
         for number, line in enumerate(payload.splitlines(), 1):
             if line == "COMMIT" or not line:
@@ -179,6 +194,30 @@ class FakeHost:
             else:
                 return 1, "", f"line {number} failed"  # nothing of the transaction is kept
         self.tables[(backend, family)], self.nat[(backend, family)] = tables["filter"], tables["nat"]
+        self.raw[(backend, family)] = tables["raw"]
+        return 0, "", ""
+
+    def ip(self, args):
+        """ip -j -<4|6> rule show; ip -<4|6> rule add|del priority N [iif I] fwmark M/K prohibit."""
+        as_json = args[0] == "-j"
+        args = args[1:] if as_json else args
+        family, args = int(args[0][1:]), args[1:]
+        rules = self.routing[family]
+        if args == ["rule", "show"] and as_json:
+            return 0, json.dumps(rules), ""
+        if args[0] != "rule" or args[1] not in ("add", "del") or args[-1] != "prohibit":
+            return 1, "", f"bad ip command {args}"
+        words = dict(zip(args[2:-1:2], args[3:-1:2]))
+        mark, mask = words["fwmark"].split("/")
+        rule = {"priority": int(words["priority"]), "src": "all", "fwmark": mark, "fwmask": mask,
+                **({"iif": words["iif"]} if "iif" in words else {}), "action": "prohibit"}
+        if args[1] == "add":
+            rules.append(rule)
+            rules.sort(key=lambda r: r["priority"])
+        elif rule in rules:
+            rules.remove(rule)
+        else:
+            return 2, "", "RTNETLINK answers: No such file or directory"
         return 0, "", ""
 
     def command(self, backend, family, args):
@@ -224,8 +263,8 @@ class FirewallFixture(unittest.TestCase):
     def apply(self, host, backend="nft", ipv6=True, config=None):
         return self.fw.apply(config or self.config, self.fw.Iptables(backend, host.run), ipv6, self.address_of, str(self.lock))
 
-    def check(self, host, backend="nft", ipv6=True):
-        return self.fw.check(self.config, self.fw.Iptables(backend, host.run), ipv6, self.address_of)
+    def check(self, host, backend="nft", ipv6=True, seen=False):
+        return self.fw.check(self.config, self.fw.Iptables(backend, host.run), ipv6, self.address_of, seen)
 
 
 class ConfigurationTest(FirewallFixture):
@@ -568,6 +607,8 @@ class KubernetesTest(FirewallFixture):
     FORWARD_JUMP = f"-A FORWARD -i {BRIDGE} -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD"
     INPUT_JUMP = f"-A INPUT -i {BRIDGE} -m comment --comment orbit-managed-runners -j ORBIT-MR-INPUT"
     NAT_JUMP = f"-A PREROUTING -i {BRIDGE} -m comment --comment orbit-managed-runners -j ORBIT-MR-PREROUTING"
+    RAW_JUMP = f"-A PREROUTING -i {BRIDGE} -m comment --comment orbit-managed-runners -j ORBIT-MR-RAW"
+    ROUTING_RULE = {"priority": 1, "src": "all", "fwmark": "0x100000", "fwmask": "0x100000", "iif": BRIDGE, "action": "prohibit"}
 
     def k3s_host(self, ipv6_k3s=True):
         host = FakeHost()
@@ -584,6 +625,11 @@ class KubernetesTest(FirewallFixture):
         self.assertEqual(nat["PREROUTING"][0], self.NAT_JUMP)
         self.assertLess(nat["PREROUTING"].index(self.NAT_JUMP), nat["PREROUTING"].index(KUBE_PREROUTING))
         self.assertEqual(nat["ORBIT-MR-PREROUTING"], self.fw.nat_rules(self.config, family))
+        raw = host.table("nft", family, "raw")["chains"]
+        self.assertEqual(raw["PREROUTING"][0], self.RAW_JUMP)
+        self.assertEqual(raw["ORBIT-MR-RAW"], self.fw.guard_rules(self.config, family, "raw"))
+        self.assertEqual(self.fw.our_routing_rules(host.routing[family]), [self.ROUTING_RULE])
+        self.assertEqual(host.routing[family][:2], [{"priority": 0, "src": "all", "table": "local"}, self.ROUTING_RULE])
 
     def test_the_nat_guard_lets_only_dockers_dnat_of_the_published_port_and_the_allowed_destinations_through(self):
         self.assertEqual(self.fw.nat_rules(self.config, 4), [
@@ -642,6 +688,70 @@ class KubernetesTest(FirewallFixture):
         self.assertEqual(len(restores), 1, "filter and nat in one iptables-restore")
         self.assertIn("*nat", restores[0])
 
+    def test_the_raw_guard_marks_every_refused_address_and_a_routing_rule_refuses_it(self):
+        rules = self.fw.guard_rules(self.config, 4, "raw")
+        self.assertEqual(rules[:4], [
+            "-A ORBIT-MR-RAW -d 172.19.0.1/32 -p tcp -m tcp --dport 2086 -j RETURN",
+            "-A ORBIT-MR-RAW -d 192.168.1.254/32 -p udp -m udp --dport 53 -j RETURN",
+            "-A ORBIT-MR-RAW -d 192.168.1.254/32 -p tcp -m tcp --dport 53 -j RETURN",
+            "-A ORBIT-MR-RAW -d 10.77.0.2/32 -p tcp -m tcp --dport 18080 -j RETURN",
+        ])
+        # Every range the filter chain rejects is marked, and nothing else; marking takes nothing but routing away.
+        self.assertEqual([rule.split()[3] for rule in rules[4:]], list(self.fw.BLOCKED_V4))
+        self.assertTrue(all(rule.endswith("-j MARK --set-xmark 0x100000/0x100000") for rule in rules[4:]))
+        self.assertEqual(self.fw.guard_rules(self.config, 6, "raw"), ["-A ORBIT-MR-RAW -j MARK --set-xmark 0x100000/0x100000"])
+        self.assertEqual(self.fw.routing_rule(self.config), self.ROUTING_RULE)
+        self.assertEqual(self.fw.rule_args(self.ROUTING_RULE),
+                         ["priority", "1", "iif", BRIDGE, "fwmark", "0x100000/0x100000", "prohibit"])
+
+    def test_the_raw_guard_holds_while_kube_router_sits_above_the_filter_rules(self):
+        host = self.k3s_host()
+        self.apply(host)
+        kube_router_sync(host)
+        problems = self.check(host)
+        # The filter rules lost their first place; the guard that does not depend on it did not.
+        self.assertFalse([problem for problem in problems if "raw" in problem or "routing rule" in problem])
+        self.assertEqual(host.table("nft", 4, "raw")["chains"]["PREROUTING"][0], self.RAW_JUMP)
+        self.assertIn(self.ROUTING_RULE, host.routing[4])
+
+    def test_a_missing_or_stale_routing_rule_is_put_back(self):
+        for name, change in {
+            "deleted": lambda r: r.remove(self.ROUTING_RULE),
+            "for an old bridge": lambda r: r.append({**self.ROUTING_RULE, "iif": "br-feedfacecafe"}),
+            "a rule routed before it": lambda r: r.insert(1, {"priority": 0, "src": "all", "fwmark": "0x1", "table": "100"}),
+        }.items():
+            with self.subTest(name=name):
+                host = self.k3s_host()
+                self.apply(host)
+                change(host.routing[4])
+                self.assertTrue(any("routing rule" in problem for problem in self.check(host)))
+                if name == "a rule routed before it":
+                    # Not this program's to remove: reported, so never enforced while it is there.
+                    self.assertIn("IPv4: 1 routing rule(s) other than the local table's come before the guard's", self.apply(host)[1])
+                    continue
+                self.assertEqual(self.apply(host), ([4], []))
+                self.assertEqual(self.fw.our_routing_rules(host.routing[4]), [self.ROUTING_RULE])
+
+    def test_once_kubernetes_was_seen_the_guards_go_on_before_it_starts(self):
+        host = FakeHost()  # after a host restart: Docker's rules, no Kubernetes yet
+        self.assertEqual(self.fw.apply(self.config, self.fw.Iptables("nft", host.run), True, self.address_of, str(self.lock),
+                                       None, True), ([4, 6], []))
+        for family in (4, 6):
+            chains = host.table("nft", family)["chains"]
+            self.assertEqual(chains["FORWARD"][0], self.FORWARD_JUMP)
+            self.assertEqual(host.table("nft", family, "raw")["chains"]["PREROUTING"][0], self.RAW_JUMP)
+            self.assertEqual(self.fw.our_routing_rules(host.routing[family]), [self.ROUTING_RULE])
+        # k3s comes up after the firewall: kube-proxy prepends KUBE-SERVICES in nat PREROUTING and kube-router its jumps in
+        # FORWARD and INPUT. The raw guard and the routing rule, which no Kubernetes component writes, stay as they were
+        # (a ClusterIP is marked before KUBE-SERVICES DNATs it); the next check puts the rest first again.
+        add_k3s(host)
+        problems = self.check(host, seen=True)
+        self.assertIn(f"IPv4: nat PREROUTING does not start with the jump for {BRIDGE}: KUBE-SERVICES come(s) before it", problems)
+        self.assertFalse([problem for problem in problems if "raw" in problem or "routing" in problem])
+        self.assertEqual(self.fw.apply(self.config, self.fw.Iptables("nft", host.run), True, self.address_of, str(self.lock),
+                                       None, True), ([4], []))
+        self.assert_first(host)
+
     def test_applying_again_writes_nothing(self):
         host = self.k3s_host()
         self.apply(host)
@@ -696,9 +806,12 @@ class KubernetesTest(FirewallFixture):
             self.fw.serve(str(config_file), str(status_file), host.run, self.address_of, True, str(self.lock), cycles=2)
         self.assertEqual([status["state"] for status in written], ["starting", "enforced", "enforced", "stopped"])
         self.assertEqual(written[1]["kubernetes"], ["IPv4"])
+        # Kubernetes was seen: from then on the guards hold for both families, and as the service starts.
+        self.assertTrue((self.root / "kubernetes-seen").exists())
+        self.assertEqual(written[2]["kubernetes"], ["IPv4", "IPv6"])
         self.assertTrue(any("KUBE-ROUTER-FORWARD come(s) before it" in problem for problem in checks[1]),
                         "the second check found Kubernetes' jumps above the rules")
-        self.assertEqual(self.check(host), [])
+        self.assertEqual(self.check(host, seen=True), [])
         self.assert_first(host)
 
     def test_enforced_is_not_reported_while_the_rules_cannot_be_put_first(self):
@@ -721,32 +834,43 @@ class KubernetesTest(FirewallFixture):
         host.table("nft", 4)["chains"]["FORWARD"] = [r for r in host.table("nft", 4)["chains"]["FORWARD"] if "KUBE" not in r and "FLANNEL" not in r]
         host.table("nft", 4)["chains"]["INPUT"] = [r for r in host.table("nft", 4)["chains"]["INPUT"] if "KUBE" not in r]
         host.table("nft", 4, "nat")["chains"]["PREROUTING"].remove(KUBE_PREROUTING)
-        self.assertIn("IPv4: the nat guard is left from when Kubernetes shared this host", self.check(host))
+        problems = self.check(host)
+        self.assertIn("IPv4: the nat guard is left from when Kubernetes shared this host", problems)
+        self.assertIn("IPv4: the raw guard is left from when Kubernetes shared this host", problems)
+        self.assertIn("IPv4: the routing rule is left from when Kubernetes shared this host", problems)
         self.assertEqual(self.apply(host), ([4], []))
         plain = FakeHost()
         self.apply(plain)
-        self.assertEqual((host.tables[("nft", 4)], host.nat[("nft", 4)]), (plain.tables[("nft", 4)], plain.nat[("nft", 4)]))
+        self.assertEqual((host.tables[("nft", 4)], host.nat[("nft", 4)], host.raw[("nft", 4)], host.routing[4]),
+                         (plain.tables[("nft", 4)], plain.nat[("nft", 4)], plain.raw[("nft", 4)], plain.routing[4]))
         self.assertEqual(host.nat[("nft", 4)], before[1][("nft", 4)])
 
     def test_remove_takes_the_guard_off_too_and_leaves_kubernetes(self):
         host = self.k3s_host()
-        k3s = copy.deepcopy((host.tables, host.nat))
+        k3s = copy.deepcopy((host.tables, host.nat, host.raw, host.routing))
         self.apply(host)
         done = self.fw.remove(host.run, legacy_present=False, ipv6=True)
         self.assertIn(f"nft IPv4: deleted nat {self.NAT_JUMP}", done)
         self.assertIn("nft IPv4: removed nat chain ORBIT-MR-PREROUTING", done)
+        self.assertIn(f"nft IPv4: deleted raw {self.RAW_JUMP}", done)
+        self.assertIn("nft IPv6: removed raw chain ORBIT-MR-RAW", done)
+        self.assertIn(f"IPv4: deleted routing rule priority 1 iif {BRIDGE} fwmark 0x100000/0x100000 prohibit", done)
         self.assertIn(f"nft IPv4: deleted {self.FORWARD_JUMP}", done)
-        self.assertEqual((host.tables, host.nat), k3s)
+        self.assertEqual((host.tables, host.nat, host.raw, host.routing), k3s)
 
     def test_preflight_tries_the_nat_guard_in_a_scratch_chain(self):
         host = self.k3s_host(ipv6_k3s=False)
-        k3s = copy.deepcopy((host.tables, host.nat))
+        k3s = copy.deepcopy((host.tables, host.nat, host.raw, host.routing))
         facts = self.fw.preflight(self.fw.Iptables("nft", host.run), ipv6=True, xtables_lock=str(self.lock))
         self.assertTrue(facts["ipv4Kubernetes"])
         self.assertNotIn("ipv6Kubernetes", facts)
         payload = [stdin for argv, stdin in host.calls if argv[0] == "iptables-nft-restore"][0]
         self.assertIn("*nat\n:ORBIT-MR-PREFLIGHT - [0:0]\n-A ORBIT-MR-PREFLIGHT -d 192.0.2.1/32", payload)
-        self.assertEqual((host.tables, host.nat), k3s)
+        self.assertIn("*raw\n:ORBIT-MR-PREFLIGHT - [0:0]\n-A ORBIT-MR-PREFLIGHT -d 192.0.2.1/32", payload)
+        ip_calls = [argv for argv, _ in host.calls if argv[0] == "ip" and "show" not in argv]
+        self.assertEqual([argv[3] for argv in ip_calls], ["add", "del"])
+        self.assertIn("orbit-preflight", ip_calls[0])
+        self.assertEqual((host.tables, host.nat, host.raw, host.routing), k3s)
 
 
 class WithoutKubernetesTest(FirewallFixture):
@@ -765,7 +889,11 @@ class WithoutKubernetesTest(FirewallFixture):
             f"-I DOCKER-USER 1 -i {BRIDGE} -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD",
             "COMMIT"]) + "\n")
         self.assertNotIn("*nat", "".join(payloads))
+        self.assertNotIn("*raw", "".join(payloads))
         self.assertEqual(host.nat, nat_before)
+        self.assertEqual(host.raw, FakeHost().raw)
+        self.assertEqual(host.routing, FakeHost().routing)
+        self.assertFalse([argv for argv, _ in host.calls if argv[0] == "ip" and "show" not in argv], "no routing rule written")
         self.assertEqual(saved["rules"]["FORWARD"], ["-A FORWARD -j DOCKER-USER", "-A FORWARD -j DOCKER-FORWARD"])
         self.assertEqual(self.fw.hooks_for(saved, 4), {"input": "INPUT", "forward": "DOCKER-USER"})
 
