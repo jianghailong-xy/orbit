@@ -185,7 +185,8 @@ struct GuestSessionView: View {
         }
         .task(id: sessionID) {
             guard let api = app.guestDoor else { return }
-            let model = GuestConversationModel(sessionID: sessionID, api: api) { [weak app] in app?.user?.name }
+            let account = app
+            let model = GuestConversationModel(sessionID: sessionID, api: api) { [weak account] in account?.user?.name }
             conversation = model
             await model.load()
             await model.follow()
