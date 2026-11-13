@@ -2935,10 +2935,6 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0560 adds the session_guest table and widens three CHECKs (external sender, its session-row preview, the
       // activity credential kind); no preserved rows, triggers or DONE fence change.
       '0560_session_guest',
-      // 0565 adds the terminal_login and terminal_credential tables, their indexes and foreign keys to "user" and
-      // "runner" only (docs/terminal-session-design.md); no preserved rows, triggers or DONE fence change, and no row
-      // is written.
-      '0565_terminal_credential',
       // 0571 adds one nullable TIMESTAMP(3) `self_update_postpone_until` on `runner` (no default, catalog-only); no
       // preserved rows, triggers or DONE fence change, and no row is written.
       '0571_runner_self_update_postpone',
