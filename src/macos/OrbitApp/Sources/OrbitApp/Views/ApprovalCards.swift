@@ -67,13 +67,18 @@ extension View {
     /// 2026-09-11). It is set here and nowhere else, so no card is dimmed twice.
     ///
     /// `dashed` draws the hairline dashed, as every card still waiting on the queue is.
-    func approvalChrome(_ tone: Color, dimmed: Bool = false, dashed: Bool = false) -> some View {
+    ///
+    /// `emphasized` draws the edge solid and heavier, for the one card that must not be scrolled
+    /// past: a coordinator question still waiting on the owner (the owner's pick, 2026-11-13).
+    func approvalChrome(_ tone: Color, dimmed: Bool = false, dashed: Bool = false,
+                        emphasized: Bool = false) -> some View {
         padding(ApprovalMetrics.padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(tone.opacity(0.07), in: RoundedRectangle(cornerRadius: ApprovalMetrics.radius))
             .overlay {
                 RoundedRectangle(cornerRadius: ApprovalMetrics.radius)
-                    .strokeBorder(tone.opacity(0.28), style: StrokeStyle(lineWidth: 1, dash: dashed ? [4, 3] : []))
+                    .strokeBorder(tone.opacity(emphasized ? 1 : 0.28),
+                                  style: StrokeStyle(lineWidth: emphasized ? 1.5 : 1, dash: dashed ? [4, 3] : []))
             }
             .opacity(dimmed ? 0.72 : 1)
     }
@@ -2734,23 +2739,43 @@ private struct CriteriaDecisionReceiptCard: View {
 private struct EvidenceDecisionReceiptCard: View {
     let decided: RecordedEvidenceDecision
     @Environment(\.openEvidenceFiles) private var openFiles
+    /// Whether the note is showing. Folded: a record is three lines, and its note can be thirty
+    /// (the owner's call, 2026-11-13).
+    @State private var noteOpen = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
-            ApprovalHeader(symbol: "checkmark.circle.fill",
-                           title: decided.recordedByAgent ? EvidenceDecisions.agentRecordedHeading
-                                                          : EvidenceDecisions.recordedHeading,
-                           tone: .blue)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.orbitMeta)
+                    .foregroundStyle(Color.blue)
+                    .frame(width: 22, height: 22)
+                    .background(Color.blue.opacity(0.16), in: RoundedRectangle(cornerRadius: 6))
+                Text(decided.recordedByAgent ? EvidenceDecisions.agentRecordedHeading
+                                             : EvidenceDecisions.recordedHeading)
+                    .font(.orbitLabel.weight(.semibold))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
             Text(decided.title)
-                .font(.orbitProse.bold())
+                .font(.orbitLabel)
+                .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(EvidenceDecisions.receiptLine(decided))
-                .font(.orbitProse)
+                .font(.orbitLabel).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let note = decided.note, !note.isEmpty {
-                Text("\(EvidenceDecisions.receiptReasonLabel)：\(note)")
-                    .font(.orbitLabel).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                DisclosureToggle(open: noteOpen,
+                                 label: EvidenceDecisions.noteToggle(decided, open: noteOpen)) {
+                    noteOpen.toggle()
+                }
+                .foregroundStyle(.secondary)
+                if noteOpen {
+                    Text("\(EvidenceDecisions.noteLabel(decided))：\(note)")
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             // The one way to an older version's files, and so to where they are seen to expire: the latest
             // version's do not (§2.8), and only the latest is ever a card. Read when it is pressed, not here.
@@ -4074,10 +4099,13 @@ private struct CoordinatorQuestionCardView: View {
 
     private var questionCard: some View {
         let standing = self.standing
+        // Orange while it waits on the owner, the colour of the `open question below` capsule
+        // that points at it; blue once it is no longer a question.
+        let open = CoordinatorQuestions.isOpen(standing)
         return ApprovalReviewLayout(title: CoordinatorQuestions.heading,
-                             symbol: "questionmark.bubble.fill", tone: .blue,
+                             symbol: "questionmark.bubble.fill", tone: open ? .orange : .blue,
                              summary: previewSummary,
-                             dimmed: !CoordinatorQuestions.isOpen(standing)) {
+                             dimmed: !open, emphasized: open) {
             Text(CoordinatorQuestions.provenance)
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -4122,7 +4150,9 @@ private struct CoordinatorQuestionCardView: View {
     }
 
     private var previewSummary: String {
-        if case .open(let row) = standing { return row.question?.question ?? row.detailLine }
+        // Flattened, as the record's card is: blank lines and table rows of the Markdown would
+        // otherwise spend the preview's three lines on nothing.
+        if case .open(let row) = standing { return row.question.map(CoordinatorQuestions.lead) ?? row.detailLine }
         return CoordinatorQuestions.gone
     }
 
