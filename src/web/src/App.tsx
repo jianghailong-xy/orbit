@@ -7,6 +7,7 @@ import { workspacesQuery, runnersQuery } from './lib/queries';
 import { machineDraftPath } from './lib/machineSetup';
 import { firstOpenableWorkspace } from './lib/workspaceOrder';
 import { AppShell, DocView, FlushView } from './components/AppShell';
+import { AdminLayout } from './components/settings/AdminLayout';
 import { SettingsLayout } from './components/settings';
 import { SettingsWorkspacePage } from './components/settings/WorkspaceSettingsPage';
 import { SettingsKeysPage, SettingsPoolsPage, SettingsProvidersHome } from './components/settings/SettingsProviderPages';
@@ -263,6 +264,13 @@ export function App() {
           {/* Settings takes over the window (owner's choice A1, docs/mocks/settings-redesign): its own nav
               of five groups in place of the app's sidebar, "Back to Orbit" and Esc to leave. Machines and
               Workspaces open the pages that manage them today until each has its own. */}
+          {/* Admin is drawn as Settings is: its own window, a nav of its pages, the page in a centred column. */}
+          <Route path="admin" element={<AdminLayout />}>
+            <Route index element={<AdminUsersPage />} />
+            <Route path="sign-in" element={<AdminSignInPage />} />
+            <Route path="email" element={<AdminEmailPage />} />
+            <Route path="integrations" element={<AdminIntegrationsPage />} />
+          </Route>
           <Route path="settings" element={<SettingsLayout />}>
             <Route index element={<Navigate to="/settings/general" replace />} />
             <Route path="general" element={<GeneralSettingsPage />} />
@@ -300,41 +308,6 @@ export function App() {
             <Route path="tasks" element={<TaskRoute />} />
             <Route path="tasks/:id" element={<TaskRoute />} />
             <Route path="lists/:key" element={<TaskRoute />} />
-            <Route
-              path="admin"
-              element={
-                <DocView>
-                  <AdminUsersPage />
-                </DocView>
-              }
-            />
-            {/* The admin area's Sign-in settings, beside its user management (docs/google-sign-in-design.md §7.1). */}
-            <Route
-              path="admin/sign-in"
-              element={
-                <DocView>
-                  <AdminSignInPage />
-                </DocView>
-              }
-            />
-            {/* The admin area's outgoing email: Resend and the welcome email (docs/welcome-email-design.md §3.1). */}
-            <Route
-              path="admin/email"
-              element={
-                <DocView>
-                  <AdminEmailPage />
-                </DocView>
-              }
-            />
-            {/* The admin area's Integrations: Feishu bots' switch (docs/feishu-bot-design.md §4.1). */}
-            <Route
-              path="admin/integrations"
-              element={
-                <DocView>
-                  <AdminIntegrationsPage />
-                </DocView>
-              }
-            />
             {/* Machines are Settings' now: /infrastructure opens one (InfrastructureRoute), its #keys and
                 #pools, and the old /providers addresses, land on Settings' Providers pages. */}
             <Route path="infrastructure" element={<InfrastructureRoute />} />
