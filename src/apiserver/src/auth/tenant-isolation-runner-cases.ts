@@ -800,6 +800,18 @@ const taskCreateFieldCases = (route: string, wrap: (task: object) => object, whe
     heldRow: (of: RunnerTenant) => ['task', of.spare.taskId] as const,
   },
   [`${route} body ${where}dependsOnTaskIds[]`]: { as: RUNNER, request: (of: RunnerTenant) => ({ params: {}, body: wrap(taskBody({ dependsOnTaskIds: [of.dependencyTaskId] })) }) },
+  // SR55: a fork of A's session, asked from B's own calling session on B's own runner. A fork is only ever of the
+  // session making the call (tasks/task-fork.ts), so A's session is answered as an id that names nothing is.
+  [`${route} body ${where}fork.sessionId`]: {
+    as: RUNNER,
+    request: (of: RunnerTenant, mine: RunnerTenant) => ({
+      params: {},
+      headers: calling(mine.runner.callingSessionId),
+      body: wrap(taskBody({
+        fork: { sessionId: of.runner.callingSessionId, sha: '5'.repeat(40), baseHead: '4'.repeat(40), includesUncommitted: true },
+      })),
+    }),
+  },
 }) satisfies Record<string, RunnerFieldCase>;
 
 /** The task filters by id, as the runner's list doors take them. */
@@ -944,6 +956,11 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
       },
     }),
     heldRow: (of) => ['codex_rate_limit_reset_operation', of.runner.codexOperationId] as const,
+  },
+  // The batch takeover: B's own process, taking A's session over among its own.
+  'POST /runner/sessions/takeover-leases body sessions[].sessionId': {
+    as: RUNNER,
+    request: (of, mine) => ({ params: {}, body: { leaseOwner: mine.runner.leaseOwner, sessions: [{ sessionId: of.runner.takeoverSessionId }] } }),
   },
   'POST /runner/sessions/:id/artifacts/result body requestId': {
     as: RUNNER,

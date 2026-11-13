@@ -4,7 +4,7 @@ import { visibleQuestions, questionsWithCoordinator } from './run-question';
 import { isRunNotifyTurn, runNotifyContent } from './run-notify';
 import {
   SESSION_MERGE_RECOVERY_V1, readMergeRecovery, mergeRecoveryConfirmable, mergeRecoveryContinuePrompt, mergeRecoveryPrompt,
-  mergeRecoveryReady, type MergeRecovery, type MergeRecoveryAction,
+  mergeRecoveryReady, type MergeRecovery, type MergeRecoveryAction, type SessionActivity,
 } from '@orbit/shared';
 import {
   BadRequestException,
@@ -32,6 +32,7 @@ import { appendScheduledWakeupContext, endWakeupLoop, readSessionWakeups } from 
 import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
 import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
+import { readSessionActivities, sessionActivitySql } from './task-work-carrier';
 import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
@@ -179,7 +180,17 @@ import {
   readOwnerDecisionsBySession,
   sessionWaitingKind,
 } from '../projects/owner-decision-signal';
-import { chatSourceColumns, decideSessionSource, type SessionSourceTaskRow } from '../projects/session-source';
+import {
+  chatSourceColumns,
+  decideSessionSource,
+  forkSourceLine,
+  SESSION_SOURCE_TASK_SELECT,
+  type SessionSourceDecision,
+  type SessionSourceTaskRow,
+} from '../projects/session-source';
+import { SourceResolutionRefusal } from '../projects/source-selector';
+import { forkRefusalBody } from '../tasks/task-fork';
+import { isCodelessTaskRun } from './codeless-checkout';
 import { readWikiChatContext, sameWikiChatContext, wikiContextOutsideChat } from '../wiki/wiki-chat-context';
 import { branchName } from '../projects/project-criterion-landing';
 import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
@@ -1312,15 +1323,7 @@ export class SessionsService {
     if (dto.taskId) {
       const task = await this.prisma.task.findFirst({
         where: { id: dto.taskId, ownerId },
-        select: {
-          id: true,
-          projectId: true,
-          verifiesTaskId: true,
-          pinnedRevision: true,
-          codeless: true,
-          attemptGeneration: true,
-          knownGoodSha: true,
-        },
+        select: SESSION_SOURCE_TASK_SELECT,
       });
       if (!task) throw new ForbiddenException('task not found');
       sourceTask = task;
@@ -1337,9 +1340,29 @@ export class SessionsService {
     //
     // A wiki chat is the one session that executes no task and still freezes a selector: origin/main,
     // by a constant rule rather than the table (SR54).
-    const source = wikiChat
+    const source: Pick<SessionSourceDecision, 'columns' | 'forkRunnerId'> = wikiChat
       ? { columns: chatSourceColumns(wikiChat.repository) }
-      : await decideSessionSource(this.prisma, sourceTask);
+      : await decideSessionSource(this.prisma, sourceTask).catch((error: unknown) => {
+          // SR55's resolution-time refusal (a binding added to the project after the fork was filed),
+          // answered in the shape the task's create door answers it in, rather than as a bare error.
+          if (error instanceof SourceResolutionRefusal && error.code === 'FORK_IN_BOUND_PROJECT') {
+            throw new ConflictException(forkRefusalBody('FORK_IN_BOUND_PROJECT', error.message, error.detail));
+          }
+          throw error;
+        });
+    // SR55's placement rule, at the door every run passes: a forked task's snapshot exists only in the
+    // forking session's repository, on that session's machine, so a run placed anywhere else could only
+    // be refused there later (or worse, find a same-named commit in some other repository). The create
+    // doors refuse an assignee on another machine; this is what holds after an edit moved the task, or
+    // its workspace, since.
+    if (source.forkRunnerId && source.forkRunnerId !== assignedRunnerId) {
+      throw new ConflictException(forkRefusalBody(
+        'FORK_SOURCE_NOT_REACHABLE',
+        "this task starts from a session's snapshot, which exists only on the machine that session ran on, and this "
+          + 'run would be placed on another machine. Assign the task to a workspace on that machine.',
+        { taskId: sourceTask?.id ?? null, forkRunnerId: source.forkRunnerId, runnerId: assignedRunnerId },
+      ));
+    }
     // Validate any compose-page image refs up front (caller's, still unscoped) so a bad
     // one fails the request before a session is created. They're scoped to the session
     // below and linked to the seeded first turn when the runner claims it (queue.service).
@@ -1369,7 +1392,20 @@ export class SessionsService {
             ).map((a) => a.fileName),
           )
         : titleFromPrompt(dto.prompt));
-    let branch = enableWorktree ? makeBranchName(title) : null;
+    // A forked task's run always gets its own branch, whatever the workspace says (SR55, design §2.4):
+    // a pinned run with no branch is refused at checkout (WORKTREE_REQUIRED), and running it in the
+    // shared workDir would put it in the very directory the session it forked from may be writing.
+    //
+    // A codeless task's run gets no branch here (design §3, B2): it is still isolated, in a checkout the claim
+    // asks for detached, and its branch is made at finalize only if the run changed something.
+    const codelessRun = isCodelessTaskRun({
+      taskId: sourceTask?.id ?? null,
+      sourceKind: source.columns.sourceKind ?? null,
+      task: sourceTask,
+    });
+    let branch = (enableWorktree && !codelessRun) || source.columns.sourceKind === 'SESSION_FORK'
+      ? makeBranchName(title)
+      : null;
     // Refuse now if the machine this is bound for cannot start it at all, rather than creating a
     // session (and, on the runner, a git checkout) that dies a second later with the same message.
     // Only for a runtime signed out on an online runner — see signedOutEngineRefusal for
@@ -3867,6 +3903,7 @@ export class SessionsService {
       runningBgJobs: string[];
       runningBgJobActivity: Prisma.JsonValue;
       runningSubagentCount: number;      engineTurnActive: boolean;
+      activity: SessionActivity | null;
       engineStartedAt: Date | null;
       enginePhase: string | null;
       runClaimedAt: Date | null;
@@ -4006,6 +4043,9 @@ export class SessionsService {
         s.running_bg_job_activity AS "runningBgJobActivity",
         cardinality(s.running_subagents)::int AS "runningSubagentCount",
         s.engine_turn_active AS "engineTurnActive",
+        -- What it is doing beyond its status (sessionActivitySql): the one answer to whether a parked
+        -- session is still working, so no client has to rebuild it from the columns around it.
+        (${Prisma.raw(sessionActivitySql('s'))}) AS "activity",
         s.engine_started_at AS "engineStartedAt",
         s.engine_phase AS "enginePhase",
         s.run_claimed_at AS "runClaimedAt",
@@ -4218,6 +4258,7 @@ export class SessionsService {
         runningBgJobCount: freshRunningBgJobs(r.runningBgJobs, r.runningBgJobActivity).length,
         runningSubagentCount: r.runningSubagentCount,
         engineTurnActive: r.engineTurnActive,
+        activity: r.activity,
         engineStartedAt: r.engineStartedAt,
         // What the list row needs to tell a three-second cold start from an engine that has been
         // compacting for four minutes; both are RUNNING with a null engineStartedAt.
@@ -4404,6 +4445,10 @@ export class SessionsService {
         task: {
           select: {
             codeless: true,
+            // Row PF's facts, for SR18's line (`forkSource` below).
+            forkSessionId: true,
+            forkSha: true,
+            forkIncludesUncommitted: true,
             project: {
               select: {
                 codebases: {
@@ -4567,6 +4612,8 @@ export class SessionsService {
       route,
       poolCodexLogin,
       mergeTarget,
+      // SR18's sentence when the task this session runs was forked from a session (design §2.3).
+      forkSource: await forkSourceLine(this.prisma, task),
       // When its turn last ended or it finished, and what it last said — what a repair waiting for the
       // owner asked — clipped to the session list's preview length, in code points as `left()` counts.
       mergeRepairSession: children[0] ? withSessionState({
@@ -4916,10 +4963,14 @@ export class SessionsService {
     });
     if (!session) throw linkNotFound();
     const stateful = withSessionState(session);
+    // A parked session can still be working (a self-driven turn, a sub-agent, a job, a wait that
+    // wakes it): without this the page read its AWAITING_INPUT as idle and said "Awaiting reply".
+    const activity = (await readSessionActivities(this.prisma, [session.id])).get(session.id) ?? null;
     return {
       title: session.title,
       workspaceName: session.workspace?.name ?? null,
       status: stateful.status,
+      activity,
       runStatus: stateful.runStatus,
       sessionState: stateful.sessionState,
       runState: stateful.runState,

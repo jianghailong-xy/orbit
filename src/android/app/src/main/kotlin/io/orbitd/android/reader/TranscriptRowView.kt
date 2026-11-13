@@ -137,7 +137,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             else -> "Interrupted"
         }
         "error", "auth_error" -> "Error"
-        "notice", "diagnostic" -> "Notice"
+        "notice", "diagnostic", "auth_settled" -> "Notice"
         "auto_retry" -> EngineErrors.autoRetryTitle(shown.fields.string("variant") == "quota", shown.body())
         "background_task" -> "Background work"
         else -> event.type.replace('_', ' ').replaceFirstChar(Char::uppercase)
@@ -259,7 +259,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                     if (nested.size > 4) TextButton(onClick = { childrenOpen = true }) { Text("Open subagent transcript") }
                 }
             } else liveOutput?.let { Text(it.takeLast(240), maxLines = 3, style = MaterialTheme.typography.bodySmall) }
-        } else if (event.type in setOf("error", "notice", "diagnostic", "auto_retry")) {
+        } else if (event.type in setOf("error", "notice", "diagnostic", "auto_retry", "auth_settled")) {
             EngineLine(shown)
             if (shown.truncated) TextButton(enabled = !loading, onClick = { loadFull() }) { Text(if (error) "Couldn't load full message · Retry" else "Read full message") }
         } else if (event.type == "thinking") {
@@ -363,7 +363,10 @@ private fun EngineLine(event: RunEvent) {
     when (event.type) {
         "error" -> ToolFailureSummary.parse(text)?.let { ToolFailureCard(text, it) }
             ?: GlyphLine("⚠", text, MaterialTheme.colorScheme.error, MaterialTheme.typography.bodyLarge)
-        "notice" -> GlyphLine("⚠", text, LocalOrbitColors.current.needsYou, MaterialTheme.typography.labelLarge)
+        // An account switch the conversation has moved past is history, muted with the sign-in failure it came with.
+        "notice" -> GlyphLine("⚠", text, if (event.fields["settled"] == JsonPrimitive(true)) MaterialTheme.colorScheme.onSurfaceVariant
+            else LocalOrbitColors.current.needsYou, MaterialTheme.typography.labelLarge)
+        "auth_settled" -> SettledAuthLine(text, event.fields["resolved"] == JsonPrimitive(true))
         "diagnostic" -> DiagnosticLine(event.fields.string("label").orEmpty(), EngineStderr.logText(text),
             (event.fields["repeats"] as? JsonPrimitive)?.intOrNull ?: 1)
         // The self-healing failure's sentence; the card around it (countdown, Retry) is the auto-retry card's.
@@ -397,6 +400,24 @@ private fun GlyphLine(glyph: String, text: String, color: Color, style: TextStyl
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(glyph, color = color, style = style, modifier = Modifier.clearAndSetSemantics { })
         SelectionContainer { Text(text, color = color, style = style) }
+    }
+}
+
+/** A sign-in failure the conversation moved past (web `.chat-authfix-settled`, iOS `AuthErrorCardView.settledRow`): one muted line,
+ * a check once the agent worked again, and the runtime's words a tap away. */
+@Composable
+private fun SettledAuthLine(message: String, resolved: Boolean) {
+    var expanded by rememberSaveable(message) { mutableStateOf(false) }
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val style = MaterialTheme.typography.labelLarge
+    Column(Modifier.fillMaxWidth().testTag("auth-settled"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.fillMaxWidth().clickable(onClickLabel = if (expanded) "Hide message" else "Show message", role = Role.Button) { expanded = !expanded },
+            horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(if (resolved) "✓" else "⚠", Modifier.clearAndSetSemantics { }, color = if (resolved) LocalOrbitColors.current.success else muted, style = style)
+            Text(if (resolved) "Sign-in failed — resolved" else "Sign-in failed", Modifier.weight(1f), color = muted, style = style)
+            Text(if (expanded) "⌄" else "›", Modifier.clearAndSetSemantics { }, color = muted, style = style)
+        }
+        if (expanded) SelectionContainer { Text(message, color = muted, style = MaterialTheme.typography.bodySmall) }
     }
 }
 

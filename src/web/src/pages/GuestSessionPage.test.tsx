@@ -7,8 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GuestSession, GuestSessionNow, SharedEvent } from '../api';
 
 /**
- * The guest page, `/g/<sessionId>` (docs/session-guests-design.md §4; board docs/mocks/share-links/10-session-guests-3),
- * mounted whole on its route over the guest door: the frame says who shared it, how it stands and that the reader is
+ * The guest view (docs/session-guests-design.md §4; boards docs/mocks/share-links/10-session-guests-3 and
+ * 11-guest-one-link-2), mounted whole over the guest door as `/sessions/<id>` draws it in the app's pane: the frame says who shared it, how it stands and that the reader is
  * a Guest; the composer only takes text and says where it runs; the session waiting on its owner, having ended, and
  * no longer being shared each read as the board draws them; and what the conversation adds is followed.
  */
@@ -23,7 +23,7 @@ vi.mock('../api', async (importOriginal) => ({
   sendGuestTurn: vi.fn(),
 }));
 const { api, ApiError, getGuestSession, getGuestEventsAfter, sendGuestTurn } = await import('../api');
-const { GuestSessionPage } = await import('./GuestSessionPage');
+const { GuestLinkRedirect, GuestSessionView } = await import('./GuestSessionPage');
 const { encodeId } = await import('../lib/idCodec');
 
 const SESSION = '0196f8a2-7c1e-7b3a-9d4e-5f6a7b8c9d0e';
@@ -82,9 +82,9 @@ async function visit(): Promise<void> {
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={[`/g/${encodeId(SESSION)}`]}>
+        <MemoryRouter initialEntries={[`/sessions/${encodeId(SESSION)}`]}>
           <Routes>
-            <Route path="/g/:sessionId" element={<GuestSessionPage />} />
+            <Route path="/sessions/:id" element={<GuestSessionView sessionId={encodeId(SESSION)} />} />
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>,
@@ -237,5 +237,25 @@ describe('the guest page', { timeout: 30_000 }, () => {
     vi.mocked(getGuestEventsAfter).mockRejectedValue(new ApiError('This conversation is no longer shared with you.', 404));
     await typeAndSend('still there?');
     expect(q('.share-state-title')?.textContent).toBe('This conversation is no longer shared with you.');
+  });
+});
+
+describe('the guest page’s first address', () => {
+  it('`/g/<id>` goes to `/sessions/<id>`, the one address a shared session has (board 11, D8)', async () => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    const id = encodeId(SESSION);
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={[`/g/${id}`]}>
+          <Routes>
+            <Route path="/g/:sessionId" element={<GuestLinkRedirect />} />
+            <Route path="/sessions/:id" element={<div id="landed">landed</div>} />
+          </Routes>
+        </MemoryRouter>,
+      );
+    });
+    expect(container.querySelector('#landed')).not.toBeNull();
   });
 });

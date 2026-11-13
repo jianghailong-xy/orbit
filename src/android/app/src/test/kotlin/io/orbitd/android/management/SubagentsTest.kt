@@ -178,7 +178,7 @@ class SubagentsTest {
 
     @Test fun modelTiersListTheModelsAndAnEditableOneTakesATier() {
         val api = api()
-        compose.setContent { InfrastructureSettings(api, 0, null, {}, {}) }
+        compose.setContent { MachinesAndModelsSettings(api, 0, null, {}, {}) }
         await("qwen-coder")
         listOf(Subagents.TIERS, Subagents.TIERS_FOOTER, "Provider", "Model", "Tier", "Price / M out", "deepseek-chat", "claude-opus-5-5",
             "S · M", "L · XL", "S–XL by effort", "$0.60", "Subscription", "—", "Not set").forEach {
@@ -201,7 +201,7 @@ class SubagentsTest {
     @Test fun clearSendsANullTier() {
         fixture.subagentTiers = SubagentFixtures.TIERS.replace(""""levels":[],"source":null""", """"levels":["M"],"source":"owner"""")
         val api = api()
-        compose.setContent { InfrastructureSettings(api, 0, null, {}, {}) }
+        compose.setContent { MachinesAndModelsSettings(api, 0, null, {}, {}) }
         await("qwen-coder")
         compose.onNodeWithTag("tier:qwen-coder", useUnmergedTree = true).performScrollTo().performClick()
         await("Clear")

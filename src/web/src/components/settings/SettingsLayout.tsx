@@ -266,11 +266,19 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
           ))}
         </NavGroup>
 
-        <NavGroup title="Machines" add={{ label: 'Register a machine', onClick: () => navigate('/runners/register') }}>
+        <NavGroup
+          title="Machines"
+          add={{ label: 'Register a machine', onClick: () => navigate('/runners/register') }}
+          empty={runners.length === 0}
+        >
           <MachineRows runners={runners} stateOf={stateOf} />
         </NavGroup>
 
-        <NavGroup title="Providers" add={{ label: 'Connect a provider', onClick: () => navigate('/settings/providers/new') }}>
+        <NavGroup
+          title="Providers"
+          add={{ label: 'Connect a provider', onClick: () => navigate('/settings/providers/new') }}
+          empty={keyCount === 0 && poolCount === 0}
+        >
           {keyCount === 0 && poolCount === 0 ? (
             // With no key and no pool at all, the group is the one way to connect a provider.
             <NavRow to="/settings/providers/new" icon={<PlusOutlined />} label="Connect a provider" />
@@ -295,7 +303,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
           )}
         </NavGroup>
 
-        <NavGroup title="Workspaces" add={{ label: 'New workspace', onClick: addWorkspace }}>
+        <NavGroup title="Workspaces" add={{ label: 'New workspace', onClick: addWorkspace }} empty={workspaces.length === 0}>
           <WorkspaceRows workspaces={workspaces} machineOf={machineOf} />
         </NavGroup>
       </div>
@@ -548,17 +556,20 @@ function WorkspaceRows({
   );
 }
 
-function NavGroup({
+export function NavGroup({
   title,
   add,
+  empty,
   children,
 }: {
   title: string;
   add?: { label: string; onClick: () => void };
+  /** Nothing in the group yet: its + stays in sight, not only under the pointer. */
+  empty?: boolean;
   children: ReactNode;
 }) {
   return (
-    <div className="settings-nav-group" role="group" aria-label={title}>
+    <div className={empty ? 'settings-nav-group settings-nav-group--empty' : 'settings-nav-group'} role="group" aria-label={title}>
       <div className="settings-nav-heading">
         <span>{title}</span>
         {add && (
@@ -572,7 +583,7 @@ function NavGroup({
   );
 }
 
-function NavRow({
+export function NavRow({
   to,
   icon,
   label,
