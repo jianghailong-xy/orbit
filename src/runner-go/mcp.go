@@ -3702,7 +3702,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"`targetShaBefore`, else `origin/<targetBranch>`. The receipt is refused when it is " +
 				"not, and when git cannot tell (fetch first, or run from inside the repository). " +
 				"Work that landed by cherry-pick or rebase is a DIFFERENT commit on the target: name " +
-				"that commit, never the original branch tip. A receipt's sourceSha goes into every " +
+				"that commit, never the original branch tip. A receipt for a task's branch also ends " +
+				"the account owner's merge card still offering that branch (asking or blocked): after " +
+				"you cherry-pick, rebase or squash a task's work onto its line by hand, record it at " +
+				"once with that task's work session and sourceBranch = the task's branch, or the owner " +
+				"keeps being asked to merge work that is already there. A receipt's sourceSha goes into every " +
 				"dependent task's dependency closure, and one the target does not contain keeps them " +
 				"refused DEPENDENCY_BASE_NOT_LANDED, because a receipt cannot be taken back. " +
 				"`rebaseBaseSha` is the field people skip and the one that decides " +
@@ -4461,7 +4465,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"rewritten: an ending is final. An item whose kind has a press of its own, a merge " +
 				"card or a paused project, is refused here: it is decided by confirming, declining or " +
 				"resuming, and closing it by hand would leave what it is about with no card in front " +
-				"of anybody.",
+				"of anybody. Closing the last failure item about a task branch's blocked merge " +
+				"candidate ends that candidate too, and its card leaves the owner's page; when the " +
+				"work went in as other commits, record merge_receipt for the task's branch as well.",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
 					"type":        "string",
