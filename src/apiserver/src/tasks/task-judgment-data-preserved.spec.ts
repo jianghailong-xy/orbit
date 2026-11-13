@@ -2952,8 +2952,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // task_claimed_project_move_guard with the target compared IS NOT DISTINCT FROM. No preserved
       // rows, triggers or DONE fence change, and no row is written.
       '0610_project_handoff_move_out',
-      // 0611 adds nullable or defaulted session settings columns and their CHECKs only; no preserved rows, triggers or DONE fence change.
-      '0611_session_settings'],
+      // 0611 creates `key_gateway_token` only; no existing table, trigger or DONE fence is touched.
+      '0611_key_gateway_token',
+      // 0612 adds a nullable `model_provider.spent_until` only; no preserved row, trigger or DONE fence changes.
+      '0612_model_provider_spent_until',
+      // 0613 creates `key_gateway_usage` only; no existing table, trigger or DONE fence is touched.
+      '0613_key_gateway_usage',
+      // 0640 adds nullable or defaulted session settings columns and their CHECKs only; no preserved rows, triggers or DONE fence change.
+      '0640_session_settings'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

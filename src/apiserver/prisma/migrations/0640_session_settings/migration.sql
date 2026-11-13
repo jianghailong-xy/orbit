@@ -1,4 +1,4 @@
--- 0611: a session's own Settings (docs/mocks/session-settings): its env vars laid over the workspace's,
+-- 0640: a session's own Settings (docs/mocks/session-settings): its env vars laid over the workspace's,
 -- when they last changed and when an engine last started with them, and per-session notification
 -- overrides plus a mute. Nullable or defaulted columns and their CHECKs only: every existing row reads
 -- "no session env, follow the account, not muted", and no trigger, fence or preserved function is touched.

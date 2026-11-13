@@ -8540,6 +8540,12 @@ export function WorkspaceView({
       ownCredential,
     ),
     ...providerGroup('pools', 'Account pools', listedChoices.filter((c) => c.kind === 'pool')),
+    // What a pool's row risks (ProviderChoice.notice), said once under the pools, as the feet below are.
+    ...[...new Set(listedChoices.flatMap((c) => (c.kind === 'pool' && c.notice ? [c.notice] : [])))].map((notice) => ({
+      key: `provider-foot-pool:${notice}`,
+      type: 'group' as const,
+      label: <span className="composer-provider-foot">{notice}</span>,
+    })),
     ...providerGroup('keys', 'API keys', listedChoices.filter((c) => c.kind === 'key')),
     ...(cursorMoveBlocked
       ? [
