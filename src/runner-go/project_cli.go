@@ -1500,6 +1500,7 @@ func cliProjectCreate(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("create project: the human rejected this project: %s", declined)
 		}
 	}
+	cliRecord().sentBody(body)
 	raw, err := t.createProject(
 		sessionID,
 		strings.TrimSpace(os.Getenv(envOrchestrationToken)),
@@ -1681,6 +1682,7 @@ func cliProjectUpdate(args []string, in io.Reader, out io.Writer) error {
 	// gated on who is asking, so nothing else needs it.
 	var raw json.RawMessage
 	var declined string
+	cliRecord().sentBody(body)
 	if runner, ok := t.(*Transport); ok {
 		sessionID := ""
 		if mergeCheckCardRequired(body) {

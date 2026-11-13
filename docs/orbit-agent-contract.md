@@ -1,7 +1,8 @@
 # Orbit Agent Contract v1
 
-> **Status:** frozen at v1.1.0, reviewed 2026-11-13 (review record in §11; v1.1.0 adds the operation
-> catalogue and changes no routing rule).
+> **Status:** frozen at v1.2.0, reviewed 2026-11-13 (review record in §11; v1.1.0 adds the operation
+> catalogue and changes no routing rule; v1.2.0 makes input strict and every answer a receipt, §5.3 and
+> §6.3).
 > This file is the authority for how an in-session Claude or Codex agent uses Orbit: which object an
 > intent belongs to, whether it travels over MCP or the CLI, what a person must approve, how failures
 > and retries are handled, and what counts as a success receipt. The implementation tasks P0-02 … P2-01
@@ -171,8 +172,8 @@ argument.
 | Approval | Inside a session, a create/batch/project/provider write files the same card and waits for the same answer. Headless writes have no card because there is no session to ask — they act as the runner owner. |
 | Attribution | Inside a session, the write is attributed to this agent and linked to this session; headless writes fall back to the runner owner. The model never invents an author. |
 | Identity and ids | Same entity, same public id, same status. A task created over the CLI is fetchable by the MCP `task_get` with no translation. |
-| Output | `--json` emits the entity document on stdout and nothing else; hints go to stderr. MCP returns the entity document as the tool result text. |
-| Failure | A refusal is a refusal on both surfaces. (Today the two disagree on how a *declined card* is reported — §8.4 G4.) |
+| Output | Every catalogued MCP tool answers with the receipt (§6.3) as `structuredContent`; a write's text is that same receipt, a read's text is the document it always was. At the CLI `--json` emits the entity document on stdout and nothing else — the receipt's `entity` — and `--receipt` emits the receipt itself; hints go to stderr. |
+| Failure | A refusal is a refusal on both surfaces, in one shape: the receipt's `ok: false` with an `outcome` and an `error` (code, message, retry rule). A declined card is `outcome: declined`, `error.code: APPROVAL_DECLINED` on both; the transport still differs (a non-error MCP result; a non-zero CLI exit). |
 
 ### 2.5 Discovery
 
@@ -187,7 +188,10 @@ argument.
   operation catalogue it was projected from (`src/runner-go/operation_catalog.go`, rendered for a
   person as [`operation-catalog.md`](./operation-catalog.md)). The same catalogue produces the MCP
   `tools/list` payload and records why an operation is deliberately absent from one surface; a
-  mandatory test executes every advertised `argv` and `helpArgv` through the CLI's own router. There
+  mandatory test executes every advertised `argv` and `helpArgv` through the CLI's own router. Since
+  v1.2.0 every `mcpInputSchema` is closed (`additionalProperties: false` on each object that names
+  its properties, §5.3), an entry with exclusive arguments carries `mutuallyExclusive`, and the
+  document carries `receiptFlag` (`--receipt`, §6.3). There
   is still no graded discovery — the document remains one ~300 KB blob in the fullest context
   (§8.2), which is why P1-01 exists.
 
@@ -319,17 +323,31 @@ a session was started.
 2. **Server-internal retries are already there:** a task create runs inside one transaction that
    the server retries on a transient database conflict, and a redelivered turn's re-created task
    dedups on a turn-derived key. An agent does not need to reproduce that.
-3. **A caller's retry of a write is safe only when the operation takes a caller key.** Today the
-   tools with an explicit `idempotencyKey` are `task_evidence_submit`, `task_await`, `session_await`,
-   `watch_create`, `wiki_propose` and `wiki_draft`; the session/project send calls take
-   `clientTurnId` instead. They return the same revision / the same turn instead of writing twice.
-4. **A create with no answer is re-read before it is sent again.** `task_create` takes no caller
-   idempotency key today (baseline §8.4 G5): after a timeout or a dropped response, list the tasks
-   it would have created (same title/project, this session) and only then decide. A second create
-   in a later turn does **not** dedup.
+3. **A caller's retry of a write is safe only when the operation takes a caller key.** The tools
+   with an explicit `idempotencyKey` are `task_create`, `task_create_batch` (since 1.2.0, gap G5),
+   `task_evidence_submit`, `task_await`, `session_await`, `watch_create`, `wiki_propose` and
+   `wiki_draft`; the session/project send calls take `clientTurnId` instead. They return the same
+   task / revision / turn instead of writing twice. A create's key is the calling session's (the
+   account's, for a person's own create with no session); derive it from the work — a slug of what
+   is being filed — so that a retried call carries the same one. The same key with a different title
+   or description is refused 409; on a batch the key names the whole batch, each item keyed by its
+   position, and an item takes no key of its own.
+4. **A create with no answer is re-read before it is sent again — unless it carried a key.** A
+   keyed create whose answer is lost (a timeout, a dropped connection) is resent by the runner itself,
+   under the same key, up to three times; the receipt of one still unanswered says `retry: resend`.
+   A create without a key is sent exactly once: after a timeout or a dropped response its receipt
+   says `outcome: unknown`, `retry: reread_first` — list the tasks it would have created (same
+   title/project, this session) and only then decide. A second keyless create in a later turn does
+   **not** dedup.
 5. **Never retry by a different door**: MCP after CLI, `task_create` after a declined card, a
    `session_create` after orchestration refused. Different door, same answer, plus a lie in the log.
 6. **An error is never evidence of success.** Only a receipt is (§6).
+7. **The receipt names the rule.** Every failed receipt carries `error.retry`, one of: `resend` (the
+   same call, unchanged, is safe and may succeed — a read, a keyed write, a 429 after
+   `retryAfterSeconds`), `reread_first` (the outcome is unknown or conflicted: re-read, then decide),
+   `fix_input` (change the arguments), `do_not_retry` (a boundary or a person's no; report it) or
+   `wait` (a person has not answered yet; you will be woken). `error.retryable` is true exactly for
+   `resend`.
 
 ### 5.3 Unknown fields and types
 
@@ -337,10 +355,41 @@ a session was started.
 is refused before any network write, with the field named. A caller that sends `startNow` and `runAt`
 together, or a string where an array is required, must get a refusal, not a silent default.
 
-**Baseline:** today the MCP server copies only known keys into the request and ignores the rest, and
-a wrong-typed `labels` was observed to return an empty list rather than an error (§8.4 G1). The CLI
-is stricter for flags (unknown flag → exit 1 on stderr) but not for JSON payload fields. P0-04 owns
-closing this.
+**Since 1.2.0 (G1 satisfied):** every catalogued tool call is judged against the schema its
+descriptor advertises before the handler runs — no card is filed and no request is sent for a call
+that does not fit:
+
+- **Closed objects.** Every object schema that declares its properties advertises
+  `additionalProperties: false`, and a key it does not declare is refused (`unknown_field`, with the
+  nearest declared name when one is close: `statuss` → "did you mean `status`?"). An object declared
+  without properties (`task_evidence_submit.evidence`, `project_update.integration`) is a free-form
+  value the server validates. The one open schema is `permission_prompt`, the engine's own protocol.
+- **Types and bounds.** `type` (a list where a field is nullable), `enum`, `minLength`/`maxLength`,
+  `minItems`/`maxItems`, `minimum`/`maximum` are held exactly as written: a string is not an array, a
+  number is not a string, `1.5` is not an integer, `null` is refused where it is not declared. The
+  schema language is that subset and no other (`TestCatalogSchemasUseOnlyTheValidatedSubset`).
+- **Required fields** (`missing_required`) and **mutually exclusive groups** (`mutually_exclusive`)
+  are declared per operation in the catalogue (`Exclusive`), stated in `orbit capabilities` as
+  `mutuallyExclusive`: `task_create` startNow/runAt and verification/verifiesTaskId; each
+  `task_create_batch` item startNow/runAt, parentTaskId/parentRef and verifiesTaskId/verifiesRef;
+  `integration_retry` taskId/promotionId; `bg_output` sinceOffset/tail. A member counts as sent when
+  it is present and not null, false or blank.
+- **The refusal** is a receipt (§6.3) with `ok: false`, `outcome: invalid`, `error.code:
+  INVALID_ARGUMENTS`, `error.retry: fix_input`, every violation as `{path, problem, message}` (path
+  `tasks[2].runAt` style) and, for an unknown top-level field, `error.accepts`: what the tool takes.
+- **The CLI** judges JSON payloads the same way: a `--tasks` document is the arguments of
+  `task_create_batch` and refused against its item schema before any card or request (the request
+  shape `{"tasks": […]}` carries tasks only — `--dry-run` and `--idempotency-key` are flags); flags
+  stay refused by the flag parser (unknown flag → exit 1). Project criteria items already refused
+  unknown fields.
+
+Measured before the switch (2026-11-13, the production `tool_call` table, 14 days, 46,867 Orbit MCP
+calls): 0.4% would have been refused, every one a field the handler had been dropping —
+`bg_run.timeout` (91), `task_await.statuses` (19), `wiki_get.id` (17), `notify.projectId` (8),
+`task_create.priority` (6) and batch items' `priority` (6), `task_evidence_decide.reason` (5), the
+evidence envelope's fields sent beside `evidence` instead of in it, and others. The one deliberate
+leniency found, `task_evidence_list.revision`/`before` sent as numbers and `project_integration_get`
+claim/round/check sent as digits, is now declared in the schema (`["string","integer"]`).
 
 ---
 
@@ -367,16 +416,66 @@ closing this.
    (or a re-read after compaction did). A title in the conversation is not an id.
 2. **Read back when the claim matters.** `task_get` / `project_get` after a write is cheap and turns
    a receipt into proof.
-3. **A receipt is the entity document, not prose about it.** MCP returns the JSON as the tool result
-   text; the CLI prints it on stdout with `--json`. A start outcome printed beside the document must
-   be read too, not dropped (baseline §8.4 G3).
-4. **A decline is a refusal, not a success.** Today the MCP tools return a declined create as a
-   non-error result whose text begins "the human rejected this task"; the CLI exits non-zero. Both
-   are refusals; the agent must classify by the outcome, never by the absence of an exception
-   (baseline §8.4 G4).
+3. **A receipt is a document, not prose about it.** Read `ok`, `outcome` and `id` from the receipt
+   (§6.3); never infer success from a sentence or from the absence of an error. A start, a batch's
+   items and a person's answer are fields of the same receipt, not lines beside it.
+4. **A decline is a refusal, not a success.** A declined card is `ok: false`, `outcome: declined`,
+   `approval.outcome: declined`, `error.code: APPROVAL_DECLINED` on both surfaces. The MCP result is
+   not marked isError and the CLI exits non-zero — classify by the receipt, never by the transport.
 5. **Evidence is its own envelope.** A task's completion evidence is submitted with
    `task_evidence_submit` (`claim`, `checks`, `gaps`); a comment is not evidence, and evidence is not
    a status write. The completion criterion decides DONE, never the agent's summary.
+
+### 6.3 The receipt (since 1.2.0)
+
+Every catalogued MCP tool answers with one document of one shape — `receiptVersion: 1` — as its
+`structuredContent`; for every tool that writes, and for a call refused before it ran, the text
+content is the same document, so a client that reads only the text reads the receipt too. A read's
+text is the document it always was. The creates and updates of tasks, projects, task lists,
+sessions and agents, and `task_start`, advertise its schema as their `outputSchema`
+(`receiptSchemaTools`); the schema is published once in `contracts/orbit-agent.contract.json`
+(`receipt.schema`). The two exceptions keep the answer their own schema promises: the wiki tools,
+whose outputSchema describes their answer, and `permission_prompt`, the engine's bridge.
+
+| Field | Always | Meaning |
+| --- | --- | --- |
+| `ok` | yes | The call did what it asked: `true` exactly for `written`, `read` and `dry_run`. |
+| `outcome` | yes | `written` · `read` · `dry_run` · `declined` (a person said no) · `pending` (a person has not answered; the call was handed to a runner-hosted job) · `refused` (the server, or the tool's own rule, said no; nothing written) · `invalid` (refused before anything was sent, §5.3) · `unknown` (no answer, or a 5xx: the write may have landed) · `failed` (a read that could not be answered). |
+| `operation` / `action` / `entityType` | yes | The catalogue's operation id (= the MCP tool = the capability id), its verb (`create`, `update`, `start`, `read`, …) and the object (`task`, `project`, `task_list`, `session`, `agent`, …). |
+| `id` / `status` | yes (null when none) | The entity's own public id and status as the server answered — the id to link as `orbit-<kind>:<id>`. For an answer that is not one entity, the id the call addressed. A batch has none: see `items`. |
+| `changedFields` | yes | The fields this call wrote, sorted, including the defaults the tool filled in (a create's `assigneeId`, a `startNow`'s `runAt`); a clear is listed like any write. Empty unless `outcome` is `written`. |
+| `approval` | yes | `{required, kind, card?, outcome, decision?, decidedBy?, message?, startAfterCreate?}`: `kind` is the catalogue's (`none`/`card`/`owner`), `outcome` one of `not_required` · `not_asked` (the call stopped before the card) · `approved` · `declined` · `pending`; `decision` is the card's own status (`ALLOWED`, `DENIED`, `ABANDONED`, …). |
+| `idempotency` | yes | `{kind, key?}`: `caller_key` when this call carried a key (and the key), `server_key` for a keyless create (only a redelivered turn deduplicates), `none`, or `read`. |
+| `error` | when `ok` is false | `{code, message, httpStatus?, retryable, retry, retryAfterSeconds?, requiredAction?, violations?, accepts?}`. `code` is the server's own refusal code when it sent one (`PROJECT_SCOPE_MISMATCH`, `TASK_WRITE_NEEDS_OWNER_CARD`, …), else `HTTP_<status>`, or the runner's: `INVALID_ARGUMENTS`, `APPROVAL_DECLINED`, `AWAITING_OWNER`, `NO_RESPONSE`, `ORCHESTRATION_OFF`, `TASK_ID_REQUIRED`, `TOOL_REFUSED`. `retry` is §5.2 rule 7. `message` is the sentence a person reads. |
+| `start` | a create that also started | `{by: startNow\|owner, started, sessionId, status, deferred?, session?}` — the started session, or why its start was deferred. |
+| `items` / `count` | a written batch | `[{index, ref?, id, status}]` in input order, and how many were written. |
+| `notes` / `text` | when there are any | Sentences that used to travel as prose beside the document; `text` is an answer that is not JSON. |
+| `entity` | when there is one | The server's document, exactly as it answered. |
+
+The CLI is the same mapping: `orbit … --receipt` prints this document — built by the same code from
+the same facts: the requests the command made, the card it filed and its answer, the body it sent —
+on stdout and nothing else, a failure's included, and exits 0 exactly when `ok` is true; `--json`
+prints the receipt's `entity`. `orbit capabilities --json` names the flag (`receiptFlag`).
+
+A write, as an agent reads it:
+
+```json
+{"receiptVersion":1,"ok":true,"outcome":"written","operation":"task_create","action":"create",
+ "entityType":"task","id":"34Asb…","status":"OPEN",
+ "changedFields":["assigneeId","autoRunWhenReady","completionCriterion","description","title"],
+ "approval":{"required":true,"kind":"card","card":"orbit_task_create","outcome":"approved","decision":"ALLOWED","decidedBy":"…"},
+ "idempotency":{"kind":"caller_key","key":"rotate-staging-key"},"entity":{"id":"34Asb…","status":"OPEN","title":"…"}}
+```
+
+and a create whose answer never came, sent without a key:
+
+```json
+{"receiptVersion":1,"ok":false,"outcome":"unknown","operation":"task_create","action":"create",
+ "entityType":"task","id":null,"status":null,"changedFields":[],
+ "approval":{"required":true,"kind":"card","card":"orbit_task_create","outcome":"approved","decision":"ALLOWED"},
+ "idempotency":{"kind":"server_key"},
+ "error":{"code":"NO_RESPONSE","message":"create task failed: …","retryable":false,"retry":"reread_first"}}
+```
 
 ---
 
@@ -599,35 +698,42 @@ Other measured facts:
   have and the other would not; graded discovery, projects included, belongs to P1-01.
 - **MCP results are a single text content block**; a successful read or write puts the entity JSON in
   it, while a refusal puts the refusal prose there. There is no `structuredContent` and no envelope
-  version (`mcp.go` `toolResult`). The result is parseable but not machine-typed.
+  version (`mcp.go` `toolResult`). The result is parseable but not machine-typed. *Since 1.2.0:* every
+  catalogued tool answers with the versioned receipt as `structuredContent`, and a write's text is
+  that receipt (§6.3, G3 satisfied).
 - **The MCP server ignores unknown arguments** and copies only known keys into the request body
   (`copyIfPresent`). A read-only probe with `bogusField` on `task_list`, `project_get` and `task_get`
-  returned the normal result; `labels: "not-an-array"` returned `[]`.
+  returned the normal result; `labels: "not-an-array"` returned `[]`. *Since 1.2.0:* refused before
+  any request with `INVALID_ARGUMENTS`, the field named (§5.3, G1 satisfied).
 - **The CLI is strict for flags, not for JSON fields**: `orbit task list --bogus` exits 1 with the
   error on stderr and nothing on stdout; `--json` output is pure JSON on stdout with hints on stderr.
+  *Since 1.2.0:* a `--tasks` document is judged against `task_create_batch`'s schema before any request,
+  and `--receipt` prints the receipt.
 - **The batch dry run returns a structured pre-write receipt**: `{"dryRun":true,"wouldWrite":2,
   "refused":false,"findings":[],"plan":[{"index":0,"ref":"s0","projectId":…,"projectTitle":…,
   "projectStatus":"OPEN"},…]}`.
 - **Decline semantics differ by surface**: the MCP create/batch tools return the rejection as a
   non-error tool result whose text begins "the human rejected this …" (`isError: false`), while the
-  CLI returns an error and a non-zero exit.
+  CLI returns an error and a non-zero exit. *Since 1.2.0:* both surfaces give the same refusal receipt
+  (`outcome: declined`, `APPROVAL_DECLINED`, who declined and why); only the transport differs (G4).
 - **A start outcome is not in the create document**: MCP appends a prose line and the started
   session JSON after the created task; the CLI prints the started outcome to stderr as a notice and
-  keeps stdout to the created task.
+  keeps stdout to the created task. *Since 1.2.0:* the receipt's `start` (MCP and `--receipt`).
 - **No caller idempotency key on task creates**: `task_evidence_submit`, session sends, `notify` and
   `task_await` take one; `task_create` does not. The server dedups a redelivered turn's re-created
   task on a turn-derived key, and retries a transient database conflict inside one transaction.
+  *Since 1.2.0:* `task_create` and `task_create_batch` take `idempotencyKey` (§5.2, G5 satisfied).
 
 ### 8.3 Scenario verdicts
 
 | Case | Verdict | Evidence | What does not hold (feeds which task) |
 | --- | --- | --- | --- |
-| S1 record task | **PARTIAL** | Tool exists and the card is filed (`task_create` handler; card `acceptsStartAfterCreate`); create receipt is the entity JSON. | Unknown fields ignored (G1); decline reported as a non-error result (G4); receipt is text-only (G3). P0-04. |
+| S1 record task | **PASS** since 1.2.0 (contract-tested, not black-box measured); was PARTIAL | Tool exists and the card is filed (`task_create` handler; card `acceptsStartAfterCreate`); the answer is the receipt with the task's id and status (`tool_contract_test.go`). | Was: unknown fields ignored (G1), decline reported as a non-error result (G4), receipt text-only (G3) — all three closed by P0-04. |
 | S2 private plan | **PARTIAL** | The injected primer states the durable-vs-private rule (`agent_instructions.go`, tested by `agent_instructions_test.go`); no structural enforcement; the runner adds no plan-mode gate to Orbit calls (P1-02). | No test that a private plan is not presented as a record; whether an engine's own plan mode refuses an Orbit write is not measured. P1-02, P2-01. |
 | S3 create without start | **PARTIAL** | `task_create` supports the full separation (`startNow`/`runAt`/`autoRunWhenReady`/card override; `mcp.go` `askBeforeTaskCreate`, `task_start_now.go`). | `autoRunWhenReady` defaults to true (`schema.prisma:5602`; the tool property says so), and the create card's top-level description does not lead with it, so "file it for later" can start work unless the agent sets false (G11). P0-05. |
-| S4 batch plan | **PARTIAL** (capability passes; real-write receipt unmeasured) | Measured dry-run receipt; atomic items with `ref`/`dependsOnRefs`/`parentRef`; one card. | No per-item id receipt observed for a real write (not measured); decline is a non-error result. P0-04. |
+| S4 batch plan | **PASS** since 1.2.0 (contract-tested, not black-box measured); was PARTIAL | Measured dry-run receipt; atomic items with `ref`/`dependsOnRefs`/`parentRef`; one card; a real write's receipt maps every item (`items`, `count`) and a decline is `outcome: declined`. | Was: no per-item id receipt for a real write; decline a non-error result — closed by P0-04. |
 | S5 read-only inspection | **PASS** | `project_get` returned the project (5,219 chars) over a read-only MCP call; `task_list --project-id` exists. | No project list surface (§8.2); project id must be learned elsewhere (P0-02/P1-01); in Codex plan mode even the read is refused (G9, P1-02). |
-| S6 immediate delegation | **PASS** | `task_start` returns the session id; `startNow` covers create+start; `session_create` is orchestration-gated (tool descriptions + code). | Start receipt split across document and prose/stderr (G3); decline semantics differ (G4). P0-04. |
+| S6 immediate delegation | **PASS** | `task_start` returns the session id; `startNow` covers create+start; `session_create` is orchestration-gated (tool descriptions + code). Since 1.2.0 the create's receipt carries the start (`start.sessionId`). | Was: start receipt split across document and prose/stderr (G3); decline semantics differ (G4) — closed by P0-04. |
 | S7 no orchestration | **PARTIAL** | Measured: 22 tools disappear; `orchestrationOffMsg` names the switch; CLI hides the commands. | No injected instruction tells an agent what to do when the family is absent; it only says "when your tool list has them". P0-05/P1-02. |
 | S8 compaction recovery | **PARTIAL** (code-inspected; not black-box measured) | Codex: three instruction modes with an explicit refresh after `thread/compacted` (`codex_appserver.go`); Claude: `--append-system-prompt` persists per process and MCP tools are re-sent per request; no MCP `initialize.instructions`. | No black-box compaction test for either engine; the project scope is not surfaced by any tool default, so a compacted agent must re-read it. P0-05, P2-01. |
 
@@ -635,11 +741,11 @@ Other measured facts:
 
 | # | Gap | Owner |
 | --- | --- | --- |
-| G1 | Unknown MCP fields and wrong types are silently ignored; CLI JSON payloads are not strict either. | P0-04 |
+| G1 | **Satisfied by P0-04 (1.2.0).** Every catalogued tool call is judged against its advertised schema — closed objects, types, bounds, required fields, mutually exclusive groups — before any request, and refused with `INVALID_ARGUMENTS` naming the field; the CLI judges `--tasks` the same way (§5.3). | P0-04 |
 | G2 | No MCP `initialize.instructions`; the agent primer exists only as an engine-injected prompt. | P0-05 |
-| G3 | Write receipts are unversioned text blocks; a start outcome is split across document and prose/stderr; no `structuredContent`. | P0-04 |
-| G4 | A declined card is a non-error MCP result and a non-zero CLI error — the same refusal, two shapes. | P0-03 / P0-04 |
-| G5 | Task creates take no caller idempotency key; a retry in a later turn can duplicate work. | P0-04 |
+| G3 | **Satisfied by P0-04 (1.2.0).** Every catalogued tool answers with the versioned receipt (§6.3) as `structuredContent`, a write's text is that receipt, the five objects' creates/updates and `task_start` advertise its schema as `outputSchema`, and the start is a field of it; `orbit … --receipt` prints the same document. | P0-04 |
+| G4 | **Shape satisfied by P0-04 (1.2.0):** a declined card is one refusal receipt on both surfaces (`outcome: declined`, `APPROVAL_DECLINED`, the decision and who made it); the transport stays different — a non-error MCP result, a non-zero CLI exit. | P0-03 / P0-04 |
+| G5 | **Satisfied by P0-04 (1.2.0).** `task_create` and `task_create_batch` take `idempotencyKey`: the same key answers with the first write in any turn, a changed payload under it is refused 409, and the runner resends a keyed create whose answer was lost. | P0-04 |
 | G6 | No project list surface on either agent surface. | P0-02 / P1-01 (P0-02 records it as deliberately absent; graded discovery belongs to P1-01) |
 | G7 | The catalogue is one 255 KB document in the fullest context (214 KB with orchestration off, 177 KB headless); there is no graded discovery (`summary`/`family`/`id`/guide). | P1-01 |
 | G8 | **Satisfied by P0-02.** `src/runner-go/operation_catalog.go` is the single versioned catalogue: one row per operation with object, intent, input schema, availability, mutates, approval, destructive, idempotency, retry, success evidence and next step. MCP `tools/list`, `orbit capabilities` (with `catalogVersion` and `catalogHash`) and the public catalogue document are projected from it, every deliberate one-surface absence carries its reason in the row, and a mandatory test executes every advertised `argv`/`helpArgv`. | P0-02 |
@@ -671,6 +777,7 @@ Other measured facts:
 | --- | --- | --- |
 | 1.0.0 | 2026-11-13 | First frozen version: object model, routing, surfaces, create/start, permissions, errors, receipts, eight scenarios, baseline. |
 | 1.1.0 | 2026-11-13 | P0-02: the operation catalogue. `orbit capabilities` gains per-operation `object`, `intent`, `risk`, `approval`, `destructive`, `idempotency`, `retry`, `successEvidence`, `nextStep`, `returns` and `availability`, and the document gains `catalogVersion`/`catalogHash` (all additive; `schemaVersion` stays 2). MCP `tools/list` and the CLI capabilities are both projections of the catalogue, every deliberate surface gap is declared with a reason, and every advertised `argv`/`helpArgv` is executed by a mandatory test. G8 is satisfied; G6 is recorded as deliberately absent. |
+| 1.2.0 | 2026-11-13 | P0-04: strict input and the receipt. Every catalogued tool call is judged against its advertised schema before any request (closed objects advertised as `additionalProperties: false`, types, bounds, required fields, the catalogue's mutually exclusive groups) and refused with `INVALID_ARGUMENTS`; the CLI judges `--tasks` the same way. Every tool answers with the versioned receipt (§6.3) — `structuredContent` always, the text too for a write — with `ok`, `outcome`, `id`, `status`, `changedFields`, `approval`, `idempotency` and a retry-ruled `error`; the five objects' creates/updates and `task_start` advertise it as `outputSchema`; `--receipt` prints it at the CLI. `task_create`/`task_create_batch` take `idempotencyKey` (G5). G1, G3 and G5 are satisfied and G4's shape is. The catalogue moves to 1.1.0 (`task_create`/`task_create_batch` idempotency `caller_key`). |
 
 ---
 

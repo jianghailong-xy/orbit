@@ -62,6 +62,8 @@ type mcpServer struct {
 	// How long the engine lets one tool call run before it reports the call failed (ORBIT_MCP_CALL_TIMEOUT_SECONDS);
 	// 0 when it waits for as long as the call takes. See handOffOwnerWait.
 	callTimeout time.Duration
+	// rec is what the tool call being answered did, for its receipt (tool_receipt.go); nil outside one.
+	rec *callRecord
 }
 
 const envMCPPermissionPrompt = "ORBIT_MCP_PERMISSION_PROMPT"
@@ -241,7 +243,7 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		if s.onlyTools != nil && !s.onlyTools[p.Name] {
 			return s.ok(req.ID, toolResult(p.Name+" is not served in this session", true)), true
 		}
-		return s.ok(req.ID, s.callTool(p.Name, p.Arguments)), true
+		return s.ok(req.ID, s.invokeTool(p.Name, p.Arguments)), true
 	default:
 		if isNotification {
 			return rpcResponse{}, false // ignore unknown notifications
@@ -634,6 +636,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// The calling session goes with it, the same as it does on task_create — here so the
 		// server can bind THIS session as the new project's coordinator, which is what makes
 		// opening the project later come back to this conversation instead of starting another.
+		s.rec.sentBody(body)
 		raw, err := s.t.createProject(s.sessionID, s.orchestrationToken, body)
 		if err != nil {
 			return toolResult("create project failed: "+err.Error(), true)
@@ -705,6 +708,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// conversation's words, a loosening it proposes is filed under this session rather than
 		// under the account owner who never asked for it, and a merge check is written against the
 		// card this session was answered on rather than against a card filed somewhere else.
+		s.rec.sentBody(body)
 		raw, declined, err := updateProjectWithApproval(s.t, s.sessionID, id, body)
 		if err != nil {
 			return toolResult("update project failed: "+err.Error(), true)
@@ -1157,7 +1161,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "engine", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff")
+		copyIfPresent(body, args, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "engine", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff", "idempotencyKey")
 		// Before the card, so the card's forecast says what the yes will do (task_start_now.go).
 		startNow := getBool(args, "startNow")
 		if startNow {
@@ -1199,6 +1203,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if startAfterCreate && !startNow {
 			body["runAt"] = dueNow(time.Now())
 		}
+		s.rec.sentBody(body)
 		raw, err := s.t.createTask(s.agentID, s.sessionID, body)
 		if err != nil {
 			if createRefused(err) {
@@ -1211,6 +1216,15 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		if startNow || startAfterCreate {
 			started, deferred := startCreatedTask(s.t, raw)
+			by := "startNow"
+			if !startNow {
+				by = "owner"
+			}
+			s.rec.setEntity(raw)
+			s.rec.startOutcome(by, started, deferred)
+			if deferred == "" {
+				s.rec.note(startedAtOnceNote)
+			}
 			return toolResult(startedTaskResult(raw, started, deferred), false)
 		}
 		return toolResult(prettyJSON(raw), false)
@@ -1285,7 +1299,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if getBool(args, "dryRun") {
 			return s.createBatchNow(map[string]interface{}{"tasks": bodies, "dryRun": true})
 		}
-		return s.createBatchWithApproval(bodies, fork)
+		return s.createBatchWithApproval(bodies, fork, getString(args, "idempotencyKey"))
 
 	case "task_batch_pin":
 		body := map[string]interface{}{}
@@ -1316,6 +1330,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if err := requireHandoffNamesItsDestination(body); err != nil {
 			return toolResult(err.Error(), true)
 		}
+		s.rec.sentBody(body)
 		raw, err := s.t.updateTask(s.sessionID, id, body)
 		if err != nil {
 			// Verbatim, plus the address of the crossing when the refusal is one a projectId move
@@ -1424,6 +1439,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if title == "" {
 			return toolResult("title is required", true)
 		}
+		s.rec.sentBody(map[string]interface{}{"title": title})
 		raw, err := s.t.createTaskList(title)
 		if err != nil {
 			return toolResult("create task-list failed: "+err.Error(), true)
@@ -1454,6 +1470,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if len(body) == 0 {
 			return toolResult("nothing to update", true)
 		}
+		s.rec.sentBody(body)
 		raw, err := s.t.updateTaskList(id, s.agentID, s.sessionID, body)
 		if err != nil {
 			return toolResult("update task-list failed: "+err.Error(), true)
@@ -1611,6 +1628,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		} else if s.agentID != "" {
 			body["agentId"] = s.agentID
 		}
+		s.rec.sentBody(body)
 		raw, err := s.t.createSession(s.sessionID, s.orchestrationToken, body)
 		if err != nil {
 			return toolResult("create session failed: "+err.Error(), true)
@@ -1896,6 +1914,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		} else if declined != "" {
 			return toolResult("the human rejected this write, and nothing was written: "+declined, false)
 		}
+		s.rec.sentBody(body)
 		raw, err := s.t.createAgent(s.sessionID, s.orchestrationToken, body)
 		if err != nil {
 			return toolResult("create agent failed: "+err.Error(), true)
@@ -1920,6 +1939,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		} else if declined != "" {
 			return toolResult("the human rejected this write, and nothing was written: "+declined, false)
 		}
+		s.rec.sentBody(body)
 		raw, err := s.t.updateAgent(s.sessionID, s.orchestrationToken, id, body)
 		if err != nil {
 			return toolResult("update agent failed: "+err.Error(), true)
@@ -2068,6 +2088,7 @@ func (s *mcpServer) handOffOwnerWait(name string, args map[string]interface{}) m
 		JobID string `json:"jobId"`
 	}
 	_ = json.Unmarshal(raw, &job)
+	s.rec.waitingForOwner(job.JobID, raw)
 	return toolResult(fmt.Sprintf("Not done yet — handed to runner-hosted job %s. %s waits for the owner's "+
 		"confirmation, which can take longer than this engine lets a tool call run (%s), so that job asks them and "+
 		"waits instead of this call. Nothing is written unless the owner confirms; if they do, the job performs the "+
@@ -2172,6 +2193,8 @@ func awaitApprovalDecision(ctx context.Context, t *Transport, sessionID, approva
 		dec, err := t.pollApproval(ctx, sessionID, approvalID)
 		if err == nil {
 			if dec.Status != "PENDING" {
+				// The answer, for the receipt of the call that asked (transport_observe.go).
+				t.observe(transportEvent{Kind: transportEventApprovalDecided, ApprovalID: approvalID, Decision: dec})
 				return dec, nil
 			}
 			continue // the server's long-poll window elapsed undecided
@@ -2236,7 +2259,7 @@ func askBeforeBatch(t *Transport, agentID, sessionID string, bodies []map[string
 // while looking like the least: fifty titles say nothing, and what actually happens is some number
 // of runs starting within the minute. This deployment has the cautionary case — one session
 // created 43 lists and ~21,500 tasks before anybody looked.
-func (s *mcpServer) createBatchWithApproval(bodies []map[string]interface{}, fork *forkSnapshot) map[string]interface{} {
+func (s *mcpServer) createBatchWithApproval(bodies []map[string]interface{}, fork *forkSnapshot, idempotencyKey string) map[string]interface{} {
 	declined, err := askBeforeBatch(s.t, s.agentID, s.sessionID, bodies)
 	if err != nil {
 		fork.release()
@@ -2246,7 +2269,12 @@ func (s *mcpServer) createBatchWithApproval(bodies []map[string]interface{}, for
 		fork.release()
 		return toolResult("the human rejected this batch: "+declined, false)
 	}
-	raw, err := s.t.createTasksBatch(s.agentID, s.sessionID, map[string]interface{}{"tasks": bodies})
+	s.rec.sentBatch(bodies)
+	batch := map[string]interface{}{"tasks": bodies}
+	if idempotencyKey != "" {
+		batch["idempotencyKey"] = idempotencyKey
+	}
+	raw, err := s.t.createTasksBatch(s.agentID, s.sessionID, batch)
 	if err != nil {
 		if createRefused(err) {
 			fork.release()

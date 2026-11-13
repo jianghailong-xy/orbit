@@ -91,6 +91,12 @@ Usage:
 
 Run 'orbit <command> --help' for command-specific options.
 
+Every command in 'orbit capabilities' also takes --receipt: it prints, in place of its output, the
+receipt the MCP tool of the same operation returns — one JSON document with ok, outcome, the
+entity's id and status, the changed fields, the approval outcome and, on a failure, the error code
+and whether a resend is safe — and exits non-zero exactly when ok is false. --json still prints the
+entity document alone, which is the receipt's entity.
+
 The runner uses each coding engine's local configuration and credentials
 (Claude Code, Codex, Kimi Code, OpenCode, Antigravity). Run 'orbit doctor' for
 installation and sign-in guidance.
@@ -332,6 +338,10 @@ func main() {
 // place the message is printed; the per-family prefix is part of the returned error so the text on
 // stderr is the one a person has always seen.
 func runOrbitCLI(args []string, in io.Reader, out, errW io.Writer) error {
+	// `--receipt` on any catalogued command prints its receipt instead of its output (cli_receipt.go).
+	if rest, asked := takeReceiptFlag(args); asked {
+		return runCLIReceipt(rest, in, out, errW)
+	}
 	cmd := ""
 	if len(args) > 0 {
 		cmd = args[0]

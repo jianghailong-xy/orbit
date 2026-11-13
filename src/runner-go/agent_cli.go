@@ -326,6 +326,7 @@ func cliAgentCreate(args []string, out io.Writer, ctx cliOrchestrationContext) e
 	} else if declined != "" {
 		return fmt.Errorf("create agent: the human rejected this write, and nothing was written: %s", declined)
 	}
+	cliRecord().sentBody(body)
 	raw, err := t.createAgent(ctx.sessionID, ctx.token, body)
 	if err != nil {
 		return fmt.Errorf("create agent: %w", err)
@@ -361,6 +362,7 @@ func cliAgentUpdate(args []string, out io.Writer, ctx cliOrchestrationContext) e
 	} else if declined != "" {
 		return fmt.Errorf("update agent: the human rejected this write, and nothing was written: %s", declined)
 	}
+	cliRecord().sentBody(body)
 	raw, err := t.updateAgent(ctx.sessionID, ctx.token, id, body)
 	if err != nil {
 		return fmt.Errorf("update agent: %w", err)
