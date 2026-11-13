@@ -456,13 +456,31 @@ describe('the header', () => {
 
   it.each([
     ['a finished run, filed Completed', rows.T6_RUN, 'Completed'],
-    ['an open conversation waiting for its next message', rows.COORDINATOR, 'Awaiting reply'],
+    // A public link's reader cannot send that next message, so it is not asked for one.
+    ['an open conversation waiting for its next message', rows.COORDINATOR, 'Waiting for owner'],
     ['a run that is running', rows.THIS_RUN, 'Running'],
   ])('says the state the share answers with: %s', async (_, session, word) => {
     answer = served(session, TAIL, true);
     await mountPage();
 
     expect(container.querySelector('header .status-pill')!.textContent).toBe(word);
+  });
+
+  // 2026-11-13: a session running a background task read "Awaiting reply" here, because the page
+  // read the parked status alone. The server now says what a parked session is still doing.
+  it.each([
+    ['TURN', 'Running', 'running'],
+    ['BACKGROUND_JOB', 'Running in background', 'ongoing'],
+    ['WAITING', 'Waiting to resume', 'ongoing'],
+    [null, 'Waiting for owner', 'todo'],
+  ])('a parked conversation with activity %s says %s', async (activity, word, tone) => {
+    answer = { ...served(rows.COORDINATOR, TAIL, true), activity };
+    await mountPage();
+
+    const pill = container.querySelector('header .status-pill')!;
+    expect(pill.textContent).toBe(word);
+    expect(pill.classList.contains(tone)).toBe(true);
+    expect(pill.classList.contains('awaiting')).toBe(false);
   });
 });
 

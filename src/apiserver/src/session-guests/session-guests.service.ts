@@ -9,6 +9,7 @@ import { SessionNotSendable, SessionsService } from '../sessions/sessions.servic
 import type { ExternalTurnSender } from '../sessions/session-message';
 import { assertEngineSession } from '../sessions/engine-session';
 import { withSessionState } from '../sessions/session-state';
+import { readSessionActivities } from '../sessions/task-work-carrier';
 import { parseMaxPayload } from '../sessions/truncate-payload';
 import { visibleQuestions } from '../sessions/run-question';
 
@@ -253,6 +254,7 @@ export class SessionGuestsService {
         },
       },
     });
+    const activities = await readSessionActivities(this.prisma, rows.map(({ session }) => session.id));
     return {
       sessions: rows.map(({ addedAt, session }) => {
         const state = withSessionState(session);
@@ -263,6 +265,7 @@ export class SessionGuestsService {
           status: state.status,
           sessionState: state.sessionState,
           lifecycleState: state.lifecycleState,
+          activity: activities.get(session.id) ?? null,
           addedAt: addedAt.toISOString(),
           lastTurnAt: session.lastTurnAt?.toISOString() ?? null,
         };
