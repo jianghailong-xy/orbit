@@ -113,3 +113,10 @@ test('an unsettled request asks to be repeated — and stops asking once that is
   assert.equal(late.owner, 'SYSTEM');
   assert.match(String(late.requiredAction), /inspect the runs/);
 });
+
+test('IN_PROGRESS names the triggerId to replay and how long to wait first', () => {
+  const refusal = body(taskRunInProgress(TASK_RUN_ACTION.execute, 'press-1'));
+
+  assert.equal(refusal.triggerId, 'press-1');
+  assert.equal(refusal.retryAfterSeconds, TASK_RUN_RETRY_AFTER_SECONDS);
+});

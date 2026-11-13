@@ -813,12 +813,13 @@ func cliProjectSend(args []string, in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	// The key rides only when there is one, exactly as `session send` sends it: omitted, the request
-	// is the one it always was, and the server mints the key itself.
-	body := map[string]interface{}{"message": messageText}
-	if key := strings.TrimSpace(*clientTurnID); key != "" {
-		body["clientTurnId"] = key
+	// Keyed per invocation, as `session send` is, so a lost answer can be replayed. Not resent
+	// here: the coordinator it resolves to can change between deliveries.
+	key, err := callIDOrNew(*clientTurnID)
+	if err != nil {
+		return fmt.Errorf("send to project coordinator: %w", err)
 	}
+	body := map[string]interface{}{"message": messageText, "clientTurnId": key}
 	if err := request.apply(body); err != nil {
 		return err
 	}
@@ -829,9 +830,10 @@ func cliProjectSend(args []string, in io.Reader, out io.Writer) error {
 		body,
 	)
 	if err != nil {
-		return fmt.Errorf("send to project coordinator: %w", err)
+		return fmt.Errorf("send to project coordinator: %w",
+			messageReplayError(err, false, "orbit project send", "", id, key))
 	}
-	return writeCLIRawJSON(out, raw, *jsonOut)
+	return writeCLIRawJSON(out, withCallID(raw, "clientTurnId", key), *jsonOut)
 }
 
 // cliProjectResolveBlocker ends one open blocker with the reason it no longer blocks.

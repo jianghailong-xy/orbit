@@ -203,3 +203,38 @@ into the envelope verbatim.
 
 Not covered by v1: emitting the `recovery` block from the API and printing the envelope from MCP and
 the CLI. Those belong to the follow-up tasks built on this contract.
+
+## 6. Replaying under the same request id (`SAME_REQUEST_ID`)
+
+These doors key their receipt on an id. The server returns the first delivery's answer to a later
+delivery under the same id, and refuses the same id with a different payload with a 409. Callers
+can only use this if they know the id, so the runner (`src/runner-go/call_identity.go`) does the
+following for each one:
+
+| Door | Id | MCP | CLI |
+| --- | --- | --- | --- |
+| task start | `triggerId` | `task_start {taskId, triggerId?}` | `orbit task start ID [--trigger-id ID]` |
+| session message | `clientTurnId` | `session_send {sessionId, message, clientTurnId?}` | `orbit session send ID --message … [--client-turn-id ID]` |
+| interrupt with a follow-up | `clientTurnId` | `session_interrupt {sessionId, message, clientTurnId?}` | `orbit session interrupt ID --message … [--client-turn-id ID]` |
+| project coordinator message | `clientTurnId` | `project_send {projectId, message, clientTurnId?}` | `orbit project send ID --message … [--client-turn-id ID]` |
+
+- **One id per logical call.** If the caller gave no id, the runner draws one, sends every attempt
+  under it, and adds it to the answer. A new call without an id gets a new id. A plain interrupt
+  (no message) has no key.
+- **Bounded resend.** A delivery is sent again only while the request is unanswered. For task
+  start that means no answer, or `TASK_RUN_REQUEST_IN_PROGRESS`. For session messages and
+  interrupts it means no answer, or 502, 503 or 504. Each wait is the backoff (250 ms, 500 ms, 1 s)
+  or the server's `retryAfterSeconds`, whichever is longer, capped at 5 s. There are at most 4
+  deliveries in total. `project_send` is not resent automatically, because the coordinator it
+  resolves to can change between deliveries.
+- **Exhausted or unanswered: keep the id.** The error keeps the server's text first, then adds
+  `  triggerId: ID` (or `  clientTurnId: ID`) and a `replay:` line naming the exact call to make
+  with the same id. The message is never copied into that call: the caller already has it.
+- **Answered (a mismatch or any other refusal): do not replay.** The `next:` line says to make a new
+  request without the id once whatever the refusal names has changed. The server's mismatch check
+  still stops one id from naming two payloads.
+- `TASK_RUN_REQUEST_IN_PROGRESS` carries `retryAfterSeconds` (2) next to its `triggerId`.
+
+Tests: `src/runner-go/call_identity_test.go` covers a lost answer, concurrent deliveries,
+IN_PROGRESS, mismatch, an exhausted bound, and an agent replaying the id read from the error, over
+MCP and the CLI.

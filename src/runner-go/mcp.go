@@ -779,14 +779,20 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// No sessionId in the body: the PROJECT is the address, and the conversation it resolves to
 		// is decided by the server at the moment of delivery. The acting session travels as the
 		// header it already is, which is also what makes the delivery the caller's own.
-		body := map[string]interface{}{"message": message}
-		copyIfPresent(body, args, "clientTurnId")
-		copySessionRequestArgs(body, args)
-		raw, err := s.t.sendProjectCoordinator(s.sessionID, s.orchestrationToken, id, body)
+		// Keyed per logical call, so an answer that never arrives can be replayed under the same
+		// key. Not resent here: the coordinator it resolves to can change between deliveries.
+		key, err := callIDOrNew(getString(args, "clientTurnId"))
 		if err != nil {
 			return toolResult("send to project coordinator failed: "+err.Error(), true)
 		}
-		return toolResult(prettyJSON(raw), false)
+		body := map[string]interface{}{"message": message, "clientTurnId": key}
+		copySessionRequestArgs(body, args)
+		raw, err := s.t.sendProjectCoordinator(s.sessionID, s.orchestrationToken, id, body)
+		if err != nil {
+			return toolResult("send to project coordinator failed: "+
+				messageReplayError(err, true, "project_send", "projectId", id, key).Error(), true)
+		}
+		return toolResult(prettyJSON(withCallID(raw, "clientTurnId", key)), false)
 
 	case "ask_owner":
 		id := getString(args, "projectId")
@@ -1354,18 +1360,19 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if !ok {
 			return toolResult(noTaskMsg, true)
 		}
-		// One name for THIS tool call, drawn once here: everything below — a redirect, any retry
-		// of the POST — is the same request, and a second task_start is a second run. A draw that
+		// One name for THIS tool call: the caller's triggerId when it is replaying one it was
+		// handed, otherwise drawn once here. Everything below — a redirect, any resend of the POST —
+		// is the same request, and a second call without a triggerId is a second run. A draw that
 		// fails stops the call rather than starting an unnamed run the model could not retry.
-		token, err := newRunRequestToken()
+		token, err := callIDOrNew(getString(args, "triggerId"))
 		if err != nil {
 			return toolResult("start task failed: "+err.Error(), true)
 		}
 		raw, err := s.t.startTask(id, token)
 		if err != nil {
-			return toolResult("start task failed: "+err.Error(), true)
+			return toolResult("start task failed: "+taskStartReplayError(err, true, id, token).Error(), true)
 		}
-		return toolResult(prettyJSON(raw), false)
+		return toolResult(prettyJSON(withCallID(raw, "triggerId", token)), false)
 
 	case "task_comment":
 		id, ok := s.resolveTaskID(args)
@@ -1673,19 +1680,27 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if id == "" || msg == "" {
 			return toolResult("sessionId and message are required", true)
 		}
-		body := map[string]interface{}{"message": msg}
-		copyIfPresent(body, args, "clientTurnId")
+		// Keyed per logical call (call_identity.go): the caller's key when it is replaying one,
+		// otherwise a new one, returned in the answer and in any error.
+		key, err := callIDOrNew(getString(args, "clientTurnId"))
+		if err != nil {
+			return toolResult("send message failed: "+err.Error(), true)
+		}
+		body := map[string]interface{}{"message": msg, "clientTurnId": key}
 		// Sent only when true. Omitted, the request is the one every installed client sends, so a
 		// server that predates the flag cannot read anything into its absence.
 		if getBool(args, "resumeIfEnded") {
 			body["resumeIfEnded"] = true
 		}
 		copySessionRequestArgs(body, args)
-		raw, err := s.t.sendSessionMessage(s.sessionID, s.orchestrationToken, id, body)
+		raw, err := deliverKeyed(func() (json.RawMessage, error) {
+			return s.t.sendSessionMessage(s.sessionID, s.orchestrationToken, id, body)
+		}, isUnansweredSessionWrite)
 		if err != nil {
-			return toolResult("send message failed: "+err.Error(), true)
+			return toolResult("send message failed: "+
+				messageReplayError(err, true, "session_send", "sessionId", id, key).Error(), true)
 		}
-		return toolResult(prettyJSON(raw), false)
+		return toolResult(prettyJSON(withCallID(raw, "clientTurnId", key)), false)
 
 	case "session_reply":
 		if !s.orchestrationEnabled() {
@@ -1723,17 +1738,30 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// With a message this is one operation, not an interrupt followed by a send: the
 		// interrupt drops what was queued behind the running turn, so a message sent as a
 		// second call would be racing that delete.
-		var body interface{}
-		if follow := strings.TrimSpace(getString(args, "message")); follow != "" {
-			req := map[string]interface{}{"message": follow}
-			copyIfPresent(req, args, "clientTurnId")
-			body = req
+		follow := strings.TrimSpace(getString(args, "message"))
+		if follow == "" {
+			// A plain interrupt carries no key and is not resent.
+			raw, err := s.t.interruptSession(s.sessionID, s.orchestrationToken, id, nil)
+			if err != nil {
+				return toolResult("interrupt session failed: "+err.Error(), true)
+			}
+			return toolResult(prettyJSON(raw), false)
 		}
-		raw, err := s.t.interruptSession(s.sessionID, s.orchestrationToken, id, body)
+		// With a follow-up the call is keyed like session_send: a replay under the same key
+		// re-files neither the interrupt nor the message.
+		key, err := callIDOrNew(getString(args, "clientTurnId"))
 		if err != nil {
 			return toolResult("interrupt session failed: "+err.Error(), true)
 		}
-		return toolResult(prettyJSON(raw), false)
+		body := map[string]interface{}{"message": follow, "clientTurnId": key}
+		raw, err := deliverKeyed(func() (json.RawMessage, error) {
+			return s.t.interruptSession(s.sessionID, s.orchestrationToken, id, body)
+		}, isUnansweredSessionWrite)
+		if err != nil {
+			return toolResult("interrupt session failed: "+
+				messageReplayError(err, true, "session_interrupt", "sessionId", id, key).Error(), true)
+		}
+		return toolResult(prettyJSON(withCallID(raw, "clientTurnId", key)), false)
 
 	case "session_merge":
 		if !s.orchestrationEnabled() {
@@ -4901,7 +4929,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		{
 			"name":        "task_start",
 			"description": "Start a task immediately on its assigned agent. Creates or resumes the task-linked session and queues it for the assignee's runner. The task must have an assignee bound to a runner and all prerequisites must be complete. Returns the session id; taskId defaults to the current task.",
-			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
+			"inputSchema": obj(map[string]interface{}{
+				"taskId":    taskIDProp,
+				"triggerId": map[string]interface{}{"type": "string", "description": "Only to replay a call whose answer you never saw: pass the triggerId its answer or error named. Omitted, this call is a new run request."},
+			}),
 		},
 		{
 			"name":        "task_comment",
@@ -5224,7 +5255,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"inputSchema": obj(withSessionRequestProps(map[string]interface{}{
 					"sessionId":     sessionIDProp,
 					"message":       str,
-					"clientTurnId":  map[string]interface{}{"type": "string", "description": "Optional idempotency key. Re-sending the same CURRENT_WORK payload with this key returns its existing receipt instead of delivering twice — use it when retrying a call whose answer you never saw. Omitted, every call is a new logical send."},
+					"clientTurnId":  map[string]interface{}{"type": "string", "description": "Only to replay a call whose answer you never saw: pass the clientTurnId its answer or error named, with the same message. Omitted, a new key is drawn and this is a new message."},
 					"resumeIfEnded": map[string]interface{}{"type": "boolean", "description": "Restart the session if it has ended, instead of refusing the message. The engine respawns with the conversation restored and this message becomes its first turn; the reply reports `revived: true`. This starts a run and holds a runner slot, so ask for it only when you mean to continue THAT conversation — otherwise start a new session. A live session is unaffected. Still refuses, naming the reason, when the session has no runner, its runner is offline, or its conversation cannot be restored."},
 				}), "sessionId", "message"),
 			},
@@ -5237,7 +5268,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"inputSchema": obj(map[string]interface{}{
 					"sessionId":    sessionIDProp,
 					"message":      map[string]interface{}{"type": "string", "description": "What to do instead, sent atomically with the stop. Omitted → a plain interrupt, and anything queued behind the running turn is dropped with nothing put in its place."},
-					"clientTurnId": map[string]interface{}{"type": "string", "description": "Optional idempotency key for the follow-up; a retry with the same key re-files neither the interrupt nor the message. Ignored without `message`."},
+					"clientTurnId": map[string]interface{}{"type": "string", "description": "Only to replay an interrupt with `message` whose answer you never saw: pass the clientTurnId its answer or error named, with the same message. A replay re-files neither the interrupt nor the message. Ignored without `message`."},
 				}, "sessionId"),
 			},
 			map[string]interface{}{
@@ -5438,7 +5469,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					},
 					"clientTurnId": map[string]interface{}{
 						"type":        "string",
-						"description": "Optional idempotency key the message is written under. Re-sending the same message with this key returns the turn it already filed instead of delivering a second copy — use it when retrying a call whose answer you never saw. Omitted, the server mints one and every call is a new message.",
+						"description": "Only to replay a call whose answer you never saw: pass the clientTurnId its answer or error named, with the same message. Omitted, a new key is drawn and this is a new message.",
 					},
 				}), "projectId", "message"),
 			},

@@ -958,10 +958,12 @@ func cliSessionSend(args []string, in io.Reader, out io.Writer, ctx cliOrchestra
 	if err != nil {
 		return err
 	}
-	body := map[string]interface{}{"message": messageText}
-	if key := strings.TrimSpace(*clientTurnID); key != "" {
-		body["clientTurnId"] = key
+	// Keyed per invocation (call_identity.go): --client-turn-id when it replays one, otherwise new.
+	key, err := callIDOrNew(*clientTurnID)
+	if err != nil {
+		return fmt.Errorf("send session message: %w", err)
 	}
+	body := map[string]interface{}{"message": messageText, "clientTurnId": key}
 	// Sent only when asked. Omitted, the request is byte-for-byte the one every installed client
 	// sends, so an old server cannot read a field it does not know about as anything.
 	if *resumeIfEnded {
@@ -970,11 +972,14 @@ func cliSessionSend(args []string, in io.Reader, out io.Writer, ctx cliOrchestra
 	if err := request.apply(body); err != nil {
 		return err
 	}
-	raw, err := t.sendSessionMessage(ctx.sessionID, ctx.token, id, body)
+	raw, err := deliverKeyed(func() (json.RawMessage, error) {
+		return t.sendSessionMessage(ctx.sessionID, ctx.token, id, body)
+	}, isUnansweredSessionWrite)
 	if err != nil {
-		return fmt.Errorf("send session message: %w", err)
+		return fmt.Errorf("send session message: %w",
+			messageReplayError(err, false, "orbit session send", "", id, key))
 	}
-	return writeCLIRawJSON(out, raw, *jsonOut)
+	return writeCLIRawJSON(out, withCallID(raw, "clientTurnId", key), *jsonOut)
 }
 
 func cliSessionInterrupt(args []string, in io.Reader, out io.Writer, ctx cliOrchestrationContext) error {
@@ -999,21 +1004,29 @@ func cliSessionInterrupt(args []string, in io.Reader, out io.Writer, ctx cliOrch
 	if err != nil {
 		return err
 	}
-	// A plain interrupt stays a bodyless POST, exactly as it was; the follow-up only rides
-	// along when there is one.
-	var body interface{}
-	if follow := strings.TrimSpace(messageText); follow != "" {
-		req := map[string]interface{}{"message": follow}
-		if key := strings.TrimSpace(*clientTurnID); key != "" {
-			req["clientTurnId"] = key
+	// A plain interrupt stays a bodyless POST, exactly as it was, and is not resent.
+	follow := strings.TrimSpace(messageText)
+	if follow == "" {
+		raw, err := t.interruptSession(ctx.sessionID, ctx.token, id, nil)
+		if err != nil {
+			return fmt.Errorf("interrupt session: %w", err)
 		}
-		body = req
+		return writeCLIRawJSON(out, raw, *jsonOut)
 	}
-	raw, err := t.interruptSession(ctx.sessionID, ctx.token, id, body)
+	// With a follow-up it is keyed like `session send`.
+	key, err := callIDOrNew(*clientTurnID)
 	if err != nil {
 		return fmt.Errorf("interrupt session: %w", err)
 	}
-	return writeCLIRawJSON(out, raw, *jsonOut)
+	body := map[string]interface{}{"message": follow, "clientTurnId": key}
+	raw, err := deliverKeyed(func() (json.RawMessage, error) {
+		return t.interruptSession(ctx.sessionID, ctx.token, id, body)
+	}, isUnansweredSessionWrite)
+	if err != nil {
+		return fmt.Errorf("interrupt session: %w",
+			messageReplayError(err, false, "orbit session interrupt", "", id, key))
+	}
+	return writeCLIRawJSON(out, withCallID(raw, "clientTurnId", key), *jsonOut)
 }
 
 func cliSessionMerge(args []string, out io.Writer, ctx cliOrchestrationContext) error {

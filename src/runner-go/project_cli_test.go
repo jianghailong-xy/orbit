@@ -1682,12 +1682,13 @@ func TestProjectSendPostsTheCoordinatorMessagesRouteAsTheCallingSession(t *testi
 	if token != "session-token" {
 		t.Fatalf("project send credential header = %q", token)
 	}
-	// The body carries the message and nothing else: an id here would be a conversation named by the
-	// caller, which is exactly the snapshot this door refuses to take.
+	// The body carries the message and the key drawn for this call, nothing else: an id here would
+	// be a conversation named by the caller, which is exactly the snapshot this door refuses to take.
 	var body map[string]interface{}
 	if err := json.Unmarshal([]byte(raw), &body); err != nil {
 		t.Fatalf("project send body is not JSON: %v\n%s", err, raw)
 	}
+	takeDrawnKey(t, body)
 	if len(body) != 1 || body["message"] != "the shard is red" {
 		t.Fatalf("project send body = %#v", body)
 	}
@@ -1791,11 +1792,10 @@ func TestProjectSendCarriesTheClientTurnId(t *testing.T) {
 	}
 }
 
-// Without a key the request is the one this command always sent — the message alone — and the
-// server mints the key itself. An empty or blank --client-turn-id is no key either, exactly as for
-// `session send`: the route floors the field at one character, so an empty string sent for "none"
-// would be refused where the caller asked for nothing.
-func TestProjectSendSendsNoClientTurnIdWhenNoneIsGiven(t *testing.T) {
+// Without a key the command draws one for this call and prints it, so a lost answer can be replayed
+// under it. An empty or blank --client-turn-id is no key either, exactly as for `session send`: it
+// is never sent as "", which the route would refuse (it floors the field at one character).
+func TestProjectSendDrawsAClientTurnIdWhenNoneIsGiven(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		args []string
@@ -1834,11 +1834,12 @@ func TestProjectSendSendsNoClientTurnIdWhenNoneIsGiven(t *testing.T) {
 			if err := json.Unmarshal([]byte(raw), &body); err != nil {
 				t.Fatalf("project send body is not JSON: %v\n%s", err, raw)
 			}
-			if _, present := body["clientTurnId"]; present || len(body) != 1 || body["message"] != "the shard is red" {
+			key := takeDrawnKey(t, body)
+			if key == "" || len(body) != 1 || body["message"] != "the shard is red" {
 				t.Fatalf("project send body = %#v", body)
 			}
-			if out.Len() == 0 || strings.Contains(out.String(), "clientTurnId") {
-				t.Fatalf("project send printed %q", out.String())
+			if !strings.Contains(out.String(), `"clientTurnId":"`+key+`"`) {
+				t.Fatalf("project send printed %q, without the key %s", out.String(), key)
 			}
 		})
 	}

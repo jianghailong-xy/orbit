@@ -2186,8 +2186,9 @@ func randomUUID() (string, error) {
 }
 
 // How far a named run request is resent, and how long it waits between attempts: three resends
-// after the first delivery, backing off 250ms -> 500ms -> 1s. A bounded ~1.75s in the worst case,
-// and then the invocation fails and says exactly why. Bounded because this is for a dropped
+// after the first delivery, backing off 250ms -> 500ms -> 1s, or longer when the server's
+// retryAfter asks for it (each wait capped at keyedResendCap, so ~15s at worst). Then the
+// invocation fails and says exactly why, keeping its id. Bounded because this is for a dropped
 // connection and a lease being handed over, not for an outage.
 const (
 	runRequestResendAttempts = 4
@@ -2319,26 +2320,12 @@ func (t *Transport) startTask(id, triggerID string) (json.RawMessage, error) {
 }
 
 // deliverRunRequest sends one named run request until it is answered, resending only what
-// `isResendableRunFailure` says left it unanswered — the runner's door and the person's alike.
+// `isResendableRunFailure` says left it unanswered — the runner's door and the person's alike. The
+// waits honour the server's retryAfter (deliverKeyed). Once the attempts are spent it returns the
+// real last answer, not a summary of it: a caller that ran out of attempts while the control plane
+// kept saying "being answered right now" needs to be told that.
 func deliverRunRequest(send func() (json.RawMessage, error)) (json.RawMessage, error) {
-	var lastErr error
-	for attempt := range runRequestResendAttempts {
-		if attempt > 0 {
-			time.Sleep(runRequestResendDelay << (attempt - 1))
-		}
-		out, err := send()
-		if err == nil {
-			return out, nil
-		}
-		lastErr = err
-		if !isResendableRunFailure(err) {
-			return nil, err
-		}
-	}
-	// The real last answer, not a summary of it: a caller that ran out of attempts while the
-	// control plane kept saying "being answered right now" needs to be told that, and a lost
-	// connection needs to read as one.
-	return nil, lastErr
+	return deliverKeyed(send, isResendableRunFailure)
 }
 
 // A comment names the session it was written from, so the control plane can record which run of

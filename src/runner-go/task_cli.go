@@ -2883,6 +2883,7 @@ func cliTaskDelete(args []string, out io.Writer) error {
 func cliTaskStart(args []string, out io.Writer) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit task start")
+	triggerID := fs.String("trigger-id", "", "replay the run request this id names (from an earlier answer or error)")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(rest); err != nil {
 		return err
@@ -2895,18 +2896,19 @@ func cliTaskStart(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	// One name for THIS `orbit task start`, drawn once: every resend below it is the same
-	// request, and the next invocation of the command is a different one. A draw that fails stops
-	// the command rather than starting an unnamed run.
-	token, err := newRunRequestToken()
+	// One name for THIS `orbit task start`: --trigger-id when it replays an earlier one, otherwise
+	// drawn once. Every resend below it is the same request, and the next invocation without
+	// --trigger-id is a different one. A draw that fails stops the command rather than starting an
+	// unnamed run.
+	token, err := callIDOrNew(*triggerID)
 	if err != nil {
 		return fmt.Errorf("start task: %w", err)
 	}
 	raw, err := t.startTask(id, token)
 	if err != nil {
-		return fmt.Errorf("start task: %w", err)
+		return fmt.Errorf("start task: %w", taskStartReplayError(err, false, id, token))
 	}
-	return writeCLIRawJSON(out, raw, *jsonOut)
+	return writeCLIRawJSON(out, withCallID(raw, "triggerId", token), *jsonOut)
 }
 
 func cliTaskRequestConfirmation(args []string, out io.Writer) error {

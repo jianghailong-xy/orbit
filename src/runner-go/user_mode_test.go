@@ -305,7 +305,8 @@ func TestUserModeCommandsCallTheUserRoutesWithThePersonalAccessToken(t *testing.
 			if want == "" {
 				want = `{"answeredBy":"` + tc.method + ` ` + tc.path + `"}`
 			}
-			if strings.TrimSpace(out) != want {
+			// A keyed write also prints the id it was sent under, in front (call_identity.go).
+			if stripEchoedCallID(out, r.body) != want {
 				t.Errorf("printed %q, want %q", out, want)
 			}
 		})

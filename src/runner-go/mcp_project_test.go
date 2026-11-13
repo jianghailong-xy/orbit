@@ -1451,6 +1451,7 @@ func TestProjectSendToolPostsAsTheCallingSession(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &body); err != nil {
 		t.Fatalf("project_send body is not JSON: %v\n%s", err, raw)
 	}
+	key := takeDrawnKey(t, body)
 	if len(body) != 1 || body["message"] != "the shard is red" {
 		t.Fatalf("project_send body = %#v", body)
 	}
@@ -1463,14 +1464,15 @@ func TestProjectSendToolPostsAsTheCallingSession(t *testing.T) {
 		t.Fatalf("project_send result is not JSON: %v\n%s", err, text)
 	}
 	if got["created"] != true || got["replacedSessionId"] != "343dlzsYWKo5z8l2M8tsB" ||
-		got["replaceReason"] != "RUNNER_OFFLINE" {
+		got["replaceReason"] != "RUNNER_OFFLINE" || got["clientTurnId"] != key {
 		t.Fatalf("project_send result = %#v", got)
 	}
 }
 
-// clientTurnId is project_send's retry key, offered the way session_send offers it: optional, so a
-// call without one is the call it always was — the message alone, the server minting the key — and
-// passed through as given when there is one, so a retry gets back the turn it already filed.
+// clientTurnId is project_send's retry key, offered the way session_send offers it: optional, and
+// passed through as given when there is one, so a replay gets back the turn it already filed.
+// Without one the runner draws a key for the call (call_identity.go), so a lost answer can still
+// be replayed under it.
 func TestProjectSendToolTakesAnOptionalClientTurnId(t *testing.T) {
 	tools := toolDescriptors(false, true)
 	prop, _ := mcpToolProps(tools, "project_send")["clientTurnId"].(map[string]interface{})
@@ -1511,7 +1513,7 @@ func TestProjectSendToolTakesAnOptionalClientTurnId(t *testing.T) {
 	if len(bodies) != 2 {
 		t.Fatalf("project_send made %d requests, want 2", len(bodies))
 	}
-	if _, present := bodies[0]["clientTurnId"]; present || len(bodies[0]) != 1 {
+	if key := takeDrawnKey(t, bodies[0]); key == "" || len(bodies[0]) != 1 {
 		t.Fatalf("project_send without a key sent %#v", bodies[0])
 	}
 	if len(bodies[1]) != 2 || bodies[1]["clientTurnId"] != "shard-4:Retry/7f3a" {
