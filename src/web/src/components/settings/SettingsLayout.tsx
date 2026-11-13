@@ -242,7 +242,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
   const addWorkspace = () => navigate(runners.length > 0 ? '/settings/workspaces/new' : '/runners/register');
 
   return (
-    <nav className="settings-nav" aria-label="Settings">
+    <nav className="settings-nav autohide-scrollbar" aria-label="Settings">
       <button type="button" className="settings-back" onClick={() => navigate(settingsReturnPath())}>
         <LeftOutlined />
         <span>Back to Orbit</span>
