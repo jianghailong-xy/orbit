@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 31 |
-| `user` | 416 |
+| `user` | 418 |
 | `admin` | 28 |
 | `runner` | 176 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **655** |
+| **Total** | **657** |
 
 ## Public routes
 
@@ -356,6 +356,8 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/sessions/:id/share` | path `id` | `ShareLinksController.enableSessionLink` |
 | `PUT` | `/api/sessions/:id/share` | body `PutShareLinkDto`; path `id` | `ShareLinksController.putSessionLink` |
 | `PUT` | `/api/sessions/:id/tags` | body `SetSessionTagsDto`; path `id` | `SessionsController.setTags` |
+| `GET` | `/api/sessions/:id/task-moves` | path `id` | `SessionTaskMovesController.list` |
+| `POST` | `/api/sessions/:id/task-moves/decision` | body `DecideTaskMoveBatchDto`; path `id` | `SessionTaskMovesController.decide` |
 | `GET` | `/api/sessions/:id/turns` | path `id`; query `view` | `SessionsController.queuedTurns` |
 | `POST` | `/api/sessions/:id/turns` | body `Object`; path `id` | `SessionsController.turn` |
 | `DELETE` | `/api/sessions/:id/turns/:turnId` | path `id`, `turnId` | `SessionsController.cancelTurn` |
