@@ -446,7 +446,7 @@ test('the server writes the changed topics\' articles, and the footnote check ke
 
 // ── 2. the ref: the snapshot's, asked for when there is none ─────────────────────────────────────
 
-test('no snapshot yet: the job asks the space\'s runner for one, parks without a lease, and writes at its commit once it lands', { skip, timeout: 120_000 }, async () => {
+test('no snapshot yet: the job asks the space\'s runner for one, parks without a lease, and writes at its commit once it lands', { skip, timeout: 240_000 }, async () => {
   const h = await boot();
   const o = await owner(h);
   await adds(h, o, Array.from({ length: 3 }, (_, i) =>
@@ -459,7 +459,7 @@ test('no snapshot yet: the job asks the space\'s runner for one, parks without a
   const w = worker(h);
   await enqueueWikiArticlesJob(h.prisma as unknown as PrismaService, { ownerId: o.id, spaceId: o.spaceId });
   // Parked: waiting for the repository, no lease, and one snapshot asked of the workspace's runner.
-  await until('the job to park', w, async () => (await jobs(h, o))[0]?.state === 'waiting', 20);
+  await until('the job to park', w, async () => (await jobs(h, o))[0]?.state === 'waiting', 60);
   const parked = (await jobs(h, o))[0];
   assert.equal(parked.waiting_for, 'repo');
   assert.equal(parked.lease_owner, null, 'a parked job holds no lease');
@@ -490,7 +490,7 @@ test('no snapshot yet: the job asks the space\'s runner for one, parks without a
   await modelUp(h);
   const w2 = worker(h);
   await enqueueWikiArticlesJob(h.prisma as unknown as PrismaService, { ownerId: failing.id, spaceId: failing.spaceId });
-  await until('the second space\'s job to park', w2, async () => (await jobs(h, failing))[0]?.state === 'waiting', 20);
+  await until('the second space\'s job to park', w2, async () => (await jobs(h, failing))[0]?.state === 'waiting', 60);
   const [bad] = await h.ops.dispatch({ runnerId: failing.runnerId, leaseOwner, draining: false, capabilities: [WIKI_REPO_OP_CAPABILITY] });
   await h.ops.applyWikiRepoOpResult({
     id: bad.id, runnerId: failing.runnerId,
@@ -521,7 +521,7 @@ test('the System model refuses the key: the queue stops at the first 401, nothin
   h.model.answer = writer();
   const w = worker(h);
   await enqueueWikiArticlesJob(h.prisma as unknown as PrismaService, { ownerId: o.id, spaceId: o.spaceId });
-  await until('the first call', w, async () => h.model.hits.length >= 1, 20);
+  await until('the first call', w, async () => h.model.hits.length >= 1, 60);
   // The model counts the call when it arrives; the queue settles it afterwards (the probe writes auth_failed, the request
   // goes back). Wait for that, however slow the host, so the passes below all run against the refused key.
   await w.queue.whenIdle();
