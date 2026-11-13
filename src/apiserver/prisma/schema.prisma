@@ -329,8 +329,8 @@ model User {
   refreshTokens    RefreshToken[] // long-lived rotating refresh tokens (hashed at rest)
   personalAccessTokens PersonalAccessToken[] // the user's own API tokens (hashed at rest, 0383)
   patDeviceLogins  PatDeviceLogin[] // the `orbit login` requests this user approved or denied (0388)
-  terminalLogins   TerminalLogin[] // terminal sign-ins asked for on this user's runners (0597)
-  terminalCredentials TerminalCredential[] // the terminals this user approved (0597)
+  terminalLogins   TerminalLogin[] // terminal sign-ins asked for on this user's runners (0625)
+  terminalCredentials TerminalCredential[] // the terminals this user approved (0625)
   identities       UserIdentity[] // the Google account this user signs in with (0391)
   oauthLoginFlows  OAuthLoginFlow[] // Google sign-ins in flight that would link to this user (0391)
   clientVersions   ClientVersion[] // which build of each client this user is running
@@ -466,7 +466,7 @@ model PersonalAccessToken {
 /// `pat_device_login_status_chk` (status from the list below; decided ⇔ `decidedById` and
 /// `decidedAt` set) and `pat_device_login_expires_in_days_chk` live only in the migration.
 /// A terminal on a runner's machine asking the account's owner to approve it (docs/terminal-session-design.md
-/// "The terminal credential", 0597). Started with the machine's runner credential, so it is bound to that runner and
+/// "The terminal credential", 0625). Started with the machine's runner credential, so it is bound to that runner and
 /// to the runner's owner from the start; the owner approves or denies it in the app (an owner-channel act), and the
 /// CLI, polling with the device code only it holds, collects the TERMINAL credential once. No credential is kept here.
 model TerminalLogin {
@@ -493,7 +493,7 @@ model TerminalLogin {
   @@map("terminal_login")
 }
 
-/// A TERMINAL credential (0597): what `orbit` in a terminal acts with, minted only by the owner's approval of a
+/// A TERMINAL credential (0625): what `orbit` in a terminal acts with, minted only by the owner's approval of a
 /// TerminalLogin, bound to the account and to one runner, and ending 30 days after that approval. Only its sha256 is kept.
 model TerminalCredential {
   id          String    @id @default(uuid(7)) @db.Uuid
@@ -919,7 +919,7 @@ model Runner {
   regionCheckRequestedAt DateTime? @map("region_check_requested_at")
 
   executableRuntimeHeartbeats     ExecutableRuntimeHeartbeat[]
-  // Terminal sign-ins on this machine, and the TERMINAL credentials bound to it (0597): they go with it.
+  // Terminal sign-ins on this machine, and the TERMINAL credentials bound to it (0625): they go with it.
   terminalLogins         TerminalLogin[]
   terminalCredentials    TerminalCredential[]
 
@@ -2693,7 +2693,7 @@ model Approval {
   startAfterCreate Boolean @default(false) @map("start_after_create")
   // User who decided it (no FK; cf. Activity.actorId).
   decidedById  String?   @map("decided_by_id") @db.Uuid
-  /// The credential the decider used (0500, 0505): `LOGIN` | `PAT` | `IMPERSONATION` | `FEISHU` | `COORDINATOR` — a click on a Feishu card
+  /// The credential the decider used (0500, 0505, 0626): `LOGIN` | `PAT` | `IMPERSONATION` | `FEISHU` | `COORDINATOR` | `TERMINAL` — a click on a Feishu card
   /// (docs/feishu-bot-design.md §7.2). NULL on a row nobody decided and on every row decided before 0500.
   decidedCredentialKind String? @map("decided_credential_kind")
   /// The clicker's open_id and the card's message_id when `decidedCredentialKind` is `FEISHU`, and only then
@@ -3400,6 +3400,8 @@ model Project {
   /// The exceptions somebody has to act on, and where they were queued (migration 0278).
   openItems          ProjectOpenItem[]
   openItemDeliveries ProjectOpenItemDelivery[]
+  /// The orphans the sweep told somebody about, once each (migration 0585).
+  orphanNotices      ProjectOrphanNotice[]
 
   /// Every attempt the platform made to land work on this project's integration line (migration 0281).
   integrationJobs ProjectIntegrationJob[]
@@ -4142,6 +4144,33 @@ model ProjectOpenItemDelivery {
   @@unique([itemId, sessionId, purpose], map: "project_open_item_delivery_item_session_purpose_key")
   @@index([sessionId, clientTurnId], map: "project_open_item_delivery_session_turn_idx")
   @@map("project_open_item_delivery")
+}
+
+/// One pending item of a project that nobody could move or nobody was told about, as the orphan sweep
+/// reported it (docs/evidence-always-has-an-addressee-design.md §4, migration 0585). One row per
+/// (project, orphan key): the key names the item and the state it was found in, so the same orphan in
+/// the same state is reported once, and a new state is a new key. `recipient` is who was told —
+/// the project's coordinator conversation (`sessionId`, the turn keyed `clientTurnId`), or the
+/// account owner when the project has no Automatic coordinator to tell. History, not a queue: nothing
+/// reads it to decide anything but whether this orphan was already reported.
+model ProjectOrphanNotice {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  projectId    String   @map("project_id") @db.Uuid
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  ownerId      String   @map("owner_id") @db.Uuid
+  /// The task whose pending item it is. History rather than a foreign key, like the session.
+  taskId       String   @map("task_id") @db.Uuid
+  orphanKey    String   @map("orphan_key")
+  /// EVIDENCE | EXCEPTION_ITEM | TASK_RUN | DEPENDENCIES
+  kind         String
+  /// COORDINATOR | OWNER
+  recipient    String
+  sessionId    String?  @map("session_id") @db.Uuid
+  clientTurnId String?  @map("client_turn_id")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([projectId, orphanKey], map: "project_orphan_notice_project_key")
+  @@map("project_orphan_notice")
 }
 
 /// One time a project's coordinator spent more on its own than the project allows, and what became of
@@ -5146,8 +5175,10 @@ model ProjectHandoffApproval {
   /// answer, and no crossing can name a deleted project, so nothing is loosened by removing it.
   fromProjectId String  @map("from_project_id") @db.Uuid
   fromProject   Project @relation("ProjectHandoffFrom", fields: [fromProjectId], references: [id], onDelete: Cascade)
-  toProjectId   String  @map("to_project_id") @db.Uuid
-  toProject     Project @relation("ProjectHandoffTo", fields: [toProjectId], references: [id], onDelete: Cascade)
+  /// Null only for a MOVE_TASK that takes the task out of every project (0610, a CHECK): the
+  /// account owner's confirmation then files it under none.
+  toProjectId   String?  @map("to_project_id") @db.Uuid
+  toProject     Project? @relation("ProjectHandoffTo", fields: [toProjectId], references: [id], onDelete: Cascade)
 
   /// FILE_TASK | MOVE_TASK | DEPEND_ON_TASK, frozen by a CHECK in 0155 rather than by a Prisma enum
   /// (cf. `ProjectBlocker.kind`): the values are `project-handoff.ts`'s closed set, and a second

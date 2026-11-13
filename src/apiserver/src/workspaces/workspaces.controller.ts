@@ -11,6 +11,7 @@ import {
 import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatScope, workspaceConfinement } from '../auth/pat-scope.decorator';
+import { TerminalRoute, terminalRunnerOf } from '../auth/terminal-credentials';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { WorkspacesService } from './workspaces.service';
 import { CreateWorkspaceDto, ReorderWorkspacesDto, UpdateWorkspaceDto } from './dto';
@@ -30,9 +31,11 @@ export class WorkspacesController {
   }
 
   @PatScope('workspaces:read', { workspaceConfinable: 'LIST' })
+  // A terminal (`orbit` in a cwd) reads only the workspaces on its own machine, to find the one the cwd is in.
+  @TerminalRoute('WORKSPACE_LIST')
   @Get()
   list(@CurrentUser() user: AuthUser) {
-    return this.workspaces.list(user.userId, workspaceConfinement(user));
+    return this.workspaces.list(user.userId, workspaceConfinement(user), terminalRunnerOf(user));
   }
 
   // Persist the sidebar drag order. Declared before the `:id` routes; the static

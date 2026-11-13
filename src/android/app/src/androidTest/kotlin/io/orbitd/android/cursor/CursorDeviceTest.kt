@@ -87,7 +87,7 @@ class CursorDeviceTest {
                 signIn(server)
                 newSession(pass)
                 cursorSession(pass)
-                infrastructure(pass)
+                machinesAndModels(pass)
             } catch (e: Throwable) {
                 capture("$pass-failed"); throw e
             } finally {
@@ -187,12 +187,12 @@ class CursorDeviceTest {
         compose.waitUntil(15_000) { compose.onAllNodes(hasTestTag("composer-model") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
     }
 
-    // iOS 2, 3 and 4 · Infrastructure, a machine, Cursor CLI's engine page, its accounts and a Cursor key
+    // iOS 2, 3 and 4 · Machines & models, a machine, Cursor CLI's engine page, its accounts and a Cursor key
 
     /** hpc's row among the machines — not a "Needs you" line that names it. */
     private val hpcRow = hasText("hpc") and hasText(" running", substring = true) and hasClickAction()
 
-    private fun infrastructure(pass: String) {
+    private fun machinesAndModels(pass: String) {
         back()
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
         click(hasText("Settings") and hasClickAction())

@@ -161,7 +161,7 @@ class A13dStackDeviceTest {
         click(hasText("Machines & models") and hasClickAction()); await("DeepSeek (a13d)")
         if (answer["ok"] == JsonPrimitive(false)) await("Unavailable")
         compose.onAllNodesWithText("API keys").onFirst().performScrollTo()
-        capture("stack-infrastructure-keys")
+        capture("stack-machines-and-models-keys")
         click(hasText("DeepSeek (a13d)") and hasClickAction()); await("DeepSeek account balance")
         if (answer["ok"] == JsonPrimitive(false)) {
             await("Couldn't get the balance"); answer.s("message")?.let { await(it) }

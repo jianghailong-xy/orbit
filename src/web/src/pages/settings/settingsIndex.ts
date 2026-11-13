@@ -22,8 +22,10 @@ export const PERSONAL_PAGES = [
   { path: '/settings/shared-links', label: 'Shared links' },
   { path: '/settings/access-tokens', label: 'Access tokens' },
   { path: '/settings/terminals', label: 'Terminals' },
-  { path: '/settings/integrations/feishu', label: 'Feishu' },
 ] as const;
+
+/** The Integrations group of Settings: each connected service's page, its nav label and address. */
+export const INTEGRATION_PAGES = [{ path: '/settings/integrations/feishu', label: 'Feishu' }] as const;
 
 const setting = <K extends string>(
   anchor: K,

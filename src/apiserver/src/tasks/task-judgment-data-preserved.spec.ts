@@ -2938,16 +2938,27 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0571_runner_self_update_postpone',
       // 0572 adds session_guest's daily message count (two columns); no preserved rows, triggers or DONE fence change.
       '0572_session_guest_daily_turns',
+      // 0585 adds project_orphan_notice, the orphan sweep's ledger: one new table, no existing row read
+      // or rewritten. No completion ledger, DONE fence, preserved trigger or function is changed.
+      '0585_project_orphan_notice',
       // 0590 adds one nullable TIMESTAMP(3) `self_update_now_requested_at` on `runner` (no default, catalog-only); no
       // preserved rows, triggers or DONE fence change, and no row is written.
       '0590_runner_self_update_now',
       // 0595 adds one nullable TIMESTAMP(3) `drain_waiting_pushed_at` on `runner` (no default, catalog-only); no
       // preserved rows, triggers or DONE fence change, and no row is written.
       '0595_runner_drain_waiting_push',
-      // 0597 adds the terminal_login and terminal_credential tables, their indexes and foreign keys to "user" and
+      // 0610 lets project_handoff_approval.to_project_id be NULL for a MOVE_TASK (one CHECK),
+      // rebuilds 0386's pending-move index NULLS NOT DISTINCT, and restates 0389's
+      // task_claimed_project_move_guard with the target compared IS NOT DISTINCT FROM. No preserved
+      // rows, triggers or DONE fence change, and no row is written.
+      '0610_project_handoff_move_out',
+      // 0625 adds the terminal_login and terminal_credential tables, their indexes and foreign keys to "user" and
       // "runner" only (docs/terminal-session-design.md); no preserved rows, triggers or DONE fence change, and no row
       // is written.
-      '0597_terminal_credential'],
+      '0625_terminal_credential',
+      // 0626 widens approval_decided_via_chk to allow 'TERMINAL' (docs/terminal-session-design.md); approval only, no
+      // preserved rows, triggers or DONE fence change, and no row is written.
+      '0626_approval_decided_by_terminal'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

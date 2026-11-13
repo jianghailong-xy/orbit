@@ -182,10 +182,13 @@ export class WorkspacesService {
     };
   }
 
-  /** `only`: the workspaces a token confined to them may see (`workspaceConfinement`). */
-  async list(ownerId: string, only?: readonly string[]) {
+  /**
+   * `only`: the workspaces a token confined to them may see (`workspaceConfinement`). `onRunner`: one machine's
+   * workspaces, what a TERMINAL credential reads (`terminalRunnerOf`).
+   */
+  async list(ownerId: string, only?: readonly string[], onRunner?: string) {
     const workspaces = await this.prisma.workspace.findMany({
-      where: { ownerId, deletedAt: null, ...(only ? { id: { in: [...only] } } : {}) },
+      where: { ownerId, deletedAt: null, ...(only ? { id: { in: [...only] } } : {}), ...(onRunner ? { runnerId: onRunner } : {}) },
       // Custom drag order first; never-reordered workspaces (position NULL) sort last by
       // creation time, so newly added workspaces append below the arranged ones.
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],

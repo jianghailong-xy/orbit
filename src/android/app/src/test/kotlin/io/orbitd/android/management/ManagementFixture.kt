@@ -47,6 +47,8 @@ object ManagementFixture {
     val balanceGates = java.util.concurrent.ConcurrentHashMap<String, CompletableDeferred<Unit>>()
     /** GET tasks/:id for [TASK]. */
     @Volatile var task = "{}"
+    /** GET tasks/:id/evidence for [TASK]: its evidence versions, oldest first. */
+    @Volatile var evidence = "[]"
     @Volatile var workspaceName = "Alpha"
     @Volatile var runnerAlias = "Old alias"
     @Volatile var runnerCapacity = 2
@@ -123,7 +125,7 @@ object ManagementFixture {
         deviceStatus = "PENDING"; deviceConflict = false; deviceLastSeen = null; deviceGate = null
         drop = CompletableDeferred(); opened = 0
         queries.clear(); modelRouting = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; terminals = emptyList(); providerCatalog = "[]"; providersMine = "[]"
-        balances.clear(); balanceGates.clear(); task = "{}"
+        balances.clear(); balanceGates.clear(); task = "{}"; evidence = "[]"
         keyCheckAnswer = """{"ok":true,"keyCheck":"VALID","message":"Cursor accepted this key.","recorded":true,"keyCheckState":"VALID","keyCheckedAt":null}"""
         onKeyCheck = {}
     }
@@ -219,6 +221,7 @@ object ManagementFixture {
             "providers" -> ok(providerCatalog)
             "providers/mine" -> ok(providersMine)
             "tasks/$TASK" -> ok(task)
+            "tasks/$TASK/evidence" -> ok(evidence)
             "users/me/avatar" -> fail(404, "no avatar")
             "workspaces" -> ok("[${workspace()}]")
             "workspaces/$WORKSPACE" -> { if (api.method == HttpMethod.PATCH) workspaceName = body()["name"]!!.jsonPrimitive.content; ok(workspace()) }

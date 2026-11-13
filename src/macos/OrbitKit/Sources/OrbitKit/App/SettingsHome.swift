@@ -6,12 +6,12 @@ import CoreGraphics   // CGSize/CGRect's Swift members on Apple platforms; Found
 /// A page Settings opens from its list, each one a frame of Settings' own stack
 /// (`NavNode.settingsPage`).
 public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
-    case infrastructure, sessions, notifications, sharedLinks, accessTokens, terminals, changePassword, admin
+    case machinesAndModels, sessions, notifications, sharedLinks, accessTokens, terminals, changePassword, admin
 
     /// The page's navigation title — the same words as the row that opens it.
     public var title: String {
         switch self {
-        case .infrastructure: return SettingsHome.title(.infrastructure)
+        case .machinesAndModels: return SettingsHome.title(.machinesAndModels)
         case .sessions:       return SettingsHome.title(.sessions)
         case .notifications:  return SettingsHome.title(.notifications)
         case .sharedLinks:    return SettingsHome.title(.sharedLinks)
@@ -41,7 +41,7 @@ public enum SettingsHome {
     }
 
     public enum Row: String, CaseIterable, Sendable {
-        case infrastructure
+        case machinesAndModels
         case sessions, notifications, appearance
         case email, instance, sharedLinks, accessTokens, terminals, changePassword, admin
     }
@@ -59,7 +59,7 @@ public enum SettingsHome {
     /// The rows a group shows, in order. Admin is role-gated, like its section everywhere else.
     public static func rows(_ group: Group, isAdmin: Bool) -> [Row] {
         switch group {
-        case .machines:    return [.infrastructure]
+        case .machines:    return [.machinesAndModels]
         case .preferences: return [.sessions, .notifications, .appearance]
         case .account:
             let rows: [Row] = [.email, .instance, .sharedLinks, .accessTokens, .terminals, .changePassword]
@@ -69,7 +69,7 @@ public enum SettingsHome {
 
     public static func title(_ row: Row) -> String {
         switch row {
-        case .infrastructure:    return AppSection.runners.title
+        case .machinesAndModels:    return AppSection.runners.title
         case .sessions:          return "Sessions"
         case .notifications:     return "Notifications"
         case .appearance:        return "Appearance"
@@ -83,10 +83,10 @@ public enum SettingsHome {
         }
     }
 
-    /// SF Symbol for the row's leading glyph. Infrastructure and Admin keep the glyph their sections have.
+    /// SF Symbol for the row's leading glyph. Machines & models and Admin keep the glyph their sections have.
     public static func systemImage(_ row: Row) -> String {
         switch row {
-        case .infrastructure:    return AppSection.runners.systemImage
+        case .machinesAndModels:    return AppSection.runners.systemImage
         case .sessions:          return "bubble.left.and.bubble.right"
         case .notifications:     return "bell"
         case .appearance:        return "circle.lefthalf.filled"
@@ -104,7 +104,7 @@ public enum SettingsHome {
     /// row itself, and the two lines that only say something.
     public static func page(_ row: Row) -> SettingsPage? {
         switch row {
-        case .infrastructure: return .infrastructure
+        case .machinesAndModels: return .machinesAndModels
         case .sessions:       return .sessions
         case .notifications:  return .notifications
         case .sharedLinks:    return .sharedLinks
@@ -117,16 +117,16 @@ public enum SettingsHome {
         }
     }
 
-    /// The line under a group: the Infrastructure page's own, under the one row that opens it.
+    /// The line under a group: the Machines & models page's own, under the one row that opens it.
     public static func footer(_ group: Group) -> String? {
-        group == .machines ? Infrastructure.subtitle : nil
+        group == .machines ? MachinesAndModels.subtitle : nil
     }
 
     // MARK: - What a row says
 
-    /// "1 needs you" — how many lines the Infrastructure page's Needs you holds; with none, how many of
+    /// "1 needs you" — how many lines the Machines & models page's Needs you holds; with none, how many of
     /// the account's machines can take work right now.
-    public static func infrastructureValue(needsYou: Int, runners: [Runner]) -> String {
+    public static func machinesAndModelsValue(needsYou: Int, runners: [Runner]) -> String {
         if needsYou > 0 { return needsYou == 1 ? "1 needs you" : "\(needsYou) need you" }
         return runnersValue(runners)
     }

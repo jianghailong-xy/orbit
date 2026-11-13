@@ -27,6 +27,7 @@ import { replayableEventSql } from '../common/system-noise';
 import { AllowQueryToken } from '../auth/allow-query-token.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden, PatScope, workspaceConfinement } from '../auth/pat-scope.decorator';
+import { TerminalRoute } from '../auth/terminal-credentials';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -287,6 +288,7 @@ export class SessionsController {
       requires: ['workspaceId'],
     },
   })
+  @TerminalRoute('CREATE_SESSION')
   @Post()
   create(
     @CurrentUser() user: AuthUser,
@@ -494,6 +496,7 @@ export class SessionsController {
   }
 
   @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
+  @TerminalRoute('SESSION')
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.get(user.userId, id);
@@ -594,6 +597,7 @@ export class SessionsController {
   }
 
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @TerminalRoute('SESSION')
   @Post(':id/turns')
   turn(
     @CurrentUser() user: AuthUser,
@@ -707,6 +711,7 @@ export class SessionsController {
    *  the same transaction — see SessionsService.interrupt for why the two cannot be two
    *  requests. A bodyless POST stays exactly what it was. */
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @TerminalRoute('SESSION')
   @Post(':id/interrupt')
   interrupt(
     @CurrentUser() user: AuthUser,
@@ -940,6 +945,7 @@ export class SessionsController {
 
   /** Allow or deny a pending tool-permission approval. */
   @PatForbidden('OWNER_INTERACTIVE')
+  @TerminalRoute('SESSION')
   @Post(':id/approvals/:approvalId/decision')
   decideApproval(
     @CurrentUser() user: AuthUser,
@@ -977,6 +983,7 @@ export class SessionsController {
    * events just newer than a seq, paging from there back down to the tail.
    */
   @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
+  @TerminalRoute('SESSION')
   @Get(':id/events/page')
   eventPage(
     @CurrentUser() user: AuthUser,
@@ -1054,6 +1061,7 @@ export class SessionsController {
   @AllowQueryToken()
   @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
   @UseGuards(SessionOwnerGuard)
+  @TerminalRoute('SESSION')
   @Sse(':id/events')
   events(
     @CurrentUser() user: AuthUser,

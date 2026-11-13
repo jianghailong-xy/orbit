@@ -492,7 +492,7 @@ final class AppModel {
 
     /// Per-section shared stores (list + detail observe the same instance). Rebuilt per instance.
     private(set) var tasks: TasksModel?
-    /// The account's managed runner: its state in a managed workspace's console, and on Infrastructure
+    /// The account's managed runner: its state in a managed workspace's console, and on Machines & models
     /// for an account with no runner yet. Inert without the server's capability.
     private(set) var managedRunner: ManagedRunnerModel?
     private(set) var agents: AgentsModel?
@@ -505,7 +505,7 @@ final class AppModel {
     private(set) var accessTokens: AccessTokensModel?
     /// Settings → Terminals: the terminals approved on this account, with Revoke.
     private(set) var terminals: TerminalsModel?
-    /// The shared pools the account is in: Infrastructure's Account pools, and each pool's page.
+    /// The shared pools the account is in: Machines & models' Account pools, and each pool's page.
     private(set) var sharedPools: SharedPoolsModel?
     /// The account's watches: Following, the console's Watching card, and every session's row and header.
     private(set) var watches: WatchesModel?
@@ -589,7 +589,7 @@ final class AppModel {
         terminals = TerminalsModel(baseURL: url, tokenStore: tokenStore)
         sharedPools = SharedPoolsModel(baseURL: url, tokenStore: tokenStore)
         let managedRunnerModel = ManagedRunnerModel(baseURL: url, tokenStore: tokenStore)
-        // A managed runner set up from Infrastructure brings its runner and default workspace with it.
+        // A managed runner set up from Machines & models brings its runner and default workspace with it.
         managedRunnerModel.onEnsured = { [weak self] in self?.scheduleLibraryRefresh(.agents) }
         // Its default workspace's first session starts where the workspace list says: follow it as the runner comes up.
         managedRunnerModel.onFirstSessionProviderChanged = { [weak self] in self?.scheduleLibraryRefresh(.agents) }
@@ -1409,7 +1409,7 @@ final class AppModel {
             scheduleLibraryRefresh(.agents)
             scheduleControlRefresh()
             // A shared pool's people are told of every change to it — a key going in, a rule — so a
-            // pool page that is open shows it. Read only once Infrastructure has asked for the list —
+            // pool page that is open shows it. Read only once Machines & models has asked for the list —
             // and the account's own keys likewise, which only that page reads.
             if sharedPools?.loadState.hasLoaded == true {
                 Task { await sharedPools?.load() }
@@ -2331,7 +2331,7 @@ final class AppModel {
     /// compact shell uses this to yield the left screen edge to its drawer-open gesture only where
     /// no pushed page needs the edge for the system back-swipe. Every section that pushes reads its
     /// own stack — Tasks (a detail, then the list directory), Agents (a draft, then a console),
-    /// Infrastructure, Following, Admin, and Settings (a page, then what that page pushes).
+    /// Machines & models, Following, Admin, and Settings (a page, then what that page pushes).
     var sectionAtRoot: Bool {
         switch selectedSection {
         // Nothing pushed on the Tasks stack: not a task's detail, not the list directory — one
@@ -2344,7 +2344,7 @@ final class AppModel {
         // The sections whose pages are frames of their own stack: one read covers both the
         // three-column selection and the compact push. Skills pushes nothing (always at root); Admin
         // pushes a user's record now, which is what replaced the unconditional `true` this used to
-        // answer with; Settings pushes its pages and what they push in turn (Infrastructure, then a
+        // answer with; Settings pushes its pages and what they push in turn (Machines & models, then a
         // machine's record).
         case .skills, .runners, .following, .admin, .settings: return nav.sectionAtRoot
         // A project's page over the index: the same one read.
@@ -3601,9 +3601,9 @@ final class AppModel {
         }
     }
 
-    /// One engine's page on one machine, from outside the Infrastructure page — a session picker's way to
+    /// One engine's page on one machine, from outside the Machines & models page — a session picker's way to
     /// the fix for an engine that machine can't run, and a repair card's: the machine's record in the
-    /// Infrastructure section, and its engine's page over it, where signing in and installing live.
+    /// Machines & models section, and its engine's page over it, where signing in and installing live.
     func openRunnerEngine(_ runnerID: String, engine: String) {
         route(to: .runner(runnerID))
         push(.runnerEngine(runnerID: runnerID, engine: engine))
@@ -3760,7 +3760,7 @@ final class AppModel {
 
     /// The one-shot launch landing: the agent you last used (persisted via `selectedAgentID`), else
     /// the first agent, else the first online machine's new session page when the server says there
-    /// are none, else the Infrastructure section — the native parallel of web's runners/register
+    /// are none, else the Machines & models section — the native parallel of web's runners/register
     /// onboarding. A deep link / notification that already chose
     /// an agent, a session or another section is respected. Decided only off a successful agent
     /// fetch: an offline launch leaves it unlatched, and the control plane's reconnect reload decides

@@ -76,16 +76,15 @@ function promptFor(task: {
 // when the executor stopped writing its own DONE: steps 3 and 4 are the instruction half of that
 // boundary, and they have to arrive in the same release as the refusal in `update()`
 // (`task-self-done-boundary.spec.ts`) or every run in flight hits a wall it was never told about.
-const PROMPT_WITHOUT_INSTRUCTIONS =
-  'Start the task “Ship it”.\n\n' +
-  'Task description:\n下载 000_00008.parquet\n\n' +
-  'Follow these steps:\n' +
-  '1. First use task_get to read the task in full with its comment history.\n' +
-  '2. Do the task.\n' +
-  '3. When you are done, submit the completion evidence envelope with task_evidence_submit. All four ' +
-  'fields are required: claim (what you claim to have completed), criterion ({key, text}, copied from the ' +
-  'acceptance criteria project_get returns), checks (each {kind, ref}, kind one of ' +
-  "TOOL_CALL / COMMIT / ARTIFACT, ref pointing at a row already recorded under this task's sessions; at " +
+// Step 3 of the evidence protocol, verbatim, around what it says of the task's standard (2026-11-12,
+// docs/evidence-always-has-an-addressee-design.md §2). It used to tell every run to copy a criterion
+// from project_get, which led runs of project tasks with no criterionKey to quote another one; since
+// the server binds the standard to each revision (P2), the envelope it asks for has no `criterion`.
+const evidenceStep = (standard: string): string =>
+  '3. When you are done, submit the completion evidence envelope with task_evidence_submit. ' + standard +
+  'Orbit records that standard with the evidence itself, so the envelope does not name one. ' +
+  'All three fields are required: claim (what you claim to have completed), ' +
+  "checks (each {kind, ref}, kind one of TOOL_CALL / COMMIT / ARTIFACT, ref pointing at a row already recorded under this task's sessions; at " +
   'least one must resolve, or the whole submission is refused), and gaps (what this evidence could not ' +
   'establish; an empty array if nothing). Run the checks you will cite with bg_run and cite the job id it ' +
   'returns (bgj_...) as a TOOL_CALL ref: a commit sha resolves only once Orbit has recorded it for this task, ' +
@@ -94,11 +93,31 @@ const PROMPT_WITHOUT_INSTRUCTIONS =
   '— Orbit has stored it already; work answered by an exit code alone belongs to EXECUTABLE acceptance, ' +
   'not here. Do not use task_comment in place of submitting evidence, and do not write status — DONE is ' +
   'the authorization that unlocks downstream tasks, and only evaluating the completionCriterion the task ' +
-  'declares can produce it; the server refuses a direct DONE from anyone.\n' +
+  'declares can produce it; the server refuses a direct DONE from anyone.\n';
+
+// The fixture task states no standard (no criterionKey, no acceptanceCriteria).
+const NO_STANDARD_STEP = evidenceStep(
+  'This task states no standard: it declares no project criterion (criterionKey) and its acceptanceCriteria ' +
+  'are empty, so a submission is refused. Before you submit, write what would settle the work into its ' +
+  'acceptanceCriteria with task_update, or declare a criterionKey. ',
+);
+
+const STEP_FOUR =
   '4. If the work failed or could not be finished, first explain why with task_comment, then use task_update ' +
   'to set the status to FAILED. Do not set it to DONE, and do not set it to IN_PROGRESS — downstream treats ' +
   'IN_PROGRESS as an ordinary wait and keeps waiting forever, while only FAILED marks downstream as needing ' +
   'a person to step in.';
+
+const promptWith = (step3: string): string =>
+  'Start the task “Ship it”.\n\n' +
+  'Task description:\n下载 000_00008.parquet\n\n' +
+  'Follow these steps:\n' +
+  '1. First use task_get to read the task in full with its comment history.\n' +
+  '2. Do the task.\n' +
+  step3 +
+  STEP_FOUR;
+
+const PROMPT_WITHOUT_INSTRUCTIONS = promptWith(NO_STANDARD_STEP);
 
 test('a list with no instructions assembles the prompt exactly as it did before the layer existed', async () => {
   const prompt = await promptFor({
@@ -126,23 +145,8 @@ test('instructions are spliced between the task description and the reporting pr
       'Follow these steps:\n' +
       '1. First use task_get to read the task in full with its comment history.\n' +
       '2. Do the task.\n' +
-      '3. When you are done, submit the completion evidence envelope with task_evidence_submit. All four ' +
-      'fields are required: claim (what you claim to have completed), criterion ({key, text}, copied from the ' +
-      'acceptance criteria project_get returns), checks (each {kind, ref}, kind one of ' +
-      "TOOL_CALL / COMMIT / ARTIFACT, ref pointing at a row already recorded under this task's sessions; at " +
-      'least one must resolve, or the whole submission is refused), and gaps (what this evidence could not ' +
-      'establish; an empty array if nothing). Run the checks you will cite with bg_run and cite the job id it ' +
-      'returns (bgj_...) as a TOOL_CALL ref: a commit sha resolves only once Orbit has recorded it for this task, ' +
-      'and a repository path does not resolve at all. A TOOL_CALL may also carry command/succeeded, which the server ' +
-      "checks byte for byte against the cited tool_call. Do not copy a command's raw output into the evidence " +
-      '— Orbit has stored it already; work answered by an exit code alone belongs to EXECUTABLE acceptance, ' +
-      'not here. Do not use task_comment in place of submitting evidence, and do not write status — DONE is ' +
-      'the authorization that unlocks downstream tasks, and only evaluating the completionCriterion the task ' +
-      'declares can produce it; the server refuses a direct DONE from anyone.\n' +
-      '4. If the work failed or could not be finished, first explain why with task_comment, then use task_update ' +
-      'to set the status to FAILED. Do not set it to DONE, and do not set it to IN_PROGRESS — downstream treats ' +
-      'IN_PROGRESS as an ordinary wait and keeps waiting forever, while only FAILED marks downstream as needing ' +
-      'a person to step in.',
+      NO_STANDARD_STEP +
+      STEP_FOUR,
   );
 });
 
@@ -258,9 +262,11 @@ test('step 3 asks for the evidence envelope and forbids writing status', async (
   const step3 = text.split('\n').find((line) => line.startsWith('3. '))!;
   assert.match(step3, /task_evidence_submit/);
   assert.match(step3, /Do not use task_comment in place of submitting evidence/);
-  for (const field of ['claim', 'criterion', 'checks', 'gaps']) {
+  for (const field of ['claim', 'checks', 'gaps']) {
     assert.match(step3, new RegExp(field), step3);
   }
+  // The server binds the standard to the revision (P2), so the envelope asks for no `criterion`.
+  assert.doesNotMatch(step3, /criterion \((?:exactly|with|the key)|\{"key"/, step3);
   assert.match(step3, /TOOL_CALL \/ COMMIT \/ ARTIFACT/);
   assert.match(step3, /least one must resolve/);
   assert.match(step3, /Do not copy a command's raw output into the evidence/);
@@ -342,13 +348,15 @@ test('an OWNER_CONFIRMED task declares its work finished and reports in its sess
 test('an EVIDENCE_JUDGMENT task, and a verifier, still get the evidence envelope word for word', async () => {
   // The branch above is keyed on OWNER_CONFIRMED alone: declaring any other criterion dispatches
   // the template exactly as it was before that branch existed.
-  for (const task of [
-    { completionCriterion: 'EVIDENCE_JUDGMENT' },
-    { completionCriterion: 'VERIFICATION', verifiesTaskId: 'subject-task' },
-  ]) {
-    const prompt = await promptFor({ description: '下载 000_00008.parquet', list: null, ...task });
-    assert.equal(await prompt(), PROMPT_WITHOUT_INSTRUCTIONS);
-  }
+  const ordinary = await promptFor({ description: '下载 000_00008.parquet', list: null, completionCriterion: 'EVIDENCE_JUDGMENT' });
+  assert.equal(await ordinary(), PROMPT_WITHOUT_INSTRUCTIONS);
+  // A verifier with no criteria of its own is settled by its verdict, and is not told it has no standard.
+  const verifier = await promptFor({
+    description: '下载 000_00008.parquet', list: null, completionCriterion: 'VERIFICATION', verifiesTaskId: 'subject-task',
+  });
+  assert.equal(await verifier(), promptWith(evidenceStep(
+    'This task checks another task and is settled by its verdict, not by a standard of its own. ',
+  )));
 });
 
 test('a task declaring EXECUTABLE keeps its step 3 word for word', async () => {

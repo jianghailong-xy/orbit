@@ -36,13 +36,6 @@ const glyphs = {
       <path d="M18.5 17.5v4" />
     </>
   ),
-  // desktopcomputer
-  runners: (
-    <>
-      <rect x="1.5" y="3.5" width="21" height="14" rx="1.8" />
-      <path d="M1.5 14.5h21M12 17.5v4M7.5 21.5h9" />
-    </>
-  ),
 };
 
 export function SidebarNavIcon({ name }: { name: keyof typeof glyphs }) {

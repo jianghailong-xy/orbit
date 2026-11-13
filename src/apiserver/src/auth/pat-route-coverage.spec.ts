@@ -2,21 +2,12 @@ import assert from 'node:assert/strict';
 import { readdirSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { Body, Param, Query, RequestMethod, type DynamicModule } from '@nestjs/common';
-import {
-  CONTROLLER_WATERMARK,
-  GUARDS_METADATA,
-  METHOD_METADATA,
-  MODULE_METADATA,
-  PATH_METADATA,
-  ROUTE_ARGS_METADATA,
-} from '@nestjs/common/constants';
+import { Body, Param, Query, RequestMethod } from '@nestjs/common';
+import { CONTROLLER_WATERMARK, METHOD_METADATA, PATH_METADATA, ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
 import { PUBLIC_ID_FIELDS } from '@orbit/shared';
 import { getMetadataStorage } from 'class-validator';
-import { AppModule } from '../app.module';
 import { PublicIdPipe } from '../common/public-id';
-import { JwtAuthGuard } from './jwt-auth.guard';
 import { OWNER_INTERACTIVE_ROUTES } from './pat-owner-channel-routes';
 import {
   PAT_FORBIDDEN,
@@ -29,7 +20,7 @@ import {
   patDeclaration,
 } from './pat-scope.decorator';
 import { PAT_SCOPES } from './pat.service';
-import { TERMINAL_SELF } from './terminal-credentials';
+import { type Controller, guardsOf, handlersOf, isJwtAuthGuard, join, mountedControllers } from './route-census';
 
 // The personal-access-token census (docs/personal-access-token-design.md §6.2). A token is the user
 // on every route behind JwtAuthGuard, so each of those routes has to say what a token may do there:
@@ -43,8 +34,6 @@ import { TERMINAL_SELF } from './terminal-credentials';
 // and every declaration through `patDeclaration`, the function JwtAuthGuard itself decides with, so
 // what this file reports is what a token meets. Paths are the controllers' own, under /api.
 
-type Controller = new (...args: never[]) => unknown;
-
 interface Route {
   /** `POST /tasks/:taskId/owner-confirmation` */
   route: string;
@@ -56,44 +45,6 @@ interface Route {
 }
 
 const reflector = new Reflector();
-
-/** Every controller the production app mounts. */
-async function mountedControllers(): Promise<Set<Controller>> {
-  const seen = new Set<unknown>();
-  const controllers = new Set<Controller>();
-  const visit = async (entry: unknown): Promise<void> => {
-    // `ConfigModule.forRoot()` is a promise of its module; `forwardRef(() => X)` names one lazily.
-    let node = await entry;
-    if (node && typeof node === 'object' && 'forwardRef' in node) node = (node as { forwardRef: () => unknown }).forwardRef();
-    if (!node || seen.has(node)) return;
-    seen.add(node);
-    const dynamic = typeof node === 'object' ? (node as DynamicModule) : undefined;
-    const declared = (key: string) => (Reflect.getMetadata(key, dynamic ? dynamic.module : (node as object)) ?? []) as unknown[];
-    for (const c of [...declared(MODULE_METADATA.CONTROLLERS), ...(dynamic?.controllers ?? [])]) controllers.add(c as Controller);
-    for (const i of [...declared(MODULE_METADATA.IMPORTS), ...(dynamic?.imports ?? [])]) await visit(i);
-  };
-  await visit(AppModule);
-  return controllers;
-}
-
-const isJwtAuthGuard = (guard: unknown) => guard === JwtAuthGuard || guard instanceof JwtAuthGuard;
-const guardsOf = (target: object) => (Reflect.getMetadata(GUARDS_METADATA, target) ?? []) as unknown[];
-
-/** A controller's handlers, inherited ones included, as Nest's route explorer finds them. */
-function handlersOf(controller: Controller): Array<[string, (...args: unknown[]) => unknown]> {
-  const found = new Map<string, (...args: unknown[]) => unknown>();
-  for (let proto = controller.prototype as object; proto && proto !== Object.prototype; proto = Object.getPrototypeOf(proto)) {
-    for (const name of Object.getOwnPropertyNames(proto)) {
-      const value = Object.getOwnPropertyDescriptor(proto, name)?.value;
-      if (name === 'constructor' || found.has(name) || typeof value !== 'function') continue;
-      if (Reflect.getMetadata(METHOD_METADATA, value) === undefined) continue;
-      found.set(name, value);
-    }
-  }
-  return [...found];
-}
-
-const join = (...parts: string[]) => '/' + parts.map((p) => p.replace(/^\/+|\/+$/g, '')).filter(Boolean).join('/');
 
 /** The routes behind JwtAuthGuard: one row per method and path a handler answers. */
 function jwtRoutesOf(controller: Controller): Route[] {
@@ -327,25 +278,6 @@ test('§6.5: @PatSelf opens exactly two routes to every token — GET and DELETE
       .map(([name]) => `${c.name}.${name}`)
       .filter((at) => !routes.some((r) => r.at === at)));
   assert.deepEqual(unguarded, []);
-});
-
-// ── The TERMINAL credential: deny by default (docs/terminal-session-design.md) ─────────────────
-// JwtAuthGuard admits a TERMINAL credential only to a handler marked @TerminalSelf and refuses it 403 everywhere else.
-// Until the terminal's allowlist opens more, that is the terminal reading and revoking itself — exact both ways, so a
-// route opened to a terminal is a decision made here.
-const TERMINAL_SELF_ROUTES = ['DELETE /terminals/self', 'GET /terminals/self'];
-
-test('a TERMINAL credential reaches exactly GET and DELETE /terminals/self, and no route on a controller-wide mark', async () => {
-  const { controllers, routes } = await census;
-  const marked = routes
-    .filter((r) => Reflect.getMetadata(TERMINAL_SELF, (r.controller.prototype as Record<string, object>)[r.method]) === true)
-    .map((r) => r.route)
-    .sort();
-  assert.deepEqual(marked, TERMINAL_SELF_ROUTES, '@TerminalSelf on a handler');
-  assert.deepEqual([...controllers].filter((c) => Reflect.getMetadata(TERMINAL_SELF, c) !== undefined).map((c) => c.name), []);
-  // Each of them is still closed to a personal access token: a terminal acting on itself is not a token's business.
-  const open = routes.filter((r) => TERMINAL_SELF_ROUTES.includes(r.route) && r.declared.kind !== 'FORBIDDEN').map((r) => r.route);
-  assert.deepEqual(open, []);
 });
 
 test("§5: the owner channel's doors are refused to every token, and are exactly the listed ones", async () => {

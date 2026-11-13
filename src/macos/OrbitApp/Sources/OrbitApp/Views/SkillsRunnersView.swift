@@ -67,8 +67,8 @@ struct SkillRow: View {
 
 // MARK: - Runners
 
-/// The Infrastructure page (docs/mocks/infrastructure-page/03-ios.png): the Infrastructure section's list
-/// on a Mac and an iPad, the section's own page on a phone, and Settings › Infrastructure there — what needs
+/// The Machines & models page (docs/mocks/infrastructure-page/03-ios.png): the Machines & models section's list
+/// on a Mac and an iPad, the section's own page on a phone, and Settings › Machines & models there — what needs
 /// a person, the machines (each opening its record; reordered and removed here), then the account pools
 /// and the API keys. Every way out stays in the app: an engine is signed in on its page, a machine on its
 /// record, a pool on its page — iOS's own; the Mac has none.
@@ -83,7 +83,7 @@ struct RunnersListView: View {
     var body: some View {
         @Bindable var model = model
         if let runners = model.runners {
-            let lists = InfrastructureLists(model)
+            let lists = MachinesAndModelsLists(model)
             // An account with no runner at all, while the server offers managed runners: its managed
             // runner — Set up, or why there is none — above the machines, as the web's default landing
             // shows it (`ManagedRunnerLogic.onboarding`). Add Runner stays where it is.
@@ -103,7 +103,7 @@ struct RunnersListView: View {
                 if lists.settled {
                     let attention = lists.attention
                     if !attention.isEmpty {
-                        InfrastructureNeedsYouSection(items: attention, opensPools: opensPools,
+                        MachinesAndModelsNeedsYouSection(items: attention, opensPools: opensPools,
                                                       open: openAttention)
                     }
                 }
@@ -114,16 +114,16 @@ struct RunnersListView: View {
                     .onMove { moveRunners(runners, from: $0, to: $1) }
                     .onDelete { pendingRemoval = runnerToRemove(runners, at: $0) }
                 } header: {
-                    RunnerSectionHeader(Infrastructure.machines,
-                                        trailing: Infrastructure.machinesCount(runners.runners))
+                    RunnerSectionHeader(MachinesAndModels.machines,
+                                        trailing: MachinesAndModels.machinesCount(runners.runners))
                 } footer: {
-                    Text(Infrastructure.machinesDetail)
+                    Text(MachinesAndModels.machinesDetail)
                 }
                 RunnerAddSection { addingRunner = true }
-                InfrastructurePoolsSection(memberPools: lists.memberPools, ownPools: lists.ownPools,
+                MachinesAndModelsPoolsSection(memberPools: lists.memberPools, ownPools: lists.ownPools,
                                            open: opensPools ? push : nil)
-                InfrastructureKeysSection(keys: lists.keys, balances: model.agents?.deepSeekBalances ?? [:],
-                                          cursorModel: Infrastructure.cursorModel(lists.runners.filter { $0.online == true }),
+                MachinesAndModelsKeysSection(keys: lists.keys, balances: model.agents?.deepSeekBalances ?? [:],
+                                          cursorModel: MachinesAndModels.cursorModel(lists.runners.filter { $0.online == true }),
                                           open: opensPools ? push : nil)
             }
             .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
@@ -148,8 +148,8 @@ struct RunnersListView: View {
             .task { await self.model.agents?.loadOwnKeys() }
             .task { await self.model.agents?.loadDeepSeekBalances() }
             .task { await self.model.sharedPools?.load() }
-            .task(id: InfrastructureLists.codexPoolIDs(model)) {
-                for id in InfrastructureLists.codexPoolIDs(self.model) { await self.model.sharedPools?.loadAccess(id) }
+            .task(id: MachinesAndModelsLists.codexPoolIDs(model)) {
+                for id in MachinesAndModelsLists.codexPoolIDs(self.model) { await self.model.sharedPools?.loadAccess(id) }
             }
         } else {
             ProgressView()
@@ -183,7 +183,7 @@ struct RunnersListView: View {
     private func push(_ page: NavNode) { model.push(page) }
 
     /// A line of Needs you, opened: the machine's record, the pool's page.
-    private func openAttention(_ item: Infrastructure.Attention) {
+    private func openAttention(_ item: MachinesAndModels.Attention) {
         switch item.kind {
         case .offline(let runnerID), .noCliSignedIn(let runnerID), .updating(let runnerID):
             if rowNavigation == .selection {
@@ -252,7 +252,7 @@ private struct RunnersLoadOverlay: ViewModifier {
 }
 
 /// The list's last card: Add Runner, and what it will ask of the new machine.
-/// The managed runner above Infrastructure's list on the Mac, for an account with no runner
+/// The managed runner above Machines & models' list on the Mac, for an account with no runner
 /// (`ManagedRunnerLogic.onboarding`). A Mac list is a table that keeps its rows where they were when
 /// a row or a top inset that arrives after it has drawn changes its height, so there the banner takes
 /// room of its own above the list; on iOS it is the list's first section.
@@ -343,7 +343,7 @@ private struct RunnerListEditing: ViewModifier {
 
 /// One machine in the list (03-ios.png): its status dot and name, the bar of its slots in use at the end
 /// of the line — or Offline; under it how many of them run and how many of its engines are signed out,
-/// in amber, or where its engines stand (`Infrastructure.machineLine`); and, only when something needs a
+/// in amber, or where its engines stand (`MachinesAndModels.machineLine`); and, only when something needs a
 /// person, the list's third line in amber or red — `RunnerAttention`'s, the line the web card and the
 /// machine's own page say.
 struct RunnerRow: View {
@@ -382,7 +382,7 @@ struct RunnerRow: View {
                                 .foregroundStyle(Color.secondary)
                         }
                     }
-                    Text(Infrastructure.machineLine(runner, now: now))
+                    Text(MachinesAndModels.machineLine(runner, now: now))
                         .font(.orbitListSubtitle)
                         .foregroundStyle(Color.secondary)
                         .lineLimit(1)

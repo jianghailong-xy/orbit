@@ -149,8 +149,8 @@ interface TopNavItem {
   shortcut?: string;
 }
 
-// Fixed product destinations, the same for every account: Machines & models and Admin are rows of the
-// account menu at the panel's foot, not among these. Individual Workspace rows are primary destinations
+// Fixed product destinations, the same for every account: Admin is a row of the account menu at the
+// panel's foot, not among these. Individual Workspace rows are primary destinations
 // in their own right, so there is no proxy Workspaces parent here.
 const TOP: TopNavItem[] = [
   {
@@ -176,7 +176,7 @@ const TOP: TopNavItem[] = [
   // in each session's header and Watching strip, and those are what link to /following.
   // No Machines & models either (docs/mocks/machines-and-models, 02): where agents run and whose quota
   // they spend is set up once and fixed when something says so — every card that needs it fixed links
-  // there — so it is reached as the phone reaches it, from Settings, and from the account menu.
+  // there — so it is reached as the phone reaches it, from Settings.
 ];
 
 // The left sidebar is user-resizable; the chosen width persists across refreshes.
@@ -1212,18 +1212,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                   if (mode !== it.key) setMode(it.key);
                 },
               })),
-            },
-            // Where agents run and whose quota they spend, two clicks away as the phone has it (Settings, then
-            // its row) — the page left the sidebar's fixed rows for here and Settings
-            // (docs/mocks/machines-and-models, 02).
-            {
-              key: 'machines',
-              icon: <SidebarNavIcon name="runners" />,
-              label: 'Machines & models',
-              onSelect: () => {
-                const first = runners.data?.[0];
-                navigate(first ? `/settings/machines/${encodeId(first.id)}` : '/settings/general');
-              },
             },
             {
               key: 'settings',

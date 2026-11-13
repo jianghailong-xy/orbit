@@ -9,7 +9,7 @@ import { firstOpenableWorkspace } from './lib/workspaceOrder';
 import { AppShell, DocView, FlushView } from './components/AppShell';
 import { SettingsLayout } from './components/settings';
 import { SettingsWorkspacePage } from './components/settings/WorkspaceSettingsPage';
-import { SettingsPoolsPage, SettingsProvidersHome, SettingsVendorPage } from './components/settings/SettingsProviderPages';
+import { SettingsKeysPage, SettingsPoolsPage, SettingsProvidersHome } from './components/settings/SettingsProviderPages';
 import { MachineSettingsPage } from './components/settings/MachineSettingsPage';
 import { useRememberOutsideSettings } from './lib/settingsReturn';
 import { ManagedRunnerLanding } from './components/ManagedRunnerNotice';
@@ -262,7 +262,7 @@ export function App() {
               redirects to it too; the task list lives at "/tasks". Each view wraps itself in its
               layout contract (DocView = page gutter + scroll, FlushView = full-bleed). */}
           {/* Settings takes over the window (owner's choice A1, docs/mocks/settings-redesign): its own nav
-              of four groups in place of the app's sidebar, "Back to Orbit" and Esc to leave. Machines and
+              of five groups in place of the app's sidebar, "Back to Orbit" and Esc to leave. Machines and
               Workspaces open the pages that manage them today until each has its own. */}
           <Route path="settings" element={<SettingsLayout />}>
             <Route index element={<Navigate to="/settings/general" replace />} />
@@ -285,15 +285,16 @@ export function App() {
             {/* Connecting a Feishu group, opened from the bot's card with its one-time ticket (docs/feishu-bot-design.md §8.1). */}
             <Route path="integrations/feishu/connect-group" element={<FeishuConnectGroupPage />} />
             <Route path="machines/:id" element={<SettingsMachineRoute />} />
-            {/* Providers (owner's choice C1, board-4): a page per connected vendor, Account pools, and a key's
-                connect and edit pages, all in Settings' right-hand column. */}
+            {/* Providers (owner's choice C1, board-4; choice A, docs/mocks/settings-providers-compact): every
+                API key on one page, a vendor's alone at its own address, Account pools, and a key's connect
+                and edit pages, all in Settings' right-hand column. */}
             <Route path="providers" element={<SettingsProvidersHome />} />
             <Route path="providers/new" element={<ProviderPickPage />} />
             <Route path="providers/new/:slug" element={<ProviderConnectPage />} />
             <Route path="providers/keys/:id" element={<ProviderConnectPage />} />
             <Route path="providers/pools" element={<SettingsPoolsPage />} />
             <Route path="providers/pools/:id" element={<ProviderPoolPage />} />
-            <Route path="providers/:vendor" element={<SettingsVendorPage />} />
+            <Route path="providers/:vendor" element={<SettingsKeysPage />} />
             <Route path="workspaces/:id" element={<SettingsWorkspacePage />} />
           </Route>
           <Route element={<AppShell />}>

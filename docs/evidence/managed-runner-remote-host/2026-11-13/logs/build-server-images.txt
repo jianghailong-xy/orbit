@@ -1,0 +1,7 @@
+==> 2026-11-13T08:46:43+08:00 building orbit-apiserver:local at 18a0285c64802fb9cc93d9913abb50d1f600f7e4
+sha256:be2729cf1ef9cfbf08ea273fa485007df001d98bda2c02799c0d94429cd8a7db
+==> 2026-11-13T08:48:06+08:00 building orbit-web at 18a0285c64802fb9cc93d9913abb50d1f600f7e4
+sha256:510e039dc7baf546fc726d1df80d6ced59f6f273927820090ebcaf849d3871b1
+==> 2026-11-13T08:48:38+08:00 saving
+-rw------- 1 root root 564011008 Nov 13 08:48 /mnt/data/tmp/34w2jF/server-images.tar
+==> 2026-11-13T08:48:46+08:00 done

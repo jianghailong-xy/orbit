@@ -6,8 +6,8 @@ import XCTest
 @testable import OrbitKit
 
 /// Settings' list on iOS — what it holds and what each row says (`SettingsHome`), and the logic of
-/// the pages it opens that is not a view: Shared links (`SharedLinksList`) and Infrastructure's pools
-/// (`ProvidersOverview`; the rest of that page is `InfrastructureTests`').
+/// the pages it opens that is not a view: Shared links (`SharedLinksList`) and Machines & models' pools
+/// (`ProvidersOverview`; the rest of that page is `MachinesAndModelsTests`').
 final class SettingsHomeTests: XCTestCase {
 
     // MARK: - The list
@@ -18,8 +18,8 @@ final class SettingsHomeTests: XCTestCase {
     func testTheGroupsReadInTheOrderTheyWerePicked() {
         // Machines & models has no header: its one row says that name (docs/mocks/machines-and-models, ⑥-2).
         XCTAssertEqual(SettingsHome.Group.allCases.map(SettingsHome.header), [nil, "Preferences", "Account"])
-        // One row: the web's Runners and Providers pages are one page, Infrastructure.
-        XCTAssertEqual(SettingsHome.rows(.machines, isAdmin: false), [.infrastructure])
+        // One row: the web's Runners and Providers pages are one page, Machines & models.
+        XCTAssertEqual(SettingsHome.rows(.machines, isAdmin: false), [.machinesAndModels])
         // The five session settings are one row's page now (`SessionSettings`), first in Preferences.
         XCTAssertEqual(SettingsHome.rows(.preferences, isAdmin: false), [.sessions, .notifications, .appearance])
         XCTAssertEqual(SettingsHome.rows(.account, isAdmin: false),
@@ -41,20 +41,20 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(Set(listed), Set(SettingsHome.Row.allCases), "a row is in no group")
     }
 
-    /// Each row has a name and a glyph of its own; Infrastructure and Admin keep their sections'.
+    /// Each row has a name and a glyph of its own; Machines & models and Admin keep their sections'.
     func testEveryRowHasItsOwnNameAndGlyph() {
         let rows = SettingsHome.Row.allCases
         XCTAssertEqual(Set(rows.map(SettingsHome.title)).count, rows.count, "two rows share a name")
         XCTAssertEqual(Set(rows.map(SettingsHome.systemImage)).count, rows.count, "two rows share a glyph")
-        XCTAssertEqual(SettingsHome.title(.infrastructure), "Machines & models")
-        XCTAssertEqual(SettingsHome.title(.infrastructure), AppSection.runners.title)
-        XCTAssertEqual(SettingsHome.systemImage(.infrastructure), AppSection.runners.systemImage)
+        XCTAssertEqual(SettingsHome.title(.machinesAndModels), "Machines & models")
+        XCTAssertEqual(SettingsHome.title(.machinesAndModels), AppSection.runners.title)
+        XCTAssertEqual(SettingsHome.systemImage(.machinesAndModels), AppSection.runners.systemImage)
         XCTAssertEqual(SettingsHome.title(.admin), AppSection.admin.title)
         XCTAssertEqual(SettingsHome.systemImage(.admin), AppSection.admin.systemImage)
     }
 
     /// The rows that open a page open their own, titled as the row is; Appearance's menu and the two
-    /// lines that only say something open nothing. Infrastructure is one of them: the runners list's
+    /// lines that only say something open nothing. Machines & models is one of them: the runners list's
     /// frame of its own went with the Providers page.
     func testTheRowsThatOpenAPageOpenTheirOwn() {
         let opening = SettingsHome.Row.allCases.compactMap(SettingsHome.page)
@@ -70,15 +70,15 @@ final class SettingsHomeTests: XCTestCase {
         }
         XCTAssertEqual(SettingsHome.page(.sessions), .sessions)
         XCTAssertEqual(SettingsPage.sessions.title, "Sessions")
-        XCTAssertEqual(SettingsHome.page(.infrastructure), .infrastructure)
-        XCTAssertEqual(SettingsPage.infrastructure.title, "Machines & models")
+        XCTAssertEqual(SettingsHome.page(.machinesAndModels), .machinesAndModels)
+        XCTAssertEqual(SettingsPage.machinesAndModels.title, "Machines & models")
     }
 
     /// Machines & models says what its one row is for, in the web page's own line; no other group has
     /// a line under it.
     func testOnlyMachinesAndModelsHasALineUnderIt() {
         XCTAssertEqual(SettingsHome.footer(.machines), "Where your agents run, and whose model quota they spend.")
-        XCTAssertEqual(SettingsHome.footer(.machines), Infrastructure.subtitle)
+        XCTAssertEqual(SettingsHome.footer(.machines), MachinesAndModels.subtitle)
         for group in [SettingsHome.Group.preferences, .account] {
             XCTAssertNil(SettingsHome.footer(group), "\(group)")
         }
@@ -116,18 +116,18 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(SettingsHome.runnersValue([]), "None")
     }
 
-    /// Infrastructure's row says how many lines its page's Needs you holds (03-ios.png: "1 needs you");
+    /// Machines & models' row says how many lines its page's Needs you holds (03-ios.png: "1 needs you");
     /// with none, how many machines can take work.
-    func testInfrastructureSaysHowManyThingsNeedYou() throws {
+    func testMachinesAndModelsSaysHowManyThingsNeedYou() throws {
         let fleet = try [runner("a", online: true), runner("b", online: false)]
-        XCTAssertEqual(SettingsHome.infrastructureValue(needsYou: 1, runners: fleet), "1 needs you")
-        XCTAssertEqual(SettingsHome.infrastructureValue(needsYou: 3, runners: fleet), "3 need you")
-        XCTAssertEqual(SettingsHome.infrastructureValue(needsYou: 0, runners: fleet), "1 of 2 online")
-        XCTAssertEqual(SettingsHome.infrastructureValue(needsYou: 0, runners: []), "None")
+        XCTAssertEqual(SettingsHome.machinesAndModelsValue(needsYou: 1, runners: fleet), "1 needs you")
+        XCTAssertEqual(SettingsHome.machinesAndModelsValue(needsYou: 3, runners: fleet), "3 need you")
+        XCTAssertEqual(SettingsHome.machinesAndModelsValue(needsYou: 0, runners: fleet), "1 of 2 online")
+        XCTAssertEqual(SettingsHome.machinesAndModelsValue(needsYou: 0, runners: []), "None")
 
         // The count is the page's own list: the machine offline is one line of it.
-        let lines = Infrastructure.attention(runners: fleet, workspaces: [], memberPools: [], ownPools: [])
-        XCTAssertEqual(SettingsHome.infrastructureValue(needsYou: lines.count, runners: fleet), "1 needs you")
+        let lines = MachinesAndModels.attention(runners: fleet, workspaces: [], memberPools: [], ownPools: [])
+        XCTAssertEqual(SettingsHome.machinesAndModelsValue(needsYou: lines.count, runners: fleet), "1 needs you")
     }
 
     /// A machine online where no coding CLI is signed in, and no workspace runs on a key, is one line of
@@ -144,8 +144,8 @@ final class SettingsHomeTests: XCTestCase {
                 #"{"id":"w-\#(runner)","name":"app","runnerId":"\#(runner)"\#(last)}"#.utf8))
         }
         func value(_ runners: [Runner], _ workspaces: [Agent]) -> String {
-            let lines = Infrastructure.attention(runners: runners, workspaces: workspaces, memberPools: [], ownPools: [])
-            return SettingsHome.infrastructureValue(needsYou: lines.count, runners: runners)
+            let lines = MachinesAndModels.attention(runners: runners, workspaces: workspaces, memberPools: [], ownPools: [])
+            return SettingsHome.machinesAndModelsValue(needsYou: lines.count, runners: runners)
         }
         XCTAssertEqual(value([austin], []), "1 needs you")
         XCTAssertEqual(value([austin], [try workspace("claude")]), "1 needs you")
@@ -330,7 +330,7 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(url.absoluteString, "https://orbitd.io/s/tok")
     }
 
-    // MARK: - Infrastructure's pools
+    // MARK: - Machines & models' pools
 
     func testAPoolsValueSaysWhyItCantRunOrHowManyOfItsAccountsCan() {
         XCTAssertEqual(ProvidersOverview.poolSummary(ProviderPool(id: "p", slug: "p", label: "P",
