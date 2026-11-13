@@ -175,6 +175,11 @@ export const HEARTBEAT_DELIVERIES = {
     ],
   },
   repoCleanupRequest: { how: 'MARKED', writers: ['workspaces/workspaces.service.ts#requestRepoCleanup'], pending: 'a clean-up pending' },
+  mainCheckoutRequests: {
+    how: 'MARKED',
+    writers: ['workspaces/main-checkout.service.ts#read', 'workspaces/main-checkout.service.ts#act'],
+    pending: 'a main checkout read or action of the runner not yet handed out',
+  },
   refreshModelCatalog: { how: 'MARKED', writers: ['runners/runners.service.ts#requestModelCatalogRefresh'], pending: 'until a beat claims it' },
   checkSelfUpdate: { how: 'MARKED', writers: ['runners/runners.service.ts#requestSelfUpdate'], pending: 'until a beat claims it' },
   drainScopedClaims: {
@@ -834,6 +839,10 @@ export async function readLinkReconcilePending(prisma: Pick<PrismaService, '$que
          WHERE g."runner_id" = ${runnerId}::uuid AND g."state" IN ('PENDING_DELIVERY', 'REMOVING')
       )
       OR EXISTS (
+        SELECT 1 FROM "main_checkout_request" m
+         WHERE m."runner_id" = ${runnerId}::uuid AND m."state" = 'pending'
+      )
+      OR EXISTS (
         SELECT 1 FROM "wiki_repo_op" o
           JOIN "workspace" w ON w."id" = o."workspace_id"
          WHERE w."runner_id" = ${runnerId}::uuid AND o."state" IN ('queued', 'running')
@@ -867,6 +876,7 @@ export function heartbeatAnswerHandsOut(answer: RunnerHeartbeatResponse): boolea
     || (answer.artifactRequests?.length ?? 0) > 0
     || (answer.integrationJobs?.length ?? 0) > 0
     || (answer.wikiRepoOps?.length ?? 0) > 0
+    || (answer.mainCheckoutRequests?.length ?? 0) > 0
     || (answer.cursorKeyChecks?.length ?? 0) > 0
     || (answer.secretGrantsRemoving?.length ?? 0) > 0
     || answer.loginRequest !== undefined

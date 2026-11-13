@@ -149,6 +149,11 @@ func (p *inboxPoller) next(ctx context.Context) (*RunInboxResponse, error) {
 				p.sessionID, resp.Kind, resp.TurnID))
 			continue
 		}
+		// A main checkout result line: written here, once, and never a turn for the session loop
+		// (main_checkout_notice.go). After the check above, so a copy handed over again is not written twice.
+		if takeMainCheckoutNotice(p.sessionID, resp) {
+			continue
+		}
 		return resp, nil
 	}
 }

@@ -113,6 +113,7 @@ func init() {
 		dirProbeCapabilityV1,
 		createWorkDirCapabilityV1,
 		claudeRegionCapabilityV1,
+		mainCheckoutGitCapabilityV1,
 		selfUpdatePostponeCapabilityV1,
 		selfUpdateNowCapabilityV1,
 		taskForkCapabilityV1,
@@ -938,6 +939,16 @@ func (t *Transport) installResult(b InstallResultRequest) error {
 // content it was holding was saved.
 func (t *Transport) repoCleanupResult(b RepoCleanupResultRequest) error {
 	return t.do(nil, "POST", "/runner/repo-cleanup-result", b, nil, 15*time.Second)
+}
+
+// mainCheckoutSnapshot answers a heartbeat-delivered main checkout read (contract §10.2).
+func (t *Transport) mainCheckoutSnapshot(id string, b MainCheckoutSnapshotAnswer) error {
+	return t.do(nil, "POST", "/runner/main-checkout/"+url.PathEscape(id)+"/snapshot", b, nil, 15*time.Second)
+}
+
+// mainCheckoutResult reports how a heartbeat-delivered main checkout action went (contract §10.2).
+func (t *Transport) mainCheckoutResult(id string, b MainCheckoutActionResult) error {
+	return t.do(nil, "POST", "/runner/main-checkout/"+url.PathEscape(id)+"/result", b, nil, 15*time.Second)
 }
 
 // commitResult reports the outcome of a heartbeat-delivered CommitCommand back to the server.

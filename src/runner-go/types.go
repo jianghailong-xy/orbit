@@ -436,6 +436,10 @@ type HeartbeatResponse struct {
 	// A "clean up this checkout" the user asked for after seeing it reported wedged. Nil on older
 	// control planes and whenever no repair is in flight. Redelivered until we report an outcome.
 	RepoCleanupRequest *RepoCleanupCommand `json:"repoCleanupRequest,omitempty"`
+	// Main checkout reads and actions (docs/main-checkout-git-contract.md §10), each handed out
+	// once and answered at /runner/main-checkout/:id/{snapshot,result}. Only to a runner that
+	// declares main-checkout-git/v1.
+	MainCheckoutRequests []MainCheckoutRunnerRequest `json:"mainCheckoutRequests,omitempty"`
 	// Re-read the runtime CLIs' model lists now instead of waiting for our own periodic pass.
 	// Handed over once and cleared there, not redelivered: the refreshed catalog we report on a
 	// later heartbeat is the only outcome there is. False/absent on older control planes.

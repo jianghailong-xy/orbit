@@ -180,6 +180,19 @@ internal class EngineReading(events: List<RunEvent>) {
                 "system" -> {
                     // A new engine run: as on web, a diagnostic it reports again starts a row of its own.
                     if (e.fields.string("subtype") == "resumed") { lastStderr = null; lastFailure = null; diagnosticsSeen.clear() }
+                    // The main checkout's card and its action lines (docs/main-checkout-git-contract.md §7) are rows of their own; their
+                    // `notice` text is what a client without them draws.
+                    when (e.fields.string("noticeKind")) {
+                        MainCheckout.NOTICE_CHANGED, MainCheckout.NOTICE_RESULT -> {
+                            val card = e.fields.string("noticeKind") == MainCheckout.NOTICE_CHANGED
+                            val readable = if (card) MainCheckout.changedNotice(e.fields) != null else MainCheckout.resultNotice(e.fields) != null
+                            if (readable) {
+                                rows[e.seq] = e.copy(type = if (card) MainCheckout.ROW_CARD else MainCheckout.ROW_RESULT)
+                                lastRow = e
+                                return@forEach
+                            }
+                        }
+                    }
                     // A deliberate heads-up wins over stderr, one row each; a recoverable diagnostic is a calm row of its own kind.
                     val notice = e.fields.string("notice")?.ifEmpty { null }
                     if (notice != null) {

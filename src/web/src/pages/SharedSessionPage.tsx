@@ -4,7 +4,6 @@ import { useQuery, type QueryKey } from '@tanstack/react-query';
 import { LoadingOutlined } from '@ant-design/icons';
 import {
   fetchSharedArtifactObjectUrl,
-  fetchSharedAttachmentDataUrl,
   fetchSharedAttachmentObjectUrl,
   getSharedEventFull,
   getSharedEventPage,
@@ -43,8 +42,6 @@ import { titleFirstLine } from '../lib/title';
 const TAIL_PAGE = 200;
 const OLDER_PAGE = 200;
 const LOAD_OLDER_AT = 400;
-// Download HTML reads the transcript whole, in the largest pages the share serves.
-const EXPORT_PAGE = 500;
 // A live conversation is followed: asked what it has added since the newest event on the page,
 // NEWER_PAGE at a time — every WORKING_POLL_MS while it works or has just moved, and every
 // WAITING_POLL_MS while it waits on its owner, who may answer at any moment.
@@ -111,18 +108,6 @@ export const RUN_TONE: Record<SessionRunState, string> = {
   ENDED: 'cancelled',
 };
 
-/** Every event of the shared transcript, unclipped: from the newest page back to the first. */
-async function wholeTranscript(token: string, sessionId?: string): Promise<SharedEvent[]> {
-  const pages: SharedEvent[][] = [];
-  let before: number | undefined;
-  for (;;) {
-    const page = await getSharedEventPage(token, { before, limit: EXPORT_PAGE, whole: true, sessionId });
-    pages.unshift(page.events);
-    if (!page.hasMore || page.events.length === 0) return pages.flat();
-    before = page.events[0].seq;
-  }
-}
-
 /**
  * Public, read-only view of a conversation a link shares: a session link's own (`/s/<token>`), or
  * one the link opens besides its root — a task link's run (`/s/<token>/c/<id>`). No auth, no app
@@ -187,8 +172,6 @@ function SharedConversation() {
           : NOTHING_ELSE_SHARED,
     [token, task, linkScope],
   );
-  const [downloading, setDownloading] = useState(false);
-
   // The pages scrolled in above the tail, oldest first.
   const [older, setOlder] = useState<SharedEvent[]>([]);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -338,36 +321,6 @@ function SharedConversation() {
     };
   }, [head?.title]);
 
-  // Build the same self-contained HTML the app's export produces, from the whole transcript rather
-  // than the pages scrolled in so far, with images embedded through the public share route so a
-  // logged-out viewer's saved file still shows them.
-  const download = async () => {
-    if (!head || downloading) return;
-    setDownloading(true);
-    try {
-      const [whole, { exportSessionHtml }] = await Promise.all([
-        wholeTranscript(token, sessionId),
-        import('../lib/sessionExport'),
-      ]);
-      await exportSessionHtml(
-        {
-          id: token,
-          title: head.title,
-          status: sessionRunStateOf(head),
-          createdAt: head.createdAt,
-          workspace: { name: head.workspaceName },
-        },
-        whole,
-        (id) => fetchSharedAttachmentDataUrl(token, id),
-        scope,
-      );
-    } catch (e) {
-      console.error('Download failed', e);
-    } finally {
-      setDownloading(false);
-    }
-  };
-
   if (isLoading) return <SharedLoading />;
   if (isError || !head) return <SharedUnavailable />;
   const tone =
@@ -401,37 +354,6 @@ function SharedConversation() {
           {tone === 'running' ? <LoadingOutlined spin /> : <span className="status-dot" />}
           {sessionStateWord(head)}
         </span>
-      }
-      actions={
-        <button
-          className="share-download"
-          onClick={download}
-          disabled={downloading || events.length === 0}
-          aria-label="Download this conversation as a self-contained HTML file"
-          title="Download this conversation as a self-contained HTML file"
-        >
-          {downloading ? (
-            <span className="share-download-spin" aria-hidden />
-          ) : (
-            <svg
-              className="share-download-icon"
-              viewBox="0 0 24 24"
-              width="16"
-              height="16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-          )}
-          <span className="share-download-label">{downloading ? 'Preparing…' : 'Download HTML'}</span>
-        </button>
       }
       scrollRef={scrollRef}
       onScroll={(e) => {
