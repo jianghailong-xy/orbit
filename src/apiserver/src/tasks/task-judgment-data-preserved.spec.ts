@@ -2970,7 +2970,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0617_task_fork_changed_files',
       // 0618 adds a nullable email_outbox.session_id, its foreign key and index, two CHECKs and a wider unique index
       // only; no preserved rows, triggers or DONE fence change, and no row is written.
-      '0618_email_outbox_session_invite'],
+      '0618_email_outbox_session_invite',
+      // 0641 adds AFTER INSERT/UPDATE/DELETE statement triggers on `session_scheduled_wakeup` (reusing 0487's
+      // open_list_bump_via_session) and on `watch` (its own new open_list_bump_watch), which only call 0487's
+      // open_list_bump and so write `open_list_epoch` alone. No table, column, constraint or type is created, altered
+      // or dropped, nothing sits on `task` or `project`, there is no INSERT, UPDATE or DELETE, and none of the six
+      // preserved triggers/functions is named or replaced, so it is not another writer of the DONE fence.
+      '0641_open_list_epoch_session_waits'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
