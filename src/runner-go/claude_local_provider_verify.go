@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -48,10 +49,6 @@ import (
 
 // localRunCheckTimeout bounds one run of a check. A var so a test can shorten it.
 var localRunCheckTimeout = 45 * time.Second
-
-// localRunCheckGrace is how long the check keeps listening on the hostile listener after the local one was
-// asked: a request sent elsewhere at the same time is still seen.
-var localRunCheckGrace = 2 * time.Second
 
 // localRunCheckEnvHook, set only by a test, rewrites the checked CLI's environment: how a control case shows
 // the check fails when the isolation it measures is taken away.
@@ -137,6 +134,7 @@ func claudeLocalRunFingerprint() (string, error) {
 func ensureLocalProviderRun(ctx context.Context) error {
 	fingerprint, err := claudeLocalRunFingerprint()
 	if err != nil {
+		setLocalRunDeclared(false)
 		return err
 	}
 	localRunGate.mu.Lock()
@@ -146,23 +144,120 @@ func ensureLocalProviderRun(ctx context.Context) error {
 	}
 	err = verifyLocalProviderRun(ctx)
 	localRunGate.checked, localRunGate.fingerprint, localRunGate.err = true, fingerprint, err
+	setLocalRunDeclared(err == nil)
 	return err
 }
 
+// ── What the runner declares, as the check last answered ────────────────────────────────────────────
+
+var (
+	// localRunDeclaring is set by the daemon (declareLocalProviderRun): only a runner that measures declares.
+	localRunDeclaring atomic.Bool
+	// localRunDeclared is whether the last check passed, which is whether ollama-run/v1 is declared.
+	localRunDeclared atomic.Bool
+	// runnerCapabilitiesChanged is signalled when what runnerCapabilities answers changes: the link opens its
+	// next connection at once, so its Hello — the declaration the link carries — says so (link_work.go).
+	runnerCapabilitiesChanged = make(chan struct{}, 1)
+)
+
+// runnerCapabilities is what this process declares on every call it makes, now: the fixed set, and
+// localProviderRunCapabilityV1 while the last check of this machine's Claude Code passed. A check that fails —
+// the binary or a managed policy changed under a running runner — takes it out of the very next declaration.
+func runnerCapabilities() string {
+	if localRunDeclared.Load() {
+		return runnerCapabilitiesV1 + "," + localProviderRunCapabilityV1
+	}
+	return runnerCapabilitiesV1
+}
+
+// setLocalRunDeclared records a check's answer as what the runner declares, and says so when it changed.
+func setLocalRunDeclared(ok bool) {
+	if !localRunDeclaring.Load() {
+		return
+	}
+	if localRunDeclared.Swap(ok) != ok {
+		if ok {
+			fmt.Fprintf(os.Stderr, "orbit: local providers (Ollama) are offered on this runner again\n")
+		}
+		select {
+		case runnerCapabilitiesChanged <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// localRunWatchInterval is how often a runner looks at whether the claude binary or a managed policy file
+// changed on disk, and checks again when one did.
+var localRunWatchInterval = time.Minute
+
 var declareLocalProviderRunOnce sync.Once
 
-// declareLocalProviderRun adds localProviderRunCapabilityV1 to what this runner declares, once, when the check
-// passes. Run before the runner first talks to the control plane, so every declaration it makes is the same.
+// declareLocalProviderRun runs the first check, before the runner first talks to the control plane, and keeps
+// the declaration current after it (watchLocalProviderRun). Once per process.
 func declareLocalProviderRun() {
 	declareLocalProviderRunOnce.Do(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*(localRunCheckTimeout+localRunCheckGrace)+5*time.Second)
-		defer cancel()
+		localRunDeclaring.Store(true)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*localRunCheckTimeout+5*time.Second)
 		if err := ensureLocalProviderRun(ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "orbit: local providers (Ollama) are not offered on this runner: %v\n", err)
-			return
 		}
-		runnerCapabilitiesV1 += "," + localProviderRunCapabilityV1
+		cancel()
+		go watchLocalProviderRun(context.Background())
 	})
+}
+
+// watchLocalProviderRun checks again whenever what a check depends on changed on disk, so a runner whose Claude
+// Code updated itself into one that fails stops declaring ollama-run/v1 before the control plane hands it a local
+// session, not after.
+func watchLocalProviderRun(ctx context.Context) {
+	ticker := time.NewTicker(localRunWatchInterval)
+	defer ticker.Stop()
+	last := localRunDiskKey()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			last = localRunWatchTick(ctx, last)
+		}
+	}
+}
+
+// localRunWatchTick is one look: when the disk key moved since last, a new check (keyed by contents, as every
+// check is). Returns the key it saw.
+func localRunWatchTick(ctx context.Context, last string) string {
+	key := localRunDiskKey()
+	if key == last {
+		return last
+	}
+	cctx, cancel := context.WithTimeout(ctx, 2*localRunCheckTimeout+5*time.Second)
+	defer cancel()
+	if err := ensureLocalProviderRun(cctx); err != nil {
+		fmt.Fprintf(os.Stderr, "orbit: local providers (Ollama) are no longer offered on this runner: %v\n", err)
+	}
+	return key
+}
+
+// localRunDiskKey is a cheap look at what a check depends on — the claude binary's and every managed file's
+// path, size and modification time — for the watch to notice a change without reading the binary. The check it
+// triggers is keyed by contents; a spawn always reads them.
+func localRunDiskKey() string {
+	var b strings.Builder
+	paths := claudeManagedSettingsPaths()
+	if path, err := exec.LookPath("claude"); err == nil {
+		if real, err := filepath.EvalSymlinks(path); err == nil {
+			path = real
+		}
+		paths = append([]string{path}, paths...)
+	}
+	for _, p := range paths {
+		fmt.Fprintf(&b, "%s|", p)
+		if st, err := os.Stat(p); err == nil {
+			fmt.Fprintf(&b, "%d|%d", st.Size(), st.ModTime().UnixNano())
+		}
+		b.WriteString(";")
+	}
+	return b.String()
 }
 
 // verifyLocalProviderRun is one check: the hostile run, then the machine run.
@@ -181,7 +276,9 @@ type localRunRequest struct {
 	header http.Header
 }
 
-// localRunListener is a loopback endpoint that records every request it is sent and refuses it.
+// localRunListener is a loopback endpoint that records every request it is sent. The local one answers a
+// model request with a minimal valid Messages reply, so an isolated `claude -p --max-turns 1` finishes its turn
+// and exits by itself; the decoy refuses everything.
 type localRunListener struct {
 	url  string
 	srv  *http.Server
@@ -190,7 +287,46 @@ type localRunListener struct {
 	hit  chan struct{}
 }
 
-func newLocalRunListener() (*localRunListener, error) {
+// localRunReply answers r as the Messages API would: a one-word reply, streamed when r asks for a stream.
+func localRunReply(w http.ResponseWriter, r *http.Request, body []byte) {
+	if !strings.HasPrefix(r.URL.Path, "/v1/messages") {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/v1/messages/count_tokens") {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"input_tokens":1}`)
+		return
+	}
+	var req struct {
+		Model  string `json:"model"`
+		Stream bool   `json:"stream"`
+	}
+	_ = json.Unmarshal(body, &req)
+	model, _ := json.Marshal(req.Model)
+	if !req.Stream {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"id":"msg_orbit_check","type":"message","role":"assistant","model":%s,`+
+			`"content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","stop_sequence":null,`+
+			`"usage":{"input_tokens":1,"output_tokens":1}}`, model)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	for _, ev := range []struct{ name, data string }{
+		{"message_start", `{"type":"message_start","message":{"id":"msg_orbit_check","type":"message","role":"assistant","model":` + string(model) +
+			`,"content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}}`},
+		{"content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`},
+		{"content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}`},
+		{"content_block_stop", `{"type":"content_block_stop","index":0}`},
+		{"message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":1}}`},
+		{"message_stop", `{"type":"message_stop"}`},
+	} {
+		_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", ev.name, ev.data)
+	}
+}
+
+func newLocalRunListener(answers bool) (*localRunListener, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, err
@@ -199,7 +335,7 @@ func newLocalRunListener() (*localRunListener, error) {
 	l.srv = &http.Server{
 		ReadHeaderTimeout: 5 * time.Second,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_, _ = io.Copy(io.Discard, io.LimitReader(r.Body, 1<<20))
+			body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 			l.mu.Lock()
 			// A proxied request names its target in the request line; either way the path is what was asked.
 			l.seen = append(l.seen, localRunRequest{path: r.URL.Path, header: r.Header.Clone()})
@@ -207,6 +343,10 @@ func newLocalRunListener() (*localRunListener, error) {
 			select {
 			case l.hit <- struct{}{}:
 			default:
+			}
+			if answers {
+				localRunReply(w, r, body)
+				return
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
@@ -272,7 +412,7 @@ func localRunHostileSettings(hostileURL, sentinel string) map[string]interface{}
 
 // localRunCheck is one run of the CLI (see the file's head); hostile chooses which.
 func localRunCheck(ctx context.Context, hostile bool) error {
-	local, err := newLocalRunListener()
+	local, err := newLocalRunListener(true)
 	if err != nil {
 		return err
 	}
@@ -300,7 +440,7 @@ func localRunCheck(ctx context.Context, hostile bool) error {
 		claudeNonessentialTrafficVar: "1",
 	}
 	if hostile {
-		if decoy, err = newLocalRunListener(); err != nil {
+		if decoy, err = newLocalRunListener(false); err != nil {
 			return err
 		}
 		defer decoy.srv.Close()
@@ -353,19 +493,19 @@ func localRunCheck(ctx context.Context, hostile bool) error {
 	if decoy != nil {
 		decoyHit = decoy.hit
 	}
+	// The whole life of the CLI is watched: answered, an isolated one finishes its one turn and exits by itself,
+	// and everything it sent until then — to either listener — is what is judged. A request to the decoy at any
+	// moment ends the check as failed; so does a CLI still running at the deadline, or one that exits unclean.
+	var exitErr error
 	select {
-	case <-local.hit:
-		// Anything sent elsewhere at the same moment is still caught.
-		select {
-		case <-decoyHit:
-		case <-time.After(localRunCheckGrace):
-		}
-		stop()
+	case exitErr = <-exited:
 	case <-decoyHit:
 		stop()
-	case <-exited:
 	case <-cctx.Done():
 		stop()
+		if decoy == nil || len(decoy.requests()) == 0 {
+			return errors.New("Claude Code did not finish its one turn on the local endpoint before the check's deadline")
+		}
 	}
 	if decoy != nil {
 		if seen := decoy.requests(); len(seen) > 0 {
@@ -375,6 +515,9 @@ func localRunCheck(ctx context.Context, hostile bool) error {
 	seen := local.requests()
 	if len(seen) == 0 {
 		return errors.New("Claude Code never asked the local endpoint: a settings file sends its requests elsewhere")
+	}
+	if exitErr != nil {
+		return fmt.Errorf("Claude Code did not finish its one turn on the local endpoint cleanly: %v", exitErr)
 	}
 	for _, r := range seen {
 		if !strings.HasPrefix(r.path, "/v1/messages") {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,10 +53,29 @@ func fakeLocalRunSettings() (map[string]string, string) {
 //	settings-route  to the base URL a settings file names
 //	settings-header with the custom header a settings file names
 //	helper-key      with the key a settings file's apiKeyHelper prints
+//	delayed-decoy   obediently first, then — after the check's old two-second grace — to the base URL a
+//	                settings file names, before exiting cleanly
+//	hangs           obediently, then never exits
 func runFakeLocalRunClaude(mode string) int {
 	if mode == "silent" {
 		return 0
 	}
+	if mode == "delayed-decoy" {
+		fakeLocalRunSend("obedient")
+		time.Sleep(3 * time.Second)
+		fakeLocalRunSend("settings-route")
+		return 0
+	}
+	if mode == "hangs" {
+		fakeLocalRunSend("obedient")
+		select {}
+	}
+	fakeLocalRunSend(mode)
+	return 0
+}
+
+// fakeLocalRunSend sends one model request the way mode says (runFakeLocalRunClaude).
+func fakeLocalRunSend(mode string) {
 	settingsEnv, helper := fakeLocalRunSettings()
 	base := os.Getenv("ANTHROPIC_BASE_URL")
 	if mode == "settings-route" && settingsEnv["ANTHROPIC_BASE_URL"] != "" {
@@ -63,7 +83,7 @@ func runFakeLocalRunClaude(mode string) int {
 	}
 	req, err := http.NewRequest(http.MethodPost, base+"/v1/messages", strings.NewReader(`{"model":"x"}`))
 	if err != nil {
-		return 1
+		return
 	}
 	req.Header.Set("Authorization", "Bearer "+os.Getenv("ANTHROPIC_AUTH_TOKEN"))
 	if mode == "settings-header" {
@@ -80,7 +100,6 @@ func runFakeLocalRunClaude(mode string) int {
 		_, _ = io.Copy(io.Discard, res.Body)
 		res.Body.Close()
 	}
-	return 0
 }
 
 // fakeLocalRunClaudeOnPath puts a `claude` first on PATH that is this test binary in mode.
@@ -104,11 +123,14 @@ func fakeLocalRunClaudeOnPath(t *testing.T, mode string) string {
 // endpoint's own request passes; one that follows a settings file's base URL, adds its custom header or its
 // helper's key, or sends nothing, fails. A CLI's version is never consulted: its behaviour is.
 func TestVerifyLocalProviderRunCatchesEveryLeak(t *testing.T) {
-	localRunCheckGrace = 200 * time.Millisecond
-	localRunCheckTimeout = 10 * time.Second
-	t.Cleanup(func() { localRunCheckGrace, localRunCheckTimeout = 2*time.Second, 45*time.Second })
+	localRunCheckTimeout = 8 * time.Second
+	t.Cleanup(func() { localRunCheckTimeout = 45 * time.Second })
 	for mode, wantPass := range map[string]bool{
 		"obedient": true, "silent": false, "settings-route": false, "settings-header": false, "helper-key": false,
+		// Local first, the leak only after the old grace: the whole life of the CLI is watched now.
+		"delayed-decoy": false,
+		// A CLI that never finishes its turn fails at the deadline, closed.
+		"hangs": false,
 	} {
 		t.Run(mode, func(t *testing.T) {
 			fakeLocalRunClaudeOnPath(t, mode)
@@ -255,4 +277,89 @@ func TestVerifyLocalProviderRunOnTheInstalledClaude(t *testing.T) {
 		t.Fatalf("the control failed for another reason: %v", err)
 	}
 	t.Logf("control: %v", err)
+}
+
+// ── The declaration follows the check ───────────────────────────────────────────────────────────────
+
+// declaredOn is what one HTTPS call from t declares, as the control plane reads it off the request.
+func declaredOn(t *testing.T) string {
+	t.Helper()
+	got := make(chan string, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case got <- r.Header.Get(runnerCapabilitiesHeader):
+		default:
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{}`)
+	}))
+	defer srv.Close()
+	tr := NewTransport(srv.URL, "runner-token")
+	if err := tr.doHTTP(context.Background(), http.DefaultClient, http.MethodGet, "/runner/ping", nil, nil, 5*time.Second, nil); err != nil {
+		t.Fatal(err)
+	}
+	return <-got
+}
+
+func declaresLocalRun(list string) bool {
+	return strings.Contains(","+list+",", ","+localProviderRunCapabilityV1+",")
+}
+
+// A runner declares ollama-run/v1 after a passing check, and stops declaring it — on the very next HTTPS call,
+// in the next link Hello, with the link told to open its next connection now — once its Claude Code changes
+// on disk into one that fails. A local session that still reaches it is refused with the stable code.
+func TestLocalProviderRunCapabilityIsWithdrawnWhenTheCheckStopsPassing(t *testing.T) {
+	resetLocalRunGate(t)
+	localRunDeclaring.Store(true)
+	t.Cleanup(func() { localRunDeclaring.Store(false); localRunDeclared.Store(false) })
+	localRunCheckTimeout = 8 * time.Second
+	t.Cleanup(func() { localRunCheckTimeout = 45 * time.Second })
+	drain := func() bool {
+		select {
+		case <-runnerCapabilitiesChanged:
+			return true
+		default:
+			return false
+		}
+	}
+	drain()
+
+	path := fakeLocalRunClaudeOnPath(t, "obedient")
+	seen := localRunDiskKey()
+	if err := ensureLocalProviderRun(context.Background()); err != nil {
+		t.Fatalf("an isolated CLI failed: %v", err)
+	}
+	if !declaresLocalRun(runnerCapabilities()) || !declaresLocalRun(declaredOn(t)) || !declaresLocalRun(strings.Join(linkHello("p").GetCapabilities(), ",")) {
+		t.Fatal("a passing check is not declared")
+	}
+	if !drain() {
+		t.Fatal("the link was not told the declaration changed")
+	}
+
+	// Claude Code updates itself into one that sends a settings file's header along: the watch notices the
+	// binary changed, checks again, and the declaration goes.
+	b, _ := os.ReadFile(path)
+	if err := os.WriteFile(path, []byte(strings.Replace(string(b), "=obedient ", "=settings-header ", 1)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if next := localRunWatchTick(context.Background(), seen); next == seen {
+		t.Fatal("the watch did not see the binary change")
+	}
+	if declaresLocalRun(runnerCapabilities()) || declaresLocalRun(declaredOn(t)) || declaresLocalRun(strings.Join(linkHello("p").GetCapabilities(), ",")) {
+		t.Fatal("a runner whose check now fails still declares " + localProviderRunCapabilityV1)
+	}
+	if !drain() {
+		t.Fatal("the link was not told the declaration changed")
+	}
+	// A watch tick with nothing changed checks nothing again.
+	if again := localRunWatchTick(context.Background(), localRunDiskKey()); again != localRunDiskKey() {
+		t.Fatal("unchanged")
+	}
+
+	job := &ClaimedSession{SessionID: "local-job", Agent: AgentExecConfig{Env: localJobEnv(t.TempDir())}}
+	settings, _ := writeClaudeSettings(t.TempDir(), "", false)
+	if _, err := spawnClaude(context.Background(), job, t.TempDir(), []string{"-p", "--settings", settings}); err == nil ||
+		!strings.HasPrefix(err.Error(), "LOCAL_PROVIDER_RUNNER_OUTDATED: ") {
+		t.Fatalf("a local session reaching a runner that lost the capability: %v", err)
+	}
 }

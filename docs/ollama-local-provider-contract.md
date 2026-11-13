@@ -299,7 +299,11 @@ runner's own. Both runs have to pass.
 2. **The machine run** measures what this machine's own settings and environment do: the real managed policy, the
    runner's user config, a proxy in its environment.
 
-A run passes only if every request reaches the local listener with the check's nonce as `Authorization`, no
+The local listener answers a model request with a minimal valid Messages reply (streamed when the request asks for
+a stream), so an isolated `claude -p --max-turns 1` finishes its turn and exits by itself. The check watches the
+CLI's whole life, both listeners throughout, until it exits. A request to the hostile listener at any moment fails
+the run at once, and so does a CLI still running at the check's deadline or one that exits other than cleanly. A
+run passes only if every request reaches the local listener with the check's nonce as `Authorization`, no
 `X-Api-Key`, and no header named or valued by a settings file, and the hostile listener receives nothing. A CLI that
 honours any of those settings, ignores the switch, sends a helper's key or sends nothing fails. The installed CLI's
 version is never consulted, only its behaviour.
@@ -313,6 +317,20 @@ Code's documented locations (https://code.claude.com/docs/en/managed-settings) a
 `C:\Program Files\ClaudeCode\managed-settings.json`, each with its `managed-settings.d` drop-ins, plus
 `CLAUDE_CODE_MANAGED_SETTINGS_PATH` when it is set. A local spawn after the key has changed checks again (Claude
 Code updates itself), and a local session is not started if the check fails.
+
+**The declaration follows the check.** `ollama-run/v1` is part of what the runner declares only while its last
+check passed (`runnerCapabilities`):
+
+- Every check, whether at start, from the watch or at a spawn, updates the declaration. So does the minute-by-minute
+  watch, which checks again whenever the `claude` binary's or a managed file's size or modification time moved.
+- A runner whose check stops passing leaves `ollama-run/v1` out of its very next HTTPS heartbeat. Its link opens its
+  next connection at once (make before break), so the Hello the gateway forwards says so too. The control plane
+  stores the declaration from that beat, and the gate then refuses a new local session with
+  `LOCAL_PROVIDER_RUNNER_OUTDATED` before anything is handed out: session create, claim (held PENDING with the
+  sentence), reclaim and switch alike.
+- A local session claimed in the moment between the check failing and that beat is refused at spawn with an error
+  starting `LOCAL_PROVIDER_RUNNER_OUTDATED:`.
+- A check that passes again declares the capability again.
 
 A routing variable is matched by prefix, so a platform added later is covered: `ANTHROPIC_*`, `CLAUDE_CODE_USE_*`,
 `CLAUDE_CODE_SKIP_*_AUTH`, `AWS_*`, `VERTEX_REGION_*`, plus `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_SUBAGENT_MODEL`,

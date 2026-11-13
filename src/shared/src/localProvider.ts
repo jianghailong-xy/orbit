@@ -488,7 +488,11 @@ export function localProviderReadiness(
   const runner = target.runner;
   const runs = (runner?.capabilities ?? []).some((value) => value.trim().toLowerCase() === LOCAL_PROVIDER_RUN_CAPABILITY);
   if (!runner || runner.capabilitiesReportedAt == null || !declaresLocalProbe(runner.capabilities) || !runs) {
-    return refuse('LOCAL_PROVIDER_RUNNER_OUTDATED', 'needs a newer runner: update the runner it is bound to');
+    return refuse(
+      'LOCAL_PROVIDER_RUNNER_OUTDATED',
+      'needs a runner that keeps its session on the local endpoint: update the runner it is bound to, or see that ' +
+        "runner's log for why it stopped offering local providers",
+    );
   }
   const state = (LOCAL_PROBE_STATES as readonly string[]).includes(row.probeState ?? '') ? (row.probeState as LocalProbeState) : null;
   const probedAtMs = row.probedAt == null ? NaN : new Date(row.probedAt).getTime();

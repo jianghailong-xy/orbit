@@ -536,7 +536,7 @@ func (c *linkConn) close(status websocket.StatusCode, reason string) {
 // say it today (transport.go doVia), so the gateway can forward them once the link carries the work (§5.3).
 func linkHello(processID string) *linkpb.Hello {
 	header := http.Header{}
-	header.Set(runnerCapabilitiesHeader, runnerCapabilitiesV1)
+	header.Set(runnerCapabilitiesHeader, runnerCapabilities())
 	setManagedInstanceHeaders(header)
 	hello := &linkpb.Hello{
 		ProcessId:          processID,

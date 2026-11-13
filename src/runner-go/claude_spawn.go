@@ -243,7 +243,9 @@ func spawnClaude(ctx context.Context, job *ClaimedSession, execDir string, args 
 		// Checked again here, not only when the runner started: Claude Code updates itself, and a managed
 		// settings file can change under a running runner. Re-measured only when one of them has.
 		if err := ensureLocalProviderRun(ctx); err != nil {
-			return nil, fmt.Errorf("this runner cannot keep a local provider's session on its local endpoint: %w", err)
+			// The capability went with the check (runnerCapabilities), so the control plane holds the next one as
+			// LOCAL_PROVIDER_RUNNER_OUTDATED; this one, claimed in between, says the same code.
+			return nil, fmt.Errorf("LOCAL_PROVIDER_RUNNER_OUTDATED: this runner cannot keep a local provider's session on its local endpoint: %w", err)
 		}
 	}
 	if err := pinLocalProviderSettings(args, job.Agent.Env, execDir); err != nil {

@@ -280,6 +280,11 @@ func (w *linkWork) loop(ctx context.Context) {
 			}
 			w.setCurrent(cur, nil)
 			retryAt, drainAt = w.now().Add(wait), time.Time{}
+		case <-runnerCapabilitiesChanged:
+			// What this process declares changed (runnerCapabilities): the next connection's Hello says it now, made
+			// before this one breaks, as a renewal is.
+			renewAt = w.now()
+			continue
 		case ev := <-w.events:
 			if ev.conn != cur {
 				continue // from a connection replaced since

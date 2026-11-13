@@ -385,7 +385,7 @@ func (t *Transport) doHTTP(ctx context.Context, client *http.Client, method, pat
 		return err
 	}
 	req.Header.Set("content-type", "application/json")
-	req.Header.Set(runnerCapabilitiesHeader, runnerCapabilitiesV1)
+	req.Header.Set(runnerCapabilitiesHeader, runnerCapabilities())
 	req.Header.Set(runnerOSHeader, runtime.GOOS)
 	req.Header.Set("X-Orbit-Supported-Providers", supportedProvidersHeader())
 	req.Header.Set(runnerWriteCapabilityRevisionHeader, strconv.Itoa(runnerWriteCapabilityRevision))

@@ -575,7 +575,7 @@ suite('a local Ollama provider through dispatch, against a fake Ollama, on real 
     assert.equal(await outcome(() => create(owner, old, onOld.slug)), 'LOCAL_PROVIDER_RUNNER_OUTDATED');
     const waiting = await sessionOn(owner, old, onOld.slug);
     assert.equal(await claimOn(old), null);
-    assert.match((await rowOf(waiting)).error ?? '', /needs a newer runner/);
+    assert.match((await rowOf(waiting)).error ?? '', /needs a runner that keeps its session on the local endpoint/);
     // Once it declares the probe, the same session runs.
     await db.runner.update({ where: { id: old.runnerId }, data: { capabilities: [OLLAMA_PROBE_CAPABILITY], capabilitiesReportedAt: new Date() } });
     assert.equal(await claimOn(old), null, 'a runner that probes but does not isolate the run was handed it');
@@ -947,5 +947,36 @@ suite('a local Ollama provider through dispatch, against a fake Ollama, on real 
     } finally {
       clock.now = null;
     }
+  });
+  await t.test('(15) a runner whose next heartbeat no longer declares ollama-run/v1 is refused before any local run is handed out', async () => {
+    const home = await machine(owner, 'withdraw-home');
+    const local = await localOn(owner, home);
+    await probe(local);
+    /** A full heartbeat over the runner route, declaring `capabilities` as its header would. */
+    const beat = (capabilities: string[]) =>
+      runnerApi.heartbeat({ id: home.runnerId, ownerId: owner, version: null } as never, {} as never, capabilities.join(','));
+    const declared = async () => (await db.runner.findUniqueOrThrow({ where: { id: home.runnerId }, select: { capabilities: true } })).capabilities;
+
+    await beat([OLLAMA_PROBE_CAPABILITY, LOCAL_PROVIDER_RUN_CAPABILITY]);
+    assert.ok((await declared()).includes(LOCAL_PROVIDER_RUN_CAPABILITY));
+    const ran = ((await create(owner, home, local.slug)) as { id: string }).id;
+    assert.equal((await claimOn(home))?.sessionId, ran);
+    const idle = await idleOn(owner, home, local.slug);
+
+    // The runner's check stopped passing (its Claude Code changed): its next beat leaves the capability out.
+    await beat([OLLAMA_PROBE_CAPABILITY]);
+    assert.ok(!(await declared()).includes(LOCAL_PROVIDER_RUN_CAPABILITY), 'the withdrawn capability is still on the row');
+    assert.equal(await outcome(() => create(owner, home, local.slug)), 'LOCAL_PROVIDER_RUNNER_OUTDATED');
+    const waiting = await sessionOn(owner, home, local.slug);
+    for (let i = 0; i < 3; i++) assert.equal(await claimOn(home), null, 'a local run was handed to a runner that withdrew the capability');
+    const held = await rowOf(waiting);
+    assert.equal(held.status, RunStatus.PENDING);
+    assert.match(held.error ?? '', /needs a runner that keeps its session on the local endpoint/);
+    assert.equal((await runnerApi.reclaim({ id: home.runnerId, ownerId: owner })).sessions.find((s) => s.sessionId === idle), undefined);
+    assert.equal(await outcome(() => sessions.updateConfig(owner, idle, { model: MODEL } as never)), 'LOCAL_PROVIDER_RUNNER_OUTDATED');
+
+    // Declared again once its check passes: the same session runs.
+    await beat([OLLAMA_PROBE_CAPABILITY, LOCAL_PROVIDER_RUN_CAPABILITY]);
+    assert.equal((await claimOn(home))?.sessionId, waiting);
   });
 });
