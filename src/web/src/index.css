@@ -25409,6 +25409,34 @@ button.project-open-item-action:disabled {
   .wk-layout > .wk-dir-col { position: sticky; top: 0; max-height: calc(var(--app-vh, 100vh) - 48px); overflow-y: auto;
                              overscroll-behavior: contain; margin-left: -8px; scrollbar-width: thin; }
   .wk-layout > .wk-dir-col > .wk-toc { margin-left: 0; }
+  /* The head, the search and the directory as one column from the window's top to its foot (board
+     docs/mocks/wiki-rail ③): the title and the space, the search, then the rows, which scroll on their own, and
+     Settings and Share at the foot. The head row and the search line above it give way to it; the main column
+     starts at the top, the home's line first. */
+  .wk-page--railed { display: grid; grid-template-columns: 248px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
+                     column-gap: 32px; align-items: start; }
+  .wk-page--railed > .wk-title-row, .wk-page--railed > .wk-search { display: none; }
+  /* The home's line was the head's; Activity has its own head and status row (as on a phone). */
+  .wk-page--railed.wk-page--activity > .wk-home-state { display: none; }
+  .wk-page--railed > .wk-layout { display: contents; }
+  .wk-page--railed > .wk-home-state, .wk-page--railed > .wk-layout > .wk-main { grid-column: 2; }
+  .wk-page--railed > .wk-layout > .wk-dir-col { grid-column: 1; grid-row: 1 / span 2; display: flex; flex-direction: column;
+                                                top: -24px; height: var(--app-vh, 100vh); max-height: none; overflow: hidden;
+                                                margin: -24px 0 -24px -32px; padding: 16px 0 0 24px;
+                                                border-right: 1px solid var(--border-subtle); background: var(--bg-subtle); }
+  .wk-rail-top { flex: none; padding: 0 16px 10px 0; }
+  .wk-rail-head { display: flex; align-items: center; gap: 12px; height: 32px; }
+  .wk-rail-head .wk-select .v, .wk-rail-head .wk-space-tag { max-width: 150px; }
+  .wk-rail-top > .wk-search { margin-top: 14px; }
+  .wk-page--railed > .wk-layout > .wk-dir-col > .wk-toc { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+                                                         padding: 0 10px 12px 0; scrollbar-width: thin; }
+  .wk-rail-foot { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 16px 12px 0;
+                  border-top: 1px solid var(--border-subtle); }
+  .wk-rail-foot > .session-shared-pill { height: 32px; padding: 0 12px; font-size: 13px; }
+  .wk-toc-alarm { flex: none; width: 7px; height: 7px; margin-left: 6px; border-radius: 50%; }
+  .wk-toc-alarm--error { background: var(--error); }
+  .wk-toc-alarm--warn { background: var(--warning-solid); }
+  .wk-toc-alarm + .tp-count { margin-left: 6px; }
   .wk-layout.home > .wk-main { container: wk-home / inline-size; }
   .wk-home { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
   .wk-home > .wk-pl-cat { margin: 0; padding: 12px 18px 4px; border: 1px solid var(--border-subtle); border-radius: 10px;
@@ -25479,7 +25507,7 @@ button.project-open-item-action:disabled {
   .wk-maint-wide { display: none; }
   .wk-maint-narrow { display: contents; }
   .wk-maint-spin { display: none; }
-  .wk-page--reading > .wk-title-row, .wk-page--reading > .wk-search, .wk-page--reading > .wk-status-row { display: none; }
+  .wk-page--reading > .wk-title-row, .wk-page--reading > .wk-search { display: none; }
   /* The head's space sits beside its buttons (mock 30 ③). */
   .wk-title-row > .page-title { flex: 1; min-width: 0; }
   /* The home ends on the ways to everything else (mock 31 ①); a desktop has them atop the directory. */
@@ -25490,8 +25518,7 @@ button.project-open-item-action:disabled {
   .wk-page--activity > .wk-home-state { display: none; }
   /* Review's own head is the one its mock draws on a phone (09): `← Wiki` over the title, no Wiki head. */
   .wk-page:has(> .wk-body > .rv-page) > .wk-title-row,
-  .wk-page:has(> .wk-body > .rv-page) > .wk-search,
-  .wk-page:has(> .wk-body > .rv-page) > .wk-status-row { display: none; }
+  .wk-page:has(> .wk-body > .rv-page) > .wk-search { display: none; }
   .wk-crumb--back .ic, .wk-crumb--back > span { display: none; }
   .wk-crumb--back .back { display: inline-flex; margin-right: 4px; }
   .wk-act-head { margin-top: 2px; }
@@ -27053,17 +27080,33 @@ button.agent-progress-agent:hover {
 
 /* ── the wiki chat (docs/wiki-chat-design.md §3–§4, board 42 ⓪ ①) ──────────────────────────────────────────
    The round button at the window's bottom right, the panel it opens, the composer's chips and a document's Ask
-   (components/WikiChat*.tsx). Both the button and the panel are fixed to the window: the button floats over the
-   entry drawer (z 5) and its scrim (z 4); the panel stands beside the drawer, which opens to its left. A docked
-   panel pushes everything under the Wiki's head over by its width (`--wk-chat-w`), the head's buttons staying
-   where they are (board 42 ①); narrower than 1440 the directory folds into the Contents drawer. The page's foot
-   keeps 88 clear so the button never sits on its last line. */
+   (components/WikiChat*.tsx). The button is fixed to the window and floats over the entry drawer (z 5) and its scrim
+   (z 4). From 1200 the panel is a column of the page (board docs/mocks/wiki-rail 03 Ⓑ), the entry drawer opening to
+   its left; narrower than 1440 the app sidebar shows as its icon rail for it (C2). Narrower than 1200 the panel lies
+   over the page and the directory folds into the Contents drawer. The page's foot keeps 88 clear so the button never
+   sits on its last line. */
 .wk-chat-host.has-fab .wk-page,
 .wk-chat-host.has-fab .wk-drawer { padding-bottom: 88px; }
-.wk-chat-host.is-docked .wk-page > :not(.wk-title-row) { margin-right: var(--wk-chat-w, 400px); }
+/* Beside the directory's column the clearance is the main column's: on the page it would stop the column short of the
+   window's foot when the page scrolls to its end. */
+.wk-chat-host.has-fab .wk-page--railed { padding-bottom: 0; }
+.wk-chat-host.has-fab .wk-page--railed .wk-main { padding-bottom: 88px; }
+/* Where it docks the panel is a column of the page (board docs/mocks/wiki-rail 03 Ⓑ): beside the page, from the window's
+   top to its foot as the directory's column is, held there while the page scrolls; before the chats are read an empty
+   slot of its width keeps the page from moving when it comes. */
+.wk-chat-frame.is-columned { display: flex; align-items: flex-start; }
+.wk-chat-frame.is-columned > .wk-chat-host { flex: 1; min-width: 0; }
+.wk-chat-frame.is-columned > .wk-chat-panel,
+.wk-chat-frame.is-columned > .wk-chat-slot { position: sticky; top: -24px; right: auto; bottom: auto; flex: none; box-sizing: border-box;
+                                             height: var(--app-vh, 100vh); margin: -24px -32px -24px 32px;
+                                             border: 0; border-left: 1px solid var(--border-subtle); border-radius: 0; }
 .wk-chat-host.is-open:not(.is-sheet) .wk-drawer,
 .wk-chat-host.is-open:not(.is-sheet) .wk-with-drawer .wk-scrim { right: var(--wk-chat-w, 400px); }
 .wk-chat-host.is-fold .wk-layout { display: block; }
+/* Folded, the column is gone with the directory: the head row and the search line are back over the page. */
+.wk-chat-host.is-fold .wk-page--railed { display: block; }
+.wk-chat-host.is-fold .wk-page--railed > .wk-title-row { display: flex; }
+.wk-chat-host.is-fold .wk-page--railed > .wk-search { display: flex; }
 .wk-chat-host.is-fold .wk-dir-col { display: none; }
 .wk-chat-host.is-fold .wk-page .wk-contents-btn { display: inline-flex; }
 .wk-chat-host .wk-dc-page { position: relative; }
