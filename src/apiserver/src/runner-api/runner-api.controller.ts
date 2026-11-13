@@ -164,6 +164,7 @@ import {
   type NormalizedRunEvent,
   toUuid,
   CLAUDE_REGION_V1,
+  TASK_FORK_V1,
   CLAUDE_REGION_REFUSED_SUBTYPE,
   CLAUDE_REGION_STOPPED_SUBTYPE,
   type ClaudeRegionCheckRequest,
@@ -2475,6 +2476,7 @@ export class RunnerApiController {
     let postponeSelfUpdateUntil: RunnerHeartbeatResponse['postponeSelfUpdateUntil'];
     let selfUpdateNow: RunnerHeartbeatResponse['selfUpdateNow'];
     let regionCheckRequest: RunnerHeartbeatResponse['regionCheckRequest'];
+    let forkSnapshotsOpen: RunnerHeartbeatResponse['forkSnapshotsOpen'];
     try {
       cancelSessionIds = await this.realtime.drainCancellations(runner.id);
       // Manual git mutations are fail-closed: a runner must advertise its process owner,
@@ -2537,6 +2539,9 @@ export class RunnerApiController {
       selfUpdateNow = await this.drainSelfUpdateNow(runner.id);
       // The owner's Check again, redelivered rather than claimed: a beat that skips it costs nothing, so it is last.
       regionCheckRequest = await this.drainRegionCheckRequest(runner.id, capabilities);
+      // A listing, read on every full beat like agentDirs; a beat that fails before it states nothing, which the
+      // runner reads as "delete nothing".
+      forkSnapshotsOpen = await this.forkSnapshotsOpen(updated.ownerId, runner.id, capabilities);
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
@@ -2614,6 +2619,8 @@ export class RunnerApiController {
       ...(cursorKeyChecks.length > 0 ? { cursorKeyChecks } : {}),
       // Only while the owner's Check again waits, and only to a process that declared claude-region/v1.
       ...(regionCheckRequest ? { regionCheckRequest } : {}),
+      // Only to a process that declared task-fork/v1: an older runner's response keeps its shape.
+      ...(forkSnapshotsOpen ? { forkSnapshotsOpen } : {}),
       // Only to a runner that declared owner-secret/v1: ids and expiries, never a value.
       ...(secretReconcile ?? {}),
       // Only on a link call, which the gateway takes it out of: an HTTPS response keeps its shape.
@@ -2997,6 +3004,26 @@ export class RunnerApiController {
       data: { selfUpdateNowRequestedAt: null },
     });
     return claimed.count > 0 ? true : undefined;
+  }
+
+  /**
+   * The snapshots this runner's open forked tasks start from (docs/task-fork-from-session-design.md §2.6, SR55): the
+   * distinct `fork_sha` of every OPEN or IN_PROGRESS task forked on this runner. The runner deletes each keep-alive ref
+   * whose snapshot is not listed, so a task that closed lets its snapshot go. Only to a process that declares
+   * task-fork/v1; undefined otherwise, which deletes nothing. Reads only, through the owner's status index.
+   */
+  private async forkSnapshotsOpen(
+    ownerId: string,
+    runnerId: string,
+    capabilities: string | string[] | undefined,
+  ): Promise<string[] | undefined> {
+    if (!runnerSupportsCapability(capabilities, TASK_FORK_V1)) return undefined;
+    const rows = await this.prisma.task.findMany({
+      where: { ownerId, status: { in: ['OPEN', 'IN_PROGRESS'] }, forkRunnerId: runnerId, forkSha: { not: null } },
+      select: { forkSha: true },
+      distinct: ['forkSha'],
+    });
+    return rows.map((r) => r.forkSha as string);
   }
 
   /**

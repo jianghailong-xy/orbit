@@ -230,6 +230,10 @@ export const HEARTBEAT_DELIVERIES = {
     ],
     pending: 'a grant of the runner being removed (readLinkReconcilePending)',
   },
+  forkSnapshotsOpen: {
+    how: 'FULL_ONLY',
+    reads: 'the open forked tasks of the runner, on every full reconcile (at least every five minutes); a quiet answer leaves it out, which the runner reads as "delete nothing"',
+  },
   linkHints: { how: 'EVERY_BEAT', reads: 'readRunnerLinkHints in the beat statement; watchers and the release in this process' },
 } as const satisfies Record<keyof Required<RunnerHeartbeatResponse> | 'linkHints', HeartbeatDelivery>;
 

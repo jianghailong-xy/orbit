@@ -1358,7 +1358,18 @@ export interface RunnerHeartbeatResponse {
   secretGrants?: Array<{ id: string; expiresAt: string }>;
   /** Grants of this runner being removed: remove the copy if held, then confirm with /removed either way. */
   secretGrantsRemoving?: string[];
+  /**
+   * The snapshots this runner's open forked tasks start from (docs/task-fork-from-session-design.md §2.6): the runner
+   * deletes each keep-alive ref `refs/orbit/fork/*` whose snapshot is not listed. Sent only to a runner that declared
+   * `task-fork/v1`, and only by a beat that reconciles in full. Only a PRESENT list states anything: absent deletes
+   * nothing, `[]` means no open forked task.
+   */
+  forkSnapshotsOpen?: string[];
 }
+
+/** Declared by a runner that deletes the fork keep-alive refs `forkSnapshotsOpen` no longer names. runner-go asserts
+ *  the same string. */
+export const TASK_FORK_V1 = 'task-fork/v1';
 
 /** Declared by a runner that honours the owner's Later (`postponeSelfUpdateUntil`,
  *  docs/runner-update-drain-design.md §4). A runner without it is refused a postpone as too old.
