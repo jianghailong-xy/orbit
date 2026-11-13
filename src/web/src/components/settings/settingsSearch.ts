@@ -1,8 +1,8 @@
-import { PERSONAL_PAGES, PERSONAL_SETTINGS } from '../../pages/settings/settingsIndex';
+import { INTEGRATION_PAGES, PERSONAL_PAGES, PERSONAL_SETTINGS } from '../../pages/settings/settingsIndex';
 import { vendorName, vendorOf } from '../ProviderGallery';
 
 /**
- * Settings' search box (docs/mocks/settings-redesign, board-2 note 2): one query over all four groups —
+ * Settings' search box (docs/mocks/settings-redesign, board-2 note 2): one query over all five groups —
  * Personal pages and the title and description of each setting on them, machine names and hostnames,
  * vendor names and key labels, workspace names and working directories. Each hit opens a page, and
  * names the row on it to flash (SettingsRow's `anchor`) when the match was a row's.
@@ -17,7 +17,7 @@ export type SettingsHit = {
 };
 
 export type SettingsHitGroup = {
-  title: 'Personal' | 'Machines' | 'Providers' | 'Workspaces';
+  title: 'Personal' | 'Integrations' | 'Machines' | 'Providers' | 'Workspaces';
   hits: SettingsHit[];
 };
 
@@ -66,6 +66,12 @@ export function searchSettings(query: string, sources: SettingsSearchSources): S
       anchor: s.anchor,
     });
   }
+
+  const integrations: SettingsHit[] = INTEGRATION_PAGES.filter((page) => has(page.label, q)).map((page) => ({
+    key: page.path,
+    label: page.label,
+    to: page.path,
+  }));
 
   const machines: SettingsHit[] = [];
   for (const runner of sources.runners) {
@@ -129,6 +135,7 @@ export function searchSettings(query: string, sources: SettingsSearchSources): S
 
   const groups: SettingsHitGroup[] = [
     { title: 'Personal', hits: personal },
+    { title: 'Integrations', hits: integrations },
     { title: 'Machines', hits: machines },
     { title: 'Providers', hits: providers },
     { title: 'Workspaces', hits: workspaces },
