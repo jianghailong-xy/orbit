@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 31 |
-| `user` | 416 |
+| `user` | 419 |
 | `admin` | 28 |
-| `runner` | 176 |
+| `runner` | 184 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **655** |
+| **Total** | **666** |
 
 ## Public routes
 
@@ -229,6 +229,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/providers/mine/:id/balance` | path `id`; query `refresh` | `ProvidersController.balanceMine` |
 | `GET` | `/api/providers/mine/:id/key` | path `id` | `ProvidersController.revealMineKey` |
 | `POST` | `/api/providers/mine/:id/key-check` | path `id` | `ProvidersController.recheckMineKey` |
+| `PATCH` | `/api/providers/mine/:id/model-tier` | body `UpdateProviderModelTierDto`; path `id` | `ProvidersController.setModelTier` |
 | `GET` | `/api/providers/mine/:id/usage` | path `id` | `ProvidersController.usageMine` |
 | `GET` | `/api/providers/pools` | — | `ProvidersController.listPools` |
 | `POST` | `/api/providers/pools` | body `CreateProviderPoolDto` | `ProvidersController.createPool` |
@@ -255,6 +256,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/providers/shared-pools/:id/people` | body `AddSharedPoolPersonDto`; path `id` | `SharedPoolsController.addPerson` |
 | `DELETE` | `/api/providers/shared-pools/:id/people/:userId` | path `id`, `userId` | `SharedPoolsController.removePerson` |
 | `PATCH` | `/api/providers/shared-pools/:id/people/:userId` | body `UpdateSharedPoolPersonDto`; path `id`, `userId` | `SharedPoolsController.setRole` |
+| `GET` | `/api/providers/subagent-tiers` | — | `ProvidersController.subagentTiers` |
 | `POST` | `/api/providers/test` | body `TestModelProviderDto` | `ProvidersController.test` |
 | `POST` | `/api/push/register` | body `RegisterDeviceTokenDto` | `PushController.register` |
 | `POST` | `/api/push/unregister` | body `UnregisterDeviceTokenDto` | `PushController.unregister` |
@@ -355,6 +357,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/sessions/:id/share` | path `id` | `ShareLinksController.sessionLink` |
 | `POST` | `/api/sessions/:id/share` | path `id` | `ShareLinksController.enableSessionLink` |
 | `PUT` | `/api/sessions/:id/share` | body `PutShareLinkDto`; path `id` | `ShareLinksController.putSessionLink` |
+| `GET` | `/api/sessions/:id/subagents` | path `id` | `SessionsController.subagentRuns` |
 | `PUT` | `/api/sessions/:id/tags` | body `SetSessionTagsDto`; path `id` | `SessionsController.setTags` |
 | `GET` | `/api/sessions/:id/turns` | path `id`; query `view` | `SessionsController.queuedTurns` |
 | `POST` | `/api/sessions/:id/turns` | body `Object`; path `id` | `SessionsController.turn` |
@@ -654,6 +657,11 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/sessions/:id/release-leases` | body `Object`; path `id` | `RunnerApiController.releaseLeases` |
 | `POST` | `/api/runner/sessions/:id/scheduled-wakeup` | body `ScheduledWakeupDto`; path `id` | `RunnerApiController.scheduledWakeup` |
 | `POST` | `/api/runner/sessions/:id/source/pin` | body `Object`; path `id` | `RunnerApiController.pinSessionSource` |
+| `POST` | `/api/runner/sessions/:id/subagents` | body `SubagentRunCreateDto`; path `id` | `RunnerSubagentsController.openSubagentRun` |
+| `PATCH` | `/api/runner/sessions/:id/subagents/:runId` | body `SubagentRunUpdateDto`; path `id`, `runId` | `RunnerSubagentsController.updateSubagentRun` |
+| `GET` | `/api/runner/sessions/:id/subagents/:runId/events` | path `id`, `runId`; query `after` | `RunnerSubagentsController.readRelayedSubagentEvents` |
+| `POST` | `/api/runner/sessions/:id/subagents/:runId/fallback` | body `SubagentFallbackDto`; path `id`, `runId` | `RunnerSubagentsController.nextSubagentCandidate` |
+| `POST` | `/api/runner/sessions/:id/subagents/:runId/stop` | path `id`, `runId` | `RunnerSubagentsController.stopRemoteSubagentRun` |
 | `POST` | `/api/runner/sessions/:id/takeover-leases` | body `Object`; path `id` | `RunnerApiController.takeoverLeases` |
 | `POST` | `/api/runner/sessions/:id/turn-complete` | body `Object`; path `id` | `RunnerApiController.turnComplete` |
 | `POST` | `/api/runner/sessions/:id/turns` | body `Object`; path `id` | `RunnerSessionsController.sendMessage` |
@@ -664,6 +672,9 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/runner/sessions/search` | query `limit`, `q` | `RunnerSessionsController.searchSessions` |
 | `POST` | `/api/runner/sessions/takeover-leases` | body `Object` | `RunnerApiController.takeoverLeasesBatch` |
 | `POST` | `/api/runner/sessions/worktrees-removable` | body `Object` | `RunnerApiController.worktreesRemovable` |
+| `PATCH` | `/api/runner/subagent-runs/:runId` | body `SubagentRunUpdateDto`; path `runId` | `RunnerSubagentsController.endRemoteSubagentRun` |
+| `POST` | `/api/runner/subagent-runs/:runId/claim` | path `runId` | `RunnerSubagentsController.claimRemoteSubagentRun` |
+| `POST` | `/api/runner/subagent-runs/:runId/events` | body `Object`; path `runId` | `RunnerSubagentsController.relaySubagentEvents` |
 | `GET` | `/api/runner/task-lists` | — | `RunnerTasksController.listLists` |
 | `POST` | `/api/runner/task-lists` | body `CreateTaskListDto` | `RunnerTasksController.createList` |
 | `DELETE` | `/api/runner/task-lists/:id` | path `id` | `RunnerTasksController.deleteList` |
