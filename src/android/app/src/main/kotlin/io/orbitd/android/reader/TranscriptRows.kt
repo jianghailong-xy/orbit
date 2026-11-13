@@ -267,9 +267,12 @@ internal class EngineReading(events: List<RunEvent>) {
         copy(type = type, payload = buildJsonObject(build), truncated = false)
 }
 
-/** A signed-out engine's own words (OrbitKit `EngineAuth.isAuthErrorText`): a sign-in remedy, not an API error. */
+/** A signed-out engine's own words (OrbitKit `EngineAuth.isAuthErrorText`): a sign-in remedy, not an API error.
+ * A failure of the connection — Cloudflare's block page, a dropped socket — carries the same prefix but is not
+ * one: the credentials are intact and it clears on its own, so it is excluded here and retried instead. */
 internal object EngineAuth {
-    fun isAuthErrorText(text: String?): Boolean = text != null && text.trimStart().startsWith("Failed to authenticate")
+    fun isAuthErrorText(text: String?): Boolean =
+        text != null && !EngineErrors.isConnectionFailureText(text) && text.trimStart().startsWith("Failed to authenticate")
 }
 
 /**
