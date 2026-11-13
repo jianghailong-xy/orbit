@@ -42,7 +42,7 @@ const OPEN_PROJECTS: SidebarProject[] = [{
   title: 'DeepSeek Harness',
   status: 'OPEN',
   createdAt: '2026-08-01T00:00:00.000Z',
-  lastActivityAt: '2026-10-05T00:00:00.000Z',
+  lastActivityAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
   buckets: { running: 0 },
   attention: { ownerItems: [] },
   coordinatorActivity: null,
@@ -234,15 +234,15 @@ describe('Machines & models, which has no sidebar row (docs/mocks/machines-and-m
     expect(labels).toEqual(['Projects', 'Tasks', 'Waiting on you', 'Wiki']);
   });
 
-  it('is a row of the account menu, above Settings, that opens its page', async () => {
+  it('is no row of the account menu either: it is a part of Settings', async () => {
     serve();
     await visit('/tasks');
     await click(container!.querySelector<HTMLElement>('.tp-user-trigger')!);
-    const rows = [...document.querySelectorAll<HTMLElement>('[role="menu"].tp-account-menu [role="menuitem"]')];
-    const labels = rows.map((row) => row.textContent);
-    expect(labels.indexOf('Machines & models')).toBe(labels.indexOf('Settings') - 1);
-    await click(rows.find((row) => row.textContent === 'Machines & models')!);
-    expect(location).toBe('/infrastructure');
+    const labels = [...document.querySelectorAll<HTMLElement>('[role="menu"].tp-account-menu [role="menuitem"]')].map(
+      (row) => row.textContent,
+    );
+    expect(labels).toContain('Settings');
+    expect(labels).not.toContain('Machines & models');
   });
 
   it.each([

@@ -265,22 +265,58 @@ const (
 	selfUpdateStateHeldByRollout = "heldByRollout"
 )
 
+// The phases of a release this runner is behind (SelfUpdateReport.Phase), mirroring @orbit/shared
+// RunnerSelfUpdatePhase.
+const (
+	// Waiting for the turns in flight to end, under the deferral limit: work goes on as usual.
+	selfUpdatePhaseAvailable = "available"
+	// Past the limit: no new work is taken until the turns in flight end (drainForUpdate).
+	selfUpdatePhaseDraining = "draining"
+	// Nothing in flight: stopping to install the release and start again.
+	selfUpdatePhaseRestarting = "restarting"
+	// The owner put the release off until PostponedUntil; work goes on as usual.
+	selfUpdatePhasePostponed = "postponed"
+)
+
+// selfUpdatePostponeCapabilityV1 declares that this runner honours the owner's Later
+// (HeartbeatResponse.PostponeSelfUpdateUntil): @orbit/shared's SELF_UPDATE_POSTPONE_V1. The control
+// plane refuses a postpone for a runner that does not declare it, which would drop it unread.
+const selfUpdatePostponeCapabilityV1 = "self-update-postpone/v1"
+
+// selfUpdatePhase is the part of the report about a waiting release; the zero value is none.
+type selfUpdatePhase struct {
+	phase, targetVersion                          string
+	availableSince, drainingSince, postponedUntil time.Time
+	turnsInFlight, turnsAtDrain                   int
+	// Restarting for the owner's Update Now: the turns it interrupted.
+	interruptedTurns int
+}
+
 // selfUpdateStatus is where this runner's updates of itself stand, for the heartbeat: set by the
 // update at startup, by every release check, and by the install that follows a drain.
 var selfUpdateStatus struct {
 	mu                        sync.Mutex
 	state, reason, installDir string
+	phase                     selfUpdatePhase
 }
 
 // noteSelfUpdate records what the latest look at this runner's updates found. An empty installDir
-// keeps the one recorded before.
+// keeps the one recorded before. It clears the phase: a look that found no release waiting, or a
+// failure, ends whatever the Update card said (noteSelfUpdatePhase sets one).
 func noteSelfUpdate(state, reason, installDir string) {
+	noteSelfUpdatePhase(state, reason, selfUpdatePhase{})
+	if installDir != "" {
+		selfUpdateStatus.mu.Lock()
+		selfUpdateStatus.installDir = installDir
+		selfUpdateStatus.mu.Unlock()
+	}
+}
+
+// noteSelfUpdatePhase records a state together with where the waiting release stands.
+func noteSelfUpdatePhase(state, reason string, phase selfUpdatePhase) {
 	selfUpdateStatus.mu.Lock()
 	defer selfUpdateStatus.mu.Unlock()
-	selfUpdateStatus.state, selfUpdateStatus.reason = state, reason
-	if installDir != "" {
-		selfUpdateStatus.installDir = installDir
-	}
+	selfUpdateStatus.state, selfUpdateStatus.reason, selfUpdateStatus.phase = state, reason, phase
 }
 
 // selfUpdateStateOf is what one release check found. An install directory this user cannot write
@@ -305,6 +341,7 @@ func selfUpdateStateOf(installable bool, checkErr error, heldBack bool) (state, 
 func selfUpdateReport() *SelfUpdateReport {
 	selfUpdateStatus.mu.Lock()
 	state, reason, dir := selfUpdateStatus.state, selfUpdateStatus.reason, selfUpdateStatus.installDir
+	phase := selfUpdateStatus.phase
 	selfUpdateStatus.mu.Unlock()
 	if state == "" {
 		return nil
@@ -313,7 +350,23 @@ func selfUpdateReport() *SelfUpdateReport {
 	return &SelfUpdateReport{
 		State: state, Reason: reason, InstallDir: dir,
 		LastUpdatedAt: last.At, LastUpdatedFrom: last.From, LastUpdatedTo: last.To,
+		Phase: phase.phase, TargetVersion: phase.targetVersion,
+		AvailableSince: rfc3339OrEmpty(phase.availableSince),
+		DrainingSince:  rfc3339OrEmpty(phase.drainingSince),
+		PostponedUntil: rfc3339OrEmpty(phase.postponedUntil),
+		TurnsInFlight:  phase.turnsInFlight, TurnsAtDrain: phase.turnsAtDrain,
+		InterruptedTurns:           phase.interruptedTurns,
+		LastUpdateSeconds:          last.restartSeconds(),
+		LastUpdateInterruptedTurns: last.InterruptedTurns,
+		QuietWindowSeconds:         int(selfUpdateQuietWindow / time.Second),
 	}
+}
+
+func rfc3339OrEmpty(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
 }
 
 // selfUpdateRecord is the last update this runner installed into itself. Kept on disk next to the
@@ -322,6 +375,34 @@ type selfUpdateRecord struct {
 	At   string `json:"lastUpdatedAt"`
 	From string `json:"lastUpdatedFrom"`
 	To   string `json:"lastUpdatedTo"`
+	// The restart, for the Updated card: when the stop for it began, how many turns an Update Now
+	// interrupted for it, and when the image it restarted into started (markSelfUpdateBack). Absent in
+	// a record an older runner wrote.
+	StoppedAt        string `json:"stoppedAt,omitempty"`
+	InterruptedTurns int    `json:"interruptedTurns,omitempty"`
+	BackAt           string `json:"backAt,omitempty"`
+}
+
+// restartSeconds is how long the restart took, from the stop to the new image starting; 0 when the
+// record does not say.
+func (r selfUpdateRecord) restartSeconds() int {
+	stopped, err1 := time.Parse(time.RFC3339, r.StoppedAt)
+	back, err2 := time.Parse(time.RFC3339, r.BackAt)
+	if err1 != nil || err2 != nil || back.Before(stopped) {
+		return 0
+	}
+	return max(1, int(back.Sub(stopped).Round(time.Second)/time.Second))
+}
+
+// markSelfUpdateBack is the first thing the image an update restarted into says about it: it is
+// back, now. Only once per update — a later start of the same image is not the restart.
+func markSelfUpdateBack(now time.Time) {
+	rec := lastSelfUpdate()
+	if rec.StoppedAt == "" || rec.BackAt != "" || rec.To != version {
+		return
+	}
+	rec.BackAt = now.UTC().Format(time.RFC3339)
+	writeSelfUpdateRecord(rec)
 }
 
 func selfUpdateRecordPath() string { return filepath.Join(machineHome(), "self-update.json") }
@@ -339,7 +420,16 @@ func lastSelfUpdate() selfUpdateRecord {
 // recordSelfUpdate files an installed update. Best-effort, like engineUpdateLog: losing it costs the
 // "last updated" line, never the update.
 func recordSelfUpdate(from, to string, at time.Time) {
-	b, err := json.Marshal(selfUpdateRecord{At: at.UTC().Format(time.RFC3339), From: from, To: to})
+	rec := selfUpdateRecord{At: at.UTC().Format(time.RFC3339), From: from, To: to}
+	if stopped := updateNowRestart.startedAt.Load(); stopped != nil {
+		rec.StoppedAt = stopped.UTC().Format(time.RFC3339)
+		rec.InterruptedTurns = int(updateNowRestart.interrupted.Load())
+	}
+	writeSelfUpdateRecord(rec)
+}
+
+func writeSelfUpdateRecord(rec selfUpdateRecord) {
+	b, err := json.Marshal(rec)
 	if err != nil {
 		return
 	}

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Settings 侧栏配色对齐主 workspace</title>
+<style>
+  body { margin: 0; background: #eef0f3; font: 14px/1.55 -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans SC', sans-serif; color: #1f2329; }
+  .board { width: 1180px; padding: 36px 40px 44px; background: #eef0f3; }
+  h1 { margin: 0 0 4px; font-size: 24px; }
+  .sub { margin: 0 0 24px; color: #646a73; }
+  .row { display: flex; gap: 28px; margin-bottom: 28px; }
+  .frame { flex: 1; }
+  .frame h2 { margin: 0 0 8px; font-size: 15px; }
+  .frame h2 small { font-weight: 400; color: #646a73; margin-left: 6px; }
+  .frame img { width: 100%; display: block; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.14); }
+  .theme { margin: 0 0 10px; font-size: 13px; font-weight: 600; color: #8f959e; letter-spacing: .04em; text-transform: uppercase; }
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.08); font-size: 13px; }
+  th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #eceef1; vertical-align: top; }
+  th { background: #fafbfc; color: #646a73; font-weight: 600; }
+  code { font: 12px 'JetBrains Mono', ui-monospace, monospace; background: #f1f1f4; padding: 1px 4px; border-radius: 4px; }
+  .notes { display: flex; gap: 28px; }
+  .notes > div { flex: 1; }
+  .notes h3 { margin: 0 0 8px; font-size: 15px; }
+  .notes ul { margin: 0; padding-left: 18px; }
+  .open { background: #fff7e6; border: 1px solid #ffd591; border-radius: 10px; padding: 12px 16px; }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>Settings 侧栏配色对齐主 workspace</h1>
+  <p class="sub">真实页面截图（vite + ui-migration fixtures，1440×900 @2x），只截左侧导航栏。② 是把 <code>proposal.css</code> 注入到真实页面后的效果，和准备提交的改动完全一样。</p>
+
+  <p class="theme">Light</p>
+  <div class="row">
+    <div class="frame"><h2>① 现在 <small>Settings</small></h2><img src="frames/crop-settings-today-light.png"></div>
+    <div class="frame"><h2>② 修改后 <small>Settings</small></h2><img src="frames/crop-settings-new-light.png"></div>
+    <div class="frame"><h2>参照 <small>主 workspace 侧栏</small></h2><img src="frames/crop-main-light.png"></div>
+  </div>
+
+  <p class="theme">Dark</p>
+  <div class="row">
+    <div class="frame"><h2>① 现在</h2><img src="frames/crop-settings-today-dark.png"></div>
+    <div class="frame"><h2>② 修改后</h2><img src="frames/crop-settings-new-dark.png"></div>
+    <div class="frame"><h2>参照</h2><img src="frames/crop-main-dark.png"></div>
+  </div>
+
+  <table>
+    <tr><th>元素</th><th>① 现在</th><th>② 修改后</th><th>对齐的主侧栏规则</th></tr>
+    <tr><td>侧栏底色</td><td><code>--bg-subtle</code> #fafbfc</td><td><code>--bg-base</code> 白（保留右侧 1px 分隔线）</td><td>主侧栏是 <code>--bg-base</code></td></tr>
+    <tr><td>选中行</td><td><code>--bg-hover-strong</code> 灰底，黑字，字重 500</td><td><code>--brand-tint</code> 浅蓝底，图标、文字和右侧标注都是 <code>--brand</code>，常规字重</td><td><code>.tp-item.active</code>、<code>.tp-item.active .tp-count</code></td></tr>
+    <tr><td>搜索框</td><td><code>--fill-muted</code> 实心灰，无边框，32px</td><td><code>--bg-sunken</code> + 1px <code>--border-subtle</code>，34px</td><td><code>.session-search</code></td></tr>
+    <tr><td>分组标题</td><td>12px，<code>--text-3</code>，26px 高</td><td>13px，字重 600，<code>--text-2</code>，32px 高</td><td><code>.tp-group-name</code>、<code>.tp-group-head</code></td></tr>
+    <tr><td>行高 / 字号</td><td>30px / 13px</td><td>36px / 14px</td><td><code>.tp-item</code></td></tr>
+  </table>
+
+  <div class="notes" style="margin-top:24px">
+    <div>
+      <h3>改动范围</h3>
+      <ul>
+        <li>只改 <code>src/web/src/components/settings/Settings.css</code>，不新增颜色变量，深色主题自动跟着改。</li>
+        <li>窄屏（手机）布局本来就是白底、40px 行高，不受影响。</li>
+        <li>拖动机器时的行（<code>.settings-nav-sortable.dragging</code>）仍是灰底加阴影，不变。</li>
+      </ul>
+    </div>
+    <div class="open">
+      <h3>待你定</h3>
+      <ul>
+        <li>行高 36px 后侧栏会更长，机器、Workspace 多的账号要多滚一点；Workspaces 仍是默认显示 5 个加 “Show all”。</li>
+        <li>选中行沿用主侧栏的常规字重，没有加粗；要保留 500 的话告诉我。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+</body>
+</html>

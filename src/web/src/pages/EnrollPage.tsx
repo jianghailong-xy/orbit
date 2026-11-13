@@ -259,7 +259,7 @@ export function EnrollPage() {
             {START_A_SESSION}
           </a>
         </div>
-        <a className="enroll-quiet-link" href={runnerId ? `/runners/${encodeId(runnerId)}` : '/infrastructure'}>
+        <a className="enroll-quiet-link" href={runnerId ? `/settings/machines/${encodeId(runnerId)}` : '/settings/general'}>
           {ENROLL_OPEN_MACHINE}
         </a>
       </EnrollShell>

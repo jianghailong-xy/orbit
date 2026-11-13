@@ -5,12 +5,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsage, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
-import { ownSignInPanel, RunnerEngines } from './RunnerEngines';
+import { ownSignInPanel } from './RunnerEngines';
+import { EngineRows } from './RunnerEngines.test-rows';
 import {
   clickRunnerMenuItem,
   dialogDescription,
   dialogName,
-  openRunnerCards,
+  openAccountGroups,
   openRunnerMenu,
   runnerMenuItem,
 } from './RunnerEngines.test-helpers';
@@ -131,9 +132,9 @@ afterEach(() => {
   localStorage.clear();
 });
 
-/** The section over these runners, their cards open — and, unless `folded`, every group of accounts. */
+/** These runners' engine rows, with every group of accounts open unless `folded`. */
 function mount(runners: Runner[], { folded = false } = {}) {
-  openRunnerCards(runners);
+  openAccountGroups(runners);
   if (folded) localStorage.removeItem('orbit:providers-open-accounts');
   apiMock.mockImplementation(async (path: string, options?: { method?: string }) => {
     if (path === '/runners') return runners;
@@ -153,7 +154,7 @@ function mount(runners: Runner[], { folded = false } = {}) {
     root!.render(
       <MemoryRouter initialEntries={['/providers']}>
         <QueryClientProvider client={qc}>
-          <RunnerEngines />
+          <EngineRows />
         </QueryClientProvider>
       </MemoryRouter>,
     ),

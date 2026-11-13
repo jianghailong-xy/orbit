@@ -26,6 +26,7 @@ import {
   DoneProjectDto,
   DecideCriteriaChangeDto,
   DecideProjectHandoffDto,
+  MoveCriterionDto,
   OpenProjectCoordinatorDto,
   RebindProjectCoordinatorDto,
   ReplaceProjectCoordinatorDto,
@@ -518,6 +519,24 @@ export class ProjectsController {
   }
 
   /**
+   * The done card's "Move to a follow-up…": one unmet criterion of this project, and its serving
+   * tasks that are not DONE or CANCELLED, moved to another open project or to a new one, in one
+   * transaction (`ProjectsService.moveCriterion`, `criterion-move.ts`). The owner's alone: a request
+   * made from a session is refused 403.
+   */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Post(':id/criteria/:criterionKey/move')
+  moveCriterion(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('criterionKey', PublicIdPipe) criterionKey: string,
+    @Body() dto: MoveCriterionDto,
+    @Headers('x-orbit-session-id') actingSessionId: string | undefined,
+  ) {
+    return this.projects.moveCriterion(user.userId, id, criterionKey, dto, actingSessionId, user.credential);
+  }
+
+  /**
    * Complete on a finished project's row (docs/session-list-projects-design.md §3.6): its coordinator
    * and its members still in Open, in every workspace, moved to Completed together; the answer is
    * `{ completed }`, how many moved (`ProjectsService.completeSessions`). A DONE or CANCELLED project
@@ -855,6 +874,16 @@ export class ProjectsController {
    * it is in Trash and whether the press would refuse — all four BEFORE the press, which is the one
    * thing pressing it can never tell you.
    */
+  /**
+   * Every unfinished task's pending item, who can move it and when they were told, and whether it is
+   * an orphan (docs/evidence-always-has-an-addressee-design.md §4). A read in the strict sense.
+   */
+  @PatScope('projects:read', { workspaceConfinable: false })
+  @Get(':id/pending-addressees')
+  pendingAddressees(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.projects.pendingAddressees(user.userId, id);
+  }
+
   @PatScope('projects:read', { workspaceConfinable: false })
   @Get(':id/coordinator/status')
   coordinatorStatus(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {

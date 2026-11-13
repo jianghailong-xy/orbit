@@ -558,6 +558,28 @@ public final class APIClient: @unchecked Sendable {
         return result.count
     }
 
+    // MARK: People who can reply — a session's guests (docs/session-guests-design.md §3, §7)
+
+    /// The people the owner invited to reply in this session. Web parity: `getSessionGuests`.
+    public func sessionGuests(_ sessionID: String) async throws -> [SessionGuestPerson] {
+        let list: SessionGuestList = try await get("sessions/\(sessionID)/guests")
+        return list.guests
+    }
+
+    /// Invite an Orbit account by the email it signs in with; answers the people as they now stand.
+    /// Web parity: `inviteSessionGuest`.
+    public func inviteSessionGuest(_ sessionID: String, email: String) async throws -> [SessionGuestPerson] {
+        let list: SessionGuestList = try await post("sessions/\(sessionID)/guests",
+                                                    body: InviteSessionGuestRequest(email: email))
+        return list.guests
+    }
+
+    /// Take a guest out at once; answers the people who are left. Web parity: `removeSessionGuest`.
+    public func removeSessionGuest(_ sessionID: String, userID: String) async throws -> [SessionGuestPerson] {
+        let list: SessionGuestList = try await delete("sessions/\(sessionID)/guests/\(userID)")
+        return list.guests
+    }
+
     // MARK: personal access tokens — listed and revoked here, issued only on the web
     // (docs/personal-access-token-design.md §6.5, §9)
 
@@ -604,6 +626,14 @@ public final class APIClient: @unchecked Sendable {
     public func decideEvidence(taskID: String,
                                _ req: EvidenceDecisionRequest) async throws -> EvidenceDecisionResult {
         try await post("tasks/\(taskID)/evidence/decision", body: req)
+    }
+
+    /// Restart the task from the owner's pending row that offers it (`EvidenceRestart`). A Run press:
+    /// `triggerId` is drawn at the gesture (`PublicID.newToken`) and names it.
+    public func restartTaskFromEvidence(taskID: String, evidenceRevision: String,
+                                        triggerId: String) async throws -> EvidenceRestartResult {
+        try await post(EvidenceRestart.path(taskID: taskID, evidenceRevision: evidenceRevision),
+                       body: EvidenceRestartRequest(triggerId: triggerId))
     }
 
     /// What one version of a task's evidence cites, a page at a time, for the card that shows it
@@ -761,6 +791,45 @@ public final class APIClient: @unchecked Sendable {
                                    note: String) async throws -> ProjectDoneRequestDeclined {
         try await post("projects/\(projectID)/done-requests/\(itemID)/decline",
                        body: ProjectDoneDeclineBody(note: note))
+    }
+
+    // MARK: the done card's follow-ups (`ProjectDoneFollowUps.swift`)
+
+    /// Move to a follow-up… (`POST /projects/:id/criteria/:criterionKey/move`): one unmet criterion
+    /// and its open serving tasks, to an open project or a new one. The owner's alone.
+    public func moveCriterion(projectID: String, criterionKey: String,
+                              _ body: MoveCriterionBody) async throws -> MoveCriterionResult {
+        try await post("projects/\(projectID)/criteria/\(criterionKey)/move", body: body)
+    }
+
+    /// The owner's Confirm sheet on a criterion met by confirmation.
+    public func confirmCriterion(projectID: String, criterionID: String,
+                                 _ body: ConfirmCriterionBody) async throws {
+        try await postRaw("projects/\(projectID)/criteria/\(criterionID)/confirmations", body: body)
+    }
+
+    /// Withdraw a standing confirmation: the criterion goes back to waiting for one.
+    public func withdrawCriterionConfirmation(projectID: String, criterionID: String) async throws {
+        try await postRaw("projects/\(projectID)/criteria/\(criterionID)/confirmations/withdraw",
+                          body: Optional<Empty>.none)
+    }
+
+    /// Run an Agent check of a criterion against its verification method.
+    public func startCriterionCheck(projectID: String, criterionID: String) async throws {
+        try await postRaw("projects/\(projectID)/criteria/\(criterionID)/checks",
+                          body: Empty())
+    }
+
+    /// The owner's non-code mark (How it runs' Delivers row), written by the owner's PATCH.
+    public func setProjectNonCode(_ projectID: String, nonCode: Bool) async throws {
+        _ = try await send(makeRequest("projects/\(projectID)", method: "PATCH",
+                                       body: ProjectNonCodeBody(nonCode: nonCode)))
+    }
+
+    /// "Met by: …" — the set restated with one criterion's mode changed. A change of mode is a
+    /// criteria change, so the server may hold it for a decision; the answer then says so.
+    public func setCriteriaModes(_ projectID: String, _ body: CriteriaModeBody) async throws -> CriteriaModeAnswer {
+        try await patch("projects/\(projectID)", body: body)
     }
 
     // MARK: owner requests — what a session asked the account owner to do
@@ -1233,6 +1302,9 @@ public final class APIClient: @unchecked Sendable {
     /// `GET /tasks/:id/attribution`: where this work counts, where it was noticed, which crossing
     /// touches it and what blocks it — the detail page's Attribution block.
     public func taskAttribution(_ id: String) async throws -> TaskAttribution { try await get("tasks/\(id)/attribution") }
+    /// `GET /tasks/:id/evidence`: every version of the task's completion evidence, oldest first,
+    /// each with its decision once it has one.
+    public func taskEvidence(_ id: String) async throws -> [TaskEvidenceRevision] { try await get("tasks/\(id)/evidence") }
     /// `GET /tasks/:id/dependency-graph`, asked the way the browser's panel asks it: both directions,
     /// up to 500 tasks, unary chains paired.
     public func taskDependencyGraph(_ id: String) async throws -> TaskDependencyGraph {
@@ -1764,6 +1836,23 @@ public final class APIClient: @unchecked Sendable {
     @discardableResult
     public func requestRunnerSelfUpdate(_ id: String) async throws -> RunnerSelfUpdateRequest {
         try await postEmpty("runners/\(id)/self-update")
+    }
+
+    /// Update Now: the runner interrupts the owner's turns in flight, installs the waiting release and
+    /// restarts; each interrupted turn continues once it is back. Refused for a runner offline, too old
+    /// to honour it (no `self-update-now/v1`), or with nothing waiting.
+    @discardableResult
+    public func updateRunnerNow(_ id: String) async throws -> RunnerSelfUpdateNowResponse {
+        try await post("runners/\(id)/self-update/now", body: RunnerUpdateNow.request)
+    }
+
+    /// Later: the runner ends its drain for the waiting release now and puts it off until `until`,
+    /// capped at 09:00 tomorrow in `timeZone`. Refused for a runner offline, too old to honour it, or
+    /// with nothing waiting.
+    @discardableResult
+    public func postponeRunnerSelfUpdate(_ id: String, until: Date,
+                                         timeZone: TimeZone = .current) async throws -> RunnerSelfUpdatePostponeResponse {
+        try await post("runners/\(id)/self-update/postpone", body: RunnerUpdateLater.request(until: until, timeZone: timeZone))
     }
 
     /// Check again (docs/claude-region-check-contract.md §7): the runner checks its Claude region at

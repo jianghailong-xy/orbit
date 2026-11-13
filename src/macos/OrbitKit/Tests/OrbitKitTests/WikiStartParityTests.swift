@@ -610,7 +610,7 @@ final class WikiStartParityTests: XCTestCase {
         assertSays(card, "if (!plan.data) return null;", in: Self.card)
         assertSays(card, "if (to === 'setUp') return setSettingUp(true);", in: Self.card)
         assertSays(card, "if (to === 'plan') return navigate(wikiPlanPath(space.slug));", in: Self.card)
-        assertSays(card, "if (to === 'runners') return navigate('/infrastructure');", in: Self.card)
+        assertSays(card, "if (to === 'runners') return navigate(machinesHref);", in: Self.card)
         assertSays(card, "const answer = await draft.mutateAsync(undefined);", in: Self.card)
         assertSays(card, "message.success(answer.created ? WIKI_PLAN_REDRAFT_ASKED : WIKI_PLAN_REDRAFT_ALREADY);", in: Self.card)
         assertSays(card, "message.error(\"\(WikiCopy.planDraftFailed)\"", in: Self.card)

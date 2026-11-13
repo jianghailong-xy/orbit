@@ -1449,7 +1449,7 @@ interface AskOwnerDto {
 
 投递的这条消息画成一行（修订 17）：`owner-answer:v1:` 轮次旁记一张 `ownerAnswer` 卡（`@orbit/shared` 的 `OwnerAnswerCard`：`itemId`、`kind`、`sessionId`、`deliveredAt`；owner 用 Not yet… 退回收尾请求的投递走同一命名空间，`kind` 是 `DONE_REQUEST`），排队读口的两种视图与 runner 回显入库读同一个函数（`readTurnCards`），排队时与回显后是同一张卡。`deliveredAt` 取**这个会话**那条 ANSWER 投递行的 `created_at`：R11 轮换后补投给新协调会话时，是新会话被投递的时刻，不是答复时刻。卡由投递行支撑：键在这一命名空间、却没有对应投递行的轮次（调用方自己起的键、投递事务没有提交），或键里的会话不是轮次所在的会话，都没有卡，照旧画成消息。客户端（web、OrbitKit、Android）把这条轮次画成一行灰胶囊 `Sent to the coordinator · HH:mm`（证据卡转交给协调会话那一行的同一句话、同一套时间写法），点开是给 agent 的原文；它是协调会话工作里的一行，不是新一轮的开头，sticky 条不指向它。消息文本一字不改：轮换出的新协调会话靠它知道问了什么。
 
-**R11（轮换不丢）**：协调会话绑定或轮换提交后（X-D4 第 2 条），给新会话投递满足以下任一条件的已答复提问：`blocksTaskIds` 里还有未 DONE / CANCELLED 的任务；或提问会话就是被替换掉的那一代协调会话。投递行唯一键 `(item, session, ANSWER)` 保证每一代只收一次。答复时没有协调会话 → 答复等到下一次绑定再投。
+**R11（轮换不丢）**：协调会话绑定或轮换提交后（X-D4 第 2 条），给新会话投递满足以下任一条件的已答复提问：`blocksTaskIds` 里还有未 DONE / CANCELLED 的任务；或提问会话就是被替换掉的那一代协调会话、且它没有收到过这条答复（没有它的 ANSWER 投递行）。被替换的那一代已读过、又不再阻塞任何任务的答复不补投：它已经在那一代处理过，补投一条就是新会话一个全量上下文的 turn（2026-11-12 一次轮换补投了 33 条）。投递行唯一键 `(item, session, ANSWER)` 保证每一代只收一次。答复时没有协调会话 → 答复等到下一次绑定再投。
 
 **R12（撤回）**：提问会话调用 `open_item_resolve` 处理自己的提问 → `WITHDRAWN`，`resolution_note` 是撤回理由。卡片不再消失（修订 14）：它成为一张 Withdrawn 记录，同样画在 `resolvedAt` 那一刻——标题 Withdrawn、灰色图标、问题开头两行、「The coordinator withdrew it」加理由；详情照样回放问题和选项，没有勾，底栏写「Withdrawn by the coordinator · HH:mm」加理由。owner 用自己的关闭门（`POST /projects/:id/open-items/:itemId/resolve`）关掉的提问同样是 `WITHDRAWN`，记录里 `resolvedBy = USER`，卡上写「You withdrew it」「Withdrawn by you · HH:mm」。
 
@@ -2521,3 +2521,5 @@ M-F4、M7、M-T11 不变：(a) 或 (b) 成立时，Automatic 的项目分支照�
 - **v1 修订 35**（owner 2026-11-08 决定）：协调者暂时不可用时，证据和异常待办只在其会话排队，不给 owner 出卡、不进 Needs you；当前分配的 ITEM 投递 turn 未取走前，项目页列表不返回、`escalatesAt` 为 NULL，不计时、不设上限。取走后从 `conversation_turn.delivered_at` 给满一个项目窗口；taken up、修复在途规则不变，已结束、进回收站、关掉 Automatic 仍立即转 owner。三端去掉 Waiting for the coordinator 折叠卡及 Decide it myself，`waitingOnCoordinator` 保留且恒为空数组。不在项目里的派发会话同样处理，FAILED 未结束等它回来补发一次，取走后才计 30 分钟。取代修订 7、13 中从未取走也按旧截止时间升级的部分。效果图原件见 `docs/mocks/coordinator-account-wait/board.html` 与 `board.png`；本修订只改文档。
 
 - **v1 修订 36**（2026-11-10，owner 当日裁决 Q26–Q29 按默认做法）：新增 §11「落地检查分两层与基线红」。`LAND_TASK` 跑项目的落地检查（`landing_check_command`，NULL 时沿用 `merge_check_command`），全检只在 M-S3 进 main 时跑（K1）；只改仓库声明的免检路径时跳过落地检查，名单从 upstream 读（K2）；落地检查红且这一代合入了 upstream 时，在不含任务的组合树上再跑一次判归属（K3）；基线红只开一条待办并扣住队列（K4），被扣的任务在结果事务里入队下一代、待办结案后自动续上，是 J5 的一处例外（K5）；修 upstream 的任务可直接进 upstream（K6，第 2 期）；晋升候选只在判据全部满足或协调会话显式请求时才建（K7）。附录 A 加 Q26–Q29。缘由与数据见 §11.1（项目 `34tldQSV0yrkdQ5yx6PpR`），设计图 `docs/mocks/landing-two-tier/`。本修订只改文档；§11.8 所列正文条款随实现任务改写，在此之前以 §11 为准。
+
+- **v1 修订 37**（2026-11-13，owner 当日裁决）：§5.2 R11「提问会话是被替换的那一代」一支收窄为「且那一代没有收到过这条答复」。缘由：2026-11-12 一次协调会话接手，被替换的那一代在 11-07～11-10 问过、早已收到的 33 条答复逐条补投，每条一个全量上下文 turn，新会话逐条回「已处理」。仍阻塞未结任务的答复照旧补投。`deliverAnsweredQuestions` 读被替换会话的 ANSWER 投递行；`blocking-request-replies.pg.spec.ts` 第 (h) 例改为三问：阻塞的、旧会话已读的、无人协调时答复的，补投第一与第三条。无迁移。

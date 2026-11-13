@@ -135,15 +135,12 @@ function WorksWith({ engines, models, defaultModel, usage }: {
 }
 
 /**
- * Step 1 of adding a provider (/providers/new): pick a vendor. Its own page rather than a modal
+ * Step 1 of adding a provider (/settings/providers/new): pick a vendor. Its own page rather than a modal
  * step, so picking a vendor is a normal navigation — back button included.
  */
 export function ProviderPickPage() {
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      <Link className="provider-back" to="/infrastructure#keys">
-        ‹ Machines & models
-      </Link>
+    <div>
       <h1 className="page-title" style={{ marginTop: 8 }}>
         Add a provider
       </h1>
@@ -159,8 +156,9 @@ export function ProviderPickPage() {
 }
 
 /**
- * Step 2 of adding a provider (/providers/new/:slug), and the edit form (/providers/:id): paste a
- * key, optionally probe it, and save.
+ * Step 2 of adding a provider (/settings/providers/new/:slug), and the edit form
+ * (/settings/providers/keys/:id), both in Settings' right-hand column: paste a key, optionally probe it,
+ * and save.
  *
  * Editing needs the row, and the management API only lists — so the page reads the same cached
  * list Infrastructure fills and picks its id out of it.
@@ -201,8 +199,8 @@ export function ProviderConnectPage() {
     if (!row) {
       return (
         <div className="provider-form">
-          <Link className="provider-back" to="/infrastructure#keys">
-            ‹ Machines & models
+          <Link className="provider-back" to="/settings/providers">
+            ‹ Providers
           </Link>
           <div style={{ marginTop: 16, color: 'var(--text-3)' }}>That provider no longer exists.</div>
         </div>
@@ -225,9 +223,9 @@ export function ProviderConnectPage() {
 
   // DeepSeek Harness is an engine now, and runs on a DeepSeek key: its old connect address (older
   // apps' "Add API key" links to it) connects one.
-  if (slug === DSH_PRESET_SLUG) return <Navigate to="/providers/new/deepseek" replace />;
+  if (slug === DSH_PRESET_SLUG) return <Navigate to="/settings/providers/new/deepseek" replace />;
   const preset = PROVIDER_PRESETS.find((p) => p.slug === slug);
-  if (!preset && slug !== 'custom') return <Navigate to="/providers/new" replace />;
+  if (!preset && slug !== 'custom') return <Navigate to="/settings/providers/new" replace />;
   return (
     <ProviderForm
       key={slug}
@@ -264,6 +262,8 @@ function ProviderForm({
   const isCustom = !preset;
   // The company the key is from, as the gallery names it.
   const vendor = preset ? vendorName(preset.slug) : null;
+  // The page of the vendor this key is (or will be) one of, in Settings' Providers group.
+  const vendorPage = `/settings/providers/${vendorOf(editing ? editing.presetSlug : preset?.slug)}`;
   const presetModels = catalog?.models ?? preset?.models ?? [];
   // The vendor's current pick, which a following provider dispatches with — not the one this
   // bundle was built with, or the form would probe the key against a model the session won't use.
@@ -416,7 +416,7 @@ function ProviderForm({
           .finally(() => void qc.invalidateQueries({ queryKey: PROVIDERS_LIST_KEY }));
       }
       message.success(editing ? 'Provider updated' : 'Provider created');
-      navigate('/infrastructure#keys');
+      navigate(vendorPage);
     },
     onError: (e: Error) => setSaveError(e.message),
   });
@@ -542,7 +542,7 @@ function ProviderForm({
         void qc.invalidateQueries({ queryKey: PROVIDERS_LIST_KEY });
         void qc.invalidateQueries({ queryKey: providersQuery().queryKey });
         message.success('Provider deleted');
-        navigate('/infrastructure#keys');
+        navigate('/settings/providers');
       },
     });
 
@@ -568,8 +568,8 @@ function ProviderForm({
 
   return (
     <div className="provider-form">
-      <Link className="provider-back" to={editing ? '/infrastructure#keys' : '/providers/new'}>
-        {editing ? '‹ Machines & models' : '‹ All providers'}
+      <Link className="provider-back" to={editing ? vendorPage : '/settings/providers/new'}>
+        {editing ? `‹ ${vendorName(vendorOf(editing.presetSlug))}` : '‹ All providers'}
       </Link>
       <h1 className="page-title" style={{ marginTop: 8 }}>
         {title}
@@ -999,7 +999,7 @@ function ProviderForm({
               Save anyway
             </Button>
           )}
-          <Button onClick={() => navigate('/infrastructure#keys')}>Cancel</Button>
+          <Button onClick={() => navigate(editing ? vendorPage : '/settings/providers')}>Cancel</Button>
           <Button
             variant="primary"
             disabled={!canSave}

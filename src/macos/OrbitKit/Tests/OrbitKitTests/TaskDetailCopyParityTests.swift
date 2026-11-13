@@ -28,7 +28,8 @@ final class TaskDetailCopyParityTests: XCTestCase {
     private static let watchEditor = "src/web/src/components/WatchEditor.tsx"
     private static let dependencyList = "src/web/src/components/TaskDependencyList.tsx"
     private static let sharedTask = "src/web/src/pages/SharedTaskPage.tsx"
-    private static let runnerDetail = "src/web/src/pages/RunnerDetailPage.tsx"
+    /// The Agent's settings: RunnerDetailPage.tsx is gone, and its switch is a row of the workspace's Settings page.
+    private static let workspaceSettings = "src/web/src/components/settings/WorkspaceSettingsPage.tsx"
     private static let workspace = "src/web/src/components/WorkspaceView.tsx"
 
     private struct Missing: Error, CustomStringConvertible {
@@ -68,25 +69,58 @@ final class TaskDetailCopyParityTests: XCTestCase {
 
     func testTheSectionHeadingsAndTheDetailsLabels() throws {
         let web = try source(Self.panel)
-        for heading in [TaskDetailCopy.detailsHeading, TaskDetailCopy.dependenciesHeading,
-                        TaskDetailCopy.descriptionHeading, TaskDetailCopy.acceptanceHeading] {
+        // 2026-11-12 (docs/mocks/task-detail-agent-first): the web panel leads with the run, under its
+        // own headings. The native pages keep Details / Dependencies / Description / Acceptance /
+        // Runs / Comments until their own board; these are the web's words, pinned here so the two
+        // are told apart on purpose rather than drift.
+        for heading in ["Now", "Done means", "In the plan", "Runs with", "Activity"] {
             assertSays(web, "<div className=\"tdp-section-title\">\(heading)</div>", in: Self.panel)
         }
-        assertSays(web, "<div className=\"tdp-section-title\">\(TaskDetailCopy.runsHeading) ({sessions.length})</div>",
-                   in: Self.panel)
-        assertSays(web, "<div className=\"tdp-section-title\">\(TaskDetailCopy.commentsHeading) ({comments.length})</div>",
-                   in: Self.panel)
+        assertSays(web, "{q.data?.status === 'DONE' ? 'Delivered' : 'Evidence'}", in: Self.panel)
+        // Behind Runs with → Edit, the same field labels as the native Details.
         for label in [TaskDetailCopy.assigneeLabel, TaskDetailCopy.providerLabel, TaskDetailCopy.modelLabel,
-                      TaskDetailCopy.listLabel, TaskDetailCopy.createdByLabel, TaskDetailCopy.createdFromLabel,
-                      TaskDetailCopy.createdLabel] {
+                      TaskDetailCopy.listLabel] {
             assertSays(web, "<span className=\"tdp-field-label\">\(label)</span>", in: Self.panel)
         }
         assertSays(web, ": '\(TaskDetailCopy.runNow)'", in: Self.panel)
         // The Run's hint on the task nothing else starts: the panel's `runNowHint`, the rule with the words.
         assertSays(web, "if (status === 'OPEN' && !projectId && prerequisites === 0) { return '"
                     + TaskDetailCopy.nothingStartsThisTask + "'; }", in: Self.panel)
-        assertSays(web, "<div className=\"tdp-muted\">\(TaskDetailCopy.noRuns)</div>", in: Self.panel)
-        assertSays(web, "<div className=\"tdp-muted\">\(TaskDetailCopy.noComments)</div>", in: Self.panel)
+    }
+
+    /// The page led by the run (docs/mocks/task-detail-agent-first): every word the native page says
+    /// in its new blocks, as the web panel declares it.
+    func testTheRunLedPageSaysTheBrowsersWords() throws {
+        let web = try source(Self.panel)
+        for heading in [TaskDetailCopy.nowHeading, TaskDetailCopy.doneMeansHeading, TaskDetailCopy.planHeading,
+                        TaskDetailCopy.runsWithHeading, TaskDetailCopy.activityHeading] {
+            assertSays(web, "<div className=\"tdp-section-title\">\(heading)</div>", in: Self.panel)
+        }
+        assertSays(web, "'\(TaskDetailCopy.deliveredHeading)' : '\(TaskDetailCopy.evidenceHeading)'", in: Self.panel)
+        assertSays(web, ">\(TaskDetailCopy.briefHeading)<", in: Self.panel)
+        assertSays(web, "'\(TaskDetailCopy.hideGraph)' : '\(TaskDetailCopy.showGraph)'", in: Self.panel)
+        assertSays(web, "label: '\(TaskDetailCopy.runAgain)',", in: Self.panel)
+        assertSays(web, TaskDetailCopy.changesApplyToNextRun, in: Self.panel)
+        assertSays(web, "{ label: '\(TaskDetailCopy.toTheRun)', value: 'run' }", in: Self.panel)
+        assertSays(web, "{ label: '\(TaskDetailCopy.comment)', value: 'comment' }", in: Self.panel)
+        assertSays(web, "message.success('\(TaskDetailCopy.sentToTheRun)')", in: Self.panel)
+        assertSays(web, "`Message ${task?.assignee?.name ?? '\(TaskDetailCopy.theAgentInASentence)'} while it works…`",
+                   in: Self.panel)
+        XCTAssertEqual(TaskDetailCopy.messageWhileItWorks("orbit"), "Message orbit while it works…")
+        assertSays(web, "?? '\(TaskDetailCopy.theAgent)'} is working`", in: Self.panel)
+        XCTAssertEqual(TaskDetailCopy.isWorking("orbit"), "orbit is working")
+        assertSays(web, "label: '\(TaskDetailCopy.evidenceAccepted)', tone: 'green'", in: Self.panel)
+        assertSays(web, "label: '\(TaskDetailCopy.evidenceSentBack)', tone: 'amber'", in: Self.panel)
+        assertSays(web, "label: '\(TaskDetailCopy.evidenceAwaiting)', tone: 'muted'", in: Self.panel)
+        assertSays(web, "\(TaskDetailCopy.notCovered){", in: Self.panel)
+        assertSays(web, "<strong>\(TaskDetailCopy.filed)</strong>", in: Self.panel)
+        // The plan's sentence and the evidence line are built the same way on both sides.
+        for fragment in ["'Nothing blocks this task.'", "'Its prerequisite is done.'", "prerequisites are done.`",
+                         "” waits on it.`", "more wait on it.`", "`Evidence r${row.revision} · submitted ${when(row.submittedAt)}`",
+                         "'you' : 'a reviewing agent'", "`Tool call ${check.ref}`", "`Commit ${check.ref.slice(0, 9)}`",
+                         "`Artifact ${check.ref}`", "`File ${check.ref}`", "return '<1m';", "'<$0.01'"] {
+            assertSays(web, fragment, in: Self.panel)
+        }
     }
 
     /// The run pins, engine first (board 6): the Engine field's label and its unpinned choice, the
@@ -190,7 +224,6 @@ final class TaskDetailCopyParityTests: XCTestCase {
         let web = try source(Self.acceptance)
         let declared: [(String, String)] = [
             ("ACCEPTANCE_EMPTY", TaskDetailCopy.acceptanceEmpty),
-            ("ACCEPTANCE_PAIR_EMPTY", TaskDetailCopy.acceptancePairEmpty),
             ("ACCEPTANCE_AUTOMATIC_HINT", TaskDetailCopy.acceptanceAutomaticHint),
             ("ACCEPTANCE_PAIR_INCOMPLETE", TaskDetailCopy.acceptancePairIncomplete),
             ("ACCEPTANCE_EXIT_CODE_NOT_AN_INTEGER", TaskDetailCopy.acceptanceExitCodeNotAnInteger),
@@ -356,9 +389,10 @@ final class TaskDetailCopyParityTests: XCTestCase {
     }
 
     func testTheAgentsSwitchSaysWhatTheWebSwitchSays() throws {
-        let web = try source(Self.runnerDetail)
-        assertSays(web, "label=\"\(TaskDetailCopy.smartSelectionSwitch)\" desc=\"\(TaskDetailCopy.smartSelectionSwitchDetail)\"",
-                   in: Self.runnerDetail)
+        let web = try source(Self.workspaceSettings)
+        // The web row puts the long sentence in its tooltip, under a shorter description of its own.
+        assertSays(web, "title=\"\(TaskDetailCopy.smartSelectionSwitch)\"", in: Self.workspaceSettings)
+        assertSays(web, "tooltip=\"\(TaskDetailCopy.smartSelectionSwitchDetail)\"", in: Self.workspaceSettings)
     }
 
     func testTheComposersModelMenuSaysWhyItIsThisModel() throws {

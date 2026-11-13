@@ -7,6 +7,7 @@ import { PublicIdPipe } from '../common/public-id';
 import {
   DecideTaskEvidenceDto,
   ImportLegacyTaskCommentEvidenceDto,
+  RunTaskDto,
   SubmitTaskCompletionEvidenceDto,
 } from './dto';
 import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
@@ -74,6 +75,22 @@ export class TaskCompletionEvidenceController {
       dto,
       { door: 'USER', userId: user.userId, actingSessionId },
     );
+  }
+
+  /**
+   * Restart the task, the action the owner's pending row names (`ownerAction: RESTART_TASK`) for an
+   * undecidable revision nobody else can move: no live run, no Automatic coordinator. The owner's own
+   * press, so no PAT reaches it; the body is the Run press's (`triggerId`).
+   */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Post(':revision/restart')
+  restart(
+    @CurrentUser() user: AuthUser,
+    @Param('taskId', PublicIdPipe) taskId: string,
+    @Param('revision') revision: string,
+    @Body() dto: RunTaskDto,
+  ) {
+    return this.evidence.restartFromEvidence(user.userId, taskId, revision, dto?.triggerId);
   }
 
   @PatScope('tasks:read', { workspaceConfinable: { params: { taskId: 'task' } } })

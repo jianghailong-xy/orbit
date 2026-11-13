@@ -3,7 +3,7 @@ import XCTest
 @testable import OrbitKit
 
 /// The rest of the clients' engine-first reading (docs/provider-engine-contract.md §1, §6): the wire's
-/// `engine` fields, a task's run pins (board 6), the Infrastructure page's API keys and a DeepSeek key's
+/// `engine` fields, a task's run pins (board 6), the Machines & models page's API keys and a DeepSeek key's
 /// page (boards iOS 1 and 2), and the composer's Provider level (boards iOS 4 and 5).
 final class EngineFirstClientTests: XCTestCase {
     private func json(_ value: some Encodable) throws -> [String: Any] {
@@ -133,7 +133,7 @@ final class EngineFirstClientTests: XCTestCase {
         XCTAssertNil(pinned.providerRequest("deepseek"))
     }
 
-    // MARK: Infrastructure's API keys (board iOS 1 ③)
+    // MARK: Machines & models' API keys (board iOS 1 ③)
 
     /// Each vendor's keys together, in the order of each vendor's first key: a key from the retired
     /// DeepSeek Harness preset is DeepSeek's, a self-maintained endpoint Custom's.

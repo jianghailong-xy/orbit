@@ -819,15 +819,159 @@ public enum RunnerPageFormat {
         if RunnerAttention.compareRunnerVersions(version, latest) >= 0 {
             return version + RunnerPageCopy.RUNNER_LINE_SEPARATOR + RunnerPageCopy.RUNNER_VERSION_LATEST
         }
+        // Draining or restarting for a release: `0.1.253 · updating to 0.1.254`.
+        if let target = runner.selfUpdate?.targetVersion,
+           runner.selfUpdate?.phase == "draining" || runner.selfUpdate?.phase == "restarting" {
+            return version + RunnerPageCopy.RUNNER_LINE_SEPARATOR + RunnerPageCopy.runnerVersionUpdatingTo(version: target)
+        }
         let note: String?
+        let quiet = runner.selfUpdate?.quietWindowSeconds.flatMap { $0 > 0 ? $0 : nil }
         switch runner.selfUpdate?.state {
         case nil: note = runner.runsAsRoot == true ? RunnerPageCopy.RUNNER_VERSION_INSTALLS_WHEN_IDLE : nil
-        case "enabled"?, "waitingForIdle"?: note = RunnerPageCopy.RUNNER_VERSION_INSTALLS_WHEN_IDLE
+        case "enabled"?, "waitingForIdle"?:
+            note = quiet.map { RunnerPageCopy.runnerVersionInstallsWhenQuiet(minutes: quietMinutes(seconds: $0)) }
+                ?? RunnerPageCopy.RUNNER_VERSION_INSTALLS_WHEN_IDLE
         case "heldByRollout"?: note = RunnerPageCopy.RUNNER_VERSION_NOT_ROLLED_OUT
         default: note = nil
         }
         guard let note else { return version }
         return version + RunnerPageCopy.RUNNER_LINE_SEPARATOR + latest + " " + note
+    }
+
+    // MARK: the Update card (board 4)
+
+    /// A release this runner is behind, in the phase it reports — the web's `runnerUpdateCard`.
+    public struct UpdateCard: Equatable, Sendable {
+        /// The runner's phase, or `updated`: no release waiting, and one installed within the last day.
+        public let phase: String
+        /// Amber while it holds work back or restarts; plain while work goes on as usual.
+        public let warn: Bool
+        public let title: String
+        public let tag: String
+        /// Empty on an Updated card whose runner measured nothing about the restart: no body is drawn.
+        public let body: String
+        /// Draining only: `Waiting for 2 of 8 turns · 38 min`, and the share of those turns done.
+        public let progressLabel: String?
+        public let progress: Double?
+        /// Draining only: the reader's turns it waits for — session, title, `running 1 h 52 min`.
+        public var turns: [Turn] = []
+
+        public struct Turn: Equatable, Sendable {
+            public let id: String
+            public let title: String
+            public let running: String?
+        }
+    }
+
+    /// A runner's quiet window (`selfUpdate.quietWindowSeconds`) in whole minutes, at least one — the web's
+    /// `runnerQuietMinutes`.
+    public static func quietMinutes(seconds: Int) -> Int { max(1, Int((Double(seconds) / 60).rounded())) }
+
+    private static func availableBodyQuiet(seconds: Int) -> String {
+        let minutes = quietMinutes(seconds: seconds)
+        return RunnerPageCopy.runnerUpdateAvailableBodyQuiet(
+            minutes: minutes, unit: minutes == 1 ? RunnerPageCopy.RUNNER_UNIT_MINUTE : RunnerPageCopy.RUNNER_UNIT_MINUTES)
+    }
+
+    /// The card a runner's report calls for; nil with no phase (nothing waiting, or a runner too old
+    /// to say) or no version to name, and for a phase this client does not know.
+    public static func updateCard(_ runner: Runner, now: Date, timeZone: TimeZone = .current) -> UpdateCard? {
+        guard let report = runner.selfUpdate else { return nil }
+        guard let phase = report.phase else { return updatedCard(report, now: now, timeZone: timeZone) }
+        guard let version = report.targetVersion else { return nil }
+        switch phase {
+        case "available":
+            return UpdateCard(phase: phase, warn: false,
+                              title: RunnerPageCopy.runnerUpdateAvailableTitle(version: version),
+                              tag: RunnerPageCopy.RUNNER_UPDATE_TAG_AVAILABLE,
+                              // A runner that reports its quiet window waits for it; one that doesn't keeps the old wording.
+                              body: report.quietWindowSeconds.flatMap { $0 > 0 ? availableBodyQuiet(seconds: $0) : nil }
+                                  ?? RunnerPageCopy.RUNNER_UPDATE_AVAILABLE_BODY,
+                              progressLabel: nil, progress: nil)
+        case "draining":
+            let left = report.turnsInFlight ?? 0
+            let of = report.turnsAtDrain.map { max($0, left) }
+            let waited = report.drainingSince.flatMap { RelativeTime.parse($0) }.map {
+                updateWaited(minutes: max(0, Int(now.timeIntervalSince($0) / 60)))
+            }
+            let unit = (of ?? left) == 1 ? RunnerPageCopy.RUNNER_UPDATE_TURN : RunnerPageCopy.RUNNER_UPDATE_TURNS
+            let count = of.map { RunnerPageCopy.runnerUpdateWaitingForOf(left: left, of: $0, unit: unit) }
+                ?? RunnerPageCopy.runnerUpdateWaitingFor(left: left, unit: unit)
+            let since = report.availableSince.flatMap { updateClock($0, timeZone: timeZone) }
+            return UpdateCard(
+                phase: phase, warn: true,
+                title: RunnerPageCopy.runnerUpdateDrainingTitle(version: version),
+                tag: RunnerPageCopy.RUNNER_UPDATE_TAG_DRAINING,
+                body: since.map { RunnerPageCopy.runnerUpdateDrainingBody(version: version, since: $0) }
+                    ?? RunnerPageCopy.RUNNER_UPDATE_DRAINING_BODY_NO_SINCE,
+                progressLabel: waited.map { count + RunnerPageCopy.RUNNER_LINE_SEPARATOR + $0 } ?? count,
+                progress: of.map { $0 > 0 ? Double($0 - left) / Double($0) : 0 } ?? 0,
+                turns: updateTurns(runner, now: now))
+        case "restarting":
+            // After the owner's Update Now, the turns it interrupted continue once it is back.
+            let interrupted = report.interruptedTurns ?? 0
+            return UpdateCard(phase: phase, warn: true,
+                              title: RunnerPageCopy.runnerUpdateRestartingTitle(version: version),
+                              tag: RunnerPageCopy.RUNNER_UPDATE_TAG_RESTARTING,
+                              body: interrupted > 0 ? RunnerPageCopy.runnerUpdateRestartingBodyInterrupted(turns: interrupted)
+                                  : RunnerPageCopy.RUNNER_UPDATE_RESTARTING_BODY,
+                              progressLabel: nil, progress: nil)
+        case "postponed":
+            guard let until = report.postponedUntil.flatMap({ updateClock($0, timeZone: timeZone) }) else { return nil }
+            return UpdateCard(phase: phase, warn: false,
+                              title: RunnerPageCopy.runnerUpdatePostponedTitle(version: version, until: until),
+                              tag: RunnerPageCopy.RUNNER_UPDATE_TAG_POSTPONED,
+                              body: RunnerPageCopy.runnerUpdatePostponedBody(until: until),
+                              progressLabel: nil, progress: nil)
+        default:
+            return nil
+        }
+    }
+
+    /// The Updated card (board 4): the last update, for a day after it was installed — how long the
+    /// restart took and how many turns an Update Now interrupted for it, as far as the runner measured
+    /// them (the web's `updatedCard`). Its body is empty when the runner measured neither. Nil with no
+    /// update recorded, or an older one.
+    static func updatedCard(_ report: RunnerSelfUpdate, now: Date, timeZone: TimeZone) -> UpdateCard? {
+        guard let to = report.lastUpdatedTo, let iso = report.lastUpdatedAt, let at = RelativeTime.parse(iso),
+              let tag = updateClock(iso, timeZone: timeZone) else { return nil }
+        let age = now.timeIntervalSince(at)
+        guard age <= Double(RunnerPageCopy.RUNNER_UPDATE_TAG_UPDATED_HOURS) * 3600, age >= -60 else { return nil }
+        let took = report.lastUpdateSeconds.flatMap { $0 > 0 ? RunnerPageCopy.runnerUpdateTook(seconds: $0) : nil }
+        return UpdateCard(phase: "updated", warn: false,
+                          title: RunnerPageCopy.runnerUpdateUpdatedTitle(version: to), tag: tag,
+                          body: RunnerPageCopy.runnerUpdateUpdatedBody(
+                              took: took, interruptedTurns: report.lastUpdateInterruptedTurns ?? 0),
+                          progressLabel: nil, progress: nil)
+    }
+
+    /// The reader's turns on the runner (`updateTurns`, longest running first): each one's session, its
+    /// title (`Untitled session` with none) and `running 1 h 52 min`. The draining card lists them, and
+    /// Update Now… names them as the turns it interrupts.
+    public static func updateTurns(_ runner: Runner, now: Date) -> [UpdateCard.Turn] {
+        (runner.updateTurns ?? []).map { turn in
+            let title = turn.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return UpdateCard.Turn(
+                id: turn.id,
+                title: title.isEmpty ? RunnerPageCopy.RUNNER_UPDATE_UNTITLED_TURN : title,
+                running: turn.startedAt.flatMap { RelativeTime.parse($0) }.map {
+                    RunnerPageCopy.runnerUpdateTurnRunning(
+                        duration: updateWaited(minutes: max(0, Int(now.timeIntervalSince($0) / 60))))
+                })
+        }
+    }
+
+    /// How long it has waited: `38 min`, `1 h 52 min`, `2 h`.
+    public static func updateWaited(minutes: Int) -> String {
+        if minutes < 60 { return RunnerPageCopy.runnerUpdateWaitedMinutes(minutes: minutes) }
+        let hours = minutes / 60, rest = minutes % 60
+        return rest > 0 ? RunnerPageCopy.runnerUpdateWaitedHoursMinutes(hours: hours, minutes: rest)
+            : RunnerPageCopy.runnerUpdateWaitedHours(hours: hours)
+    }
+
+    /// The clock time the card names, as the board writes it: `09:58`.
+    public static func updateClock(_ iso: String, timeZone: TimeZone = .current) -> String? {
+        RelativeTime.parse(iso).map { formatter("HH:mm", timeZone).string(from: $0) }
     }
 
     /// `Sep 20, 4:00 PM · 0.1.189 → 0.1.190`: when the runner last updated itself, in the reader's time

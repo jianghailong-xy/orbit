@@ -854,7 +854,7 @@ final class SessionProviderChoicesTests: XCTestCase {
             XCTAssertTrue(web.contains(phrase), "web lost \(phrase)")
         }
         XCTAssertTrue(try source("src/web/src/lib/dshRuntime.ts")
-            .contains("export const DSH_CONNECT_HREF = '/providers/new/\(DshRuntime.keyPreset)';"))
+            .contains("export const DSH_CONNECT_HREF = '/settings/providers/new/\(DshRuntime.keyPreset)';"))
     }
 
     private func source(_ relative: String) throws -> String {

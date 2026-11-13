@@ -17,6 +17,8 @@ import { pendingCriteriaDecisionsQuery, pendingDecisionsQuery } from '../lib/que
 import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import './ui/Typography.css';
 import { streamPoll } from '../lib/listBudget';
+import type { CrossingPointer } from './CrossingDecisionCard';
+import { EvidenceRestartAction, RESTART_TASK_OWNER_ACTION } from './EvidenceRestartAction';
 
 /**
  * What is TRUE right now about this session's open questions, pinned under the header.
@@ -160,6 +162,9 @@ export interface PendingDecisionDecidability {
   decidable: boolean;
   refusal: string | null;
   requiredAction: string | null;
+  /** Who can clear an undecidable row now: its live run, the project's coordinator, or the owner.
+   *  Null when decidable; absent from a server older than evidence-always-has-an-addressee §3. */
+  addressee?: 'RUN' | 'COORDINATOR' | 'OWNER' | null;
 }
 
 /**
@@ -194,6 +199,9 @@ export interface PendingDecisionRow {
   citations: PendingDecisionCitation[];
   decidability: PendingDecisionDecidability;
   independence: PendingDecisionIndependence;
+  /** The action the owner can take on an undecidable row nobody else can move: `RESTART_TASK`
+   *  (`EvidenceRestartAction.tsx`). Null or absent on every other row, and from an older server. */
+  ownerAction?: typeof RESTART_TASK_OWNER_ACTION | null;
 }
 
 export interface PendingDecisionQueue {
@@ -546,8 +554,11 @@ function pointsAtCard(
  * The rows waiting on this reader's own resubmission: the facts, and the sentence saying what clears
  * them. Not a control. No card is drawn for one of these anywhere, and a control that goes nowhere
  * is worse than none.
+ *
+ * The one exception is a row that carries `ownerAction`: nobody else can move it, and what the
+ * reader can do is Restart the task, which is a Run press and not a decision.
  */
-function DecisionRows({ group }: { group: PendingDecisionRow[] }) {
+function DecisionRows({ group, sessionId }: { group: PendingDecisionRow[]; sessionId: string }) {
   return (
     <ul className="decision-rail-list">
       {group.map((row) => (
@@ -560,9 +571,13 @@ function DecisionRows({ group }: { group: PendingDecisionRow[] }) {
               {row.decidability.refusal
                 ?? 'no decision can be recorded about this evidence'}
             </span>
-            <div>
-              <span className="orbit-typography">{WAITING_ON_YOU_ACTION}</span>
-            </div>
+            {row.ownerAction === RESTART_TASK_OWNER_ACTION ? (
+              <EvidenceRestartAction key={decisionRowKey(row)} row={row} sessionId={sessionId} />
+            ) : (
+              <div>
+                <span className="orbit-typography">{WAITING_ON_YOU_ACTION}</span>
+              </div>
+            )}
           </div>
         </li>
       ))}
@@ -654,6 +669,8 @@ export function DecisionStrip({
   onToggle,
   onReveal = () => {},
   onOpenCriteria,
+  crossings = [],
+  onRevealCrossing = () => {},
   onRevealConfirmation = () => {},
   onRevealOwnerConfirmation = () => {},
   onRevealException = () => {},
@@ -689,6 +706,11 @@ export function DecisionStrip({
   onReveal?: (row: PendingDecisionRow) => void;
   /** Where the reader goes to answer a proposal: its card, in the conversation it was sent to. */
   onOpenCriteria?: (row: PendingCriteriaDecisionRow) => void;
+  /** Batches of cross-project requests into this conversation's project, still waiting on their
+   *  card here — named by the card's own question. */
+  crossings?: ReadonlyArray<CrossingPointer>;
+  /** Where the reader goes to answer a batch: its card, by its id. */
+  onRevealCrossing?: (id: string) => void;
   /** Where the reader goes to start the project on the plan it states: its card. */
   onRevealConfirmation?: () => void;
 }) {
@@ -733,6 +755,16 @@ export function DecisionStrip({
         go: () => onOpenCriteria(row),
       }))
       : []),
+    // Cross-project requests into this project, one card per batch: after the weakenings, which are
+    // questions about the ruler itself, and before evidence measured against it.
+    ...[...crossings]
+      .sort((a, b) => (b.ageSeconds ?? 0) - (a.ageSeconds ?? 0))
+      .map((pointer) => ({
+        key: `crossing:${pointer.id}`,
+        label: pointer.label,
+        ageSeconds: pointer.ageSeconds,
+        go: () => onRevealCrossing(pointer.id),
+      })),
     ...oldestFirst(decisions).map((row) => ({
       key: `evidence:${decisionRowKey(row)}`,
       label: row.title,
@@ -821,7 +853,7 @@ export function DecisionStrip({
               <span className="decision-rail-label">{WAITING_ON_YOU_LABEL}</span>
               <span className="decision-rail-count">{`${yours.length} to resubmit`}</span>
             </div>
-            <DecisionRows group={yours} />
+            <DecisionRows group={yours} sessionId={queue.decidingSessionId} />
           </section>
         </div>
       )}
@@ -845,6 +877,7 @@ export function SessionDecisionStrip({
   exceptions = [],
   needsYou,
   onOpenCriteria,
+  crossings = [],
 }: {
   sessionId: string;
   /** The project this session coordinates, when it coordinates one. Its held criteria proposals
@@ -864,6 +897,9 @@ export function SessionDecisionStrip({
   exceptions?: ReadonlyArray<ExceptionCardPointer>;
   needsYou?: ReadonlyArray<ExceptionCardPointer>;
   onOpenCriteria?: (row: PendingCriteriaDecisionRow) => void;
+  /** The batches of cross-project requests still waiting on a card in this conversation
+   *  (`useCrossingDecisionCards`). */
+  crossings?: ReadonlyArray<CrossingPointer>;
 }) {
   const [open, setOpen] = useState(false);
   const phone = useMediaQuery(PHONE_QUERY);
@@ -884,14 +920,14 @@ export function SessionDecisionStrip({
   // thing that keeps a reader from mistaking a broken query for an empty queue; the strip is
   // otherwise silent while the first read is in flight, so it never flashes.
   const ownerExceptions = needsYou ?? exceptions;
-  if (pending.isError && ownerExceptions.length === 0) {
+  if (pending.isError && ownerExceptions.length === 0 && crossings.length === 0) {
     return (
       <div className="decision-strip decision-strip-unread" role="status">
         {`${STRIP_LABEL}: this queue could not be read.`}
       </div>
     );
   }
-  if (!pending.data && ownerExceptions.length === 0) return null;
+  if (!pending.data && ownerExceptions.length === 0 && crossings.length === 0) return null;
   const queue: PendingDecisionQueue = pending.data ?? {
     decidingSessionId: sessionId,
     count: 0,
@@ -904,6 +940,8 @@ export function SessionDecisionStrip({
       criteria={criteria.data ?? null}
       confirmation={confirmation}
       onOpenCriteria={onOpenCriteria}
+      crossings={crossings}
+      onRevealCrossing={(id) => revealCard(document.getElementById(id))}
       open={open}
       phone={phone}
       hasCard={(row) => cards?.has(decisionRowKey(row)) ?? false}

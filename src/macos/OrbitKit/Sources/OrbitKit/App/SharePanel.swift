@@ -174,6 +174,9 @@ public struct SharePanel: Equatable, Sendable {
     }
 
     public let kind: ShareRootKind
+    /// A session's panel that also carries People who can reply: with no public link, the line under
+    /// Access says the people invited below can still reply (docs/session-guests-design.md §3).
+    public let invitesPeople: Bool
     public private(set) var phase: Phase = .loading
     /// The open link, never an ended one: a link past its expiry that nobody has settled yet reads as
     /// the ended link it is.
@@ -185,8 +188,9 @@ public struct SharePanel: Equatable, Sendable {
     /// refusal — replaces them.
     public private(set) var pending = ShareInclude()
 
-    public init(kind: ShareRootKind) {
+    public init(kind: ShareRootKind, invitesPeople: Bool = false) {
         self.kind = kind
+        self.invitesPeople = invitesPeople && kind == .session
     }
 
     // MARK: what the server said
@@ -231,7 +235,8 @@ public struct SharePanel: Equatable, Sendable {
 
     /// The line under Access: what a visitor can do, or how to make a public link.
     public var accessDetail: String {
-        link == nil ? SharePanelCopy.privateDetail : SharePanelCopy.publicDetail(kind)
+        guard link == nil else { return SharePanelCopy.publicDetail(kind) }
+        return invitesPeople ? SessionGuestsCopy.privateDetail : SharePanelCopy.privateDetail
     }
 
     public func step(to access: Access) -> AccessStep {

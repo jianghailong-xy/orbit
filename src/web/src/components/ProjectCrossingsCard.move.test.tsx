@@ -7,8 +7,12 @@ import { api, ApiError } from '../api';
 import type { ProjectCrossingRow } from '../lib/attribution';
 import {
   MOVE_TASK_APPROVE_CONSEQUENCE,
+  MOVE_TASK_DENY_CONSEQUENCE,
+  MOVE_TASK_OUT_APPROVE_CONSEQUENCE,
   MOVE_TASK_STATE_MEANING,
+  NO_PROJECT,
   ProjectCrossingsCard,
+  crossingConfirmPrompt,
 } from './ProjectCrossingsCard';
 
 /**
@@ -221,5 +225,69 @@ describe('ProjectCrossingsCard — confirming a move, live', () => {
     );
     expect(answers).toHaveLength(2);
     expect(node.textContent).not.toContain('That answer was not recorded');
+  });
+});
+
+/** A move out of the project entirely: the row the source project reads, with no target. */
+function moveOutRow(over: Partial<ProjectCrossingRow> = {}): ProjectCrossingRow {
+  return moveRow({
+    fromProjectId: PROJECT,
+    fromProjectPublicId: PROJECT,
+    fromProject: { title: 'Runner hardening', status: 'OPEN' },
+    toProjectId: null,
+    toProjectPublicId: undefined,
+    toProject: null,
+    requestedCriterion: null,
+    withdrawnCriterion: { key: 'AAASourceCriterion', text: 'The drain never wedges.' },
+    ...over,
+  });
+}
+
+describe('ProjectCrossingsCard — a move out to no project', () => {
+  it('names the missing target no project, in the prompt as everywhere', () => {
+    expect(NO_PROJECT).toBe('no project');
+    expect(MOVE_TASK_OUT_APPROVE_CONSEQUENCE).toBe(
+      "Confirming takes the task out of this project; no project's acceptance counts it any more.",
+    );
+    for (const row of [moveOutRow(), moveOutRow({ toProjectPublicId: null })]) {
+      expect(crossingConfirmPrompt(row, 'APPROVE')).toEqual({
+        verb: 'Approve',
+        from: 'Runner hardening',
+        to: 'no project',
+        subject: 'Wire the drain watchdog',
+        consequence: MOVE_TASK_OUT_APPROVE_CONSEQUENCE,
+      });
+      expect(crossingConfirmPrompt(row, 'DENY').consequence).toBe(MOVE_TASK_DENY_CONSEQUENCE);
+    }
+    // An ordinary move keeps its own words.
+    expect(crossingConfirmPrompt(moveRow(), 'APPROVE').consequence).toBe(MOVE_TASK_APPROVE_CONSEQUENCE);
+  });
+
+  it('draws the row with no project as its target and confirms it the same way', async () => {
+    server.row = moveOutRow();
+    const node = await mount();
+    expect(node.textContent).toContain('Runner hardening');
+    expect(node.textContent).toContain(`→ ${NO_PROJECT}`);
+    expect(node.textContent).not.toContain('unnamed project');
+    expect(node.textContent).not.toContain('null');
+
+    await press(node, 'Approve…');
+    expect(answers).toEqual([]);
+    expect(node.textContent).toContain(
+      'Approve moving “Wire the drain watchdog” from Runner hardening to no project?',
+    );
+    expect(node.textContent).toContain(MOVE_TASK_OUT_APPROVE_CONSEQUENCE);
+    expect(node.textContent).not.toContain(MOVE_TASK_APPROVE_CONSEQUENCE);
+
+    server.decide = async () => {
+      server.row = moveOutRow({ state: 'APPLIED', decidedAt: '2026-10-06T10:00:00.000Z' });
+      return server.row;
+    };
+    await press(node, 'Yes, approve');
+    await until(
+      () => (node.textContent ?? '').includes(MOVE_TASK_STATE_MEANING.APPLIED),
+      'the request read back as applied',
+    );
+    expect(answers).toEqual([{ decision: 'APPROVE', acknowledgedCrossingKey: KEY }]);
   });
 });

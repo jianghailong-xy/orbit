@@ -35,6 +35,23 @@ export interface OrbitExchangeSummary {
   target: ExchangeTarget | null;
 }
 
+/**
+ * How long an answer may be and still fold. Most of what Orbit opens is answered with a result or a
+ * question for the reader, and only a short answer is routine: on 60 answers drawn and labeled on a
+ * self-hosted deployment (2026-11-12, docs/mocks/conversation-fold-rules/02), a watch's under 220
+ * characters and any other's under 80 folded 11 of the 14 routine ones and none of the 46 that said
+ * something.
+ * A reply from another session never folds by length: a short one was as often a ruling as a receipt.
+ */
+export const WATCH_FOLDS_BELOW = 220;
+export const OTHER_FOLDS_BELOW = 80;
+
+/** Whether an exchange of this kind, answered in this many characters, is short enough to fold. */
+export function foldsAtLength(category: ExchangeCategory, length: number): boolean {
+  if (category === 'reply') return false;
+  return length < (category === 'watch' ? WATCH_FOLDS_BELOW : OTHER_FOLDS_BELOW);
+}
+
 /** Ids compared whichever way each is spelled (uuid or base62). */
 export const idKey = (id: string): string => (id.includes('-') ? (routeId(id) ?? id) : id);
 

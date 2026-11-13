@@ -42,6 +42,13 @@ struct ConsoleView: View {
     @State private var bandOpened = false
     /// The folded pill comes and goes by fading alone under Reduce Motion.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// A wide shell: a task this conversation opens opens over it, not in the Tasks section
+    /// (`opensTasksOverPage`, owner decision 2026-11-12).
+    @Environment(\.opensTasksOverPage) private var opensTasksOverPage
+    /// Move… — the ⋯ menu's on iOS, the window toolbar's on the Mac, and the region card's on both —
+    /// and the session's workspace list the Move panel counts its folders over.
+    @State private var movingSession: Session?
+    @State private var moveListed: [Session] = []
     #if os(iOS)
     /// The ⋯ menu's Rename… (web double-clicks its header title). Seeded from the session's own
     /// title — not `SessionHeader.title`, whose agent-name fallback would otherwise be typed in as if
@@ -49,8 +56,6 @@ struct ConsoleView: View {
     @State private var renaming = false
     @State private var renameDraft = ""
     @State private var taggingSession: Session?
-    @State private var movingSession: Session?
-    @State private var moveListed: [Session] = []
     @State private var confirmPurge = false
     /// Gates the "needs you" banner to the compact shell — see the `safeAreaInset` below.
     @Environment(\.horizontalSizeClass) private var hSize
@@ -351,6 +356,12 @@ struct ConsoleView: View {
                 .environment(\.sessionImagePreview, sessionImagePreview(console))
                 // The workspace's background agents and workflows, for the cards that draw them.
                 .environment(\.taskActivity, taskActivity(console))
+                // A task link in this conversation — prose on the Mac, a card's own button —
+                // opens over the conversation on a wide shell (owner decision 2026-11-12). With
+                // the flag false (every phone) this is the app's own door, word for word.
+                .environment(\.openURL, OpenURLAction { url in
+                    appModel.openOrbitLink(url, overPage: opensTasksOverPage) ? .handled : .leaving(url)
+                })
                 .environment(\.openPromotionReview, { promotionID in
                     promotionReview = PromotionReviewTarget(id: promotionID)
                 })
@@ -480,6 +491,35 @@ struct ConsoleView: View {
                 .environment(appModel)
                 .task { await appModel.loadSessionTags() }
         }
+        #else
+        // The same link on macOS, from the window toolbar: a detail pane's own actions sit at
+        // `.primaryAction` there, as the project and task pages' menus do.
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                // No Share on a landing session (LS6): it is platform work, not a conversation,
+                // and its page's own ⋯ menu is the whole of what it offers.
+                if appModel.session(id: sessionID)?.isLanding != true {
+                    Button { showShare = true } label: {
+                        Label("Share session", systemImage: "square.and.arrow.up")
+                    }
+                    .help("Share a read-only link to this session")
+                }
+            }
+            // Move…, the iPhone's ⋯ menu item, beside Share: the same Move panel the list's rows
+            // open. None on a landing session (LS6), nor in Trash, where there is nothing to file.
+            ToolbarItem(placement: .primaryAction) {
+                if let session = appModel.session(id: sessionID), session.isLanding != true,
+                   session.effectiveLifecycleState != .trash {
+                    Button { openMove(session) } label: {
+                        Label("Move…", systemImage: "folder")
+                    }
+                    .help("Move this session to a folder or another workspace")
+                    .disabled(sessionWorkspace(session) == nil)
+                }
+            }
+        }
+        #endif
+        // The Move panel, from Move… or the region card (docs/session-folders-move-design.md §4).
         .sheet(item: $movingSession) { session in
             if let workspace = sessionWorkspace(session) {
                 SessionMoveSheet(session: session, workspace: workspace, listed: moveListed)
@@ -496,41 +536,20 @@ struct ConsoleView: View {
                     }
             }
         }
-        #else
-        // The same link on macOS, from the window toolbar: a detail pane's own actions sit at
-        // `.primaryAction` there, as the project and task pages' menus do.
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                // No Share on a landing session (LS6): it is platform work, not a conversation,
-                // and its page's own ⋯ menu is the whole of what it offers.
-                if appModel.session(id: sessionID)?.isLanding != true {
-                    Button { showShare = true } label: {
-                        Label("Share session", systemImage: "square.and.arrow.up")
-                    }
-                    .help("Share a read-only link to this session")
-                }
-            }
-        }
-        #endif
         .sheet(isPresented: $showShare) {
             if let baseURL = appModel.baseURL {
-                ShareSheet(kind: .session, rootID: sessionID, baseURL: baseURL, tokenStore: appModel.tokenStore)
+                ShareSheet(kind: .session, rootID: sessionID, baseURL: baseURL, tokenStore: appModel.tokenStore,
+                           guests: appModel.session(id: sessionID).map { .of($0, agents: appModel.agents) })
             }
         }
     }
 
-    /// The region card's Move to another machine: the ⋯ menu's Move… (`SessionMoveSheet`). The Mac's
-    /// console has no Move — that sheet is the phone's and the iPad's — so there the card leaves it out.
+    /// The region card's Move to another machine: Move… (`SessionMoveSheet`), on every platform.
     private var moveFromCard: (() -> Void)? {
-        #if os(iOS)
         guard let session = appModel.session(id: sessionID), sessionWorkspace(session) != nil else { return nil }
         return { openMove(session) }
-        #else
-        return nil
-        #endif
     }
 
-    #if os(iOS)
     private func sessionWorkspace(_ session: Session) -> Agent? {
         appModel.agents?.items.first { $0.id == (session.agent?.id ?? session.agentId) }
     }
@@ -546,6 +565,7 @@ struct ConsoleView: View {
         movingSession = session
     }
 
+    #if os(iOS)
     private func sessionMenu(_ session: Session) -> some View {
         Menu {
             if session.effectiveLifecycleState == .trash {
@@ -593,7 +613,8 @@ struct ConsoleView: View {
                 if let taskID = session.taskId {
                     Section {
                         Button {
-                            appModel.openFromConversation(.task(taskID), overConsole: opensPagesOverConsole)
+                            appModel.openFromConversation(.task(taskID), overConsole: opensPagesOverConsole,
+                                                          overPage: opensTasksOverPage)
                         } label: {
                             Label("Open Task", systemImage: "arrow.up.right")
                         }
@@ -813,11 +834,34 @@ struct TranscriptView: View {
         ScrollViewReader { proxy in
             chrome(follows(rowsList, proxy), proxy)
         }
+        // Held by its runner's update (board 5 of docs/mocks/runner-update-drain): the foot row of
+        // the reader's last message says so, or, before there is one, the queued page does.
+        .environment(\.runnerUpdatingFoot, runnerUpdatingFoot)
+        .overlay { runnerUpdatingPage }
         // macOS shows the session state in this band. iOS gave the state up with the nav-bar title,
         // for reading space (see `ConsoleView`'s toolbar), so the band is retired there.
         #if os(macOS)
         .safeAreaInset(edge: .top, spacing: 0) { statusBar }
         #endif
+    }
+
+    /// The session as the list holds it, when its runner's update is what holds it.
+    private var runnerUpdatingSession: Session? {
+        guard let session = app.session(id: console.sessionID), RunnerUpdating.holds(session) else { return nil }
+        return session
+    }
+
+    private var runnerUpdatingFoot: RunnerUpdatingFoot? {
+        guard let session = runnerUpdatingSession,
+              let id = RunnerUpdating.footBubbleID(console.state.items) else { return nil }
+        return RunnerUpdatingFoot(bubbleID: id, session: session, machine: console.runnerName, runnerID: console.runnerID)
+    }
+
+    @ViewBuilder private var runnerUpdatingPage: some View {
+        if let session = runnerUpdatingSession, RunnerUpdating.footBubbleID(console.state.items) == nil {
+            RunnerUpdatingQueuedView(session: session, machine: console.runnerName, runnerID: console.runnerID,
+                                     onOpenSession: { app.route(to: .session($0)) })
+        }
     }
 
     /// Split out of `body`, and out of each other, because as one expression this chain is long
@@ -1319,7 +1363,7 @@ struct TranscriptView: View {
         case .promotionApproval(let promotionID):
             openPromotionReview(promotionID)
         case .criteriaDecision, .acceptanceConfirmation, .startProject, .criteriaChange,
-             .ownerConfirmation, .coordinatorQuestion:
+             .ownerConfirmation, .coordinatorQuestion, .crossingBatch:
             openApprovalReview(.delivered(card))
         default:
             break
@@ -1470,8 +1514,8 @@ struct TranscriptView: View {
     private var statusBar: some View {
         HStack(spacing: 8) {
             Circle().fill(console.connected ? .green : .orange).frame(width: 7, height: 7)
-            Text(headerStatus)
-                .font(.caption).foregroundStyle(.secondary)
+            headerStatus
+                .font(.caption)
             if let session = app.session(id: console.sessionID) {
                 SessionCoordinatorBadge(session: session)
             }
@@ -1480,23 +1524,44 @@ struct TranscriptView: View {
                 Label("\(console.state.pendingApprovals.count) pending", systemImage: "hand.raised.fill")
                     .font(.caption).foregroundStyle(.orange)
             }
-            if !console.state.background.isEmpty {
-                Label("\(console.state.background.count) background", systemImage: "gearshape.2")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+            // No count of background processes here: the Background processes tray above the
+            // composer already says how many, and it is the one that opens them.
         }
         .padding(.horizontal, 16).padding(.vertical, 6)
         .background(.bar)
+        // The band is a shade off the transcript's white; the hairline is what says where it ends.
+        // Wrapped in a stack so the bare `Divider()` draws horizontally (see `stickyQuestion`).
+        .overlay(alignment: .bottom) { VStack(spacing: 0) { Divider() } }
     }
 
-    private var headerStatus: String {
+    /// "run state · lifecycle · when", the run state leading in the colour the session's status
+    /// glyph has in the list (amber when it needs a decision, red when it failed, …) and semibold,
+    /// so the one word that says what to do next is not the same faint grey as the timestamp.
+    private var headerStatus: Text {
         let watching = app.watches?.summary(for: console.sessionID)
+        let now = Date()
         // The machine by name: a session held for the Claude region says Anthropic is unavailable there.
-        if let subtitle = SessionHeader.subtitle(for: app.session(id: console.sessionID), watching: watching,
-                                                 machine: console.runnerName) {
-            return subtitle
+        guard let session = app.session(id: console.sessionID),
+              let subtitle = SessionHeader.subtitle(for: session, watching: watching, now: now,
+                                                    machine: console.runnerName) else {
+            return Text(console.state.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
+                .foregroundColor(.secondary)
         }
-        return console.state.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized
+        let word = SessionHeader.statusWord(for: session, watching: watching, now: now, machine: console.runnerName)
+        guard subtitle.hasPrefix(word) else { return Text(subtitle).foregroundColor(.secondary) }
+        let tone = SessionStatusGlyph.make(for: session, watching: watching, now: now, machine: console.runnerName).tone
+        return Text(word).fontWeight(.semibold).foregroundColor(Self.statusWordColor(tone))
+            + Text(subtitle.dropFirst(word.count)).foregroundColor(.secondary)
+    }
+
+    private static func statusWordColor(_ tone: SessionStatusGlyph.Tone) -> Color {
+        switch tone {
+        case .brand:   return .blue
+        case .success: return .green
+        case .warning: return .orange
+        case .error:   return .red
+        case .neutral: return .primary
+        }
     }
     #endif
 }
@@ -2011,10 +2076,16 @@ struct TranscriptItemView: View {
         case .assistant(let b): AssistantBubbleView(bubble: b)
         case .thinking(let b):  ThinkingView(block: b)
         case .toolCall(let c):  ToolCardView(card: c, fullPayload: fullPayload)
-        case .interrupt(_, _, let runnerRestart):
-            // Nobody pressed Stop on a turn the runner's restart cut off: the row says what did (web parity).
-            Label(runnerRestart ? "Interrupted — the runner restarted" : "Interrupted", systemImage: "stop.circle")
-                .font(.orbitLabel).foregroundStyle(.secondary)
+        case .interrupt(_, _, let runnerRestart, let runnerUpdate):
+            if let runnerUpdate {
+                // The owner's Update Now cut it: the web's line, its ⊘ included (D4).
+                Text(RunnerPageCopy.runnerUpdateInterruptedLine(version: runnerUpdate.targetVersion))
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+            } else {
+                // Nobody pressed Stop on a turn the runner's restart cut off: the row says what did (web parity).
+                Label(runnerRestart ? "Interrupted — the runner restarted" : "Interrupted", systemImage: "stop.circle")
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+            }
         case .error(_, let message):
             if let console, console.executesDsh, let repair = DshRuntime.repair(message) {
                 DshRepairCardView(console: console, repair: repair)

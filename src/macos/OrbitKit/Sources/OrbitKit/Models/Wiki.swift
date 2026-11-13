@@ -982,6 +982,22 @@ public struct WikiTimelineItem: Codable, Equatable, Sendable, Identifiable {
 public struct WikiSearchResponse: Codable, Equatable, Sendable {
     public let q: String?
     public let hits: [WikiSearchHit]?
+    /// Why nothing could be looked up (contract `searchUnavailable`); nil on an answer that searched a wiki. Kept as the
+    /// server spelled it, so a value newer than this build still decodes; `WikiSearchUnavailable` names the known ones.
+    public let unavailable: String?
+
+    public init(q: String?, hits: [WikiSearchHit]?, unavailable: String? = nil) {
+        self.q = q
+        self.hits = hits
+        self.unavailable = unavailable
+    }
+}
+
+/// The closed set behind `WikiSearchResponse.unavailable` (src/shared `WIKI_SEARCH_UNAVAILABLE`): the workspace has no
+/// wiki, or the wiki for its repository is in Trash.
+public enum WikiSearchUnavailable: String, CaseIterable, Sendable {
+    case noWiki = "no_wiki"
+    case wikiInTrash = "wiki_in_trash"
 }
 
 public struct WikiSearchHit: Codable, Equatable, Sendable, Identifiable {
