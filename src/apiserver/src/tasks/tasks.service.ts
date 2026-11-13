@@ -10,6 +10,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { PushService } from '../push/push.service';
+import { ProjectOrphanSweepService } from '../projects/project-orphan-sweep.service';
 import {
   CreatorType,
   Prisma,
@@ -81,6 +82,7 @@ import {
   sessionHasEnded,
 } from '../projects/project-open-item';
 import { branchName } from '../projects/project-criterion-landing';
+import { forkSourceLine } from '../projects/session-source';
 import { projectAwaitingStart, projectNotStartedRefusal } from '../projects/project-started';
 import {
   cancelledProjectOf,
@@ -135,13 +137,7 @@ import type { RunStop } from '../projects/task-run-stopped.producer';
 import { refreshProjectDone } from '../projects/project-done-request';
 import { completionEvidenceRevisedFact } from '../projects/completion-input';
 import { criterionStandingRefusal, quotedCriterion } from './task-evidence-decision';
-import {
-  arrivalMessage,
-  movedEvidenceTurnId,
-  resubmitMessage,
-  resubmitStandard,
-  type MovedEvidence,
-} from './moved-task-evidence';
+import { tellEvidenceUndecidable } from './undecidable-evidence';
 import {
   planPreflightRefusalBody,
   planPreflightRefusals,
@@ -237,7 +233,11 @@ export {
   QUOTA_BLIND_RETRY_BACKOFF_MS,
 } from './task-retry-policy';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
-import { clearDispatchRefusal } from './task-dispatch-refusal';
+import {
+  clearDispatchRefusal,
+  FORK_REFUSAL_STANDS_SQL,
+  recordForkDispatchRefusal,
+} from './task-dispatch-refusal';
 import {
   TASK_RUN_ACTION,
   TASK_RUN_LEASE_MS,
@@ -335,7 +335,7 @@ import {
   verificationSubjectNeedsVerifierRefusal,
   type TaskCompletionCriterionValue,
 } from './task-completion-criterion';
-import { TASK_DELIVERY_SELECT, buildTaskExecutionPrompt } from './task-execution-prompt';
+import { TASK_DELIVERY_SELECT, TASK_STANDARD_SELECT, buildTaskExecutionPrompt } from './task-execution-prompt';
 import {
   MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS,
   normaliseTaskCriterionOverrideReason,
@@ -370,6 +370,12 @@ import {
   taskCodelessHasCommitsBody,
   taskCodelessReasonRequiredBody,
 } from './task-codeless';
+import {
+  assertForkCallerOnRunner,
+  assertForkPlacement,
+  resolveTaskFork,
+  type TaskForkColumns,
+} from './task-fork';
 import {
   criterionAsksForOwnerConfirmation,
   ownerConfirmationNotDelegatedBody,
@@ -1115,6 +1121,10 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   -- permission: deleting 112 paused-able lists released 55,513 tasks that then ran for a
   -- fortnight. Every clause here that permits must be positive and read off the task itself.
   AND t.dispatch_hold = false
+  -- ...and so is a forked task whose start was refused on facts that still hold: a code binding on
+  -- its project, or its workspace on another machine (recordForkDispatchRefusal). Offering it again
+  -- before one of them changes is the same 409 every sweep, which is how it went unseen.
+  AND NOT ${FORK_REFUSAL_STANDS_SQL}
   -- ...and so is a task filed under a cancelled project: its owner stopped pursuing the goal the
   -- task is for. Read off the project row, which outlives every task filed under it (see
   -- projectNotCancelledSql), and applied by every automatic door and by execute() alike.
@@ -1231,6 +1241,10 @@ const PROJECT_INDEPENDENT_READY_SQL = Prisma.sql`
   t.status = 'OPEN'::task_status
   AND t.auto_run_when_ready = true
   AND t.dispatch_hold = false
+  -- ...and so is a forked task whose start was refused on facts that still hold: a code binding on
+  -- its project, or its workspace on another machine (recordForkDispatchRefusal). Offering it again
+  -- before one of them changes is the same 409 every sweep, which is how it went unseen.
+  AND NOT ${FORK_REFUSAL_STANDS_SQL}
   AND ${Prisma.raw(projectNotCancelledSql('t'))}
   AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
   AND (t.run_at IS NULL OR t.run_at <= now())
@@ -1374,6 +1388,10 @@ const SCHEDULED_DUE_SQL = Prisma.sql`
   AND t.run_at <= now()
   AND t.status = 'OPEN'::task_status
   AND t.dispatch_hold = false
+  -- ...and so is a forked task whose start was refused on facts that still hold: a code binding on
+  -- its project, or its workspace on another machine (recordForkDispatchRefusal). Offering it again
+  -- before one of them changes is the same 409 every sweep, which is how it went unseen.
+  AND NOT ${FORK_REFUSAL_STANDS_SQL}
   AND ${Prisma.raw(projectNotCancelledSql('t'))}
   -- A schedule is an automatic start like the others: a project its owner has not started, or has
   -- paused, keeps its appointment (not consumed, so it fires once the project moves) and starts
@@ -2138,6 +2156,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     @Optional() private readonly evidenceReviews?: EvidenceReviewService,
     @Optional() private readonly confirmationReviews?: OwnerConfirmationReviewService,
     @Optional() private readonly push?: PushService,
+    /**
+     * The orphan sweep (docs/evidence-always-has-an-addressee-design.md §4), on the reconcile timer.
+     * `@Optional()` and last for the places that build this service directly: they run no sweep.
+     */
+    @Optional() private readonly orphanSweep?: ProjectOrphanSweepService,
   ) {
     this.handoffs = handoffs ?? new ProjectHandoffService(prisma);
     this.files = files ?? new FilesService(prisma);
@@ -2588,7 +2611,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       .then(() => this.confirmationReviews?.deliverPendingFor())
       .catch((e) =>
         this.logger.error(`waiting evidence sweep failed: ${e instanceof Error ? e.message : e}`),
-      );
+      )
+      // The orphan sweep, last and on this timer for the reason at the top of this block: it reads
+      // what the sweeps before it have just delivered, so it does not report as untold what this
+      // same tick handed over. It runs every few ticks (`ORPHAN_SWEEP_INTERVAL_MS`) and never rejects.
+      .then(() => this.orphanSweep?.tick());
   }
 
   onModuleDestroy(): void {
@@ -3824,6 +3851,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * the task is still the user's (`creator` stays unset), and the credential is recorded beside it
    * in `activity` — see `recordTasksCreated`.
    */
+  /**
+   * The runner door's half of SR55's "the calling session": a request carrying a fork must come from a
+   * session this runner credential is running (`task-fork.ts`). The create below checks the rest.
+   */
+  async assertForkCallerOnRunner(ownerId: string, runnerId: string, sessionId: string | undefined): Promise<void> {
+    await assertForkCallerOnRunner(this.prisma, ownerId, runnerId, sessionId);
+  }
+
   async create(
     ownerId: string,
     dto: CreateTaskDto,
@@ -3837,6 +3872,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // reimplemented, because a second writer is a second thing to keep in step with every column a
     // Task has — see `createWithVerifier`.
     const verification = dto.verification;
+    if (verification && dto.fork) {
+      // The paired writer below is a second row builder; a fork it silently dropped would be a task that
+      // starts somewhere nobody chose. Two calls do the same job: the subject forked, its check after.
+      throw new BadRequestException(
+        'fork and verification cannot be used together yet: create the forked task, then its verification task',
+      );
+    }
     if (verification) {
       // One task, one role in the relation: it either IS the check (verifiesTaskId) or is the
       // subject something else checks (verification). Naming both would make it its own subject.
@@ -3958,6 +4000,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     await this.assertFixesOpenItem(
       this.prisma, ownerId, scopedProjectId, dto.fixesOpenItemId, creatorSessionId,
     );
+    // SR55: a fork is from the calling session, runs on its machine, and is not filed into a project
+    // with a code binding — judged against the project the scope admitted, before any transaction.
+    const forkColumns = await resolveTaskFork(
+      this.prisma, ownerId, creatorSessionId, { ...dto, projectId: scopedProjectId }, null,
+    );
     // Against the project this write was ADMITTED into, for the reason stated above: a coordinator
     // that names no project still files its work under the one it coordinates, and refusing that
     // request on the DTO's empty `projectId` would be a refusal of a task that lands in a project.
@@ -4030,6 +4077,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       idempotencyKey,
       await this.pausedListIds(ownerId, [dto.listId]),
       criterionDeclaration,
+      forkColumns,
     );
     // Initial edges and their task must become visible atomically. Taking the same owner lock
     // used by add/replace prevents a concurrent reverse-edge write from observing the new task
@@ -4437,6 +4485,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     heldListIds: ReadonlySet<string>,
     /** Migration 0232: what `dto.criterionKey` resolved to, or null when nothing was declared. */
     criterionDeclaration: { criterionDefinitionId: string; criterionRevision: number } | null,
+    /** Migration 0615: the fork `resolveTaskFork` checked, or null/absent for a task not forked. */
+    fork?: TaskForkColumns | null,
   ): Prisma.TaskUncheckedCreateInput {
     const sessionId = origin?.sessionId;
     return {
@@ -4485,6 +4535,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // SR5's declaration, made with the task: no reason is asked for a task's first statement of
       // what it is (`task-codeless.ts`). Omitted leaves the column default, false.
       codeless: dto.codeless,
+      // SR55's five facts, in this INSERT and never again (0615's `task_fork_guard`). Absent on a task
+      // that was not forked, so the columns stay out of the statement, as on every task before them.
+      ...(fork ?? {}),
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       // Omitted means unscheduled. The `undefined` is what makes that true without a default:
       // Prisma leaves the column out of the INSERT, so the row is born NULL exactly as every task
@@ -5070,6 +5123,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         this.prisma, ownerId, item.projectId, item.fixesOpenItemId, creatorSessionId,
       );
     }
+    // SR55, per item and over the project each was admitted into, like the link check above. A
+    // replayed item's row already carries whatever fork it was written with.
+    const forkColumns = new Map<number, TaskForkColumns>();
+    for (const [index, item] of items.entries()) {
+      if (frozen.has(index)) continue;
+      const fork = await resolveTaskFork(this.prisma, ownerId, creatorSessionId, item, index);
+      if (fork) forkColumns.set(index, fork);
+    }
     // Item by item, over the project each one was ADMITTED into, and above the dry run for the
     // same reason the bound below is. A frozen item is a replay whose row already exists:
     // re-judging it could only refuse a write that already happened.
@@ -5292,6 +5353,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               idempotencyKey,
               heldListIds,
               criterionDeclarations.get(index) ?? null,
+              forkColumns.get(index) ?? null,
             ),
           }));
         if (!existing) {
@@ -6299,7 +6361,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     sessionId: string,
   ): Promise<never> {
     const from = task.projectId;
-    const to = dto.projectId as string;
+    // null: take the task out of every project. The confirmation files it under none.
+    const to = (dto.projectId ?? null) as string | null;
     const extra = Object.entries(dto)
       .filter(([field, value]) => value !== undefined && !MOVE_REQUEST_FIELDS.has(field))
       .map(([field]) => field)
@@ -6320,7 +6383,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         'a blank key names no criterion. Leave criterionKey out to ask for the move without one, '
         + 'or pass one of the keys project_get returns for the project the task would move into.'));
     }
-    await this.assertOwnedProject(ownerId, to);
+    if (criterionKey && to === null) {
+      throw new BadRequestException(this.criterionUnknown(JSON.stringify(criterionKey),
+        'a task taken out of every project serves no project\'s criterion. Leave criterionKey out '
+        + 'to ask for it to be taken out, or name the project it should move into instead.'));
+    }
+    if (to !== null) await this.assertOwnedProject(ownerId, to);
 
     const write: ScopeWriteInput = {
       operation: 'HANDOFF_TASK',
@@ -6347,7 +6415,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
     // Resolved in the target and nowhere else, by the rule every declaration is resolved by, and
     // refused as the malformed request it is rather than as an authority refusal.
-    const criterion = criterionKey
+    const criterion = criterionKey && to
       ? (await this.resolveCriterionDeclarations(ownerId, [{ projectId: to, criterionKey }])
           .catch((error: unknown) => {
             if (error instanceof ForbiddenException) throw new BadRequestException(error.getResponse());
@@ -6524,6 +6592,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
     const from = asked.fromProjectId;
     const to = asked.toProjectId;
+    // SR55, as on the edit door: a forked task is never moved into a project with a code binding.
+    // Refused before the approval is spent, so the request stays answerable once the fork is resolved.
+    const fork = await this.prisma.task.findFirst({
+      where: { id: taskId, ownerId },
+      select: { forkRunnerId: true, forkSessionId: true },
+    });
+    if (fork?.forkRunnerId && fork.forkSessionId && to) {
+      await assertForkPlacement(this.prisma, ownerId,
+        { forkRunnerId: fork.forkRunnerId, forkSessionId: fork.forkSessionId }, { projectId: to });
+    }
     const moved = await withTransactionRetry(this.prisma, async (tx) => {
       await this.lockDependencyGraph(tx, ownerId);
       const projectIds = orderedIds([from, to]);
@@ -6584,12 +6662,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // work, and gives up only a task none of its criteria count. What the task serves is read
       // under this transaction's lock on it, so a declaration made while the request waited counts.
       const ends = await tx.project.findMany({
-        where: { id: { in: [from, to] }, ownerId },
+        where: { id: { in: orderedIds([from, to]) }, ownerId },
         select: { id: true, status: true },
       });
-      // A project this read does not find is not open: fail closed, as R8 does.
-      const statusOf = (id: string): HandoffProjectFacts =>
-        ({ status: ends.find((end) => end.id === id)?.status ?? 'CANCELLED' });
+      // A project this read does not find is not open: fail closed, as R8 does. A move out of
+      // every project lands nowhere, and nowhere is always open to take it.
+      const statusOf = (id: string | null): HandoffProjectFacts =>
+        id === null
+          ? { status: 'OPEN' }
+          : { status: ends.find((end) => end.id === id)?.status ?? 'CANCELLED' };
       const acceptance = decideHandoffAcceptance(statusOf(from), statusOf(to), {
         servesSourceCriterion: await this.handoffs.servesCriterionOf(tx, ownerId, taskId, from),
       });
@@ -6599,7 +6680,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             ? `task ${uuidToBase62(taskId)} serves an acceptance criterion of project `
               + `${uuidToBase62(from)}, which is settled, and a settled project gives up only work `
               + 'none of its criteria count'
-            : `project ${uuidToBase62(to)} is not open, and a settled project takes no work until `
+            : `project ${to ? uuidToBase62(to) : '(none)'} is not open, and a settled project takes no work until `
               + 'it is reopened');
       }
       await this.handoffs.assertMoveNotLanding(tx, ownerId, taskId, {
@@ -6608,7 +6689,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       });
       // What the task will declare over there: the criterion the request named, at its revision
       // NOW — the same snapshot `resolveCriterionDeclarations` takes — read under the target's lock.
-      const criterion = row.requestedCriterionDefinitionId
+      const criterion = row.requestedCriterionDefinitionId && to
         ? await tx.projectAcceptanceCriterionDefinition.findFirst({
             where: { id: row.requestedCriterionDefinitionId, projectId: to, project: { ownerId } },
             select: { id: true, revision: true },
@@ -6616,7 +6697,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         : null;
       if (row.requestedCriterionDefinitionId && !criterion) {
         throw refuse('MOVE_TASK_CRITERION_GONE', 'DENY_THE_REQUEST',
-          `the criterion this request would have the task serve in project ${uuidToBase62(to)} `
+          `the criterion this request would have the task serve in project ${to ? uuidToBase62(to) : '(none)'} `
           + `(${criterionKeyOf(row.requestedCriterionDefinitionId)}) is no longer one that project `
           + 'states');
       }
@@ -6709,17 +6790,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     await this.openItems?.deliverForTasks([taskId]);
     // And the evidence it brought along, which the project it is in now decides (the same decision
     // that moves the run with it): handed to that project's decider, or — when the move left it
-    // quoting a standard the task is no longer held to — sent back to be filed again.
-    await this.handOverMovedEvidence(ownerId, {
-      taskId,
-      fromProjectId: from,
-      toProjectId: to,
-      withdrawnCriterionDefinitionId: moved.criterionDefinitionId,
-    });
+    // quoting a standard the task is no longer held to — sent back to be filed again. A task taken
+    // out of every project has no project to decide it, and is left as the owner's own unfiling
+    // leaves it.
+    if (to) {
+      await this.handOverMovedEvidence(ownerId, {
+        taskId,
+        fromProjectId: from,
+        toProjectId: to,
+        withdrawnCriterionDefinitionId: moved.criterionDefinitionId,
+      });
+    }
   }
 
   /**
-   * A confirmed move's evidence hand-over (`moved-task-evidence.ts` says what and why), after the
+   * A confirmed move's evidence hand-over (`undecidable-evidence.ts` says what and why), after the
    * move's commit and from the rows it committed, the way every other delivery of that edge is.
    *
    * Nothing is said when there is nothing undecided: a task that is not EVIDENCE_JUDGMENT, one that
@@ -6728,10 +6813,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    *
    * A revision the decision door would take in the target is routed through the evidence door again,
    * keyed with the target (`completionEvidenceRevisedFact`'s `movedFromProjectId`). One it would
-   * refuse is sent back: each live run of the task is told what to quote instead, written into the
-   * turn it is running where it can be, and an Automatic target's live coordinator is told the task
-   * arrived owing a new revision. Each message is keyed by the revision and the target, so a repeat
-   * says nothing twice; neither revives a conversation that has ended.
+   * refuse takes the shared undecidable path (`tellEvidenceUndecidable`): each live run of the task
+   * is steered with the standard it is held to now, and an Automatic target's live coordinator is
+   * told the task arrived owing a new revision. Each message is keyed by the revision and the
+   * standard, so a repeat says nothing twice; neither revives a conversation that has ended.
    *
    * Like every delivery on this edge, a failure is logged and never reported as a failed move: the
    * move committed. What a failed hand-over leaves is the state before this unit existed — the
@@ -6792,95 +6877,26 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
-      const projects = await this.prisma.project.findMany({
-        where: { id: { in: [move.fromProjectId, move.toProjectId] }, ownerId },
-        select: {
-          id: true,
-          title: true,
-          coordinatorEnabled: true,
-          coordinatorSessionId: true,
-          coordinatorSession: { select: SESSION_ENDING_SELECT },
+      // Not decidable there: the one shared path every undecidable revision takes
+      // (`undecidable-evidence.ts`) — the live runs are steered, an Automatic target's coordinator
+      // is told, each once per revision and standard.
+      const from = await this.prisma.project.findFirst({
+        where: { id: move.fromProjectId, ownerId },
+        select: { id: true, title: true },
+      });
+      if (!from) return;
+      await tellEvidenceUndecidable(this.prisma, this.sessions, {
+        ownerId,
+        taskId: task.id,
+        cause: {
+          kind: 'MOVED',
+          from,
+          withdrawnCriterionDefinitionId: move.withdrawnCriterionDefinitionId,
         },
       });
-      const from = projects.find((project) => project.id === move.fromProjectId);
-      const to = projects.find((project) => project.id === move.toProjectId);
-      if (!from || !to) return;
-      const declared = task.criterionDefinitionId
-        ? await this.prisma.projectAcceptanceCriterionDefinition.findFirst({
-            where: { id: task.criterionDefinitionId, projectId: move.toProjectId },
-            select: { id: true, text: true },
-          })
-        : null;
-      const moved: MovedEvidence = {
-        taskId: task.id,
-        title: task.title,
-        revision: latest.revision.toString(),
-        from: { id: from.id, title: from.title },
-        to: { id: to.id, title: to.title },
-        quoted: quotedCriterion(latest.evidence),
-        withdrawnCriterionDefinitionId: move.withdrawnCriterionDefinitionId,
-        standard: resubmitStandard({ id: task.id, acceptanceCriteria: task.acceptanceCriteria, declared }),
-      };
-
-      const runs = (await this.prisma.session.findMany({
-        where: { ownerId, taskId: task.id },
-        select: { id: true, ...SESSION_ENDING_SELECT },
-        orderBy: { id: 'asc' },
-      })).filter((run) => !sessionHasEnded(run));
-      const told: string[] = [];
-      for (const run of runs) {
-        if (await this.tellMovedEvidence(ownerId, run.id, {
-          clientTurnId: movedEvidenceTurnId('run', latest.id, move.toProjectId),
-          content: resubmitMessage(moved),
-          steerIfLive: true,
-        })) told.push(run.id);
-      }
-      // The coordinator of an Automatic target, as the evidence door itself would reach it: a project
-      // whose switch is off is told no evidence fact, and an ended conversation is not revived.
-      if (to.coordinatorEnabled && to.coordinatorSessionId && to.coordinatorSession
-        && !sessionHasEnded(to.coordinatorSession)) {
-        await this.tellMovedEvidence(ownerId, to.coordinatorSessionId, {
-          clientTurnId: movedEvidenceTurnId('coordinator', latest.id, move.toProjectId),
-          content: arrivalMessage(moved, told),
-          steerIfLive: false,
-        });
-      }
     } catch (error) {
       this.logger.warn(`evidence of task ${move.taskId} was not handed over to project `
         + `${move.toProjectId} after its move: ${error instanceof Error ? error.message : error}`);
-    }
-  }
-
-  /**
-   * One message of the hand-over above, as a platform turn under a key derived from the revision.
-   * True when it is on the conversation; false when the conversation refused it for a state of the
-   * world (gone, ended, busy being written, unable to run) — the refusals every delivery here takes
-   * as such. A fault is raised to the caller, which logs it.
-   */
-  private async tellMovedEvidence(
-    ownerId: string,
-    sessionId: string,
-    turn: { clientTurnId: string; content: string; steerIfLive: boolean },
-  ): Promise<boolean> {
-    try {
-      await this.sessions.createTurn(ownerId, sessionId, {
-        clientTurnId: turn.clientTurnId,
-        content: turn.content,
-        intent: 'NEXT_TURN',
-      }, turn.steerIfLive ? { steerIfLive: true } : undefined);
-      return true;
-    } catch (error) {
-      if (
-        error instanceof NotFoundException
-        || error instanceof ConflictException
-        || error instanceof ForbiddenException
-        || error instanceof BadRequestException
-      ) {
-        this.logger.log(`moved-evidence message to session ${sessionId} was not written: `
-          + `${error.message}`);
-        return false;
-      }
-      throw error;
     }
   }
 
@@ -9267,6 +9283,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // and a row with work of its own is one whose detail has a verifier state like any other.
     const [
       dependencyFacts, supersession, autoRunSkipped, workState, progress, verifier, routes, modelHintOptions, integrations,
+      forkSource,
     ] =
       await Promise.all([
         this.dependencyFactsFor(ownerId, [id]),
@@ -9283,6 +9300,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         readTaskRouteSummaries(this.prisma, ownerId, (task.sessions ?? []).map((session) => session.id)),
         this.modelHintOptions(ownerId, task),
         task.projectId ? readTaskIntegrationViews(this.prisma, ownerId, task.projectId, [id]) : new Map(),
+        forkSourceLine(this.prisma, task),
       ]);
     const dependencyState = computeDependencyState(dependencyFacts.get(id) ?? []);
     return {
@@ -9330,6 +9348,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // A task in no project lands on no project's main branch.
         mainBranch: null,
       },
+      // SR18's sentence when this task was forked from a session (design §2.3), null otherwise: the
+      // line every client shows where it shows the task's source.
+      forkSource,
       ...supersession,
     };
   }
@@ -9551,8 +9572,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // finds the one already waiting) and moves nothing. Only a session asks: the owner's own move
     // is §4 R1's and goes on below exactly as before, `handoff` or not. Only from a project, since
     // a move leaves one. And only while the contract is enforced: in `observe` nothing is refused,
-    // so the write proceeds as it did before this door existed.
-    if (actingSessionId && dto.handoff != null && typeof dto.projectId === 'string'
+    // so the write proceeds as it did before this door existed. `projectId: null` with a `handoff`
+    // asks for the task to be taken out of its project (account owner, 2026-11-13): §4 R4 refuses
+    // a session that writes that, and this is how it asks instead.
+    if (actingSessionId && dto.handoff != null
+      && (typeof dto.projectId === 'string' || dto.projectId === null)
       && before.projectId && dto.projectId !== before.projectId
       && projectScopeMode() === 'enforce') {
       return this.requestMove(ownerId, { ...before, projectId: before.projectId }, dto, actingSessionId);
@@ -9802,6 +9826,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (dto.assigneeId) await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
     if (dto.projectId) await this.assertOwnedProject(ownerId, dto.projectId);
+    // SR55: an edit may not move a forked task where its next run could only be refused — into a
+    // project with a code binding, or onto a workspace on another machine than its snapshot's. Asked of
+    // what the edit changes only, before the transaction, like every refusal on this path.
+    // `before` is the full row (loadDetail reads every column), so an ordinary task pays no query here.
+    if ((dto.assigneeId || dto.projectId) && (dto.assigneeId !== before.assigneeId || dto.projectId !== before.projectId)) {
+      if (before.forkRunnerId && before.forkSessionId) {
+        await assertForkPlacement(this.prisma, ownerId,
+          { forkRunnerId: before.forkRunnerId, forkSessionId: before.forkSessionId },
+          {
+            assigneeId: dto.assigneeId && dto.assigneeId !== before.assigneeId ? dto.assigneeId : null,
+            projectId: dto.projectId && dto.projectId !== before.projectId ? dto.projectId : null,
+          });
+      }
+    }
     // The engine, provider and model pins as this write leaves them — each three-state; a provider
     // alone carries the engine it runs on by default, and an engine alone is checked against the
     // provider pin the task keeps (docs/provider-engine-contract.md §3.5).
@@ -14881,8 +14919,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (e instanceof TaskRunFenceLost) {
         throw taskRunInProgress(TASK_RUN_ACTION.execute, runRequestToken);
       }
+      // An automatic start of a forked task refused by the session create door: recorded on the
+      // task, so the candidate scans stop offering it until something it was decided on changes.
+      if (auto) await this.recordForkRefusalOf(id, e);
       throw e;
     }
+  }
+
+  /** `recordForkDispatchRefusal` for an error that is a fork refusal; anything else is left alone. */
+  private async recordForkRefusalOf(taskId: string, e: unknown): Promise<void> {
+    if (!(e instanceof ConflictException)) return;
+    const body = e.getResponse() as { code?: unknown; message?: unknown };
+    if (body?.code !== 'FORK_SOURCE_NOT_REACHABLE' && body?.code !== 'FORK_IN_BOUND_PROJECT') return;
+    await recordForkDispatchRefusal(
+      this.prisma, taskId, { code: body.code, message: String(body.message ?? '') }, new Date(),
+    ).catch((err) =>
+      this.logger.warn(`fork refusal of task ${taskId} not recorded: ${err?.message ?? err}`));
   }
 
   /**
@@ -15024,6 +15076,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // How the run's work reaches its line, which the prompt says (§10.5 O-L3).
         codeless: true,
         project: { select: TASK_DELIVERY_SELECT },
+        // The standard the prompt states for its evidence (step 3).
+        ...TASK_STANDARD_SELECT,
       },
     });
     if (!task) throw new NotFoundException('task not found');
@@ -15499,6 +15553,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * as it always did.
    */
   private buildExecutePrompt(task: {
+    id: string;
+    projectId?: string | null;
+    criterionRevision?: number | null;
+    criterionDefinition?: { id: string; text: string } | null;
     title: string;
     description?: string | null;
     acceptanceCriteria?: string | null;
@@ -15636,6 +15694,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // and how the run's work reaches its line, which the prompt says (§10.5 O-L3).
         codeless: true,
         project: { select: { status: true, ...TASK_DELIVERY_SELECT } },
+        // The standard the prompt states for its evidence (step 3).
+        ...TASK_STANDARD_SELECT,
         list: { select: { instructions: true } },
         assignee: { select: { id: true, runnerId: true } },
       },

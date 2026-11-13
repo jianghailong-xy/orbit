@@ -1,5 +1,6 @@
 package io.orbitd.android.directory
 
+import io.orbitd.android.openProjectSessionsPage
 import io.orbitd.android.hasRowMenu
 import io.orbitd.android.openRowMenu
 import android.graphics.Bitmap
@@ -92,7 +93,7 @@ class TrashDeviceTest {
 
                 // The project's sessions page: a member goes on the press too; refused, it is back at once and the toast says why. The
                 // page's list is scrolled to its rows: on a 360×640 dp phone the ones below the fold are not composed until then.
-                compose.onNodeWithTag("project-row:$launch").performClick(); settle()
+                compose.openProjectSessionsPage(launch); settle()
                 await { exists(hasTestTag("project-sessions")) }
                 compose.awaitListed(hasRowMenu("Options for Shipped docs"))
                 rowAction("Shipped docs")

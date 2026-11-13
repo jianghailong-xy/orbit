@@ -100,6 +100,10 @@ function renderCoordinatorInstructions(
         + 'next step, then act. No automatic loop decides for you when to act.\n\n')
     + 'When it is time to act, you have tools: project_update changes this project’s title, goal and instructions; '
     + 'task_create, task_update and task_start manage its tasks.\n\n'
+    + 'When you split the work into tasks, a task’s acceptance criteria may only require what its own work and its '
+    + 'dependencies make provable when it is delivered: a clause that needs the output of a task it does not depend on '
+    + 'cannot be proven by it, and a gap against that clause is not a gap its run can close. Cross-task parity (copy or '
+    + 'behaviour matching across clients, say) belongs to a check task that depends on all of them.\n\n'
     + (modelRouting
       ? 'Give every task you create a modelHint (S/M/L/XL) and a one-sentence modelHintReason, and when you see a task '
         + 'in the project without one, add it with task_update. '

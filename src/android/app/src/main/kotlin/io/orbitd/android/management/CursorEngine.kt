@@ -174,7 +174,7 @@ internal fun CursorKeyPage(api: ManagementApi, revision: Long, providerId: Strin
             key = found; gone = found == null; failure = null
             found?.let { rememberProviderKeyTitle(providerId, it.str("label") ?: it.text("slug")) }
         } catch (e: CancellationException) { throw e } catch (e: Exception) { failure = personalFailure(e) }
-        try { model = Infrastructure.cursorModel(providerObjects(api.get("runners")).filter { it.bool("online") == true }) }
+        try { model = MachinesAndModels.cursorModel(providerObjects(api.get("runners")).filter { it.bool("online") == true }) }
         catch (e: CancellationException) { throw e } catch (_: Exception) { }
     }
     LaunchedEffect(providerId, revision, rememberResumed()) { load() }

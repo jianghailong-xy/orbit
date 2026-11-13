@@ -26,6 +26,9 @@ class RunnerUpdatingCopyParityTest {
     @Test fun theNamedConstantsAreWebsDeclarations() {
         assertHas("export const RUNNER_UPDATING_TITLE = '${RunnerUpdating.RUNNER_UPDATING_TITLE}';")
         assertHas("export const RUNNER_UPDATING_TAG = '${RunnerUpdating.RUNNER_UPDATING_TAG}';")
+        assertHas("export const RUNNER_STOPPING_TITLE = '${RunnerUpdating.RUNNER_STOPPING_TITLE}';")
+        assertHas("export const RUNNER_STOPPING_TAG = '${RunnerUpdating.RUNNER_STOPPING_TAG}';")
+        assertHas("gate?.queuedRunnerUpdate?.stopping === true")
         assertHas("export const QUEUED_LABEL = '${RunnerUpdating.QUEUED}';")
         assertHas("queuedReason === 'runner_updating'")
         listOf(RunnerUpdating.THE_RUNNER, RunnerUpdating.UNTITLED_SESSION, RunnerUpdating.SESSION_STARTS, RunnerUpdating.LESS_THAN_A_MINUTE,
@@ -34,7 +37,7 @@ class RunnerUpdatingCopyParityTest {
         // Every string constant of the object is held above: a word added there and not here fails.
         val declared = RunnerUpdating::class.java.declaredFields.filter { it.type == String::class.java }
             .map { it.isAccessible = true; it.get(null) as String }
-        assertEquals(9, declared.size)
+        assertEquals(11, declared.size)
     }
 
     @Test fun everyBuiltSentenceIsOneWebLiteral() {
@@ -70,6 +73,26 @@ class RunnerUpdatingCopyParityTest {
         assertHas("`Waiting \${minutes} min`")
         assertEquals("Waiting 2 h $count min", waited(120L + count))
         assertHas("`Waiting \${Math.floor(minutes / 60)} h\${rest ? ` \${rest} min` : ''}`")
+    }
+
+    /** A runner that is stopping, not updating (board runner-stopping): the queued page's sentences and the popover's, each one web
+     *  literal. */
+    @Test fun everyStoppingSentenceIsOneWebLiteral() {
+        val stopping = QueuedGate("runner_updating", count, QueuedRunnerUpdate(version, null, emptyList(), stopping = true))
+        val parts = RunnerUpdating.runnerUpdatingDescription(stopping, who).filterIsInstance<RunnerUpdatingPart.Words>().map { it.text }
+        assertEquals("$who is stopping. ", parts[0])
+        assertHas(template(parts[0]))
+        assertEquals("It starts no new work until $count turns finish: ", parts[1])
+        assertEquals("This session starts once $who is back.", parts.last())
+        assertEquals("This session starts once it is back.",
+            RunnerUpdating.runnerUpdatingDescription(stopping, null).filterIsInstance<RunnerUpdatingPart.Words>().last().text)
+        assertHas("`This session starts once \${name || 'it'} is back.`")
+        val sent = " This message is sent once it is back."
+        assertHas("`\${first}$sent`")
+        assertEquals("$who starts no new turns until $count turns finish, then stops.", RunnerUpdating.runnerUpdatingMessageText(stopping, who).removeSuffix(sent))
+        assertHas("`\${who} starts no new turns until \${turnsFinish(count)}, then stops.`")
+        assertEquals("$who stops now.", RunnerUpdating.runnerUpdatingMessageText(stopping.copy(queuedActive = 0), who).removeSuffix(sent))
+        assertHas("`\${who} stops now.`")
     }
 
     /** A rendered sentence as the TypeScript template it came from. */

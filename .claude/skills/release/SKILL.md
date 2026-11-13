@@ -10,12 +10,17 @@ from that same tag, so one command ships all three clients together:
 
 | Job (in `release.yml`) | Output |
 |------------------------|--------|
-| `dmg` | macOS: signed + notarized DMG, a GitHub Release, and the Sparkle auto-update appcast |
+| `identity` | Refuses the tag unless it is `v` + the root `package.json` version and carries a filled-in `release-notes/<version>.md`; every build job waits for it |
+| `dmg` | macOS: signed + notarized DMG, a GitHub Release whose body is those release notes, and the Sparkle auto-update appcast |
 | `testflight` | iOS: signed `.ipa` archived and uploaded to TestFlight |
 | `android-build` | Android: signed release APK (signing key from the `android-internal` environment) |
 | `android-publish` | Android: attaches `orbit-android-<version>.apk`, its `.sha256` and `android-update.json` to the **same GitHub Release** `dmg` created; installed Android apps update themselves from it |
 
-The tag is the single source of truth for the version:
+**The root `package.json` version is the version of record**, and the tag is that version with `v`. Every
+surface derives from it: the GitHub Release, the DMG/`.zip` names and `CFBundleShortVersionString`, the
+TestFlight marketing version (numeric, suffix stripped), the Android `versionName`, the runner binaries and
+`/dl/version.json`, the Sparkle appcast and `android-update.json`. `release.yml` refuses a tag that disagrees
+with the package, so the two cannot drift.
 
 - `vX.Y.Z` → macOS **stable** channel (reaches everyone) **+** an iOS TestFlight build.
 - `vX.Y.Z-beta.N` → macOS **beta** channel (only users who enabled "Receive beta updates") **+** an
@@ -28,46 +33,44 @@ The tag is the single source of truth for the version:
 
 ## How to use
 
-1. **Pick the version.** `release.sh next` resolves it from the newest tag — the next beta in the
-   current series, or `X.Y.(Z+1)-beta.1` if the newest tag is a stable release. Confirm the
-   resolved version before tagging; pass an explicit version for anything else (a stable release,
-   or opening a new minor).
-
-   ```bash
-   git -c versionsort.suffix=-beta tag --list 'v*' --sort=-v:refname | head -1
-   ```
+1. **Pick the version.** `release.sh next` prints the one tag to cut next, resolved from the **package
+   version** alone (old tags are never read as a sequence): the package version itself while it has no
+   tag yet (the release commit is prepared and waiting), otherwise the next beta in the current series,
+   or `X.Y.(Z+1)-beta.1` once a stable version is the package version. It only prints. Confirm it before
+   bumping; pass an explicit version for anything else (a stable release, or opening a new minor).
 
    **A beta belongs to the version it precedes, not the one already out.** `0.1.1-beta.2` sorts
    *below* `0.1.1`, so once `X.Y.Z` ships stable, its betas are spent — the next beta must open on
-   `X.Y.(Z+1)`. Missing that bump is what left the counter running to `0.1.1-beta.100` on a version
-   that was never released. `next` handles the bump; if you pass a version by hand, check it
-   sorts above the newest stable tag.
+   `X.Y.(Z+1)`. `next` handles the bump.
 
-2. **Always cut from `main`, synced with `origin/main`.** Check out `main` and pull before tagging.
-   Tagging a feature/session branch — or a `main` that's behind `origin/main` — ships a tree that's
-   missing whatever landed on `main` in parallel, so the release silently **drops those features and
-   can revert already-merged fixes**. The tag must point at a committed, pushed `main` tip so both
-   workflows check out the right code. Verify before tagging:
+2. **Bump the package and open the notes.** This is the release commit: `package.json`, the lockfile and
+   `release-notes/<version>.md` all name the same version.
+
+   ```bash
+   .claude/skills/release/release.sh bump next          # or: bump 0.2.0-beta.3
+   ```
+
+   `bump next` while the package version is still untagged and its notes exist changes nothing.
+
+   Fill in every section of the notes file (`docs/release-notes-template.md`), commit it, and make sure
+   the branch is `main` synced with `origin/main` before tagging. Tagging a feature/session branch — or
+   a `main` that's behind `origin/main` — ships a tree that's missing whatever landed on `main` in
+   parallel, so the release silently **drops those features and can revert already-merged fixes**.
 
    ```bash
    git rev-parse --abbrev-ref HEAD                     # → main
    git fetch origin && git rev-list --count HEAD..origin/main   # → 0 (nothing on origin/main you're missing)
    ```
 
-   If a fix lives only on another branch, merge it into `main` first — never tag the branch directly.
-
-3. **Run the helper** (resolves the repo root itself):
+3. **Tag it** (resolves the repo root itself). It runs the same identity gate as CI, refuses a dirty
+   tree, a tag that disagrees with `package.json`, missing or placeholder notes, and an already-used tag
+   (local or remote), then creates an annotated tag and pushes it:
 
    ```bash
-   .claude/skills/release/release.sh next            # next beta after the newest tag
-   .claude/skills/release/release.sh 0.2.0           # stable macOS + iOS TestFlight
-   .claude/skills/release/release.sh 0.2.0-beta.3    # macOS beta channel + iOS TestFlight
+   .claude/skills/release/release.sh 0.2.0-beta.3    # the version package.json already carries
    ```
 
-   It validates the version, refuses a dirty tree or an already-used tag (local or remote), creates
-   an annotated `vX.Y.Z` tag, and pushes it to `origin`.
-
-4. **Watch the build and report the result.** All four jobs run in the one `release.yml` run:
+4. **Watch the build and report the result.** All five jobs run in the one `release.yml` run:
 
    ```bash
    gh run watch "$(gh run list --workflow release.yml -L 1 --json databaseId -q '.[0].databaseId')"
@@ -88,6 +91,8 @@ The tag is the single source of truth for the version:
 
 ## Notes
 
+- `.agents/skills/release/` carries the same rules for other engines; its `scripts/release.sh` is this
+  `release.sh`, byte for byte (`npm run test:release-identity` checks it). Change both together.
 - Accepted: `X.Y.Z` (stable) or `X.Y.Z-beta.N` (macOS beta channel). iOS always ships the numeric
   `X.Y.Z` to TestFlight regardless of suffix.
 - **One tag fires all three** — every `v*` tag also uploads an iOS TestFlight build (two `macos-15`

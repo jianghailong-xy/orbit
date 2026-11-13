@@ -1,4 +1,5 @@
 import type { OwnerConfirmationNotReviewedReason } from './owner-confirmation-review';
+import type { MainCheckoutRunnerRequest } from './mainCheckoutGit';
 // The wire contract shared by the control plane, the Go runner, the web app and the native
 // clients.
 //
@@ -891,11 +892,18 @@ export interface RunnerUpdateTurn {
 export interface RunnerDrainWaiting {
   sessions: number;
   messages: number;
+  /** The runner drains because its process is stopping (a stop signal: a service restart or stop, a
+   *  reboot), not for a release: its update phase is neither `draining` nor `restarting`. The clients
+   *  then say "is stopping" and offer neither Later nor Update Now. Absent from an older server. */
+  stopping?: boolean;
 }
 
 /** Why a queued session waits on its runner's self-update (queuedReason 'runner_updating'): the
  *  release, the owner's turns the drain waits for, and when the wait began. */
 export interface QueuedRunnerUpdate {
+  /** The runner is stopping, not updating (RunnerDrainWaiting.stopping): "Runner stopping", no actions.
+   *  Absent from an older server. */
+  stopping?: boolean;
   targetVersion: string | null;
   since: string | null;
   turns: Array<{ id: string; title: string | null }>;
@@ -1259,6 +1267,9 @@ export interface RunnerHeartbeatResponse {
   /** A checkout repair the user started after seeing it reported wedged. Absent on older control
    *  planes, and whenever no repair is in flight for this runner. */
   repoCleanupRequest?: RepoCleanupCommand;
+  /** Main checkout reads and actions for a runner that declared `main-checkout-git/v1`
+   *  (docs/main-checkout-git-contract.md §10). Each is handed out once. Absent otherwise. */
+  mainCheckoutRequests?: MainCheckoutRunnerRequest[];
   /** Re-read the runtime CLIs' model lists now, instead of waiting for the runner's own periodic
    *  pass. Set once per user request and cleared as it is handed over, so a runner that misses it
    *  (offline, older build) costs nothing more than the wait it was already in. */
@@ -1358,7 +1369,23 @@ export interface RunnerHeartbeatResponse {
   secretGrants?: Array<{ id: string; expiresAt: string }>;
   /** Grants of this runner being removed: remove the copy if held, then confirm with /removed either way. */
   secretGrantsRemoving?: string[];
+  /**
+   * The snapshots this runner's open forked tasks start from (docs/task-fork-from-session-design.md §2.6): the runner
+   * deletes each keep-alive ref `refs/orbit/fork/*` whose snapshot is not listed. Sent only to a runner that declared
+   * `task-fork/v1`, and only by a beat that reconciles in full. Only a PRESENT list states anything: absent deletes
+   * nothing, `[]` means no open forked task.
+   */
+  forkSnapshotsOpen?: string[];
 }
+
+/** Declared by a runner that deletes the fork keep-alive refs `forkSnapshotsOpen` no longer names. runner-go asserts
+ *  the same string. */
+export const TASK_FORK_V1 = 'task-fork/v1';
+
+/** Declared by a runner that runs a codeless task in a detached checkout and makes its branch only at finalize, when
+ *  the run changed something (`ClaimedSession.codelessCheckout`, docs/task-fork-from-session-design.md §3 B2). An
+ *  older runner is handed the branch up front instead. runner-go asserts the same string. */
+export const CODELESS_CHECKOUT_V1 = 'codeless-checkout/v1';
 
 /** Declared by a runner that honours the owner's Later (`postponeSelfUpdateUntil`,
  *  docs/runner-update-drain-design.md §4). A runner without it is refused a postpone as too old.
@@ -2232,6 +2259,13 @@ export interface ClaimedSession {
    *  and workDir is a git repo, the runner runs claude in a per-session `git worktree` on
    *  this branch instead of the shared workDir. Generated server-side at session creation. */
   branch?: string;
+  /** A codeless task's run with no branch yet (docs/task-fork-from-session-design.md §3 B2), sent only to a runner
+   *  that declares `codeless-checkout/v1` and only when `branch` is absent: run in a checkout of its own, detached
+   *  at the run's base (`git worktree add --detach`). At finalize, nothing changed → the checkout is removed and no
+   *  branch is made; changes → `codelessBranch` is created there, committed to, and reported as the branch. */
+  codelessCheckout?: boolean;
+  /** The branch a `codelessCheckout` run makes at finalize if it changed anything. */
+  codelessBranch?: string;
   /** Agent opt-in: if workDir isn't a git repo, the runner `git init`s it (default
    *  .gitignore + baseline commit) so the session can still be worktree-isolated. */
   autoInitGit?: boolean;
@@ -2497,7 +2531,10 @@ export type ConversationTurnKind =
   | 'shell'
   | 'diff'
   | 'steer'
-  | 'withdraw';
+  | 'withdraw'
+  /** A main checkout result line (docs/main-checkout-git-contract.md §10.3): the runner writes `content` (a
+   *  MainCheckoutResultNotice) as a system event. Never shown to the agent; answered as it is handed out. */
+  | 'notice';
 
 /** What a routing-v1 sender wants a message to do. Omission retains the installed N-1
  * server-side auto-steer/queue protocol; new clients always send one explicit value. */
@@ -2665,6 +2702,30 @@ export interface TakeoverTurnLeasesResponse {
   status: RunStatus;
 }
 
+/** The most sessions one batch takeover may name. */
+export const BATCH_TAKEOVER_TURN_LEASES_MAX = 500;
+
+/** Runner process → control plane: the takeover above for many sessions in one request, as a
+ *  restarted runner makes for the sessions a reclaim handed back. Each row is judged exactly as
+ *  the single route judges it, and one row's refusal does not refuse the others. */
+export interface BatchTakeoverTurnLeasesRequest {
+  leaseOwner: string;
+  sessions: Array<{ sessionId: string; expectedLeaseOwner?: string | null }>;
+}
+
+/** One row's answer, in request order: the status the single route answers with, or the
+ *  status code and reason it refuses with (403 not this runner's, 409 a conflict). */
+export interface BatchTakeoverTurnLeasesResult {
+  sessionId: string;
+  status?: RunStatus;
+  error?: { statusCode: number; message: string; code?: string };
+}
+
+export interface BatchTakeoverTurnLeasesResponse {
+  ok: true;
+  results: BatchTakeoverTurnLeasesResult[];
+}
+
 /** One open interactive session a restarted runner must retain. Only RUNNING is
  *  re-attached as an active turn; queued/idle sessions are registered cold so their
  *  worktree survives and a later claim can resume them without spawning eagerly. */
@@ -2692,6 +2753,10 @@ export interface ReclaimSession {
   /** Git branch for this session's worktree, cf. ClaimedSession.branch. On reclaim the
    *  runner re-attaches to (or re-creates from this branch) the same worktree. */
   branch?: string;
+  /** cf. ClaimedSession.codelessCheckout: the codeless run's detached checkout is re-attached. */
+  codelessCheckout?: boolean;
+  /** cf. ClaimedSession.codelessBranch. */
+  codelessBranch?: string;
   /** Agent opt-in to auto-`git init` a non-git workDir, cf. ClaimedSession.autoInitGit. */
   autoInitGit?: boolean;
   /** Make a missing workDir inside reposRoot first, cf. ClaimedSession.createWorkDir. */

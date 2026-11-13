@@ -6,7 +6,7 @@
  * (test-support/fake-google.ts), and Resend is a fake HTTP server this spec runs, reached through
  * ORBIT_RESEND_API_URL. Nothing reaches the network. What it is held to:
  *
- *   (1) 0516 and 0517: the columns and constraints, and both run again without changing anything;
+ *   (1) 0516, 0517 and 0618: the columns and constraints, and they run again without changing anything;
  *   (2) the first administrator /setup creates gets no welcome email (D3);
  *   (3) an unconfigured channel: a Google sign-up writes one SKIPPED row, and nothing is sent;
  *   (4) Admin → Email: PUT saves, GET never answers the key; then a Google sign-up is ONE request to the
@@ -137,7 +137,7 @@ test('welcome email on PostgreSQL: 0516/0517, sign-up and admin-created accounts
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = async (query: string, values: unknown[] = []): Promise<any[]> => (await sql.query(query, values)).rows;
 
-  await t.test('(1) 0516 and 0517: the columns and constraints, and both run again unchanged', async () => {
+  await t.test('(1) 0516, 0517 and 0618: the columns and constraints, and they run again unchanged', async () => {
     const shape = async (table: string) => (await rows(
       `SELECT column_name, udt_name, is_nullable FROM information_schema.columns
         WHERE table_schema = current_schema() AND table_name = $1 ORDER BY ordinal_position`, [table],
@@ -154,15 +154,21 @@ test('welcome email on PostgreSQL: 0516/0517, sign-up and admin-created accounts
       'status text NOT NULL', 'attempts int4 NOT NULL', 'generation int4 NOT NULL', 'key_attempt int4 NOT NULL',
       'next_attempt_at timestamptz NOT NULL', 'last_error text NULL', 'last_attempt_at timestamptz NULL',
       'provider_message_id text NULL', 'sent_at timestamptz NULL', 'created_at timestamptz NOT NULL', 'updated_at timestamptz NOT NULL',
+      'session_id uuid NULL',
     ];
     assert.deepEqual(await shape('email_settings'), settings);
     assert.deepEqual(await shape('email_outbox'), outbox);
     assert.deepEqual(await constraints('email_settings'), ['email_settings_one_row_chk', 'email_settings_pkey']);
-    assert.deepEqual(await constraints('email_outbox'), ['email_outbox_kind_chk', 'email_outbox_pkey', 'email_outbox_status_chk', 'email_outbox_user_id_fkey']);
-    const unique = await rows(`SELECT indexdef FROM pg_indexes WHERE indexname = 'email_outbox_kind_user_id_key'`);
-    assert.match(unique[0].indexdef, /UNIQUE INDEX .* \(kind, user_id\)/);
+    assert.deepEqual(await constraints('email_outbox'), [
+      'email_outbox_kind_chk', 'email_outbox_pkey', 'email_outbox_session_id_chk', 'email_outbox_session_id_fkey',
+      'email_outbox_status_chk', 'email_outbox_user_id_fkey',
+    ]);
+    // 0618 replaced 0517's (kind, user_id) with (kind, user_id, session_id) NULLS NOT DISTINCT: still one WELCOME per account.
+    const unique = await rows(`SELECT indexdef FROM pg_indexes WHERE indexname = 'email_outbox_kind_user_session_key'`);
+    assert.match(unique[0].indexdef, /UNIQUE INDEX .* \(kind, user_id, session_id\) NULLS NOT DISTINCT/);
     await sql.query(migration('0516_email_settings'));
     await sql.query(migration('0517_email_outbox'));
+    await sql.query(migration('0618_email_outbox_session_invite'));
     assert.deepEqual(await shape('email_settings'), settings, 'a second run changes nothing');
     assert.deepEqual(await shape('email_outbox'), outbox);
     await assert.rejects(sql.query(`INSERT INTO email_settings (id) VALUES (2)`), { constraint: 'email_settings_one_row_chk' });

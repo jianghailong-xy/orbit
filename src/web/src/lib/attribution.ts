@@ -77,8 +77,9 @@ export interface ProjectCrossingRow {
   publicId?: string;
   fromProjectId: string;
   fromProjectPublicId?: string;
-  toProjectId: string;
-  toProjectPublicId?: string;
+  /** Null on a MOVE_TASK that takes the task out of its project, filed under none. */
+  toProjectId: string | null;
+  toProjectPublicId?: string | null;
   fromProject?: { title: string; status: AttributionProjectStatus } | null;
   toProject?: { title: string; status: AttributionProjectStatus } | null;
   kind: string;

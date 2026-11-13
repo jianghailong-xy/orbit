@@ -79,6 +79,19 @@ describe('crossingBatches — one card per batch', () => {
     expect(crossingBatches([row()], 'TgtPub')).toHaveLength(1);
   });
 
+  it('never draws a move out to no project as a crossing into any project', () => {
+    n = 0;
+    const out = row({ toProjectId: null, toProjectPublicId: null, toProject: null, requestedCriterion: null });
+    const absent = row({ toProjectId: null, toProjectPublicId: undefined, toProject: null, requestedCriterion: null });
+    for (const id of [TARGET, 'TgtPub', SOURCE, 'SrcPub']) {
+      expect(crossingBatches([out, absent], id)).toEqual([]);
+    }
+    // Beside an ordinary move from the same source, it neither joins nor splits that batch.
+    const into = row();
+    const batches = crossingBatches([out, into, absent], TARGET);
+    expect(batches.map((b) => b.rows)).toEqual([[into]]);
+  });
+
   it('starts a new batch for a request made after the earlier batch was fully answered', () => {
     n = 0;
     const first = row({ state: 'APPLIED', requestedAt: '2026-11-01T00:00:00.000Z', decidedAt: '2026-11-01T01:00:00.000Z' });

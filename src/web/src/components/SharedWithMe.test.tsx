@@ -2,13 +2,15 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GuestSessionSummary } from '@orbit/shared';
 
 /**
  * Shared with me, the sidebar's last group (docs/session-guests-design.md §4; board
  * docs/mocks/share-links/10-session-guests-3): the sessions GET /guest-sessions lists, each with its title, who shared
- * it and how it stands, opening its guest page; and no group at all while nothing is shared with you.
+ * it and how it stands, opening it at `/sessions/<id>` (board 11, D8) with the open one highlighted; and no group at
+ * all while nothing is shared with you.
  */
 
 vi.mock('../api', async (importOriginal) => ({
@@ -34,7 +36,7 @@ let container: HTMLDivElement;
 let root: Root;
 const onOpen = vi.fn();
 
-async function mount(): Promise<void> {
+async function mount(at = '/'): Promise<void> {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -42,7 +44,9 @@ async function mount(): Promise<void> {
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>
-        <SharedWithMeGroup onOpen={onOpen} />
+        <MemoryRouter initialEntries={[at]}>
+          <SharedWithMeGroup onOpen={onOpen} />
+        </MemoryRouter>
       </QueryClientProvider>,
     );
   });
@@ -77,15 +81,23 @@ describe('Shared with me', () => {
     ]);
   });
 
-  it('opens a session’s guest page, by click or by Enter', async () => {
+  it('opens a shared session at its one address, by click or by Enter', async () => {
     vi.mocked(listGuestSessions).mockResolvedValue({ sessions: [RUNNING] });
     await mount();
     const row = container.querySelector<HTMLElement>('.tp-guest-session')!;
     expect(row.getAttribute('role')).toBe('link');
     await act(async () => row.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await act(async () => row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
-    expect(onOpen.mock.calls).toEqual([[`/g/${encodeId(RUNNING.id)}`], [`/g/${encodeId(RUNNING.id)}`]]);
-    expect(guestSessionPath(RUNNING.id)).toBe(`/g/${encodeId(RUNNING.id)}`);
+    expect(onOpen.mock.calls).toEqual([[`/sessions/${encodeId(RUNNING.id)}`], [`/sessions/${encodeId(RUNNING.id)}`]]);
+    expect(guestSessionPath(RUNNING.id)).toBe(`/sessions/${encodeId(RUNNING.id)}`);
+  });
+
+  it('highlights the row of the shared session open now, and only that one', async () => {
+    vi.mocked(listGuestSessions).mockResolvedValue({ sessions: [RUNNING, COMPLETED] });
+    await mount(`/sessions/${encodeId(RUNNING.id)}`);
+    const rows = [...container.querySelectorAll<HTMLElement>('.tp-guest-session')];
+    expect(rows.map((r) => r.classList.contains('active'))).toEqual([true, false]);
+    expect(rows[0].getAttribute('aria-current')).toBe('page');
   });
 
   it('folds and unfolds from its head', async () => {
