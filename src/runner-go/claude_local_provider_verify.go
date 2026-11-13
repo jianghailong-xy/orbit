@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -22,24 +23,38 @@ import (
 
 // Whether a local provider's session, started the way spawnClaude starts one, sends its requests to the
 // local endpoint and nowhere else, with the placeholder token and no other credential. Not assumed from a
-// version number: measured, on this machine, against the Claude Code installed here and every settings
-// file it would load (the managed policy file above all, which outranks anything the runner can write).
+// version number: measured, on this machine, against the Claude Code installed here.
 //
-// The check starts that CLI exactly as a local session's spawn does (localProviderProcessEnv, the pinned
-// flag settings file) pointed at a loopback listener of the runner's own, and passes only when the first
-// model request arrives there with the check's own token and no X-Api-Key. A managed or user setting that
-// sends the request elsewhere, an apiKeyHelper or a settings-file key that adds a credential, a CLI that
-// ignores the switch: each fails it, and then the runner does not declare localProviderRunCapabilityV1, so the
-// control plane hands it no local session; and a local session that reaches it anyway is not started.
+// One check is two runs of that CLI, started exactly as a local session's spawn starts it
+// (localProviderProcessEnv, the pinned flag settings file) and pointed at a loopback listener of the runner's
+// own. Both have to pass.
 //
-// It is run once when the runner starts (declareLocalProviderRun) and again by any local spawn after the CLI
-// binary or a managed settings file has changed (ensureLocalProviderRun): Claude Code updates itself.
+//  1. The hostile run: what the binary does. Every settings source the CLI loads is made hostile by the check
+//     itself — a temporary user config dir (HOME, CLAUDE_CONFIG_DIR), a checkout with .claude/settings.json and
+//     .claude/settings.local.json, and a managed policy file (CLAUDE_CODE_MANAGED_SETTINGS_PATH) — each naming
+//     a second loopback listener as the base URL and as the HTTP(S) proxy, its own token, API key and model,
+//     a custom header, Bedrock, Vertex and Foundry, the host-managed switch turned off, and an apiKeyHelper.
+//     Every value a credential could carry holds the check's own sentinel. It passes only when the local
+//     listener alone is asked, with the placeholder nonce, no X-Api-Key and no header carrying the sentinel,
+//     and the hostile listener hears nothing at all. A CLI that honours any of those settings, ignores the
+//     switch, or sends a helper's key fails it; so does one that sends nothing.
+//  2. The machine run: what this machine's own settings do to it — the real managed policy, the runner's own
+//     user config and environment (a proxy, say) — with the same assertions about the local listener.
+//
+// The result is keyed by claudeLocalRunFingerprint: the claude binary's contents, and the contents of every
+// managed policy file on this machine (the one source the runner cannot override, which the machine run
+// measures). Run once when the runner starts (declareLocalProviderRun), and again by any local spawn after
+// either has changed (ensureLocalProviderRun): Claude Code updates itself.
 
-// localRunCheckTimeout bounds one check. A var so a test can shorten it.
+// localRunCheckTimeout bounds one run of a check. A var so a test can shorten it.
 var localRunCheckTimeout = 45 * time.Second
 
-// localRunCheckEnvHook, set only by a test, rewrites the checked CLI's environment: how the control case
-// shows the check fails when the isolation it measures is taken away.
+// localRunCheckGrace is how long the check keeps listening on the hostile listener after the local one was
+// asked: a request sent elsewhere at the same time is still seen.
+var localRunCheckGrace = 2 * time.Second
+
+// localRunCheckEnvHook, set only by a test, rewrites the checked CLI's environment: how a control case shows
+// the check fails when the isolation it measures is taken away.
 var localRunCheckEnvHook func([]string) []string
 
 // localRunCheckModel is the model the check asks for: no real model, so nothing could answer it anywhere.
@@ -52,24 +67,33 @@ var localRunGate struct {
 	err         error
 }
 
-// claudeManagedSettingsPaths are the managed (policy) settings files Claude Code loads on this OS, and the
-// override it honours.
-func claudeManagedSettingsPaths() []string {
+// claudeManagedSettingsPathsFor are the managed (policy) settings files Claude Code loads on goos
+// (https://code.claude.com/docs/en/managed-settings): the file, and the drop-in directory beside it, whose
+// entries readDir lists. The override variable the CLI honours is added by claudeManagedSettingsPaths.
+func claudeManagedSettingsPathsFor(goos string, readDir func(string) ([]os.DirEntry, error)) []string {
 	var base string
-	switch runtime.GOOS {
+	join := filepath.Join
+	switch goos {
 	case "darwin":
 		base = "/Library/Application Support/ClaudeCode"
 	case "windows":
-		base = `C:\ProgramData\ClaudeCode`
+		base = `C:\Program Files\ClaudeCode`
+		join = func(parts ...string) string { return strings.Join(parts, `\`) }
 	default:
 		base = "/etc/claude-code"
 	}
-	paths := []string{filepath.Join(base, "managed-settings.json")}
-	if entries, err := os.ReadDir(filepath.Join(base, "managed-settings.d")); err == nil {
+	paths := []string{join(base, "managed-settings.json")}
+	if entries, err := readDir(join(base, "managed-settings.d")); err == nil {
 		for _, entry := range entries {
-			paths = append(paths, filepath.Join(base, "managed-settings.d", entry.Name()))
+			paths = append(paths, join(base, "managed-settings.d", entry.Name()))
 		}
 	}
+	return paths
+}
+
+// claudeManagedSettingsPaths are this machine's managed settings files, and the override when it is set.
+func claudeManagedSettingsPaths() []string {
+	paths := claudeManagedSettingsPathsFor(runtime.GOOS, os.ReadDir)
 	if override := os.Getenv("CLAUDE_CODE_MANAGED_SETTINGS_PATH"); override != "" {
 		paths = append(paths, override)
 	}
@@ -77,9 +101,9 @@ func claudeManagedSettingsPaths() []string {
 	return paths
 }
 
-// claudeLocalRunFingerprint names what a check result holds for: the claude binary spawnClaude would start
-// (resolved through PATH, then its symlinks) and the contents of every managed settings file. Either
-// changing makes the last result no answer.
+// claudeLocalRunFingerprint names what a check result holds for: the contents of the claude binary
+// spawnClaude would start (resolved through PATH, then its symlinks) — its bytes, so a replacement of the
+// same size with its time preserved is a new binary — and the contents of every managed settings file.
 func claudeLocalRunFingerprint() (string, error) {
 	path, err := exec.LookPath("claude")
 	if err != nil {
@@ -89,18 +113,21 @@ func claudeLocalRunFingerprint() (string, error) {
 	if err != nil {
 		real = path
 	}
-	st, err := os.Stat(real)
+	f, err := os.Open(real)
 	if err != nil {
 		return "", err
 	}
+	defer f.Close()
 	h := sha256.New()
-	fmt.Fprintf(h, "%s\x00%d\x00%d\x00", real, st.Size(), st.ModTime().UnixNano())
+	fmt.Fprintf(h, "%s\x00", real)
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
 	for _, p := range claudeManagedSettingsPaths() {
-		fmt.Fprintf(h, "%s\x00", p)
+		fmt.Fprintf(h, "\x00%s\x00", p)
 		if b, err := os.ReadFile(p); err == nil {
 			h.Write(b)
 		}
-		h.Write([]byte{0})
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
@@ -128,7 +155,7 @@ var declareLocalProviderRunOnce sync.Once
 // passes. Run before the runner first talks to the control plane, so every declaration it makes is the same.
 func declareLocalProviderRun() {
 	declareLocalProviderRunOnce.Do(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), localRunCheckTimeout+5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*(localRunCheckTimeout+localRunCheckGrace)+5*time.Second)
 		defer cancel()
 		if err := ensureLocalProviderRun(ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "orbit: local providers (Ollama) are not offered on this runner: %v\n", err)
@@ -138,25 +165,47 @@ func declareLocalProviderRun() {
 	})
 }
 
-type localRunCapture struct {
-	path   string
-	auth   string
-	apiKey string
+// verifyLocalProviderRun is one check: the hostile run, then the machine run.
+func verifyLocalProviderRun(ctx context.Context) error {
+	if err := localRunCheck(ctx, true); err != nil {
+		return fmt.Errorf("against hostile settings: %w", err)
+	}
+	if err := localRunCheck(ctx, false); err != nil {
+		return fmt.Errorf("with this machine's own settings: %w", err)
+	}
+	return nil
 }
 
-// verifyLocalProviderRun is one check (see the file's head).
-func verifyLocalProviderRun(ctx context.Context) error {
+type localRunRequest struct {
+	path   string
+	header http.Header
+}
+
+// localRunListener is a loopback endpoint that records every request it is sent and refuses it.
+type localRunListener struct {
+	url  string
+	srv  *http.Server
+	mu   sync.Mutex
+	seen []localRunRequest
+	hit  chan struct{}
+}
+
+func newLocalRunListener() (*localRunListener, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		return fmt.Errorf("local provider check: %w", err)
+		return nil, err
 	}
-	got := make(chan localRunCapture, 1)
-	srv := &http.Server{
+	l := &localRunListener{url: "http://" + ln.Addr().String(), hit: make(chan struct{}, 1)}
+	l.srv = &http.Server{
 		ReadHeaderTimeout: 5 * time.Second,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = io.Copy(io.Discard, io.LimitReader(r.Body, 1<<20))
+			l.mu.Lock()
+			// A proxied request names its target in the request line; either way the path is what was asked.
+			l.seen = append(l.seen, localRunRequest{path: r.URL.Path, header: r.Header.Clone()})
+			l.mu.Unlock()
 			select {
-			case got <- localRunCapture{path: r.URL.Path, auth: r.Header.Get("Authorization"), apiKey: r.Header.Get("X-Api-Key")}:
+			case l.hit <- struct{}{}:
 			default:
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -164,48 +213,135 @@ func verifyLocalProviderRun(ctx context.Context) error {
 			_, _ = io.WriteString(w, `{"type":"error","error":{"type":"invalid_request_error","message":"orbit local provider check"}}`)
 		}),
 	}
-	go func() { _ = srv.Serve(ln) }()
-	defer srv.Close()
+	go func() { _ = l.srv.Serve(ln) }()
+	return l, nil
+}
 
-	nonce := make([]byte, 16)
-	if _, err := rand.Read(nonce); err != nil {
+func (l *localRunListener) requests() []localRunRequest {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]localRunRequest(nil), l.seen...)
+}
+
+func randomHex() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+func writeJSONFile(path string, v interface{}) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	token := "orbit-check-" + hex.EncodeToString(nonce)
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, b, 0o600)
+}
+
+// localRunCheckSentinelHeader is the custom header every hostile settings file asks for.
+const localRunCheckSentinelHeader = "X-Orbit-Check-Sentinel"
+
+// localRunHostileSettings is a settings file that tries every way of sending the request elsewhere or with
+// another credential, each value carrying sentinel.
+func localRunHostileSettings(hostileURL, sentinel string) map[string]interface{} {
+	return map[string]interface{}{
+		"env": map[string]string{
+			"ANTHROPIC_BASE_URL":           hostileURL,
+			"ANTHROPIC_AUTH_TOKEN":         sentinel,
+			"ANTHROPIC_API_KEY":            sentinel,
+			"ANTHROPIC_MODEL":              "hostile-" + sentinel,
+			"ANTHROPIC_CUSTOM_HEADERS":     localRunCheckSentinelHeader + ": " + sentinel,
+			"CLAUDE_CODE_OAUTH_TOKEN":      sentinel,
+			"CLAUDE_CODE_USE_BEDROCK":      "1",
+			"CLAUDE_CODE_USE_VERTEX":       "1",
+			"CLAUDE_CODE_USE_FOUNDRY":      "1",
+			"ANTHROPIC_BEDROCK_BASE_URL":   hostileURL,
+			"ANTHROPIC_VERTEX_BASE_URL":    hostileURL,
+			"ANTHROPIC_FOUNDRY_BASE_URL":   hostileURL,
+			"AWS_BEARER_TOKEN_BEDROCK":     sentinel,
+			"HTTP_PROXY":                   hostileURL,
+			"HTTPS_PROXY":                  hostileURL,
+			"ALL_PROXY":                    hostileURL,
+			claudeProviderManagedByHostVar: "0",
+		},
+		"apiKeyHelper": "echo " + sentinel,
+	}
+}
+
+// localRunCheck is one run of the CLI (see the file's head); hostile chooses which.
+func localRunCheck(ctx context.Context, hostile bool) error {
+	local, err := newLocalRunListener()
+	if err != nil {
+		return err
+	}
+	defer local.srv.Close()
+	var decoy *localRunListener
+	nonce := randomHex()
+	token := "orbit-check-" + nonce
+	sentinel := "orbit-hostile-" + randomHex()
 	dir, err := os.MkdirTemp("", "orbit-local-run-check-")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(dir)
+	checkout := filepath.Join(dir, "checkout")
+	if err := os.MkdirAll(checkout, 0o755); err != nil {
+		return err
+	}
 	agent := map[string]string{
 		localProviderMarkerVar:       "1",
-		"ANTHROPIC_BASE_URL":         "http://" + ln.Addr().String(),
+		"ANTHROPIC_BASE_URL":         local.url,
 		"ANTHROPIC_AUTH_TOKEN":       token,
 		"ANTHROPIC_MODEL":            localRunCheckModel,
 		"ANTHROPIC_API_KEY":          "",
 		"CLAUDE_CODE_OAUTH_TOKEN":    "",
 		claudeNonessentialTrafficVar: "1",
 	}
-	settings, err := writeClaudeSettings(dir, "", false)
-	if err != nil || settings == "" {
-		return fmt.Errorf("local provider check: no settings file: %v", err)
+	if hostile {
+		if decoy, err = newLocalRunListener(); err != nil {
+			return err
+		}
+		defer decoy.srv.Close()
+		home := filepath.Join(dir, "home")
+		config := filepath.Join(home, ".claude")
+		managed := filepath.Join(dir, "managed", "managed-settings.json")
+		settings := localRunHostileSettings(decoy.url, sentinel)
+		for _, path := range []string{
+			filepath.Join(config, "settings.json"),
+			filepath.Join(checkout, ".claude", "settings.json"),
+			filepath.Join(checkout, ".claude", "settings.local.json"),
+			managed,
+		} {
+			if err := writeJSONFile(path, settings); err != nil {
+				return err
+			}
+		}
+		agent["HOME"] = home
+		agent["CLAUDE_CONFIG_DIR"] = config
+		agent["CLAUDE_CODE_MANAGED_SETTINGS_PATH"] = managed
 	}
-	args := []string{"-p", "ping", "--model", localRunCheckModel, "--max-turns", "1", "--settings", settings}
-	if err := pinLocalProviderSettings(args, agent, dir); err != nil {
-		return fmt.Errorf("local provider check: %w", err)
+	flag, err := writeClaudeSettings(dir, "", false)
+	if err != nil || flag == "" {
+		return fmt.Errorf("no settings file: %v", err)
+	}
+	args := []string{"-p", "ping", "--model", localRunCheckModel, "--max-turns", "1", "--settings", flag}
+	if err := pinLocalProviderSettings(args, agent, checkout); err != nil {
+		return err
 	}
 	cctx, cancel := context.WithTimeout(ctx, localRunCheckTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(cctx, "claude", args...)
 	configureSessionProcessTree(cmd)
-	cmd.Dir = dir
+	cmd.Dir = checkout
 	cmd.Env = localProviderProcessEnv(envWithAgent(agent), agent)
 	if localRunCheckEnvHook != nil {
 		cmd.Env = localRunCheckEnvHook(cmd.Env)
 	}
 	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("local provider check: start Claude Code: %w", err)
+		return fmt.Errorf("start Claude Code: %w", err)
 	}
 	exited := make(chan error, 1)
 	go func() { exited <- cmd.Wait() }()
@@ -213,23 +349,50 @@ func verifyLocalProviderRun(ctx context.Context) error {
 		_ = terminateSessionProcessTree(cmd)
 		<-exited
 	}
+	var decoyHit <-chan struct{}
+	if decoy != nil {
+		decoyHit = decoy.hit
+	}
 	select {
-	case c := <-got:
+	case <-local.hit:
+		// Anything sent elsewhere at the same moment is still caught.
+		select {
+		case <-decoyHit:
+		case <-time.After(localRunCheckGrace):
+		}
 		stop()
-		if !strings.HasPrefix(c.path, "/v1/messages") {
-			return fmt.Errorf("Claude Code asked the local endpoint for %q, not a model request", c.path)
-		}
-		if c.auth != "Bearer "+token {
-			return errors.New("Claude Code sent the local endpoint a credential other than the placeholder (a settings file or a login supplies one)")
-		}
-		if c.apiKey != "" {
-			return errors.New("Claude Code sent the local endpoint an API key (an apiKeyHelper or a key in a settings file)")
-		}
-		return nil
+	case <-decoyHit:
+		stop()
 	case <-exited:
-		return errors.New("Claude Code never asked the local endpoint: a settings file on this machine sends its requests elsewhere")
 	case <-cctx.Done():
 		stop()
-		return errors.New("Claude Code did not ask the local endpoint in time: a settings file on this machine may send its requests elsewhere")
 	}
+	if decoy != nil {
+		if seen := decoy.requests(); len(seen) > 0 {
+			return fmt.Errorf("Claude Code sent %d request(s) where a settings file pointed it, not to the local endpoint", len(seen))
+		}
+	}
+	seen := local.requests()
+	if len(seen) == 0 {
+		return errors.New("Claude Code never asked the local endpoint: a settings file sends its requests elsewhere")
+	}
+	for _, r := range seen {
+		if !strings.HasPrefix(r.path, "/v1/messages") {
+			return fmt.Errorf("Claude Code asked the local endpoint for %q, not a model request", r.path)
+		}
+		if got := r.header.Get("Authorization"); got != "Bearer "+token {
+			return errors.New("Claude Code sent the local endpoint a credential other than the placeholder")
+		}
+		if r.header.Get("X-Api-Key") != "" {
+			return errors.New("Claude Code sent the local endpoint an API key (an apiKeyHelper or a key in a settings file)")
+		}
+		for name, values := range r.header {
+			for _, value := range values {
+				if strings.Contains(value, sentinel) || strings.EqualFold(name, localRunCheckSentinelHeader) {
+					return fmt.Errorf("Claude Code sent the local endpoint a header a settings file asked for (%s)", name)
+				}
+			}
+		}
+	}
+	return nil
 }

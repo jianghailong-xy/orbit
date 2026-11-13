@@ -284,15 +284,35 @@ the runner:
 4. does not start the session at all if it cannot write that file;
 5. never passes the marker on to the engine.
 
-**`ollama-run/v1` is measured, not assumed.** The binary does not declare it. When the runner starts, before its
-first call to the control plane, it runs the installed `claude` exactly as a local session's spawn would: the same
-environment and the pinned flag settings, with the machine's real managed, user and checkout settings, pointed at a
-loopback listener of its own (`claude_local_provider_verify.go`). The runner declares `ollama-run/v1` only if the
-first model request arrives there carrying the check's own token and no `X-Api-Key`. A settings file that sends the
-request elsewhere, an `apiKeyHelper` or settings key that adds a credential, or a CLI that ignores the switch each
-fails the check. The result is keyed by the resolved `claude` binary and the contents of every managed settings
-file. A local spawn after either has changed checks again (Claude Code updates itself), and a local session is not
-started if the check fails.
+**`ollama-run/v1` is measured, not assumed.** The binary does not declare it. When the runner daemon starts,
+before its first call to the control plane, it runs one check (`claude_local_provider_verify.go`). The check is two
+runs of the installed `claude`, each started exactly as a local session's spawn starts it (the same environment
+filter, the host-managed switch, the pinned flag settings file) and each pointed at a loopback listener of the
+runner's own. Both runs have to pass.
+
+1. **The hostile run** proves what the binary does. The check writes hostile settings into every source the CLI
+   loads: a temporary user config (`HOME`, `CLAUDE_CONFIG_DIR`), a checkout's `.claude/settings.json` and
+   `.claude/settings.local.json`, and a managed policy file (`CLAUDE_CODE_MANAGED_SETTINGS_PATH`). Each one names a
+   second loopback listener as the base URL, the Bedrock/Vertex/Foundry base URLs and the HTTP(S) proxy. Each also
+   sets its own token, API key, OAuth token and model, a custom header, Bedrock, Vertex and Foundry on, the
+   host-managed switch to `0`, and an `apiKeyHelper`. Every credential-bearing value carries the check's sentinel.
+2. **The machine run** measures what this machine's own settings and environment do: the real managed policy, the
+   runner's user config, a proxy in its environment.
+
+A run passes only if every request reaches the local listener with the check's nonce as `Authorization`, no
+`X-Api-Key`, and no header named or valued by a settings file, and the hostile listener receives nothing. A CLI that
+honours any of those settings, ignores the switch, sends a helper's key or sends nothing fails. The installed CLI's
+version is never consulted, only its behaviour.
+
+The result is keyed by the SHA-256 of the resolved `claude` binary's contents (so a replacement of the same size
+with its modification time restored is a new binary) and of the contents of every managed policy file. The
+hostile run covers every other settings source, because it shows the binary ignores them. The managed files are
+the one source the runner cannot override, and the machine run measures them, so they stay in the key. Claude
+Code's documented locations (https://code.claude.com/docs/en/managed-settings) are watched:
+`/etc/claude-code/managed-settings.json`, `/Library/Application Support/ClaudeCode/managed-settings.json` and
+`C:\Program Files\ClaudeCode\managed-settings.json`, each with its `managed-settings.d` drop-ins, plus
+`CLAUDE_CODE_MANAGED_SETTINGS_PATH` when it is set. A local spawn after the key has changed checks again (Claude
+Code updates itself), and a local session is not started if the check fails.
 
 A routing variable is matched by prefix, so a platform added later is covered: `ANTHROPIC_*`, `CLAUDE_CODE_USE_*`,
 `CLAUDE_CODE_SKIP_*_AUTH`, `AWS_*`, `VERTEX_REGION_*`, plus `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_SUBAGENT_MODEL`,

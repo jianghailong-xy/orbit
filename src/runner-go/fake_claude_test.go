@@ -70,6 +70,10 @@ func TestMain(m *testing.M) {
 	if mode := os.Getenv(fakeCursorScopeProcessEnv); mode != "" {
 		os.Exit(runFakeCursorScopeProcess(mode))
 	}
+	// A scripted claude for the local provider check (claude_local_provider_verify_test.go).
+	if mode := os.Getenv(fakeLocalRunClaudeEnv); mode != "" {
+		os.Exit(runFakeLocalRunClaude(mode))
+	}
 	if dir := os.Getenv(fakeClaudeDirEnv); dir != "" {
 		os.Exit(runFakeClaude(dir))
 	}

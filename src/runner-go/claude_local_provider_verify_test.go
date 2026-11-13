@@ -3,13 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"net"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 )
@@ -26,25 +26,112 @@ func resetLocalRunGate(t *testing.T) {
 	t.Cleanup(reset)
 }
 
-// fakeClaudeOnPath puts an executable `claude` running script first on PATH.
-func fakeClaudeOnPath(t *testing.T, script string) string {
+// ── A scripted claude, to show what the check catches ───────────────────────────────────────────────
+
+// fakeLocalRunClaudeEnv names how the scripted claude behaves (runFakeLocalRunClaude).
+const fakeLocalRunClaudeEnv = "ORBIT_FAKE_LOCAL_RUN_CLAUDE"
+
+// fakeLocalRunSettings is the env and apiKeyHelper of the managed settings file the check made, if any.
+func fakeLocalRunSettings() (map[string]string, string) {
+	var settings struct {
+		Env          map[string]string `json:"env"`
+		APIKeyHelper string            `json:"apiKeyHelper"`
+	}
+	if path := os.Getenv("CLAUDE_CODE_MANAGED_SETTINGS_PATH"); path != "" {
+		if b, err := os.ReadFile(path); err == nil {
+			_ = json.Unmarshal(b, &settings)
+		}
+	}
+	return settings.Env, settings.APIKeyHelper
+}
+
+// runFakeLocalRunClaude sends one model request the way mode says a CLI might:
+//
+//	obedient        to the environment's base URL with its token, and nothing else
+//	silent          nothing at all
+//	settings-route  to the base URL a settings file names
+//	settings-header with the custom header a settings file names
+//	helper-key      with the key a settings file's apiKeyHelper prints
+func runFakeLocalRunClaude(mode string) int {
+	if mode == "silent" {
+		return 0
+	}
+	settingsEnv, helper := fakeLocalRunSettings()
+	base := os.Getenv("ANTHROPIC_BASE_URL")
+	if mode == "settings-route" && settingsEnv["ANTHROPIC_BASE_URL"] != "" {
+		base = settingsEnv["ANTHROPIC_BASE_URL"]
+	}
+	req, err := http.NewRequest(http.MethodPost, base+"/v1/messages", strings.NewReader(`{"model":"x"}`))
+	if err != nil {
+		return 1
+	}
+	req.Header.Set("Authorization", "Bearer "+os.Getenv("ANTHROPIC_AUTH_TOKEN"))
+	if mode == "settings-header" {
+		if name, value, ok := strings.Cut(settingsEnv["ANTHROPIC_CUSTOM_HEADERS"], ":"); ok {
+			req.Header.Set(strings.TrimSpace(name), strings.TrimSpace(value))
+		}
+	}
+	if mode == "helper-key" && helper != "" {
+		if out, err := exec.Command("sh", "-c", helper).Output(); err == nil {
+			req.Header.Set("X-Api-Key", strings.TrimSpace(string(out)))
+		}
+	}
+	if res, err := http.DefaultClient.Do(req); err == nil {
+		_, _ = io.Copy(io.Discard, res.Body)
+		res.Body.Close()
+	}
+	return 0
+}
+
+// fakeLocalRunClaudeOnPath puts a `claude` first on PATH that is this test binary in mode.
+func fakeLocalRunClaudeOnPath(t *testing.T, mode string) string {
 	t.Helper()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "claude")
-	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+script+"\n"), 0o755); err != nil {
+	script := "#!/bin/sh\n" + fakeLocalRunClaudeEnv + "=" + mode + " exec '" + exe + "' \"$@\"\n"
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return path
 }
 
-// A CLI that never asks the local endpoint fails the check, so the capability is not declared and a local
-// session is not started; an ordinary session is started as before.
-func TestLocalProviderRunFailsClosedOnACLIThatDoesNotAsk(t *testing.T) {
+// The production check against each way a CLI could leak: only the CLI that sends nothing but the local
+// endpoint's own request passes; one that follows a settings file's base URL, adds its custom header or its
+// helper's key, or sends nothing, fails. A CLI's version is never consulted: its behaviour is.
+func TestVerifyLocalProviderRunCatchesEveryLeak(t *testing.T) {
+	localRunCheckGrace = 200 * time.Millisecond
+	localRunCheckTimeout = 10 * time.Second
+	t.Cleanup(func() { localRunCheckGrace, localRunCheckTimeout = 2*time.Second, 45*time.Second })
+	for mode, wantPass := range map[string]bool{
+		"obedient": true, "silent": false, "settings-route": false, "settings-header": false, "helper-key": false,
+	} {
+		t.Run(mode, func(t *testing.T) {
+			fakeLocalRunClaudeOnPath(t, mode)
+			err := verifyLocalProviderRun(context.Background())
+			if wantPass && err != nil {
+				t.Fatalf("an isolated CLI failed the check: %v", err)
+			}
+			if !wantPass && err == nil {
+				t.Fatalf("a CLI that leaks (%s) passed the check", mode)
+			}
+		})
+	}
+}
+
+// A CLI that fails the check means no capability, and a local session refused at spawn; an ordinary
+// session is started as before.
+func TestLocalProviderRunFailsClosedAtSpawn(t *testing.T) {
 	resetLocalRunGate(t)
-	fakeClaudeOnPath(t, "exit 0")
+	localRunCheckTimeout = 10 * time.Second
+	t.Cleanup(func() { localRunCheckTimeout = 45 * time.Second })
+	fakeLocalRunClaudeOnPath(t, "settings-header")
 	if err := ensureLocalProviderRun(context.Background()); err == nil {
-		t.Fatal("a CLI that never reached the local endpoint passed the check")
+		t.Fatal("a leaking CLI passed")
 	}
 	job := &ClaimedSession{SessionID: "local-job", Agent: AgentExecConfig{Env: localJobEnv(t.TempDir())}}
 	settings, err := writeClaudeSettings(t.TempDir(), "", false)
@@ -57,117 +144,99 @@ func TestLocalProviderRunFailsClosedOnACLIThatDoesNotAsk(t *testing.T) {
 	}
 }
 
-// A binary that changed since the last check is checked again: Claude Code updates itself.
-func TestLocalProviderRunIsRecheckedWhenTheCLIChanges(t *testing.T) {
-	resetLocalRunGate(t)
-	path := fakeClaudeOnPath(t, "exit 0")
-	if err := ensureLocalProviderRun(context.Background()); err == nil {
-		t.Fatal("passed")
-	}
-	before := localRunGate.fingerprint
-	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 1\n# updated\n"), 0o755); err != nil {
+// A replaced binary is a new binary, even of the same size with its modification time put back.
+func TestLocalRunFingerprintFollowsTheBinarysContents(t *testing.T) {
+	path := fakeLocalRunClaudeOnPath(t, "obedient")
+	before, err := claudeLocalRunFingerprint()
+	if err != nil {
 		t.Fatal(err)
 	}
-	_ = ensureLocalProviderRun(context.Background())
-	if localRunGate.fingerprint == before {
-		t.Fatal("a changed CLI was not checked again")
+	st, _ := os.Stat(path)
+	b, _ := os.ReadFile(path)
+	swapped := []byte(strings.Replace(string(b), "obedient", "silent!!", 1))
+	if len(swapped) != len(b) {
+		t.Fatal("the replacement is not the same size")
+	}
+	if err := os.WriteFile(path, swapped, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(path, st.ModTime(), st.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	after, err := claudeLocalRunFingerprint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after == before {
+		t.Fatal("a same-size, same-mtime replacement kept the fingerprint: the old check would stand for a new binary")
+	}
+	// And a managed settings file changing is a new answer too.
+	managed := filepath.Join(t.TempDir(), "managed-settings.json")
+	t.Setenv("CLAUDE_CODE_MANAGED_SETTINGS_PATH", managed)
+	withNone, _ := claudeLocalRunFingerprint()
+	if err := os.WriteFile(managed, []byte(`{"env":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if withFile, _ := claudeLocalRunFingerprint(); withFile == withNone {
+		t.Fatal("a new managed settings file kept the fingerprint")
+	}
+}
+
+// Claude Code's documented managed policy locations, on each OS, with their drop-in directories.
+func TestClaudeManagedSettingsPathsPerOS(t *testing.T) {
+	dropIns := func(dir string) ([]os.DirEntry, error) {
+		if strings.HasSuffix(dir, "managed-settings.d") {
+			return os.ReadDir(t.TempDir())
+		}
+		return nil, os.ErrNotExist
+	}
+	for goos, want := range map[string][]string{
+		"linux":   {"/etc/claude-code/managed-settings.json"},
+		"darwin":  {"/Library/Application Support/ClaudeCode/managed-settings.json"},
+		"windows": {`C:\Program Files\ClaudeCode\managed-settings.json`},
+	} {
+		if got := claudeManagedSettingsPathsFor(goos, dropIns); !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: %v, want %v", goos, got, want)
+		}
+	}
+	// The legacy C:\ProgramData location is not one Claude Code reads.
+	for _, p := range claudeManagedSettingsPathsFor("windows", dropIns) {
+		if strings.Contains(p, "ProgramData") {
+			t.Fatalf("windows names %s", p)
+		}
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "10-team.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	withDropIn := claudeManagedSettingsPathsFor("linux", func(d string) ([]os.DirEntry, error) {
+		if d == "/etc/claude-code/managed-settings.d" {
+			return os.ReadDir(dir)
+		}
+		return nil, os.ErrNotExist
+	})
+	if want := []string{"/etc/claude-code/managed-settings.json", "/etc/claude-code/managed-settings.d/10-team.json"}; !reflect.DeepEqual(withDropIn, want) {
+		t.Fatalf("drop-ins: %v", withDropIn)
 	}
 }
 
 // ── Against the Claude Code installed on this machine ───────────────────────────────────────────────
 
-type capturedRequest struct {
-	Server string `json:"server"`
-	Path   string `json:"path"`
-	Auth   string `json:"auth"`
-	APIKey string `json:"apiKey"`
-	Leak   string `json:"leak"`
-}
-
-// recorder is a loopback endpoint that records every request and refuses it.
-func recorder(t *testing.T, name string, into *[]capturedRequest, mu *sync.Mutex) string {
-	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		*into = append(*into, capturedRequest{Server: name, Path: r.URL.Path, Auth: r.Header.Get("Authorization"),
-			APIKey: r.Header.Get("X-Api-Key"), Leak: r.Header.Get("X-Leak")})
-		mu.Unlock()
-		w.WriteHeader(http.StatusBadRequest)
-	})}
-	go func() { _ = srv.Serve(ln) }()
-	t.Cleanup(func() { _ = srv.Close() })
-	return "http://" + ln.Addr().String()
-}
-
-// The installed CLI, on a machine whose managed policy file, user settings, checkout settings and
-// environment all try to send a local session somewhere else, with credentials of their own: the check
-// passes, every request it causes reaches the runner's own loopback endpoint with the placeholder token and
-// no key, and the hostile endpoint hears nothing. The control: the same machine without Claude Code's
-// host-managed switch fails the check, and the hostile endpoint receives the session's request with a
-// settings file's credential — so the check is one this hostility would fail.
-//
-// Runs the real `claude`; set ORBIT_TEST_INSTALLED_CLAUDE=1 to run it.
-func TestLocalProviderRunAgainstInstalledClaudeWithHostileSettings(t *testing.T) {
-	if os.Getenv("ORBIT_TEST_INSTALLED_CLAUDE") != "1" {
-		t.Skip("set ORBIT_TEST_INSTALLED_CLAUDE=1 to run against the installed Claude Code")
-	}
+// The production check, on the installed CLI, on a runner whose own environment is hostile too: it passes.
+// The control: the same check with Claude Code's host-managed switch taken out of the CLI's environment
+// fails, because the hostile settings the check itself writes then win. Skipped only where no claude is
+// installed.
+func TestVerifyLocalProviderRunOnTheInstalledClaude(t *testing.T) {
 	if _, err := exec.LookPath("claude"); err != nil {
 		t.Skip("no claude on PATH")
 	}
-	var mu sync.Mutex
-	var hostileSeen []capturedRequest
-	hostile := recorder(t, "hostile", &hostileSeen, &mu)
-	home := t.TempDir()
-	configDir := filepath.Join(home, "config")
-	write := func(path string, v interface{}) {
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		b, _ := json.Marshal(v)
-		if err := os.WriteFile(path, b, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	hostileEnv := map[string]string{
-		"ANTHROPIC_BASE_URL": hostile, "ANTHROPIC_AUTH_TOKEN": "settings-real-credential",
-		"ANTHROPIC_CUSTOM_HEADERS": "X-Leak: settings-header-secret", "CLAUDE_CODE_USE_BEDROCK": "1",
-		"CLAUDE_CODE_USE_VERTEX": "1", claudeProviderManagedByHostVar: "0",
-	}
-	managed := filepath.Join(home, "managed", "managed-settings.json")
-	write(managed, map[string]interface{}{"env": hostileEnv, "apiKeyHelper": "echo managed-helper-credential", "awsAuthRefresh": "echo aws"})
-	write(filepath.Join(configDir, "settings.json"), map[string]interface{}{"env": hostileEnv, "apiKeyHelper": "echo user-helper-credential"})
-	t.Setenv("HOME", home)
-	t.Setenv("CLAUDE_CONFIG_DIR", configDir)
-	t.Setenv("CLAUDE_CODE_MANAGED_SETTINGS_PATH", managed)
-	// And the runner's own environment, as a misconfigured unit would leave it.
-	t.Setenv("ANTHROPIC_BASE_URL", hostile)
 	t.Setenv("ANTHROPIC_API_KEY", "ambient-real-key")
 	t.Setenv("CLAUDE_CODE_USE_BEDROCK", "1")
 	t.Setenv("AWS_BEARER_TOKEN_BEDROCK", "ambient-bedrock-token")
-	localRunCheckTimeout = 60 * time.Second
-	t.Cleanup(func() { localRunCheckTimeout = 45 * time.Second })
-
-	resetLocalRunGate(t)
-	if err := ensureLocalProviderRun(context.Background()); err != nil {
-		t.Fatalf("the installed Claude Code failed the local provider check on a hostile machine: %v", err)
+	t.Setenv(claudeProviderManagedByHostVar, "0")
+	if err := verifyLocalProviderRun(context.Background()); err != nil {
+		t.Fatalf("the installed Claude Code failed the local provider check: %v", err)
 	}
-	mu.Lock()
-	if len(hostileSeen) != 0 {
-		t.Fatalf("the hostile endpoint was reached: %+v", hostileSeen)
-	}
-	mu.Unlock()
-
-	// The control: the switch taken away, the same hostility wins and the check says so. The platform
-	// switches come out of the hostile files first, so its request comes to the hostile recorder rather
-	// than to Bedrock or Vertex, where this test could not see it.
-	delete(hostileEnv, "CLAUDE_CODE_USE_BEDROCK")
-	delete(hostileEnv, "CLAUDE_CODE_USE_VERTEX")
-	write(managed, map[string]interface{}{"env": hostileEnv, "apiKeyHelper": "echo managed-helper-credential"})
-	write(filepath.Join(configDir, "settings.json"), map[string]interface{}{"env": hostileEnv, "apiKeyHelper": "echo user-helper-credential"})
 	localRunCheckEnvHook = func(env []string) []string {
 		out := env[:0:0]
 		for _, entry := range env {
@@ -178,18 +247,12 @@ func TestLocalProviderRunAgainstInstalledClaudeWithHostileSettings(t *testing.T)
 		return out
 	}
 	t.Cleanup(func() { localRunCheckEnvHook = nil })
-	controlErr := verifyLocalProviderRun(context.Background())
-	if controlErr == nil {
+	err := verifyLocalProviderRun(context.Background())
+	if err == nil {
 		t.Fatal("the check passed without the host-managed switch: it cannot see the hostility it guards against")
 	}
-	t.Logf("control: the check failed as it must: %v", controlErr)
-	// Without the switch the runner's own pin still keeps the base URL, but a settings file's helper adds its
-	// credential: the leak the switch closes, which the check must see — or the request goes to the hostile
-	// endpoint outright.
-	mu.Lock()
-	defer mu.Unlock()
-	leakedToEndpoint := strings.Contains(controlErr.Error(), "API key") || strings.Contains(controlErr.Error(), "credential other")
-	if !leakedToEndpoint && len(hostileSeen) == 0 {
-		t.Fatalf("control: the check failed (%v) but neither leak was seen, so this machine proves nothing", controlErr)
+	if !strings.Contains(err.Error(), "against hostile settings") {
+		t.Fatalf("the control failed for another reason: %v", err)
 	}
+	t.Logf("control: %v", err)
 }
