@@ -27,6 +27,7 @@ export * from './project-start';
 export * from './providerPresets';
 export * from './openCodeKeys';
 export * from './providerEngines';
+export * from './localProvider';
 export * from './providerTransport';
 export * from './retry';
 export * from './searchTerms';

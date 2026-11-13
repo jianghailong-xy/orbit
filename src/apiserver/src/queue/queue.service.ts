@@ -548,6 +548,9 @@ export class QueueService {
                         ELSE ARRAY[s."engine"]
                       END)
                       AND ${usableProviderSql('mp', Prisma.raw('s.owner_id'))}
+                      -- A runner-scoped key (0646, a local Ollama) is claimed by its own runner and no other;
+                      -- with no runner bound, by none.
+                      AND (mp."scope" <> 'runner' OR mp."runner_id" = ${runnerId})
                   ) OR EXISTS (
                     SELECT 1 FROM "provider_pool" pp
                     WHERE pp.slug = s.provider AND ((pp.engine = s."engine" AND (
@@ -573,6 +576,7 @@ export class QueueService {
                     WHERE mp.slug = s.provider AND mp.enabled
                       AND mp.runtime IN ('claude', 'codex', 'kimi', 'antigravity', 'dsh')
                       AND ${usableProviderSql('mp', Prisma.raw('s.owner_id'))}
+                      AND (mp."scope" <> 'runner' OR mp."runner_id" = ${runnerId})
                   ) OR EXISTS (
                     SELECT 1 FROM "provider_pool" pp
                     WHERE pp.slug = s.provider AND (
@@ -726,9 +730,13 @@ export class QueueService {
         return await this.buildSession(rows[0].id);
       } catch (error: any) {
         const refusal = error?.getResponse?.();
-        if (refusal?.code !== 'POOL_ACCOUNT_PAUSED' && refusal?.code !== 'PROVIDER_ENGINE_INCOMPATIBLE') throw error;
+        if (
+          refusal?.code !== 'POOL_ACCOUNT_PAUSED' && refusal?.code !== 'PROVIDER_ENGINE_INCOMPATIBLE'
+          && refusal?.code !== 'LOCAL_PROVIDER_ELSEWHERE' && refusal?.code !== 'LOCAL_PROVIDER_NO_RUNNER'
+        ) throw error;
         // A credential that stopped being one the session's engine can run between the hold above and
-        // this build — a key edited in that window — puts it back to wait, as a pause does.
+        // this build — a key edited in that window, or a local provider moved to another runner or left
+        // with none — puts it back to wait, as a pause does.
         await this.prisma.session.updateMany({
           where: { id: rows[0].id, status: 'RUNNING' },
           data: {
@@ -1038,6 +1046,7 @@ export class QueueService {
         kimiAccount: accounts.kimiAccount,
         cursorAccount: accounts.cursorAccount,
         runner: session.assignedRunner,
+        runnerId: session.assignedRunnerId,
       });
     let exec = resolveExec(session.model);
     // Snapshot an inherited default on the session at its first claim, and refresh one the runtime

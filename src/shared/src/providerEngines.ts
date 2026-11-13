@@ -55,7 +55,16 @@ export type EngineCredential =
   /** A configured key (ModelProvider). `runtime` is the row's column, which names the protocol its
    *  endpoint speaks; `subscriptionToken` is whether the decrypted key is a Claude subscription
    *  token (`sk-ant-oat…`), which Anthropic serves to Claude Code alone. */
-  | { kind: 'key'; runtime: string | null; presetSlug: string | null; baseUrl: string; subscriptionToken: boolean }
+  | {
+    kind: 'key';
+    runtime: string | null;
+    presetSlug: string | null;
+    baseUrl: string;
+    subscriptionToken: boolean;
+    /** A runner-scoped local server (localProvider.ts): it runs on its native engine alone, the one route
+     *  measured against it (docs/ollama-local-provider-phase0.md §0). */
+    local?: boolean;
+  }
   /** OpenCode's own provider configuration on the runner. */
   | { kind: 'opencode' };
 
@@ -129,6 +138,7 @@ function keyEngines(key: Extract<EngineCredential, { kind: 'key' }>, options: En
   const dialect = keyDialect(key.runtime);
   if (!dialect) return [];
   if (key.subscriptionToken) return dialect === 'anthropic' ? [AgentProvider.CLAUDE] : [];
+  if (key.local) return dialect === 'anthropic' ? [AgentProvider.CLAUDE] : [];
   // A Cursor key is spent by Cursor CLI alone: it is no model API OpenCode could call.
   if (dialect === 'cursor') return [AgentProvider.CURSOR];
   // A row still on the retired `dsh` runtime ran on DeepSeek Harness, and keeps doing so by default.

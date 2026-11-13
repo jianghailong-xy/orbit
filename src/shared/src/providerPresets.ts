@@ -86,6 +86,12 @@ export interface ProviderPreset {
   brand: ProviderBrand;
   /** Vendor console where the user mints an API key (rendered as a "Get your API key" link). */
   keyUrl?: string;
+  /**
+   * A model server on one runner's own machine (localProvider.ts): a provider made from this preset is
+   * runner-scoped, takes no API key, and lists the models that runner discovers on it rather than a
+   * catalogue of its own. Its `baseUrl` is resolved on that runner, so loopback is the runner itself.
+   */
+  runnerScoped?: boolean;
 }
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
@@ -263,6 +269,19 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     note: 'Beijing-region endpoint; Singapore/intl uses a workspace-specific URL (see Model Studio docs).',
     brand: { mono: 'Q', from: '#7a72ff', to: '#4f46e5' },
     keyUrl: 'https://bailian.console.aliyun.com',
+  },
+  {
+    // Ollama on a runner's machine, spoken to by Claude Code on Ollama's own Anthropic Messages endpoint
+    // at its root (docs/ollama-local-provider-phase0.md §0). No key, no shipped models: what it serves is
+    // what the runner finds on the instance.
+    slug: 'ollama',
+    label: 'Ollama',
+    baseUrl: 'http://127.0.0.1:11434',
+    models: [],
+    defaultModel: '',
+    runtime: 'claude',
+    runnerScoped: true,
+    brand: { mono: 'O', from: '#3f3f46', to: '#0a0a0a' },
   },
 ];
 

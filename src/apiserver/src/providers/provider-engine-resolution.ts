@@ -35,6 +35,7 @@ export const RESOLUTION_SELECT = {
   model: true,
   runtimeSessionId: true,
   usesRuntimeDefaultModel: true,
+  assignedRunnerId: true,
   workspace: { select: { env: true, model: true } },
   assignedRunner: {
     select: {
@@ -183,6 +184,7 @@ export async function resolutionOf(db: Prisma.TransactionClient, session: Resolu
       modelCatalog: session.assignedRunner?.modelCatalog,
       workspaceEnv,
       runner: session.assignedRunner,
+      runnerId: session.assignedRunnerId,
     });
     const { key, endpoint } = handedOver(exec.provider, exec.env, exec.runnerModel ?? exec.model);
     return {

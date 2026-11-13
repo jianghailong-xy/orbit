@@ -987,6 +987,8 @@ model Runner {
   managedWorkload     Json?    @map("managed_workload")
 
   sessions Session[]
+  // Runner-scoped providers bound to this machine (migration 0646): a local model server it alone reaches.
+  modelProviders ModelProvider[]
   // Checkouts of this machine's finished sessions that still hold work no branch has, as its
   // last scan reported them (migration 0474).
   abandonedCheckouts AbandonedCheckout[]
@@ -7081,6 +7083,27 @@ model ModelProvider {
   // gateway sets keyCheckState INVALID when OpenAI refuses the key (401). NULL = not known to be spent;
   // cleared by the key's next answered request and by a new secret.
   spentUntil    DateTime? @map("spent_until")
+  // A runner-scoped provider (migration 0646, docs/ollama-local-provider-contract.md): "account" — every row
+  // before it, dispatched wherever its owner's sessions run — or "runner", a model server on one runner's own
+  // machine (Ollama), dispatched on `runnerId` alone and never anywhere else. Runner scope goes with authMode
+  // "none" and an empty apiKeyEnc (the server takes no key), and only on a personal row; the CHECKs hold it.
+  scope         String   @default("account")
+  // The runner a runner-scoped row runs on. SET NULL when that runner is removed: the row stays, dispatches
+  // nowhere, and waits to be bound to another runner of its owner's.
+  runnerId      String?  @map("runner_id") @db.Uuid
+  runner        Runner?  @relation(fields: [runnerId], references: [id], onDelete: SetNull)
+  // "bearer" — the engine authenticates with the stored key — or "none" (runner scope only).
+  authMode      String   @default("bearer") @map("auth_mode")
+  // What the bound runner's last probe of the instance found (@orbit/shared LOCAL_PROBE_STATES), the server's
+  // version and a short reason, and when. Written by the runner (phase 2); NULL = never probed = unknown.
+  // `probeMessage` names no endpoint and no credential.
+  probeState    String?   @map("probe_state")
+  probeVersion  String?   @map("probe_version")
+  probeMessage  String?   @map("probe_message")
+  probedAt      DateTime? @map("probed_at")
+  // The instance's own model catalogue as that runner discovered it ([{ value, label?, contextWindow?, tools? }],
+  // @orbit/shared LocalInstanceModel). NULL until a runner reports one. `models` above stays the owner's list.
+  instanceModels Json?    @map("instance_models")
   // NULL = a shared provider (admin-managed): visible in, and dispatchable for, admins' sessions
   // only (usableProviderScope). Set = a personal (BYOK) provider: visible in, and dispatchable for,
   // only its owner's sessions. Slugs stay globally unique either way, so dispatch-by-slug is never
@@ -7098,6 +7121,8 @@ model ModelProvider {
   gatewayUsage  KeyGatewayUsage[]
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([runnerId])
 
   // What a pool member points at: this provider together with its owner, so a member can only name
   // a personal provider of the pool's own owner — a shared row's NULL owner matches no member.

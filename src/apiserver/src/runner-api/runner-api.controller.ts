@@ -4076,6 +4076,7 @@ export class RunnerApiController {
           kimiAccount: s.kimiAccount ?? workspace?.kimiAccount,
           cursorAccount: s.cursorAccount ?? workspace?.cursorAccount,
           runner: s.assignedRunner,
+          runnerId: runner.id,
         });
       let exec: ReturnType<typeof resolveExec>;
       try {
@@ -4084,7 +4085,9 @@ export class RunnerApiController {
         // A credential its engine cannot run — a key whose protocol was changed under it — is left
         // out with the reason the claim holds it with (QueueService.pausedPendingSessions).
         const refusal = (error as { getResponse?: () => { code?: string; message?: string } }).getResponse?.();
-        if (refusal?.code !== 'PROVIDER_ENGINE_INCOMPATIBLE' || !refusal.message) throw error;
+        // So is a local provider this runner is not the one for (LOCAL_PROVIDER_*): never rebuilt here.
+        const held = ['PROVIDER_ENGINE_INCOMPATIBLE', 'LOCAL_PROVIDER_ELSEWHERE', 'LOCAL_PROVIDER_NO_RUNNER'];
+        if (!held.includes(refusal?.code ?? '') || !refusal?.message) throw error;
         await this.markProviderUpgradeRequired(runner.id, { id: s.id }, refusal.message,
           s.status === RunStatus.PENDING ? [{ id: s.id, error: s.error }] : []);
         continue;
@@ -5937,6 +5940,7 @@ export class RunnerApiController {
         poolKeyId: true,
         poolCodexAccountId: true,
         usesRuntimeDefaultModel: true,
+        assignedRunnerId: true,
         codexAccount: true,
         claudeAccount: true,
         antigravityAccount: true,
@@ -6010,6 +6014,7 @@ export class RunnerApiController {
         kimiAccount: session.kimiAccount ?? session.workspace?.kimiAccount,
         cursorAccount: session.cursorAccount ?? session.workspace?.cursorAccount,
         runner: session.assignedRunner,
+        runnerId: session.assignedRunnerId,
       });
     } catch (error) {
       // Every refusal it makes is of the credential: gone, disabled, on a runtime no engine speaks, or

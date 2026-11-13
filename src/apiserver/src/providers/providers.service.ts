@@ -49,6 +49,14 @@ import { geminiApiModel, isInternalHost } from './held-key';
 import { keyFingerprint } from './provider-engine-resolution';
 import { LANDING_PROVIDER_SLUG, pickFreeSlug, slugBase } from './provider-slug';
 import { assertEngineSession } from '../sessions/engine-session';
+import {
+  createScope,
+  PROVIDER_RUNNER_SELECT,
+  PROVIDER_SCOPE_SELECT,
+  providerScopeFields,
+  updateScope,
+  withoutScopeColumns,
+} from './local-provider';
 
 /**
  * The slugs whose `model_provider` row is a compatibility guard, not a provider: migrations 0080, 0367
@@ -91,6 +99,9 @@ export interface UsableProvider {
   label?: string;
   models?: unknown;
   defaultModel?: string | null;
+  /** Only on a runner-scoped key (a local Ollama): the caller's own runner it runs on, and nowhere else. */
+  scope?: 'runner';
+  runnerId?: string | null;
 }
 
 /** Why a Cursor key check came to NO_RUNNER: no runner of the caller's can check one, those that can are
@@ -127,7 +138,7 @@ function cursorKeyCheckAnswer(outcome: CursorKeyCheckOutcome, why: CursorKeyChec
 
 /** The engines a key's row runs on (shared providerEngines.ts): its protocol, its preset and endpoint,
  *  and whether its key is a Claude subscription token — which only this side can say, holding the key. */
-function keyEngines(row: { runtime: string; presetSlug: string | null; baseUrl: string; apiKeyEnc: string }): AgentProvider[] {
+function keyEngines(row: { runtime: string; presetSlug: string | null; baseUrl: string; apiKeyEnc: string; scope?: string }): AgentProvider[] {
   return credentialEngines(keyCredential(row), engineTableOptions(row.baseUrl));
 }
 
@@ -401,6 +412,10 @@ export class ProvidersService {
         defaultModel: true,
         presetSlug: true,
         followsPreset: true,
+        // Scope, and a runner-scoped row's runner and probe (local-provider.ts): turned into the scope
+        // fields below, which name the runner only while it is the row owner's own, and never the endpoint.
+        enabled: true,
+        ...PROVIDER_SCOPE_SELECT,
       },
     });
     // Every client — web, iOS, macOS — reads its model list from here, so resolving the preset
@@ -410,12 +425,14 @@ export class ProvidersService {
     // machine running the session: a runner reports the account its own CLI is logged into, which
     // is a different account from a BYOK key. id/ownerId/baseUrl/apiKeyEnc are selected only to
     // ask that credential and are dropped here — this payload stays keyless and endpointless.
-    return rows.map(({ id, ownerId, baseUrl, apiKeyEnc, ...picker }) => {
+    return rows.map((row) => {
+      const { id, ownerId, baseUrl, apiKeyEnc, enabled: _enabled, ...picker } = withoutScopeColumns(row);
       // Every engine this key runs on, its default first (docs/provider-engine-contract.md §6.3):
       // whether it holds a Claude subscription token is this side's to say, holding the key.
-      const engines = keyEngines({ ...picker, baseUrl, apiKeyEnc });
+      const engines = keyEngines({ ...picker, baseUrl, apiKeyEnc, scope: row.scope });
       return {
         ...withPreset(picker),
+        ...providerScopeFields(row),
         planUsage: this.planUsage.snapshot({ id, ownerId, runtime: picker.runtime, baseUrl, apiKeyEnc }),
         engines,
         // Whether an OpenCode session may spend this key as well as its own engine: kept for clients
@@ -466,6 +483,9 @@ export class ProvidersService {
         // Read only to say which engines the key runs on; never part of the answer.
         baseUrl: true,
         apiKeyEnc: true,
+        // A runner-scoped key names its runner (the caller's own): the one place it can run.
+        ownerId: true,
+        ...PROVIDER_SCOPE_SELECT,
       },
     });
     const pools = await this.prisma.providerPool.findMany({
@@ -486,8 +506,11 @@ export class ProvidersService {
       // preset backs the row is the picker's business, not the caller's: dropped here, with the
       // endpoint and the key, which were read only to say which engines run it.
       ...rows.filter((row) => row.enabled !== false).map((row) => {
-        const { presetSlug, followsPreset, enabled, baseUrl, apiKeyEnc, ...view } = withPreset(row);
-        return { ...view, engines: keyEngines({ ...row }), builtin: false };
+        const { presetSlug, followsPreset, enabled, baseUrl, apiKeyEnc, ownerId: _ownerId, ...view } = withPreset(withoutScopeColumns(row));
+        // Only a runner-scoped key says so: every other entry reads exactly as it always has.
+        const scoped = providerScopeFields(row);
+        const where = scoped.scope === 'runner' ? { scope: scoped.scope, runnerId: scoped.runnerId } : {};
+        return { ...view, ...where, engines: keyEngines({ ...row }), builtin: false };
       }),
       // A pool runs on its members' Claude subscriptions, whose models are the Claude CLI's own —
       // so, like a built-in engine, it names no model list of its own. A shared pool runs Codex on
@@ -510,6 +533,7 @@ export class ProvidersService {
     const rows = await this.prisma.modelProvider.findMany({
       where: { ownerId: null, slug: { notIn: COMPATIBILITY_GUARD_SLUGS } },
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }, { id: 'asc' }],
+      include: { runner: PROVIDER_RUNNER_SELECT },
     });
     return rows.map((r) => this.desensitize(r));
   }
@@ -531,6 +555,7 @@ export class ProvidersService {
     const rows = await this.prisma.modelProvider.findMany({
       where: { ownerId, slug: { notIn: COMPATIBILITY_GUARD_SLUGS } },
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }, { id: 'asc' }],
+      include: { runner: PROVIDER_RUNNER_SELECT },
     });
     const lastUsed = await readLastUsed(this.prisma, ownerId, rows.map((row) => ({ id: row.id, slug: row.slug })));
     return rows.map((r) => {
@@ -573,11 +598,14 @@ export class ProvidersService {
       };
     }
     const preset = this.assertPreset(dto.presetSlug);
+    // Runner scope, auth mode and runner (local-provider.ts): a local Ollama takes no key and runs on one of
+    // the caller's own runners; every other provider still needs its key, as it always did.
+    const scoped = await createScope(this.prisma, ownerId, dto, preset);
     const runtime = dto.runtime ?? preset?.runtime ?? AgentProvider.CLAUDE;
     // Following means the catalogue supplies the models — a list sent alongside it would only be a
     // stale copy of the same thing. What's stored is then a snapshot: reads serve the preset, so it
     // only ever surfaces if we stop shipping that preset.
-    const follows = !!preset && dto.followsPreset !== false;
+    const follows = !!preset && !preset.runnerScoped && dto.followsPreset !== false;
     const models = follows
       ? catalogModels(preset!).map((m) => ({
           value: m.value,
@@ -590,7 +618,12 @@ export class ProvidersService {
       label: dto.label,
       runtime,
       baseUrl: dto.baseUrl,
-      apiKeyEnc: encryptSecret(dto.apiKey),
+      // No key, none stored: the empty string, which an older replica fails to decrypt and so refuses to
+      // dispatch (migration 0646). Any placeholder an engine needs is built at dispatch, in memory.
+      apiKeyEnc: scoped.authMode === 'none' ? '' : encryptSecret(dto.apiKey!),
+      scope: scoped.scope,
+      authMode: scoped.authMode,
+      runnerId: scoped.runnerId,
       models: models as Prisma.InputJsonValue,
       defaultModel: (follows ? catalogDefaultModel(preset!) : dto.defaultModel) ?? dto.models?.[0]?.value ?? null,
       // Identity outlives ownership: a row that maintains its own list is still an Anthropic one.
@@ -601,7 +634,7 @@ export class ProvidersService {
     };
     assertReasoningLevels(data.runtime, models);
     const row = await this.withFreeSlug(base, (slug) =>
-      this.prisma.modelProvider.create({ data: { ...data, slug } }),
+      this.prisma.modelProvider.create({ data: { ...data, slug }, include: { runner: PROVIDER_RUNNER_SELECT } }),
     );
     this.publishChanged(ownerId, row.id);
     return this.desensitize(row);
@@ -671,6 +704,8 @@ export class ProvidersService {
       baseUrl: dto.baseUrl,
       defaultModel: dto.defaultModel,
       enabled: dto.enabled,
+      // A runner-scoped row's own rules, and its rebinding (local-provider.ts).
+      ...(await updateScope(this.prisma, current, dto)),
     };
     if (dto.models) data.models = dto.models as Prisma.InputJsonValue;
     // False hands the model list back to the row (the caller edited it); true takes the preset's
@@ -701,7 +736,7 @@ export class ProvidersService {
       // its protocol, its endpoint (one that stops being DeepSeek's strands DeepSeek Harness) or its
       // secret (a Claude subscription token runs nowhere but Claude Code) out from under them.
       const runs = credentialEngines(keyCredential(
-        { runtime, presetSlug: current.presetSlug, baseUrl: dto.baseUrl ?? current.baseUrl, apiKeyEnc: apiKeyEnc ?? current.apiKeyEnc },
+        { runtime, presetSlug: current.presetSlug, baseUrl: dto.baseUrl ?? current.baseUrl, apiKeyEnc: apiKeyEnc ?? current.apiKeyEnc, scope: current.scope },
         dto.apiKey,
       ), engineTableOptions(dto.baseUrl ?? current.baseUrl));
       const stranded = (await readKeyUsage(this.prisma, current)).engines.filter((e) => !runs.includes(e.engine));
@@ -710,7 +745,7 @@ export class ProvidersService {
       }
       await this.recordSessionEngines(current);
     }
-    const row = await this.prisma.modelProvider.update({ where: { id }, data });
+    const row = await this.prisma.modelProvider.update({ where: { id }, data, include: { runner: PROVIDER_RUNNER_SELECT } });
     // A key switched off, given a new secret or moved to another endpoint or protocol: the tokens Claude Code
     // sessions on it run with through the gateway stop at once (docs/claude-engine-openai-gateway-design.md
     // §4.2). The session's next claim mints a token on the key as it now is.
@@ -1432,8 +1467,15 @@ export class ProvidersService {
   // Drop the encrypted key from any browser-facing payload; expose only whether one is set. The
   // management surfaces read the same preset-resolved catalogue the pickers do, so the form shows
   // what a session would actually get.
-  private desensitize({ apiKeyEnc, ...rest }: Prisma.ModelProviderGetPayload<object>) {
-    // `engines`: which engines the key runs on (§6.3), decided with the key, which stays here.
-    return { ...withPreset(rest), engines: keyEngines({ ...rest, apiKeyEnc }), hasApiKey: !!apiKeyEnc };
+  private desensitize(row: Prisma.ModelProviderGetPayload<{ include: { runner: typeof PROVIDER_RUNNER_SELECT } }>) {
+    const { apiKeyEnc, ...rest } = withoutScopeColumns(row);
+    // `engines`: which engines the key runs on (§6.3), decided with the key, which stays here. The scope
+    // fields name the runner only while it is the owner's own, and carry no probe wording (local-provider.ts).
+    return {
+      ...withPreset(rest),
+      ...providerScopeFields(row),
+      engines: keyEngines({ ...rest, apiKeyEnc, scope: row.scope }),
+      hasApiKey: !!apiKeyEnc,
+    };
   }
 }

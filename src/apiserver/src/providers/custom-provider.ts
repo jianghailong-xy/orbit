@@ -8,6 +8,7 @@ import {
   isEngineCompatible,
   isRetiredModel,
   keyDialect,
+  LOCAL_AUTH_PLACEHOLDER,
   modelForProvider,
   OPENCODE_DIALECT_NPM,
   openCodeBaseUrl,
@@ -126,6 +127,12 @@ export interface ModelProviderRow {
    *  row's models are the catalogue's; an endpoint with no preset — a self-hosted server — has no
    *  catalogue anywhere, so what its owner wrote here is the only description of it there is. */
   models?: unknown;
+  /** Migration 0646: `runner` for a model server on one runner's machine (a local Ollama), which runs on
+   *  `runnerId` and nowhere else; absent or `account` for every other row and every minted one. */
+  scope?: string;
+  runnerId?: string | null;
+  /** `none`: the endpoint takes no key and none is stored; the engine gets LOCAL_AUTH_PLACEHOLDER. */
+  authMode?: string;
 }
 
 /** The row's own entry for `model`, as its owner wrote it. */
@@ -497,7 +504,7 @@ function isSubscriptionToken(apiKey: string): boolean {
  * token (it runs nowhere anyway: dispatch refuses it when it decrypts it).
  */
 export function keyCredential(
-  row: Pick<ModelProviderRow, 'runtime' | 'baseUrl' | 'apiKeyEnc' | 'presetSlug' | 'sessionToken' | 'codexLogin'>,
+  row: Pick<ModelProviderRow, 'runtime' | 'baseUrl' | 'apiKeyEnc' | 'presetSlug' | 'sessionToken' | 'codexLogin' | 'scope'>,
   apiKey?: string,
 ): EngineCredential {
   // Not a key at all: the owner's own Codex login pool, as dispatch minted its row.
@@ -516,6 +523,8 @@ export function keyCredential(
     presetSlug: row.presetSlug ?? null,
     baseUrl: row.baseUrl,
     subscriptionToken: isSubscriptionToken(key),
+    // A local server runs on Claude Code alone (shared providerEngines.ts).
+    ...(row.scope === 'runner' ? { local: true } : {}),
   };
 }
 
@@ -616,6 +625,35 @@ function openCodeKeyConfig(row: OpenCodeKeyRow, model: string, base?: string, ap
 }
 
 /**
+ * Refuse a runner-scoped row (migration 0646) unless the session is on that row's runner. A row whose runner
+ * was removed (runner_id SET NULL), a door that names no runner, and any other runner all refuse — the
+ * session waits rather than running its local model's work somewhere else or on a cloud engine. The message
+ * names the provider, never its endpoint.
+ */
+export function assertRunnerScope(
+  row: Pick<ModelProviderRow, 'scope' | 'runnerId' | 'slug'>,
+  runnerId: string | null | undefined,
+  declared?: string | null,
+): void {
+  if (row.scope !== 'runner') return;
+  const slug = row.slug ?? declared ?? '';
+  if (!row.runnerId) {
+    throw new BadRequestException({
+      code: 'LOCAL_PROVIDER_NO_RUNNER',
+      message: `provider "${slug}" runs only on its own runner, and it has none; bind it to one of your runners`,
+      provider: slug,
+    });
+  }
+  if (runnerId !== row.runnerId) {
+    throw new BadRequestException({
+      code: 'LOCAL_PROVIDER_ELSEWHERE',
+      message: `provider "${slug}" runs only on the runner it is bound to`,
+      provider: slug,
+    });
+  }
+}
+
+/**
  * Resolve how to actually run a session at dispatch: the engine the runner is handed, the model to
  * pass, and the process env. The engine is the SESSION's (`engine`, Session.engine — or, for a row
  * that has none yet, what session-engine.ts derived), and the credential only says where it sends its
@@ -686,6 +724,9 @@ export function resolveProviderExec(args: {
   /** The owner's configured keys (openCodeKeyRows), for an OpenCode session whose model names one
    *  (`orbit-<slug>/<model>`): that key is written into the run's OPENCODE_CONFIG_CONTENT. */
   openCodeKeys?: OpenCodeKeyRow[];
+  /** The id of the runner the session is assigned to — what a runner-scoped row is checked against. A door
+   *  that passes none resolves no runner-scoped row at all (assertRunnerScope). */
+  runnerId?: string | null;
 }): {
   provider: AgentProvider;
   model: string;
@@ -710,10 +751,16 @@ export function resolveProviderExec(args: {
   }
   const legacyInheritance = args.usesRuntimeDefaultModel === false;
   if (customRow) {
+    // A runner-scoped row runs on its own runner or not at all: never on another machine, never on a
+    // cloud engine's sign-in instead.
+    assertRunnerScope(customRow, args.runnerId, args.declaredProvider);
     // A runtime no engine speaks is refused in the words it always was, before anything is asked of it.
     const native = runtimeOf(customRow);
     const engine = args.engine ?? native;
-    const apiKey = customRow.sessionToken ?? decryptSecret(customRow.apiKeyEnc);
+    // A key that takes none gets a placeholder an engine's CLI can send, built here and held nowhere: Claude
+    // Code given no token at all would send the runner's own Claude sign-in to the endpoint instead.
+    const apiKey = customRow.sessionToken
+      ?? (customRow.authMode === 'none' ? LOCAL_AUTH_PLACEHOLDER : decryptSecret(customRow.apiKeyEnc));
     const credential = keyCredential(customRow, apiKey);
     const table = customRow.codexLogin ? poolTableOptions() : engineTableOptions(customRow.baseUrl);
     if (!isEngineCompatible(engine, credential, table)) {

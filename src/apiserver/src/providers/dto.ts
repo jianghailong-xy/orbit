@@ -1,4 +1,4 @@
-import { CURSOR_KEY_CHECK_STATES } from '@orbit/shared';
+import { CURSOR_KEY_CHECK_STATES, PROVIDER_AUTH_MODES, PROVIDER_SCOPES } from '@orbit/shared';
 import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Matches, Min, MinLength } from 'class-validator';
 import { IsPublicId } from '../common/public-id';
 
@@ -24,8 +24,17 @@ export class CreateModelProviderDto {
   @IsString() @MinLength(1) label!: string;
   @IsOptional() @IsIn(RUNTIMES) runtime?: string;
   @IsString() @MinLength(1) baseUrl!: string;
-  /** Plaintext provider API key; stored AES-GCM encrypted, never returned to the browser. */
-  @IsString() @MinLength(1) apiKey!: string;
+  /** Plaintext provider API key; stored AES-GCM encrypted, never returned to the browser. Required for
+   *  every provider but a runner-scoped one with authMode `none` (a local Ollama), which takes none —
+   *  the service refuses a missing or blank one with PROVIDER_API_KEY_REQUIRED. */
+  @IsOptional() @IsString() apiKey?: string;
+  /** `runner` for a model server on one of the caller's runners (docs/ollama-local-provider-contract.md);
+   *  omitted means what the preset implies — `runner` for a local preset, else `account`. */
+  @IsOptional() @IsIn([...PROVIDER_SCOPES]) scope?: string;
+  /** The caller's own runner a runner-scoped provider runs on. */
+  @IsOptional() @IsPublicId() runnerId?: string;
+  /** `none` for a local server that takes no key (runner scope only); omitted means what the scope implies. */
+  @IsOptional() @IsIn([...PROVIDER_AUTH_MODES]) authMode?: string;
   /** Picker model list: [{ value, label, contextWindow? }]. Ignored when following a preset.
    *  dsh requires an empty list because its ACP catalogue supplies opaque model selections. */
   @IsOptional() @IsArray() models?: { value: string; label: string; contextWindow?: number }[];
@@ -72,8 +81,11 @@ export class UpdateModelProviderDto {
   @IsOptional() @IsString() @MinLength(1) label?: string;
   @IsOptional() @IsIn(RUNTIMES) runtime?: string;
   @IsOptional() @IsString() @MinLength(1) baseUrl?: string;
-  /** Omit to keep the stored key; provide to rotate it. */
+  /** Omit to keep the stored key; provide to rotate it. A provider with authMode `none` takes none. */
   @IsOptional() @IsString() @MinLength(1) apiKey?: string;
+  /** Bind a runner-scoped provider to another of the caller's own runners. Scope and authMode are fixed
+   *  at creation, like the vendor identity. */
+  @IsOptional() @IsPublicId() runnerId?: string;
   @IsOptional() @IsArray() models?: { value: string; label: string; contextWindow?: number }[];
   @IsOptional() @IsString() defaultModel?: string;
   /** Hand the model list back to the row (false) or to its preset (true); omit to leave ownership

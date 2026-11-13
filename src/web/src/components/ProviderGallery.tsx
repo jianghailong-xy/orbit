@@ -129,9 +129,10 @@ export const newKeyEngines = (key: { runtime?: string | null; presetSlug: string
 
 /** The vendors offered to connect: every preset but the retired DeepSeek Harness one, less any whose keys
  *  run on no engine this page draws — Cursor's run on Cursor CLI alone, which the web draws once a runner
- *  of the account knows it (webShowsEngine). */
+ *  of the account knows it (webShowsEngine). A runner-scoped local server (Ollama) is connected by choosing
+ *  its runner, not by pasting a key, which this form cannot do yet; it is left out until it can. */
 const offeredPresets = (runners: readonly SignedInRunner[]) =>
-  PROVIDER_PRESETS.filter((p) => p.slug !== DSH_PRESET_SLUG
+  PROVIDER_PRESETS.filter((p) => p.slug !== DSH_PRESET_SLUG && !p.runnerScoped
     && newKeyEngines({ runtime: p.runtime, presetSlug: p.slug, baseUrl: p.baseUrl })
       .some((engine) => webShowsEngine(engine, runners)));
 

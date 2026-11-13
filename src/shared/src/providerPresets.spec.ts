@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AgentProvider } from './enums';
+import { OLLAMA_DEFAULT_BASE_URL, OLLAMA_PRESET_SLUG } from './localProvider';
 import { PROVIDER_PRESETS, providerPreset } from './providerPresets';
 
 // The catalogue is hand-edited whenever a vendor ships a model, and the server now derives real
@@ -27,6 +28,14 @@ describe('PROVIDER_PRESETS', () => {
         expect(p.defaultModel).toBe('');
         continue;
       }
+      // A local server's models are what its runner finds on it; none ships here, and none is the
+      // runner CLI's own list either (that would default an Ollama row to a Claude model).
+      if (p.runnerScoped) {
+        expect(p.modelsFromRuntime).toBeUndefined();
+        expect(p.models).toEqual([]);
+        expect(p.defaultModel).toBe('');
+        continue;
+      }
       expect(p.models.length).toBeGreaterThan(0);
       // A default outside the list would leave the picker showing one model and the runner
       // launching another.
@@ -41,8 +50,9 @@ describe('PROVIDER_PRESETS', () => {
   it('keeps every maintained list on a catalogue that recognizes its own models', () => {
     for (const p of PROVIDER_PRESETS) {
       if (!p.catalog) {
-        // The only lists allowed to stand still are the ones the runner's CLI reports instead.
-        expect(p.modelsFromRuntime).toBe(true);
+        // The only lists allowed to stand still are the ones the runner's CLI reports instead, or the
+        // instance's own, which the runner discovers on a local server.
+        expect(p.modelsFromRuntime || p.runnerScoped).toBe(true);
         continue;
       }
       expect(p.catalog.source.trim()).not.toBe('');
@@ -53,7 +63,18 @@ describe('PROVIDER_PRESETS', () => {
   });
 
   it('points at an https endpoint', () => {
-    for (const p of PROVIDER_PRESETS) expect(p.baseUrl).toMatch(/^https:\/\//);
+    // A runner-scoped server is reached on its runner's own loopback, never over the network.
+    for (const p of PROVIDER_PRESETS.filter((preset) => !preset.runnerScoped)) expect(p.baseUrl).toMatch(/^https:\/\//);
+  });
+
+  it('runs Ollama on Claude Code, at the server root on the runner, with no key', () => {
+    const ollama = providerPreset(OLLAMA_PRESET_SLUG)!;
+    expect(ollama.runtime).toBe('claude');
+    expect(ollama.baseUrl).toBe(OLLAMA_DEFAULT_BASE_URL);
+    expect(ollama.runnerScoped).toBe(true);
+    expect(ollama.keyUrl).toBeUndefined();
+    expect(ollama.catalog).toBeUndefined();
+    expect(PROVIDER_PRESETS.filter((p) => p.runnerScoped).map((p) => p.slug)).toEqual([OLLAMA_PRESET_SLUG]);
   });
 
   it('runs Kimi on the Kimi CLI, pointed at the API that CLI speaks', () => {
