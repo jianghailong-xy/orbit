@@ -84,7 +84,9 @@ verified. `release.sh bump` opens the file, and the tag is refused while a secti
 
 ## Before tagging
 
-1. Run `release.sh bump <version>` and fill in `release-notes/<version>.md`; commit both. Confirm
+1. Run `release.sh bump <version>` and fill in `release-notes/<version>.md`; move the `Unreleased` entries in
+   [`CHANGELOG.md`](../CHANGELOG.md) under the new version and link that version's release notes; commit them
+   together. Confirm
    `node scripts/release-identity.mjs check-tag v<version>` passes (it runs `check-notes` too). Before the
    tag exists, `bash scripts/supply-chain-dry-run.sh` dry-runs the supply chain with representative local
    artifacts and checks that the same gate release.yml runs accepts the bundle and refuses tampering.
@@ -126,7 +128,8 @@ unless the maintainer explicitly records the exception.
 - Check that the release assets, `SHA256SUMS`/SBOM/provenance bundle, appcast, TestFlight build, and
   Android `android-update.json` identify the same tag.
 - Announce the release in [Discussions](https://github.com/jianghailong-xy/orbit/discussions) with upgrade notes,
-  known limits, and a link to the exact release.
+  known limits, and a link to the exact release, and name that release in the fixed
+  [release feedback thread](https://github.com/jianghailong-xy/orbit/discussions/159).
 - Keep the previous supported release and rollback instructions discoverable.
 - Update the relevant current guide when a command, configuration key, migration, or support boundary changes.
 
