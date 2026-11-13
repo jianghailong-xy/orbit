@@ -72,6 +72,9 @@ const OLD_FIELDS = [
 ];
 /** What every root answers with since links became `share_link` rows (0306), whatever the root. */
 const LINK_FIELDS = ['kind', 'include', 'sharedAt'];
+// Activity was added by the parked-session activity projection. The guest red line also requires
+// public roots and polling to carry waitingOnOwner as a boolean, never approval contents.
+const STATE_FIELDS = ['activity', 'waitingOnOwner'];
 
 type Json = Record<string, any>;
 type Answer = { status: number; headers: IncomingHttpHeaders; body: Buffer; json: Json };
@@ -312,14 +315,15 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
     const state = withSessionState(row);
 
     // The root: every old field, then the tail page (200) and hasMore, and the link's own three
-    // (kind, include, sharedAt) — nothing else.
+    // (kind, include, sharedAt), plus the shared activity and waiting-on-owner state.
     const root = await visit(at(''));
     assert.equal(root.status, 200, root.body.toString());
     assert.deepEqual(
       Object.keys(root.json).sort(),
-      [...OLD_FIELDS, ...LINK_FIELDS, 'events', 'hasMore', 'agentName'].sort(),
+      [...OLD_FIELDS, ...LINK_FIELDS, ...STATE_FIELDS, 'events', 'hasMore', 'agentName'].sort(),
     );
     assert.equal(root.json.kind, 'SESSION');
+    assert.equal(typeof root.json.waitingOnOwner, 'boolean');
     assert.equal(root.json.title, 'Draw the mock and show me');
     assert.equal(root.json.workspaceName, workspaceName);
     assert.equal(root.json.createdAt, row.createdAt.toISOString());
@@ -478,8 +482,8 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
 
     // The header is the root's — its fields, as the root answers them, and nothing else.
     const root = await visit(at(''));
-    assert.deepEqual(Object.keys(rest.json).sort(), [...OLD_FIELDS, 'agentName', 'events', 'after'].sort());
-    for (const field of [...OLD_FIELDS, 'agentName']) assert.deepEqual(rest.json[field], root.json[field], field);
+    assert.deepEqual(Object.keys(rest.json).sort(), [...OLD_FIELDS, ...STATE_FIELDS, 'agentName', 'events', 'after'].sort());
+    for (const field of [...OLD_FIELDS, ...STATE_FIELDS, 'agentName']) assert.deepEqual(rest.json[field], root.json[field], field);
 
     // A conversation that moves on: the next read holds what it added and how it stands now.
     const liveToken = newToken();
