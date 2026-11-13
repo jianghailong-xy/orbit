@@ -468,7 +468,6 @@ import { loginCodeRelay } from '../runners/login-code-relay';
 import { readDirProbeResult } from '../runners/dir-probe';
 import { readRunnerRepoHealth, sanitizeRunnerRepoHealth, workspacesWithChangedRepoHealth } from '../common/runner-repo-health';
 import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
-import { claimDrainWaitingPush } from '../common/runner-drain-waiting';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
 import { orchestrationEnabled } from '../common/orchestration-switch';
@@ -1975,9 +1974,6 @@ export class RunnerApiController {
       }
     }
     if (verdict.answer !== 'FULL') {
-      // Work queuing behind a drain moves nothing a quiet beat reads, so a draining beat asks for the drain's push here
-      // too: at most one statement per beat, and only while the runner drains.
-      if (dto?.draining === true) await this.pushDrainWaiting(runnerId);
       // Whichever apiserver process holds them (cursor-key-check-relay.ts): the gateway forwards a beat to any.
       const cursorKeyChecks = await cursorKeyCheckRelay.takeAnywhere(runnerId);
       return quietHeartbeatAnswer(row, {
@@ -1991,19 +1987,6 @@ export class RunnerApiController {
       row,
       digests,
     });
-  }
-
-  /**
-   * A runner draining for its update with something of its owner's waiting on it: tell them, once per drain (D3). The
-   * claim is the guard — only the beat whose UPDATE matched pushes — and a failure costs the push, never the heartbeat.
-   */
-  private async pushDrainWaiting(runnerId: string): Promise<void> {
-    try {
-      const push = await claimDrainWaitingPush(this.prisma, runnerId);
-      if (push) void this.push.notifyRunnerDrainWaiting(push);
-    } catch (error) {
-      this.logger.warn(`runner ${runnerId}: drain push skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
-    }
   }
 
   /** What a link heartbeat's answer says waits for the runner: the beat statement's HintState, and this process's own. */
@@ -2136,8 +2119,6 @@ export class RunnerApiController {
         // to send a leaseOwner or a draining flag writes NULL: no active lease, not draining.
         heartbeatLeaseOwner,
         heartbeatDraining: typeof dto?.draining === 'boolean' ? dto.draining : null,
-        // A beat that is not draining ends the drain's one push (migration 0595): the next drain pushes again.
-        ...(dto?.draining === true ? {} : { drainWaitingPushedAt: null }),
         // Per-engine health for Infrastructure. Sanitized on the way in as well as out, so a
         // malformed report can't be stored as a claim about this machine; an older runner omits
         // the field entirely and keeps whatever was last known.
@@ -2331,7 +2312,6 @@ export class RunnerApiController {
         void this.push.notifyEngineSignedOut(runner.id, current.engine);
       }
     }
-    if (dto?.draining === true) await this.pushDrainWaiting(runner.id);
     // A finished install stops being news the moment the probe confirms it: clear the slot so the
     // row goes back to speaking from engine health (which then says "signed out", with the sign-in
     // that actually comes next) rather than sitting on a terminal status nobody has to act on.

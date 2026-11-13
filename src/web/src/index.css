@@ -2320,39 +2320,80 @@ button.toast--pill:focus-visible {
 .runner-updating-pop .runner-update-actions {
   justify-content: flex-start;
 }
-/* Board 3 ⑥: one line atop the conversation pane while the runner drains with the reader's work waiting. */
-.runner-drain-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+/* docs/mocks/runner-update-indicator: a quiet pill left of the header's ⋯ while the runner drains with the
+   reader's work waiting; its popover holds the rest. */
+.runner-update-pill {
+  display: inline-flex;
   flex: none;
-  /* Edge to edge across the pane, over its top padding (board 3 ⑥); the header keeps its own spacing below. */
-  margin: -16px calc(-1 * var(--pane-gutter)) 16px;
-  padding: 10px var(--pane-gutter);
-  background: var(--warning-bg, #fdf3e3);
-  border-bottom: 1px solid var(--warning-border, #f3dcb5);
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--fill-muted);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.runner-update-pill:hover,
+.runner-update-pill[data-popup-open] {
+  background: var(--bg-hover-strong);
+}
+.runner-update-pill-short {
+  display: none;
+}
+@media (max-width: 640px) {
+  .runner-update-pill { padding: 0 8px; }
+  .runner-update-pill-label { display: none; }
+  .runner-update-pill-short { display: inline; }
+}
+.runner-update-popover {
+  width: 380px;
   font-size: 13px;
 }
-.runner-drain-banner-icon {
-  color: var(--warning, #c47a00);
-  flex: none;
+.runner-update-popover-body,
+.runner-update-popover-waits {
+  margin: 0 0 10px;
+  color: var(--text-2);
 }
-.runner-drain-banner-text {
-  flex: 1;
+.runner-update-popover-turns {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+.runner-update-popover-turns li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.runner-update-popover-turns li:last-child {
+  border-bottom: 0;
+}
+.runner-update-popover-turns a {
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.runner-drain-banner-actions {
+.runner-update-popover-turns span,
+.runner-update-popover-more {
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.runner-update-popover-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: none;
 }
-.runner-drain-banner-close {
-  border: 0;
-  background: none;
-  color: var(--text-tertiary, #8a8a8a);
-  cursor: pointer;
-  padding: 4px;
+.runner-update-popover-open {
+  margin-left: auto;
 }
 /* A Later row: what it does on the left, the clock time on the right in the meta voice. */
 .runner-update-later-item {
