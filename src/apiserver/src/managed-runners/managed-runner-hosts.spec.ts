@@ -316,8 +316,9 @@ test('placement: the non-draining host with the most free room; ties to the earl
 });
 
 test('the Docker backend tracks whether its channel can be reached: marked by a call that reaches nothing, cleared by any answer', async () => {
-  const channel = new FakeDockerChannel('host-a', IMAGE_A);
-  const backend = new DockerBackend(channel, testDockerRunnerProfile({ instanceId: 'host-a' }));
+  const profile = testDockerRunnerProfile({ instanceId: 'host-a' });
+  const channel = new FakeDockerChannel('host-a', profile.runner.image);
+  const backend = new DockerBackend(channel, profile);
   assert.equal(backend.unreachable, false, 'nothing heard yet: not marked');
   channel.down = true;
   await assert.rejects(backend.readVolume(mapping()));
@@ -340,7 +341,7 @@ test('the Docker backend tracks whether its channel can be reached: marked by a 
       ? async () => { throw new DockerChannelUnreachable('injected: the answer broke off'); }
       : Reflect.get(target, key, receiver)),
   });
-  const other = new DockerBackend(flaky, testDockerRunnerProfile({ instanceId: 'host-a' }));
+  const other = new DockerBackend(flaky, profile);
   channel.down = true;
   await assert.rejects(other.readInstance(mapping()));
   channel.down = false;
