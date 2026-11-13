@@ -34,6 +34,8 @@ import io.orbitd.android.core.cards.OwnerRequest
 import io.orbitd.android.core.cards.OwnerRequestStep
 import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.core.cards.OwnerReview
+import io.orbitd.android.directory.DirectoryRunner
+import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.text.MarkdownText
 import io.orbitd.android.ui.LocalOrbitColors
 import java.time.Instant
@@ -41,10 +43,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * What a session asked the owner to do (web `OwnerRequestCard`), drawn the same in the conversation that asked and in the "Waiting on
- * you" inbox. Pending it is the whole request; once ended it is one line saying how, who and when ([OwnerRequestResolved]). [runner]
- * names a runner by the name the owner knows it by. [focusInput]: opened from a push's action, the card takes the focus on its input —
- * the key's field, the answer's words, or Mark done.
+ * What a session asked the owner to do (web `OwnerRequestCard`), drawn in the conversation that asked. Pending it is the whole
+ * request; once ended it is one line saying how, who and when ([OwnerRequestResolved]). [runner] names a runner by the name the owner
+ * knows it by. [focusInput]: opened from a push's action, the card takes the focus on its input — the key's field, the answer's words,
+ * or Mark done.
  */
 @Composable
 fun OwnerRequestCard(request: OwnerRequest, store: OwnerRequestStore, runner: (String?) -> String, open: (String) -> Unit,
@@ -339,18 +341,33 @@ fun OwnerRequestSnoozed(request: OwnerRequest, until: Long, now: Instant = Insta
     }
 }
 
-/** One request where a conversation draws it: whole, folded for later, or as its summary. */
+/** A runner by the name the owner knows it by. */
+internal fun runnerNames(runners: List<DirectoryRunner>): (String?) -> String = { id ->
+    runners.firstOrNull { ObjectId.same(it.id, id) }?.let { it.displayName ?: it.name } ?: "this runner"
+}
+
+/** One request where a conversation draws it: whole, folded for later, or as its summary. The request a link opened [sessionId]'s
+ * conversation onto ([OwnerRequestLinks]) is shown whole even if it was put off, brought into view and its input focused. */
 @Composable
-fun OwnerRequestInConversation(request: OwnerRequest, store: OwnerRequestStore, runner: (String?) -> String, open: (String) -> Unit) {
+fun OwnerRequestInConversation(request: OwnerRequest, store: OwnerRequestStore, runner: (String?) -> String, open: (String) -> Unit,
+    sessionId: String? = null) {
     val snoozes by OwnerRequestSnoozes.of(LocalContext.current).state.collectAsState()
+    val context = LocalContext.current
     // Drawn again when the reminder falls due.
     var due by remember(request.id) { mutableIntStateOf(0) }
+    var focused by remember(request.id) { mutableStateOf(false) }
+    val focus = sessionId?.let(CardFocus::pending)?.takeIf { it == CardFocus.ownerRequest(request.id) }
+    if (focus != null) LaunchedEffect(focus) {
+        OwnerRequestSnoozes.of(context).wake(request.id)
+        focused = true
+        CardFocus.spend(sessionId!!)
+    }
     val now = Instant.now()
     val until = snoozes[OwnerRequests.key(request.id)] ?: 0
     if (until > now.toEpochMilli()) LaunchedEffect(until, due) { delay(until - System.currentTimeMillis()); due++ }
     when {
         !request.pending -> OwnerRequestResolved(request, store, runner, now)
         until > now.toEpochMilli() -> OwnerRequestSnoozed(request, until, now)
-        else -> OwnerRequestCard(request, store, runner, open, now)
+        else -> OwnerRequestCard(request, store, runner, open, now, focusInput = focused)
     }
 }

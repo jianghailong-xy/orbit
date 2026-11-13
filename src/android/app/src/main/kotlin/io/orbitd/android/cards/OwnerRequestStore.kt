@@ -20,12 +20,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 
 /**
- * The owner requests this account has, as the conversation that asked and the "Waiting on you" inbox read them: one read per list
- * (`open`, `all`, `done`, `declined`), each request's answer standing in for it in every list as soon as a door returns it. One store
+ * The owner requests this account has, as the conversation that asked reads them: one read per list (`open`, `all`), each
+ * request's answer standing in for it in every list as soon as a door returns it. One store
  * per signed-in handle; another account's requests are never drawn.
  */
 class OwnerRequestStore internal constructor(private val auth: AuthSession, val handle: SessionHandle, private val scope: CoroutineScope,
@@ -33,15 +32,9 @@ class OwnerRequestStore internal constructor(private val auth: AuthSession, val 
 
     data class State(
         val lists: Map<String, List<OwnerRequest>> = emptyMap(),
-        /** The lists the last read of failed for, so a page can say it could not read them. */
-        val failed: Set<String> = emptySet(),
         val savedSecrets: List<AccountSecret> = emptyList(),
         /** The tasks a request holds up, by id, as their titles were read. */
         val taskTitles: Map<String, String> = emptyMap(),
-        /** The open projects as `GET /projects?status=OPEN` last answered: their attention counts the coordinators' questions. */
-        val projects: List<JsonObject> = emptyList(),
-        /** The coordinators' open questions, off the open items of each project that has one (web `WaitingOnYouPage`). */
-        val questions: List<OwnerRequests.CoordinatorQuestionRow> = emptyList(),
     ) {
         fun list(filter: String) = lists[filter].orEmpty()
         val open get() = list(OPEN)
@@ -61,35 +54,11 @@ class OwnerRequestStore internal constructor(private val auth: AuthSession, val 
                 try {
                     val requests = api.list(filter)
                     if (!live()) return@launch
-                    mutable.update { it.copy(lists = it.lists + (filter to requests), failed = it.failed - filter) }
+                    mutable.update { it.copy(lists = it.lists + (filter to requests)) }
                     titles(requests.flatMap { it.blocksTaskIds })
                 } catch (cancel: CancellationException) { throw cancel }
-                catch (_: Exception) { mutable.update { it.copy(failed = it.failed + filter) } }
+                catch (_: Exception) { /* The list stands as it was last read. */ }
             }
-        }
-    }
-
-    /**
-     * The coordinators' questions, which stay on their own table: the open projects, and — for the inbox's rows ([items]) — the open
-     * items of each project whose attention says a question is waiting. The drawer's count needs only the projects.
-     */
-    fun loadQuestions(items: Boolean) {
-        scope.launch {
-            try {
-                val projects = Wire.decode(auth.request(handle, ApiRequest(listOf("projects"), query = listOf("status" to "OPEN"))).requireSuccess().body,
-                    JsonArray.serializer()).filterIsInstance<JsonObject>()
-                if (!live()) return@launch
-                mutable.update { it.copy(projects = projects) }
-                if (!items) return@launch
-                val questions = OwnerRequests.projectsWithQuestions(projects).flatMap { project ->
-                    val id = project.text("id") ?: return@flatMap emptyList()
-                    val read = try {
-                        Wire.decode(auth.request(handle, ApiRequest(listOf("projects", id, "open-items"))).requireSuccess().body, JsonObject.serializer())
-                    } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
-                    OwnerRequests.coordinatorQuestions(project, read)
-                }
-                if (live()) mutable.update { it.copy(questions = questions) }
-            } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { /* The requests still stand on their own. */ }
         }
     }
 
@@ -128,8 +97,6 @@ class OwnerRequestStore internal constructor(private val auth: AuthSession, val 
     companion object {
         const val OPEN = "open"
         const val ALL = "all"
-        const val DONE = "done"
-        const val DECLINED = "declined"
         private var shared: OwnerRequestStore? = null
 
         fun of(auth: AuthSession, handle: SessionHandle, scope: CoroutineScope): OwnerRequestStore {

@@ -42,6 +42,7 @@ import io.orbitd.android.reader.SessionDestination
 import io.orbitd.android.reader.WorktreeModel
 import io.orbitd.android.toast.OrbitToasts
 import io.orbitd.android.toast.ToastHost
+import io.orbitd.android.toast.ToastTone
 import io.orbitd.android.tasks.TasksScreen
 import io.orbitd.android.projects.ProjectAttention
 import io.orbitd.android.projects.ProjectsScreen
@@ -51,9 +52,8 @@ import io.orbitd.android.wiki.WikiDrawerRow
 import io.orbitd.android.wiki.WikiDestination
 import io.orbitd.android.wiki.wikiEntered
 import io.orbitd.android.watch.WatchDestination
-import io.orbitd.android.cards.OwnerRequestStore
-import io.orbitd.android.cards.WaitingOnYouDestination
-import io.orbitd.android.cards.WaitingOnYouDrawerCount
+import io.orbitd.android.cards.OwnerRequestLinks
+import io.orbitd.android.core.cards.OwnerRequestsApi
 import io.orbitd.android.watch.WatchStore
 import io.orbitd.android.composer.MachineSetup
 import io.orbitd.android.composer.MachineSetupCopy
@@ -143,13 +143,29 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             if (signedIn == null) drawer.close()
         }
     }
+    // An owner request's link (its push's action) names the request only: it waits here, through a sign-in, for the read that says
+    // which conversation asked, and that conversation opens on its card (iOS 0efaa61e4).
+    var ownerRequestLink by remember { mutableStateOf<Pair<Long, String>?>(null) }
     LaunchedEffect(incoming) {
         incoming?.second?.let { raw ->
+            if (OrbitLinks.ownerRequest(raw) != null) { ownerRequestLink = incoming; return@LaunchedEffect }
             OrbitLinks.parse(raw, signedIn?.handle?.account?.server, Origin.EXTERNAL)?.let { route ->
                 if (navigation.current != route) LastPageMarks.arrived(route, raw)
                 navigation = navigation.receive(route)
             }
         }
+    }
+    LaunchedEffect(ownerRequestLink, signedIn?.handle) {
+        val link = ownerRequestLink ?: return@LaunchedEffect
+        val handle = signedIn?.handle ?: return@LaunchedEffect
+        val id = OrbitLinks.ownerRequest(link.second) ?: return@LaunchedEffect
+        val route = OwnerRequestLinks.open(id) { OwnerRequestsApi(app.session, handle).get(it) }
+        if (route == null) OrbitToasts.show(OwnerRequestLinks.unreadable, tone = ToastTone.ERROR)
+        else {
+            if (navigation.current != route) LastPageMarks.arrived(route, link.second)
+            navigation = navigation.receive(route)
+        }
+        ownerRequestLink = null
     }
     // Android dispatches IME Back before this callback. Animated IME visibility can lag
     // its actual dismissal; gating the route callback on it can finish the Activity.
@@ -323,12 +339,6 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                             }
                             if (dest == Destination.WIKI) WikiDrawerRow(app, signedIn.handle, drawer.isOpen, row) else row()
                         }
-                        // What sessions asked the owner to do (web `WaitingOnYouPage`), with how many are waiting.
-                        NavigationDrawerItem(label = { Text(WAITING_ON_YOU) }, selected = navigation.section == WAITING_ON_YOU,
-                            icon = { Icon(painterResource(R.drawable.ic_bell), null) },
-                            onClick = { select(WAITING_ON_YOU, OrbitRoute(Destination.WAITING_ON_YOU, origin = Origin.DRAWER)) },
-                            badge = { WaitingOnYouDrawerCount(remember(signedIn.handle) { OwnerRequestStore.of(app.session, signedIn.handle, app.processScope) }, projects.projects, revision) },
-                            modifier = Modifier.testTag("drawer:waiting-on-you"))
                         SectionHeading("Workspaces")
                         DrawerUnreachableRow(data) { app.realtime.refreshDirectory() }
                         if (data.ready && data.workspaces.isEmpty() && machinesToSetUp.isEmpty()) Text(MachineSetupCopy.NO_WORKSPACES_YET, Modifier.padding(16.dp))
@@ -435,7 +445,6 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                     land(it, OrbitRoute(Destination.WORKSPACE, it, it))
                                 }
                                 Destination.BUILD -> BuildInformation { navigation = navigation.back() }
-                                Destination.WAITING_ON_YOU -> WaitingOnYouDestination(app, signedIn.handle, route, data, revision, ::open)
                                 else -> ObjectDestination(route, api, data, revision, ::open) { app.realtime.refreshDirectory() }
                             }
                         }
@@ -487,7 +496,6 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     Destination.WIKI_JOB -> "Run"
     Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION -> "Wiki plan"
     Destination.WATCH -> if (route.id == null) "Following" else "Watch"
-    Destination.WAITING_ON_YOU -> WAITING_ON_YOU
     Destination.SETTINGS -> if (route.id == "workspace") data.workspaces.firstOrNull { ObjectId.same(it.id, route.workspaceId) }?.name
         ?.let { "$it settings" } ?: settingsTitle(route.id) else settingsTitle(route.id, route.recordId)
     Destination.RUNNER -> runnerTitle(route.recordId, route.id, data.runners.firstOrNull { ObjectId.same(it.id, route.id) }?.name)
@@ -575,5 +583,3 @@ private fun IdentityField(label: String, value: String) {
         Text(value, style = MaterialTheme.typography.bodyMedium)
     }
 }
-
-private const val WAITING_ON_YOU = io.orbitd.android.core.cards.OwnerRequests.waitingOnYou

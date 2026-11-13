@@ -549,6 +549,18 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // Inside the row it follows, so no list index moves: the reader's jumps count rows.
                 val ownerPlaced = remember(displayedRows, ownerRequests) { OwnerRequests.place(displayedRows.map { it.event.ts }, ownerRequests) }
                 val crossingPlaced = remember(displayedRows, crossingBatches) { CrossingCards.place(displayedRows.map { it.event.ts }, crossingBatches) }
+                // An owner request's link opened this conversation onto its card (OwnerRequestLinks): once the reader has placed itself, the
+                // row the card follows is scrolled to, and the card brings itself into view when drawn (OwnerRequestInConversation).
+                val ownerFocus = CardFocus.pending(route.id!!)?.takeIf { it.startsWith(CardFocus.OWNER_REQUEST) }
+                LaunchedEffect(ownerFocus, ownerPlaced, placed) {
+                    if (ownerFocus == null || !placed) return@LaunchedEffect
+                    val index = ownerPlaced.entries.firstOrNull { (_, asked) -> asked.any { CardFocus.ownerRequest(it.id) == ownerFocus } }?.key
+                        ?: return@LaunchedEffect
+                    follow = false
+                    // Ahead of the rows: the loading line until the window is seeded, the older-messages item, and the created-workspace line.
+                    val lead = (if (displayedWindow.seeded) 0 else 1) + 1 + (if (createdWorkspaceLine != null && !displayedWindow.hasOlder) 1 else 0)
+                    list.scrollToItem(if (index < 0) 0 else index + lead)
+                }
                 val live = transcript.takeIf { displayedWindow.newerAfter == null }
                 // A turn running now, read at the live tail: only there is the window's newest head the turn in hand. Not a run that is
                 // merely live: a turn stopped without a `turn_end` would count up for as long as the session waits (iOS reads `.running` too).
@@ -572,7 +584,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     item(key = "older") {
                         if (displayedWindow.hasOlder) TextButton(enabled = !displayedLoading, onClick = { follow = false; model.older() }) { Text(if (displayedLoading) "Loading messages…" else "Load earlier messages") }
                         else if (ownerPlaced[-1] != null || crossingPlaced[-1] != null) Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            ownerPlaced[-1]?.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink) } }
+                            ownerPlaced[-1]?.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, route.id) } }
                             crossingPlaced[-1]?.forEach { key(it.id) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } }
                         }
                     }
@@ -623,7 +635,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         if (asked == null && crossings == null) drawRow()
                         else Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             drawRow()
-                            asked?.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink) } }
+                            asked?.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, route.id) } }
                             crossings?.forEach { key(it.id) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } }
                         }
                     }

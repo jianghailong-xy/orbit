@@ -32,8 +32,9 @@ data class PushPayload(
     val isOwnerItem get() = kind in ownerItemKinds
     val isReminder get() = kind == "approval" || isOwnerItem
     val isOwnerRequest get() = kind == OWNER_REQUEST
-    /** An owner request's primary action (`orbit://owner-request/<id>`): the inbox, its card open on its input. Neither it nor
-     * Later ends the request; the tap on the notification itself opens the session that asked, as [link] says. */
+    /** An owner request's primary action (`orbit://owner-request/<id>`): the conversation that asked, opened on the request's card
+     * with its input focused ([io.orbitd.android.cards.OwnerRequestLinks]). Neither it nor Later ends the request; the tap on the
+     * notification itself opens that conversation too, as [link] says. */
     val ownerRequestLink: String? get() = ownerRequestId?.takeIf { isOwnerRequest }?.let { "orbit://owner-request/$it" }
 
     /** The existing ACTION_VIEW/OrbitLinks entry retains authentication and the caller's stack. */

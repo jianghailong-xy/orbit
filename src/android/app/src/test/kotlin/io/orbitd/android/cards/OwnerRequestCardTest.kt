@@ -7,12 +7,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -22,6 +20,10 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.TestOrbitApplication
 import io.orbitd.android.core.cards.OwnerRequests
+import io.orbitd.android.core.cards.OwnerRequestsApi
+import io.orbitd.android.navigation.Destination
+import io.orbitd.android.navigation.ObjectId
+import io.orbitd.android.navigation.OrbitLinks
 import io.orbitd.android.ui.OrbitTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -42,9 +44,10 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /**
- * The owner request card as a conversation and the inbox draw it (web `OwnerRequestCard`): each kind's fields and buttons, its doors
+ * The owner request card as the conversation that asked draws it (web `OwnerRequestCard`): each kind's fields and buttons, its doors
  * on the real wire — the card turning into its one resolved line — the key's field, which is a password field whose value is never
- * saved and is gone once submitted, Remind me later folding the card, and the inbox opening a push's request with its input focused.
+ * saved and is gone once submitted, Remind me later folding the card, and a request's link (`orbit://owner-request/<id>`, its push's
+ * action) opening that conversation on the card with its input focused.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = TestOrbitApplication::class, qualifiers = "w411dp-h891dp")
@@ -71,12 +74,12 @@ class OwnerRequestCardTest {
     @After fun tearDown() { scope.cancel(); runBlocking { fixture.auth.logout() }; fixture.close() }
 
     /** The conversation that asked: its requests in the order they were filed, each whole, folded or as its line. */
-    @Composable private fun Conversation(only: String? = null) {
+    @Composable private fun Conversation(only: String? = null, session: String? = null) {
         val state by store.state.collectAsState()
         Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             OwnerRequests.forSession(OwnerRequestFixture.SESSION, state.list(OwnerRequestStore.ALL), state.open)
                 .filter { only == null || it.id == only }
-                .forEach { OwnerRequestInConversation(it, store, { "mac-mini" }, {}) }
+                .forEach { OwnerRequestInConversation(it, store, { "mac-mini" }, {}, session) }
         }
     }
     private var only by mutableStateOf<String?>(null)
@@ -213,99 +216,57 @@ class OwnerRequestCardTest {
         assertEquals("", tag(id, "secret").fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
     }
 
-    @Test fun remindMeLaterFoldsTheCardAndTakesItOutOfTheCount() {
+    @Test fun remindMeLaterFoldsTheCard() {
         val id = OwnerRequestFixture.CONFIRM_ID
         show(id)
-        assertEquals(4, OwnerRequests.waitingCount(store.state.value.open, OwnerRequestSnoozes.of(RuntimeEnvironment.getApplication()).state.value,
-            java.time.Instant.now()))
         tag(id, "later").performClick()
         compose.onNodeWithTag("owner-request:$id:later:In 1 hour").performClick()
         compose.waitForIdle()
         tag(id, "snoozed").assertExists()
         compose.onAllNodesWithTag("owner-request:$id:primary", useUnmergedTree = true).assertCountEquals(0)
-        val snoozes = OwnerRequestSnoozes.of(RuntimeEnvironment.getApplication())
-        assertEquals(3, OwnerRequests.waitingCount(store.state.value.open, snoozes.state.value, java.time.Instant.now()))
         tag(id, "show-now").performClick()
         compose.waitForIdle()
         tag(id, "primary").assertExists()
-        assertEquals(4, OwnerRequests.waitingCount(store.state.value.open, snoozes.state.value, java.time.Instant.now()))
         assertTrue(fixture.posts().isEmpty())
     }
 
-    /** A push's action (`orbit://owner-request/<id>`) opens the inbox with that request's card open and its input focused. */
-    @Test fun theInboxOpensThePushedRequestOnItsInput() {
-        compose.setContent { OrbitTheme(darkTheme = false) { WaitingOnYouScreen(store, emptyList(), OwnerRequestFixture.SECRET_ID, 0, {}) } }
-        compose.waitForIdle()
-        compose.onNodeWithTag("waiting-on-you:count", useUnmergedTree = true).assertTextEquals("4")
-        compose.onNodeWithTag("waiting-on-you:row:${OwnerRequestFixture.SECRET_ID}:action").assertTextContains("Close")
-        compose.onNodeWithTag("waiting-on-you:row:${OwnerRequestFixture.STEPS_ID}:action").assertTextContains("Open steps")
-        compose.onNodeWithTag("waiting-on-you:row:${OwnerRequestFixture.STEPS_ID}:detail", useUnmergedTree = true).assertTextEquals("3 steps · holds 1 task")
-        compose.onAllNodesWithTag("owner-request:${OwnerRequestFixture.STEPS_ID}", useUnmergedTree = true).assertCountEquals(0)
+    /** A request's link reads the request, asks for its card in the conversation that asked, and opens that conversation: there the
+     * card is drawn whole with its input focused, and the ask is spent. The other requests stay as they are. */
+    @Test fun aRequestsLinkOpensTheConversationThatAskedOnItsCardWithItsInputFocused() {
+        val api = OwnerRequestsApi(fixture.auth, store.handle)
+        val link = "orbit://owner-request/${ObjectId.toPublic(OwnerRequestFixture.SECRET_ID)}"
+        val id = OrbitLinks.ownerRequest(link)!!
+        assertEquals(OwnerRequestFixture.SECRET_ID, id)
+        val route = runBlocking { OwnerRequestLinks.open(id) { api.get(it) } }!!
+        assertEquals(Destination.SESSION, route.destination)
+        assertEquals(OwnerRequestFixture.SESSION, route.id)
+        assertEquals(CardFocus.ownerRequest(OwnerRequestFixture.SECRET_ID), CardFocus.pending(OwnerRequestFixture.SESSION))
+        assertTrue(fixture.calls.any { it.method == "GET" && it.path == "/api/owner-requests/$id" })
+        compose.setContent { OrbitTheme(darkTheme = false) { Conversation(session = route.id) } }
         compose.waitUntil(5_000) { runCatching { tag(OwnerRequestFixture.SECRET_ID, "secret").assertIsFocused() }.isSuccess }
+        assertNull("spent once the card is drawn", CardFocus.pending(OwnerRequestFixture.SESSION))
+        tag(OwnerRequestFixture.STEPS_ID, "primary").assertExists()
+        assertTrue(fixture.posts().isEmpty())
     }
 
-    /** The Open tab holds the coordinators' questions beside the requests, newest first, and the header counts both as one. */
-    @Test fun theInboxListsCoordinatorQuestionsBesideTheRequestsAndCountsThemAsOne() {
-        fixture.projects = buildJsonArray { add(OwnerRequestFixture.questionProject(20)) }
-        fixture.openItems[OwnerRequestFixture.PROJECT] = OwnerRequestFixture.questionItems(20)
-        OwnerRequestSnoozes.of(RuntimeEnvironment.getApplication()).snooze(OwnerRequestFixture.SECRET_ID, System.currentTimeMillis() + 3_600_000)
-        val answered = mutableListOf<OwnerRequests.CoordinatorQuestionRow>()
-        compose.setContent { OrbitTheme(darkTheme = false) { WaitingOnYouScreen(store, emptyList(), null, 0, {}) { answered += it } } }
-        val question = "waiting-on-you:row:question:${OwnerRequestFixture.QUESTION_ITEM}"
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag(question, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
-        // Four requests, one put off for later, and one question.
-        compose.onNodeWithTag("waiting-on-you:count", useUnmergedTree = true).assertTextEquals("4")
-        compose.onNodeWithTag("$question:title", useUnmergedTree = true).assertTextEquals("Should the canary go to 5% or 20% of traffic?")
-        compose.onNodeWithTag("$question:detail", useUnmergedTree = true).assertTextEquals("Payments rollout · decision · recommended: 5%")
-        compose.onNodeWithTag("$question:age", useUnmergedTree = true).assertTextEquals("20m ago")
-        // Newest first: the secret (2m), the steps (14m), the question (20m), the decision (30m), the confirmation (45m).
-        val order = listOf("waiting-on-you:row:${OwnerRequestFixture.SECRET_ID}", "waiting-on-you:row:${OwnerRequestFixture.STEPS_ID}", question,
-            "waiting-on-you:row:${OwnerRequestFixture.DECISION_ID}", "waiting-on-you:row:${OwnerRequestFixture.CONFIRM_ID}")
-        val tops = order.map { compose.onNodeWithTag(it).fetchSemanticsNode().boundsInRoot.top }
-        assertEquals(tops.sorted(), tops)
-        compose.onNodeWithTag("$question:action").assertTextContains("Answer").performClick()
-        assertEquals(OwnerRequestFixture.QUESTION_ITEM, answered.single().itemId)
-        assertEquals(OwnerRequestFixture.PROJECT, answered.single().projectId)
-    }
-
-    /** The task a card holds up opens over the inbox, each page keeping its state by its route as the shell's holder does; Back returns
-     * to the inbox with that card still open, the task's chip where it was pressed (owner, 2026-11-12). */
-    @Test fun aTaskOpenedFromAnInboxCardComesBackToThatCardOpen() {
-        val id = OwnerRequestFixture.STEPS_ID
-        var page by mutableStateOf("inbox")
-        val opened = mutableListOf<String>()
-        compose.setContent {
-            OrbitTheme(darkTheme = false) {
-                val holder = rememberSaveableStateHolder()
-                holder.SaveableStateProvider(page) {
-                    if (page == "inbox") WaitingOnYouScreen(store, emptyList(), null, 0, { link -> opened += link; page = "task" })
-                    else Text("The task's page")
-                }
-            }
-        }
-        compose.onNodeWithTag("waiting-on-you:row:$id:action").assertTextContains("Open steps").performClick()
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("Ship the login page", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(hasText("Ship the login page") and hasAnyAncestor(hasTestTag("owner-request:$id:holding")), useUnmergedTree = true).performClick()
+    /** A request put off for later that a link names is shown whole: the owner asked for it. */
+    @Test fun aLinkedRequestPutOffForLaterIsShownWhole() {
+        val id = OwnerRequestFixture.CONFIRM_ID
+        val snoozes = OwnerRequestSnoozes.of(RuntimeEnvironment.getApplication())
+        snoozes.snooze(id, System.currentTimeMillis() + 3_600_000)
+        val api = OwnerRequestsApi(fixture.auth, store.handle)
+        val route = runBlocking { OwnerRequestLinks.open(id) { api.get(it) } }!!
+        compose.setContent { OrbitTheme(darkTheme = false) { Conversation(id, session = route.id) } }
         compose.waitForIdle()
-        assertEquals(listOf("orbit-task:${OwnerRequestFixture.TASK}"), opened)
-        text("The task's page").assertExists()
-        compose.runOnIdle { page = "inbox" }  // Back
-        compose.waitForIdle()
-        compose.onNodeWithTag("waiting-on-you:row:$id:action").assertTextContains("Close")
-        compose.onNode(hasText("Ship the login page") and hasAnyAncestor(hasTestTag("owner-request:$id:holding")), useUnmergedTree = true).assertExists()
+        tag(id, "primary").assertExists()
+        assertEquals(0L, snoozes.until(id))
     }
 
-    @Test fun theInboxEndedTabsListResolvedLines() {
-        val id = OwnerRequestFixture.STEPS_ID
-        compose.setContent { OrbitTheme(darkTheme = false) { WaitingOnYouScreen(store, emptyList(), null, 0, {}) } }
-        compose.onNodeWithTag("waiting-on-you:row:$id:action").performClick()
-        tag(id, "primary").performClick()
-        posted("/api/owner-requests/$id/done")
-        compose.onNodeWithTag("waiting-on-you:tab:DONE").performClick()
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag("owner-request:$id:resolved", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
-        tag(id, "outcome").assertTextEquals("Marked done")
-        compose.onNodeWithTag("waiting-on-you:tab:DECLINED").performClick()
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag("waiting-on-you:empty", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
-        text("Nothing has been declined.").assertExists()
+    /** A request that cannot be read opens nothing and asks for no card. */
+    @Test fun aRequestThatCannotBeReadOpensNothing() {
+        val api = OwnerRequestsApi(fixture.auth, store.handle)
+        CardFocus.spend(OwnerRequestFixture.SESSION)
+        assertNull(runBlocking { OwnerRequestLinks.open("01a0d6a9-d763-70e1-b4cf-8793e971b5ff") { api.get(it) } })
+        assertNull(CardFocus.pending(OwnerRequestFixture.SESSION))
     }
 }

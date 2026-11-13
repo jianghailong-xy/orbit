@@ -13,8 +13,8 @@ import kotlinx.serialization.json.*
 
 /*
  * Owner requests: what a session has asked the account owner to do (apiserver `owner-requests`; web lib/ownerRequests.ts and
- * components/OwnerRequestCard.tsx). One door (`/owner-requests`) is read for the card in the conversation that asked and for the
- * "Waiting on you" inbox, so the two cannot say different things.
+ * components/OwnerRequestCard.tsx). One door (`/owner-requests`) is read for the card in the conversation that asked, where each
+ * request is seen and answered.
  */
 
 @Serializable
@@ -117,8 +117,6 @@ object OwnerRequests {
     fun kindTag(kind: String) = when (kind) { MANUAL_STEP -> "STEPS"; else -> kind }
     /** The card's primary button. */
     fun primary(kind: String) = when (kind) { DECISION -> "Send answer"; SECRET -> "Provide key"; MANUAL_STEP -> "Mark done"; else -> "Confirm" }
-    /** An inbox row's button. */
-    fun inboxAction(kind: String) = when (kind) { DECISION -> "Answer"; SECRET -> "Provide"; MANUAL_STEP -> "Open steps"; else -> "Review" }
     /** A push's primary action, which opens the card on its input. */
     fun pushAction(kind: String): String? = when (kind) {
         SECRET -> "Provide key"; DECISION -> "Answer"; MANUAL_STEP -> "Mark done"; CONFIRM -> "Review"; else -> null
@@ -256,26 +254,6 @@ object OwnerRequests {
     fun resolvedGrant(request: OwnerRequest): OwnerRequestSecretGrant? =
         request.secretGrant?.takeIf { request.kind == SECRET && (request.state == "DONE" || removalToTell(it)) }
 
-    /** An inbox row's detail: "3 steps", "decision · recommended: Ship it", "confirmation". */
-    fun requestDetail(request: OwnerRequest): String? = when (request.kind) {
-        MANUAL_STEP -> request.steps.orEmpty().size.let { "$it ${if (it == 1) "step" else "steps"}" }
-        DECISION -> request.recommendedOption?.let { request.options?.getOrNull(it)?.label }?.let { "decision · recommended: $it" } ?: "decision"
-        CONFIRM -> "confirmation"
-        else -> null
-    }
-
-    /** "holds 2 tasks", and for how long once that has passed a day. */
-    fun holdsText(request: OwnerRequest, now: Instant): String? {
-        val count = request.blocksTaskIds.size
-        if (count == 0) return null
-        val waited = parse(request.createdAt)?.let { Duration.between(it, now) } ?: Duration.ZERO
-        return "holds $count ${if (count == 1) "task" else "tasks"}" +
-            (if (waited >= Duration.ofDays(1)) " for ${BackgroundWakeCard.duration(waited.seconds)}" else "")
-    }
-
-    /** The row's detail line: the kind's own words, then what it holds up. */
-    fun rowDetail(request: OwnerRequest, now: Instant): String = listOfNotNull(requestDetail(request), holdsText(request, now)).joinToString(" · ")
-
     data class SnoozeChoice(val label: String, val duration: Duration)
     val snoozeChoices = listOf(SnoozeChoice("In 1 hour", Duration.ofHours(1)), SnoozeChoice("In 4 hours", Duration.ofHours(4)),
         SnoozeChoice("Tomorrow", Duration.ofDays(1)))
@@ -287,56 +265,6 @@ object OwnerRequests {
         val deadline = parse(request.expiresAt) ?: return snoozeChoices
         return snoozeChoices.filter { now.plus(it.duration).isBefore(deadline) }
     }
-
-    /** How many requests are waiting: a request put off for later is not counted until it comes back. */
-    fun waitingCount(requests: List<OwnerRequest>, snoozes: Map<String, Long>, now: Instant): Int =
-        requests.count { it.pending && (snoozes[key(it.id)] ?: 0) <= now.toEpochMilli() }
-
-    /**
-     * The inbox's one count (web `waitingCount`): the requests not put off for later, and the questions coordinators asked through
-     * `ask_owner` — which stay on their own table (project open items) but are one list to the owner — as each open project's
-     * attention counts them.
-     */
-    fun waitingCount(requests: List<OwnerRequest>, projects: List<JsonObject>, snoozes: Map<String, Long>, now: Instant): Int =
-        waitingCount(requests, snoozes, now) + projects.sumOf(::openQuestionCount)
-
-    /** How many coordinator questions an open project (`GET /projects?status=OPEN`) says wait on the owner. */
-    fun openQuestionCount(project: JsonObject): Int = project.obj("attention")?.objects("ownerItems").orEmpty()
-        .filter { it.text("kind") == "COORDINATOR_QUESTION" }.sumOf { it.number("count") ?: 0 }
-
-    /** The open projects a coordinator has asked the owner something in: the ones whose open items are worth reading. */
-    fun projectsWithQuestions(projects: List<JsonObject>): List<JsonObject> = projects.filter { openQuestionCount(it) > 0 }
-
-    /** A coordinator's open question as an inbox row: what it asks, in plain words, the project it is about, and since when. */
-    data class CoordinatorQuestionRow(val projectId: String, val projectTitle: String, val itemId: String, val question: String,
-        val recommended: String?, val waitingSince: String) {
-        val detail get() = "$projectTitle · " + (recommended?.let { "decision · recommended: $it" } ?: "decision")
-    }
-
-    /** The questions on a project's open items (web `coordinatorQuestions`): only the owner's group, and only rows carrying a question. */
-    fun coordinatorQuestions(project: JsonObject, items: JsonObject?): List<CoordinatorQuestionRow> {
-        val projectId = project.text("id") ?: return emptyList()
-        val title = project.text("title").orEmpty()
-        return items?.objects("needsYou").orEmpty().mapNotNull { row ->
-            val question = row.obj("question")?.takeIf { row.text("kind") == "COORDINATOR_QUESTION" } ?: return@mapNotNull null
-            val itemId = row.text("itemId") ?: return@mapNotNull null
-            val recommended = question.number("recommendedOption")?.let { question.objects("options").getOrNull(it)?.text("label") }
-            CoordinatorQuestionRow(projectId, title, itemId, CoordinatorQuestions.lead(question), recommended,
-                row.text("waitingSince") ?: return@mapNotNull null)
-        }
-    }
-
-    /** One row of the inbox's Open tab: an owner request, or a coordinator's question. */
-    sealed interface OpenRow {
-        val at: String
-        data class Request(val request: OwnerRequest) : OpenRow { override val at get() = request.createdAt }
-        data class Question(val question: CoordinatorQuestionRow) : OpenRow { override val at get() = question.waitingSince }
-    }
-
-    /** The Open tab: requests and questions in one list, newest first by when each was asked. */
-    fun openRows(requests: List<OwnerRequest>, questions: List<CoordinatorQuestionRow>): List<OpenRow> =
-        (requests.map { OpenRow.Request(it) } + questions.map { OpenRow.Question(it) })
-            .sortedByDescending { parse(it.at) ?: Instant.MIN }
 
     /** The one spelling a request is kept under on this device (a push names the UUID, a read may name the short id). */
     fun key(id: String): String = canonicalId(id) ?: id

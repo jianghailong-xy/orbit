@@ -13,7 +13,7 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 
 /**
- * A loopback owner-requests server for the card and inbox tests: the requests it holds move from PENDING as the owner's doors are
+ * A loopback owner-requests server for the card and link tests: the requests it holds move from PENDING as the owner's doors are
  * pressed, and every call is kept with its body, through OkHttp and `AuthSession` as the app makes them.
  */
 internal class OwnerRequestFixture {
@@ -23,9 +23,6 @@ internal class OwnerRequestFixture {
     val held = ConcurrentHashMap<String, JsonObject>()
     /** The secret door's refusal, when a test wants one. */
     @Volatile var refuseSecret: String? = null
-    /** The open projects (`GET /projects?status=OPEN`) and each one's open items, for the coordinators' questions. */
-    @Volatile var projects: JsonArray = JsonArray(emptyList())
-    val openItems = ConcurrentHashMap<String, JsonObject>()
 
     private val server = MockWebServer().apply {
         dispatcher = object : Dispatcher() {
@@ -38,8 +35,6 @@ internal class OwnerRequestFixture {
                 return when {
                     path == "/api/auth/login" -> json(200, """{"accessToken":"or-access","refreshToken":"or-refresh","user":{"id":"u","email":"u@example.test","name":"U"}}""")
                     path == "/api/account-secrets" -> json(200, """{"secrets":[]}""")
-                    path == "/api/projects" -> json(200, projects.toString())
-                    parts.first() == "projects" && parts.getOrNull(2) == "open-items" -> json(200, (openItems[parts[1]] ?: JsonObject(emptyMap())).toString())
                     parts.first() == "tasks" -> json(200, """{"id":"${parts[1]}","title":"Ship the login page"}""")
                     path == "/api/owner-requests" -> {
                         val state = request.requestUrl!!.queryParameter("state")
@@ -48,6 +43,10 @@ internal class OwnerRequestFixture {
                         }.sortedByDescending { it.s("createdAt") }
                         json(200, buildJsonObject { put("requests", JsonArray(rows)) }.toString())
                     }
+                    // One request by either spelling of its id: what an `orbit://owner-request/<id>` link reads.
+                    parts.first() == "owner-requests" && parts.size == 2 && request.method == "GET" ->
+                        held.values.firstOrNull { io.orbitd.android.navigation.ObjectId.same(it.s("id"), parts[1]) }?.let { json(200, it.toString()) }
+                            ?: json(404, """{"message":"owner request not found"}""")
                     parts.first() == "owner-requests" && request.method == "POST" -> {
                         val id = parts[1]
                         val row = held[id] ?: return json(404, """{"message":"owner request not found"}""")
@@ -136,33 +135,6 @@ internal class OwnerRequestFixture {
                 addJsonObject { put("label", "Hong Kong") }
             }
             put("recommendedOption", 0)
-        }
-
-        const val PROJECT = "01a0d6a9-d763-70e1-b4cf-8793e971b5dd"
-        const val QUESTION_ITEM = "01a0d6a9-d763-70e1-b4cf-8793e971b5ee"
-
-        /** An open project whose coordinator asked one question, and its open items carrying it. */
-        fun questionProject(minutesAgo: Long, count: Int = 1) = buildJsonObject {
-            put("id", PROJECT); put("title", "Payments rollout"); put("status", "OPEN")
-            putJsonObject("attention") { putJsonArray("ownerItems") { addJsonObject {
-                put("kind", "COORDINATOR_QUESTION"); put("count", count); put("oldestWaitingSince", Instant.now().minusSeconds(minutesAgo * 60).toString())
-            } } }
-        }
-        fun questionItems(minutesAgo: Long) = buildJsonObject {
-            putJsonArray("needsYou") {
-                addJsonObject {
-                    put("itemId", QUESTION_ITEM); put("kind", "COORDINATOR_QUESTION"); put("assignee", "OWNER")
-                    put("waitingSince", Instant.now().minusSeconds(minutesAgo * 60).toString())
-                    putJsonObject("question") {
-                        put("question", "Should the **canary** go to 5% or 20% of traffic?")
-                        putJsonArray("options") { addJsonObject { put("label", "5%") }; addJsonObject { put("label", "20%") } }
-                        put("recommendedOption", 0)
-                    }
-                }
-                // Another owner item on the same project is not a question.
-                addJsonObject { put("itemId", "01a0d6a9-d763-70e1-b4cf-8793e971b5ef"); put("kind", "FUSE_PAUSED"); put("assignee", "OWNER")
-                    put("waitingSince", Instant.now().toString()) }
-            }
         }
 
         fun confirm() = request(CONFIRM_ID, "CONFIRM", "Confirm the DNS change", "The new records point the app at the new load balancer.", 45) {}

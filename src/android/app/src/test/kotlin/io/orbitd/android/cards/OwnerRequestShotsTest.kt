@@ -37,9 +37,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * NATIVE frames of the owner request card on a phone (the task's mockup, panels 1–5): the SECRET, MANUAL_STEP and DECISION cards, a
- * resolved line, and the Waiting on you inbox's Open tab with three requests and a
- * coordinator's question. Each is drawn by the production composable over the real
+ * NATIVE frames of the owner request card on a phone (the task's mockup, panels 1–4): the SECRET, MANUAL_STEP and DECISION cards and a
+ * resolved line. Each is drawn by the production composable over the real
  * wire and written under `src/android/build/evidence/owner-requests-android/` beside its semantics tree.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -68,8 +67,6 @@ class OwnerRequestShotsTest {
                 put("state", "DONE"); put("resolvedAt", Instant.now().minusSeconds(600).toString()); put("resolvedByUserId", "u")
                 put("resolvedClient", "android")
             }))
-        fixture.projects = buildJsonArray { add(OwnerRequestFixture.questionProject(20)) }
-        fixture.openItems[OwnerRequestFixture.PROJECT] = OwnerRequestFixture.questionItems(20)
         store = OwnerRequestStore(fixture.auth, runBlocking { fixture.signIn() }, scope)
         store.load(OwnerRequestStore.OPEN, OwnerRequestStore.ALL)
         compose.waitUntil(10_000) { store.state.value.list(OwnerRequestStore.ALL).size == 4 && store.state.value.taskTitles.isNotEmpty() }
@@ -113,18 +110,5 @@ class OwnerRequestShotsTest {
         show { Card(OwnerRequestFixture.CONFIRM_ID) }
         compose.onNodeWithTag("owner-request:${OwnerRequestFixture.CONFIRM_ID}:outcome", useUnmergedTree = true).assertTextEquals("Confirmed")
         shot("resolved-line")
-    }
-
-    @Test fun theInbox() {
-        show { WaitingOnYouScreen(store, emptyList(), null, 0, {}) }
-        compose.waitUntil(10_000) {
-            compose.onAllNodesWithTag("waiting-on-you:row:question:${OwnerRequestFixture.QUESTION_ITEM}", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
-        }
-        compose.onNodeWithTag("waiting-on-you:count", useUnmergedTree = true).assertTextEquals("4")
-        compose.onNodeWithTag("waiting-on-you:row:question:${OwnerRequestFixture.QUESTION_ITEM}:detail", useUnmergedTree = true)
-            .assertTextEquals("Payments rollout · decision · recommended: 5%")
-        compose.onNodeWithTag("waiting-on-you:row:${OwnerRequestFixture.STEPS_ID}:detail", useUnmergedTree = true)
-            .assertTextEquals("3 steps · holds 2 tasks for 1d 1h")
-        shot("inbox-open")
     }
 }
