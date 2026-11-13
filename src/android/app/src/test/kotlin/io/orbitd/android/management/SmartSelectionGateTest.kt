@@ -104,11 +104,14 @@ class SmartSelectionGateTest {
             }
         }
         await("Run two")
-        compose.onNodeWithTag("task-suggested").assertExists()
-        compose.onNodeWithText("Coordinator: A well-specified fix.").assertExists()
         compose.onNodeWithText("✦ M").assertExists()
         compose.onNodeWithText("would have picked", substring = true).assertExists()
         compose.onAllNodesWithText("ⓘ").assertCountEquals(2)
+        // Suggested and the coordinator's reason are with the other run fields, in the Runs with sheet (board 05 D).
+        compose.onNodeWithTag("task-runs-with").performScrollTo().performClick()
+        compose.onNodeWithTag("task-suggested").assertExists()
+        compose.onNodeWithText("Coordinator: A well-specified fix.").assertExists()
+        compose.onNodeWithTag("task-runs-with-done").performClick()
         page = "workspace"
         await("Smart model selection for tasks")
         compose.onNodeWithText("Task runs").assertExists()

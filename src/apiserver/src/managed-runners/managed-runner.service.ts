@@ -36,6 +36,7 @@ import {
 } from './managed-runner-eligibility';
 import { MANAGED_RUNNER_GATE, managedRunnerDisabledError, type ManagedRunnerGate } from './managed-runner-gate';
 import { MANAGED_RUNNER_NAME, MANAGED_WORKSPACE_DIR, MANAGED_WORKSPACE_NAME } from './managed-runner-resources';
+import { placeNewMapping } from './managed-runner-placement';
 import { MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from './managed-runner-runtime';
 import type { ManagedRunnerSignIn } from './managed-runner-sign-in';
 import { managedRunnerWork, recordManagedDemand } from './managed-runner-work';
@@ -296,7 +297,9 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
     if (!mapping) throw new NotFoundException({ code: MANAGED_RUNNER_NOT_FOUND, message: 'No managed runner has this runner id.' });
     let outcome: ManagedVolumeSwitchOutcome;
     try {
-      outcome = await runtime.manager.switchVolume({
+      // The manager of the mapping's own host: on several Docker hosts each drives only its location's mappings.
+      const manager = runtime.hosts?.find((host) => host.manager.owns(mapping))?.manager ?? runtime.manager;
+      outcome = await manager.switchVolume({
         mappingId: mapping.id,
         actorId,
         revision: dto.revision,
@@ -381,10 +384,18 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
    * The mapping, the runner row and the default workspace, in one retriable transaction. The runner
    * row starts OFFLINE with a credential nobody holds: the manager issues the real one with the
    * bootstrap credential. The data volume's location and name are the run backend's, and so is the
-   * mapping: only that backend's manager drives it. A concurrent request that loses the owner's
-   * unique key reads the winner.
+   * mapping: only that backend's manager drives it. With several Docker channel hosts the backend is the
+   * one placement chose (managed-runner-placement.ts), and the mapping stays on its location for good. A
+   * concurrent request that loses the owner's unique key reads the winner.
    */
-  private async createMapping(ownerId: string, idempotencyKey: string, { profile, manager: { backend } }: AvailableRuntime): Promise<ManagedRunner> {
+  private async createMapping(ownerId: string, idempotencyKey: string, runtime: AvailableRuntime): Promise<ManagedRunner> {
+    const { profile } = runtime;
+    const placed = await placeNewMapping(this.prisma, runtime);
+    if (!placed) {
+      this.log.error('managed runners: every Docker channel host is draining; no new runner can be placed');
+      throw new ServiceUnavailableException(managedRunnerUnavailableReason());
+    }
+    const { backend } = placed;
     try {
       return await withTransactionRetry(
         this.prisma,

@@ -1,13 +1,12 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useId, useState, type FormEvent } from 'react';
 import { api } from '../api';
-import { AdminNav } from '../components/AdminNav';
+import { SettingsCard, SettingsHeader, SettingsRow, SettingsSection } from '../components/settings';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Spinner } from '../components/ui/Spinner';
 import { Switch } from '../components/ui/Switch';
-import '../components/ui/Card.css';
 import { useToast } from '../lib/toast';
 
 type EmailMissing = 'SWITCH' | 'API_KEY' | 'FROM' | 'API_KEY_UNREADABLE';
@@ -96,17 +95,15 @@ export function AdminEmailPage() {
 
   if (saved.isPending) {
     return (
-      <div className="admin-page">
-        <AdminNav />
+      <div className="settings-page">
         <Spinner />
       </div>
     );
   }
   if (saved.isError) {
     return (
-      <div className="admin-page">
-        <AdminNav />
-        <h1 className="page-title">Email</h1>
+      <div className="settings-page">
+        <SettingsHeader title="Email" />
         <p className="admin-signin-error" role="alert">
           Couldn’t load the email settings: {saved.error.message}
         </p>
@@ -140,118 +137,97 @@ export function AdminEmailPage() {
   };
 
   return (
-    <div className="admin-page">
-      <AdminNav />
-      <h1 className="page-title">Email</h1>
-      <form className="orbit-card admin-signin" onSubmit={submit} aria-labelledby={ids.title}>
-        <div className="orbit-card-head">
-          <h2 className="orbit-card-title" id={ids.title}>
-            {EMAIL_SETTINGS_TITLE}
-          </h2>
-          <Badge tone={settings.on ? 'success' : 'default'}>{settings.on ? 'On' : 'Off'}</Badge>
+    <form className="settings-page admin-form" onSubmit={submit} aria-labelledby={ids.title}>
+      <SettingsHeader title="Email" description="Email this server sends, through Resend." />
+      {settings.apiKeyUnreadable && (
+        <div className="admin-email-result admin-email-result-error" role="alert">
+          {KEY_UNREADABLE_WARNING}
         </div>
-        <div className="orbit-card-body admin-signin-fields">
-          {settings.apiKeyUnreadable && (
-            <div className="admin-email-result admin-email-result-error" role="alert">
-              {KEY_UNREADABLE_WARNING}
-            </div>
-          )}
-          {offNote && <div className="admin-signin-hint admin-email-off">{offNote}</div>}
-
-          <div className="admin-signin-row">
-            <div>
-              <div className="admin-signin-label" id={ids.enabled}>
-                Send email from this deployment
-              </div>
-              <div className="admin-signin-hint">Orbit sends through Resend. Nothing is sent while this is off.</div>
-            </div>
-            <Switch aria-labelledby={ids.enabled} checked={enabled} onCheckedChange={(value) => setDraft((d) => ({ ...d, enabled: value }))} />
-          </div>
-
-          <div className="admin-signin-field">
-            <label className="admin-signin-label" htmlFor={ids.key}>
-              Resend API key
-            </label>
-            <Input
-              id={ids.key}
-              type="password"
-              value={apiKey}
-              placeholder={
-                settings.apiKeyUnreadable
-                  ? 'Not readable — paste the API key again'
-                  : settings.hasApiKey
-                    ? 'Saved — enter a new one to replace it'
-                    : 're_…'
-              }
-              autoComplete="new-password"
-              spellCheck={false}
-              onChange={(e) => setApiKey(e.target.value)}
-            />
-            <div className="admin-signin-hint">
-              A key with sending access is enough. It is never shown again; leave this empty to keep it.{' '}
-              <a href={RESEND_KEYS_URL} target="_blank" rel="noreferrer">
-                Create a key in Resend
-              </a>
-            </div>
-          </div>
-
-          <div className="admin-email-pair">
-            <div className="admin-signin-field">
-              <label className="admin-signin-label" htmlFor={ids.from}>
-                From
-              </label>
+      )}
+      <SettingsSection
+        title={<span id={ids.title}>{EMAIL_SETTINGS_TITLE}</span>}
+        description={offNote ?? undefined}
+        action={<Badge tone={settings.on ? 'success' : 'default'}>{settings.on ? 'On' : 'Off'}</Badge>}
+      >
+        <SettingsCard>
+          <SettingsRow
+            title={<span id={ids.enabled}>Send email from this deployment</span>}
+            description="Nothing is sent while this is off."
+            control={<Switch aria-labelledby={ids.enabled} checked={enabled} onCheckedChange={(value) => setDraft((d) => ({ ...d, enabled: value }))} />}
+          />
+          <SettingsRow
+            title={<label htmlFor={ids.key}>Resend API key</label>}
+            description={
+              <>
+                A key with sending access is enough. It is never shown again; leave this empty to keep it.{' '}
+                <a href={RESEND_KEYS_URL} target="_blank" rel="noreferrer">
+                  Create a key in Resend
+                </a>
+              </>
+            }
+            control={
+              <Input
+                id={ids.key}
+                className="admin-row-input"
+                type="password"
+                value={apiKey}
+                placeholder={
+                  settings.apiKeyUnreadable
+                    ? 'Not readable — paste the API key again'
+                    : settings.hasApiKey
+                      ? 'Saved — enter a new one to replace it'
+                      : 're_…'
+                }
+                autoComplete="new-password"
+                spellCheck={false}
+                onChange={(e) => setApiKey(e.target.value)}
+              />
+            }
+          />
+          <SettingsRow
+            title={<label htmlFor={ids.from}>From</label>}
+            description="Its domain must be verified in Resend."
+            control={
               <Input
                 id={ids.from}
+                className="admin-row-input"
                 value={fromAddress}
                 placeholder="Orbit <orbit@example.com>"
                 autoComplete="off"
                 spellCheck={false}
                 onChange={(e) => setDraft((d) => ({ ...d, fromAddress: e.target.value }))}
               />
-              <div className="admin-signin-hint">Its domain must be verified in Resend.</div>
-            </div>
-            <div className="admin-signin-field">
-              <label className="admin-signin-label" htmlFor={ids.replyTo}>
-                Reply-To
-              </label>
+            }
+          />
+          <SettingsRow
+            title={<label htmlFor={ids.replyTo}>Reply-To</label>}
+            description="Empty: the first administrator's address."
+            control={
               <Input
                 id={ids.replyTo}
+                className="admin-row-input"
                 value={replyTo}
                 placeholder={settings.replyToDefault ?? 'admin@example.com'}
                 autoComplete="off"
                 spellCheck={false}
                 onChange={(e) => setDraft((d) => ({ ...d, replyTo: e.target.value }))}
               />
-              <div className="admin-signin-hint">Empty: the first administrator's address.</div>
-            </div>
-          </div>
-
-          <div className="admin-signin-row admin-email-divided">
-            <div>
-              <div className="admin-signin-label" id={ids.welcome}>
-                Send a welcome email to new accounts
-              </div>
-              <div className="admin-signin-hint">
-                One email when an account is created, by Google sign-up or in Users. Accounts that already exist don't get one.
-              </div>
-            </div>
-            <Switch
-              aria-labelledby={ids.welcome}
-              checked={welcomeEnabled}
-              onCheckedChange={(value) => setDraft((d) => ({ ...d, welcomeEnabled: value }))}
-            />
-          </div>
-
-          <div className="admin-email-actions">
-            {test ? (
-              <div className={`admin-email-result ${test.ok ? 'admin-email-result-ok' : 'admin-email-result-error'}`} role="status">
-                {testResultText(test)}
-              </div>
-            ) : (
-              <span />
-            )}
-            <div className="admin-email-buttons">
+            }
+          />
+          <SettingsRow
+            title="Test"
+            description={
+              test ? (
+                <span className={test.ok ? 'admin-email-ok' : 'admin-email-failed'} role="status">
+                  {testResultText(test)}
+                </span>
+              ) : (
+                'Sends one email to your own address.'
+              )
+            }
+            control={
               <Button
+                size="small"
                 onClick={() => sendTest.mutate()}
                 loading={sendTest.isPending}
                 disabled={changed || !settings.hasApiKey}
@@ -259,34 +235,58 @@ export function AdminEmailPage() {
               >
                 Send test email
               </Button>
-              <Button variant="primary" type="submit" disabled={!changed} loading={save.isPending}>
-                Save
-              </Button>
-            </div>
-          </div>
+            }
+          />
+          <SettingsRow
+            title="Last 7 days"
+            description={
+              showFailures && settings.lastWeek.failures.length > 0 ? (
+                <ul className="admin-email-failures">
+                  {settings.lastWeek.failures.map((f) => (
+                    <li key={`${f.email}-${f.at}`}>
+                      {f.email} · {attemptTime(f.at)} · <span className="admin-email-failed">{f.error}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <>
+                  Sent {settings.lastWeek.sent} ·{' '}
+                  <span className={settings.lastWeek.failed > 0 ? 'admin-email-failed' : undefined}>Failed {settings.lastWeek.failed}</span>
+                </>
+              )
+            }
+            control={
+              settings.lastWeek.failed > 0 ? (
+                <Button size="small" variant="text" onClick={() => setShowFailures((v) => !v)}>
+                  {showFailures ? 'Hide failures' : 'Show failures'}
+                </Button>
+              ) : undefined
+            }
+          />
+        </SettingsCard>
+      </SettingsSection>
 
-          <div className="admin-email-week">
-            <div>
-              <span className="admin-signin-label">Last 7 days</span> · Sent {settings.lastWeek.sent} ·{' '}
-              <span className={settings.lastWeek.failed > 0 ? 'admin-email-failed' : undefined}>Failed {settings.lastWeek.failed}</span>
-            </div>
-            {settings.lastWeek.failed > 0 && (
-              <Button size="small" variant="text" onClick={() => setShowFailures((v) => !v)}>
-                {showFailures ? 'Hide failures' : 'Show failures'}
-              </Button>
-            )}
-          </div>
-          {showFailures && settings.lastWeek.failures.length > 0 && (
-            <ul className="admin-email-failures">
-              {settings.lastWeek.failures.map((f) => (
-                <li key={`${f.email}-${f.at}`}>
-                  <span className="admin-signin-label">{f.email}</span> · {attemptTime(f.at)} · <span className="admin-email-failed">{f.error}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </form>
-    </div>
+      <SettingsSection title="Welcome email">
+        <SettingsCard>
+          <SettingsRow
+            title={<span id={ids.welcome}>Send a welcome email to new accounts</span>}
+            description="One email when an account is created, by Google sign-up or in Users."
+            control={
+              <Switch
+                aria-labelledby={ids.welcome}
+                checked={welcomeEnabled}
+                onCheckedChange={(value) => setDraft((d) => ({ ...d, welcomeEnabled: value }))}
+              />
+            }
+          />
+        </SettingsCard>
+      </SettingsSection>
+
+      <div className="admin-form-actions">
+        <Button variant="primary" type="submit" disabled={!changed} loading={save.isPending}>
+          Save
+        </Button>
+      </div>
+    </form>
   );
 }

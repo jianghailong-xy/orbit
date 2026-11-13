@@ -1309,6 +1309,49 @@ export async function retireCandidatesLandedByReceipt(
 }
 
 /**
+ * M-T14: the assignee closed by hand the last failure item about a BLOCKED task-branch candidate, so
+ * the candidate ends with it — SUPERSEDED, through M-T13's own edge.
+ *
+ * WHAT WAS WRONG (2026-11-13, project 01a1c3c9, branch orbit/task-ai-c49d3a)
+ * -------------------------------------------------------------------------
+ * The coordinator cherry-picked a MAIN-line task's commit onto the upstream by hand and wrote no
+ * receipt. The owner later confirmed the card; the landing replayed the old commit onto a tip that
+ * had moved, conflicted, and blocked the candidate. The coordinator closed the conflict item ("the
+ * work is already on the branch as f72343c"), as the item's own message tells it to — and the card
+ * kept saying "Can't merge into feature/v1.1.1 yet" about work already there. A cherry-pick is a
+ * different commit, so no check can see it landed, and nothing else ends a BLOCKED candidate.
+ *
+ * THE RULE
+ * --------
+ * A BLOCKED candidate's question is "who deals with this failure". Once its assignee has closed every
+ * failure item about it by hand, nobody is left to answer it: the work is on the upstream some other
+ * way, or a fix task carries it as a candidate of its own. Only `TASK_BRANCH` candidates: a project
+ * branch still holds work nothing else will offer. Answers whether it retired the candidate.
+ */
+export async function retireCandidateAfterHandledItem(
+  prisma: PrismaService,
+  input: { projectId: string; promotionId: string },
+): Promise<boolean> {
+  return withTransactionRetry(prisma, async (tx) => {
+    const row = await tx.projectPromotion.findFirst({
+      where: {
+        id: input.promotionId,
+        projectId: input.projectId,
+        sourceKind: 'TASK_BRANCH' satisfies PromotionSourceKind,
+        state: 'BLOCKED' satisfies PromotionState,
+      },
+      select: { id: true, projectId: true, state: true, checkJobId: true, openItemId: true },
+    });
+    if (!row) return false;
+    const stillOpen = await tx.projectOpenItem.count({
+      where: { projectId: row.projectId, promotionId: row.id, state: 'OPEN', kind: { in: [...INTEGRATION_ITEM_KINDS] } },
+    });
+    if (stillOpen > 0) return false;
+    return retireCandidate(tx, row, new Date(), []);
+  }, loggedRetry(logger, 'projectPromotion.retireAfterHandledItem'));
+}
+
+/**
  * M-T13's edge for one candidate a recorded merge answered: SUPERSEDED by a compare-and-set on the
  * state it was read in, its check stopped as J-T8 asks — unless it is one this transaction is writing
  * the answer of — and the owner's card and the failures about it closed `PROMOTION_MOVED_ON`. False

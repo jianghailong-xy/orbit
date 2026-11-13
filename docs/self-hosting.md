@@ -1423,6 +1423,13 @@ existed, and writes nothing under `data/`.
 a deployment without the firewall gets none, and one with it keeps its service and rules as they were. Add it to a
 deployment with `scripts/install-server.sh --enable-managed-runner-firewall`.
 
+Where the managed runner profile names channel hosts on other machines only
+([Managed runners on another host](#managed-runners-on-another-host)), `/upgrade` builds no managed runner image and
+leaves `channel.json` and `profile.json` as they are, even if `.env` still lists the `managed-runners-docker` profile;
+after the other services it prints the image each host's channel reports. Each channel host then takes the same
+commit with its own kit (`remote-host.sh upgrade <commit>`). A profile with a socket path or a loopback URL in it has a
+channel on this host, and gets the steps below.
+
 Where `.env` turns on the `managed-runners-docker` profile, `/upgrade` also keeps the managed runners current. The
 runner in their image never updates itself, so each upgrade:
 
@@ -1513,6 +1520,157 @@ Each runner's data is on a Docker volume, `mr-data-<runner id>`, on this host's 
 above do not include it, and neither switching managed runners off nor disabling an account deletes it. Back the
 volumes up, restore them, and handle a full disk, a memory limit, a channel or apiserver outage and a host restart as
 [Managed runners on Docker: backup, restore and failure handling](managed-runner-docker-operations.md) describes.
+
+### Managed runners on another host
+
+The runners' containers and volumes can live on other machines than the server, each one a **channel host**. The
+server's apiserver then reaches each host's Docker channel over a private link, and the runners reach the server
+the way any runner on the internet does, at its public `https://` address. The design record is
+[docs/managed-runner-remote-host-design.md](managed-runner-remote-host-design.md).
+
+```text
+server (10.66.0.1)                                   channel host (10.66.0.3)
+apiserver ── HTTP + bearer token, private link ──▶  docker-channel   listens on 10.66.0.3:7300 only, for 10.66.0.1 only
+  profile.json: docker.hosts[].channel.url            managed-runner-firewall   rules on this host
+                                                      orbit-managed-runner image   built here, from the server's commit
+                                                      mr-<runner> containers ── https://<server> ──▶ the server
+```
+
+What a channel host needs:
+
+- A private address the server reaches it at, on a link you trust: a WireGuard or other encrypted tunnel, not a LAN
+  others share. The channel speaks plain HTTP with a bearer token, and answers only the source addresses you name.
+- Docker with the Compose plugin, rootful, on its iptables firewall backend, as for the
+  [managed runners' firewall](#isolation-and-its-limits) on a single host. No deployment with managed runners on the
+  same host: the kit's containers have the same names (`orbit-docker-channel`, `orbit-managed-runner-firewall`).
+- A checkout of this repository, for the kit to build from, and root.
+- The server at a public `https://` address its runners can reach. The firewall refuses every private address, so a
+  runner never reaches the server over the private link, and the profile refuses a plain `http://` `runner.serverUrl`
+  once a host is remote.
+
+Every container on a channel host shares that host's kernel with whatever else it runs, as on a single host
+([Isolation and its limits](#isolation-and-its-limits)). The firewall closes the network paths, not that one.
+
+#### Install a channel host
+
+On the channel host, as root, from the checkout:
+
+```bash
+deploy/managed-runner/remote-host/remote-host.sh install --listen 10.66.0.3 --allow-peer 10.66.0.1 --commit <the server's commit>
+```
+
+`--listen` is the host's own private address the channel listens on (in 10/8, 172.16/12, 192.168/16 or 100.64/10;
+the channel refuses `0.0.0.0` and public addresses), `--allow-peer` the address the server's connections come from
+(repeat it for several apiserver hosts). `--port` (7300) and `--instance` (`orbit-<8 hex>`, the label of everything
+the channel makes) are optional; without `--commit` it builds the checkout as it is, which must have no uncommitted
+changes. It then does what a single host's install does for its managed runners, with the same code
+(`deploy/managed-runner/host.sh`):
+
+1. checks that the host can carry the firewall's rules, makes the `orbit-managed-runners` network, and builds the
+   managed runner image as `orbit-managed-runner:local`, pushed nowhere;
+2. writes `data/channel-host` (mode 0700): the channel's `token`, `channel.json` (listening on `--listen` for the
+   `--allow-peer` addresses alone, naming the image by its ID) after the channel's own check of it, `firewall/config.json`,
+   and `compose.env`, which names the directory for
+   [deploy/managed-runner/remote-host/compose.yml](../deploy/managed-runner/remote-host/compose.yml);
+3. applies the firewall's rules once and checks from the runners' network that this host and private addresses are
+   refused and that DNS resolves;
+4. starts `managed-runner-firewall` and `docker-channel`, the channel in the host's network namespace;
+5. prints the entry for the server's profile and where the token is:
+
+   ```text
+   { "instanceId": "orbit-1a2b3c4d", "channel": { "url": "http://10.66.0.3:7300" }, "tokenFile": "/var/lib/orbit-managed-runners/orbit-1a2b3c4d.token" }
+   ```
+
+`remote-host.sh status` says what runs there: the instance and its listener, the image `channel.json` names and the
+commit it was built from, both services, the firewall's status, and the runner containers and data volumes.
+
+#### Point the server at it
+
+On the server, managed runners are switched on in `.env` without the `managed-runners-docker` profile, which would
+start a channel on the server itself:
+
+```dotenv
+ORBIT_MANAGED_RUNNERS_ENABLED=true
+ORBIT_MANAGED_RUNNERS_DIR=./data/managed-runners
+```
+
+Copy the channel host's `data/channel-host/token` into the server's `data/managed-runners` as `<instance>.token`
+(mode 0600, the directory 0700), and write `data/managed-runners/profile.json` with every host under `docker.hosts`:
+
+```json
+{
+  "schemaVersion": 1,
+  "valueKind": "actual",
+  "backend": "docker",
+  "environmentId": "orbit-prod",
+  "clusterKey": "orbit-prod",
+  "resourceProfileId": "docker-default",
+  "docker": {
+    "hosts": [
+      { "instanceId": "orbit-1a2b3c4d", "channel": { "url": "http://10.66.0.3:7300" }, "tokenFile": "/var/lib/orbit-managed-runners/orbit-1a2b3c4d.token" }
+    ]
+  },
+  "storage": { "capacity": "20Gi" },
+  "runner": {
+    "image": "channel",
+    "serverUrl": "https://orbit.example.com",
+    "maxConcurrent": 2,
+    "tmpSizeLimit": "1Gi",
+    "resources": { "cpu": "2", "memory": "4Gi", "pids": 4096 }
+  },
+  "lifecycle": {
+    "maxAttempts": 5, "backoffBaseSeconds": 10, "backoffMaxSeconds": 300, "startupDeadlineSeconds": 1800,
+    "requestTimeoutSeconds": 60, "leaseSeconds": 60, "pollIntervalSeconds": 5, "heartbeatFreshSeconds": 120,
+    "idleSeconds": 3600, "capacityRetrySeconds": 60, "drainSeconds": 600
+  }
+}
+```
+
+`"image": "channel"` takes the image each channel reports in `/v1/info`, so a channel host's upgrade changes one file,
+its own `channel.json`; the apiserver still checks that the channel is the instance the profile names. A pinned
+`"sha256:…"` works too, and must then be copied from the channel host after each of its upgrades: until it matches, the
+apiserver makes no runner there. `runner.serverUrl` is the server's public `https://` origin. Then
+`docker compose up -d --force-recreate apiserver`. The apiserver says at start whether managed runners are on
+(`docker compose logs apiserver | grep 'managed runners are'`), and each host's pool is what that host has, less a
+quarter of its CPU and memory and a tenth of its volumes' disk, unless the entry's `capacity` (or else the profile's)
+states a dimension outright.
+
+#### Add a host, drain one
+
+To add a host, install it as above, add its entry to `docker.hosts`, copy its token, and recreate the apiserver. A new
+account's runner goes to the host with the most room left in its pool, skipping draining hosts, and stays there: its
+volume is on that host's disk. A host whose channel cannot be reached stops only its own runners (`CHANNEL_UNREACHABLE`);
+the others go on.
+
+To take a host out of use, add `"draining": true` to its entry and recreate the apiserver. No new runner is placed
+there; the runners already there keep running on it and waking there. Nothing moves them: moving a sleeping runner is
+a backup of its volume on the old host and a restore on the new one
+([the runbook](managed-runner-docker-operations.md#on-a-channel-host)), which is not automatic yet. Drop the entry only
+once `remote-host.sh status` on that host shows no data volume, since a runner whose host is not in the profile has
+nowhere to run.
+
+#### Upgrade
+
+In this order, with the same commit:
+
+1. **The server**, with `/upgrade` as always. On a profile whose channel hosts are all remote it builds no managed
+   runner image and writes neither `channel.json` nor `profile.json`; at the end it prints the image each host
+   reports, as the apiserver reaches it.
+2. **Each channel host**, with the commit the server now runs:
+
+   ```bash
+   deploy/managed-runner/remote-host/remote-host.sh upgrade <commit>
+   ```
+
+   It checks that commit out (fetching it from `origin` if it is not there), rebuilds the channel, the firewall and the
+   managed runner image, and, where the image ID is new, writes it into `channel.json` as `/upgrade` does on a single
+   host: the file replaced whole by a rename, `data/channel-host/.image-switch` marking a switch not yet started on.
+   It then recreates the firewall if its image changed (its rules stay in force meanwhile) and the channel, and
+   prints its status. With `"image": "channel"`, the apiserver reads the new image from `/v1/info` before it
+   makes its next container there; nothing on the server changes.
+
+Running runners are not interrupted on either side: each moves to the new image with its next container, as on a single
+host ([What an upgrade does](#what-an-upgrade-does)).
 
 ## Multi-user Linux machines
 

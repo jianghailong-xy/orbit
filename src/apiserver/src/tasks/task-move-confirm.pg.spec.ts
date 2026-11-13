@@ -720,4 +720,80 @@ test('unit L4: the account owner confirms a move, and the task moves', { skip, c
     assert.equal(retried.projectId, w.projectB);
     assert.equal((await taskRow(w.work)).description, 'racing the move');
   });
+  // ------------------------------------------------------------------------------------------
+  // Out of every project (account owner, 2026-11-13): the coordinator asks, the owner's yes does it.
+  // ------------------------------------------------------------------------------------------
+
+  await t.test('the coordinator asks to take a task out of its project, and the owner\'s yes files it under none', async () => {
+    const w = await seed('move-out');
+    const out = { projectId: null, handoff: { reason: 'not this project\'s work' } };
+
+    const question = await asked(w, w.coordA, out);
+    assert.equal(question.to_project_id, null);
+    assert.equal(question.from_project_id, w.projectA);
+    assert.deepEqual(await taskRow(w.task), {
+      project_id: w.projectA, criterion_definition_id: w.criterionA, criterion_revision: 1,
+      description: null,
+    }, 'asking moves nothing');
+
+    // Asked again, it is the same question — 0610's index holds the NULL target to one row.
+    const again = await refusalOf(() => ask(w, w.coordA, out));
+    assert.equal(again.body.code, 'APPROVAL_PENDING');
+    assert.equal(again.body.handoffId, question.id);
+    assert.equal((await requests(w.ownerId)).length, 1);
+
+    // No session holds "no project": another project's coordinator may not ask for it.
+    const bystander = await refusalOf(() => ask(w, w.coordB, out));
+    assert.equal(bystander.body.code, 'PROJECT_SCOPE_MISMATCH');
+    // A task in no project serves no project's criterion.
+    const withKey = await refusalOf(() => ask(w, w.coordA, {
+      ...out, criterionKey: criterionKeyOf(w.criterionB),
+    }));
+    assert.equal(withKey.status, 400);
+    // Without the handoff it is still the write R4 refuses.
+    const undeclared = await refusalOf(() => ask(w, w.coordA, { projectId: null, handoff: undefined }));
+    assert.equal(undeclared.body.code, 'UNMAPPED_PROJECT_WORK');
+
+    // The card lists it with no target.
+    const [listed] = await handoffs.listForProject(w.ownerId, w.projectA);
+    assert.equal(listed.id, question.id);
+    assert.equal(listed.toProjectId, null);
+    assert.equal(listed.toProject, null);
+    assert.deepEqual(listed.withdrawnCriterion?.key, criterionKeyOf(w.criterionA));
+
+    const answer = await card.decideHandoff(owner(w), w.projectA, question.id, {
+      decision: 'APPROVE', acknowledgedCrossingKey: question.crossing_key,
+    } as never);
+    assert.equal(answer.row.state, 'APPLIED');
+    assert.deepEqual(await taskRow(w.task), {
+      project_id: null, criterion_definition_id: null, criterion_revision: null, description: null,
+    }, 'in no project, and A\'s declaration taken back');
+    assert.deepEqual((await moves(w.ownerId)).map((row) => row.payload), [{
+      taskId: w.task,
+      fromProjectId: w.projectA,
+      toProjectId: null,
+      handoffId: question.id,
+      requestedBySessionId: w.coordA,
+      criterionDefinitionId: null,
+      withdrawnCriterionDefinitionId: w.criterionA,
+    }]);
+  });
+
+  await t.test('a refused request to take a task out leaves it where it is', async () => {
+    const w = await seed('move-out-denied');
+    const question = await asked(w, w.coordA, { projectId: null, handoff: { reason: 'r' } });
+    await deny(w, question.id);
+    assert.equal((await taskRow(w.task)).project_id, w.projectA);
+    assert.equal((await requestRow(question.id)).state, 'DENIED');
+  });
+
+  await t.test('a task whose run is live is taken out with it', async () => {
+    const w = await seed('move-out-live');
+    const question = await asked(w, w.coordA, { projectId: null, handoff: { reason: 'r' } }, w.work);
+    await confirm(w, question.id);
+    assert.equal((await taskRow(w.work)).project_id, null);
+    const { rows: [run] } = await admin.query(
+      'SELECT "status"::text AS "status", "task_id" FROM "session" WHERE "id" = $1::uuid', [w.worker]);
+    assert.deepEqual(run, { status: 'RUNNING', task_id: w.work });
+  });
 });

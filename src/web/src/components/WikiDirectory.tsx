@@ -63,7 +63,7 @@ export type WikiDirectoryAt =
   | { view: 'topic'; topic: string; part: number }
   | { view: 'doc'; slug: string }
   | { view: 'plan' }
-  // Activity (design §12.3.2) is not one of the directory's rows: beside it, none is lit.
+  // Activity (design §12.3.2): on a desktop its own row in the column is lit; the Contents drawer has no such row.
   | { view: 'activity' };
 
 /** The section a document's page has on screen, as it announces it (`wk-doc-section`): the directory lights it. */
@@ -84,7 +84,18 @@ function useDocSection(slug: string | null): string | null {
   return key;
 }
 
-export function WikiDirectory({ spaceId, spaceSlug, at }: { spaceId: string; spaceSlug: string; at: WikiDirectoryAt }) {
+export function WikiDirectory({
+  spaceId,
+  spaceSlug,
+  at,
+  activity = null,
+}: {
+  spaceId: string;
+  spaceSlug: string;
+  at: WikiDirectoryAt;
+  /** The desktop column's Activity row (board docs/mocks/wiki-rail ③), after the Plan; the Contents drawer has none. */
+  activity?: ReactNode;
+}) {
   const directory = useQuery(wikiArticlesQuery(spaceId));
   const docs = useQuery(wikiDocsQuery(spaceId));
   const plan = useQuery(wikiPlanQuery(spaceId));
@@ -100,7 +111,7 @@ export function WikiDirectory({ spaceId, spaceSlug, at }: { spaceId: string; spa
   const section = useDocSection(openDoc);
 
   return (
-    <nav className="wk-toc" aria-label={WIKI_CONTENTS}>
+    <nav className="wk-toc autohide-scrollbar" aria-label={WIKI_CONTENTS}>
       <Link className={`wk-toc-item${at.view === 'home' ? ' active' : ''}`} to={wikiSpacePath(spaceSlug)}>
         <span className="tp-ico">
           <HomeOutlined />
@@ -126,6 +137,7 @@ export function WikiDirectory({ spaceId, spaceSlug, at }: { spaceId: string; spa
         <span className="lb">{WIKI_DIRECTORY_PLAN}</span>
         {pending > 0 && <span className="tp-count needs-you">{pending}</span>}
       </Link>
+      {activity}
       <div className="wk-toc-sep" />
       {docGroups.map((group) => (
         <WikiDocGroupRows key={group.key} group={group} spaceSlug={spaceSlug} openDoc={openDoc} section={section} />

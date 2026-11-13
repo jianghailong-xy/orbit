@@ -85,6 +85,9 @@ import { RunnerSignIn } from './RunnerSignIn';
 import { AppLink } from './AppLink';
 import { SameOriginLink } from './SameOriginLink';
 import { TaskRunHandoffNotice } from './TaskRunHandoffNotice';
+import { MainCheckoutCard, MainCheckoutResultRow } from './MainCheckout';
+import { MainCheckoutResultsCtx, isMainCheckoutChanged, isMainCheckoutResult } from '../lib/mainCheckout';
+import type { MainCheckoutChangedNotice, MainCheckoutResultNotice } from '@orbit/shared';
 import type { TaskRunConflict } from '../lib/taskRunHandoff';
 import { WatchWakeCard, WatchWakeNamesCtx, watchWakeTitle } from './WatchWakeCard';
 import { BackgroundWakeCard, backgroundWakeName, backgroundWakeTitle } from './BackgroundWakeCard';
@@ -667,11 +670,23 @@ type DiagnosticNode = {
   code?: string;
   repeats?: number;
 };
-type AuthErrorNode = { kind: 'authError'; seq: number; message: string };
+// `settled`: the session moved past this failure, so the card is history rather than a remedy —
+// 'resolved' once the agent did work after it, 'superseded' once a later message or failure came
+// first. Only an unsettled card offers sign-in and Retry: its Retry re-sends the session's latest
+// message, which above a later bubble is no longer the message this failure ate.
+type AuthErrorNode = { kind: 'authError'; seq: number; message: string; settled?: 'resolved' | 'superseded' };
 /** A runner-side heads-up that isn't a failure: the turn worked, but something about WHERE it
  *  worked needs saying — today, edits it left in the machine's shared checkout instead of this
  *  session's worktree. Rendered as a calm note, not an error: nothing is broken yet. */
-type NoticeNode = { kind: 'notice'; seq: number; message: string };
+type NoticeNode = {
+  kind: 'notice';
+  seq: number;
+  message: string;
+  /** The main checkout's card (board 01) or an action's result line (board 03), drawn instead of the text. */
+  mainCheckout?: MainCheckoutChangedNotice | MainCheckoutResultNotice;
+  /** An account switch the session has since moved past (see `settleAccountSwitches`). */
+  settled?: boolean;
+};
 // A failure that fixes itself, so the card carries a pending retry rather than a remedy: the
 // account's quota spent, or the provider briefly unable to answer. `stale` marks every such
 // card but the most recent one — the armed retry is a single value on the session, so an older
@@ -1026,7 +1041,25 @@ function buildTranscript(
     const list = into(parentId);
     const prev = list[list.length - 1];
     if (prev?.kind === 'authError' && prev.message === message) return;
-    list.push({ kind: 'authError', seq, message });
+    if (openAuth) openAuth.settled ??= 'superseded';
+    openAuth = { kind: 'authError', seq, message };
+    list.push(openAuth);
+  };
+  // The latest sign-in card whose outcome is still open. A next message supersedes it (its Retry
+  // would re-send that message, not the one the failure ate); the agent doing work afterwards
+  // resolves it — even past a later message, since that work is what the sign-in was for.
+  let openAuth: AuthErrorNode | undefined;
+  // "Switched to … — … is signed out" lines not yet followed by anything. Once the conversation
+  // moves on, the switch is history and drops to the muted tone with the card it came with.
+  let openSwitches: NoticeNode[] = [];
+  const settleAccountSwitches = () => {
+    for (const n of openSwitches) n.settled = true;
+    openSwitches = [];
+  };
+  const agentWorked = () => {
+    if (openAuth) openAuth.settled = 'resolved';
+    openAuth = undefined;
+    settleAccountSwitches();
   };
   // Only the latest auto-retry card is live; the ones above it describe outages that are over.
   // "Over" is decided by the next user message, whoever sent it: the retry firing, the user
@@ -1214,6 +1247,8 @@ function buildTranscript(
     switch (ev.type) {
       case 'user': {
         outageOver();
+        if (openAuth) openAuth.settled ??= 'superseded';
+        settleAccountSwitches();
         // The composer's just-sent previews join in by turnId (instant, local object URLs);
         // the runner also echoes durable image refs in the event payload, used when there's
         // no local preview (after a reload, or the server-seeded first turn). An image-only
@@ -1382,6 +1417,7 @@ function buildTranscript(
           else if (isApiErrorText(text)) into(parent).push({ kind: 'error', seq: ev.seq, message: text });
           else {
             const siblings = into(parent);
+            agentWorked();
             siblings.push({ kind: 'assistant', seq: ev.seq, text });
             if (siblings === roots) turnReply = text;
           }
@@ -1420,6 +1456,7 @@ function buildTranscript(
         };
         if (node.id) byId.set(node.id, node);
         openTools.push({ node, parent });
+        agentWorked();
         into(parent).push(node);
         lastOpenTool = node;
         break;
@@ -1514,7 +1551,14 @@ function buildTranscript(
         // A deliberate heads-up from the runner (see NoticeNode) — the turn itself was fine.
         if (p.notice) {
           lastStderr = undefined;
-          into(parent).push({ kind: 'notice', seq: ev.seq, message: String(p.notice) });
+          const notice: NoticeNode = {
+            kind: 'notice',
+            seq: ev.seq,
+            message: String(p.notice),
+            ...(isMainCheckoutChanged(p) || isMainCheckoutResult(p) ? { mainCheckout: p } : {}),
+          };
+          if (p.noticeKind === 'pool-member-switched') openSwitches.push(notice);
+          into(parent).push(notice);
           break;
         }
         // Runner stderr (e.g. "No conversation found with session ID: …") — surface as
@@ -1801,17 +1845,30 @@ export const Transcript = memo(function Transcript({
     for (let i = events.length - 1; i >= 0; i--) if (events[i].type === 'turn_end') return events[i].seq;
     return 0;
   }, [events]);
+  // The main-checkout cards read the result lines written after them (MainCheckoutCard's handled state).
+  const mainCheckoutResults = useMemo(() => {
+    const results: Array<{ seq: number; result: MainCheckoutResultNotice['result'] }> = [];
+    const writtenAt = new Map<number, string>();
+    for (const ev of events) {
+      if (ev.type !== 'system') continue;
+      if (isMainCheckoutResult(ev.payload)) results.push({ seq: ev.seq, result: ev.payload.result });
+      else if (isMainCheckoutChanged(ev.payload) && ev.ts) writtenAt.set(ev.seq, ev.ts);
+    }
+    return { results, writtenAt };
+  }, [events]);
   const body = (
-    <TaskLookupCtx.Provider value={taskLookup}>
-      <ImagePreviewProvider>
-        {head.map((insert) => (
-          <Fragment key={insert.key}>{insert.element}</Fragment>
-        ))}
-        <NodeList nodes={before} live={live} placed={placed} />
-        <StreamingDrafts lastTurnEnd={lastTurnEnd} />
-        {after.length > 0 && <NodeList nodes={after} live={live} placed={placed} />}
-      </ImagePreviewProvider>
-    </TaskLookupCtx.Provider>
+    <MainCheckoutResultsCtx.Provider value={mainCheckoutResults}>
+      <TaskLookupCtx.Provider value={taskLookup}>
+        <ImagePreviewProvider>
+          {head.map((insert) => (
+            <Fragment key={insert.key}>{insert.element}</Fragment>
+          ))}
+          <NodeList nodes={before} live={live} placed={placed} />
+          <StreamingDrafts lastTurnEnd={lastTurnEnd} />
+          {after.length > 0 && <NodeList nodes={after} live={live} placed={placed} />}
+        </ImagePreviewProvider>
+      </TaskLookupCtx.Provider>
+    </MainCheckoutResultsCtx.Provider>
   );
   return artifactResolve ? (
     <ArtifactResolverContext.Provider value={artifactResolve}>{body}</ArtifactResolverContext.Provider>
@@ -2530,13 +2587,19 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       );
     }
     case 'notice':
+      if (node.mainCheckout && isMainCheckoutChanged(node.mainCheckout)) {
+        return <MainCheckoutCard notice={node.mainCheckout} seq={node.seq} />;
+      }
+      if (node.mainCheckout && isMainCheckoutResult(node.mainCheckout)) {
+        return <MainCheckoutResultRow notice={node.mainCheckout} seq={node.seq} />;
+      }
       return (
-        <div className="chat-notice" data-seq={node.seq}>
+        <div className={node.settled ? 'chat-notice chat-notice-settled' : 'chat-notice'} data-seq={node.seq}>
           ⚠ {node.message}
         </div>
       );
     case 'authError':
-      return <AuthErrorCard message={node.message} seq={node.seq} />;
+      return <AuthErrorCard message={node.message} seq={node.seq} settled={node.settled} />;
     case 'autoRetry':
       return (
         <AutoRetryCard
@@ -2636,13 +2699,13 @@ const RELAY_LOGIN = new Set(['claude', 'codex', 'kimi', 'antigravity']);
  * needs nothing on that box, and the cases it can't cover (a CLI too old to relay, no `script`)
  * report themselves with the command to run — as does the runtime's own message above.
  */
-function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
+function AuthErrorCard({ message, seq, settled }: { message: string; seq?: number; settled?: 'resolved' | 'superseded' }) {
   const help = useContext(AuthErrorCtx);
   // A press that would be the server's own re-send is a promise only the server makes, and the
   // window's last bubble can be somebody else's — so this card asks for the answer rather than
   // quoting the bubble (the same rule, and the same hook, as the quota card's). Above the branches
   // below, which return early.
-  const retryIsTheServers = !!help?.onNeedRetryText && help?.retryWordsAreTheReaders === false;
+  const retryIsTheServers = !settled && !!help?.onNeedRetryText && help?.retryWordsAreTheReaders === false;
   const onNeedRetryText = help?.onNeedRetryText;
   useEffect(() => {
     if (retryIsTheServers) onNeedRetryText?.();
@@ -2650,6 +2713,24 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
   const provider = help?.provider;
   const local = !!provider && LOCAL_LOGIN.has(provider);
   const relayable = !!provider && RELAY_LOGIN.has(provider);
+  const title = !help
+    ? 'Authentication failed'
+    : local
+        ? `Sign-in expired${help.accountLabel ? ` for ${help.accountLabel}` : ''}${help.runnerName ? ` on “${help.runnerName}”` : ''}`
+        : 'Provider authentication failed';
+  // The session moved past it: one muted line, the runtime's words a click away, and no actions —
+  // signing in or re-sending from here would act on a failure that is over.
+  if (settled) {
+    return (
+      <details className="chat-authfix-settled" data-seq={seq} data-settled={settled}>
+        <summary>
+          {settled === 'resolved' ? <span className="chat-authfix-settled-ok">✓</span> : <span>⚠</span>}
+          <span>{settled === 'resolved' ? `${title} — resolved` : title}</span>
+        </summary>
+        <div className="chat-authfix-msg">{message}</div>
+      </details>
+    );
+  }
   if (help && (provider === 'antigravity' || (help.runtime === 'antigravity' && antigravityRepair(message) === 'needsKey'))) {
     return <AntigravityRepairCard repair="needsKey" help={help} seq={seq} />;
   }
@@ -2657,13 +2738,7 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
     <div className="chat-authfix" data-seq={seq}>
       <div className="chat-authfix-head">
         <WarningFilled className="chat-authfix-icon" />
-        <div className="chat-authfix-title">
-          {!help
-            ? 'Authentication failed'
-            : local
-                ? `Sign-in expired${help.accountLabel ? ` for ${help.accountLabel}` : ''}${help.runnerName ? ` on “${help.runnerName}”` : ''}`
-                : 'Provider authentication failed'}
-        </div>
+        <div className="chat-authfix-title">{title}</div>
       </div>
       <div className="chat-authfix-msg">{message}</div>
       {local ? (

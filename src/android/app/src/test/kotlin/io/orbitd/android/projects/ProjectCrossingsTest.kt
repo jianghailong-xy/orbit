@@ -101,6 +101,26 @@ class ProjectCrossingsTest {
         assertNull(gone.obj("requestedCriterion")?.text("text")); assertEquals("34bGone", gone.obj("requestedCriterion")?.text("key"))
     }
 
+    /** A move that takes the task out of its project names no target: the row, and the list around it, still read. */
+    @Test fun aMoveOutOfEveryProjectIsReadAndAsksToNoProject() {
+        val out = """{"id":"34bOutRow","publicId":"34bOutRow","fromProjectId":"34bFrom","fromProjectPublicId":"34bFrom","toProjectId":null,
+            "kind":"MOVE_TASK","subjectTaskId":"34bMovedTask","crossingKey":"$key","state":"PENDING","title":"Watchdog",
+            "requestedAt":"2026-10-07T09:00:00.000Z","fromProject":{"title":"Coordinator control loop","status":"OPEN"},"toProject":null,
+            "subjectTask":{"id":"34bMovedTask","title":"Wire the drain watchdog"},"requestedCriterion":null}"""
+        val rows = ProjectCrossings.rows(j(list.trim().removeSuffix("]") + ",$out]"))!!
+        assertEquals(4, rows.size)
+        val row = rows.last()
+        assertTrue(ProjectCrossings.hasNoTarget(row)); assertFalse(ProjectCrossings.hasNoTarget(rows.first()))
+        val approve = ProjectCrossings.prompt(row, approve = true)
+        assertEquals(ProjectCrossings.Prompt("Approve", "Coordinator control loop", "no project", "Wire the drain watchdog",
+            "Confirming takes the task out of this project; no project's acceptance counts it any more."), approve)
+        assertEquals("Approve moving “Wire the drain watchdog” from Coordinator control loop to no project?", ProjectCrossings.question(approve))
+        assertEquals(ProjectCrossings.moveDenyConsequence, ProjectCrossings.prompt(row, approve = false).consequence)
+        // The public id absent altogether reads the same; the source is still required.
+        assertNotNull(ProjectCrossings.rows(j("""[{"id":"r","fromProjectId":"a","kind":"MOVE_TASK","crossingKey":"k","state":"PENDING"}]""")))
+        assertNull(ProjectCrossings.rows(j("""[{"id":"r","fromProjectId":null,"toProjectId":null,"kind":"MOVE_TASK","crossingKey":"k","state":"PENDING"}]""")))
+    }
+
     // MARK: which rows can be answered
 
     @Test fun onlyAPendingCrossingCanBeAnswered() {

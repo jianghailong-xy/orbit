@@ -186,7 +186,7 @@ private val runnerNames = mutableStateMapOf<String, String>()
 fun runnerTitle(record: String?, runnerId: String?, fallback: String?): String = when {
     record == "name" -> RunnerCopy.ABOUT_NAME
     record?.startsWith("engine:") == true -> RunnerPage.engineName(record.removePrefix("engine:"))
-    runnerId == null -> Infrastructure.TITLE
+    runnerId == null -> MachinesAndModels.TITLE
     else -> runnerNames[ObjectId.canonical(runnerId) ?: runnerId] ?: fallback ?: "Runner"
 }
 
@@ -216,7 +216,7 @@ private fun styled(text: String, strong: List<String> = emptyList(), code: List<
     code.filter { it.isNotEmpty() }.forEach { word -> text.indexOf(word).takeIf { it >= 0 }?.let { addStyle(SpanStyle(fontFamily = FontFamily.Monospace), it, it + word.length) } }
 }
 
-/** Infrastructure's machines (iOS 5e75edbde's Machines section): every runner — a row opens it, its handle reorders it and its ⋯ menu
+/** Machines & models' machines (iOS 5e75edbde's Machines section): every runner — a row opens it, its handle reorders it and its ⋯ menu
  * removes it, with no Edit mode (iOS 91316c246). The removal itself is asked by the page that holds the rows ([remove]). */
 @Composable
 internal fun MachineRows(model: RunnersModel, now: Long, openRunner: (String) -> Unit, remove: (JsonObject) -> Unit) {
@@ -286,7 +286,7 @@ internal data class RunnerDrag(val id: String, val order: List<String>, val offs
 }
 
 /** One machine (iOS 5e75edbde's RunnerRow): its status dot and name, the bar of its slots in use — or Offline; under it how many of them
- * run and how many of its engines are signed out, in amber, or where its engines stand (Infrastructure.machineLine); and, only when
+ * run and how many of its engines are signed out, in amber, or where its engines stand (MachinesAndModels.machineLine); and, only when
  * something needs a person, the list's third line. A press opens it, its handle — the list's drag — moves it, and its ⋯ menu removes it
  * (iOS's swipe). TalkBack, which cannot drag, moves it with the row's Move up and Move down actions. */
 @Composable
@@ -311,7 +311,7 @@ private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: 
                         Gauge(if (max > 0) active.toFloat() / max else 0f, if (active >= max) Ink.amber else MaterialTheme.colorScheme.primary, Modifier.width(44.dp))
                     } else if (RunnerPage.isOffline(runner, now)) Text(RunnerCopy.OFFLINE, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                 }
-                Text(Infrastructure.machineLine(runner, now), style = MaterialTheme.typography.bodySmall, color = Ink.muted, maxLines = 1)
+                Text(MachinesAndModels.machineLine(runner, now), style = MaterialTheme.typography.bodySmall, color = Ink.muted, maxLines = 1)
                 RunnerPage.listAttentionLine(items)?.let { line ->
                     Text("⚠ $line", style = MaterialTheme.typography.bodySmall, color = Ink.tone(RunnerPage.listTone(items) ?: "warn"), maxLines = 2)
                 }
@@ -335,7 +335,7 @@ private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: 
 fun RunnerScreen(api: ManagementApi, runnerId: String?, record: String?, revision: Long, open: (OrbitRoute) -> Unit,
                  back: () -> Unit, openWorkspace: (String) -> Unit) {
     when {
-        runnerId == null -> InfrastructurePage(api, revision, open)
+        runnerId == null -> MachinesAndModelsPage(api, revision, open)
         record == "name" -> RunnerNamePage(api, runnerId, revision, back)
         record?.startsWith("engine:") == true -> RunnerEnginePage(api, runnerId, record.removePrefix("engine:"), revision)
         else -> RunnerDetail(api, runnerId, revision, open, back, openWorkspace)
@@ -471,7 +471,9 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                 }
                 workspaces.forEachIndexed { index, workspace ->
                     if (index > 0) HorizontalDivider()
-                    WorkspaceRow(workspace, RunnerPage.runningCount(workspace, model.counts)) { openWorkspace(workspace.text("id")) }
+                    WorkspaceRow(workspace, RunnerPage.runningCount(workspace, model.counts), isolation = {
+                        WorktreeIsolationSwitch(api, workspace, reload = { model.load() }, failed = notice::show)
+                    }) { openWorkspace(workspace.text("id")) }
                 }
             }
             FormSection(RunnerCopy.ABOUT, footer = if (runner.bool("runsAsRoot") == true) RunnerCopy.ROOT_NO_BYPASS else null) {
@@ -661,8 +663,8 @@ private fun EngineRow(runner: JsonObject, health: JsonObject, offline: Boolean, 
     // fixes it (iOS 2's four states). Its page installs a missing build, or puts the pinned one back.
     val cursor = if (engine == ProviderEngines.CURSOR) CursorRuntime.state(runner) else null
     val cursorHint = cursor?.takeIf { it.blocksRow }?.let { CursorRuntime.hint(it, health) }
-    // An engine the machine lacks opens its page where that page installs it (Infrastructure.installsFromPage).
-    val opens = installed || cursor == CursorRuntime.RunnerState.NOT_INSTALLED || (cursor == null && Infrastructure.installsFromPage(runner, engine))
+    // An engine the machine lacks opens its page where that page installs it (MachinesAndModels.installsFromPage).
+    val opens = installed || cursor == CursorRuntime.RunnerState.NOT_INSTALLED || (cursor == null && MachinesAndModels.installsFromPage(runner, engine))
     Row(Modifier.fillMaxWidth().clickable(enabled = opens, role = Role.Button, onClick = open).padding(vertical = 8.dp)
         .testTag("engine-row:$engine"), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -694,7 +696,7 @@ private fun EngineRow(runner: JsonObject, health: JsonObject, offline: Boolean, 
 }
 
 @Composable
-private fun WorkspaceRow(workspace: JsonObject, running: Int, open: () -> Unit) {
+private fun WorkspaceRow(workspace: JsonObject, running: Int, isolation: @Composable () -> Unit = {}, open: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = open).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.weight(1f)) {
@@ -702,6 +704,8 @@ private fun WorkspaceRow(workspace: JsonObject, running: Int, open: () -> Unit) 
             RunnerPage.workspaceLine(workspace).takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted, maxLines = 1) }
         }
         if (running > 0) Text(RunnerCopy.workspaceRunning(running), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+        // Worktree isolation, switched here as on web's runner page (board 04's dialogs say what it means for the main checkout).
+        isolation()
         Chevron()
     }
 }
@@ -860,10 +864,10 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
             // An engine the machine lacks — a sign-in engine, or OpenCode (A07-15 ②) — is installed from here, as the web's engine row
             // installs it (iOS 5e75edbde).
             else if (RunnerPage.isLoginEngine(engine)) EngineInstallSection(runner, engine,
-                Infrastructure.rowKind(Infrastructure.engineHealth(runner, engine), runner.obj("install"), engine),
-                Infrastructure.installable(runner, engine), offline, ::install)
-            else if (engine == ProviderEngines.OPENCODE) EngineInstallSection(runner, engine, Infrastructure.rowKind(health, runner.obj("install"), engine),
-                Infrastructure.installsOpenCode(runner), offline, ::install)
+                MachinesAndModels.rowKind(MachinesAndModels.engineHealth(runner, engine), runner.obj("install"), engine),
+                MachinesAndModels.installable(runner, engine), offline, ::install)
+            else if (engine == ProviderEngines.OPENCODE) EngineInstallSection(runner, engine, MachinesAndModels.rowKind(health, runner.obj("install"), engine),
+                MachinesAndModels.installsOpenCode(runner), offline, ::install)
             // Cursor CLI stays on the build Orbit pins, which a runner release moves: Update Engines Now has nothing to do for it.
             if (cursor != null) Text(if (offline) RunnerCopy.ENGINES_OFFLINE_FOOTER else CursorCopy.ENGINE_FOOTER,
                 Modifier.padding(horizontal = 16.dp, vertical = 12.dp).testTag("cursor-engine-footer"), style = MaterialTheme.typography.bodySmall,
@@ -912,14 +916,14 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
  * `installSection`): Install, or Retry after an install that failed, Installing… while one runs, and the relay's own words. Nothing for an
  * engine it has, or for an Antigravity this runner can't run at all ([installable]). */
 @Composable
-private fun EngineInstallSection(runner: JsonObject, engine: String, kind: Infrastructure.RowKind, installable: Boolean, offline: Boolean,
+private fun EngineInstallSection(runner: JsonObject, engine: String, kind: MachinesAndModels.RowKind, installable: Boolean, offline: Boolean,
                                  install: () -> Unit) {
-    if (kind != Infrastructure.RowKind.INSTALLING && !installable) return
+    if (kind != MachinesAndModels.RowKind.INSTALLING && !installable) return
     val relay = runner.obj("install")
     FormSection {
-        if (kind == Infrastructure.RowKind.INSTALLING) Text(Infrastructure.INSTALLING, Modifier.padding(vertical = 8.dp), color = Ink.muted)
+        if (kind == MachinesAndModels.RowKind.INSTALLING) Text(MachinesAndModels.INSTALLING, Modifier.padding(vertical = 8.dp), color = Ink.muted)
         else TextButton(enabled = !offline && relay?.str("status") !in setOf("pending", "installing"), onClick = install) {
-            Text(if (kind == Infrastructure.RowKind.INSTALL_FAILED) Infrastructure.RETRY else Infrastructure.install(engine))
+            Text(if (kind == MachinesAndModels.RowKind.INSTALL_FAILED) MachinesAndModels.RETRY else MachinesAndModels.install(engine))
         }
         relay?.takeIf { it.str("engine") == engine }?.str("message")?.takeIf { it.isNotEmpty() }?.let {
             Text(it, Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.labelMedium, color = Ink.muted)
@@ -938,7 +942,7 @@ private fun CursorStateSection(runner: JsonObject, state: CursorRuntime.RunnerSt
         CursorRuntime.hint(state, health)?.let { Text(it, Modifier.padding(vertical = 6.dp), style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
         if (state == CursorRuntime.RunnerState.UNSUPPORTED_VERSION) {
             val installing = relay?.str("engine") == ProviderEngines.CURSOR && relay.str("status") in setOf("pending", "installing")
-            if (installing) Text(Infrastructure.INSTALLING, Modifier.padding(vertical = 8.dp), color = Ink.muted)
+            if (installing) Text(MachinesAndModels.INSTALLING, Modifier.padding(vertical = 8.dp), color = Ink.muted)
             else TextButton(enabled = !offline && relay?.str("status") !in setOf("pending", "installing"), onClick = install) { Text(CursorCopy.REINSTALL) }
             relay?.takeIf { it.str("engine") == ProviderEngines.CURSOR }?.str("message")?.takeIf { it.isNotEmpty() }?.let {
                 Text(it, Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.labelMedium, color = Ink.muted)
@@ -1223,7 +1227,9 @@ private class SignInRelay(private val api: ManagementApi, val runnerId: String, 
 @Composable
 internal fun RunnerSignInCard(api: ManagementApi, runner: JsonObject, engine: String, account: String? = null, accountName: String? = null,
                              autoStart: Boolean = false, signInTitle: String? = null, onUseApiKey: (() -> Unit)? = null,
-                             onClose: (() -> Unit)? = null, onSignedIn: (() -> Unit)? = null) {
+                             onClose: (() -> Unit)? = null, onSignedIn: (() -> Unit)? = null,
+                             apiKeyLabel: String = io.orbitd.android.composer.MachineSetupCopy.SETUP_USE_API_KEY,
+                             apiKeyHint: String? = null) {
     val runnerId = runner.text("id")
     val scope = rememberCoroutineScope()
     val relay = remember(runnerId, engine, account) { SignInRelay(api, runnerId, engine, account, adding = accountName != null) }
@@ -1308,9 +1314,10 @@ internal fun RunnerSignInCard(api: ManagementApi, runner: JsonObject, engine: St
                     }
                     Text(KimiSite.SEPARATE_ACCOUNTS, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
                     onUseApiKey?.let { useKey ->
-                        OutlinedButton(onClick = useKey) { Text(io.orbitd.android.composer.MachineSetupCopy.SETUP_USE_API_KEY) }
+                        OutlinedButton(onClick = useKey) { Text(apiKeyLabel) }
                     }
-                } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                } else FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // The key button wraps under the sign-in where both don't fit on a line, rather than being squeezed beside it.
                     Button(onClick = { scope.launch { relay.begin(accountName, scope) } }, enabled = !relay.busy && named) {
                         Text(when {
                             relay.busy -> "Starting…"
@@ -1322,9 +1329,11 @@ internal fun RunnerSignInCard(api: ManagementApi, runner: JsonObject, engine: St
                         })
                     }
                     onUseApiKey?.let { useKey ->
-                        OutlinedButton(onClick = useKey) { Text(io.orbitd.android.composer.MachineSetupCopy.SETUP_USE_API_KEY) }
+                        OutlinedButton(onClick = useKey) { Text(apiKeyLabel) }
                     }
                 }
+                // What a key is beside a sign-in, where the card says it (the web's RunnerSignIn hint, on the welcome card).
+                if (onUseApiKey != null && apiKeyHint != null) Text(apiKeyHint, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
                 close()
             }
         }

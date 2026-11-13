@@ -133,6 +133,12 @@ private fun Pill(model: WorktreeModel, state: WorktreeState, d: JsonObject, bran
     var menu by remember { mutableStateOf(false) }
     var copied by remember { mutableStateOf(false) }
     LaunchedEffect(copied) { if (copied) { delay(1_500); copied = false } }
+    // A main checkout Move's line offers View changes: this worktree's changes, as the branch summary opens them.
+    val mainCheckout = LocalMainCheckout.current
+    val mainCheckoutSheet = mainCheckout?.state?.collectAsState()?.value?.sheet
+    LaunchedEffect(mainCheckoutSheet) {
+        if (mainCheckoutSheet == MainCheckoutState.Sheet.WORKTREE_CHANGES) { sheet = "diff"; mainCheckout.open(null) }
+    }
     val displayBranch = WorktreeBarLogic.displayBranch(d, branch)
     val runStatus = d.string("runStatus") ?: d.string("status")
     val committed = runStatus !in setOf("RUNNING", "AWAITING_INPUT", "INTERRUPTED")

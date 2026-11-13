@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>项目会话：右侧项目栏 + 标题栏按钮（第 2 版）</title>
+<link rel="stylesheet" href="board.css">
+<style>
+  section.b-part { padding: 8px 4px 28px; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; }
+  .b-frame { position: relative; border-radius: 12px; background: #fff; overflow: hidden;
+             box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 10px 30px rgba(0,0,0,.08); }
+  .b-crop { position: absolute; background-repeat: no-repeat; }
+  .b-ring { position: absolute; border: 2.5px dashed #f5222d; border-radius: 10px; pointer-events: none; }
+  .b-num { position: absolute; width: 24px; height: 24px; border-radius: 50%; background: #f5222d; color: #fff;
+           font: 700 13px/24px Inter, sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; }
+  .b-band { position: absolute; top: 0; bottom: 0; background: rgba(51,112,255,.07); border-left: 2px solid #3370ff;
+            border-right: 2px solid #3370ff; pointer-events: none; }
+  .b-bandlabel { position: absolute; top: 6px; transform: translateX(-50%); background: #3370ff; color: #fff;
+                 font: 650 12px/20px Inter, "Noto Sans SC", sans-serif; padding: 0 9px; border-radius: 999px; white-space: nowrap; }
+  .b-phone { box-sizing: content-box; border-radius: 34px; border: 9px solid #1b1b1d; box-shadow: 0 18px 40px rgba(0,0,0,.2); }
+  .b-dim { position: absolute; inset: 0; background: rgba(0,0,0,.32); }
+  .b-sheet { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 14px 14px 0 0; overflow: hidden; background: #fff; box-shadow: 0 -6px 24px rgba(0,0,0,.18); }
+  .b-grab { position: absolute; left: 50%; top: 6px; width: 36px; height: 5px; margin-left: -18px; border-radius: 3px; background: #d0d0d6; z-index: 2; }
+  .b-q { background: #fff; border-radius: 16px; padding: 18px 24px 14px; margin-bottom: 18px; }
+  .b-q h2 { font-size: 17px; margin: 0 0 10px; }
+  .b-rec { display: inline-block; background: #d9f7be; color: #135200; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 0 8px; margin-left: 6px; }
+</style></head>
+<body>
+<h1>项目会话：点项目行打开协调者，项目的会话在会话区最右边一栏（第 2 版）</h1>
+<p class="lede" style="width:2300px">按 11-11 你定的三条改了：<b>① 项目栏放在会话区最右边（B）；② 点项目行，会话区打开协调者会话；③ 项目栏可以收起：窗口放不下四栏时自动收起，协调者会话标题栏上的按钮 <span style="white-space:nowrap">⊞ 11</span> 把它展开或收起；手机（Web、iOS、Android）上点同一个按钮，从底部弹出项目的会话列表。</b><br>
+每一帧都截自真实的 Web 控制台（当前 main，vite + 固定样例数据）。方案帧是把真实截图按栏拼起来的；标题栏里的 ⊞ 11 按钮、项目栏的 ✕ 和手机上的底部弹窗是画进去的。红色虚线和数字是标注。</p>
+
+<!-- ① today -->
+<section class="b-part">
+  <div class="row">
+    <div class="col">
+      <div class="cap"><span class="tag now">今天</span>点“搜索服务迁移到新索引”这一行之前</div>
+      <div class="b-frame" data-frame="today-list"></div>
+    </div>
+    <div class="vs">→</div>
+    <div class="col">
+      <div class="cap"><span class="tag now">今天</span>点了之后：整栏换成项目会话页</div>
+      <div class="b-frame" data-frame="today-click"></div>
+    </div>
+  </div>
+  <ul class="notes" style="width:1560px">
+    <li class="n" data-n="1">项目占的是协调者那一行：进度 10/12，副行是协调者最近收到的消息。</li>
+    <li class="n" data-n="2">点它，会话栏整栏滑成项目会话页（URL 加 <code>?project=</code>）。原来的列表看不见了，要按 <b>‹</b> 才回去；在项目里看完一个成员，想回到别的会话，得先退出项目页。</li>
+    <li class="n" data-n="3">右边的会话区不变，还是刚才那个会话，跟项目没关系。</li>
+  </ul>
+</section>
+
+<!-- ② wide window -->
+<section class="b-part">
+  <div class="cap"><span class="tag new">方案</span>宽窗口：点项目行 → 会话区打开协调者，项目栏开在最右边</div>
+  <div class="b-frame" data-frame="b-coord"></div>
+  <ul class="notes" style="width:1500px">
+    <li class="n" data-n="1"><b>会话列表原样留着</b>，项目那一行保持选中。</li>
+    <li class="n" data-n="2">协调者会话的标题栏，⋮ 左边多一个按钮：项目图标 + 会话数（<b>⊞ 11</b>）。项目栏开着时按钮是蓝底（按下态）；点它收起，再点展开。悬停提示 <i>Project sessions</i>。</li>
+    <li class="n" data-n="3">项目栏就是今天的项目会话页（进度卡、Coordinator、按时间分组的成员、DONE 后的结算卡），贴在会话区右边，宽度和会话栏一样。页头左边的 ‹ 换成 ✕，作用和标题栏按钮一样：收起。</li>
+    <li class="n" data-n="4">协调者在栏顶，是选中态，因为会话区打开的就是它。</li>
+    <li>标题栏上方那行“← 搜索服务迁移到新索引”（打开项目页）和项目栏页头的 ⊞（也是打开项目页）都保持不变。</li>
+  </ul>
+</section>
+
+<!-- ③ member -->
+<section class="b-part">
+  <div class="cap"><span class="tag new">方案</span>在项目栏里点一个成员（T7 回放对比）</div>
+  <div class="b-frame" data-frame="b-member"></div>
+  <ul class="notes" style="width:1500px">
+    <li class="n" data-n="1">列表里项目那一行还是选中的（会话区里的会话属于这个项目）。</li>
+    <li class="n" data-n="2">项目栏里选中 T7，栏不动。</li>
+    <li class="n" data-n="3">会话区换成 T7。成员之间切换只动会话区。T7 的标题栏也有 ⊞ 11（11-11 定：成员也放）。</li>
+    <li>在列表里点另一个项目：会话区换成那个项目的协调者，项目栏也跟着换。点一个不属于任何项目的会话：项目栏关掉。</li>
+  </ul>
+</section>
+
+<!-- ④ narrow window -->
+<section class="b-part">
+  <div class="cap"><span class="tag new">方案</span>窗口放不下四栏：项目栏自动收起，用标题栏按钮展开</div>
+  <div class="b-frame" data-frame="b-narrow"></div>
+  <ul class="notes" style="width:1180px">
+    <li class="n" data-n="1">项目栏收起时，按钮是普通灰色（不是按下态），点它展开项目栏。</li>
+    <li class="n" data-n="2">点项目行的效果不变：会话区打开协调者；只是项目栏先收着。</li>
+    <li><b>什么时候算“放不下”</b>：展开项目栏后会话区会窄于 480px（这张 1180px 宽的窗口就是：会话区只剩 260px）。窗口拉宽到放得下时，项目栏自己展开回来；用户在宽窗口里手动收起的，就一直收着，直到再点按钮。</li>
+  </ul>
+</section>
+
+<!-- ⑤ phone -->
+<section class="b-part">
+  <div class="row">
+    <div class="col">
+      <div class="cap"><span class="tag new">方案</span>手机：点项目行 → 直接进协调者会话</div>
+      <div class="b-frame b-phone" data-frame="p-coord"></div>
+    </div>
+    <div class="vs">→</div>
+    <div class="col">
+      <div class="cap"><span class="tag new">方案</span>点 ⊞ 11 → 底部弹出项目的会话列表</div>
+      <div class="b-frame b-phone" data-frame="p-sheet"></div>
+    </div>
+    <div class="col" style="width:640px;padding-top:34px">
+      <ul class="notes" style="margin-top:0">
+        <li class="n" data-n="1">手机上点会话列表里的项目行，<b>不再推进到项目会话页</b>，直接打开协调者会话。标题栏 ⋮ 左边同样是 <b>⊞ 11</b>。</li>
+        <li class="n" data-n="2">点它，从底部弹出项目的会话列表，内容和桌面的项目栏一样。弹窗先停在中间高度，往上拖到全屏；点 ✕、点遮罩或往下拖就关掉。</li>
+        <li class="n" data-n="3">点一个成员：弹窗关掉，会话区换成那个成员；返回 ← 回到会话列表。</li>
+        <li><b>iOS</b>：用系统 sheet（中/大两档 detent），列表就是现在的 <code>SessionProjectPage</code> 的内容；<b>Android</b>：用 <code>ModalBottomSheet</code>，列表复用现在的项目会话页。这两端图里没画，外观照各自现有的弹窗。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ⑥ decided + open -->
+<section class="b-part" style="width:1620px">
+  <h1 style="font-size:22px">已定（11-11，全部定完）</h1>
+  <div class="b-q">
+    <ul class="notes" style="margin-top:0">
+      <li>项目栏放在<b>会话区最右边</b>。</li>
+      <li>点项目行，会话区打开<b>协调者会话</b>。</li>
+      <li>项目栏<b>可以收起</b>：放不下四栏时自动收起；协调者标题栏的 <b>⊞ 11</b> 按钮展开或收起；手机上同一个按钮打开底部弹窗。</li>
+      <li><b>成员会话的标题栏也放 ⊞ 按钮</b>，样子、位置和协调者的一样。</li>
+    </ul>
+  </div>
+  <div class="b-q">
+    <h2>落地（按代价排）</h2>
+    <ul class="notes">
+      <li><b>Web</b>：<code>WorkspaceView</code> 里 <code>?project=</code> 不再决定会话栏画哪一页；会话栏照常画列表，项目会话页那段 JSX 搬进会话区右边的新栏；点项目行改成打开协调者并带上 <code>?project=</code>。标题栏加 ⊞ 按钮；收起状态和宽度存在本地。手机宽度用底部弹窗画同一个列表。</li>
+      <li><b>测试</b>：改 <code>WorkspaceView.projectSessions.test.tsx</code> 里“点项目行进入项目页”的几条；加“列表仍在、协调者被打开、项目栏出现在右边、按钮收起/展开、窄窗口默认收起、选中无关会话后栏关闭、手机上按钮弹出列表”。</li>
+      <li><b>iOS / Android</b>：点项目行改成打开协调者；协调者标题栏加按钮，弹出项目会话列表（复用现有页面内容）。各一个任务。</li>
+      <li><b>macOS</b>：宽窗口和 Web 一样是右侧栏，单独一个任务。</li>
+    </ul>
+  </div>
+</section>
+
+<script>
+// Frames are cut from real console shots (CSS px; the PNGs are 2x): desktop 1180×760 (nav 0–280,
+// session column 280–600, conversation 600–1180), phone 393×852.
+const DESK = [1180, 760], PHONE = [393, 852];
+const NAV = [0, 280], COL = [280, 320], CONV = [600, 580];
+const piece = (src, [sx, sw], dx) => ({ src, sx, sw, dx, sy: 0, sh: DESK[1], dy: 0, size: DESK });
+const FRAMES = {
+  'today-list': { scale: 0.66, w: 1180, h: 760, parts: [piece('t-list', [0, 1180], 0)], marks: [[1, 300, 307, 272, 64]] },
+  'today-click': { scale: 0.66, w: 1180, h: 760, parts: [piece('t-click', [0, 1180], 0)],
+    marks: [[2, 286, 8, 308, 746], [3, 612, 24, 556, 130]] },
+  'b-coord': { scale: 1, w: 1500, h: 760, parts: [piece('n-wide', NAV, 0), piece('c-coord', COL, 280),
+      piece('n-wide', CONV, 600), piece('n-wide', COL, 1180)], band: [1180, 320, '项目栏'],
+    marks: [[1, 300, 307, 272, 64], [2, 1075, 37, 51, 30], [3, 1196, 30, 28, 28], [4, 1200, 152, 272, 64]] },
+  'b-member': { scale: 1, w: 1500, h: 760, parts: [piece('n-member', NAV, 0), piece('c-member', COL, 280),
+      piece('n-member', CONV, 600), piece('n-member', COL, 1180)], band: [1180, 320, '项目栏'],
+    marks: [[1, 300, 307, 272, 64], [2, 1200, 251, 272, 64], [3, 612, 24, 556, 130]] },
+  'b-narrow': { scale: 1, w: 1180, h: 760, parts: [piece('n-narrow', [0, 1180], 0)],
+    marks: [[1, 1075, 37, 51, 30], [2, 300, 307, 272, 64]] },
+  'p-coord': { scale: 0.8, w: 393, h: 852, parts: [{ src: 'p-coord', sx: 0, sw: 393, sy: 0, sh: 852, dx: 0, dy: 0, size: PHONE }],
+    marks: [[1, 294, 33, 51, 30]] },
+  'p-sheet': { scale: 0.8, w: 393, h: 852, parts: [{ src: 'p-coord', sx: 0, sw: 393, sy: 0, sh: 852, dx: 0, dy: 0, size: PHONE }],
+    sheet: { top: 250, src: 'p-page' }, marks: [[2, 10, 268, 373, 40], [3, 14, 495, 357, 64]] },
+};
+const crop = (p, s) => {
+  const d = document.createElement('div');
+  d.className = 'b-crop';
+  Object.assign(d.style, { left: `${p.dx * s}px`, top: `${p.dy * s}px`, width: `${p.sw * s}px`, height: `${p.sh * s}px`,
+    backgroundImage: `url(shots/${p.src}.png)`, backgroundSize: `${p.size[0] * s}px ${p.size[1] * s}px`,
+    backgroundPosition: `${-p.sx * s}px ${-p.sy * s}px`, borderLeft: p.dx && p.sx ? '1px solid #ececf0' : '0' });
+  return d;
+};
+for (const el of document.querySelectorAll('[data-frame]')) {
+  const f = FRAMES[el.dataset.frame];
+  const s = f.scale;
+  el.style.width = `${f.w * s}px`;
+  el.style.height = `${f.h * s}px`;
+  for (const p of f.parts) el.append(crop(p, s));
+  if (f.sheet) {
+    const dim = document.createElement('div'); dim.className = 'b-dim'; el.append(dim);
+    const sh = document.createElement('div'); sh.className = 'b-sheet';
+    sh.style.height = `${(f.h - f.sheet.top) * s}px`;
+    const g = document.createElement('div'); g.className = 'b-grab'; sh.append(g);
+    sh.append(crop({ src: f.sheet.src, sx: 0, sw: 393, sy: 0, sh: f.h - f.sheet.top, dx: 0, dy: 6, size: PHONE }, s));
+    el.append(sh);
+  }
+  if (f.band) {
+    const [x, w, label] = f.band;
+    const b = document.createElement('div'); b.className = 'b-band';
+    Object.assign(b.style, { left: `${x * s}px`, width: `${w * s}px` });
+    const l = document.createElement('div'); l.className = 'b-bandlabel'; l.textContent = label;
+    Object.assign(l.style, { left: `${(x + w / 2) * s}px`, top: `${(f.h - 30) * s}px` });
+    el.append(b, l);
+  }
+  for (const [n, x, y, w, h] of f.marks) {
+    const r = document.createElement('div'); r.className = 'b-ring';
+    Object.assign(r.style, { left: `${x * s - 3}px`, top: `${y * s - 3}px`, width: `${w * s + 6}px`, height: `${h * s + 6}px`, zIndex: 3 });
+    const k = document.createElement('div'); k.className = 'b-num'; k.textContent = n;
+    Object.assign(k.style, { left: `${Math.min(x * s + w * s - 8, f.w * s - 30)}px`, top: `${Math.max(y * s - 14, 6)}px`, zIndex: 3 });
+    el.append(r, k);
+  }
+}
+</script>
+</body></html>

@@ -724,6 +724,20 @@ func (p *sessionPool) turnsInFlightLocked() int {
 	return n
 }
 
+// turnRunning reports whether a turn is running in the session id names (an Orbit or a public id)
+// right now, counted as turnsInFlightLocked counts it. A Move into its worktree is refused while one
+// is (TARGET_BUSY): the agent would be writing the same files.
+func (p *sessionPool) turnRunning(id string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, key := range []string{id, decodeSessionID(id)} {
+		if s := p.sessions[key]; s != nil && ((s.active && !s.heldForUpdate) || s.selfDrivenTurn) {
+			return true
+		}
+	}
+	return false
+}
+
 // turnsInFlight is turnsInFlightLocked for a caller that does not hold the lock: the managed
 // workload report (managed_sleep.go).
 func (p *sessionPool) turnsInFlight() int {
