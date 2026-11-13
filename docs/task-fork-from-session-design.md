@@ -101,7 +101,11 @@ When the task is DONE, its branch is `S` + the task's commits, in the same repos
 In v1 the **forking session merges it itself**:
 
 - The `task_await` payload for a forked task carries `branch`, `forkSha` and the one command to run in the
-  forking session's checkout: `git merge --no-ff <branch>`.
+  forking session's checkout: `git merge --no-ff <branch>`. As built (P3), the wake's `forkedTasks` entry names
+  `branch`, `forkSha`, `baseHead`, `snapshotChangedFiles` (the files S changed relative to `baseHead`, sent by
+  the runner at the snapshot and stored in `task.fork_changed_files`, migration 0607) and, once the task is DONE,
+  `reviewCommand` (`git diff HEAD...<branch>`), `mergeCommand` and a `mergeInstruction` saying to read the first
+  before running the second (§2.7 F4).
 - If the forking session committed `S`'s edits in the meantime (its own turn-end commit, for example), git sees
   the same changes on both sides from `baseHead` and merges them without conflict. Conflicts happen only where the
   forking session kept editing the lines the task changed. That is a real conflict, and it is the forking agent's
@@ -149,6 +153,11 @@ A `codeless` task declares that it produces no code. Two ways to stop it leaving
 Neither option decides what a codeless task that did write code means for its criterion. Today
 `task-codeless.ts` refuses only the *later* declaration on a task with commits; a task created codeless that
 then commits is not flagged. That is unchanged by this design and noted as a follow-up.
+
+As built (P3): the session is created with no branch; the claim hands a runner declaring `codeless-checkout/v1`
+`codelessCheckout` and `codelessBranch` (`orbit/<slug>-<6 hex of the session id>`), and an older runner the
+branch up front. Only a codeless task's run may report a branch at finalize that it was not created with. A
+codeless task with worktrees off still runs in the workDir, as every task on that workspace does.
 
 B2 keeps isolation and leaves nothing behind in the common case. Its cost is that the server must accept a branch
 first reported at finalize rather than named at creation, for this one kind of session.
