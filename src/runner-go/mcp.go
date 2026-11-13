@@ -219,17 +219,7 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 	case "ping":
 		return s.ok(req.ID, struct{}{}), true
 	case "tools/list":
-		tools := toolDescriptors(s.allowPermissionPrompt, s.orchestrationEnabled())
-		if s.watchesOff {
-			tools = withoutWatchTools(tools)
-		}
-		if s.wikiOff {
-			tools = withoutWikiTools(tools)
-		}
-		if s.onlyTools != nil {
-			tools = onlyMCPTools(tools, s.onlyTools)
-		}
-		return s.ok(req.ID, map[string]interface{}{"tools": tools}), true
+		return s.ok(req.ID, map[string]interface{}{"tools": s.listedToolDescriptors()}), true
 	case "tools/call":
 		var p struct {
 			Name      string                 `json:"name"`
@@ -239,7 +229,8 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 			return s.err(req.ID, -32602, "invalid params"), true
 		}
 		if s.onlyTools != nil && !s.onlyTools[p.Name] {
-			return s.ok(req.ID, toolResult(p.Name+" is not served in this session", true)), true
+			result := toolResult(p.Name+" is not served in this session", true)
+			return s.ok(req.ID, s.withRecovery(p.Name, p.Arguments, markTransportActivity(), result)), true
 		}
 		return s.ok(req.ID, s.callTool(p.Name, p.Arguments)), true
 	default:
@@ -339,7 +330,13 @@ const maxProjectAcceptanceCriteriaChars = 4000
 const maxProjectAcceptanceCriteriaItems = 100
 const maxProjectAcceptanceVerificationMethodChars = 4000
 
+// callTool runs one tool. A failed call also carries the recovery report (recovery_render.go).
 func (s *mcpServer) callTool(name string, args map[string]interface{}) map[string]interface{} {
+	mark := markTransportActivity()
+	return s.withRecovery(name, args, mark, s.runTool(name, args))
+}
+
+func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string]interface{} {
 	// Runner-hosted background jobs are not a control-plane call at all: they are
 	// forwarded to the local runner over this session's socket (mcp_bg.go).
 	if result, handled := s.callBgTool(name, args); handled {

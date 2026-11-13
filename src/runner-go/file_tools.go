@@ -158,7 +158,13 @@ type skippedFile struct {
 
 // uploadFile keeps one file. The name goes out through mime.FormatMediaType, which writes RFC 5987 `filename*` for a
 // name a quoted string cannot carry: busboy reads a plain filename as Latin-1.
-func (t *Transport) uploadFile(parent context.Context, sessionID string, file *os.File, name, mimeType string, fields map[string]string) (sessionFile, error) {
+func (t *Transport) uploadFile(parent context.Context, sessionID string, file *os.File, name, mimeType string, fields map[string]string) (out sessionFile, err error) {
+	noteTransportAttempt()
+	defer func() { noteTransportResult(http.MethodPost, err) }()
+	return t.uploadFileOnce(parent, sessionID, file, name, mimeType, fields)
+}
+
+func (t *Transport) uploadFileOnce(parent context.Context, sessionID string, file *os.File, name, mimeType string, fields map[string]string) (sessionFile, error) {
 	var out sessionFile
 	if err := refuseFileHoldingSecret(file, file.Name()); err != nil {
 		return out, err
@@ -265,7 +271,13 @@ func (t *Transport) listFiles(filter url.Values) (json.RawMessage, error) {
 // them there only once they are all in and match `want`, so a dropped connection or a wrong byte leaves no file that
 // looks fetched. `want` is empty for a row from before Orbit Files, which has no sha256 to match. The bytes also go to
 // keep, for a caller that reads them: what was checked, and not what a path holds afterwards.
-func (t *Transport) downloadFile(parent context.Context, sessionID, fileID, name, want string, keep io.Writer) (string, string, int64, error) {
+func (t *Transport) downloadFile(parent context.Context, sessionID, fileID, name, want string, keep io.Writer) (path, sum string, size int64, err error) {
+	noteTransportAttempt()
+	defer func() { noteTransportResult(http.MethodGet, err) }()
+	return t.downloadFileOnce(parent, sessionID, fileID, name, want, keep)
+}
+
+func (t *Transport) downloadFileOnce(parent context.Context, sessionID, fileID, name, want string, keep io.Writer) (string, string, int64, error) {
 	ctx, cancel := context.WithTimeout(parent, fileCallTimeout)
 	defer cancel()
 	route := "/runner/sessions/" + sessionID + "/attachments/" + url.PathEscape(fileID)

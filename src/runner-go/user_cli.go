@@ -867,11 +867,13 @@ func writeAPIAnswer(out io.Writer, body []byte, compact bool) error {
 // apiStatusError is a non-2xx answer `orbit api` has already printed: the status, and the refusal's
 // code and next step when its body names them.
 func apiStatusError(method, target string, res *userAPIResponse) error {
-	refusal := (&transportHTTPError{body: string(res.body)}).refusal()
-	if refusal == "" {
-		return fmt.Errorf("%s %s -> %d", method, target, res.status)
+	cause := &transportHTTPError{method: method, path: target, statusCode: res.status, body: string(res.body)}
+	refusal := cause.refusal()
+	text := fmt.Sprintf("%s %s -> %d", method, target, res.status)
+	if refusal != "" {
+		text += "\n" + strings.TrimRight(refusal, "\n")
 	}
-	return fmt.Errorf("%s %s -> %d\n%s", method, target, res.status, strings.TrimRight(refusal, "\n"))
+	return &recoveryTextError{text: text, cause: cause}
 }
 
 // nextCursorOf is the cursor a paged answer names for its next page — {items, nextCursor}, as GET

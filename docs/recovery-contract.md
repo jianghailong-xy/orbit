@@ -201,8 +201,8 @@ The Go transport's text is unchanged byte for byte. That covers the `refused:` o
 the same vectors. Legacy flat fields stay on every body, and `owner` and `requiredAction` are copied
 into the envelope verbatim.
 
-Not covered by v1: emitting the `recovery` block from the API and printing the envelope from MCP and
-the CLI. Those belong to the follow-up tasks built on this contract.
+Not covered by v1: emitting the `recovery` block from the API. That belongs to the follow-up tasks
+built on this contract.
 
 ## 6. Replaying under the same request id (`SAME_REQUEST_ID`)
 
@@ -261,3 +261,90 @@ IN_PROGRESS, mismatch, an exhausted bound, a failure that may have written (gate
 `src/apiserver/src/sessions/client-turn-id-replay.pg.spec.ts` holds the server's half on
 PostgreSQL: racing deliveries and replays of one clientTurnId leave one turn (one interrupt and one
 follow-up), and a different payload under the same key writes nothing.
+
+## 7. How MCP and the CLI report a failure
+
+`src/runner-go/recovery_render.go` turns every failed call into one report, on both surfaces:
+
+```json
+{
+  "ok": false,
+  "error": { "contractVersion": 1, "code": "TRANSIENT_DB_CONFLICT", "effect": "NONE",
+             "retry": { "policy": "SAFE", "afterSeconds": 2 }, "actionCode": "RETRY", "...": "..." },
+  "next":  { "type": "invoke", "actionCode": "RETRY", "afterSeconds": 2, "reason": "...",
+             "argv": ["/usr/local/bin/orbit", "task", "create", "--title", "x", "--description-file", "-", "--json"],
+             "stdin": "the description, verbatim\n" },
+  "text":  "orbit task: POST /runner/tasks -> 503 ..."
+}
+```
+
+- **`error`** is the §2 envelope from `recoveryOf`. The same server answer gives the same `error` over
+  MCP and at the CLI. That includes `code`, `effect`, `retry`, `actionCode`, `actor`,
+  `userConfirmation` and `resources`.
+- **The error is read from what the call really did.** If the error value carries an HTTP answer or a
+  transport failure, it is read directly. Otherwise the renderer takes the newest failure this process
+  recorded during the call whose text appears in the printed message. If the call sent nothing at
+  all, the failure is local: `LOCAL_INVALID_REQUEST`, effect `NONE`. Anything else is
+  `UNKNOWN_ERROR`. If a write in the same call went through before the failure, an effect of `NONE`
+  becomes `UNKNOWN`, so the call is verified before anything is sent again.
+- **A request id** counts as sent when the call carried `idempotencyKey`, `clientTurnId` or
+  `triggerId`, or the matching CLI flags `--idempotency-key`, `--client-turn-id` or `--trigger-id`.
+- **`next`** is the one step this surface can take now. `type` is one of the following:
+  - `invoke`: over MCP it carries `tool` and `input`. At the CLI it carries `argv`, an array whose
+    first element is the absolute path of this executable, and `stdin`, the exact bytes to write to
+    standard input (absent when the command reads none). A CLI step is never a shell string: user
+    text stays one argv element or stays in stdin, exactly as it was given.
+  - `ask_user`: a person has to decide (`AWAIT_OWNER_DECISION`, a required confirmation, or actor
+    `USER`).
+  - `wait`: wait `afterSeconds`, or until the system changes the state.
+  - `manual`: change the request, or check the state by hand.
+
+  How each action code maps to a step:
+
+  | actionCode | Step |
+  | --- | --- |
+  | `RETRY`, `RETRY_SAME_REQUEST` | `invoke` the same call, only if this surface exposes it. `RETRY_SAME_REQUEST` also needs the call to have carried its request id. Otherwise `wait` (when there is an `afterSeconds`) or `manual`. |
+  | `VERIFY_STATE` | `invoke` the reader of the first resource that has one: `TASK` → `task_get`, `SESSION` → `session_get`, `PROJECT` → `project_get`, or `orbit <type> get ID --json`. Only an id that is one safe path segment and does not start with `-` is handed on. With no reader, `manual`. |
+  | `AWAIT_OWNER_DECISION` | `ask_user`. |
+  | none | `ask_user` when a confirmation is required or the actor is `USER`. `manual` on a `COMMITTED` write. `wait` when the actor is `SYSTEM` or there is an `afterSeconds`. Otherwise `manual`. |
+  | anything else | `ask_user` when a confirmation is required, otherwise `manual`. |
+
+  "Exposes" means the tool appears in this server's `tools/list` (orchestration, watch, wiki and
+  `ORBIT_MCP_TOOLS` gating included), or the command is an `available` entry of
+  `orbit capabilities --json`. When the capability is missing, the step degrades: it is never an
+  invoke that cannot run.
+
+**MCP.** `content[0].text` and `isError` are byte for byte what they were, so a client that reads
+only the text sees no change. The report is added as `structuredContent`, including for tools that declare an
+`outputSchema` and refusals before dispatch. `tools/list` advertises an object schema with `anyOf`
+branches for the original success schema and the recovery report, so schema-validating clients can
+read both. The original first text block and `isError` are unchanged; no second block is appended.
+
+**CLI.** A successful `--json` call prints what it always printed. A failed `--json` call exits `1`
+and prints the report as exactly one JSON document on **stdout**, so a single
+`JSON.parse` of stdout reads it. JSON-mode stdout is spooled to a private temporary file until the
+command succeeds, then copied unchanged. If a later page fails (`task list --all` or `api --paginate`),
+the partial output is discarded before the failure report is written. Successful NDJSON stays NDJSON.
+Diagnostic stderr is separate from the machine-readable stdout document. `text` is the line a person would have read. Without `--json`, a failure prints
+that same `orbit <command>: <error>` line on stderr, exactly as before. The stdin of `orbit provider`
+and `orbit token` may hold a credential, so it is never echoed back, and those commands are not
+offered again. Neither is a command whose stdin exceeded 256 KiB or was not UTF-8.
+
+Revision 2 also routes `whoami`, `api` and other flag-parsed command failures through the shared CLI
+boundary. API status errors retain their original human text while exposing the transport cause to
+the renderer. Commands without a `--json` mode and child-process passthrough commands are outside
+this JSON contract. Native API `recovery` production remains separate work.
+
+The recovery tests include serialized MCP initialize/list/call responses validated with Ajv against
+the advertised output schema, pre-dispatch capability refusals, and real CLI subprocess failures
+across command families, partial task/API pagination, and `whoami` after it has written identity data.
+
+Revision 3 derives request identity from the failed outbound request body, including generated IDs;
+empty or whitespace-only IDs do not protect a retry. MCP and CLI use that same metadata. A same-ID
+replay is offered only if the suggested input/argv preserves the actual sent ID. In particular, an
+`orbit task start` trigger generated after parsing is recognized, but replaying argv that would draw
+a new trigger stays manual. JSON-mode detection uses the selected command's option value boundaries
+and Go boolean forms, including the last repeated value. String flag values such as `--json` and
+`--client-turn-id=x` remain literal user text. A source-based test checks the boundary grammar against
+typed flag registrations; real subprocess tests cover literal values, boolean forms, empty IDs,
+explicit IDs and generated triggers while retaining the revision 2 regression suite.

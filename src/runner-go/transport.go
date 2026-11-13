@@ -355,7 +355,10 @@ func (t *Transport) doHeaders(ctx context.Context, method, path string, body, ou
 // doVia is doHeaders sent through client: t.client for every call but the wiki door's
 // (wiki_conn.go). On the daemon's transport a daemon route's call goes over the runner link
 // instead (linkMode.doVia); every other call is doHTTP's.
-func (t *Transport) doVia(ctx context.Context, client *http.Client, method, path string, body, out interface{}, timeout time.Duration, headers map[string]string) error {
+func (t *Transport) doVia(ctx context.Context, client *http.Client, method, path string, body, out interface{}, timeout time.Duration, headers map[string]string) (err error) {
+	// What this process sent and how it ended, for the failure it may have to report (recovery_render.go).
+	noteTransportAttempt()
+	defer func() { noteTransportResult(method, err, body) }()
 	if t.link != nil {
 		return t.link.doVia(ctx, method, path, body, out, timeout, headers, func(ctx context.Context) error {
 			return t.doHTTP(ctx, client, method, path, body, out, timeout, headers)
@@ -1164,7 +1167,13 @@ const maxSessionAttachmentBytes = 25 << 20
 
 var errAttachmentTooLarge = errors.New("File exceeds the 25 MiB limit")
 
-func (t *Transport) uploadSessionAttachmentFile(ctx context.Context, sessionID string, file *os.File, mimeType, filename string) (string, error) {
+func (t *Transport) uploadSessionAttachmentFile(ctx context.Context, sessionID string, file *os.File, mimeType, filename string) (id string, err error) {
+	noteTransportAttempt()
+	defer func() { noteTransportResult(http.MethodPost, err) }()
+	return t.uploadSessionAttachmentFileOnce(ctx, sessionID, file, mimeType, filename)
+}
+
+func (t *Transport) uploadSessionAttachmentFileOnce(ctx context.Context, sessionID string, file *os.File, mimeType, filename string) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
