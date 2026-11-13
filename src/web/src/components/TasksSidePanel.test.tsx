@@ -23,6 +23,16 @@ const source = readFileSync(fileURLToPath(new URL('./TasksSidePanel.tsx', import
 const styles = readFileSync(fileURLToPath(new URL('../index.css', import.meta.url)), 'utf8');
 
 describe('TasksSidePanel nav', () => {
+  // The Wiki's chat column narrower than 1440 asks for the icon rail (board docs/mocks/wiki-rail 03 C2): shown collapsed
+  // while it asks, and the toggle opens it back for that while — neither writes the choice the owner keeps.
+  it('shows the icon rail while a page asks for it, and keeps the owner’s own choice untouched', () => {
+    expect(source).toContain('const folded = useSidebarFolded();');
+    expect(source).toContain('const collapsed = kept || (folded && !unfolded);');
+    const toggle = source.match(/const toggleCollapsed = useCallback\(\(\) => \{([\s\S]*?)\n {2}\}, \[folded, kept\]\);/)?.[1] ?? '';
+    expect(toggle.indexOf('setUnfolded((u) => !u);\n      return;')).toBeGreaterThan(-1);
+    expect(toggle.indexOf('setUnfolded')).toBeLessThan(toggle.indexOf('localStorage.setItem(SIDEBAR_COLLAPSED_KEY'));
+  });
+
   it('adds Projects (icon, label, and shortcut) to the fixed TOP nav', () => {
     const topBlock =
       source.match(/const TOP(?:\s*:\s*TopNavItem\[\])?\s*=\s*\[([\s\S]*?)\n\];/)?.[1] ?? '';

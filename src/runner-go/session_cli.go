@@ -121,6 +121,9 @@ Options:
                            run commands, use auto. Inside a session it can never be wider
                            than that session's own mode: a wider mode is refused, and a
                            wider default gives way to its mode
+  --no-worktree            Run in the agent's own checkout with no branch and no worktree,
+                           even when the agent isolates each session: for work that changes
+                           no code. The session shares that checkout and has no branch to merge
   --wait[=BOOL]            Wait until the first turn settles. Inside a session the wait is first
                            recorded as a watch that wakes this session when the turn settles: if
                            the wait runs out or the server stops answering, the output carries
