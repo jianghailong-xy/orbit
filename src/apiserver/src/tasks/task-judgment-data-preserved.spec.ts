@@ -2935,6 +2935,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0560 adds the session_guest table and widens three CHECKs (external sender, its session-row preview, the
       // activity credential kind); no preserved rows, triggers or DONE fence change.
       '0560_session_guest',
+      // 0565 adds the terminal_login and terminal_credential tables, their indexes and foreign keys to "user" and
+      // "runner" only (docs/terminal-session-design.md); no preserved rows, triggers or DONE fence change, and no row
+      // is written.
+      '0565_terminal_credential',
       // 0571 adds one nullable TIMESTAMP(3) `self_update_postpone_until` on `runner` (no default, catalog-only); no
       // preserved rows, triggers or DONE fence change, and no row is written.
       '0571_runner_self_update_postpone',
@@ -2974,7 +2978,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0625_terminal_credential',
       // 0626 widens approval_decided_via_chk to allow 'TERMINAL' (docs/terminal-session-design.md); approval only, no
       // preserved rows, triggers or DONE fence change, and no row is written.
-      '0626_approval_decided_by_terminal'],
+      '0626_approval_decided_by_terminal',
+      // 0627 adds two nullable columns to conversation_turn, sender_client and sender_client_detail (which client
+      // sent the turn, sessions/turn-sender-client.ts); no preserved rows, triggers or DONE fence change, and no row
+      // is written.
+      '0627_turn_sender_client'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

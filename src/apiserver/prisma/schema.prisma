@@ -2828,6 +2828,13 @@ model ConversationTurn {
   externalSenderSource String? @map("external_sender_source")
   externalSenderId     String? @map("external_sender_id")
   externalSenderName   String? @map("external_sender_name")
+  /// Which client sent this turn (migration 0627, sessions/turn-sender-client.ts): web, ios, macos, android,
+  /// terminal, feishu or runner, from the credential and the `X-Orbit-Client` / `X-Orbit-Device` headers of the
+  /// door it came in through, never from a body. The detail is an ios client's device (iphone / ipad) or a
+  /// terminal's machine name. Null for a session's message (its sender column says it), a token's, the
+  /// platform's own deliveries, and every turn written before 0627.
+  senderClient       String? @map("sender_client")
+  senderClientDetail String? @map("sender_client_detail")
   status          String    @default("PENDING") // PENDING | IN_FLIGHT | ANSWERED
   deliveredAt     DateTime? @map("delivered_at")
   leaseDeadlineAt DateTime? @map("lease_deadline_at")

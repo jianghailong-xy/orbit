@@ -29,6 +29,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden, PatScope, workspaceConfinement } from '../auth/pat-scope.decorator';
 import { TerminalRoute } from '../auth/terminal-credentials';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
+import { senderClientOfRequest } from './turn-sender-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SetSessionTagsDto } from '../session-tags/dto';
@@ -603,9 +604,14 @@ export class SessionsController {
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Body(PublicIdPipe.forFields('attachmentIds')) dto: SessionTurnDto,
+    @Headers('x-orbit-client') client?: string,
+    @Headers('x-orbit-device') device?: string,
   ) {
     assertClientTurnIdNotReserved(dto.clientTurnId);
-    return this.sessions.createTurn(user.userId, id, dto);
+    // Which client sent it, from the credential and the app's own headers (turn-sender-client.ts), never the body.
+    return this.sessions.createTurn(user.userId, id, dto, {
+      senderClient: senderClientOfRequest(user.credential, client, device),
+    });
   }
 
   /** Versioned mutation door for Web. An N-1 API returns 404 before touching a turn, so a new
@@ -616,9 +622,14 @@ export class SessionsController {
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Body(PublicIdPipe.forFields('attachmentIds')) dto: SessionTurnDto,
+    @Headers('x-orbit-client') client?: string,
+    @Headers('x-orbit-device') device?: string,
   ) {
     assertClientTurnIdNotReserved(dto.clientTurnId);
-    return this.sessions.createTurn(user.userId, id, dto);
+    // Which client sent it, from the credential and the app's own headers (turn-sender-client.ts), never the body.
+    return this.sessions.createTurn(user.userId, id, dto, {
+      senderClient: senderClientOfRequest(user.credential, client, device),
+    });
   }
 
   // Default stays the installed native client's queue-only contract. Web opts into `active` to
@@ -664,12 +675,18 @@ export class SessionsController {
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Body(PublicIdPipe.forFields('attachmentIds', 'stopSessionId')) dto: SessionResumeDto,
+    @Headers('x-orbit-client') client?: string,
+    @Headers('x-orbit-device') device?: string,
   ) {
     assertClientTurnIdNotReserved(dto.clientTurnId);
     // The person's door, and the only one that routes a message onto the run that holds this
     // session's task — see SessionsService.resume's `routeToCurrentRun` for why the sweeps and the
     // dispatchers keep the refusal instead.
-    return this.sessions.resume(user.userId, id, dto, { routeToCurrentRun: true, credential: user.credential });
+    return this.sessions.resume(user.userId, id, dto, {
+      routeToCurrentRun: true,
+      credential: user.credential,
+      senderClient: senderClientOfRequest(user.credential, client, device),
+    });
   }
 
   /** A personal access token reaches this with `sessions:write`, but never changes the permission
