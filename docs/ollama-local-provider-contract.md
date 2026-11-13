@@ -123,7 +123,9 @@ The probe states and `STALE` are defined in §6.
 
 On its own runner, the engine gets `ANTHROPIC_BASE_URL` = the row's `baseUrl` and
 `ANTHROPIC_AUTH_TOKEN` = `LOCAL_AUTH_PLACEHOLDER`. The placeholder is built into the job's environment at
-dispatch and stored nowhere. It is needed because Claude Code given no token would send the runner's own
+dispatch. The control plane persists it nowhere: no provider row, session, turn or task holds it, and no real
+secret is stored for a local provider at all. On the runner it exists only in the session's runtime configuration:
+the engine's environment and the temporary `--settings` file in the session's scratch directory (§7). It is needed because Claude Code given no token would send the runner's own
 Claude sign-in to the endpoint.
 
 The claim SQL claims a session on a runner-scoped row only on `runner_id`. The claim's late check and the
@@ -250,8 +252,9 @@ credential or the runner's own Claude sign-in.
 
 **What a claim hands the runner** on a local row: Claude Code and the model, with:
 
-- `ANTHROPIC_BASE_URL` = the row's `baseUrl`, `ANTHROPIC_AUTH_TOKEN` = `LOCAL_AUTH_PLACEHOLDER` (built at dispatch,
-  stored nowhere), `ANTHROPIC_MODEL`, and the model again in `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`,
+- `ANTHROPIC_BASE_URL` = the row's `baseUrl`, `ANTHROPIC_AUTH_TOKEN` = `LOCAL_AUTH_PLACEHOLDER` (built at dispatch;
+  persisted in no control-plane or task data, present only in the session's environment and its temporary
+  `--settings` file), `ANTHROPIC_MODEL`, and the model again in `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`,
   `ANTHROPIC_SMALL_FAST_MODEL` and `CLAUDE_CODE_SUBAGENT_MODEL`, so background and subagent requests ask the instance
   for a model it serves;
 - `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`;
@@ -259,7 +262,9 @@ credential or the runner's own Claude sign-in.
   `CLAUDE_CODE_USE_{BEDROCK,VERTEX,FOUNDRY}`, their `SKIP_*_AUTH`, the Bedrock/Vertex/Foundry base URLs, projects
   and keys, AWS and Google credentials);
 - the workspace environment without any routing variable (`isClaudeRoutingVar`, below);
-- `ORBIT_LOCAL_PROVIDER=1`, which tells the runner to isolate the run.
+- `ORBIT_LOCAL_PROVIDER=1`, which tells the runner to isolate the run. It is reserved: `resolveProviderExec` takes
+  it out of every job's workspace environment, on every path (a cloud key, an engine's sign-in, OpenCode), so only
+  the runner-scoped branch can set it and a workspace that types it in gets an ordinary job.
 
 **The runner's half** (`runner-go/claude_local_provider.go`, declared as `ollama-run/v1`). A claude process takes
 routing from the runner's own environment, from the `env` of the settings files it loads (the user's
@@ -271,14 +276,28 @@ the runner:
    job's own empty values win as well);
 2. writes into the flag settings file an `env` that pins every routing variable: the job's value where it sets one,
    and `""` for each routing variable a lower settings file sets;
-3. does not start the session at all if it cannot write that file;
-4. never passes the marker on to the engine.
+3. sets `CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST=1`, Claude Code's own switch for a host that supplies the provider.
+   With it the CLI ignores every provider variable a settings file names, the managed policy file included, and
+   sends no `apiKeyHelper` or settings-file credential (measured on 2.1.321, 2.1.323 and 2.1.325: a managed file
+   setting another base URL, token, custom headers, Bedrock, Vertex, a model, `apiKeyHelper` and the switch itself
+   to `0` changed nothing about where the request went or what it carried);
+4. does not start the session at all if it cannot write that file;
+5. never passes the marker on to the engine.
+
+**`ollama-run/v1` is measured, not assumed.** The binary does not declare it. When the runner starts, before its
+first call to the control plane, it runs the installed `claude` exactly as a local session's spawn would: the same
+environment and the pinned flag settings, with the machine's real managed, user and checkout settings, pointed at a
+loopback listener of its own (`claude_local_provider_verify.go`). The runner declares `ollama-run/v1` only if the
+first model request arrives there carrying the check's own token and no `X-Api-Key`. A settings file that sends the
+request elsewhere, an `apiKeyHelper` or settings key that adds a credential, or a CLI that ignores the switch each
+fails the check. The result is keyed by the resolved `claude` binary and the contents of every managed settings
+file. A local spawn after either has changed checks again (Claude Code updates itself), and a local session is not
+started if the check fails.
 
 A routing variable is matched by prefix, so a platform added later is covered: `ANTHROPIC_*`, `CLAUDE_CODE_USE_*`,
 `CLAUDE_CODE_SKIP_*_AUTH`, `AWS_*`, `VERTEX_REGION_*`, plus `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_SUBAGENT_MODEL`,
 `CLOUD_ML_REGION`, `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT` and `GCLOUD_PROJECT`. An unmarked job (a
-cloud key, a sign-in) is spawned exactly as before. Managed (policy) settings outrank the flag layer and are left
-to the machine's administrator. A provider switch stays on the session's engine: Claude Code may move between a cloud key and a local
+cloud key, a sign-in) is spawned exactly as before. A provider switch stays on the session's engine: Claude Code may move between a cloud key and a local
 provider on its own runner; another engine is `PROVIDER_ENGINE_INCOMPATIBLE`.
 
 **Failures during a run.** `isRetryableApiErrorText` (`@orbit/shared` events.ts) does not re-send what Ollama says

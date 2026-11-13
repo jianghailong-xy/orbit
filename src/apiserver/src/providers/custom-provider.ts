@@ -777,7 +777,11 @@ export function resolveProviderExec(args: {
    *  (declaredReasoningLevels): what every door that hands the engine an effort maps it onto. */
   reasoningLevels?: string[];
 } {
-  const { customRow, sessionModel, workspaceModel, workspaceEnv } = args;
+  const { customRow, sessionModel, workspaceModel } = args;
+  // The local-provider marker is the control plane's word to the runner, never a workspace's: taken out of
+  // every job's environment here, so only the runner-scoped branch below can set it, and a cloud key, a
+  // sign-in or OpenCode with the marker typed into its workspace is spawned exactly as it would be without.
+  const workspaceEnv = withoutReservedEnv(args.workspaceEnv);
   if (customRow && !customRow.enabled) {
     throw new BadRequestException('provider is disabled');
   }
@@ -937,6 +941,14 @@ export function resolveProviderExec(args: {
     env,
     ...(retired ? { retiredPin: true } : {}),
   };
+}
+
+/** `env` without the variables only dispatch may set (LOCAL_PROVIDER_MARKER_VAR), in any case. Null stays null. */
+function withoutReservedEnv(env: Record<string, string> | null | undefined): Record<string, string> | null | undefined {
+  if (!env) return env;
+  const reserved = Object.keys(env).filter((name) => name.toUpperCase() === LOCAL_PROVIDER_MARKER_VAR);
+  if (!reserved.length) return env;
+  return Object.fromEntries(Object.entries(env).filter(([name]) => !reserved.includes(name)));
 }
 
 /**

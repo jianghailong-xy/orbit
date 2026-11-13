@@ -80,8 +80,16 @@ func localProviderProcessEnv(env []string, agentEnv map[string]string) []string 
 		}
 		out = append(out, entry)
 	}
-	return out
+	// Claude Code's own switch for a host that supplies the provider (measured on 2.1.321–2.1.325): every
+	// provider variable a settings file names — the managed policy file, the user's, the checkout's — is
+	// ignored in favour of this environment, and neither an apiKeyHelper nor a settings-file token is sent.
+	// Appended last, so the inherited value cannot undo it; a settings file cannot either, since the switch is
+	// itself one of the variables it protects.
+	return append(out, claudeProviderManagedByHostVar+"=1")
 }
+
+// claudeProviderManagedByHostVar is Claude Code's switch for a host that supplies the provider itself.
+const claudeProviderManagedByHostVar = "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST"
 
 // localProviderPinnedEnv is the `env` the flag settings file carries for a local job: every routing
 // variable the job sets, at its value, and every routing variable a lower settings file sets

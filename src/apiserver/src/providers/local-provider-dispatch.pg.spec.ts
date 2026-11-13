@@ -39,7 +39,7 @@ import type { AddressInfo } from 'node:net';
 import test from 'node:test';
 
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { CreatorType, PrismaClient, RunStatus, RunnerStatus, TaskStatus } from '@prisma/client';
 import {
   AgentProvider,
   apiErrorRetryAt,
@@ -76,6 +76,8 @@ import { ProviderPlanUsageService } from './plan-usage.service';
 import { ProvidersService } from './providers.service';
 import '../test-support/dequeue-under-lease';
 import { sessionLease } from '../test-support/dequeue-under-lease';
+import { establishProjectContractForPgTest } from '../projects/project-contract-test-helper';
+import { AUTO_RUN_RETRY_BACKOFF_MS } from '../tasks/task-retry-policy';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY ??= 'local-provider-dispatch-spec';
@@ -246,6 +248,9 @@ suite('a local Ollama provider through dispatch, against a fake Ollama, on real 
   const providers = new ProvidersService(prisma, realtime, usage);
   const sessions = new SessionsService(prisma, queue, realtime);
   const tasks = new TasksService(prisma, sessions, realtime);
+  // The instant the task sweep decides its backoff against: real time, unless case (14) moves it.
+  const clock: { now: Date | null } = { now: null };
+  (tasks as unknown as { now: () => Date }).now = () => clock.now ?? new Date();
   const runnerApi = new RunnerApiController(
     db as never, queue as never, realtime as never, realtime as never, { issue: async () => 'orchestration-credential' } as never,
     // The messages here carry no `#`-references and reach no list console.
@@ -277,7 +282,8 @@ suite('a local Ollama provider through dispatch, against a fake Ollama, on real 
       data: {
         id: workspaceId, ownerId, runnerId, name: `${label}-agent`, enabled: true, workDir: `/tmp/${label}`,
         // A credential typed into the workspace: never one a local session may carry to its endpoint.
-        env: { ANTHROPIC_API_KEY: WORKSPACE_SECRET, KEEP_ME: 'yes' },
+        // …and the local-provider marker typed in by hand: dispatch alone may set it (custom-provider.ts).
+        env: { ANTHROPIC_API_KEY: WORKSPACE_SECRET, KEEP_ME: 'yes', ORBIT_LOCAL_PROVIDER: '1' },
       },
     });
     return { runnerId, workspaceId };
@@ -612,6 +618,9 @@ suite('a local Ollama provider through dispatch, against a fake Ollama, on real 
       assert.equal(claimed?.agent.env?.ANTHROPIC_AUTH_TOKEN, 'sk-local-dispatch-keyed');
       assert.equal(claimed?.agent.env?.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, undefined);
       assert.equal(claimed?.agent.env?.ANTHROPIC_API_KEY, WORKSPACE_SECRET, 'an ordinary key session lost its workspace env');
+      // The marker its workspace forged never reaches the runner: the job is spawned as an ordinary cloud one.
+      assert.equal(claimed?.agent.env?.ORBIT_LOCAL_PROVIDER, undefined, 'a forged local marker reached a cloud job');
+      assert.equal(claimed?.agent.env?.ANTHROPIC_BASE_URL, 'https://api.deepseek.com/anthropic');
     }
     // No model request ever reached the fake but the three case (8) sent itself: the control plane runs nothing on it.
     assert.equal(fake.seen.filter((line) => line === 'POST /v1/messages').length, 3);
@@ -838,6 +847,105 @@ suite('a local Ollama provider through dispatch, against a fake Ollama, on real 
         assert.ok(held.get(task.id) instanceof Date, `${label}: not backed off`);
         assert.ok(!refused.has(task.id), `${label}: held as final`);
       }
+    }
+  });
+  await t.test('(14) auto-run through the ready sweep, a real run and its settlement: Ollama\'s final answers start no new run; a cold-start timeout only backs off, on the same runner and provider', async () => {
+    const home = await machine(owner, 'ladder-home');
+    const laptop = await machine(owner, 'ladder-laptop');
+    const local = await localOn(owner, home);
+    await probe(local);
+    const projectId = randomUUID();
+    await db.project.create({ data: { id: projectId, ownerId: owner, title: 'local ladder', coordinatorEnabled: false, maxConcurrentTasks: 10, startedAt: new Date() } });
+    await establishProjectContractForPgTest(db, owner, projectId, 'local ladder');
+    const prerequisite = await db.task.create({
+      data: { ownerId: owner, projectId, assigneeId: home.workspaceId, title: 'done first', creatorType: CreatorType.USER, creatorId: owner,
+        provider: 'claude', completionCriterion: 'EVIDENCE_JUDGMENT', status: TaskStatus.DONE, autoRunWhenReady: false },
+    });
+    /** An OPEN auto-run task on the local provider whose prerequisite is DONE: the next ready sweep starts it. */
+    const readyTask = async (title: string) => {
+      const task = await db.task.create({
+        data: { ownerId: owner, projectId, assigneeId: home.workspaceId, title, creatorType: CreatorType.USER, creatorId: owner,
+          provider: local.slug, completionCriterion: 'EVIDENCE_JUDGMENT', status: TaskStatus.OPEN, autoRunWhenReady: true, dispatchHold: false },
+      });
+      await db.taskDependency.create({ data: { taskId: task.id, dependsOnTaskId: prerequisite.id } });
+      return task.id;
+    };
+    const sweepTasks = () => (tasks as unknown as { reconcileReadyTasks(): Promise<void> }).reconcileReadyTasks();
+    const runsOf = (taskId: string) => db.session.findMany({
+      where: { taskId, startsTaskWork: true }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { id: true, status: true, createdAt: true, provider: true, providerBuiltin: true, assignedRunnerId: true, retryAt: true },
+    });
+    const skippedOf = async (taskId: string) =>
+      ((await tasks.get(owner, taskId)) as unknown as { autoRunSkipped?: { code: string; retryAt: Date | string | null } | null }).autoRunSkipped ?? null;
+    /** The run the sweep started, claimed by the bound runner, its opening turn handed out and failed with `text` as the runner settles it. */
+    const failsWith = async (taskId: string, text: string) => {
+      clock.now = null;
+      await sweepTasks();
+      const [run] = await runsOf(taskId);
+      assert.ok(run, 'the ready sweep started no run');
+      assert.deepEqual([run.provider, run.providerBuiltin, run.assignedRunnerId], [local.slug, false, home.runnerId]);
+      assert.equal(await claimOn(laptop), null);
+      const claimed = await claimOn(home);
+      assert.equal(claimed?.sessionId, run.id);
+      assert.equal(claimed?.agent.env?.ANTHROPIC_BASE_URL, fake.url);
+      const turnId = await handOut(home, run.id);
+      await ends(home, run.id, turnId, true, text);
+      return run;
+    };
+    try {
+      for (const [label, text] of [['out of memory', await said(MODEL, 'oom')], ['missing model', await said('gone:7b')]] as const) {
+        const taskId = await readyTask(`ladder ${label}`);
+        const run = await failsWith(taskId, text);
+        const settled = await db.session.findUniqueOrThrow({ where: { id: run.id }, select: { status: true, retryAt: true } });
+        assert.deepEqual([settled.status, settled.retryAt], [RunStatus.FAILED, null], `${label}: the run is retried by the session`);
+        assert.equal((await db.task.findUniqueOrThrow({ where: { id: taskId } })).status, TaskStatus.OPEN);
+        // Well past every backoff window: the sweep starts nothing, and the read says why.
+        clock.now = new Date(Date.now() + AUTO_RUN_RETRY_BACKOFF_MS[AUTO_RUN_RETRY_BACKOFF_MS.length - 1] + 60_000);
+        await sweepTasks();
+        await sweepTasks();
+        assert.equal((await runsOf(taskId)).length, 1, `${label}: the ladder started a replacement run`);
+        assert.equal((await skippedOf(taskId))?.code, 'LOCAL_SERVER_REFUSED');
+        clock.now = null;
+      }
+
+      const taskId = await readyTask('ladder cold start');
+      const run = await failsWith(taskId, COLD_START_TIMEOUT);
+      // The session's own retry comes first, within its budget, on the same runner, provider and env (case 12).
+      let turnId: string;
+      for (let attempt = 0; ; attempt++) {
+        const row = await db.session.findUniqueOrThrow({ where: { id: run.id }, select: { retryAt: true } });
+        if (!row.retryAt) break;
+        assert.ok(attempt < MAX_API_ERROR_RETRIES, 'the session re-sent a timeout past its budget');
+        assert.equal((await skippedOf(taskId))?.code, 'RUN_RETRY_ARMED');
+        await db.session.update({ where: { id: run.id }, data: { retryAt: new Date(Date.now() - 3_600_000) } });
+        await db.runner.update({ where: { id: home.runnerId }, data: { lastHeartbeatAt: new Date() } });
+        await retries.sweep();
+        const claimed = await claimOn(home);
+        assert.equal(claimed?.sessionId, run.id);
+        assert.equal(claimed?.agent.env?.ORBIT_LOCAL_PROVIDER, '1');
+        turnId = await handOut(home, run.id);
+        await ends(home, run.id, turnId, true, COLD_START_TIMEOUT);
+      }
+      // Then the task ladder: held inside its first window, one new run after it, on the same runner and provider.
+      const failed = await db.session.findUniqueOrThrow({ where: { id: run.id }, select: { createdAt: true } });
+      const windowEnds = failed.createdAt.getTime() + AUTO_RUN_RETRY_BACKOFF_MS[0];
+      clock.now = new Date(windowEnds - 1_000);
+      await sweepTasks();
+      assert.equal((await runsOf(taskId)).length, 1, 'retried inside its backoff window');
+      assert.equal((await skippedOf(taskId))?.code, 'RETRY_BACKOFF');
+      clock.now = new Date(windowEnds + 1_000);
+      await sweepTasks();
+      const runs = await runsOf(taskId);
+      assert.equal(runs.length, 2, 'expected exactly one new run after the window');
+      const next = runs[1];
+      assert.deepEqual([next.provider, next.providerBuiltin, next.assignedRunnerId], [local.slug, false, home.runnerId]);
+      clock.now = null;
+      assert.equal(await claimOn(laptop), null);
+      const claimed = await claimOn(home);
+      assert.equal(claimed?.sessionId, next.id);
+      assert.equal(claimed?.agent.env?.ANTHROPIC_BASE_URL, fake.url);
+    } finally {
+      clock.now = null;
     }
   });
 });

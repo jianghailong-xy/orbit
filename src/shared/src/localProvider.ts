@@ -89,7 +89,8 @@ export const LOCAL_CLAUDE_CLEARED_ENV = [
 
 /**
  * The token handed to an engine whose CLI insists on one when the provider takes none. Built into the
- * engine's environment at dispatch, in memory, and never stored: it is not a secret, and it is what keeps
+ * engine's environment at dispatch, and persisted in no control-plane or task data; on the runner it exists only in
+ * the session's runtime configuration (its environment and temporary --settings file): it is not a secret, and it is what keeps
  * Claude Code from sending the runner's own Claude sign-in to the local endpoint instead.
  */
 export const LOCAL_AUTH_PLACEHOLDER = 'ollama';

@@ -77,6 +77,8 @@ func TestLocalProviderEnvOverridesTheRunnersAmbientRouting(t *testing.T) {
 	t.Setenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
 	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "ambient-oauth")
 	t.Setenv("RUNNER_OWN", "kept")
+	// An inherited switch turned off cannot undo the one the local job sets.
+	t.Setenv(claudeProviderManagedByHostVar, "0")
 	agent := localJobEnv(t.TempDir())
 
 	got := exactEnv(t, localProviderProcessEnv(envWithAgent(agent), agent))
@@ -88,6 +90,9 @@ func TestLocalProviderEnvOverridesTheRunnersAmbientRouting(t *testing.T) {
 		if v, ok := got[key]; !ok || v != want {
 			t.Errorf("%s = %q (set %v), want %q", key, v, ok, want)
 		}
+	}
+	if got[claudeProviderManagedByHostVar] != "1" {
+		t.Errorf("%s = %q: settings files could still route the session", claudeProviderManagedByHostVar, got[claudeProviderManagedByHostVar])
 	}
 	for _, key := range []string{"CLAUDE_CODE_USE_VERTEX", "AWS_BEARER_TOKEN_BEDROCK", "ANTHROPIC_VERTEX_PROJECT_ID", "CLAUDE_CODE_OAUTH_TOKEN", localProviderMarkerVar} {
 		if v, ok := got[key]; ok {
@@ -177,8 +182,9 @@ func TestLocalProviderPinsRoutingOverLowerSettings(t *testing.T) {
 	}
 }
 
-func TestRunnerDeclaresLocalProviderRun(t *testing.T) {
-	if !strings.Contains(","+runnerCapabilitiesV1+",", ","+localProviderRunCapabilityV1+",") {
-		t.Fatal("the runner does not declare " + localProviderRunCapabilityV1)
+// Never declared by the binary alone: only once declareLocalProviderRun has measured this machine.
+func TestLocalProviderRunIsNotDeclaredStatically(t *testing.T) {
+	if strings.Contains(","+runnerCapabilitiesV1+",", ","+localProviderRunCapabilityV1+",") {
+		t.Fatal(localProviderRunCapabilityV1 + " is declared before any check ran")
 	}
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -238,6 +239,13 @@ func spawnClaude(ctx context.Context, job *ClaimedSession, execDir string, args 
 	// routing variable pinned in the flag settings layer over the user's and the checkout's settings
 	// (claude_local_provider.go). Not started at all when that cannot be done.
 	cmd.Env = localProviderProcessEnv(cmd.Env, job.Agent.Env)
+	if isLocalProviderJob(job.Agent.Env) {
+		// Checked again here, not only when the runner started: Claude Code updates itself, and a managed
+		// settings file can change under a running runner. Re-measured only when one of them has.
+		if err := ensureLocalProviderRun(ctx); err != nil {
+			return nil, fmt.Errorf("this runner cannot keep a local provider's session on its local endpoint: %w", err)
+		}
+	}
 	if err := pinLocalProviderSettings(args, job.Agent.Env, execDir); err != nil {
 		return nil, err
 	}
