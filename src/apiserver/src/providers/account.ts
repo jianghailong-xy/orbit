@@ -38,6 +38,10 @@ export interface AccountRunner {
   accountPauses: unknown;
   planUsage: unknown;
   activeSessions?: ActiveSessions;
+  /** What the runner declared on its last full heartbeat. Read only for a local provider's gate
+   *  (localProviderReadiness): a read that leaves them out refuses every runner-scoped row, never passes it. */
+  capabilities?: readonly string[] | null;
+  capabilitiesReportedAt?: Date | string | null;
 }
 
 /** How many sessions are at work on each of a runner's accounts of each engine, by account id, an account

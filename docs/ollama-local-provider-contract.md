@@ -134,10 +134,7 @@ waits; it is never turned into a built-in Claude or Codex session on the runner'
 
 ## 5. Left to later phases
 
-- Phase 3: affinity scheduling that assigns a new session to the provider's runner, the capability gate
-  (refusing an `UNKNOWN` runner before dispatch), `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, zero cost,
-  readable PENDING reasons, and the provider-switch door, which today refuses a local provider for a session
-  not yet on its runner.
+- Phase 3 is §7. Zero cost for local rows is still open.
 - Phases 4A/4B: the connect flow and pickers. The web gallery leaves runner-scoped presets out until 4A
   draws a runner chooser; native clients show the generic mark.
 
@@ -206,3 +203,58 @@ response body, a prompt or a key. The catalogue keeps a name, `contextWindow`, `
   cannot widen this list.
 - No proxy (the environment's `HTTP_PROXY` is ignored). No redirect is followed. No transparent decompression.
   Response headers are capped at 16 KiB.
+
+## 7. Dispatch readiness and failing closed (phase 3)
+
+Task `34DuK8hgYpZdMfSAydDJ0`. One rule, `localProviderReadiness` (`@orbit/shared` localProvider.ts), decides whether a
+session may run on a runner-scoped provider now. Every door applies it, with the runner the session is (or would be)
+on and the model it would run:
+
+| Door | Where | On refusal |
+| --- | --- | --- |
+| Session create (also task start, a mention reply) | `SessionsService.create` → `assertLocalProviderStartable` | 400 with the code; nothing written |
+| Task create, and a task edit that moves the provider, model or assignee | `TasksService.assertLocalPinStartable` | 400 with the code; nothing written |
+| Claim | `QueueService.pausedPendingSessions` holds it before the claim; `resolveProviderExec` refuses it at the build | stays PENDING, `error` = the sentence |
+| Reclaim (runner restart) | `RunnerApiController.reclaim` → `resolveProviderExec` | left out, PENDING ones marked with the sentence |
+| Provider switch, any config change | `SessionsService.updateConfig` → `resolveProviderExec` | 400 with the code |
+| Reload (a switch's respawn) | `reloadProviderEnv` → `resolveProviderExec` | not handed out; refusal is the sentence |
+
+The checks, in order, each with a stable code (`LOCAL_PROVIDER_REFUSAL_CODES`):
+
+| Code | When | Clears on its own |
+| --- | --- | --- |
+| `LOCAL_PROVIDER_DISABLED` | the row is off | no |
+| `LOCAL_PROVIDER_NO_RUNNER` | no runner bound, or it is no longer the row owner's | no |
+| `LOCAL_PROVIDER_ELSEWHERE` | the session is on any other runner, or none | no |
+| `LOCAL_PROVIDER_RUNNER_OUTDATED` | the runner has not declared `ollama-probe/v1` | no |
+| `LOCAL_PROVIDER_UNPROBED` | no probe yet | yes |
+| `LOCAL_PROVIDER_STALE` | the probe is older than `LOCAL_PROBE_STALE_MS` | yes |
+| `LOCAL_PROVIDER_UNREACHABLE` | the probe got no answer: stopped, cold-starting, busy | yes |
+| `LOCAL_PROVIDER_MISCONFIGURED` | `MALFORMED`, `REFUSED`, `CLOUD_ENABLED`, or a `-cloud` model | no |
+| `LOCAL_PROVIDER_NO_MODELS` | the instance serves no local model | no |
+| `LOCAL_PROVIDER_MODEL_MISSING` | the model is not in the instance's catalogue, or nothing names one | no |
+| `LOCAL_PROVIDER_CAPABILITY_MISSING` | the model lacks `tools`, or its context is unknown or under 65,536 | no |
+
+The model is the session's own, else the row's default, else the first it lists (`localTargetModel`): never the
+built-in Claude default. `llama3` matches `llama3:latest`. A row-level `MODEL_MISSING`/`CAPABILITY_MISSING` about
+another model the row names does not refuse a session whose own model is fine.
+
+A held session waits PENDING with a sentence beginning `Local provider ` (`LOCAL_PROVIDER_ERROR_PREFIX`), which the
+claim clears when it finally claims it. A hold is re-judged on each poll from the stored probe; nothing re-sends it
+on a timer, so neither kind of hold is a retry loop. No refusal moves the session onto another runner, another
+credential or the runner's own Claude sign-in.
+
+**What a claim hands the runner** on a local row: Claude Code, the model, `ANTHROPIC_BASE_URL` = the row's
+`baseUrl`, `ANTHROPIC_AUTH_TOKEN` = `LOCAL_AUTH_PLACEHOLDER` (built at dispatch, stored nowhere),
+`ANTHROPIC_MODEL`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, and the workspace environment without
+`ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN`, so no cloud credential typed into the workspace reaches the local
+endpoint. A provider switch stays on the session's engine: Claude Code may move between a cloud key and a local
+provider on its own runner; another engine is `PROVIDER_ENGINE_INCOMPATIBLE`.
+
+**Failures during a run.** `isRetryableApiErrorText` (`@orbit/shared` events.ts) does not re-send what Ollama says
+can never succeed, whatever the status: `requires more system memory`, `llama runner process has terminated`,
+`out of memory`, `try pulling it first` (`LOCAL_SERVER_FATAL_ERROR_MARKERS`). A busy server (503), an overloaded
+one, a timeout during a cold load and a bare 500 stay retryable, within `MAX_API_ERROR_RETRIES` (3).
+
+Tests: `src/shared/src/localProviderReadiness.spec.ts`, and `src/apiserver/src/providers/local-provider-dispatch.pg.spec.ts`,
+which runs every door against a fake Ollama on loopback.

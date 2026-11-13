@@ -14,6 +14,10 @@ import {
   type AnthropicBoundCredential,
   type PlanUsageSnapshot,
   type RunnerModelCatalog,
+  isLocalProviderRefusalCode,
+  LOCAL_PROVIDER_ERROR_PREFIX,
+  localProviderReadiness,
+  localTargetModel,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { anthropicGatewayEnabled, engineTableOptions, withKeyGatewayToken } from '../providers/key-gateway';
@@ -255,6 +259,8 @@ export class QueueService {
         assignedRunner: {
           select: {
             engines: true, accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true,
+            // What a local provider's gate reads beside the capabilities (localProviderReadiness).
+            capabilitiesReportedAt: true,
             // What the region check holds a session on, and the name its sentence gives the machine.
             name: true, displayName: true, region: true,
           },
@@ -277,6 +283,8 @@ export class QueueService {
       let unavailableError = PROVIDER_UNAVAILABLE_ERROR;
       // The credential it spends, as far as the region check asks (credentialIsAnthropicBound).
       let credential: AnthropicBoundCredential | null = null;
+      // Why a local provider (a runner-scoped row) cannot run it here now, when it cannot.
+      let localHeld: string | null = null;
       if (until && runner && isAccountEngine(slug)) {
         const canMove = runner.capabilities.includes(ACCOUNT_MOVE_CAPABILITY[slug]);
         const move = canMove && accountBeforeDispatch(slug, {
@@ -309,6 +317,16 @@ export class QueueService {
               }, poolTableOptions());
           if (!engines.includes(engine)) incompatible = engineIncompatibleMessage(slug, engine, engines);
         }
+        // A local provider waits here, with its reason, until it can run on this runner: its runner says Ollama
+        // is answering, recently, with the session's model. Claiming it to refuse it at the build would be a
+        // claim and a release on every poll; it is never handed to a cloud engine instead.
+        if (provider && !unavailable && provider.scope === 'runner') {
+          localHeld = localProviderReadiness(
+            provider,
+            { runnerId, runner, model: localTargetModel(provider, session.model) },
+            now.getTime(),
+          )?.message ?? null;
+        }
         const key = `${session.ownerId}:${slug}`;
         if (!poolPauses.has(key)) poolPauses.set(key, await this.accountPoolPausedUntil(session.ownerId, slug, now));
         until = poolPauses.get(key) ?? null;
@@ -339,14 +357,16 @@ export class QueueService {
           unavailableError = ADMIN_ONLY_PROVIDER_ERROR;
         }
       }
-      if (!until && !unavailable && !incompatible && !regionHeld && !dshHeld) continue;
+      if (!until && !unavailable && !incompatible && !localHeld && !regionHeld && !dshHeld) continue;
       blocked.push(session.id);
       // A credential that cannot run says so first; the region before a pause, which only waits out a time.
       const error = unavailable
         ? unavailableError
         : incompatible
           ? incompatible
-          : regionHeld
+          : localHeld
+            ? localHeld
+            : regionHeld
             ? regionHeld
             : until ? `Account paused until ${until.toISOString()}` : dshUnavailable!;
       if (session.error !== error) {
@@ -474,7 +494,9 @@ export class QueueService {
             ) OR error LIKE 'Account paused until %' OR error LIKE ${ENGINE_INCOMPATIBLE_ERROR_LIKE}
               -- The region check's hold, released (docs/claude-region-check-contract.md §11), and the sentence a turn it
               -- stopped ended with: both begin with the code.
-              OR starts_with(error, ${CLAUDE_REGION_ERROR_PREFIX}) THEN NULL
+              OR starts_with(error, ${CLAUDE_REGION_ERROR_PREFIX})
+              -- A local provider's hold (pausedPendingSessions), released: its runner now says it can run.
+              OR starts_with(error, ${LOCAL_PROVIDER_ERROR_PREFIX}) THEN NULL
             ELSE error
           END,
           "started_at" = COALESCE("started_at", now()),
@@ -732,7 +754,7 @@ export class QueueService {
         const refusal = error?.getResponse?.();
         if (
           refusal?.code !== 'POOL_ACCOUNT_PAUSED' && refusal?.code !== 'PROVIDER_ENGINE_INCOMPATIBLE'
-          && refusal?.code !== 'LOCAL_PROVIDER_ELSEWHERE' && refusal?.code !== 'LOCAL_PROVIDER_NO_RUNNER'
+          && !isLocalProviderRefusalCode(refusal?.code)
         ) throw error;
         // A credential that stopped being one the session's engine can run between the hold above and
         // this build — a key edited in that window, or a local provider moved to another runner or left
@@ -879,7 +901,9 @@ export class QueueService {
             defaultRemoved: true,
             // What moving it off a spent account before this start reads (accountsForClaim).
             planUsage: true,
+            // And what a local provider's gate reads (localProviderReadiness).
             capabilities: true,
+            capabilitiesReportedAt: true,
           },
         },
         // The account-level permission default and orchestration switch, which replaced the

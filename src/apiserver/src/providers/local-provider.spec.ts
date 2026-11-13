@@ -205,9 +205,15 @@ test('dispatch of a runner-scoped row', async (t) => {
     scope: 'runner',
     authMode: 'none',
     runnerId: MY_RUNNER,
+    // What the runner's probe last found (phase 2): answering, a moment ago, the model there with tools.
+    probeState: 'READY',
+    probedAt: new Date(),
+    instanceModels: [{ value: 'qwen3.8:27b', contextWindow: 262144, tools: true }],
   };
+  const probing = { engines: null, defaultRemoved: null, accountPauses: null, planUsage: null,
+    capabilities: [OLLAMA_PROBE_CAPABILITY], capabilitiesReportedAt: new Date() };
   const resolve = (customRow: typeof local | null, runnerId: string | null | undefined, engine = AgentProvider.CLAUDE) =>
-    resolveProviderExec({ engine, declaredProvider: 'ollama', declaredProviderBuiltin: false, customRow, sessionModel: null, runnerId });
+    resolveProviderExec({ engine, declaredProvider: 'ollama', declaredProviderBuiltin: false, customRow, sessionModel: null, runnerId, runner: probing });
   const code = (run: () => unknown) => {
     try {
       run();

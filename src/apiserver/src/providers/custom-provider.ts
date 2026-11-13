@@ -9,6 +9,9 @@ import {
   isRetiredModel,
   keyDialect,
   LOCAL_AUTH_PLACEHOLDER,
+  LOCAL_PROVIDER_ERROR_PREFIX,
+  localProviderReadiness,
+  localTargetModel,
   modelForProvider,
   OPENCODE_DIALECT_NPM,
   openCodeBaseUrl,
@@ -133,6 +136,10 @@ export interface ModelProviderRow {
   runnerId?: string | null;
   /** `none`: the endpoint takes no key and none is stored; the engine gets LOCAL_AUTH_PLACEHOLDER. */
   authMode?: string;
+  /** What the bound runner's last probe found (migration 0646; phase 2), read by localProviderReadiness. */
+  probeState?: string | null;
+  probedAt?: Date | string | null;
+  instanceModels?: unknown;
 }
 
 /** The row's own entry for `model`, as its owner wrote it. */
@@ -640,16 +647,41 @@ export function assertRunnerScope(
   if (!row.runnerId) {
     throw new BadRequestException({
       code: 'LOCAL_PROVIDER_NO_RUNNER',
-      message: `provider "${slug}" runs only on its own runner, and it has none; bind it to one of your runners`,
+      message: `${LOCAL_PROVIDER_ERROR_PREFIX}"${slug}" runs only on its own runner, and it has none; bind it to one of your runners`,
       provider: slug,
     });
   }
   if (runnerId !== row.runnerId) {
     throw new BadRequestException({
       code: 'LOCAL_PROVIDER_ELSEWHERE',
-      message: `provider "${slug}" runs only on the runner it is bound to`,
+      message: `${LOCAL_PROVIDER_ERROR_PREFIX}"${slug}" runs only on the runner it is bound to; start this session on that runner`,
       provider: slug,
     });
+  }
+}
+
+/**
+ * Refuse a session on a runner-scoped row unless it may run there now (shared localProviderReadiness): on the
+ * row's own runner, that runner new enough to probe, a fresh probe that found Ollama answering, and `model` on
+ * the instance with tool calling and enough context. The refusal carries a stable `code` and whether it clears
+ * on its own (`transient`); it names the provider and the model, never the endpoint. A row that is not
+ * runner-scoped passes untouched.
+ */
+export function assertLocalProviderReady(
+  row: Pick<ModelProviderRow, 'scope' | 'slug' | 'enabled' | 'runnerId' | 'probeState' | 'probedAt' | 'instanceModels'>,
+  target: {
+    runnerId: string | null | undefined;
+    runner: { capabilities?: readonly string[] | null; capabilitiesReportedAt?: Date | string | null } | null | undefined;
+    model: string | null | undefined;
+  },
+  declared?: string | null,
+  now: number = Date.now(),
+): void {
+  if (row.scope !== 'runner') return;
+  const slug = row.slug ?? declared ?? '';
+  const refusal = localProviderReadiness({ ...row, slug, runnerId: row.runnerId ?? null }, target, now);
+  if (refusal) {
+    throw new BadRequestException({ code: refusal.code, message: refusal.message, provider: slug, transient: refusal.transient });
   }
 }
 
@@ -777,12 +809,19 @@ export function resolveProviderExec(args: {
     // A custom provider's model space is its own; never coerce it through the claude/gpt
     // prefix guard. Workspace.model is only a rolling-deploy bridge for model-less sessions made
     // by old replicas; current clients put their choice directly on Session.model.
-    const model =
-      (retired ? undefined : pin) ||
-      firstNonBlank(legacyInheritance && space !== AgentProvider.DSH ? workspaceModel : undefined) ||
-      runtimeCatalogDefault(customRow, space, args) ||
-      (space !== AgentProvider.DSH ? presetDefaultModel(customRow) : undefined) ||
-      DEFAULT_MODEL_BY_PROVIDER[space];
+    const local = customRow.scope === 'runner';
+    // A local provider runs a model its instance serves, or nothing: it has no catalogue default, and the
+    // built-in Claude default is not a model Ollama has (localTargetModel).
+    const model = local
+      ? (localTargetModel(customRow, pin) ?? '')
+      : (retired ? undefined : pin) ||
+        firstNonBlank(legacyInheritance && space !== AgentProvider.DSH ? workspaceModel : undefined) ||
+        runtimeCatalogDefault(customRow, space, args) ||
+        (space !== AgentProvider.DSH ? presetDefaultModel(customRow) : undefined) ||
+        DEFAULT_MODEL_BY_PROVIDER[space];
+    // The rest of the gate, now that the model is known: the runner can say whether Ollama is up, it said so
+    // recently, and the model is there with what Claude Code needs.
+    if (local) assertLocalProviderReady(customRow, { runnerId: args.runnerId, runner: args.runner, model }, args.declaredProvider);
     const reasoningLevels = declaredReasoningLevels(customRow, model, engine);
     if (engine === AgentProvider.OPENCODE) {
       // OpenCode spends the key as a provider of its own, named for it, and is told the model by that
@@ -811,8 +850,11 @@ export function resolveProviderExec(args: {
       // The kimi runtime also reads the model from here, so it can only be built once the
       // model above is resolved.
       env: {
-        ...(workspaceEnv ?? {}),
+        // A local session sends nothing off its machine: no workspace-typed Anthropic key reaches the local
+        // endpoint, and Claude Code's own background traffic (telemetry, update checks) is off.
+        ...(local ? withoutAnthropicKeys(workspaceEnv) : (workspaceEnv ?? {})),
         ...injectedEnv(engine, customRow, model, apiKey, customRow.codexLogin ? catalogWindow(args.modelCatalog, model) : undefined),
+        ...(local ? { CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' } : {}),
       },
       ...(retired ? { retiredPin: true } : {}),
       ...(reasoningLevels ? { reasoningLevels } : {}),
@@ -893,6 +935,13 @@ export function resolveProviderExec(args: {
     env,
     ...(retired ? { retiredPin: true } : {}),
   };
+}
+
+/** A workspace environment with every Anthropic credential variable taken out (a local session's). */
+function withoutAnthropicKeys(env: Record<string, string> | null | undefined): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(env ?? {}).filter(([name]) => name !== 'ANTHROPIC_API_KEY' && name !== 'CLAUDE_CODE_OAUTH_TOKEN'),
+  );
 }
 
 /**

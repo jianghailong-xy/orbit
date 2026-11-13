@@ -40,6 +40,7 @@ export const RESOLUTION_SELECT = {
   assignedRunner: {
     select: {
       runtimeDefaultModels: true, modelCatalog: true, engines: true, defaultRemoved: true, accountPauses: true, planUsage: true,
+      capabilities: true, capabilitiesReportedAt: true,
     },
   },
 } satisfies Prisma.SessionSelect;

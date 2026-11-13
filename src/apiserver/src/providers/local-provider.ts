@@ -4,11 +4,13 @@ import {
   AgentProvider,
   isCloudModelId,
   localProviderStatus,
+  localTargetModel,
   type ProviderAuthMode,
   type ProviderPreset,
   type ProviderScope,
   type ProviderScopeFields,
 } from '@orbit/shared';
+import { assertLocalProviderReady } from './custom-provider';
 
 /**
  * Runner-scoped providers on the API side (docs/ollama-local-provider-contract.md): the rules a write is
@@ -221,4 +223,46 @@ export async function updateScope(
   }
   if (runnerMoves || (!!dto.baseUrl && dto.baseUrl !== current.baseUrl)) Object.assign(data, CLEARED_PROBE);
   return data;
+}
+
+/**
+ * The gate a door that starts work applies before it writes anything (session create, task create and
+ * edit, task start): a session on a runner-scoped `row` would run on `runnerId` with `model`, and is refused
+ * now, with the stable code dispatch would refuse it with (shared localProviderReadiness), rather than written
+ * to wait. The bound runner counts only while it is still the row owner's. `runnerId` undefined means the door
+ * does not know the runner yet (a task with no assignee): then only what the row's own runner reports is
+ * checked, and the session's own door checks the rest. A row that is not runner-scoped passes untouched.
+ */
+export async function assertLocalProviderStartable(
+  db: Pick<Prisma.TransactionClient, 'runner'>,
+  row: {
+    slug: string;
+    ownerId: string | null;
+    scope: string;
+    enabled: boolean;
+    runnerId: string | null;
+    probeState: string | null;
+    probedAt: Date | null;
+    instanceModels: unknown;
+    defaultModel?: string | null;
+    models?: unknown;
+  },
+  target: { runnerId: string | null | undefined; model: string | null | undefined },
+): Promise<void> {
+  if (row.scope !== 'runner') return;
+  const bound = row.runnerId
+    ? await db.runner.findUnique({
+        where: { id: row.runnerId },
+        select: { id: true, ownerId: true, capabilities: true, capabilitiesReportedAt: true },
+      })
+    : null;
+  const runner = bound && row.ownerId && bound.ownerId === row.ownerId ? bound : null;
+  assertLocalProviderReady(
+    { ...row, runnerId: runner?.id ?? null },
+    {
+      runnerId: target.runnerId === undefined ? runner?.id : target.runnerId,
+      runner,
+      model: localTargetModel(row, target.model),
+    },
+  );
 }

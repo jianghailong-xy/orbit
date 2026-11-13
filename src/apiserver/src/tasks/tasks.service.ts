@@ -314,8 +314,10 @@ import {
   usableProviderScope,
   usableProviderSql,
 } from '../providers/custom-provider';
+import { assertLocalProviderStartable } from '../providers/local-provider';
 import {
   credentialPairLabels,
+  keyRowForSlug,
   resolvedCredentialEngines,
   resolveEngineProvider,
   resolveTaskPin,
@@ -2667,6 +2669,30 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  /**
+   * A task pinned to a local provider (a runner-scoped key) is refused now, with the code its run would be
+   * refused with, when that run could not start: its assignee is on another runner, or the provider's runner
+   * cannot say Ollama is answering, recently, with the pinned model and what Claude Code needs
+   * (providers/local-provider.ts assertLocalProviderStartable). With no assignee, only the provider's own
+   * runner is asked; the session's create door checks the runner it lands on. Any other pin passes untouched.
+   */
+  private async assertLocalPinStartable(
+    ownerId: string,
+    pin: { provider?: string | null; model?: string | null; assigneeId?: string | null },
+  ): Promise<void> {
+    // An engine's own sign-in is never a local provider: no row to read.
+    if (!pin.provider || isBuiltinProvider(pin.provider, true)) return;
+    const row = await keyRowForSlug(this.prisma, ownerId, pin.provider);
+    if (!row || row.scope !== 'runner') return;
+    const runnerId = pin.assigneeId
+      ? ((await this.prisma.workspace.findFirst({
+          where: { id: pin.assigneeId, ownerId, deletedAt: null },
+          select: { runnerId: true },
+        }))?.runnerId ?? null)
+      : undefined;
+    await assertLocalProviderStartable(this.prisma, row, { runnerId, model: pin.model });
+  }
+
   /** A task may only be filed under a list the same user owns (cf. assertOwnedWorkspace). */
   private async assertOwnedList(ownerId: string, listId?: string | null): Promise<void> {
     if (!listId) return;
@@ -3904,6 +3930,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // The engine, provider and model pins, resolved together and stored as resolved: a provider alone
     // carries the engine it runs on by default, a retired name its key, an old OpenCode model its key.
     dto = { ...dto, ...(await this.resolvePins(ownerId, dto, null, true)) };
+    await this.assertLocalPinStartable(ownerId, { provider: dto.provider, model: dto.model, assigneeId: dto.assigneeId });
     // Link to the originating session only when it's one this owner has (the runner
     // injects its own session id, so this is a guard, not a trust boundary). A stale id
     // would otherwise fail the FK insert.
@@ -9846,6 +9873,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const pins = dto.engine !== undefined || dto.provider !== undefined || dto.model !== undefined
       ? await this.resolvePins(ownerId, dto, { engine: before.engine, provider: before.provider })
       : {};
+    // A write that moves the provider pin, the model pin or the assignee is held to a local provider's gate
+    // as it leaves them, the way a new task is.
+    if (dto.provider !== undefined || dto.model !== undefined || dto.assigneeId !== undefined) {
+      await this.assertLocalPinStartable(ownerId, {
+        provider: pins.provider !== undefined ? pins.provider : before.provider,
+        model: pins.model !== undefined ? pins.model : before.model,
+        assigneeId: dto.assigneeId !== undefined ? dto.assigneeId : before.assigneeId,
+      });
+    }
     // Unit L3 §4. An update never re-files a task on its own — a write that does not mention the
     // project leaves it exactly where it is — so this binds nothing and only refuses: it is what
     // stops a coordinator editing work inside another project's goal (R6), moving work across the

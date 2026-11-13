@@ -297,3 +297,172 @@ export function sanitizeLocalProviderProbe(value: unknown): {
     models: sanitizeInstanceModels(p.models),
   };
 }
+
+// ── Dispatch readiness (phase 3) ───────────────────────────────────────────────────────────────────────
+
+/**
+ * Every refusal a door gives a session on a runner-scoped provider. Each one says the session will not run
+ * there, and none of them moves it onto another runner or a cloud engine's own sign-in.
+ *
+ *   DISABLED            the owner turned the provider off.
+ *   NO_RUNNER           its runner was removed, or no longer belongs to the provider's owner.
+ *   ELSEWHERE           the session is on another runner, or the door named none.
+ *   RUNNER_OUTDATED     the runner does not declare OLLAMA_PROBE_CAPABILITY: too old to say whether Ollama is up.
+ *   UNPROBED            the runner has not probed the instance yet.
+ *   STALE               the last probe is older than LOCAL_PROBE_STALE_MS.
+ *   UNREACHABLE         the last probe got no answer: Ollama is stopped, still starting, or busy.
+ *   MISCONFIGURED       the endpoint is not Ollama, the runner refuses to reach it, or it forwards to the cloud.
+ *   NO_MODELS           the instance serves no local model.
+ *   MODEL_MISSING       the model the session would run is not on the instance, or nothing names one.
+ *   CAPABILITY_MISSING  that model lacks tool calling, or serves less than LOCAL_MIN_CONTEXT_WINDOW.
+ */
+export const LOCAL_PROVIDER_REFUSAL_CODES = [
+  'LOCAL_PROVIDER_DISABLED',
+  'LOCAL_PROVIDER_NO_RUNNER',
+  'LOCAL_PROVIDER_ELSEWHERE',
+  'LOCAL_PROVIDER_RUNNER_OUTDATED',
+  'LOCAL_PROVIDER_UNPROBED',
+  'LOCAL_PROVIDER_STALE',
+  'LOCAL_PROVIDER_UNREACHABLE',
+  'LOCAL_PROVIDER_MISCONFIGURED',
+  'LOCAL_PROVIDER_NO_MODELS',
+  'LOCAL_PROVIDER_MODEL_MISSING',
+  'LOCAL_PROVIDER_CAPABILITY_MISSING',
+] as const;
+export type LocalProviderRefusalCode = (typeof LOCAL_PROVIDER_REFUSAL_CODES)[number];
+
+/**
+ * The refusals that clear on their own: the runner's next probe answers them (a cold Ollama finishing its
+ * start, a busy one freeing up, a runner coming back online). Every other refusal waits for a person: a
+ * removed model, a model without tools, a wrong endpoint, an old runner. A session held on either kind
+ * waits PENDING with the reason; nothing re-sends it on a timer.
+ */
+export const LOCAL_PROVIDER_TRANSIENT_REFUSALS: ReadonlySet<LocalProviderRefusalCode> = new Set([
+  'LOCAL_PROVIDER_UNPROBED',
+  'LOCAL_PROVIDER_STALE',
+  'LOCAL_PROVIDER_UNREACHABLE',
+]);
+
+/** Every refusal sentence begins with this, so a hold that has cleared is recognised by its words. */
+export const LOCAL_PROVIDER_ERROR_PREFIX = 'Local provider ';
+
+export interface LocalProviderRefusal {
+  code: LocalProviderRefusalCode;
+  /** Whether it clears without anybody acting (LOCAL_PROVIDER_TRANSIENT_REFUSALS). */
+  transient: boolean;
+  /** The sentence the session waits with. It names the provider and the model, never the endpoint. */
+  message: string;
+}
+
+export function isLocalProviderRefusalCode(code: unknown): code is LocalProviderRefusalCode {
+  return (LOCAL_PROVIDER_REFUSAL_CODES as readonly unknown[]).includes(code);
+}
+
+/**
+ * The instance's entry for `model`: Ollama serves `llama3` as `llama3:latest`, so a name without a tag
+ * matches its `:latest`. Any other tag is part of the name.
+ */
+export function localInstanceModel(
+  catalogue: readonly LocalInstanceModel[] | null | undefined,
+  model: string,
+): LocalInstanceModel | undefined {
+  const name = model.trim();
+  const tagged = name.includes(':') ? name : `${name}:latest`;
+  return catalogue?.find((entry) => entry.value === name || entry.value === tagged);
+}
+
+/**
+ * The model a session on a local provider would run: its own, else the row's default, else the first the row
+ * lists. Null when nothing names one — a local provider has no catalogue default to fall back to, and the
+ * built-in Claude default is not a model Ollama serves.
+ */
+export function localTargetModel(
+  row: { defaultModel?: string | null; models?: unknown },
+  sessionModel: string | null | undefined,
+): string | null {
+  const own = typeof sessionModel === 'string' ? sessionModel.trim() : '';
+  if (own) return own;
+  const fallback = typeof row.defaultModel === 'string' ? row.defaultModel.trim() : '';
+  if (fallback) return fallback;
+  const listed = Array.isArray(row.models) ? (row.models[0] as { value?: unknown } | undefined)?.value : undefined;
+  return typeof listed === 'string' && listed.trim() ? listed.trim() : null;
+}
+
+/**
+ * Whether a session may run on a runner-scoped provider now, and the refusal when it may not. The one rule
+ * every door applies: session create, task create and start, the claim and the reclaim, a provider switch and
+ * the reload that respawns on one.
+ *
+ * `runnerId` is the runner the session is (or would be) on, `runner` that runner's capability report, and
+ * `model` the model it would run. Fails closed: a missing runner report, a missing probe and a missing
+ * catalogue entry all refuse, and none of them is read as healthy.
+ */
+export function localProviderReadiness(
+  row: {
+    slug?: string | null;
+    enabled: boolean;
+    runnerId: string | null;
+    probeState?: string | null;
+    probedAt?: Date | string | null;
+    instanceModels?: unknown;
+  },
+  target: {
+    runnerId: string | null | undefined;
+    runner: { capabilities?: readonly string[] | null; capabilitiesReportedAt?: Date | string | null } | null | undefined;
+    model: string | null | undefined;
+  },
+  now: number = Date.now(),
+): LocalProviderRefusal | null {
+  const name = `"${row.slug ?? ''}"`;
+  const refuse = (code: LocalProviderRefusalCode, rest: string): LocalProviderRefusal => ({
+    code,
+    transient: LOCAL_PROVIDER_TRANSIENT_REFUSALS.has(code),
+    message: `${LOCAL_PROVIDER_ERROR_PREFIX}${name} ${rest}`,
+  });
+  if (!row.enabled) return refuse('LOCAL_PROVIDER_DISABLED', 'is disabled; enable it, or switch this session to another provider');
+  if (!row.runnerId) {
+    return refuse('LOCAL_PROVIDER_NO_RUNNER', 'runs only on its own runner, and it has none; bind it to one of your runners');
+  }
+  if (target.runnerId !== row.runnerId) {
+    return refuse('LOCAL_PROVIDER_ELSEWHERE', 'runs only on the runner it is bound to; start this session on that runner');
+  }
+  const runner = target.runner;
+  if (!runner || runner.capabilitiesReportedAt == null || !declaresLocalProbe(runner.capabilities)) {
+    return refuse('LOCAL_PROVIDER_RUNNER_OUTDATED', 'needs a newer runner: update the runner it is bound to');
+  }
+  const state = (LOCAL_PROBE_STATES as readonly string[]).includes(row.probeState ?? '') ? (row.probeState as LocalProbeState) : null;
+  const probedAtMs = row.probedAt == null ? NaN : new Date(row.probedAt).getTime();
+  if (!state || !Number.isFinite(probedAtMs)) {
+    return refuse('LOCAL_PROVIDER_UNPROBED', 'has not been checked by its runner yet; this session starts once it is');
+  }
+  if (now - probedAtMs > LOCAL_PROBE_STALE_MS) {
+    return refuse('LOCAL_PROVIDER_STALE', 'has not been checked recently; its runner may be offline. This session starts once it reports again');
+  }
+  if (state === 'UNREACHABLE') {
+    return refuse('LOCAL_PROVIDER_UNREACHABLE', 'is not answering on its runner (stopped, still loading, or busy); this session starts once it answers');
+  }
+  if (state === 'MALFORMED' || state === 'REFUSED' || state === 'CLOUD_ENABLED') {
+    return refuse('LOCAL_PROVIDER_MISCONFIGURED', 'is not an endpoint its runner can use; check its address on that runner');
+  }
+  if (state === 'NO_MODELS') return refuse('LOCAL_PROVIDER_NO_MODELS', 'serves no local model; pull one on its runner');
+  // READY, MODEL_MISSING and CAPABILITY_MISSING describe the models the row names. The session runs one model,
+  // and that model's own entry decides.
+  const model = typeof target.model === 'string' ? target.model.trim() : '';
+  if (!model) return refuse('LOCAL_PROVIDER_MODEL_MISSING', 'names no model; choose one of the models it serves');
+  if (isCloudModelId(model)) {
+    return refuse('LOCAL_PROVIDER_MISCONFIGURED', `would forward model "${model}" to Ollama's cloud; choose a local model`);
+  }
+  const catalogue = Array.isArray(row.instanceModels) ? (row.instanceModels as LocalInstanceModel[]) : null;
+  const entry = localInstanceModel(catalogue, model);
+  if (!entry) return refuse('LOCAL_PROVIDER_MODEL_MISSING', `does not serve model "${model}"; pull it on its runner or choose another`);
+  if (entry.tools !== true) {
+    return refuse('LOCAL_PROVIDER_CAPABILITY_MISSING', `serves model "${model}" without tool calling; choose a model with tools`);
+  }
+  if (typeof entry.contextWindow !== 'number' || entry.contextWindow < LOCAL_MIN_CONTEXT_WINDOW) {
+    return refuse(
+      'LOCAL_PROVIDER_CAPABILITY_MISSING',
+      `serves model "${model}" with less than ${LOCAL_MIN_CONTEXT_WINDOW} tokens of context; choose a larger model`,
+    );
+  }
+  return null;
+}
