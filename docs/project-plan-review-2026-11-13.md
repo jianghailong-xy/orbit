@@ -1,7 +1,7 @@
 # Project plan review: brand and open-source maturity
 
 **Review date:** 2026-11-13
-**Reviewed baseline:** `22a13906b0a394650c1af89b58549956eaa21c2a` (`origin/main`, committed 2026-11-13 06:18:46 +0800)
+**Reviewed baseline:** `8b0a7c1dafd201ef11c06830568a4d87019b306c` (`origin/main`, committed 2026-11-13 07:37:01 +0100)
 **Review branch:** `orbit/task-p0-main-04e5d6`, fast-forwarded to the baseline before this review; the branch
 contains the reviewed commit.
 **Review task:** P0, re-review the brand plan against the latest main (`34wj7wzYWIG6aVJz0B1S2` in the Orbit
@@ -9,6 +9,10 @@ project).
 **Status of this document:** public review and decision material. It records recommendations only. No rename,
 repository transfer, application or package rename, domain purchase, account migration, or change to the
 project's acceptance criteria has been performed.
+
+**Baseline movement:** `main` advanced during the review from `22a13906b` to `8b0a7c1d`. The two intervening
+commits are a runner updater fix and the release bump to `0.1.256`; they do not change the plan findings. The
+review branch merged the newer commit, and every repository statement below is anchored to `8b0a7c1d`.
 
 ## 1. Executive summary
 
@@ -39,7 +43,7 @@ Five findings drive the recommendations:
    an unpushed local branch. Two historical tasks are marked done with no session run records; their evidence
    was reconstructed independently in comments. Landing receipts are absent across the project.
 5. **Release identity is still unreconciled at the reviewed commit.** Tag `v0.1.2-beta.245` carries
-   `package.json` version `0.1.254`; `main` then bumps to `0.1.255`; the newest non-prerelease GitHub release is
+   `package.json` version `0.1.254`; `main` then bumps to `0.1.256`; the newest non-prerelease GitHub release is
    `v0.1.0` from 2026-06-26 while 346 releases exist, almost all prereleases; and the README still says the
    source version is `0.1.198` against tag `v0.1.2-beta.138`. This is the same class of defect the August audit
    flagged, now larger.
@@ -174,7 +178,7 @@ The root README is otherwise current and is the strongest public document in the
 are behind reality:
 
 - `README.md` lines 266-269 say the runner source version is `0.1.198` while the newest tag is
-  `v0.1.2-beta.138`. The reviewed checkout is `0.1.255`, the newest tag is `v0.1.2-beta.245`, and the two do
+  `v0.1.2-beta.138`. The reviewed checkout is `0.1.256`, the newest tag is `v0.1.2-beta.245`, and the two do
   not follow one scheme.
 - `package.json` describes the product as "Orbit — AI Agent task scheduling platform (control plane +
   distributed coding-agent runners)", while the approved descriptor is "Agent Mission Control" and the
@@ -219,7 +223,7 @@ Orbit priority, not the `P0`-`P3` label in the title; Section 6.5 explains the m
 | T2 | Review and publish docs and community baseline | DONE | Completed | PR #29 merged as `bba40eb5f`; the files are on `main`; the docs check passes. The closing comment records an independent verification of links, Issue Forms, build, and a clean Compose stack. | None | Closed |
 | T3 | Repository-wide CI and main quality gate | DONE | Completed | `.github/workflows/ci.yml` is on `main`; PR #30 merged on 2026-08-20; the branch-protection API reports six required checks, strict mode, one review, and no force push or deletion. | None | Closed |
 | T4 | Triage and remediate production dependency alerts | IN_PROGRESS | Continue | The August baseline and the continuous controls are on `main`. The latest comment (2026-11-13) reports four DSH alerts fixed and a new section added to `docs/dependency-security.md`, but the section and the `@modelcontextprotocol/client` override are absent from the reviewed `main`; the work is unlanded. The Dependabot API at review still lists alerts #75 and #76 (high) and #77 and #78 (moderate) open in the two DSH lockfiles, plus development moderates #129 and #130. | None | 270 |
-| T5 | One version, tag, and release rule | OPEN | Rescope | `docs/release-process.md` and the tag-driven workflow are live, but identity is inconsistent: tag `v0.1.2-beta.245` contains `package.json` `0.1.254`; `main` then bumps to `0.1.255`; the newest non-prerelease release is `v0.1.0`; the README still cites `0.1.198` and `v0.1.2-beta.138`. | None | 280 |
+| T5 | One version, tag, and release rule | OPEN | Rescope | `docs/release-process.md` and the tag-driven workflow are live, but identity is inconsistent: tag `v0.1.2-beta.245` contains `package.json` `0.1.254`; `main` then bumps to `0.1.256`; the newest non-prerelease release is `v0.1.0`; the README still cites `0.1.198` and `v0.1.2-beta.138`. | None | 280 |
 | T6 | Independent organization, domain, and account plan | OPEN | Rescope | No organization or project domain exists; the remote is a personal namespace and the site and appcast are on personal Pages. The written ownership, roles, two-recovery-admin, cost, and exit plan does not require the final name; execution does. | T1 | 140 |
 | T7 | GitHub facade and discovery metadata | OPEN | Rescope | Description, 14 topics, and Discussions are already configured; the homepage points at `docs/README.md`, not the site; Social Preview and anonymous link checks are unrecorded. Topics and brand assets are name-dependent; Discussions and link checks are not. | T1, T2 | 120 |
 | T8 | Project-level security and conduct channels | OPEN | Rescope | Private vulnerability reporting, secret scanning, and push protection are enabled; SECURITY.md and CODE_OF_CONDUCT still route reports to a maintainer's GitHub profile or a public issue. No project-owned address, no two named recipients, no drill record. | T6 | 130 |
@@ -567,8 +571,10 @@ The edge list used for the review, as task-to-prerequisite pairs:
 
 | Evidence | Value |
 | --- | --- |
-| Reviewed `origin/main` commit | `22a13906b0a394650c1af89b58549956eaa21c2a` |
+| Reviewed `origin/main` commit | `8b0a7c1dafd201ef11c06830568a4d87019b306c` |
+| Baseline at review start | `22a13906b0a394650c1af89b58549956eaa21c2a`; superseded during the review by the runner fix and the `0.1.256` release bump |
 | Review branch | `orbit/task-p0-main-04e5d6` |
+| `main` package version at baseline | `0.1.256` |
 | Documentation baseline merge | `bba40eb5f`, PR #29 |
 | Repository-wide CI merge | PR #30, merged 2026-08-20 |
 | Dependency baseline merge | PR #31, merged 2026-08-20 |
