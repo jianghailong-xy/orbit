@@ -16215,7 +16215,12 @@ button.chat-jump-start:hover {
   font-size: 13px;
 }
 
-/* The guest page (GuestSessionPage, docs/session-guests-design.md §4; board 10-session-guests-3). */
+/* The guest view (GuestSessionPage, docs/session-guests-design.md §4; boards 10-session-guests-3, 11-guest-one-link-2):
+   drawn inside the app's own main pane at /sessions/<id>, so it fills that pane rather than the window. */
+.share-page.guest-view {
+  height: 100%;
+  min-height: 0;
+}
 .share-subtitle {
   overflow: hidden;
   text-overflow: ellipsis;

@@ -2957,7 +2957,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0612 adds a nullable `model_provider.spent_until` only; no preserved row, trigger or DONE fence changes.
       '0612_model_provider_spent_until',
       // 0613 creates `key_gateway_usage` only; no existing table, trigger or DONE fence is touched.
-      '0613_key_gateway_usage'],
+      '0613_key_gateway_usage',
+      // 0618 adds a nullable email_outbox.session_id, its foreign key and index, two CHECKs and a wider unique index
+      // only; no preserved rows, triggers or DONE fence change, and no row is written.
+      '0618_email_outbox_session_invite'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
