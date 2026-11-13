@@ -7,6 +7,8 @@ import {
   NON_REPLAYABLE_EVENT_TYPES,
   replayableEventSql,
 } from '../common/system-noise';
+import { SessionGuestsService } from '../session-guests/session-guests.service';
+import { SharedController } from '../shared/shared.controller';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
 
@@ -168,8 +170,10 @@ test('what a shared session added after a seq sits behind the same fence, read a
   assertReplayFence(captured, 'ASC');
 });
 
-test('a shared session read after a seq answers one page of events, each event once', async () => {
-  let eventReads = 0;
+/** A live shared session with two events after seq 7, answering its header, activity and run_event
+ *  reads by their SQL; `eventReads` counts the run_event reads. */
+function afterSeqFixture(extra: Record<string, unknown> = {}) {
+  const counts = { eventReads: 0 };
   const row = (seq: number) => ({
     seq,
     type: RunEventType.TURN_END,
@@ -178,6 +182,7 @@ test('a shared session read after a seq answers one page of events, each event o
     createdAt: new Date('2026-08-31T02:00:00Z'),
   });
   const prisma = {
+    ...extra,
     session: {
       findFirst: async () => ({
         id: SESSION,
@@ -193,18 +198,69 @@ test('a shared session read after a seq answers one page of events, each event o
     },
     $queryRaw: async (strings: TemplateStringsArray) => {
       if (rawRead(strings) === 'activity') return [{ id: SESSION, activity: null }];
-      eventReads += 1;
+      counts.eventReads += 1;
       return [row(8), row(9)];
     },
   };
-  const service = new SessionsService(prisma as never, {} as never, {} as never);
+  const sessions = new SessionsService(prisma as never, {} as never, {} as never);
+  return { prisma, sessions, counts };
+}
 
-  const now = await service.getSharedEventsAfter(SESSION, { after: 7, maxPayload: 2048 });
+/** Exactly one page of events in an answer: one `events` array, seqs 8 and 9 once each, and no
+ *  other field carrying a second group of them. */
+function assertOneEventGroup(answer: Record<string, unknown>): void {
+  const groups = Object.entries(answer).filter(([, value]) =>
+    Array.isArray(value) && value.some((item) => item && typeof item === 'object' && 'seq' in item));
+  assert.deepEqual(groups.map(([key]) => key), ['events']);
+  assert.deepEqual((answer.events as { seq: number }[]).map((event) => event.seq), [8, 9]);
+}
 
-  assert.equal(eventReads, 1);
+test('a shared session read after a seq answers one page of events, each event once', async () => {
+  const { sessions, counts } = afterSeqFixture();
+
+  const now = await sessions.getSharedEventsAfter(SESSION, { after: 7, maxPayload: 2048 });
+
+  assert.equal(counts.eventReads, 1);
   assert.deepEqual(now.events.map((event) => event.seq), [8, 9]);
   assert.equal(now.after, null);
   assert.equal(now.activity, null);
+});
+
+test('the public share door answers after a seq with one group of events, read once', async () => {
+  const { sessions, counts } = afterSeqFixture();
+  const links = {
+    resolve: async () => ({ sessionId: SESSION, include: { toolOutput: true } }),
+  };
+  const controller = new SharedController(links as never, sessions, {} as never);
+
+  const answer = await controller.events('token', undefined, '7', undefined, '2048');
+
+  assert.equal(counts.eventReads, 1);
+  assertOneEventGroup(answer as unknown as Record<string, unknown>);
+  assert.ok('runState' in answer, 'an after-seq answer carries the header');
+  assert.equal(answer.runState, 'RUNNING');
+});
+
+test('a guest following a session after a seq gets one group of events, read once', async () => {
+  const { prisma, sessions, counts } = afterSeqFixture({
+    sessionGuest: {
+      findFirst: async () => ({
+        id: 'guest-row',
+        openedAt: null,
+        session: { ownerId: 'owner' },
+        user: { name: 'Guest' },
+      }),
+    },
+    approval: { findMany: async () => [] },
+  });
+  const guests = new SessionGuestsService(prisma as never, sessions);
+
+  const answer = await guests.events('guest', SESSION, { after: '7', maxPayload: '2048' });
+
+  assert.equal(counts.eventReads, 1);
+  assertOneEventGroup(answer as unknown as Record<string, unknown>);
+  assert.ok('waitingOnOwner' in answer, 'an after-seq answer carries the header');
+  assert.equal(answer.waitingOnOwner, false);
 });
 
 test('the SSE history replay applies the same fence while leaving its live half alone', async () => {
