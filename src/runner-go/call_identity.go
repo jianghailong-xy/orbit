@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strconv"
@@ -169,7 +170,9 @@ type replayableCallError struct {
 }
 
 func (e *replayableCallError) Error() string {
-	text := e.err.Error() + "\n  " + e.field + ": " + e.id + "\n"
+	// The id as JSON: a caller-chosen key with a space, a quote or a newline in it is one parseable
+	// value, and cannot forge a line of its own below.
+	text := e.err.Error() + "\n  " + e.field + ": " + jsonText(e.id) + "\n"
 	switch e.guidance {
 	case verifyGuidance:
 		return text + "  replay:  the outcome is not known. Check whether it took effect; if it did not, replay with " +
@@ -222,21 +225,67 @@ func taskStartReplayError(err error, mcp bool, taskID, triggerID string) error {
 		guidance: callGuidance(err), replay: replay, fresh: fresh}
 }
 
-// messageReplayError wraps a failed keyed message with its clientTurnId. For MCP, tool is the tool
-// and targetField names the argument that addresses it; for the CLI, tool is the command ("orbit
-// session send"). The message itself is never copied into the replay: the caller still has it, and
-// the CLI form reads it from stdin.
-func messageReplayError(err error, mcp bool, tool, targetField, target, clientTurnID string) error {
+// messageReplayError wraps a failed keyed message with its clientTurnId. body is the request exactly
+// as it was sent, so the replay carries every field that shapes it (resumeIfEnded, expectReply,
+// replyOptions, replyWithinSeconds, ...): the server fingerprints a request, and a replay missing one
+// of them is a different request it refuses. Only the message is left out of the text: the caller
+// still has it, and the CLI form reads it from stdin.
+//
+// For MCP, tool is the tool and targetField the argument that addresses it; for the CLI, tool is the
+// command ("orbit session send").
+func messageReplayError(err error, mcp bool, tool, targetField, target string, body map[string]interface{}) error {
+	clientTurnID, _ := body["clientTurnId"].(string)
 	var replay, fresh string
 	if mcp {
-		replay = tool + " " + jsonText(map[string]string{targetField: target, "clientTurnId": clientTurnID}) +
-			` plus the same "message"`
-		fresh = tool + " " + jsonText(map[string]string{targetField: target}) + ` plus the "message" (without clientTurnId)`
+		args := replayArgs(body, targetField, target)
+		replay = tool + " " + jsonText(args) + ` plus the same "message"`
+		delete(args, "clientTurnId")
+		fresh = tool + " " + jsonText(args) + ` plus the "message" (without clientTurnId)`
 	} else {
 		words := append(strings.Fields(tool)[1:], target, "--message-file", "-")
+		words = append(words, requestFlags(body)...)
 		replay = cliArgv(append(words, "--client-turn-id", clientTurnID)...) + ", with the same message on stdin"
 		fresh = cliArgv(words...) + ", with the message on stdin (without --client-turn-id)"
 	}
 	return &replayableCallError{err: err, field: "clientTurnId", id: clientTurnID,
 		guidance: callGuidance(err), replay: replay, fresh: fresh}
+}
+
+// replayArgs is the MCP arguments that send body again: every field as sent but the message, plus
+// the one that addresses it.
+func replayArgs(body map[string]interface{}, targetField, target string) map[string]interface{} {
+	args := map[string]interface{}{targetField: target}
+	for k, v := range body {
+		if k != "message" {
+			args[k] = v
+		}
+	}
+	return args
+}
+
+// requestFlags is the CLI flags that put body's request fields back, in a fixed order. The message
+// (stdin) and the clientTurnId (added by the caller) are not among them.
+func requestFlags(body map[string]interface{}) []string {
+	var flags []string
+	if v, _ := body["resumeIfEnded"].(bool); v {
+		flags = append(flags, "--resume-if-ended")
+	}
+	if v, _ := body["expectReply"].(bool); v {
+		flags = append(flags, "--expect-reply")
+	}
+	if v, ok := body["replyOptions"]; ok && v != nil {
+		flags = append(flags, "--reply-options", jsonText(v))
+	}
+	if v, ok := body["replyWithinSeconds"]; ok && v != nil {
+		flags = append(flags, "--reply-within-seconds", fmt.Sprint(v))
+	}
+	return flags
+}
+
+// replayableRequestFields is every body field requestFlags (or the message, the key and the
+// address) puts back. A body field outside it would be dropped from a CLI replay, which a test
+// pins against the bodies the three commands build.
+var replayableRequestFields = map[string]bool{
+	"message": true, "clientTurnId": true,
+	"resumeIfEnded": true, "expectReply": true, "replyOptions": true, "replyWithinSeconds": true,
 }

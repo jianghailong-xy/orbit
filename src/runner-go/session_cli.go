@@ -977,7 +977,7 @@ func cliSessionSend(args []string, in io.Reader, out io.Writer, ctx cliOrchestra
 	}, isUnansweredSessionWrite)
 	if err != nil {
 		return fmt.Errorf("send session message: %w",
-			messageReplayError(err, false, "orbit session send", "", id, key))
+			messageReplayError(err, false, "orbit session send", "", id, body))
 	}
 	return writeCLIRawJSON(out, withCallID(raw, "clientTurnId", key), *jsonOut)
 }
@@ -1024,7 +1024,7 @@ func cliSessionInterrupt(args []string, in io.Reader, out io.Writer, ctx cliOrch
 	}, isUnansweredSessionWrite)
 	if err != nil {
 		return fmt.Errorf("interrupt session: %w",
-			messageReplayError(err, false, "orbit session interrupt", "", id, key))
+			messageReplayError(err, false, "orbit session interrupt", "", id, body))
 	}
 	return writeCLIRawJSON(out, withCallID(raw, "clientTurnId", key), *jsonOut)
 }

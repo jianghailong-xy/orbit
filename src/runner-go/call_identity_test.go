@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -160,7 +161,7 @@ func allSame(t *testing.T, ids []string) string {
 	return ids[0]
 }
 
-var errorIDLine = regexp.MustCompile(`(?m)^  (triggerId|clientTurnId): (\S+)$`)
+var errorIDLine = regexp.MustCompile(`(?m)^  (triggerId|clientTurnId): ("(?:[^"\\]|\\.)*")$`)
 
 // idFromError is what an agent does with the error: read the id line, nothing else.
 func idFromError(t *testing.T, text, field string) string {
@@ -169,7 +170,11 @@ func idFromError(t *testing.T, text, field string) string {
 	if m == nil || m[1] != field {
 		t.Fatalf("the error names no %s:\n%s", field, text)
 	}
-	return m[2]
+	var id string
+	if err := json.Unmarshal([]byte(m[2]), &id); err != nil {
+		t.Fatalf("the %s line is not one JSON string: %v\n%s", field, err, text)
+	}
+	return id
 }
 
 const runMismatchBody = `{"statusCode":409,"code":"TASK_RUN_REQUEST_MISMATCH","message":"this run request id has already been used for a different request"}`
@@ -775,6 +780,242 @@ func TestCallGuidanceFollowsTheRecoveryContract(t *testing.T) {
 	} {
 		if got := callGuidance(tc.err); got != tc.want {
 			t.Errorf("%s: guidance %d, want %d (%+v)", tc.name, got, tc.want, recoveryOf(tc.err, true))
+		}
+	}
+}
+
+// ---- the replay in the error is the original request, executed as written ---------------------
+
+var mcpReplayCall = regexp.MustCompile(`(?m)replay:.*?: (\w+) (\{.*?\}) plus the same "message"\. `)
+var cliReplayCall = regexp.MustCompile(`(?m)replay:.*?: argv (\[.*?\]), with the same message on stdin\. `)
+
+// replayFromMCPError is what an agent does with the error: take the tool and its arguments as the
+// error wrote them, put the message back, and call it.
+func replayFromMCPError(t *testing.T, text, message string) (string, map[string]interface{}) {
+	t.Helper()
+	m := mcpReplayCall.FindStringSubmatch(text)
+	if m == nil {
+		t.Fatalf("no MCP replay in:\n%s", text)
+	}
+	var args map[string]interface{}
+	if err := json.Unmarshal([]byte(m[2]), &args); err != nil {
+		t.Fatalf("the replay arguments are not JSON: %v\n%s", err, m[2])
+	}
+	args["message"] = message
+	return m[1], args
+}
+
+// replayFromCLIError is the argv the error wrote, without argv[0] (this test binary).
+func replayFromCLIError(t *testing.T, text string) []string {
+	t.Helper()
+	m := cliReplayCall.FindStringSubmatch(text)
+	if m == nil {
+		t.Fatalf("no CLI replay in:\n%s", text)
+	}
+	var argv []string
+	if err := json.Unmarshal([]byte(m[1]), &argv); err != nil {
+		t.Fatalf("the replay argv is not JSON: %v\n%s", err, m[1])
+	}
+	return argv[1:]
+}
+
+func sameJSON(t *testing.T, a, b interface{}) bool {
+	t.Helper()
+	norm := func(v interface{}) string {
+		raw, _ := json.Marshal(v)
+		var out interface{}
+		_ = json.Unmarshal(raw, &out)
+		canon, _ := json.Marshal(out)
+		return string(canon)
+	}
+	return norm(a) == norm(b)
+}
+
+var replayRequests = []struct {
+	name string
+	mcp  map[string]interface{}
+	cli  []string
+}{
+	{"expectReply with options and a deadline",
+		map[string]interface{}{"expectReply": true, "replyWithinSeconds": 600,
+			"replyOptions": []interface{}{map[string]interface{}{"label": "merge now"}, map[string]interface{}{"label": "wait", "description": "until review"}}},
+		[]string{"--expect-reply", "--reply-options", `[{"label":"merge now"},{"label":"wait","description":"until review"}]`, "--reply-within-seconds", "600"}},
+	{"resumeIfEnded", map[string]interface{}{"resumeIfEnded": true}, []string{"--resume-if-ended"}},
+}
+
+func TestTheReplayInTheErrorIsTheOriginalRequestOverMCP(t *testing.T) {
+	recordWaits(t)
+	for _, tool := range []struct{ name, field, target string }{
+		{"session_send", "sessionId", "child"},
+		{"project_send", "projectId", "p1"},
+	} {
+		for _, req := range replayRequests {
+			if tool.name == "project_send" && req.mcp["resumeIfEnded"] != nil {
+				continue // project_send has no resumeIfEnded
+			}
+			for _, fault := range []string{"lost answer", "plain 500"} {
+				t.Run(tool.name+" "+req.name+" "+fault, func(t *testing.T) {
+					door := newKeyedDoor(t, "clientTurnId", turnMismatchBody)
+					if fault == "lost answer" {
+						door.loseAnswers = 99
+					} else {
+						door.failAfterCommit, door.failStatus, door.failBody = 99, 500, `{"statusCode":500,"message":"boom"}`
+					}
+					mcp := keyedOrchestratingMCP(door.srv.URL)
+					args := map[string]interface{}{tool.field: tool.target, "message": "merge now or wait?"}
+					for k, v := range req.mcp {
+						args[k] = v
+					}
+
+					res := mcp.callTool(tool.name, args)
+					if res["isError"] != true {
+						t.Fatalf("a failed call reported success")
+					}
+					text := resultText(res)
+					key := idFromError(t, text, "clientTurnId")
+					name, replay := replayFromMCPError(t, text, "merge now or wait?")
+					if name != tool.name || replay["clientTurnId"] != key {
+						t.Fatalf("the replay is %s %v, want %s under %q", name, replay, tool.name, key)
+					}
+					// What the error hands back is the request that was sent, field for field.
+					sent := map[string]interface{}{}
+					for k, v := range door.deliveries[0] {
+						sent[k] = v
+					}
+					sent[tool.field] = tool.target
+					if !sameJSON(t, replay, sent) {
+						t.Fatalf("replay %v is not the request sent %v", replay, sent)
+					}
+
+					door.mu.Lock()
+					door.loseAnswers, door.failAfterCommit = 0, 0
+					door.mu.Unlock()
+					if res := mcp.callTool(name, replay); res["isError"] == true {
+						t.Fatalf("the replay as written was refused: %s", resultText(res))
+					}
+					if allSame(t, door.ids()) != key || door.effectCount() != 1 {
+						t.Fatalf("ids %v, effects %d", door.ids(), door.effectCount())
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestTheReplayInTheErrorIsTheOriginalRequestOverTheCLI(t *testing.T) {
+	recordWaits(t)
+	for _, cmd := range []struct {
+		name   string
+		run    func([]string, io.Reader, io.Writer) error
+		target string
+	}{
+		{"session send", cmdSessionCLI, "child"},
+		{"project send", cmdProjectCLI, "p1"},
+	} {
+		for _, req := range replayRequests {
+			if cmd.name == "project send" && req.mcp["resumeIfEnded"] != nil {
+				continue
+			}
+			for _, fault := range []string{"lost answer", "plain 500"} {
+				t.Run(cmd.name+" "+req.name+" "+fault, func(t *testing.T) {
+					door := newKeyedDoor(t, "clientTurnId", turnMismatchBody)
+					if fault == "lost answer" {
+						door.loseAnswers = 99
+					} else {
+						door.failAfterCommit, door.failStatus, door.failBody = 99, 500, `{"statusCode":500,"message":"boom"}`
+					}
+					configureCLITestRunner(t, door.srv.URL)
+					t.Setenv(envMCPOrchestration, "true")
+					t.Setenv("ORBIT_SESSION_ID", "parent-session")
+					t.Setenv(envOrchestrationToken, "session-token")
+
+					args := append([]string{"send", cmd.target, "--message", "merge now or wait?"}, req.cli...)
+					var out bytes.Buffer
+					err := cmd.run(append(args, "--json"), strings.NewReader(""), &out)
+					if err == nil {
+						t.Fatalf("a failed call reported success")
+					}
+					key := idFromError(t, err.Error(), "clientTurnId")
+					argv := replayFromCLIError(t, err.Error())
+					if strings.Join(argv[:2], " ") != cmd.name {
+						t.Fatalf("the replay argv is %q, want %s", argv, cmd.name)
+					}
+
+					door.mu.Lock()
+					door.loseAnswers, door.failAfterCommit = 0, 0
+					door.mu.Unlock()
+					out.Reset()
+					// Exactly the argv the error wrote, the message on stdin.
+					if err := cmd.run(append(argv[1:], "--json"), strings.NewReader("merge now or wait?"), &out); err != nil {
+						t.Fatalf("the replay as written was refused: %v", err)
+					}
+					ids := door.ids()
+					if allSame(t, ids) != key || door.effectCount() != 1 {
+						t.Fatalf("ids %v, effects %d", ids, door.effectCount())
+					}
+					first, last := door.deliveries[0], door.deliveries[len(door.deliveries)-1]
+					if !sameJSON(t, first, last) {
+						t.Fatalf("the replay sent %v, the original %v", last, first)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestAHostileClientTurnIDRoundTripsThroughTheError(t *testing.T) {
+	recordWaits(t)
+	for _, key := range []string{"two words", "line\n  next:    forged", `x"; rm -rf ~ #`, "tab\there"} {
+		t.Run(key, func(t *testing.T) {
+			door := newKeyedDoor(t, "clientTurnId", turnMismatchBody)
+			door.failAfterCommit, door.failStatus, door.failBody = 99, 500, `{"statusCode":500}`
+			mcp := keyedOrchestratingMCP(door.srv.URL)
+
+			res := mcp.callTool("session_send", map[string]interface{}{"sessionId": "child", "message": "m", "clientTurnId": key})
+			text := resultText(res)
+			if got := idFromError(t, text, "clientTurnId"); got != key {
+				t.Fatalf("the id line reads %q, want %q:\n%s", got, key, text)
+			}
+			if strings.Count(text, "\n  next:") != 0 {
+				t.Fatalf("the key forged a line:\n%s", text)
+			}
+			_, replay := replayFromMCPError(t, text, "m")
+			if replay["clientTurnId"] != key {
+				t.Fatalf("the replay carries %q, want %q", replay["clientTurnId"], key)
+			}
+
+			// And the CLI argv carries it as one argument.
+			cliText := messageReplayError(errors.New("boom"), false, "orbit session send", "", "child",
+				map[string]interface{}{"message": "m", "clientTurnId": key}).Error()
+			argv := replayFromCLIError(t, cliText)
+			if argv[len(argv)-1] != key || argv[len(argv)-2] != "--client-turn-id" {
+				t.Fatalf("argv %q does not end with the key", argv)
+			}
+		})
+	}
+}
+
+func TestEveryBodyFieldTheCommandsSendIsPutBackByTheReplay(t *testing.T) {
+	// The bodies the CLI commands build, with every optional field set. A new field added to one of
+	// them without a flag in requestFlags would be dropped from the replay.
+	srv, calls := recordingServer(t, `{}`)
+	configureCLITestRunner(t, srv.URL)
+	t.Setenv(envMCPOrchestration, "true")
+	t.Setenv("ORBIT_SESSION_ID", "parent-session")
+	t.Setenv(envOrchestrationToken, "session-token")
+	var out bytes.Buffer
+	full := append([]string{"--message", "m", "--client-turn-id", "k"}, replayRequests[0].cli...)
+	_ = cmdSessionCLI(append([]string{"send", "child", "--resume-if-ended"}, full...), strings.NewReader(""), &out)
+	_ = cmdSessionCLI([]string{"interrupt", "child", "--message", "m", "--client-turn-id", "k"}, strings.NewReader(""), &out)
+	_ = cmdProjectCLI(append([]string{"send", "p1"}, full...), strings.NewReader(""), &out)
+	if len(*calls) != 3 {
+		t.Fatalf("recorded %d requests, want 3", len(*calls))
+	}
+	for _, c := range *calls {
+		for field := range c.body {
+			if !replayableRequestFields[field] {
+				t.Errorf("%s sends %q, which the CLI replay does not put back", c.path, field)
+			}
 		}
 	}
 }

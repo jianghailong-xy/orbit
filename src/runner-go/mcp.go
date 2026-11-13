@@ -790,7 +790,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		raw, err := s.t.sendProjectCoordinator(s.sessionID, s.orchestrationToken, id, body)
 		if err != nil {
 			return toolResult("send to project coordinator failed: "+
-				messageReplayError(err, true, "project_send", "projectId", id, key).Error(), true)
+				messageReplayError(err, true, "project_send", "projectId", id, body).Error(), true)
 		}
 		return toolResult(prettyJSON(withCallID(raw, "clientTurnId", key)), false)
 
@@ -1698,7 +1698,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}, isUnansweredSessionWrite)
 		if err != nil {
 			return toolResult("send message failed: "+
-				messageReplayError(err, true, "session_send", "sessionId", id, key).Error(), true)
+				messageReplayError(err, true, "session_send", "sessionId", id, body).Error(), true)
 		}
 		return toolResult(prettyJSON(withCallID(raw, "clientTurnId", key)), false)
 
@@ -1759,7 +1759,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}, isUnansweredSessionWrite)
 		if err != nil {
 			return toolResult("interrupt session failed: "+
-				messageReplayError(err, true, "session_interrupt", "sessionId", id, key).Error(), true)
+				messageReplayError(err, true, "session_interrupt", "sessionId", id, body).Error(), true)
 		}
 		return toolResult(prettyJSON(withCallID(raw, "clientTurnId", key)), false)
 

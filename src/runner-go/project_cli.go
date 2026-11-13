@@ -831,7 +831,7 @@ func cliProjectSend(args []string, in io.Reader, out io.Writer) error {
 	)
 	if err != nil {
 		return fmt.Errorf("send to project coordinator: %w",
-			messageReplayError(err, false, "orbit project send", "", id, key))
+			messageReplayError(err, false, "orbit project send", "", id, body))
 	}
 	return writeCLIRawJSON(out, withCallID(raw, "clientTurnId", key), *jsonOut)
 }
