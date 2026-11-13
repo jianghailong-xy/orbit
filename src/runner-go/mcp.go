@@ -1564,6 +1564,9 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		body := map[string]interface{}{"prompt": prompt}
 		copyIfPresent(body, args, "title", "model", "engine", "provider", "permissionMode")
+		if v, ok := args["worktree"].(bool); ok && !v {
+			body["worktree"] = false
+		}
 		// Route to a target agent: an explicit agentId wins; else an @-mentioned agentName
 		// (resolved to that owner's agent server-side); else default to the current agent.
 		if id := getString(args, "agentId"); id != "" {

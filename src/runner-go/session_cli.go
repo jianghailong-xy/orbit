@@ -128,6 +128,12 @@ Options:
                            recorded, a session that has not settled carries why under "watch"
                            instead and stderr says so in one line, and a watch the server
                            refuses ends the wait at once
+  --no-worktree            Run in the agent's own checkout, with no branch and no worktree, even
+                           when the agent isolates each session in a worktree. For work that
+                           changes no code (investigating, reading logs, answering a question):
+                           it leaves no unmerged branch behind. Not for code changes: the
+                           session edits the checkout every other non-isolated session shares,
+                           and has no branch to merge. Omit it to follow the agent's own setting
   --json
 
 --engine and --provider together must be a pair that runs: a provider names the engines it
@@ -568,6 +574,7 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchest
 	engine := fs.String("engine", "", "the CLI that runs the session")
 	provider := fs.String("provider", "", "where the session's credential comes from")
 	permissionMode := fs.String("permission-mode", "", "session permission mode")
+	noWorktree := fs.Bool("no-worktree", false, "run in the agent's own checkout, with no branch and no worktree")
 	wait := fs.Bool("wait", false, "wait until the first turn settles")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(args); err != nil {
@@ -641,6 +648,9 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchest
 			return fmt.Errorf("--permission-mode cannot be empty")
 		}
 		body["permissionMode"] = *permissionMode
+	}
+	if *noWorktree {
+		body["worktree"] = false
 	}
 	t, err := cliSessionTransport(ctx)
 	if err != nil {
