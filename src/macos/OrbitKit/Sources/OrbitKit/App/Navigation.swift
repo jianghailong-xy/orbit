@@ -67,16 +67,16 @@ public enum NavNode: Hashable, Sendable {
     /// device's name is, instead of a text field and a Rename button on the record.
     case runnerName(runnerID: String)
     case watchDetail(watchID: String)
-    /// A page Settings' list opens — Infrastructure, Notifications, Shared links, Access tokens, Change
+    /// A page Settings' list opens — Machines & models, Notifications, Shared links, Access tokens, Change
     /// password, Admin — each a frame of Settings' own stack. A machine's record pushed from
-    /// Infrastructure is the *same* ``runnerDetail(runnerID:)`` frame the Infrastructure section pushes —
+    /// Machines & models is the *same* ``runnerDetail(runnerID:)`` frame the Machines & models section pushes —
     /// what tells the two apart is the stack a frame rides, not the frame.
     case settingsPage(SettingsPage)
-    /// A pool's page, pushed from Infrastructure's Account pools: an account pool of the user's own Claude
+    /// A pool's page, pushed from Machines & models' Account pools: an account pool of the user's own Claude
     /// subscriptions, read-only here, or a shared pool of OpenAI API keys, which is run from its page.
     case accountPool(poolID: String)
     case sharedPool(poolID: String)
-    /// One of the account's own API keys, read-only, pushed from Infrastructure's API keys: a DeepSeek
+    /// One of the account's own API keys, read-only, pushed from Machines & models' API keys: a DeepSeek
     /// key's page, its account balance first (`DeepSeekBalance`). Changing a key happens on the web.
     case providerDetail(providerID: String)
     case userDetail(userID: String)
@@ -261,7 +261,7 @@ public struct NavState: Equatable, Sendable {
         return nil
     }
 
-    // The three sections whose list opens one kind of record — Following, Infrastructure (a machine's),
+    // The three sections whose list opens one kind of record — Following, Machines & models (a machine's),
     // Admin — say "which record is showing" with the id on top of their own stack. Each one is a total function
     // of that stack like every other fact here: the list's highlight and the detail pane are the
     // same read, which is what stops a row drawing as selected while the page under it says
@@ -275,7 +275,7 @@ public struct NavState: Equatable, Sendable {
         return id
     }
 
-    /// `AppModel.selectedRunnerID` — the machine's record the Infrastructure pane shows. A page the record
+    /// `AppModel.selectedRunnerID` — the machine's record the Machines & models pane shows. A page the record
     /// pushed over itself (an engine's, its name's) is still that runner's, so the list's highlight
     /// stays on it.
     public var selectedRunnerID: String? {

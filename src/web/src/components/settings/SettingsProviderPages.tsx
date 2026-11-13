@@ -20,9 +20,10 @@ import { Spinner } from '../ui/Spinner';
 import { SettingsCard, SettingsRow, SettingsSection } from './SettingsBlocks';
 
 /*
- * Settings' Providers group (owner's choice C1, docs/mocks/settings-redesign board-4): a page per
- * connected vendor with its API keys and the account pools using them, and Account pools on a page of its own — what Infrastructure's API keys and Account pools sections
- * held, split by vendor.
+ * Settings' Providers group (owner's choice C1, docs/mocks/settings-redesign board-4, its nav made two
+ * fixed rows by choice A, docs/mocks/settings-providers-compact): one page of API keys, grouped by
+ * vendor, and Account pools on a page of its own — what Infrastructure's API keys and Account pools
+ * sections held.
  */
 
 const useKeys = () => useQuery({ queryKey: PROVIDERS_LIST_KEY, queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE) });
@@ -35,20 +36,22 @@ function Loading() {
   );
 }
 
-/** /settings/providers: the first connected vendor's page, or with no key at all, connecting one. */
+/** /settings/providers: every key (SettingsKeysPage), or with no key at all, connecting one. */
 export function SettingsProvidersHome() {
   const keys = useKeys();
   if (keys.isPending) return <Loading />;
-  const first = keys.data?.[0];
-  return <Navigate to={first ? `/settings/providers/${vendorOf(first.presetSlug)}` : '/settings/providers/new'} replace />;
+  return keys.data?.length ? <SettingsKeysPage /> : <Navigate to="/settings/providers/new" replace />;
 }
 
 /**
- * /settings/providers/:vendor — one vendor's API keys: a row each (ProviderKeyRows), Add key in the
- * section's heading; and the account pools any of them is in, each a row into the pools page.
+ * /settings/providers and /settings/providers/:vendor — every API key on the account on one page
+ * (owner's choice A, docs/mocks/settings-providers-compact board-1), a section per vendor with its own
+ * Add, so the nav holds one row for keys however many vendors are connected. A vendor in the address
+ * shows that vendor's keys alone, its chip chosen; with keys of two vendors or more the chips switch
+ * between them. Then the account pools using the keys shown.
  */
-export function SettingsVendorPage() {
-  const vendor = useParams().vendor ?? '';
+export function SettingsKeysPage() {
+  const vendor = useParams().vendor;
   const message = useToast();
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -57,7 +60,15 @@ export function SettingsVendorPage() {
   const pools = useQuery(providerPoolsQuery());
   const nowMs = Date.now();
 
-  const rows = (keys.data ?? []).filter((row) => vendorOf(row.presetSlug) === vendor);
+  // The vendors in the order of each one's first key, as the nav once listed them.
+  const all = keys.data ?? [];
+  const vendors = new Map<string, ProviderRow[]>();
+  for (const row of all) {
+    const slug = vendorOf(row.presetSlug);
+    vendors.set(slug, [...(vendors.get(slug) ?? []), row]);
+  }
+  const shown: [string, ProviderRow[]][] = vendor ? [[vendor, vendors.get(vendor) ?? []]] : [...vendors];
+  const rows = shown.flatMap(([, list]) => list);
   const poolsWith = (row: ProviderRow) =>
     (pools.data ?? []).filter((pool) => pool.members.some((member) => routeId(member.id) === routeId(row.id)));
   const using = (pools.data ?? []).filter((pool) => rows.some((row) => poolsWith(row).includes(pool)));
@@ -82,47 +93,79 @@ export function SettingsVendorPage() {
       width: 440,
       onConfirm: async () => {
         await deleteMut.mutateAsync(p.id);
-        // The vendor's last key gone, its row leaves the nav, and so does its page.
-        if (rows.length === 1) navigate('/settings/providers', { replace: true });
+        // The chosen vendor's last key gone, its chip goes too: back to every key.
+        if (vendor && rows.length === 1) navigate('/settings/providers', { replace: true });
       },
     });
 
-  const name = vendorName(vendor);
+  if (keys.isPending) return <Loading />;
+
   return (
     <>
       <div className="sp-vendor-head">
-        <ProviderTile slug={vendor} label={name} size={30} />
-        <h1 className="sp-vendor-title">{name}</h1>
+        <h1 className="sp-vendor-title">API keys</h1>
+        <Button size="small" icon={<PlusOutlined />} onClick={() => navigate('/settings/providers/new')}>
+          Add key
+        </Button>
       </div>
-      <p className="sp-vendor-sub">API keys on your account, usable from every machine and billed per token.</p>
+      <p className="sp-vendor-sub">Keys on your account, usable from every machine and billed per token.</p>
 
-      <SettingsSection
-        title={
-          <>
-            Keys {rows.length > 0 && <span className="sp-count">{rows.length}</span>}
-          </>
-        }
-        action={
-          <Button size="small" icon={<PlusOutlined />} onClick={() => navigate(`/settings/providers/new/${vendor}`)}>
-            Add key
-          </Button>
-        }
-      >
-        {keys.isPending ? (
-          <Loading />
-        ) : rows.length === 0 ? (
-          <SettingsCard>
-            <SettingsRow title={`No ${name} keys`} description="Add one, and it's usable from every machine." />
-          </SettingsCard>
-        ) : (
-          <ProviderKeyRows
-            rows={rows}
-            nowMs={nowMs}
-            poolsOf={(row) => poolsWith(row).map((pool) => pool.label)}
-            onDelete={deleteKey}
-          />
-        )}
-      </SettingsSection>
+      {vendors.size >= 2 && (
+        <nav className="sp-chips" aria-label="Vendors">
+          <Link className={vendor ? 'sp-chip' : 'sp-chip on'} to="/settings/providers" replace>
+            All <span className="sp-chip-count">{all.length}</span>
+          </Link>
+          {[...vendors].map(([slug, list]) => (
+            <Link
+              key={slug}
+              className={slug === vendor ? 'sp-chip on' : 'sp-chip'}
+              to={`/settings/providers/${slug}`}
+              replace
+            >
+              {vendorName(slug)} <span className="sp-chip-count">{list.length}</span>
+            </Link>
+          ))}
+        </nav>
+      )}
+
+      {shown.map(([slug, list]) => {
+        const name = vendorName(slug);
+        return (
+          <SettingsSection
+            key={slug}
+            className="sp-vendor-section"
+            title={
+              <span className="sp-vendor-name">
+                <ProviderTile slug={slug} label={name} size={20} />
+                {name} <span className="sp-count">{list.length === 1 ? '1 key' : `${list.length} keys`}</span>
+              </span>
+            }
+            action={
+              <Button
+                size="small"
+                icon={<PlusOutlined />}
+                aria-label={`Add ${name} key`}
+                onClick={() => navigate(`/settings/providers/new/${slug}`)}
+              >
+                Add
+              </Button>
+            }
+          >
+            {list.length === 0 ? (
+              <SettingsCard>
+                <SettingsRow title={`No ${name} keys`} description="Add one, and it's usable from every machine." />
+              </SettingsCard>
+            ) : (
+              <ProviderKeyRows
+                rows={list}
+                nowMs={nowMs}
+                poolsOf={(row) => poolsWith(row).map((pool) => pool.label)}
+                onDelete={deleteKey}
+              />
+            )}
+          </SettingsSection>
+        );
+      })}
 
       {using.length > 0 && (
         <SettingsSection title="Account pools using these keys">

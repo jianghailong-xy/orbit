@@ -316,7 +316,8 @@ export function handoffMoveDigest(move: {
 export interface HandoffCrossing {
   ownerId: string;
   fromProjectId: string;
-  toProjectId: string;
+  /** null only for a MOVE_TASK out of every project (0610). */
+  toProjectId: string | null;
   kind: HandoffKind;
   /**
    * MOVE_TASK: the task being moved. DEPEND_ON_TASK: the prerequisite. FILE_TASK: null — the task
@@ -452,7 +453,7 @@ export function decideHandoffAcceptance(
 /** The stored row, as everything below reads it. */
 export interface HandoffApprovalRow {
   fromProjectId: string;
-  toProjectId: string;
+  toProjectId: string | null;
   kind: HandoffKind;
   subjectTaskId: string | null;
   state: HandoffStoredState;

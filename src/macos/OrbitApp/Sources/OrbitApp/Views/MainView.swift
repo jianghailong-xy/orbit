@@ -249,7 +249,9 @@ struct SectionSidebar: View {
                 Divider()
                 AccountFooter(isAdmin: isAdmin)
             }
-            .background(.bar)
+            // The sidebar's own material, so the footer reads as part of the rail (`.bar` drew it
+            // a lighter band) while still covering the rows that scroll under it.
+            .background(SidebarMaterial())
         }
         .sheet(item: $editingWorkspace) { agent in
             if let agents = model.agents { AgentSettingsSheet(agents: agents, agent: agent) }
@@ -368,9 +370,10 @@ struct SectionSidebar: View {
         }
     }
 
-    /// The workspace's own session list, off any project's sessions page that covered it.
+    /// The workspace's own session list, off any project's sessions page or folder page that covered it.
     private func openWorkspace(_ id: String) {
         if model.selectedAgentID == id, model.projectSessionsColumn != nil { model.leaveProjectSessions() }
+        if model.selectedAgentID == id, model.folderColumn != nil { model.leaveFolder() }
         model.openAgent(id)
     }
 
@@ -468,6 +471,19 @@ struct AccountFooter: View {
         Divider()
         Button("Sign out", role: .destructive) { model.logout() }
     }
+}
+
+/// The source list's translucent sidebar material, for chrome pinned over the sidebar.
+private struct SidebarMaterial: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .sidebar
+        view.blendingMode = .behindWindow
+        view.state = .followsWindowActiveState
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }
 #endif
 
