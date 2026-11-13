@@ -28,8 +28,9 @@ class SessionSettingsDeviceTest : IncrementDeviceTest() {
         "notifyTurnFinished":"inherit","notifyNeedsYou":"inherit","muted":$muted,"envPendingRestart":true}"""
 
     private fun row() = """{"id":"$session","title":"Session page settings","status":"RUNNING","runState":"RUNNING","lifecycleState":"OPEN",
-        "provider":"claude","engine":"claude","engineVersion":"2.4.1","claudeAccount":"Claude Max (2)","model":"claude-opus-5-5",
-        "assignedRunnerId":"$runner","assignedRunner":{"id":"$runner","name":"hpc-01","displayName":"HPC"},
+        "provider":"claude","engine":"claude","engineVersion":"2.4.1","claudeAccount":"max-2","model":"claude-opus-5-5",
+        "assignedRunnerId":"$runner","assignedRunner":{"id":"$runner","name":"hpc-01","displayName":"HPC",
+        "engines":[{"engine":"claude","version":"2.4.1","accounts":[{"id":"default"},{"id":"max-2","name":"Max (account 2)"}]}]},
         "agent":{"id":"$workspace","name":"Alpha"},"agentId":"$workspace","workspace":{"id":"$workspace","name":"Alpha","workDir":"~/.orbit/worktrees/01a1c927"},
         "createdAt":"2026-09-28T12:00:00Z","lastTurnAt":"${ago(1)}","capabilities":{"canSend":true,"canComplete":true},"taskId":"$task",
         "tags":[{"id":"t-web","name":"web","color":"#3B82F6"},{"id":"t-review","name":"needs review","color":"#F59E0B"}],"pendingApprovals":0,
@@ -86,7 +87,7 @@ class SessionSettingsDeviceTest : IncrementDeviceTest() {
         verify("Notifications says where it applies", exists(hasText("iOS and Android")))
         capture("04-settings-notifications")
         scrollTo("Worktree and background jobs")
-        listOf("Claude Code 2.4.1", "HPC · Claude Max (2)", "1.82M", "in 1.71M · out 108K · cache 1.52M", "$4.37", "23 turns", "Session ID")
+        listOf("Claude Code 2.4.1", "HPC · Claude Code · Max (account 2)", "1.82M", "in 1.71M · out 108K · cache 1.52M", "$4.37", "23 turns", "Session ID")
             .forEach { verify("Info: $it", exists(hasText(it, substring = true), unmerged = true)) }
         capture("05-settings-info")
         compose.onNodeWithText("Worktree and background jobs").performClick()

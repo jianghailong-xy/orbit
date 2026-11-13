@@ -1,6 +1,7 @@
 package io.orbitd.android.reader
 
 import io.orbitd.android.composer.ProviderEngines
+import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.serialization.json.*
 import java.time.Instant
@@ -136,13 +137,23 @@ internal object SessionSettings {
         val engine = detail.string("engine") ?: return null
         return listOfNotNull(ProviderEngines.cliName(engine), detail.string("engineVersion")).joinToString(" ")
     }
-    /** HPC · Default: the machine it runs on and the engine account it signed in with. */
+    /** HPC · Claude Code · Max (2): the machine it runs on and the account it signs in with ([account]). */
     fun runnerAccount(detail: JsonObject): String? {
         val runner = (detail["assignedRunner"] as? JsonObject)?.let { it.string("displayName") ?: it.string("name") }
-        val engine = detail.string("engine")
-        val account = detail.string("account") ?: engine?.let { detail.string("${it}Account") }
-        val accountLabel = account?.let { if (it == "default") "Default" else it }
-        return listOfNotNull(runner, accountLabel).joinToString(" · ").ifEmpty { null }
+        return listOfNotNull(runner, account(detail)).joinToString(" · ").ifEmpty { null }
+    }
+    /** iOS `SessionSettingsPanel.accountLabel`: a Codex pool's ChatGPT login by its email; else, on an engine's own sign-in, the
+     * engine and the account as the assigned runner names it (`RunnerPage.accountLabel`: its name, else Default or the slot's id).
+     * Null on a key or a pool, which name no account here. */
+    fun account(detail: JsonObject): String? {
+        (detail["poolCodexLogin"] as? JsonObject)?.string("email")?.takeIf { it.isNotEmpty() }?.let { return it }
+        val engine = detail.string("engine")?.takeIf { it.isNotEmpty() } ?: return null
+        val provider = detail.string("provider")
+        if (provider != null && provider !in ProviderEngines.LOGIN_ENGINES) return null
+        val id = detail.string("${engine}Account")?.takeIf { it.isNotEmpty() } ?: "default"
+        val accounts = ((detail["assignedRunner"] as? JsonObject)?.get("engines") as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
+            .firstOrNull { it.string("engine") == engine }?.get("accounts").let { it as? JsonArray }.orEmpty().filterIsInstance<JsonObject>()
+        return "${ProviderEngines.cliName(engine)} · ${RunnerPage.accountLabel(id, accounts)}"
     }
     fun branch(detail: JsonObject) = detail.string("worktreeBranch") ?: detail.string("branch")
     fun workingDirectory(detail: JsonObject) = (detail["workspace"] as? JsonObject)?.string("workDir")

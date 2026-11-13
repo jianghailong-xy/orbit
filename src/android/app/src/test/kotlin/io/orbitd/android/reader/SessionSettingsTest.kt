@@ -13,7 +13,8 @@ class SessionSettingsTest {
     private fun json(text: String) = Wire.json.parseToJsonElement(text).jsonObject
     private val detail = json("""{"id":"019a2b3c-4d5e-7f80-9a1b-ac2e648c946c","engine":"claude","engineVersion":"2.4.1",
         "createdAt":"2026-09-28T12:00:00Z","branch":"main","worktreeBranch":"orbit/session-settings-a1",
-        "assignedRunner":{"id":"r1","name":"hpc-01","displayName":"HPC"},"claudeAccount":"max-2",
+        "assignedRunner":{"id":"r1","name":"hpc-01","displayName":"HPC","engines":[{"engine":"claude","version":"2.4.1",
+            "accounts":[{"id":"default"},{"id":"max-2","name":"Max (account 2)"}]}]},"provider":"claude","claudeAccount":"max-2",
         "workspace":{"id":"w1","workDir":"/root/.orbit/worktrees/01a1c927"},
         "tags":[{"id":"t1","name":"web","color":"#3B82F6"},{"id":"t2","name":"needs review","color":"#F59E0B"}],
         "settings":{"env":{"DEBUG":"orbit:*","LOG_LEVEL":"trace","CLAUDE_CODE_AUTO_COMPACT_WINDOW":"500000"},
@@ -70,6 +71,17 @@ class SessionSettingsTest {
         assertEquals("The engine restarts after this turn", SessionSettings.restartToast(afterTurn = true))
     }
 
+    /** As iOS `SessionSettingsPanel.accountLabel`: the runner's name for the slot, the id only when it names none. */
+    @Test fun accountIsNamedAsTheRunnerNamesIt() {
+        assertEquals("Claude Code · Max (account 2)", SessionSettings.account(detail))
+        val unnamed = json("""{"engine":"claude","claudeAccount":"max-3","assignedRunner":{"engines":[{"engine":"claude","accounts":[{"id":"max-2","name":"Max (account 2)"}]}]}}""")
+        assertEquals("Claude Code · Account max-3", SessionSettings.account(unnamed))
+        assertEquals("Claude Code · Default", SessionSettings.account(json("""{"engine":"claude"}""")))
+        assertNull("a key names no account", SessionSettings.account(json("""{"engine":"claude","provider":"my-deepseek-key"}""")))
+        assertEquals("me@example.com", SessionSettings.account(json("""{"engine":"codex","provider":"pool-1","poolCodexLogin":{"email":"me@example.com"}}""")))
+        assertEquals("HPC", SessionSettings.runnerAccount(json("""{"engine":"claude","provider":"k","assignedRunner":{"displayName":"HPC"}}""")))
+    }
+
     @Test fun infoRowsReadTheDetail() {
         val usage = SessionSettings.usage(detail)!!
         assertEquals("1.82M", SessionSettings.tokens(SessionSettings.tokensTotal(usage)))
@@ -79,7 +91,7 @@ class SessionSettingsTest {
         assertEquals("1 turn", SessionSettings.turns(usage.copy(numTurns = 1)))
         assertEquals("950", SessionSettings.tokens(950)); assertEquals("2M", SessionSettings.tokens(2_000_000))
         assertEquals("Claude Code 2.4.1", SessionSettings.engineLine(detail))
-        assertEquals("HPC · max-2", SessionSettings.runnerAccount(detail))
+        assertEquals("HPC · Claude Code · Max (account 2)", SessionSettings.runnerAccount(detail))
         assertEquals("orbit/session-settings-a1", SessionSettings.branch(detail))
         assertEquals("/root/.orbit/worktrees/01a1c927", SessionSettings.workingDirectory(detail))
         assertEquals("Sep 28, 20:00", SessionSettings.created(detail.string("createdAt"), ZoneId.of("Asia/Shanghai")))
