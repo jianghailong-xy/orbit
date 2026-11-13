@@ -322,11 +322,21 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
       acceptanceExpectedExitCode: 0, autoRunWhenReady: false, attachmentIds,
     });
     const tasksBefore = await db.task.count({ where: { ownerId } });
-    const refused = await call(api, 'POST', '/api/runner/tasks', machine.token, taskBody([made.id]));
+    // The runner door is carded by caller now: this spec's subject is what a create does with the
+    // ids it is given, so it files the card the session would have asked for and writes under it.
+    const asSession = { 'x-orbit-session-id': b62(sessionId) };
+    const cardFor = (input: Record<string, unknown>) => db.approval.create({
+      data: { sessionId, toolName: 'orbit_task_create', input: input as never, status: 'ALLOWED', decidedById: ownerId, decidedAt: new Date() },
+    });
+    const bundleBody = taskBody([made.id]);
+    await cardFor(bundleBody);
+    const refused = await call(api, 'POST', '/api/runner/tasks', machine.token, bundleBody, asSession);
     assert.equal(refused.status, 400, refused.text);
     assert.match(refused.json.message, /pass the ids of the files in it, individually/);
     assert.equal(await db.task.count({ where: { ownerId } }), tasksBefore, 'no task from a refused bundle');
-    const accepted = await call(api, 'POST', '/api/runner/tasks', machine.token, taskBody([file.publicId]));
+    const fileBody = taskBody([file.publicId]);
+    await cardFor(fileBody);
+    const accepted = await call(api, 'POST', '/api/runner/tasks', machine.token, fileBody, asSession);
     assert.equal(accepted.status, 201, accepted.text);
     assert.equal(await db.attachment.count({ where: { taskId: toUuid(accepted.json.id) } }), 1, 'the file is copied');
   });

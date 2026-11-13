@@ -1,6 +1,6 @@
 {
   "name": "orbit.agent",
-  "contractVersion": "1.1.0",
+  "contractVersion": "1.2.0",
   "doc": "docs/orbit-agent-contract.md",
   "status": "frozen",
   "frozenAt": "2026-11-13",
@@ -103,6 +103,11 @@
       "jsonOutput": "entity document on stdout only; hints on stderr",
       "unknownFlags": "refused with exit 1 before any request"
     },
+    "writeAuthority": {
+      "machineCredential": "the agent's credential: task create, create-batch and DAG apply require a usable acting session (this runner's, this account's, not ended) and an ALLOWED card covering the exact write; there is no session-less form — x-orbit-session-id is attribution, so an agent can unset it (v1.2.0)",
+      "personCredential": "the owner's own act: orbit login or ORBIT_USER_TOKEN writes task create and create-batch on /api/tasks card-free by design; a person's terminal edits DAG edges one at a time, and the batch restructure has no person route (v1.2.0)",
+      "refusal": {"code": "TASK_WRITE_NEEDS_OWNER_CARD", "actions": ["ASK_THROUGH_THE_SAME_TOOL", "USE_A_PERSONAL_ACCESS_TOKEN"]}
+    },
     "parity": {
       "note": "Since 1.1.0 the operation catalogue (src/runner-go/operation_catalog.go) is the single declaration; these are its current declared gaps, each with a reason in the catalogue row.",
       "mcpOnlyTools": ["ask_owner", "bg_kill", "bg_list", "bg_output", "bg_run", "criterion_check_report", "criterion_check_start", "criterion_confirm", "criterion_confirmation_withdraw", "integration_abandon", "integration_observe", "integration_retry", "open_item_hand_over", "open_item_resolve", "permission_prompt", "request_owner_action", "schedule_wakeup", "withdraw_owner_request"],
@@ -160,7 +165,7 @@
     {"write": "project_create/project_update", "required": ["id", "status", "criteria as written"]},
     {"write": "session_create", "required": ["session id", "status"]},
     {"write": "file_upload", "required": ["file id", "reply link"]},
-    {"write": "declined card", "required": ["distinct refusal outcome", "who declined", "why"]}
+    {"write": "declined card", "required": ["refused true", "code APPROVAL_DECLINED", "tool", "message", "decidedBy when a person answered"], "shape": {"refused": true, "code": "APPROVAL_DECLINED", "tool": "orbit_task_create", "message": "the human rejected this task: why", "decidedBy": "user id, absent when no person answered"}}
   ],
   "receiptRules": [
     "No id, no claim.",
@@ -170,12 +175,12 @@
     "Evidence is its own envelope (task_evidence_submit); a comment is not evidence and evidence is not a status write."
   ],
   "scenarios": [
-    {"id": "S1", "case": "E1-record-task", "name": "Record a task", "baseline": "PARTIAL", "baselineEvidence": "tool + card exist; unknown fields ignored (G1); decline is a non-error result (G4); text-only receipt (G3)"},
+    {"id": "S1", "case": "E1-record-task", "name": "Record a task", "baseline": "PARTIAL", "baselineEvidence": "tool + card exist; unknown fields ignored (G1); decline is the shared APPROVAL_DECLINED document (G4 closed by P0-03); text-only receipt (G3)"},
     {"id": "S2", "case": "E2-private-plan", "name": "Private plan", "baseline": "PARTIAL", "baselineEvidence": "primer states the rule; no enforcement; plan-mode write gate not implemented (G9)"},
     {"id": "S3", "case": "E3-create-no-start", "name": "Create without start", "baseline": "PARTIAL", "baselineEvidence": "the separation exists (startNow/runAt/autoRunWhenReady/card override), but autoRunWhenReady defaults to true and the create tool's top-level description does not lead with it: no-start requires an explicit false (G11)"},
-    {"id": "S4", "case": "E4-batch-plan", "name": "Batch plan", "baseline": "PARTIAL", "baselineNote": "capability passes; real-write receipt unmeasured", "baselineEvidence": "dry-run receipt measured; atomic refs; per-item ids on a real write not measured; decline is a non-error result"},
+    {"id": "S4", "case": "E4-batch-plan", "name": "Batch plan", "baseline": "PARTIAL", "baselineNote": "capability passes; real-write receipt unmeasured", "baselineEvidence": "dry-run receipt measured; atomic refs; per-item ids on a real write not measured; since v1.1.0 the server refuses a session batch no answered card covers"},
     {"id": "S5", "case": "E5-read-only-project", "name": "Read-only project inspection", "baseline": "PASS", "baselineEvidence": "project_get measured; no project list surface (G6)"},
-    {"id": "S6", "case": "E6-immediate-delegation", "name": "Immediate delegation", "baseline": "PASS", "baselineEvidence": "task_start/session_create semantics hold; start receipt split (G3); decline parity gap (G4)"},
+    {"id": "S6", "case": "E6-immediate-delegation", "name": "Immediate delegation", "baseline": "PASS", "baselineEvidence": "task_start/session_create semantics hold; start receipt split (G3); decline is one document (G4 closed by P0-03)"},
     {"id": "S7", "case": "E7-no-orchestration", "name": "No orchestration", "baseline": "PARTIAL", "baselineEvidence": "22 tools disappear (measured); no instruction for the absent family (G2/P0-05)"},
     {"id": "S8", "case": "E8-compaction-recovery", "name": "Compaction recovery", "baseline": "PARTIAL", "baselineNote": "code-inspected; not black-box measured", "baselineEvidence": "Codex re-injects after compaction; Claude keeps the system prompt; no MCP instructions; no black-box test (G10)"}
   ],
@@ -183,7 +188,7 @@
     {"id": "G1", "gap": "unknown MCP fields and wrong types silently ignored", "owner": "P0-04"},
     {"id": "G2", "gap": "no MCP initialize.instructions", "owner": "P0-05"},
     {"id": "G3", "gap": "write receipts are unversioned text; start outcome split; no structuredContent", "owner": "P0-04"},
-    {"id": "G4", "gap": "declined card is a non-error MCP result and a non-zero CLI error", "owner": "P0-03/P0-04"},
+    {"id": "G4", "gap": "declined card is a non-error MCP result and a non-zero CLI error", "owner": "P0-03 (closed); P0-04 for the remaining receipt format", "status": "CLOSED", "closedBy": "P0-03", "closedAt": "2026-11-13", "note": "both surfaces return the same APPROVAL_DECLINED document; the transport difference (tool result vs non-zero exit) is the surface's, not the outcome's"},
     {"id": "G5", "gap": "task creates take no caller idempotency key", "owner": "P0-04"},
     {"id": "G6", "gap": "no project list surface on either agent surface", "owner": "P0-02/P1-01", "status": "decided", "resolution": "recorded as a deliberate absence in the operation catalogue; graded discovery, projects included, belongs to P1-01"},
     {"id": "G7", "gap": "one 255 KB capabilities document; no graded discovery", "owner": "P1-01"},

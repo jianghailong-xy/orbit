@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -2090,17 +2091,20 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 		body["fork"] = fork.payload()
 	}
 	// The same card the MCP tool raises: an agent that shells out to this command must not find a
-	// door the tool keeps closed. Headless there is no session, and so nobody to ask — nor as the
-	// person, who is the one asking: a card is filed by a session, on the runner's routes.
+	// door the tool keeps closed. Headless there is no session, and so nobody to ask — the server
+	// refuses that write outright (task-write-approval.ts): the runner credential is the agent's,
+	// and only a person's own credential (ORBIT_USER_TOKEN / orbit login) files work card-free.
 	startAfterCreate := false
 	if runner, ok := t.(*Transport); ok {
 		declined, start, err := askBeforeTaskCreate(runner, sessionID, body)
 		if err != nil {
 			fork.release()
 			return fmt.Errorf("create task: %w", err)
-		} else if declined != "" {
+		} else if declined != nil {
 			fork.release()
-			return fmt.Errorf("create task: the human rejected this task: %s", declined)
+			// The same document the MCP tool hands back (`declinedCardRefusal`): the CLI carries it
+			// as the command's error, so the exit code is non-zero and the reason survives.
+			return errors.New(declinedCardRefusal(taskCreateApprovalToolName, "this task", declined))
 		}
 		startAfterCreate = start
 	}
@@ -2145,9 +2149,12 @@ var cliNoticeOut io.Writer = os.Stderr
 
 // cliTaskAttribution returns the (agentId, sessionId) a CLI write is attributed to. Inside a
 // session the runner injects both, and the CLI claims agent authorship like the MCP server. A
-// headless process (launchd/cron) has no ORBIT_SESSION_ID: it keeps runner-owner attribution,
-// because its runner credential is shared and must not let any script pose as an agent by setting
-// an env var. The credential itself is always the runner token either way; only attribution moves.
+// headless process (launchd/cron) has no ORBIT_SESSION_ID: for the writes that accept it, it keeps
+// runner-owner attribution, because its runner credential is shared and must not let any script
+// pose as an agent by setting an env var. It is NOT a card-free way to create work: the runner
+// credential cannot write a task create, create-batch or DAG apply without a session and its
+// answered card (task-write-approval.ts); a headless process acting for the owner uses
+// ORBIT_USER_TOKEN or `orbit login` instead.
 func cliTaskAttribution() (agentID, sessionID string) {
 	sessionID = strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID"))
 	if sessionID == "" {
@@ -2341,9 +2348,9 @@ func cliTaskCreateBatch(args []string, in io.Reader, out io.Writer) error {
 		if declined, err := askBeforeBatch(runner, agentID, sessionID, items); err != nil {
 			fork.release()
 			return fmt.Errorf("%s: %w", verb, err)
-		} else if declined != "" {
+		} else if declined != nil {
 			fork.release()
-			return fmt.Errorf("%s: the human rejected this batch: %s", verb, declined)
+			return errors.New(declinedCardRefusal(batchApprovalToolName, "this batch", declined))
 		}
 	}
 	out2, err := t.createTasksBatch(agentID, sessionID, body)
@@ -3188,10 +3195,12 @@ func (l *cliStringList) Set(v string) error {
 	return nil
 }
 
-// cliTaskListProposeDag is the CLI door onto the same batch, and it deliberately does NOT raise
-// an approval: the approval exists to interpose a human between an *agent* and the graph, and at
-// a terminal the human is already the one typing. So it previews by default and writes with
-// --apply, which is the shape a person actually wants — look, then commit.
+// cliTaskListProposeDag is the CLI door onto the same batch as the `tasklist_propose_dag` tool, and
+// from a session it takes the same path: preview, the owner's card, apply on their yes
+// (dag_approval.go). It used to apply with no approval at all, on the theory that at a terminal the
+// human is already the one deciding — true of a person typing, false of the agent that reaches this
+// same binary through its shell. A process in no session is the owner at their own terminal: nobody
+// to ask and no conversation to ask in, so it still applies directly.
 func cliTaskListProposeDag(args []string, out io.Writer) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit task-list propose-dag")
@@ -3228,24 +3237,30 @@ func cliTaskListProposeDag(args []string, out io.Writer) error {
 	if len(ops) == 0 {
 		return fmt.Errorf("at least one --add or --remove is required")
 	}
-	body := map[string]interface{}{"ops": ops}
-	if *note != "" {
-		body["note"] = *note
-	}
 	t, err := cliTransport()
 	if err != nil {
 		return err
 	}
-	var raw json.RawMessage
-	if *apply {
-		raw, err = t.dagApply(id, body)
-	} else {
-		raw, err = t.dagPreview(id, body)
+	if !*apply {
+		body := map[string]interface{}{"ops": ops}
+		if *note != "" {
+			body["note"] = *note
+		}
+		raw, err := t.dagPreview(id, body)
+		if err != nil {
+			return fmt.Errorf("propose dag: %w", err)
+		}
+		return writeCLIRawJSON(out, raw, *jsonOut)
 	}
+	_, sessionID := cliTaskAttribution()
+	applied, declined, err := dagChangeWithApproval(t, sessionID, id, ops, *note)
 	if err != nil {
 		return fmt.Errorf("propose dag: %w", err)
 	}
-	return writeCLIRawJSON(out, raw, *jsonOut)
+	if declined != nil {
+		return errors.New(declinedCardRefusal(dagApprovalToolName, "this DAG change", declined))
+	}
+	return writeCLIRawJSON(out, applied, *jsonOut)
 }
 
 // parseDagEdge reads TASK_ID:DEPENDS_ON_ID. Ids are base62 or uuid, neither of which contains a
@@ -3391,7 +3406,9 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 		TaskID:    strings.TrimSpace(os.Getenv("ORBIT_TASK_ID")),
 		// Derived from the write path itself rather than restated, so the document cannot claim
 		// one author while the tasks it creates record another: in a session these commands
-		// stamp the acting agent, headless they write as the runner owner, and logged in as you.
+		// stamp the acting agent, logged in as you they are the person's own, and headless on the
+		// runner credential they are the runner owner's — except the carded task writes, which
+		// need a session and refuse a headless machine-credential caller altogether.
 		Actor: cliCapabilityActor(),
 	}
 	// A minted service credential names its own scopes, so it decides what this process may do —
