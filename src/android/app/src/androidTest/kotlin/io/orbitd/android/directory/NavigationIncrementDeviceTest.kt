@@ -65,13 +65,13 @@ class NavigationIncrementDeviceTest {
                 compose.onNode(row("Tasks")).performClick()
                 await { exists(hasTestTag("task:$task")) }
                 compose.onNodeWithTag("task:$task").performClick()
-                await { exists(hasTestTag("task-assignee")) }
+                await { exists(hasTestTag("task-runs-with")) }
                 capture("02-task-page")
                 // The destination already showing: its row is the selected one, and pressing it only closes the drawer.
                 openDrawer(); compose.onNode(row("Tasks")).assertIsSelected()
                 capture("03-drawer-tasks-selected")
                 compose.onNode(row("Tasks")).performClick(); settle()
-                assertTrue("the task page stays", exists(hasTestTag("task-assignee")))
+                assertTrue("the task page stays", exists(hasTestTag("task-runs-with")))
                 compose.onNodeWithContentDescription("Back").assertExists()
                 capture("04-current-row-only-closes")
                 // Another destination lands on its root; back to Tasks is the list, not the task left there.
@@ -81,7 +81,7 @@ class NavigationIncrementDeviceTest {
                 capture("05-workspace-root")
                 openDrawer(); compose.onNode(row("Tasks")).performClick(); settle()
                 await { exists(hasTestTag("task:$task")) }
-                assertFalse("the Tasks list at its root", exists(hasTestTag("task-assignee")))
+                assertFalse("the Tasks list at its root", exists(hasTestTag("task-runs-with")))
                 capture("06-tasks-root")
 
                 // A05-2 · Set assignee lists the workspaces with a runner first, as the drawer does.

@@ -1199,6 +1199,18 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /** A workspace's checkout reads differently on its runner's heartbeat (repoHealth: counts, branch, state). Keyed by
+   *  the owner, since a heartbeat has no session; `repoHealth` tells a client only the workspace list moved, so it need
+   *  not read its session lists again, and `affectsTaskRows: false` tells the Apple apps the same of their task rows. */
+  publishWorkspaceRepoHealthChanged(ownerId: string, workspaceId: string): void {
+    this.publish(`${RealtimeService.USER_SCOPE}${ownerId}`, {
+      seq: 0,
+      type: RunEventType.AGENT_CHANGED,
+      ts: new Date().toISOString(),
+      payload: { id: workspaceId, repoHealth: true, affectsTaskRows: false },
+    });
+  }
+
   /**
    * One of the owner's watches changed — made, edited, paused, resumed or stopped; matched, expired
    * or ended unmatched; or one of its deliveries delivered or dead-lettered. User-scoped, because a
@@ -1307,6 +1319,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
                 ...(typeof ev.payload.affectsTaskRows === 'boolean'
                   ? { affectsTaskRows: ev.payload.affectsTaskRows }
                   : {}),
+                ...(ev.payload.repoHealth === true ? { repoHealth: true } : {}),
               }
             : { id: String(ev.payload.id ?? '') };
       return {

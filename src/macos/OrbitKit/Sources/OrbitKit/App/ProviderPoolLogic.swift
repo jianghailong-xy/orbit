@@ -32,7 +32,8 @@ public enum ProviderPools {
             return ConfiguredProvider(slug: pool.slug, label: pool.label,
                                       runtime: codex ? "codex" : "claude",
                                       presetSlug: codex ? SharedPools.keyPresetSlug : "anthropic",
-                                      modelsFromRuntime: true)
+                                      modelsFromRuntime: true,
+                                      engines: pool.shared == nil ? pool.engines : nil)
         }
     }
 
@@ -135,7 +136,7 @@ public enum ProviderPools {
         return (keys ? "key\(n == 1 ? "" : "s")" : "account\(n == 1 ? "" : "s")") + " you can run on"
     }
 
-    // MARK: the pool's page (Settings → Infrastructure → an account pool)
+    // MARK: the pool's page (Settings → Machines & models → an account pool)
 
     /// The page's head: what the pool is, and how many of its accounts a session could start on now
     /// (`availability`).

@@ -635,6 +635,7 @@ private fun ProviderChoices(model: ComposerModel, catalog: ComposerCatalog, engi
                     ?.let { ProviderChoices.fixSuffix(it, option.unavailable) } ?: "")
                     else (if (here) "✓ " else "") + option.label)
                 option.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                option.notice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
     }

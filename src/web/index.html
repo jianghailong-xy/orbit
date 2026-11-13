@@ -18,7 +18,10 @@
     <!-- Chrome offers "Install" (rather than only "Create shortcut") once the page links a
          manifest with a name, a start_url, a standalone display and 192px + 512px icons. -->
     <link rel="manifest" href="/manifest.webmanifest" />
-    <title>Orbit</title>
+    <!-- On a public link's page (/s/<token>) nginx.conf turns these SSI comments into the link's own
+         title, description and picture, for a chat app that reads the page without running it
+         (WeChat showed only "Orbit"). Everywhere else they stay comments and the title is Orbit. -->
+    <!--# block name="bare_title" --><title>Orbit</title><!--# endblock --><!--# include virtual="/share-card/${share_token}/card" stub="bare_title" -->
     <script src="/theme-boot.js"></script>
     <style>
       /* First-paint boot splash: rendered before the JS bundle loads and removed

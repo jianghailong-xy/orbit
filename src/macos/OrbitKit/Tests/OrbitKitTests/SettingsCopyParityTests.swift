@@ -4,8 +4,8 @@ import XCTest
 
 /// Settings on iOS says what the web's Settings, Profile, Shared links, Access tokens and Infrastructure
 /// pages say. `SettingsCopy`, `SharedLinksList`, `AccessTokensList`, `ProvidersOverview` and
-/// `Infrastructure` carry those pages' words over to the phone (and Access tokens' and
-/// Infrastructure's to the Mac too), and nothing in either build notices a word changed at one end
+/// `MachinesAndModels` carry those pages' words over to the phone (and Access tokens' and
+/// Machines & models' to the Mac too), and nothing in either build notices a word changed at one end
 /// only — so each one is looked up in the web source it came from. A missing counterpart is a
 /// FAILURE, never an `XCTSkip`. A word no web page says any more (the Settings redesign removed the
 /// Infrastructure page and split the Settings page) is pinned to iOS's own value instead, and its
@@ -15,7 +15,7 @@ import XCTest
 /// Sessions row, which regroup the web's cards for a phone; "Default permission", the
 /// web's "Default permission mode" shortened to leave its row room for a value; and the words only a
 /// phone has to say — this device's own switch, the alerts that are always sent, the card shown
-/// while alerts are off, the sign-out confirmation, and Infrastructure's "Needs you" heading and its
+/// while alerts are off, the sign-out confirmation, and Machines & models' "Needs you" heading and its
 /// row's "1 needs you" (03-ios.png's own; the web draws Needs attention with no heading).
 final class SettingsCopyParityTests: XCTestCase {
 
@@ -249,7 +249,7 @@ final class SettingsCopyParityTests: XCTestCase {
                    in: Self.accessTokenWords)
     }
 
-    /// Infrastructure: what the web's Infrastructure page said — Machines & models' footer here — its
+    /// Machines & models: what the web's Infrastructure page said — Machines & models' footer here — its
     /// Machines, API keys and Account pools sections, their lines, and a key switched off.
     /// InfrastructurePage.tsx is gone since the Settings redesign (docs/mocks/settings-redesign): Machines
     /// is now a group of the web's Settings nav and is looked up there. The other words no web page says
@@ -258,18 +258,18 @@ final class SettingsCopyParityTests: XCTestCase {
     /// vendor's page says "API keys on your account, usable from every machine and billed per token."
     /// under a "Keys" section and "No <vendor> keys" when it has none; the machine count and busy-slots
     /// line went with the page.
-    func testInfrastructuresSectionsSayWhatTheWebPageSays() throws {
-        XCTAssertEqual(Infrastructure.subtitle, "Where your agents run, and whose model quota they spend.")
-        XCTAssertEqual(SettingsHome.footer(.machines), Infrastructure.subtitle)
-        assertSays(try web(Self.settingsNav), "<NavGroup title=\"\(Infrastructure.machines)\"", in: Self.settingsNav)
-        XCTAssertEqual(Infrastructure.machinesDetail,
+    func testMachinesAndModelssSectionsSayWhatTheWebPageSays() throws {
+        XCTAssertEqual(MachinesAndModels.subtitle, "Where your agents run, and whose model quota they spend.")
+        XCTAssertEqual(SettingsHome.footer(.machines), MachinesAndModels.subtitle)
+        assertSays(try web(Self.settingsNav), "<NavGroup title=\"\(MachinesAndModels.machines)\"", in: Self.settingsNav)
+        XCTAssertEqual(MachinesAndModels.machinesDetail,
                        "Subscriptions signed in here are spent only by sessions on that machine.")
         XCTAssertEqual(ProvidersOverview.apiKeys, "API keys")
         XCTAssertEqual(ProvidersOverview.apiKeysDetail,
                        "On your account and usable from every machine — billed per token.")
         XCTAssertEqual(ProvidersOverview.noKeys, "No keys yet")
         // A key's row is on its vendor's page, a switched-off one badged, since the Settings redesign.
-        assertSays(try web(Self.keyCards), "<Badge>\(Infrastructure.disabled)</Badge>", in: Self.keyCards)
+        assertSays(try web(Self.keyCards), "<Badge>\(MachinesAndModels.disabled)</Badge>", in: Self.keyCards)
 
         let pools = try web(Self.pools)
         assertSays(pools, "<h3>\(ProvidersOverview.accountPools)</h3>", in: Self.pools)
@@ -282,10 +282,10 @@ final class SettingsCopyParityTests: XCTestCase {
     /// with it, is gone from RunnerEngines.tsx. iOS's row still sums every machine up in one line, All
     /// signed in included, in the words the card last used.
     func testAMachinesLineSaysWhatTheWebCardSays() throws {
-        XCTAssertEqual(Infrastructure.running(active: 2, max: 4), "2 / 4 running")
-        XCTAssertEqual(Infrastructure.summary(try runner(nil)), "Engines not reported")
+        XCTAssertEqual(MachinesAndModels.running(active: 2, max: 4), "2 / 4 running")
+        XCTAssertEqual(MachinesAndModels.summary(try runner(nil)), "Engines not reported")
         let all = #"[{"engine":"claude","installed":true,"auth":"yes"},{"engine":"codex","installed":true,"auth":"yes"},{"engine":"kimi","installed":true,"auth":"yes"}]"#
-        XCTAssertEqual(Infrastructure.summary(try runner(all)), "All signed in")
+        XCTAssertEqual(MachinesAndModels.summary(try runner(all)), "All signed in")
     }
 
     /// Needs you: each line and what it means. The web drew the same lines in `NeedsAttention` until
@@ -293,11 +293,11 @@ final class SettingsCopyParityTests: XCTestCase {
     /// to their own cards; iOS keeps the block for those until its own page is redrawn, and since
     /// 2026-10-29 lists no engine signed out, as the web's machine card drew it nothing.
     func testNeedsYouSaysWhatTheWebSays() throws {
-        XCTAssertEqual(Infrastructure.offlineLine(machine: "ThinkPad"), "ThinkPad is offline")
-        XCTAssertEqual(Infrastructure.offlineDetail(lastHeartbeatAt: nil, nowMs: 0),
+        XCTAssertEqual(MachinesAndModels.offlineLine(machine: "ThinkPad"), "ThinkPad is offline")
+        XCTAssertEqual(MachinesAndModels.offlineDetail(lastHeartbeatAt: nil, nowMs: 0),
                        "Never checked in · its subscriptions are unavailable until it’s back")
-        XCTAssertEqual(Infrastructure.poolLine(pool: "Claude keys"), "Claude keys is unavailable")
-        XCTAssertEqual(Infrastructure.poolDetail(reason: "No account can run"),
+        XCTAssertEqual(MachinesAndModels.poolLine(pool: "Claude keys"), "Claude keys is unavailable")
+        XCTAssertEqual(MachinesAndModels.poolDetail(reason: "No account can run"),
                        "No account can run · no session can start on it")
     }
 
@@ -320,7 +320,7 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(try web("src/web/src/components/RunnerSignIn.tsx"), names, in: "src/web/src/components/RunnerSignIn.tsx")
         XCTAssertEqual(LoginEngine.cursor.displayName, ProviderEngines.cliName("cursor"))
         // A key keeps the name its owner gave it, a Gemini key's too.
-        XCTAssertEqual(Infrastructure.keyLabel("Gemini", presetSlug: "gemini"), "Gemini")
+        XCTAssertEqual(MachinesAndModels.keyLabel("Gemini", presetSlug: "gemini"), "Gemini")
     }
 
     private func runner(_ engines: String?) throws -> Runner {

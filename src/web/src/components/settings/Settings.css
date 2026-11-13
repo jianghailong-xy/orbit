@@ -266,7 +266,7 @@
   overflow-y: auto;
 }
 .settings-column {
-  max-width: 660px;
+  max-width: 880px;
   margin: 0 auto;
   padding: 40px 24px 64px;
 }
@@ -476,7 +476,7 @@
   flex-shrink: 0;
 }
 .settings-row-description {
-  max-width: 440px;
+  max-width: 600px;
 }
 
 /* A Personal page drawn from ui/Card (Profile's sign-in methods and password, Feishu's sections) reads as a
@@ -516,7 +516,7 @@
 }
 
 /* A page whose body is a table or list of many columns (Shared links, Access tokens) takes the room the
-   window has, rather than the settings rows' 660px. */
+   window has, rather than the settings rows' 880px. */
 .settings-column:has(> .settings-page--wide) {
   max-width: 1080px;
 }
@@ -633,49 +633,7 @@
   font-weight: 500;
 }
 
-/* Workspaces (board-5): the nav group's Show all and its filter, and a workspace's own page. */
-.settings-nav-filter {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 28px;
-  margin: 2px 0 4px;
-  padding: 0 8px;
-  border-radius: 6px;
-  background: var(--fill-muted);
-  color: var(--text-3);
-}
-.settings-nav-filter input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  outline: none;
-  background: none;
-  color: var(--text-1);
-  font: inherit;
-  font-size: 12.5px;
-}
-.settings-nav-filter:focus-within {
-  box-shadow: 0 0 0 2px var(--brand-border);
-}
-.settings-nav-more {
-  display: block;
-  width: 100%;
-  height: 30px;
-  padding: 0 8px 0 34px;
-  border: 0;
-  border-radius: 6px;
-  background: none;
-  color: var(--text-2);
-  font: inherit;
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-}
-.settings-nav-more:hover {
-  background: var(--bg-hover);
-  color: var(--text-1);
-}
+/* Workspaces (board-5): a workspace's own page. */
 .settings-nav-none {
   padding: 4px 8px 4px 34px;
   font-size: 12.5px;

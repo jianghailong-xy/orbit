@@ -354,6 +354,16 @@ export class ShareLinksService {
     };
   }
 
+  /** What a link's card in a chat app names (shared/share-card.ts): its kind and its root's title.
+   *  The same 404 as `resolve` for a link that opens nothing. Not a view. */
+  async cardOf(token: string): Promise<{ kind: ShareRootKind; title: string }> {
+    const link = await this.resolve(token);
+    const title = link.sessionId
+      ? (await this.prisma.session.findUnique({ where: { id: link.sessionId }, select: { title: true } }))?.title
+      : link.root?.title;
+    return { kind: link.kind, title: title ?? '' };
+  }
+
   /** A task link's root page: the task, with the layers the link includes (public-task.ts). The
    *  link shares the task itself and nothing else a task can name. */
   taskPage(link: OpenLink): Promise<PublicTask> {

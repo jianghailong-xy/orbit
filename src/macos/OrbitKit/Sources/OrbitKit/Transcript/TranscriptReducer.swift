@@ -135,11 +135,20 @@ public struct TranscriptReducer: Sendable, Codable {
     /// reducer's — now or after either mints more. Transient like `bgLaunch`: the parent's is
     /// always "i", so it's excluded from the persisted keys and old snapshots still decode.
     private var idPrefix = "i"
-    /// Whether the reader's unread steers wait out of `items` (`TranscriptState.unreadSteers`). Off for
-    /// a reducer folding an older history page (`prependOlder`): how a steer there ended may lie in
-    /// the window already loaded, past what the page can see, so the page draws each where it was
-    /// sent, as history always was. Transient like `idPrefix`.
-    private var holdsUnreadSteers = true
+    /// What this window folded with nothing to fold into, because the event it answers is in an older
+    /// page not loaded yet (the live window is folded first, then paged back — `prependOlder`): a
+    /// `tool_result` whose call is there, and a steer's settling `user_delivery` (its delivery and
+    /// seq) whose `user` event is. The page takes them up when it arrives, so a call there settles and
+    /// a steer is drawn where it was read. Web re-reduces its whole event array and so heals the same
+    /// seam for free. Transient like `bgLaunch`; the results are capped, since one whose call never
+    /// comes (its call trimmed for good, a duplicate) must not pile up.
+    private var strayResults: [RunEvent] = []
+    private var strayDeliveries: [String: (delivery: String, seq: Int)] = [:]
+    private static let strayResultCap = 256
+    /// Where each steer held unread would have been drawn when it was sent (an index into `items`): a
+    /// page whose steer settles in no event loaded at all draws it there (`prependOlder`).
+    /// Transient like `idPrefix`.
+    private var heldAt: [String: Int] = [:]
     /// Command + optional `description` of each `Bash(run_in_background)` launch, keyed by its
     /// tool_use id. The `background_*` events never carry either, so both are correlated from the
     /// launch captured here — matching web's `deriveBackgroundShells`, which titles the row
@@ -339,7 +348,9 @@ public struct TranscriptReducer: Sendable, Codable {
             }
             // A deliberate heads-up (see `TranscriptItem.notice`) — the turn itself was fine. Never
             // sent beside stderr; if it ever were, it wins, as on web. One row per event, unfolded.
-            if let notice = nonEmpty(str(ev, "notice")) {
+            if let item = mainCheckoutNotice(ev) {
+                state.items.append(.mainCheckout(item))
+            } else if let notice = nonEmpty(str(ev, "notice")) {
                 state.items.append(.notice(id: nextID(), message: notice))
             } else if let diagnostic = recoverableDiagnostic(ev) {
                 // Current runners attach impact metadata to known startup/auxiliary failures. Keep
@@ -356,6 +367,22 @@ public struct TranscriptReducer: Sendable, Codable {
         case .resync:           break
         case .unknown:          break          // lifecycle noise — no transcript item
         }
+    }
+
+    /// A main checkout card or result line (contract §7), by the event's `noticeKind`. A payload that
+    /// doesn't decode is nil, so its `notice` sentence still shows as a plain notice row.
+    private mutating func mainCheckoutNotice(_ ev: RunEvent) -> MainCheckoutNoticeItem? {
+        let kind = str(ev, "noticeKind")
+        guard kind == MainCheckoutNoticeItem.changedKind || kind == MainCheckoutNoticeItem.resultKind,
+              let data = try? JSONEncoder().encode(ev.payload) else { return nil }
+        let notice = str(ev, "notice") ?? ""
+        if kind == MainCheckoutNoticeItem.changedKind {
+            guard let changed = try? JSONDecoder().decode(MainCheckoutChangedNotice.self, from: data) else { return nil }
+            return MainCheckoutNoticeItem(id: nextID(), seq: ev.seq, notice: notice, changed: changed, ts: ev.ts)
+        }
+        struct Envelope: Decodable { let result: MainCheckoutActionResult }
+        guard let envelope = try? JSONDecoder().decode(Envelope.self, from: data) else { return nil }
+        return MainCheckoutNoticeItem(id: nextID(), seq: ev.seq, notice: notice, result: envelope.result)
     }
 
     /// Read a structured diagnostic that is explicitly recoverable/degraded: its label, the logged
@@ -498,10 +525,10 @@ public struct TranscriptReducer: Sendable, Codable {
     /// items are prepended, the dedup set merged, and `oldestSeq` moved back. Only transcript
     /// items graft — the page's status/approval/background side effects are discarded, because the
     /// live window owns that truth (a historical `turn_end` must not clobber a running status, nor
-    /// an old background task resurrect the tray). One seam wart is accepted (web heals it by
-    /// re-reducing its full event array, which an incremental reducer can't): a card whose
-    /// `tool_result` was folded — unmatched, and dropped — before its `tool_use` was loaded stays
-    /// "running"; a result arriving after the graft closes it normally (closeTool scans all items).
+    /// an old background task resurrect the tray). The seam itself is healed the way web's one pass
+    /// over its full event array would have folded it: a `tool_result` or a steer's settling
+    /// `user_delivery` this window could not place (`strayResults`, `strayDeliveries`) is taken up by
+    /// the page holding its call or its steer.
     public mutating func prependOlder(_ page: EventPage) {
         // An empty page means the cursor can't advance: stop the affordance regardless of
         // `hasMore`, or the load-earlier row would spin forever re-fetching nothing.
@@ -520,10 +547,47 @@ public struct TranscriptReducer: Sendable, Codable {
         guard !fresh.isEmpty else { return }
         var sub = TranscriptReducer()
         sub.idPrefix = "o\(fresh[0].seq)-"   // per-page id namespace: see `idPrefix`
-        sub.holdsUnreadSteers = false
         for ev in fresh { sub.apply(ev) }
+        // The results this window could not match, for calls this page opened: they came later, so
+        // they settle those calls now, as they would have in one pass.
+        if !strayResults.isEmpty {
+            let open = Set(sub.state.items.compactMap { item -> String? in
+                if case .toolCall(let card) = item, card.status == .running { return card.id }
+                return nil
+            })
+            var kept: [RunEvent] = []
+            for ev in strayResults {
+                if let id = str(ev, "toolUseId") ?? str(ev, "tool_use_id") ?? str(ev, "id"), open.contains(id) {
+                    sub.closeTool(ev)
+                } else {
+                    kept.append(ev)
+                }
+            }
+            strayResults = kept
+        }
         sub.flushStreaming()   // close anything left open at the page's end (defensive; pages hold no deltas)
-        state.items = sub.state.items + state.items
+        // The page's steers it saw no settling delivery for. One this window saw settle is drawn in the
+        // window, where it was read; one nothing loaded says anything about is drawn where it was
+        // sent, as history always was.
+        var pageItems = sub.state.items
+        var drawnAtSend = 0
+        let held = sub.state.unreadSteers.sorted { (sub.heldAt[$0.turnId ?? ""] ?? .max) < (sub.heldAt[$1.turnId ?? ""] ?? .max) }
+        for steer in held {
+            var bubble = steer
+            if let turnId = bubble.turnId, let settled = strayDeliveries.removeValue(forKey: turnId) {
+                bubble.delivery = settled.delivery
+                bubble.undelivered = settled.delivery == "failed"
+                let at = state.items.firstIndex { (Self.durableSeq($0) ?? 0) > settled.seq } ?? state.items.count
+                state.items.insert(.user(bubble), at: at)
+                if let o = openAssistant, o >= at { openAssistant = o + 1 }
+                if let o = openThinking, o >= at { openThinking = o + 1 }
+            } else {
+                let sent = sub.heldAt[bubble.turnId ?? ""] ?? pageItems.count
+                pageItems.insert(.user(bubble), at: min(sent + drawnAtSend, pageItems.count))
+                drawnAtSend += 1
+            }
+        }
+        state.items = pageItems + state.items
         // A sub-agent's list grafts the same way, key by key — the page is older, so its part goes
         // first. Keyed by the Agent call's id, a call and its work may straddle two pages and still
         // meet. What an older page's ends said about a task is kept only where the live window has
@@ -539,8 +603,8 @@ public struct TranscriptReducer: Sendable, Codable {
         // The open-bubble cursors are item INDICES — shift them past the prepended rows, or the
         // next live delta would stream into an old bubble. (`maxSeq` keeps the parent's — the
         // page is older by construction; the low-water cursor already moved above.)
-        if let i = openAssistant { openAssistant = i + sub.state.items.count }
-        if let i = openThinking { openThinking = i + sub.state.items.count }
+        if let i = openAssistant { openAssistant = i + pageItems.count }
+        if let i = openThinking { openThinking = i + pageItems.count }
     }
 
     /// Bounds of real database rows in a historical page. Seq 0 is reserved for live-only nudges;
@@ -636,6 +700,7 @@ public struct TranscriptReducer: Sendable, Codable {
         case .autoRetry(let n):         seq = n.seq
         case .user, .error, .authError: seq = nil
         case .notice, .diagnostic:      seq = nil
+        case .mainCheckout(let m):      seq = m.seq
         }
         return (seq ?? 0) > 0 ? seq : nil
     }
@@ -736,6 +801,7 @@ public struct TranscriptReducer: Sendable, Codable {
         state.queued.removeAll { $0.turnId == turnId }
         state.accepted.removeAll { $0.turnId == turnId }
         state.unreadSteers.removeAll { $0.turnId == turnId }
+        heldAt.removeValue(forKey: turnId)
         guard let i = state.items.lastIndex(where: {
             if case .user(let b) = $0 { return b.turnId == turnId }
             return false
@@ -1148,6 +1214,11 @@ public struct TranscriptReducer: Sendable, Codable {
                 return
             }
         }
+        // No call to settle: it may be in an older page not loaded yet (`strayResults`).
+        if id != nil {
+            strayResults.append(ev)
+            if strayResults.count > Self.strayResultCap { strayResults.removeFirst() }
+        }
     }
 
     /// Replace the visible output snapshot of one still-running user shell. This event is
@@ -1350,7 +1421,10 @@ public struct TranscriptReducer: Sendable, Codable {
                 state.accepted[i].pending = false
                 state.accepted[i].undelivered = true
             }
+            return
         }
+        // Its `user` event may be in an older page not loaded yet (`strayDeliveries`).
+        if SteerDelivery.settles(delivery), ev.seq > 0 { strayDeliveries[turnId] = (delivery, ev.seq) }
     }
 
     /// Move a steer out of the tray and into the conversation, at the point it settled: the end of
@@ -1358,6 +1432,7 @@ public struct TranscriptReducer: Sendable, Codable {
     /// streaming — so nothing open is flushed (see `appendUser`).
     private mutating func settleUnreadSteer(at i: Int) {
         var bubble = state.unreadSteers.remove(at: i)
+        if let turnId = bubble.turnId { heldAt.removeValue(forKey: turnId) }
         bubble.undelivered = bubble.delivery == "failed"
         state.items.append(.user(bubble))
     }
@@ -1365,7 +1440,7 @@ public struct TranscriptReducer: Sendable, Codable {
     /// Whether this bubble, just echoed, waits in the tray rather than the conversation: a steer the
     /// reader typed that nothing has read yet (`TranscriptState.unreadSteers`).
     private func waitsUnread(_ bubble: UserBubble) -> Bool {
-        holdsUnreadSteers && bubble.steer && bubble.turnId != nil
+        bubble.steer && bubble.turnId != nil
             && !SteerDelivery.settles(bubble.delivery) && bubble.delivery != SteerDelivery.withdrawn
             && SteerDelivery.isReadersOwn(bubble)
     }
@@ -1536,6 +1611,7 @@ public struct TranscriptReducer: Sendable, Codable {
                     state.items.remove(at: i)
                     if let o = openAssistant, o > i { openAssistant = o - 1 }
                     if let o = openThinking, o > i { openThinking = o - 1 }
+                    if let turnId = b.turnId { heldAt[turnId] = i }
                     state.unreadSteers.append(b)
                 } else {
                     state.items[i] = .user(b)
@@ -1575,6 +1651,7 @@ public struct TranscriptReducer: Sendable, Codable {
                                     note: bubble.note, steer: true, delivery: bubble.delivery,
                                     withdrawable: bubble.withdrawable)
             }
+            if let turnId = bubble.turnId { heldAt[turnId] = state.items.count }
             state.unreadSteers.append(bubble)
         } else {
             state.items.append(.user(bubble))

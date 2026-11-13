@@ -479,7 +479,7 @@ private struct PasteBackForm: View {
 ///
 /// The remedy depends on where the credentials live (see `EngineAuth.remedy`): a built-in engine
 /// signs in on the runner itself, OpenCode's provider-specific login can only be run on that
-/// machine, Antigravity connects Gemini in Infrastructure, and any other slug is a configured
+/// machine, Antigravity connects Gemini in Machines & models, and any other slug is a configured
 /// API key — which these clients can't edit, so the card says where it lives instead of offering a
 /// button that goes nowhere.
 struct AuthErrorCardView: View {
@@ -642,7 +642,7 @@ struct AntigravityRepairCardView: View {
 
 /// A DeepSeek Harness session that could not run, as the remedy rather than the runner's sentence
 /// (web's `DshRepairCard`). Its credential is a configured key, never a sign-in on the runner, so a
-/// key problem is fixed on that key's page, from Infrastructure; everything else is about the machine.
+/// key problem is fixed on that key's page, from Machines & models; everything else is about the machine.
 struct DshRepairCardView: View {
     let console: ConsoleModel
     let repair: DshRuntime.Repair

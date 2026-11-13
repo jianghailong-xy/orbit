@@ -984,7 +984,8 @@ export class SessionsService {
        *
        * A conversation about a task does not change code, so a branch and a worktree for it are an
        * unmerged branch left behind by a reply to a comment — which reads as work somebody
-       * abandoned. Internal, and set only by the @-mention delivery sweep.
+       * abandoned. Set by the @-mention delivery sweep, and by `spawnFromSession` when the calling
+       * session asks for `worktree: false`.
        */
       noWorktree?: boolean;
       /**
@@ -2381,6 +2382,9 @@ export class SessionsService {
       /** The child's own permission posture, never wider than the parent's: a wider one named is
        *  refused. Omitted, it is the account default, or the parent's own mode where that is wider. */
       permissionMode?: string;
+      /** `false` opens the child in the workspace's own checkout, with no branch and no worktree, whatever the
+       *  workspace's default. It can only turn isolation off: anything else leaves the workspace's setting. */
+      worktree?: boolean;
     },
   ): Promise<{
     id: string;
@@ -2503,6 +2507,7 @@ export class SessionsService {
         // parentSessionId link is what marks them as spawned/orchestrated.
         parentSessionId,
         tree: { rootSessionId, depth: parent.spawnDepth + 1 },
+        ...(dto.worktree === false ? { noWorktree: true } : {}),
       },
     );
     // Surface the target workspace's name + provider so the web/native transcript can render a
@@ -4641,7 +4646,9 @@ export class SessionsService {
         provider: parent.provider ?? undefined,
         prompt: mergeRecoveryPrompt(recovery, preparePR),
       },
-      { source: 'merge-repair', parentSessionId: parent.id },
+      // It works in the repair worktree the runner made for the recovery (recovery.repairWorktree), so a
+      // worktree and branch of its own would only be left behind empty, reading as abandoned work.
+      { source: 'merge-repair', parentSessionId: parent.id, noWorktree: true },
     );
     return withSessionState(created);
   }

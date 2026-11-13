@@ -209,6 +209,44 @@ final class OrbitAskPreviewTests: XCTestCase {
                      "the server's own card has its preview")
     }
 
+    func testAPlainCardShowsTheWholeInput() throws {
+        let filed = json(#"{"slug":"ollama-hpc","defaultModel":"qwen3.8:27b","baseUrl":"https://h/v1"}"#)
+        let raw = try XCTUnwrap(Approvals.rawInput(filed))
+        for words in ["\"slug\" : \"ollama-hpc\"", "qwen3.8:27b", "https://h/v1"] {
+            XCTAssertTrue(raw.contains(words), words)
+        }
+    }
+
+    func testAProviderUpdateReadsAsItsFieldsAndModels() throws {
+        let filed = json(#"""
+        {"slug":"ollama-hpc-responses","defaultModel":"qwen3.8:27b","models":[
+          {"label":"Qwen3.8 27B (Ollama, 64K)","value":"qwen3.8:27b","contextWindow":65536},
+          {"label":"Qwen3 Coder 30B (Ollama, 64K)","value":"qwen3-coder:30b","contextWindow":65536}]}
+        """#)
+        let preview = try XCTUnwrap(Approvals.providerWritePreview(toolName: "orbit_provider_update", from: filed))
+        XCTAssertEqual(preview.heading, "Change this provider?")
+        XCTAssertEqual(preview.name, "ollama-hpc-responses")
+        XCTAssertEqual(preview.action, "Save changes")
+        XCTAssertEqual(preview.fields.map(\.caption), ["Default model"], "nothing the write leaves alone")
+        let models = try XCTUnwrap(preview.models)
+        XCTAssertEqual(models.map(\.isDefault), [true, false])
+        XCTAssertEqual(models[1].detail, "Qwen3 Coder 30B (Ollama, 64K) · 64K context")
+        XCTAssertEqual(preview.modelsCaption, "Models · replaces the current list")
+        XCTAssertNil(Approvals.providerWritePreview(toolName: "Bash", from: filed))
+    }
+
+    func testAProviderAddNamesItsProtocolAndHidesTheKey() throws {
+        let filed = json(#"{"label":"Local vLLM","runtime":"codex","baseUrl":"http://h/v1","apiKey":"(set — not shown)"}"#)
+        let preview = try XCTUnwrap(Approvals.providerWritePreview(toolName: "orbit_provider_create", from: filed))
+        XCTAssertEqual(preview.name, "Local vLLM")
+        XCTAssertEqual(preview.fields.map(\.value), ["OpenAI Responses (codex)", "http://h/v1", "Set — not shown"])
+        XCTAssertNil(preview.models)
+        XCTAssertNil(preview.note)
+        XCTAssertEqual(ProviderWritePreview.contextSize(65536), "64K")
+        XCTAssertEqual(ProviderWritePreview.contextSize(200_000), "200K")
+        XCTAssertEqual(ProviderWritePreview.contextSize(1_048_576), "1M")
+    }
+
     // MARK: ending a blocker
 
     /// What the runner puts on the ask: the project, the blocker's own facts from the project read,
