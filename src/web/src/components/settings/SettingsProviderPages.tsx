@@ -141,8 +141,10 @@ export function SettingsKeysPage() {
               </span>
             }
             action={
+              // Quiet beside the page's own Add key, the one bordered add on the page (settings-buttons board 01).
               <Button
                 size="small"
+                variant="text"
                 icon={<PlusOutlined />}
                 aria-label={`Add ${name} key`}
                 onClick={() => navigate(`/settings/providers/new/${slug}`)}

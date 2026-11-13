@@ -16974,7 +16974,8 @@ button.chat-jump-start:hover {
 
 /* One vendor's keys on its Settings page (ProviderKeyRows, docs/mocks/settings-redesign board-4): a
    SettingsRow per key, its name over one line of what it runs on, the model it starts on, the pools it
-   is in and when it was last used; Edit and ⋯ on its right. */
+   is in and when it was last used; a borderless ⋯ and the › that says the row opens (settings-buttons
+   board 01) on its right. */
 .vk-line {
   display: flex;
   flex-wrap: wrap;
@@ -16984,13 +16985,21 @@ button.chat-jump-start:hover {
 .vk-line .infra-model {
   color: var(--text-1);
 }
-.vk-used {
+.vk-used,
+.vk-used-item {
   white-space: nowrap;
 }
 .vk-act {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
+}
+.vk-act .orbit-button-text {
+  color: var(--text-3);
+}
+.vk-chev {
+  color: var(--text-3);
+  font-size: 11px;
 }
 
 /* ============================================================================
@@ -17709,7 +17718,11 @@ button.chat-jump-start:hover {
   margin-top: 10px;
 }
 .pool-row {
-  grid-template-columns: minmax(0, 1fr) 196px 140px 110px;
+  /* Top-aligned (settings-buttons board 02): the status, the quota's head and the actions sit level with
+     the name's line, however many lines the quota column takes. The last column holds a way back
+     (Resume Now, Sign in again) beside the ⋯. */
+  grid-template-columns: minmax(0, 1fr) 160px 140px 146px;
+  align-items: start;
 }
 .pool-status {
   min-width: 0;
@@ -17744,7 +17757,7 @@ button.chat-jump-start:hover {
 /* The pool's page takes accounts out, so its rows carry up to two actions: Re-add key and the
    remove mark (88 + 8 + 24px measured). */
 .pool-detail .pool-row {
-  grid-template-columns: minmax(0, 1fr) 196px 130px 124px;
+  grid-template-columns: minmax(0, 1fr) 160px 130px 146px;
 }
 /* The head's gauge: the account the next session runs on, never an average of them. */
 .pool-gauge {
@@ -17958,8 +17971,70 @@ button.chat-jump-start:hover {
 .re-chip.pool-shared-chip {
   flex: none;
   margin-left: 0;
-  background: var(--brand-tint);
-  color: var(--brand);
+  font-weight: 500;
+}
+/* The pool card's head (settings-buttons board 02): a chevron that can be seen, the name on one line,
+   the whole head lit under the pointer since a press anywhere on it folds (foldFromAnywhere). */
+.pool-card .re-head:hover {
+  background: var(--bg-hover);
+}
+.re-chev.pool-chev {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+.pool-card .re-runner {
+  white-space: nowrap;
+}
+.pool-card .re-summary {
+  border-left: 0;
+  padding-left: 0;
+}
+/* A row's ⋯, quiet beside the buttons that are a way back. */
+.pool-row .pool-more.orbit-button:not(:hover):not(:active) {
+  color: var(--text-3);
+}
+/* A status as a dot before plain words (AccountPauseStatus dot): on rows whose buttons sit beside it. */
+.status-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  font-size: 12px;
+  line-height: 24px;
+  color: var(--text-1);
+  white-space: nowrap;
+}
+.status-dot::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dot-idle);
+}
+.status-dot-success::before,
+.status-dot-green::before {
+  background: var(--success-solid);
+}
+.status-dot-warning::before,
+.status-dot-orange::before,
+.status-dot-gold::before {
+  background: var(--warning-solid);
+}
+.status-dot-error::before,
+.status-dot-red::before {
+  background: var(--error-solid);
+}
+.status-dot-info::before,
+.status-dot-blue::before {
+  background: var(--brand);
+}
+.status-dot-error,
+.status-dot-red {
+  color: var(--error);
 }
 .pool-people {
   display: inline-flex;
@@ -17991,9 +18066,8 @@ button.chat-jump-start:hover {
   margin-top: 1px;
   font-size: 12px;
   color: var(--text-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Wraps rather than cut: an ellipsis left "· …" where the last part was (settings-buttons board 02). */
+  overflow-wrap: anywhere;
 }
 
 /* ── the pool's page: its title, its people and its rules ─────────────────────── */
@@ -18384,12 +18458,6 @@ button.chat-jump-start:hover {
 }
 .pool-login-window + .pool-login-window {
   margin-top: 8px;
-}
-/* The sign-out mark rests grey and turns red only under the pointer: red on a row that is fine read
-   as something wrong with it. At rest only: under the pointer and pressed it keeps the danger
-   button's own red. */
-.pool-row .pool-signout.orbit-button:not(:hover):not(:active) {
-  color: var(--text-3);
 }
 .pool-login-reset {
   margin-top: 3px;

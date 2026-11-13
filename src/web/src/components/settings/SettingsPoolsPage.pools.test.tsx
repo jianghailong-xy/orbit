@@ -152,6 +152,18 @@ describe('Account pools in Settings', { timeout: 30_000 }, () => {
     });
     await settle();
   };
+  /** Opens a row's ⋯ (settings-buttons board 02) and presses an item in it. */
+  const pressMenu = async (row: Element | null, name: string, label: string) => {
+    await click(row?.querySelector(`button[aria-label="More for ${name}"]`));
+    await act(async () => {
+      await vi.waitFor(() => {
+        if (!menuItem(label)) throw new Error(`no ${label} in the menu yet`);
+      });
+    });
+    await click(menuItem(label));
+  };
+  const menuItem = (label: string) =>
+    Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find((el) => el.textContent?.trim() === label) ?? null;
   const button = (words: string, scope: ParentNode = document.body) =>
     Array.from(scope.querySelectorAll<HTMLButtonElement>('button')).find(
       (el) => el.textContent?.trim() === words,
@@ -168,6 +180,8 @@ describe('Account pools in Settings', { timeout: 30_000 }, () => {
 
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    // A row's ⋯ menu measures its trigger.
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
     path = '';
     mobile = false;
     storage = new Map();
@@ -517,7 +531,7 @@ describe('Account pools in Settings', { timeout: 30_000 }, () => {
     keys = [WORK, HOME];
     pools = [pool([member(WORK, { state: 'AVAILABLE', next: true }), member(HOME, { state: 'AVAILABLE' })])];
     await mount(`/settings/providers/pools/${POOL_ID}`);
-    await click(rowOf('Home')!.querySelector('button[aria-label="Remove Home from this pool"]'));
+    await pressMenu(rowOf('Home'), 'Home', 'Remove from pool');
     expect(posted).toEqual([{ method: 'DELETE', path: `/providers/pools/${POOL_ID}/members/${HOME.id}`, body: undefined }]);
   });
 
@@ -534,7 +548,7 @@ describe('Account pools in Settings', { timeout: 30_000 }, () => {
     expect(text()).toContain('Account pool · 2 of 3 accounts available');
     expect(rowOf('Team API key')?.querySelector('.pool-status')?.textContent).toBe('Unavailable');
     expect(rowOf('Team API key')?.querySelector('.pool-why')?.textContent).toBe('Metered API key — no 5-hour window');
-    await click(rowOf('Team API key')!.querySelector('button[aria-label="Remove Team API key from this pool"]'));
+    await pressMenu(rowOf('Team API key'), 'Team API key', 'Remove from pool');
     expect(posted).toEqual([
       { method: 'DELETE', path: `/providers/pools/${POOL_ID}/members/${METERED.id}`, body: undefined },
     ]);
