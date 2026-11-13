@@ -1,0 +1,23 @@
+mac: Labels shown
+mac: needs review shown
+mac: Public link shown
+mac: Working directory shown
+mac: Compact at shown
+mac: Variables shown
+mac: When it needs you shown
+mac: Mute this session shown
+mac: iOS and Android shown
+mac-info: in view after 1 move(s) at (295.0, 612.75, 91.0, 16.0)
+mac: Claude Code 2.4.1 shown
+mac: HPC shown
+mac: Max (2) shown
+mac: 1.82M shown
+mac: $4.37 shown
+mac: 23 turns shown
+mac: Session ID shown
+mac-variables-row: in view after 1 move(s) at (295.0, 436.25, 71.0, 16.0)
+mac: DEBUG shown
+mac: LOG_LEVEL shown
+mac: NODE_OPTIONS shown
+mac: Restart after this turn shown
+mac: replaces the workspace shown

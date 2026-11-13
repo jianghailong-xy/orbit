@@ -1,0 +1,6 @@
+Test Case '-[RunStartMacProbeUITests.SettingsShotTests testMacSessionSettings]' started.
+Test Case '-[RunStartMacProbeUITests.SettingsShotTests testMacSessionSettings]' passed (62.064 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 62.064 (62.066) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 62.064 (62.067) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 62.064 (62.068) seconds
+** TEST SUCCEEDED **

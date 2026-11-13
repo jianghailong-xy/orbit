@@ -1,0 +1,5 @@
+capture=success
+run=https://github.com/jianghailong-xy/orbit/actions/runs/43381480094
+sha=ecbe54235f2f8d8c70e72e98b57262ebdf8a4485
+== displays ==
+0, 0, 1024, 768

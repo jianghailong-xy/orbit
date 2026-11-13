@@ -1,0 +1,116 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "f3ed283e5b4ca99cfa9cd465405eff2e4cf851b1",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "C7249A66-5C3D-4C96-A75C-140C8194ACB3.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "SettingsShotTeststestMacSessionSettings-notes_0_5E5A3265-C557-4A10-8253-E66945BAA5E4.txt",
+        "timestamp" : 1794553582.946
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "f3ed283e5b4ca99cfa9cd465405eff2e4cf851b1",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "7740F168-C140-4DE7-B95A-7BD705E42306.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-requests_0_731B2D2B-BC6B-4581-A30E-7E4321147026.txt",
+        "timestamp" : 1794553581.866
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "f3ed283e5b4ca99cfa9cd465405eff2e4cf851b1",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "87A61458-05C0-4154-988C-59858D5468F7.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "tree-mac-3b-restart-queued_0_F9E23FDB-6628-4288-96D9-BA35AF417F2D.txt",
+        "timestamp" : 1794553581.832
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "f3ed283e5b4ca99cfa9cd465405eff2e4cf851b1",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "8536C0DC-A757-4D31-BA62-AC53E9FE54BC.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-3b-restart-queued_0_A2BD6E6E-14B8-4731-BF04-8FB95E118A4C.png",
+        "timestamp" : 1794553581.57
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "f3ed283e5b4ca99cfa9cd465405eff2e4cf851b1",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "65764AAB-0405-4E0C-8339-46A2309A3DD1.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "tree-mac-3-variables_0_32E70929-D089-4719-801F-187932823F86.txt",
+        "timestamp" : 1794553575.918
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "f3ed283e5b4ca99cfa9cd465405eff2e4cf851b1",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "6DD23955-80DF-4B9A-A29E-611D5E56FADD.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-3-variables_0_4FC8ACC0-AC22-48B3-A62E-C69377F373B3.png",
+        "timestamp" : 1794553575.499
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "f3ed283e5b4ca99cfa9cd465405eff2e4cf851b1",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "50B6FAB6-6880-4F59-892D-4CBD7F7130D6.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "tree-mac-4-info_0_CA838E19-075D-48B4-90F2-287BA6AB8582.txt",
+        "timestamp" : 1794553567.231
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "f3ed283e5b4ca99cfa9cd465405eff2e4cf851b1",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "EECA73EA-5724-4165-8DBA-814AA3C8162A.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-4-info_0_C9E8DD7D-7711-4985-A589-847813808EE1.png",
+        "timestamp" : 1794553566.833
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "f3ed283e5b4ca99cfa9cd465405eff2e4cf851b1",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "BF0E7BCB-9DEF-4631-ACA3-E429DE4B5C25.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "tree-mac-2-sheet_0_66189BFE-A5CE-4B72-9818-A27DC32A49C1.txt",
+        "timestamp" : 1794553561.168
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "f3ed283e5b4ca99cfa9cd465405eff2e4cf851b1",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "6509AAA2-0BC3-409F-B690-56E0A57AB252.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-2-sheet_0_783CE2FC-CE5A-451C-87A1-B351B25B9FA3.png",
+        "timestamp" : 1794553560.619
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "f3ed283e5b4ca99cfa9cd465405eff2e4cf851b1",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "9E2473CB-FA1C-4D6F-BA2E-7EA1F7E87425.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "tree-mac-1-toolbar_0_5A823666-30C2-4841-9E21-EF15C9983CBA.txt",
+        "timestamp" : 1794553554.67
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "f3ed283e5b4ca99cfa9cd465405eff2e4cf851b1",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "385CDB83-B628-49CE-B3C1-937B78716484.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-1-toolbar_0_8A368839-BD91-4BBF-A163-F3BBB451DF72.png",
+        "timestamp" : 1794553554.337
+      }
+    ],
+    "testIdentifier" : "SettingsShotTests/testMacSessionSettings()",
+    "testIdentifierURL" : "test://com.apple.xcode/RunStartProbe/RunStartMacProbeUITests/SettingsShotTests/testMacSessionSettings"
+  }
+]

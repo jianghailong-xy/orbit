@@ -1,0 +1,7 @@
+   6 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S1
+   5 NOT SERVED /api/sessions/S1/turns?view=active
+   5 NOT SERVED /api/sessions/S1/background
+   5 NOT SERVED /api/sessions/S1/approvals?status=PENDING
+   2 NOT SERVED /api/wiki/trash
+   1 NOT SERVED /api/owner-requests?state=open
+   1 NOT SERVED /api/auth/capabilities

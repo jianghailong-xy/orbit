@@ -1,0 +1,300 @@
+CodeSign /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework
+/Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework
+/Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework
+/Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework
+/Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework
+/Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Intermediates.noindex/RunStartProbe.build/Debug/RunStartMacProbeUITests.build/RunStartMacProbeUITests.xctest.xcent --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest
+
+Touch /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest
+
+CodeSign /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Intermediates.noindex/RunStartProbe.build/Debug/RunStartMacProbeUITests.build/RunStartMacProbeUITests.xctest.xcent --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app
+/Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app: replacing existing signature
+
+2026-11-13 07:05:19.209419+0000 RunStartMacProbeUITests-Runner[21476:63583] [Default] Running tests...
+Test Suite 'All tests' started at 2026-11-13 07:05:20.986.
+Test Suite 'RunStartMacProbeUITests.xctest' started at 2026-11-13 07:05:20.987.
+Test Suite 'SettingsShotTests' started at 2026-11-13 07:05:20.987.
+Test Case '-[RunStartMacProbeUITests.SettingsShotTests testMacSessionSettings]' started.
+    t =     0.00s Start Test at 2026-11-13 07:05:20.988
+    t =     3.70s Set Up
+    t =     4.00s Open io.orbitd.crossingsmacprobe
+    t =     4.00s     Launch io.orbitd.crossingsmacprobe
+2026-11-13 07:05:25.647 xcodebuild[6065:24975] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-13 07:05:25.647 xcodebuild[6065:24975] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     6.42s         Wait for accessibility to load
+    t =     6.75s         Setting up automation session
+    t =     6.79s         Wait for io.orbitd.crossingsmacprobe to idle
+    t =     6.80s Get number of matches for: Descendants matching type Window
+    t =     7.81s Get number of matches for: Descendants matching type Window
+    t =     8.35s Get number of matches for: Descendants matching type Window
+    t =     8.92s Get number of matches for: Descendants matching type Window
+    t =     9.47s Get number of matches for: Descendants matching type Window
+    t =    10.04s Get number of matches for: Descendants matching type Window
+    t =    10.58s Get number of matches for: Descendants matching type Window
+    t =    11.12s Get number of matches for: Descendants matching type Window
+    t =    11.66s Get number of matches for: Descendants matching type Window
+    t =    12.20s Get number of matches for: Descendants matching type Window
+    t =    12.72s Get number of matches for: Descendants matching type Window
+    t =    13.27s Get number of matches for: Descendants matching type Window
+    t =    13.81s Get number of matches for: Descendants matching type Window
+    t =    14.40s Get number of matches for: Descendants matching type Window
+    t =    14.95s Get number of matches for: Descendants matching type Window
+    t =    15.50s Get number of matches for: Descendants matching type Window
+    t =    16.04s Get number of matches for: Descendants matching type Window
+    t =    16.60s Get number of matches for: Descendants matching type Window
+    t =    17.15s Get number of matches for: Descendants matching type Window
+    t =    17.70s Get number of matches for: Descendants matching type Window
+    t =    18.23s Get number of matches for: Descendants matching type Window
+    t =    18.78s Get number of matches for: Descendants matching type Window
+    t =    19.31s Get number of matches for: Descendants matching type Window
+    t =    19.87s Get number of matches for: Descendants matching type Window
+    t =    20.39s Get number of matches for: Descendants matching type Window
+    t =    20.93s Get number of matches for: Descendants matching type Window
+    t =    21.47s Get number of matches for: Descendants matching type Window
+    t =    22.01s Type 'n' key with modifiers '⌘' (0x10)
+    t =    22.01s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    22.01s     Find the Target Application 'io.orbitd.crossingsmacprobe'
+    t =    22.04s     Check for interrupting elements affecting "RunStartMacProbe" Application
+    t =    22.04s     Synthesize event
+    t =    24.37s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    24.46s Get number of matches for: Descendants matching type Window
+    t =    24.63s Checking existence of `Button (First Match)`
+    t =    25.39s Checking existence of `Button (First Match)`
+    t =    26.16s Checking existence of `Button (First Match)`
+    t =    26.77s Checking existence of `Button (First Match)`
+    t =    27.41s Checking existence of `Button (First Match)`
+    t =    28.01s Checking existence of `Button (First Match)`
+    t =    28.71s Checking existence of `Button (First Match)`
+    t =    33.35s Added attachment named 'mac-1-toolbar'
+    t =    33.36s Requesting snapshot of accessibility hierarchy for app with pid 21699
+    t =    33.57s Requesting snapshot of accessibility hierarchy for app with pid 21699
+    t =    33.68s Added attachment named 'tree-mac-1-toolbar.txt'
+    t =    33.76s Checking existence of `Button (First Match)`
+    t =    33.80s Click Button (First Match)
+    t =    33.80s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    33.80s     Find the Button (First Match)
+    t =    33.84s     Check for interrupting elements affecting "Settings…" Button
+    t =    33.90s     Synthesize event
+    t =    34.79s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    35.02s Checking existence of `Any (First Match)`
+    t =    35.45s Checking existence of `StaticText (First Match)`
+    t =    35.61s Checking existence of `StaticText (First Match)`
+    t =    35.67s Checking existence of `Any (First Match)`
+    t =    35.81s Checking existence of `StaticText (First Match)`
+    t =    35.93s Checking existence of `StaticText (First Match)`
+    t =    36.04s Checking existence of `Any (First Match)`
+    t =    36.15s Checking existence of `StaticText (First Match)`
+    t =    36.24s Checking existence of `StaticText (First Match)`
+    t =    39.63s Added attachment named 'mac-2-sheet'
+    t =    39.64s Requesting snapshot of accessibility hierarchy for app with pid 21699
+    t =    39.86s Requesting snapshot of accessibility hierarchy for app with pid 21699
+    t =    40.18s Added attachment named 'tree-mac-2-sheet.txt'
+    t =    40.19s Checking existence of `Any (First Match)`
+    t =    40.34s Checking existence of `StaticText (First Match)`
+    t =    40.40s Checking existence of `StaticText (First Match)`
+    t =    40.46s Checking existence of `Any (First Match)`
+    t =    40.53s Checking existence of `Any (First Match)`
+    t =    40.61s Checking existence of `Any (First Match)`
+    t =    40.76s Checking existence of `StaticText (First Match)`
+    t =    40.84s Checking existence of `StaticText (First Match)`
+    t =    40.91s Checking existence of `Any (First Match)`
+    t =    41.02s Checking existence of `StaticText (First Match)`
+    t =    41.07s Checking existence of `StaticText (First Match)`
+    t =    41.14s Checking existence of `Any (First Match)`
+    t =    41.26s Checking existence of `StaticText (First Match)`
+    t =    41.34s Checking existence of `StaticText (First Match)`
+    t =    41.41s Checking existence of `Any (First Match)`
+    t =    41.46s Checking existence of `Any (First Match)`
+    t =    41.52s Checking existence of `Any (First Match)`
+    t =    41.62s Checking existence of `StaticText (First Match)`
+    t =    41.69s Checking existence of `StaticText (First Match)`
+    t =    41.76s Checking existence of `Any (First Match)`
+    t =    41.88s Checking existence of `StaticText (First Match)`
+    t =    41.97s Checking existence of `StaticText (First Match)`
+    t =    42.04s Checking existence of `Any (First Match)`
+    t =    42.16s Checking existence of `StaticText (First Match)`
+    t =    42.21s Checking existence of `StaticText (First Match)`
+    t =    42.26s Checking existence of `Any (First Match)`
+    t =    42.37s Checking existence of `StaticText (First Match)`
+    t =    42.49s Checking existence of `StaticText (First Match)`
+    t =    42.60s Find the StaticText (First Match)
+    t =    42.73s Find the Window (First Match)
+    t =    42.75s Hover over "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window[0.50, 0.50]
+    t =    42.75s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    42.75s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    42.76s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    42.78s     Synthesize event
+    t =    42.80s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    42.82s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    42.94s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    42.96s Scroll "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window[0.50, 0.50] by dx: 0.00, dy: -900.00
+    t =    42.96s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    42.96s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    42.98s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    42.99s     Synthesize event
+    t =    43.01s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    43.02s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    43.42s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    44.24s Checking existence of `"Engine session" StaticText`
+    t =    44.42s Find the "Engine session" StaticText
+    t =    44.54s Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    45.85s Added attachment named 'mac-4-info'
+    t =    45.85s Requesting snapshot of accessibility hierarchy for app with pid 21699
+    t =    46.03s Requesting snapshot of accessibility hierarchy for app with pid 21699
+    t =    46.24s Added attachment named 'tree-mac-4-info.txt'
+    t =    46.25s Checking existence of `Any (First Match)`
+    t =    46.34s Checking existence of `StaticText (First Match)`
+    t =    46.40s Checking existence of `StaticText (First Match)`
+    t =    46.46s Checking existence of `Any (First Match)`
+    t =    46.56s Checking existence of `StaticText (First Match)`
+    t =    46.63s Checking existence of `StaticText (First Match)`
+    t =    46.69s Checking existence of `Any (First Match)`
+    t =    46.79s Checking existence of `StaticText (First Match)`
+    t =    46.86s Checking existence of `StaticText (First Match)`
+    t =    46.92s Checking existence of `Any (First Match)`
+    t =    47.04s Checking existence of `StaticText (First Match)`
+    t =    47.12s Checking existence of `StaticText (First Match)`
+    t =    47.22s Checking existence of `Any (First Match)`
+    t =    47.33s Checking existence of `StaticText (First Match)`
+    t =    47.42s Checking existence of `StaticText (First Match)`
+    t =    47.50s Checking existence of `Any (First Match)`
+    t =    47.61s Checking existence of `StaticText (First Match)`
+    t =    47.72s Checking existence of `StaticText (First Match)`
+    t =    47.81s Checking existence of `Any (First Match)`
+    t =    47.92s Checking existence of `StaticText (First Match)`
+    t =    47.99s Checking existence of `StaticText (First Match)`
+    t =    48.06s Checking existence of `Any (First Match)`
+    t =    48.16s Checking existence of `StaticText (First Match)`
+    t =    48.21s Checking existence of `StaticText (First Match)`
+    t =    48.26s Find the StaticText (First Match)
+    t =    48.32s Find the Window (First Match)
+    t =    48.44s Hover over "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window[0.50, 0.50]
+    t =    48.44s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    48.45s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    48.46s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    48.50s     Synthesize event
+    t =    48.51s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    48.53s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    48.65s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    48.66s Scroll "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window[0.50, 0.50] by dx: 0.00, dy: 734.38
+    t =    48.66s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    48.66s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    48.68s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    48.70s     Synthesize event
+    t =    48.71s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    48.72s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    49.09s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    49.91s Checking existence of `"Compact at" StaticText`
+    t =    50.00s Find the "Compact at" StaticText
+    t =    50.10s Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    50.10s Checking existence of `Button (First Match)`
+    t =    50.18s Checking existence of `Button (First Match)`
+    t =    50.24s Click Button (First Match)
+    t =    50.24s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    50.24s     Find the Button (First Match)
+    t =    50.32s     Check for interrupting elements affecting "Variables, 3" Button
+    t =    50.34s     Synthesize event
+    t =    50.99s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    53.01s Checking existence of `Any (First Match)`
+    t =    53.15s Checking existence of `Any (First Match)`
+    t =    54.51s Added attachment named 'mac-3-variables'
+    t =    54.52s Requesting snapshot of accessibility hierarchy for app with pid 21699
+    t =    54.73s Requesting snapshot of accessibility hierarchy for app with pid 21699
+    t =    54.93s Added attachment named 'tree-mac-3-variables.txt'
+    t =    54.93s Checking existence of `Any (First Match)`
+    t =    55.05s Checking existence of `Any (First Match)`
+    t =    55.13s Checking existence of `Any (First Match)`
+    t =    55.22s Checking existence of `Any (First Match)`
+    t =    55.29s Checking existence of `Any (First Match)`
+    t =    55.36s Checking existence of `StaticText (First Match)`
+    t =    55.42s Checking existence of `StaticText (First Match)`
+    t =    55.51s Checking existence of `Any (First Match)`
+    t =    55.59s Checking existence of `Any (First Match)`
+    t =    55.70s Checking existence of `Any (First Match)`
+    t =    55.80s Checking existence of `StaticText (First Match)`
+    t =    55.91s Checking existence of `StaticText (First Match)`
+    t =    56.03s Checking existence of `Any (First Match)`
+    t =    56.16s Checking existence of `Any (First Match)`
+    t =    56.29s Find the Any (First Match)
+    t =    56.44s Click "Restart after this turn" Button
+    t =    56.44s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    56.44s     Find the "Restart after this turn" Button
+    t =    56.53s     Check for interrupting elements affecting "Restart after this turn" Button
+    t =    56.62s     Synthesize event
+    t =    57.27s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    60.58s Added attachment named 'mac-3b-restart-queued'
+    t =    60.59s Requesting snapshot of accessibility hierarchy for app with pid 21699
+    t =    60.74s Requesting snapshot of accessibility hierarchy for app with pid 21699
+    t =    60.84s Added attachment named 'tree-mac-3b-restart-queued.txt'
+    t =    60.88s Added attachment named 'mac-requests.txt'
+    t =    60.88s Terminate io.orbitd.crossingsmacprobe:21699
+    t =    61.96s Tear Down
+    t =    61.96s     Added attachment named 'SettingsShotTeststestMacSessionSettings-notes.txt'
+Test Case '-[RunStartMacProbeUITests.SettingsShotTests testMacSessionSettings]' passed (62.064 seconds).
+Test Suite 'SettingsShotTests' passed at 2026-11-13 07:06:23.053.
+	 Executed 1 test, with 0 failures (0 unexpected) in 62.064 (62.066) seconds
+Test Suite 'RunStartMacProbeUITests.xctest' passed at 2026-11-13 07:06:23.054.
+	 Executed 1 test, with 0 failures (0 unexpected) in 62.064 (62.067) seconds
+Test Suite 'All tests' passed at 2026-11-13 07:06:23.055.
+	 Executed 1 test, with 0 failures (0 unexpected) in 62.064 (62.068) seconds
+2026-11-13 07:06:23.522 xcodebuild[6065:24975] [MT] IDETestOperationsObserverDebug: 69.180 elapsed -- Testing started completed.
+2026-11-13 07:06:23.523 xcodebuild[6065:24975] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-11-13 07:06:23.523 xcodebuild[6065:24975] [MT] IDETestOperationsObserverDebug: 69.180 sec, +69.180 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.sr-probe/results/mac.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

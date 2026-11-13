@@ -1,0 +1,56 @@
+==> iPhone FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC
+==> stub ready on 127.0.0.1:8765 (pid 6018, after 2s)
+==> mac
+Test Case '-[RunStartMacProbeUITests.SettingsShotTests testMacSessionSettings]' started.
+Test Case '-[RunStartMacProbeUITests.SettingsShotTests testMacSessionSettings]' passed (62.064 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 62.064 (62.066) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 62.064 (62.067) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 62.064 (62.068) seconds
+** TEST SUCCEEDED **
+==> stub ready on 127.0.0.1:8765 (pid 24596, after 2s)
+==> ios
+Test Case '-[RunStartProbeUITests.SettingsShotTests testIPhoneSessionSettings]' started.
+Test Case '-[RunStartProbeUITests.SettingsShotTests testIPhoneSessionSettings]' passed (163.654 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 163.654 (163.659) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 163.654 (163.661) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 163.654 (163.663) seconds
+** TEST SUCCEEDED **
+.sr-probe/run.sh: line 83: 24596 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+/Users/runner/work/orbit/orbit/.sr-probe/shots/ios:
+total 3984
+drwxr-xr-x  20 runner  staff     640 Nov 13 07:17 .
+drwxr-xr-x   5 runner  staff     160 Nov 13 07:17 ..
+drwxr-xr-x  16 runner  staff     512 Nov 13 07:17 attachments
+-rw-r--r--   1 runner  staff  187441 Nov 13 07:14 ios-1-menu.png
+-rw-r--r--   1 runner  staff  258074 Nov 13 07:15 ios-2-sheet.png
+-rw-r--r--   1 runner  staff  221544 Nov 13 07:16 ios-3-variables.png
+-rw-r--r--   1 runner  staff  198649 Nov 13 07:16 ios-3b-restart-queued.png
+-rw-r--r--   1 runner  staff  295180 Nov 13 07:15 ios-4-info.png
+-rw-r--r--@  1 runner  staff    9909 Nov 13 07:16 ios-requests.txt
+-rw-r--r--   1 runner  staff     346 Nov 13 07:17 not-served.txt
+-rw-r--r--   1 runner  staff    9946 Nov 13 07:16 requests.log
+-rw-r--r--   1 runner  staff       0 Nov 13 07:06 requests.log.out
+-rw-r--r--@  1 runner  staff     495 Nov 13 07:16 SettingsShotTeststestIPhoneSessionSettings-notes.txt
+-rw-r--r--@  1 runner  staff   16519 Nov 13 07:14 tree-ios-1-menu.txt
+-rw-r--r--@  1 runner  staff   23497 Nov 13 07:15 tree-ios-2-sheet.txt
+-rw-r--r--@  1 runner  staff   21367 Nov 13 07:16 tree-ios-3-variables.txt
+-rw-r--r--@  1 runner  staff   21184 Nov 13 07:16 tree-ios-3b-restart-queued.txt
+-rw-r--r--@  1 runner  staff   26573 Nov 13 07:15 tree-ios-4-info.txt
+-rw-r--r--   1 runner  staff     140 Nov 13 07:17 writes.txt
+-rw-r--r--   1 runner  staff  703116 Nov 13 07:17 xcodebuild-ios.log
+
+/Users/runner/work/orbit/orbit/.sr-probe/shots/mac:
+total 3304
+drwxr-xr-x  13 runner  staff     416 Nov 13 07:17 .
+drwxr-xr-x   5 runner  staff     160 Nov 13 07:17 ..
+drwxr-xr-x  15 runner  staff     480 Nov 13 07:06 attachments
+-rw-r--r--   1 runner  staff  118712 Nov 13 07:06 mac-1-toolbar.png
+-rw-r--r--   1 runner  staff  225763 Nov 13 07:06 mac-2-sheet.png
+-rw-r--r--   1 runner  staff  204814 Nov 13 07:06 mac-3-variables.png
+-rw-r--r--   1 runner  staff  197142 Nov 13 07:06 mac-3b-restart-queued.png
+-rw-r--r--   1 runner  staff  211863 Nov 13 07:06 mac-4-info.png
+-rw-r--r--   1 runner  staff     346 Nov 13 07:17 not-served.txt
+-rw-r--r--   1 runner  staff    6996 Nov 13 07:06 requests.log
+-rw-r--r--   1 runner  staff       0 Nov 13 06:57 requests.log.out
+-rw-r--r--   1 runner  staff     140 Nov 13 07:17 writes.txt
+-rw-r--r--   1 runner  staff  702071 Nov 13 07:06 xcodebuild-mac.log

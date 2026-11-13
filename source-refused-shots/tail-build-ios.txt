@@ -1,0 +1,300 @@
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbe.app/__preview.dylib
+
+CodeSign /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbe.app (in target 'RunStartProbe' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbe.app
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbe.app (in target 'RunStartProbe' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbe.app
+
+Validate /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbe.app (in target 'RunStartProbe' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-validationUtility /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbe.app -shallow-bundle -infoplist-subpath Info.plist
+
+Touch /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbe.app (in target 'RunStartProbe' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbe.app
+
+ProcessInfoPlistFile /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest/Info.plist /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Intermediates.noindex/RunStartProbe.build/Debug-iphonesimulator/RunStartProbeUITests.build/empty-RunStartProbeUITests.plist (in target 'RunStartProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-infoPlistUtility /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Intermediates.noindex/RunStartProbe.build/Debug-iphonesimulator/RunStartProbeUITests.build/empty-RunStartProbeUITests.plist -producttype com.apple.product-type.bundle.ui-testing -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Intermediates.noindex/RunStartProbe.build/Debug-iphonesimulator/RunStartProbeUITests.build/ProductTypeInfoPlistAdditions.plist -o /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest/Info.plist
+
+Ld /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest/RunStartProbeUITests normal (in target 'RunStartProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios17.0-simulator -bundle -isysroot /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -O0 -L/Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -L/Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator -L/Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F/Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -F/Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator -iframework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -iframework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/Developer/Library/Frameworks -filelist /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Intermediates.noindex/RunStartProbe.build/Debug-iphonesimulator/RunStartProbeUITests.build/Objects-normal/arm64/RunStartProbeUITests.LinkFileList -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker @loader_path/Frameworks -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Intermediates.noindex/RunStartProbe.build/Debug-iphonesimulator/RunStartProbeUITests.build/Objects-normal/arm64/RunStartProbeUITests_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Intermediates.noindex/RunStartProbe.build/Debug-iphonesimulator/RunStartProbeUITests.build/Objects-normal/arm64/RunStartProbeUITests_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Intermediates.noindex/RunStartProbe.build/Debug-iphonesimulator/RunStartProbeUITests.build/Objects-normal/arm64/RunStartProbeUITests.swiftmodule @/Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Intermediates.noindex/RunStartProbe.build/Debug-iphonesimulator/RunStartProbeUITests.build/Objects-normal/arm64/RunStartProbeUITests-linker-args.resp -Xlinker -needed_framework -Xlinker XCTest -framework XCTest -Xlinker -needed-lXCTestSwiftSupport -lXCTestSwiftSupport -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __entitlements -Xlinker /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Intermediates.noindex/RunStartProbe.build/Debug-iphonesimulator/RunStartProbeUITests.build/RunStartProbeUITests.xctest-Simulated.xcent -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __ents_der -Xlinker /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Intermediates.noindex/RunStartProbe.build/Debug-iphonesimulator/RunStartProbeUITests.build/RunStartProbeUITests.xctest-Simulated.xcent.der -Xlinker -no_adhoc_codesign -o /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest/RunStartProbeUITests
+
+ExtractAppIntentsMetadata (in target 'RunStartProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.PU4oSH/Metal.xctoolchain --module-name RunStartProbeUITests --sdk-root /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk --xcode-version 17F113 --platform-family iOS --deployment-target 17.0 --bundle-identifier io.orbitd.crossingsprobe.uitests --output /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest --target-triple arm64-apple-ios17.0-simulator --binary-file /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest/RunStartProbeUITests --dependency-file /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Intermediates.noindex/RunStartProbe.build/Debug-iphonesimulator/RunStartProbeUITests.build/Objects-normal/arm64/RunStartProbeUITests_dependency_info.dat --stringsdata-file /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Intermediates.noindex/RunStartProbe.build/Debug-iphonesimulator/RunStartProbeUITests.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Intermediates.noindex/RunStartProbe.build/Debug-iphonesimulator/RunStartProbeUITests.build/Objects-normal/arm64/RunStartProbeUITests.SwiftFileList --metadata-file-list /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Intermediates.noindex/RunStartProbe.build/Debug-iphonesimulator/RunStartProbeUITests.build/RunStartProbeUITests.DependencyMetadataFileList --static-metadata-file-list /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Intermediates.noindex/RunStartProbe.build/Debug-iphonesimulator/RunStartProbeUITests.build/RunStartProbeUITests.DependencyStaticMetadataFileList --swift-const-vals-list /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Intermediates.noindex/RunStartProbe.build/Debug-iphonesimulator/RunStartProbeUITests.build/Objects-normal/arm64/RunStartProbeUITests.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-11-13 07:12:31.905 appintentsmetadataprocessor[39661:106354] Starting appintentsmetadataprocessor export
+2026-11-13 07:12:31.908 appintentsmetadataprocessor[39661:106354] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+CopySwiftLibs /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest (in target 'RunStartProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest/RunStartProbeUITests --scan-folder /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest/Frameworks --scan-folder /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest/PlugIns --scan-folder /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest/SystemExtensions --scan-folder /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest/Extensions --platform iphonesimulator --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.PU4oSH/Metal.xctoolchain --toolchain /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest/Frameworks --strip-bitcode --scan-executable /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Intermediates.noindex/RunStartProbe.build/Debug-iphonesimulator/RunStartProbeUITests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+
+AppIntentsSSUTraining (in target 'RunStartProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsnltrainingprocessor --infoplist-path /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest/Info.plist --temp-dir-path /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Intermediates.noindex/RunStartProbe.build/Debug-iphonesimulator/RunStartProbeUITests.build/ssu --bundle-id io.orbitd.crossingsprobe.uitests --product-path /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest --extracted-metadata-path /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest/Metadata.appintents --metadata-file-list /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Intermediates.noindex/RunStartProbe.build/Debug-iphonesimulator/RunStartProbeUITests.build/RunStartProbeUITests.DependencyMetadataFileList --source-file /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest/Info.plist --archive-ssu-assets
+2026-11-13 07:12:31.949 appintentsnltrainingprocessor[39662:106355] Parsing options for appintentsnltrainingprocessor
+2026-11-13 07:12:31.950 appintentsnltrainingprocessor[39662:106355] Starting AppIntents SSU YAML Generation
+2026-11-13 07:12:31.950 appintentsnltrainingprocessor[39662:106355] No AppShortcuts found - Skipping.
+
+MkDir /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app (in target 'RunStartProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    /bin/mkdir -p /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app
+
+CopyAndPreserveArchs /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/RunStartProbeUITests-Runner (in target 'RunStartProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/lipo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/XCTRunner -output /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/RunStartProbeUITests-Runner -extract arm64
+
+Copy /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PkgInfo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/PkgInfo (in target 'RunStartProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/PkgInfo /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app
+
+CopyPlistFile /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/Info.plist /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Info.plist (in target 'RunStartProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-copyPlist --validate --convert xml1 --macro-expansion WRAPPEDPRODUCTNAME RunStartProbeUITests-Runner --macro-expansion WRAPPEDPRODUCTBUNDLEIDENTIFIER io.orbitd.crossingsprobe.uitests.xctrunner --macro-expansion TESTPRODUCTNAME RunStartProbeUITests --macro-expansion TESTPRODUCTBUNDLEIDENTIFIER io.orbitd.crossingsprobe.uitests --copy-value UIDeviceFamily /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest/Info.plist --outdir /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app -- /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Info.plist
+
+Copy /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/Frameworks/libXCTestSwiftSupport.dylib /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib (in target 'RunStartProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/Frameworks/XCUnit.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCUnit.framework (in target 'RunStartProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCUnit.framework /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/Frameworks/XCUIAutomation.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCUIAutomation.framework (in target 'RunStartProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCUIAutomation.framework /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/Frameworks/XCTestSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework (in target 'RunStartProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/Frameworks/XCTestCore.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework (in target 'RunStartProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/Frameworks/XCTest.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework (in target 'RunStartProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/Frameworks/XCTAutomationSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework (in target 'RunStartProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/Frameworks/Testing.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework (in target 'RunStartProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/Frameworks
+
+CodeSign /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest (in target 'RunStartProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest
+
+CodeSign /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app (in target 'RunStartProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app
+/Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app: replacing existing signature
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest (in target 'RunStartProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest
+
+Touch /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest (in target 'RunStartProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.sr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RunStartProbeUITests-Runner.app/PlugIns/RunStartProbeUITests.xctest
+
+2026-11-13 07:13:32.265954+0000 RunStartProbeUITests-Runner[41055:110600] [Default] Running tests...
+objc[41055]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x10533c310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x1081dc398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'All tests' started at 2026-11-13 07:13:43.268.
+Test Suite 'RunStartProbeUITests.xctest' started at 2026-11-13 07:13:43.269.
+Test Suite 'SettingsShotTests' started at 2026-11-13 07:13:43.270.
+Test Case '-[RunStartProbeUITests.SettingsShotTests testIPhoneSessionSettings]' started.
+    t =     0.00s Start Test at 2026-11-13 07:13:43.273
+    t =     6.07s Set Up
+    t =    13.01s Open io.orbitd.crossingsprobe
+    t =    13.01s     Launch io.orbitd.crossingsprobe
+2026-11-13 07:13:58.901 xcodebuild[24604:71491] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-13 07:13:58.901 xcodebuild[24604:71491] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    38.43s         Setting up automation session
+    t =    44.89s         Wait for io.orbitd.crossingsprobe to idle
+    t =    49.21s Checking existence of `"Session actions" Button`
+    t =    51.43s Checking existence of `"Session actions" Button`
+    t =    52.73s Checking existence of `"Session actions" Button`
+    t =    53.39s Checking existence of `"Session actions" Button`
+    t =    54.00s Checking existence of `"Session actions" Button`
+    t =    58.24s Checking existence of `"Session actions" Button`
+    t =    59.66s Find the "Session actions" Button
+    t =    61.94s Tap "Session actions" Button
+    t =    61.94s     Wait for io.orbitd.crossingsprobe to idle
+    t =    61.95s     Find the "Session actions" Button
+    t =    62.13s     Check for interrupting elements affecting "Session actions" Button
+    t =    64.04s     Synthesize event
+    t =    64.90s     Wait for io.orbitd.crossingsprobe to idle
+    t =    69.58s Added attachment named 'ios-1-menu'
+    t =    69.59s Requesting snapshot of accessibility hierarchy for app with pid 43149
+    t =    70.37s Requesting snapshot of accessibility hierarchy for app with pid 43149
+    t =    70.58s Added attachment named 'tree-ios-1-menu.txt'
+    t =    70.59s Checking existence of `"Settings…" Button`
+    t =    70.83s Tap "Settings…" Button
+    t =    70.83s     Wait for io.orbitd.crossingsprobe to idle
+    t =    70.84s     Find the "Settings…" Button
+    t =    71.08s     Check for interrupting elements affecting "gearshape" Button
+    t =    71.31s     Synthesize event
+    t =    71.65s     Wait for io.orbitd.crossingsprobe to idle
+    t =    73.98s Checking existence of `Any (First Match)`
+    t =    75.95s Checking existence of `Any (First Match)`
+    t =    78.21s Checking existence of `Any (First Match)`
+    t =    80.71s Checking existence of `Any (First Match)`
+    t =    82.20s Checking existence of `Any (First Match)`
+    t =    83.25s Checking existence of `Any (First Match)`
+    t =    84.31s Checking existence of `Any (First Match)`
+    t =    85.24s Checking existence of `Any (First Match)`
+    t =    86.18s Checking existence of `Any (First Match)`
+    t =    87.05s Checking existence of `Any (First Match)`
+    t =    92.05s Added attachment named 'ios-2-sheet'
+    t =    92.07s Requesting snapshot of accessibility hierarchy for app with pid 43149
+    t =    93.65s Requesting snapshot of accessibility hierarchy for app with pid 43149
+    t =    93.90s Added attachment named 'tree-ios-2-sheet.txt'
+    t =    93.91s Checking existence of `Any (First Match)`
+    t =    94.96s Checking existence of `Any (First Match)`
+    t =    95.78s Checking existence of `Any (First Match)`
+    t =    96.55s Checking existence of `Any (First Match)`
+    t =    97.78s Checking existence of `Any (First Match)`
+    t =    98.90s Checking existence of `Any (First Match)`
+    t =    99.83s Checking existence of `Any (First Match)`
+    t =   100.98s Checking existence of `Any (First Match)`
+    t =   102.13s Checking existence of `Any (First Match)`
+    t =   103.30s Checking existence of `Any (First Match)`
+    t =   105.01s Checking existence of `Any (First Match)`
+    t =   105.50s Checking existence of `Any (First Match)`
+    t =   106.02s Swipe up Target Application 'io.orbitd.crossingsprobe'
+    t =   106.02s     Wait for io.orbitd.crossingsprobe to idle
+    t =   106.02s     Find the Target Application 'io.orbitd.crossingsprobe'
+    t =   106.20s     Check for interrupting elements affecting "RunStartProbe" Application
+    t =   106.43s     Synthesize event
+    t =   107.00s     Wait for io.orbitd.crossingsprobe to idle
+    t =   110.11s Checking existence of `Any (First Match)`
+    t =   111.30s Swipe up Target Application 'io.orbitd.crossingsprobe'
+    t =   111.30s     Wait for io.orbitd.crossingsprobe to idle
+    t =   111.54s     Find the Target Application 'io.orbitd.crossingsprobe'
+    t =   111.85s     Check for interrupting elements affecting "RunStartProbe" Application
+    t =   112.00s     Synthesize event
+    t =   112.50s     Wait for io.orbitd.crossingsprobe to idle
+    t =   114.20s Checking existence of `Any (First Match)`
+    t =   115.78s Find the Any (First Match)
+    t =   116.68s Swipe up Target Application 'io.orbitd.crossingsprobe'
+    t =   116.68s     Wait for io.orbitd.crossingsprobe to idle
+    t =   116.68s     Find the Target Application 'io.orbitd.crossingsprobe'
+    t =   116.78s     Check for interrupting elements affecting "RunStartProbe" Application
+    t =   116.90s     Synthesize event
+    t =   117.35s     Wait for io.orbitd.crossingsprobe to idle
+    t =   119.04s Checking existence of `"Engine session" StaticText`
+    t =   120.83s Find the "Engine session" StaticText
+    t =   122.08s Swipe up Target Application 'io.orbitd.crossingsprobe'
+    t =   122.09s     Wait for io.orbitd.crossingsprobe to idle
+    t =   122.09s     Find the Target Application 'io.orbitd.crossingsprobe'
+    t =   122.27s     Check for interrupting elements affecting "RunStartProbe" Application
+    t =   122.69s     Synthesize event
+    t =   123.15s     Wait for io.orbitd.crossingsprobe to idle
+    t =   126.60s Added attachment named 'ios-4-info'
+    t =   126.60s Requesting snapshot of accessibility hierarchy for app with pid 43149
+    t =   127.90s Requesting snapshot of accessibility hierarchy for app with pid 43149
+    t =   128.10s Added attachment named 'tree-ios-4-info.txt'
+    t =   128.11s Checking existence of `Any (First Match)`
+    t =   128.98s Checking existence of `Any (First Match)`
+    t =   129.67s Checking existence of `Any (First Match)`
+    t =   130.30s Checking existence of `Any (First Match)`
+    t =   130.89s Checking existence of `Any (First Match)`
+    t =   131.56s Checking existence of `Any (First Match)`
+    t =   132.08s Checking existence of `Any (First Match)`
+    t =   132.50s Swipe down Target Application 'io.orbitd.crossingsprobe'
+    t =   132.50s     Wait for io.orbitd.crossingsprobe to idle
+    t =   132.50s     Find the Target Application 'io.orbitd.crossingsprobe'
+    t =   132.62s     Check for interrupting elements affecting "RunStartProbe" Application
+    t =   132.80s     Synthesize event
+    t =   133.25s     Wait for io.orbitd.crossingsprobe to idle
+    t =   135.93s Swipe down Target Application 'io.orbitd.crossingsprobe'
+    t =   135.93s     Wait for io.orbitd.crossingsprobe to idle
+    t =   135.93s     Find the Target Application 'io.orbitd.crossingsprobe'
+    t =   136.19s     Check for interrupting elements affecting "RunStartProbe" Application
+    t =   136.46s     Synthesize event
+    t =   137.00s     Wait for io.orbitd.crossingsprobe to idle
+    t =   137.96s Swipe down Target Application 'io.orbitd.crossingsprobe'
+    t =   137.96s     Wait for io.orbitd.crossingsprobe to idle
+    t =   137.97s     Find the Target Application 'io.orbitd.crossingsprobe'
+    t =   138.18s     Check for interrupting elements affecting "RunStartProbe" Application
+    t =   138.43s     Synthesize event
+    t =   138.88s     Wait for io.orbitd.crossingsprobe to idle
+    t =   139.72s Swipe down Target Application 'io.orbitd.crossingsprobe'
+    t =   139.72s     Wait for io.orbitd.crossingsprobe to idle
+    t =   139.73s     Find the Target Application 'io.orbitd.crossingsprobe'
+    t =   139.89s     Check for interrupting elements affecting "RunStartProbe" Application
+    t =   140.03s     Synthesize event
+    t =   140.49s     Wait for io.orbitd.crossingsprobe to idle
+    t =   141.34s Checking existence of `Button (First Match)`
+    t =   142.17s Checking existence of `Button (First Match)`
+    t =   142.77s Tap Button (First Match)
+    t =   142.77s     Wait for io.orbitd.crossingsprobe to idle
+    t =   142.77s     Find the Button (First Match)
+    t =   143.34s     Check for interrupting elements affecting "Variables, 3" Button
+    t =   143.47s     Synthesize event
+    t =   143.79s     Wait for io.orbitd.crossingsprobe to idle
+    t =   145.99s Checking existence of `Any (First Match)`
+    t =   148.30s Added attachment named 'ios-3-variables'
+    t =   148.30s Requesting snapshot of accessibility hierarchy for app with pid 43149
+    t =   149.37s Requesting snapshot of accessibility hierarchy for app with pid 43149
+    t =   149.72s Added attachment named 'tree-ios-3-variables.txt'
+    t =   149.72s Checking existence of `Any (First Match)`
+    t =   150.71s Checking existence of `Any (First Match)`
+    t =   151.24s Checking existence of `Any (First Match)`
+    t =   151.69s Checking existence of `Any (First Match)`
+    t =   152.20s Checking existence of `Any (First Match)`
+    t =   152.68s Checking existence of `Any (First Match)`
+    t =   153.23s Find the Any (First Match)
+    t =   153.79s Tap "Restart after this turn" Button
+    t =   153.79s     Wait for io.orbitd.crossingsprobe to idle
+    t =   153.80s     Find the "Restart after this turn" Button
+    t =   154.38s     Check for interrupting elements affecting "Restart after this turn" Button
+    t =   154.62s     Synthesize event
+    t =   155.00s     Wait for io.orbitd.crossingsprobe to idle
+    t =   158.56s Added attachment named 'ios-3b-restart-queued'
+    t =   158.57s Requesting snapshot of accessibility hierarchy for app with pid 43149
+    t =   161.35s Requesting snapshot of accessibility hierarchy for app with pid 43149
+    t =   161.61s Added attachment named 'tree-ios-3b-restart-queued.txt'
+    t =   161.67s Added attachment named 'ios-requests.txt'
+    t =   161.67s Terminate io.orbitd.crossingsprobe:43149
+    t =   162.69s Tear Down
+    t =   162.69s     Added attachment named 'SettingsShotTeststestIPhoneSessionSettings-notes.txt'
+Test Case '-[RunStartProbeUITests.SettingsShotTests testIPhoneSessionSettings]' passed (163.654 seconds).
+Test Suite 'SettingsShotTests' passed at 2026-11-13 07:16:26.929.
+	 Executed 1 test, with 0 failures (0 unexpected) in 163.654 (163.659) seconds
+Test Suite 'RunStartProbeUITests.xctest' passed at 2026-11-13 07:16:26.931.
+	 Executed 1 test, with 0 failures (0 unexpected) in 163.654 (163.661) seconds
+Test Suite 'All tests' passed at 2026-11-13 07:16:26.931.
+	 Executed 1 test, with 0 failures (0 unexpected) in 163.654 (163.663) seconds
+2026-11-13 07:17:18.844 xcodebuild[24604:71491] [MT] IDETestOperationsObserverDebug: 286.125 elapsed -- Testing started completed.
+2026-11-13 07:17:18.845 xcodebuild[24604:71491] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-11-13 07:17:18.846 xcodebuild[24604:71491] [MT] IDETestOperationsObserverDebug: 286.125 sec, +286.125 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.sr-probe/results/ios.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

@@ -1,0 +1,245 @@
+Attributes: Application, 0x98db5cf00, pid: 21699, title: 'RunStartMacProbe', Disabled
+Element subtree:
+ →Application, 0x98db5cf00, pid: 21699, title: 'RunStartMacProbe', Disabled
+    Window (Main), 0x98db5de00, {{0.0, 31.0}, {1010.0, 677.0}}, identifier: 'SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1', title: 'orbit-macos', Disabled
+      Group, 0x98db5e300, {{0.0, 31.0}, {1010.0, 677.0}}, Disabled
+        SplitGroup, 0x98db5e440, {{0.0, 31.0}, {1010.0, 677.0}}, identifier: 'SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<RunStartMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<RunStartMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1, SidebarNavigationSplitView', Disabled
+          Group, 0x98db5e580, {{0.0, 31.0}, {300.0, 677.0}}, Disabled
+            RadioGroup, 0x98db5e6c0, {{17.0, 90.0}, {266.0, 26.0}}, label: 'Session scope, Session scope'
+              RadioButton, 0x98db5e800, {{18.0, 91.0}, {88.0, 24.0}}, label: 'Open', value: 1
+              RadioButton, 0x98db5e940, {{107.0, 91.0}, {87.0, 24.0}}, label: 'Completed', value: 0
+              RadioButton, 0x98db5ea80, {{195.0, 91.0}, {87.0, 24.0}}, label: 'Trash', value: 0
+            ScrollView, 0x98db5ebc0, {{0.0, 123.0}, {300.0, 585.0}}, Disabled
+              Outline, 0x98db5df40, {{-1.0, 122.0}, {302.0, 587.0}}
+                OutlineRow, 0x98db5e080, {{0.0, 133.0}, {300.0, 51.0}}, Selected, Disabled
+                  Cell, 0x98db5c500, {{10.0, 133.0}, {280.0, 51.0}}, Keyboard Focused, Selected
+                    Other, 0x98db5e1c0, {{35.1, 151.0}, {14.9, 15.0}}, label: 'Running'
+                    StaticText, 0x98db5c780, {{60.0, 143.0}, {134.0, 16.0}}, value: Session page setti...
+                    StaticText, 0x98db5d040, {{60.0, 161.0}, {189.0, 13.0}}, value: You: Add a Setting...
+                TableColumn, 0x98db5d180, {{10.0, 123.0}, {280.0, 585.0}}, identifier: 'ListColumn', Disabled
+          Splitter, 0x98db5c8c0, {{300.0, 83.0}, {1.0, 625.0}}, value: 301, Disabled
+          Group, 0x98db5ca00, {{301.0, 31.0}, {709.0, 677.0}}, Disabled
+            StaticText, 0x98db5c000, {{332.0, 89.0}, {121.0, 13.0}}, value: Running · Open · 9...
+            ScrollView, 0x98db5d900, {{301.0, 108.0}, {709.0, 504.0}}, Disabled
+              Outline, 0x98db5da40, {{300.0, 107.0}, {711.0, 506.0}}
+                OutlineRow, 0x98db5db80, {{301.0, 108.0}, {709.0, 21.0}}, Disabled
+                  Cell, 0x98db5cc80, {{301.0, 108.0}, {709.0, 21.0}}, Keyboard Focused
+                TableColumn, 0x98db5cdc0, {{301.0, 108.0}, {709.0, 504.0}}, identifier: 'ListColumn', Disabled
+            TextField, 0x98db5dcc0, {{332.0, 626.0}, {647.0, 19.0}}, placeholderValue: 'Message…'
+            MenuButton, 0x98db5ed00, {{324.0, 666.0}, {23.0, 16.0}}, identifier: 'plus', title: 'Add'
+            MenuButton, 0x98db5ee40, {{353.0, 665.0}, {37.0, 18.0}}, title: 'Auto'
+            MenuButton, 0x98db5ef80, {{751.0, 665.0}, {160.0, 18.0}}, label: 'Model claude-opus-5-5, effort Default'
+            Button, 0x98db5f0c0, {{918.0, 667.0}, {28.0, 14.0}}, label: 'Context window not reported yet'
+            Button, 0x98db5f200, {{954.0, 658.0}, {32.0, 32.0}}, identifier: 'stop.circle.fill', label: 'stop.circle.fill'
+      Toolbar, 0x98db5f340, {{0.0, 31.0}, {1010.0, 52.0}}, Disabled
+        Button, 0x98db5f480, {{100.0, 31.0}, {42.0, 52.0}}, label: 'Search Sessions', Disabled
+        Button, 0x98db5f5c0, {{142.0, 31.0}, {45.0, 52.0}}, label: 'Show Sidebar'
+        Button, 0x98db5f700, {{187.0, 31.0}, {45.0, 52.0}}, label: 'New session'
+        Button, 0x98db5f840, {{392.0, 31.0}, {45.0, 52.0}}, label: 'New Folder…'
+        Button, 0x98db5f980, {{437.0, 31.0}, {41.0, 52.0}}, label: 'Settings'
+        Button, 0x98db5fac0, {{487.0, 31.0}, {41.0, 52.0}}, label: 'Share session'
+        Button, 0x98db5fc00, {{528.0, 31.0}, {40.0, 52.0}}, label: 'Move…'
+        Button, 0x98db5fd40, {{568.0, 31.0}, {41.0, 52.0}}, label: 'Settings…'
+      Button, 0x98db5fe80, {{18.0, 49.0}, {16.0, 16.0}}, identifier: '_XCUI:CloseWindow', Disabled
+      Button, 0x98db67ac0, {{64.0, 49.0}, {16.0, 16.0}}, identifier: '_XCUI:ZoomWindow'
+        Group, 0x98db67c00, {{65.0, 50.0}, {14.0, 14.0}}, Disabled
+          Group, 0x98db67e80, {{65.0, 50.0}, {14.0, 14.0}}, Disabled
+      Button, 0x98db67d40, {{41.0, 49.0}, {16.0, 16.0}}, identifier: '_XCUI:MinimizeWindow'
+      StaticText, 0x98db67840, {{232.0, 31.0}, {160.0, 52.0}}, value: orbit-macos
+      Sheet, 0x98db67980, {{265.0, 83.0}, {480.0, 637.0}}, Keyboard Focused, Disabled
+        Group, 0x98db54000, {{265.0, 83.0}, {480.0, 637.0}}, Disabled
+          Button, 0x98db54140, {{275.0, 93.0}, {30.0, 30.0}}, label: 'Back'
+          StaticText, 0x98db54280, {{313.0, 100.0}, {61.0, 16.0}}, value: Variables
+          ScrollView, 0x98db543c0, {{265.0, 131.0}, {480.0, 589.0}}, Disabled
+            Outline, 0x98db54500, {{264.0, 130.0}, {482.0, 591.0}}
+              OutlineRow, 0x98db54640, {{265.0, 141.0}, {480.0, 76.0}}, Disabled
+                Cell, 0x98db54780, {{275.0, 141.0}, {460.0, 76.0}}, Keyboard Focused
+                  Group, 0x98db548c0, {{281.0, 131.0}, {448.0, 28.0}}, Disabled
+                    StaticText, 0x98db54a00, {{281.0, 138.0}, {68.0, 14.0}}, label: 'This session'
+              OutlineRow, 0x98db54b40, {{265.0, 217.0}, {480.0, 37.0}}, Disabled
+                Cell, 0x98db54c80, {{275.0, 217.0}, {460.0, 37.0}}, Keyboard Focused
+                  Button, 0x98db54dc0, {{281.0, 221.0}, {448.0, 29.0}}, label: 'CLAUDE_CODE_AUTO_COMPACT_WINDOW, 500000'
+              OutlineRow, 0x98db54f00, {{265.0, 254.0}, {480.0, 37.0}}, Disabled
+                Cell, 0x98db55040, {{275.0, 254.0}, {460.0, 37.0}}, Keyboard Focused
+                  Button, 0x98db55180, {{281.0, 258.0}, {448.0, 29.0}}, label: 'DEBUG, orbit:*'
+              OutlineRow, 0x98db552c0, {{265.0, 291.0}, {480.0, 37.0}}, Disabled
+                Cell, 0x98db55400, {{275.0, 291.0}, {460.0, 37.0}}, Keyboard Focused
+                  Button, 0x98db55540, {{281.0, 295.0}, {448.0, 29.0}}, label: 'LOG_LEVEL, trace'
+              OutlineRow, 0x98db55680, {{265.0, 348.0}, {480.0, 0.0}}, Disabled
+                Cell, 0x98db557c0, {{275.0, 348.0}, {460.0, 0.0}}, Keyboard Focused
+                  Group, 0x98db55900, {{281.0, 348.0}, {448.0, 0.0}}, Disabled
+              OutlineRow, 0x98db55a40, {{265.0, 348.0}, {480.0, 112.0}}, Disabled
+                Cell, 0x98db55b80, {{275.0, 348.0}, {460.0, 112.0}}, Keyboard Focused
+                  StaticText, 0x98db55cc0, {{293.0, 360.0}, {345.0, 16.0}}, value: The new variables ...
+                  StaticText, 0x98db55e00, {{293.0, 382.0}, {398.0, 32.0}}, value: A turn is running....
+                  Button, 0x98db55f40, {{293.0, 424.0}, {424.0, 24.0}}, label: 'Restart after this turn'
+              OutlineRow, 0x98db56080, {{265.0, 480.0}, {480.0, 28.0}}, Disabled
+                Cell, 0x98db561c0, {{275.0, 480.0}, {460.0, 28.0}}, Keyboard Focused
+                  Group, 0x98db56300, {{281.0, 480.0}, {448.0, 28.0}}, Disabled
+                    StaticText, 0x98db56440, {{281.0, 487.0}, {111.0, 14.0}}, label: 'From the workspace'
+              OutlineRow, 0x98db56580, {{265.0, 508.0}, {480.0, 37.0}}, Disabled
+                Cell, 0x98db566c0, {{275.0, 508.0}, {460.0, 37.0}}, Keyboard Focused
+                  StaticText, 0x98db56800, {{281.0, 512.0}, {50.0, 14.0}}, value: GOCACHE
+                  StaticText, 0x98db56940, {{281.0, 528.0}, {106.0, 13.0}}, value: /mnt/data/gocache
+              OutlineRow, 0x98db56a80, {{265.0, 545.0}, {480.0, 37.0}}, Disabled
+                Cell, 0x98db56bc0, {{275.0, 545.0}, {460.0, 37.0}}, Keyboard Focused
+                  StaticText, 0x98db56d00, {{281.0, 549.0}, {86.0, 14.0}}, value: NODE_OPTIONS
+                  StaticText, 0x98db56e40, {{281.0, 565.0}, {155.0, 13.0}}, value: --max-old-space-si...
+              OutlineRow, 0x98db56f80, {{265.0, 582.0}, {480.0, 28.0}}, Disabled
+                Cell, 0x98db570c0, {{275.0, 582.0}, {460.0, 28.0}}, Keyboard Focused
+                  Group, 0x98db57200, {{281.0, 582.0}, {448.0, 28.0}}, Disabled
+                    StaticText, 0x98db57340, {{281.0, 589.0}, {357.0, 14.0}}, value: A session variable...
+              TableColumn, 0x98db57480, {{275.0, 131.0}, {460.0, 589.0}}, identifier: 'ListColumn', Disabled
+    MenuBar, 0x98db575c0, {{0.0, 0.0}, {1024.0, 30.0}}
+      MenuBarItem, 0x98db57700, {{10.0, 0.0}, {34.0, 30.0}}, title: 'Apple'
+        Menu, 0x98db57840, {{0.0, 768.0}, {0.0, 0.0}}
+          MenuItem, 0x98db57980, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_aboutThisMacRequested:', title: 'About This Mac'
+          MenuItem, 0x98db57ac0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_systemInformationRequested:', title: 'System Information'
+          MenuItem, 0x98db57c00, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x98db57d40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_systemSettingsRequested:', title: 'System Settings…'
+          MenuItem, 0x98db57e80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_appStoreRequested:', title: 'App Store'
+          MenuItem, 0x98da60000, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x98da60140, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentsRequested:', title: 'Recent Items'
+            Menu, 0x98da60280, {{0.0, 768.0}, {0.0, 0.0}}
+              MenuItem, 0x98da603c0, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Applications', Disabled
+              MenuItem, 0x98da60500, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Installer'
+              MenuItem, 0x98da60640, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Show “Installer” in Finder'
+              MenuItem, 0x98da60780, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'RunStartMacProbe'
+              MenuItem, 0x98da608c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Show “RunStartMacProbe” in Finder'
+              MenuItem, 0x98da60a00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'System Settings'
+              MenuItem, 0x98da60b40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Show “System Settings” in Finder'
+              MenuItem, 0x98da60c80, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+              MenuItem, 0x98da60dc0, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Documents', Disabled
+              MenuItem, 0x98da60f00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'AnkaGuestAddons.pkg'
+              MenuItem, 0x98da61040, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Show “AnkaGuestAddons.pkg” in Finder'
+              MenuItem, 0x98da61180, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+              MenuItem, 0x98da612c0, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Servers', Disabled
+              MenuItem, 0x98da61400, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Macintosh HD'
+              MenuItem, 0x98da61540, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+              MenuItem, 0x98da61680, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_clearRecentItemsRequested:', title: 'Clear Menu'
+          MenuItem, 0x98da617c0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x98da61900, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_forceQuitPanelRequested:', title: 'Force Quit…'
+          MenuItem, 0x98da61a40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_forceQuitRequested:', title: 'Force Quit RunStartMacProbe'
+          MenuItem, 0x98da61b80, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x98da61cc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_sleepRequested:', title: 'Sleep'
+          MenuItem, 0x98da61e00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_restartRequested:', title: 'Restart…'
+          MenuItem, 0x98da61f40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_restartNowRequested:', title: 'Restart'
+          MenuItem, 0x98da62080, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_shutDownRequested:', title: 'Shut Down…'
+          MenuItem, 0x98da621c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_shutDownNowRequested:', title: 'Shut Down'
+          MenuItem, 0x98da62300, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x98da62440, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_lockScreenRequested:', title: 'Lock Screen'
+          MenuItem, 0x98da62580, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_logOutRequested:', title: 'Log Out Anka…'
+          MenuItem, 0x98da626c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_logOutNowRequested:', title: 'Log Out Anka'
+          MenuItem, 0x98da62800, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+      MenuBarItem, 0x98da62940, {{44.0, 0.0}, {143.0, 30.0}}, title: 'RunStartMacProbe'
+        Menu, 0x98da62a80, {{0.0, 768.0}, {0.0, 0.0}}
+          MenuItem, 0x98da62bc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'orderFrontStandardAboutPanel:', title: 'About RunStartMacProbe'
+          MenuItem, 0x98da62d00, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x98da62e40, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Services'
+            Menu, 0x98da62f80, {{0.0, 768.0}, {0.0, 0.0}}
+              MenuItem, 0x98da630c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Activity Monitor'
+              MenuItem, 0x98da63200, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Allocations & Leaks'
+              MenuItem, 0x98da63340, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'File Activity'
+              MenuItem, 0x98da63480, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'System Trace'
+              MenuItem, 0x98da635c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Time Profile Active Application'
+              MenuItem, 0x98da63700, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Time Profile App Under Mouse'
+              MenuItem, 0x98da63840, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Time Profile Entire System'
+              MenuItem, 0x98da63980, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Toggle Instruments Recording'
+              MenuItem, 0x98da63ac0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_configureServicesMenu:', title: 'Services Settings…'
+          MenuItem, 0x98da63c00, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x98da63d40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'hide:', title: 'Hide RunStartMacProbe'
+          MenuItem, 0x98da63e80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'hideOtherApplications:', title: 'Hide Others'
+          MenuItem, 0x98da58000, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'unhideAllApplications:', title: 'Show All', Disabled
+          MenuItem, 0x98da58140, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x98da58280, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'terminate:', title: 'Quit RunStartMacProbe'
+      MenuBarItem, 0x98da583c0, {{187.0, 0.0}, {42.0, 30.0}}, title: 'File'
+        Menu, 0x98da58500, {{0.0, 768.0}, {0.0, 0.0}}
+          MenuItem, 0x98da58640, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'menuAction:', title: 'New Window'
+          MenuItem, 0x98da58780, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x98da588c0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x98da58a00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'performClose:', title: 'Close', Disabled
+          MenuItem, 0x98da58b40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'closeAll:', title: 'Close All'
+      MenuBarItem, 0x98da58c80, {{229.0, 0.0}, {44.0, 30.0}}, title: 'Edit'
+        Menu, 0x98da58dc0, {{0.0, 768.0}, {0.0, 0.0}}
+          MenuItem, 0x98da58f00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'undo:', title: 'Undo', Disabled
+          MenuItem, 0x98da59040, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'redo:', title: 'Redo', Disabled
+          MenuItem, 0x98da59180, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x98da592c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'cut:', title: 'Cut', Disabled
+          MenuItem, 0x98da59400, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'copy:', title: 'Copy', Disabled
+          MenuItem, 0x98da59540, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'paste:', title: 'Paste', Disabled
+          MenuItem, 0x98da59680, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'delete:', title: 'Delete', Disabled
+          MenuItem, 0x98da597c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'selectAll:', title: 'Select All', Disabled
+          MenuItem, 0x98da59900, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x98da59a40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_NSMenuItemAutoFillIdentifier', title: 'AutoFill'
+            Menu, 0x98da59b80, {{0.0, 768.0}, {0.0, 0.0}}
+              MenuItem, 0x98da59cc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_handleInsertFromContactsCommand:', title: 'Contact…', Disabled
+              MenuItem, 0x98da59e00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_handleInsertFromPasswordsCommand:', title: 'Passwords…', Disabled
+              MenuItem, 0x98da59f40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_handleInsertFromCreditCardsCommand:', title: 'Credit Card…', Disabled
+          MenuItem, 0x98da5a080, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'startDictation:', title: 'Start Dictation…'
+          MenuItem, 0x98da5a1c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'orderFrontCharacterPalette:', title: 'Emoji & Symbols'
+      MenuBarItem, 0x98da5a300, {{273.0, 0.0}, {50.0, 30.0}}, title: 'View'
+        Menu, 0x98da5a440, {{0.0, 768.0}, {0.0, 0.0}}
+          MenuItem, 0x98da5a580, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'toggleTabBar:', title: 'Show Tab Bar'
+          MenuItem, 0x98da5a6c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'toggleTabOverview:', title: 'Show All Tabs', Disabled
+          MenuItem, 0x98da5a800, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x98da5a940, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'toggleFullScreen:', title: 'Enter Full Screen', Disabled
+      MenuBarItem, 0x98da5aa80, {{323.0, 0.0}, {69.0, 30.0}}, title: 'Window'
+        Menu, 0x98da5abc0, {{0.0, 768.0}, {0.0, 0.0}}
+          MenuItem, 0x98da5ad00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'performMiniaturize:', title: 'Minimize'
+          MenuItem, 0x98da5ae40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'miniaturizeAll:', title: 'Minimize All'
+          MenuItem, 0x98da5af80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'performZoom:', title: 'Zoom'
+          MenuItem, 0x98da5b0c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'zoomAll:', title: 'Zoom All'
+          MenuItem, 0x98da5b200, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomFill:', title: 'Fill'
+          MenuItem, 0x98da5b340, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomCenter:', title: 'Center'
+          MenuItem, 0x98da5b480, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x98da5b5c0, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Move & Resize'
+            Menu, 0x98da5b700, {{0.0, 768.0}, {0.0, 0.0}}
+              MenuItem, 0x98da5b840, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Halves', Disabled
+              MenuItem, 0x98da5b980, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomLeft:', title: 'Left'
+              MenuItem, 0x98da5bac0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomRight:', title: 'Right'
+              MenuItem, 0x98da5bc00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTop:', title: 'Top'
+              MenuItem, 0x98da5bd40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottom:', title: 'Bottom'
+              MenuItem, 0x98da5be80, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+              MenuItem, 0x98da50000, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Quarters', Disabled
+              MenuItem, 0x98da50140, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTopLeft:', title: 'Top Left'
+              MenuItem, 0x98da50280, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTopRight:', title: 'Top Right'
+              MenuItem, 0x98da503c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottomLeft:', title: 'Bottom Left'
+              MenuItem, 0x98da50500, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottomRight:', title: 'Bottom Right'
+              MenuItem, 0x98da50640, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+              MenuItem, 0x98da50780, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Arrange', Disabled
+              MenuItem, 0x98da508c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomLeftAndRight:', title: 'Left & Right'
+              MenuItem, 0x98da50a00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomLeftThreeUp:', title: 'Left & Quarters'
+              MenuItem, 0x98da50b40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomRightAndLeft:', title: 'Right & Left'
+              MenuItem, 0x98da50c80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomRightThreeUp:', title: 'Right & Quarters'
+              MenuItem, 0x98da50dc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTopAndBottom:', title: 'Top & Bottom'
+              MenuItem, 0x98da50f00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTopThreeUp:', title: 'Top & Quarters'
+              MenuItem, 0x98da51040, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottomAndTop:', title: 'Bottom & Top'
+              MenuItem, 0x98da51180, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottomThreeUp:', title: 'Bottom & Quarters'
+              MenuItem, 0x98da512c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomQuarters:', title: 'Quarters'
+              MenuItem, 0x98da51400, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+              MenuItem, 0x98da51540, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomUntile:', title: 'Return to Previous Size', Disabled
+          MenuItem, 0x98da51680, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Full Screen Tile', Disabled
+          MenuItem, 0x98da517c0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x98da51900, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_removeWindowFromStageManagerSet:', title: 'Remove Window from Set', Disabled
+          MenuItem, 0x98da51a40, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x98da51b80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'arrangeInFront:', title: 'Bring All to Front'
+          MenuItem, 0x98da51cc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'alternateArrangeInFront:', title: 'Arrange in Front'
+          MenuItem, 0x98da51e00, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x98da51f40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'selectPreviousTab:', title: 'Show Previous Tab', Disabled
+          MenuItem, 0x98da52080, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'selectNextTab:', title: 'Show Next Tab', Disabled
+          MenuItem, 0x98da521c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'moveTabToNewWindow:', title: 'Move Tab to New Window', Disabled
+          MenuItem, 0x98da52300, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'mergeAllWindows:', title: 'Merge All Windows', Disabled
+          MenuItem, 0x98da52440, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x98da52580, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x98da526c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'makeKeyAndOrderFront:', title: 'orbit-macos'
+      MenuBarItem, 0x98da52800, {{392.0, 0.0}, {48.0, 30.0}}, title: 'Help'
+        Menu, 0x98da52940, {{0.0, 768.0}, {0.0, 0.0}}
+          MenuItem, 0x98da52a80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'showHelp:', title: 'RunStartMacProbe Help'
+    TouchBar, 0x98da52bc0, {{80.0, 0.0}, {685.0, 30.0}}, Disabled
+Path to element:
+ →Application, 0x98db5cf00, pid: 21699, title: 'RunStartMacProbe', Disabled
+Query chain:
+ →Find: Target Application 'io.orbitd.crossingsmacprobe'
+  Output: {
+    Application, 0x98da52d00, pid: 21699, title: 'RunStartMacProbe', Disabled
+  }

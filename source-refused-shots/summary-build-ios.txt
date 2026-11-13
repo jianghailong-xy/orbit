@@ -1,0 +1,6 @@
+Test Case '-[RunStartProbeUITests.SettingsShotTests testIPhoneSessionSettings]' started.
+Test Case '-[RunStartProbeUITests.SettingsShotTests testIPhoneSessionSettings]' passed (163.654 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 163.654 (163.659) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 163.654 (163.661) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 163.654 (163.663) seconds
+** TEST SUCCEEDED **

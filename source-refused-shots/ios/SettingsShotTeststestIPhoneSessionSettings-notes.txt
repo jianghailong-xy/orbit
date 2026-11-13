@@ -1,0 +1,21 @@
+ios: Labels shown
+ios: needs review shown
+ios: Public link shown
+ios: Working directory shown
+ios: Compact at shown
+ios: Variables shown
+ios: When it needs you MISSING
+ios: Mute this session MISSING
+ios: iOS and Android shown
+ios: Claude Code 2.4.1 shown
+ios: HPC shown
+ios: Max (2) shown
+ios: 1.82M shown
+ios: $4.37 shown
+ios: 23 turns shown
+ios: Session ID shown
+ios: DEBUG shown
+ios: LOG_LEVEL shown
+ios: NODE_OPTIONS shown
+ios: Restart after this turn shown
+ios: replaces the workspace shown
