@@ -16808,35 +16808,6 @@ button.chat-jump-start:hover {
   gap: 8px;
 }
 
-/* The vendors with no key yet, in one line under a vendor's keys (ProviderPills). */
-.pv-more {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-  font-size: 12px;
-  color: var(--text-3);
-}
-.pv-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding: 0 10px 0 4px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-raised);
-  color: var(--text-2);
-  font-size: 12px;
-  white-space: nowrap;
-  text-decoration: none;
-}
-.pv-pill:hover {
-  border-color: var(--brand-border);
-  color: var(--brand);
-}
-
 /* ============================================================================
    Infrastructure → "Machines": the engine CLIs signed in on each machine (the
    same rows on a machine's own page). A different kind of identity from the API
