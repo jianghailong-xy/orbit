@@ -42,7 +42,6 @@ const OPEN_PROJECTS: SidebarProject[] = [{
   title: 'DeepSeek Harness',
   status: 'OPEN',
   createdAt: '2026-08-01T00:00:00.000Z',
-  // Touched an hour ago, so the rail names it rather than folding it into its quiet row.
   lastActivityAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
   buckets: { running: 0 },
   attention: { ownerItems: [] },
@@ -243,7 +242,7 @@ describe('Machines & models, which has no sidebar row (docs/mocks/machines-and-m
     const labels = rows.map((row) => row.textContent);
     expect(labels.indexOf('Machines & models')).toBe(labels.indexOf('Settings') - 1);
     await click(rows.find((row) => row.textContent === 'Machines & models')!);
-    expect(location).toBe('/infrastructure');
+    expect(location).toBe(`/settings/machines/${RUNNER}`);
   });
 
   it.each([

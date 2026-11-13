@@ -188,7 +188,7 @@ struct RunnersListView: View {
     /// A line of Needs you, opened: the machine's record, the pool's page.
     private func openAttention(_ item: Infrastructure.Attention) {
         switch item.kind {
-        case .offline(let runnerID), .noCliSignedIn(let runnerID):
+        case .offline(let runnerID), .noCliSignedIn(let runnerID), .updating(let runnerID):
             if rowNavigation == .selection {
                 model.selectedRunnerID = runnerID
             } else {
@@ -492,6 +492,8 @@ struct RunnerDetailContent: View {
     @State private var choosingReserve = false
     @State private var confirmingRotate = false
     @State private var confirmingRemove = false
+    /// The postponed Update card's Update Now… asks first (a runner without `self-update-now/v1`).
+    @State private var confirmingUpdateNow = false
     /// The token a rotation just minted: shown on this page once, and gone with it.
     @State private var rotatedToken: String?
     @State private var notice: String?
@@ -505,6 +507,9 @@ struct RunnerDetailContent: View {
                                                     latestVersion: runners.latestVersion)
         Form {
             head(now: now)
+            if let card = RunnerPageFormat.updateCard(runner, now: now) {
+                updateSection(card)
+            }
             if !items.isEmpty {
                 attentionSection(items, now: now)
             }
@@ -588,6 +593,94 @@ struct RunnerDetailContent: View {
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
         }
+    }
+
+    /// The Update card (board 4): a release this runner is behind, in the phase it reports — amber
+    /// while it holds work back or restarts, and Updated for a day after. Later ▾ while draining;
+    /// Change ▾ once postponed. Update Now… (`RunnerUpdateNowControl`) while available, draining or
+    /// postponed for a runner that declares `self-update-now/v1`; one without it keeps the postponed
+    /// card's Update Now…, which asks for Update Runner Now.
+    @ViewBuilder private func updateSection(_ card: RunnerPageFormat.UpdateCard) -> some View {
+        Section {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(card.title)
+                        .fontWeight(.semibold)
+                    Spacer(minLength: 8)
+                    Text(card.tag)
+                        .font(.orbitLabel)
+                        .foregroundStyle(card.warn ? RunnerInk.amber : Color.secondary)
+                        .lineLimit(1)
+                }
+                if !card.body.isEmpty {
+                    Text(card.body)
+                        .foregroundStyle(Color.secondary)
+                }
+                if let label = card.progressLabel {
+                    Text(label)
+                        .font(.orbitLabel)
+                        .foregroundStyle(Color.secondary)
+                        .padding(.top, 4)
+                    ProgressView(value: card.progress ?? 0)
+                        .tint(RunnerInk.amber)
+                }
+            }
+            .padding(.vertical, 4)
+            .listRowBackground(card.warn ? Color.orange.opacity(0.08) : nil)
+            // The turns it waits for (board 4): each opens its session.
+            ForEach(card.turns, id: \.id) { turn in
+                Button { openSession(turn.id) } label: {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(turn.title)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Spacer(minLength: 8)
+                        if let running = turn.running {
+                            Text(running)
+                                .font(.orbitLabel)
+                                .foregroundStyle(Color.secondary)
+                                .lineLimit(1)
+                        }
+                        RunnerChevron()
+                    }
+                    .foregroundStyle(Color.primary)
+                    .contentShape(Rectangle())
+                }
+                .runnerRowButtonStyle()
+            }
+            if card.phase == "available", RunnerUpdateNow.offered(runner) {
+                RunnerUpdateNowControl(runnerID: runner.id, machine: RunnerPageFormat.displayName(runner),
+                                       onNotice: show)
+            }
+            if card.phase == "draining" || card.phase == "postponed" {
+                HStack(spacing: 8) {
+                    RunnerUpdateLaterControl(runnerID: runner.id, version: runner.selfUpdate?.targetVersion,
+                                             machine: RunnerPageFormat.displayName(runner),
+                                             change: card.phase == "postponed")
+                    if RunnerUpdateNow.offered(runner) {
+                        RunnerUpdateNowControl(runnerID: runner.id, machine: RunnerPageFormat.displayName(runner),
+                                               onNotice: show)
+                    } else if card.phase == "postponed" {
+                        Button(RunnerPageCopy.RUNNER_UPDATE_NOW) { confirmingUpdateNow = true }
+                            .buttonStyle(.bordered)
+                            .accessibilityIdentifier("runner-update-now")
+                    }
+                }
+                .orbitConfirmation(RunnerPageCopy.runnerUpdateNowConfirmTitle(version: runner.selfUpdate?.targetVersion ?? ""),
+                                   isPresented: $confirmingUpdateNow) {
+                    Button(RunnerPageCopy.RUNNER_UPDATE_NOW_CONFIRM) { updateRunner() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text(RunnerPageCopy.RUNNER_UPDATE_NOW_CONFIRM_BODY)
+                }
+            }
+        }
+    }
+
+    /// A turn the Update card names: its conversation, after the Settings sheet comes down.
+    private func openSession(_ id: String) {
+        model.settingsPresented = false
+        model.route(to: .session(id))
     }
 
     /// Only what needs a person, most severe first, each with what to do about it.

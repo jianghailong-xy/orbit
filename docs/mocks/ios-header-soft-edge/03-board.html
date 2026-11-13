@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>iOS 左侧抽屉：顶部和底部也用软边</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #eef0f3; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: #1c1c1e; }
+  .b-part { padding: 28px 32px 32px; width: 1180px; }
+  .b-part h1 { font-size: 26px; margin-bottom: 4px; }
+  .b-part h2 { font-size: 20px; margin: 22px 0 10px; }
+  .b-sub { color: #6b6b70; margin-bottom: 18px; }
+  .b-row { display: flex; gap: 40px; align-items: flex-start; }
+  .b-col { width: 520px; }
+  .b-cap { font-weight: 600; font-size: 17px; margin: 0 0 8px; }
+  .b-cap small { font-weight: 400; color: #6b6b70; font-size: 14px; margin-left: 6px; }
+  .b-tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 10px; margin-left: 6px; vertical-align: 2px; }
+  .b-tag.now { background: #e5e5ea; color: #48484a; }
+  .b-tag.rec { background: #d6f0dc; color: #1a7f37; }
+  .b-lbl { font-size: 13px; color: #6b6b70; margin: 10px 0 4px; }
+  .b-notes { margin-top: 12px; font-size: 14px; color: #3a3a3c; }
+  .b-notes li { margin: 0 0 4px 18px; }
+  table.b-t { border-collapse: collapse; font-size: 14px; }
+  table.b-t td, table.b-t th { border: 1px solid #d1d1d6; padding: 6px 10px; text-align: left; vertical-align: top; background: #fff; }
+  table.b-t th { background: #f2f2f7; }
+  code { font-family: "JetBrains Mono", monospace; font-size: 12.5px; background: #e9e9ee; padding: 0 4px; border-radius: 4px; }
+
+  /* a crop of the owner's 440pt phone, dark, drawer open */
+  .crop { width: 440px; position: relative; overflow: hidden; background: #000; box-shadow: 0 0 0 1px #c7c7cc, 0 8px 24px rgba(0,0,0,.12); }
+  .crop.top { height: 300px; border-radius: 44px 44px 0 0; }
+  .crop.bot { height: 200px; border-radius: 0 0 44px 44px; }
+  .dr { position: absolute; left: 0; top: 0; width: 325px; height: 956px; background: #1c1c1e; color: #fff; overflow: hidden; }
+  .crop.bot .dr { top: -756px; }
+  .card { position: absolute; left: 325px; top: 0; width: 440px; height: 956px; background: #000; border-radius: 40px 0 0 40px; box-shadow: -6px 0 18px rgba(0,0,0,.5); }
+  .crop.bot .card { top: -756px; }
+  .card .t { position: absolute; left: 20px; color: #fff; font-size: 17px; white-space: nowrap; }
+  .card .m { position: absolute; left: 20px; width: 60px; height: 14px; border-radius: 7px; background: #2c2c2e; }
+
+  .clip { position: absolute; left: 0; right: 0; top: 0; bottom: 0; overflow: hidden; }
+  .clip.today { top: 116px; }
+  .rows { position: absolute; left: 0; right: 0; }
+  .r { height: 44.5px; display: flex; align-items: center; padding-left: 22px; font-size: 19px; gap: 14px; position: relative; }
+  .r svg { flex: none; }
+  .r .n { position: absolute; right: 30px; color: #ff9f0a; font-size: 15px; }
+  .r .h { color: #8e8e93; }
+  .r.sel { background: #1f2a44; margin: 0 12px 0 10px; border-radius: 10px; padding-left: 12px; }
+  .hd { height: 40px; padding: 12px 0 0 22px; color: #8e8e93; font-weight: 600; font-size: 17px; }
+  .hd small { font-weight: 400; margin-left: 8px; font-size: 14px; }
+  .rule { height: .5px; background: #38383a; margin: 6px 12px 6px 22px; }
+  .pr { padding: 6px 22px; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .head { position: absolute; z-index: 4; left: 0; right: 0; top: 0; height: 116px; }
+  .head.opaque { background: #1c1c1e; }
+  .ttl { position: absolute; z-index: 6; left: 22px; top: 82px; font-size: 22px; font-weight: 700; color: #fff; }
+  .disc { position: absolute; z-index: 6; left: 269px; top: 76px; width: 44px; height: 44px; border-radius: 50%; background: #2c2c2e; }
+  .sb { position: absolute; z-index: 7; left: 0; right: 0; top: 0; height: 50px; color: #fff; font-weight: 600; font-size: 17px; }
+  .sb .tm { position: absolute; left: 52px; top: 18px; }
+  .sb .rt { position: absolute; right: 30px; top: 19px; font-size: 14px; }
+
+  .soft { position: absolute; z-index: 4; left: 0; right: 0; pointer-events: none; }
+  .soft > div { position: absolute; inset: 0; }
+  .soft.t { top: 0; height: 146px; }
+  .soft.b { bottom: 0; height: 110px; }
+  .soft.t .b1 { backdrop-filter: blur(2px); -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 60%, transparent 100%); }
+  .soft.t .b2 { backdrop-filter: blur(8px); -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 45%, transparent 80%); }
+  .soft.t .b3 { backdrop-filter: blur(16px); -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 40%, transparent 65%); }
+  .soft.t .w { background: linear-gradient(to bottom, rgba(28,28,30,.96) 0, rgba(28,28,30,.85) 55%, rgba(28,28,30,.4) 82%, rgba(28,28,30,0) 100%); }
+  .soft.b .b1 { backdrop-filter: blur(2px); -webkit-mask-image: linear-gradient(to top, #000 0, #000 60%, transparent 100%); }
+  .soft.b .b2 { backdrop-filter: blur(8px); -webkit-mask-image: linear-gradient(to top, #000 0, #000 45%, transparent 80%); }
+  .soft.b .b3 { backdrop-filter: blur(16px); -webkit-mask-image: linear-gradient(to top, #000 0, #000 40%, transparent 65%); }
+  .soft.b .w { background: linear-gradient(to top, rgba(28,28,30,.96) 0, rgba(28,28,30,.85) 45%, rgba(28,28,30,.4) 75%, rgba(28,28,30,0) 100%); }
+
+  .ns { position: absolute; z-index: 6; left: 10px; top: 871px; height: 42px; padding: 0 18px; border-radius: 21px; background: #2f6bff; color: #fff;
+        font-weight: 600; font-size: 17px; display: flex; align-items: center; gap: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+  .gear { position: absolute; z-index: 6; left: 270px; top: 869px; width: 44px; height: 44px; border-radius: 50%; background: #2c2c2e; }
+  .home { position: absolute; z-index: 7; left: 147px; top: 940px; width: 146px; height: 5px; border-radius: 3px; background: #fff; }
+
+  .mk { position: absolute; z-index: 9; width: 22px; height: 22px; border-radius: 50%; background: #ff3b30; color: #fff;
+        font-size: 13px; font-weight: 700; text-align: center; line-height: 22px; box-shadow: 0 0 0 2px #fff; }
+  .ring { position: absolute; z-index: 8; border: 2px dashed #ff453a; border-radius: 8px; }
+</style>
+</head>
+<body>
+<section class="b-part" id="part-1">
+  <h1>iOS 左侧抽屉：标题和底部按钮也用软边</h1>
+  <p class="b-sub">440 pt 宽、深色，抽屉打开、列表已上滚。每台手机切两段：顶部 0–300 pt、底部 756–956 pt。和会话列表同一种处理：不切、不画线，越靠边越糊、越淡。</p>
+  <div class="b-row">
+    <div class="b-col">
+      <p class="b-cap">① 今天<span class="b-tag now">beta.238</span></p>
+      <p class="b-lbl">顶部</p><div class="crop top" id="t1"></div>
+      <p class="b-lbl">底部</p><div class="crop bot" id="b1"></div>
+      <ul class="b-notes">
+        <li><b>1</b> 标题行是列表上面一块实心的底：列表的顶就在它下沿，Tasks 那一行被拦腰切掉。</li>
+        <li><b>2</b> New session 和设置浮在列表上，但下面没有任何过渡：项目名从两颗按钮之间和下面清楚地透出来，和按钮挤在一起。</li>
+      </ul>
+    </div>
+    <div class="b-col">
+      <p class="b-cap">② 建议<span class="b-tag rec">推荐</span><small>上下都软边</small></p>
+      <p class="b-lbl">顶部</p><div class="crop top" id="t2"></div>
+      <p class="b-lbl">底部</p><div class="crop bot" id="b2"></div>
+      <ul class="b-notes">
+        <li><b>1</b> 标题和搜索浮在列表上，列表一直滚到屏幕顶；标题下面一层抽屉底色的模糊 + 淡出，到标题下约 30 pt 透明。行滑上去是淡出，不是被切。</li>
+        <li><b>2</b> 底部同理：按钮下面从屏幕底往上约 110 pt 的模糊 + 淡出，按钮周围不再透字。</li>
+        <li>标题 <code>Orbit</code> 字重不变：它是抽屉的名字，不是工作区名，Gemini 的抽屉标题也是粗的。</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>待定 · 要你拍板</h2>
+  <table class="b-t">
+    <tr><th></th><th>方案 A（推荐）</th><th>方案 B</th></tr>
+    <tr><td>D1 顶部</td><td>标题浮起 + 软边（②上）</td><td>保持今天</td></tr>
+    <tr><td>D2 底部按钮</td><td>也加软边（②下）</td><td>只改顶部，底部保持今天</td></tr>
+    <tr><td>D3 标题字重</td><td>保持粗体</td><td>和列表标题一样改成 medium</td></tr>
+  </table>
+  <h2>落地（按代价排）</h2>
+  <table class="b-t">
+    <tr><th>改动</th><th>位置</th><th>代价</th></tr>
+    <tr><td>标题行从列表上方移到列表的顶部 inset 里，背景换成软边层（复用 02 板那层的画法，颜色用抽屉底色 <code>drawerSurface</code>）</td><td>CompactShell.swift <code>NavigationDrawer</code></td><td>小；只在 iPhone 抽屉，iPad 侧栏的标题在系统栏上，不动</td></tr>
+    <tr><td>底部按钮下加同一层，方向朝上</td><td>同上，<code>.overlay(alignment: .bottom)</code></td><td>小</td></tr>
+    <tr><td>真机核对浅色和深色两种模式</td><td>—</td><td>一次 beta</td></tr>
+  </table>
+</section>
+
+<script>
+const G = {
+  list: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"><circle cx="5" cy="7" r="2"/><circle cx="5" cy="17" r="2"/><path d="M10 7h10M10 17h10"/></svg>',
+  grid: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>',
+  book: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"><path d="M6 3h12v15H7a2 2 0 0 0 0 4h11"/><path d="M6 3v17"/></svg>',
+  hand: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"><path d="M8 12V5a1.5 1.5 0 0 1 3 0v6M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V5a1.5 1.5 0 0 1 3 0v8c0 5-3 8-7 8-3 0-5-2-6-5l-1.5-3.5a1.4 1.4 0 0 1 2.5-1.3L8 14"/></svg>',
+  folder: c => `<svg width="26" height="22" viewBox="0 0 26 22" fill="none" stroke="${c}" stroke-width="1.8" stroke-linejoin="round"><path d="M2 4a2 2 0 0 1 2-2h6l2 3h10a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/><path d="M2 8h22"/></svg>`,
+};
+const ws = [['orbit-develop','runner-a',1],['orbit-prod','runner-b'],['orbit-macos','mac-mini'],['data-pipeline','workstation'],['site-develop','runner-b'],['site-prod','runner-b'],['scratch','runner-a'],['lfs','workstation'],['notes','workstation'],['security-review','runner-a'],['push-service','runner-b'],['orbit','laptop']];
+const projects = ['Session guests','Evidence always has an addressee','Main checkout on the runner','Runner update drain','Fork a task from a session','Terminal session','Account move','Wiki explicit creation'];
+function rail() {
+  let h = '';
+  h += `<div class="r">${G.grid}<span>Projects</span></div>`;
+  h += `<div class="r">${G.list}<span>Tasks</span></div>`;
+  h += `<div class="r">${G.book}<span>Wiki</span></div>`;
+  h += `<div class="r">${G.hand}<span>Waiting on you</span><span class="n">7</span></div>`;
+  h += '<div class="rule"></div><div class="hd">Workspaces</div>';
+  for (const [n, m, s] of ws) h += `<div class="r${s ? ' sel' : ''}">${G.folder(s ? '#4a8bff' : '#fff')}<span>${n} <span class="h">· ${m}</span></span></div>`;
+  h += '<div class="hd">Projects<small>44</small></div>';
+  for (const p of projects) h += `<div class="pr">${p}</div>`;
+  for (const p of projects) h += `<div class="pr">${p} (2)</div>`;
+  return h;
+}
+function card() {
+  const titles = ['Session guests','Evidence always…','Main checkout…','Remove Waiting…','Task: Android…','Task: Android…','Task: Fix main…','Fork a task fr…','Runner link…','Start an Orbit…','Session page…','Account move…'];
+  let h = '<div class="card">';
+  titles.forEach((t, i) => { h += `<div class="t" style="top:${130 + i * 76}px">${t}</div><div class="m" style="top:${160 + i * 76}px"></div>`; });
+  return h + '</div>';
+}
+// today: rail starts below the 116pt header; scrolled so Tasks sits at the cut
+// proposal: rail scrolls under the header up to the screen top, same scroll position
+function drawer(proposal) {
+  const rowsTop = 116 - 64;
+  const list = `<div class="rows" style="top:${rowsTop}px">${rail()}</div>`;
+  return `<div class="dr">
+    ${proposal ? `<div class="clip">${list}</div>` : `<div class="clip today"><div class="rows" style="top:-64px">${rail()}</div></div>`}
+    ${proposal ? '<div class="soft t"><div class="b1"></div><div class="b2"></div><div class="b3"></div><div class="w"></div></div>' : '<div class="head opaque"></div>'}
+    ${proposal ? '<div class="soft b"><div class="b1"></div><div class="b2"></div><div class="b3"></div><div class="w"></div></div>' : ''}
+    <div class="ttl">Orbit</div><div class="disc"></div>
+    <div class="ns">✎ New session</div><div class="gear"></div>
+  </div>`;
+}
+function shoot(id, proposal, bottom, marks) {
+  const el = document.getElementById(id);
+  el.innerHTML = card() + drawer(proposal) +
+    (bottom ? '<div class="home"></div>' : '<div class="sb"><span class="tm">10:25</span><span class="rt">▂▄▆█ ◠ 86</span></div>') + marks;
+  if (bottom) { el.querySelector('.home').style.top = '184px'; }
+}
+shoot('t1', false, false, '<div class="ring" style="left:6px;top:110px;width:310px;height:30px"></div><div class="mk" style="left:300px;top:130px">1</div>');
+shoot('b1', false, true, '<div class="ring" style="left:6px;top:100px;width:316px;height:70px;border-radius:14px"></div><div class="mk" style="left:306px;top:90px">2</div>');
+shoot('t2', true, false, '<div class="ring" style="left:6px;top:96px;width:310px;height:52px;border-radius:12px"></div><div class="mk" style="left:300px;top:136px">1</div>');
+shoot('b2', true, true, '<div class="ring" style="left:6px;top:86px;width:316px;height:84px;border-radius:14px"></div><div class="mk" style="left:306px;top:76px">2</div>');
+</script>
+</body>
+</html>

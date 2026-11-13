@@ -526,14 +526,19 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         public let satisfied: Bool?
         /// The criterion's `key`, which a gap names it by (`AcceptedGap.criterionKey`).
         public let key: String?
+        /// Its text revision and how it is checked — what the done card's Confirm sheet names.
+        public let revision: Int?
+        public let verificationMethod: String?
 
         public init(id: String, ordinal: Int, text: String, satisfied: Bool? = nil,
-                    key: String? = nil) {
+                    key: String? = nil, revision: Int? = nil, verificationMethod: String? = nil) {
             self.id = id
             self.ordinal = ordinal
             self.text = text
             self.satisfied = satisfied
             self.key = key
+            self.revision = revision
+            self.verificationMethod = verificationMethod
         }
     }
 
@@ -573,16 +578,21 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
     /// The settings half of the project's integration line, for the main branch the done cards name
     /// where its work landed. Nil from a server that did not say, and then they say main.
     public let integration: ProjectIntegrationSettings?
+    /// The non-code mark and the criteria moved out, for the done card (`ProjectDoneFollowUps.swift`).
+    public let followUps: ProjectDoneFollowUpFields
 
     /// What the done cards read off this document.
     public var doneSubject: ProjectDoneSubject {
         ProjectDoneSubject(title: title ?? id, status: status,
                            criteria: (acceptanceCriteriaItems ?? []).map {
                                ProjectDoneSubject.Criterion(id: $0.id, key: $0.key, ordinal: $0.ordinal,
-                                                            text: $0.text)
+                                                            text: $0.text, revision: $0.revision,
+                                                            verificationMethod: $0.verificationMethod)
                            },
                            derivedDone: derivedDone, doneBy: doneBy, doneAt: doneAt,
-                           acceptedGaps: acceptedGaps, upstreamRef: integration?.upstreamRef)
+                           acceptedGaps: acceptedGaps, upstreamRef: integration?.upstreamRef,
+                           projectID: id, nonCodeMark: followUps.nonCodeMark,
+                           criteriaMovedOut: followUps.criteriaMovedOut)
     }
     /// How many tasks the project holds — what the confirmation card's condition asks before it
     /// offers to start anything, because "Start the project" is a verb and this is its object.
@@ -611,7 +621,8 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
                 derivedDone: ProjectDerivedDone? = nil, doneBy: ProjectDoneBy? = nil,
                 doneAt: String? = nil, acceptedGaps: [AcceptedGap] = [],
                 coordinatorSessionId: String? = nil, exceptionEscalationSeconds: Int? = nil,
-                integration: ProjectIntegrationSettings? = nil) {
+                integration: ProjectIntegrationSettings? = nil,
+                followUps: ProjectDoneFollowUpFields = ProjectDoneFollowUpFields()) {
         self.id = id
         self.acceptanceCriteriaItems = acceptanceCriteriaItems
         self.title = title
@@ -627,6 +638,7 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         self.coordinatorSessionId = coordinatorSessionId
         self.exceptionEscalationSeconds = exceptionEscalationSeconds
         self.integration = integration
+        self.followUps = followUps
     }
 
     public init(from decoder: Decoder) throws {
@@ -648,9 +660,11 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         coordinatorSessionId = try? c.decodeIfPresent(String.self, forKey: .coordinatorSessionId)
         exceptionEscalationSeconds = try? c.decodeIfPresent(Int.self, forKey: .exceptionEscalationSeconds)
         integration = try? c.decodeIfPresent(ProjectIntegrationSettings.self, forKey: .integration)
+        followUps = (try? ProjectDoneFollowUpFields(from: decoder)) ?? ProjectDoneFollowUpFields()
     }
 
     public func encode(to encoder: Encoder) throws {
+        try followUps.encode(into: encoder)
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id)
         try c.encodeIfPresent(acceptanceCriteriaItems, forKey: .acceptanceCriteriaItems)

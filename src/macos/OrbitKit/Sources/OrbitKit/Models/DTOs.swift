@@ -276,6 +276,12 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// Where this runner's updates of itself stand, as it last reported. Nil from an older server or
     /// a runner too old to report it, which the Runners pages judge by `runsAsRoot` as they always have.
     public var selfUpdate: RunnerSelfUpdate? = nil
+    /// Only on a runner draining for its self-update: the reader's turns the drain waits for, longest
+    /// running first (shared `RunnerUpdateTurn`), which the runner page's Update card lists.
+    public var updateTurns: [RunnerUpdateTurn]? = nil
+    /// Only while it drains for its self-update and something of the reader's waits on it (D3): how many
+    /// sessions and messages. Needs you's "studio-mac is updating — 1 session waiting" line reads it.
+    public var drainWaiting: RunnerDrainWaiting? = nil
     /// What the runner declared it can do on its last poll — `codex-account-move/v1` and
     /// `claude-account-move/v1` say it carries a session's conversation to another of its accounts;
     /// `antigravity-account-login/v1`, that it signs in Antigravity accounts of their own, which is all
@@ -453,6 +459,14 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// opens by saying so. Only `GET /sessions/:id` and the create answer carry it: a list row's nil
     /// says nothing.
     public var createdWorkspace: Bool? = nil
+    /// Which gate the server found holding a queued session, with the numbers it judged on (web
+    /// `QueuedGate`). Only a list row carries them, and only `runner_updating` is read so far
+    /// (`RunnerUpdating`); nil from an older control plane.
+    public var queuedReason: String? = nil
+    public var queuedActive: Int? = nil
+    public var queuedLimit: Int? = nil
+    /// Beside `queuedReason` `runner_updating` only: what the update is and what it waits for.
+    public var queuedRunnerUpdate: QueuedRunnerUpdate? = nil
     public let pendingApprovals: Int?
     /// What `pendingApprovals` is counting, when one word says it better than "approval":
     /// `OWNER_CONFIRMATION` when everything counted is an OWNER_CONFIRMED task's run waiting for its
@@ -699,6 +713,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         numTurns = try? values.decodeIfPresent(Int.self, forKey: .numTurns)
         runtimeSessionId = try? values.decodeIfPresent(String.self, forKey: .runtimeSessionId)
         createdWorkspace = try? values.decodeIfPresent(Bool.self, forKey: .createdWorkspace)
+        queuedReason = try? values.decodeIfPresent(String.self, forKey: .queuedReason)
+        queuedActive = try? values.decodeIfPresent(Int.self, forKey: .queuedActive)
+        queuedLimit = try? values.decodeIfPresent(Int.self, forKey: .queuedLimit)
+        queuedRunnerUpdate = try? values.decodeIfPresent(QueuedRunnerUpdate.self, forKey: .queuedRunnerUpdate)
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
         ownerItems = try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems)

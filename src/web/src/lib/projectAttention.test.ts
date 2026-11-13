@@ -10,7 +10,6 @@ import {
   integrationChipOf,
   orderWithinSection,
   projectAttentionSections,
-  projectIsLive,
   projectIsWorking,
   projectNeedsYouCount,
   sidebarProjects,
@@ -1007,19 +1006,5 @@ describe('the sidebar’s Projects group', () => {
     const newer = row({ title: 'Newer', createdAt: '2026-02-01T00:00:00.000Z' });
     expect(sidebarProjects([older, newer]).map((p) => p.title)).toEqual(['Newer', 'Older']);
     expect(sidebarProjects([newer, older]).map((p) => p.title)).toEqual(['Newer', 'Older']);
-  });
-
-  it('names a project waiting on you, at work, or touched in the last 24 hours; the rest are quiet', () => {
-    expect(projectIsLive(row({ lastActivityAt: at(24 * HOUR - MINUTE) }), NOW)).toBe(true);
-    expect(projectIsLive(row({ lastActivityAt: at(24 * HOUR) }), NOW)).toBe(false);
-    // Waiting on you or at work: named however long ago it was touched.
-    const waiting = row({ lastActivityAt: at(9 * DAY), attention: { ownerItems: [ownerItem('COORDINATOR_QUESTION', 1, HOUR)] } });
-    expect(projectIsLive(waiting, NOW)).toBe(true);
-    expect(projectIsLive(row({ lastActivityAt: at(9 * DAY), buckets: { running: 1 } }), NOW)).toBe(true);
-    // A coordinator's turn counts as activity, as it does for the order.
-    const turned = row({ lastActivityAt: at(9 * DAY), coordinatorActivity: { working: false, lastTurnAt: at(HOUR) } });
-    expect(projectIsLive(turned, NOW)).toBe(true);
-    // Nothing written yet: its creation is its activity.
-    expect(projectIsLive(row({ lastActivityAt: null, createdAt: at(2 * HOUR) }), NOW)).toBe(true);
   });
 });

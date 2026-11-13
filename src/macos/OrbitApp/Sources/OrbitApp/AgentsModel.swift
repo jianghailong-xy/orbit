@@ -78,10 +78,9 @@ final class AgentsModel {
 
     // The selected agent's sessions for the current Open/Completed/Trash view.
     private(set) var agentSessions: [Session] = []
-    #if os(iOS)
-    /// The same scope across every Workspace, for project wording and coordinator placement.
+    /// The same scope across every Workspace, for project wording and coordinator placement (and a
+    /// project's sessions page, on every shell).
     private(set) var allSessions: [Session] = []
-    #endif
     private(set) var sessionsLoading = false
     /// The last (agent, view) `loadSessions` ran for, so a row action can silently refresh the same
     /// list without the view having to thread the agent id / tab back in.
@@ -106,9 +105,6 @@ final class AgentsModel {
         api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
     }
 
-    var groups: [AgentGroup] {
-        AgentListLogic.sidebarGroups(items, runnerOrder: runnerOrder, machines: machinesToSetUp)
-    }
     var orderedItems: [Agent] { AgentListLogic.ordered(items, runnerOrder: runnerOrder) }
     /// What the workspace list shows where its rows would be: a failed fetch is never "no workspaces".
     var listPresentation: ListLoadPresentation {
@@ -482,9 +478,7 @@ final class AgentsModel {
     func hideTrashedSession(_ id: String) {
         trashing.insert(id)
         agentSessions = SessionFilter.removing(id, from: agentSessions)
-        #if os(iOS)
         allSessions = SessionFilter.removing(id, from: allSessions)
-        #endif
     }
 
     func revealTrashedSession(_ id: String) {
@@ -532,9 +526,7 @@ final class AgentsModel {
             let read = try await api.listSessions(view: view)
             guard isCurrent() else { return }
             let all = SessionFilter.removing(trashing, from: read)
-            #if os(iOS)
             allSessions = all
-            #endif
             agentSessions = SessionFilter.forAgent(all, agentID: agentID, view: view)
         } catch { if isCurrent() { errorText = friendly(error) } }
     }
@@ -570,9 +562,7 @@ final class AgentsModel {
     func applyOpenRow(_ all: [Session], workspaceIDs: Set<String?>) {
         openSnapshot = all
         guard let q = lastSessionQuery, q.view == .open else { return }
-        #if os(iOS)
         allSessions = all
-        #endif
         guard workspaceIDs.contains(q.agentID) else { return }
         let mine = SessionFilter.forAgent(all, agentID: q.agentID, view: .open)
         if agentSessions != mine { agentSessions = mine }
@@ -581,9 +571,7 @@ final class AgentsModel {
     /// Write the Open list only where it changed: Observation invalidates on assignment, equal or
     /// not, and the list redraws for each — a change in another workspace leaves this one's rows.
     private func adoptOpen(_ all: [Session], agentID: String) {
-        #if os(iOS)
         if allSessions != all { allSessions = all }
-        #endif
         let mine = SessionFilter.forAgent(all, agentID: agentID, view: .open)
         if agentSessions != mine { agentSessions = mine }
     }

@@ -37,6 +37,7 @@ import {
   PushpinOutlined,
   RightOutlined,
   SearchOutlined,
+  TeamOutlined,
   ThunderboltOutlined,
   UndoOutlined,
 } from '@ant-design/icons';
@@ -319,7 +320,7 @@ import {
 } from './RunNeverStartedCard';
 import { claudeRegionHeld, claudeRegionHeldWords, useClaudeRegionCheckAgain } from '../lib/claudeRegion';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
-import { AntigravityRepairCard, antigravityRepair, AttachmentImage, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
+import { AntigravityRepairCard, antigravityRepair, AttachmentImage, QueuedFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
 import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
@@ -447,6 +448,10 @@ import { useConfirm } from './ui/ConfirmDialog';
 import { Image } from './ui/Image';
 import { Menu, type MenuItem } from './ui/Menu';
 import { Popover } from './ui/Popover';
+import { RunnerDrainBanner } from './RunnerDrainBanner';
+import { RunnerUpdateLaterMenu } from './RunnerUpdateLater';
+import { RunnerUpdateNowButton } from './RunnerUpdateNow';
+import { runnerTakesUpdateNow } from '../lib/runnerUpdateNow';
 import { Select } from './ui/Select';
 import { Spinner } from './ui/Spinner';
 import { Textarea } from './ui/Textarea';
@@ -555,7 +560,13 @@ import {
   QUEUED_NOTICE_DELAY_MS,
   STARTING_NOTICE_DELAY_MS,
   type QueuedGate,
+  RUNNER_UPDATING_TAG,
+  RUNNER_UPDATING_TITLE,
+  isRunnerUpdating,
   pendingSlotDescription,
+  runnerUpdatingDescription,
+  runnerUpdatingMessageText,
+  runnerUpdatingWaited,
   queuedLabel,
   queuedNoticeVisible,
   queuedTitle,
@@ -1062,7 +1073,7 @@ const parkedWorkLabel = (s: any): ParkedWork | null => {
 // background process or a watch that will resume it, default = reply content.
 type SessionLine = {
   text: string;
-  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review';
+  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review' | 'warning';
 };
 // The line for a message the workspace hasn't answered yet, marked with who sent it (`sentBy`).
 // Prefixed, because the preview line is otherwise the workspace's voice: unmarked, a message and a
@@ -1227,7 +1238,12 @@ export const sessionLine = (
     if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
     return { text: 'Running…', tone: 'running' };
   }
-  if (live && state === 'QUEUED') return { text: claudeRegionHeldWords(s, machine) ?? queuedLabel(s), tone: 'queued' };
+  if (live && state === 'QUEUED') {
+    const held = claudeRegionHeldWords(s, machine);
+    // A runner draining for its update is the one queue word in the warning colour (board 2 ①): it
+    // can last hours, and only the owner can shorten it.
+    return { text: held ?? queuedLabel(s), tone: !held && isRunnerUpdating(s) ? 'warning' : 'queued' };
+  }
   // Parked (AWAITING_INPUT) but still doing background work — a sub-workspace and/or background
   // shells that outlive the turn — so it doesn't read as idle. A spawned sub-workspace parks the
   // parent at AWAITING_INPUT while it runs, so this (not the RUNNING branch) is what usually
@@ -1295,6 +1311,16 @@ export function CoordinatorBadge({ projectId }: { projectId?: string | null }) {
   );
 }
 
+/** Where and how the agent runs a guest's message, for the Share dialog's People who can reply: the session's own
+ *  runner and permission mode, or the workspace's machine when the session names none. */
+const guestContextOf = (s: any, fallbackRunner: string) => ({
+  runnerName: s.assignedRunner?.displayName || s.assignedRunner?.name || fallbackRunner,
+  permissionMode: typeof s.permissionMode === 'string' ? s.permissionMode : 'default',
+});
+
+/** What the two-person icon beside a row's time says: people the owner invited can reply here. */
+export const SESSION_GUESTS_TIP = 'People you invited can reply';
+
 /** What the globe beside a row's time says: a public link opens this session right now. */
 export const SESSION_SHARED_TIP = 'Shared · anyone with the link';
 
@@ -1320,6 +1346,11 @@ export function SessionTitleRow({
       {s.shared === true && (
         <span className="session-shared" title={SESSION_SHARED_TIP} aria-label={SESSION_SHARED_TIP}>
           <GlobalOutlined />
+        </span>
+      )}
+      {s.hasGuests === true && (
+        <span className="session-guests" title={SESSION_GUESTS_TIP} aria-label={SESSION_GUESTS_TIP}>
+          <TeamOutlined />
         </span>
       )}
       <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
@@ -1875,6 +1906,108 @@ function TranscriptSkeleton() {
  * compacting a conversation it can no longer fit, which is minutes and can retry). Neither the
  * copy nor the spinner can: both read identically at 3s and at 30m.
  */
+/** A clock that moves once a minute, for the waits counted in minutes. */
+function useMinuteNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return now;
+}
+
+/**
+ * The queued page of a session held by its runner's update (board 2 ②–③): why, with the turns it
+ * waits for as links, and how long it has waited. Later and Update Now… go below the wait once they
+ * do something (`actions`); until then nothing is drawn there.
+ */
+export function RunnerUpdatingQueued({
+  gate,
+  machine,
+  onOpenSession,
+  actions,
+}: {
+  gate: QueuedGate;
+  machine?: string | null;
+  onOpenSession: (id: string) => void;
+  actions?: ReactNode;
+}) {
+  const now = useMinuteNow();
+  const waited = runnerUpdatingWaited(gate, now);
+  return (
+    <>
+      <div className="chat-queued-title">{RUNNER_UPDATING_TITLE}</div>
+      <div className="chat-queued-desc chat-runner-updating-desc">
+        {runnerUpdatingDescription(gate, machine).map((part, i) =>
+          typeof part === 'string' ? (
+            <Fragment key={i}>{part}</Fragment>
+          ) : (
+            <a
+              key={i}
+              href={`/sessions/${encodeId(part.id)}`}
+              onClick={(e) => {
+                e.preventDefault();
+                onOpenSession(part.id);
+              }}
+            >
+              {part.title}
+            </a>
+          ),
+        )}
+      </div>
+      {waited && <div className="chat-queued-waited">{waited}</div>}
+      {actions}
+    </>
+  );
+}
+
+/**
+ * The foot-row tag under a message the update holds (board 2 ⑤): `Queued · runner updating`, in the
+ * meta voice, the reason dotted-underlined because a press opens why — the same words and the same
+ * slot for Later and Update Now… as the queued page.
+ */
+export function RunnerUpdatingTag({
+  gate,
+  machine,
+  actions,
+}: {
+  gate: QueuedGate;
+  machine?: string | null;
+  actions?: ReactNode;
+}) {
+  const now = useMinuteNow();
+  const waited = runnerUpdatingWaited(gate, now);
+  return (
+    <span className="chat-runner-updating">
+      Queued
+      <span className="chat-meta-sep">·</span>
+      <Popover
+        title={RUNNER_UPDATING_TITLE}
+        side="bottom"
+        align="end"
+        trigger={
+          <button type="button" className="chat-runner-updating-reason">
+            {RUNNER_UPDATING_TAG}
+          </button>
+        }
+      >
+        <div className="runner-updating-pop">
+          <p>
+            {runnerUpdatingMessageText(gate, machine)}
+            {waited && (
+              <>
+                <br />
+                {waited}.
+              </>
+            )}
+          </p>
+          {actions}
+        </div>
+      </Popover>
+    </span>
+  );
+}
+
 function WaitElapsed({ since }: { since?: string | null }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -2269,7 +2402,7 @@ export function WorkspaceView({
   };
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
   // A row's Share action opens the share dialog for that row rather than for the open session.
-  const [shareRowId, setShareRowId] = useState<string | null>(null);
+  const [shareRow, setShareRow] = useState<any>(null);
   // The session the Move dialog is open for: a row's, or the open conversation's.
   const [moveTarget, setMoveTarget] = useState<(MoveDialogSession & {
     workspace?: { id: string; name: string };
@@ -3742,7 +3875,7 @@ export function WorkspaceView({
         .map((choice) => ({ engine: row.slug, provider: choice.slug })),
     );
     if (keyed[0]) pickDraft(keyed[0].engine, keyed[0].provider);
-    else navigate('/infrastructure#keys');
+    else navigate('/settings/providers');
   };
   // An account row under the draft engine's own sign-in: that sign-in, on that account — or on
   // Automatic (`null`). Like the provider, it binds the session being drafted and rewrites no
@@ -3890,6 +4023,7 @@ export function WorkspaceView({
     activeSlots,
     runner.maxConcurrent,
     (selectedSession ?? selected) as QueuedGate | null,
+    machineName(runner),
   );
   const selectedStartingSession = selectedSession ?? selected;
   const selectedIsQueued = selected
@@ -3911,6 +4045,11 @@ export function WorkspaceView({
   );
   const showQueuedNotice =
     selectedIsQueued && queuedNoticeVisible(selectedStartingSession, delayedQueuedNotice);
+  // Held by its runner's update: the page and the message foot row explain it (board 2).
+  const runnerUpdatingGate: QueuedGate | null =
+    selectedIsQueued && isRunnerUpdating(selectedStartingSession)
+      ? (selectedStartingSession as QueuedGate)
+      : null;
   const selectedIsStarting = selected ? sessionIsStarting(selectedStartingSession) : false;
   // Starting or compacting — see waitingNoticeFor. Its `since` is the clock the notice counts from.
   const selectedWaiting = selected ? waitingNoticeFor(selectedStartingSession) : null;
@@ -4169,6 +4308,25 @@ export function WorkspaceView({
   // The event each of those rows is drawn from (`queuedTurnEvent`): the one its echo will be. Only
   // the rows the tray does not hold (`inPendingTray`): what Orbit queued, and a message whose
   // delivery settled undelivered, which is part of the conversation's record.
+  // The message a runner update holds: the last one the reader sent, whose foot row says why
+  // (board 2 ⑤). None while the session is not held by an update.
+  let queuedFoot: { seq: number; tag: ReactNode } | null = null;
+  if (runnerUpdatingGate) {
+    for (let i = transcriptEvents.length - 1; i >= 0; i--) {
+      if (transcriptEvents[i].type !== 'user') continue;
+      queuedFoot = {
+        seq: transcriptEvents[i].seq,
+        tag: (
+          <RunnerUpdatingTag
+            gate={runnerUpdatingGate}
+            machine={machineName(runner)}
+            actions={<div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} />{runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={machineName(runner)} />}</div>}
+          />
+        ),
+      };
+      break;
+    }
+  }
   const queuedTailEvents = useMemo(
     () =>
       visibleQueuedTurns
@@ -5796,7 +5954,7 @@ export function WorkspaceView({
       return;
     }
     const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
-    navigate(a ? `/workspaces/${encodeId(a)}${listSearch}` : `/runners/${encodeId(runner.id)}${listSearch}`);
+    navigate(a ? `/workspaces/${encodeId(a)}${listSearch}` : `/settings/machines/${encodeId(runner.id)}${listSearch}`);
   };
   // After leaveIfOpen re-scopes to the workspace, the auto-open effect picks that workspace's
   // next session — but it reads the cached list, which still holds the row we just
@@ -6056,7 +6214,7 @@ export function WorkspaceView({
     if (action === 'complete') requestComplete(s);
     else if (action === 'restore') requestRestore(s);
     else if (action === 'pin') pinMut.mutate({ id: s.id, pin: !s.pinnedAt, projectId: s.projectMembership?.projectId });
-    else if (action === 'share') setShareRowId(s.id);
+    else if (action === 'share') setShareRow(s);
     else if (action === 'move') openMove(s);
     else if (action === 'delete') requestTrash(s, returnFocus);
     else confirmPurge({ id: s.id, title: s.title }, returnFocus);
@@ -7139,7 +7297,7 @@ export function WorkspaceView({
     if (!selected || shownProviderListed || isLoginProvider(shownProvider) || shownProvider === AgentProvider.OPENCODE) return null;
     if (configuredProviders.some((p) => p.slug === shownProvider) || !ownKeys.data) return null;
     const row = ownKeys.data.find((p) => p.slug === shownProvider);
-    if (row) return row.enabled ? null : { status: 'Turned off', href: `/providers/${encodeId(row.id)}` };
+    if (row) return row.enabled ? null : { status: 'Turned off', href: `/settings/providers/keys/${encodeId(row.id)}` };
     return shownProvider === AgentProvider.DSH ? null : { status: 'Key deleted' };
   })();
   // Where this session could move without changing engine: the credentials its engine runs on here.
@@ -7845,7 +8003,7 @@ export function WorkspaceView({
     setView(next);
     if (!selectedId) return;
     const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
-    navigate(a ? `/workspaces/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
+    navigate(a ? `/workspaces/${encodeId(a)}` : `/settings/machines/${encodeId(runner.id)}`);
   };
   const activeTag = tagFilter ? (sessionTags.find((t) => t.id === tagFilter) ?? null) : null;
   // ── The composer's model control ───────────────────────────────────────────────────────────
@@ -7862,7 +8020,7 @@ export function WorkspaceView({
   const pickAccount = (account: string, signedOut: boolean): void => {
     if (!shownAccountEngine) return;
     if (signedOut) {
-      navigate(`/infrastructure?runner=${encodeId(runner.id)}&engine=${shownAccountEngine}`);
+      navigate(`/settings/machines/${encodeId(runner.id)}?engine=${shownAccountEngine}`);
       return;
     }
     // A draft starts on it: nothing on the server yet, so the pick rides on the create.
@@ -7897,7 +8055,7 @@ export function WorkspaceView({
     if (picked?.unavailable) {
       navigate(
         picked.fixHref ??
-          `/infrastructure?runner=${encodeId(runner.id)}&engine=${picked.fixEngine ?? shownEngine}`,
+          `/settings/machines/${encodeId(runner.id)}?engine=${picked.fixEngine ?? shownEngine}`,
       );
       return;
     }
@@ -7979,14 +8137,14 @@ export function WorkspaceView({
       runnerVersion: runner.version,
       googleLogin: runner.antigravity?.googleLogin,
       runtime: shownEngine,
-      onConnectGemini: () => navigate(geminiProvider ? `/providers/${encodeId(geminiProvider.id)}` : '/providers/new/gemini'),
+      onConnectGemini: () => navigate(geminiProvider ? `/settings/providers/keys/${encodeId(geminiProvider.id)}` : '/settings/providers/new/gemini'),
       onSwitchToGemini: geminiChoice && !geminiChoice.unavailable && !selectedTrashed && !selectedMissing
         ? () => pickProvider(geminiChoice.slug)
         : undefined,
-      onOpenProviders: () => navigate(`/infrastructure?runner=${encodeId(runner.id)}&engine=antigravity`),
+      onOpenProviders: () => navigate(`/settings/machines/${encodeId(runner.id)}?engine=antigravity`),
       onInstall: runner.online && runner.antigravity?.supported ? () => installAntigravity.mutate() : undefined,
       installDisabled: installAntigravity.isPending || installDsh.isPending || runner.install?.status === 'installing' || runner.install?.status === 'pending',
-      onEditDshKey: () => navigate(dshProviderRow ? `/providers/${encodeId(dshProviderRow.id)}` : '/infrastructure#keys'),
+      onEditDshKey: () => navigate(dshProviderRow ? `/settings/providers/keys/${encodeId(dshProviderRow.id)}` : '/settings/providers'),
       onInstallDsh: runner.online && runner.capabilities?.includes(DSH_RUNNER_CAPABILITY) ? () => installDsh.mutate() : undefined,
       onRetry:
         authRetryText && !selectedTrashed && !selectedMissing
@@ -8014,7 +8172,7 @@ export function WorkspaceView({
       onNeedRetryText: selectedId ? () => setRetryMessageAskedFor(selectedId) : undefined,
       // The provider gallery, not a preset vendor: the engine narrows it to a runtime, not to
       // whose key the user actually holds.
-      onUseApiKey: () => navigate('/infrastructure#keys'),
+      onUseApiKey: () => navigate('/settings/providers'),
     }),
     // `send.mutate` is referentially stable; `send` itself is not, and depending on it would
     // rebuild this every render and re-render the card through the context.
@@ -8084,7 +8242,7 @@ export function WorkspaceView({
       selectedRuntime === AgentProvider.DSH
         ? authErrorHelp.onEditDshKey
         : authErrorHelp.onOpenProviders,
-    openRunner: () => navigate(`/runners/${encodeId(runner.id)}`),
+    openRunner: () => navigate(`/settings/machines/${encodeId(runner.id)}`),
     // The conversation is the other way to answer a refusal, so this only arms it:
     // the reader's own words are the point, and nothing is sent for them.
     chatAbout: () => setTimeout(() => taRef.current?.focus(), 0),
@@ -8280,7 +8438,7 @@ export function WorkspaceView({
     const pick = (account: string, signedOut: boolean) => {
       if (here) return pickAccount(account, signedOut);
       if (signedOut) {
-        navigate(`/infrastructure?runner=${encodeId(runner.id)}&engine=${engine}`);
+        navigate(`/settings/machines/${encodeId(runner.id)}?engine=${engine}`);
         return;
       }
       pickProvider(engine!, account);
@@ -9255,7 +9413,7 @@ export function WorkspaceView({
                   navigate(sessionPath(id), { state: stampFromList() }))}
               onBack={isMobile ? () => {
                 const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
-                const list = a ? `/workspaces/${encodeId(a)}${listSearch}` : `/runners/${encodeId(runner.id)}${listSearch}`;
+                const list = a ? `/workspaces/${encodeId(a)}${listSearch}` : `/settings/machines/${encodeId(runner.id)}${listSearch}`;
                 navigateWithPaneSlide('pop', () =>
                   arrivedFromList() ? navigate(-1) : navigate(list, { replace: true }),
                 );
@@ -9268,6 +9426,8 @@ export function WorkspaceView({
           )
         ) : (
         <>
+        {/* Board 3 ⑥: this runner drains for its update with something of the reader's waiting on it (D3). */}
+        <RunnerDrainBanner runner={runner} machine={machineName(runner)} />
         <div className="workspace-header">
           {isMobile && (
             <button
@@ -9276,7 +9436,7 @@ export function WorkspaceView({
               aria-label="Back to sessions"
               onClick={() => {
                 const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
-                const list = a ? `/workspaces/${encodeId(a)}${listSearch}` : `/runners/${encodeId(runner.id)}${listSearch}`;
+                const list = a ? `/workspaces/${encodeId(a)}${listSearch}` : `/settings/machines/${encodeId(runner.id)}${listSearch}`;
                 // A real back when the list is the entry behind this one, so returning unwinds
                 // the push instead of stacking a third entry on top of it. A deep-linked
                 // conversation has no such entry: replace it, which still lands on the list —
@@ -9598,10 +9758,17 @@ export function WorkspaceView({
             onClose={() => setShareOpen(false)}
             kind="SESSION"
             rootId={selected.id}
+            guests={guestContextOf(selected, machineName(runner))}
           />
         )}
-        {shareRowId && (
-          <ShareModal open onClose={() => setShareRowId(null)} kind="SESSION" rootId={shareRowId} />
+        {shareRow && (
+          <ShareModal
+            open
+            onClose={() => setShareRow(null)}
+            kind="SESSION"
+            rootId={shareRow.id}
+            guests={guestContextOf(shareRow, machineName(runner))}
+          />
         )}
         <SessionMoveModal
           open={!!moveTarget}
@@ -9736,8 +9903,19 @@ export function WorkspaceView({
                     <span />
                     <span />
                   </div>
-                  <div className="chat-queued-title">{queuedTitle(selectedSession ?? selected)}</div>
-                  <div className="chat-queued-desc">{slotWaitDescription}</div>
+                  {runnerUpdatingGate ? (
+                    <RunnerUpdatingQueued
+                      gate={runnerUpdatingGate}
+                      machine={machineName(runner)}
+                      onOpenSession={(id) => navigate(sessionPath(id))}
+                      actions={<div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} />{runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={machineName(runner)} />}</div>}
+                    />
+                  ) : (
+                    <>
+                      <div className="chat-queued-title">{queuedTitle(selectedSession ?? selected)}</div>
+                      <div className="chat-queued-desc">{slotWaitDescription}</div>
+                    </>
+                  )}
                 </div>
               )}
               {placeholder === 'starting' && showStartingNotice && !neverStarted && (
@@ -9758,10 +9936,12 @@ export function WorkspaceView({
                   conversation instead of a blank pane. */}
               {placeholder === 'skeleton' && <TranscriptSkeleton />}
               {/* The transcript, in the contexts its cards read (SessionConversation). */}
+              <QueuedFootCtx.Provider value={queuedFoot}>
               <SessionConversation
                 sessionId={selectedId}
                 stream={stream}
-                live={live && !selectedRegionHeld}
+                // Held for the region or by its runner's update: nothing is working on its message.
+                live={live && !selectedRegionHeld && !runnerUpdatingGate}
                 turnImages={turnImages}
                 inserts={transcriptInserts}
                 authErrorHelp={authErrorHelp}
@@ -9774,6 +9954,7 @@ export function WorkspaceView({
                 wikiChat={wikiChatCards}
                 subagentWaiting={subagentWaiting}
               />
+              </QueuedFootCtx.Provider>
               {/* The conversation's last row while it is at rest: its recap whole, the line its list
                   row reads in one (SessionRecapCard). Above the cards that ask the owner something,
                   which stay nearest the composer, and only once the transcript it sums up is drawn.
@@ -9937,6 +10118,8 @@ export function WorkspaceView({
                 !selectedTrashed &&
                 showQueuedNotice &&
                 !neverStarted &&
+                // The foot row of the waiting message says it instead (board 2 ⑤).
+                !queuedFoot &&
                 transcriptEvents.length > 0 && (
                 dshQueueRepair ? <DshRepairCard repair={dshQueueRepair} help={authErrorHelp} /> : antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-note chat-slot-wait">
                   <span>{queuedTitle(selectedSession ?? selected)}</span>

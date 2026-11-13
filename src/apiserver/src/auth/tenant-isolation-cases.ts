@@ -127,6 +127,8 @@ export interface Tenant {
   wikiTopicSlug: string;
   /** A Feishu group connected to the account's app (docs/feishu-bot-design.md §8.1). */
   feishuChatRouteId: string;
+  /** Another account, invited to reply in `sessionId` (docs/session-guests-design.md): its email, as the owner invites it. */
+  guestEmail: string;
   /** For /admin/*: a user an administrator acts on (with a profile photo), one of its tokens, a global provider. */
   adminSubjectId: string;
   adminSubjectTokenId: string;
@@ -152,6 +154,8 @@ export interface Tenant {
     tagId: string;
     shareLinkId: string;
     feishuChatRouteId: string;
+    /** A second guest of `sessionId`, whom the owner's remove takes out. */
+    guestUserId: string;
     listId: string;
     taskId: string;
   };
@@ -335,6 +339,12 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   },
   'POST /projects/:id/pause': { request: (of) => ({ params: { id: of.projectId } }) },
   'POST /projects/:id/resume': { request: (of) => ({ params: { id: of.projectId } }) },
+  'POST /projects/:id/criteria/:criterionKey/move': {
+    request: (of) => ({
+      params: { id: of.projectId, criterionKey: of.projectCriterionId },
+      body: { newProject: { title: 'census follow-up' } },
+    }),
+  },
   'POST /projects/:id/sessions/complete': { request: (of) => ({ params: { id: of.projectId } }) },
   'GET /projects/:id/acceptance/criteria-decisions/pending': { request: (of) => ({ params: { id: of.projectId } }) },
   'POST /projects/:id/acceptance/criteria-decisions/:intentId': {
@@ -525,6 +535,12 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'POST /runners/:id/engine-update': { request: (of) => ({ params: { id: of.runnerId } }) },
   'POST /runners/:id/refresh-models': { request: (of) => ({ params: { id: of.runnerId } }) },
   'POST /runners/:id/self-update': { request: (of) => ({ params: { id: of.runnerId } }) },
+  'POST /runners/:id/self-update/postpone': {
+    request: (of) => ({ params: { id: of.runnerId }, body: { until: new Date(Date.now() + 3_600_000).toISOString(), timeZone: 'UTC' } }),
+  },
+  'POST /runners/:id/self-update/now': {
+    request: (of) => ({ params: { id: of.runnerId }, body: { interruptTurns: true } }),
+  },
   'POST /runners/:id/region-check': { request: (of) => ({ params: { id: of.runnerId } }) },
   'POST /runners/:id/claude-history': { request: (of) => ({ params: { id: of.runnerId }, body: { workDir: '/census' } }) },
   'GET /runners/:id/claude-history': { request: (of) => ({ params: { id: of.runnerId }, query: { workDir: '/census' } }) },
@@ -581,6 +597,11 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     nested: ['turnId'],
   },
   'POST /sessions/:id/resume': { request: (of) => ({ params: { id: of.sessionId }, body: turn('resume') }) },
+  // Session guests (docs/session-guests-design.md §7): the owner's People routes on A's session. The guest door is read
+  // by hand (TENANT_ISOLATION_BY_HAND): the account that owns the session is no guest of it.
+  'GET /sessions/:id/guests': { request: (of) => ({ params: { id: of.sessionId } }) },
+  'POST /sessions/:id/guests': { request: (of) => ({ params: { id: of.sessionId }, body: { email: of.guestEmail } }) },
+  'DELETE /sessions/:id/guests/:userId': { request: (of) => ({ params: { id: of.sessionId, userId: of.spare.guestUserId } }) },
   'PATCH /sessions/:id/config': { request: (of) => ({ params: { id: of.sessionId }, body: { effort: 'low' } }) },
   'PATCH /sessions/:id/account': { request: (of) => ({ params: { id: of.sessionId }, body: { account: 'automatic' } }) },
   'POST /sessions/:id/interrupt': { request: (of) => ({ params: { id: of.sessionId }, body: {} }) },
@@ -820,6 +841,25 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
  * that shows the route finds its object only under the caller's own account. Kept as short as it can be.
  */
 export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  // Session guests (docs/session-guests-design.md §7).
+  'GET /guest-sessions/:id':
+    "every guest route reads the caller's live session_guest row on that session first (session-guests/session-guests.service.ts:236) and answers the one 404 without it, so a session B was never invited to — A's included — is refused before anything is read or written; A, its owner, is no guest of it either, so neither account's request can be stood up from the census fixture. session-guests.pg.spec.ts (1) sends the invited guest's and a stranger's",
+  'GET /guest-sessions/:id/events':
+    "every guest route reads the caller's live session_guest row on that session first (session-guests/session-guests.service.ts:236) and answers the one 404 without it, so a session B was never invited to — A's included — is refused before anything is read or written; A, its owner, is no guest of it either, so neither account's request can be stood up from the census fixture. session-guests.pg.spec.ts (1) sends the invited guest's and a stranger's",
+  'GET /guest-sessions/:id/events/:seq':
+    "every guest route reads the caller's live session_guest row on that session first (session-guests/session-guests.service.ts:236) and answers the one 404 without it, so a session B was never invited to — A's included — is refused before anything is read or written; A, its owner, is no guest of it either, so neither account's request can be stood up from the census fixture. session-guests.pg.spec.ts (1) sends the invited guest's and a stranger's",
+  'POST /guest-sessions/:id/turns':
+    "every guest route reads the caller's live session_guest row on that session first (session-guests/session-guests.service.ts:236) and answers the one 404 without it, so a session B was never invited to — A's included — is refused before anything is read or written; A, its owner, is no guest of it either, so neither account's request can be stood up from the census fixture. session-guests.pg.spec.ts (1) sends the invited guest's and a stranger's",
+  'DELETE /guest-sessions/:id/turns/:turnId':
+    "every guest route reads the caller's live session_guest row on that session first (session-guests/session-guests.service.ts:236) and answers the one 404 without it, so a session B was never invited to — A's included — is refused before anything is read or written; A, its owner, is no guest of it either, so neither account's request can be stood up from the census fixture. session-guests.pg.spec.ts (1) sends the invited guest's and a stranger's; the turn is then looked up as the guest's own (session-guests/session-guests.service.ts:407)",
+  'POST /guest-sessions/:id/turns/:turnId/steer':
+    "every guest route reads the caller's live session_guest row on that session first (session-guests/session-guests.service.ts:236) and answers the one 404 without it, so a session B was never invited to — A's included — is refused before anything is read or written; A, its owner, is no guest of it either, so neither account's request can be stood up from the census fixture. session-guests.pg.spec.ts (1) sends the invited guest's and a stranger's; the turn is then looked up as the guest's own (session-guests/session-guests.service.ts:407)",
+  'POST /guest-sessions/:id/leave':
+    "every guest route reads the caller's live session_guest row on that session first (session-guests/session-guests.service.ts:236) and answers the one 404 without it, so a session B was never invited to — A's included — is refused before anything is read or written; A, its owner, is no guest of it either, so neither account's request can be stood up from the census fixture. session-guests.pg.spec.ts (1) sends the invited guest's and a stranger's",
+  // ── criteria met by confirmation (0545) ────────────────────────────────────────────────────────
+  'POST /projects/:id/criteria/:criterionId/confirmations': 'the criterion is read by (id, the project, the caller as the project\'s owner) before anything is read or written, so another account\'s project or criterion answers 404 (projects/project-criterion-confirmation.service.ts:244); project-criterion-confirmation.spec.ts reads the door',
+  'POST /projects/:id/criteria/:criterionId/confirmations/withdraw': 'the criterion is read by (id, the project, the caller as the project\'s owner) before anything is read or written, so another account\'s project or criterion answers 404 (projects/project-criterion-confirmation.service.ts:244), and the UPDATE is keyed by that definition id',
+  'POST /projects/:id/criteria/:criterionId/checks': 'the criterion is read by (id, the project, the caller as the project\'s owner) before anything is read or written, so another account\'s project or criterion answers 404 (projects/project-criterion-confirmation.service.ts:244); the check task is then filed through TasksService.create under the same owner',
   'GET /owner-requests/:id':
     'the request is read by (id, the caller) and nothing else, so another account\'s id answers 404 (owner-requests/owner-requests.service.ts:193); owner-requests.pg.spec.ts (f) sends it',
   'POST /owner-requests/:id/done':
@@ -1001,6 +1041,14 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
           { id: of.projectCriterionId, text: 'the census holds elsewhere', verificationMethod: 'the census' },
         ],
       },
+    }),
+  },
+  // The destination is read under the owner's own key: another account's project is one that names
+  // nothing (404), before anything is moved.
+  'POST /projects/:id/criteria/:criterionKey/move body toProjectId': {
+    request: (of, mine) => ({
+      params: { id: mine.projectId, criterionKey: mine.projectCriterionId },
+      body: { toProjectId: of.projectId },
     }),
   },
   'POST /projects/:id/coordinator body workspaceId': {
@@ -1303,6 +1351,10 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
 
 /** Ids a request carries that name nothing of an account's to reach, each with why and where that is so. */
 export const TENANT_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
+  'POST /projects/:id/criteria/:criterionId/confirmations body attachmentIds[]':
+    'counted among the caller\'s own uploads (attachment by id and owner) before anything is written; one that is not answers 404 (projects/project-criterion-confirmation.service.ts:281)',
+  'POST /projects/:id/criteria/:criterionId/checks body workspaceId':
+    'handed to TasksService.create as the check task\'s assignee, which reads the workspace by (id, the caller) and refuses another account\'s 403 before any row is written (tasks/tasks.service.ts:2606)',
   'POST /owner-requests/:id/secret body savedSecretId':
     'read by (id, the caller) before anything is written, so another account\'s saved secret is the 404 of one that does not exist (owner-requests/owner-secrets.service.ts:217); owner-secrets.pg.spec.ts (h) sends another account\'s',
   'POST /tasks/:id/execute body triggerId':

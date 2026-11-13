@@ -131,6 +131,11 @@ import {
 import { agentProviderSeed, lastProviderByWorkspace } from '../workspaces/workspace-provider';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  reprojectAfterSettledChecks,
+  settleChecksOfEndedRun,
+  type SettledCriterionCheck,
+} from '../projects/criterion-check-ended';
+import {
   TaskWorkFacts,
   isExecutionClaimConflict,
   isLockNotAvailable,
@@ -165,6 +170,7 @@ import {
   treeActiveTurns,
   treeCeiling,
 } from '../common/session-tree-sql';
+import { queuedRunnerUpdateOf } from '../common/runner-self-update';
 import { QueueService } from '../queue/queue.service';
 import { mergeDispatchGate } from '../projects/task-checkpoint.service';
 import {
@@ -3846,6 +3852,7 @@ export class SessionsService {
       pinnedAt: Date | null;
       folderId: string | null;
       shared: boolean;
+      hasGuests: boolean;
       tags: { id: string; name: string; color: string; isSystem: boolean; position: number }[];
       runningBgCount: number;
       runningBgShells: string[];
@@ -3880,6 +3887,9 @@ export class SessionsService {
       queuedReason: string | null;
       queuedActive: number | null;
       queuedLimit: number | null;
+      queuedRunnerSelfUpdate: Prisma.JsonValue;
+      queuedRunnerTurns: Array<{ id: string; title: string | null }> | null;
+      queuedSince: Date | null;
     };
     const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`
       SELECT
@@ -3961,6 +3971,12 @@ export class SessionsService {
              AND sl.revoked_at IS NULL
              AND (sl.expires_at IS NULL OR sl.expires_at > now())
         )) AS "shared",
+        -- Whether anyone the owner invited can reply here now (session_guest, 0560): the list's
+        -- two-person icon beside the globe (docs/session-guests-design.md §3).
+        EXISTS (
+          SELECT 1 FROM session_guest sg
+           WHERE sg.session_id = s.id AND sg.removed_at IS NULL
+        ) AS "hasGuests",
         COALESCE((
           SELECT json_agg(json_build_object(
                    'id', st.id, 'name', st.name, 'color', st.color,
@@ -4049,7 +4065,25 @@ export class SessionsService {
         ) END AS "landing",
         q.reason  AS "queuedReason",
         q.active  AS "queuedActive",
-        q."limit" AS "queuedLimit"
+        q."limit" AS "queuedLimit",
+        -- What the runner_updating explanation names (docs/runner-update-drain-design.md §3): the
+        -- release it is updating to, the owner's turns it waits for, and the clock "Waiting 38 min"
+        -- counts from. Read only for a row that gate holds; every other row pays nothing for it.
+        CASE WHEN q.reason = 'runner_updating' THEN r.self_update END AS "queuedRunnerSelfUpdate",
+        CASE WHEN q.reason = 'runner_updating' THEN COALESCE((
+          SELECT json_agg(json_build_object('id', busy.id, 'title', busy.title)
+                          ORDER BY busy.last_turn_at, busy.id)
+            FROM "session" busy
+           WHERE busy.assigned_runner_id = s.assigned_runner_id
+             AND busy.status = 'RUNNING'
+             -- Named only to their owner; the count in queuedActive still covers every turn.
+             AND busy.owner_id = s.owner_id
+             AND busy.deleted_at IS NULL
+        ), '[]'::json) END AS "queuedRunnerTurns",
+        -- The runner names the drain's start once it reports one; until then the session's own
+        -- wait is the nearest clock: last_turn_at moved when it went PENDING.
+        CASE WHEN q.reason = 'runner_updating'
+          THEN COALESCE(s.last_turn_at, s.created_at) END AS "queuedSince"
       FROM session s
       LEFT JOIN workspace a  ON a.id = s.workspace_id
       LEFT JOIN runner r ON r.id = s.assigned_runner_id
@@ -4074,6 +4108,11 @@ export class SessionsService {
               -- offline there.
               WHEN r.id IS NULL OR ${runnerOfflineSql('r')}
                 THEN 'runner_offline'
+              -- Second, for the offline gate's reason: a runner draining for a self-update claims
+              -- nothing whatever its counts say (runner drainForUpdate), so naming a capacity gate
+              -- here would send the reader to the wrong cause. Ends only when the update does.
+              WHEN r.heartbeat_draining IS TRUE
+                THEN 'runner_updating'
               WHEN ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)} >= r.max_concurrent
                 THEN 'runner_at_capacity'
               WHEN s.root_session_id IS NOT NULL
@@ -4098,6 +4137,8 @@ export class SessionsService {
         LATERAL (
           SELECT
             CASE g.reason
+              -- The turns the drain waits for: every one in flight on the runner.
+              WHEN 'runner_updating'    THEN g.runner_active
               WHEN 'runner_at_capacity' THEN g.runner_active
               WHEN 'tree_at_capacity'   THEN g.tree_active
               WHEN 'batch_at_capacity'  THEN g.batch_active
@@ -4166,6 +4207,7 @@ export class SessionsService {
         pinnedAt: r.pinnedAt,
         folderId: r.folderId,
         shared: r.shared === true,
+        hasGuests: r.hasGuests === true,
         tags: r.tags,
         runningBgCount: r.runningBgCount,
         runningBgJobCount: freshRunningBgJobs(r.runningBgJobs, r.runningBgJobActivity).length,
@@ -4202,6 +4244,8 @@ export class SessionsService {
         queuedReason: r.queuedReason,
         queuedActive: r.queuedActive == null ? null : Number(r.queuedActive),
         queuedLimit: r.queuedLimit == null ? null : Number(r.queuedLimit),
+        // Only beside queuedReason 'runner_updating'; null on every other row.
+        queuedRunnerUpdate: queuedRunnerUpdateOf(r),
       }),
     );
     // A turn blocked on a permission prompt keeps the session generating, so the list can't tell
@@ -7420,6 +7464,13 @@ export class SessionsService {
     return { ok: true };
   }
 
+  /** Tell the runner and the session's readers that its queue changed: what a withdrawal outside cancelQueuedTurn
+   *  (a session guest's turns going with their invitation, session-guests.service.ts) announces after its commit. */
+  announceQueuedTurnsChanged(id: string) {
+    this.realtime.notifyInbox(id);
+    this.realtime.publishQueuedTurnsChanged(id);
+  }
+
   /**
    * Wait for the runner to say what came of a `withdraw` turn, and answer the person with it. The
    * steer is gone only when the engine said it dropped it; everything else is a refusal naming why.
@@ -8386,11 +8437,13 @@ export class SessionsService {
   ) {
     // Retried whole. Every terminal transition is decided from the Session row under its lock, so a
     // re-run sees whichever end actually committed rather than re-applying one that did not.
-    return withTransactionRetry(
+    const ended = await withTransactionRetry(
       this.prisma,
       (tx) => this.transitionEndLocked(tx, ownerId, sessionId, reason, lifecycle, requireNoProjectBinding),
       loggedRetry(this.logger, 'sessions.transitionEnd'),
     );
+    await reprojectAfterSettledChecks(this.prisma, ended.checksSettled, this.logger);
+    return ended;
   }
 
   /**
@@ -8413,6 +8466,8 @@ export class SessionsService {
     filingState: SessionFilingState;
     endReason: SessionEndReason | null;
     projectBound: boolean;
+    /** The Agent checks this end settled, for their projects' DONE after the commit. */
+    checksSettled?: SettledCriterionCheck[];
   }> {
     const locked = await tx.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM "session"
@@ -8516,6 +8571,12 @@ export class SessionsService {
     // its task. The requests queued here are left to the end itself: the status write below (or the
     // finalize after it) closes them RECIPIENT_ENDED, which wins over UNDELIVERED (session-request.ts).
     await settleUnrunSessionRequests(tx, sessionId, { code: 'SESSION_ENDED', closesRequests: false, retryArmed: false });
+    // An Agent check this run was, ended before its verdict (projects/criterion-check-ended.ts).
+    const checksSettled = await settleChecksOfEndedRun(
+      tx,
+      { sessionId, taskId: session.taskId },
+      `its run was ended (${reason})`,
+    );
     if (session.status === RunStatus.PENDING) {
       await tx.session.update({
         where: { id: sessionId },
@@ -8577,6 +8638,7 @@ export class SessionsService {
       filingState,
       endReason: reason,
       projectBound: false,
+      checksSettled,
     };
   }
 
@@ -9175,6 +9237,12 @@ export class SessionsService {
        */
       senderSessionId?: string;
       /**
+       * Who outside Orbit sent the turn — see `createTurn`'s own. Carried onto both branches: a
+       * guest's message to an ended session revives it (docs/session-guests-design.md §5, D5) and is
+       * no less the guest's for that.
+       */
+      externalSender?: ExternalTurnSender;
+      /**
        * What rides on the turn — see `createTurn`'s own. Carried onto both branches for the reason
        * `senderSessionId` is: a request is no less a request for having woken its recipient up.
        */
@@ -9308,6 +9376,7 @@ export class SessionsService {
         fence: opts?.fence,
         participateSendTransaction: opts?.participateSendTransaction,
         senderSessionId: opts?.senderSessionId,
+        externalSender: opts?.externalSender,
         onTurnWritten: opts?.onTurnWritten,
         requestFingerprint,
       });
@@ -9600,6 +9669,7 @@ export class SessionsService {
         clientTurnId: dto.clientTurnId,
         requestFingerprint,
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
+        ...externalSenderColumns(opts?.externalSender),
         ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
@@ -9652,7 +9722,9 @@ export class SessionsService {
           // Previewed from enqueue, as in createTurn: a revive waits for a slot like any other
           // turn, and until the runner reports it the row would show the reply from before. With
           // its sender, as there.
-          ...(dto.content ? pendingMessageColumns(dto.content, sentBy, sentByOrbit) : {}),
+          ...(dto.content
+            ? pendingMessageColumns(dto.content, sentBy, sentByOrbit, externalSenderOf(externalSenderColumns(opts?.externalSender)))
+            : {}),
           mergeStatus: null,
           mergeOperationId: null,
           mergeOperationOwner: null,

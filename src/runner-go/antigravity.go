@@ -1273,9 +1273,11 @@ func runAntigravitySessionProcess(ctx context.Context, shutdownCtx context.Conte
 			shutdownDone = nil
 			draining = true
 			stopInbox()
-			drainTimer = time.After(shutdownDrainTimeout)
+			drainTimer = time.After(stopDrainBudget(shutdownCtx, shutdownDrainTimeout))
 		case <-drainTimer:
 			logln("Antigravity drain timeout for", job.SessionID+"; stopping the running turn")
+			// Marked, as the Claude drain marks its own (watchShutdownDrain).
+			emit(evInterrupt, stopInterruptPayload(shutdownCtx))
 			return stCancelled, true, false
 		case <-d.stopTimerC():
 			d.stopTimer = nil

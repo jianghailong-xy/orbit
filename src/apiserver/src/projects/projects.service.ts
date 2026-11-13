@@ -29,6 +29,8 @@ import {
   type SessionFilingState,
   type SessionRunState,
   toUuid,
+  type MoveCriterionRefusal,
+  type MoveCriterionResult,
 } from '@orbit/shared';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
@@ -67,9 +69,14 @@ import {
   MAX_PROJECT_ACCEPTANCE_VERIFICATION_METHOD_CHARS,
   REMOVED_CRITERION_WIRING_FIELDS,
   removedCriterionWiring,
+  type MoveCriterionDto,
   UpdateProjectDto,
   type UpdateProjectAcceptanceCriterionDto,
 } from './dto';
+import { planCriterionMove, readCriterionMoveFacts, writeCriterionMove } from './criterion-move';
+import { readCriterionMoveRecord } from './criterion-move-record';
+import { settleTaskSegmentAfterMove } from './landing-session';
+import { lockOwnerTaskGraph, orderedIds } from '../common/lock-order';
 import {
   CRITERIA_DECISION_ALREADY_SETTLED,
   CRITERIA_DECISION_BASE_SEAL_MOVED,
@@ -153,6 +160,7 @@ import {
   type CriterionSatisfaction,
   readCriterionSatisfaction,
 } from './project-criterion-satisfaction';
+import { CRITERION_SATISFIED_BY, type CriterionSatisfiedByValue } from './project-criterion-confirmation';
 import {
   type CriterionLanding,
   landingBranchesFor,
@@ -213,7 +221,11 @@ import {
 } from './project-pause';
 import { projectMoves } from '../tasks/project-pause-dispatch';
 import { readProjectTaskWorkStates, type ProjectTaskWorkStateFields } from './project-task-work-state';
-import { taskNotRetiredSql, verificationFailureIsHistorySql } from '../tasks/task-supersession';
+import {
+  isLockNotAvailable,
+  taskNotRetiredSql,
+  verificationFailureIsHistorySql,
+} from '../tasks/task-supersession';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
   MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS,
@@ -257,6 +269,8 @@ export const COORDINATOR_MESSAGE_UNDELIVERED_CODE = 'COORDINATOR_MESSAGE_UNDELIV
  * start is refused before it begins, and starting with Automatic off is one of the two ways out.
  */
 export const START_COORDINATOR_UNAVAILABLE = 'START_COORDINATOR_UNAVAILABLE';
+/** The non-code mark written from a session that does not coordinate the project (`nonCodeWriter`). */
+export const NON_CODE_COORDINATOR_ONLY = 'NON_CODE_COORDINATOR_ONLY';
 
 /**
  * Which press `coordinator` is answering.
@@ -503,6 +517,7 @@ const ACCEPTANCE_DEFINITIONS_INCLUDE = {
     contentHash: true,
     semanticRevision: true,
     semanticHash: true,
+    satisfiedBy: true,
   },
 };
 
@@ -523,6 +538,7 @@ interface ResolvedAcceptanceEdit {
     completionCriterionOverrideReason: string | null;
     revision: number;
     contentHash: string;
+    satisfiedBy: CriterionSatisfiedByValue;
   }>;
   desired: Array<{
     id: string;
@@ -531,6 +547,8 @@ interface ResolvedAcceptanceEdit {
     text: string;
     verificationMethod: string;
     completionCriterionOverrideReason: string | null;
+    /** Resolved: what the request sent, or the row's own mode when it sent none. */
+    satisfiedBy: CriterionSatisfiedByValue;
   }>;
   direction: CriteriaEditDirection;
 }
@@ -657,6 +675,7 @@ type WithAcceptanceDefinitions = {
     contentHash: string;
     semanticRevision: number;
     semanticHash: string;
+    satisfiedBy?: CriterionSatisfiedByValue;
   }>;
 };
 
@@ -677,6 +696,8 @@ export function acceptanceCriteriaItemsOf(
     text: criterion.text,
     verificationMethod: criterion.verificationMethod,
     completionCriterionOverrideReason: criterion.completionCriterionOverrideReason ?? null,
+    // How it is met (migration 0545): by its tasks, or by a confirmation of its current revision.
+    satisfiedBy: criterion.satisfiedBy ?? 'TASKS',
     // The name `criterionKey` carries, beside the revision that says which wording it names.
     // Two fields rather than one content hash: `criterionKeyOf` has why. `contentHash` stays on
     // the projection — it is still what the row stores — and nothing derives the key from it.
@@ -724,8 +745,10 @@ function withAcceptanceDefinitions<T extends WithAcceptanceDefinitions>(project:
  */
 function criterionAnswer(
   derived: CriterionSatisfaction | undefined,
-): Partial<Pick<CriterionSatisfaction, 'satisfied' | 'unmet'>> {
-  return derived === undefined ? {} : { satisfied: derived.satisfied, unmet: derived.unmet };
+): Partial<Pick<CriterionSatisfaction, 'satisfied' | 'unmet' | 'confirmation'>> {
+  return derived === undefined
+    ? {}
+    : { satisfied: derived.satisfied, unmet: derived.unmet, confirmation: derived.confirmation };
 }
 
 /**
@@ -1279,11 +1302,14 @@ export class ProjectsService {
       text: string;
       verificationMethod: string;
       completionCriterionOverrideReason?: string | null;
+      satisfiedBy?: CriterionSatisfiedByValue;
     }>,
   ): Array<{
     text: string;
     verificationMethod: string;
     completionCriterionOverrideReason: string | null;
+    /** Undefined when the request did not say: a retained criterion keeps its mode. */
+    satisfiedBy: CriterionSatisfiedByValue | undefined;
   }> {
     if (!Array.isArray(items)) {
       throw new BadRequestException('acceptanceCriteriaItems must be an array');
@@ -1356,10 +1382,17 @@ export class ProjectsService {
           `most ${MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS} characters`,
         );
       }
+      const satisfiedBy = item?.satisfiedBy ?? undefined;
+      if (satisfiedBy !== undefined && !CRITERION_SATISFIED_BY.includes(satisfiedBy)) {
+        throw new BadRequestException(
+          `acceptance criterion ${index + 1} satisfiedBy must be one of ${CRITERION_SATISFIED_BY.join(', ')}`,
+        );
+      }
       return {
         text,
         verificationMethod,
         completionCriterionOverrideReason,
+        satisfiedBy,
       };
     });
     const total = normalized.reduce((sum, criterion) => sum + criterion.text.length, 0);
@@ -1436,6 +1469,7 @@ export class ProjectsService {
         completionCriterionOverrideReason: true,
         revision: true,
         contentHash: true,
+        satisfiedBy: true,
       },
     });
     const byId = new Map(existing.map((criterion) => [criterion.id, criterion]));
@@ -1461,7 +1495,15 @@ export class ProjectsService {
         throw new BadRequestException(`acceptance criterion id ${supplied ?? id} is repeated`);
       }
       used.add(id);
-      return { ...criterion, id, retainedId: supplied === undefined ? null : id, ordinal: index + 1 };
+      return {
+        ...criterion,
+        id,
+        retainedId: supplied === undefined ? null : id,
+        ordinal: index + 1,
+        // Not sent keeps what the row has, so a caller that predates the field and restates the
+        // set cannot flip an owner's CONFIRMATION criterion back to TASKS without saying so.
+        satisfiedBy: criterion.satisfiedBy ?? byId.get(id)?.satisfiedBy ?? 'TASKS',
+      };
     });
     // Classified against the rows as they still stand, which is the only state they are ever
     // classified against: nothing below this line writes.
@@ -1512,6 +1554,7 @@ export class ProjectsService {
             text: criterion.text,
             verificationMethod: criterion.verificationMethod,
             completionCriterionOverrideReason: criterion.completionCriterionOverrideReason,
+            satisfiedBy: criterion.satisfiedBy,
             contentHash,
             revision:
               previous.text === criterion.text
@@ -1529,6 +1572,7 @@ export class ProjectsService {
             text: criterion.text,
             verificationMethod: criterion.verificationMethod,
             completionCriterionOverrideReason: criterion.completionCriterionOverrideReason,
+            satisfiedBy: criterion.satisfiedBy,
             revision: 1,
             contentHash,
           },
@@ -1587,6 +1631,9 @@ export class ProjectsService {
       text: criterion.text,
       verificationMethod: criterion.verificationMethod,
       completionCriterionOverrideReason: criterion.completionCriterionOverrideReason,
+      // Only a CONFIRMATION criterion carries the field, so a TASKS-only proposal's digest is the
+      // one it had before migration 0545.
+      ...(criterion.satisfiedBy === 'CONFIRMATION' ? { satisfiedBy: criterion.satisfiedBy } : {}),
     })));
     const actionDigest = criteriaWeakeningActionDigest(request);
     // The seal of the set that stands, computed off the same rows and by the same function the
@@ -1991,6 +2038,9 @@ export class ProjectsService {
             ...(criterion.completionCriterionOverrideReason === null
               ? {}
               : { completionCriterionOverrideReason: criterion.completionCriterionOverrideReason }),
+            // A proposal states every criterion's mode: CONFIRMATION when it carries the field,
+            // TASKS when it does not (a proposal filed before 0545 knew no other mode).
+            satisfiedBy: criterion.satisfiedBy ?? 'TASKS',
           })),
         );
         await ProjectsService.replaceAcceptanceDefinitions(
@@ -2670,6 +2720,7 @@ export class ProjectsService {
       blockers,
       standardSetConfirmation,
       mainBranchMemory,
+      moveRecord,
     ] = await Promise.all([
       // One lookup by primary key, not a tally of this project's tasks.
       //
@@ -2728,6 +2779,10 @@ export class ProjectsService {
       // one statement keyed by the project: what a coordinator reads before it asks to start, to
       // know whether it has to suggest one.
       readMainBranchMemory(this.prisma, id),
+      // And the criterion move record (board 02 G/I): the criteria this project moved out to a
+      // follow-up, and where each of its own came from. One statement over the move activity rows,
+      // found by 0555's partial indexes and bounded by the moves, not by anything else the project holds.
+      readCriterionMoveRecord(this.prisma, ownerId, id, criterionKeyOf),
     ]);
     const landingAnswers = criterionLandingWithReasons(
       landingFacts,
@@ -2775,7 +2830,11 @@ export class ProjectsService {
         // is where the reason itself leaves the server, so that a reader who is shown a project
         // that will not settle is shown which criterion, which conversation, and what to do.
         ...criterionIndependenceAnswer(independent.get(item.id)),
+        // Where the criterion came from, when it was moved here from another project; else null.
+        movedFrom: moveRecord.movedFrom.get(item.id) ?? null,
       })),
+      // The criteria this project moved out to a follow-up, in the order they stood here.
+      criteriaMovedOut: moveRecord.movedOut,
       blockers,
       integration: {
         ...projectIntegrationView(codebase, project.exceptionEscalationSeconds),
@@ -2790,6 +2849,7 @@ export class ProjectsService {
         landingAnswers,
         independence,
         standardSetConfirmation,
+        project.nonCode,
       ),
     };
   }
@@ -3604,6 +3664,37 @@ export class ProjectsService {
    * owner has answered covers exactly this change (`assertIntegrationIsWrittenByItsOwner`). A token
    * stays refused the whole object, card or no card — it is not a session, so there is nothing for
    * a card to be bound to — which is the one asymmetry here. */
+  /**
+   * Who writes the non-code mark on this request, or null when it carries none. The account owner
+   * (no acting session) or the conversation this project is coordinated from (COORDINATOR, with its
+   * session id); any other session is refused whole before anything is written — the mark decides
+   * whether a project reads landing at all, so it is not a side effect of some task's edit.
+   */
+  static nonCodeWriter(
+    dto: Pick<UpdateProjectDto, 'nonCode' | 'nonCodeReason'>,
+    actingSessionId: string | undefined,
+    coordinatorSessionId: string | null,
+  ): { by: 'OWNER' | 'COORDINATOR'; sessionId: string | null } | null {
+    if (dto.nonCode === undefined) {
+      if (dto.nonCodeReason !== undefined && dto.nonCodeReason !== null) {
+        throw new BadRequestException(
+          'nonCodeReason is the reason for the non-code mark: send it with nonCode, not on its own',
+        );
+      }
+      return null;
+    }
+    const session = actingSessionId?.trim();
+    if (!session) return { by: 'OWNER', sessionId: null };
+    if (session !== coordinatorSessionId) {
+      throw new ForbiddenException({
+        code: NON_CODE_COORDINATOR_ONLY,
+        message: 'Only the conversation this project is coordinated from, or the account owner, '
+          + 'may mark it non-code or clear the mark: nothing was written.',
+      });
+    }
+    return { by: 'COORDINATOR', sessionId: session };
+  }
+
   async update(
     ownerId: string,
     id: string,
@@ -3625,6 +3716,7 @@ export class ProjectsService {
       );
     }
     ProjectsService.assertStatusIsNotWrittenFromASession(dto, actingSessionId);
+    const nonCodeWriter = ProjectsService.nonCodeWriter(dto, actingSessionId, current.coordinatorSessionId);
     // The card this write rests on, when it carries a merge check. Read BEFORE the transaction
     // with the rest of the guards, so a request no card covers is refused having written nothing.
     const mergeCheckApproval = await this.assertIntegrationIsWrittenByItsOwner(
@@ -3668,6 +3760,15 @@ export class ProjectsService {
         : {}),
       ...(dto.sessionBudgetPerDay !== undefined
         ? { sessionBudgetPerDay: dto.sessionBudgetPerDay }
+        : {}),
+      ...(nonCodeWriter
+        ? {
+          nonCode: dto.nonCode,
+          nonCodeSetBy: nonCodeWriter.by,
+          nonCodeSetBySessionId: nonCodeWriter.sessionId,
+          nonCodeSetAt: new Date(),
+          nonCodeReason: dto.nonCodeReason?.trim() || null,
+        }
         : {}),
       // One bump per write of the authorization set, however many of its fields the write carried:
       // a revision is a version of that set, not a count of columns. `increment` rather than a
@@ -3882,7 +3983,8 @@ export class ProjectsService {
       // this write is the only thing that moves them — when it moves them at all. A HELD edit
       // moved none of them, so there is nothing to re-project and no reason to re-decide a column
       // the owner may have just written by hand.
-      if (dto.acceptanceCriteriaItems !== undefined && !held) {
+      // So is the non-code mark: a marked project's criteria are no longer withheld for landing.
+      if ((dto.acceptanceCriteriaItems !== undefined && !held) || nonCodeWriter) {
         await this.reprojectProjectStatus(ownerId, id);
       }
       // Spread rather than nested, and only when there IS one: a caller whose edit was applied
@@ -3950,6 +4052,165 @@ export class ProjectsService {
       loggedRetry(this.logger, 'projects.resume'),
     );
     return this.afterPause(ownerId, id, 'RESUME', written);
+  }
+
+  /**
+   * `POST /projects/:id/criteria/:criterionKey/move` — the done card's "Move to a follow-up…": one
+   * unmet criterion of this project and its serving tasks that are not DONE or CANCELLED, moved to
+   * `toProjectId` or to a project this move creates (`newProject`), in ONE transaction.
+   * `criterion-move.ts` says what moves, what stays and every refusal.
+   *
+   * The owner's alone: a request made from a session is refused 403 before anything is read. No
+   * session may move work across projects without the owner's answer (project_crossings), and this
+   * move IS that answer, so there is no coordinator door to it.
+   *
+   * Locks, in the canonical order: the owner row (rank 10, the task-graph mutex, which also covers the
+   * new project's foreign key), both projects FOR NO KEY UPDATE sorted (40), the source's serving
+   * tasks FOR UPDATE NOWAIT sorted (50, CRITERION_MOVE_BUSY rather than a wait), and then the rows
+   * written under them. Every refusal is decided under those locks before the first write.
+   */
+  async moveCriterion(
+    ownerId: string,
+    projectId: string,
+    criterionKey: string,
+    dto: MoveCriterionDto,
+    actingSessionId?: string,
+    credential?: AuthCredential,
+  ): Promise<MoveCriterionResult> {
+    if (actingSessionId?.trim()) {
+      throw new ForbiddenException({
+        code: 'CRITERION_MOVE_OWNER_ONLY',
+        message: 'Moving a criterion to another project is the account owner\'s own decision, so a '
+          + 'request made from a session is refused. Nothing was written.',
+      });
+    }
+    const badTarget = (message: string) => new BadRequestException({
+      code: 'CRITERION_MOVE_TARGET_REQUIRED' satisfies MoveCriterionRefusal, message,
+    });
+    const toProjectId = typeof dto?.toProjectId === 'string' && dto.toProjectId.trim()
+      ? dto.toProjectId.trim()
+      : null;
+    const newProject = dto?.newProject ?? null;
+    if ((toProjectId === null) === (newProject === null)) {
+      throw badTarget('name exactly one destination: toProjectId, or newProject with a title');
+    }
+    const newTitle = typeof newProject?.title === 'string' ? newProject.title.trim() : '';
+    if (newProject && !newTitle) throw badTarget('the new project needs a title');
+    let criterionId: string;
+    let targetId: string | null;
+    try {
+      criterionId = toUuid(criterionKey);
+      targetId = toProjectId === null ? null : toUuid(toProjectId);
+    } catch {
+      throw new NotFoundException('no such criterion or project');
+    }
+    if (targetId === projectId) {
+      throw new BadRequestException({
+        code: 'CRITERION_MOVE_SAME_PROJECT' satisfies MoveCriterionRefusal,
+        message: 'the criterion is already in this project; choose another one or create a new one',
+      });
+    }
+
+    const moved = await withTransactionRetry(this.prisma, async (tx) => {
+      await lockOwnerTaskGraph(tx, ownerId);
+      const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT "id" FROM "project"
+         WHERE "id" = ANY(${orderedIds([projectId, targetId])}::uuid[])
+           AND "owner_id" = ${ownerId}::uuid
+         ORDER BY "id"
+         FOR NO KEY UPDATE`);
+      if (locked.length !== (targetId ? 2 : 1)) throw new NotFoundException('project not found');
+      const definition = await tx.projectAcceptanceCriterionDefinition.findFirst({
+        where: { id: criterionId, projectId },
+        select: { id: true },
+      });
+      if (!definition) throw new NotFoundException('this project states no such criterion');
+
+      const serving = await tx.task.findMany({
+        where: { ownerId, projectId, criterionDefinitionId: criterionId },
+        select: { id: true },
+      });
+      try {
+        await tx.$queryRaw`
+          SELECT "id" FROM "task"
+           WHERE "id" = ANY(${orderedIds(serving.map((task) => task.id))}::uuid[])
+           ORDER BY "id"
+           FOR UPDATE NOWAIT`;
+      } catch (error) {
+        if (!isLockNotAvailable(error)) throw error;
+        throw new ConflictException({
+          code: 'CRITERION_MOVE_BUSY' satisfies MoveCriterionRefusal,
+          message: 'a task serving this criterion is being written right now (a run starting on it, '
+            + 'most likely); nothing was written — try again in a moment',
+          taskIds: serving.map((task) => task.id),
+          itemIds: [],
+        });
+      }
+
+      const facts = await readCriterionMoveFacts(tx, ownerId, { sourceId: projectId, targetId, criterionId });
+      if (!facts) throw new NotFoundException('this project states no such criterion');
+      const decided = planCriterionMove(facts);
+      if ('refusal' in decided) {
+        const { code, message, taskIds, itemIds } = decided.refusal;
+        throw new ConflictException({ code, message: `${message}. Nothing was written.`, taskIds, itemIds });
+      }
+
+      const target = targetId ?? (await tx.project.create({
+        data: {
+          ownerId,
+          title: newTitle,
+          goal: ProjectsService.blankToNull(newProject?.goal ?? undefined),
+          runtime: { create: {} },
+        },
+        select: { id: true },
+      })).id;
+      const seals = await writeCriterionMove(tx, ownerId, {
+        sourceId: projectId, targetId: target, criterionId, plan: decided.plan,
+      }, credential);
+      return { target, plan: decided.plan, seals };
+    }, loggedRetry(this.logger, 'projects.moveCriterion')).catch((error: unknown) => {
+      // 0389's guard, reached only by a run claimed after the read above: the same refusal.
+      if (error instanceof Error && error.message.includes('TASK_CLAIMED_PROJECT_MOVE')) {
+        throw new ConflictException({
+          code: 'CRITERION_MOVE_TASK_RUNNING' satisfies MoveCriterionRefusal,
+          message: 'a task serving this criterion started a run while it was being moved. Nothing was written.',
+          taskIds: [],
+          itemIds: [],
+        });
+      }
+      throw error;
+    });
+
+    // After the commit: the landing A had open for each moved task is not A's any more (the move
+    // confirmation's rule), and both projects' derived status and done requests are read again.
+    for (const taskId of moved.plan.movedTaskIds) {
+      await settleTaskSegmentAfterMove(this.prisma, { ownerId, taskId, fromProjectId: projectId })
+        .catch((e) => this.logger.warn(`landing settlement after criterion move failed: ${
+          (e as { message?: string })?.message ?? String(e)}`));
+    }
+    await this.reprojectProjectStatus(ownerId, projectId);
+    await this.reprojectProjectStatus(ownerId, moved.target);
+    if (this.openItems && moved.plan.movedOpenItemIds.length > 0) {
+      await this.openItems.deliverForItems(moved.plan.movedOpenItemIds)
+        .catch((e) => this.logger.warn(`moved open items not delivered: ${
+          (e as { message?: string })?.message ?? String(e)}`));
+    }
+    for (const id of [projectId, moved.target]) {
+      this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CHANGED, id);
+    }
+    for (const taskId of [...moved.plan.movedTaskIds, ...moved.plan.keptTaskIds]) {
+      this.realtime?.publishForUser(ownerId, RunEventType.TASK_CHANGED, taskId);
+    }
+    return {
+      fromProjectId: projectId,
+      toProjectId: moved.target,
+      createdProject: targetId === null,
+      criterionKey: criterionKeyOf(criterionId),
+      movedTaskIds: moved.plan.movedTaskIds,
+      keptTaskIds: moved.plan.keptTaskIds,
+      movedOpenItemIds: moved.plan.movedOpenItemIds,
+      fromCriteriaDigest: moved.seals,
+    };
   }
 
   /**

@@ -3,7 +3,8 @@ import XCTest
 @testable import OrbitKit
 
 /// A connected Feishu group's member who sent a turn is drawn as `From Feishu · <name>`
-/// (docs/feishu-bot-design.md §8.2): over the bubble in the conversation, and in front of the words on
+/// (docs/feishu-bot-design.md §8.2), and a guest the owner invited as `From <name>`
+/// (docs/session-guests-design.md §3): over the bubble in the conversation, and in front of the words on
 /// the session row. Ports the web's `Transcript.externalSender.test.tsx` and
 /// `WorkspaceView.sessionLine.test.tsx` cases, and holds the words to the web's own source: a missing
 /// counterpart is a failure, never an `XCTSkip`.
@@ -23,6 +24,21 @@ final class ExternalSenderTests: XCTestCase {
                                 .object(["name": .string("Li Lei")])] {
             XCTAssertNil(ExternalSender.parse(bad), "read a sender out of \(String(describing: bad))")
         }
+    }
+
+    func testReadsAGuestOnlyWithTheirName() {
+        XCTAssertEqual(ExternalSender.parse(.object(["source": .string("ORBIT_GUEST"), "name": .string(" Alice Chen ")])),
+                       ExternalMessageFrom(source: "ORBIT_GUEST", name: "Alice Chen"))
+        // A guest is an Orbit account, which always has a name: one without it is no guest this build can name.
+        for bad: JSONValue in [.object(["source": .string("ORBIT_GUEST"), "name": .null]),
+                               .object(["source": .string("ORBIT_GUEST"), "name": .string("  ")]),
+                               .object(["source": .string("ORBIT_GUEST")])] {
+            XCTAssertNil(ExternalSender.parse(bad), "read a guest out of \(bad)")
+        }
+    }
+
+    func testTheGuestsLabelIsFromAndTheirName() {
+        XCTAssertEqual(ExternalSender.label(ExternalMessageFrom(source: "ORBIT_GUEST", name: "Alice Chen")), "From Alice Chen")
     }
 
     func testTheLabelNamesTheSenderOrSaysFeishuAlone() {
@@ -48,6 +64,22 @@ final class ExternalSenderTests: XCTestCase {
         let stopped = try JSONDecoder().decode(Session.self, from: Data(
             #"{"id":"s1","status":"INTERRUPTED","lastUserText":"Fix it","lastUserFromExternal":{"source":"FEISHU","name":"Li Lei"}}"#.utf8))
         XCTAssertEqual(SessionLine.make(for: stopped, live: true).text, "From Feishu · Li Lei: Fix it")
+    }
+
+    func testTheRowNamesAGuestInsteadOfYou() throws {
+        let guest = try row(#","lastUserFromExternal":{"source":"ORBIT_GUEST","name":"Alice Chen"}"#)
+        XCTAssertEqual(guest.lastUserFromExternal, ExternalMessageFrom(source: "ORBIT_GUEST", name: "Alice Chen"))
+        XCTAssertEqual(SessionLine.make(for: guest, live: true),
+                       SessionLine(text: "From Alice Chen: Fix the build", tone: .preview))
+        let stopped = try JSONDecoder().decode(Session.self, from: Data(
+            #"{"id":"s1","status":"SUCCEEDED","lastUserText":"Twice is fine","lastUserFromExternal":{"source":"ORBIT_GUEST","name":"Alice Chen"}}"#.utf8))
+        XCTAssertEqual(SessionLine.make(for: stopped, live: true).text, "From Alice Chen: Twice is fine")
+        // Nameless, it reads as the turn always has rather than failing the row.
+        let nameless = try row(#","lastUserFromExternal":{"source":"ORBIT_GUEST","name":null}"#)
+        XCTAssertNil(nameless.lastUserFromExternal)
+        XCTAssertEqual(SessionLine.make(for: nameless, live: true).text, "You: Fix the build")
+        let again = try JSONDecoder().decode(Session.self, from: try JSONEncoder().encode(guest))
+        XCTAssertEqual(again.lastUserFromExternal, guest.lastUserFromExternal)
     }
 
     func testTheRowToleratesAnOlderOrAnOddServer() throws {
@@ -146,6 +178,17 @@ final class ExternalSenderTests: XCTestCase {
         XCTAssertNil(b.sessionMessage)
     }
 
+    func testTheBubbleCarriesTheGuestTheEchoRecorded() throws {
+        var reducer = TranscriptReducer()
+        reducer.apply(try echo(#"{"source": "ORBIT_GUEST", "name": "Alice Chen"}"#))
+        let b = try bubble(reducer)
+        XCTAssertEqual(b.externalSender, ExternalMessageFrom(source: "ORBIT_GUEST", name: "Alice Chen"))
+        XCTAssertEqual(b.externalSender.map(ExternalSender.label), "From Alice Chen")
+        XCTAssertEqual(b.text, "Fix the build")
+        let back = try JSONDecoder().decode(UserBubble.self, from: try JSONEncoder().encode(b))
+        XCTAssertEqual(back.externalSender, b.externalSender)
+    }
+
     func testTheOwnersOwnMessageCarriesNoSender() throws {
         var reducer = TranscriptReducer()
         reducer.apply(try echo(nil))
@@ -212,6 +255,15 @@ final class ExternalSenderTests: XCTestCase {
                       "the web's EXTERNAL_SENDER_NAME_SEPARATOR drifted from \(ExternalSender.nameSeparator.debugDescription)")
         XCTAssertTrue(lib.contains("from.source !== '\(ExternalSender.feishuSource)'"),
                       "the web reads another source than \(ExternalSender.feishuSource)")
+        XCTAssertTrue(lib.contains("export const EXTERNAL_SENDER_FROM_GUEST = '\(ExternalSender.fromGuest)';"),
+                      "the web's EXTERNAL_SENDER_FROM_GUEST drifted from \(ExternalSender.fromGuest.debugDescription)")
+        // A guest: read only with a name, and labelled `From <name>`.
+        XCTAssertTrue(lib.contains(
+            "if (from.source === '\(ExternalSender.guestSource)') return name ? { source: '\(ExternalSender.guestSource)', name } : null;"),
+                      "the web reads a guest by another rule")
+        XCTAssertTrue(lib.contains(
+            "if (from.source === '\(ExternalSender.guestSource)') return `${EXTERNAL_SENDER_FROM_GUEST} ${from.name}`;"),
+                      "the web's guest label changed shape")
         // The label: the name after the separator, or the source's words alone.
         XCTAssertTrue(lib.contains(
             "return from.name ? `${EXTERNAL_SENDER_FROM_FEISHU}${EXTERNAL_SENDER_NAME_SEPARATOR}${from.name}` : EXTERNAL_SENDER_FROM_FEISHU;"),

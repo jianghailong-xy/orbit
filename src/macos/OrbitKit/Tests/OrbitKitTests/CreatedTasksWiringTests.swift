@@ -176,12 +176,18 @@ final class CreatedTasksWiringTests: XCTestCase {
     /// to the same behaviour"): a link in the transcript — as prose or as a card — and the Watching
     /// card's target rows all hand the console's answer to the model, which pushes a task or another
     /// session over the console on a phone.
+    ///
+    /// Updated for the owner's 2026-11-12 decision: a task link on a wide shell opens over the page
+    /// it was pressed on instead of switching sections, so the door has a second answer (`overPage`)
+    /// that only a wide shell sets. The phone's push is unchanged.
     func testEveryDoorOutOfAConversationPushesOverItOnAPhone() throws {
         let app = code(try source("AppModel.swift"))
-        let opener = try slice(app, from: "func openFromConversation(_ route: Route, overConsole: Bool) {",
+        let opener = try slice(app, from: "func openFromConversation(_ route: Route, overConsole: Bool, overPage: Bool = false) {",
                                to: "\n    }")
-        XCTAssertTrue(opener.contains("guard overConsole else { return self.route(to: route) }"),
-                      "off a phone's conversation nothing changes: it is a route")
+        XCTAssertTrue(opener.contains("if case .task(let id) = route, overPage { return openTaskOverPage(id) }"),
+                      "a task on a wide shell opens over the page it was pressed on")
+        XCTAssertTrue(opener.contains("route(to: route)"),
+                      "off a phone's conversation and off a task link nothing changes: it is a route")
         XCTAssertTrue(opener.contains("case .task(let id):    push(.taskDetail(taskID: id))"))
         XCTAssertTrue(opener.contains("case .session(let id): pushConsole(id)"))
         let pushConsole = try slice(app, from: "func pushConsole(_ id: String) {", to: "\n    }")
@@ -192,15 +198,17 @@ final class CreatedTasksWiringTests: XCTestCase {
 
         let prose = code(try source("Views/Console/SelectableText.swift"))
         XCTAssertTrue(prose.contains("context.coordinator.opensOverConsole = context.environment.opensPagesOverConsole"))
-        XCTAssertTrue(prose.contains("self.app?.openFromConversation(route, overConsole: self.opensOverConsole)"))
-        XCTAssertTrue(prose.contains("self.app?.openOrbitLink(url, overConsole: self.opensOverConsole)"))
+        XCTAssertTrue(prose.contains("context.coordinator.opensOverPage = context.environment.opensTasksOverPage"))
+        XCTAssertTrue(prose.contains("self.app?.openFromConversation(route, overConsole: self.opensOverConsole,"))
+        XCTAssertTrue(prose.contains("overPage: self.opensOverPage)"))
+        XCTAssertTrue(prose.contains("self.app?.openOrbitLink(url, overConsole: self.opensOverConsole,"))
         XCTAssertTrue(code(try source("Views/OrbitLinkCardView.swift"))
-            .contains("app.open(cards.destination(for: ref), overConsole: overConsole)"))
+            .contains("app.open(cards.destination(for: ref), overConsole: overConsole, overPage: overPage)"))
 
         // A project's page — from a project link, or a coordinator conversation's ⋯ menu — goes over
         // the conversation on a phone and to the Projects section on the wide shells (the owner,
         // 2026-09-26: there was no way from a coordinator conversation to its project's page; the
-        // title that opened it too left the nav bar on 2026-10-15).
+        // title that opened it too left the nav bar on 2026-10-15). Only tasks changed on 2026-11-12.
         let project = try slice(app, from: "func openProjectFromConversation(_ id: String, overConsole: Bool) {",
                                 to: "\n    }")
         XCTAssertTrue(project.contains("guard overConsole else { return openProject(id) }"),
@@ -217,7 +225,7 @@ final class CreatedTasksWiringTests: XCTestCase {
                       "…through the same door a project link takes")
 
         let watching = code(try source("Views/WatchingCard.swift"))
-        XCTAssertTrue(watching.contains("model.openFromConversation(destination, overConsole: overConsole)"),
+        XCTAssertTrue(watching.contains("model.openFromConversation(destination, overConsole: overConsole, overPage: overPage)"),
                       "a watch's target opens over the conversation")
     }
 

@@ -6,8 +6,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsageBucket, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
-import { MachineEngines, RunnerEngines, accountsGroup, machineChipsOf, summaryOf } from './RunnerEngines';
-import { openRunnerMenu, clickRunnerMenuItem, openRunnerCards } from './RunnerEngines.test-helpers';
+import { MachineEngines, accountsGroup } from './RunnerEngines';
+import { EngineRows } from './RunnerEngines.test-rows';
+import { openRunnerMenu, clickRunnerMenuItem, openAccountGroups } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -131,7 +132,7 @@ afterEach(() => {
 });
 
 function mount(r: Runner) {
-  openRunnerCards([r]);
+  openAccountGroups([r]);
   apiMock.mockImplementation(async (path: string, options?: { method?: string }) => {
     if (path === '/runners') return [r];
     if (path.endsWith('/login') && (options?.method ?? 'GET') === 'GET') {
@@ -148,7 +149,7 @@ function mount(r: Runner) {
     root!.render(
       <MemoryRouter initialEntries={['/providers']}>
         <QueryClientProvider client={qc}>
-          <RunnerEngines />
+          <EngineRows />
         </QueryClientProvider>
       </MemoryRouter>,
     ),
@@ -291,17 +292,6 @@ describe('two Google accounts on one runner', () => {
     ).toEqual([`/runners/${RUNNER_ID}/accounts/antigravity/${WORK.id}`]);
   });
 
-  it('counts a signed-out account against the folded card', () => {
-    const chip = (box: Runner) => machineChipsOf(box).find((each) => each.engine === 'antigravity');
-    expect(chip(runner())).toEqual({ engine: 'antigravity', logins: 2, accounts: 2, signedOut: false });
-    expect(chip(runner(antigravity({ accounts: [DEFAULT, { ...WORK, auth: 'no' }] })))).toEqual({
-      engine: 'antigravity',
-      logins: 1,
-      accounts: 2,
-      signedOut: false,
-    });
-    expect(summaryOf(runner(antigravity({ accounts: [DEFAULT, { ...WORK, auth: 'no' }] })))).toBeNull();
-  });
 });
 
 describe('one Google account', () => {
@@ -364,12 +354,6 @@ describe('a runner that runs agy on its Gemini key', () => {
     expect(all(await openRunnerMenu(defaultRow), '[role="menuitem"]').map((item) => item.textContent?.trim())).toEqual(['Rename', 'Remove account']);
     // Automatic starts on a Google account, the only one with a quota to spend first.
     expect([defaultRow, workRow].map((row) => row.querySelector('.re-name')?.textContent)).toEqual(['Default', 'WorkNEXT']);
-    expect(machineChipsOf(box).find((chip) => chip.engine === 'antigravity')).toEqual({
-      engine: 'antigravity',
-      logins: 2,
-      accounts: 2,
-      signedOut: false,
-    });
   });
 
   it('keeps its one row as it was: env key, with no pause to offer', () => {
@@ -382,7 +366,7 @@ describe('a runner that runs agy on its Gemini key', () => {
 
 describe('the runner page’s Antigravity rows', () => {
   /** What the runner's own page draws: the card's rows, as MachineEngines lays them out there — its
-   *  Antigravity accounts open, as the card's are (openRunnerCards). */
+   *  Antigravity accounts open, as the card's are (openAccountGroups). */
   const machinePage = (r: Runner) => {
     const box = document.createElement('div');
     box.innerHTML = renderToStaticMarkup(
