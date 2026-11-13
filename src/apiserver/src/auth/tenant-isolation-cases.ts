@@ -1372,9 +1372,9 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
 /** Ids a request carries that name nothing of an account's to reach, each with why and where that is so. */
 export const TENANT_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
   'POST /admin/providers body runnerId':
-    'a shared (admin) provider is never runner-scoped: createScope refuses runner scope on a row with no owner (PROVIDER_RUNNER_SHARED), or a runnerId on an account-scoped one (PROVIDER_RUNNER_NOT_SCOPED), before any runner is read, so no id is looked up at all (providers/local-provider.ts createScope); local-provider.spec.ts "createScope" sends both',
+    'a shared (admin) provider is never runner-scoped: createScope refuses runner scope on a row with no owner (PROVIDER_RUNNER_SHARED), or a runnerId on an account-scoped one (PROVIDER_RUNNER_NOT_SCOPED), before any runner is read, so no id is looked up at all (providers/local-provider.ts:158, providers/local-provider.ts:164); local-provider.spec.ts "createScope" sends both',
   'PATCH /admin/providers/:id body runnerId':
-    'a shared (admin) provider is account-scoped, and updateScope refuses a runnerId on an account-scoped row (PROVIDER_RUNNER_NOT_SCOPED) before any runner is read (providers/local-provider.ts updateScope); local-provider.spec.ts "updateScope" sends one',
+    'a shared (admin) provider is account-scoped, and updateScope refuses a runnerId on an account-scoped row (PROVIDER_RUNNER_NOT_SCOPED) before any runner is read (providers/local-provider.ts:201); local-provider.spec.ts "updateScope" sends one',
   'POST /workspaces/:id/main-checkout/actions body targetSessionId':
     'read by (id, the caller, not deleted) and required to be a session of this workspace before anything is written, so another account\'s is the 404 of one that does not exist (workspaces/main-checkout.service.ts:553); main-checkout.pg.spec.ts "move: the target must be…" sends one that does not exist',
   'POST /workspaces/:id/main-checkout/actions body initiatedFromSessionId':
