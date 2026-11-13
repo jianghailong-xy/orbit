@@ -103,8 +103,7 @@ struct SessionFolderPage: View {
     @State private var rowSwipe = RowSwipeState()
     #endif
     /// The row whose action was tapped — the sheets below are held by the page, as the workspace
-    /// list holds its own, so they present reliably from a row's swipe or long-press menu. (Move is
-    /// iOS's row action, so on the Mac `movingSession` is never set and has no panel.)
+    /// list holds its own, so they present reliably from a row's swipe or long-press menu.
     @State private var taggingSession: Session?
     @State private var sharingSession: Session?
     @State private var movingSession: Session?
@@ -227,13 +226,11 @@ struct SessionFolderPage: View {
                            guests: .of(s, agents: app.agents))
             }
         }
-        #if os(iOS)
         .sheet(item: $movingSession) { s in
             if let workspace = app.agents?.agent(s.agent?.id ?? s.agentId ?? address.agentID) {
                 SessionMoveSheet(session: s, workspace: workspace, listed: app.agents?.allSessions ?? []).environment(app)
             }
         }
-        #endif
         // Keep the page's rows fresh while it is the page on screen: pushing it cancels the list
         // beneath (`AgentPanes`' own task), and in a wide shell it replaces that list outright.
         // Completed keeps its poll; Open is served by the app's shared snapshot, so one read is

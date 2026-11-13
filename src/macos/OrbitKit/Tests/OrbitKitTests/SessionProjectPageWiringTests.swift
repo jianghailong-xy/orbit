@@ -417,7 +417,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
             XCTAssertTrue(row.contains(part), "member rows preserve `\(part)`")
         }
         let moveAction = try slice(page, from: "private func moveAction(_ session: Session) -> (() -> Void)? {", to: "\n    }")
-        XCTAssertTrue(moveAction.contains("return { movingSession = session }"), "iOS moves a member to a folder")
+        XCTAssertTrue(moveAction.contains("{ movingSession = session }"), "a member moves to a folder")
         XCTAssertFalse(row.contains("address.view"), "member actions and appearance use the session's lifecycle")
         let sessionActions = code(try appSource("Views/SessionRowActions.swift"))
         let move = try slice(sessionActions, from: "private var moveAction: RowSwipeAction? {", to: "\n    }")

@@ -327,25 +327,29 @@ final class SessionFolderPageWiringTests: XCTestCase {
 
     /// The layer is every platform's: the page, the rows' menu modifier and the model's folder page /
     /// rename / delete / create entries compile for the Mac as for iOS (the Mac's list draws folders
-    /// as web's does). New Folder… in the ≡ menu and Move stay iOS's.
+    /// as web's does), Move and New Folder… included. Only the swipes stay iOS's.
     func testTheFoldersLayerIsCompiledForEveryPlatform() throws {
         let page = try appSource("Views/SessionFolderPage.swift")
         for part in ["struct SessionFolderPage: View", "struct SessionFolderRowView: View",
                      "private struct SessionFolderManagement: ViewModifier"] {
             XCTAssertEqual(try branches(of: part, in: page), [], "`\(part)` is every platform's")
         }
-        XCTAssertEqual(try branches(of: "SessionMoveSheet(session: s,", in: page), ["os(iOS)"],
-                       "the Mac's folder page has no Move panel")
+        XCTAssertEqual(try branches(of: "SessionMoveSheet(session: s,", in: page), [],
+                       "the Mac's folder page moves its rows too")
         XCTAssertEqual(try branches(of: ".rowSwipeList(rowSwipe)", in: page), ["os(iOS)"])
 
         let agents = code(try appSource("Views/AgentsView.swift"))
         for part in ["@State private var renamingFolder: SessionFolder?",
                      "@State private var deletingFolder: SessionFolderDeletion?",
                      "@AppStorage(\"sessionList.pinnedCollapsed\") private var pinnedCollapsed = false",
-                     "private func pinnedSectionHeader(_ title: String) -> some View"] {
+                     "private func pinnedSectionHeader(_ title: String) -> some View",
+                     "@State private var namingFolder = false", "private func createFolderFromMenu() {"] {
             XCTAssertEqual(try branches(of: part, in: agents), [], "`\(part)` is every platform's")
         }
-        XCTAssertEqual(try branches(of: "@State private var namingFolder = false", in: agents), ["os(iOS)"])
+        // The Mac's New Folder… is a toolbar button, beside the workspace's settings.
+        let macToolbar = try slice(agents, from: "ToolbarItem(placement: .navigation) {\n                Button {\n                    app.startComposingSession()", to: "#endif")
+        XCTAssertTrue(macToolbar.contains("Button { namingFolder = true } label: {"))
+        XCTAssertTrue(macToolbar.contains(".disabled(view == .trash)"), "no folder row is drawn in Trash")
         XCTAssertFalse(agents.contains("ForEach(agents.agentSessions) { s in"),
                        "the Mac's flat list is gone: it draws the folder rows and sections")
 

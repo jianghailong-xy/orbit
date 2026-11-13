@@ -359,8 +359,8 @@ struct AgentPanes: View {
     @State private var rowSwipe = RowSwipeState()
     #endif
     /// The row whose Share was tapped — drives the share panel, owned by the list for the same
-    /// reason as `taggingSession`. Share and Move are iOS's row actions (`sessionRowActions`), so on
-    /// the Mac these two are never set and have no panel.
+    /// reason as `taggingSession`. Share is iOS's row action (`sessionRowActions`), so on the Mac it is
+    /// never set and has no panel.
     @State private var sharingSession: Session?
     /// The row whose Move was tapped — drives the Move panel, list-owned like the two above.
     @State private var movingSession: Session?
@@ -369,13 +369,11 @@ struct AgentPanes: View {
     @State private var renamingFolder: SessionFolder?
     /// The folder whose Delete Folder… was tapped, held the same way.
     @State private var deletingFolder: SessionFolderDeletion?
-    #if os(iOS)
-    /// New Folder… in the ≡ menu (§3.4) and the prompt it opens: its draft, whether it is waiting on
-    /// the server, and why the last one failed (a name the workspace already has, in words).
+    /// New Folder… (§3.4) — in the ≡ menu on iOS, the window toolbar on the Mac — and the prompt it
+    /// opens: its draft, and why the last one failed (a name the workspace already has, in words).
     @State private var namingFolder = false
     @State private var newFolderDraft = ""
     @State private var newFolderFailure: String?
-    #endif
     /// Whether the Pinned section is folded to its header. Stored rather than view
     /// state: this pane is rebuilt per workspace (`.id(a.id)`), so @State would unfold it on every
     /// switch, and on every launch.
@@ -596,6 +594,15 @@ struct AgentPanes: View {
                 }
                 .help("Start a new session with \(agent.name)")
             }
+            // New Folder…, as the iPhone's ≡ menu offers it: not in Trash, where no folder row is
+            // drawn — the new folder would appear nowhere on screen.
+            ToolbarItem(placement: .primaryAction) {
+                Button { namingFolder = true } label: {
+                    Label(SessionFolderCopy.newFolder, systemImage: "folder.badge.plus")
+                }
+                .help("New folder in \(agent.name)")
+                .disabled(view == .trash)
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button { showSettings = true } label: {
                     Label("Settings", systemImage: "gearshape")
@@ -624,6 +631,7 @@ struct AgentPanes: View {
                            guests: .of(s, agents: app.agents))
             }
         }
+        #endif
         // The Move panel for the row whose Move was tapped: the folders of this workspace, counted
         // over the list the row is in (docs/session-folders-move-design.md §4).
         .sheet(item: $movingSession) { s in
@@ -631,7 +639,7 @@ struct AgentPanes: View {
                 SessionMoveSheet(session: s, workspace: workspace, listed: agents.allSessions).environment(app)
             }
         }
-        // New Folder… in the ≡ menu: the system's prompt names it, it lands at the top of this list,
+        // New Folder… (the ≡ menu, or the Mac's toolbar): the system's prompt names it, it lands at the top of this list,
         // and a name the workspace already has is refused in so many words (as the Move panel's is).
         .alert(SessionMoveCopy.newFolderTitle, isPresented: $namingFolder) {
             TextField(SessionMoveCopy.folderNamePlaceholder, text: $newFolderDraft)
@@ -646,9 +654,8 @@ struct AgentPanes: View {
         } message: {
             Text(newFolderFailure ?? "")
         }
-        #endif
         // Load the owner's tag library when the pane appears so the picker + chips are populated,
-        // and the folder library the list's folder rows (and on iOS the Move panel) are drawn from.
+        // and the folder library the list's folder rows and the Move panel are drawn from.
         .task {
             await app.loadSessionTags()
             await app.loadSessionFolders()
@@ -1048,8 +1055,7 @@ struct AgentPanes: View {
         }
     }
 
-    #if os(iOS)
-    /// New Folder… in the ≡ menu: make the folder in this workspace and keep it, so its row draws at
+    /// New Folder…: make the folder in this workspace and keep it, so its row draws at
     /// the top of this very list. A refusal (a name the workspace already has is a 409) leaves its
     /// reason up as an alert, with the draft kept for another try.
     private func createFolderFromMenu() {
@@ -1064,7 +1070,6 @@ struct AgentPanes: View {
     private var newFolderFailed: Binding<Bool> {
         Binding(get: { newFolderFailure != nil }, set: { if !$0 { newFolderFailure = nil } })
     }
-    #endif
 
     @ViewBuilder private func tagSectionHeader(_ tag: SessionTag?) -> some View {
         if let tag {

@@ -175,26 +175,24 @@ final class SessionMoveWiringTests: XCTestCase {
         XCTAssertTrue(item.contains("Button(action: moveAction.perform)"), "the menu runs the swipe's own action")
     }
 
-    // MARK: iOS only
+    // MARK: every platform
 
-    /// The swipe's Move, the menu's Move…, the panel and the list's sheet for it compile for iOS
-    /// alone, and Trash has none of them.
-    func testTheNewEntriesAreCompiledForIOSOnly() throws {
+    /// The swipe's Move, the menu's Move…, the panel and the list's sheet for it compile for iOS and
+    /// the Mac alike (the Mac's right-click menu has Move…), and Trash has none of them.
+    func testTheNewEntriesAreCompiledForEveryPlatform() throws {
         let actions = code(try appSource("Views/SessionRowActions.swift"))
         let made = "RowSwipeAction(title: \"Move\", systemImage: \"folder\", tint: .indigo, perform: onMove)"
-        XCTAssertEqual(try branches(of: made, in: actions), ["os(iOS)"], "the Mac's rows have no Move")
+        XCTAssertEqual(try branches(of: made, in: actions), [], "the Mac's rows have Move too")
         XCTAssertEqual(actions.components(separatedBy: "RowSwipeAction(title: \"Move\"").count - 1, 1,
                        "the swipe and the menu draw the same one")
         let move = try slice(actions, from: "private var moveAction: RowSwipeAction? {", to: "\n    }")
         XCTAssertTrue(move.contains("guard !isTrash, let onMove else { return nil }"), "nothing to file in Trash")
-        XCTAssertTrue(try slice(move, from: "#else", to: "#endif").contains("return nil"))
-        // The Mac's share entry is unchanged too: still iOS only, and also out of Trash.
+        XCTAssertFalse(move.contains("#if"))
+        // The Mac's share entry is unchanged: still iOS only, and also out of Trash.
         XCTAssertEqual(try branches(of: "RowSwipeAction(title: \"Share\"", in: actions), ["os(iOS)"])
 
         let agents = code(try appSource("Views/AgentsView.swift"))
-        // The panel is iOS's. The list's rows hand their session over on every platform, but only
-        // iOS's row actions (above) ever call it, so on the Mac nothing sets it.
-        XCTAssertEqual(try branches(of: ".sheet(item: $movingSession)", in: agents), ["os(iOS)"])
+        XCTAssertEqual(try branches(of: ".sheet(item: $movingSession)", in: agents), [])
         XCTAssertEqual(try branches(of: "await app.loadSessionFolders()", in: agents), [],
                        "the Mac reads the library too: its list draws the folder rows")
         let row = try slice(agents, from: "@ViewBuilder private func sessionRow(", to: "private func tagSectionHeader(")
@@ -206,16 +204,14 @@ final class SessionMoveWiringTests: XCTestCase {
         XCTAssertTrue(projectRow.contains("onMove: { if let coordinator = row.coordinator { movingSession = coordinator } }"))
         XCTAssertEqual(agents.components(separatedBy: "onMove:").count - 1, 3,
                        "two ordinary row shapes and one project coordinator hand a session over")
-        // The project row's menu offers Move on iOS alone.
         let projectMenu = code(try appSource("Views/SessionProjectPage.swift"))
         XCTAssertEqual(try branches(of: "Button(action: onMove) { Label(SessionProjectCopy.move, systemImage: \"folder\") }",
-                                    in: projectMenu), ["os(iOS)"])
+                                    in: projectMenu), [])
 
         let sheet = code(try appSource("Views/SessionMoveSheet.swift"))
-        XCTAssertEqual(try branches(of: "struct SessionMoveSheet: View", in: sheet), ["os(iOS)"])
+        XCTAssertEqual(try branches(of: "struct SessionMoveSheet: View", in: sheet), [])
 
-        // The model's folder entries are every platform's (the Mac's list draws folders); only the
-        // views above ever ask it to move a row, and those are iOS's.
+        // The model's folder entries are every platform's.
         let app = code(try appSource("AppModel.swift"))
         for part in ["var sessionFolders: [SessionFolder] = []", "func loadSessionFolders() async",
                      "func moveSession(_ id: String, toFolder folderID: String?)",
@@ -237,10 +233,13 @@ final class SessionMoveWiringTests: XCTestCase {
         let switcher = code(try slice(try appSource("Views/AgentIdentity.swift"),
                                       from: "struct AgentSwitchSheet: View {", to: "\n}\n"))
         for part in ["NavigationStack {", ".navigationBarTitleDisplayMode(.inline)",
-                     "ToolbarItem(placement: .topBarTrailing) {", ".presentationDetents([.medium, .large])"] {
+                     ".presentationDetents([.medium, .large])"] {
             XCTAssertTrue(sheet.contains(part), "the panel has `\(part)`")
             XCTAssertTrue(switcher.contains(part), "as the workspace switcher does")
         }
+        // Done at the top right on iOS, and the default button of the Mac's sheet.
+        XCTAssertTrue(sheet.contains("ToolbarItem(placement: .confirmationAction) {"))
+        XCTAssertEqual(try branches(of: ".presentationDetents([.medium, .large])", in: sheet), ["os(iOS)"])
         XCTAssertTrue(sheet.contains("Button(SessionMoveCopy.done) { dismiss() }"))
         XCTAssertTrue(sheet.contains(".navigationTitle(SessionMoveCopy.title)"))
         let title = try slice(sheet, from: "private var title: some View {", to: "\n    }")

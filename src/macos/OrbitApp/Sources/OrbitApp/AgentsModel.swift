@@ -424,14 +424,12 @@ final class AgentsModel {
         agentSessions[index] = agentSessions[index].settingFolder(folderID)
     }
 
-    #if os(iOS)
     /// Take a row moved to another workspace out of this pane's list, which is one workspace's — for
     /// the same reason: a Completed row isn't in the Open snapshot. See `AppModel.moveSession(_:to:…)`.
     func applyMovedSession(_ id: String, toWorkspace workspaceID: String) {
         guard lastSessionQuery?.agentID != workspaceID else { return }
         agentSessions = SessionFilter.removing(id, from: agentSessions)
     }
-    #endif
 
     /// Update relation metadata even in this pane's independently loaded Completed/Trash rows.
     /// Open rows are refreshed through `applyOpenSnapshot`, but those two scopes otherwise wait for

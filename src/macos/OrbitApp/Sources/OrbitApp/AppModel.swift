@@ -3351,7 +3351,6 @@ final class AppModel {
         return try await api.sessionMoveTargets(id)
     }
 
-    #if os(iOS)
     /// New Folder… on a workspace's page in the Move panel: a folder in the workspace the session is
     /// about to move to, which the confirmation then files it in. Throws the server's refusal — a name
     /// that workspace already has is a 409 — for the page to put into words.
@@ -3362,7 +3361,6 @@ final class AppModel {
         return folder
     }
 
-    #endif
 
     /// Move a session to another workspace, filed in one of its folders or in none — the
     /// confirmation's Move, or its End and Move (§5.3–5.4): end the session, wait until it has
@@ -3387,9 +3385,7 @@ final class AppModel {
         defer { Task { await reloadSessionLists() } }
         switch outcome {
         case .moved:
-            #if os(iOS)
             patchSessionWorkspace(id, to: target, folder: folderID)
-            #endif
             showToast(SessionMoveCopy.movedToWorkspace(target.name), sessionID: id, sessionTitle: name,
                       tone: .info, icon: "folder")
             return nil
@@ -3398,7 +3394,6 @@ final class AppModel {
         }
     }
 
-    #if os(iOS)
     /// Write a move to another workspace into every loaded copy of a row, as `patchSessionFolder`
     /// writes a folder: the Open snapshot — whose agent filter is what takes the row out of the
     /// workspace's Open list — the pane's own Completed rows, and the detail cache.
@@ -3416,7 +3411,6 @@ final class AppModel {
         if let cached = sessionDetails.resolve(id) { sessionDetails.store(moved(cached)) }
         agents?.applyMovedSession(id, toWorkspace: target.workspaceId)
     }
-    #endif
 
     // MARK: routing + notification intents
 
