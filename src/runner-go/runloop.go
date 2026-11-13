@@ -1145,6 +1145,24 @@ type manualWorktreeOperationKey struct {
 	leaseOwner  string
 }
 
+// answeredOperations is, per session, the last operation whose result the control plane took. The
+// heartbeat redelivers an operation until its result is stored, so an answer drained before that —
+// on a slow link it arrives after the result was posted (2026-11-13: answers 11.7 s late) — still
+// names it. Run again, a merge recovery check runs with the record the first run was handed, and
+// its answer is refused as no longer current. One entry per session: a session's next operation
+// has a new id.
+type answeredOperations map[string]manualWorktreeOperationKey
+
+func (a answeredOperations) answered(key manualWorktreeOperationKey) bool {
+	return key.operationID != "" && a[key.sessionID] == key
+}
+
+func (a answeredOperations) answer(key manualWorktreeOperationKey) {
+	if key.operationID != "" {
+		a[key.sessionID] = key
+	}
+}
+
 // unstartedWorktreeCommands picks the merge/commit commands a draining process must hand
 // back instead of strand. The server claims heartbeat-delivered git work before it returns
 // the response, so a drain beginning mid-cycle leaves commands owned by an epoch that will
@@ -1761,6 +1779,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		mergingNow := map[string]bool{}
 		committingNow := map[string]bool{}
 		mergeOutcomes := map[manualWorktreeOperationKey]mergeOutcome{}
+		mergesAnswered := answeredOperations{}
 		commitOutcomes := map[manualWorktreeOperationKey]commitOutcome{}
 		artifactNow := map[string]bool{}
 		// Integration jobs this process has in flight. A claim is already exclusive in the control
@@ -2021,8 +2040,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				if reclaimDeferred.deferForReclaim(pool, m.SessionID, "merge", snapshot, beatNow) {
 					continue
 				}
+				answeredKey := manualWorktreeOperationKey{
+					kind: "merge", sessionID: m.SessionID,
+					operationID: m.OperationID, leaseOwner: m.LeaseOwner,
+				}
 				mergeMu.Lock()
-				busy := mergingNow[m.SessionID]
+				busy := mergingNow[m.SessionID] || mergesAnswered.answered(answeredKey)
 				if !busy {
 					mergingNow[m.SessionID] = true
 				}
@@ -2075,6 +2098,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					} else {
 						mergeMu.Lock()
 						delete(mergeOutcomes, key)
+						mergesAnswered.answer(key)
 						mergeMu.Unlock()
 					}
 				}(m, snapshot)
