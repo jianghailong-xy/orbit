@@ -21742,51 +21742,7 @@ div.landing-jobs-open {
   font-size: 12px;
 }
 
-/* The admin area: its sections side by side (AdminNav), and the Sign-in settings (AdminSignInPage). */
-.admin-nav {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-.admin-nav-link {
-  margin-bottom: -1px;
-  padding: 8px 12px;
-  border-bottom: 2px solid transparent;
-  color: var(--text-2);
-  font-weight: 500;
-  text-decoration: none;
-}
-.admin-nav-link:hover {
-  color: var(--text-1);
-}
-.admin-nav-link.active {
-  border-bottom-color: var(--brand);
-  color: var(--brand);
-}
-.admin-nav-link:focus-visible {
-  border-radius: 4px;
-  outline: 2px solid var(--brand);
-  outline-offset: 1px;
-}
-/* One width for every admin page, so their shared tabs stay put between them: wide enough for the
-   user list's columns. */
-.admin-page {
-  max-width: 1200px;
-  margin: 0 auto;
-}
-.admin-page > .page-title {
-  margin-bottom: 16px;
-}
-/* Its form is a card (the class names of components/ui/Card, which a form root cannot render). */
-.admin-signin {
-  max-width: 640px;
-  margin-bottom: 16px;
-}
-.admin-signin-fields {
-  display: grid;
-  gap: 20px;
-}
+/* The admin area's Sign-in settings (AdminSignInPage), whose label, hint and row classes other pages reuse. */
 .admin-signin-row {
   display: flex;
   align-items: center;
@@ -21806,7 +21762,7 @@ div.landing-jobs-open {
   font-size: 12px;
 }
 .admin-signin-note {
-  margin-top: -12px;
+  margin-top: 10px;
   color: var(--warning);
   font-size: 12px;
 }
@@ -21825,32 +21781,8 @@ div.landing-jobs-open {
   background: var(--warning-bg);
   color: var(--warning);
 }
-.admin-signin-redirect {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-.admin-signin-redirect code {
-  min-width: 0;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: var(--fill-muted);
-  color: var(--text-1);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 12.5px;
-  overflow-wrap: anywhere;
-}
-.admin-signin-actions {
-  display: flex;
-  justify-content: flex-end;
-}
 .admin-signin-error {
   color: var(--error);
-}
-/* Admin → Integrations: how many Feishu apps accounts have connected. */
-.admin-feishu-count {
-  color: var(--text-2);
 }
 /* Settings → Integrations → Feishu (FeishuIntegrationPage): the account's own app, then the steps in Feishu's
    console. Its fields reuse the admin Sign-in settings' rows, labels and hints. */
@@ -21963,29 +21895,6 @@ div.landing-jobs-open {
    Orbit, since when — and its actions: the one most often wanted in sight, the rest in its menu
    (docs/mocks/admin-users-redesign, direction A). Columns give way as the table's own box narrows,
    whatever the side nav's width: Created first, then Sign-in, Status and Last active. */
-.admin-users-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-.admin-users-head .page-title {
-  margin: 0;
-}
-.admin-users-sub {
-  margin-top: 4px;
-  color: var(--text-3);
-  font-size: 13px;
-}
-.admin-users-tools {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.admin-users-search {
-  width: 240px;
-}
 .admin-users-frame {
   container: admin-users / inline-size;
 }
@@ -22138,16 +22047,6 @@ div.landing-jobs-open {
 @container admin-users (max-width: 479px) {
   .admin-users-who-text {
     max-width: 200px;
-  }
-}
-@media (max-width: 768px) {
-  .admin-users-head {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .admin-users-search {
-    flex: 1;
-    width: auto;
   }
 }
 /* Add user: the fields stacked 8px apart. */
@@ -27394,61 +27293,18 @@ button.agent-progress-agent:hover {
   line-height: 1.5;
 }
 .project-done-findings ul { list-style: none; padding: 0; margin: 0; }
-/* Admin → Email (AdminEmailPage, docs/welcome-email-design.md §3.1): the Sign-in card's rows, with From and
-   Reply-To side by side, the test email's answer beside its buttons, and the last week under a rule. */
-.admin-email-off {
-  margin-top: -8px;
-}
-.admin-email-pair {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-@media (max-width: 600px) {
-  .admin-email-pair {
-    grid-template-columns: 1fr;
-  }
-}
-.admin-email-divided {
-  padding-top: 20px;
-  border-top: 1px solid var(--border-subtle, var(--border));
-}
-.admin-email-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.admin-email-buttons {
-  display: flex;
-  gap: 8px;
-  margin-left: auto;
-}
+/* Admin → Email (AdminEmailPage, docs/welcome-email-design.md §3.1): the unreadable-key alert, failed counts and
+   the last week's failures. */
 .admin-email-result {
   padding: 8px 12px;
   border: 1px solid;
   border-radius: 6px;
   overflow-wrap: anywhere;
 }
-.admin-email-result-ok {
-  border-color: var(--success-border);
-  background: var(--success-bg);
-  color: var(--success);
-}
 .admin-email-result-error {
   border-color: var(--error-border);
   background: var(--error-bg);
   color: var(--error);
-}
-.admin-email-week {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border-subtle, var(--border));
-  color: var(--text-2);
 }
 .admin-email-failed {
   color: var(--error);
@@ -27456,7 +27312,7 @@ button.agent-progress-agent:hover {
 .admin-email-failures {
   display: grid;
   gap: 6px;
-  margin: -8px 0 0;
+  margin: 4px 0 0;
   padding: 0;
   list-style: none;
   color: var(--text-2);
