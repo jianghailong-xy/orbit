@@ -2623,14 +2623,15 @@ func buildOperationCatalog() []*operation {
 					"provider": map[string]interface{}{"type": "string", "description": "Where the session's credential comes from: an engine's own sign-in on the runner (\"claude\", \"codex\", \"kimi\", \"antigravity\"), \"opencode\" for OpenCode's own configuration, an account pool, or one of the owner's API keys — provider_list shows every slug with the engines it can run. " +
 						"Named without `engine`, it runs on the engine that provider runs on by default, as it always did: a sign-in on its own engine, a key on its own protocol's CLI (a DeepSeek key on Claude Code), and the built-in \"dsh\" as DeepSeek Harness on the owner's first enabled DeepSeek key. " +
 						"Omit both to start where the target agent's project last started — an agent has no engine or provider of its own."},
-					// The enum is what a model actually chooses from, so it lists only the modes this
-					// machine can run — a root runner drops "bypassPermissions", which claude refuses
-					// under root by exiting during startup. Offering it there is how a sub-session got
-					// created that could never produce a turn.
+					// The catalogue declares the whole contract — every mode, and the prose with no
+					// machine-specific note — so its identity is the same on every runner. The
+					// projection narrows it to what THIS machine can run: a root runner drops
+					// "bypassPermissions", which claude refuses under root by exiting during
+					// startup (catalogToolDescriptors -> applyPermissionModeOffer).
 					"permissionMode": map[string]interface{}{
 						"type":        "string",
-						"enum":        offeredPermissionModes(),
-						"description": strings.TrimSpace("How much the sub-session may do without a human: \"plan\" investigates and proposes without touching anything, \"default\" asks before each unapproved action, \"acceptEdits\" pre-approves file edits only, \"auto\" lets the model decide when to ask and is the mode for unattended work that has to run commands, \"dontAsk\" never asks but refuses anything not already approved, commands and background jobs included, \"bypassPermissions\" never asks and allows everything. Omit to use the owner's account default. It can never be wider than this session's own mode: a wider mode is refused, and when the default is wider the sub-session runs in this session's own mode. A mode that asks parks the sub-session on an approval card until a human answers, so pick one only if someone is watching. " + rootWithheldPermissionModeNote()),
+						"enum":        append([]string{}, allPermissionModes...),
+						"description": strings.TrimSpace("How much the sub-session may do without a human: \"plan\" investigates and proposes without touching anything, \"default\" asks before each unapproved action, \"acceptEdits\" pre-approves file edits only, \"auto\" lets the model decide when to ask and is the mode for unattended work that has to run commands, \"dontAsk\" never asks but refuses anything not already approved, commands and background jobs included, \"bypassPermissions\" never asks and allows everything. Omit to use the owner's account default. It can never be wider than this session's own mode: a wider mode is refused, and when the default is wider the sub-session runs in this session's own mode. A mode that asks parks the sub-session on an approval card until a human answers, so pick one only if someone is watching. "),
 					},
 					"worktree": map[string]interface{}{"type": "boolean", "description": "Pass false to run the session in the agent's own checkout, with no branch and no worktree, even when the agent isolates each session in a worktree. For work that changes no code (investigating, reading logs, answering a question, read-only queries): it leaves no unmerged branch behind. Not for code changes: the session edits the checkout every other non-isolated session shares, and has no branch to merge. Omit it to follow the agent's own setting; true cannot turn isolation on for an agent that has it off."},
 					"wait":     map[string]interface{}{"type": "boolean", "description": "Wait for the new session's first turn to settle and return its full state inline: up to about 10 minutes, less when this session was itself spawned by a wait. The wait is recorded on Orbit's server as a watch before it starts, so when that time runs out or the connection drops, the call returns the session as last seen with the watch under \"watch\", and the watch wakes this session when the turn settles; end your turn then instead of polling. If the server does not record the watch, the result says no server-held watch backs the wait, and a refused watch returns at once. Default false: returns immediately."},
@@ -4994,6 +4995,43 @@ func catalogSurfaceSwitch(parts []string, op *operation) []string {
 // cannot leave a stale name in Claude's configuration.
 func claudeToolName(tool string) string { return "mcp__orbit__" + tool }
 
+// applyPermissionModeOffer narrows the catalogue's canonical session_create permission-mode enum
+// and description to what THIS machine can run. The catalogue keeps the full list so its content
+// hash is the same on every runner and in CI; the tool list, and the capability schema built from
+// it, still advertise only modes this runner can actually start (a root runner cannot run
+// bypassPermissions: claude exits during startup, before a turn).
+func applyPermissionModeOffer(descriptor map[string]interface{}) map[string]interface{} {
+	schema, _ := descriptor["inputSchema"].(map[string]interface{})
+	props, _ := schema["properties"].(map[string]interface{})
+	mode, _ := props["permissionMode"].(map[string]interface{})
+	if mode == nil {
+		return descriptor
+	}
+	modeCopy := make(map[string]interface{}, len(mode))
+	for key, value := range mode {
+		modeCopy[key] = value
+	}
+	modeCopy["enum"] = offeredPermissionModes()
+	base, _ := modeCopy["description"].(string)
+	modeCopy["description"] = strings.TrimSpace(base + " " + rootWithheldPermissionModeNote())
+	propsCopy := make(map[string]interface{}, len(props))
+	for key, value := range props {
+		propsCopy[key] = value
+	}
+	propsCopy["permissionMode"] = modeCopy
+	schemaCopy := make(map[string]interface{}, len(schema))
+	for key, value := range schema {
+		schemaCopy[key] = value
+	}
+	schemaCopy["properties"] = propsCopy
+	descriptorCopy := make(map[string]interface{}, len(descriptor))
+	for key, value := range descriptor {
+		descriptorCopy[key] = value
+	}
+	descriptorCopy["inputSchema"] = schemaCopy
+	return descriptorCopy
+}
+
 func catalogToolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[string]interface{} {
 	all := operationCatalog().Ops
 	tools := make([]map[string]interface{}, 0, len(all))
@@ -5018,6 +5056,9 @@ func catalogToolDescriptors(includePermissionPrompt, includeOrchestration bool) 
 		}
 		for key, value := range op.MCP.Extra {
 			descriptor[key] = value
+		}
+		if op.Tool == "session_create" {
+			descriptor = applyPermissionModeOffer(descriptor)
 		}
 		tools = append(tools, descriptor)
 	}

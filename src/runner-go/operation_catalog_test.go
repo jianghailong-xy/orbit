@@ -81,6 +81,11 @@ func TestMCPToolListIsProjectedFromCatalog(t *testing.T) {
 				for key, value := range op.MCP.Extra {
 					expected[key] = value
 				}
+				// One descriptor is narrowed to this machine at projection time: the catalogue
+				// keeps the whole permission-mode contract, the tool list offers what can run here.
+				if op.Tool == "session_create" {
+					expected = applyPermissionModeOffer(expected)
+				}
 				if !reflect.DeepEqual(descriptor, expected) {
 					t.Errorf("tools/list[%d] for %q is not the catalogue's descriptor (extra keys included)", i, op.Tool)
 				}
@@ -150,6 +155,9 @@ func TestCLICapabilitiesAreProjectedFromCatalog(t *testing.T) {
 		var wantSchema map[string]interface{}
 		if op.MCP != nil {
 			wantSchema = op.MCP.InputSchema
+			if op.Tool == "session_create" {
+				wantSchema = applyPermissionModeOffer(map[string]interface{}{"inputSchema": wantSchema})["inputSchema"].(map[string]interface{})
+			}
 		} else {
 			wantSchema = op.CLI.InputSchema
 		}
