@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { isRetryableApiErrorText } from './events';
 import {
   LOCAL_PROBE_STALE_MS,
+  LOCAL_PROVIDER_RUN_CAPABILITY,
   LOCAL_PROVIDER_ERROR_PREFIX,
   LOCAL_PROVIDER_REFUSAL_CODES,
   LOCAL_PROVIDER_TRANSIENT_REFUSALS,
@@ -27,7 +28,7 @@ const row = {
     { value: 'unsure:4b', tools: true },
   ],
 };
-const runner = { capabilities: [OLLAMA_PROBE_CAPABILITY], capabilitiesReportedAt: new Date(NOW - 60_000) };
+const runner = { capabilities: [OLLAMA_PROBE_CAPABILITY, LOCAL_PROVIDER_RUN_CAPABILITY], capabilitiesReportedAt: new Date(NOW - 60_000) };
 const target = { runnerId: RUNNER, runner, model: 'qwen3.8:27b' };
 const code = (r: Partial<typeof row> & Record<string, unknown>, t: Partial<typeof target> & Record<string, unknown> = {}) =>
   localProviderReadiness({ ...row, ...r } as never, { ...target, ...t } as never, NOW)?.code ?? 'READY';
@@ -48,7 +49,9 @@ describe('localProviderReadiness', () => {
   it('refuses a runner that cannot say: no report, or no probe capability', () => {
     expect(code({}, { runner: null })).toBe('LOCAL_PROVIDER_RUNNER_OUTDATED');
     expect(code({}, { runner: { capabilities: [], capabilitiesReportedAt: new Date(NOW) } })).toBe('LOCAL_PROVIDER_RUNNER_OUTDATED');
-    expect(code({}, { runner: { capabilities: [OLLAMA_PROBE_CAPABILITY], capabilitiesReportedAt: null } })).toBe('LOCAL_PROVIDER_RUNNER_OUTDATED');
+    expect(code({}, { runner: { capabilities: [OLLAMA_PROBE_CAPABILITY, LOCAL_PROVIDER_RUN_CAPABILITY], capabilitiesReportedAt: null } })).toBe('LOCAL_PROVIDER_RUNNER_OUTDATED');
+    // A phase 2 runner probes, but does not isolate the run (ollama-run/v1).
+    expect(code({}, { runner: { capabilities: [OLLAMA_PROBE_CAPABILITY], capabilitiesReportedAt: new Date(NOW) } })).toBe('LOCAL_PROVIDER_RUNNER_OUTDATED');
   });
 
   it('refuses no probe, an old probe, and an instance that does not answer', () => {
@@ -101,6 +104,13 @@ describe('a local model server\'s failures', () => {
     expect(isRetryableApiErrorText('API Error: 500 {"error":"llama runner process has terminated: exit status 2"}')).toBe(false);
     expect(isRetryableApiErrorText('API Error: 500 {"error":"cudaMalloc failed: out of memory"}')).toBe(false);
     expect(isRetryableApiErrorText('API Error: 404 {"error":{"message":"model \\"x\\" not found, try pulling it first"}}')).toBe(false);
+  });
+
+  it('leaves every cloud provider\'s 500 as it was, even one that mentions memory or a missing model', () => {
+    expect(isRetryableApiErrorText('API Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error: out of memory"}}')).toBe(true);
+    expect(isRetryableApiErrorText('API Error: 500 {"error":{"message":"upstream worker out of memory, retry"}}')).toBe(true);
+    expect(isRetryableApiErrorText('API Error: 502 {"error":{"message":"model not found on this replica"}}')).toBe(true);
+    expect(isRetryableApiErrorText('API Error: 503 {"error":{"message":"CUDA out of memory on shard 3"}}')).toBe(true);
   });
 
   it('still re-sends what clears on its own: busy, overloaded, a timeout, a bare 500', () => {

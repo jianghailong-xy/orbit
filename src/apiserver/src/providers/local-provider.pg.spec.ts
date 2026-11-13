@@ -32,7 +32,7 @@ import test from 'node:test';
 
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
-import { AgentProvider, LOCAL_AUTH_PLACEHOLDER, OLLAMA_PROBE_CAPABILITY, type ClaimedSession } from '@orbit/shared';
+import { AgentProvider, LOCAL_AUTH_PLACEHOLDER, LOCAL_PROVIDER_RUN_CAPABILITY, OLLAMA_PROBE_CAPABILITY, type ClaimedSession } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { sha256 } from '../common/crypto.util';
@@ -118,7 +118,7 @@ suite('a runner-scoped local provider, on real PostgreSQL', { timeout: 600_000 }
   }
 
   interface Machine { runnerId: string; workspaceId: string }
-  async function machine(ownerId: string, label: string, capabilities: string[] | null = [OLLAMA_PROBE_CAPABILITY]): Promise<Machine> {
+  async function machine(ownerId: string, label: string, capabilities: string[] | null = [OLLAMA_PROBE_CAPABILITY, LOCAL_PROVIDER_RUN_CAPABILITY]): Promise<Machine> {
     const runnerId = randomUUID();
     const workspaceId = randomUUID();
     await db.runner.create({

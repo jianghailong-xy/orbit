@@ -199,14 +199,18 @@ export function isRateLimitApiErrorText(text: string | null | undefined): boolea
  * otherwise re-send three times into the same wall. A cold load, a busy server (503) and a timeout are not
  * here: those clear on their own, and stay retryable within MAX_API_ERROR_RETRIES.
  *
- * Plain lowercase substrings, only wording Ollama prints.
+ * Plain lowercase substrings, each one Ollama's or llama.cpp's own wording that no cloud provider prints, so the
+ * rule changes nothing for any other provider: a cloud 500 that says "out of memory" or "model not found" is still
+ * judged by its status.
  */
 export const LOCAL_SERVER_FATAL_ERROR_MARKERS = [
   // "model requires more system memory (31.2 GiB) than is available (12.0 GiB)"
   'requires more system memory',
-  // "llama runner process has terminated: … out of memory", "cudaMalloc failed: out of memory"
+  // "llama runner process has terminated: … out of memory", "llama runner process has terminated: exit status 2"
   'llama runner process has terminated',
-  'out of memory',
+  // llama.cpp's own allocator failure as Ollama relays it: "cudaMalloc failed: out of memory". Not a bare
+  // "out of memory", which a cloud provider's transient 500 may say too and must stay retryable.
+  'cudamalloc failed',
   // "model \"qwen3:8b\" not found, try pulling it first"
   'try pulling it first',
 ];

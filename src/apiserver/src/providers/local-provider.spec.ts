@@ -8,7 +8,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { AgentProvider, LOCAL_AUTH_PLACEHOLDER, OLLAMA_PROBE_CAPABILITY, providerPreset } from '@orbit/shared';
+import { AgentProvider, LOCAL_AUTH_PLACEHOLDER, LOCAL_PROVIDER_RUN_CAPABILITY, OLLAMA_PROBE_CAPABILITY, providerPreset } from '@orbit/shared';
 import { assertRunnerScope, resolveProviderExec } from './custom-provider';
 import { createScope, providerScopeFields, updateScope } from './local-provider';
 import { encryptSecret } from './provider-crypto';
@@ -211,7 +211,7 @@ test('dispatch of a runner-scoped row', async (t) => {
     instanceModels: [{ value: 'qwen3.8:27b', contextWindow: 262144, tools: true }],
   };
   const probing = { engines: null, defaultRemoved: null, accountPauses: null, planUsage: null,
-    capabilities: [OLLAMA_PROBE_CAPABILITY], capabilitiesReportedAt: new Date() };
+    capabilities: [OLLAMA_PROBE_CAPABILITY, LOCAL_PROVIDER_RUN_CAPABILITY], capabilitiesReportedAt: new Date() };
   const resolve = (customRow: typeof local | null, runnerId: string | null | undefined, engine = AgentProvider.CLAUDE) =>
     resolveProviderExec({ engine, declaredProvider: 'ollama', declaredProviderBuiltin: false, customRow, sessionModel: null, runnerId, runner: probing });
   const code = (run: () => unknown) => {

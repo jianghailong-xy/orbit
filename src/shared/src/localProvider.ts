@@ -33,6 +33,61 @@ export const OLLAMA_DEFAULT_BASE_URL = 'http://127.0.0.1:11434';
 export const OLLAMA_PROBE_CAPABILITY = 'ollama-probe/v1';
 
 /**
+ * What a runner declares once it runs a local provider's Claude Code session isolated from every other route
+ * (runner-go/claude_local_provider.go): no inherited cloud routing, and every routing variable pinned in the
+ * session's flag settings layer over the user's and the checkout's settings files. A runner that probes but does
+ * not declare this is refused as LOCAL_PROVIDER_RUNNER_OUTDATED.
+ */
+export const LOCAL_PROVIDER_RUN_CAPABILITY = 'ollama-run/v1';
+
+/** The job variable that marks a local provider's session for the runner; the runner never passes it on. */
+export const LOCAL_PROVIDER_MARKER_VAR = 'ORBIT_LOCAL_PROVIDER';
+
+/**
+ * Whether a variable decides where Claude Code sends its model requests, or with which credential — the same rule
+ * as the runner's claudeRoutingKey: Anthropic's endpoint, key and models, every cloud platform switch
+ * (CLAUDE_CODE_USE_*) with its CLAUDE_CODE_SKIP_*_AUTH sibling, base URLs, regions and credentials, and the OAuth
+ * token. A local session takes none of these from its workspace.
+ */
+export function isClaudeRoutingVar(name: string): boolean {
+  const key = name.toUpperCase();
+  if (['CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_CODE_SUBAGENT_MODEL', 'CLOUD_ML_REGION', 'GOOGLE_APPLICATION_CREDENTIALS',
+    'GOOGLE_CLOUD_PROJECT', 'GCLOUD_PROJECT', 'VERTEX_REGION_CLAUDE_CODE'].includes(key)) return true;
+  if (['ANTHROPIC_', 'CLAUDE_CODE_USE_', 'AWS_', 'VERTEX_REGION_'].some((prefix) => key.startsWith(prefix))) return true;
+  return key.startsWith('CLAUDE_CODE_SKIP_') && key.endsWith('_AUTH');
+}
+
+/**
+ * The routing variables a local session's job names as empty, so that whatever the runner's own environment holds
+ * for them is overridden even on the way to the runner's own filter. Not the whole rule (isClaudeRoutingVar is):
+ * the ones known to send a request somewhere else.
+ */
+export const LOCAL_CLAUDE_CLEARED_ENV = [
+  'ANTHROPIC_API_KEY',
+  'CLAUDE_CODE_OAUTH_TOKEN',
+  'ANTHROPIC_CUSTOM_HEADERS',
+  'CLAUDE_CODE_USE_BEDROCK',
+  'CLAUDE_CODE_USE_VERTEX',
+  'CLAUDE_CODE_USE_FOUNDRY',
+  'CLAUDE_CODE_SKIP_BEDROCK_AUTH',
+  'CLAUDE_CODE_SKIP_VERTEX_AUTH',
+  'CLAUDE_CODE_SKIP_FOUNDRY_AUTH',
+  'ANTHROPIC_BEDROCK_BASE_URL',
+  'ANTHROPIC_VERTEX_BASE_URL',
+  'ANTHROPIC_VERTEX_PROJECT_ID',
+  'ANTHROPIC_FOUNDRY_BASE_URL',
+  'ANTHROPIC_FOUNDRY_RESOURCE',
+  'ANTHROPIC_FOUNDRY_API_KEY',
+  'AWS_BEARER_TOKEN_BEDROCK',
+  'AWS_ACCESS_KEY_ID',
+  'AWS_SECRET_ACCESS_KEY',
+  'AWS_SESSION_TOKEN',
+  'AWS_PROFILE',
+  'CLOUD_ML_REGION',
+  'GOOGLE_APPLICATION_CREDENTIALS',
+] as const;
+
+/**
  * The token handed to an engine whose CLI insists on one when the provider takes none. Built into the
  * engine's environment at dispatch, in memory, and never stored: it is not a secret, and it is what keeps
  * Claude Code from sending the runner's own Claude sign-in to the local endpoint instead.
@@ -304,10 +359,13 @@ export function sanitizeLocalProviderProbe(value: unknown): {
  * Every refusal a door gives a session on a runner-scoped provider. Each one says the session will not run
  * there, and none of them moves it onto another runner or a cloud engine's own sign-in.
  *
- *   DISABLED            the owner turned the provider off.
+ *   DISABLED            the owner turned the provider off. A backstop: every door answers a disabled row first with
+ *                       the refusals every disabled provider meets ("provider not available", "provider is
+ *                       disabled"), so no door returns this code.
  *   NO_RUNNER           its runner was removed, or no longer belongs to the provider's owner.
  *   ELSEWHERE           the session is on another runner, or the door named none.
- *   RUNNER_OUTDATED     the runner does not declare OLLAMA_PROBE_CAPABILITY: too old to say whether Ollama is up.
+ *   RUNNER_OUTDATED     the runner does not declare OLLAMA_PROBE_CAPABILITY and LOCAL_PROVIDER_RUN_CAPABILITY: too old
+ *                       to say whether Ollama is up, or to keep the run off every other route.
  *   UNPROBED            the runner has not probed the instance yet.
  *   STALE               the last probe is older than LOCAL_PROBE_STALE_MS.
  *   UNREACHABLE         the last probe got no answer: Ollama is stopped, still starting, or busy.
@@ -427,7 +485,8 @@ export function localProviderReadiness(
     return refuse('LOCAL_PROVIDER_ELSEWHERE', 'runs only on the runner it is bound to; start this session on that runner');
   }
   const runner = target.runner;
-  if (!runner || runner.capabilitiesReportedAt == null || !declaresLocalProbe(runner.capabilities)) {
+  const runs = (runner?.capabilities ?? []).some((value) => value.trim().toLowerCase() === LOCAL_PROVIDER_RUN_CAPABILITY);
+  if (!runner || runner.capabilitiesReportedAt == null || !declaresLocalProbe(runner.capabilities) || !runs) {
     return refuse('LOCAL_PROVIDER_RUNNER_OUTDATED', 'needs a newer runner: update the runner it is bound to');
   }
   const state = (LOCAL_PROBE_STATES as readonly string[]).includes(row.probeState ?? '') ? (row.probeState as LocalProbeState) : null;

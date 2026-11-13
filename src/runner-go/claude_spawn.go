@@ -234,6 +234,13 @@ func spawnClaude(ctx context.Context, job *ClaimedSession, execDir string, args 
 	// A claude that does not talk to Anthropic runs while the region check answers blocked, with its nonessential
 	// traffic off: that keeps a Claude login stored here from going to Anthropic with it (claude_region.go).
 	cmd.Env = claudeQuietEnv(cmd.Env, job.Agent.Env)
+	// A session on a local model server reaches that server alone: no inherited cloud routing, and every
+	// routing variable pinned in the flag settings layer over the user's and the checkout's settings
+	// (claude_local_provider.go). Not started at all when that cannot be done.
+	cmd.Env = localProviderProcessEnv(cmd.Env, job.Agent.Env)
+	if err := pinLocalProviderSettings(args, job.Agent.Env, execDir); err != nil {
+		return nil, err
+	}
 	sp := &claudeSpawn{cmd: cmd}
 	var err error
 	if sp.stdin, err = cmd.StdinPipe(); err != nil {

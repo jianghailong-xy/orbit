@@ -8,7 +8,10 @@ import {
   isEngineCompatible,
   isRetiredModel,
   keyDialect,
+  isClaudeRoutingVar,
   LOCAL_AUTH_PLACEHOLDER,
+  LOCAL_CLAUDE_CLEARED_ENV,
+  LOCAL_PROVIDER_MARKER_VAR,
   LOCAL_PROVIDER_ERROR_PREFIX,
   localProviderReadiness,
   localTargetModel,
@@ -849,13 +852,12 @@ export function resolveProviderExec(args: {
       // Provider env wins over any user-set workspace env (e.g. a hand-typed ANTHROPIC_BASE_URL).
       // The kimi runtime also reads the model from here, so it can only be built once the
       // model above is resolved.
-      env: {
-        // A local session sends nothing off its machine: no workspace-typed Anthropic key reaches the local
-        // endpoint, and Claude Code's own background traffic (telemetry, update checks) is off.
-        ...(local ? withoutAnthropicKeys(workspaceEnv) : (workspaceEnv ?? {})),
-        ...injectedEnv(engine, customRow, model, apiKey, customRow.codexLogin ? catalogWindow(args.modelCatalog, model) : undefined),
-        ...(local ? { CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' } : {}),
-      },
+      env: local
+        ? localClaudeEnv(workspaceEnv, injectedEnv(engine, customRow, model, apiKey), model)
+        : {
+          ...(workspaceEnv ?? {}),
+          ...injectedEnv(engine, customRow, model, apiKey, customRow.codexLogin ? catalogWindow(args.modelCatalog, model) : undefined),
+        },
       ...(retired ? { retiredPin: true } : {}),
       ...(reasoningLevels ? { reasoningLevels } : {}),
     };
@@ -937,11 +939,34 @@ export function resolveProviderExec(args: {
   };
 }
 
-/** A workspace environment with every Anthropic credential variable taken out (a local session's). */
-function withoutAnthropicKeys(env: Record<string, string> | null | undefined): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(env ?? {}).filter(([name]) => name !== 'ANTHROPIC_API_KEY' && name !== 'CLAUDE_CODE_OAUTH_TOKEN'),
-  );
+/**
+ * A local session's environment (docs/ollama-local-provider-contract.md §7). It reaches the local endpoint and
+ * nothing else: the workspace's routing variables are dropped (isClaudeRoutingVar); every known cloud route is
+ * named empty (LOCAL_CLAUDE_CLEARED_ENV), so the runner's own environment cannot supply one; the endpoint, the
+ * placeholder token and the model are the provider's; Claude Code's background model slots run the session's
+ * model, which the instance serves, rather than a Claude model it does not; its nonessential traffic is off; and
+ * the job is marked for the runner (LOCAL_PROVIDER_MARKER_VAR), which drops inherited routing and pins all of it
+ * in the session's flag settings layer (runner-go/claude_local_provider.go).
+ */
+function localClaudeEnv(
+  workspaceEnv: Record<string, string> | null | undefined,
+  injected: Record<string, string>,
+  model: string,
+): Record<string, string> {
+  const kept = Object.fromEntries(Object.entries(workspaceEnv ?? {}).filter(([name]) => !isClaudeRoutingVar(name)));
+  const cleared = Object.fromEntries(LOCAL_CLAUDE_CLEARED_ENV.map((name) => [name, '']));
+  return {
+    ...kept,
+    ...cleared,
+    ...injected,
+    ANTHROPIC_DEFAULT_OPUS_MODEL: model,
+    ANTHROPIC_DEFAULT_SONNET_MODEL: model,
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: model,
+    ANTHROPIC_SMALL_FAST_MODEL: model,
+    CLAUDE_CODE_SUBAGENT_MODEL: model,
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+    [LOCAL_PROVIDER_MARKER_VAR]: '1',
+  };
 }
 
 /**

@@ -223,10 +223,9 @@ The checks, in order, each with a stable code (`LOCAL_PROVIDER_REFUSAL_CODES`):
 
 | Code | When | Clears on its own |
 | --- | --- | --- |
-| `LOCAL_PROVIDER_DISABLED` | the row is off | no |
 | `LOCAL_PROVIDER_NO_RUNNER` | no runner bound, or it is no longer the row owner's | no |
 | `LOCAL_PROVIDER_ELSEWHERE` | the session is on any other runner, or none | no |
-| `LOCAL_PROVIDER_RUNNER_OUTDATED` | the runner has not declared `ollama-probe/v1` | no |
+| `LOCAL_PROVIDER_RUNNER_OUTDATED` | the runner has not declared both `ollama-probe/v1` and `ollama-run/v1` | no |
 | `LOCAL_PROVIDER_UNPROBED` | no probe yet | yes |
 | `LOCAL_PROVIDER_STALE` | the probe is older than `LOCAL_PROBE_STALE_MS` | yes |
 | `LOCAL_PROVIDER_UNREACHABLE` | the probe got no answer: stopped, cold-starting, busy | yes |
@@ -234,6 +233,11 @@ The checks, in order, each with a stable code (`LOCAL_PROVIDER_REFUSAL_CODES`):
 | `LOCAL_PROVIDER_NO_MODELS` | the instance serves no local model | no |
 | `LOCAL_PROVIDER_MODEL_MISSING` | the model is not in the instance's catalogue, or nothing names one | no |
 | `LOCAL_PROVIDER_CAPABILITY_MISSING` | the model lacks `tools`, or its context is unknown or under 65,536 | no |
+
+A disabled or deleted row is answered before this gate by the refusals every provider meets: `provider not
+available: "<slug>"` at session and task create, `provider not available` at a switch onto it, `provider is disabled`
+at a config change of a session already on it, and `Provider is unavailable; check its configuration` as the claim's
+hold. The gate also refuses a disabled row (`LOCAL_PROVIDER_DISABLED`) as a backstop, but no door answers with it.
 
 The model is the session's own, else the row's default, else the first it lists (`localTargetModel`): never the
 built-in Claude default. `llama3` matches `llama3:latest`. A row-level `MODEL_MISSING`/`CAPABILITY_MISSING` about
@@ -244,17 +248,49 @@ claim clears when it finally claims it. A hold is re-judged on each poll from th
 on a timer, so neither kind of hold is a retry loop. No refusal moves the session onto another runner, another
 credential or the runner's own Claude sign-in.
 
-**What a claim hands the runner** on a local row: Claude Code, the model, `ANTHROPIC_BASE_URL` = the row's
-`baseUrl`, `ANTHROPIC_AUTH_TOKEN` = `LOCAL_AUTH_PLACEHOLDER` (built at dispatch, stored nowhere),
-`ANTHROPIC_MODEL`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, and the workspace environment without
-`ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN`, so no cloud credential typed into the workspace reaches the local
-endpoint. A provider switch stays on the session's engine: Claude Code may move between a cloud key and a local
+**What a claim hands the runner** on a local row: Claude Code and the model, with:
+
+- `ANTHROPIC_BASE_URL` = the row's `baseUrl`, `ANTHROPIC_AUTH_TOKEN` = `LOCAL_AUTH_PLACEHOLDER` (built at dispatch,
+  stored nowhere), `ANTHROPIC_MODEL`, and the model again in `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`,
+  `ANTHROPIC_SMALL_FAST_MODEL` and `CLAUDE_CODE_SUBAGENT_MODEL`, so background and subagent requests ask the instance
+  for a model it serves;
+- `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`;
+- every known cloud route named empty (`LOCAL_CLAUDE_CLEARED_ENV`: `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`,
+  `CLAUDE_CODE_USE_{BEDROCK,VERTEX,FOUNDRY}`, their `SKIP_*_AUTH`, the Bedrock/Vertex/Foundry base URLs, projects
+  and keys, AWS and Google credentials);
+- the workspace environment without any routing variable (`isClaudeRoutingVar`, below);
+- `ORBIT_LOCAL_PROVIDER=1`, which tells the runner to isolate the run.
+
+**The runner's half** (`runner-go/claude_local_provider.go`, declared as `ollama-run/v1`). A claude process takes
+routing from the runner's own environment, from the `env` of the settings files it loads (the user's
+`CLAUDE_CONFIG_DIR/settings.json`, the checkout's `.claude/settings.json` and `.claude/settings.local.json`, then
+the `--settings` flag file the runner writes, which outranks the other three), and from the job. For a marked job
+the runner:
+
+1. drops every routing variable it inherited unless the job sets it (exec keeps the last value of a key, so the
+   job's own empty values win as well);
+2. writes into the flag settings file an `env` that pins every routing variable: the job's value where it sets one,
+   and `""` for each routing variable a lower settings file sets;
+3. does not start the session at all if it cannot write that file;
+4. never passes the marker on to the engine.
+
+A routing variable is matched by prefix, so a platform added later is covered: `ANTHROPIC_*`, `CLAUDE_CODE_USE_*`,
+`CLAUDE_CODE_SKIP_*_AUTH`, `AWS_*`, `VERTEX_REGION_*`, plus `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_SUBAGENT_MODEL`,
+`CLOUD_ML_REGION`, `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT` and `GCLOUD_PROJECT`. An unmarked job (a
+cloud key, a sign-in) is spawned exactly as before. Managed (policy) settings outrank the flag layer and are left
+to the machine's administrator. A provider switch stays on the session's engine: Claude Code may move between a cloud key and a local
 provider on its own runner; another engine is `PROVIDER_ENGINE_INCOMPATIBLE`.
 
 **Failures during a run.** `isRetryableApiErrorText` (`@orbit/shared` events.ts) does not re-send what Ollama says
-can never succeed, whatever the status: `requires more system memory`, `llama runner process has terminated`,
-`out of memory`, `try pulling it first` (`LOCAL_SERVER_FATAL_ERROR_MARKERS`). A busy server (503), an overloaded
-one, a timeout during a cold load and a bare 500 stay retryable, within `MAX_API_ERROR_RETRIES` (3).
+can never succeed, whatever the status (`LOCAL_SERVER_FATAL_ERROR_MARKERS`): `requires more system memory`,
+`llama runner process has terminated`, `cudamalloc failed`, `try pulling it first`. Each is Ollama's or llama.cpp's
+own wording, so no cloud provider's error changes class: a cloud 500 that says "out of memory" stays retryable. A
+busy server (503), an overloaded one, a timeout during a cold load and a bare 500 stay retryable, within
+`MAX_API_ERROR_RETRIES` (3).
+
+The task auto-run ladder (`TasksService.autoRunHoldOff`, 2 min to 120 min, at most 5 failures) reads the same
+markers. A task whose latest failed run ended on one is held with `LOCAL_SERVER_REFUSED` until somebody starts it,
+rather than re-run into the same answer. A later failure of any other kind puts it back on the ladder.
 
 Tests: `src/shared/src/localProviderReadiness.spec.ts`, and `src/apiserver/src/providers/local-provider-dispatch.pg.spec.ts`,
 which runs every door against a fake Ollama on loopback.

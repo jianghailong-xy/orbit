@@ -49,7 +49,10 @@ import {
   LOCAL_PROBE_STALE_MS,
   LOCAL_PROVIDER_ERROR_PREFIX,
   MAX_API_ERROR_RETRIES,
+  LOCAL_PROVIDER_RUN_CAPABILITY,
   OLLAMA_PROBE_CAPABILITY,
+  RunEventType,
+  RunStatus as SharedRunStatus,
   type ClaimedSession,
   type LocalInstanceModel,
   type LocalProviderProbe,
@@ -65,10 +68,14 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from '../tasks/tasks.service';
+import { AutoRetryService } from '../sessions/auto-retry.service';
+import { AUTO_RETRY_TURN_KEY_PREFIX } from '../sessions/watch-turn-key';
+import { PROVIDER_UNAVAILABLE_ERROR } from '../runner-api/runner-provider-support';
 import { storeLocalProviderProbes } from './local-provider-probe';
 import { ProviderPlanUsageService } from './plan-usage.service';
 import { ProvidersService } from './providers.service';
 import '../test-support/dequeue-under-lease';
+import { sessionLease } from '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY ??= 'local-provider-dispatch-spec';
@@ -240,8 +247,13 @@ suite('a local Ollama provider through dispatch, against a fake Ollama, on real 
   const sessions = new SessionsService(prisma, queue, realtime);
   const tasks = new TasksService(prisma, sessions, realtime);
   const runnerApi = new RunnerApiController(
-    db as never, queue as never, realtime as never, {} as never, { issue: async () => 'orchestration-credential' } as never, {} as never,
+    db as never, queue as never, realtime as never, realtime as never, { issue: async () => 'orchestration-credential' } as never,
+    // The messages here carry no `#`-references and reach no list console.
+    { expand: async (_owner: string, content?: string) => content } as never,
+    { appendFor: async (_tx: unknown, _id: string, content?: string) => content } as never,
+    undefined, undefined, undefined, undefined, sessions,
   );
+  const retries = new AutoRetryService(prisma, sessions, realtime);
 
   async function person(label: string): Promise<string> {
     const id = randomUUID();
@@ -251,7 +263,7 @@ suite('a local Ollama provider through dispatch, against a fake Ollama, on real 
 
   interface Machine { runnerId: string; workspaceId: string }
   /** A runner and a workspace on it. `capabilities` null is a runner too old to declare any. */
-  async function machine(ownerId: string, label: string, capabilities: string[] | null = [OLLAMA_PROBE_CAPABILITY]): Promise<Machine> {
+  async function machine(ownerId: string, label: string, capabilities: string[] | null = [OLLAMA_PROBE_CAPABILITY, LOCAL_PROVIDER_RUN_CAPABILITY]): Promise<Machine> {
     const runnerId = randomUUID();
     const workspaceId = randomUUID();
     await db.runner.create({
@@ -312,6 +324,12 @@ suite('a local Ollama provider through dispatch, against a fake Ollama, on real 
 
   const owner = await person('owner');
   const stranger = await person('stranger');
+  // Every case starts from the same instance, so a case that fails part-way does not take the next one with it.
+  t.beforeEach(() => {
+    fake.models.clear();
+    fake.models.set(MODEL, { tools: true, contextWindow: 262_144 });
+    fake.failure = null;
+  });
 
   await t.test('(1) affinity: created and claimed on its own runner only; no other runner ever claims it', async () => {
     const home = await machine(owner, 'aff-home');
@@ -358,7 +376,13 @@ suite('a local Ollama provider through dispatch, against a fake Ollama, on real 
     assert.equal(env.ANTHROPIC_MODEL, MODEL);
     assert.equal(env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, '1');
     assert.equal(env.KEEP_ME, 'yes', 'the rest of the workspace env still travels');
-    assert.equal(env.ANTHROPIC_API_KEY, undefined, 'a workspace Anthropic key reached the local endpoint');
+    // Named empty, so neither the workspace's key nor one in the runner's own environment reaches the endpoint.
+    assert.equal(env.ANTHROPIC_API_KEY, '', 'a workspace Anthropic key reached the local endpoint');
+    for (const route of ['CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY', 'AWS_BEARER_TOKEN_BEDROCK', 'CLAUDE_CODE_OAUTH_TOKEN']) {
+      assert.equal(env[route], '', `${route} is not overridden`);
+    }
+    assert.equal(env.ORBIT_LOCAL_PROVIDER, '1', 'the runner is not told to isolate the run');
+    assert.equal(env.ANTHROPIC_DEFAULT_HAIKU_MODEL, MODEL, 'background requests go to a model the instance does not serve');
     assert.ok(!JSON.stringify(claimed).includes(WORKSPACE_SECRET));
     // Nothing stored holds a key for it, or the placeholder.
     const keyed = await client.query(`SELECT 1 FROM "model_provider" WHERE "id" = $1 AND "api_key_enc" <> ''`, [local.id]);
@@ -441,30 +465,42 @@ suite('a local Ollama provider through dispatch, against a fake Ollama, on real 
     assert.equal((await claimOn(home))?.sessionId, waiting);
   });
 
-  await t.test('(5) resume and reload: rebuilt on its own runner only while ready', async () => {
+  /** The runner's inbox poll, as it makes it: the session's live lease, and a poller that takes steers. */
+  const inbox = async (at: Machine, id: string) =>
+    runnerApi.inbox({ id: at.runnerId } as never, id, await sessionLease(prisma, id), '1') as Promise<{
+      turnId: string; kind: string; env?: Record<string, string>; content?: string;
+    }>;
+  const reloadsOf = (id: string) => db.conversationTurn.findMany({ where: { sessionId: id, kind: 'reload' }, orderBy: { seq: 'asc' } });
+
+  await t.test('(5) resume and reload: rebuilt on its own runner only while ready, through the runner\'s own doors', async () => {
     const home = await machine(owner, 'resume-home');
     const local = await localOn(owner, home);
+    const twin = await localOn(owner, home);
     await probe(local);
+    await probe(twin);
     const idle = await sessionOn(owner, home, local.slug, RunStatus.AWAITING_INPUT);
     const rebuilt = (await runnerApi.reclaim({ id: home.runnerId, ownerId: owner })).sessions.find((s) => s.sessionId === idle);
     assert.equal(rebuilt?.agent.env?.ANTHROPIC_BASE_URL, fake.url);
     assert.equal(rebuilt?.agent.env?.ANTHROPIC_AUTH_TOKEN, LOCAL_AUTH_PLACEHOLDER);
 
-    const reload = (id: string) =>
-      (runnerApi as unknown as { reloadProviderEnv: (tx: unknown, id: string, content: string) => Promise<{ env?: Record<string, string>; refusal?: string }> })
-        .reloadProviderEnv(db, id, JSON.stringify({ provider: local.slug }));
-    const ready = await reload(idle);
-    assert.equal(ready.env?.ANTHROPIC_BASE_URL, fake.url);
-    assert.equal(ready.env?.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, '1');
+    // A provider switch onto the twin queues a reload; the runner's inbox hands it out with the twin's env.
+    assert.equal(await outcome(() => sessions.updateConfig(owner, idle, { provider: twin.slug, model: MODEL } as never)), 'accepted');
+    const handed = await inbox(home, idle);
+    assert.equal(handed.kind, 'reload');
+    assert.equal(handed.env?.ANTHROPIC_BASE_URL, fake.url);
+    assert.equal(handed.env?.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, '1');
+    assert.equal(handed.env?.ORBIT_LOCAL_PROVIDER, '1');
 
+    // Switched back while ready, then the twin's probe goes stale before the runner polls: the reload is not handed out.
+    assert.equal(await outcome(() => sessions.updateConfig(owner, idle, { provider: local.slug, model: MODEL } as never)), 'accepted');
     await probe(local, new Date(Date.now() - LOCAL_PROBE_STALE_MS - 60_000));
-    const stale = await reload(idle);
-    assert.equal(stale.env, undefined);
-    assert.match(stale.refusal ?? '', /^Local provider ".+" has not been checked recently/);
+    const refused = await inbox(home, idle);
+    assert.notEqual(refused.kind, 'reload', 'a reload onto a stale local provider was handed out');
+    assert.equal(refused.env, undefined);
     const again = (await runnerApi.reclaim({ id: home.runnerId, ownerId: owner })).sessions.find((s) => s.sessionId === idle);
     assert.equal(again, undefined, 'a stale local provider was rebuilt on reclaim');
+    assert.equal((await rowOf(idle)).provider, local.slug, 'the session moved off its provider');
   });
-
   await t.test('(6) provider switch keeps the same-runtime rule, under the same gate', async () => {
     const home = await machine(owner, 'switch-home');
     const laptop = await machine(owner, 'switch-laptop');
@@ -499,9 +535,19 @@ suite('a local Ollama provider through dispatch, against a fake Ollama, on real 
     const local = await localOn(owner, home);
     await probe(local);
     await providers.update(owner, local.id, { enabled: false });
+    // A disabled provider meets the refusals every disabled provider meets, at every door; the gate's own
+    // LOCAL_PROVIDER_DISABLED is a backstop no door answers first.
     assert.equal(await outcome(() => create(owner, home, local.slug)), `provider not available: "${local.slug}"`);
+    const cloud = (await providers.create(owner, {
+      label: 'DeepSeek', presetSlug: 'deepseek', baseUrl: 'https://api.deepseek.com/anthropic', apiKey: 'local-dispatch-closed-cloud',
+    })) as { slug: string };
+    const onCloud = await sessionOn(owner, home, cloud.slug, RunStatus.AWAITING_INPUT);
+    assert.equal(await outcome(() => sessions.updateConfig(owner, onCloud, { provider: local.slug } as never)), 'provider not available');
+    const onDisabled = await sessionOn(owner, home, local.slug, RunStatus.AWAITING_INPUT);
+    assert.equal(await outcome(() => sessions.updateConfig(owner, onDisabled, { model: MODEL } as never)), 'provider is disabled');
     const whileDisabled = await sessionOn(owner, home, local.slug);
     assert.equal(await claimOn(home), null);
+    assert.equal((await rowOf(whileDisabled)).error, PROVIDER_UNAVAILABLE_ERROR);
     await providers.update(owner, local.id, { enabled: true });
     assert.equal((await claimOn(home))?.sessionId, whileDisabled);
 
@@ -526,6 +572,8 @@ suite('a local Ollama provider through dispatch, against a fake Ollama, on real 
     assert.match((await rowOf(waiting)).error ?? '', /needs a newer runner/);
     // Once it declares the probe, the same session runs.
     await db.runner.update({ where: { id: old.runnerId }, data: { capabilities: [OLLAMA_PROBE_CAPABILITY], capabilitiesReportedAt: new Date() } });
+    assert.equal(await claimOn(old), null, 'a runner that probes but does not isolate the run was handed it');
+    await db.runner.update({ where: { id: old.runnerId }, data: { capabilities: [OLLAMA_PROBE_CAPABILITY, LOCAL_PROVIDER_RUN_CAPABILITY], capabilitiesReportedAt: new Date() } });
     assert.equal((await claimOn(old))?.sessionId, waiting);
   });
 
@@ -567,5 +615,229 @@ suite('a local Ollama provider through dispatch, against a fake Ollama, on real 
     }
     // No model request ever reached the fake but the three case (8) sent itself: the control plane runs nothing on it.
     assert.equal(fake.seen.filter((line) => line === 'POST /v1/messages').length, 3);
+  });
+  // ── A run, through the runner's own doors ────────────────────────────────────────────────────────────
+
+  /** An idle session that has run its opening turn: nothing for a claim to seed. */
+  async function idleOn(ownerId: string, at: Machine, provider: string): Promise<string> {
+    const id = await sessionOn(ownerId, at, provider, RunStatus.AWAITING_INPUT);
+    await db.conversationTurn.create({
+      data: {
+        sessionId: id, seq: 1, clientTurnId: `initial-${id}`, kind: 'message', content: 'hello',
+        status: 'ANSWERED', deliveredAt: new Date(), answeredAt: new Date(),
+      },
+    });
+    return id;
+  }
+  /** The runner process that holds the session's inbox lease, as every runner write names it. */
+  const leaseOwnerOf = async (id: string) =>
+    (await db.session.findUniqueOrThrow({ where: { id }, select: { inboxLeaseOwner: true } })).inboxLeaseOwner ?? undefined;
+  const seqs = new Map<string, number>();
+  /** The runner's events for one turn, through the real ingest. */
+  async function say(at: Machine, id: string, turnId: string, type: RunEventType, payload: Record<string, unknown>) {
+    const seq = (seqs.get(id) ?? 100) + 1;
+    seqs.set(id, seq);
+    await runnerApi.events({ id: at.runnerId } as never, id, {
+      events: [{ seq, type, ts: new Date().toISOString(), turnId, payload }], leaseOwner: await leaseOwnerOf(id),
+    } as never);
+  }
+  /** The runner's poll after a claim, until a message comes out; echoed as the engine echoes it. */
+  async function handOut(at: Machine, id: string): Promise<string> {
+    for (;;) {
+      const handed = await (runnerApi as unknown as {
+        dequeueTurn: (id: string, runnerId: string, lease: string | null) => Promise<Record<string, unknown> | null>;
+      }).dequeueTurn(id, at.runnerId, null);
+      assert.ok(handed, `the inbox of ${id} handed nothing out`);
+      const turn = await db.conversationTurn.findUniqueOrThrow({ where: { id: String(handed.turnId) } });
+      if (turn.kind !== 'message') continue;
+      await say(at, id, turn.id, RunEventType.USER, { text: String(handed.content ?? '') });
+      return turn.id;
+    }
+  }
+  /** A person's message: queued, claimed by the bound runner, handed out. */
+  async function running(at: Machine, id: string, words: string): Promise<{ turnId: string; claimed: ClaimedSession }> {
+    await sessions.createTurn(owner, id, { clientTurnId: randomUUID(), content: words });
+    const claimed = await claimOn(at);
+    assert.equal(claimed?.sessionId, id, 'the bound runner was not handed the turn');
+    return { turnId: await handOut(at, id), claimed: claimed! };
+  }
+  /** The turn ends as the runner settles it: the engine's last words, then the completion. */
+  async function ends(at: Machine, id: string, turnId: string, failed: boolean, text: string) {
+    await say(at, id, turnId, RunEventType.ASSISTANT, { text });
+    await runnerApi.turnComplete({ id: at.runnerId } as never, id, {
+      leaseOwner: await leaseOwnerOf(id),
+      turnId, status: failed ? SharedRunStatus.FAILED : SharedRunStatus.SUCCEEDED,
+      subtype: failed ? 'error_during_execution' : 'success', numTurns: 1, costUsd: 0, ...(failed ? { error: text } : {}),
+    } as never);
+  }
+  /** What the fake answers a model request with, in Claude Code's own rendering of an answer it gave up on. */
+  async function said(model: string, failure: FakeOllama['failure'] = null): Promise<string> {
+    fake.failure = failure;
+    try {
+      const res = await fetch(`${fake.url}/v1/messages`, { method: 'POST', body: JSON.stringify({ model, max_tokens: 8, messages: [] }) });
+      return `API Error: ${res.status} ${await res.text()}`;
+    } finally {
+      fake.failure = null;
+    }
+  }
+  const COLD_START_TIMEOUT = 'API Error: Request timed out.';
+  const resentOf = (id: string) => db.conversationTurn.findMany({ where: { sessionId: id, clientTurnId: { startsWith: AUTO_RETRY_TURN_KEY_PREFIX } } });
+
+  await t.test('(10) task start: the task-bound session is made and claimed on the bound runner; stale or stopped, the start is refused', async () => {
+    const home = await machine(owner, 'task-home');
+    const laptop = await machine(owner, 'task-laptop');
+    const local = await localOn(owner, home);
+    await probe(local);
+    const task = (await tasks.create(owner, { title: 'local task run', provider: local.slug, assigneeId: home.workspaceId, ...TASK_CHECK } as never)) as { id: string };
+    const started = (await tasks.execute(owner, task.id, undefined, randomUUID())) as { sessionId: string };
+    const run = await db.session.findUniqueOrThrow({
+      where: { id: started.sessionId },
+      select: { taskId: true, assignedRunnerId: true, provider: true, providerBuiltin: true, engine: true },
+    });
+    assert.deepEqual(run, { taskId: task.id, assignedRunnerId: home.runnerId, provider: local.slug, providerBuiltin: false, engine: AgentProvider.CLAUDE });
+    assert.equal(await claimOn(laptop), null);
+    const claimed = await claimOn(home);
+    assert.equal(claimed?.sessionId, started.sessionId);
+    assert.equal(claimed?.agent.env?.ANTHROPIC_BASE_URL, fake.url);
+    assert.equal(claimed?.agent.env?.ORBIT_LOCAL_PROVIDER, '1');
+
+    // Created while READY, then the probe goes stale — or Ollama stops — before the task is started.
+    for (const turn of ['stale', 'stopped'] as const) {
+      const later = (await tasks.create(owner, { title: `local task ${turn}`, provider: local.slug, assigneeId: home.workspaceId, ...TASK_CHECK } as never)) as { id: string };
+      if (turn === 'stale') {
+        await probe(local, new Date(Date.now() - LOCAL_PROBE_STALE_MS - 60_000));
+      } else {
+        await fake.stop();
+        try {
+          assert.equal(await probe(local), 'UNREACHABLE');
+        } finally {
+          await fake.start();
+        }
+      }
+      const code = turn === 'stale' ? 'LOCAL_PROVIDER_STALE' : 'LOCAL_PROVIDER_UNREACHABLE';
+      assert.equal(await outcome(() => tasks.execute(owner, later.id, undefined, randomUUID())), code);
+      assert.deepEqual(await db.session.findMany({ where: { taskId: later.id }, select: { id: true } }), [], 'a refused start left a run behind');
+      assert.deepEqual(
+        await db.task.findUniqueOrThrow({ where: { id: later.id }, select: { provider: true, assigneeId: true } }),
+        { provider: local.slug, assigneeId: home.workspaceId },
+        'a refused start moved the task',
+      );
+      assert.equal(await claimOn(laptop), null);
+      await probe(local);
+    }
+  });
+
+  await t.test('(11) Ollama stops after a run: the next turn, a reclaim and a reload hand out nothing until it is back', async () => {
+    const home = await machine(owner, 'mid-home');
+    const local = await localOn(owner, home);
+    const twin = await localOn(owner, home);
+    await probe(local);
+    await probe(twin);
+    const id = await idleOn(owner, home, local.slug);
+    const first = await running(home, id, 'list the files');
+    assert.equal(first.claimed.agent.env?.ANTHROPIC_BASE_URL, fake.url);
+    await ends(home, id, first.turnId, false, 'here they are');
+    assert.equal((await rowOf(id)).status, RunStatus.AWAITING_INPUT, 'the run did not end recoverable');
+    // A second idle session, switched while ready: its reload is queued for the runner's next poll.
+    const idle = await sessionOn(owner, home, local.slug, RunStatus.AWAITING_INPUT);
+    assert.equal(await outcome(() => sessions.updateConfig(owner, idle, { provider: twin.slug, model: MODEL } as never)), 'accepted');
+
+    await fake.stop();
+    try {
+      assert.equal(await probe(local), 'UNREACHABLE');
+      assert.equal(await probe(twin), 'UNREACHABLE');
+      await sessions.createTurn(owner, id, { clientTurnId: randomUUID(), content: 'and now?' });
+      for (let i = 0; i < 3; i++) assert.equal(await claimOn(home), null, 'a turn was handed to a runner whose Ollama is down');
+      const held = await rowOf(id);
+      assert.equal(held.status, RunStatus.PENDING);
+      assert.match(held.error ?? '', /is not answering on its runner/);
+      const reclaimed = (await runnerApi.reclaim({ id: home.runnerId, ownerId: owner })).sessions.map((s) => s.sessionId);
+      assert.ok(!reclaimed.includes(id) && !reclaimed.includes(idle), 'a reclaim rebuilt a session onto a stopped Ollama');
+      const reload = await inbox(home, idle);
+      assert.notEqual(reload.kind, 'reload', 'a reload onto a stopped Ollama was handed out');
+      assert.equal(reload.env, undefined);
+      for (const sid of [id, idle]) {
+        const row = await rowOf(sid);
+        assert.deepEqual([row.providerBuiltin, row.engine], [false, AgentProvider.CLAUDE], 'a session moved onto a cloud engine');
+      }
+    } finally {
+      await fake.start();
+    }
+    await probe(local);
+    await probe(twin);
+    const back = await claimOn(home);
+    assert.equal(back?.sessionId, id);
+    assert.equal(back?.agent.env?.ANTHROPIC_BASE_URL, fake.url);
+    assert.equal((await rowOf(id)).error, null);
+  });
+
+  await t.test('(12) failures through ingest, settlement and the retry sweep: out of memory and a missing model are never re-sent; a cold-start timeout is, within the budget, on the same runner and provider', async () => {
+    const home = await machine(owner, 'retry-home');
+    const local = await localOn(owner, home);
+    await probe(local);
+    const heartbeat = () => db.runner.update({ where: { id: home.runnerId }, data: { lastHeartbeatAt: new Date() } });
+
+    for (const [label, text] of [['out of memory', await said(MODEL, 'oom')], ['missing model', await said('gone:7b')]] as const) {
+      const id = await idleOn(owner, home, local.slug);
+      const turn = await running(home, id, `the ${label} turn`);
+      await ends(home, id, turn.turnId, true, text);
+      const failed = await db.session.findUniqueOrThrow({ where: { id }, select: { status: true, retryAt: true } });
+      assert.equal(failed.status, RunStatus.FAILED);
+      assert.equal(failed.retryAt, null, `${label} armed an automatic retry`);
+      await heartbeat();
+      await retries.sweep();
+      assert.equal((await resentOf(id)).length, 0, `${label} was re-sent`);
+      assert.equal(await claimOn(home), null);
+    }
+
+    const id = await idleOn(owner, home, local.slug);
+    let turnId = (await running(home, id, 'load the big model')).turnId;
+    for (let attempt = 0; ; attempt++) {
+      await ends(home, id, turnId, true, COLD_START_TIMEOUT);
+      const row = await db.session.findUniqueOrThrow({ where: { id }, select: { retryAt: true, provider: true, providerBuiltin: true, assignedRunnerId: true } });
+      assert.deepEqual([row.provider, row.providerBuiltin, row.assignedRunnerId], [local.slug, false, home.runnerId], 'a retry moved the session');
+      if (!row.retryAt) break;
+      assert.ok(attempt < MAX_API_ERROR_RETRIES, 'a timeout was re-sent past the budget');
+      await db.session.update({ where: { id }, data: { retryAt: new Date(Date.now() - 3_600_000) } });
+      await heartbeat();
+      await retries.sweep();
+      const claimed = await claimOn(home);
+      assert.equal(claimed?.sessionId, id, 'the re-sent turn was not handed to the bound runner');
+      assert.equal(claimed?.agent.env?.ANTHROPIC_BASE_URL, fake.url);
+      assert.equal(claimed?.agent.env?.ORBIT_LOCAL_PROVIDER, '1');
+      turnId = await handOut(home, id);
+    }
+    assert.equal((await resentOf(id)).length, MAX_API_ERROR_RETRIES);
+  });
+
+  await t.test('(13) a task run that ended on Ollama refusing the request is held off the auto-run ladder; a timeout only backs off', async () => {
+    const home = await machine(owner, 'auto-home');
+    const local = await localOn(owner, home);
+    await probe(local);
+    const policy = async (taskId: string) => {
+      const refused = new Set<string>();
+      const held = await (tasks as unknown as {
+        autoRunHoldOff: (ids: string[], blind: Set<string>, o: { countUnrequestedEnds: boolean; localServerRefused: Set<string> }) => Promise<Map<string, Date | null>>;
+      }).autoRunHoldOff([taskId], new Set(), { countUnrequestedEnds: true, localServerRefused: refused });
+      return { held, refused };
+    };
+    for (const [label, error, final] of [
+      ['out of memory', await said(MODEL, 'oom'), true],
+      ['missing model', await said('gone:7b'), true],
+      ['cold-start timeout', COLD_START_TIMEOUT, false],
+      ['busy', await said(MODEL, 'busy'), false],
+    ] as const) {
+      const task = (await tasks.create(owner, { title: `auto ${label}`, provider: local.slug, assigneeId: home.workspaceId, ...TASK_CHECK } as never)) as { id: string };
+      const { sessionId } = (await tasks.execute(owner, task.id, undefined, randomUUID())) as { sessionId: string };
+      await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.FAILED, error, finishedAt: new Date() } });
+      const { held, refused } = await policy(task.id);
+      if (final) {
+        assert.ok(held.has(task.id) && held.get(task.id) === null, `${label}: the ladder would re-run it`);
+        assert.ok(refused.has(task.id), `${label}: not told apart from a spent budget`);
+      } else {
+        assert.ok(held.get(task.id) instanceof Date, `${label}: not backed off`);
+        assert.ok(!refused.has(task.id), `${label}: held as final`);
+      }
+    }
   });
 });
