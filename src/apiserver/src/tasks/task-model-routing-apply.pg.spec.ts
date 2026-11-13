@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
+import { BadRequestException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { CreatorType, PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
@@ -579,24 +580,33 @@ test('the switch is the owner\'s: the user API turns it on and off, the agent to
         // None of these writes names a field the owner's card covers, so nothing reads this.
         {} as never,
       );
-      const spawned = await agents.createWorkspace(runner, 'orchestrating-session', 'credential', {
+      // Refused by name (HUMAN_ONLY_WORKSPACE_FIELDS), not dropped: the agent learns it cannot, and nothing is written.
+      const humanOnly = async (write: Promise<unknown>, fields: string[]) => {
+        const refused = await write.then(() => null, (error: unknown) => error);
+        assert.ok(refused instanceof BadRequestException, 'a 400');
+        const answer = refused.getResponse() as { code: string; fields: string[] };
+        assert.equal(answer.code, 'HUMAN_ONLY_WORKSPACE_FIELD');
+        assert.deepEqual(answer.fields, fields);
+      };
+      await humanOnly(agents.createWorkspace(runner, 'orchestrating-session', 'credential', {
         name: 'agent-made', modelRouting: true, modelRoutingOptimizeFor: 'intelligence',
-      });
-      assert.equal(await routingOf(spawned.id), false, 'an agent cannot create an Agent with it on');
-      assert.equal((await db.workspace.findUniqueOrThrow({ where: { id: spawned.id } })).modelRoutingOptimizeFor, 'cost');
-      await agents.updateWorkspace(runner, 'orchestrating-session', 'credential', spawned.id, { modelRouting: true, modelRoutingOptimizeFor: 'intelligence' });
-      assert.equal(await routingOf(spawned.id), false, 'nor turn it on');
-      assert.equal((await db.workspace.findUniqueOrThrow({ where: { id: spawned.id } })).modelRoutingOptimizeFor, 'cost');
+      }), ['modelRouting', 'modelRoutingOptimizeFor']);
+      assert.equal(await db.workspace.count({ where: { ownerId: target.ownerId, name: 'agent-made' } }), 0,
+        'an agent cannot create an Agent with it on');
+      await humanOnly(agents.updateWorkspace(runner, 'orchestrating-session', 'credential', plain.id, {
+        modelRouting: true, modelRoutingOptimizeFor: 'intelligence',
+      }), ['modelRouting', 'modelRoutingOptimizeFor']);
+      assert.equal(await routingOf(plain.id), false, 'nor turn it on');
+      assert.equal((await db.workspace.findUniqueOrThrow({ where: { id: plain.id } })).modelRoutingOptimizeFor, 'cost');
       await workspaces.update(target.ownerId, target.agentId, { modelRouting: true });
-      await agents.updateWorkspace(runner, 'orchestrating-session', 'credential', target.agentId, {
+      const before = await db.workspace.findUniqueOrThrow({ where: { id: target.agentId } });
+      await humanOnly(agents.updateWorkspace(runner, 'orchestrating-session', 'credential', target.agentId, {
         modelRouting: false, description: 'touched by an agent',
-      });
+      }), ['modelRouting']);
       assert.deepEqual(
-        await db.workspace.findUniqueOrThrow({
-          where: { id: target.agentId }, select: { modelRouting: true, description: true },
-        }),
-        { modelRouting: true, description: 'touched by an agent' },
-        'nor turn it off: the update went through and left the switch where the owner put it',
+        await db.workspace.findUniqueOrThrow({ where: { id: target.agentId } }),
+        before,
+        'nor turn it off: the whole write is refused, so neither the switch nor the description moved',
       );
     } finally {
       await services.db.$disconnect();
