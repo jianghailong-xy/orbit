@@ -1,0 +1,90 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Settings · add a machine</title><style>
+body{margin:0;background:#f3f4f6}
+.b-part{font:15px/1.6 Inter,"Noto Sans SC",sans-serif;color:#1f2328;background:#fff;width:2060px;padding:36px 44px 40px;box-sizing:border-box;margin:0 0 24px}
+.b-part h1{font-size:26px;margin:0 0 6px}.b-part h2{font-size:20px;margin:26px 0 10px}
+.b-lead{color:#4b5563;margin:0 0 14px}
+.b-row{display:flex;gap:24px;align-items:flex-start}
+.b-frame{margin:0;width:640px}
+.b-arrow{align-self:center;font-size:30px;color:#9ca3af;margin:0 -12px}
+.b-shot{position:relative;border:1px solid #d1d5db;border-radius:10px;line-height:0}
+.b-shot img{border-radius:10px}
+.b-frame figcaption{font-size:14px;color:#374151;margin-top:8px}
+.b-frame figcaption b{color:#111}
+.b-pin{position:absolute;width:24px;height:24px;border-radius:50%;background:#e11d48;color:#fff;font:700 13px/24px Inter,sans-serif;text-align:center;box-shadow:0 0 0 3px #fff}
+.b-ring{position:absolute;border:2.5px dashed #e11d48;border-radius:8px}
+.b-notes{counter-reset:n;padding:0;list-style:none;margin:10px 0 0}
+.b-notes li{position:relative;padding-left:34px;margin:8px 0}
+.b-notes li::before{counter-increment:n;content:counter(n);position:absolute;left:0;top:2px;width:22px;height:22px;border-radius:50%;background:#e11d48;color:#fff;font:700 12px/22px Inter,sans-serif;text-align:center}
+.b-bad{color:#b91c1c;font-weight:600}.b-ok{color:#047857;font-weight:600}
+table.b-t{border-collapse:collapse;width:100%;font-size:14px;margin-top:6px}
+.b-t th,.b-t td{border:1px solid #e5e7eb;padding:8px 10px;text-align:left;vertical-align:top}
+.b-t th{background:#f9fafb}
+.b-rec{background:#ecfdf5}
+.b-tag{display:inline-block;font-size:12px;border-radius:4px;padding:0 6px;background:#fef3c7;color:#92400e;margin-left:6px}
+code{font:13px "JetBrains Mono",monospace;background:#f3f4f6;padding:1px 4px;border-radius:4px}
+</style></head><body>
+<section class="b-part" id="part-1"><h1>Settings → Machines → ＋ · 今天（真实页面，HEAD 87c394579）</h1>
+<p class="b-lead">示例账号 Mia（虚构）。窗口 1280×900。Settings 里另外两个 ＋（Providers、Workspaces）都留在 Settings 里；只有 Machines 的 ＋ 跳到 <code>/runners/register</code>，那是主界面的页面。</p>
+<h2>A. 已有机器的老用户</h2><div class="b-row">
+<figure class="b-frame"><div class="b-shot"><img src="shots/today-fleet-0.png" width="640"><span class="b-ring" style="left:112px;top:263px;width:26px;height:26px"></span><span class="b-pin" style="left:146px;top:264px">1</span></div><figcaption><b>T1</b> 在 Settings 里点 Machines 的 ＋</figcaption></figure>
+<div class="b-arrow">→</div>
+<figure class="b-frame"><div class="b-shot"><img src="shots/today-fleet-1.png" width="640"><span class="b-ring" style="left:4px;top:4px;width:132px;height:136px"></span><span class="b-pin" style="left:142px;top:10px">2</span><span class="b-ring" style="left:228px;top:172px;width:334px;height:24px"></span><span class="b-pin" style="left:566px;top:172px">3</span></div><figcaption><b>T2</b> <span class="b-bad">整个窗口离开 Settings</span>：左边换成主界面侧栏，没有 Back to Orbit。</figcaption></figure>
+<div class="b-arrow">→</div>
+<figure class="b-frame"><div class="b-shot"><img src="shots/today-online.png" width="640"><span class="b-ring" style="left:472px;top:286px;width:76px;height:22px"></span><span class="b-pin" style="left:552px;top:286px">4</span></div><figcaption><b>T3</b> 新机器上线：只有 Start a session。</figcaption></figure>
+</div>
+<h2>B. 新用户（一台机器都没有，服务器没开托管 runner）</h2><div class="b-row">
+<figure class="b-frame"><div class="b-shot"><img src="shots/today-new-landing.png" width="640"><span class="b-pin" style="left:226px;top:94px">5</span></div><figcaption><b>N1 首次登录</b>：落在主界面的欢迎卡（三步：电脑 → 模型 → 第一条消息）。<span class="b-ok">这条路是对的。</span></figcaption></figure>
+<figure class="b-frame"><div class="b-shot"><img src="shots/today-new-settings-0.png" width="640"><span class="b-ring" style="left:6px;top:262px;width:120px;height:20px"></span><span class="b-pin" style="left:146px;top:260px">6</span></div><figcaption><b>N2</b> 新用户自己打开 Settings：Machines 组下面是空的，只剩标题边一个小 ＋。</figcaption></figure>
+<figure class="b-frame"><div class="b-shot"><img src="shots/today-new-settings-1.png" width="640"></div><figcaption><b>N3</b> 点 ＋：<span class="b-bad">同样离开 Settings</span>，落到 N1 的欢迎卡。</figcaption></figure>
+</div>
+<h2>问题</h2><ol class="b-notes">
+<li>＋ 在 Settings 导航里，用户预期“在 Settings 右侧打开一页”，就像 Providers 的 ＋（<code>/settings/providers/new</code>）和 Workspaces 的 ＋（<code>/settings/workspaces/new</code>）。</li>
+<li>跳出后左栏换成主界面，回不到 Settings（只能浏览器后退）。原因：<code>ef640054a</code>（11-12 Settings 独立窗口）时，注册页还是旧的主界面页面，没搬进 Settings。</li>
+<li>文案还写着 “Machines &amp; models page”——web 上这个页面已经没了，现在是 Settings 左栏的 Machines 组。</li>
+<li>上线后只能去开会话；想先配这台机器（引擎、并发、工作区）得自己再找回 Settings。</li>
+<li>N1 首次登录走欢迎卡是对的，不该动。</li>
+<li>空的 Machines 组只有一个小 ＋，新用户很难看出这里能加机器；Providers 组空时会显示一行 “Connect a provider”，两组不一致。</li>
+</ol></section>
+
+<section class="b-part" id="part-2"><h1>方案：在 Settings 里加机器，新用户首次登录不变（原型，真实页面）</h1>
+<p class="b-lead">新地址 <code>/settings/machines/new</code>：Settings 右栏里放同一份 “Add a runner”（同一个组件、同一条命令、同一套轮询），不新造外观。<code>/runners/register</code> 保留，首次登录、欢迎页、Projects 等 Settings 外的入口照旧去它。</p>
+<h2>A. 老用户</h2><div class="b-row">
+<figure class="b-frame"><div class="b-shot"><img src="shots/proto-fleet-0.png" width="640"><span class="b-ring" style="left:112px;top:263px;width:26px;height:26px"></span><span class="b-pin" style="left:146px;top:264px">1</span></div><figcaption><b>P1</b> 同 T1，点 ＋</figcaption></figure>
+<div class="b-arrow">→</div>
+<figure class="b-frame"><div class="b-shot"><img src="shots/proto-fleet-1.png" width="640"><span class="b-ring" style="left:4px;top:4px;width:124px;height:66px"></span><span class="b-pin" style="left:134px;top:10px">2</span><span class="b-ring" style="left:156px;top:44px;width:390px;height:26px"></span><span class="b-pin" style="left:552px;top:46px">3</span></div><figcaption><b>P2</b> <span class="b-ok">留在 Settings</span>，右栏是注册指引；左栏、Back to Orbit、Esc 都在。</figcaption></figure>
+<div class="b-arrow">→</div>
+<figure class="b-frame"><div class="b-shot"><img src="shots/proto-online.png" width="640"><span class="b-ring" style="left:4px;top:366px;width:124px;height:24px"></span><span class="b-pin" style="left:134px;top:366px">4</span><span class="b-ring" style="left:436px;top:161px;width:154px;height:28px"></span><span class="b-pin" style="left:560px;top:196px">5</span></div><figcaption><b>P3</b> 上线：左栏 Machines 里出现 new-box；两个按钮。</figcaption></figure>
+</div>
+<h2>B. 新用户</h2><div class="b-row">
+<figure class="b-frame"><div class="b-shot"><img src="shots/proto-new-landing.png" width="640"><span class="b-pin" style="left:226px;top:94px">6</span></div><figcaption><b>P4 首次登录</b>：<span class="b-ok">不变</span>，仍是欢迎卡，连上后自己走到第 2 步。</figcaption></figure>
+<figure class="b-frame"><div class="b-shot"><img src="shots/proto-new-settings-0.png" width="640"><span class="b-ring" style="left:4px;top:277px;width:128px;height:24px"></span><span class="b-pin" style="left:138px;top:277px">7</span></div><figcaption><b>P5</b> 新用户打开 Settings：空的 Machines 组显示一行 Register a machine（照 Providers 空态）。</figcaption></figure>
+<figure class="b-frame"><div class="b-shot"><img src="shots/proto-new-settings-1.png" width="640"><span class="b-ring" style="left:156px;top:12px;width:110px;height:30px"></span><span class="b-pin" style="left:272px;top:15px">8</span></div><figcaption><b>P6</b> 点它或 ＋：留在 Settings，右栏是同一份注册指引（不是欢迎卡）。</figcaption></figure>
+</div>
+<ol class="b-notes">
+<li>Machines 的 ＋ 改到 <code>/settings/machines/new</code>，和另外两个 ＋ 一致。</li>
+<li>页面在 Settings 右栏里，宽度、标题位置跟 “Add a provider” 一样。</li>
+<li>文案改成 “It appears under Machines on the left once it comes online.”（Settings 外那一份改成 “…under Machines in Settings…”，去掉已不存在的 “Machines &amp; models page”）。</li>
+<li>轮询照旧：新机器一上线，左栏 Machines 里马上出现它，点它就到它的设置页。</li>
+<li>两个按钮：<b>Machine settings</b>（留在 Settings，去配这台机器）和 <b>Start a session</b>（离开 Settings 去开会话，主按钮）。上线提示改为 “It's now under Machines on the left. Next, start a session on it…”。</li>
+<li>首次登录完全不动：<code>DefaultLanding</code> 没机器时仍去 <code>/runners/register</code> 的欢迎卡。开了托管 runner 的服务器上，新用户一进来就有一台托管机器，Machines 组本来就不空，也不受影响。</li>
+<li>空组显示一行 “Register a machine”，和 Providers 组空时的 “Connect a provider” 一样；有机器后这行消失，只剩 ＋。</li>
+<li>Settings 里没有机器时，Workspaces 的 ＋ 今天也会跳出去到欢迎卡，改成同样去 <code>/settings/machines/new</code>。</li>
+</ol></section>
+
+<section class="b-part" id="part-3"><h1>待定 · 要你拍板</h1>
+<table class="b-t"><tr><th style="width:22%">问题</th><th>方案 A</th><th>方案 B</th></tr>
+<tr><td>1. Settings 里点 Machines 的 ＋</td><td class="b-rec"><b>留在 Settings</b>，右栏打开注册指引（P2）。和 Providers / Workspaces 的 ＋ 一致。<span class="b-tag">推荐</span></td><td>维持今天：离开 Settings 去主界面的注册页（T2）。</td></tr>
+<tr><td>2. 新用户（0 台机器）在 Settings 里点 ＋</td><td class="b-rec"><b>同 A：Settings 里的普通注册指引</b>（P6）。用户主动进了 Settings，就留在 Settings；上线后 Start a session 带用户去开第一个会话。<span class="b-tag">推荐</span></td><td>跳出去到欢迎卡（今天的 N3）：引导更完整（三步），但用户被带离了自己进的 Settings。<br>（C：把三步欢迎卡整张放进 Settings 右栏——多一种排版，不推荐。）</td></tr>
+<tr><td>3. 上线后的按钮</td><td class="b-rec"><b>Machine settings + Start a session</b> 两个（P3）。<span class="b-tag">推荐</span></td><td>只留 Start a session（今天）。</td></tr>
+<tr><td>4. 空 Machines 组</td><td class="b-rec"><b>显示一行 Register a machine</b>（P5），和 Providers 空态一致。<span class="b-tag">推荐</span></td><td>只保留标题边的 ＋（N2）。</td></tr>
+</table>
+<h2>不变的</h2><ol class="b-notes">
+<li>首次登录的落地（欢迎卡 / 托管 runner 落地页）、<code>/runners/register</code> 地址和它在 Settings 外的所有入口。</li>
+<li>注册命令、系统切换、上线检测（5 秒轮询 runners）。</li>
+<li>macOS / iOS / Android：加机器是 Settings → Machines &amp; models 页里的 “Add Runner” 一节，本来就在设置里，不受影响；这次只改 web。</li>
+</ol>
+<h2>落地</h2>
+<table class="b-t"><tr><th>改动</th><th>大小</th></tr>
+<tr><td><code>App.tsx</code> 加 <code>settings/machines/new</code> 路由；<code>RunnerRegisterGuide</code> 加 <code>inSettings</code>（不出欢迎卡、Settings 文案、多一个 Machine settings 按钮）；<code>SettingsLayout</code> 两个 ＋ 改去新地址、空组加一行；<code>machineSetupCopy.ts</code> 加一句文案。原型 diff 见 <code>prototype.patch</code>（4 个文件，+25/−12）。</td><td>仅 web，1 个任务</td></tr>
+<tr><td>测试：点 Machines ＋ 后 Settings 导航仍在；0 台机器时空组有 Register a machine；首次登录 <code>/</code> 仍到欢迎卡；Settings 里的指引上线后出现两个按钮、Machine settings 去 <code>/settings/machines/:id</code>。</td><td>同一任务</td></tr>
+</table></section></body></html>
