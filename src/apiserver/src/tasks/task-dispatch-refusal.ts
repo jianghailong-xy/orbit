@@ -7,6 +7,7 @@ import {
   SOURCE_REFUSAL_CODES,
   SourceRefusalCode,
   TaskDispatchRefusal,
+  TaskForkRefusalPlacement,
   uuidToBase62,
 } from '@orbit/shared';
 
@@ -364,3 +365,117 @@ export async function clearDispatchRefusal(
   `);
   return cleared > 0;
 }
+
+/**
+ * A forked task's automatic start refused before any run existed, recorded where somebody will see it.
+ *
+ * A forked task is pinned to the forking session's machine and may not live in a project with a code
+ * binding. The task's own writes refuse both (`assertForkPlacement`), but two changes made elsewhere
+ * still reach it: a code binding added to its project, and its workspace moved to another machine.
+ * Then only the session create door refuses (409 FORK_IN_BOUND_PROJECT / FORK_SOURCE_NOT_REACHABLE),
+ * and the automatic starters used to log that and offer the task again on every sweep, with nothing on
+ * the task saying so.
+ *
+ * So an automatic start that meets one of those two refusals records it on the task's dispatchRefusal,
+ * with the facts it was decided on (`placement`), and writes it on the task's timeline once. The
+ * candidate scans leave the task alone while those facts still hold (`FORK_REFUSAL_STANDS_SQL`), and
+ * offer it again as soon as any of them changes; a run that is then put on it clears the refusal
+ * (`clearDispatchRefusal`), and one refused again records the new facts.
+ *
+ * Returns the refusal written, or null when the same refusal on the same facts was already recorded.
+ */
+export async function recordForkDispatchRefusal(
+  prisma: PrismaService,
+  taskId: string,
+  refused: { code: 'FORK_SOURCE_NOT_REACHABLE' | 'FORK_IN_BOUND_PROJECT'; message: string },
+  at: Date,
+): Promise<TaskDispatchRefusal | null> {
+  return prisma.$transaction(async (tx) => {
+    // Locked so two automatic doors refused at once leave one record and one comment.
+    await tx.$queryRaw`SELECT 1 FROM "task" WHERE "id" = ${taskId}::uuid FOR UPDATE`;
+    const task = await tx.task.findUnique({
+      where: { id: taskId },
+      select: {
+        assigneeId: true, projectId: true, creatorType: true, creatorId: true, dispatchRefusal: true,
+        assignee: { select: { runnerId: true } },
+      },
+    });
+    if (!task) return null;
+    const codebase = task.projectId
+      ? await tx.projectCodebase.findFirst({
+          where: { projectId: task.projectId, slot: 'primary' },
+          select: { id: true },
+        })
+      : null;
+    const placement: TaskForkRefusalPlacement = {
+      assigneeId: task.assigneeId,
+      runnerId: task.assignee?.runnerId ?? null,
+      projectId: task.projectId,
+      codebaseId: codebase?.id ?? null,
+    };
+    const previous = task.dispatchRefusal as unknown as TaskDispatchRefusal | null;
+    if (
+      previous?.code === refused.code
+      && JSON.stringify(previous.placement ?? null) === JSON.stringify(placement)
+    ) {
+      return null;
+    }
+    const refusal: TaskDispatchRefusal = {
+      code: refused.code,
+      fixAction: SOURCE_FIX_ACTIONS[refused.code],
+      refusedAt: at.toISOString(),
+      sessionId: null,
+      baseSha: null,
+      ref: null,
+      missing: [],
+      reason: refused.message,
+      placement,
+    };
+    await tx.task.update({
+      where: { id: taskId },
+      data: { dispatchRefusal: refusal as unknown as Prisma.InputJsonValue },
+    });
+    await tx.taskComment.create({
+      data: {
+        taskId,
+        authorType: task.assigneeId ? CreatorType.AGENT : task.creatorType,
+        authorId: task.assigneeId ?? task.creatorId,
+        body: forkDispatchRefusalComment(refusal),
+      },
+    });
+    return refusal;
+  });
+}
+
+/** The note a refused forked start leaves on the task's timeline. */
+function forkDispatchRefusalComment(refusal: TaskDispatchRefusal): string {
+  const fix = refusal.code === 'FORK_IN_BOUND_PROJECT'
+    ? 'Move the task to a project without a code binding (or out of any project), or remove the binding.'
+    : "Assign the task to a workspace on the forking session's machine, or move its workspace back to that machine.";
+  return (
+    `<!-- orbit:${DISPATCH_REFUSED_SIGNAL_CODE} -->\n`
+    + '**Start refused (recorded by Orbit)**\n\n'
+    + "This task was forked from a session's snapshot, and its automatic start was refused before a run was "
+    + "created, so the task's status was not changed. The refusal is recorded on the task's dispatchRefusal.\n\n"
+    + `Refusal code: ${refusal.code} (fix: ${refusal.fixAction})\n\n`
+    + `Next step: ${fix} Orbit does not start this task automatically again until its assignee, its project, `
+    + "its project's code binding or its workspace's machine changes.\n\n"
+    + `Why: ${refusal.reason}\n\n`
+    + `Signal source: ${DISPATCH_REFUSED_SIGNAL_CODE}`
+  );
+}
+
+/**
+ * A forked task's recorded refusal still stands: every fact it was decided on is as it was. Correlated
+ * to an outer `task t`; the automatic candidate scans leave such a task out (`recordForkDispatchRefusal`).
+ * COALESCE because a task with no refusal must read as "does not stand", never as NULL.
+ */
+export const FORK_REFUSAL_STANDS_SQL = Prisma.sql`COALESCE(
+  t.dispatch_refusal ->> 'code' IN ('FORK_SOURCE_NOT_REACHABLE', 'FORK_IN_BOUND_PROJECT')
+  AND (t.dispatch_refusal -> 'placement' ->> 'assigneeId') IS NOT DISTINCT FROM t.assignee_id::text
+  AND (t.dispatch_refusal -> 'placement' ->> 'projectId') IS NOT DISTINCT FROM t.project_id::text
+  AND (t.dispatch_refusal -> 'placement' ->> 'runnerId') IS NOT DISTINCT FROM
+      (SELECT fw.runner_id::text FROM workspace fw WHERE fw.id = t.assignee_id)
+  AND (t.dispatch_refusal -> 'placement' ->> 'codebaseId') IS NOT DISTINCT FROM
+      (SELECT fc.id::text FROM project_codebase fc WHERE fc.project_id = t.project_id AND fc.slot = 'primary'),
+  false)`;

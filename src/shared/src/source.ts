@@ -180,8 +180,11 @@ export interface TaskDispatchRefusal {
   /** §10.1's pairing, carried with the code for the reason `sourceRefusalDetail` carries it. */
   fixAction: SourceFixAction;
   refusedAt: string;
-  /** The run that was refused. */
-  sessionId: string;
+  /**
+   * The run that was refused. Null for a forked task's start refused before any run existed
+   * (FORK_SOURCE_NOT_REACHABLE / FORK_IN_BOUND_PROJECT, decided by the session create door).
+   */
+  sessionId: string | null;
   /**
    * The commit the run was pinned to, which is what it failed to contain. Null when no pin froze:
    * a refusal at resolution stops before one exists, and a selector that named a SHA has nothing
@@ -199,6 +202,19 @@ export interface TaskDispatchRefusal {
   missing: Array<{ sha: string; taskId: string | null }>;
   /** The runner's own words, after the code. */
   reason: string;
+  /**
+   * For a forked task's refusal only: the facts it was decided on. The automatic starters do not
+   * offer the task again while all four still hold, and offer it once any of them changes.
+   */
+  placement?: TaskForkRefusalPlacement;
+}
+
+/** What a fork refusal was decided on: the task's assignee and that workspace's machine, its project and that project's code binding. */
+export interface TaskForkRefusalPlacement {
+  assigneeId: string | null;
+  runnerId: string | null;
+  projectId: string | null;
+  codebaseId: string | null;
 }
 
 /**

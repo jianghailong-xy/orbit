@@ -233,7 +233,11 @@ export {
   QUOTA_BLIND_RETRY_BACKOFF_MS,
 } from './task-retry-policy';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
-import { clearDispatchRefusal } from './task-dispatch-refusal';
+import {
+  clearDispatchRefusal,
+  FORK_REFUSAL_STANDS_SQL,
+  recordForkDispatchRefusal,
+} from './task-dispatch-refusal';
 import {
   TASK_RUN_ACTION,
   TASK_RUN_LEASE_MS,
@@ -1117,6 +1121,10 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   -- permission: deleting 112 paused-able lists released 55,513 tasks that then ran for a
   -- fortnight. Every clause here that permits must be positive and read off the task itself.
   AND t.dispatch_hold = false
+  -- ...and so is a forked task whose start was refused on facts that still hold: a code binding on
+  -- its project, or its workspace on another machine (recordForkDispatchRefusal). Offering it again
+  -- before one of them changes is the same 409 every sweep, which is how it went unseen.
+  AND NOT ${FORK_REFUSAL_STANDS_SQL}
   -- ...and so is a task filed under a cancelled project: its owner stopped pursuing the goal the
   -- task is for. Read off the project row, which outlives every task filed under it (see
   -- projectNotCancelledSql), and applied by every automatic door and by execute() alike.
@@ -1233,6 +1241,10 @@ const PROJECT_INDEPENDENT_READY_SQL = Prisma.sql`
   t.status = 'OPEN'::task_status
   AND t.auto_run_when_ready = true
   AND t.dispatch_hold = false
+  -- ...and so is a forked task whose start was refused on facts that still hold: a code binding on
+  -- its project, or its workspace on another machine (recordForkDispatchRefusal). Offering it again
+  -- before one of them changes is the same 409 every sweep, which is how it went unseen.
+  AND NOT ${FORK_REFUSAL_STANDS_SQL}
   AND ${Prisma.raw(projectNotCancelledSql('t'))}
   AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
   AND (t.run_at IS NULL OR t.run_at <= now())
@@ -1376,6 +1388,10 @@ const SCHEDULED_DUE_SQL = Prisma.sql`
   AND t.run_at <= now()
   AND t.status = 'OPEN'::task_status
   AND t.dispatch_hold = false
+  -- ...and so is a forked task whose start was refused on facts that still hold: a code binding on
+  -- its project, or its workspace on another machine (recordForkDispatchRefusal). Offering it again
+  -- before one of them changes is the same 409 every sweep, which is how it went unseen.
+  AND NOT ${FORK_REFUSAL_STANDS_SQL}
   AND ${Prisma.raw(projectNotCancelledSql('t'))}
   -- A schedule is an automatic start like the others: a project its owner has not started, or has
   -- paused, keeps its appointment (not consumed, so it fires once the project moves) and starts
@@ -14903,8 +14919,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (e instanceof TaskRunFenceLost) {
         throw taskRunInProgress(TASK_RUN_ACTION.execute, runRequestToken);
       }
+      // An automatic start of a forked task refused by the session create door: recorded on the
+      // task, so the candidate scans stop offering it until something it was decided on changes.
+      if (auto) await this.recordForkRefusalOf(id, e);
       throw e;
     }
+  }
+
+  /** `recordForkDispatchRefusal` for an error that is a fork refusal; anything else is left alone. */
+  private async recordForkRefusalOf(taskId: string, e: unknown): Promise<void> {
+    if (!(e instanceof ConflictException)) return;
+    const body = e.getResponse() as { code?: unknown; message?: unknown };
+    if (body?.code !== 'FORK_SOURCE_NOT_REACHABLE' && body?.code !== 'FORK_IN_BOUND_PROJECT') return;
+    await recordForkDispatchRefusal(
+      this.prisma, taskId, { code: body.code, message: String(body.message ?? '') }, new Date(),
+    ).catch((err) =>
+      this.logger.warn(`fork refusal of task ${taskId} not recorded: ${err?.message ?? err}`));
   }
 
   /**
