@@ -1,4 +1,6 @@
 # Release workflow for all three Orbit clients — one `vX.Y.Z` tag ships them from a single push:
+#   • identity        → refuses a tag whose version is not the root package.json version or that has no
+#                       human-written release-notes/<version>.md; every build job waits for it.
 #   • dmg             → macOS:   signed + notarized + stapled DMG, the GitHub Release, and the Sparkle appcast.
 #   • testflight      → iOS:     signed .ipa archived and uploaded to TestFlight.
 #   • android-build   → Android: signed release APK, built and verified with the android-internal environment.
@@ -11,8 +13,9 @@
 # with no tag uses each build's default version); Android runs on tag pushes alone. The build/test CI
 # gates live in client.yml and android.yml.
 #
-# The tag drives the version. macOS uses it verbatim (vX.Y.Z → stable channel; vX.Y.Z-beta.N →
-# Sparkle beta channel). iOS strips any -beta.N to a numeric marketing version
+# The tag drives the version. The tag is `v` + the root package.json version (identity checks it), macOS uses
+# it verbatim (vX.Y.Z → stable channel; vX.Y.Z-beta.N → Sparkle beta channel), the GitHub Release body is the
+# human-written release-notes/<version>.md. iOS strips any -beta.N to a numeric marketing version
 # (CFBundleShortVersionString must be numeric); its build number is the commit count. Android uses the
 # tag without v as versionName and the same commit count as versionCode, which must exceed every
 # published Android versionCode; a second tag on an already published commit skips Android quietly.
@@ -45,9 +48,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ---- The one version ---------------------------------------------------------------------------
+  # The tag must name the root package.json version and carry human-written notes for that version;
+  # nothing is built or published otherwise (docs/release-process.md, "One version of record").
+  identity:
+    name: Release identity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0       # the commit count every artifact's build number uses
+      - name: Check the tag, package version and release notes name one release
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        run: node scripts/release-identity.mjs check-tag "$GITHUB_REF_NAME"
+
   # ---- macOS: signed + notarized DMG ----------------------------------------------------------
   dmg:
     name: macOS · signed + notarized DMG
+    needs: [identity]
     # A tag push builds both; a manual run honours the platform choice.
     if: (github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'both' || inputs.platform == 'macos'))
     runs-on: macos-15
@@ -128,7 +147,8 @@ jobs:
         run: |
           ver="${GITHUB_REF_NAME#v}"
           prerelease=""; case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease";; esac
-          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes $prerelease \
+          # The body is the release's own human-written notes; the identity job refused the tag without them.
+          gh release create "$GITHUB_REF_NAME" --title "Orbit $ver" --notes-file "release-notes/$ver.md" $prerelease \
             "src/macos/build/Orbit-v$ver-arm64.dmg" \
             "src/macos/build/Orbit-v$ver-arm64.zip"
 
@@ -167,6 +187,7 @@ jobs:
   # ---- iOS: TestFlight --------------------------------------------------------------------------
   testflight:
     name: iOS · TestFlight
+    needs: [identity]
     if: (github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'both' || inputs.platform == 'ios'))
     runs-on: macos-15
     steps:
@@ -286,6 +307,7 @@ jobs:
   # this job uses; nothing here runs Apple tooling or holds a write token.
   android-build:
     name: Android · signed release APK
+    needs: [identity]
     if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -390,12 +412,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # The annotated tag's message is the update's notes; github-release.py has a default sentence.
-          git fetch --no-tags --force origin "+refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
-          : > "$RUNNER_TEMP/notes.txt"
-          if [ "$(git cat-file -t "refs/tags/$GITHUB_REF_NAME")" = tag ]; then
-            git tag -l --format='%(contents:subject)%0a%0a%(contents:body)' "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.txt"
-          fi
+          # The update carries the release's own human-written notes; the identity job refused the tag without them.
+          cp "release-notes/${GITHUB_REF_NAME#v}.md" "$RUNNER_TEMP/notes.txt"
           python3 src/android/scripts/github-release.py manifest --tag "$GITHUB_REF_NAME" --repository "$GITHUB_REPOSITORY" \
             --identity "$RUNNER_TEMP/android-release/identity.json" --apk "$RUNNER_TEMP/android-release/app-release.apk" \
             --notes-file "$RUNNER_TEMP/notes.txt" --output "$RUNNER_TEMP/publish" --github-output "$GITHUB_OUTPUT"

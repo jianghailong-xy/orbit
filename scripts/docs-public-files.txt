@@ -19,6 +19,7 @@ docs/product-intro.md
 docs/project-maturity.md
 docs/project-plan-review-2026-11-13.md
 docs/release-process.md
+docs/release-notes-template.md
 docs/runner-cli.md
 docs/runner-troubleshooting.md
 docs/self-hosting.md

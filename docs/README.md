@@ -21,6 +21,7 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 | Find deployment settings and defaults | [Configuration reference](configuration.md) |
 | Diagnose runner enrollment, heartbeat, or runtime failures | [Runner troubleshooting](runner-troubleshooting.md) |
 | Publish or upgrade a release | [Release process](release-process.md) |
+| Write the notes a release publishes | [Release notes template](release-notes-template.md) |
 | Verify a fresh install and runner heartbeat | [Clean-host smoke record](evidence/clean-install-2026-09-29.md) |
 | Understand the system and trust boundaries | [Architecture overview](architecture.md) |
 | Build or change Orbit | [Development guide](development.md) and [contribution guide](../CONTRIBUTING.md) |

@@ -3,36 +3,99 @@
 Orbit is pre-1.0. A release is useful only when an operator can identify the exact source, understand upgrade
 impact, and reproduce the checks that support the announcement.
 
+## One version of record
+
+The root [`package.json`](../package.json) version is the version of record. Nothing else chooses a version;
+the tag and every artifact derive from it:
+
+| Surface | Derived from | Example for `0.1.257-beta.1` |
+| --- | --- | --- |
+| `package.json`, and the server, web and runner binaries built from this tree | the version of record | `0.1.257-beta.1` (and `X-Orbit-Client: web/0.1.257-beta.1`) |
+| Git tag | `v` + the version | `v0.1.257-beta.1` |
+| GitHub Release | the tag | tag `v0.1.257-beta.1`, title `Orbit 0.1.257-beta.1`, prerelease flag set |
+| macOS DMG and Sparkle payload | the tag, verbatim | `Orbit-v0.1.257-beta.1-arm64.dmg`, `Orbit-v0.1.257-beta.1-arm64.zip`, `CFBundleShortVersionString` `0.1.257-beta.1` |
+| iOS TestFlight | the tag, with the prerelease suffix stripped | marketing `0.1.257`, build number = commit count |
+| Android APK and `android-update.json` | the tag without `v` | `orbit-android-0.1.257-beta.1.apk`, `versionName` `0.1.257-beta.1`, `versionCode` = commit count |
+| Runner binaries and `/dl/version.json` | `package.json` | `0.1.257-beta.1` |
+| Sparkle appcast | the macOS build | `sparkle:shortVersionString` `0.1.257-beta.1`, `sparkle:version` = build number, `beta` channel |
+| Release notes | `release-notes/<version>.md` in the release commit | `release-notes/0.1.257-beta.1.md` |
+
+The release commit is the only commit that sets the version: `release.sh bump <version>` writes
+`package.json`, `package-lock.json` and `release-notes/<version>.md`, the maintainer fills in the notes, and
+`release.sh <version>` tags it. The `identity` job in `release.yml` refuses a tag that is not `v` +
+`package.json`, has no notes, or is lightweight, before any artifact is built. Run the same gate by hand
+with:
+
+```bash
+node scripts/release-identity.mjs check-tag vX.Y.Z[-beta.N]
+```
+
+Tags before this rule are historical exceptions, not a pattern: `v0.1.2-beta.245` carried `package.json`
+`0.1.254`, and `/dl` published `0.1.256` from untagged commits. Do not repeat or "fix" them by retagging;
+releases after this rule follow it.
+
 ## Version and channels
 
-- Use one product version in the `vX.Y.Z` tag, package metadata, application metadata, artifact names, and
-  release notes.
-- `vX.Y.Z-beta.N` tags are prereleases for the beta update channel. A tag without a prerelease suffix is a
-  stable release.
-- Pin deployments to a tag. `main` is a development branch and older releases are not supported release
-  lines.
-- The [messaging brief](messaging-brief.md) owns the public positioning and the wording for known boundaries;
-  this page owns the operational release checklist.
+- Versions are SemVer: `X.Y.Z`, or `X.Y.Z-beta.N` on the beta channel. Only the `beta` prerelease channel
+  ships today; a stable tag is `X.Y.Z` with no suffix.
+- A release is ordered by SemVer precedence: numeric parts first, then a release outranks its prereleases,
+  then the prerelease identifiers (`beta.2` above `beta.1`). Both the runner and the control plane read
+  [contracts/release-versions.json](../contracts/release-versions.json) as the one fixture for this
+  ordering, so the two cannot disagree about which release is newer. Runners built before this rule
+  compared components numerically and cannot see a prerelease as newer; the first prerelease release tells
+  operators to reinstall those runners once, and every release after that orders normally.
+- A beta belongs to the version it precedes: once `X.Y.Z` ships, its betas are spent and the next beta is
+  `X.Y.(Z+1)-beta.1`.
+- `vX.Y.Z` releases reach the macOS stable channel; `vX.Y.Z-beta.N` reaches only users who enabled
+  "Receive beta updates". iOS always ships the numeric core, because Apple requires a numeric marketing
+  version; the commit count is its build number. Android keeps the suffix in `versionName` and uses the
+  commit count as `versionCode`.
+- Artifact names follow the tag: `Orbit-v<version>-arm64.dmg` and `.zip`, `orbit-android-<version>.apk`, and
+  the runner assets named in `/dl/version.json`'s `assets` map.
+
+## Support window
+
+- Only the newest published release is supported. Pre-1.0 there is no compatibility guarantee between
+  releases; upgrade straight to the newest release and follow its notes.
+- Security fixes are made on the newest release and published as a new release. Older tags — older betas
+  and the previous stable included — are not maintained as branches. [SECURITY.md](../SECURITY.md) states
+  the same boundary.
+- The immediately previous release stays downloadable and is the rollback target for runners and
+  deployments; that is availability for rollback, not support.
+- `v0.1.0`, the repository's only non-prerelease release, predates the current schema and pipeline. It is
+  historical and is not a supported line.
+
+## Release notes
+
+Every release has `release-notes/<version>.md` in its tree, written for the operator. The
+[template](release-notes-template.md) lists the required sections — summary, upgrade impact, security
+fixes, known limitations, artifacts and verification, and rollback. The GitHub Release body is that file,
+and `android-update.json` carries it to installed Android apps. A generated changelog alone is not a release
+body: name what an operator must do, which security issues were fixed and who was exposed, and what was not
+verified. `release.sh bump` opens the file, and the tag is refused while a section is empty or still a TODO.
 
 ## Before tagging
 
-1. Reconcile the version in the root package, runner, web/native metadata, and the intended tag.
+1. Run `release.sh bump <version>` and fill in `release-notes/<version>.md`; commit both. Confirm
+   `node scripts/release-identity.mjs check-tag v<version>` passes (it runs `check-notes` too).
 2. Run the required checks for the candidate: JavaScript build/tests, PostgreSQL specs, Go runner tests, Swift
    core tests, container image build/boot, and the client workflow when native artifacts change.
 3. Verify a clean-machine Compose install and record the OS, Docker/runtime versions, tag/SHA, and sanitized
    evidence. Review backups, migrations, security notes, and rollback impact.
-4. Prepare human-readable notes with the problem solved, the three relevant launch scenarios, upgrade/migration
-   impact, security fixes, known limitations, artifact links, and verification evidence.
+4. Re-read the notes against the diff: the problem solved, upgrade/migration impact, security fixes, known
+   limitations, artifact links, verification evidence, and rollback.
 
 ## Publishing
 
-Pushing a `v*` tag starts [.github/workflows/release.yml](../.github/workflows/release.yml), which builds the
-signed/notarized macOS DMG, the iOS TestFlight artifact and the signed Android APK. The macOS job creates the
-GitHub Release and Sparkle appcast for tag pushes; once it and the Android build have succeeded, the Android
-publishing job attaches `orbit-android-<version>.apk`, its `.sha256` and `android-update.json` to that same
-Release ([Android releases](../src/android/docs/release.md)). Maintainers must review the generated release
-body before sharing it in Discussions or other channels, and must check that the release is marked prerelease
-when the tag contains `-`.
+Pushing a `v*` tag starts [.github/workflows/release.yml](../.github/workflows/release.yml). Its `identity`
+job checks the tag against the root package version and the release notes; `dmg`, `testflight` and
+`android-build` wait for it, so a tag that fails the check builds and publishes nothing. The macOS job
+creates the GitHub Release — its body is `release-notes/<version>.md` — and the Sparkle appcast for tag
+pushes. Once it and the Android build have succeeded, the Android publishing job attaches
+`orbit-android-<version>.apk`, its `.sha256` and `android-update.json` to that same Release
+([Android releases](../src/android/docs/release.md)). Maintainers must read the published release body once
+more before sharing it in Discussions or other channels, and must confirm it is marked prerelease when the
+tag contains `-`.
 
 Do not publish signing credentials, private logs, or a claim that a generated changelog is a substitute for
 human upgrade notes. If a required gate is unavailable, say so in the release body and delay the release
@@ -52,6 +115,15 @@ unless the maintainer explicitly records the exception.
 The commands below require Git, GitHub CLI authenticated for repository reads, Node.js, curl, and Docker
 Compose. Run deployment commands in the existing deployment checkout, with its protected `.env` and data
 mounts. Replace the tag placeholders with actual published tags; do not use `main` as the release identity.
+
+Run the offline gate first: it reads the tag's package version and notes and prints the version every surface
+is expected to carry. Complete the checklist below against the published artifacts.
+
+```bash
+ORBIT_RELEASE_TAG='<release-tag>'
+git fetch origin --tags
+node scripts/release-identity.mjs check-tag "$ORBIT_RELEASE_TAG"
+```
 
 ```bash
 set -euo pipefail

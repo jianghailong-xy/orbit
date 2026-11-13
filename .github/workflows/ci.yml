@@ -58,6 +58,8 @@ jobs:
         run: npm run test:docs
       - name: Validate public documentation
         run: npm run docs:check
+      - name: Test the release identity rules
+        run: npm run test:release-identity
       - name: Generate Prisma Client
         run: npm run prisma:generate
       - name: Build workspaces

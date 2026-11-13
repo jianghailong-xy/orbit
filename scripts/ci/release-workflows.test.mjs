@@ -34,12 +34,6 @@ const jobs = block(release, 'jobs', 0);
 const job = (name) => block(jobs, name, 2);
 const jobNames = [...jobs.matchAll(/^  ([\w-]+):$/gm)].map((match) => match[1]);
 
-function predicate(name) {
-  const value = job(name).match(/^    if: (.+)$/m)?.[1];
-  assert.ok(value, `Missing ${name} job guard`);
-  return value;
-}
-
 function needsOf(name) {
   const value = job(name).match(/^    needs: (.+)$/m)?.[1];
   if (!value) return [];
@@ -75,15 +69,17 @@ function evaluate(expression, event, ref, platform = '', outputs = {}) {
 }
 
 /**
- * Which jobs a run of release.yml performs: a job's guard holds and every job it needs ran and
- * succeeded (an `if` without a status function implies success()). `failed` jobs ran but failed.
+ * Which jobs a run of release.yml performs: a job's guard holds (a job with no `if` always runs) and every
+ * job it needs ran and succeeded (an `if` without a status function implies success()). `failed` jobs ran
+ * but failed.
  */
 function selection(event, ref, platform, { skip = 'false', failed = [] } = {}) {
   const ran = new Map();
   const runs = (name) => {
     if (!ran.has(name)) {
+      const guard = job(name).match(/^    if: (.+)$/m)?.[1];
       ran.set(name, needsOf(name).every((need) => runs(need) && !failed.includes(need))
-        && evaluate(predicate(name), event, ref, platform, { 'android-build': { skip } }));
+        && (guard === undefined || evaluate(guard, event, ref, platform, { 'android-build': { skip } })));
     }
     return ran.get(name);
   };
@@ -187,19 +183,38 @@ const scenarios = [
 ];
 const platforms = ['both', 'macos', 'ios', 'android', 'unknown', '', 'MACOS'];
 
-test('release.yml holds the two Apple jobs and the two Android jobs, publishing after both builds', () => {
-  assert.deepEqual(jobNames, ['dmg', 'testflight', 'android-build', 'android-publish']);
-  assert.deepEqual(needsOf('dmg'), []);
-  assert.deepEqual(needsOf('testflight'), []);
-  assert.deepEqual(needsOf('android-build'), []);
+test('release.yml holds the identity gate, the two Apple jobs and the two Android jobs, publishing after both builds', () => {
+  assert.deepEqual(jobNames, ['identity', 'dmg', 'testflight', 'android-build', 'android-publish']);
+  assert.deepEqual(needsOf('identity'), []);
+  assert.deepEqual(needsOf('dmg'), ['identity']);
+  assert.deepEqual(needsOf('testflight'), ['identity']);
+  assert.deepEqual(needsOf('android-build'), ['identity']);
   assert.deepEqual(needsOf('android-publish').sort(), ['android-build', 'dmg']);
+});
+
+test('a tag is refused unless it names the package version and carries the release notes', () => {
+  const gate = step('identity', 'Check the tag, package version and release notes name one release');
+  assert.match(gate, /^        if: github\.event_name == 'push' && github\.ref_type == 'tag'$/m);
+  assert.match(gate, /^        run: node scripts\/release-identity\.mjs check-tag "\$GITHUB_REF_NAME"$/m);
+  // Every artifact-producing job waits for it, so a mismatched tag builds and publishes nothing.
+  for (const name of ['dmg', 'testflight', 'android-build']) {
+    assert.ok(needsOf(name).includes('identity'), `${name} builds before the identity gate`);
+  }
+});
+
+test('the GitHub Release body is the human-written release notes, not a generated changelog', () => {
+  const create = step('dmg', 'Create GitHub Release');
+  assert.match(create, /--notes-file "release-notes\/\$ver\.md"/);
+  assert.doesNotMatch(create, /--generate-notes/);
+  // The Android update manifest carries the same notes.
+  assert.match(step('android-publish', 'Write update manifest'), /cp "release-notes\/\$\{GITHUB_REF_NAME#v\}\.md" "\$RUNNER_TEMP\/notes\.txt"/);
 });
 
 test('omitted dispatch platform resolves to the workflow default before job selection', () => {
   const defaultPlatform = release.match(/^        default: (\w+)$/m)?.[1];
   assert.equal(defaultPlatform, 'both');
   assert.deepEqual(selection('workflow_dispatch', 'refs/heads/main', defaultPlatform),
-    { dmg: true, testflight: true, 'android-build': false, 'android-publish': false });
+    { identity: true, dmg: true, testflight: true, 'android-build': false, 'android-publish': false });
 });
 
 for (const [event, ref] of scenarios) {
@@ -208,6 +223,7 @@ for (const [event, ref] of scenarios) {
       const tagPush = event === 'push' && /^refs\/tags\/v/.test(ref);
       const manual = event === 'workflow_dispatch';
       assert.deepEqual(selection(event, ref, platform), {
+        identity: true,
         dmg: tagPush || (manual && ['both', 'macos'].includes(platform.toLowerCase())),
         testflight: tagPush || (manual && ['both', 'ios'].includes(platform.toLowerCase())),
         'android-build': tagPush,
@@ -220,7 +236,7 @@ for (const [event, ref] of scenarios) {
 test('a v* tag push runs all four jobs; Android publishing waits for dmg and the Android build', () => {
   for (const ref of ['refs/tags/v0.1.0', 'refs/tags/v0.1.2-beta.195']) {
     assert.deepEqual(selection('push', ref, ''),
-      { dmg: true, testflight: true, 'android-build': true, 'android-publish': true }, ref);
+      { identity: true, dmg: true, testflight: true, 'android-build': true, 'android-publish': true }, ref);
     // A failed DMG leaves Android unpublished (Re-run failed jobs publishes it once dmg is fixed);
     // a failed TestFlight upload does not hold it back.
     assert.equal(selection('push', ref, '', { failed: ['dmg'] })['android-publish'], false);
