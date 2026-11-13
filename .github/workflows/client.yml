@@ -50,6 +50,10 @@ on:
         description: "Also run the iOS http://ip ATS probe (simulator, A/B against no ATS keys)"
         type: boolean
         default: false
+      guest_probe:
+        description: "Also run the session-guests evidence probe (Mac window + iPhone shots)"
+        type: boolean
+        default: false
 
 concurrency:
   group: client-${{ github.ref }}
@@ -288,3 +292,47 @@ jobs:
           git commit -q -m "source-refused probe results for ${{ github.sha }} (run ${{ github.run_id }})"
           git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
             results:refs/heads/probe/source-refused-mac-shots-results
+
+  # PROBE BRANCH ONLY (never merged): the native guest view's pictures
+  # (docs/evidence/session-guests-native/probe-harness).
+  guest-shots:
+    name: Session-guests probe (Mac window + iPhone)
+    if: github.event_name == 'workflow_dispatch' && inputs.guest_probe
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Stage the harness at the repository root
+        run: |
+          mkdir -p .guest-probe
+          cp -R docs/evidence/session-guests-native/probe-harness/. .guest-probe/
+      - name: Build, drive and capture
+        id: capture
+        continue-on-error: true
+        run: bash .guest-probe/run.sh 2>&1 | tee run-output.log; exit ${PIPESTATUS[0]}
+      - name: Keep the logs beside the shots
+        if: always()
+        run: |
+          mkdir -p .guest-probe/shots
+          cp run-output.log .guest-probe/shots/ 2>/dev/null || true
+          for log in .guest-probe/build-*.log; do
+            [ -f "$log" ] || continue
+            grep -E "error:|Test Case|Executed|\*\* TEST|\*\* BUILD|never showed" "$log" | head -400 > ".guest-probe/shots/summary-$(basename "$log" .log).txt" || true
+          done
+          find .guest-probe/shots -name 'xcodebuild-*.log' -size +20M -exec gzip -9 {} \;
+          echo "capture=${{ steps.capture.outcome }}" > .guest-probe/shots/outcomes.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: guest-shots
+          path: .guest-probe/shots
+          include-hidden-files: true
+      - name: Fail as the capture did
+        if: steps.capture.outcome != 'success'
+        run: exit 1
