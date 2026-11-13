@@ -625,7 +625,10 @@ button.toast--pill:focus-visible {
   flex: 1;
   min-width: 0;
   height: var(--app-vh);
-  overflow: hidden;
+  /* clip, not hidden: a hidden box is still a scroll container, so a scrollIntoView inside it (the
+     sticky `↑` bar's jump to a turn near the tail) scrolled the whole region up once the transcript
+     ran out of room, hiding the header and the list's top under a gap below the composer. */
+  overflow: clip;
 }
 /* A view fills the main region. .app-view--doc adds the page gutter and owns its
    scroll; the bare class is full-bleed (the agent console / runner install guide). */
