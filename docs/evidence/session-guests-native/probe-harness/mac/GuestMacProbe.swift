@@ -1,33 +1,52 @@
 import SwiftUI
+import AppKit
 import OrbitKit
 
-// Evidence probe (see ../README.md): the Mac app's own window (`MainView`, which OrbitApp.swift's
-// RootView shows once signed in — the probe replaces that file), pointed at stub.py with
-// `-orbit.instance`. The picture is taken BY THE APP (`WindowShot`): the window server's image of its
-// own window, which needs no screen-recording permission on a CI Mac.
+// Evidence probe (see ../README.md): the Mac app's own `MainView` (which OrbitApp.swift's RootView
+// shows once signed in — the probe replaces that file), pointed at stub.py with `-orbit.instance`.
+// The window is made here rather than by a WindowGroup: launched from a script on a CI Mac, a
+// WindowGroup may open no window at all, and then nothing runs. The picture is taken BY THE APP
+// (`WindowShot`): the window server's image of its own window, which needs no screen-recording
+// permission.
 @main
 struct GuestMacProbeApp: App {
-    @State private var model: AppModel
-    @StateObject private var updater = UpdaterModel()
+    @NSApplicationDelegateAdaptor(ProbeDelegate.self) private var delegate
+    var body: some Scene {
+        Settings { EmptyView() }
+    }
+}
 
-    init() {
+@MainActor
+final class ProbeDelegate: NSObject, NSApplicationDelegate {
+    private var window: NSWindow?
+    private let model: AppModel
+    private let updater = UpdaterModel()
+
+    override init() {
         ProbeArgs.wipeIfFresh()
-        _model = State(initialValue: AppModel())
+        model = AppModel()
+        super.init()
     }
 
-    var body: some Scene {
-        WindowGroup {
-            MainView()
-                .environment(model)
-                .environmentObject(updater)
-                .frame(minWidth: 900, minHeight: 600)
-                .task {
-                    await ProbeArgs.land(model)
-                    await WindowShot.takeIfAsked()
-                }
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.regular)
+        let root = MainView()
+            .environment(model)
+            .environmentObject(updater)
+            .frame(minWidth: 900, minHeight: 600)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1020, height: 660),
+                              styleMask: [.titled, .closable, .resizable, .miniaturizable],
+                              backing: .buffered, defer: false)
+        window.contentView = NSHostingView(rootView: root)
+        window.setFrameTopLeftPoint(NSPoint(x: 0, y: (NSScreen.main?.visibleFrame.maxY ?? 760)))
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        self.window = window
+        FileHandle.standardError.write(Data("probe: window \(window.frame) base=\(String(describing: model.baseURL))\n".utf8))
+        Task { @MainActor in
+            await ProbeArgs.land(model)
+            await WindowShot.takeIfAsked()
         }
-        .defaultSize(width: 1020, height: 660)
-        .defaultPosition(.topLeading)
     }
 }
 
@@ -48,12 +67,16 @@ enum WindowShot {
               let image = CGWindowListCreateImage(.null, .optionIncludingWindow,
                                                   CGWindowID(window.windowNumber),
                                                   [.boundsIgnoreFraming, .bestResolution]) else {
-            FileHandle.standardError.write(Data("probe: no window image\n".utf8))
+            FileHandle.standardError.write(Data("probe: no window image (\(NSApp.windows.count) windows)\n".utf8))
             return
         }
         let rep = NSBitmapImageRep(cgImage: image)
         rep.size = window.frame.size
-        try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+        do {
+            try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+        } catch {
+            FileHandle.standardError.write(Data("probe: could not write \(path): \(error)\n".utf8))
+        }
     }
 }
 
