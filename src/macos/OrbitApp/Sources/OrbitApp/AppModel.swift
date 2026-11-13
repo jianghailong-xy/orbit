@@ -2186,6 +2186,11 @@ final class AppModel {
         NeedsYouLogic.banner(waiting: needsYouSessions, excluding: focused)
     }
 
+    /// The banner unfolded: one line per waiting conversation, the first the one the banner names.
+    func needsYouEntries(excluding focused: String?) -> [NeedsYouBanner] {
+        NeedsYouLogic.entries(waiting: needsYouSessions, excluding: focused)
+    }
+
     /// Open the session the banner points at. The same navigation as a Recents tap, minus the origin
     /// that says "drawer": a banner tap didn't come from the drawer, so the console it lands on keeps
     /// the system back-swipe instead of yielding the edge to the drawer gesture. An earlier Recents
