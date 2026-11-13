@@ -24,13 +24,13 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /**
- * A13-17 (iOS 5e75edbde): Settings' Machines & models group is one row, Infrastructure, whose page reads top to bottom Needs you, What
+ * A13-17 (iOS 5e75edbde): Settings' Machines & models group is one row, Machines & models, whose page reads top to bottom Needs you, What
  * your agents can run on, Machines, Add Runner, Account pools and API keys — each line of Needs you with its way out in the app — and
  * reads the machines again every 15 s while it is up.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = ManagementShellApplication::class)
-class InfrastructurePageTest {
+class MachinesAndModelsPageTest {
     @get:Rule(order = 0) val host = object : ExternalResource() {
         override fun before() {
             val app = RuntimeEnvironment.getApplication()
@@ -51,7 +51,7 @@ class InfrastructurePageTest {
     }
     private fun page() {
         val api = api()
-        compose.setContent { InfrastructureSettings(api, revision, null, { opened += it }, {}) }
+        compose.setContent { MachinesAndModelsSettings(api, revision, null, { opened += it }, {}) }
     }
     private fun await(text: String) = compose.waitUntil(60_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
     /** Where [text] starts down the page, scrolled out of view or not (boundsInRoot clips to what is on screen). */
@@ -72,21 +72,21 @@ class InfrastructurePageTest {
         fixture.providersMine = """[{"id":"${fixture.KEY_OPENAI}","slug":"openai","label":"OpenAI","runtime":"codex","presetSlug":"openai",
             "hasApiKey":true,"enabled":false,"defaultModel":"gpt-5","models":[{"value":"gpt-5","label":"GPT-5"}],"engines":["codex","opencode"]}]"""
         page()
-        await(Infrastructure.NEEDS_YOU)
-        val sections = listOf(Infrastructure.NEEDS_YOU, Infrastructure.MACHINES, RunnerCopy.ADD, Infrastructure.ACCOUNT_POOLS,
-            Infrastructure.API_KEYS)
+        await(MachinesAndModels.NEEDS_YOU)
+        val sections = listOf(MachinesAndModels.NEEDS_YOU, MachinesAndModels.MACHINES, RunnerCopy.ADD, MachinesAndModels.ACCOUNT_POOLS,
+            MachinesAndModels.API_KEYS)
         sections.forEach { compose.onAllNodesWithText(it).assertCountEquals(1) }
         val tops = sections.map(::top)
         assertEquals("top to bottom: $sections", tops.sorted(), tops)
         // Each block's words, as iOS says them.
-        listOf(Infrastructure.MACHINES_DETAIL, RunnerCopy.ADD_FOOTER, Infrastructure.ACCOUNT_POOLS_DETAIL,
-            "${Infrastructure.API_KEYS_DETAIL} ${DeepSeekBalance.EDIT_ON_WEB}").forEach { compose.onNodeWithText(it).assertExists() }
+        listOf(MachinesAndModels.MACHINES_DETAIL, RunnerCopy.ADD_FOOTER, MachinesAndModels.ACCOUNT_POOLS_DETAIL,
+            "${MachinesAndModels.API_KEYS_DETAIL} ${DeepSeekBalance.EDIT_ON_WEB}").forEach { compose.onNodeWithText(it).assertExists() }
         compose.onNodeWithText("1 machine · 0 / 2 slots busy").assertExists()
         // The machine's row: its slots and where its engines stand — Codex signed out there is no count of its own, as on the web's card.
         compose.onNodeWithText("0 / 2 running · 1 of 3 signed in", useUnmergedTree = true).assertExists()
         // A key switched off says so, beside its model and the engines it runs on.
         compose.onNodeWithText("GPT-5", useUnmergedTree = true).assertExists()
-        compose.onNodeWithText(Infrastructure.DISABLED, useUnmergedTree = true).assertExists()
+        compose.onNodeWithText(MachinesAndModels.DISABLED, useUnmergedTree = true).assertExists()
         compose.onNodeWithText("Codex · OpenCode", useUnmergedTree = true).assertExists()
         // The old pages' words are gone with them.
         listOf("On your runners", "Your API keys", "Providers").forEach { compose.onAllNodesWithText(it, substring = true).assertCountEquals(0) }
@@ -106,11 +106,11 @@ class InfrastructurePageTest {
         compose.onAllNodesWithText("is signed out on", substring = true).assertCountEquals(0)
         fun press(line: String, action: String) = compose.onNode(hasText(action) and hasClickAction() and
             hasAnyAncestor(hasTestTag(line))).performScrollTo().performClick()
-        press("needs-you:offline:${fixture.RUNNER_TWO}", Infrastructure.DETAILS)
-        press("needs-you:pool:${fixture.POOL}", Infrastructure.MANAGE)
+        press("needs-you:offline:${fixture.RUNNER_TWO}", MachinesAndModels.DETAILS)
+        press("needs-you:pool:${fixture.POOL}", MachinesAndModels.MANAGE)
         compose.runOnIdle {
             assertEquals(listOf(OrbitRoute(Destination.RUNNER, fixture.RUNNER_TWO),
-                OrbitRoute(Destination.SETTINGS, "infrastructure", recordId = "own:${fixture.POOL}")), opened)
+                OrbitRoute(Destination.SETTINGS, "machines-and-models", recordId = "own:${fixture.POOL}")), opened)
         }
     }
 
@@ -144,7 +144,7 @@ class InfrastructurePageTest {
     /** Settings' Machines & models group: one row, Machines & models, and no header over it to say the name twice (iOS SettingsHome,
      * docs/mocks/machines-and-models ⑥-2) — "1 needs you" while something does, else the machines online — and the page's line under it.
      * It comes first, before Preferences, whose first row is Sessions (docs/mocks/ios-settings-order). */
-    @Test fun settingsHasOneInfrastructureRowWithItsValueAndTheLineUnderIt() {
+    @Test fun settingsHasOneMachinesAndModelsRowWithItsValueAndTheLineUnderIt() {
         // Codex signed out on the one machine is nothing for the row to count, as the web's machine card draws it nothing.
         codexSignedOut()
         val api = api()
@@ -153,28 +153,28 @@ class InfrastructurePageTest {
                 deviceAlerts = { true }, notifications = {}, about = {})
         }
         await("1 of 1 online")
-        compose.onNode(hasText(Infrastructure.TITLE) and hasText("1 of 1 online") and hasClickAction()).assertExists()
-        compose.onNodeWithText(Infrastructure.SUBTITLE).assertExists()
+        compose.onNode(hasText(MachinesAndModels.TITLE) and hasText("1 of 1 online") and hasClickAction()).assertExists()
+        compose.onNodeWithText(MachinesAndModels.SUBTITLE).assertExists()
         listOf("Runners", "Providers").forEach { compose.onAllNodesWithText(it).assertCountEquals(0) }
-        compose.onAllNodesWithText(Infrastructure.TITLE).assertCountEquals(1)
-        assertTrue("Machines & models comes before Preferences", top(Infrastructure.TITLE) < top(Infrastructure.SUBTITLE) &&
-            top(Infrastructure.SUBTITLE) < top("Preferences") && top("Preferences") < top(SESSIONS) && top(SESSIONS) < top("Notifications"))
+        compose.onAllNodesWithText(MachinesAndModels.TITLE).assertCountEquals(1)
+        assertTrue("Machines & models comes before Preferences", top(MachinesAndModels.TITLE) < top(MachinesAndModels.SUBTITLE) &&
+            top(MachinesAndModels.SUBTITLE) < top("Preferences") && top("Preferences") < top(SESSIONS) && top(SESSIONS) < top("Notifications"))
         // A machine offline is.
         fixture.secondRunner = true; fixture.runnerTwoOnline = false
         revision++
         await("1 needs you")
-        compose.onNode(hasText(Infrastructure.TITLE) and hasText("1 needs you") and hasClickAction()).performScrollTo().performClick()
-        compose.runOnIdle { assertEquals(listOf(OrbitRoute(Destination.SETTINGS, "infrastructure")), opened) }
+        compose.onNode(hasText(MachinesAndModels.TITLE) and hasText("1 needs you") and hasClickAction()).performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(listOf(OrbitRoute(Destination.SETTINGS, "machines-and-models")), opened) }
     }
 
-    /** A pool's page and a DeepSeek key's are titled by their name once read, as iOS titles them; Infrastructure until then. */
+    /** A pool's page and a DeepSeek key's are titled by their name once read, as iOS titles them; Machines & models until then. */
     @Test fun aPoolsPageIsTitledByItsName() {
-        assertEquals(Infrastructure.TITLE, settingsTitle("infrastructure"))
-        assertEquals(Infrastructure.TITLE, settingsTitle("infrastructure", "shared:never-read"))
+        assertEquals(MachinesAndModels.TITLE, settingsTitle("machines-and-models"))
+        assertEquals(MachinesAndModels.TITLE, settingsTitle("machines-and-models", "shared:never-read"))
         val api = api()
-        compose.setContent { InfrastructureSettings(api, revision, "own:${fixture.POOL}", {}, {}) }
+        compose.setContent { MachinesAndModelsSettings(api, revision, "own:${fixture.POOL}", {}, {}) }
         await("Team Codex")
-        assertEquals("Team Codex", settingsTitle("infrastructure", "own:${fixture.POOL}"))
-        assertEquals(Infrastructure.TITLE, runnerTitle(null, null, null))
+        assertEquals("Team Codex", settingsTitle("machines-and-models", "own:${fixture.POOL}"))
+        assertEquals(MachinesAndModels.TITLE, runnerTitle(null, null, null))
     }
 }

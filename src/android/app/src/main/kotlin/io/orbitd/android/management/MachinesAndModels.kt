@@ -10,15 +10,15 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 /**
- * OrbitKit `Infrastructure` and `ProvidersOverview` (iOS 33e0e2e09, 5e75edbde): the Infrastructure page — where the account's agents run
+ * OrbitKit `MachinesAndModels` and `ProvidersOverview` (iOS 33e0e2e09, 5e75edbde): the Machines & models page — where the account's agents run
  * and whose model quota they spend, the web's /infrastructure on one page, which Runners and Providers became. Top to bottom: what needs
  * a person, the machines, Add Runner, the account pools and the API keys.
  *
  * Needs you, at its top, is iOS's rules (the web drew it too until 2026-10-25), read from the same lists — the machines (GET runners) and
  * the pools, its own and the ones it is in — so nothing new is asked of the server.
- * Pure, so InfrastructureTest pins it to iOS's cases and InfrastructureCopyParityTest its words to the Swift source.
+ * Pure, so MachinesAndModelsTest pins it to iOS's cases and MachinesAndModelsCopyParityTest its words to the Swift source.
  */
-internal object Infrastructure {
+internal object MachinesAndModels {
     // Words
     /** The page's name: the Settings row that opens it, and its title. */
     const val TITLE = "Machines & models"
@@ -49,7 +49,7 @@ internal object Infrastructure {
     fun poolLine(pool: String) = "$pool is unavailable"
 
     /** A machine draining for its update with the reader's work waiting on it (board 5's note, D3): "studio-mac is updating — 1 session
-     * and 1 message waiting" (OrbitKit `Infrastructure.updatingLine`). */
+     * and 1 message waiting" (OrbitKit `MachinesAndModels.updatingLine`). */
     fun updatingLine(machine: String, sessions: Int, messages: Int): String {
         val parts = buildList {
             if (sessions > 0) add(if (sessions == 1) "1 session" else "$sessions sessions")
@@ -58,7 +58,7 @@ internal object Infrastructure {
         return "$machine is updating — ${parts.joinToString(" and ")} waiting"
     }
 
-    /** "Updating to 0.1.254 · it starts no new work until 2 turns finish" (OrbitKit `Infrastructure.updatingDetail`). */
+    /** "Updating to 0.1.254 · it starts no new work until 2 turns finish" (OrbitKit `MachinesAndModels.updatingDetail`). */
     fun updatingDetail(targetVersion: String?, turns: Int): String {
         val updating = targetVersion?.let { "Updating to $it" } ?: "Updating"
         if (turns <= 0) return "$updating · it restarts once nothing is running"
@@ -78,7 +78,7 @@ internal object Infrastructure {
         return "${runners.size} machine${if (runners.size == 1) "" else "s"} · $busy / $all slots busy"
     }
 
-    /** SettingsHome.infrastructureValue: "1 needs you" — how many lines Needs you holds; with none, how many of the account's machines
+    /** SettingsHome.machinesAndModelsValue: "1 needs you" — how many lines Needs you holds; with none, how many of the account's machines
      * can take work right now. */
     fun settingsValue(needsYou: Int, runners: List<JsonObject>): String =
         if (needsYou > 0) { if (needsYou == 1) "1 needs you" else "$needsYou need you" } else settingsRunnersValue(runners)
@@ -109,7 +109,7 @@ internal object Infrastructure {
     /** What needs a person, a line each: each machine offline, then each machine online that nothing can run on — no coding CLI signed in
      * and no workspace on a key (RunnerPage.noCliSignedIn, which the web's Settings row counts too) — then each pool no session can start
      * on, the ones the account is in before its own, as the page lists them. An engine signed out beside one signed in is no line, as the
-     * web's machine card draws it nothing: the machine's own page says so, and signs it in (OrbitKit `Infrastructure.attention`).
+     * web's machine card draws it nothing: the machine's own page says so, and signs it in (OrbitKit `MachinesAndModels.attention`).
      * [workspaces] are the account's, each on the machine it names. */
     fun attention(runners: List<JsonObject>, workspaces: List<JsonObject>, memberPools: List<Pool>, ownPools: List<Pool>,
                   nowMs: Long): List<Attention> {
@@ -155,7 +155,7 @@ internal object Infrastructure {
     /** The model a Cursor CLI session on a Cursor key starts on (web's cursorModelOf): Auto, Cursor's own default, by the name the
      * catalogue of the first machine online that can run it gives it — the models are Cursor CLI's on each machine, whichever key it runs
      * on (docs/cursor-runtime-contract.md §10). Auto it is with none. A key's row and its page say it too (OrbitKit
-     * `Infrastructure.cursorModel`). */
+     * `MachinesAndModels.cursorModel`). */
     fun cursorModel(online: List<JsonObject>): String {
         for (runner in online) {
             if (CursorRuntime.state(runner) != CursorRuntime.RunnerState.READY) continue
@@ -256,7 +256,7 @@ internal object Infrastructure {
      * OpenCode gets none, as the web draws it no row. */
     /** Whether an engine the machine lacks has its page to open from the machine's record (web's Install on its row): that page installs
      * it — Install, or Retry after an install that failed — or shows the install running. DeepSeek Harness's page installs its pinned CLI
-     * where the machine can run one (OrbitKit `Infrastructure.installsFromPage`). */
+     * where the machine can run one (OrbitKit `MachinesAndModels.installsFromPage`). */
     fun installsFromPage(runner: JsonObject, engine: String): Boolean {
         if (engine == ProviderEngines.DSH) return DshRuntime.state(runner).installable || runner.obj("install")?.str("engine") == ProviderEngines.DSH
         val health = runner.list("engines").firstOrNull { it.str("engine") == engine }

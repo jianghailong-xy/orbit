@@ -2947,13 +2947,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0595 adds one nullable TIMESTAMP(3) `drain_waiting_pushed_at` on `runner` (no default, catalog-only); no
       // preserved rows, triggers or DONE fence change, and no row is written.
       '0595_runner_drain_waiting_push',
-      // 0597 adds the terminal_login and terminal_credential tables, their indexes and foreign keys to "user" and
+      // 0610 lets project_handoff_approval.to_project_id be NULL for a MOVE_TASK (one CHECK),
+      // rebuilds 0386's pending-move index NULLS NOT DISTINCT, and restates 0389's
+      // task_claimed_project_move_guard with the target compared IS NOT DISTINCT FROM. No preserved
+      // rows, triggers or DONE fence change, and no row is written.
+      '0610_project_handoff_move_out',
+      // 0625 adds the terminal_login and terminal_credential tables, their indexes and foreign keys to "user" and
       // "runner" only (docs/terminal-session-design.md); no preserved rows, triggers or DONE fence change, and no row
       // is written.
-      '0597_terminal_credential',
-      // 0600 widens approval_decided_via_chk to allow 'TERMINAL' (docs/terminal-session-design.md); approval only, no
+      '0625_terminal_credential',
+      // 0626 widens approval_decided_via_chk to allow 'TERMINAL' (docs/terminal-session-design.md); approval only, no
       // preserved rows, triggers or DONE fence change, and no row is written.
-      '0600_approval_decided_by_terminal'],
+      '0626_approval_decided_by_terminal'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

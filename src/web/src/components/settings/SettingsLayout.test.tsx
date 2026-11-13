@@ -67,7 +67,11 @@ vi.mock('./SettingsProviderPages', async (original) => {
   const { useParams } = await import('react-router-dom');
   return {
     ...(await original<typeof import('./SettingsProviderPages')>()),
-    SettingsVendorPage: () => <p data-page={`vendor:${useParams().vendor}`}>vendor</p>,
+    SettingsKeysPage: () => {
+      const { vendor } = useParams();
+      return <p data-page={vendor ? `vendor:${vendor}` : 'keys'}>keys</p>;
+    },
+    SettingsProvidersHome: () => <p data-page="keys">keys</p>,
     SettingsPoolsPage: () => <p data-page="pools">pools</p>,
   };
 });
@@ -256,7 +260,7 @@ describe('the Settings window', () => {
     expect(group('Workspaces').querySelector('.settings-nav-add')?.getAttribute('aria-label')).toBe('New workspace');
   });
 
-  it('lists Personal, each machine with its status dot, each vendor with its keys, and each workspace with its machine', async () => {
+  it('lists Personal, each machine with its status dot, API keys and Account pools, and each workspace with its machine', async () => {
     await visit('/settings/general');
     expect(rows('Personal').map((r) => [r.label, r.href])).toEqual([
       ['General', '/settings/general'],
@@ -275,8 +279,8 @@ describe('the Settings window', () => {
       ['Studio Mac', '/settings/machines/studioMac', 'Offline'],
     ]);
     expect(rows('Providers').map((r) => [r.label, r.href, r.meta])).toEqual([
-      ['Anthropic', '/settings/providers/anthropic', '2 keys'],
-      ['OpenAI', '/settings/providers/openai', '1 key'],
+      // Two rows however many vendors the keys are (docs/mocks/settings-providers-compact).
+      ['API keys', '/settings/providers', '3'],
       ['Account pools', '/settings/providers/pools', '1'],
     ]);
     expect(rows('Workspaces').map((r) => [r.label, r.href, r.meta])).toEqual([
@@ -299,8 +303,7 @@ describe('the Settings window', () => {
       '/settings/integrations/feishu': 'feishu',
       '/settings/machines/gpuBox': 'machine:gpuBox:',
       '/settings/machines/studioMac': 'machine:studioMac:',
-      '/settings/providers/anthropic': 'vendor:anthropic',
-      '/settings/providers/openai': 'vendor:openai',
+      '/settings/providers': 'keys',
       '/settings/providers/pools': 'pools',
       '/settings/workspaces/wsOrbit': 'workspace:wsOrbit',
       '/settings/workspaces/wsSite': 'workspace:wsSite',
@@ -322,6 +325,23 @@ describe('the Settings window', () => {
     ]);
     await click(nav().querySelector('a[href="/settings/providers/new"]'));
     expect(page()).toBe('pick-vendor');
+  });
+
+  it('keeps API keys lit on a vendor’s keys, and on none of a key’s own pages', async () => {
+    for (const [path, lit] of [
+      ['/settings/providers/anthropic', '/settings/providers'],
+      ['/settings/providers/pools', '/settings/providers/pools'],
+      ['/settings/providers/new', null],
+      ['/settings/providers/new/anthropic', null],
+      ['/settings/providers/keys/k1', null],
+      ['/settings/providers/pools/p1', '/settings/providers/pools'],
+    ] as const) {
+      await visit(path);
+      expect([path, nav().querySelector('a.active')?.getAttribute('href') ?? null]).toEqual([path, lit]);
+      await act(async () => root?.unmount());
+      root = null;
+      container.remove();
+    }
   });
 
   it('opens connecting a key, editing one and a pool’s page in the right-hand column', async () => {

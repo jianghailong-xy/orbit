@@ -8,9 +8,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** The Infrastructure page's words are iOS's (5e75edbde), byte for byte, and so is what sends a reader there (39f906344): the Antigravity
+/** The Machines & models page's words are iOS's (5e75edbde), byte for byte, and so is what sends a reader there (39f906344): the Antigravity
  * repair card, and where the people of a shared pool see it. No product string still points at a Providers page. */
-class InfrastructureCopyParityTest {
+class MachinesAndModelsCopyParityTest {
     private val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
         .first { File(it, "src/macos/OrbitKit/Sources/OrbitKit").isDirectory }
     private fun read(path: String) = File(root, path).readText()
@@ -22,14 +22,14 @@ class InfrastructureCopyParityTest {
         (runCatching { field.get(holder) }.getOrNull() as? String)?.let { field.name to it }
     }.toMap()
 
-    /** Every constant of Infrastructure is a literal in the Swift it was ported from: Infrastructure and ProvidersOverview, the page's
+    /** Every constant of Machines & models is a literal in the Swift it was ported from: Machines & models and ProvidersOverview, the page's
      * name (AppSection), and the engine page's install words (RunnerEnginePage). */
-    @Test fun infrastructureWordsAreIosOwn() {
-        val source = listOf("${kit}Infrastructure.swift", "${kit}ProvidersOverview.swift", "${kit}AppSection.swift", "${views}RunnerEnginePage.swift")
+    @Test fun machinesAndModelsWordsAreIosOwn() {
+        val source = listOf("${kit}MachinesAndModels.swift", "${kit}ProvidersOverview.swift", "${kit}AppSection.swift", "${views}RunnerEnginePage.swift")
             .joinToString("\n") { read(it) }
-        val words = constants(Infrastructure)
-        assertTrue("Infrastructure holds no words", words.size >= 15)
-        assertEquals("Infrastructure strings not in the Swift sources", emptyMap<String, String>(), words.filterValues { !source.contains("\"$it\"") })
+        val words = constants(MachinesAndModels)
+        assertTrue("MachinesAndModels holds no words", words.size >= 15)
+        assertEquals("MachinesAndModels strings not in the Swift sources", emptyMap<String, String>(), words.filterValues { !source.contains("\"$it\"") })
         // The sentences built around a name keep iOS's words around it.
         listOf("\"\\(machine) is offline\"", "\"\\(machine) has no coding CLI signed in\"",
             "\"Last seen \\(", "\"Never checked in\"", "\" · its subscriptions are unavailable until it’s back\"", "\"\\(pool) is unavailable\"",
@@ -57,7 +57,7 @@ class InfrastructureCopyParityTest {
         assertEquals(emptyList<String>(), found)
     }
 
-    @Test fun theAntigravityRepairCardSaysInfrastructureAsIosDoes() {
+    @Test fun theAntigravityRepairCardSaysMachinesAndModelsAsIosDoes() {
         val engineAuth = read("${kit}EngineAuth.swift")
         listOf(AntigravityRepair.NEEDS_KEY.body("wikova", "0.1.230"), AntigravityRepair.NOT_INSTALLED.body("wikova", null)).forEach {
             assertTrue("\"$it\" is not in EngineAuth.swift", engineAuth.contains("\"$it\""))
@@ -65,7 +65,7 @@ class InfrastructureCopyParityTest {
         assertTrue("the card's way to the engine page", read("${views}RunnerSignInView.swift").contains("Button(\"Open in Machines & models\")"))
     }
 
-    @Test fun aSharedPoolsPeopleSeeItOnTheirInfrastructurePage() {
+    @Test fun aSharedPoolsPeopleSeeItOnTheirMachinesAndModelsPage() {
         val source = read("${kit}WhoCanUseIt.swift")
         val pool = Json.parseToJsonElement("""{"id":"p","label":"Team Codex","keys":[],
             "people":[{"userId":"a","name":"Me","creator":true,"you":true},{"userId":"b","name":"Bo"}]}""").jsonObject

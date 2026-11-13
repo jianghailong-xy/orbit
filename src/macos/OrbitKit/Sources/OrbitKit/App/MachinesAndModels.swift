@@ -1,14 +1,14 @@
 import Foundation
 
-/// The Infrastructure page on iOS and macOS — the web's `/infrastructure` (InfrastructurePage.tsx): where
+/// The Machines & models page on iOS and macOS — the web's `/infrastructure` (InfrastructurePage.tsx): where
 /// the account's agents run and whose quota they spend, on one page (docs/mocks/infrastructure-page/03-ios.png).
-/// It is the Mac's Infrastructure section, and Settings › Infrastructure on a phone. Top to bottom: what
+/// It is the Mac's Machines & models section, and Settings › Machines & models on a phone. Top to bottom: what
 /// needs a person, the machines, the account pools and the API keys.
 ///
 /// Needs you, at its top, is what the web's page drew too until it dropped it (2026-10-25): the same rules,
 /// read from the same lists — the machines (GET /runners) and the pools, its own and the ones it is in —
 /// so nothing new is asked of the server.
-public enum Infrastructure {
+public enum MachinesAndModels {
 
     // MARK: - Words
 

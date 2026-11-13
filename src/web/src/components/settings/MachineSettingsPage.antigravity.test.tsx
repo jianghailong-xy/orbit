@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import type { Runner } from '../TasksSidePanel';
 import { MachineSettingsPage } from './MachineSettingsPage';
-import { SettingsVendorPage } from './SettingsProviderPages';
+import { SettingsKeysPage } from './SettingsProviderPages';
 
 vi.mock('../../api', async (original) => ({ ...(await original<typeof import('../../api')>()), api: vi.fn() }));
 const apiMock = vi.mocked(api);
@@ -75,7 +75,7 @@ describe('Antigravity identity and readiness on a machine’s Settings page and 
         <QueryClientProvider client={client}>
           <Routes>
             <Route path="/settings/machines/:id" element={<MachineSettingsPage />} />
-            <Route path="/settings/providers/:vendor" element={<SettingsVendorPage />} />
+            <Route path="/settings/providers/:vendor" element={<SettingsKeysPage />} />
           </Routes>
         </QueryClientProvider>
       </MemoryRouter>);
@@ -88,15 +88,15 @@ describe('Antigravity identity and readiness on a machine’s Settings page and 
     await act(async () => root.unmount());
     root = createRoot(container);
     await mount([runner(), runner({ id: 'offline', online: false })], '/settings/providers/gemini');
-    expect(container.querySelector('.sp-vendor-title')?.textContent).toBe('Google Gemini');
+    expect(container.querySelector('.sp-vendor-section .sp-vendor-name')?.textContent).toBe('Google Gemini 1 key');
     expect(container.querySelector('.settings-row .vk-name')?.textContent).toBe('Gemini');
     expect(words(container.querySelector('.settings-row .prov-engines'))).toBe('Runs on Antigravity CLI · OpenCode');
     // Which machines can run it is the machines' to say, on their own rows: the key no longer does.
     expect(container.querySelector('.settings-row')?.textContent).not.toContain('Ready on');
-    // Another Gemini key is added from Google Gemini's own page.
+    // Another Gemini key is added from Google Gemini's own section.
     expect(
-      [...container.querySelectorAll('.settings-section-action button')].map((b) => b.textContent),
-    ).toEqual(['Add key']);
+      [...container.querySelectorAll('.sp-vendor-section .settings-section-action button')].map((b) => b.getAttribute('aria-label')),
+    ).toEqual(['Add Google Gemini key']);
   });
 
   it('offers installation on the focused CLI row of a machine without the CLI', async () => {

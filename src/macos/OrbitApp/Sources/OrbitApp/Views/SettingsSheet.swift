@@ -23,7 +23,7 @@ extension View {
 }
 
 /// Settings' own stack: the list at its root, and each page it opens as a frame of
-/// `NavState.settingsPath` — the `SettingsPage`s; from Infrastructure a machine's record and its engine
+/// `NavState.settingsPath` — the `SettingsPage`s; from Machines & models a machine's record and its engine
 /// and name pages, and a pool's page; and an account's record under Admin. A form row pushes with its
 /// `NavigationLink` value; a list row inside a page pushes through `AppModel.push`, which lands here
 /// while the sheet is up.
@@ -73,9 +73,9 @@ private struct SettingsPageView: View {
 
     var body: some View {
         switch page {
-        // The page the Infrastructure section shows, pushing onto Settings' stack: Machines & models'
+        // The page the Machines & models section shows, pushing onto Settings' stack: Machines & models'
         // one row, where the web's Runners and Providers pages became one.
-        case .infrastructure: RunnersListView(rowNavigation: .push)
+        case .machinesAndModels: RunnersListView(rowNavigation: .push)
         case .sessions:       SessionSettingsPage()
         case .notifications:  NotificationSettingsPage()
         case .sharedLinks:    SharedLinksSettingsPage()
@@ -149,15 +149,15 @@ struct SettingsHomeView: View {
             Task { await model.savePreferences(UpdatePreferencesRequest(theme: value)) }
         }
         .onAppear(perform: seed)
-        // Each row's value is its own read, so they are asked for side by side. Infrastructure's is what
+        // Each row's value is its own read, so they are asked for side by side. Machines & models' is what
         // its page's Needs you holds: the machines, and the pools — a Codex one of the account's own with
         // its people and keys, which say whether it can run.
         .task { alertsAllowed = await model.notifications.alertsAllowed() }
         .task { await model.runners?.load() }
         .task { await model.agents?.reloadPools() }
         .task { await model.sharedPools?.load() }
-        .task(id: InfrastructureLists.codexPoolIDs(model)) {
-            for id in InfrastructureLists.codexPoolIDs(model) { await model.sharedPools?.loadAccess(id) }
+        .task(id: MachinesAndModelsLists.codexPoolIDs(model)) {
+            for id in MachinesAndModelsLists.codexPoolIDs(model) { await model.sharedPools?.loadAccess(id) }
         }
         .task { await model.sharedLinks?.load() }
         .task { await model.accessTokens?.load() }
@@ -236,10 +236,10 @@ struct SettingsHomeView: View {
             LabeledContent { Text(model.user?.email ?? "") } label: { label }
         case .instance:
             LabeledContent { Text(SettingsHome.instanceName(model.baseURL) ?? "") } label: { label }
-        case .infrastructure:
-            NavigationLink(value: NavNode.settingsPage(.infrastructure)) {
+        case .machinesAndModels:
+            NavigationLink(value: NavNode.settingsPage(.machinesAndModels)) {
                 LabeledContent {
-                    if let value = infrastructureValue {
+                    if let value = machinesAndModelsValue {
                         // What needs a person is said in amber, as the mock's row says it.
                         Text(value.text)
                             .foregroundStyle(value.needsYou ? RunnerInk.amber : Color.secondary)
@@ -257,10 +257,10 @@ struct SettingsHomeView: View {
 
     /// Only an answer the server gave — never the empty list a model starts with: how many lines the
     /// page's Needs you holds, or with none how many machines are online.
-    private var infrastructureValue: (text: String, needsYou: Bool)? {
+    private var machinesAndModelsValue: (text: String, needsYou: Bool)? {
         guard let runners = model.runners, runners.loadState.hasLoaded else { return nil }
-        let needsYou = InfrastructureLists(model).attention.count
-        return (SettingsHome.infrastructureValue(needsYou: needsYou, runners: runners.runners), needsYou > 0)
+        let needsYou = MachinesAndModelsLists(model).attention.count
+        return (SettingsHome.machinesAndModelsValue(needsYou: needsYou, runners: runners.runners), needsYou > 0)
     }
 
     private func value(of row: SettingsHome.Row) -> String? {
@@ -950,11 +950,11 @@ private struct ChangePasswordPage: View {
 
 // MARK: - Account pools
 
-/// An account pool's page: the pool as Infrastructure last read it, with account pause controls; for a
+/// An account pool's page: the pool as Machines & models last read it, with account pause controls; for a
 /// Codex pool of one's own, its page (`CodexPoolPageView`) with its people and keys read beside its ChatGPT
 /// accounts, run from here: an account signed in, in again or out, keys and people added and taken out,
-/// the pool deleted. Deleting the pool closes the page. Pushed from Infrastructure's Account pools, on
-/// Settings' stack or the Infrastructure section's own.
+/// the pool deleted. Deleting the pool closes the page. Pushed from Machines & models' Account pools, on
+/// Settings' stack or the Machines & models section's own.
 struct AccountPoolSettingsPage: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -1017,7 +1017,7 @@ struct AccountPoolSettingsPage: View {
 
 /// A DeepSeek key's page, read-only: the key as the account's own list last read it, and the balance of
 /// its DeepSeek account — read with the list, and asked of DeepSeek again by Refresh or Retry. Pushed from
-/// Infrastructure's API keys, on Settings' stack or the Infrastructure section's own.
+/// Machines & models' API keys, on Settings' stack or the Machines & models section's own.
 struct ProviderDetailSettingsPage: View {
     @Environment(AppModel.self) private var model
     let providerID: String
@@ -1029,7 +1029,7 @@ struct ProviderDetailSettingsPage: View {
             .first(where: { $0.providerID.map(PublicID.storageKey) == key }) {
             if CursorRuntime.isKey(provider) {
                 CursorKeyPageView(key: provider,
-                                  model: Infrastructure.cursorModel((model.runners?.runners ?? []).filter { $0.online == true }),
+                                  model: MachinesAndModels.cursorModel((model.runners?.runners ?? []).filter { $0.online == true }),
                                   checkAgain: { await agents.recheckCursorKey(providerID) })
             } else {
                 DeepSeekKeyPageView(key: provider, reading: agents.deepSeekBalances[providerID],

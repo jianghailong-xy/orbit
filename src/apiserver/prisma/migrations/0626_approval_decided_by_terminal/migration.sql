@@ -17,7 +17,7 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 0600: after 0597 (this project line's terminal_credential); free on main and every pushed branch (others hold 0605-0607).
+-- 0626: right after 0625 (this project line's terminal_credential); free on main and every pushed branch (others hold up to 0610).
 -- Can run twice: DROP CONSTRAINT IF EXISTS.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 
