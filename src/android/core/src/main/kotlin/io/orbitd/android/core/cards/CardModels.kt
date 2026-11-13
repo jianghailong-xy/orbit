@@ -72,6 +72,8 @@ enum class CardVerb(val label: String) {
     WIKI_RECONFIRM("Keep entry"), WIKI_AMEND("Amend entry"), WIKI_RETIRE("Retire entry"),
     WATCH_PAUSE("Pause watch"), WATCH_RESUME("Resume watch"), WATCH_CANCEL("Cancel watch"),
     REOPEN_TASK("Reopen"),
+    /** The owner's own move on evidence nobody else can move (`ownerAction: RESTART_TASK`): the task starts again (`EvidenceRestart`). */
+    RESTART_TASK(EvidenceRestart.action),
 }
 
 /** The server address and the exact version drawn. No action is inferred from an event's prose. */
@@ -165,6 +167,17 @@ object CardCatalog {
                 val allowed = row.obj("decidability")?.flag("decidable") == true && row.obj("independence")?.flag("independent") == true
                 add(InteractionCard("evidence:$task:$revision", CardFamily.EVIDENCE, "Completion evidence", row, id,
                     projectId, task, "$revision:$deciding", if (allowed) listOf(CardVerb.CONFIRM_EVIDENCE, CardVerb.SEND_BACK) else emptyList(),
+                    context = buildJsonObject { put("decidingSessionId", deciding) }))
+            }
+            // An undecidable revision only the owner can move (§3, D2 = A): the server places it in this session's `waitingOnYou`
+            // with `ownerAction`, and the card's one press is Restart the task. A row there without it is a run's or nobody's to press.
+            queue.objects("waitingOnYou").forEach { row ->
+                if (!EvidenceRestart.offered(row)) return@forEach
+                val task = row.text("taskId") ?: return@forEach
+                val revision = row.text("evidenceRevision") ?: return@forEach
+                val deciding = row.obj("ownerCard")?.text("decidingSessionId") ?: queue.text("decidingSessionId") ?: return@forEach
+                add(InteractionCard("evidence:$task:$revision", CardFamily.EVIDENCE, "Completion evidence", row, id,
+                    projectId, task, "$revision:${EvidenceRestart.ownerAction}", listOf(CardVerb.RESTART_TASK),
                     context = buildJsonObject { put("decidingSessionId", deciding) }))
             }
             queue.objects("sentToCoordinator").forEach { row ->

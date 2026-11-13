@@ -50,7 +50,7 @@ import {
 import { settingsReturnPath } from '../../lib/settingsReturn';
 import { useToast } from '../../lib/toast';
 import { useMediaQuery } from '../../lib/useMediaQuery';
-import { PERSONAL_PAGES } from '../../pages/settings/settingsIndex';
+import { INTEGRATION_PAGES, PERSONAL_PAGES } from '../../pages/settings/settingsIndex';
 import { ControlPlaneProvider } from '../../lib/useControlPlane';
 import { ImpersonationBanner } from '../ImpersonationBanner';
 import { vendorName, vendorOf } from '../ProviderGallery';
@@ -68,6 +68,10 @@ const PERSONAL_ICONS: Record<(typeof PERSONAL_PAGES)[number]['path'], ReactNode>
   '/settings/shared-links': <LinkOutlined />,
   '/settings/access-tokens': <KeyOutlined />,
   '/settings/terminals': <CodeOutlined />,
+};
+
+/** Integrations' rows' icons, one per connected service. */
+const INTEGRATION_ICONS: Record<(typeof INTEGRATION_PAGES)[number]['path'], ReactNode> = {
   '/settings/integrations/feishu': <ApiOutlined />,
 };
 
@@ -110,7 +114,7 @@ const runnerName = (runner: Pick<Runner, 'name' | 'displayName'>): string =>
 
 /**
  * The Settings window (owner's choice A1): Settings takes over the whole window, the app's own sidebar
- * gone, with a nav of four groups on the left — Personal, Machines, Providers, Workspaces — and the
+ * gone, with a nav of five groups on the left — Personal, Integrations, Machines, Providers, Workspaces — and the
  * chosen page in a centred column on the right. "Back to Orbit" and Esc go back to the page Settings
  * was opened from; Esc clears a search first.
  *
@@ -263,6 +267,12 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
         <NavGroup title="Personal">
           {PERSONAL_PAGES.map((page) => (
             <NavRow key={page.path} to={page.path} icon={PERSONAL_ICONS[page.path]} label={page.label} />
+          ))}
+        </NavGroup>
+
+        <NavGroup title="Integrations">
+          {INTEGRATION_PAGES.map((page) => (
+            <NavRow key={page.path} to={page.path} icon={INTEGRATION_ICONS[page.path]} label={page.label} />
           ))}
         </NavGroup>
 

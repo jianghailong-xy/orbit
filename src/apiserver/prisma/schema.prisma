@@ -3400,6 +3400,8 @@ model Project {
   /// The exceptions somebody has to act on, and where they were queued (migration 0278).
   openItems          ProjectOpenItem[]
   openItemDeliveries ProjectOpenItemDelivery[]
+  /// The orphans the sweep told somebody about, once each (migration 0585).
+  orphanNotices      ProjectOrphanNotice[]
 
   /// Every attempt the platform made to land work on this project's integration line (migration 0281).
   integrationJobs ProjectIntegrationJob[]
@@ -4142,6 +4144,33 @@ model ProjectOpenItemDelivery {
   @@unique([itemId, sessionId, purpose], map: "project_open_item_delivery_item_session_purpose_key")
   @@index([sessionId, clientTurnId], map: "project_open_item_delivery_session_turn_idx")
   @@map("project_open_item_delivery")
+}
+
+/// One pending item of a project that nobody could move or nobody was told about, as the orphan sweep
+/// reported it (docs/evidence-always-has-an-addressee-design.md §4, migration 0585). One row per
+/// (project, orphan key): the key names the item and the state it was found in, so the same orphan in
+/// the same state is reported once, and a new state is a new key. `recipient` is who was told —
+/// the project's coordinator conversation (`sessionId`, the turn keyed `clientTurnId`), or the
+/// account owner when the project has no Automatic coordinator to tell. History, not a queue: nothing
+/// reads it to decide anything but whether this orphan was already reported.
+model ProjectOrphanNotice {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  projectId    String   @map("project_id") @db.Uuid
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  ownerId      String   @map("owner_id") @db.Uuid
+  /// The task whose pending item it is. History rather than a foreign key, like the session.
+  taskId       String   @map("task_id") @db.Uuid
+  orphanKey    String   @map("orphan_key")
+  /// EVIDENCE | EXCEPTION_ITEM | TASK_RUN | DEPENDENCIES
+  kind         String
+  /// COORDINATOR | OWNER
+  recipient    String
+  sessionId    String?  @map("session_id") @db.Uuid
+  clientTurnId String?  @map("client_turn_id")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([projectId, orphanKey], map: "project_orphan_notice_project_key")
+  @@map("project_orphan_notice")
 }
 
 /// One time a project's coordinator spent more on its own than the project allows, and what became of

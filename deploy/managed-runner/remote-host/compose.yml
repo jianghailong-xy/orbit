@@ -1,0 +1,81 @@
+# The channel host of managed runners on another machine (docs/self-hosting.md, "Managed runners on another host";
+# docs/managed-runner-remote-host-design.md). Two services, the same programs root Compose runs on a single host:
+#
+#   docker-channel           the restricted Docker channel (deploy/managed-runner/docker-channel), in this host's network
+#                            namespace, listening on one private address of it for the apiserver hosts channel.json's
+#                            listen.allowPeers names, with the bearer token;
+#   managed-runner-firewall  the managed runners' host firewall (deploy/managed-runner/firewall), keeping its rules on this
+#                            host's iptables.
+#
+# Run it through remote-host.sh (install, upgrade <sha>, status), which writes the directory both read and the env file
+# that names it: docker compose -f deploy/managed-runner/remote-host/compose.yml --env-file <dir>/compose.env ...
+# Its containers have root Compose's names, so a host runs either this or a deployment with managed runners, never both.
+name: orbit-channel-host
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "100m"
+    max-file: "5"
+    compress: "true"
+
+services:
+  docker-channel:
+    build:
+      context: ../../..
+      dockerfile: deploy/managed-runner/docker-channel/Dockerfile
+    image: orbit-docker-channel:local
+    container_name: orbit-docker-channel
+    restart: unless-stopped
+    logging: *logging
+    # The listener is on one of this host's own addresses: channel.json's listen.tcp.host, which check-config holds to a
+    # private one, and it closes a connection from any address outside listen.allowPeers before reading a byte of it.
+    network_mode: host
+    # The disk the storage budget is measured on, as in root Compose: an empty volume of the channel's own, read-only,
+    # which Docker keeps beside every runner's data volume.
+    command: ["serve", "--config", "/var/lib/orbit-managed-runners/channel.json", "--disk-probe-path", "/var/lib/orbit-docker-volumes"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - "${ORBIT_CHANNEL_HOST_DIR:?run this through deploy/managed-runner/remote-host/remote-host.sh}:/var/lib/orbit-managed-runners"
+      - type: volume
+        target: /var/lib/orbit-docker-volumes
+        read_only: true
+    healthcheck:
+      # Serving: its address is in LISTEN in this host's /proc/net/tcp. A connection would do too, but from this host it
+      # comes from an address allowPeers does not list, and the channel would log every one of them as refused.
+      test: ["CMD", "python3", "-I", "-c", "import json, socket, struct; t = json.load(open('/var/lib/orbit-managed-runners/channel.json'))['listen']['tcp']; want = '%08X:%04X' % (struct.unpack('<I', socket.inet_aton(t['host']))[0], t['port']); rows = [l.split() for l in open('/proc/net/tcp').readlines()[1:]]; raise SystemExit(0 if any(r[1] == want and r[3] == '0A' for r in rows) else 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  # As root Compose's managed-runner-firewall: this host's network namespace, NET_ADMIN and NET_RAW, never the Docker
+  # socket; it checks its rules every 10 s, repairs what changed, and leaves them in place when it stops. The channel
+  # starts no runner container while it does not report them in force.
+  managed-runner-firewall:
+    build:
+      context: ../../..
+      dockerfile: deploy/managed-runner/firewall/Dockerfile
+    image: orbit-managed-runner-firewall:local
+    container_name: orbit-managed-runner-firewall
+    restart: unless-stopped
+    logging: *logging
+    network_mode: host
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN, NET_RAW]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    volumes:
+      - "${ORBIT_CHANNEL_HOST_DIR:?run this through deploy/managed-runner/remote-host/remote-host.sh}/firewall:/var/lib/orbit-managed-runner-firewall"
+      # The legacy iptables backend's lock, which install names only where this host's iptables is legacy.
+      - type: bind
+        source: "${ORBIT_MANAGED_RUNNER_FIREWALL_XTABLES_LOCK:-/dev/null}"
+        target: /run/xtables.lock
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD", "python3", "-I", "/opt/orbit-managed-runner-firewall/firewall.py", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

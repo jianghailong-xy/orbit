@@ -161,6 +161,15 @@ defaults to ORBIT_SESSION_ID and must execute this task; its lifecycle state is 
 Unicode composition and line endings share one stable digest; changed evidence makes a new revision.
 This command does not change task status and does not add a comment.
 
+The envelope is {"claim": ..., "checks": [...], "gaps": [...]}. It names no standard: Orbit records
+the one the task is held to (its declared criterion, else its own acceptance criteria) with the
+revision itself. A "criterion" an older client still sends is accepted and ignored.
+
+Each gap is a plain sentence. When one leaves a clause of the task's standard unproven, add the
+optional "gapClauses": [{"gap": <index into gaps>, "criterionClause": ..., "followUpTaskId": ...}].
+The follow-up must be a task in the same project; while a marked gap has none, the evidence can be
+sent back but not confirmed.
+
 Each entry of checks is {"kind": ..., "ref": ...}, kind one of TOOL_CALL, COMMIT, ARTIFACT or FILE.
 A screenshot or a report goes in as {"kind": "FILE", "ref": "<id>"}, the id 'orbit file upload'
 printed for a file or a folder bundle kept in one of this task's sessions, or attached to the task.
@@ -185,7 +194,10 @@ evidence is decided from the project it is in now, and a task moved out takes it
 evidence with it, so the project it left can no longer decide it. A run of another task, or a
 conversation a run opened, is refused unless the evidence is addressed to that session, as the
 subject of the task it verifies or a task in no project it dispatched
-(EVIDENCE_JUDGMENT_FROM_RUN_REFUSED).
+(EVIDENCE_JUDGMENT_FROM_RUN_REFUSED). A CONFIRM is refused while a gap names a clause of the
+task's standard in gapClauses without a followUpTaskId in the same project
+(EVIDENCE_JUDGMENT_GAP_WITHOUT_FOLLOW_UP); plain-text gaps do not block it, and SEND_BACK is never
+blocked by gaps.
 --note is required for SEND_BACK: it is delivered to the run that submitted the revision as a
 platform message, so it is what the next revision aims at. The deciding Session is ORBIT_SESSION_ID
 and is not a flag.
@@ -1522,7 +1534,7 @@ func cliTaskEvidenceList(args []string, out io.Writer) error {
 func cliTaskEvidenceSubmit(args []string, in io.Reader, out io.Writer) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit task evidence-submit")
-	evidenceText := fs.String("evidence", "", "completion evidence envelope as one JSON object: {claim, criterion{key,text}, checks[], gaps[]}")
+	evidenceText := fs.String("evidence", "", "completion evidence envelope as one JSON object: {claim, checks[], gaps[]}")
 	evidenceFile := fs.String("evidence-file", "", "read evidence JSON from stdin (-)")
 	sourceSessionID := fs.String("source-session-id", "", "source task Session (defaults to ORBIT_SESSION_ID)")
 	idempotencyKey := fs.String("idempotency-key", "", "caller retry identity (max 200 characters)")

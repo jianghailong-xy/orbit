@@ -240,6 +240,7 @@ test('the owner channel refuses a personal access token door by door and field b
       body: { decision: 'CONFIRM', evidenceRevision: '1', decidingSessionId: nobody() },
       login: 404,
     },
+    { route: 'POST /tasks/:taskId/evidence/:revision/restart', path: `/tasks/${nobody()}/evidence/1/restart`, body: {}, login: 404 },
     {
       route: 'POST /sessions/:id/approvals/:approvalId/decision',
       path: `/sessions/${sessionId}/approvals/${nobody()}/decision`,

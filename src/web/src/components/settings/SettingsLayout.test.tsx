@@ -245,11 +245,12 @@ describe('the Settings window', () => {
     expect(page()).toBe('/settings/general');
   });
 
-  it('has the four groups, and a + in the heading of Machines, Providers and Workspaces only', async () => {
+  it('has the five groups, and a + in the heading of Machines, Providers and Workspaces only', async () => {
     await visit('/settings/general');
     const titles = [...nav().querySelectorAll('[role="group"]')].map((g) => g.getAttribute('aria-label'));
-    expect(titles).toEqual(['Personal', 'Machines', 'Providers', 'Workspaces']);
+    expect(titles).toEqual(['Personal', 'Integrations', 'Machines', 'Providers', 'Workspaces']);
     expect(group('Personal').querySelector('.settings-nav-add')).toBeNull();
+    expect(group('Integrations').querySelector('.settings-nav-add')).toBeNull();
     expect(group('Machines').querySelector('.settings-nav-add')?.getAttribute('aria-label')).toBe('Register a machine');
     expect(group('Providers').querySelector('.settings-nav-add')?.getAttribute('aria-label')).toBe('Connect a provider');
     expect(group('Workspaces').querySelector('.settings-nav-add')?.getAttribute('aria-label')).toBe('New workspace');
@@ -266,8 +267,8 @@ describe('the Settings window', () => {
       ['Shared links', '/settings/shared-links'],
       ['Access tokens', '/settings/access-tokens'],
       ['Terminals', '/settings/terminals'],
-      ['Feishu', '/settings/integrations/feishu'],
     ]);
+    expect(rows('Integrations').map((r) => [r.label, r.href])).toEqual([['Feishu', '/settings/integrations/feishu']]);
     expect(rows('Machines').map((r) => [r.label, r.href, r.dot])).toEqual([
       ['gpu-box', '/settings/machines/gpuBox', 'Online'],
       ['old-laptop', '/settings/machines/oldLaptop', 'Needs you'],

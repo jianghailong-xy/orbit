@@ -262,7 +262,7 @@ export function App() {
               redirects to it too; the task list lives at "/tasks". Each view wraps itself in its
               layout contract (DocView = page gutter + scroll, FlushView = full-bleed). */}
           {/* Settings takes over the window (owner's choice A1, docs/mocks/settings-redesign): its own nav
-              of four groups in place of the app's sidebar, "Back to Orbit" and Esc to leave. Machines and
+              of five groups in place of the app's sidebar, "Back to Orbit" and Esc to leave. Machines and
               Workspaces open the pages that manage them today until each has its own. */}
           <Route path="settings" element={<SettingsLayout />}>
             <Route index element={<Navigate to="/settings/general" replace />} />

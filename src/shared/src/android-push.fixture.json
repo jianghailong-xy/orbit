@@ -171,6 +171,32 @@
       }
     },
     {
+      "name": "project-orphan",
+      "pushType": "alert",
+      "collapseId": "project-orphan-019a0000-0000-5000-8000-00000000000b",
+      "source": {
+        "aps": {
+          "alert": {
+            "title": "Session translation: nobody has this",
+            "body": "Task “task D” has a running session. Nobody can move it now."
+          },
+          "sound": "default",
+          "thread-id": "019a0000-0000-7000-8000-000000000004"
+        },
+        "kind": "project-orphan",
+        "projectID": "019a0000-0000-7000-8000-000000000004"
+      },
+      "data": {
+        "version": "1",
+        "type": "alert",
+        "registrationKey": "019a0000-0000-7000-8000-000000000001",
+        "eventId": "40000000-0000-4000-8000-000000000008",
+        "notificationKey": "project-orphan-019a0000-0000-5000-8000-00000000000b",
+        "sentAt": "2026-11-12T13:00:00.000Z",
+        "payload": "{\"kind\":\"project-orphan\",\"projectID\":\"019a0000-0000-7000-8000-000000000004\",\"title\":\"Session translation: nobody has this\",\"body\":\"Task “task D” has a running session. Nobody can move it now.\",\"threadId\":\"019a0000-0000-7000-8000-000000000004\"}"
+      }
+    },
+    {
       "name": "terminal-login",
       "pushType": "alert",
       "collapseId": "terminal-login-019a0000-0000-7000-8000-00000000000b",
@@ -191,7 +217,7 @@
         "version": "1",
         "type": "alert",
         "registrationKey": "019a0000-0000-7000-8000-000000000001",
-        "eventId": "40000000-0000-4000-8000-000000000008",
+        "eventId": "40000000-0000-4000-8000-000000000009",
         "notificationKey": "terminal-login-019a0000-0000-7000-8000-00000000000b",
         "sentAt": "2026-11-12T10:00:00.000Z",
         "payload": "{\"kind\":\"terminal-login\",\"runnerID\":\"019a0000-0000-7000-8000-00000000000c\",\"terminalLoginID\":\"019a0000-0000-7000-8000-00000000000b\",\"title\":\"Approve a terminal?\",\"body\":\"Terminal on dev-laptop · code 7KQ-4MZ\",\"threadId\":\"terminal-login-019a0000-0000-7000-8000-00000000000b\"}"
