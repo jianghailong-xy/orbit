@@ -388,7 +388,10 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                     ProjectLandingsWindow(app, signedIn.handle, route, api, project, route.recordId, ::open)
                                 }
                                 Destination.SEARCH -> SearchScreen(api, ::open)
-                                Destination.SESSION -> SessionDestination(app, signedIn.handle, route, api, data, ::open, scopeList::holds) {
+                                // A member picked from a conversation's project sheet takes that conversation's place: Back returns
+                                // to the list it was opened from (owner 2026-11-11, docs/mocks/project-sessions-column board 5).
+                                Destination.SESSION -> SessionDestination(app, signedIn.handle, route, api, data, ::open, scopeList::holds,
+                                    swap = { next -> keyboard?.hide(); focus.clearFocus(); navigation = navigation.back().push(next) }) {
                                     navigation = navigation.dropSession(route.id!!)
                                 }
                                 Destination.DRAFT -> NewSessionComposer(app, signedIn.handle, route, data, ::open) { key, root -> land(key, root) }
