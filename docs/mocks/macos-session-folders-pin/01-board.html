@@ -46,6 +46,7 @@ h1 { font-size:28px; letter-spacing:-.02em; margin:0 0 6px; } h2 { font-size:21p
 .badge { display:inline-block; font-size:11px; font-weight:600; background:rgba(0,0,0,.07); border-radius:999px; padding:0 7px; margin-right:6px; color:#333; }
 .row.sel .badge { background:rgba(255,255,255,.25); color:#fff; }
 .chip { display:inline-block; font-size:11px; font-weight:600; background:#e8f0ff; color:#1e4fc2; border-radius:5px; padding:0 6px; margin-right:6px; }
+.ic.pj { position:relative; font-size:15px; } .ic.pj .pdot { position:absolute; right:3px; bottom:3px; width:6px; height:6px; border-radius:50%; background:var(--amber); box-shadow:0 0 0 2px #fff; }
 .dot { width:7px; height:7px; border-radius:50%; background:var(--amber); flex:none; }
 .hd { display:flex; align-items:center; font-size:11.5px; font-weight:700; color:var(--l2); padding:10px 8px 4px; }
 .hd .sp { flex:1; } .hd .chev { font-size:11px; color:var(--l2); display:inline-block; }
@@ -61,7 +62,7 @@ h1 { font-size:28px; letter-spacing:-.02em; margin:0 0 6px; } h2 { font-size:21p
 .menu { position:absolute; z-index:9; width:200px; background:rgba(246,246,248,.97); border-radius:9px; padding:5px; box-shadow:0 10px 30px rgba(0,0,0,.22),0 0 0 .5px rgba(0,0,0,.18); font-size:13px; }
 .menu .mi { padding:3px 10px; border-radius:5px; } .menu .mi.hi { background:var(--tint); color:#fff; } .menu .mi.red { color:#d70015; }
 .menu .sep { height:1px; background:rgba(0,0,0,.1); margin:4px 8px; }
-.mk { position:absolute; border:1.6px dashed var(--mark); border-radius:8px; pointer-events:none; z-index:7; }
+.mk { position:absolute; border:1.6px dashed var(--mark); border-radius:8px; pointer-events:none; z-index:10; }
 .mk .b-num { position:absolute; top:2px; right:4px; }
 </style>
 </head>
@@ -70,14 +71,14 @@ h1 { font-size:28px; letter-spacing:-.02em; margin:0 0 6px; } h2 { font-size:21p
 <!-- ───────────── part 1 ───────────── -->
 <div class="b-part" id="part-1">
 <h1>macOS 会话列表：文件夹行 + 可收起的 Pinned</h1>
-<p class="lede">和 web、iPad 的列表一个结构：顶部是文件夹行，下面是 Pinned / 今天 / 昨天 / … 分组，Pinned 点标题就能收起。分组用的是 iPad 那套代码（<code>SessionFolderGrouping</code> + <code>SessionTimeGrouping</code>），Mac 只是换成 Mac 的行和工具栏。示例数据，不是真实会话。</p>
+<p class="lede">和 web、iPad 的列表一个结构（2026-11-13 第二版：项目行带 web 的 Projects 图标；Mac 也有 Move… 和 New Folder…）：顶部是文件夹行，下面是 Pinned / 今天 / 昨天 / … 分组，Pinned 点标题就能收起。分组用的是 iPad 那套代码（<code>SessionFolderGrouping</code> + <code>SessionTimeGrouping</code>），Mac 只是换成 Mac 的行和工具栏。示例数据，不是真实会话。</p>
 <div class="b-row">
   <div>
     <span class="b-tag now">① 今天（main）</span>
     <div class="win" id="w-now">
       <div class="side"><div class="tl"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div></div>
       <div class="col">
-        <div class="tb"><span class="tbi">✎</span><div class="seg"><span class="on">Open</span><span>Completed</span><span>Trash</span></div><span class="tbi">⚙</span></div>
+        <div class="tb"><span class="tbi">✎</span><div class="seg"><span class="on">Open</span><span>Completed</span><span>Trash</span></div><span class="tbi">🗀⁺</span><span class="tbi">⚙</span></div>
         <div class="list" id="t1">
           <div class="row sel"><span class="pinbar"></span><span class="ic err">✕</span><div class="tx"><div class="t">Cluster repair: east region</div><div class="sub"><span class="badge">Coordinator</span>API Error: 406 Post "…</div></div></div>
           <div class="row"><span class="pinbar"></span><span class="ic">◯</span><div class="tx"><div class="t">Stream app onboarding</div><div class="sub">Hourly check round 6 finished…</div></div></div>
@@ -103,15 +104,15 @@ h1 { font-size:28px; letter-spacing:-.02em; margin:0 0 6px; } h2 { font-size:21p
     <div class="win" id="w-after">
       <div class="side"><div class="tl"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div></div>
       <div class="col">
-        <div class="tb"><span class="tbi">✎</span><div class="seg"><span class="on">Open</span><span>Completed</span><span>Trash</span></div><span class="tbi">⚙</span></div>
+        <div class="tb"><span class="tbi">✎</span><div class="seg"><span class="on">Open</span><span>Completed</span><span>Trash</span></div><span class="tbi">🗀⁺</span><span class="tbi">⚙</span></div>
         <div class="list">
           <div id="t2"><div class="frow"><span class="fi">🗀</span><span class="fn">LX routine</span><span class="ct">9</span><span class="cv">›</span></div>
           <div class="frow"><span class="fi">🗀</span><span class="fn">Onboarding</span><span class="cap">1</span><span class="ct">4</span><span class="cv">›</span></div>
           <div class="frow"><span class="fi">🗀</span><span class="fn">Backfills</span><span class="spin"></span><span class="ct">6</span><span class="cv">›</span></div></div>
           <div class="hd fold" id="t3">Pinned<span class="sp"></span><span class="chev" style="transform:rotate(90deg)">›</span></div>
-          <div class="row sel" id="t4"><div class="tx" style="padding-left:2px"><div class="t" style="display:flex">Cluster repair: east region<span style="flex:1"></span><span style="font-size:11px;opacity:.8">2m</span></div><div class="sub"><span class="chip" style="background:rgba(255,255,255,.25);color:#fff">3/7 tasks</span>API Error: 406 Post "…</div></div></div>
+          <div class="row sel" id="t4"><span class="pinbar"></span><span class="ic pj" style="color:#fff">▦</span><div class="tx"><div class="t" style="display:flex">Cluster repair: east region<span style="flex:1"></span><span style="font-size:11px;opacity:.8">2m</span></div><div class="sub"><span class="chip" style="background:rgba(255,255,255,.25);color:#fff">3/7 tasks</span>API Error: 406 Post "…</div></div></div>
           <div class="row"><span class="pinbar"></span><span class="ic">◯</span><div class="tx"><div class="t">Stream app onboarding</div><div class="sub">Hourly check round 6 finished…</div></div><span class="tm">5m</span></div>
-          <div class="row"><div class="tx" style="padding-left:2px"><div class="t" style="display:flex">App 55 October backfill<span style="flex:1"></span><span class="dot" style="margin:4px 6px 0 0"></span><span class="tm" style="margin:0">1h</span></div><div class="sub"><span class="chip">5/9 tasks</span><span style="color:var(--amber)">Approve merge to main</span></div></div></div>
+          <div class="row"><span class="pinbar"></span><span class="ic pj">▦<i class="pdot"></i></span><div class="tx"><div class="t" style="display:flex">App 55 October backfill<span style="flex:1"></span><span class="tm" style="margin:0">1h</span></div><div class="sub"><span class="chip">5/9 tasks</span><span style="color:var(--amber)">Approve merge to main</span></div></div></div>
           <div class="row"><span class="pinbar"></span><span class="ic">◯</span><div class="tx"><div class="t">Gray release percentage</div><div class="sub">Short answer: app 55 is on…</div></div><span class="tm">3h</span></div>
           <div class="hd">Today</div>
           <div class="row"><span class="ic">▭</span><div class="tx"><div class="t">Query daily table schema</div><div class="sub">Background process running…</div></div><span class="tm">9:41</span></div>
@@ -122,7 +123,7 @@ h1 { font-size:28px; letter-spacing:-.02em; margin:0 0 6px; } h2 { font-size:21p
       </div>
       <div class="detail"><div class="ph" style="top:80px;width:60%"></div><div class="ph" style="top:104px"></div><div class="ph" style="top:128px;width:70%"></div></div>
     </div>
-    <div class="b-cap">「LX」那 9 个会话收进了文件夹行；Pinned 只剩 4 行；协调会话变成项目行（带任务进度）。</div>
+    <div class="b-cap">「LX」那 9 个会话收进了文件夹行；Pinned 只剩 4 行；协调会话变成项目行：左边是 web 的 Projects 图标（运行中是转圈，等你是橙点），和会话行对齐。</div>
   </div>
 </div>
 </div>
@@ -136,7 +137,7 @@ h1 { font-size:28px; letter-spacing:-.02em; margin:0 0 6px; } h2 { font-size:21p
     <div class="win" style="width:440px;height:520px">
       <div class="side" style="width:60px"><div class="tl"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div></div>
       <div class="col" style="width:380px;border-right:0">
-        <div class="tb"><span class="tbi">✎</span><div class="seg"><span class="on">Open</span><span>Completed</span><span>Trash</span></div><span class="tbi">⚙</span></div>
+        <div class="tb"><span class="tbi">✎</span><div class="seg"><span class="on">Open</span><span>Completed</span><span>Trash</span></div><span class="tbi">🗀⁺</span><span class="tbi">⚙</span></div>
         <div class="list">
           <div class="frow"><span class="fi">🗀</span><span class="fn">LX routine</span><span class="ct">9</span><span class="cv">›</span></div>
           <div class="frow"><span class="fi">🗀</span><span class="fn">Onboarding</span><span class="cap">1</span><span class="ct">4</span><span class="cv">›</span></div>
@@ -175,7 +176,7 @@ h1 { font-size:28px; letter-spacing:-.02em; margin:0 0 6px; } h2 { font-size:21p
     <div class="win" style="width:440px;height:520px">
       <div class="side" style="width:60px"><div class="tl"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div></div>
       <div class="col" style="width:380px;border-right:0">
-        <div class="tb"><span class="tbi">✎</span><div class="seg"><span class="on">Open</span><span>Completed</span><span>Trash</span></div><span class="tbi">⚙</span></div>
+        <div class="tb"><span class="tbi">✎</span><div class="seg"><span class="on">Open</span><span>Completed</span><span>Trash</span></div><span class="tbi">🗀⁺</span><span class="tbi">⚙</span></div>
         <div class="list">
           <div class="frow" style="background:rgba(0,0,0,.06)"><span class="fi">🗀</span><span class="fn">LX routine</span><span class="ct">9</span><span class="cv">›</span></div>
           <div class="frow"><span class="fi">🗀</span><span class="fn">Onboarding</span><span class="cap">1</span><span class="ct">4</span><span class="cv">›</span></div>
@@ -191,6 +192,68 @@ h1 { font-size:28px; letter-spacing:-.02em; margin:0 0 6px; } h2 { font-size:21p
 </div>
 </div>
 
+<!-- ───────────── part 4 ───────────── -->
+<div class="b-part" id="part-4">
+<h2>⑥ 右键会话 → Move…　⑦ Move 面板　⑧ 工具栏 New Folder…</h2>
+<div class="b-row">
+  <div>
+    <span class="b-tag after">⑥ 右键会话行</span>
+    <div class="win" style="width:440px;height:470px">
+      <div class="side" style="width:60px"><div class="tl"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div></div>
+      <div class="col" style="width:380px;border-right:0">
+        <div class="tb"><span class="tbi">✎</span><div class="seg"><span class="on">Open</span><span>Completed</span><span>Trash</span></div><span class="tbi">🗀⁺</span><span class="tbi">⚙</span></div>
+        <div class="list">
+          <div class="frow"><span class="fi">🗀</span><span class="fn">LX routine</span><span class="ct">9</span><span class="cv">›</span></div>
+          <div class="hd">Today</div>
+          <div class="row" style="background:rgba(0,0,0,.06)"><span class="ic">▭</span><div class="tx"><div class="t">Query daily table schema</div><div class="sub">Background process running…</div></div><span class="tm">9:41</span></div>
+          <div class="row"><span class="ic err">✕</span><div class="tx"><div class="t">Too many part files</div><div class="sub">API Error: 406 Post "https://…</div></div><span class="tm">9:02</span></div>
+        </div>
+      </div>
+      <div class="menu" id="t6" style="left:190px;top:150px"><div class="mi">✎ Rename…</div><div class="mi">📌 Pin</div><div class="mi">🏷 Tags…</div><div class="mi">✓ Complete</div><div class="mi hi">🗀 Move…</div><div class="sep"></div><div class="mi red">🗑 Delete</div></div>
+    </div>
+  </div>
+  <div>
+    <span class="b-tag after">⑦ Move 面板（iOS 同一个，Mac 上是 sheet）</span>
+    <div class="win" style="width:480px;height:470px;flex-direction:column">
+      <div class="tb" id="t7h" style="justify-content:space-between"><span style="width:40px"></span><div class="ttl"><b>Move</b><small>Query daily table schema</small></div><span style="color:var(--tint);font-weight:600;padding-right:6px">Done</span></div>
+      <div class="list" style="padding:8px 14px;background:#f5f5f7" id="t7">
+        <div class="hd" style="padding-left:4px">FOLDERS IN DATA-PLATFORM</div>
+        <div style="background:#fff;border-radius:9px;padding:2px 0">
+          <div class="frow"><span class="fi" style="color:#888">▤</span><span class="fn">No Folder</span><span style="color:var(--tint);font-weight:700">✓</span></div>
+          <div class="frow"><span class="fi" style="color:#5856d6">🗀</span><span class="fn">LX routine</span><span class="ct">9</span></div>
+          <div class="frow"><span class="fi" style="color:#5856d6">🗀</span><span class="fn">Backfills</span><span class="ct">6</span></div>
+          <div class="frow" style="border-bottom:0"><span class="fi">🗀⁺</span><span class="fn">New Folder…</span></div>
+        </div>
+        <div class="hd" style="padding-left:4px">MOVE TO ANOTHER WORKSPACE</div>
+        <div style="background:#fff;border-radius:9px;padding:2px 0">
+          <div class="frow"><span class="fi" style="color:#d97757">✳</span><span class="fn">analytics<br><small style="color:var(--l2)">Claude Code · studio-mac</small></span><span class="cv">›</span></div>
+          <div class="frow" style="border-bottom:0;opacity:.45"><span class="fi">◎</span><span class="fn">infra<br><small>Runner offline</small></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <span class="b-tag after">⑧ 工具栏 New Folder…</span>
+    <div class="win" style="width:440px;height:470px">
+      <div class="side" style="width:60px"><div class="tl"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div></div>
+      <div class="col" style="width:380px;border-right:0;position:relative">
+        <div class="tb"><span class="tbi">✎</span><div class="seg"><span class="on">Open</span><span>Completed</span><span>Trash</span></div><span class="tbi" id="t8" style="background:rgba(0,0,0,.08)">🗀⁺</span><span class="tbi">⚙</span></div>
+        <div class="list" style="opacity:.5">
+          <div class="frow"><span class="fi">🗀</span><span class="fn">LX routine</span><span class="ct">9</span><span class="cv">›</span></div>
+          <div class="hd">Today</div>
+          <div class="row"><span class="ic">▭</span><div class="tx"><div class="t">Query daily table schema</div><div class="sub">Background process running…</div></div></div>
+        </div>
+        <div style="position:absolute;left:40px;right:40px;top:120px;background:#f6f6f8;border-radius:12px;box-shadow:0 12px 34px rgba(0,0,0,.25);padding:18px;text-align:center;font-size:13px">
+          <b style="font-size:14px">New Folder</b><div style="color:var(--l2);margin:4px 0 10px">Name the folder.</div>
+          <div style="background:#fff;border:1px solid #ccc;border-radius:6px;padding:4px 8px;text-align:left;color:var(--l3)">Folder name</div>
+          <div style="display:flex;gap:8px;margin-top:12px"><span style="flex:1;background:#fff;border-radius:6px;padding:4px;box-shadow:0 0 0 .5px #bbb">Cancel</span><span style="flex:1;background:var(--tint);color:#fff;border-radius:6px;padding:4px">Create</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
 <!-- ───────────── part 3 ───────────── -->
 <div class="b-part" id="part-3">
 <div class="b-notes"><ol>
@@ -199,27 +262,18 @@ h1 { font-size:28px; letter-spacing:-.02em; margin:0 0 6px; } h2 { font-size:21p
 <li><span class="b-num">3</span><b>Pinned 标题</b>：整条是按钮，› 展开时朝下、收起时朝右；收起状态记在本机（和 iPad 同一个键），换 workspace、重启都保持。文件夹页里的 Pinned 共用这一个开关。</li>
 <li><span class="b-num">4</span><b>文件夹页</b>：占会话列，顶栏 ‹ 返回、标题是文件夹名+workspace 名、⋯（改名/删除）、✎（新会话直接建在这个文件夹里）。右边详情不动。再点侧栏里当前 workspace 也会回到列表。每个 workspace 记得自己停在哪个文件夹。</li>
 <li><span class="b-num">5</span><b>右键</b>：Rename… / Delete Folder…，和 iPad 长按、文件夹页 ⋯ 是同一套对话框和文案。删除文件夹不删会话，会话回到列表。</li>
+<li><span class="b-num">6</span><b>会话右键 Move…</b>：和 iOS 长按菜单同一位置（Complete 之后、Delete 之前）；项目行的右键也有 Move（搬的是 coordinator）。Trash 里没有。</li>
+<li><span class="b-num">7</span><b>Move 面板</b>：就是 iOS 的那个：本 workspace 的文件夹（当前的打勾、New Folder…），下面是搬到其他 Workspace（点进去选那边的文件夹并确认）。Mac 上是窗口 sheet，Done 在右上。</li>
+<li><span class="b-num">8</span><b>New Folder…</b>：iPhone 在 ≡ 菜单里，Mac 放在工具栏设置齿轮旁边；Trash 视图里置灰（那里不画文件夹行）。</li>
 </ol></div>
 
-<div class="q"><h3>待定 · 要你拍板</h3></div>
-<div class="b-row">
-  <div class="opt rec"><h3>A. 项目行跟着进 Mac 列表<span class="rec-tag">推荐 · 已实现</span></h3>
-    <p>分组代码是 iPad / web 共用的，协调会话变成项目行（标题 + 任务进度 chip + 状态行），点它进项目的会话页 —— 和 web 一致，也和 Mac 侧栏的项目行进的是同一页。</p>
-    <p>注意：项目行没有左边的圆形图标（iOS 的行本来就没有），在 Mac 上和会话行左边对不齐，见 ② 的第一行。要补一个图标可以另开一小步。</p></div>
-  <div class="opt"><h3>B. Mac 列表不出项目行</h3>
-    <p>协调会话保持普通会话行 + Coordinator 标签（今天的样子），只加文件夹和 Pinned。和 web 不一致，但改动更小。</p></div>
-</div>
-<div class="b-row" style="margin-top:16px">
-  <div class="opt rec"><h3>C. Move / New Folder… 先只留 iOS<span class="rec-tag">推荐 · 已实现</span></h3>
-    <p>这次 Mac 只能看、进、改名、删除文件夹；把会话放进文件夹还得在 iPhone / iPad / web 上做。项目行菜单里的 Move 在 Mac 上隐藏，免得点了没反应。</p></div>
-  <div class="opt"><h3>D. Mac 也补 Move 和 New Folder…</h3>
-    <p>右键菜单加 Move…（弹 Move 面板）、工具栏加 New Folder…，和 web 完全对齐。要把 iOS 的 Move 面板搬到 Mac，单独一步。</p></div>
-</div>
+<div class="q"><h3>已拍板（2026-11-13）</h3>
+<p style="margin:6px 0 0">① 项目行：和 web 保持一致 —— 进 Mac 列表，左边补上 web 的 Projects 图标。② Move / New Folder…：引入 Mac，和 iOS 保持一致。会话页（console）⋯ 菜单里的 Move 还没上 Mac，另做。</p></div>
 </div>
 
 <script>
 window.drawMarks = () => {
-  const marks = [['t1',1],['t2',2],['t3',3],['t4',4],['t3b',3],['t4b',4],['t5',5]];
+  const marks = [['t1',1],['t2',2],['t3',3],['t4',4],['t3b',3],['t4b',4],['t5',5],['t6',6],['t7',7],['t8',8]];
   for (const [id, n] of marks) {
     const el = document.getElementById(id), win = el.closest('.win');
     const w = win.getBoundingClientRect(), r = el.getBoundingClientRect(), pad = 3;

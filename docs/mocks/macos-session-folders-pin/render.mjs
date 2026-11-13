@@ -6,6 +6,6 @@ const p = await b.newPage({ deviceScaleFactor: 2, viewport: { width: 1500, heigh
 await p.goto('file://' + board);
 await p.evaluate(() => document.fonts.ready);
 await p.evaluate(() => window.drawMarks && window.drawMarks());
-for (const id of ['part-1', 'part-2', 'part-3'])
+for (const id of ['part-1', 'part-2', 'part-4', 'part-3'])
   await p.locator('#' + id).screenshot({ path: `${outDir}/01-${id}.png` });
 await b.close();
