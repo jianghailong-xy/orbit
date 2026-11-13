@@ -218,7 +218,7 @@ Orbit priority, not the `P0`-`P3` label in the title; Section 6.5 explains the m
 | T1 | Name and trademark clearance | OPEN | Continue, owner-paused | The clearance brief exists as `docs/naming-decision.md` at commit `b56c15d1b` on local branch `orbit/task-p0-081917`; it is not on `main` and the branch is not pushed. The owner recorded a pause on 2026-11-13, not a choice among the candidates. | None | 150 |
 | T2 | Review and publish docs and community baseline | DONE | Completed | PR #29 merged as `bba40eb5f`; the files are on `main`; the docs check passes. The closing comment records an independent verification of links, Issue Forms, build, and a clean Compose stack. | None | Closed |
 | T3 | Repository-wide CI and main quality gate | DONE | Completed | `.github/workflows/ci.yml` is on `main`; PR #30 merged on 2026-08-20; the branch-protection API reports six required checks, strict mode, one review, and no force push or deletion. | None | Closed |
-| T4 | Triage and remediate production dependency alerts | IN_PROGRESS | Continue | The August baseline and the continuous controls are on `main`. The latest comment (2026-11-13) reports four DSH alerts fixed and a new section added to `docs/dependency-security.md`, but the section and the `@modelcontextprotocol/client` override are absent from the reviewed `main`; the work is unlanded. | None | 270 |
+| T4 | Triage and remediate production dependency alerts | IN_PROGRESS | Continue | The August baseline and the continuous controls are on `main`. The latest comment (2026-11-13) reports four DSH alerts fixed and a new section added to `docs/dependency-security.md`, but the section and the `@modelcontextprotocol/client` override are absent from the reviewed `main`; the work is unlanded. The Dependabot API at review still lists alerts #75 and #76 (high) and #77 and #78 (moderate) open in the two DSH lockfiles, plus development moderates #129 and #130. | None | 270 |
 | T5 | One version, tag, and release rule | OPEN | Rescope | `docs/release-process.md` and the tag-driven workflow are live, but identity is inconsistent: tag `v0.1.2-beta.245` contains `package.json` `0.1.254`; `main` then bumps to `0.1.255`; the newest non-prerelease release is `v0.1.0`; the README still cites `0.1.198` and `v0.1.2-beta.138`. | None | 280 |
 | T6 | Independent organization, domain, and account plan | OPEN | Rescope | No organization or project domain exists; the remote is a personal namespace and the site and appcast are on personal Pages. The written ownership, roles, two-recovery-admin, cost, and exit plan does not require the final name; execution does. | T1 | 140 |
 | T7 | GitHub facade and discovery metadata | OPEN | Rescope | Description, 14 topics, and Discussions are already configured; the homepage points at `docs/README.md`, not the site; Social Preview and anonymous link checks are unrecorded. Topics and brand assets are name-dependent; Discussions and link checks are not. | T1, T2 | 120 |
@@ -244,8 +244,9 @@ have to retract.
 
 **T4 is the highest-value name-independent finish.** The continuous controls already protect `main`; what is
 missing is the 2026-11-13 change set. It should be landed, the four DSH alerts confirmed closed on the next
-dependency-graph scan, and the full web suite completed (the task's own comment records it as a gap). Until
-then the supply-chain task correctly stays blocked.
+dependency-graph scan, and the full web suite completed (the task's own comment records it as a gap). At
+review the API still lists alerts #75 to #78 open in the two DSH lockfiles, which confirms the change set is
+not on `main`. Until then the supply-chain task correctly stays blocked.
 
 **T5 should be split, not merely continued.** The documentation and workflow work is largely present; the
 defect is identity. A small task should choose one public version scheme, align `package.json`, the tag, the
@@ -582,5 +583,6 @@ The edge list used for the review, as task-to-prerequisite pairs:
 | Open issues | 0 |
 | Discussions categories | Announcements, General, Ideas, Polls, Q&A, Show and tell |
 | Dependency controls | Dependabot security updates enabled; vulnerability alerts enabled; secret scanning and push protection enabled |
+| Open Dependabot alerts | 6: #75 and #76 high, #77 and #78 moderate in the two DSH lockfiles; #129 and #130 moderate, development scope |
 | Documentation check at baseline | 32 files, 0 lint issues, 0 local link or anchor errors, 3 checker tests passed before this report was added |
 | Documentation gate after this report | 33 public Markdown files; the result is recorded in the task evidence job |
