@@ -1,4 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
+-- Renumbered 2026-11-13 by the coordinator to 0660–0662: main had reached 0641 before this project line was promoted.
 -- `orbit` in a terminal (docs/terminal-session-design.md, "The terminal credential"), task T2: a TERMINAL credential
 -- answers this machine's approval cards, and SessionsService.decideApproval records the credential the decider used
 -- in approval.decided_credential_kind. approval_decided_via_chk (0500, widened by 0505) allowed LOGIN, PAT,
@@ -17,7 +18,7 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 0626: right after 0625 (this project line's terminal_credential); free on main and every pushed branch (others hold up to 0610).
+-- 0661: right after 0660 (this project line's terminal_credential); free on main and every pushed branch (others hold up to 0610).
 -- Can run twice: DROP CONSTRAINT IF EXISTS.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 

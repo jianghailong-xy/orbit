@@ -2975,17 +2975,17 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0618 adds a nullable email_outbox.session_id, its foreign key and index, two CHECKs and a wider unique index
       // only; no preserved rows, triggers or DONE fence change, and no row is written.
       '0618_email_outbox_session_invite',
-      // 0625 adds the terminal_login and terminal_credential tables, their indexes and foreign keys to "user" and
+      // 0660 adds the terminal_login and terminal_credential tables, their indexes and foreign keys to "user" and
       // "runner" only (docs/terminal-session-design.md); no preserved rows, triggers or DONE fence change, and no row
       // is written.
-      '0625_terminal_credential',
-      // 0626 widens approval_decided_via_chk to allow 'TERMINAL' (docs/terminal-session-design.md); approval only, no
+      '0660_terminal_credential',
+      // 0661 widens approval_decided_via_chk to allow 'TERMINAL' (docs/terminal-session-design.md); approval only, no
       // preserved rows, triggers or DONE fence change, and no row is written.
-      '0626_approval_decided_by_terminal',
-      // 0627 adds two nullable columns to conversation_turn, sender_client and sender_client_detail (which client
+      '0661_approval_decided_by_terminal',
+      // 0662 adds two nullable columns to conversation_turn, sender_client and sender_client_detail (which client
       // sent the turn, sessions/turn-sender-client.ts); no preserved rows, triggers or DONE fence change, and no row
       // is written.
-      '0627_turn_sender_client'],
+      '0662_turn_sender_client'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

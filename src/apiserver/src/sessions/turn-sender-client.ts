@@ -2,7 +2,7 @@ import type { ExternalMessageFrom, MessageSentFrom, SessionMessageCard } from '@
 import type { AuthCredential } from '../common/current-user.decorator';
 
 /**
- * Which client sent a turn (`conversation_turn.sender_client` / `sender_client_detail`, migration 0627), and the
+ * Which client sent a turn (`conversation_turn.sender_client` / `sender_client_detail`, migration 0662), and the
  * `sentFrom` card a `user` event carries for it (`MessageSentFrom`, @orbit/shared).
  *
  * Written by the doors that know, from what the request proved or the apps already send on every request —

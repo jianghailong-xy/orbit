@@ -330,8 +330,8 @@ model User {
   refreshTokens    RefreshToken[] // long-lived rotating refresh tokens (hashed at rest)
   personalAccessTokens PersonalAccessToken[] // the user's own API tokens (hashed at rest, 0383)
   patDeviceLogins  PatDeviceLogin[] // the `orbit login` requests this user approved or denied (0388)
-  terminalLogins   TerminalLogin[] // terminal sign-ins asked for on this user's runners (0625)
-  terminalCredentials TerminalCredential[] // the terminals this user approved (0625)
+  terminalLogins   TerminalLogin[] // terminal sign-ins asked for on this user's runners (0660)
+  terminalCredentials TerminalCredential[] // the terminals this user approved (0660)
   identities       UserIdentity[] // the Google account this user signs in with (0391)
   oauthLoginFlows  OAuthLoginFlow[] // Google sign-ins in flight that would link to this user (0391)
   clientVersions   ClientVersion[] // which build of each client this user is running
@@ -467,7 +467,7 @@ model PersonalAccessToken {
 /// `pat_device_login_status_chk` (status from the list below; decided ⇔ `decidedById` and
 /// `decidedAt` set) and `pat_device_login_expires_in_days_chk` live only in the migration.
 /// A terminal on a runner's machine asking the account's owner to approve it (docs/terminal-session-design.md
-/// "The terminal credential", 0625). Started with the machine's runner credential, so it is bound to that runner and
+/// "The terminal credential", 0660). Started with the machine's runner credential, so it is bound to that runner and
 /// to the runner's owner from the start; the owner approves or denies it in the app (an owner-channel act), and the
 /// CLI, polling with the device code only it holds, collects the TERMINAL credential once. No credential is kept here.
 model TerminalLogin {
@@ -494,7 +494,7 @@ model TerminalLogin {
   @@map("terminal_login")
 }
 
-/// A TERMINAL credential (0625): what `orbit` in a terminal acts with, minted only by the owner's approval of a
+/// A TERMINAL credential (0660): what `orbit` in a terminal acts with, minted only by the owner's approval of a
 /// TerminalLogin, bound to the account and to one runner, and ending 30 days after that approval. Only its sha256 is kept.
 model TerminalCredential {
   id          String    @id @default(uuid(7)) @db.Uuid
@@ -929,7 +929,7 @@ model Runner {
   regionCheckRequestedAt DateTime? @map("region_check_requested_at")
 
   executableRuntimeHeartbeats     ExecutableRuntimeHeartbeat[]
-  // Terminal sign-ins on this machine, and the TERMINAL credentials bound to it (0625): they go with it.
+  // Terminal sign-ins on this machine, and the TERMINAL credentials bound to it (0660): they go with it.
   terminalLogins         TerminalLogin[]
   terminalCredentials    TerminalCredential[]
 
@@ -2708,7 +2708,7 @@ model Approval {
   startAfterCreate Boolean @default(false) @map("start_after_create")
   // User who decided it (no FK; cf. Activity.actorId).
   decidedById  String?   @map("decided_by_id") @db.Uuid
-  /// The credential the decider used (0500, 0505, 0626): `LOGIN` | `PAT` | `IMPERSONATION` | `FEISHU` | `COORDINATOR` | `TERMINAL` — a click on a Feishu card
+  /// The credential the decider used (0500, 0505, 0661): `LOGIN` | `PAT` | `IMPERSONATION` | `FEISHU` | `COORDINATOR` | `TERMINAL` — a click on a Feishu card
   /// (docs/feishu-bot-design.md §7.2). NULL on a row nobody decided and on every row decided before 0500.
   decidedCredentialKind String? @map("decided_credential_kind")
   /// The clicker's open_id and the card's message_id when `decidedCredentialKind` is `FEISHU`, and only then
@@ -2838,11 +2838,11 @@ model ConversationTurn {
   externalSenderSource String? @map("external_sender_source")
   externalSenderId     String? @map("external_sender_id")
   externalSenderName   String? @map("external_sender_name")
-  /// Which client sent this turn (migration 0627, sessions/turn-sender-client.ts): web, ios, macos, android,
+  /// Which client sent this turn (migration 0662, sessions/turn-sender-client.ts): web, ios, macos, android,
   /// terminal, feishu or runner, from the credential and the `X-Orbit-Client` / `X-Orbit-Device` headers of the
   /// door it came in through, never from a body. The detail is an ios client's device (iphone / ipad) or a
   /// terminal's machine name. Null for a session's message (its sender column says it), a token's, the
-  /// platform's own deliveries, and every turn written before 0627.
+  /// platform's own deliveries, and every turn written before 0662.
   senderClient       String? @map("sender_client")
   senderClientDetail String? @map("sender_client_detail")
   status          String    @default("PENDING") // PENDING | IN_FLIGHT | ANSWERED
