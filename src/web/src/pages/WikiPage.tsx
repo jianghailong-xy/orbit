@@ -366,7 +366,7 @@ function WikiFrame({
 
       {space && at ? (
         <div className={`wk-layout${home ? ' home' : ''}`}>
-          <div className="wk-dir-col">
+          <div className="wk-dir-col autohide-scrollbar">
             <div className="wk-rail-top">
               <div className="wk-rail-head">
                 <h1 className="page-title">{WIKI_TITLE}</h1>
