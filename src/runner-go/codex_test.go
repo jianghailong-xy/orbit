@@ -108,6 +108,25 @@ func TestCodexSpawnArgsTurnAccountPluginsOff(t *testing.T) {
 	}
 }
 
+// A custom provider's session turns the ChatGPT login's connectors off on both spawn paths; a built-in
+// one keeps them, the owner's call. See codexCustomProviderAppsOffConfig.
+func TestCodexSpawnArgsTurnConnectorsOffForACustomProvider(t *testing.T) {
+	for _, custom := range []bool{true, false} {
+		job := &ClaimedSession{Agent: AgentExecConfig{Model: "gpt-5.5"}}
+		if custom {
+			job.Agent.Env = map[string]string{"OPENAI_BASE_URL": "http://127.0.0.1:11434/v1", "OPENAI_API_KEY": "ollama"}
+		}
+		for name, args := range map[string][]string{
+			"exec":       codexExecCommandArgs(job, "/repo", "/tmp/uploads", nil, "/usr/local/bin/orbit"),
+			"app-server": codexAppServerCommandArgs(job, "/tmp/codex-state", "/usr/local/bin/orbit"),
+		} {
+			if got := containsArgs(args, []string{"-c", codexCustomProviderAppsOffConfig}); got != custom {
+				t.Errorf("custom provider: %v; %s args turn apps off: %v: %v", custom, name, got, args)
+			}
+		}
+	}
+}
+
 // Both spawn paths have Codex put its bundled tools back on PATH after a login profile has run, the
 // only setting that keeps `rg` in every command shell while commands stay login shells — see
 // codexLoginShellPackagePathConfig — and only for a codex that knows it, since an older one reports the

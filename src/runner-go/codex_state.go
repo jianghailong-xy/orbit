@@ -280,8 +280,8 @@ func codexSessionAccountHomes(sessionIDs []string) map[string]bool {
 // session runs with that home, so the account's own config.toml applies to it: an `mcp_servers` or
 // `notify` a human configured for their own codex TUI reaches the session too. Codex merges `-c`
 // over the file per key, so a table cannot be cleared from the outside — `-c mcp_servers={}` is a
-// no-op (measured on 0.161.0) — and only the plugins feature is overridable, which every spawn does
-// (codexPluginsOffConfig). Closing this last door means not running the session in the account's
+// no-op (measured on 0.161.0) — and only features are overridable: plugins, which every spawn turns
+// off (codexPluginsOffConfig), and apps, which a custom provider's spawn does (codexCustomProviderAppsOffConfig). Closing this last door means not running the session in the account's
 // home at all, a change to the shared-state design rather than a flag.
 func sharedCodexStateForEnv(env []string, cwd string) (codexStateSelection, error) {
 	codexHome, err := effectiveCodexHome(env, cwd)

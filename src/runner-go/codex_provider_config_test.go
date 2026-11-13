@@ -13,6 +13,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -128,8 +129,100 @@ func TestCodexProviderArgsLoadInTheInstalledCodex(t *testing.T) {
 			if got := rec.path(); !strings.HasSuffix(got, "/responses") {
 				t.Errorf("codex %s called %q; Orbit's provider block is meant to put it on the Responses API", path, got)
 			}
+			if apps := connectorTools(t, rec.body()); len(apps) > 0 {
+				t.Errorf("codex %s sent the custom endpoint ChatGPT connector tools: %v", path, apps)
+			}
 		})
 	}
+}
+
+// A custom provider's session never sends the endpoint the ChatGPT login's connectors (the codex_apps
+// MCP), even in a CODEX_HOME that is signed in to ChatGPT with connectors installed — where a
+// legacy-layout session resumes, and where plugins=false alone measured ten of them inline on
+// 0.169.0 (codexCustomProviderAppsOffConfig). The probe above runs in an empty home, which has no
+// connectors to leak, so this one borrows the machine's: it skips unless that home holds a ChatGPT
+// login, and unless a control run without the override shows the login has connectors to send, so a
+// pass is never a home with nothing in it. --ephemeral and a scratch sqlite_home keep the run out of
+// that home's history. The model is one codex does not know, so its tools go inline rather than
+// behind tool_search, as they do on a local model.
+func TestCodexCustomProviderSendsNoConnectorToolsFromALoggedInHome(t *testing.T) {
+	t.Parallel()
+	exe, err := exec.LookPath("codex")
+	if err != nil {
+		t.Skip("no codex on PATH; this check needs the real engine")
+	}
+	cwd, _ := os.Getwd()
+	home, err := effectiveCodexHome(os.Environ(), cwd)
+	if err != nil {
+		t.Skip("no codex home: ", err)
+	}
+	var auth struct {
+		AuthMode string `json:"auth_mode"`
+	}
+	if raw, err := os.ReadFile(filepath.Join(home, "auth.json")); err != nil || json.Unmarshal(raw, &auth) != nil || auth.AuthMode != "chatgpt" {
+		t.Skipf("the codex home %s holds no ChatGPT login; there are no connectors to keep out", home)
+	}
+	run := func(t *testing.T, dropAppsOff bool) []string {
+		rec := newCodexProviderRecorder()
+		api := httptest.NewServer(rec)
+		defer api.Close()
+		agentEnv := map[string]string{"OPENAI_BASE_URL": api.URL + "/v1", "OPENAI_API_KEY": "sk-orbit-probe"}
+		job := &ClaimedSession{Agent: AgentExecConfig{Model: "orbit-probe-local-model", Env: agentEnv}}
+		dir := t.TempDir()
+		args := codexExecCommandArgs(job, dir, dir, nil, "")
+		if dropAppsOff {
+			kept := args[:0:0]
+			for i := 0; i < len(args); i++ {
+				if args[i] == "-c" && i+1 < len(args) && args[i+1] == codexCustomProviderAppsOffConfig {
+					i++
+					continue
+				}
+				kept = append(kept, args[i])
+			}
+			args = kept
+		}
+		args = append(args[:len(args)-1:len(args)-1], "--ephemeral",
+			"-c", fmt.Sprintf("sqlite_home=%q", filepath.Join(dir, "state")),
+			"-c", "model_providers.orbit.request_max_retries=0", "-c", "model_providers.orbit.stream_max_retries=0", "-")
+		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, exe, args...)
+		cmd.Env = envWithValue(envWithValue(os.Environ(), "CODEX_HOME", home), "OPENAI_API_KEY", agentEnv["OPENAI_API_KEY"])
+		cmd.Stdin = strings.NewReader("Say DONE.")
+		out, _ := cmd.CombinedOutput()
+		select {
+		case <-rec.first:
+		default:
+			t.Fatalf("codex exec sent no request:\n%s", out)
+		}
+		return connectorTools(t, rec.body())
+	}
+	if control := run(t, true); len(control) == 0 {
+		t.Skipf("the ChatGPT login in %s sends no connector tools even without %s; nothing to prove", home, codexCustomProviderAppsOffConfig)
+	}
+	if apps := run(t, false); len(apps) > 0 {
+		t.Errorf("Orbit's custom-provider argv sent the endpoint the login's connector tools: %v", apps)
+	}
+}
+
+// connectorTools names the mcp__codex_apps__ tools in a captured Responses request body.
+func connectorTools(t *testing.T, body []byte) []string {
+	t.Helper()
+	var req struct {
+		Tools []struct {
+			Name string `json:"name"`
+		} `json:"tools"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		t.Fatalf("the captured request is not JSON: %v", err)
+	}
+	var apps []string
+	for _, tool := range req.Tools {
+		if strings.HasPrefix(tool.Name, "mcp__codex_apps__") {
+			apps = append(apps, tool.Name)
+		}
+	}
+	return apps
 }
 
 // codexProbeWriter lets the engine's stderr be read while it is still being written.
@@ -212,13 +305,14 @@ func driveCodexProviderAppServer(t *testing.T, stdin io.WriteCloser, stdout io.R
 	request("turn/start", codexTurnParams(threadID, job, dir, dir, "orbit-provider-probe-turn", "Say DONE.", nil, codexTurnContextOptions{}))
 }
 
-// codexProviderRecorder notes the path of the first POST it receives and fails every request, which
+// codexProviderRecorder notes the path and body of the first POST it receives and fails every request, which
 // ends the turn without codex needing a real answer.
 type codexProviderRecorder struct {
 	mu    sync.Mutex
 	first chan struct{}
 	once  sync.Once
 	seen  string
+	sent  []byte
 }
 
 func newCodexProviderRecorder() *codexProviderRecorder {
@@ -226,17 +320,24 @@ func newCodexProviderRecorder() *codexProviderRecorder {
 }
 
 func (rec *codexProviderRecorder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	_, _ = io.ReadAll(r.Body)
+	body, _ := io.ReadAll(r.Body)
 	if r.Method == http.MethodPost {
 		rec.once.Do(func() {
 			rec.mu.Lock()
 			rec.seen = r.URL.Path
+			rec.sent = body
 			rec.mu.Unlock()
 			close(rec.first)
 		})
 	}
 	w.WriteHeader(http.StatusInternalServerError)
 	_, _ = w.Write([]byte(`{"error":{"message":"orbit provider config probe"}}`))
+}
+
+func (rec *codexProviderRecorder) body() []byte {
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	return rec.sent
 }
 
 func (rec *codexProviderRecorder) path() string {

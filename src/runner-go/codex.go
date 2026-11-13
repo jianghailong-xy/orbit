@@ -369,8 +369,19 @@ func codexProviderArgs(agentEnv map[string]string) []string {
 		"-c", `model_providers.orbit.env_key="OPENAI_API_KEY"`,
 		"-c", `model_providers.orbit.wire_api="responses"`,
 		"-c", `model_provider="orbit"`,
+		"-c", codexCustomProviderAppsOffConfig,
 	}
 }
+
+// codexCustomProviderAppsOffConfig keeps the ChatGPT login's connectors ("Apps", the codex_apps MCP)
+// out of a session that runs on a custom provider. codex loads them from the runner's ChatGPT login
+// whatever provider the session talks to, so without it an Ollama, vLLM or other Responses endpoint
+// is sent the account's connector tool schemas (329 KB on 0.169.0, so a 64K local model cannot take a
+// single turn), and the model it serves can call tools that act on the owner's ChatGPT account.
+// codexPluginsOffConfig does not cover this; see there for what was measured. Built-in (ChatGPT
+// login) sessions keep their connectors: the owner's call. TestCodexProviderArgsLoadInTheInstalledCodex
+// holds it to the installed engine.
+const codexCustomProviderAppsOffConfig = "features.apps=false"
 
 // Codex launches stdio MCP servers with a filtered environment. The Orbit MCP server reads
 // these values to attribute work to the current session/agent/task, gate orchestration tools,
@@ -402,6 +413,14 @@ const codexOrbitMCPServer = "orbit"
 // Measured against the installed CLI (0.161.0, on a home with gmail/github installed and enabled):
 // `codex debug prompt-input` renders the recommended-plugins block and the marketplace catalog
 // naming openai-curated-remote plugins without this override, and neither with it.
+//
+// It does not keep the connectors out, whatever the paragraph above says they ride in on: that is a
+// feature of its own, `apps`. Measured on 0.169.0 (a ChatGPT login with connectors installed,
+// plugins=false, first POST {base_url}/responses captured): with a model codex does not know, ten
+// mcp__codex_apps__* tools went out inline — 329 KB of the 340 KB body, more than a 64K local model
+// holds; with gpt-5.5 none went inline, but the codex_apps MCP still loaded behind tool_search.
+// features.apps=false removes them on both. A custom provider's sessions get it
+// (codexCustomProviderAppsOffConfig); the owner chose to leave a ChatGPT-login session's connectors.
 const codexPluginsOffConfig = "features.plugins=false"
 
 // codexLoginShellPackagePathConfig keeps the tools Codex ships with — ripgrep, which its instructions
