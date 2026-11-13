@@ -424,17 +424,21 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
   /** `claimDue`, with how long each watch it claimed had been due, on the database's clock. */
   private async claimDueWithDelay(): Promise<Array<{ id: string; dueSeconds: number }>> {
     return this.prisma.$queryRaw<Array<{ id: string; dueSeconds: number }>>`
-      UPDATE "watch" AS w
-      SET "next_evaluate_at" = LEAST(now() + ${this.leaseMs}::int * interval '1 millisecond', w."expires_at")
-      FROM (
+      -- A WITH and not a subquery of the UPDATE's FROM: a plan with w outside would run a subquery once for each row
+      -- of w, each run locking past the rows this statement has already written, and LIMIT would bound nothing. It
+      -- exports next_evaluate_at as it was before the lease moved it, which is what dueSeconds is measured from.
+      WITH "due" AS MATERIALIZED (
         SELECT "id", "next_evaluate_at" FROM "watch"
         WHERE "next_evaluate_at" <= now()
         ORDER BY "next_evaluate_at", "id"
         LIMIT ${this.claimBatch}
         FOR UPDATE SKIP LOCKED
-      ) AS due
-      WHERE w."id" = due."id"
-      RETURNING w."id", EXTRACT(EPOCH FROM now() - due."next_evaluate_at")::float8 AS "dueSeconds"`;
+      )
+      UPDATE "watch" AS w
+      SET "next_evaluate_at" = LEAST(now() + ${this.leaseMs}::int * interval '1 millisecond', w."expires_at")
+      FROM "due"
+      WHERE w."id" = "due"."id"
+      RETURNING w."id", EXTRACT(EPOCH FROM now() - "due"."next_evaluate_at")::float8 AS "dueSeconds"`;
   }
 
   /**
