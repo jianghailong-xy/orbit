@@ -5933,10 +5933,16 @@ export function WorkspaceView({
   // completed/trashed until the refetch lands. Drop it now so auto-open can't re-select
   // the removed session (which would null out `selected`, collapse the workspace scope, and
   // leak every workspace's sessions into the list). The invalidate below still reconciles.
+  // A list read already out was asked before the write, and its answer still holds the row: left
+  // to land, it draws the row again until the next read takes it away. The stream's reads do not
+  // cancel one another (useControlPlane's `refresh`), so cancel those here, after the drop: a
+  // cancel restores the cache as it stood, and that now includes the drop. The refresh the caller
+  // asks for next reads the lists again.
   const dropFromLists = (id: string, projectId?: string): void => {
     qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
       Array.isArray(old) ? old.filter((s) => s.id !== id) : old,
     );
+    void qc.cancelQueries({ queryKey: ['sessions'], fetchStatus: 'fetching' });
     qc.setQueriesData<any[]>({ queryKey: ['project-sessions'] }, (old) =>
       Array.isArray(old) ? old.filter((s) => s.id !== id) : old,
     );
