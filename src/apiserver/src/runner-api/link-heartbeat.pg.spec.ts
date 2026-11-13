@@ -821,7 +821,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     const waiting = await session(RunStatus.PENDING, { numTurns: 0, inboxLeaseOwner: null });
     const queued = await beat(draining);
     assert.equal(isFull(queued.answer), false, 'the work queued moved nothing a quiet beat reads');
-    assert.deepEqual(drainPushes.map((p) => [p.runnerId, p.waiting]), [[runnerId, { sessions: 1, messages: 0 }]]);
+    assert.deepEqual(drainPushes.map((p) => [p.runnerId, p.waiting]), [[runnerId, { sessions: 1, messages: 0, stopping: false }]]);
     await beat(draining);
     await beat(draining);
     assert.equal(drainPushes.length, 1, 'one push per drain');
