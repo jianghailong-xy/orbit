@@ -330,15 +330,15 @@ model User {
   refreshTokens    RefreshToken[] // long-lived rotating refresh tokens (hashed at rest)
   personalAccessTokens PersonalAccessToken[] // the user's own API tokens (hashed at rest, 0383)
   patDeviceLogins  PatDeviceLogin[] // the `orbit login` requests this user approved or denied (0388)
-  terminalLogins   TerminalLogin[] // terminal sign-ins asked for on this user's runners (0625)
-  terminalCredentials TerminalCredential[] // the terminals this user approved (0625)
+  terminalLogins   TerminalLogin[] // terminal sign-ins asked for on this user's runners (0660)
+  terminalCredentials TerminalCredential[] // the terminals this user approved (0660)
   identities       UserIdentity[] // the Google account this user signs in with (0391)
   oauthLoginFlows  OAuthLoginFlow[] // Google sign-ins in flight that would link to this user (0391)
   clientVersions   ClientVersion[] // which build of each client this user is running
   mergeReceipts    SessionMergeReceipt[] // merges recorded against this user's session branches
   agents           Agent[] // Agent identities this user owns (tenant scope)
   avatar           UserAvatar? // the profile photo, when one is set (0335)
-  emailOutbox      EmailOutbox[] // the welcome email of this account, when it was created after 0517
+  emailOutbox      EmailOutbox[] // the welcome email of this account (after 0517), and its session invitations (0618)
 
   /// Presses of Run Now this user made, and the receipts of their requests (0137).
   runRequests       TaskRunRequest[]
@@ -467,7 +467,7 @@ model PersonalAccessToken {
 /// `pat_device_login_status_chk` (status from the list below; decided ⇔ `decidedById` and
 /// `decidedAt` set) and `pat_device_login_expires_in_days_chk` live only in the migration.
 /// A terminal on a runner's machine asking the account's owner to approve it (docs/terminal-session-design.md
-/// "The terminal credential", 0625). Started with the machine's runner credential, so it is bound to that runner and
+/// "The terminal credential", 0660). Started with the machine's runner credential, so it is bound to that runner and
 /// to the runner's owner from the start; the owner approves or denies it in the app (an owner-channel act), and the
 /// CLI, polling with the device code only it holds, collects the TERMINAL credential once. No credential is kept here.
 model TerminalLogin {
@@ -494,7 +494,7 @@ model TerminalLogin {
   @@map("terminal_login")
 }
 
-/// A TERMINAL credential (0625): what `orbit` in a terminal acts with, minted only by the owner's approval of a
+/// A TERMINAL credential (0660): what `orbit` in a terminal acts with, minted only by the owner's approval of a
 /// TerminalLogin, bound to the account and to one runner, and ending 30 days after that approval. Only its sha256 is kept.
 model TerminalCredential {
   id          String    @id @default(uuid(7)) @db.Uuid
@@ -588,16 +588,25 @@ model EmailSettings {
   @@map("email_settings")
 }
 
-/// One email to send (docs/welcome-email-design.md §3.3; migration 0517), written in the transaction that
-/// creates the account. `kind` is only WELCOME; status PENDING | SENT | FAILED | SKIPPED (CHECKs live in
-/// the migration). No body and no secret: the email is rendered when it is sent.
+/// One email to send (docs/welcome-email-design.md §3.3; migrations 0517, 0618): a WELCOME row written in the
+/// transaction that creates the account, or a SESSION_INVITE row written with a session guest's new invitation.
+/// Status PENDING | SENT | FAILED | SKIPPED (CHECKs live in the migrations). No body and no secret: the email
+/// is rendered when it is sent.
+///
+/// 0618 adds the unique index this schema cannot spell — UNIQUE NULLS NOT DISTINCT (kind, user_id, session_id),
+/// one WELCOME per account and one SESSION_INVITE per (account, session) — and the CHECK that session_id is
+/// set exactly when kind is SESSION_INVITE.
 model EmailOutbox {
   id                String    @id @default(uuid(7)) @db.Uuid
   kind              String
   userId            String    @map("user_id") @db.Uuid
   user              User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// The session a SESSION_INVITE is for; null for a WELCOME (0618).
+  sessionId         String?   @map("session_id") @db.Uuid
+  session           Session?  @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   toAddress         String    @map("to_address")
-  /// The administrator who created the account; null for a Google sign-up. No relation, as updatedById.
+  /// The administrator who created the account, or the owner who invited the guest; null for a Google
+  /// sign-up. No relation, as updatedById.
   createdById       String?   @map("created_by_id") @db.Uuid
   status            String
   attempts          Int       @default(0)
@@ -611,7 +620,7 @@ model EmailOutbox {
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  @@unique([kind, userId], map: "email_outbox_kind_user_id_key")
+  @@index([sessionId], map: "email_outbox_session_id_idx")
   @@map("email_outbox")
 }
 
@@ -920,7 +929,7 @@ model Runner {
   regionCheckRequestedAt DateTime? @map("region_check_requested_at")
 
   executableRuntimeHeartbeats     ExecutableRuntimeHeartbeat[]
-  // Terminal sign-ins on this machine, and the TERMINAL credentials bound to it (0625): they go with it.
+  // Terminal sign-ins on this machine, and the TERMINAL credentials bound to it (0660): they go with it.
   terminalLogins         TerminalLogin[]
   terminalCredentials    TerminalCredential[]
 
@@ -2356,6 +2365,7 @@ model Session {
   /// Public links with this session as their root, ended ones included (migration 0306).
   shareLinks            ShareLink[]
   guests                SessionGuest[] // the people the owner invited to reply (0560)
+  guestInviteEmails     EmailOutbox[] // the email each invited person was sent (0618)
 
   @@index([assignedRunnerId, status])
   // "what did this workspace last run on", the derived seed a new session inherits when the
@@ -2698,7 +2708,7 @@ model Approval {
   startAfterCreate Boolean @default(false) @map("start_after_create")
   // User who decided it (no FK; cf. Activity.actorId).
   decidedById  String?   @map("decided_by_id") @db.Uuid
-  /// The credential the decider used (0500, 0505, 0626): `LOGIN` | `PAT` | `IMPERSONATION` | `FEISHU` | `COORDINATOR` | `TERMINAL` — a click on a Feishu card
+  /// The credential the decider used (0500, 0505, 0661): `LOGIN` | `PAT` | `IMPERSONATION` | `FEISHU` | `COORDINATOR` | `TERMINAL` — a click on a Feishu card
   /// (docs/feishu-bot-design.md §7.2). NULL on a row nobody decided and on every row decided before 0500.
   decidedCredentialKind String? @map("decided_credential_kind")
   /// The clicker's open_id and the card's message_id when `decidedCredentialKind` is `FEISHU`, and only then
@@ -2828,6 +2838,13 @@ model ConversationTurn {
   externalSenderSource String? @map("external_sender_source")
   externalSenderId     String? @map("external_sender_id")
   externalSenderName   String? @map("external_sender_name")
+  /// Which client sent this turn (migration 0662, sessions/turn-sender-client.ts): web, ios, macos, android,
+  /// terminal, feishu or runner, from the credential and the `X-Orbit-Client` / `X-Orbit-Device` headers of the
+  /// door it came in through, never from a body. The detail is an ios client's device (iphone / ipad) or a
+  /// terminal's machine name. Null for a session's message (its sender column says it), a token's, the
+  /// platform's own deliveries, and every turn written before 0662.
+  senderClient       String? @map("sender_client")
+  senderClientDetail String? @map("sender_client_detail")
   status          String    @default("PENDING") // PENDING | IN_FLIGHT | ANSWERED
   deliveredAt     DateTime? @map("delivered_at")
   leaseDeadlineAt DateTime? @map("lease_deadline_at")

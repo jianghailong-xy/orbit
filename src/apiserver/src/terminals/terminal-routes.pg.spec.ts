@@ -187,7 +187,7 @@ test('a TERMINAL credential drives only its own runner\'s sessions, and is refus
     assert.ok(answered.status === 200 || answered.status === 201, `answering A's card answered ${answered.status}: ${answered.text}`);
     const card = await db.approval.findUniqueOrThrow({ where: { id: onA.approvalId } });
     assert.equal(card.status, 'ALLOWED');
-    assert.equal(card.decidedCredentialKind, 'TERMINAL', 'the answer says it came from a terminal (0626)');
+    assert.equal(card.decidedCredentialKind, 'TERMINAL', 'the answer says it came from a terminal (0661)');
 
     // The same seven doors on B's session and on another account's: 403, and nothing moves.
     for (const other of [onB, strangers]) {

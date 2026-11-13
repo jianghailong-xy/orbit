@@ -445,6 +445,15 @@ final class ConsoleModel {
         clocksCache = (stateRevision, clocks)
         return clocks
     }
+    /// Which sign-in cards and account switches the conversation has moved past, read once per
+    /// published `state` like the clocks above: every row of the transcript asks.
+    @ObservationIgnored private var settlementCache: (revision: Int, settlement: TranscriptSettlement)?
+    var settlement: TranscriptSettlement {
+        if let cached = settlementCache, cached.revision == stateRevision { return cached.settlement }
+        let settlement = TranscriptSettlement(state.items)
+        settlementCache = (stateRevision, settlement)
+        return settlement
+    }
     /// Bumped whenever the LOCAL user sends a message from this console. The transcript observes it
     /// to force a scroll to the live tail on send — even when the user had scrolled up to read
     /// history (the `stateRevision` follow only re-pins while already at the bottom). Web parity:

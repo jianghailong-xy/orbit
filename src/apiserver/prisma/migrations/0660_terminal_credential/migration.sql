@@ -1,4 +1,5 @@
--- 0625 — the TERMINAL credential (docs/terminal-session-design.md, "The terminal credential").
+-- 0660 — the TERMINAL credential (docs/terminal-session-design.md, "The terminal credential").
+-- Renumbered 2026-11-13 by the coordinator to 0660–0662: main had reached 0641 before this project line was promoted.
 --
 --   terminal_login       one row per sign-in a terminal asks for: started with the machine's runner credential, so
 --                        bound to that runner and its owner from the start; PENDING until the owner approves or denies
@@ -8,7 +9,7 @@
 --   terminal_credential  one row per credential an approval minted: its sha256 only, the account and runner it is
 --                        bound to, the machine's name, and its end, 30 days after the approval. Revoked rows stay.
 --
--- Both go with their user and with their runner. 0625: main's highest is 0610 (2026-11-13); the ledger allows holes,
+-- Both go with their user and with their runner. 0660: main's highest is 0610 (2026-11-13); the ledger allows holes,
 -- never a number twice. Every statement can run twice. Nothing existing is altered and no row is written.
 
 CREATE TABLE IF NOT EXISTS "terminal_login" (

@@ -1,4 +1,4 @@
-data: {"seq":52,"type":"user","payload":{"text":"also add a test","delivery":"enqueued"},"turnId":"0193f2a0-0000-7000-8000-000000000002","ts":"2026-11-12T09:01:00.000Z"}
+data: {"seq":52,"type":"user","payload":{"text":"also add a test","delivery":"enqueued","sentFrom":{"client":"ios","device":"iphone"}},"turnId":"0193f2a0-0000-7000-8000-000000000002","ts":"2026-11-12T09:01:00.000Z"}
 
 data: {"seq":53,"type":"text_delta","payload":{"text":"Add"}}
 

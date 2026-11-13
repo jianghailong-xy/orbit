@@ -2607,7 +2607,7 @@ extension TranscriptItem {
     var asAssistant: AssistantBubble? { if case .assistant(let b) = self { return b }; return nil }
     var asTool: ToolCard? { if case .toolCall(let c) = self { return c }; return nil }
     var asError: String? { if case .error(_, let m) = self { return m }; return nil }
-    var asNotice: String? { if case .notice(_, let m) = self { return m }; return nil }
+    var asNotice: String? { if case .notice(_, let m, _) = self { return m }; return nil }
     var asDiagnostic: DiagnosticRead? {
         guard case .diagnostic(let d) = self else { return nil }
         return DiagnosticRead(label: d.label, text: d.text, message: d.message, repeats: d.repeats)

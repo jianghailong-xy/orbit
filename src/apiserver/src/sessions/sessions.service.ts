@@ -2,7 +2,7 @@ import { visibleQuestions, questionsWithCoordinator } from './run-question';
 import { isRunNotifyTurn, runNotifyContent } from './run-notify';
 import {
   SESSION_MERGE_RECOVERY_V1, readMergeRecovery, mergeRecoveryConfirmable, mergeRecoveryContinuePrompt, mergeRecoveryPrompt,
-  mergeRecoveryReady, type MergeRecovery, type MergeRecoveryAction,
+  mergeRecoveryReady, type MergeRecovery, type MergeRecoveryAction, type SessionActivity,
 } from '@orbit/shared';
 import {
   BadRequestException,
@@ -30,6 +30,7 @@ import { appendScheduledWakeupContext, endWakeupLoop, readSessionWakeups } from 
 import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
 import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
+import { readSessionActivities, sessionActivitySql } from './task-work-carrier';
 import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
@@ -54,6 +55,7 @@ import {
   readSessionMessageFrom,
   type ExternalTurnSender,
 } from './session-message';
+import { senderClientColumns, type TurnSenderClient } from './turn-sender-client';
 import { readOrbitMessageFrom } from './orbit-message';
 import {
   closeRequestsTheRetryWillNotResend,
@@ -3876,6 +3878,7 @@ export class SessionsService {
       runningBgJobs: string[];
       runningBgJobActivity: Prisma.JsonValue;
       runningSubagentCount: number;      engineTurnActive: boolean;
+      activity: SessionActivity | null;
       engineStartedAt: Date | null;
       enginePhase: string | null;
       runClaimedAt: Date | null;
@@ -4015,6 +4018,9 @@ export class SessionsService {
         s.running_bg_job_activity AS "runningBgJobActivity",
         cardinality(s.running_subagents)::int AS "runningSubagentCount",
         s.engine_turn_active AS "engineTurnActive",
+        -- What it is doing beyond its status (sessionActivitySql): the one answer to whether a parked
+        -- session is still working, so no client has to rebuild it from the columns around it.
+        (${Prisma.raw(sessionActivitySql('s'))}) AS "activity",
         s.engine_started_at AS "engineStartedAt",
         s.engine_phase AS "enginePhase",
         s.run_claimed_at AS "runClaimedAt",
@@ -4227,6 +4233,7 @@ export class SessionsService {
         runningBgJobCount: freshRunningBgJobs(r.runningBgJobs, r.runningBgJobActivity).length,
         runningSubagentCount: r.runningSubagentCount,
         engineTurnActive: r.engineTurnActive,
+        activity: r.activity,
         engineStartedAt: r.engineStartedAt,
         // What the list row needs to tell a three-second cold start from an engine that has been
         // compacting for four minutes; both are RUNNING with a null engineStartedAt.
@@ -4913,10 +4920,14 @@ export class SessionsService {
     });
     if (!session) throw linkNotFound();
     const stateful = withSessionState(session);
+    // A parked session can still be working (a self-driven turn, a sub-agent, a job, a wait that
+    // wakes it): without this the page read its AWAITING_INPUT as idle and said "Awaiting reply".
+    const activity = (await readSessionActivities(this.prisma, [session.id])).get(session.id) ?? null;
     return {
       title: session.title,
       workspaceName: session.workspace?.name ?? null,
       status: stateful.status,
+      activity,
       runStatus: stateful.runStatus,
       sessionState: stateful.sessionState,
       runState: stateful.runState,
@@ -6108,6 +6119,9 @@ export class SessionsService {
       externalSenderSource?: string;
       externalSenderId?: string;
       externalSenderName?: string | null;
+      /** Which client sent it (migration 0595), as `senderClientColumns` writes it. */
+      senderClient?: string;
+      senderClientDetail?: string | null;
       /** A wiki chat's page and selection (migration 0476), which delivery reads. */
       wikiContext?: Prisma.InputJsonValue;
     },
@@ -6336,6 +6350,12 @@ export class SessionsService {
        * §8.2). Like `senderSessionId`, an option of this call and never a field of `dto`. Written on a NEW turn only.
        */
       externalSender?: ExternalTurnSender;
+      /**
+       * Which client sent this turn (`conversation_turn.sender_client*`, migration 0595, turn-sender-client.ts),
+       * as the door derived it from its credential and the app's headers. Like `senderSessionId`, an option of
+       * this call and never a field of `dto`. Written on a NEW turn only.
+       */
+      senderClient?: TurnSenderClient;
       /** Full logical resume payload hash. Present only when resume delegates to this live path. */
       requestFingerprint?: string;
       /**
@@ -6659,6 +6679,7 @@ export class SessionsService {
         ...(targetTurnId ? { targetTurnId } : {}),
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
         ...externalSenderColumns(opts?.externalSender),
+        ...senderClientColumns(opts?.senderClient),
         ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
@@ -9211,6 +9232,8 @@ export class SessionsService {
        * `senderSessionId` is: a request is no less a request for having woken its recipient up.
        */
       onTurnWritten?: (tx: Prisma.TransactionClient, turn: ConversationTurn) => Promise<void>;
+      /** Which client sent the turn — see `createTurn`'s own. Carried onto both branches. */
+      senderClient?: TurnSenderClient;
       /**
        * This request is a PERSON saying something now — the HTTP resume door, and only that one.
        *
@@ -9340,6 +9363,7 @@ export class SessionsService {
         fence: opts?.fence,
         participateSendTransaction: opts?.participateSendTransaction,
         senderSessionId: opts?.senderSessionId,
+        senderClient: opts?.senderClient,
         externalSender: opts?.externalSender,
         onTurnWritten: opts?.onTurnWritten,
         requestFingerprint,
@@ -9633,6 +9657,7 @@ export class SessionsService {
         clientTurnId: dto.clientTurnId,
         requestFingerprint,
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
+        ...senderClientColumns(opts?.senderClient),
         ...externalSenderColumns(opts?.externalSender),
         ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
       });
