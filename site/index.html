@@ -17,14 +17,16 @@
     <meta property="og:title" content="Orbit — Agent Mission Control">
     <meta property="og:description" content="Self-hosted mission control for coding agents.">
     <meta property="og:url" content="https://jianghailong-xy.github.io/orbit/">
-    <meta property="og:image" content="https://jianghailong-xy.github.io/orbit/assets/social/og-image.svg">
-    <meta property="og:image:type" content="image/svg+xml">
+    <meta property="og:image" content="https://jianghailong-xy.github.io/orbit/assets/social/og-image.png">
+    <meta property="og:image:type" content="image/png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Orbit — Agent Mission Control. Durable tasks, local runners, and human approval.">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Orbit — Agent Mission Control">
     <meta name="twitter:description" content="Self-hosted mission control for coding agents.">
-    <meta name="twitter:image" content="https://jianghailong-xy.github.io/orbit/assets/social/og-image.svg">
+    <meta name="twitter:image" content="https://jianghailong-xy.github.io/orbit/assets/social/og-image.png">
+    <meta name="twitter:image:alt" content="Orbit — Agent Mission Control. Durable tasks, local runners, and human approval.">
     <link rel="stylesheet" href="assets/site.css">
   </head>
   <body>
@@ -54,6 +56,13 @@
             <p class="eyebrow">Orbit — Agent Mission Control</p>
             <h1>Self-hosted mission control for coding agents.</h1>
             <p class="hero-copy">Run coding agents on your own machines. Keep the plan, history, and controls in one self-hosted place.</p>
+            <p class="hero-audience"><strong>Built for</strong> small engineering and infrastructure teams that run coding agents against private code and internal systems.</p>
+            <p class="hero-problem"><strong>The problem</strong> Agent work outlives one chat and one machine. Plans, history, and approvals scatter across sessions, checkouts, and provider consoles.</p>
+            <ul class="proofs" aria-label="Three core proofs">
+              <li><strong>Durable work</strong><span>Task graphs, dependencies, and resumable sessions survive restarts.</span></li>
+              <li><strong>Local execution</strong><span>Runners poll out from the machines that hold your code and credentials.</span></li>
+              <li><strong>Supervised parallelism</strong><span>Worktrees reduce collisions; people approve risky commands and merges.</span></li>
+            </ul>
             <div class="hero-meta" aria-label="Project status">
               <span class="pill">Pre-1.0, active development</span>
               <span class="pill">MIT licensed</span>
@@ -61,13 +70,13 @@
             </div>
             <div class="hero-actions">
               <a class="button" href="#quick-start" data-funnel="quick-start">Start with Quick Start <span aria-hidden="true">→</span></a>
-              <a class="button secondary" href="#demo">See the 90-second demo</a>
+              <a class="button secondary" href="#demo">See the four-step demo</a>
             </div>
             <p class="hero-note">You operate the control plane, runners, credentials, TLS, backups, and access controls. Orbit is not a managed SaaS or a no-setup autonomous service.</p>
           </div>
           <figure class="hero-art" data-asset-slot="product-screenshot">
-            <img src="assets/product/hero-preview.svg" width="760" height="520" alt="Decorative Orbit preview showing a durable task graph, an online runner, and an approval card">
-            <figcaption class="asset-caption">Illustrative product preview · replaceable via the <a href="assets/README.md">public-site asset contract</a></figcaption>
+            <img src="assets/product/screenshot-task-graph.png" width="2880" height="2102" alt="Current Orbit web UI: a project page with a task graph whose arrows point from prerequisites to dependent tasks, a run queue, and acceptance criteria." fetchpriority="high">
+            <figcaption class="asset-caption">Current UI · project task graph, run queue, and acceptance criteria. Demo data from the onboarding capture set; see the <a href="assets/README.md">asset contract</a>.</figcaption>
           </figure>
         </div>
       </section>
@@ -104,32 +113,44 @@
         </div>
       </section>
 
-      <section class="section tight" id="demo">
+      <section class="section" id="demo">
         <div class="wrap">
           <div class="section-heading">
             <div>
-              <p class="kicker">90-second demo</p>
-              <h2>Three scenes, one visible intervention point.</h2>
+              <p class="kicker">Product demo · four steps</p>
+              <h2>Follow one piece of work from plan to result.</h2>
             </div>
-            <p>Use a tagged or explicitly named commit. Redact repository names, hostnames, tokens, cookies, internal URLs, and provider details before recording.</p>
+            <p>Every image below is a screenshot of the current web UI from a demo deployment. Data is example data from the onboarding guide.</p>
           </div>
-          <div class="demo-layout">
-            <div class="demo-intro" data-asset-slot="demo-gif">
-              <h3>Watch the storyboard</h3>
-              <p>The checked-in storyboard is the source of truth while a public recording is being prepared. It keeps the runner, repository, approval card, and human merge decision in frame.</p>
-              <div class="button-row">
-                <a class="button" href="https://github.com/jianghailong-xy/orbit/blob/main/docs/90-second-demo.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=demo">Open the full script <span aria-hidden="true">↗</span></a>
-                <a class="button text" href="https://github.com/jianghailong-xy/orbit/blob/main/docs/messaging-brief.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=messaging">Read messaging brief <span aria-hidden="true">↗</span></a>
-              </div>
-              <p class="hero-note">Reserved media slot: an approved short GIF can be added under <code>site/assets/product/demo.gif</code> with a factual caption.</p>
-            </div>
-            <div class="timeline" aria-label="Demo timeline">
-              <div class="timeline-item"><span class="time">0:00–0:08</span><div><strong>Opening</strong><span>Project page + online runner. Say the category line and core promise.</span></div></div>
-              <div class="timeline-item"><span class="time">0:08–0:32</span><div><strong>Work that outlives a chat</strong><span>Task dependency, resumable session, result, and comment history.</span></div></div>
-              <div class="timeline-item"><span class="time">0:32–0:56</span><div><strong>Parallel agents without checkout collisions</strong><span>Two isolated worktrees, a diff, and a human merge-review action.</span></div></div>
-              <div class="timeline-item"><span class="time">0:56–1:18</span><div><strong>Access to private infrastructure</strong><span>Runner heartbeat, internal tool, approval card, transcript, and outcome.</span></div></div>
-              <div class="timeline-item"><span class="time">1:18–1:30</span><div><strong>Close</strong><span>Pre-1.0 boundary, tagged release, hardening guide, and limits.</span></div></div>
-            </div>
+          <ol class="demo-steps">
+            <li class="demo-step" data-demo-step="task-graph">
+              <figure>
+                <img src="assets/product/screenshot-task-graph.png" width="2880" height="2102" decoding="async" alt="Task graph step: the project page shows task boxes connected by prerequisite arrows, a run queue with two ready tasks, and an acceptance criterion.">
+                <figcaption><span class="step-label">1 · Task graph</span> The project page draws prerequisites, dependents, the run queue, and acceptance criteria. The plan lives in the control plane, not in one chat window.</figcaption>
+              </figure>
+            </li>
+            <li class="demo-step" data-demo-step="runner">
+              <figure>
+                <img src="assets/product/screenshot-runner.png" width="2880" height="2048" decoding="async" alt="Runner step: the new-workspace form says it will create the workspace on the build-01 machine, which shows a green online dot in the settings sidebar.">
+                <figcaption><span class="step-label">2 · Runner</span> A workspace is a folder on a machine you registered. The green dot is build-01's heartbeat; sessions execute there with that machine's tools and credentials.</figcaption>
+              </figure>
+            </li>
+            <li class="demo-step" data-demo-step="approval">
+              <figure>
+                <img src="assets/product/screenshot-approval.png" width="2880" height="2048" decoding="async" alt="Approval step: a session is waiting for approval, and the approval card shows the exact psql command with buttons to approve, always allow psql, or reject.">
+                <figcaption><span class="step-label">3 · Approval</span> In the default permission mode, a risky command pauses at an approval card. A person sees the exact command before allowing it, always allowing that command, or rejecting it.</figcaption>
+              </figure>
+            </li>
+            <li class="demo-step" data-demo-step="result">
+              <figure>
+                <img src="assets/product/screenshot-result.png" width="2880" height="2048" decoding="async" alt="Result step: a succeeded session shows the request, the tool calls, a passing test result, the reply, and an open composer for the next message.">
+                <figcaption><span class="step-label">4 · Result</span> The finished turn keeps the request, tool calls, test output, and reply in the session. It parks awaiting input, so the next message continues with context.</figcaption>
+              </figure>
+            </li>
+          </ol>
+          <div class="demo-footer">
+            <a class="button secondary" href="https://github.com/jianghailong-xy/orbit/blob/main/docs/90-second-demo.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=demo">Read the 90-second recording script <span aria-hidden="true">↗</span></a>
+            <p class="hero-note">No recording is hosted yet; this four-step walkthrough is the public demo. The checked-in storyboard remains the script for a live recording.</p>
           </div>
         </div>
       </section>
@@ -259,8 +280,8 @@ docker compose ps</code></pre>
             <article class="roadmap-card">
               <h3>Direction, not dates</h3>
               <ul>
-                <li><strong>Now:</strong> repeatable clean-install evidence and one consistent version story.</li>
-                <li><strong>Next:</strong> screenshot-led onboarding, operator configuration reference, public changelog, and stronger community operations.</li>
+                <li><strong>Now:</strong> screenshot-led onboarding, repeatable clean-install evidence, and one consistent version story.</li>
+                <li><strong>Next:</strong> operator configuration reference, public changelog, and stronger community operations.</li>
                 <li><strong>Later:</strong> recurring schedules and inbound task sources, which are designed for but not built; v1.0 compatibility follows evidence gates.</li>
               </ul>
               <p class="version-note">Follow the <a href="https://github.com/jianghailong-xy/orbit/blob/main/ROADMAP.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=roadmap">full roadmap ↗</a> and <a href="https://github.com/jianghailong-xy/orbit/blob/main/docs/project-maturity.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=maturity">maturity gates ↗</a>.</p>
@@ -275,7 +296,18 @@ docker compose ps</code></pre>
       <div class="wrap">
         <div class="footer-row">
           <div><a class="footer-brand" href="./">Orbit — Agent Mission Control</a><p class="footer-copy">Self-hosted mission control for coding agents. Keep the plan, history, and controls in one self-hosted place.</p></div>
-          <div class="footer-links" aria-label="Footer navigation"><a href="#quick-start">Quick Start</a><a href="#boundaries">Security boundary</a><a href="#community">Community</a><a href="https://github.com/jianghailong-xy/orbit?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=footer">Repository ↗</a><a href="appcast.xml">macOS updates</a><span class="footer-language"><a href="zh/" lang="zh-CN">中文</a> / <a href="./" lang="en" aria-current="page">English</a></span></div>
+          <div class="footer-links" aria-label="Footer navigation">
+            <a href="#quick-start">Quick Start</a>
+            <a href="#boundaries">Security boundary</a>
+            <a href="#community">Community</a>
+            <a href="https://github.com/jianghailong-xy/orbit/blob/main/docs/README.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=footer-docs" data-public-link="docs">Docs ↗</a>
+            <a href="https://github.com/jianghailong-xy/orbit?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=footer" data-public-link="github">GitHub ↗</a>
+            <a href="https://github.com/jianghailong-xy/orbit/releases?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=footer-releases" data-public-link="releases">Releases ↗</a>
+            <a href="https://github.com/jianghailong-xy/orbit/blob/main/SUPPORT.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=footer-support" data-public-link="support">Support ↗</a>
+            <a href="https://github.com/jianghailong-xy/orbit/blob/main/SECURITY.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=footer-security" data-public-link="security">Security ↗</a>
+            <a href="appcast.xml">macOS updates</a>
+            <span class="footer-language"><a href="zh/" lang="zh-CN">中文</a> / <a href="./" lang="en" aria-current="page">English</a></span>
+          </div>
         </div>
         <p class="footer-legal">MIT licensed · pre-1.0 · This public entrance is a curated pointer to repository documentation, not a copy of the internal docs set.</p>
       </div>

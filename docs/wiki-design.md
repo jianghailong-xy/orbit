@@ -810,6 +810,10 @@ iPhone 抽屉、web 手机抽屉、web 桌面侧栏、iPad 与 macOS 侧栏都�
   - **详情栏默认是内容首页**（Home 选中），和手机首页同一份。点中栏的篇，详情栏换成文档页。
 - Activity、Review、Settings 都开在详情栏，按钮在详情栏页头，Activity 带等你数。去掉 `Pick an entry, or open Review.` 这个空状态（图 32）。
 - web 桌面是同一个结构的两栏版：目录栏（sticky、独立滚动，图 29）+ 主区。主区默认是内容首页，Activity 也开在主区（图 33）。
+  - 11-13 起（owner 定，效果图 `docs/mocks/wiki-rail` ③）：目录栏从窗口顶到底是一整条，248 px，从上到下是 `Wiki` · space、搜索、目录、栏底的 Settings 与 Share。栏头和栏底固定，中间的目录单独滚动。主区不再有页头那一行，Wiki 聊天面板贴顶。
+  - Activity 是目录里 Plan 下面的一行，带「等你」数；维护状态有红点或琥珀点时（同状态行的点），这一行也带一个同色的点。在 Activity 页时这一行高亮，§12.3.2「目录不选中任何一项」在 web 桌面不再适用。
+  - 状态行只在 Activity 页画，文档、文章、Browse、A–Z、Plan、Review 都不画。
+  - Wiki 聊天打开时是页面的一栏（效果图 `docs/mocks/wiki-rail` 03 Ⓑ，owner 11-13 定），见 wiki-chat-design.md §4.1。1200–1439 时应用侧栏收成图标条，这一栏保留（C2）；1200 以下聊天盖在正文上，这一栏收进 Contents，页头和搜索回到主区上方。手机不变。
 
 #### 12.3.6 加载
 

@@ -31,6 +31,9 @@
  *  (10) A receipt retires a candidate whose check is RUNNING and already timed out: the lost check is
  *      ended as ERROR · RUNNER_LOST there and then — not asked to stop — so it stops holding the
  *      project's check serial key, and the project's next check is claimed at once.
+ *  (11) M-T14 (2026-11-13): the work went in as a cherry-pick, which no receipt records, and the
+ *      last failure item about the blocked candidate is closed by hand — the candidate ends with it.
+ *  (12) M-T14 waits for the last such item: one still open keeps the candidate BLOCKED.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/promotion-landed-by-receipt.pg.spec.ts
  */
@@ -526,4 +529,59 @@ test('a merge recorded outside the card ends the candidate offering the same bra
     const handed = await heartbeat(w, 'CHECK_PROMOTION');
     assert.equal(handed?.jobId, next.checkJobId, 'the next check of the project is claimed');
   });
+
+  // ═══ (11) ═════════════════════════════════════════════════════════════════════════════════════
+  await t.test('(11) M-T14: closing the last failure item by hand ends the blocked candidate and its card',
+    async () => {
+      const w = await world('handled-by-hand');
+      const offer = await offered(w);
+      await report(w, await claim(w, 'CHECK_PROMOTION'), BRANCH_NEVER_PUSHED);
+      assert.equal((await promotion(offer.promotionId)).state, 'BLOCKED');
+      const [item] = await prisma.projectOpenItem.findMany({
+        where: { promotionId: offer.promotionId, state: 'OPEN' }, select: { id: true },
+      });
+      assert.ok(item, 'the check opened the failure item');
+
+      // 2026-11-13: the work went in as a cherry-pick, which no receipt records, and the item was
+      // closed with that reason.
+      await openItems.resolveOpenItem(ownerId, w.projectId, item.id,
+        { note: 'already on main as a cherry-pick' }, { kind: 'OWNER' });
+
+      const after = await promotion(offer.promotionId);
+      assert.equal(after.state, 'SUPERSEDED', 'nobody is left to answer the card, so it ends');
+      assert.ok(after.decidedAt);
+      assert.deepEqual(await itemsAbout(offer.promotionId), [{
+        kind: 'INTEGRATION_ERROR', state: 'RESOLVED', resolution: 'HANDLED', resolvedBy: 'USER',
+      }], 'the item keeps the hand close it was given');
+      assert.equal((await promotions.readCurrent(ownerId, w.projectId))?.state, 'SUPERSEDED',
+        'the card is served as nothing to draw');
+    });
+
+  // ═══ (12) ═════════════════════════════════════════════════════════════════════════════════════
+  await t.test('(12) M-T14: a candidate with another failure item still open stays BLOCKED until that one closes',
+    async () => {
+      const w = await world('two-items');
+      const offer = await offered(w);
+      await report(w, await claim(w, 'CHECK_PROMOTION'), BRANCH_NEVER_PUSHED);
+      const [first] = await prisma.projectOpenItem.findMany({
+        where: { promotionId: offer.promotionId, state: 'OPEN' }, select: { id: true },
+      });
+      const second = randomUUID();
+      await sql.query(
+        `INSERT INTO "project_open_item" ("id", "project_id", "owner_id", "kind", "state", "assignee", "assignee_reason",
+           "task_id", "promotion_id", "integration_job_id", "dedupe_key", "title", "payload", "waiting_since", "assigned_at",
+           "created_at", "updated_at")
+         SELECT $2::uuid, "project_id", "owner_id", 'INTEGRATION_CHECK_FAILED', 'OPEN', "assignee", "assignee_reason",
+           "task_id", "promotion_id", "integration_job_id", "dedupe_key" || ':second', "title", "payload", "waiting_since",
+           "assigned_at", now(), now()
+         FROM "project_open_item" WHERE "id" = $1::uuid`,
+        [first.id, second],
+      );
+
+      await openItems.resolveOpenItem(ownerId, w.projectId, first.id, { note: 'handled' }, { kind: 'OWNER' });
+      assert.equal((await promotion(offer.promotionId)).state, 'BLOCKED', 'one failure is still in front of somebody');
+
+      await openItems.resolveOpenItem(ownerId, w.projectId, second, { note: 'handled' }, { kind: 'OWNER' });
+      assert.equal((await promotion(offer.promotionId)).state, 'SUPERSEDED', 'the last close ends it');
+    });
 });

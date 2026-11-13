@@ -921,7 +921,16 @@ struct AgentPanes: View {
             case .project: app.openProjectSessions(address)
             }
         }
-        return SessionProjectRowView(row: row, onOpen: { app.openProjectSessions(address) })
+        // A phone opens the coordinator's conversation, not the project's sessions page, which is
+        // the button in that conversation's navigation bar (owner 2026-11-11, board 5). The iPad's
+        // column keeps the page.
+        let onTap = {
+            switch rowNavigation == .push ? SessionProjectSheet.rowTap(row) : .sessions {
+            case .coordinator(let coordinator): app.openProjectMember(coordinator, push: true)
+            case .sessions: app.openProjectSessions(address)
+            }
+        }
+        return SessionProjectRowView(row: row, onOpen: onTap)
         .sessionProjectRowActions(row, view: view, onOpen: onOpen, onSessions: { app.openProjectSessions(address) }, onProject: {
             app.openProject(row.projectId)
         }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })
@@ -2038,6 +2047,9 @@ struct AgentFormContent: View {
                 }
 
                 Toggle("Enabled", isOn: $enabled)
+                // Takes effect at once (board 04), apart from Done: it asks first when the main checkout
+                // holds what new sessions would no longer see.
+                WorktreeIsolationSwitch(workspace: agent)
             }
 
             Section("Instructions") {

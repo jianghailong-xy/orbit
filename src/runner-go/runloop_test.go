@@ -392,6 +392,9 @@ func TestReclaimMissingSessionsUsesStableTakeoverOrder(t *testing.T) {
 				{SessionID: "a", Status: stRunning},
 				{SessionID: "c", Status: stInterrupted},
 			}})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/runner/sessions/takeover-leases":
+			// A control plane from before the batch takeover.
+			http.NotFound(w, r)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/takeover-leases"):
 			parts := strings.Split(r.URL.Path, "/")
 			id := parts[len(parts)-2]
@@ -442,6 +445,9 @@ func TestReclaimSetsAsidePersistentlyConflictedSessionInsteadOfLivelocking(t *te
 				{SessionID: "a-poisoned", Status: stAwaitingInput},
 				{SessionID: "b-healthy", Status: stRunning},
 			}})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/runner/sessions/takeover-leases":
+			// A control plane from before the batch takeover.
+			http.NotFound(w, r)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/takeover-leases"):
 			if strings.Contains(r.URL.Path, "a-poisoned") {
 				poisonedAttempts.Add(1)
@@ -491,6 +497,9 @@ func TestAmbiguousClaimCanBeRecoveredFromAuthoritativeReclaim(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(ReclaimResponse{Sessions: []ReclaimSession{{
 				SessionID: "claimed-after-eof", Status: stRunning,
 			}}})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/runner/sessions/takeover-leases":
+			// A control plane from before the batch takeover.
+			http.NotFound(w, r)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/takeover-leases"):
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "status": stRunning})
 		default:
@@ -1007,6 +1016,9 @@ func TestMergeAfterARestartReclaimsAnAlreadyEndedSession(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(ReclaimResponse{Sessions: []ReclaimSession{
 				{SessionID: sessionID, Status: stAwaitingInput},
 			}})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/runner/sessions/takeover-leases":
+			// A control plane from before the batch takeover.
+			http.NotFound(w, r)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/takeover-leases"):
 			// It ended while the old image was draining; the runner finds that out here.
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "status": stSucceeded})

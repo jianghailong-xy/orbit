@@ -104,6 +104,19 @@ class MachinesAndModelsTest {
         assertEquals("a drain nothing waits on needs nobody", emptyList<MachinesAndModels.Attention>(), attention(listOf(nothingWaits)))
     }
 
+    /** A machine stopping, not updating, with the reader's work waiting on it (board runner-stopping): its own words. */
+    @Test fun aMachineStoppingWithWorkWaitingSaysStopping() {
+        val hpcStopping = obj("""{"id":"hpc2","name":"HPC","online":true,"updateTurns":[{"id":"a"},{"id":"b"}],
+            "drainWaiting":{"sessions":2,"messages":1,"stopping":true}}""")
+        val lines = attention(listOf(hpcStopping))
+        assertEquals(listOf(MachinesAndModels.Kind.Updating("hpc2")), lines.map { it.kind })
+        assertEquals("HPC is stopping — 2 sessions and 1 message waiting · Not taking new work · it stops once 2 turns finish", says(lines[0]))
+        val one = obj("""{"id":"hpc2","name":"HPC","online":true,"selfUpdate":{"turnsInFlight":1},"drainWaiting":{"sessions":0,"messages":1,"stopping":true}}""")
+        assertEquals("HPC is stopping — 1 message waiting · Not taking new work · it stops once 1 turn finishes", says(attention(listOf(one))[0]))
+        val idle = obj("""{"id":"hpc2","name":"HPC","online":true,"drainWaiting":{"sessions":1,"messages":0,"stopping":true}}""")
+        assertEquals("HPC is stopping — 1 session waiting · Not taking new work · it stops now", says(attention(listOf(idle))[0]))
+    }
+
     /** A pool no session can start on: its own reason, and its page — the account's own, or one it is in, which come first. */
     @Test fun aPoolNoSessionCanStartOnIsALine() {
         val lines = attention(fleet, own = listOf(claudePool(unavailable = "No account can run")))

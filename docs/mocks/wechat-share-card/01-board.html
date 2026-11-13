@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>WeChat share card · /s/ public links</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f4f5f7; font: 15px/1.6 Inter, "Noto Sans SC", "WenQuanYi Zen Hei", sans-serif; color: #1f2329; }
+  .b-part { width: 1040px; padding: 32px 40px 40px; background: #fff; margin: 0 auto 24px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h2 { font-size: 20px; margin: 0 0 12px; }
+  .b-sub { color: #646a73; margin: 0 0 20px; }
+  .b-row { display: flex; gap: 32px; align-items: flex-start; }
+  .b-col { flex: 1; }
+  .b-tag { display: inline-block; font-weight: 600; font-size: 15px; margin-bottom: 8px; }
+  .b-bad { color: #d83931; } .b-good { color: #2ea121; }
+
+  /* WeChat chat frame */
+  .wx { background: #ededed; border-radius: 18px; padding: 18px 14px 22px; width: 460px; }
+  .wx-msg { display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 16px; position: relative; }
+  .wx-av { width: 40px; height: 40px; border-radius: 5px; background: linear-gradient(135deg,#c9ced6,#a9b0bb); flex: none; }
+  .wx-card { width: 300px; background: #fff; border-radius: 6px; padding: 12px 14px 12px; position: relative; }
+  .wx-card:after { content: ""; position: absolute; right: -6px; top: 14px; border: 6px solid transparent; border-left-color: #fff; border-right: 0; }
+  .wx-t { font-size: 16px; line-height: 1.4; color: #191919; margin: 0 0 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .wx-b { display: flex; gap: 10px; align-items: flex-start; min-height: 50px; }
+  .wx-d { flex: 1; font-size: 13px; line-height: 1.45; color: #8a8a8a; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .wx-img { width: 50px; height: 50px; flex: none; border-radius: 3px; background: #fff center/contain no-repeat url(../../../src/web/public/icon-512.png); }
+  .wx-img.big { width: 64px; height: 64px; }
+  .wx-card.today .wx-b { min-height: 92px; justify-content: flex-end; align-items: flex-end; }
+
+  .mk { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #e8590c; color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  ol.b-notes { margin: 16px 0 0; padding-left: 0; list-style: none; }
+  ol.b-notes li { margin: 6px 0; padding-left: 30px; position: relative; }
+  ol.b-notes li .mk { left: 0; top: 2px; }
+  .b-kind { font-size: 13px; color: #646a73; margin: 0 0 6px 4px; }
+
+  table.b-t { border-collapse: collapse; width: 100%; font-size: 14px; }
+  table.b-t td, table.b-t th { border: 1px solid #dee0e3; padding: 8px 10px; text-align: left; vertical-align: top; }
+  table.b-t th { background: #f5f6f7; }
+  code { font: 13px "DejaVu Sans Mono", monospace; background: #f2f3f5; padding: 1px 4px; border-radius: 3px; }
+  .b-flow { display: flex; align-items: center; gap: 10px; margin: 8px 0 16px; flex-wrap: wrap; }
+  .b-box { border: 1px solid #c9cdd4; border-radius: 8px; padding: 8px 12px; font-size: 14px; background: #fafbfc; }
+  .b-arrow { color: #8f959e; }
+  .b-rec { background: #e8f8e8; border-left: 4px solid #2ea121; padding: 8px 12px; margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<section class="b-part" id="part-1">
+  <h1>微信分享卡片 · 公开链接 /s/…</h1>
+  <p class="b-sub">微信打开链接时只读 HTML 的 head，不跑 JS。今天 /s/… 回的是 App 的空壳，head 里只有 <code>&lt;title&gt;Orbit&lt;/title&gt;</code>，所以卡片只有一个词。</p>
+  <div class="b-row">
+    <div class="b-col">
+      <div class="b-tag b-bad">① 今天</div>
+      <div class="wx">
+        <div class="wx-msg">
+          <div class="wx-card today">
+            <p class="wx-t">Orbit</p>
+            <div class="wx-b"><div class="wx-img big"></div></div>
+            <span class="mk" style="left:-30px;top:8px">1</span>
+            <span class="mk" style="left:-30px;top:64px">2</span>
+          </div>
+          <div class="wx-av"></div>
+        </div>
+      </div>
+      <ol class="b-notes">
+        <li><span class="mk">1</span>标题只有「Orbit」：看不出分享的是哪条会话 / 任务。</li>
+        <li>没有描述，图标是微信自己抓的，卡片下半截空着。</li>
+      </ol>
+    </div>
+    <div class="b-col">
+      <div class="b-tag b-good">② 改后（会话链接为例）</div>
+      <div class="wx">
+        <div class="wx-msg">
+          <div class="wx-card">
+            <p class="wx-t">Fix the login redirect on Safari</p>
+            <div class="wx-b"><div class="wx-d">A conversation shared from Orbit</div><div class="wx-img"></div></div>
+            <span class="mk" style="left:-30px;top:8px">3</span>
+            <span class="mk" style="left:-30px;top:40px">4</span>
+            <span class="mk" style="right:-30px;top:40px;">5</span>
+          </div>
+          <div class="wx-av"></div>
+        </div>
+      </div>
+      <ol class="b-notes">
+        <li><span class="mk">3</span>标题 = 被分享的东西的名字（会话标题 / 任务标题 / 项目名 / Wiki 名）。</li>
+        <li><span class="mk">4</span>描述 = 一句说明类型的英文（文案按 CLAUDE.md 用英文）。</li>
+        <li><span class="mk">5</span>缩略图 = Orbit 的 512px PNG 图标（微信不认 SVG）。</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="b-part" id="part-2">
+  <h2>四种链接各自的卡片</h2>
+  <div class="b-row" style="flex-wrap:wrap; gap:24px">
+    <div>
+      <div class="b-kind">会话 SESSION</div>
+      <div class="wx"><div class="wx-msg" style="margin:0"><div class="wx-card">
+        <p class="wx-t">Fix the login redirect on Safari</p>
+        <div class="wx-b"><div class="wx-d">A conversation shared from Orbit</div><div class="wx-img"></div></div>
+      </div><div class="wx-av"></div></div></div>
+    </div>
+    <div>
+      <div class="b-kind">任务 TASK</div>
+      <div class="wx"><div class="wx-msg" style="margin:0"><div class="wx-card">
+        <p class="wx-t">Add retries to webhook delivery</p>
+        <div class="wx-b"><div class="wx-d">A task shared from Orbit</div><div class="wx-img"></div></div>
+      </div><div class="wx-av"></div></div></div>
+    </div>
+    <div>
+      <div class="b-kind">项目 PROJECT</div>
+      <div class="wx"><div class="wx-msg" style="margin:0"><div class="wx-card">
+        <p class="wx-t">Settings redesign</p>
+        <div class="wx-b"><div class="wx-d">A project shared from Orbit</div><div class="wx-img"></div></div>
+      </div><div class="wx-av"></div></div></div>
+    </div>
+    <div>
+      <div class="b-kind">Wiki</div>
+      <div class="wx"><div class="wx-msg" style="margin:0"><div class="wx-card">
+        <p class="wx-t">Payments service handbook — a long name wraps to a second line and then stops</p>
+        <div class="wx-b"><div class="wx-d">A wiki shared from Orbit</div><div class="wx-img"></div></div>
+      </div><div class="wx-av"></div></div></div>
+    </div>
+  </div>
+  <p class="b-sub" style="margin-top:16px">链接已关闭 / 过期 / 进了回收站：卡片保持今天的「Orbit」，不泄露原标题。标题超过两行微信自己截断。</p>
+</section>
+
+<section class="b-part" id="part-3">
+  <h2>怎么做到</h2>
+  <div class="b-flow">
+    <div class="b-box">微信抓取 <code>/s/&lt;token&gt;</code></div><span class="b-arrow">→</span>
+    <div class="b-box">web 的 nginx：<code>location /s/</code> 打开 SSI</div><span class="b-arrow">→</span>
+    <div class="b-box">子请求 <code>GET /api/shared/&lt;token&gt;/card</code></div><span class="b-arrow">→</span>
+    <div class="b-box">回一段 head：title / description / og:* </div>
+  </div>
+  <table class="b-t">
+    <tr><th>点</th><th>做法</th></tr>
+    <tr><td>浏览次数</td><td>新接口不调用 recordView：微信抓一次不算「Viewed」。只有页面里的 JS 请求才计数，跟今天一样。</td></tr>
+    <tr><td>失效链接</td><td>接口 404 → SSI 用 stub，输出原来的 <code>&lt;title&gt;Orbit&lt;/title&gt;</code>。</td></tr>
+    <tr><td>其他页面</td><td><code>location /</code> 不开 SSI，那行注释原样留在 HTML 里，无影响。</td></tr>
+    <tr><td>安全</td><td>标题本来就是拿着链接的人能看到的内容；HTML 转义；Wiki 关掉的账户照旧 404。图片地址用请求的 Host 拼成绝对地址。</td></tr>
+  </table>
+
+  <h2 style="margin-top:24px">待定 · 要你拍板</h2>
+  <table class="b-t">
+    <tr><th></th><th>方案 A：只写类型</th><th>方案 B：类型 + 状态</th></tr>
+    <tr><td>描述</td><td>A task shared from Orbit</td><td>Task · Done · shared from Orbit</td></tr>
+    <tr><td>问题</td><td>信息少一点</td><td>微信把卡片缓存在聊天里，状态会冻在分享那一刻，之后就是错的</td></tr>
+  </table>
+  <div class="b-rec">推荐 A：卡片一旦发出去就不会再变，不放会过期的状态。</div>
+
+  <h2 style="margin-top:24px">落地（按代价排）</h2>
+  <ol>
+    <li>apiserver：<code>SharedController</code> 加 <code>GET :token/card</code>，回 HTML 片段 + 单测。</li>
+    <li>web：<code>index.html</code> 的 title 改成 SSI block/include；<code>nginx.conf</code> 的 <code>/s/</code> 打开 <code>ssi</code>。</li>
+    <li>验证：起 web + apiserver 容器，<code>curl /s/&lt;token&gt;</code> 看 head；再在微信里发一次真链接截图。</li>
+  </ol>
+</section>
+
+</body>
+</html>

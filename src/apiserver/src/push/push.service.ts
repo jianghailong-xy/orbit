@@ -24,7 +24,6 @@ import { FcmTransport } from './fcm-transport';
 import { FeishuTransport, orbitUrl, type FeishuTarget } from './feishu-transport';
 import { fcmData } from './fcm-payload';
 import { claudeRegionPushBody, regionMachineName } from '../runners/runner-region';
-import { drainWaitingSentence, type DrainWaitingPush } from '../common/runner-drain-waiting';
 
 const APNS_HOST_PROD = 'api.push.apple.com';
 const APNS_HOST_SANDBOX = 'api.sandbox.push.apple.com';
@@ -418,41 +417,6 @@ export class PushService {
       await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`Claude region notify failed: ${(err as Error).message}`);
-    }
-  }
-
-  /**
-   * Tell a runner's owner that something of theirs waits on the runner's drain for a self-update
-   * (docs/runner-update-drain-design.md §3.4, D3; board 3 ⑥): once per drain, from the heartbeat whose
-   * claim (claimDrainWaitingPush) matched — at the drain's start when work already waits, or once the
-   * first work queues behind it. The body is the web banner's sentence.
-   *
-   * About the machine, as notifyEngineSignedOut is: no badge and no sessionID, and a tap opens the runner.
-   * Fire-and-forget: the heartbeat `void`s it.
-   */
-  async notifyRunnerDrainWaiting(push: DrainWaitingPush): Promise<void> {
-    if (!this.enabled) return;
-    try {
-      const { tokens, feishu } = await this.channels(push.ownerId);
-      if (tokens.length === 0 && !feishu) return;
-      const alert = { title: push.machine, body: drainWaitingSentence(push) };
-      const body = JSON.stringify({
-        aps: {
-          alert,
-          sound: 'default',
-          'thread-id': `runner-${push.runnerId}`,
-        },
-        runnerID: push.runnerId,
-        kind: 'runner-updating',
-      });
-
-      // One notification per machine: a later drain's push takes the place of an earlier one still on screen.
-      const collapseId = `runner-updating-${push.runnerId}`;
-      this.background(this.feishuOther(feishu, { kind: 'runner-updating', ...alert, collapseId }));
-
-      await this.deliver(tokens, body, 'alert', '10', collapseId);
-    } catch (err) {
-      this.log.warn(`runner drain notify failed: ${(err as Error).message}`);
     }
   }
 

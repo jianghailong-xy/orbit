@@ -141,6 +141,45 @@ final class PendingTrayTests: XCTestCase {
         XCTAssertEqual(userTexts(r), ["fix the export", "then push it to main"])
     }
 
+    /// The seam scroll-up paging leaves: the steer's `user` event in an older page, its `acknowledged`
+    /// in the window loaded first. It is drawn where it was read — after the call before the reading —
+    /// as one pass over every event (web's) draws it, not where it was sent.
+    func testAnOlderPageDrawsASteerTheWindowSawReadWhereItWasRead() {
+        var r = TranscriptReducer()
+        r.apply(said(5, "first answer"))
+        r.apply(delivery(6, turn: "t1", "acknowledged"))
+        r.apply(said(7, "second answer"))
+        r.prependOlder(EventPage(events: [
+            RunEvent(seq: 1, type: .user, turnId: "t0", payload: .object(["text": .string("fix the export")])),
+            steer(2, turn: "t1"),
+            said(3, "an older answer"),
+        ], hasMore: false))
+
+        let order = r.state.items.compactMap { item -> String? in
+            if case .user(let b) = item { return b.text }
+            if case .assistant(let b) = item { return b.text }
+            return nil
+        }
+        XCTAssertEqual(order, ["fix the export", "an older answer", "first answer", "then push it to main", "second answer"])
+        XCTAssertEqual(r.state.items.compactMap(\.asUser).last?.delivery, "acknowledged")
+        XCTAssertTrue(r.state.unreadSteers.isEmpty)
+    }
+
+    /// …and when both are in the page, the page draws it where it was read too.
+    func testAnOlderPageDrawsASteerItSawReadWhereItWasRead() {
+        var r = TranscriptReducer()
+        r.apply(said(10, "the newest reply"))
+        r.prependOlder(EventPage(events: [
+            RunEvent(seq: 1, type: .user, turnId: "t0", payload: .object(["text": .string("fix the export")])),
+            steer(2, turn: "t1"),
+            said(3, "an older answer"),
+            delivery(4, turn: "t1", "acknowledged"),
+        ], hasMore: false))
+
+        XCTAssertEqual(userTexts(r), ["fix the export", "then push it to main"])
+        XCTAssertEqual(r.state.items.firstIndex { $0.asUser?.turnId == "t1" }, 2, "after the answer written before it was read")
+    }
+
     func testTheTrayOutlivesASnapshot() throws {
         var r = running()
         r.apply(steer(2, turn: "t1"))

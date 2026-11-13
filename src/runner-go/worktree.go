@@ -664,6 +664,20 @@ func setupSourceWorktree(job *ClaimedSession, baseDir string, atRest bool) strin
 		return execDir
 	}
 
+	if src.Kind == sourceKindSessionFork {
+		// A fork's snapshot exists only in the forking session's repository on its machine (SR55): the
+		// authority is this machine's checkout, and nothing is fetched. Any other authority is not one
+		// this build can honour for a snapshot, and guessing would start the task from something else.
+		if src.RefAuthority != refAuthorityRunnerLocal {
+			return refuseSourceWorktree(job, sourceRefusalAuthorityUnreachable,
+				fmt.Sprintf("a forked run's snapshot is %s-authoritative, and only a RUNNER_LOCAL snapshot can be checked out", src.RefAuthority))
+		}
+		if _, err := git(repoRoot, "cat-file", "-e", pin+"^{commit}"); err != nil {
+			return refuseSourceWorktree(job, sourceRefusalShaUnavailable,
+				fmt.Sprintf("the session snapshot %s this task was forked from is not in the repository at %s: "+
+					"the task must run in a workspace whose workDir is the forking session's repository", pin, repoRoot))
+		}
+	}
 	if _, err := git(repoRoot, "cat-file", "-e", pin+"^{commit}"); err != nil {
 		return refuseSourceWorktree(job, sourceRefusalShaUnavailable,
 			fmt.Sprintf("pinned commit %s is not in the repository at %s", pin, repoRoot))
@@ -732,7 +746,8 @@ func refuseSourceWorktree(job *ClaimedSession, code, reason string) string {
 // claude should run in, creating baseDir first when it isn't there yet. When job has no
 // branch, baseDir isn't a git repo, or the repo has no commits, it returns baseDir
 // unchanged (shared-dir fallback) and records why on job.IsolationStatus. Otherwise it
-// sets job.WT and returns the checkout's exec dir. A session whose SOURCE is resolved takes
+// sets job.WT and returns the checkout's exec dir, or, when that checkout cannot be made, ""
+// with job.SourceRefusal set: it never runs an isolated session in the shared checkout. A session whose SOURCE is resolved takes
 // setupSourceWorktree instead, and none of those fallbacks.
 func setupWorktree(job *ClaimedSession, baseDir string) string {
 	return setupCheckout(job, baseDir, false)
@@ -778,6 +793,9 @@ func setupCheckout(job *ClaimedSession, baseDir string, atRest bool) string {
 			logln(fmt.Sprintf("session %s — created missing workDir %q", job.SessionID, baseDir))
 		}
 	}
+	if job.Branch == "" && job.CodelessCheckout && isGitRepo(baseDir) {
+		return setupCodelessCheckout(job, baseDir)
+	}
 	if job.Branch == "" {
 		job.IsolationStatus = isoShared
 		return baseDir
@@ -818,9 +836,10 @@ func setupCheckout(job *ClaimedSession, baseDir string, atRest bool) string {
 	// made below.
 	if isGitRepo(wtPath) && !checkoutBelongsTo(wtPath, repoRoot, job.Branch) {
 		if err := retireCheckout(job.SessionID, wtPath); err != nil {
-			job.IsolationStatus = isoSharedNoGit
-			logln(fmt.Sprintf("session %s — checkout %s is not this session's and could not be retired (%v); running shared", job.SessionID, wtPath, err))
-			return baseDir
+			// Never the shared checkout instead: an isolated session writing there is writing in
+			// everybody's main checkout (docs/main-checkout-git-contract.md). The run fails, saying why.
+			return refuseSourceWorktree(job, sourceRefusalWorktreeRequired,
+				fmt.Sprintf("the checkout at %s is not this session's and could not be retired: %v", wtPath, err))
 		}
 	}
 
@@ -872,7 +891,7 @@ func setupCheckout(job *ClaimedSession, baseDir string, atRest bool) string {
 			// too full to hold it, or the branch checked out somewhere else, is why it did not come back,
 			// and running in the shared directory instead has the agent writing in somebody else's checkout.
 			// A session with no base ref has nothing to restore: a run taking over the branch of the run
-			// before it, while that run's checkout still holds it, takes the fallback below.
+			// before it, while that run's checkout still holds it, is refused below like any other.
 			return refuseSourceWorktree(job, sourceRefusalWorktreeRequired, fmt.Sprintf("the session's checkout could not be restored from %s: %v", job.Branch, err))
 		}
 		_, _ = git(repoRoot, "update-ref", "-d", absentRefName(job.SessionID))
@@ -882,9 +901,10 @@ func setupCheckout(job *ClaimedSession, baseDir string, atRest bool) string {
 	}
 	if err != nil {
 		_, _ = git(repoRoot, "update-ref", "-d", baseRefName(job.SessionID))
-		job.IsolationStatus = isoSharedNoGit
-		logln(fmt.Sprintf("session %s — `git worktree add` failed (%v); running shared", job.SessionID, err))
-		return baseDir
+		// A session that asked for isolation and cannot get its checkout does not run, rather than
+		// run in the shared checkout: a disk too full, a path in the way, or the branch held by
+		// another run's checkout all end the run with the reason.
+		return refuseSourceWorktree(job, sourceRefusalWorktreeRequired, fmt.Sprintf("`git worktree add` failed: %v", err))
 	}
 	job.WT = &Worktree{Path: wtPath, Branch: job.Branch, BaseSha: base, RepoDir: repoRoot, Session: job.SessionID}
 	job.IsolationStatus = isoWorktree
@@ -1554,6 +1574,9 @@ type mergeOutcome struct {
 func mergeToMain(req MergeCommand) mergeOutcome {
 	mergeLock.Lock()
 	defer mergeLock.Unlock()
+	// And the checkout's own lock, which the main checkout actions (move, commit, push, Save & clean)
+	// take: a merge fast-forwards this very tree (main_checkout_lock.go).
+	defer lockMainCheckout(req.WorkDir)()
 	if req.RecoveryAction != "" {
 		return recoverMerge(req)
 	}

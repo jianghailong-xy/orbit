@@ -109,10 +109,11 @@ import {
 } from '../common/transaction-retry';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerHints } from '../realtime/runner-hints';
-import { sessionSourceSnapshot } from '../projects/session-source';
+import { forkAuthorityBindings, sessionSourceSnapshot } from '../projects/session-source';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
 import { branchName } from '../projects/project-criterion-landing';
+import { codelessClaimFields } from '../sessions/codeless-checkout';
 import { managedRunnerInstanceClaimable, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import { DISPATCH_PAUSED } from './dispatch-pause';
@@ -1118,7 +1119,13 @@ export class QueueService {
     // §6.3 step 1: hand the runner the frozen SOURCE snapshot. `undefined` for a Legacy session —
     // and that absence is the compatibility guarantee, not an omission: it is exactly the payload
     // every runner has always received, so nothing about their behaviour changes (SR46).
-    const source = sessionSourceSnapshot(session, await this.sourceBinding(session.sourceCodebaseId));
+    // A fork (SR55) has no binding; its authority is the machine its task's snapshot is on.
+    const source = sessionSourceSnapshot(
+      session,
+      session.sourceKind === 'SESSION_FORK'
+        ? ((await forkAuthorityBindings(this.prisma, [session])).get(session.id) ?? null)
+        : await this.sourceBinding(session.sourceCodebaseId),
+    );
     // A session nothing else will name is named by the engine about to run it (engineNamingJob).
     const naming = engineNamingJob(session, provider, configuredRow);
     return {
@@ -1133,6 +1140,9 @@ export class QueueService {
       // Per-session worktree branch (generated at creation); the runner isolates the
       // session in a `git worktree` on this branch when workDir is a git repo.
       branch: session.branch ?? undefined,
+      // A codeless task's run with no branch yet (design §3, B2): a detached checkout, and the branch to
+      // make only if the run changes something — or, for a runner too old for that, the branch up front.
+      ...codelessClaimFields(session, workspace, session.assignedRunner?.capabilities),
       // Workspace opt-in: auto-`git init` a non-git workDir so it can be isolated.
       autoInitGit: workspace?.autoInitGit ?? undefined,
       // A workspace made in a new folder under the runner's reposRoot (POST /sessions `newFolder`): the runner makes
