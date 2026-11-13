@@ -134,9 +134,10 @@ turn had already ended and acted as an ordinary next message; the interrupt rows
 ### 5.2 Codex: connector tools reach the custom endpoint
 
 `codex.go` sets `features.plugins=false`, documented (on 0.161.0) as removing the login's `codex_apps` connector
-tools. On 0.167.2 it no longer does. With the runner's exact overrides the first `POST /v1/responses` is 341,737 bytes
-with 22 tools, among them `mcp__codex_apps__chatgpt_space`, `mcp__codex_apps__github`, `mcp__codex_apps__gmail` and
-`mcp__codex_apps__sites` (314,962 bytes of tool schemas). That is 78,380 prompt tokens on this model. `--disable apps`
+tools. On 0.167.2 it no longer does. With the runner's exact overrides plus `features.plugins=false` the first `POST /v1/responses`
+is 328,900 bytes with 22 tools, 10 of them `mcp__codex_apps__*` (`chatgpt_space`, `github`, `gmail`, `sites`, …);
+without `plugins=false` it is 341,737 bytes, 314,962 of them tool schemas. Either way it is about 78K prompt tokens
+on this model (`request (78380 tokens) exceeds the available context size (65536 tokens)`). `--disable apps`
 brings it to 9 tools (≈40 KB) and the turns pass. Besides overflowing small windows, it hands the owner's ChatGPT
 connector schemas to a third-party endpoint, and a model that calls one runs it against ChatGPT's cloud. Filed as
 task `34wnlmNt2wLO1JxUs1IJB`. Until it lands, an Orbit Codex session on an Ollama row cannot run on a 64K model.
