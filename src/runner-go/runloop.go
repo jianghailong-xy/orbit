@@ -859,17 +859,54 @@ func reclaimMissingSessions(
 	knownStates func() map[string]bool,
 	prepareTakeover func(*ClaimedSession) (func(), error),
 ) ([]reclaimedStart, bool, error) {
+	starts, _, skipped, err := reclaimSessions(ctx, t, knownStates, prepareTakeover, false)
+	return starts, skipped, err
+}
+
+// reclaimWaitedOnSessions is the startup reclaim's priority phase: reclaimMissingSessions over the
+// sessions somebody may be waiting on, RUNNING (or a legacy server's statusless row, which is RUNNING)
+// and PENDING, and nothing else. The rest of the snapshot comes back untaken, in ascending id order, for
+// the idle phase to take over in the background (reclaimStarter.takeOverIdle): on 2026-11-13 the
+// takeovers of 339 mostly idle sessions held the claim loop for three minutes.
+//
+// Each phase takes its rows over in ascending id order. Two overlapping processes therefore each take
+// the waited-on rows over before the idle ones, every row of a tier in the one order they agree on; a
+// row whose status changed between their snapshots can put it in different phases for each, and that
+// conflict is bounded as every other is: takeoverConflictLimit refreshes per session, then it is set
+// aside for the deferred retry. Nothing either phase has handed over is ever taken over again by it,
+// so no refresh undoes progress.
+func reclaimWaitedOnSessions(
+	ctx context.Context,
+	t *Transport,
+	knownStates func() map[string]bool,
+	prepareTakeover func(*ClaimedSession) (func(), error),
+) ([]reclaimedStart, []*ClaimedSession, bool, error) {
+	return reclaimSessions(ctx, t, knownStates, prepareTakeover, true)
+}
+
+// reclaimWaitedOn says whether a snapshot row is one the startup reclaim's priority phase takes over.
+func reclaimWaitedOn(status string) bool {
+	return status == "" || status == stRunning || status == stPending
+}
+
+func reclaimSessions(
+	ctx context.Context,
+	t *Transport,
+	knownStates func() map[string]bool,
+	prepareTakeover func(*ClaimedSession) (func(), error),
+	leaveIdle bool,
+) ([]reclaimedStart, []*ClaimedSession, bool, error) {
 	delay := 250 * time.Millisecond
 	conflicts := map[string]int{}
 	for ctx.Err() == nil {
 		rec, err := t.reclaim(ctx)
 		if err != nil {
 			if !isRetryableTransportError(err) {
-				return nil, false, err
+				return nil, nil, false, err
 			}
 			select {
 			case <-ctx.Done():
-				return nil, false, ctx.Err()
+				return nil, nil, false, ctx.Err()
 			case <-time.After(delay):
 			}
 			if delay < 5*time.Second {
@@ -884,6 +921,8 @@ func reclaimMissingSessions(
 		})
 		localStates := knownStates()
 		pending := make([]reclaimedStart, 0, len(sessions))
+		// The rows left to the idle phase (leaveIdle), in ascending id order.
+		var idle []*ClaimedSession
 		// Every takeover this pass began. A row it hands to no supervisor — terminal,
 		// conflicted, or dropped when the snapshot is refreshed — ends its takeover here, or
 		// its checkout stays fenced against merges with nothing left to lift the fence.
@@ -927,12 +966,16 @@ func reclaimMissingSessions(
 				continue
 			}
 			job := claimedSessionFromReclaim(r)
+			if leaveIdle && !reclaimWaitedOn(r.Status) {
+				idle = append(idle, job)
+				continue
+			}
 			endTakeover := func() {}
 			if prepareTakeover != nil {
 				prepared, prepareErr := prepareTakeover(job)
 				if prepareErr != nil {
 					endTakeoversExcept(nil)
-					return nil, false, prepareErr
+					return nil, nil, false, prepareErr
 				}
 				endTakeover = prepared
 				begun[r.SessionID] = prepared
@@ -957,7 +1000,7 @@ func reclaimMissingSessions(
 					break
 				}
 				endTakeoversExcept(nil)
-				return nil, false, takeoverErr
+				return nil, nil, false, takeoverErr
 			}
 			if !reclaimStatusOpen(status) {
 				continue
@@ -975,20 +1018,43 @@ func reclaimMissingSessions(
 		if !retrySnapshot {
 			endTakeoversExcept(pending)
 			orderReclaimedStarts(pending)
-			return pending, skippedAny, nil
+			return pending, idle, skippedAny, nil
 		}
 		// The refreshed snapshot prepares its own takeovers; end this pass's first.
 		endTakeoversExcept(nil)
 		select {
 		case <-ctx.Done():
-			return nil, false, ctx.Err()
+			return nil, nil, false, ctx.Err()
 		case <-time.After(delay):
 		}
 		if delay < 5*time.Second {
 			delay *= 2
 		}
 	}
-	return nil, false, ctx.Err()
+	return nil, nil, false, ctx.Err()
+}
+
+// reclaimSnapshot reads the reclaim snapshot, retrying a transport failure with reclaimMissingSessions'
+// backoff, and returns its rows.
+func reclaimSnapshot(ctx context.Context, t *Transport) ([]ReclaimSession, error) {
+	delay := 250 * time.Millisecond
+	for {
+		rec, err := t.reclaim(ctx)
+		if err == nil {
+			return rec.Sessions, nil
+		}
+		if !isRetryableTransportError(err) {
+			return nil, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(delay):
+		}
+		if delay < 5*time.Second {
+			delay *= 2
+		}
+	}
 }
 
 // A terminal revive rotates the Session owner before it can be claimed. If this
@@ -2569,10 +2635,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// 2026-10-03 a session claimed while this reclaim was still running read "Starting" for 15 minutes.
 	lateClaimCheckAt := time.Now().Add(lateClaimWindow)
 	// The startup reclaim's sessions start in the background once their takeovers have answered
-	// (reclaimStarter); nil until then, and if the reclaim never answers.
+	// (reclaimStarter); nil until then, and if the reclaim never answers. Only the takeovers of the
+	// sessions somebody may be waiting on (RUNNING, PENDING) are made before the claim loop opens; the
+	// idle ones are made in the background (reclaimWaitedOnSessions, reclaimStarter.takeOverIdle).
 	var startupStarts *reclaimStarter
 	reclaimBegan := time.Now()
-	pendingStarts, reclaimSkipped, reclaimErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
+	pendingStarts, idleReclaims, reclaimSkipped, reclaimErr := reclaimWaitedOnSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
 	if reclaimErr != nil && loopCtx.Err() == nil {
 		logln("reclaim permanently failed; stopping runner:", reclaimErr)
 		loopCancel()
@@ -2583,25 +2651,49 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// Prune crash leftovers before any reclaimed provider can start and refresh
 		// its credential. This avoids racing cleanup against the atomic temp file used
 		// by a live refresh.
-		credentialLiveSet := make(map[string]bool, len(pendingStarts))
+		credentialLiveSet := make(map[string]bool, len(pendingStarts)+len(idleReclaims))
 		for _, pending := range pendingStarts {
 			credentialLiveSet[pending.job.SessionID] = true
+		}
+		for _, job := range idleReclaims {
+			credentialLiveSet[job.SessionID] = true
 		}
 		if err := pruneOrchestrationCredentials(credentialLiveSet); err != nil {
 			logln("credential cleanup failed:", err)
 		}
-		// Every session's takeover has answered and holds its fence; each start ends its own
-		// (reclaimStarter). The claim loop and the first heartbeat do not wait for them.
+		// Every waited-on session's takeover has answered and holds its fence; each start ends its own
+		// (reclaimStarter). The idle sessions are counted as being reclaimed from here on, and are taken
+		// over in the background. The claim loop and the first heartbeat wait for neither.
 		answeredIn := time.Since(reclaimBegan)
-		startupStarts = newReclaimStarter(pool, pendingStarts, func(pending reclaimedStart) {
+		startupStarts = newReclaimStarter(pool, pendingStarts, idleReclaims, func(pending reclaimedStart) {
 			logln(fmt.Sprintf("reclaiming session %s — %s", pending.job.SessionID, pending.job.Title))
 			startSession(pending.job, pending.initiallyActive)
 		})
+		startupStarts.takeover = func(job *ClaimedSession) (func(), string, error) {
+			endTakeover, err := prepareTakeover(job)
+			if err != nil {
+				return nil, "", err
+			}
+			status, err := takeoverClaimedSession(loopCtx, t, job)
+			if err != nil {
+				endTakeover()
+				return nil, "", err
+			}
+			return endTakeover, status, nil
+		}
 		startupStarts.onStarted = func(id string) { reclaimDeferred.started(id, beatNow) }
 		startupStarts.run(reclaimStartWorkers, func() {
-			logln(fmt.Sprintf("startup reclaim finished: %d session(s) in %s (snapshot and takeovers %s)",
-				len(pendingStarts), time.Since(reclaimBegan).Round(time.Millisecond), answeredIn.Round(time.Millisecond)))
+			idleHanded, idleTook := startupStarts.idlePhase()
+			logln(startupReclaimFinishedLine(time.Since(reclaimBegan), len(pendingStarts), answeredIn, idleHanded, idleTook))
 		})
+		go func() {
+			if err := startupStarts.takeOverIdle(loopCtx, func(ctx context.Context) ([]ReclaimSession, error) {
+				return reclaimSnapshot(ctx, t)
+			}); err != nil && loopCtx.Err() == nil {
+				logln("reclaim of idle sessions permanently failed; stopping runner:", err)
+				loopCancel()
+			}
+		}()
 		reclaimed = true
 	}
 
@@ -2677,9 +2769,15 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// startup (worktreeSweeper's `armed`).
 		if armOnceStarted && startupStarts.finished() {
 			armOnceStarted = false
-			worktreeGC.armed = true
-			pool.endUnclaimedHostlessJobs()
-			gcUploads(pool.ids())
+			if startupStarts.setAside() {
+				// The idle phase set sessions aside over takeover conflicts: as when the startup reclaim
+				// sets one aside, the deferred retry takes them over, and arms the sweep once nothing is left.
+				reclaimRetryAt = time.Now().Add(reclaimRetryInterval)
+			} else {
+				worktreeGC.armed = true
+				pool.endUnclaimedHostlessJobs()
+				gcUploads(pool.ids())
+			}
 		}
 		// Sessions set aside by an earlier reclaim have authoritative rows but no local
 		// supervisor; their inbox is never polled until a takeover succeeds. Keep retrying
@@ -2839,7 +2937,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		}
 		// A session the startup reclaim has not started yet starts first, or its start is waited for:
 		// the claim then meets the supervisor the reclaim made, and never makes a second one.
-		startupStarts.settle(job.SessionID)
+		// An idle session the startup reclaim had not taken over when this claim was answered is taken over
+		// by settle, or by the idle phase meanwhile: the claim still names the owner that takeover replaced,
+		// and takes the session over from this process instead.
+		if replaced, tookOver := startupStarts.settle(job.SessionID); tookOver && strings.EqualFold(job.LeaseOwner, replaced) {
+			job.LeaseOwner = t.leaseOwner
+		}
 		// A successful claim response can narrowly win the race with loopCtx
 		// cancellation. Register it rather than orphaning an already-claimed session;
 		// startSession observes the cancelled shutdown context and detaches without
