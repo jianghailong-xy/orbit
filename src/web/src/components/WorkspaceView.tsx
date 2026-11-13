@@ -29,6 +29,7 @@ import {
   MessageOutlined,
   MinusCircleOutlined,
   MoreOutlined,
+  SettingOutlined,
   PaperClipOutlined,
   PauseCircleOutlined,
   PictureOutlined,
@@ -439,6 +440,7 @@ import { UNDER_REVIEW, underReviewLine } from './OwnerConfirmationReview';
 import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
+import { SessionSettingsDrawer } from './SessionSettingsDrawer';
 import type { Runner } from './TasksSidePanel';
 import { accountsOf } from './AccountSelect';
 import { PlanUsageIndicator } from './PlanUsageIndicator';
@@ -2400,6 +2402,8 @@ export function WorkspaceView({
     pressTimer.current = undefined;
   };
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
+  const [settingsOpen, setSettingsOpen] = useState(false); // the open session's Settings… drawer
+  useEffect(() => setSettingsOpen(false), [selectedId]); // it belongs to the session it was opened on
   // A row's Share action opens the share dialog for that row rather than for the open session.
   const [shareRow, setShareRow] = useState<any>(null);
   // The session the Move dialog is open for: a row's, or the open conversation's.
@@ -9632,6 +9636,15 @@ export function WorkspaceView({
                                 label: MOVE_COPY.action,
                                 onSelect: () => openMove(selectedSession ?? selected),
                               },
+                              {
+                                key: 'settings',
+                                icon: <SettingOutlined />,
+                                label: 'Settings…',
+                                onSelect: () => {
+                                  setHeaderMenuOpen(false);
+                                  setSettingsOpen(true);
+                                },
+                              },
                               { key: 'divider-3', type: 'separator' as const },
                             ]
                           : selectedLifecycleState === 'OPEN'
@@ -9664,6 +9677,15 @@ export function WorkspaceView({
                                   icon: <FolderOutlined />,
                                   label: MOVE_COPY.action,
                                   onSelect: () => openMove(selectedSession ?? selected),
+                                },
+                                {
+                                  key: 'settings',
+                                  icon: <SettingOutlined />,
+                                  label: 'Settings…',
+                                  onSelect: () => {
+                                    setHeaderMenuOpen(false);
+                                    setSettingsOpen(true);
+                                  },
                                 },
                                 { key: 'divider-4', type: 'separator' as const },
                               ]
@@ -9731,6 +9753,25 @@ export function WorkspaceView({
             kind="SESSION"
             rootId={selected.id}
             guests={guestContextOf(selected, machineName(runner))}
+          />
+        )}
+        {selected && !selectedTrashed && !composing && (
+          <SessionSettingsDrawer
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            sessionId={selected.id}
+            sessionTags={(selected.tags ?? []) as SessionTagRef[]}
+            tagLibrary={sessionTags}
+            onToggleTag={toggleTag}
+            tagsSaving={setTagsMut.isPending}
+            engineName={selectedSession?.engine ? engineTitle.name : null}
+            runnerName={runner ? machineName(runner) : null}
+            accountLabel={
+              // An engine's own sign-in by the account it is on, as the composer's Provider row names it.
+              shownProviderRow?.kind === 'login'
+                ? `${engineTitle.name} · ${shownAccountLabel ?? shownProviderRow.label}`
+                : shownProviderValue
+            }
           />
         )}
         {shareRow && (

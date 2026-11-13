@@ -299,6 +299,7 @@ describe('a shared session in the session list and its conversation', { timeout:
       'Complete',
       'Rename…',
       'Move…',
+      'Settings…',
       '─',
       'Copy link',
       'Share…Live link',

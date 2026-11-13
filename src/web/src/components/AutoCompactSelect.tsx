@@ -8,7 +8,8 @@ import { Select } from './ui/Select';
 export const AUTO_COMPACT_VARIABLE = 'CLAUDE_CODE_AUTO_COMPACT_WINDOW';
 
 const DEFAULT = 'default';
-const SIZES = [
+/** The sizes on offer, Default (the variable unset) first; the session Settings drawer offers the same. */
+export const AUTO_COMPACT_SIZES = [
   { value: DEFAULT, label: 'Default' },
   { value: '700000', label: '700K tokens' },
   { value: '500000', label: '500K tokens' },
@@ -32,7 +33,7 @@ export function withAutoCompact<Row extends { key: string; value: string }>(rows
  */
 export function AutoCompactSelect({ value, onChange }: { value: string | undefined; onChange: (size: string) => void }) {
   const size = value?.trim() || DEFAULT;
-  const options = SIZES.some((row) => row.value === size) ? SIZES : [...SIZES, { value: size, label: `${size} tokens` }];
+  const options = AUTO_COMPACT_SIZES.some((row) => row.value === size) ? AUTO_COMPACT_SIZES : [...AUTO_COMPACT_SIZES, { value: size, label: `${size} tokens` }];
   return (
     <div className="rd-form-field">
       <div className="rd-form-label">Compact Claude Code sessions at</div>
