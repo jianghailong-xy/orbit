@@ -286,6 +286,8 @@ const USER_DRIVERS: Readonly<Record<string, Drive>> = {
     s.sessions.resume(w.ownerId, id, { clientTurnId: randomUUID(), content: 'hi' }),
   'PATCH /sessions/:id/config': (s, w, id) => s.sessions.updateConfig(w.ownerId, id, { effort: 'low' }),
   'PATCH /sessions/:id/account': (s, w, id) => s.sessions.switchAccount(w.ownerId, id, 'automatic'),
+  'PATCH /sessions/:id/settings': (s, w, id) => s.sessions.updateSettings(w.ownerId, id, { muted: true }),
+  'POST /sessions/:id/restart': (s, w, id) => s.sessions.restart(w.ownerId, id),
   'POST /sessions/:id/interrupt': (s, w, id) => s.sessions.interrupt(w.ownerId, id),
   'POST /sessions/:id/end': (s, w, id) => s.sessions.end(w.ownerId, id),
   'POST /sessions/:id/merge': (s, w, id) => s.sessions.mergeToMain(w.ownerId, id),
