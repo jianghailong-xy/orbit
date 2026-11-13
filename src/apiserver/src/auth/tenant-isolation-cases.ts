@@ -1010,6 +1010,21 @@ const taskFilterCases = (route: string, filters: readonly string[]) =>
   }])) as Record<string, TenantFieldCase>;
 
 export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCase>> = {
+  // A local Ollama is bound to one of the caller's own runners (docs/ollama-local-provider-contract.md §3.1):
+  // another account's runner is answered as a runner that does not exist, and nothing is written. A shared
+  // (admin) provider is never bound to a runner at all.
+  'POST /providers/mine body runnerId': {
+    request: (of) => ({ params: {}, body: { label: 'census ollama', presetSlug: 'ollama', baseUrl: 'http://127.0.0.1:11434', runnerId: of.runnerId } }),
+  },
+  'PATCH /providers/mine/:id body runnerId': {
+    request: (of, mine) => ({ params: { id: mine.providerId }, body: { runnerId: of.runnerId } }),
+  },
+  'POST /admin/providers body runnerId': {
+    request: (of) => ({ params: {}, body: { label: 'census ollama', presetSlug: 'ollama', baseUrl: 'http://127.0.0.1:11434', runnerId: of.runnerId } }),
+  },
+  'PATCH /admin/providers/:id body runnerId': {
+    request: (of, mine) => ({ params: { id: mine.adminProviderId }, body: { runnerId: of.runnerId } }),
+  },
   'POST /access-tokens body workspaceIds[]': {
     request: (of) => ({ params: {}, body: { name: 'census token', scopes: ['tasks:read'], workspaceIds: [of.workspaceId] } }),
   },

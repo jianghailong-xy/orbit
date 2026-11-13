@@ -1288,6 +1288,16 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     as: SESSION,
     request: (of, mine) => ({ params: { id: mine.workspaceId }, body: { runnerId: of.runnerId } }),
   },
+  // A local Ollama is bound to one of the caller's own runners (docs/ollama-local-provider-contract.md §3.1):
+  // another account's runner is answered as a runner that does not exist, and nothing is written.
+  'POST /runner/providers body runnerId': {
+    as: RUNNER,
+    request: (of) => ({ params: {}, body: { label: 'census ollama', presetSlug: 'ollama', baseUrl: 'http://127.0.0.1:11434', runnerId: of.runnerId } }),
+  },
+  'PATCH /runner/providers/:slug body runnerId': {
+    as: RUNNER,
+    request: (of, mine) => ({ params: { slug: mine.runner.providerSlug }, body: { runnerId: of.runnerId } }),
+  },
   'POST /runner/notify header x-orbit-session-id': fromTheirSession(RUNNER, () => ({ params: {}, body: { message: 'from the census' } })),
 
   // ── the wiki ────────────────────────────────────────────────────────────────────────────────────

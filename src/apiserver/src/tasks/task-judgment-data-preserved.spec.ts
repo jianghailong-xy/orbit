@@ -2970,7 +2970,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0617_task_fork_changed_files',
       // 0618 adds a nullable email_outbox.session_id, its foreign key and index, two CHECKs and a wider unique index
       // only; no preserved rows, triggers or DONE fence change, and no row is written.
-      '0618_email_outbox_session_invite'],
+      '0618_email_outbox_session_invite',
+      // 0646 adds model_provider scope/auth_mode (NOT NULL with constant defaults), a nullable runner_id with its
+      // foreign key and index, five nullable probe columns and five CHECKs on model_provider alone; no preserved
+      // rows, triggers or DONE fence change, and no row is written.
+      '0646_model_provider_runner_scope'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
