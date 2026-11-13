@@ -62,7 +62,7 @@ final class SessionSettingsWiringTests: XCTestCase {
         XCTAssertTrue(sheet.contains("SessionSettingsSheet(sessionID: session.id,"))
         // The flag both platforms set is declared outside the iOS-only state.
         let declared = try XCTUnwrap(console.range(of: "@State private var settingsSession: Session?"))
-        let iosState = try XCTUnwrap(console.range(of: "#if os(iOS)"))
+        let iosState = try XCTUnwrap(console.range(of: "#if os(iOS)\n    @State private var renaming = false"))
         XCTAssertLessThan(declared.lowerBound, iosState.lowerBound)
         // Presented outside the platform branches, so both get it.
         let tail = String(console[console.range(of: ".sheet(item: $settingsSession)")!.lowerBound...])
