@@ -253,7 +253,7 @@ func ensureTerminalCredential(out io.Writer) (*terminalCredential, error) {
 	}
 	cfg := loadConfig()
 	if cfg == nil || cfg.RunnerToken == "" {
-		return nil, errors.New("No runner is registered on this machine, so a session cannot run in this folder. Run `orbit register` first.")
+		return nil, errors.New(noRunnerMessage)
 	}
 	server, err := normalizeServerURL(cfg.ServerURL)
 	if err != nil {
