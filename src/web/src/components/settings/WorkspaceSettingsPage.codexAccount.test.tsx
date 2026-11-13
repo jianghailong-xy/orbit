@@ -1,0 +1,343 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import type { PlanUsage, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
+import type { Runner } from '../TasksSidePanel';
+import { SettingsWorkspacePage } from './WorkspaceSettingsPage';
+import { MachineSettingsPage } from './MachineSettingsPage';
+
+/**
+ * A workspace picks which of its runner's Codex accounts its Codex sessions run on, under the
+ * workspace's Settings page (Sessions). Mounted as the page is, so each claim is about what a person does:
+ * open the workspace, open Advanced, pick an account, save — and what the save sends is the
+ * account's id, which is all the control plane stores.
+ */
+
+vi.mock('../../api', async (original) => ({ ...(await original<typeof import('../../api')>()), api: vi.fn() }));
+const { api } = await import('../../api');
+const apiMock = vi.mocked(api);
+
+// Public ids, the spelling the web holds every id in (= uuidToBase62 of a v7 uuid).
+const RUNNER_ID = '33zx0JhRhJo8rd25d3qAM';
+const WORKSPACE_ID = '33zx0JhRhJo8rd25d3qAN';
+
+const DEFAULT: RunnerEngineAccount = { id: 'default', home: '/root/.codex', codexHome: '/root/.codex', auth: 'yes' };
+const WORK: RunnerEngineAccount = {
+  id: '3fa91c2e',
+  name: 'Work',
+  home: '/root/.orbit/codex-accounts/3fa91c2e',
+  codexHome: '/root/.orbit/codex-accounts/3fa91c2e',
+  auth: 'yes',
+};
+
+const codex = (accounts?: RunnerEngineAccount[]): RunnerEngineHealth => ({
+  engine: 'codex',
+  installed: true,
+  auth: 'yes',
+  version: '0.156.0',
+  ...(accounts ? { accounts } : {}),
+});
+
+const runner = (accounts?: RunnerEngineAccount[]): Runner => ({
+  id: RUNNER_ID,
+  name: 'wikova',
+  online: true,
+  // Default's 5h window: the runner's usage probe reads Default.
+  planUsage: { provider: 'codex', primary: { utilization: 62, windowDurationMins: 300 } } as PlanUsage,
+  engines: [{ engine: 'claude', installed: true, auth: 'yes' }, codex(accounts)],
+});
+
+const PERSONAL: RunnerEngineAccount = {
+  id: '7c21de40',
+  name: 'Personal',
+  home: '/root/.orbit/codex-accounts/7c21de40',
+  codexHome: '/root/.orbit/codex-accounts/7c21de40',
+  auth: 'yes',
+};
+
+/** The runner as served once its Codex Default is removed from Orbit: the accounts that remain, marked,
+ *  and none of Default's quota. */
+const withoutDefault = (accounts: RunnerEngineAccount[]): Runner => ({
+  ...runner(accounts),
+  planUsage: { provider: 'codex', accounts: {} } as PlanUsage,
+  engines: [{ engine: 'claude', installed: true, auth: 'yes' }, { ...codex(accounts), removedDefault: { home: '/root/.codex' } }],
+});
+
+const workspace = (codexAccount: string | null, env: Record<string, string> = {}) => ({
+  id: WORKSPACE_ID,
+  name: 'orbit',
+  runnerId: RUNNER_ID,
+  workDir: '/srv/orbit',
+  env,
+  codexAccount,
+  createdAt: '2026-09-23T08:00:00.000Z',
+});
+
+let root: Root | null = null;
+let host: HTMLDivElement | null = null;
+
+beforeAll(() => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  // The account picker measures its box, and jsdom ships no layout to measure: nothing asserted
+  // here depends on one.
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }));
+});
+afterAll(() => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+  vi.unstubAllGlobals();
+});
+afterEach(() => {
+  act(() => root?.unmount());
+  host?.remove();
+  root = host = null;
+  apiMock.mockReset();
+  document.body.innerHTML = '';
+});
+
+/** The workspace's Settings page (by default), or `at` the machine's own. Every PATCH is collected. */
+function mount(r: Runner, ws: ReturnType<typeof workspace>, at = `/settings/workspaces/${WORKSPACE_ID}`) {
+  const patches: Array<Record<string, unknown>> = [];
+  apiMock.mockImplementation(async (path: string, options?: { method?: string; body?: unknown }) => {
+    const method = options?.method ?? 'GET';
+    if (method === 'PATCH' && path === `/workspaces/${WORKSPACE_ID}`) {
+      patches.push(options?.body as Record<string, unknown>);
+      // The server keeps what it was sent, as the next read shows.
+      ws = { ...ws, ...(options?.body as object) };
+      return ws;
+    }
+    if (path === '/runners') return [r];
+    if (path === '/workspaces') return [ws];
+    if (path === '/providers') return [];
+    // The workspace rows' "N running" reads the sidebar's per-workspace tallies.
+    if (path === '/sessions/counts') return [];
+    if (path === '/users/me') return { id: 'u', email: 'u@example.invalid', name: 'u', createdAt: '', preferences: {} };
+    if (path.includes('permission-rules')) return [];
+    if (path.includes('imported')) return { count: 0 };
+    return {};
+  });
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  qc.setQueryData(['runners'], [r]);
+  qc.setQueryData(['workspaces'], [ws]);
+  qc.setQueryData(['providers'], []);
+  host = document.createElement('div');
+  document.body.appendChild(host);
+  root = createRoot(host);
+  act(() =>
+    root!.render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={[at]}>
+          <Routes>
+            <Route path="/settings/workspaces/:id" element={<SettingsWorkspacePage />} />
+            <Route path="/settings/machines/:id" element={<MachineSettingsPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    ),
+  );
+  return { patches };
+}
+
+const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+const byText = (selector: string, text: string) => {
+  const found = [...document.body.querySelectorAll<HTMLElement>(selector)].find(
+    (el) => el.textContent?.trim() === text,
+  );
+  if (!found) throw new Error(`no ${selector} reading "${text}"`);
+  return found;
+};
+const click = async (el: HTMLElement) => {
+  await act(async () => {
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+  await settle();
+};
+/** A mouse press as a browser delivers it — pointer and mouse down and up, then the click — which a
+ *  list option needs before it takes a click as a choice rather than a keyboard activation. */
+const press = async (el: HTMLElement) => {
+  await act(async () => {
+    const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
+    el.dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse' }));
+    el.dispatchEvent(new MouseEvent('mousedown', init));
+    el.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0, pointerType: 'mouse' }));
+    el.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
+    el.dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
+  });
+  await settle();
+};
+
+/** The workspace's page, drawn: its account rows show without anything to open. */
+async function openEditor() {
+  await settle();
+}
+const openAdvanced = openEditor;
+
+const field = () =>
+  [...document.body.querySelectorAll<HTMLElement>('.rd-form-field')].find(
+    (el) => el.querySelector('.rd-form-label')?.textContent === 'Codex account',
+  );
+
+/** The account picker, as its role names it. */
+const picker = () => field()?.querySelector<HTMLElement>('[role="combobox"]');
+
+/** Open the account dropdown and read its options: each account's name, then its own line. */
+async function options() {
+  await click(picker()!);
+  return [...document.body.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')].map((o) => {
+    const status = o.querySelector('.rd-codex-account-status');
+    return { el: o, text: [status?.previousElementSibling?.textContent, status?.textContent] };
+  });
+}
+
+describe('which Codex account a workspace runs on', () => {
+  it('offers each account on the runner with its own quota and sign-in, and saves the id picked', async () => {
+    const { patches } = mount(runner([DEFAULT, WORK]), workspace(null));
+    await openAdvanced();
+    // Nothing picked, on a runner with two accounts, is Automatic.
+    expect(picker()?.textContent).toContain('Automatic');
+
+    const offered = await options();
+    expect(offered.map((o) => o.text)).toEqual([
+      ['Automatic', 'each new session starts on the account whose quota resets soonest'],
+      ['Default (~/.codex)', '5h limit 62% · signed in'],
+      // Only Default has a quota reported: the usage probe reads Default.
+      ['Work', 'signed in'],
+    ]);
+    await press(offered[2].el);
+    // Saved on the pick: one PATCH, carrying only this field.
+    expect(patches).toEqual([{ codexAccount: WORK.id }]);
+  });
+
+  it('offers a renamed Default by its name, saying under it what it is', async () => {
+    mount(runner([{ ...DEFAULT, name: 'jianghailong.main' }, WORK]), workspace(null));
+    await openAdvanced();
+
+    const offered = await options();
+    expect(offered.map((o) => o.text)).toEqual([
+      ['Automatic', 'each new session starts on the account whose quota resets soonest'],
+      ['jianghailong.main', 'Default · ~/.codex · 5h limit 62% · signed in'],
+      ['Work', 'signed in'],
+    ]);
+  });
+
+  it('saves Automatic as no account at all, and Default as a choice of its own', async () => {
+    for (const [pick, saved] of [
+      [0, null],
+      [1, 'default'],
+    ] as const) {
+      const { patches } = mount(runner([DEFAULT, WORK]), workspace(WORK.id));
+      await openEditor();
+      expect(picker()?.textContent).toContain('Work');
+      const offered = await options();
+      await press(offered[pick].el);
+      expect(patches).toEqual([{ codexAccount: saved }]);
+      act(() => root?.unmount());
+      host?.remove();
+      root = host = null;
+    }
+  });
+
+  it('asks nothing of a runner with one account, and keeps the choice it never showed', async () => {
+    for (const accounts of [[DEFAULT], undefined]) {
+      const { patches } = mount(runner(accounts), workspace(null));
+      await openAdvanced();
+      expect(field()).toBeUndefined();
+      expect(patches).toEqual([]);
+      act(() => root?.unmount());
+      host?.remove();
+      root = host = null;
+    }
+  });
+
+  it('says so when the account a workspace names is not on its runner, and lets it be undone', async () => {
+    const { patches } = mount(runner([DEFAULT]), workspace('5e6f7a8b'));
+    await openAdvanced();
+    const offered = await options();
+    expect(offered.map((o) => o.text)).toEqual([
+      ['Default (~/.codex)', '5h limit 62% · signed in'],
+      ['Account 5e6f7a8b', 'not on this runner — sessions run on Default'],
+    ]);
+    await press(offered[0].el);
+    expect(patches).toEqual([{ codexAccount: null }]);
+  });
+
+  it('does not claim Default, or an automatic pick, while a CODEX_HOME typed into the env points elsewhere', async () => {
+    mount(runner([DEFAULT, WORK]), workspace('default', { CODEX_HOME: '/root/.codex-b' }));
+    await openAdvanced();
+    expect(field()?.textContent).toContain('sessions run in ~/.codex-b, not Default');
+    act(() => root?.unmount());
+    host?.remove();
+    root = host = null;
+    mount(runner([DEFAULT, WORK]), workspace(null, { CODEX_HOME: '/root/.codex-b' }));
+    await openAdvanced();
+    expect(field()?.textContent).toContain('sessions run in ~/.codex-b, not on an automatic pick');
+  });
+});
+
+describe('a runner whose Codex Default is removed from Orbit', () => {
+  it('draws the remaining accounts on its page, ending with Default’s line and the way back', async () => {
+    mount(withoutDefault([WORK]), workspace(null), `/settings/machines/${RUNNER_ID}`);
+    await settle();
+    // A group of one, as any group, starts folded: open it.
+    await click(document.body.querySelector<HTMLElement>('.re-row[data-engine="codex"] .re-grp-toggle')!);
+    const group = [...document.body.querySelectorAll<HTMLElement>('.re-acct')];
+    expect(group.map((row) => row.querySelector('.re-name-text')?.textContent ?? row.textContent?.trim())).toEqual([
+      'Work',
+      'Default · ~/.codex isn’t used by OrbitUse again',
+    ]);
+  });
+
+  it('offers no Default for a workspace, only Automatic and the accounts that remain', async () => {
+    mount(withoutDefault([WORK, PERSONAL]), workspace(null));
+    await openAdvanced();
+    expect(picker()?.textContent).toContain('Automatic');
+
+    const offered = await options();
+    expect(offered.map((o) => o.text)).toEqual([
+      ['Automatic', 'each new session starts on the account whose quota resets soonest'],
+      ['Work', 'signed in'],
+      ['Personal', 'signed in'],
+    ]);
+  });
+
+  it('says a workspace set to Default now runs on Automatic, and saves Automatic as no account', async () => {
+    const { patches } = mount(withoutDefault([WORK]), workspace('default'));
+    await openAdvanced();
+    expect(picker()?.textContent).toContain('Default');
+
+    const offered = await options();
+    expect(offered.map((o) => o.text)).toEqual([
+      ['Automatic', 'each new session starts on the account whose quota resets soonest'],
+      ['Work', 'signed in'],
+      ['Default', 'removed from Orbit — sessions run on Automatic'],
+    ]);
+    await press(offered[0].el);
+    expect(patches).toEqual([{ codexAccount: null }]);
+  });
+
+  it('says an account the runner no longer reports runs on Automatic, not on Default', async () => {
+    mount(withoutDefault([WORK, PERSONAL]), workspace('5e6f7a8b'));
+    await openAdvanced();
+    const offered = await options();
+    expect(offered.at(-1)?.text).toEqual(['Account 5e6f7a8b', 'not on this runner — sessions run on Automatic']);
+  });
+});

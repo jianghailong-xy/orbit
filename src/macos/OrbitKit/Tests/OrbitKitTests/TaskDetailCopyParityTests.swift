@@ -28,7 +28,8 @@ final class TaskDetailCopyParityTests: XCTestCase {
     private static let watchEditor = "src/web/src/components/WatchEditor.tsx"
     private static let dependencyList = "src/web/src/components/TaskDependencyList.tsx"
     private static let sharedTask = "src/web/src/pages/SharedTaskPage.tsx"
-    private static let runnerDetail = "src/web/src/pages/RunnerDetailPage.tsx"
+    /// The Agent's settings: RunnerDetailPage.tsx is gone, and its switch is a row of the workspace's Settings page.
+    private static let workspaceSettings = "src/web/src/components/settings/WorkspaceSettingsPage.tsx"
     private static let workspace = "src/web/src/components/WorkspaceView.tsx"
 
     private struct Missing: Error, CustomStringConvertible {
@@ -388,9 +389,10 @@ final class TaskDetailCopyParityTests: XCTestCase {
     }
 
     func testTheAgentsSwitchSaysWhatTheWebSwitchSays() throws {
-        let web = try source(Self.runnerDetail)
-        assertSays(web, "label=\"\(TaskDetailCopy.smartSelectionSwitch)\" desc=\"\(TaskDetailCopy.smartSelectionSwitchDetail)\"",
-                   in: Self.runnerDetail)
+        let web = try source(Self.workspaceSettings)
+        // The web row puts the long sentence in its tooltip, under a shorter description of its own.
+        assertSays(web, "title=\"\(TaskDetailCopy.smartSelectionSwitch)\"", in: Self.workspaceSettings)
+        assertSays(web, "tooltip=\"\(TaskDetailCopy.smartSelectionSwitchDetail)\"", in: Self.workspaceSettings)
     }
 
     func testTheComposersModelMenuSaysWhyItIsThisModel() throws {

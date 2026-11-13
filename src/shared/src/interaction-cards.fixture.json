@@ -246,6 +246,13 @@
             "gaps": [
               "Physical devices have not been checked."
             ],
+            "gapClauses": [
+              {
+                "gap": 0,
+                "criterionClause": "on physical devices",
+                "followUpTaskId": "34ZaIKb2sLBtndX7DqxHH"
+              }
+            ],
             "citations": [
               {
                 "kind": "COMMIT",

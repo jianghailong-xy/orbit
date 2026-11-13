@@ -212,7 +212,7 @@ public enum TaskDetailCopy {
     /// How the Why of a run that a failure moved up a tier ends (`USAGE_LIMIT_NOTE`).
     public static let usageLimitNote = "a failure from a usage limit would not have moved the tier"
 
-    // The Agent's settings (`RunnerDetailPage.tsx`).
+    // The Agent's settings (`settings/WorkspaceSettingsPage.tsx`).
     public static let smartSelectionSwitch = "Smart model selection for tasks"
     public static let smartSelectionSwitchDetail =
         "Task runs use the model and effort of the tier suggested for the task, and go one tier up after a "

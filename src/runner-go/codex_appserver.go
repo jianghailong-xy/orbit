@@ -675,10 +675,15 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 	waitForIdle := func() {
 		tk := time.NewTicker(150 * time.Millisecond)
 		defer tk.Stop()
-		deadline := time.After(shutdownDrainTimeout)
+		// The owner's Update Now cuts the turn at once (stopDrainBudget); any other stop gives it the drain.
+		deadline := time.After(stopDrainBudget(shutdownCtx, shutdownDrainTimeout))
 		for {
 			activeMu.Lock()
 			idle := active == nil
+			cut := ""
+			if active != nil {
+				cut = active.orbitTurnID
+			}
 			activeMu.Unlock()
 			if idle {
 				return
@@ -686,7 +691,15 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			select {
 			case <-tk.C:
 			case <-deadline:
-				logln("codex app-server drain timeout for", job.SessionID)
+				// Marked interrupted, as the Claude drain marks its own (watchShutdownDrain): without it the
+				// transcript stops mid-call with nothing to say why. The turn is not acked, so the control
+				// plane hands it back as the continuation once the session is reclaimed.
+				emitFor(cut, evInterrupt, stopInterruptPayload(shutdownCtx))
+				if stoppingForUpdateNow(shutdownCtx) {
+					logln("codex app-server update now for", job.SessionID+"; interrupting the turn in flight")
+				} else {
+					logln("codex app-server drain timeout for", job.SessionID)
+				}
 				return
 			case <-ctx.Done():
 				return

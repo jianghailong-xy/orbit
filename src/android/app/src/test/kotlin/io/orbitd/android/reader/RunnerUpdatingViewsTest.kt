@@ -38,7 +38,7 @@ class RunnerUpdatingViewsTest {
     private fun text(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
         .config[SemanticsProperties.Text].joinToString("") { it.text }
 
-    @Test fun theBlockSaysWhyAndHowLongWithNoButtons() {
+    @Test fun theBlockSaysWhyAndHowLongWithNoButtonsUntilLaterIsHanded() {
         compose.setContent { OrbitTheme { RunnerUpdatingQueued(gate, "studio-mac", {}, now = now) } }
         assertEquals("Runner updating", text("runner-updating:title"))
         assertEquals("studio-mac is updating to 0.1.254. It starts no new work until 2 turns finish: Backfill missing shard rows and " +

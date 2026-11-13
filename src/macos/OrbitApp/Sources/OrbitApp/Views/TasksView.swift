@@ -770,6 +770,7 @@ struct TaskListsDirectoryView: View {
             }
         }
         .listStyle(.plain)
+        .softTopEdgeEffect()
         .navigationTitle(TaskListCopy.taskListsTitle)
         .navigationBarTitleDisplayMode(inSheet ? .inline : .large)
         .searchable(text: $query, prompt: TaskListCopy.searchLists)

@@ -162,11 +162,11 @@ test('the key is the task\'s own public id by convention, and nothing reads it',
   const { tx, lookups } = transactionOver([]);
   const task = taskInNoProject(CRITERION_TEXT);
 
-  // The shape layer requires a non-blank key, so an envelope for a task in no project has to put
-  // SOMETHING there. The convention is the task's own public id, which is what the submission that
-  // hit the 409 on 2026-09-05 already wrote, and it has to keep working.
+  // The key the server binds for a task that declares no criterion is the task's own public id,
+  // which is also what the submission that hit the 409 on 2026-09-05 wrote, and a stored revision
+  // carrying it has to keep working.
   const asSubmittedToday = evidence({ key: OWN_PUBLIC_ID_KEY, text: CRITERION_TEXT });
-  assert.equal(parseEvidenceEnvelope(asSubmittedToday).criterion.key, OWN_PUBLIC_ID_KEY);
+  assert.equal(parseEvidenceEnvelope(asSubmittedToday, 'stored').criterion?.key, OWN_PUBLIC_ID_KEY);
   assert.equal(await criterionStandingRefusal(tx, task, asSubmittedToday), null);
 
   // And the convention is compatible because nothing resolves it: this lane binds to the TEXT,
@@ -499,8 +499,10 @@ test('all three callers hand the predicate the task row, not a project id', () =
   const service = read('src/apiserver/src/tasks/task-completion-evidence.service.ts');
   const queue = read('src/apiserver/src/tasks/pending-evidence-judgments.ts');
 
-  // The submission path: the locked task row itself, which already carries `acceptanceCriteria`.
-  assert.match(service, /evidenceCriterionMatch\(tx, task, envelope\.criterion\)/);
+  // The submission path: the locked task row itself, which already carries `acceptanceCriteria`,
+  // binds the standard the task is held to and reports it through the same predicate.
+  assert.match(service, /taskStandard\(tx, task, taskId\)/);
+  assert.match(service, /evidenceCriterionMatch\(tx, task, standard\)/);
   // The decision door: the same row, and its SELECT has to actually read the column, or the
   // fallback would see `undefined` and refuse every task in no project exactly as before.
   assert.match(service, /assertCriterionUnmoved\(tx, task, latest\.evidence\)/);

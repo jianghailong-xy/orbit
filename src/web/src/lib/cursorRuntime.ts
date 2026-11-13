@@ -36,7 +36,7 @@ export const CURSOR_PINNED_VERSION = '2026.10.14-941492e';
 /** The preset a Cursor User API Key is connected from — not `cursor`, the engine's own name. */
 export const CURSOR_KEY_PRESET = 'cursor-api';
 /** Where a Cursor key is connected. */
-export const CURSOR_CONNECT_HREF = `/providers/new/${CURSOR_KEY_PRESET}`;
+export const CURSOR_CONNECT_HREF = `/settings/providers/new/${CURSOR_KEY_PRESET}`;
 
 /** Why a runner can't start Cursor CLI, most fundamental first, or `ready`. */
 export type CursorRunnerState = 'ready' | 'updateRunner' | 'unsupportedPlatform' | 'unsupportedVersion' | 'notInstalled';

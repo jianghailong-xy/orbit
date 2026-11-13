@@ -85,10 +85,15 @@ const CORE_TABLES = ['conversation_turn', 'run_event', 'session', 'task'];
  * points. `0234_project_acceptance_evaluation_plan_lane_removal` then took the evaluation-plan
  * lane those four fed, a fourth. What is left is the authored declaration, still pinned column for
  * column.
+ *
+ * `0545_criterion_confirmation` then added `satisfied_by` (TASKS or CONFIRMATION, owner decision
+ * 2026-11-11): how the criterion is met, authored with its text and folded into its revision and
+ * hashes. It is part of the declaration, not a continuation of a failure or a judgment of one, so
+ * it is pinned here with the rest.
  */
 const PROJECT_ACCEPTANCE_COLUMNS: Readonly<Record<string, string>> = {
   project_acceptance_criterion_definition:
-    'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!',
+    'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!, satisfied_by:criterion_satisfied_by!',
 };
 
 function publishes(): RealtimeService {

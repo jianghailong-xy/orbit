@@ -53,6 +53,8 @@ export class FakeDockerChannel implements DockerChannel {
   limits: Record<string, number> = {};
   /** Set: the host's firewall for managed runners is configured and not in force, and the channel starts no container. */
   firewallDown: string | null = null;
+  /** Set: the channel host cannot be reached at all; every call fails before it reaches the channel. */
+  down = false;
   /** Unset: a stop is taken in and the container goes on running, in its grace, until `exit` reports it. */
   stopsAtOnce = true;
   private failures: Array<{ call: string; failure: Failure }> = [];
@@ -219,6 +221,7 @@ export class FakeDockerChannel implements DockerChannel {
 
   private call(name: string): Failure | undefined {
     this.calls.push(name);
+    if (this.down) throw new DockerChannelUnreachable(`injected: the channel host is down (${name})`, false);
     const at = this.failures.findIndex((f) => f.call === name);
     if (at < 0) return undefined;
     const [{ failure }] = this.failures.splice(at, 1);

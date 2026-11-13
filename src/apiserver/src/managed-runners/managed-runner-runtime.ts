@@ -10,7 +10,14 @@ import type { ManagedKubeClient } from './kube-client';
 import { KubernetesBackend } from './kubernetes-backend';
 import type { ManagedRunnerBackend } from './managed-runner-backend';
 import { ManagedRunnerManager } from './managed-runner-manager';
-import { loadManagedRunnerProfile, type AnyManagedRunnerProfile, type DockerRunnerProfile, type ManagedRunnerProfile } from './managed-runner-profile';
+import {
+  dockerHostProfile,
+  dockerRunnerHosts,
+  loadManagedRunnerProfile,
+  type AnyManagedRunnerProfile,
+  type DockerRunnerProfile,
+  type ManagedRunnerProfile,
+} from './managed-runner-profile';
 import { ManagedRunnerWorker } from './managed-runner-worker';
 
 /** The DI token of the enabled runtime: null when the feature is off. */
@@ -30,11 +37,24 @@ export type KubeClientFactory = (profile: ManagedRunnerProfile) => ManagedKubeCl
  */
 export const MANAGED_RUNNER_DOCKER_CHANNEL_FACTORY = Symbol('MANAGED_RUNNER_DOCKER_CHANNEL_FACTORY');
 
+/** Called once per channel host, with that host's profile (`dockerHostProfile`): its instance, channel and token file. */
 export type DockerChannelFactory = (profile: DockerRunnerProfile) => DockerChannel;
 
-/** What an enabled process could build: a manager and its loop, or the reasons it could not. */
+/** One Docker channel host's manager: it drives only the mappings of its location. */
+export interface ManagedRunnerHostRuntime {
+  instanceId: string;
+  /** No new mapping is placed here (managed-runner-placement.ts). */
+  draining: boolean;
+  manager: ManagedRunnerManager;
+}
+
+/**
+ * What an enabled process could build: a manager and its loop, or the reasons it could not. `manager` is the
+ * first (on Kubernetes, or a single Docker host, the only) one; `hosts`, when present, every Docker host's in
+ * the profile's order, and the loop drives them all.
+ */
 export type ManagedRunnerRuntime =
-  | { available: true; profile: AnyManagedRunnerProfile; manager: ManagedRunnerManager; worker: ManagedRunnerWorker }
+  | { available: true; profile: AnyManagedRunnerProfile; manager: ManagedRunnerManager; worker: ManagedRunnerWorker; hosts?: ManagedRunnerHostRuntime[] }
   | { available: false; problems: string[] };
 
 /**
@@ -59,21 +79,39 @@ export function createManagedRunnerRuntime(deps: {
     return { available: false, problems: loaded.problems };
   }
   const profile = loaded.profile;
+  const holder = `${hostname()}/${process.pid}/${randomUUID()}`;
+  if (profile.backend === 'docker') {
+    // One backend and one manager per channel host. With several, each drives only its own location's
+    // mappings; a single host drives every Docker mapping, as before the list existed.
+    const listed = dockerRunnerHosts(profile);
+    const hosts: ManagedRunnerHostRuntime[] = [];
+    try {
+      for (const host of listed) {
+        const hostProfile = dockerHostProfile(profile, host);
+        const backend = new DockerBackend((deps.dockerChannel ?? dockerChannelFromProfile)(hostProfile), hostProfile);
+        const manager = new ManagedRunnerManager(deps.prisma, backend, profile, { holder, ownLocationOnly: listed.length > 1 });
+        hosts.push({ instanceId: host.instanceId, draining: host.draining, manager });
+      }
+    } catch (error) {
+      const problem = (error as Error).message;
+      log.error(`managed runners are enabled but unavailable: ${problem}`);
+      return { available: false, problems: [problem] };
+    }
+    const worker = new ManagedRunnerWorker(hosts.map((host) => host.manager), profile.lifecycle.pollIntervalSeconds * 1000);
+    const where = listed.map((host) => `Docker instance ${host.instanceId}${host.remote ? ' (remote)' : ''}${host.draining ? ' (draining)' : ''}`).join(', ');
+    log.log(`managed runners are enabled in ${profile.environmentId} (${where})`);
+    return { available: true, profile, manager: hosts[0].manager, worker, hosts };
+  }
   let backend: ManagedRunnerBackend;
   try {
-    backend = profile.backend === 'docker'
-      ? new DockerBackend((deps.dockerChannel ?? dockerChannelFromProfile)(profile), profile)
-      : new KubernetesBackend(deps.kubeClient(profile), profile);
+    backend = new KubernetesBackend(deps.kubeClient(profile), profile);
   } catch (error) {
     const problem = (error as Error).message;
     log.error(`managed runners are enabled but unavailable: ${problem}`);
     return { available: false, problems: [problem] };
   }
-  const manager = new ManagedRunnerManager(deps.prisma, backend, profile, {
-    holder: `${hostname()}/${process.pid}/${randomUUID()}`,
-  });
+  const manager = new ManagedRunnerManager(deps.prisma, backend, profile, { holder });
   const worker = new ManagedRunnerWorker(manager, profile.lifecycle.pollIntervalSeconds * 1000);
-  const where = profile.backend === 'docker' ? `Docker instance ${profile.docker.instanceId}` : `namespace ${profile.kubernetes.namespace}`;
-  log.log(`managed runners are enabled in ${profile.environmentId} (${where})`);
+  log.log(`managed runners are enabled in ${profile.environmentId} (namespace ${profile.kubernetes.namespace})`);
   return { available: true, profile, manager, worker };
 }

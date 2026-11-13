@@ -189,7 +189,14 @@ struct AgentContentColumn: View {
                 }
             }
             #else
-            workspaceList
+            // A project's sessions page takes the column, as on the iPad: the sidebar's project row
+            // opens it (docs/mocks/macos-sidebar, owner 2026-11-12), the detail beside it following
+            // the member picked.
+            if let address = app.projectSessionsColumn, rowNavigation == .selection {
+                SessionProjectPage(address: address, rowNavigation: rowNavigation)
+            } else {
+                workspaceList
+            }
             #endif
         }
         #if os(iOS)
@@ -663,7 +670,8 @@ struct AgentPanes: View {
         // list-owned like the tag picker above. iOS only, as the rows' Share is.
         .sheet(item: $sharingSession) { s in
             if let baseURL = app.baseURL {
-                ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore)
+                ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore,
+                           guests: .of(s, agents: app.agents))
             }
         }
         // The Move panel for the row whose Move was tapped: the folders of this workspace, counted

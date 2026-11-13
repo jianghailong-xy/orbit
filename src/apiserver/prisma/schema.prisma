@@ -377,6 +377,7 @@ model User {
   feishuMessages   FeishuMessage[]
   /// The Feishu message chains of its sessions (migration 0499).
   feishuThreads    FeishuThread[]
+  sessionGuestPlaces SessionGuest[] // the sessions this user was invited into as a guest (0560)
   /// Its sessions' replies on their way back to Feishu (migration 0501).
   feishuOutbox     FeishuOutbox[]
 
@@ -785,6 +786,15 @@ model Runner {
   // Now"), cleared as the next heartbeat hands the request over. No reply: the state above is
   // the answer, on the heartbeats that follow — the shape of modelCatalogRefreshAt.
   selfUpdateRequestedAt DateTime? @map("self_update_requested_at")
+  // The owner's Later (0571): the time the waiting release is put off until, handed to the next
+  // heartbeat as postponeSelfUpdateUntil and cleared there, like selfUpdateRequestedAt.
+  selfUpdatePostponeUntil DateTime? @map("self_update_postpone_until")
+  // The owner's Update Now (0590): install the waiting release now, interrupting the turns in
+  // flight. Handed to the next heartbeat as selfUpdateNow and cleared there, like the two above.
+  selfUpdateNowRequestedAt DateTime? @map("self_update_now_requested_at")
+  // The push that something of the owner's waits on this runner's drain (0595): set by the one
+  // heartbeat that sends it, cleared by a beat that is not draining, so each drain pushes once.
+  drainWaitingPushedAt DateTime? @map("drain_waiting_pushed_at")
   // Where this machine puts checkouts Orbit clones for it, reported each heartbeat. A clone of
   // `<owner>/<repo>` lands at `<reposRoot>/<owner>-<repo>`.
   // NULL means this runner has never reported one — a build too old to send it. That withdraws
@@ -2285,6 +2295,7 @@ model Session {
   observingWatches      Watch[]
   /// Public links with this session as their root, ended ones included (migration 0306).
   shareLinks            ShareLink[]
+  guests                SessionGuest[] // the people the owner invited to reply (0560)
 
   @@index([assignedRunnerId, status])
   // "what did this workspace last run on", the derived seed a new session inherits when the
@@ -3334,6 +3345,8 @@ model Project {
   /// The exceptions somebody has to act on, and where they were queued (migration 0278).
   openItems          ProjectOpenItem[]
   openItemDeliveries ProjectOpenItemDelivery[]
+  /// The orphans the sweep told somebody about, once each (migration 0585).
+  orphanNotices      ProjectOrphanNotice[]
 
   /// Every attempt the platform made to land work on this project's integration line (migration 0281).
   integrationJobs ProjectIntegrationJob[]
@@ -4076,6 +4089,33 @@ model ProjectOpenItemDelivery {
   @@unique([itemId, sessionId, purpose], map: "project_open_item_delivery_item_session_purpose_key")
   @@index([sessionId, clientTurnId], map: "project_open_item_delivery_session_turn_idx")
   @@map("project_open_item_delivery")
+}
+
+/// One pending item of a project that nobody could move or nobody was told about, as the orphan sweep
+/// reported it (docs/evidence-always-has-an-addressee-design.md §4, migration 0585). One row per
+/// (project, orphan key): the key names the item and the state it was found in, so the same orphan in
+/// the same state is reported once, and a new state is a new key. `recipient` is who was told —
+/// the project's coordinator conversation (`sessionId`, the turn keyed `clientTurnId`), or the
+/// account owner when the project has no Automatic coordinator to tell. History, not a queue: nothing
+/// reads it to decide anything but whether this orphan was already reported.
+model ProjectOrphanNotice {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  projectId    String   @map("project_id") @db.Uuid
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  ownerId      String   @map("owner_id") @db.Uuid
+  /// The task whose pending item it is. History rather than a foreign key, like the session.
+  taskId       String   @map("task_id") @db.Uuid
+  orphanKey    String   @map("orphan_key")
+  /// EVIDENCE | EXCEPTION_ITEM | TASK_RUN | DEPENDENCIES
+  kind         String
+  /// COORDINATOR | OWNER
+  recipient    String
+  sessionId    String?  @map("session_id") @db.Uuid
+  clientTurnId String?  @map("client_turn_id")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([projectId, orphanKey], map: "project_orphan_notice_project_key")
+  @@map("project_orphan_notice")
 }
 
 /// One time a project's coordinator spent more on its own than the project allows, and what became of
@@ -9275,4 +9315,31 @@ model ProjectPromotionRequest {
 
   @@index([projectId, createdAt])
   @@map("project_promotion_request")
+}
+
+/// Someone the owner of a session invited to reply in it (docs/session-guests-design.md §7, migration 0560). A live row
+/// (`removedAt` null) lets `userId` read the session through /guest-sessions and send turns into it, recorded as the
+/// owner's turns with external sender ORBIT_GUEST. Removing or leaving stamps `removedAt` and `removedReason`
+/// (REMOVED | LEFT); inviting again is a new row. Two partial indexes this schema cannot spell: unique
+/// (session_id, user_id) WHERE removed_at IS NULL, and (user_id) WHERE removed_at IS NULL.
+model SessionGuest {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  sessionId     String    @map("session_id") @db.Uuid
+  session       Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade, map: "session_guest_session_id_fkey")
+  /// The session's owner when the guest was added. No foreign key: the session's cascade takes the row.
+  ownerId       String    @map("owner_id") @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade, map: "session_guest_user_id_fkey")
+  addedAt       DateTime  @default(now()) @map("added_at") @db.Timestamptz(3)
+  /// The first time the guest opened the session; null until they do.
+  openedAt      DateTime? @map("opened_at") @db.Timestamptz(3)
+  removedAt     DateTime? @map("removed_at") @db.Timestamptz(3)
+  /// REMOVED (the owner took them out) | LEFT (they left); set exactly when removedAt is.
+  removedReason String?   @map("removed_reason")
+  /// The UTC day turnsOnDay counts (0572); null until the guest's first message.
+  turnDay       DateTime? @map("turn_day") @db.Date
+  /// Messages the guest sent on turnDay: the daily cap's count, taken by one conditional UPDATE.
+  turnsOnDay    Int       @default(0) @map("turns_on_day")
+
+  @@map("session_guest")
 }

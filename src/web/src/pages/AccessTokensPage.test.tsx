@@ -242,7 +242,7 @@ describe('Settings → Access tokens', { timeout: 60_000 }, () => {
     serve([CI, LAPTOP, OLD, LAPSED]);
     await open();
 
-    expect(page().querySelector('.page-title')?.textContent).toBe('Access tokens');
+    expect(page().querySelector('.settings-header-title')?.textContent).toBe('Access tokens');
     expect(tabs()).toEqual([
       { label: 'Active', count: '2', selected: true },
       { label: 'Revoked & expired', count: '2', selected: false },

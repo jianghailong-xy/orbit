@@ -25,8 +25,13 @@ class RunnerUpdatingShellTest : ComposerShellTest() {
     }
 
     /** Board 2's case: studio-mac draining for 0.1.254 behind two turns, for 38 minutes and 5 seconds. */
-    private fun held() {
-        ComposerShell.runner = ComposerShell.obj("""{"id":"${ComposerShell.RUNNER}","name":"studio-mac","online":true,"status":"ONLINE",
+    private fun held(updateNow: Boolean = false) {
+        // A runner that takes Update Now says so, with the release it drains for and the owner's turns in flight (GET /runners).
+        val takesUpdateNow = if (!updateNow) "" else """"capabilities":["self-update-now/v1"],
+            "selfUpdate":{"state":"waitingForIdle","phase":"draining","targetVersion":"0.1.254","turnsInFlight":2,"turnsAtDrain":2},
+            "updateTurns":[{"id":"34A07cOtherSession0001","title":"Backfill missing shard rows","startedAt":"${Instant.now().minusSeconds(112 * 60L + 5)}"},
+            {"id":"34A07cOtherSession0002","title":"Why are 11-08 metrics zero","startedAt":"${Instant.now().minusSeconds(47 * 60L + 5)}"}],"""
+        ComposerShell.runner = ComposerShell.obj("""{"id":"${ComposerShell.RUNNER}","name":"studio-mac","online":true,"status":"ONLINE",$takesUpdateNow
             "version":"0.1.253","engines":[{"engine":"claude","installed":true,"auth":"yes"}],
             "modelCatalog":{"claude":[{"value":"claude-opus-5-5","label":"Opus 5.5"}]}}""")
         val since = Instant.now().minusSeconds(38 * 60L + 5).toString()
@@ -50,9 +55,24 @@ class RunnerUpdatingShellTest : ComposerShellTest() {
         assertEquals("Waiting 38 min", text("runner-updating:waited"))
         assertFalse("no foot row with no message to put it under", has(hasTestTag("runner-updating-foot"), unmerged = true))
         assertFalse(shows("No messages yet"))
-        // Nothing to press yet: Later and Update Now come in later tasks.
-        assertFalse(shows("Later…")); assertFalse(shows("Update Now…"))
+        // Later… is on the page for the session's runner; Update Now… only for a runner that takes it, which this one does not say.
+        assertTrue(shows("Later…")); assertFalse(shows("Update Now…"))
         shot("android-runner-updating-empty")
+    }
+
+    /** Board 5's left phone, then its confirmation: the runner takes Update Now, so the page offers it beside Later…. */
+    @Test fun aRunnerThatTakesUpdateNowIsOfferedItWithItsTurns() {
+        held(updateNow = true); signIn(); openSession()
+        await { has(hasTestTag("runner-updating"), unmerged = true) && shows("Update Now…") }
+        assertTrue(shows("Later…"))
+        shot("android-runner-updating-update-now")
+        compose.onNodeWithTag("runner-update-now").performClick()
+        await { has(hasTestTag("runner-update-now-sheet:title"), unmerged = true) }
+        assertEquals("Update studio-mac now?", text("runner-update-now-sheet:title"))
+        assertEquals("It stops these turns, installs 0.1.254 and restarts — usually under a minute. Each one then continues where it stopped, " +
+            "with a note that the update interrupted it.", text("runner-update-now-sheet:message"))
+        assertTrue(has(hasText("Backfill missing shard rows")) && has(hasText("running 1 h 52 min")) && has(hasText("running 47 min")))
+        compose.onNodeWithTag("runner-update-now:confirm").assertTextEquals("Interrupt 2 Turns and Update")
     }
 
     @Test fun theHeldMessagesFootRowSaysWhyAndOpensTheAccount() {

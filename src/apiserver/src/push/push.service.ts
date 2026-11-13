@@ -24,6 +24,7 @@ import { FcmTransport } from './fcm-transport';
 import { FeishuTransport, orbitUrl, type FeishuTarget } from './feishu-transport';
 import { fcmData } from './fcm-payload';
 import { claudeRegionPushBody, regionMachineName } from '../runners/runner-region';
+import { drainWaitingSentence, type DrainWaitingPush } from '../common/runner-drain-waiting';
 
 const APNS_HOST_PROD = 'api.push.apple.com';
 const APNS_HOST_SANDBOX = 'api.sandbox.push.apple.com';
@@ -90,6 +91,7 @@ export interface AgentNotifyResult {
 const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
   'engine-signed-out': 'Engine signed out',
   'claude-region-blocked': 'Claude is not available on this runner',
+  'runner-updating': 'Runner updating',
   'confirmation-raised': 'Coordinator raised this for your decision',
   'confirmation-problems': 'Problems found after you confirmed',
   'owner-request': 'Request for you',
@@ -99,6 +101,7 @@ const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
   'wiki-review-mode-manual': 'Wiki switched to Manual',
   'wiki-review-mode-tiered': 'Wiki switched to Tiered',
   'wiki-maintenance-failing': 'Wiki maintenance needs attention',
+  'project-orphan': 'Nobody has this',
 };
 
 /**
@@ -411,6 +414,41 @@ export class PushService {
       await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`Claude region notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * Tell a runner's owner that something of theirs waits on the runner's drain for a self-update
+   * (docs/runner-update-drain-design.md §3.4, D3; board 3 ⑥): once per drain, from the heartbeat whose
+   * claim (claimDrainWaitingPush) matched — at the drain's start when work already waits, or once the
+   * first work queues behind it. The body is the web banner's sentence.
+   *
+   * About the machine, as notifyEngineSignedOut is: no badge and no sessionID, and a tap opens the runner.
+   * Fire-and-forget: the heartbeat `void`s it.
+   */
+  async notifyRunnerDrainWaiting(push: DrainWaitingPush): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const { tokens, feishu } = await this.channels(push.ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const alert = { title: push.machine, body: drainWaitingSentence(push) };
+      const body = JSON.stringify({
+        aps: {
+          alert,
+          sound: 'default',
+          'thread-id': `runner-${push.runnerId}`,
+        },
+        runnerID: push.runnerId,
+        kind: 'runner-updating',
+      });
+
+      // One notification per machine: a later drain's push takes the place of an earlier one still on screen.
+      const collapseId = `runner-updating-${push.runnerId}`;
+      this.background(this.feishuOther(feishu, { kind: 'runner-updating', ...alert, collapseId }));
+
+      await this.deliver(tokens, body, 'alert', '10', collapseId);
+    } catch (err) {
+      this.log.warn(`runner drain notify failed: ${(err as Error).message}`);
     }
   }
 
@@ -923,6 +961,32 @@ export class PushService {
       await this.deliver(tokens, body, 'alert', '10', collapseId);
     } catch (err) {
       this.log.warn(`confirmation raised notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * The orphan sweep found a pending item of a project with no coordinator to tell: nobody can move it,
+   * or the one who can was never told (docs/evidence-always-has-an-addressee-design.md §4). Called once
+   * per orphan, after the sweep's ledger row committed (`ProjectOrphanSweepService`), so a push that
+   * fails is not tried again: the item stays on `GET /projects/:id/pending-addressees`.
+   */
+  async notifyProjectOrphan(input: {
+    ownerId: string; projectId: string; noticeId: string; title: string; body: string;
+  }): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const { tokens, feishu } = await this.channels(input.ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const alert = { title: input.title, body: input.body };
+      const collapseId = `project-orphan-${input.noticeId}`;
+      const body = JSON.stringify({
+        aps: { alert, sound: 'default', 'thread-id': input.projectId },
+        kind: 'project-orphan', projectID: input.projectId,
+      });
+      this.background(this.feishuOther(feishu, { kind: 'project-orphan', ...alert, collapseId, projectId: input.projectId }));
+      await this.deliver(tokens, body, 'alert', '10', collapseId);
+    } catch (err) {
+      this.log.warn(`project orphan notify failed: ${(err as Error).message}`);
     }
   }
 
