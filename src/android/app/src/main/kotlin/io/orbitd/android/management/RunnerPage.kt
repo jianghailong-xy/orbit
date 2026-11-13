@@ -667,7 +667,7 @@ internal object RunnerPage {
      * on a key or a pool instead — then nothing can run on it, with a workspace or without one (OrbitKit RunnerAttention.noCliSignedIn,
      * the web's noCliSignedIn). Null when one is signed in or its sign-in is unknown, when none is installed, and when a workspace runs
      * on a key: that machine runs without any sign-in, so a signed-out login is news only to the workspaces on it. Settings counts the
-     * machine by the same answer (Infrastructure.attention).
+     * machine by the same answer (MachinesAndModels.attention).
      */
     fun noCliSignedIn(runner: JsonObject, workspaces: List<JsonObject>): List<String>? {
         // A signed-out Claude Code on a machine blocked for the Claude region is no CLI to sign in: Orbit won't start a Claude sign-in

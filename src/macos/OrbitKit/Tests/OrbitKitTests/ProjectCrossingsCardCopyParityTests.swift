@@ -87,6 +87,9 @@ final class ProjectCrossingsCardCopyParityTests: XCTestCase {
         assertDeclares(web, "MOVE_TASK_WITHDRAWN_CRITERION_NOTE", ProjectCrossings.moveWithdrawnCriterionNote)
         assertDeclares(web, "MOVE_TASK_CRITERION_GONE", ProjectCrossings.moveCriterionGone)
         assertDeclares(web, "MOVE_TASK_APPROVE_CONSEQUENCE", ProjectCrossings.moveApproveConsequence)
+        assertDeclares(web, "NO_PROJECT", ProjectCrossings.noProject)
+        assertSays(web, "export const MOVE_TASK_OUT_APPROVE_CONSEQUENCE = \"\(ProjectCrossings.moveOutApproveConsequence)\";",
+                   in: Self.card)
         assertDeclares(web, "MOVE_TASK_DENY_CONSEQUENCE", ProjectCrossings.moveDenyConsequence)
         try assertRecord(web, "MOVE_TASK_STATE_MEANING", ProjectCrossings.moveStateMeaning, in: Self.card)
     }
@@ -157,6 +160,8 @@ final class ProjectCrossingsCardCopyParityTests: XCTestCase {
         XCTAssertEqual(ProjectCrossings.waiting(23), "23 waiting")
         assertSays(web, "<Text strong>{title ?? '\(ProjectCrossings.unnamedProject)'}</Text>", in: Self.card)
         assertSays(web, "<Text muted>\(ProjectCrossings.arrow)</Text>", in: Self.card)
+        assertSays(web, "{row.toProjectId == null ? ( <Text strong>{NO_PROJECT}</Text> ) : ( <ProjectEnd",
+                   in: Self.card)
         assertSays(web, "<Text muted>Reason given: {row.reason}</Text>", in: Self.card)
         XCTAssertEqual(ProjectCrossings.reasonGiven("REASON"), "Reason given: REASON")
         assertSays(web, "title=\"\(ProjectCrossings.notRecorded)\"", in: Self.card)
@@ -196,14 +201,22 @@ final class ProjectCrossingsCardCopyParityTests: XCTestCase {
         let web = try source(Self.card)
         assertSays(web, "const from = row.fromProject?.title ?? (row.fromProjectPublicId ?? row.fromProjectId);",
                    in: Self.card)
-        assertSays(web, "const to = row.toProject?.title ?? (row.toProjectPublicId ?? row.toProjectId);",
-                   in: Self.card)
+        assertSays(web, "const to = row.toProjectId == null ? NO_PROJECT : row.toProject?.title "
+                   + "?? (row.toProjectPublicId ?? row.toProjectId);", in: Self.card)
+        assertSays(web, "const approve = row.toProjectId == null ? MOVE_TASK_OUT_APPROVE_CONSEQUENCE "
+                   + ": MOVE_TASK_APPROVE_CONSEQUENCE;", in: Self.card)
         assertSays(web, "subject: row.subjectTask?.title ?? row.title, consequence: decision === 'APPROVE' "
-                   + "? MOVE_TASK_APPROVE_CONSEQUENCE : MOVE_TASK_DENY_CONSEQUENCE,", in: Self.card)
+                   + "? approve : MOVE_TASK_DENY_CONSEQUENCE,", in: Self.card)
         let bare = ProjectCrossings.prompt(sample(kind: "MOVE_TASK"), .approve)
         XCTAssertEqual(bare.from, "FromPublic")
         XCTAssertEqual(bare.to, "ToPublic")
         XCTAssertEqual(bare.subject, "Asked title")
+        // A move to no project reads `no project` at its "to" end, even beside a joined title.
+        let out = ProjectCrossing(id: "r", fromProjectId: "FromRaw", toProjectId: nil,
+                                  toProject: ProjectCrossing.ProjectEnd(title: "Stale"), kind: "MOVE_TASK",
+                                  crossingKey: "k", state: "PENDING", title: "t", requestedAt: "")
+        XCTAssertEqual(ProjectCrossings.prompt(out, .approve).to, ProjectCrossings.noProject)
+        XCTAssertEqual(ProjectCrossings.prompt(out, .approve).consequence, ProjectCrossings.moveOutApproveConsequence)
     }
 
     /// A filing and a dependency answer in the filing's words.

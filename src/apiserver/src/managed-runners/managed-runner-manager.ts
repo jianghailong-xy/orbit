@@ -192,6 +192,12 @@ export interface ManagedRunnerManagerOptions {
    * switch is gone; while it exists, the runtime passes it (managed-runner-runtime.ts).
    */
   linkOnly?: () => boolean | Promise<boolean>;
+  /**
+   * Drive only the mappings of the backend's own location (`backend.location`: cluster key and namespace), not
+   * every mapping of its backend: one manager per Docker channel host, each its own location
+   * (managed-runner-runtime.ts). Absent or false: every mapping of the backend, as a single-host server does.
+   */
+  ownLocationOnly?: boolean;
 }
 
 /**
@@ -361,6 +367,8 @@ export class ManagedRunnerManager {
   private readonly linkOnly: () => boolean | Promise<boolean>;
   /** This environment's capacity pool, created or brought to the backend's totals once per process. */
   private pool?: Promise<string>;
+  /** Which mappings are this manager's: its backend's, and with `ownLocationOnly` its location's only. */
+  readonly scope: { backend: string; clusterKey?: string; namespace?: string };
 
   /** On `backend`, with the profile's lifecycle budgets. */
   constructor(prisma: PrismaService, backend: ManagedRunnerBackend, profile: Pick<ManagedRunnerProfile, 'lifecycle'>, options?: ManagedRunnerManagerOptions);
@@ -378,6 +386,15 @@ export class ManagedRunnerManager {
     this.random = options.random ?? Math.random;
     this.log = options.log ?? new Logger('ManagedRunnerManager');
     this.linkOnly = options.linkOnly ?? (() => true);
+    this.scope = options.ownLocationOnly
+      ? { backend: this.backend.name, clusterKey: this.backend.location.clusterKey, namespace: this.backend.location.namespace }
+      : { backend: this.backend.name };
+  }
+
+  /** Whether a mapping is one this manager drives (`scope`). */
+  owns(mapping: Pick<ManagedRunner, 'backend' | 'clusterKey' | 'namespace'>): boolean {
+    const { backend, clusterKey, namespace } = this.scope;
+    return mapping.backend === backend && (clusterKey === undefined || (mapping.clusterKey === clusterKey && mapping.namespace === namespace));
   }
 
   /**
@@ -393,10 +410,10 @@ export class ManagedRunnerManager {
     const now = this.now();
     const due = { OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }] };
     const pool = await this.capacityPool();
-    const backend = this.backend.name;
+    const scope = this.scope;
     const disabled = await this.prisma.managedRunner.findMany({
       where: {
-        backend,
+        ...scope,
         owner: { disabledAt: { not: null } },
         desiredState: { not: 'DELETED' },
         OR: [
@@ -410,7 +427,7 @@ export class ManagedRunnerManager {
     });
     const waiting = await this.prisma.managedRunner.findMany({
       where: {
-        backend,
+        ...scope,
         managementState: 'WAITING_CAPACITY',
         desiredState: 'RUNNING',
         OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }, { capacityRevision: null }, { capacityRevision: { lt: pool.revision } }],
@@ -421,7 +438,7 @@ export class ManagedRunnerManager {
     });
     const moving = await this.prisma.managedRunner.findMany({
       where: {
-        backend,
+        ...scope,
         OR: [
           { desiredState: 'RUNNING', managementState: { in: ['REQUESTED', 'PROVISIONING', 'STARTING', 'FENCING'] }, ...due },
           // Demand cannot come for a disabled owner's fenced mapping: its proof is looked for anyway.
@@ -436,13 +453,13 @@ export class ManagedRunnerManager {
       select: { id: true },
     });
     const watched = await this.prisma.managedRunner.findMany({
-      where: { backend, desiredState: 'RUNNING', managementState: 'READY', ...due },
+      where: { ...scope, desiredState: 'RUNNING', managementState: 'READY', ...due },
       orderBy: { updatedAt: 'asc' },
       take: limit,
       select: { id: true },
     });
     const missing = await this.prisma.managedRunner.findMany({
-      where: { backend, managementState: 'FAILED', lastError: { path: ['code'], equals: 'PVC_MISSING' } },
+      where: { ...scope, managementState: 'FAILED', lastError: { path: ['code'], equals: 'PVC_MISSING' } },
       orderBy: { updatedAt: 'asc' },
       take: limit,
       select: { id: true },
@@ -465,13 +482,13 @@ export class ManagedRunnerManager {
     return runners.length;
   }
 
-  /** One pass over one mapping, under this replica's lease. Another backend's mapping is not driven, nor leased. */
+  /** One pass over one mapping, under this replica's lease. A mapping not in this manager's scope (another backend's, or another host's) is not driven, nor leased. */
   async reconcile(mappingId: string): Promise<ReconcileOutcome> {
     const leased = await this.acquireLease(mappingId);
     if (!leased) {
-      const found = await this.prisma.managedRunner.findUnique({ where: { id: mappingId }, select: { backend: true } });
+      const found = await this.prisma.managedRunner.findUnique({ where: { id: mappingId }, select: { backend: true, clusterKey: true, namespace: true } });
       if (!found) return 'NOT_FOUND';
-      return found.backend === this.backend.name ? 'LEASED_ELSEWHERE' : 'IDLE';
+      return this.owns(found) ? 'LEASED_ELSEWHERE' : 'IDLE';
     }
     try {
       let mapping = leased;
@@ -1477,9 +1494,12 @@ export class ManagedRunnerManager {
     const holder = `${this.holder}/volume-switch/${randomUUID()}`;
     const leased = await this.acquireLease(request.mappingId, holder);
     if (!leased) {
-      const found = await this.prisma.managedRunner.findUnique({ where: { id: request.mappingId }, select: { backend: true } });
+      const found = await this.prisma.managedRunner.findUnique({ where: { id: request.mappingId }, select: { backend: true, clusterKey: true, namespace: true } });
       if (found && found.backend !== this.backend.name) {
         throw new ManagedVolumeSwitchRefused('NOT_APPLICABLE', `the mapping is a ${found.backend} one, and this server runs ${this.backend.name}`);
+      }
+      if (found && !this.owns(found)) {
+        throw new ManagedVolumeSwitchRefused('NOT_APPLICABLE', `the mapping is on ${found.clusterKey}/${found.namespace}, not this manager's ${this.backend.location.clusterKey}/${this.backend.location.namespace}`);
       }
       throw new ManagedVolumeSwitchRefused('MAPPING_BUSY', found ? "another manager pass holds the mapping's lease" : 'the mapping is gone');
     }
@@ -1835,7 +1855,7 @@ export class ManagedRunnerManager {
   private async acquireLease(id: string, holder = this.holder): Promise<ManagedRunner | null> {
     const now = this.now();
     const { count } = await this.prisma.managedRunner.updateMany({
-      where: { id, backend: this.backend.name, OR: [{ leaseHolder: null }, { leaseHolder: holder }, { leaseExpiresAt: { lte: now } }] },
+      where: { id, ...this.scope, OR: [{ leaseHolder: null }, { leaseHolder: holder }, { leaseExpiresAt: { lte: now } }] },
       data: { leaseHolder: holder, leaseExpiresAt: this.leaseUntil(now) },
     });
     return count === 0 ? null : this.reread(id);

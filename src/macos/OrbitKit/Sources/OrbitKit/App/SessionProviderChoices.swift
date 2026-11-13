@@ -35,7 +35,7 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
     /// (`ProviderPool.unavailable`) — a reason no machine fixes, which is why `fixEngine` stays nil for
     /// it. Not for one whose accounts are only spent: that one waits for a reset (`note`).
     public let unavailable: String?
-    /// Which engine row on Infrastructure fixes `unavailable` — the engine the menu is for. Set whenever
+    /// Which engine row on Machines & models fixes `unavailable` — the engine the menu is for. Set whenever
     /// a runner can fix `unavailable`; nil on a pool whose accounts are what is missing, whose row is
     /// greyed out rather than sent anywhere.
     public let fixEngine: String?
@@ -401,7 +401,7 @@ public enum SessionProviderChoices {
     ///
     /// Each carries the health the runner last reported, because a choice is a claim about someone
     /// else's machine. The engine's CLI not installed there, or its sign-in signed out → listed with the
-    /// reason, pointing at Infrastructure, where that machine gets its install or its sign-in. A key or a
+    /// reason, pointing at Machines & models, where that machine gets its install or its sign-in. A key or a
     /// pool brings its own credential, so only the CLI has to be there; a pool also needs one of its
     /// accounts able to run, which the server says (`ProviderPool.unavailable`). Mirrors web's
     /// `engineProviders`.

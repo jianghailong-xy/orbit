@@ -38,7 +38,8 @@ data class PushPayload(
 
     /** The existing ACTION_VIEW/OrbitLinks entry retains authentication and the caller's stack. */
     val link: String? get() = when {
-        kind == "project-done" -> projectId?.let { "orbit://project/$it" }
+        // A project done, and a pending item of a project nobody has (the orphan sweep, owner with no coordinator): its project.
+        kind == "project-done" || kind == "project-orphan" -> projectId?.let { "orbit://project/$it" }
         kind == "watch-matched" -> watchId?.let { "orbit://watch/$it" }
         // About a machine: its sign-in lapsed, its Claude connection to Anthropic is in a region Anthropic does not offer Claude in,
         // or it drains for an update with the owner's work waiting on it.
@@ -77,7 +78,7 @@ data class PushMessage(
 
     companion object {
         private val uuid = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
-        private val kinds = PushPayload.ownerItemKinds + setOf("project-done", "approval", "finished", "failed", "agent-message",
+        private val kinds = PushPayload.ownerItemKinds + setOf("project-done", "project-orphan", "approval", "finished", "failed", "agent-message",
             "engine-signed-out", "confirmation-problems", "watch-matched", "wiki-review-mode-manual",
             "wiki-review-mode-tiered", "wiki-maintenance-failing", "loop-missed", "wakeup-dropped", "claude-region-blocked",
             "runner-updating", PushPayload.OWNER_REQUEST)
@@ -119,7 +120,7 @@ data class PushMessage(
                 when (payload.kind) {
                     // A wakeup loop that stopped running, and a wakeup dropped with its FAILED session, are about that session.
                     "approval", "finished", "failed", "loop-missed", "wakeup-dropped" -> require(payload.sessionId != null)
-                    "project-done" -> require(payload.projectId != null)
+                    "project-done", "project-orphan" -> require(payload.projectId != null)
                     "agent-message" -> Unit // Headless orbit notify deliberately names no session.
                     // A session filed an owner request: about that session, and the request its actions open.
                     PushPayload.OWNER_REQUEST -> require(payload.sessionId != null && payload.ownerRequestId != null)

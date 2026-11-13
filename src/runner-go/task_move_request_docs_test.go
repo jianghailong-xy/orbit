@@ -39,7 +39,7 @@ func TestMCPTaskUpdateDescribesTheMoveRequestAndItsConfirmation(t *testing.T) {
 	props := mcpToolProps(tools, "task_update")
 
 	assertSaysAll(t, "the task_update tool description", mcpToolDescription(tools, "task_update"),
-		"PROJECT_SCOPE_MISMATCH for another project unless it asks for the move with `handoff`",
+		"PROJECT_SCOPE_MISMATCH for another project unless it asks for either with `handoff`",
 		"files a move request, answers CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING and leaves the task where it is",
 		"the account owner's confirmation moves the task at once, with nothing to send again",
 	)
@@ -54,7 +54,9 @@ func TestMCPTaskUpdateDescribesTheMoveRequestAndItsConfirmation(t *testing.T) {
 		"and the task stays where it is",
 		// Who answers, and that the answer is the move.
 		"Only the ACCOUNT OWNER answers it",
-		"Their confirmation IS the move: the task joins the target project at once and nothing has to be sent again",
+		"Their confirmation IS the move: the task joins the target project (or, for null, leaves its project) at once and nothing has to be sent again",
+		// Taking a task out of every project is asked the same way (2026-11-13).
+		"or with projectId null to ask for the task to be taken out of every project (only from the project it is in, and with no criterionKey",
 		"project_crossings",
 		// Who may ask.
 		"is the move's source or its target; any other session is refused PROJECT_SCOPE_MISMATCH",
@@ -72,7 +74,7 @@ func TestMCPTaskUpdateDescribesTheMoveRequestAndItsConfirmation(t *testing.T) {
 	project, _ := props["projectId"].(map[string]interface{})
 	projectText, _ := project["description"].(string)
 	assertSaysAll(t, "task_update's projectId description", projectText,
-		"PROJECT_SCOPE_MISMATCH for another project unless it ASKS for the move with `handoff`",
+		"PROJECT_SCOPE_MISMATCH for another project unless it ASKS for either with `handoff` (null with `handoff` asks for the task to be taken out of its project)",
 		"Asking moves nothing by itself",
 		"once the ACCOUNT OWNER confirms it, the task moves at once and nothing has to be sent again",
 		"a requested move withdraws the one the task has in its current project by itself",
@@ -102,8 +104,8 @@ func TestTaskUpdateHelpDescribesTheMoveRequestAndItsConfirmation(t *testing.T) {
 	reason := help[strings.Index(help, "--handoff-reason TEXT"):]
 	reason = reason[:strings.Index(reason, "--fixes-open-item-id")]
 	assertSaysAll(t, "the --handoff-reason help", reason,
-		"Ask for the move --project names, and say why",
-		"stays where it is until the ACCOUNT OWNER confirms the request",
+		"Ask for the move --project or --no-project names, and say why",
+		"stays where it is until the ACCOUNT OWNER\n                              confirms the request",
 		"their confirmation is the move",
 	)
 
@@ -118,6 +120,12 @@ func TestTaskUpdateHelpDescribesTheMoveRequestAndItsConfirmation(t *testing.T) {
 		"withdrawn by the move",
 		"out of a settled (DONE or CANCELLED) project, only a task that serves none of that project's\n    acceptance criteria may be moved, and into a settled project nothing may\n    (PROJECT_REOPEN_REQUIRED)",
 		"MOVE_TASK_LANDING_IN_FLIGHT",
+		"--no-project with --handoff-reason asks the same way for the task to be taken out of every project",
+	)
+	detach := help[strings.Index(help, "--no-project  "):]
+	detach = detach[:strings.Index(detach, "--handoff-reason TEXT")]
+	assertSaysAll(t, "the --no-project help", detach,
+		"unless it asks with --handoff-reason; the owner's\n                              confirmation then takes the task out",
 	)
 	assertSaysNoStaleMoveClaim(t, "`orbit task update --help`", help)
 
@@ -129,9 +137,10 @@ func TestTaskUpdateHelpDescribesTheMoveRequestAndItsConfirmation(t *testing.T) {
 	}
 	arguments := strings.Join(spec.Arguments, "\n")
 	assertSaysAll(t, "`orbit capabilities` for task_update", arguments,
-		"PROJECT_SCOPE_MISMATCH for the second unless it asks for the move with --handoff-reason, which files a request, answers CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING and leaves the task where it is",
+		"PROJECT_SCOPE_MISMATCH for the second unless it asks for either with --handoff-reason, which files a request, answers CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING and leaves the task where it is",
 		"The owner's confirmation moves the task at once, with nothing to send again",
-		"--handoff-reason <text> (handoff: ASK for the move --project names, and why.",
+		"--handoff-reason <text> (handoff: ASK for the move --project or --no-project names, and why.",
+		"--no-project asks for the task to be taken out of every project, from the project it is in and with no --criterion-key",
 		"the task stays where it is until the ACCOUNT OWNER confirms it, which moves the task at once with nothing to send again",
 		"Only a session whose own project is the move's source or its target may ask, any other is refused PROJECT_SCOPE_MISMATCH",
 		"optionally --criterion-key, a criterion of the TARGET project that the task declares once moved",
