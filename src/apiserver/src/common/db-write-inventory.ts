@@ -624,12 +624,12 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'projects/projects.service.ts#coordinator',
     shape: 'TX_RETRIED',
-    locks: 'After the candidate Session is created, its landing workspace FOR SHARE (rank 15), candidate and previous Session rows FOR UPDATE in UUID order (rank 30), then Project FOR NO KEY UPDATE (rank 40), followed by writes only to those held rows.',
+    locks: 'After the candidate Session is created, its landing workspace FOR SHARE (rank 15), candidate and previous Session rows FOR UPDATE in UUID order (rank 30), then Project FOR NO KEY UPDATE (rank 40), followed by writes to those held rows; then, only when the swap replaced a previous Session, the watch rows that Session observes in state ACTIVE FOR UPDATE in id order in one UPDATE (rank 45), whose new observer FK check takes the candidate Session FOR KEY SHARE, already held. No trigger on watch.',
     identity: 'The candidate Session id and the coordinator pointer observed before creating it. The compare-and-swap decides whether that candidate won.',
     isolation: '',
     attempts: 4,
     replay: 'Only the short binding CAS is retried, always against the same already-created candidate. The locked Project is re-read for its current pointer and title; a loser writes no title ownership and is discarded by the caller.',
-    effects: 'Session creation is before the transaction and never replayed by it. Discard/publish are after it resolves.',
+    effects: 'Session creation is before the transaction and never replayed by it. Discard/publish (including one watch.changed per moved watch) are after it resolves.',
     answer: 'Typed 503 from the global boundary; a lost CAS adopts the winner or returns the existing 409 contract.',
   },
   {

@@ -74,6 +74,8 @@ function store(
   /** Every `data` object a write handed the project row, in order. */
   const writes: Array<Record<string, unknown>> = [];
   const created: Array<{ workspaceId: string; title: string }> = [];
+  /** The watches rows, by observer and state: what the swap re-points. */
+  const watches: Array<{ id: string; observer: string; state: string }> = [];
 
   const find = (id: string | null) => sessions.find((s) => s.id === id) ?? null;
 
@@ -141,6 +143,13 @@ function store(
         // The rows the CAS locks, in the order it asked for them.
         return values.map((id) => find(id)).filter(Boolean).map((row) => ({ id: row!.id }));
       }
+      if (text.includes('UPDATE "watch"')) {
+        // The outgoing coordinator's ACTIVE watches, re-pointed at the successor.
+        const [successor, outgoing] = values;
+        const moved = watches.filter((w) => w.observer === outgoing && w.state === 'ACTIVE');
+        for (const w of moved) w.observer = successor;
+        return moved.map((w) => ({ id: w.id }));
+      }
       if (text.includes('FROM "project"')) {
         return values[0] === project.id && values[1] === project.ownerId
           ? [{ coordinator_session_id: project.coordinatorSessionId, title: project.title }]
@@ -183,7 +192,7 @@ function store(
 
   const acceptance = { criteriaSummary: async () => ({ total: 0, passed: 0, lastRunAt: null, criteria: [] }) };
   const service = new ProjectsService(prisma as never, acceptance as never, sessionsService as never);
-  return { service, project, sessions, writes, created, completed };
+  return { service, project, sessions, writes, created, completed, watches };
 }
 
 async function thrown(work: () => Promise<unknown>): Promise<unknown> {
@@ -204,7 +213,7 @@ test('a COMPLETED coordinator is replaced, in the workspace it already ran in', 
 
   const replaced = await service.coordinator(OWNER, PROJECT, undefined, 'replace');
 
-  assert.deepEqual(replaced, { sessionId: OPENED, created: true, workspaceId: HOME });
+  assert.deepEqual(replaced, { sessionId: OPENED, created: true, workspaceId: HOME, movedWatches: 0 });
   // §7.5: the SESSION is replaced; the workspace is not. A replacement that could land anywhere
   // else would be a migration wearing a replacement's name.
   assert.deepEqual(created, [{ workspaceId: HOME, title: 'Ship the coordinator' }]);
@@ -283,7 +292,7 @@ test('opening a completed coordinator hands back that same conversation', async 
 
   const opened = await service.coordinator(OWNER, PROJECT);
 
-  assert.deepEqual(opened, { sessionId: STANDING, created: false, workspaceId: HOME });
+  assert.deepEqual(opened, { sessionId: STANDING, created: false, workspaceId: HOME, movedWatches: 0 });
   assert.deepEqual(created, []);
   assert.deepEqual(writes, []);
   assert.equal(project.coordinatorSessionId, STANDING);
@@ -309,7 +318,7 @@ test('a replacement that names another workspace opens there, and the project go
 
   const replaced = await service.coordinator(OWNER, PROJECT, ELSEWHERE, 'replace');
 
-  assert.deepEqual(replaced, { sessionId: OPENED, created: true, workspaceId: ELSEWHERE });
+  assert.deepEqual(replaced, { sessionId: OPENED, created: true, workspaceId: ELSEWHERE, movedWatches: 0 });
   // The outgoing conversation is completed where it is; it does not move.
   assert.deepEqual(completed, [STANDING]);
   assert.equal(sessions.find((s) => s.id === STANDING)!.workspaceId, HOME);
@@ -360,4 +369,20 @@ test('a replacement named somewhere that cannot take it refuses before ending an
     assert.deepEqual(writes, []);
     assert.equal(project.coordinatorSessionId, STANDING);
   }
+});
+
+// ── The waits the outgoing coordinator set ───────────────────────────────────────────────────
+
+test('a replacement answers how many of the outgoing coordinator\'s ACTIVE waits it moved', async () => {
+  const { service, watches } = store(sessionRow());
+  watches.push(
+    { id: 'w1', observer: STANDING, state: 'ACTIVE' },
+    { id: 'w2', observer: STANDING, state: 'MATCHED' },
+    { id: 'w3', observer: 'someone-else', state: 'ACTIVE' },
+  );
+
+  const replaced = await service.coordinator(OWNER, PROJECT, undefined, 'replace');
+
+  assert.equal(replaced.movedWatches, 1);
+  assert.deepEqual(watches.map((w) => w.observer), [OPENED, STANDING, 'someone-else']);
 });
