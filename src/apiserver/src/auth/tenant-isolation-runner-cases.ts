@@ -1685,6 +1685,15 @@ export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
   'ALL /gw/codex/{*path}':
     'the same gateway, for every path under it; one outside its list is refused before anything is forwarded — '
     + 'pool-gateway.controller.ts:46',
+  'ALL /gw/anthropic':
+    'the Anthropic gateway for Claude Code on an OpenAI key: its one credential is an `orbit-gwk-` session token, '
+    + 'found by its hash and bound to the (session, key, person) it was issued for, refused unless that session is '
+    + 'still open on that key and engine and that key is still the person\'s own, so a token reaches only the session '
+    + 'it belongs to; the path is the Anthropic API\'s, with no Orbit id in it — anthropic-gateway.controller.ts:25, '
+    + 'anthropic-gateway.service.ts:94',
+  'ALL /gw/anthropic/{*path}':
+    'the same gateway, for every path under it; one outside its two paths is refused before anything is forwarded — '
+    + 'anthropic-gateway.controller.ts:36',
   'POST /auth/login':
     'email and password; finds the one user by email and answers a wrong pair as an unknown one — auth.service.ts:32',
   'GET /auth/methods':

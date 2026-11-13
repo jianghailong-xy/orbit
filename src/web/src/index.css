@@ -18949,6 +18949,17 @@ button.chat-jump-start:hover {
   min-width: 0;
 }
 /* The one sentence under OpenCode's keys, for the key it cannot run (board 4 ⑤). */
+/* The task pin's Provider list: what a pool's row risks, under the options (TaskDetailPanel pinNotices). */
+.tdp-pin-foot {
+  padding: 6px 10px 8px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.tdp-pin-foot p {
+  margin: 0;
+}
 .composer-provider-foot {
   display: block;
   max-width: 280px;
