@@ -5,11 +5,14 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 
 /** The server's account of a runner draining for a self-update (web `QueuedRunnerUpdate`, docs/runner-update-drain-design.md): the
- *  release it installs next, when the wait began, and the reader's own turns the drain waits for, oldest first. */
-data class QueuedRunnerUpdate(val targetVersion: String? = null, val since: String? = null, val turns: List<Turn> = emptyList()) {
+ *  release it installs next, when the wait began, and the reader's own turns the drain waits for, oldest first. [stopping]: the runner
+ *  drains because its process is stopping, not for a release (docs/mocks/runner-stopping); false from a server that predates it. */
+data class QueuedRunnerUpdate(val targetVersion: String? = null, val since: String? = null, val turns: List<Turn> = emptyList(),
+    val stopping: Boolean = false) {
     data class Turn(val id: String, val title: String?)
 
     companion object {
@@ -19,7 +22,7 @@ data class QueuedRunnerUpdate(val targetVersion: String? = null, val since: Stri
             fun JsonObject.str(key: String) = (get(key) as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
             val turns = (o["turns"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
                 .mapNotNull { t -> t.str("id")?.let { Turn(it, t.str("title")) } }
-            return QueuedRunnerUpdate(o.str("targetVersion"), o.str("since"), turns)
+            return QueuedRunnerUpdate(o.str("targetVersion"), o.str("since"), turns, (o["stopping"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true)
         }
     }
 }
@@ -44,6 +47,9 @@ internal object RunnerUpdating {
     const val RUNNER_UPDATING_TITLE = "Runner updating"
     /** The foot-row tag under a message the drain holds: `Queued · ` then this, underlined, to open why. */
     const val RUNNER_UPDATING_TAG = "runner updating"
+    const val RUNNER_STOPPING_TITLE = "Runner stopping"
+    /** RUNNER_UPDATING_TAG's words for a runner that is stopping rather than updating. */
+    const val RUNNER_STOPPING_TAG = "runner stopping"
     /** The word before the tag on the foot row (web `QUEUED_LABEL`). */
     const val QUEUED = "Queued"
     const val THE_RUNNER = "The runner"
@@ -54,6 +60,16 @@ internal object RunnerUpdating {
     const val AND = " and "
 
     fun isRunnerUpdating(gate: QueuedGate?): Boolean = gate?.queuedReason == "runner_updating"
+
+    /** Whether the runner holding this session is stopping rather than updating (board runner-stopping ①; web `isRunnerStopping`): it has
+     *  nothing to postpone or install now, so the places that offer Later and Update Now offer neither. */
+    fun isRunnerStopping(gate: QueuedGate?): Boolean = isRunnerUpdating(gate) && gate?.queuedRunnerUpdate?.stopping == true
+
+    /** `Runner updating`, or `Runner stopping` (web `runnerUpdatingTitle`). */
+    fun runnerUpdatingTitle(gate: QueuedGate?): String = if (isRunnerStopping(gate)) RUNNER_STOPPING_TITLE else RUNNER_UPDATING_TITLE
+
+    /** The foot-row tag's words: `runner updating`, or `runner stopping` (web `runnerUpdatingTag`). */
+    fun runnerUpdatingTag(gate: QueuedGate?): String = if (isRunnerStopping(gate)) RUNNER_STOPPING_TAG else RUNNER_UPDATING_TAG
 
     private fun turnTitle(title: String?) = title?.trim()?.takeIf { it.isNotEmpty() } ?: UNTITLED_SESSION
 
@@ -76,24 +92,34 @@ internal object RunnerUpdating {
         return parts
     }
 
-    /** The queued page's explanation (board 2 ②), its turns as parts the page draws as links (web `runnerUpdatingDescription`). */
+    /** The queued page's explanation (board 2 ②), its turns as parts the page draws as links (web `runnerUpdatingDescription`). A runner
+     *  that is stopping says so, and the session starts once it is back (board runner-stopping ①). */
     fun runnerUpdatingDescription(gate: QueuedGate, machine: String?): List<RunnerUpdatingPart> {
-        val who = machine?.trim()?.takeIf { it.isNotEmpty() } ?: THE_RUNNER
+        val name = machine?.trim()?.takeIf { it.isNotEmpty() }
+        val who = name ?: THE_RUNNER
+        val stopping = isRunnerStopping(gate)
         val version = gate.queuedRunnerUpdate?.targetVersion?.takeIf { it.isNotEmpty() }
-        val parts = mutableListOf<RunnerUpdatingPart>(RunnerUpdatingPart.Words(if (version != null) "$who is updating to $version. " else "$who is updating. "))
+        val parts = mutableListOf<RunnerUpdatingPart>(RunnerUpdatingPart.Words(
+            if (stopping) "$who is stopping. " else if (version != null) "$who is updating to $version. " else "$who is updating. "))
         val count = turnCount(gate)
         if (count > 0) {
             parts += RunnerUpdatingPart.Words("It starts no new work until ${turnsFinish(count)}: ")
             parts += namedTurns(gate)
             parts += RunnerUpdatingPart.Words(". ")
         }
-        parts += RunnerUpdatingPart.Words(SESSION_STARTS)
+        parts += RunnerUpdatingPart.Words(if (stopping) "This session starts once ${name ?: "it"} is back." else SESSION_STARTS)
         return parts
     }
 
     /** The popover a queued message's `runner updating` tag opens (board 2 ⑤; web `runnerUpdatingMessageText`). */
     fun runnerUpdatingMessageText(gate: QueuedGate, machine: String?): String {
         val who = machine?.trim()?.takeIf { it.isNotEmpty() } ?: THE_RUNNER
+        if (isRunnerStopping(gate)) {
+            // Board runner-stopping ②.
+            val count = turnCount(gate)
+            val first = if (count > 0) "$who starts no new turns until ${turnsFinish(count)}, then stops." else "$who stops now."
+            return "$first This message is sent once it is back."
+        }
         val version = gate.queuedRunnerUpdate?.targetVersion?.takeIf { it.isNotEmpty() }
         val update = if (version != null) "updates to $version" else "updates"
         val count = turnCount(gate)

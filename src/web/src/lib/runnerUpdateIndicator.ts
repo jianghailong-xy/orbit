@@ -22,10 +22,15 @@ export interface RunnerUpdateIndicator {
   body: string;
   /** `10 sessions and 19 messages of yours wait for it.` */
   waits: string;
+  /** The runner is stopping, not updating (docs/mocks/runner-stopping): no Later, no Update Now. */
+  stopping: boolean;
 }
 
 export const RUNNER_UPDATE_INDICATOR_BODY = 'It installs once these turns finish. Nothing is lost — waiting work starts right after.';
 export const RUNNER_UPDATE_INDICATOR_BODY_RESTARTING = 'It is restarting into the new version. Waiting work starts right after.';
+/** The body for a runner that is stopping rather than updating (docs/mocks/runner-stopping). */
+export const RUNNER_STOPPING_INDICATOR_BODY = 'It stops once these turns finish. Nothing is lost — waiting work starts once it is back.';
+export const RUNNER_STOPPING_INDICATOR_BODY_NOW = 'It is stopping now. Waiting work starts once it is back.';
 /** How many of the reader's turns the popover names; the rest read `and 2 more`. */
 export const RUNNER_UPDATE_INDICATOR_TURNS_SHOWN = 3;
 
@@ -58,11 +63,22 @@ export function runnerUpdateIndicator(runner: UpdateIndicatorRunner, machine: st
   // The runner's own count covers every turn in flight; the reader's named turns are the nearest from one that sends none.
   const turns = report?.turnsInFlight ?? runner.updateTurns?.length ?? 0;
   const version = report?.targetVersion ?? null;
+  if (waiting.stopping === true) {
+    return {
+      pill: turns > 0 ? `${machine} stopping · ${counted(turns, 'turn', 'turns')} left` : `${machine} stopping`,
+      short: turns > 0 ? String(turns) : '',
+      title: `${machine} is stopping`,
+      body: turns > 0 ? RUNNER_STOPPING_INDICATOR_BODY : RUNNER_STOPPING_INDICATOR_BODY_NOW,
+      waits: runnerUpdateIndicatorWaits(waiting),
+      stopping: true,
+    };
+  }
   return {
     pill: turns > 0 ? `${machine} updating · ${counted(turns, 'turn', 'turns')} left` : `${machine} restarting`,
     short: turns > 0 ? String(turns) : '',
     title: version ? `${machine} is updating to ${version}` : `${machine} is updating`,
     body: turns > 0 ? RUNNER_UPDATE_INDICATOR_BODY : RUNNER_UPDATE_INDICATOR_BODY_RESTARTING,
     waits: runnerUpdateIndicatorWaits(waiting),
+    stopping: false,
   };
 }

@@ -197,10 +197,11 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }?.queuedGate
     val runnerUpdatingMachine = listRow?.let { data.machineName(it.workspace) }
     // Later… for the runner the update holds this session on (its workspace's runner), and Update Now… when that runner takes it: the
-    // runner's row as GET /runners lists it says so, with the owner's turns in flight (`updateTurns`) the confirmation names.
+    // runner's row as GET /runners lists it says so, with the owner's turns in flight (`updateTurns`) the confirmation names. A runner
+    // that is stopping, not updating, has nothing to postpone or install: neither (board runner-stopping ①).
     val runnerUpdatingRunner = listRow?.let { row -> data.workspaces.firstOrNull { ObjectId.same(it.id, row.workspace) }?.runnerId }
     val runnerUpdatingRow = runnerUpdatingRunner?.let { runnerId -> data.runnerRows.firstOrNull { ObjectId.same(it.text("id"), runnerId) } }
-    val runnerUpdatingLater: (@Composable () -> Unit)? = runnerUpdatingRunner?.let { runnerId -> {
+    val runnerUpdatingLater: (@Composable () -> Unit)? = runnerUpdatingRunner?.takeIf { !RunnerUpdating.isRunnerStopping(runnerUpdatingGate) }?.let { runnerId -> {
         RunnerUpdateLaterButton(runnerUpdatingGate?.queuedRunnerUpdate?.targetVersion, runnerUpdatingMachine, { until ->
             runCatching { api.mutate(RunnerUpdateLater.path(runnerId), body = RunnerUpdateLater.body(until)) }
                 .fold({ app.realtime.refreshDirectory(); null }, { it.message ?: RunnerUpdateLater.POSTPONE_FAILED })

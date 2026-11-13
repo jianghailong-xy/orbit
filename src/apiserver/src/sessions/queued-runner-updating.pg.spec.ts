@@ -11,7 +11,10 @@
  *   (3) a draining runner that reports no target or start: targetVersion null, and the session's own
  *       wait as the clock;
  *   (4) an offline runner reads `runner_offline` even when its last beat said draining;
- *   (5) a full runner that is not draining reads `runner_at_capacity` (n/n), with no queuedRunnerUpdate.
+ *   (5) a full runner that is not draining reads `runner_at_capacity` (n/n), with no queuedRunnerUpdate;
+ *   (6) a runner draining because its process stops, not for a release, still reads `runner_updating`
+ *       but with queuedRunnerUpdate.stopping (docs/mocks/runner-stopping): only the phases `draining`
+ *       and `restarting` are an update's drain.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/sessions/queued-runner-updating.pg.spec.ts
  *
@@ -115,6 +118,7 @@ test('queuedReason runner_updating: a draining runner names its update, ahead of
       selfUpdate: {
         state: 'waitingForIdle',
         reason: 'deferred for 1h0m0s, the limit; taking no new work until the 3 turn(s) in flight end',
+        phase: 'draining',
         targetVersion: '0.1.254',
         drainingSince: drainingSince.toISOString(),
       },
@@ -131,6 +135,7 @@ test('queuedReason runner_updating: a draining runner names its update, ahead of
     assert.equal(got.queuedActive, 3, 'every turn in flight on the runner');
     assert.equal(got.queuedLimit, null, 'a drain has no limit to show');
     const update = got.queuedRunnerUpdate;
+    assert.equal(update.stopping, false, 'phase draining is the update’s drain');
     assert.equal(update.targetVersion, '0.1.254');
     assert.equal(new Date(update.since).getTime(), drainingSince.getTime(), 'the runner’s own drain start');
     assert.deepEqual(
@@ -163,6 +168,8 @@ test('queuedReason runner_updating: a draining runner names its update, ahead of
     assert.equal(got.queuedRunnerUpdate.targetVersion, null);
     assert.equal(new Date(got.queuedRunnerUpdate.since).getTime(), waitedFrom.getTime());
     assert.equal(got.queuedRunnerUpdate.turns.length, 0);
+    // No phase: nothing says this drain is for a release, so it reads as the process stopping.
+    assert.equal(got.queuedRunnerUpdate.stopping, true);
   });
 
   await t.test('(4) an offline runner reads runner_offline, even if its last beat said draining', async () => {
@@ -184,5 +191,20 @@ test('queuedReason runner_updating: a draining runner names its update, ahead of
     assert.equal(got.queuedActive, 1);
     assert.equal(got.queuedLimit, 1);
     assert.equal(got.queuedRunnerUpdate, null);
+  });
+
+  await t.test('(6) a runner draining because its process stops: runner_updating with stopping, whatever release waits', async () => {
+    for (const [name, selfUpdate, stopping] of [
+      ['stopping-up-to-date', { state: 'enabled' }, true],
+      ['stopping-release-waiting', { state: 'waitingForIdle', phase: 'available', targetVersion: '0.1.257' }, true],
+      ['stopping-postponed', { state: 'waitingForIdle', phase: 'postponed', targetVersion: '0.1.257' }, true],
+      ['restarting-into-release', { state: 'enabled', phase: 'restarting', targetVersion: '0.1.257' }, false],
+    ] as const) {
+      const r = await runner(alice.id, name, { maxConcurrent: 4, heartbeatDraining: true, selfUpdate });
+      const queued = await session(alice.id, r, `queued on ${name}`, RunStatus.PENDING);
+      const got = await row(aliceToken, queued);
+      assert.equal(got.queuedReason, 'runner_updating', name);
+      assert.equal(got.queuedRunnerUpdate.stopping, stopping, name);
+    }
   });
 });
