@@ -4,7 +4,7 @@
 # checked against its sha256sum-amd64.txt). k3s-stop kills the k3s process only, as systemd's KillMode=process does on
 # `systemctl restart k3s`: pods keep running, k3s and its controllers start again over them.
 set -euo pipefail
-source /mnt/data/tmp/34wdoS/kit/env.sh
+source /mnt/data/tmp/34wdoS/kit2/env.sh
 cmd=$1; shift || true
 on() { docker exec "$M" "$@"; }
 case "$cmd" in
@@ -16,7 +16,7 @@ case "$cmd" in
       --memory 6g --memory-swap 6g --cpus 6 --oom-score-adj 1000 \
       --network "$NET" --ip "$M_IP" --tmpfs /run:rw,exec,size=256m -e DOCKER_TLS_CERTDIR= \
       -v "$K/m/docker:/var/lib/docker" -v "$K/m/rancher:/var/lib/rancher" -v "$K/m/work:/work" \
-      -v /root/orbit/.git:/repo.git:ro -v "$K/kit:/kit:ro" -v "$K/bin/k3s:/usr/local/bin/k3s:ro" \
+      -v /root/orbit/.git:/repo.git:ro -v "$K/kit2:/kit:ro" -v "$K/bin/k3s:/usr/local/bin/k3s:ro" \
       "$DIND_IMAGE" >/dev/null
     for _ in $(seq 1 60); do on docker info >/dev/null 2>&1 && break; sleep 2; done
     on docker info --format "$M: Docker {{.ServerVersion}}, {{.Driver}}, {{.NCPU}} CPUs, {{.MemTotal}} bytes"
