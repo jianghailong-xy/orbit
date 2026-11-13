@@ -2155,3 +2155,26 @@ func TestMCPReadsNameTheLandingSession(t *testing.T) {
 		}
 	}
 }
+
+// session_create forwards worktree only as false: it can turn a session's isolation off, never on.
+func TestSessionCreateForwardsOnlyWorktreeFalse(t *testing.T) {
+	for _, tc := range []struct {
+		args map[string]interface{}
+		want interface{}
+	}{
+		{args: map[string]interface{}{"worktree": false}, want: false},
+		{args: map[string]interface{}{"worktree": true}, want: nil},
+		{args: map[string]interface{}{}, want: nil},
+	} {
+		tc.args["prompt"] = "read the logs"
+		_, body := callEngineDoor(t, engineDoorCall{tool: "session_create", request: "POST /api/runner/sessions", args: tc.args,
+			body: func(b map[string]interface{}) map[string]interface{} { return b }})
+		if got, ok := body["worktree"]; tc.want == nil && ok || tc.want != nil && got != tc.want {
+			t.Fatalf("args %v forwarded worktree = %v (present %v), want %v", tc.args, got, ok, tc.want)
+		}
+	}
+	props := mcpToolProps(toolDescriptors(false, true), "session_create")
+	if schema, _ := props["worktree"].(map[string]interface{}); schema["type"] != "boolean" {
+		t.Fatalf("session_create worktree schema = %#v", props["worktree"])
+	}
+}

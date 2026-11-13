@@ -169,6 +169,32 @@
         "sentAt": "2026-11-01T10:20:00.000Z",
         "payload": "{\"runnerID\":\"019a0000-0000-7000-8000-000000000003\",\"kind\":\"runner-updating\",\"title\":\"studio-mac\",\"body\":\"studio-mac is updating to 0.1.254 — 1 session and 1 message are waiting for 2 turns to finish.\",\"threadId\":\"runner-019a0000-0000-7000-8000-000000000003\"}"
       }
+    },
+    {
+      "name": "project-orphan",
+      "pushType": "alert",
+      "collapseId": "project-orphan-019a0000-0000-5000-8000-00000000000b",
+      "source": {
+        "aps": {
+          "alert": {
+            "title": "Session translation: nobody has this",
+            "body": "Task “task D” has a running session. Nobody can move it now."
+          },
+          "sound": "default",
+          "thread-id": "019a0000-0000-7000-8000-000000000004"
+        },
+        "kind": "project-orphan",
+        "projectID": "019a0000-0000-7000-8000-000000000004"
+      },
+      "data": {
+        "version": "1",
+        "type": "alert",
+        "registrationKey": "019a0000-0000-7000-8000-000000000001",
+        "eventId": "40000000-0000-4000-8000-000000000008",
+        "notificationKey": "project-orphan-019a0000-0000-5000-8000-00000000000b",
+        "sentAt": "2026-11-12T13:00:00.000Z",
+        "payload": "{\"kind\":\"project-orphan\",\"projectID\":\"019a0000-0000-7000-8000-000000000004\",\"title\":\"Session translation: nobody has this\",\"body\":\"Task “task D” has a running session. Nobody can move it now.\",\"threadId\":\"019a0000-0000-7000-8000-000000000004\"}"
+      }
     }
   ]
 }

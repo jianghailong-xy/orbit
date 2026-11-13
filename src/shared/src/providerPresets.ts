@@ -142,9 +142,11 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     baseUrl: 'https://api.openai.com/v1',
     // Without this the generic hint reads "OpenAI (Codex)'s OpenAI-compatible endpoint."
     note: "OpenAI's own API — the endpoint the Codex CLI talks to by default.",
+    // The windows are OpenAI's (400k each). Codex reads its own; Claude Code on this key, through Orbit's gateway,
+    // is told them as CLAUDE_CODE_MAX_CONTEXT_TOKENS, or it would assume 200k (design §4.5).
     models: [
-      { value: 'gpt-5.1', label: 'GPT-5.1' },
-      { value: 'gpt-5.1-mini', label: 'GPT-5.1 mini' },
+      { value: 'gpt-5.1', label: 'GPT-5.1', contextWindow: 400_000 },
+      { value: 'gpt-5.1-mini', label: 'GPT-5.1 mini', contextWindow: 400_000 },
     ],
     defaultModel: 'gpt-5.1',
     modelsFromRuntime: true,

@@ -94,11 +94,17 @@ public struct EvidenceDecisionDecidability: Codable, Equatable, Sendable {
     public let decidable: Bool
     public let refusal: String?
     public let requiredAction: String?
+    /// Who can clear an undecidable row now: its live run (`RUN`), the project's coordinator
+    /// (`COORDINATOR`) or the owner (`OWNER`, offered `EvidenceDecisionRow.ownerAction`). Nil when
+    /// decidable, and from a server older than evidence-always-has-an-addressee §3.
+    public let addressee: String?
 
-    public init(decidable: Bool, refusal: String? = nil, requiredAction: String? = nil) {
+    public init(decidable: Bool, refusal: String? = nil, requiredAction: String? = nil,
+                addressee: String? = nil) {
         self.decidable = decidable
         self.refusal = refusal
         self.requiredAction = requiredAction
+        self.addressee = addressee
     }
 }
 
@@ -167,6 +173,11 @@ public struct EvidenceDecisionRow: Codable, Equatable, Sendable, Identifiable {
     public let citations: [EvidenceDecisionCitation]
     public let decidability: EvidenceDecisionDecidability
     public let independence: EvidenceDecisionIndependence
+    /// The action the owner can take on an undecidable row nobody else can move: `RESTART_TASK`
+    /// (`EvidenceRestart`). Nil on every other row, and from a server older than the field. Kept as
+    /// the server's string rather than an enum, so a value this build does not know reads as no
+    /// action instead of failing the whole queue.
+    public let ownerAction: String?
 
     /// A row is one revision of one task — the pair the decision door's compare-and-set is against.
     public var id: String { "\(taskId)#\(evidenceRevision)" }
@@ -178,7 +189,8 @@ public struct EvidenceDecisionRow: Codable, Equatable, Sendable, Identifiable {
                 claim: String, gaps: [String],
                 citations: [EvidenceDecisionCitation],
                 decidability: EvidenceDecisionDecidability,
-                independence: EvidenceDecisionIndependence) {
+                independence: EvidenceDecisionIndependence,
+                ownerAction: String? = nil) {
         self.taskId = taskId
         self.title = title
         self.projectId = projectId
@@ -192,12 +204,14 @@ public struct EvidenceDecisionRow: Codable, Equatable, Sendable, Identifiable {
         self.citations = citations
         self.decidability = decidability
         self.independence = independence
+        self.ownerAction = ownerAction
     }
 }
 
 /// What THIS session is being asked to decide: `GET /tasks/evidence-decisions/pending`.
 /// Only `pending` is a question addressed to this reader — `waitingOnYou` is a row the door
-/// refuses whatever anybody presses, which is why no card is ever built from it.
+/// refuses whatever anybody presses, which is why no decision card is ever built from it. The one
+/// card drawn from it is Restart the task, for a row that carries `ownerAction` (`EvidenceRestart`).
 public struct EvidenceDecisionQueue: Codable, Equatable, Sendable {
     public let decidingSessionId: String
     /// How many rows are waiting for a decision from this session: the length of `pending`.
@@ -388,6 +402,9 @@ public struct EvidenceDecisionStanding: Equatable, Sendable {
         /// task's latest evidence, so every answer to this one would be refused; the later revision
         /// is its own card.
         case superseded(replacement: EvidenceDecisionRow)
+        /// It cannot be decided, nobody else can move it, and the read offers the owner Restart the
+        /// task for it (`ownerAction`, `EvidenceRestart.rows`). Not answerable: no decision is.
+        case restart(EvidenceDecisionRow)
         /// It is gone and nothing later has taken its place: it was answered.
         case alreadyDecided
         /// The read has not come back.
@@ -409,8 +426,14 @@ public struct EvidenceDecisionStanding: Equatable, Sendable {
     public var row: EvidenceDecisionRow? {
         switch state {
         case .decidable(let row): return row
-        case .sent, .superseded, .alreadyDecided, .unread: return nil
+        case .sent, .superseded, .alreadyDecided, .unread, .restart: return nil
         }
+    }
+
+    /// The row Restart the task is offered on, or nil.
+    public var restartRow: EvidenceDecisionRow? {
+        if case .restart(let row) = state { return row }
+        return nil
     }
 
     /// Whether the door would take an answer from this question.
@@ -506,6 +529,11 @@ public enum EvidenceDecisions {
         }) {
             return .decidable(row)
         }
+        if let row = EvidenceRestart.rows(queue: queue).first(where: { row in
+            row.taskId == taskId && row.evidenceRevision == evidenceRevision
+        }) {
+            return .restart(row)
+        }
         if let sent = sentRows(queue: queue, projectId: projectId).first(where: { row in
             row.taskId == taskId && row.evidenceRevision == evidenceRevision
         }) {
@@ -533,7 +561,7 @@ public enum EvidenceDecisions {
     /// is not a question for the reader.
     public static func isOpen(_ standing: EvidenceDecisionStanding) -> Bool {
         switch standing.state {
-        case .decidable, .unread:                          return true
+        case .decidable, .unread, .restart:                return true
         case .sent, .superseded, .alreadyDecided: return false
         }
     }
@@ -542,7 +570,7 @@ public enum EvidenceDecisions {
     public static func holdsReply(_ standing: EvidenceDecisionStanding) -> Bool {
         switch standing.state {
         case .decidable, .unread:          return true
-        case .sent, .superseded, .alreadyDecided:    return false
+        case .sent, .superseded, .alreadyDecided, .restart:    return false
         }
     }
 
@@ -551,7 +579,7 @@ public enum EvidenceDecisions {
         guard !engaged else { return false }
         switch standing.state {
         case .superseded, .alreadyDecided:           return true
-        case .decidable, .sent, .unread:   return false
+        case .decidable, .sent, .unread, .restart:   return false
         }
     }
 
@@ -639,6 +667,7 @@ public enum EvidenceDecisions {
     public static func heading(_ standing: EvidenceDecisionStanding) -> String {
         switch standing.state {
         case .decidable:                 return askHeading
+        case .restart:                   return EvidenceRestart.heading
         case .unread:                              return unreadHeading
         case .sent, .superseded, .alreadyDecided:  return staleHeading
         }
@@ -656,7 +685,7 @@ public enum EvidenceDecisions {
     public static func staleExplanation(_ standing: EvidenceDecisionStanding) -> String? {
         switch standing.state {
         // Nothing to explain: a question, or a delivery receipt with its own line (`sentLine`).
-        case .decidable, .sent:
+        case .decidable, .sent, .restart:
             return nil
         case .superseded(let replacement):
             var out = "Superseded: this task has submitted version "

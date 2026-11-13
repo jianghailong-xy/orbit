@@ -71,7 +71,7 @@ artifact; its manifest and SHA-256, not a filename, identify it.
 | `apkName`, `apkUrl`, `apkSize`, `sha256` | The release asset and its SHA-256 |
 | `certSha256` | Signing certificate fingerprint (same as `ANDROID_CERT_SHA256`) |
 | `sourceSha` | Built commit |
-| `publishedAt`, `notes` | UTC time; the annotated tag's message (`release.sh` writes `Release vX`), or `Orbit <versionName> for Android.` |
+| `publishedAt`, `notes` | UTC time; the release's `release-notes/<version>.md`, the same human-written notes as the GitHub Release body |
 
 ## Signing configuration (no credentials in this repository)
 

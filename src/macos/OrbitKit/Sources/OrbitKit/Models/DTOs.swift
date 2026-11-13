@@ -507,8 +507,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// minutes. nil from an older control plane, in which case the row shows no elapsed time.
     public let currentTurnStartedAt: String?
     /// When this session was pinned to the top of its list (ISO-8601 string), or nil if unpinned.
-    /// The list payload already sorts pinned sessions first; the row draws a leading accent bar to
-    /// mark the state at rest, mirroring web's `.session-row.pinned`.
+    /// The list payload already sorts pinned sessions first, under a "Pinned" section; as on web,
+    /// the row itself draws no pin mark at rest.
     public let pinnedAt: String?
     /// The session's stored config. A LIVE session's composer shows these (the server's
     /// choice); before the session exists the pills reflect local picks instead.

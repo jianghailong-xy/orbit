@@ -11,6 +11,7 @@ import {
   type ModelProviderRow,
 } from '../providers/custom-provider';
 import { dispatchKeyRow } from '../providers/engine-provider';
+import { withKeyGatewayToken } from '../providers/key-gateway';
 import { isPoolCandidate, poolUnavailableReason } from '../providers/pool-admission';
 import { choosePoolMember } from '../providers/pool-select';
 import { sessionEngine } from '../providers/session-engine';
@@ -107,7 +108,8 @@ export async function sessionProviderExec(
   if (!engine) return { refusal: await unavailable(null) };
   // As on the claim: the key the slug names or a retired name of one, and a legacy built-in dsh
   // session's default DeepSeek key when its workspace holds no key itself.
-  const keyRow = await dispatchKeyRow(tx, session, session.workspace?.env);
+  // Claude Code on an OpenAI key re-spawns on a token minted for this reload, as the claim mints one.
+  const keyRow = await withKeyGatewayToken(tx, session, engine, await dispatchKeyRow(tx, session, session.workspace?.env));
   let poolMember: SubagentPoolMemberChoice | undefined;
   let memberRow: ModelProvider | null = null;
   if (target && !keyRow && !isBuiltinProvider(session.provider, session.providerBuiltin)) {
@@ -119,7 +121,7 @@ export async function sessionProviderExec(
   const customRow = isBuiltinProvider(session.provider, session.providerBuiltin)
     ? keyRow
     : (keyRow ?? memberRow ??
-      (await queue.resolveLoginPool(tx, session, session.provider!)) ??
+      (await queue.resolveLoginPool(tx, session, session.provider!, false, engine)) ??
       (await queue.resolvePoolMember(tx, session, session.provider!)) ??
       (await queue.resolveSharedPool(tx, session, session.provider!)));
   // As on the claim: a Claude pool of the owner's own that none of its members can run re-spawns on

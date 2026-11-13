@@ -42,21 +42,21 @@ class DrawerDestinationTest {
         openDrawer(); row("Tasks").performClick()
         await { compose.onAllNodesWithTag("task:${NavShell.TASK}").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("task:${NavShell.TASK}").performClick()
-        await { compose.onAllNodesWithTag("task-assignee").fetchSemanticsNodes().isNotEmpty() }
+        await { compose.onAllNodesWithTag("task-runs-with").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("Back").assertExists()
         // Tasks is showing: its row is the selected one, and pressing it only closes the drawer.
         openDrawer(); row("Tasks").assertIsSelected().performClick()
-        compose.onNodeWithTag("task-assignee").assertExists()
+        compose.onNodeWithTag("task-runs-with").assertExists()
         compose.onNodeWithContentDescription("Back").assertExists()
         // A workspace's row: its session list, at the root.
         openDrawer(); row("Alpha").performClick()
         compose.onNodeWithContentDescription("Back").assertDoesNotExist()
-        compose.onAllNodesWithTag("task-assignee").assertCountEquals(0)
+        compose.onAllNodesWithTag("task-runs-with").assertCountEquals(0)
         openDrawer(); row("Alpha").assertIsSelected(); row("Tasks").assertIsNotSelected()
         // Back to Tasks: the list itself, not the task that was open there before.
         row("Tasks").performClick()
         await { compose.onAllNodesWithTag("task:${NavShell.TASK}").fetchSemanticsNodes().isNotEmpty() }
-        compose.onAllNodesWithTag("task-assignee").assertCountEquals(0)
+        compose.onAllNodesWithTag("task-runs-with").assertCountEquals(0)
         compose.onNodeWithContentDescription("Back").assertDoesNotExist()
     }
 

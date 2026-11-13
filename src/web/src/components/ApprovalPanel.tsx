@@ -296,6 +296,79 @@ const isProviderWrite = (a: ApprovalInfo): boolean =>
   a.toolName === 'orbit_provider_update' ||
   a.toolName === 'orbit_provider_delete';
 
+/** What the endpoint speaks, by the `runtime` a provider is written with. */
+const PROVIDER_PROTOCOLS: Record<string, string> = {
+  claude: 'Anthropic Messages',
+  codex: 'OpenAI Responses',
+  kimi: 'Moonshot',
+  antigravity: 'Gemini',
+  cursor: 'Cursor User API Key',
+};
+
+export interface ProviderWriteInput {
+  verb: 'add' | 'change' | 'delete';
+  /** The label on an add, the slug otherwise: what the provider is called where the owner sees it. */
+  name: string;
+  /** The fields the write sets, in a fixed order; the key only as being set. */
+  fields: Array<{ caption: string; value: string; mono: boolean }>;
+  /** The model list it writes, or null when it leaves the list alone. */
+  models: Array<{ value: string; label: string; context: string; isDefault: boolean }> | null;
+}
+
+/** 65536 → "64K", 1048576 → "1M": how a context window is said everywhere else. */
+export function contextSize(tokens: number): string {
+  if (tokens >= 1_048_576 && tokens % 1_048_576 === 0) return `${tokens / 1_048_576}M`;
+  if (tokens >= 1_000_000) return `${+(tokens / 1_000_000).toFixed(1)}M`;
+  if (tokens % 1024 === 0) return `${tokens / 1024}K`;
+  if (tokens >= 1000) return `${Math.round(tokens / 1000)}K`;
+  return String(tokens);
+}
+
+/**
+ * A provider write as the card reads it: the fields by name rather than as the JSON the runner sent.
+ * The runner files only what the write sets (`providerCard`), so an update shows its changes and
+ * nothing it leaves alone.
+ */
+export function providerWriteInput(a: ApprovalInfo): ProviderWriteInput | null {
+  if (!isProviderWrite(a)) return null;
+  const obj = (a.input ?? {}) as Record<string, unknown>;
+  const text = (v: unknown): string => (typeof v === 'string' ? v : '');
+  const verb = a.toolName === 'orbit_provider_create' ? 'add'
+    : a.toolName === 'orbit_provider_update' ? 'change' : 'delete';
+  const fields: ProviderWriteInput['fields'] = [];
+  const known = new Set(['slug', 'models']);
+  const field = (key: string, caption: string, value: string, mono: boolean): void => {
+    known.add(key);
+    if (key in obj) fields.push({ caption, value, mono });
+  };
+  // On an add the label is the heading; on a change it is one of the things being written.
+  if (verb === 'add') known.add('label');
+  else field('label', 'Label', text(obj.label), false);
+  const runtime = text(obj.runtime);
+  field('runtime', 'Protocol', PROVIDER_PROTOCOLS[runtime] ? `${PROVIDER_PROTOCOLS[runtime]} (${runtime})` : runtime, false);
+  field('baseUrl', 'Base URL', text(obj.baseUrl), true);
+  field('apiKey', 'API key', 'Set — not shown', false);
+  field('defaultModel', 'Default model', text(obj.defaultModel), true);
+  // Anything a later runner sends that this card has no name for is still shown, never dropped.
+  for (const [key, value] of Object.entries(obj)) {
+    if (known.has(key)) continue;
+    fields.push({ caption: key, value: typeof value === 'string' ? value : JSON.stringify(value), mono: true });
+  }
+  const models = Array.isArray(obj.models)
+    ? obj.models.map((m) => {
+        const row = (m ?? {}) as Record<string, unknown>;
+        const value = text(row.value);
+        return {
+          value,
+          label: text(row.label),
+          context: typeof row.contextWindow === 'number' ? `${contextSize(row.contextWindow)} context` : '',
+          isDefault: value !== '' && value === text(obj.defaultModel),
+        };
+      })
+    : null;
+  return { verb, name: verb === 'add' ? text(obj.label) : text(obj.slug), fields, models };
+}
+
 /**
  * Orbit's asks before a session deletes one of the account's runners or workspaces (runner_delete,
  * agent_delete). The asker sends only the id: what the card shows is the server's reading of what
@@ -630,6 +703,7 @@ export function ApprovalPanel({
   const mergeCheck = mergeCheckChangeInput(approval);
   const deleting = deleteInput(approval, Date.now());
   const writing = workspaceWriteInput(approval);
+  const provider = providerWriteInput(approval);
   // What the composer's bar would name as the thing not being done: the proposal's own subject, and
   // never the tool's name, which says nothing about what is not being created. Null for everything
   // that is not one of Orbit's own asks — a plan, a tool call — which keeps its one-press Reject.
@@ -672,7 +746,9 @@ export function ApprovalPanel({
                         ? `🗑 Confirm: delete ${deleting.noun} “${deleting.name || `this ${deleting.noun}`}”?`
                         : writing
                           ? `⚙️ Confirm: ${writing.creating ? 'create' : 'change'} workspace “${writing.name || 'this workspace'}”?`
-                          : `🔓 Approve tool call: ${approval.toolName}`;
+                          : provider
+                            ? `🔌 Confirm: ${provider.verb} provider${provider.name ? ` “${provider.name}”` : ''}?`
+                            : `🔓 Approve tool call: ${approval.toolName}`;
   return (
     <ReviewCard enabled={compact} title={heading}
       summary={markdownToPlainLines(plan || create?.prose || '')}
@@ -686,7 +762,7 @@ export function ApprovalPanel({
         {heading}
       </div>
       {/* A create is read top to bottom like a plan, so it grows instead of scrolling. */}
-      <div className={`approval-body${plan || create || blocker || skipCheck || mergeCheck || deleting || writing ? ' is-plan' : ''}`}>
+      <div className={`approval-body${plan || create || blocker || skipCheck || mergeCheck || deleting || writing || provider ? ' is-plan' : ''}`}>
         {plan ? (
           <Markdown
             remarkPlugins={[remarkGfm]}
@@ -712,6 +788,8 @@ export function ApprovalPanel({
           <DeleteBody input={deleting} />
         ) : writing ? (
           <WorkspaceWriteBody input={writing} />
+        ) : provider ? (
+          <ProviderWriteBody input={provider} />
         ) : (
           <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
         )}
@@ -743,7 +821,9 @@ export function ApprovalPanel({
                           ? 'Delete it'
                           : writing
                             ? (writing.creating ? 'Create it' : 'Save changes')
-                            : 'Approve'}
+                            : provider
+                              ? PROVIDER_ACTIONS[provider.verb]
+                              : 'Approve'}
           {keys && <span className="approval-kbd">{ENTER_HINT}</span>}
         </CardActionButton>
         {/* A second yes, beside the first rather than in its place: the press above stays the
@@ -963,6 +1043,54 @@ function MergeCheckChangeBody({ input }: { input: MergeCheckChangeInput }): JSX.
       {input.timeout !== null && (
         <p className="dag-approval-caption">killed after {input.timeout}s</p>
       )}
+    </div>
+  );
+}
+
+/** The yes on a provider write's card. The native card says the same (`ProviderWritePreview.action`). */
+export const PROVIDER_ACTIONS: Record<ProviderWriteInput['verb'], string> = {
+  add: 'Add it',
+  change: 'Save changes',
+  delete: 'Delete it',
+};
+export const PROVIDER_CHANGE_NOTE = 'Only the fields shown change. Everything else stays as it is.';
+export const PROVIDER_DELETE_NOTE = 'The provider and its key are removed from your account.';
+export const PROVIDER_MODELS_REPLACE = 'Models · replaces the current list';
+
+/** A provider as it would be written: the fields by name, then the model list one model a row. */
+function ProviderWriteBody({ input }: { input: ProviderWriteInput }): JSX.Element {
+  return (
+    <div className="dag-approval">
+      {input.fields.length > 0 && (
+        <dl className="provider-write-fields">
+          {input.fields.map(({ caption, value, mono }) => (
+            <div key={caption}>
+              <dt>{caption}</dt>
+              <dd>{mono ? <code>{value}</code> : value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {input.models && (
+        <>
+          <p className="dag-approval-caption">
+            {input.verb === 'change' ? PROVIDER_MODELS_REPLACE : 'Models'}
+          </p>
+          <ul className="dag-approval-changes provider-write-models">
+            {input.models.map((m) => (
+              <li key={m.value}>
+                <span>
+                  <code>{m.value}</code>
+                  {m.isDefault && <span className="provider-write-default">default</span>}
+                </span>
+                <span className="provider-write-model">{[m.label, m.context].filter(Boolean).join(' · ')}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {input.verb === 'change' && <p className="dag-approval-foot">{PROVIDER_CHANGE_NOTE}</p>}
+      {input.verb === 'delete' && <p className="dag-approval-note">{PROVIDER_DELETE_NOTE}</p>}
     </div>
   );
 }

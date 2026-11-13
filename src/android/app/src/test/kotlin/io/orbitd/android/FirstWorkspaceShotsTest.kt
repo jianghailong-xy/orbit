@@ -13,7 +13,7 @@ import io.orbitd.android.core.net.*
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.EventTransport
 import io.orbitd.android.core.realtime.SseFrame
-import io.orbitd.android.management.Infrastructure
+import io.orbitd.android.management.MachinesAndModels
 import io.orbitd.android.navigation.ObjectId
 import java.io.File
 import java.time.Instant
@@ -220,7 +220,7 @@ class FirstWorkspaceShotsTest {
         signIn()
 
         // Rule 11: 0 workspaces and 0 online machines -> lands on Machines & models.
-        awaitText(Infrastructure.MACHINES)
+        awaitText(MachinesAndModels.MACHINES)
         awaitText("orbit@austin")
 
         // Open the runner's page: Workspaces section shows machineEmptyHere + Start a session, and never "on the web".
@@ -234,7 +234,7 @@ class FirstWorkspaceShotsTest {
     }
 
     private fun openTheMachineFromMachinesAndModels() {
-        awaitText(Infrastructure.MACHINES)
+        awaitText(MachinesAndModels.MACHINES)
         compose.onNode(hasText("orbit@austin") and hasClickAction()).performScrollTo().performClick()
         awaitText(MachineSetupCopy.START_A_SESSION)
         compose.onNode(hasText(MachineSetupCopy.START_A_SESSION) and hasClickAction()).performScrollTo().performClick()
