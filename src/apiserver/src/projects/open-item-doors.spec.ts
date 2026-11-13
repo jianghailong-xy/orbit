@@ -36,7 +36,10 @@ import {
  */
 
 const SRC = path.resolve(__dirname, '../../src');
-const MCP_SOURCE = path.resolve(SRC, '../../runner-go/mcp.go');
+const MCP_SOURCES = [
+  path.resolve(SRC, '../../runner-go/mcp.go'),
+  path.resolve(SRC, '../../runner-go/operation_catalog.go'),
+];
 const CONTROLLER_FILES = [
   'runner-api/runner-projects.controller.ts',
   'runner-api/runner-tasks.controller.ts',
@@ -320,8 +323,8 @@ test('every cell’s coordinator message names only the doors that cell holds', 
   assert.ok(named > 10, 'the message census named almost nothing — it is not reading the messages');
 });
 
-test('every named implemented MCP door exists in runner-go/mcp.go', () => {
-  const names = mcpNames(readFileSync(MCP_SOURCE, 'utf8'));
+test('every named implemented MCP door exists in the runner MCP catalogue', () => {
+  const names = mcpNames(MCP_SOURCES.map((file) => readFileSync(file, 'utf8')).join('\n'));
   const missing = new Set<string>();
   const doors = [
     ...OPEN_ITEM_DOOR_TABLE.flatMap((cell) => cell.doors),
