@@ -42,13 +42,13 @@ controllers and their decorators, so it lists what the server mounts, not what a
 
 | Caller | Routes |
 | --- | --- |
-| `public` | 30 |
-| `user` | 410 |
+| `public` | 31 |
+| `user` | 416 |
 | `admin` | 28 |
-| `runner` | 173 |
+| `runner` | 176 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **645** |
+| **Total** | **655** |
 
 ## Public routes
 
@@ -77,6 +77,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/shared/:token` | path `token`; query `limit`, `maxPayload`, `preview` | `SharedController.get` |
 | `GET` | `/api/shared/:token/artifacts` | path `token`; query `path` | `SharedController.artifact` |
 | `GET` | `/api/shared/:token/attachments/:id` | path `id`, `token` | `SharedController.attachment` |
+| `GET` | `/api/shared/:token/card` | path `token` | `SharedController.card` |
 | `GET` | `/api/shared/:token/docs/:slug` | path `slug`, `token` | `SharedController.wikiDoc` |
 | `GET` | `/api/shared/:token/events` | path `token`; query `after`, `before`, `limit`, `maxPayload` | `SharedController.events` |
 | `GET` | `/api/shared/:token/events/:seq` | path `seq`, `token` | `SharedController.event` |
@@ -103,6 +104,9 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `DELETE` | `/api/agents/:id` | path `id` | `WorkspacesController.remove` |
 | `GET` | `/api/agents/:id` | path `id` | `WorkspacesController.get` |
 | `PATCH` | `/api/agents/:id` | body `UpdateWorkspaceDto`; path `id` | `WorkspacesController.update` |
+| `GET` | `/api/agents/:id/main-checkout` | path `id`; query `diff` | `WorkspacesController.mainCheckoutRead` |
+| `POST` | `/api/agents/:id/main-checkout/actions` | body `Object`; path `id` | `WorkspacesController.mainCheckoutAct` |
+| `POST` | `/api/agents/:id/main-checkout/actions/:requestId/cancel` | path `id`, `requestId` | `WorkspacesController.mainCheckoutCancel` |
 | `GET` | `/api/agents/:id/permission-rules` | path `id` | `WorkspacesController.permissionRules` |
 | `DELETE` | `/api/agents/:id/permission-rules/:ruleId` | path `id`, `ruleId` | `WorkspacesController.removePermissionRule` |
 | `POST` | `/api/agents/:id/repo-cleanup` | path `id` | `WorkspacesController.cleanUpRepo` |
@@ -495,6 +499,9 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `DELETE` | `/api/workspaces/:id` | path `id` | `WorkspacesController.remove` |
 | `GET` | `/api/workspaces/:id` | path `id` | `WorkspacesController.get` |
 | `PATCH` | `/api/workspaces/:id` | body `UpdateWorkspaceDto`; path `id` | `WorkspacesController.update` |
+| `GET` | `/api/workspaces/:id/main-checkout` | path `id`; query `diff` | `WorkspacesController.mainCheckoutRead` |
+| `POST` | `/api/workspaces/:id/main-checkout/actions` | body `Object`; path `id` | `WorkspacesController.mainCheckoutAct` |
+| `POST` | `/api/workspaces/:id/main-checkout/actions/:requestId/cancel` | path `id`, `requestId` | `WorkspacesController.mainCheckoutCancel` |
 | `GET` | `/api/workspaces/:id/permission-rules` | path `id` | `WorkspacesController.permissionRules` |
 | `DELETE` | `/api/workspaces/:id/permission-rules/:ruleId` | path `id`, `ruleId` | `WorkspacesController.removePermissionRule` |
 | `POST` | `/api/workspaces/:id/repo-cleanup` | path `id` | `WorkspacesController.cleanUpRepo` |
@@ -559,6 +566,8 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/link-token` | body `Object` | `RunnerLinkTokenController.issue` |
 | `POST` | `/api/runner/link/welcome` | body `Object` | `RunnerLinkWelcomeController.welcome` |
 | `POST` | `/api/runner/login-result` | body `Object` | `RunnerApiController.loginResult` |
+| `POST` | `/api/runner/main-checkout/:id/result` | body `Object`; path `id` | `RunnerApiController.mainCheckoutResult` |
+| `POST` | `/api/runner/main-checkout/:id/snapshot` | body `Object`; path `id` | `RunnerApiController.mainCheckoutSnapshot` |
 | `GET` | `/api/runner/me` | — | `RunnerApiController.me` |
 | `POST` | `/api/runner/notify` | body `NotifyDto` | `RunnerNotifyController.notify` |
 | `POST` | `/api/runner/owner-requests` | body `FileOwnerRequestDto` | `RunnerOwnerRequestsController.file` |
@@ -653,6 +662,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/sessions/import` | body `Object` | `RunnerSessionsController.importSession` |
 | `GET` | `/api/runner/sessions/reclaim` | — | `RunnerApiController.reclaim` |
 | `GET` | `/api/runner/sessions/search` | query `limit`, `q` | `RunnerSessionsController.searchSessions` |
+| `POST` | `/api/runner/sessions/takeover-leases` | body `Object` | `RunnerApiController.takeoverLeasesBatch` |
 | `POST` | `/api/runner/sessions/worktrees-removable` | body `Object` | `RunnerApiController.worktreesRemovable` |
 | `GET` | `/api/runner/task-lists` | — | `RunnerTasksController.listLists` |
 | `POST` | `/api/runner/task-lists` | body `CreateTaskListDto` | `RunnerTasksController.createList` |
