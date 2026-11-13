@@ -131,6 +131,43 @@ final class ProjectCrossingsTests: XCTestCase {
         XCTAssertThrowsError(try JSONDecoder().decode(ProjectCrossing.self, from: Data(json.utf8)))
     }
 
+    /// A move that takes its task out of its project names no target: the list around it still
+    /// decodes, the "to" end reads `no project`, and confirming says no project counts it any more.
+    func testAMoveToNoProjectDecodesAndReadsNoProject() throws {
+        let moveOut = #"{"id":"34bOutRow","publicId":"34bOutRow","fromProjectId":"34bFrom","fromProjectPublicId":"34bFrom","#
+            + #""toProjectId":null,"toProjectPublicId":null,"kind":"MOVE_TASK","subjectTaskId":"34bMovedTask","#
+            + #""crossingKey":"k","state":"PENDING","title":"Watchdog","requestedAt":"2026-10-07T09:00:00.000Z","#
+            + #""fromProject":{"title":"Coordinator control loop","status":"OPEN"},"toProject":null,"#
+            + #""subjectTask":{"id":"34bMovedTask","title":"Wire the drain watchdog"},"requestedCriterion":null}"#
+        let absent = #"{"id":"34bOutRow2","fromProjectId":"34bFrom","toProjectId":null,"kind":"MOVE_TASK","#
+            + #""crossingKey":"k2","state":"APPLIED","title":"t","requestedAt":"2026-10-07T08:00:00.000Z"}"#
+        let list = String(Self.list.trimmingCharacters(in: .whitespacesAndNewlines).dropLast()) + ",\(moveOut),\(absent)]"
+        let rows = try JSONDecoder().decode([ProjectCrossing].self, from: Data(list.utf8))
+        XCTAssertEqual(rows.count, 5)
+        XCTAssertFalse(rows[0].isToNoProject)
+
+        let row = rows[3]
+        XCTAssertTrue(row.isMove)
+        XCTAssertTrue(row.isToNoProject)
+        XCTAssertNil(row.toProjectId)
+        XCTAssertNil(row.toProjectPublicId)
+        XCTAssertNil(row.toProject)
+        XCTAssertNil(row.requestedCriterion)
+        XCTAssertTrue(rows[4].isToNoProject)
+        XCTAssertEqual(ProjectCrossings.toID(rows[4]), "no project")
+
+        let approve = ProjectCrossings.prompt(row, .approve)
+        XCTAssertEqual(approve.to, "no project")
+        XCTAssertEqual(approve.consequence,
+                       "Confirming takes the task out of this project; no project's acceptance counts it any more.")
+        XCTAssertEqual(ProjectCrossings.question(approve),
+                       "Approve moving “Wire the drain watchdog” from Coordinator control loop to no project?")
+        XCTAssertEqual(ProjectCrossings.prompt(row, .deny).consequence, ProjectCrossings.moveDenyConsequence)
+        XCTAssertEqual(ProjectCrossings.meaning(row), ProjectCrossings.moveStateMeaning["PENDING"])
+        // A move into a project keeps its own words.
+        XCTAssertEqual(ProjectCrossings.prompt(rows[0], .approve).consequence, ProjectCrossings.moveApproveConsequence)
+    }
+
     // MARK: which rows can be answered
 
     func testOnlyAPendingCrossingCanBeAnswered() throws {

@@ -6303,7 +6303,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     sessionId: string,
   ): Promise<never> {
     const from = task.projectId;
-    const to = dto.projectId as string;
+    // null: take the task out of every project. The confirmation files it under none.
+    const to = (dto.projectId ?? null) as string | null;
     const extra = Object.entries(dto)
       .filter(([field, value]) => value !== undefined && !MOVE_REQUEST_FIELDS.has(field))
       .map(([field]) => field)
@@ -6324,7 +6325,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         'a blank key names no criterion. Leave criterionKey out to ask for the move without one, '
         + 'or pass one of the keys project_get returns for the project the task would move into.'));
     }
-    await this.assertOwnedProject(ownerId, to);
+    if (criterionKey && to === null) {
+      throw new BadRequestException(this.criterionUnknown(JSON.stringify(criterionKey),
+        'a task taken out of every project serves no project\'s criterion. Leave criterionKey out '
+        + 'to ask for it to be taken out, or name the project it should move into instead.'));
+    }
+    if (to !== null) await this.assertOwnedProject(ownerId, to);
 
     const write: ScopeWriteInput = {
       operation: 'HANDOFF_TASK',
@@ -6351,7 +6357,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
     // Resolved in the target and nowhere else, by the rule every declaration is resolved by, and
     // refused as the malformed request it is rather than as an authority refusal.
-    const criterion = criterionKey
+    const criterion = criterionKey && to
       ? (await this.resolveCriterionDeclarations(ownerId, [{ projectId: to, criterionKey }])
           .catch((error: unknown) => {
             if (error instanceof ForbiddenException) throw new BadRequestException(error.getResponse());
@@ -6588,12 +6594,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // work, and gives up only a task none of its criteria count. What the task serves is read
       // under this transaction's lock on it, so a declaration made while the request waited counts.
       const ends = await tx.project.findMany({
-        where: { id: { in: [from, to] }, ownerId },
+        where: { id: { in: orderedIds([from, to]) }, ownerId },
         select: { id: true, status: true },
       });
-      // A project this read does not find is not open: fail closed, as R8 does.
-      const statusOf = (id: string): HandoffProjectFacts =>
-        ({ status: ends.find((end) => end.id === id)?.status ?? 'CANCELLED' });
+      // A project this read does not find is not open: fail closed, as R8 does. A move out of
+      // every project lands nowhere, and nowhere is always open to take it.
+      const statusOf = (id: string | null): HandoffProjectFacts =>
+        id === null
+          ? { status: 'OPEN' }
+          : { status: ends.find((end) => end.id === id)?.status ?? 'CANCELLED' };
       const acceptance = decideHandoffAcceptance(statusOf(from), statusOf(to), {
         servesSourceCriterion: await this.handoffs.servesCriterionOf(tx, ownerId, taskId, from),
       });
@@ -6603,7 +6612,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             ? `task ${uuidToBase62(taskId)} serves an acceptance criterion of project `
               + `${uuidToBase62(from)}, which is settled, and a settled project gives up only work `
               + 'none of its criteria count'
-            : `project ${uuidToBase62(to)} is not open, and a settled project takes no work until `
+            : `project ${to ? uuidToBase62(to) : '(none)'} is not open, and a settled project takes no work until `
               + 'it is reopened');
       }
       await this.handoffs.assertMoveNotLanding(tx, ownerId, taskId, {
@@ -6612,7 +6621,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       });
       // What the task will declare over there: the criterion the request named, at its revision
       // NOW — the same snapshot `resolveCriterionDeclarations` takes — read under the target's lock.
-      const criterion = row.requestedCriterionDefinitionId
+      const criterion = row.requestedCriterionDefinitionId && to
         ? await tx.projectAcceptanceCriterionDefinition.findFirst({
             where: { id: row.requestedCriterionDefinitionId, projectId: to, project: { ownerId } },
             select: { id: true, revision: true },
@@ -6620,7 +6629,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         : null;
       if (row.requestedCriterionDefinitionId && !criterion) {
         throw refuse('MOVE_TASK_CRITERION_GONE', 'DENY_THE_REQUEST',
-          `the criterion this request would have the task serve in project ${uuidToBase62(to)} `
+          `the criterion this request would have the task serve in project ${to ? uuidToBase62(to) : '(none)'} `
           + `(${criterionKeyOf(row.requestedCriterionDefinitionId)}) is no longer one that project `
           + 'states');
       }
@@ -6713,13 +6722,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     await this.openItems?.deliverForTasks([taskId]);
     // And the evidence it brought along, which the project it is in now decides (the same decision
     // that moves the run with it): handed to that project's decider, or — when the move left it
-    // quoting a standard the task is no longer held to — sent back to be filed again.
-    await this.handOverMovedEvidence(ownerId, {
-      taskId,
-      fromProjectId: from,
-      toProjectId: to,
-      withdrawnCriterionDefinitionId: moved.criterionDefinitionId,
-    });
+    // quoting a standard the task is no longer held to — sent back to be filed again. A task taken
+    // out of every project has no project to decide it, and is left as the owner's own unfiling
+    // leaves it.
+    if (to) {
+      await this.handOverMovedEvidence(ownerId, {
+        taskId,
+        fromProjectId: from,
+        toProjectId: to,
+        withdrawnCriterionDefinitionId: moved.criterionDefinitionId,
+      });
+    }
   }
 
   /**
@@ -9486,8 +9499,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // finds the one already waiting) and moves nothing. Only a session asks: the owner's own move
     // is §4 R1's and goes on below exactly as before, `handoff` or not. Only from a project, since
     // a move leaves one. And only while the contract is enforced: in `observe` nothing is refused,
-    // so the write proceeds as it did before this door existed.
-    if (actingSessionId && dto.handoff != null && typeof dto.projectId === 'string'
+    // so the write proceeds as it did before this door existed. `projectId: null` with a `handoff`
+    // asks for the task to be taken out of its project (account owner, 2026-11-13): §4 R4 refuses
+    // a session that writes that, and this is how it asks instead.
+    if (actingSessionId && dto.handoff != null
+      && (typeof dto.projectId === 'string' || dto.projectId === null)
       && before.projectId && dto.projectId !== before.projectId
       && projectScopeMode() === 'enforce') {
       return this.requestMove(ownerId, { ...before, projectId: before.projectId }, dto, actingSessionId);

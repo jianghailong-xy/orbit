@@ -243,7 +243,9 @@ const REFUSAL_PROSE: Readonly<Record<string, string>> = {
     'File this work under the project this session coordinates, or declare the crossing and ask '
     + 'for it.',
   NAME_OWNING_PROJECT:
-    'Somebody has to say which project owns this work; a coordinator may not pick one for it.',
+    'Somebody has to say which project owns this work; a coordinator may not pick one for it. '
+    + 'To take an existing task out of its project, send the same write with a handoff and a '
+    + 'reason: that asks the account owner, whose confirmation takes it out.',
   REOPEN_PROJECT_FIRST:
     'That project is settled. It has to be reopened — which starts a new acceptance epoch — '
     + 'before it can take new work. ' + ACCEPTANCE_FINDING_ROUTING,
