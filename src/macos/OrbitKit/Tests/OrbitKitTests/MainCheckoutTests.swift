@@ -20,7 +20,8 @@ final class MainCheckoutTests: XCTestCase {
             if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
             directory.deleteLastPathComponent()
         }
-        throw XCTSkip("\(relative) not found above \(#filePath)")
+        throw NSError(domain: "MainCheckoutTests", code: 1,
+                      userInfo: [NSLocalizedDescriptionKey: "\(relative) was not found above \(#filePath)"])
     }
 
     private static func fixture() throws -> [String: Any] {
