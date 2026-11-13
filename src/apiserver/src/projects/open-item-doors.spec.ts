@@ -62,6 +62,11 @@ function mcpNames(source: string): Set<string> {
   return new Set([...source.matchAll(/"name"\s*:\s*"([^"]+)"/g)].map((match) => match[1]));
 }
 
+/** The MCP door names, read from every file the catalogue may live in. */
+function mcpNamesFromSources(): Set<string> {
+  return mcpNames(MCP_SOURCES.map((file) => readFileSync(file, 'utf8')).join('\n'));
+}
+
 /** Read the route metadata as Nest declares it: class prefix plus method decorator. */
 function routeMetadata(source: string): string[] {
   const prefixes = [...source.matchAll(/@Controller\(\s*['"]([^'"]+)['"]\s*\)/g)]
@@ -324,7 +329,7 @@ test('every cell’s coordinator message names only the doors that cell holds', 
 });
 
 test('every named implemented MCP door exists in the runner MCP catalogue', () => {
-  const names = mcpNames(MCP_SOURCES.map((file) => readFileSync(file, 'utf8')).join('\n'));
+  const names = mcpNamesFromSources();
   const missing = new Set<string>();
   const doors = [
     ...OPEN_ITEM_DOOR_TABLE.flatMap((cell) => cell.doors),
@@ -447,7 +452,7 @@ function executableByRegistry(routes: Set<string>, names: Set<string>) {
 
 test('every action a cell projects is a door its holder can really call', () => {
   const routes = allRouteMetadata();
-  const names = mcpNames(readFileSync(MCP_SOURCE, 'utf8'));
+  const names = mcpNamesFromSources();
   const canExecute = executableByRegistry(routes, names);
   for (const cell of OPEN_ITEM_DOOR_TABLE) {
     const input = rowForCell(cell);
@@ -475,7 +480,7 @@ test('every action a cell projects is a door its holder can really call', () => 
  */
 test('a failed task’s RETRY is the run-again door its holder owns', () => {
   const routes = allRouteMetadata();
-  const names = mcpNames(readFileSync(MCP_SOURCE, 'utf8'));
+  const names = mcpNamesFromSources();
   const canExecute = executableByRegistry(routes, names);
   const cells = OPEN_ITEM_DOOR_TABLE.filter((cell) => cell.todoType === 'TASK_FAILED');
   assert.ok(cells.length > 0);
@@ -512,7 +517,7 @@ function withLandingSession(row: ReturnType<typeof sampleFor>) {
 
 test('OPEN_LANDING is the last action of every integration cell that names a landing session, for both holders', () => {
   const routes = allRouteMetadata();
-  const names = mcpNames(readFileSync(MCP_SOURCE, 'utf8'));
+  const names = mcpNamesFromSources();
   const canExecute = executableByRegistry(routes, names);
   // An observation opens no landing session (§10.6, A-Q23), so the item its failures open never
   // names one: its cell is held to having no landing door at all, below.
@@ -582,7 +587,7 @@ test('a row that names no landing session, and a kind that lands nothing, never 
  */
 test('X-E5’s cell leads with ABANDON and appends OPEN_LANDING when the landing session is named', () => {
   const routes = allRouteMetadata();
-  const names = mcpNames(readFileSync(MCP_SOURCE, 'utf8'));
+  const names = mcpNamesFromSources();
   const canExecute = executableByRegistry(routes, names);
   const cell = OPEN_ITEM_DOOR_TABLE.find((candidate) =>
     candidate.todoType === 'LANDING_LEASE_EXPIRED')!;
@@ -710,7 +715,7 @@ test('the landing session, round and moved commits move no delivery text', () =>
  */
 test('§10.7 §10.8: LANDING_UNOBSERVED has a cell for each holder, with the doors that end it and none that close it by hand', () => {
   const routes = allRouteMetadata();
-  const names = mcpNames(readFileSync(MCP_SOURCE, 'utf8'));
+  const names = mcpNamesFromSources();
   const canExecute = executableByRegistry(routes, names);
   const cells = OPEN_ITEM_DOOR_TABLE.filter((cell) => (cell.todoType as string) === 'LANDING_UNOBSERVED');
   assert.deepEqual(cells.map((cell) => cell.assignee).sort(), ['COORDINATOR', 'OWNER']);
@@ -781,7 +786,7 @@ test('§10.7 §10.8: LANDING_UNOBSERVED has a cell for each holder, with the doo
 
 test('§10.7 §10.8: LANDED_WITHOUT_CONFIRMATION has one cell, the owner\'s, led by Accept — its one resolving door', () => {
   const routes = allRouteMetadata();
-  const names = mcpNames(readFileSync(MCP_SOURCE, 'utf8'));
+  const names = mcpNamesFromSources();
   const canExecute = executableByRegistry(routes, names);
   const cells = OPEN_ITEM_DOOR_TABLE.filter((cell) => (cell.todoType as string) === 'LANDED_WITHOUT_CONFIRMATION');
   assert.equal(cells.length, 1, 'it is the owner\'s from birth: one cell');
@@ -822,7 +827,7 @@ test('§10.7 §10.8: LANDED_WITHOUT_CONFIRMATION has one cell, the owner\'s, led
  */
 test('§10.6 O-J4 §10.8: IE:observe has a cell for each holder whose one resolving door is integration_observe, and its message names it', () => {
   const routes = allRouteMetadata();
-  const names = mcpNames(readFileSync(MCP_SOURCE, 'utf8'));
+  const names = mcpNamesFromSources();
   const canExecute = executableByRegistry(routes, names);
   // The payload `observationFailed` writes (R29-5).
   const payload = {
