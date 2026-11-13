@@ -2765,11 +2765,20 @@ private struct EvidenceDecisionReceiptCard: View {
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let note = decided.note, !note.isEmpty {
-                DisclosureToggle(open: noteOpen,
-                                 label: EvidenceDecisions.noteToggle(decided, open: noteOpen)) {
+                // Not `DisclosureToggle`: its 44pt row left the folded record with a blank band
+                // under the words, and the record is meant to be three lines.
+                Button {
+                    PlatformHaptics.tap()
                     noteOpen.toggle()
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(EvidenceDecisions.noteToggle(decided, open: noteOpen))
+                        Image(systemName: noteOpen ? "chevron.up" : "chevron.down").font(.orbitMeta)
+                    }
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .contentShape(Rectangle())
                 }
-                .foregroundStyle(.secondary)
+                .buttonStyle(.plain)
                 if noteOpen {
                     Text("\(EvidenceDecisions.noteLabel(decided))：\(note)")
                         .font(.orbitLabel).foregroundStyle(.secondary)
