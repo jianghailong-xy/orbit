@@ -8,6 +8,8 @@ demo team's — names, folders, and repository paths are examples, not something
 
 Use it beside the [clean-machine first-run checklist](first-run.md), which has the exact commands and
 an evidence table to fill in. This page says what you are looking at and what each screen decides.
+The [current clean-host record](evidence/clean-install-2026-11-13.md) records the isolated deployment,
+Runner heartbeat and first completed Task, including the checks and limitations of that run.
 
 ## 1. Create the first administrator
 

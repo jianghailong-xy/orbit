@@ -130,8 +130,9 @@ selected runtime can authenticate. Runtime credentials stay on the runner for th
   before treating this deployment as ready for valuable work.
 
 A provider quota/authentication failure is a failed or blocked task check. Record it and rerun after
-resolving it; keep the existing [clean-host smoke record](evidence/clean-install-2026-09-29.md) as
-historical evidence, not proof that your first task passed.
+resolving it. The [current clean-host record](evidence/clean-install-2026-11-13.md) documents a completed
+first task and its limitations; the [2026-09-29 record](evidence/clean-install-2026-09-29.md) remains
+historical evidence of the earlier quota-blocked attempt.
 
 ## Evidence to retain
 
