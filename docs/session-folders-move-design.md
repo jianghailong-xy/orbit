@@ -8,7 +8,7 @@
 - iOS 会话列表左滑新增 **Share** 和 **Move**，与原有的 **Delete** 并排。
 - 新概念 **文件夹**：属于某个 Workspace，一个会话最多在一个文件夹里。
 - **Move** 一个入口两种去处：移到当前 Workspace 的某个文件夹；或者搬到其他 Workspace（可同时选那边的文件夹）。
-- iOS 和 web 都有文件夹和 Move（web 的做法见第 7 节）。macOS 共用 SwiftUI：列表和 iPad 一样显示文件夹行、可收起的 Pinned（2026-11-13 起，和 web 一致），文件夹页在会话列里打开，可右键改名/删除；行的右键菜单有 Move…（同一个 Move 面板，含搬到其他 Workspace），工具栏有 New Folder…。
+- iOS 和 web 都有文件夹和 Move（web 的做法见第 7 节）。macOS 共用 SwiftUI：列表和 iPad 一样显示文件夹行、可收起的 Pinned（2026-11-13 起，和 web 一致），文件夹页在会话列里打开，可右键改名/删除；行的右键菜单有 Move…（同一个 Move 面板，含搬到其他 Workspace），工具栏有 New Folder…；会话页工具栏在 Share 旁有 Move…，区域卡片也有 Move。
 
 ## 2. 左滑与长按
 
@@ -173,7 +173,6 @@ iOS 会话详情右上角使用 `⋯` 菜单：Share… / Copy Link；Rename… 
 
 - 代码跟着搬（推送分支、跨机器传改动）。
 - Codex 跨 runner、Kimi、OpenCode 的搬家。
-- macOS 会话页（console）里的 Move 入口（⋯ 菜单、区域卡片）；列表的 Move 和文件夹显示 2026-11-13 已补。web 已经补齐，见第 7 节。
 
 ## 6. 分两期做
 

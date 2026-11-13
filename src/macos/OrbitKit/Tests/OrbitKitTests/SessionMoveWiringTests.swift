@@ -221,6 +221,18 @@ final class SessionMoveWiringTests: XCTestCase {
         }
         let model = code(try appSource("AgentsModel.swift"))
         XCTAssertEqual(try branches(of: "func applyMovedSession(_ id: String, folderID: String?)", in: model), [])
+
+        // The session page moves too: the iPhone's ⋯ menu item is the Mac's toolbar button beside
+        // Share, and the region card's Move and the panel's sheet are every platform's.
+        let console = code(try appSource("Views/Console/ConsoleView.swift"))
+        for part in ["@State private var movingSession: Session?", ".sheet(item: $movingSession) { session in",
+                     "private var moveFromCard: (() -> Void)? {", "private func openMove(_ session: Session) {",
+                     "private func sessionWorkspace(_ session: Session) -> Agent? {"] {
+            XCTAssertEqual(try branches(of: part, in: console), [], "`\(part)` is every platform's")
+        }
+        XCTAssertFalse(try slice(console, from: "private var moveFromCard: (() -> Void)? {", to: "\n    }").contains("#if"))
+        let macMove = "Button { openMove(session) } label: {\n                        Label(\"Move…\", systemImage: \"folder\")"
+        XCTAssertEqual(try branches(of: macMove, in: console), ["!os(iOS)"], "the Mac's toolbar has Move…")
     }
 
     // MARK: the panel
