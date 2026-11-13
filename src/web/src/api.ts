@@ -1,4 +1,12 @@
-import type { GuestSessionSummary, MergeRecovery, MergeRecoveryAction, SessionGuestPerson } from '@orbit/shared';
+import type {
+  GuestSessionSummary,
+  MainCheckoutActionAnswer,
+  MainCheckoutActionPost,
+  MainCheckoutView,
+  MergeRecovery,
+  MergeRecoveryAction,
+  SessionGuestPerson,
+} from '@orbit/shared';
 import type {
   BgShell,
   ConfirmationAnswersCard,
@@ -24,6 +32,10 @@ import type {
   OrbitMessageFrom,
   SessionReplyCard,
   SessionMoveTargets,
+  SessionRestartResponse,
+  SessionSettings,
+  SessionSettingsPatch,
+  SessionUsage,
   SessionRequestView,
   SessionProjectMembership,
   SessionTurnIntent,
@@ -961,6 +973,14 @@ export const updateSessionConfig = (
 export const switchSessionAccount = (sessionId: string, account: string) =>
   api(`/sessions/${sessionId}/account`, { method: 'PATCH', body: { account } });
 
+/** Settings drawer: write the session's own variables (the whole map) or its notification choices. */
+export const patchSessionSettings = (sessionId: string, patch: SessionSettingsPatch) =>
+  api<SessionSettings>(`/sessions/${sessionId}/settings`, { method: 'PATCH', body: patch });
+
+/** Settings drawer: reload the live engine with the session's env, after the running turn if there is one. */
+export const restartSession = (sessionId: string) =>
+  api<SessionRestartResponse>(`/sessions/${sessionId}/restart`, { method: 'POST' });
+
 /** Rename a session's display title. Works on any session (live or ended) and never
  *  touches the runner — purely a metadata update. */
 export const renameSession = (sessionId: string, title: string) =>
@@ -1422,6 +1442,8 @@ export interface SharedSession {
   sessionState?: string;
   runStatus?: string;
   status: string;
+  /** What the session is doing beyond its status (SessionActivity); absent from an older server. */
+  activity?: string | null;
   createdAt: string;
   /** The transcript's newest page, not all of it. */
   events: SharedEvent[];
@@ -1675,16 +1697,15 @@ export const getSharedWikiDoc = (token: string, slug: string): Promise<SharedWik
   sharedGet<SharedWikiDocPage>(token, `/docs/${encodeURIComponent(slug)}`);
 
 /** A page of a shared transcript: the `limit` events just older than `before` (or the newest
- *  when it is absent). Clipped like the rest unless `whole`, which the Download HTML walk asks
- *  for — a saved file has no way to fetch a card's full payload when it is opened. */
+ *  when it is absent), clipped like the rest. */
 export const getSharedEventPage = (
   token: string,
-  opts: { before?: number; limit: number; whole?: boolean; sessionId?: string },
+  opts: { before?: number; limit: number; sessionId?: string },
 ): Promise<{ events: SharedEvent[]; hasMore: boolean }> => {
   const qs = new URLSearchParams();
   if (opts.before != null) qs.set('before', String(opts.before));
   qs.set('limit', String(opts.limit));
-  if (!opts.whole) qs.set('maxPayload', String(MAX_EVENT_PAYLOAD));
+  qs.set('maxPayload', String(MAX_EVENT_PAYLOAD));
   return sharedGet(token, `${sharedConversation(opts.sessionId)}/events?${qs.toString()}`);
 };
 
@@ -1758,23 +1779,6 @@ export const fetchSharedArtifactObjectUrl = async (token: string, artifactPath: 
   );
   if (!res.ok) throw new Error(`artifact ${artifactPath}: ${res.status}`);
   return userFileUrl(await res.blob());
-};
-
-/** Base64 data URL for an inline image in a shared transcript, via the public attachment
- *  route (no bearer). The shared-page HTML download embeds the bytes inline so the saved
- *  file works offline. Mirrors fetchAttachmentDataUrl, but for a logged-out viewer. */
-export const fetchSharedAttachmentDataUrl = async (token: string, id: string): Promise<string> => {
-  const res = await fetch(
-    `/api/shared/${encodeURIComponent(token)}/attachments/${encodeURIComponent(id)}`,
-  );
-  if (!res.ok) throw new Error(`attachment ${id}: ${res.status}`);
-  const blob = await res.blob();
-  return await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error ?? new Error('read failed'));
-    reader.readAsDataURL(blob);
-  });
 };
 
 /** One file a worktree-isolated session changed (git diff baseSha..branch); additions/
@@ -1935,6 +1939,10 @@ export interface SessionDetail {
   sourceRef?: string | null;
   sourceRefusalCode?: string | null;
   sourceRefusalDetail?: Record<string, unknown> | null;
+  /** The SOURCE line of the task this session runs when that task was forked from a session
+   *  (docs/task-fork-from-session-design.md §2.3), as the server words it; null otherwise.
+   *  Optional, because an older server does not send it. */
+  forkSource?: string | null;
   /** On an account pool: the member its last claim dispatched on (null before the first). */
   poolMemberProviderId?: string | null;
   /** On a shared pool: the key its last claim chose (null before the first, or when none could run). */
@@ -2047,6 +2055,12 @@ export interface SessionDetail {
   // "Shared · Live" and the menu's "Live link"; the Share dialog reads the link itself (getShareLink).
   shareToken?: string | null;
   sharedAt?: string | null;
+  /** The Settings drawer's own fields (docs/mocks/session-settings). Optional: an older server sends none. */
+  settings?: SessionSettings;
+  usage?: SessionUsage;
+  engineVersion?: string | null;
+  /** The engine's own id for the conversation (Claude's session id, Codex's thread id). */
+  runtimeSessionId?: string | null;
   completedAt?: string | null;
   /** Legacy API timestamp retained during rolling upgrades. */
   archivedAt?: string | null;
@@ -2181,5 +2195,23 @@ export const setWorkspaceWorktree = (workspaceId: string, enableWorktree: boolea
 export const cleanUpWorkspaceRepo = (workspaceId: string) =>
   api<{ repoCleanup?: { status: string; branch?: string | null; message?: string | null } | null }>(
     `/workspaces/${workspaceId}/repo-cleanup`,
+    { method: 'POST' },
+  );
+
+/** The main checkout as the workspace's runner sees it now, with the patches of `diffPaths`
+ *  (docs/main-checkout-git-contract.md §10.4). */
+export const getMainCheckout = (workspaceId: string, diffPaths: readonly string[] = [], signal?: AbortSignal) => {
+  const q = diffPaths.map((p) => `diff=${encodeURIComponent(p)}`).join('&');
+  return api<MainCheckoutView>(`/workspaces/${workspaceId}/main-checkout${q ? `?${q}` : ''}`, { signal });
+};
+
+/** Move, commit, push or rescue the main checkout. Repeating a requestId answers with the first request's state. */
+export const postMainCheckoutAction = (workspaceId: string, body: MainCheckoutActionPost) =>
+  api<MainCheckoutActionAnswer>(`/workspaces/${workspaceId}/main-checkout/actions`, { method: 'POST', body });
+
+/** Cancel an action its runner has not been handed yet. */
+export const cancelMainCheckoutAction = (workspaceId: string, requestId: string) =>
+  api<MainCheckoutActionAnswer>(
+    `/workspaces/${workspaceId}/main-checkout/actions/${encodeURIComponent(requestId)}/cancel`,
     { method: 'POST' },
   );

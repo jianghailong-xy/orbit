@@ -2,7 +2,8 @@ import SwiftUI
 import OrbitKit
 
 /// The project occupies its coordinator's place, with the same two scan lines as a session row.
-/// A tap opens the project's sessions; Open Session in the menu reaches the grouping target.
+/// A tap opens the coordinator on a phone and the project's sessions in the iPad's column; Open Session
+/// in the menu reaches the grouping target.
 struct SessionProjectRowView: View {
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -31,8 +32,8 @@ struct SessionProjectRowView: View {
                 .accessibilityValue(statusWords)
         }
         .buttonStyle(.plain)
-        // The session row's own cell metrics (`AgentSessionRow`): zeroed insets, its pin bar flush
-        // to the edge, and the separator under the title.
+        // The session row's own cell metrics (`AgentSessionRow`): zeroed insets and the
+        // separator under the title.
         .listRowInsets(EdgeInsets())
         .alignmentGuide(.listRowSeparatorLeading) { _ in 44 }
         #else
@@ -50,14 +51,11 @@ struct SessionProjectRowView: View {
 
     #if os(macOS)
     /// The Mac's row, laid out as a session row beside it is (web's `SessionProjectListRow`): the
-    /// coordinator's pin bar, the Projects glyph where a session's status glyph goes — the spinner
-    /// while a member runs, otherwise the glyph with a dot for waiting on you or background jobs —
-    /// then the title and time over the progress and the line.
+    /// Projects glyph where a session's status glyph goes — the spinner while a member runs,
+    /// otherwise the glyph with a dot for waiting on you or background jobs — then the title
+    /// and time over the progress and the line.
     private var macRow: some View {
         HStack(spacing: 0) {
-            Rectangle()
-                .fill(row.pinnedAt != nil ? Color.accentColor : .clear)
-                .frame(width: 3)
             HStack(spacing: 8) {
                 projectGlyph
                 VStack(alignment: .leading, spacing: 2) {
@@ -72,7 +70,7 @@ struct SessionProjectRowView: View {
                     secondLine
                 }
             }
-            .padding(.leading, 13)
+            .padding(.leading, 16)
             .padding(.trailing, 16)
             .padding(.vertical, 10)
         }
@@ -335,12 +333,16 @@ extension View {
     }
 }
 
-/// The same page is pushed on iPhone and replaces the session column on iPad.
+/// The same page is pushed on iPhone and replaces the session column on iPad; on iPhone it is also
+/// the sheet a conversation's project sessions button puts up (board 5).
 struct SessionProjectPage: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let address: SessionProjectAddress
     var rowNavigation: SessionRowNavigation = .push
+    /// Set while the page is that sheet: closes it, then runs what a press of the page opens, so
+    /// the page it opens lands on the conversation's stack rather than under the sheet.
+    var leaveSheet: ((@escaping () -> Void) -> Void)? = nil
 
     #if os(iOS)
     @State private var rowSwipe = RowSwipeState()
@@ -515,6 +517,12 @@ struct SessionProjectPage: View {
             }
         }
         .toolbar {
+            if leaveSheet != nil {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { leaveSheet?({}) } label: { Image(systemName: "xmark") }
+                        .accessibilityLabel("Close")
+                }
+            }
             if rowNavigation == .selection {
                 ToolbarItem(placement: backPlacement) {
                     Button { app.leaveProjectSessions(address.projectID) } label: {
@@ -584,7 +592,7 @@ struct SessionProjectPage: View {
                 },
                 openTask: { taskID in
                     showsLandingJobs = false
-                    app.openFromConversation(.task(taskID), overConsole: rowNavigation == .push)
+                    go { app.openFromConversation(.task(taskID), overConsole: rowNavigation == .push) }
                 })
         }
         // Side by side, each on its own poll: the landing line, the merge card, the start row and
@@ -647,11 +655,10 @@ struct SessionProjectPage: View {
     private var title: some View {
         VStack(spacing: 1) {
             Text(titleText).font(.headline).lineLimit(1)
-            // No count while no member is known yet, from the app's lists or the read: "0 sessions"
-            // would be a claim nobody checked.
-            Text(loading && sessions.isEmpty
-                 ? SessionProjectCopy.pageSubtitleLoading
-                 : SessionProjectCopy.pageSubtitle(sessions: sessions.count))
+            // The count the conversation's project sessions button draws, from the same read: no
+            // count until it has answered, since the app's lists alone hold only the Open members.
+            Text(app.projectSessionCount(address.projectID).map { SessionProjectCopy.pageSubtitle(sessions: $0) }
+                 ?? SessionProjectCopy.pageSubtitleLoading)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -808,7 +815,7 @@ struct SessionProjectPage: View {
                     ProjectLandingCardView(
                         card: card,
                         onOpenJobs: integration.inFlightJobs == nil ? nil : { showsLandingJobs = true },
-                        onOpenProject: { app.openProject(address.projectID) },
+                        onOpenProject: { go { app.openProject(address.projectID) } },
                         // The Jobs sheet's own Retry, by the same door: the card reads the page's
                         // landing read again once it went through.
                         retry: { jobID in
@@ -869,7 +876,7 @@ struct SessionProjectPage: View {
                     },
                     onDetails: { promotionReview = PromotionReviewTarget(id: $0) },
                     onCoordinator: coordinator.map { coordinator in
-                        { app.openProjectMember(coordinator, push: rowNavigation == .push) }
+                        { openMember(coordinator) }
                     })
             }
         }
@@ -878,7 +885,22 @@ struct SessionProjectPage: View {
     /// On a phone the project's page is pushed over this one, so back returns here and the drawer
     /// keeps this project selected; the iPad opens it in the Projects section.
     private func openProject() {
-        app.openProjectFromConversation(address.projectID, overConsole: rowNavigation == .push)
+        go { app.openProjectFromConversation(address.projectID, overConsole: rowNavigation == .push) }
+    }
+
+    /// What a press of the page opens: at once on a page, after the sheet closes on the sheet.
+    private func go(_ action: @escaping () -> Void) {
+        if let leaveSheet { leaveSheet(action) } else { action() }
+    }
+
+    /// A member: pushed over a phone's page, selected in the iPad's column, and in the sheet the
+    /// conversation the sheet was opened over gives its place to it (`openProjectMemberFromSheet`).
+    private func openMember(_ session: Session) {
+        if leaveSheet != nil {
+            go { app.openProjectMemberFromSheet(session) }
+        } else {
+            app.openProjectMember(session, push: rowNavigation == .push)
+        }
     }
 
     private var openProjectButton: some View {
@@ -895,7 +917,7 @@ struct SessionProjectPage: View {
         Button {
             PlatformHaptics.tap()
             if rowNavigation == .push {
-                app.push(.landings(projectID: address.projectID))
+                go { app.push(.landings(projectID: address.projectID)) }
             } else {
                 showsLandings = true
             }
@@ -950,14 +972,14 @@ struct SessionProjectPage: View {
 
     @ViewBuilder private func sessionRow(_ session: Session) -> some View {
         let scope: SessionView = session.effectiveLifecycleState == .completed ? .completed : .open
-        let row = AgentSessionRow(session: session, showsPin: scope == .open)
+        let row = AgentSessionRow(session: session)
         switch rowNavigation {
         case .selection:
             row.sessionRowActions(session, scope: scope, onTag: { taggingSession = session },
                                   onShare: { sharingSession = session }, onMove: moveAction(session))
                 .tag(session.id)
         case .push:
-            Button { app.openProjectMember(session, push: true) } label: { row.foregroundStyle(.primary) }
+            Button { openMember(session) } label: { row.foregroundStyle(.primary) }
                 .sessionRowActions(session, scope: scope, onTag: { taggingSession = session },
                                    onShare: { sharingSession = session }, onMove: moveAction(session))
         }

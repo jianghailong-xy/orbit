@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
-import { NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   DndContext,
@@ -91,11 +91,6 @@ type SettingsWorkspace = AttentionWorkspace & {
   /** When a conversation last started or took a turn there (null = never). */
   lastActiveAt?: string | null;
 };
-
-/** How many recently used workspaces the Workspaces group shows before "Show all N" (owner's choice B1:
- *  the 4-6 most recent). A list of up to one more than this is shown whole: "Show all" for a single
- *  hidden row would be a row of its own. */
-export const RECENT_WORKSPACES = 5;
 
 /** Most recently used first; never used last, in the list's own order. */
 export function byRecentUse<T extends { lastActiveAt?: string | null }>(workspaces: readonly T[]): T[] {
@@ -271,11 +266,19 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
           ))}
         </NavGroup>
 
-        <NavGroup title="Machines" add={{ label: 'Register a machine', onClick: () => navigate('/runners/register') }}>
+        <NavGroup
+          title="Machines"
+          add={{ label: 'Register a machine', onClick: () => navigate('/runners/register') }}
+          empty={runners.length === 0}
+        >
           <MachineRows runners={runners} stateOf={stateOf} />
         </NavGroup>
 
-        <NavGroup title="Providers" add={{ label: 'Connect a provider', onClick: () => navigate('/settings/providers/new') }}>
+        <NavGroup
+          title="Providers"
+          add={{ label: 'Connect a provider', onClick: () => navigate('/settings/providers/new') }}
+          empty={keyCount === 0 && poolCount === 0}
+        >
           {keyCount === 0 && poolCount === 0 ? (
             // With no key and no pool at all, the group is the one way to connect a provider.
             <NavRow to="/settings/providers/new" icon={<PlusOutlined />} label="Connect a provider" />
@@ -300,7 +303,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
           )}
         </NavGroup>
 
-        <NavGroup title="Workspaces" add={{ label: 'New workspace', onClick: addWorkspace }}>
+        <NavGroup title="Workspaces" add={{ label: 'New workspace', onClick: addWorkspace }} empty={workspaces.length === 0}>
           <WorkspaceRows workspaces={workspaces} machineOf={machineOf} />
         </NavGroup>
       </div>
@@ -525,9 +528,8 @@ function MachineRow({ runner, state, dragDisabled }: { runner: Runner; state: Ma
 }
 
 /**
- * The Workspaces group's rows (owner's choice B1): the most recently used few, each with its machine in
- * grey (two workspaces of one name on two machines stay apart), then "Show all N", which opens the
- * whole list with a filter over names, machines and folders.
+ * The Workspaces group's rows: every workspace, most recently used first, each with its machine in
+ * grey (two workspaces of one name on two machines stay apart). The owner asked for no fold here.
  */
 function WorkspaceRows({
   workspaces,
@@ -536,40 +538,9 @@ function WorkspaceRows({
   workspaces: SettingsWorkspace[];
   machineOf: (workspace: SettingsWorkspace) => string | null;
 }) {
-  const [all, setAll] = useState(false);
-  const [filter, setFilter] = useState('');
-  const open = useMatch('/settings/workspaces/:id')?.params.id;
-  const ordered = byRecentUse(workspaces);
-  const folded = !all && ordered.length > RECENT_WORKSPACES + 1;
-  let shown = ordered;
-  if (folded) {
-    shown = ordered.slice(0, RECENT_WORKSPACES);
-    // The workspace whose page is open keeps its row, though it is not among the recent ones.
-    const current = ordered.find((w) => w.id === open);
-    if (current && !shown.includes(current)) shown = [...shown, current];
-  } else if (all && filter.trim()) {
-    const words = filter.trim().toLowerCase().split(/\s+/);
-    shown = ordered.filter((w) => {
-      const haystack = [w.name, machineOf(w), (w as { workDir?: string | null }).workDir].join(' ').toLowerCase();
-      return words.every((word) => haystack.includes(word));
-    });
-  }
   return (
     <>
-      {all && (
-        <label className="settings-nav-filter">
-          <SearchOutlined />
-          <input
-            type="search"
-            placeholder="Filter workspaces"
-            aria-label="Filter workspaces"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            autoFocus
-          />
-        </label>
-      )}
-      {shown.map((workspace) => {
+      {byRecentUse(workspaces).map((workspace) => {
         const machine = machineOf(workspace);
         return (
           <NavRow
@@ -581,27 +552,24 @@ function WorkspaceRows({
           />
         );
       })}
-      {all && filter.trim() && shown.length === 0 && <div className="settings-nav-none">No workspace matches.</div>}
-      {folded && (
-        <button type="button" className="settings-nav-more" onClick={() => setAll(true)}>
-          Show all {ordered.length}
-        </button>
-      )}
     </>
   );
 }
 
-function NavGroup({
+export function NavGroup({
   title,
   add,
+  empty,
   children,
 }: {
   title: string;
   add?: { label: string; onClick: () => void };
+  /** Nothing in the group yet: its + stays in sight, not only under the pointer. */
+  empty?: boolean;
   children: ReactNode;
 }) {
   return (
-    <div className="settings-nav-group" role="group" aria-label={title}>
+    <div className={empty ? 'settings-nav-group settings-nav-group--empty' : 'settings-nav-group'} role="group" aria-label={title}>
       <div className="settings-nav-heading">
         <span>{title}</span>
         {add && (
@@ -615,7 +583,7 @@ function NavGroup({
   );
 }
 
-function NavRow({
+export function NavRow({
   to,
   icon,
   label,

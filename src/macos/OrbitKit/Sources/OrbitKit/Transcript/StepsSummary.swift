@@ -37,11 +37,14 @@ public struct StepsSummary: Equatable, Sendable {
         self.live = live
     }
 
-    public static func make(_ items: [TranscriptItem]) -> StepsSummary {
+    /// `live` is whether the turn is still running (web's `StepsLine` `live`). Once it is not, a call
+    /// that never got its answer is no longer "in flight" — it joins the line like any other, or the
+    /// finished turn would go on showing a call at work under it.
+    public static func make(_ items: [TranscriptItem], live turnLive: Bool = true) -> StepsSummary {
         var settled: [TranscriptItem] = []
         var live: [Live] = []
         for item in items {
-            if case .toolCall(let card) = item, card.status == .running {
+            if turnLive, case .toolCall(let card) = item, card.status == .running {
                 live.append(liveLine(card))
             } else {
                 settled.append(item)

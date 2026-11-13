@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -18,6 +18,7 @@ import {
   assignRunnerRelease,
   compareRunnerReleaseVersions,
   describeRunnerRelease,
+  isRunnerReleaseVersion,
   loadRunnerReleasePolicy,
   readRunnerReleasePolicy,
   rolloutBucket,
@@ -156,6 +157,16 @@ test('versions are ordered the way the runner orders them', () => {
   assert.equal(compareRunnerReleaseVersions('0.1.9', '0.1.10'), -1);
   assert.equal(compareRunnerReleaseVersions('0.2', '0.1.99'), 1);
   assert.equal(compareRunnerReleaseVersions('0.1', '0.1.0'), 0);
+});
+
+test('release version syntax and ordering match the shared contract runner-go reads', () => {
+  const contract = JSON.parse(readFileSync(path.resolve(__dirname, '../../../../contracts/release-versions.json'), 'utf8'));
+  for (const version of contract.valid) assert.equal(isRunnerReleaseVersion(version), true, `valid ${version}`);
+  for (const version of contract.invalid) assert.equal(isRunnerReleaseVersion(version), false, `invalid ${version}`);
+  for (const { a, b, want } of contract.compare) {
+    assert.equal(compareRunnerReleaseVersions(a, b), want, `${a} vs ${b}`);
+    assert.equal(compareRunnerReleaseVersions(b, a), want === 0 ? 0 : -want, `${b} vs ${a}`);
+  }
 });
 
 test('the pointer is read with its defaults, and refused rather than guessed at when it cannot be', () => {

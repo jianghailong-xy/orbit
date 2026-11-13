@@ -19,7 +19,8 @@ final class RunnerUpdatingTests: XCTestCase {
 
     static func held(active: Int? = 2, version: String? = "0.1.254", sinceMinutes: Double? = 38,
                      turns: [QueuedRunnerUpdate.Turn] = boardTurns,
-                     reason: String? = "runner_updating", runState: SessionRunState = .queued) -> Session {
+                     reason: String? = "runner_updating", runState: SessionRunState = .queued,
+                     stopping: Bool = false) -> Session {
         var s = Session(id: "S1", title: "Why is the send stuck", status: .pending, runState: runState,
                         agentId: nil, assignedRunnerId: "R1", pendingApprovals: nil, branch: nil, updatedAt: nil)
         s.queuedReason = reason
@@ -27,7 +28,7 @@ final class RunnerUpdatingTests: XCTestCase {
         s.queuedRunnerUpdate = QueuedRunnerUpdate(
             targetVersion: version,
             since: sinceMinutes.map { iso(now.addingTimeInterval(-$0 * 60)) },
-            turns: turns)
+            turns: turns, stopping: stopping)
         return s
     }
 
@@ -134,6 +135,42 @@ final class RunnerUpdatingTests: XCTestCase {
         let started = s.applying(try summary(#"{"id":"S1","status":"RUNNING","runState":"RUNNING","pendingApprovals":0}"#))
         XCTAssertNil(started.queuedReason)
         XCTAssertNil(started.queuedRunnerUpdate)
+    }
+
+    /// A runner that is stopping, not updating (board runner-stopping): it says so everywhere the
+    /// updating words were, and the session or message goes once it is back.
+    func testARunnerThatIsStoppingSaysStopping() throws {
+        let s = Self.held(version: nil, stopping: true)
+        XCTAssertTrue(RunnerUpdating.stopping(s))
+        XCTAssertFalse(RunnerUpdating.stopping(Self.held()))
+        XCTAssertFalse(RunnerUpdating.stopping(Self.held(reason: "runner_offline", stopping: true)))
+        XCTAssertEqual(SessionLine.make(for: s, live: true), SessionLine(text: "Runner stopping", tone: .warning))
+        XCTAssertEqual(SessionHeader.statusWord(for: s), "Runner stopping")
+        XCTAssertEqual(RunnerUpdating.tag(s), "runner stopping")
+        XCTAssertEqual(RunnerUpdating.title(Self.held()), "Runner updating")
+        XCTAssertEqual(RunnerUpdating.tag(Self.held()), "runner updating")
+        XCTAssertEqual(RunnerUpdating.plain(RunnerUpdating.description(s, machine: "HPC")),
+                       "HPC is stopping. It starts no new work until 2 turns finish: Backfill missing shard rows and Why are 11-08 metrics zero. This session starts once HPC is back.")
+        XCTAssertEqual(RunnerUpdating.messageText(s, machine: "HPC"),
+                       "HPC starts no new turns until 2 turns finish, then stops. This message is sent once it is back.")
+        // A stop names no release, even where one is reported.
+        XCTAssertEqual(RunnerUpdating.description(Self.held(stopping: true), machine: "HPC")[0], .text("HPC is stopping. "))
+        let idle = Self.held(active: 0, version: nil, turns: [], stopping: true)
+        XCTAssertEqual(RunnerUpdating.plain(RunnerUpdating.description(idle, machine: nil)),
+                       "The runner is stopping. This session starts once it is back.")
+        XCTAssertEqual(RunnerUpdating.messageText(idle, machine: "HPC"), "HPC stops now. This message is sent once it is back.")
+
+        let json = """
+        {"id":"S1","status":"PENDING","runState":"QUEUED","queuedReason":"runner_updating","queuedActive":0,
+         "queuedRunnerUpdate":{"stopping":true,"targetVersion":null,"since":null,"turns":[]}}
+        """
+        XCTAssertTrue(RunnerUpdating.stopping(try JSONDecoder().decode(Session.self, from: Data(json.utf8))))
+        // An older server sends no flag: an update.
+        let old = """
+        {"id":"S1","status":"PENDING","runState":"QUEUED","queuedReason":"runner_updating",
+         "queuedRunnerUpdate":{"targetVersion":"0.1.254","since":null,"turns":[]}}
+        """
+        XCTAssertFalse(RunnerUpdating.stopping(try JSONDecoder().decode(Session.self, from: Data(old.utf8))))
     }
 
     private func event(_ json: String) throws -> RunEvent {

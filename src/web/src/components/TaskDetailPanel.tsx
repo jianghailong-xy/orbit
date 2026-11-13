@@ -982,6 +982,11 @@ export function TaskDetailPanel({
         : assigneeRunnerName
           ? `sign-in on ${assigneeRunnerName}`
           : 'runner sign-in';
+  // What a pool's row risks (ProviderChoice.notice: a Codex pool of one's own under Claude Code), said once
+  // under the list, as the session picker says it under its pools.
+  const pinNotices = [
+    ...new Set([...pinCredentials, ...(pinnedOffList ? [pinnedOffList] : [])].flatMap((c) => (c.kind === 'pool' && c.notice ? [c.notice] : []))),
+  ];
   const pinLabelOf = (slug: string): string => {
     const pin = pinCredentials.find((c) => c.slug === slug) ?? pinnedOffList;
     if (pin?.kind === 'login' || isLoginProvider(slug)) return assigneeRunnerName ? `Sign-in on ${assigneeRunnerName}` : 'Runner sign-in';
@@ -1738,6 +1743,9 @@ export function TaskDetailPanel({
             {latestModel && <span className="tdp-meta-item muted">· {modelLabel(latestModel)}</span>}
             {totalCost && <span className="tdp-meta-item muted">· {totalCost}</span>}
           </div>
+          {/* A task forked from a session says where its checkout came from, in the server's own
+              words (docs/task-fork-from-session-design.md §2.3). Absent on an older server. */}
+          {q.data?.forkSource && <div className="tdp-fork-source">{q.data.forkSource}</div>}
           {/* How this row is judged, which nothing else on the page said: a row whose completion
               is owned by a check has no work of its own, and every other row names the method
               that settles it. */}
@@ -2361,6 +2369,15 @@ export function TaskDetailPanel({
                         </span>
                       );
                     }}
+                    footer={
+                      pinNotices.length > 0 ? (
+                        <div className="tdp-pin-foot">
+                          {pinNotices.map((notice) => (
+                            <p key={notice}>{notice}</p>
+                          ))}
+                        </div>
+                      ) : undefined
+                    }
                     onValueChange={(val) => pinProvider(val || null)}
                   />
                 </div>

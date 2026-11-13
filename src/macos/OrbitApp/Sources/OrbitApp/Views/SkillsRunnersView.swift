@@ -809,7 +809,9 @@ struct RunnerDetailContent: View {
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_VERSION,
                      RunnerPageFormat.versionValue(runner, latest: runners.latestVersion))
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_LAST_UPDATE, RunnerPageFormat.lastUpdate(runner))
-            if RunnerAttention.runnerCanUpdateNow(runner, nowMs: RunnerPageFormat.nowMs(now)) {
+            // Only while a release is waiting: a check with nothing newer to install is not offered.
+            if RunnerPageFormat.isBehindLatest(runner, latest: runners.latestVersion),
+               RunnerAttention.runnerCanUpdateNow(runner, nowMs: RunnerPageFormat.nowMs(now)) {
                 Button(RunnerPageCopy.RUNNER_UPDATE_RUNNER_NOW) { updateRunner() }
             }
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_RUNS_AS, RunnerPageFormat.runsAsValue(runner))

@@ -921,7 +921,16 @@ struct AgentPanes: View {
             case .project: app.openProjectSessions(address)
             }
         }
-        return SessionProjectRowView(row: row, onOpen: { app.openProjectSessions(address) })
+        // A phone opens the coordinator's conversation, not the project's sessions page, which is
+        // the button in that conversation's navigation bar (owner 2026-11-11, board 5). The iPad's
+        // column keeps the page.
+        let onTap = {
+            switch rowNavigation == .push ? SessionProjectSheet.rowTap(row) : .sessions {
+            case .coordinator(let coordinator): app.openProjectMember(coordinator, push: true)
+            case .sessions: app.openProjectSessions(address)
+            }
+        }
+        return SessionProjectRowView(row: row, onOpen: onTap)
         .sessionProjectRowActions(row, view: view, onOpen: onOpen, onSessions: { app.openProjectSessions(address) }, onProject: {
             app.openProject(row.projectId)
         }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })
@@ -1027,7 +1036,7 @@ struct AgentPanes: View {
     /// `mark`: the project of a member whose project has no row in this workspace (owner 2026-11-07,
     /// option A) — drawn on the row, and the long press's Sessions opens that project's sessions.
     @ViewBuilder private func sessionRow(_ s: Session, mark: SessionProjectMark? = nil) -> some View {
-        let row = AgentSessionRow(session: s, deleted: view == .trash, showsPin: view == .open, projectMark: mark)
+        let row = AgentSessionRow(session: s, deleted: view == .trash, projectMark: mark)
         let onSessions: (() -> Void)? = mark.map { mark in
             { app.openProjectSessions(SessionProjectAddress(projectID: mark.projectId, agentID: agent.id, view: view)) }
         }
@@ -1653,12 +1662,9 @@ struct AgentSessionRow: View {
     /// True when the Trash tab is showing this row; the preview goes static because nothing in
     /// Trash is directly resumable. The status glyph remains the run's actual outcome.
     var deleted: Bool = false
-    /// True in Open, where pinning applies. Completed/Trash rows never show the bar.
-    var showsPin: Bool = false
     /// The project this row belongs to where the list has no row for that project (owner 2026-11-07,
     /// option A): its progress leads the second line, as it leads a project row's.
     var projectMark: SessionProjectMark? = nil
-    private var isPinned: Bool { showsPin && session.pinnedAt != nil }
     @Environment(AppModel.self) private var app
     /// The live watches that will resume this session: what a parked row says it's doing instead.
     private var watching: WatchSessionSummary? { app.watches?.summary(for: session.id) }
@@ -1686,15 +1692,6 @@ struct AgentSessionRow: View {
         }
         #else
         HStack(spacing: 0) {
-            // A pinned session is marked at rest by a full-height leading accent bar, flush to the
-            // row's leading edge — the native port of web's `.session-row.pinned` inset bar
-            // (deliberately not a floating pushpin). It sits *outside* the content padding, with the
-            // cell's `listRowInsets` zeroed below, so it bleeds to the top/bottom/leading edges like
-            // web instead of floating short and inset. A clear bar of the same width keeps unpinned
-            // rows aligned.
-            Rectangle()
-                .fill(isPinned ? Color.accentColor : .clear)
-                .frame(width: 3)
             HStack(spacing: 8) {
                 StatusGlyphView(glyph: .make(for: session, watching: watching, machine: machine))
                 VStack(alignment: .leading, spacing: 2) {
@@ -1712,15 +1709,15 @@ struct AgentSessionRow: View {
                         .background(.orange, in: Capsule()).foregroundStyle(.white)
                 }
             }
-            // Re-add the standard cell insets the zeroed `listRowInsets` removed: 3 (bar) + 13 = the
-            // usual 16pt leading so the glyph stays put; 16 trailing; 10 vertical for a comfortable row.
-            .padding(.leading, 13)
+            // Re-add the standard cell insets the zeroed `listRowInsets` removed: the usual 16pt
+            // leading so the glyph stays put; 16 trailing; 10 vertical for a comfortable row.
+            .padding(.leading, 16)
             .padding(.trailing, 16)
             .padding(.vertical, 10)
         }
         .listRowInsets(EdgeInsets())
         // Keep the separator aligned under the title now that the cell insets are zeroed, rather than
-        // letting it run full-bleed: bar(3) + leading pad(13) + glyph(20) + spacing(8) = 44.
+        // letting it run full-bleed: leading pad(16) + glyph(20) + spacing(8) = 44.
         .alignmentGuide(.listRowSeparatorLeading) { _ in 44 }
         #endif
     }
@@ -2050,6 +2047,9 @@ struct AgentFormContent: View {
                 }
 
                 Toggle("Enabled", isOn: $enabled)
+                // Takes effect at once (board 04), apart from Done: it asks first when the main checkout
+                // holds what new sessions would no longer see.
+                WorktreeIsolationSwitch(workspace: agent)
             }
 
             Section("Instructions") {

@@ -259,6 +259,25 @@ describe('the Settings window', () => {
     expect(group('Workspaces').querySelector('.settings-nav-add')?.getAttribute('aria-label')).toBe('New workspace');
   });
 
+  // Settings.css shows a group's + under the pointer only, except on a group marked empty.
+  it('marks no group empty while each has something in it', async () => {
+    await visit('/settings/general');
+    for (const title of ['Machines', 'Providers', 'Workspaces']) {
+      expect(group(title).classList.contains('settings-nav-group--empty')).toBe(false);
+    }
+  });
+
+  it('marks a group with nothing in it empty, so its + stays in sight', async () => {
+    runners = [];
+    workspaces = [];
+    keys = [];
+    pools = [];
+    await visit('/settings/general');
+    for (const title of ['Machines', 'Providers', 'Workspaces']) {
+      expect(group(title).classList.contains('settings-nav-group--empty')).toBe(true);
+    }
+  });
+
   it('lists Personal, each machine with its status dot, API keys and Account pools, and each workspace with its machine', async () => {
     await visit('/settings/general');
     expect(rows('Personal').map((r) => [r.label, r.href])).toEqual([
@@ -415,8 +434,7 @@ describe('the Settings window', () => {
   });
 });
 
-// Owner's choice B1 (board-5 ① ②): the most recently used workspaces, each with its machine in grey,
-// then Show all N, which opens the whole list with a filter.
+// Every workspace, most recently used first, each with its machine in grey: the owner asked for no fold.
 describe('the Workspaces group', () => {
   const hoursAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
   const MANY = [
@@ -430,9 +448,8 @@ describe('the Workspaces group', () => {
     { id: 'w8', name: 'scratch', runnerId: 'oldLaptop', lastActiveAt: hoursAgo(400) },
   ];
   const labels = () => rows('Workspaces').map((r) => [r.label, r.meta]);
-  const filterBox = () => group('Workspaces').querySelector<HTMLInputElement>('input[aria-label="Filter workspaces"]');
 
-  it('lists the five most recently used, each with its machine, then Show all N', async () => {
+  it('lists every workspace, most recently used first and never-used last, each with its machine', async () => {
     workspaces = MANY;
     await visit('/settings/general');
     expect(labels()).toEqual([
@@ -442,57 +459,12 @@ describe('the Workspaces group', () => {
       ['ml-experiments', 'gpu-box'],
       // Two of one name stay apart by their machine.
       ['orbit', 'Studio Mac'],
-    ]);
-    expect(button('Show all 8')).toBeTruthy();
-    expect(filterBox()).toBeNull();
-  });
-
-  it('Show all opens the whole list, never-used last, with a filter over names, machines and folders', async () => {
-    workspaces = MANY;
-    await visit('/settings/general');
-    await click(button('Show all 8'));
-    expect(labels().map(([label]) => label)).toEqual([
-      'orbit',
-      'website',
-      'infra',
-      'ml-experiments',
-      'orbit',
-      'docs',
-      'scratch',
-      'never-used',
-    ]);
-    expect(button('Show all 8')).toBeUndefined();
-    const input = filterBox()!;
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'old-laptop');
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    await settle();
-    expect(labels()).toEqual([
       ['docs', 'old-laptop'],
       ['scratch', 'old-laptop'],
+      ['never-used', 'gpu-box'],
     ]);
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'nothing like it');
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    await settle();
-    expect(labels()).toEqual([]);
-    expect(group('Workspaces').textContent).toContain('No workspace matches.');
-  });
-
-  it('keeps the open workspace’s row though it is not a recent one', async () => {
-    workspaces = MANY;
-    await visit('/settings/workspaces/w8');
-    expect(labels().at(-1)).toEqual(['scratch', 'old-laptop']);
-    expect(nav().querySelector('a.active')?.getAttribute('href')).toBe('/settings/workspaces/w8');
-  });
-
-  it('shows six whole, rather than five and a Show all for one', async () => {
-    workspaces = MANY.slice(0, 6);
-    await visit('/settings/general');
-    expect(labels()).toHaveLength(6);
     expect([...group('Workspaces').querySelectorAll('button')].some((b) => b.textContent?.startsWith('Show all'))).toBe(false);
+    expect(group('Workspaces').querySelector('input')).toBeNull();
   });
 });
 

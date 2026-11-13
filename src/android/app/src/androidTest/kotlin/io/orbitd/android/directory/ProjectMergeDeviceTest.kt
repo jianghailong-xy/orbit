@@ -9,6 +9,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.orbitd.android.openProjectSessionsPage
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.AuthState
@@ -69,7 +70,7 @@ class ProjectMergeDeviceTest {
                 compose.waitUntil(20_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
                 promotion = candidate("READY")
                 await { exists(hasTestTag("project-row:$launch")) }
-                compose.onNodeWithTag("project-row:$launch").performClick()
+                compose.openProjectSessionsPage(launch)
 
                 // A · asking: what would land, the proof it was checked, the presses, Details.
                 await { exists(hasTestTag("project-merge-card:asking")) && inCard("2 of 3 met on this branch — merging does not close the project") }

@@ -471,7 +471,9 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                 }
                 workspaces.forEachIndexed { index, workspace ->
                     if (index > 0) HorizontalDivider()
-                    WorkspaceRow(workspace, RunnerPage.runningCount(workspace, model.counts)) { openWorkspace(workspace.text("id")) }
+                    WorkspaceRow(workspace, RunnerPage.runningCount(workspace, model.counts), isolation = {
+                        WorktreeIsolationSwitch(api, workspace, reload = { model.load() }, failed = notice::show)
+                    }) { openWorkspace(workspace.text("id")) }
                 }
             }
             FormSection(RunnerCopy.ABOUT, footer = if (runner.bool("runsAsRoot") == true) RunnerCopy.ROOT_NO_BYPASS else null) {
@@ -694,7 +696,7 @@ private fun EngineRow(runner: JsonObject, health: JsonObject, offline: Boolean, 
 }
 
 @Composable
-private fun WorkspaceRow(workspace: JsonObject, running: Int, open: () -> Unit) {
+private fun WorkspaceRow(workspace: JsonObject, running: Int, isolation: @Composable () -> Unit = {}, open: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = open).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.weight(1f)) {
@@ -702,6 +704,8 @@ private fun WorkspaceRow(workspace: JsonObject, running: Int, open: () -> Unit) 
             RunnerPage.workspaceLine(workspace).takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted, maxLines = 1) }
         }
         if (running > 0) Text(RunnerCopy.workspaceRunning(running), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+        // Worktree isolation, switched here as on web's runner page (board 04's dialogs say what it means for the main checkout).
+        isolation()
         Chevron()
     }
 }
@@ -1223,7 +1227,9 @@ private class SignInRelay(private val api: ManagementApi, val runnerId: String, 
 @Composable
 internal fun RunnerSignInCard(api: ManagementApi, runner: JsonObject, engine: String, account: String? = null, accountName: String? = null,
                              autoStart: Boolean = false, signInTitle: String? = null, onUseApiKey: (() -> Unit)? = null,
-                             onClose: (() -> Unit)? = null, onSignedIn: (() -> Unit)? = null) {
+                             onClose: (() -> Unit)? = null, onSignedIn: (() -> Unit)? = null,
+                             apiKeyLabel: String = io.orbitd.android.composer.MachineSetupCopy.SETUP_USE_API_KEY,
+                             apiKeyHint: String? = null) {
     val runnerId = runner.text("id")
     val scope = rememberCoroutineScope()
     val relay = remember(runnerId, engine, account) { SignInRelay(api, runnerId, engine, account, adding = accountName != null) }
@@ -1308,9 +1314,10 @@ internal fun RunnerSignInCard(api: ManagementApi, runner: JsonObject, engine: St
                     }
                     Text(KimiSite.SEPARATE_ACCOUNTS, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
                     onUseApiKey?.let { useKey ->
-                        OutlinedButton(onClick = useKey) { Text(io.orbitd.android.composer.MachineSetupCopy.SETUP_USE_API_KEY) }
+                        OutlinedButton(onClick = useKey) { Text(apiKeyLabel) }
                     }
-                } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                } else FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // The key button wraps under the sign-in where both don't fit on a line, rather than being squeezed beside it.
                     Button(onClick = { scope.launch { relay.begin(accountName, scope) } }, enabled = !relay.busy && named) {
                         Text(when {
                             relay.busy -> "Starting…"
@@ -1322,9 +1329,11 @@ internal fun RunnerSignInCard(api: ManagementApi, runner: JsonObject, engine: St
                         })
                     }
                     onUseApiKey?.let { useKey ->
-                        OutlinedButton(onClick = useKey) { Text(io.orbitd.android.composer.MachineSetupCopy.SETUP_USE_API_KEY) }
+                        OutlinedButton(onClick = useKey) { Text(apiKeyLabel) }
                     }
                 }
+                // What a key is beside a sign-in, where the card says it (the web's RunnerSignIn hint, on the welcome card).
+                if (onUseApiKey != null && apiKeyHint != null) Text(apiKeyHint, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
                 close()
             }
         }

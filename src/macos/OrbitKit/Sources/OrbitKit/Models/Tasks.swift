@@ -84,6 +84,11 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     public let supersedes: [TaskRef]?
     /// What replaced this task, oldest first: the last one is the live attempt.
     public let successorChain: [TaskRef]?
+    /// SR18's sentence for a task forked from a session (docs/task-fork-from-session-design.md
+    /// §2.3), finished by the server — "Forked from session «title» at abc1234 (includes
+    /// uncommitted changes)" — and drawn as it is. Detail payload only; nil on a task that was not
+    /// forked, and from an older server.
+    public let forkSource: String?
 
     // Computed list-view flags (absent on the detail payload).
     public let running: Bool?
@@ -134,7 +139,7 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
         case completionPolicy, verifiesTaskId, verificationState, verifier
         case acceptanceCriteria, acceptanceCommand, acceptanceExpectedExitCode, runAt, attachments
         case labels, project
-        case supersededByTaskIdAbsentReason, supersedes, successorChain
+        case supersededByTaskIdAbsentReason, supersedes, successorChain, forkSource
         case running, queued, runningSince, awaitingOwnerConfirmation, confirmationUnderReview, blocked
         case dependencyState, runnable
         case integration

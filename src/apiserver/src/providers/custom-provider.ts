@@ -22,6 +22,14 @@ import { Prisma } from '@prisma/client';
 import { BadRequestException } from '@nestjs/common';
 import { accountDir, isAccountEngine } from '@orbit/shared';
 import { ACCOUNT_CHOICE, accountEnvVar, accountOnRunner, type AccountRunner } from './account';
+import {
+  anthropicGatewayUrl,
+  engineTableOptions,
+  gatewaySmallModel,
+  KEY_GATEWAY_TOKEN_PREFIX,
+  runsThroughAnthropicGateway,
+} from './key-gateway';
+import { codexLoginToken, poolTableOptions } from './codex-login-claude';
 import { catalogModels } from './model-catalog';
 import { ANTHROPIC_HOST } from './plan-usage';
 import { decryptSecret } from './provider-crypto';
@@ -105,6 +113,10 @@ export interface ModelProviderRow {
    *  the engine's environment (shared-pool.ts sharedPoolExecRow). When set it is the key, and
    *  `apiKeyEnc` is not read. */
   sessionToken?: string;
+  /** A row minted for a Claude Code session on its owner's own Codex login pool (codex-login-claude.ts
+   *  codexLoginClaudeExecRow): the compatibility table reads it as that pool, and `sessionToken` is the
+   *  pool's session token, which Claude Code gets with /api/gw/anthropic. */
+  codexLogin?: boolean;
   defaultModel: string | null;
   /** The vendor preset this row came from, and whether it still owns the model list — when it
    *  does, the default model resolves from the catalogue rather than from the row. */
@@ -337,6 +349,8 @@ function injectedEnv(
   row: ModelProviderRow,
   model: string,
   apiKey: string,
+  /** The model's window as the runner's own Codex catalogue reports it, for a `codexLogin` row. */
+  catalogWindow?: number,
 ): Record<string, string> {
   if (engine === AgentProvider.CURSOR) {
     // The runner reads this and starts the CLI with the key as CURSOR_API_KEY, its credentials held in
@@ -376,9 +390,16 @@ function injectedEnv(
       KIMI_MODEL_BASE_URL: row.baseUrl,
     };
   }
+  // An OpenAI key on Claude Code runs through Orbit's own gateway, which holds the key and translates
+  // Anthropic Messages to OpenAI Responses (docs/claude-engine-openai-gateway-design.md §4.2). The engine gets
+  // the gateway and the session token minted for this build (key-gateway.ts withKeyGatewayToken) — never the
+  // key: a build that minted none (a read that dispatches nothing) gets no credential at all.
+  const throughGateway = runsThroughAnthropicGateway(AgentProvider.CLAUDE, row);
+  // The owner's own Codex login pool (codex-login-claude.ts) goes through the same gateway, on the pool's own
+  // session token: the ChatGPT accounts' tokens stay in the API server.
   const claudeEnv: Record<string, string> = {
-    ANTHROPIC_BASE_URL: row.baseUrl,
-    ANTHROPIC_AUTH_TOKEN: apiKey,
+    ANTHROPIC_BASE_URL: throughGateway ? anthropicGatewayUrl() : row.baseUrl,
+    ANTHROPIC_AUTH_TOKEN: throughGateway ? (row.codexLogin ? (codexLoginToken(row) ?? '') : gatewayToken(row)) : apiKey,
     // The model the session runs, beside the endpoint that serves it. The engine itself is told by
     // --model, which outranks this; what reads it is a command the session runs that must call the
     // same model through a clean Claude Code of its own — `orbit wiki verify` (wiki contract
@@ -408,9 +429,14 @@ function injectedEnv(
   // takes the by-name path from the start (measured on 2.1.292 against DeepSeek: the conversation
   // that 422s without it completes a turn with it). Injected only where the host is not
   // Anthropic's: there the inline form is served, and the session keeps it.
-  if (!isAnthropicEndpoint(row.baseUrl)) {
+  if (throughGateway || !isAnthropicEndpoint(row.baseUrl)) {
     claudeEnv.CLAUDE_CODE_INLINE_TOOLS = 'false';
   }
+  // Claude Code's background requests (WebFetch summaries, side questions) go out on its haiku slot, which on
+  // the gateway is the key's small model (design §4.5). A login pool names none: a ChatGPT plan serves the
+  // models its Codex catalogue lists, and the CLI then sends the session model there.
+  const small = throughGateway && !row.codexLogin ? gatewaySmallModel(row) : undefined;
+  if (small) claudeEnv.ANTHROPIC_DEFAULT_HAIKU_MODEL = small;
   // A model id the CLI's own catalog doesn't describe gets 200k assumed for it, and auto-compact
   // keeps the session inside that. The endpoint can't correct the CLI — an Anthropic-compatible
   // shim like DeepSeek's serves no /v1/models for it to ask — so the declared window travels as
@@ -420,9 +446,10 @@ function injectedEnv(
   // catalogue describes — any model of a self-hosted endpoint — has only the window its row declares,
   // and a server started with a smaller one (vLLM's --max-model-len) refuses every request past it.
   const preset = providerPreset(row.presetSlug);
-  const window =
-    (preset ? catalogModels(preset).find((m) => m.value === model)?.contextWindow : undefined) ??
-    ownModel(row, model)?.contextWindow;
+  const window = row.codexLogin
+    ? catalogWindow
+    : (preset ? catalogModels(preset).find((m) => m.value === model)?.contextWindow : undefined) ??
+      ownModel(row, model)?.contextWindow;
   if (typeof window === 'number' && window > 0) {
     // Declared short of the endpoint's true maximum, because the CLI's auto-compact path needs room
     // the window alone does not leave it. The CLI compacts when the conversation reaches
@@ -450,6 +477,11 @@ function injectedEnv(
   return claudeEnv;
 }
 
+/** The gateway token minted for this build, or nothing: never the key, nor a pool's token. */
+function gatewayToken(row: ModelProviderRow): string {
+  return row.sessionToken?.startsWith(KEY_GATEWAY_TOKEN_PREFIX) ? row.sessionToken : '';
+}
+
 /** A Claude subscription token: Anthropic serves it to its own clients only, so OpenCode never gets
  *  one (plan-usage.ts reads the same prefix for the same reason). */
 const SUBSCRIPTION_TOKEN_PREFIX = 'sk-ant-oat';
@@ -466,9 +498,11 @@ function isSubscriptionToken(apiKey: string): boolean {
  * token (it runs nowhere anyway: dispatch refuses it when it decrypts it).
  */
 export function keyCredential(
-  row: Pick<ModelProviderRow, 'runtime' | 'baseUrl' | 'apiKeyEnc' | 'presetSlug' | 'sessionToken'>,
+  row: Pick<ModelProviderRow, 'runtime' | 'baseUrl' | 'apiKeyEnc' | 'presetSlug' | 'sessionToken' | 'codexLogin'>,
   apiKey?: string,
 ): EngineCredential {
+  // Not a key at all: the owner's own Codex login pool, as dispatch minted its row.
+  if (row.codexLogin) return { kind: 'pool', engine: AgentProvider.CODEX, ownLogin: true };
   let key = apiKey ?? row.sessionToken;
   if (key === undefined) {
     try {
@@ -702,13 +736,16 @@ export function resolveProviderExec(args: {
     const engine = args.engine ?? native;
     const apiKey = customRow.sessionToken ?? decryptSecret(customRow.apiKeyEnc);
     const credential = keyCredential(customRow, apiKey);
-    if (!isEngineCompatible(engine, credential)) {
-      throw engineIncompatible(customRow.slug ?? args.declaredProvider ?? '', engine, credentialEngines(credential));
+    const table = customRow.codexLogin ? poolTableOptions() : engineTableOptions(customRow.baseUrl);
+    if (!isEngineCompatible(engine, credential, table)) {
+      throw engineIncompatible(customRow.slug ?? args.declaredProvider ?? '', engine, credentialEngines(credential, table));
     }
     // The model space is the engine's on this key (§2.2): DeepSeek Harness's own catalogue on a
     // DeepSeek key, the key vendor's table for Claude Code — and for OpenCode, the table the key's
     // vendor has on the engine whose protocol it speaks.
-    const space = engine === AgentProvider.OPENCODE ? dialectEngine(customRow.runtime) : engine;
+    // Claude Code on a Codex login pool is served by the Codex backend: its model space is Codex's, as the
+    // runner's own Codex catalogue lists it for the plan.
+    const space = engine === AgentProvider.OPENCODE || customRow.codexLogin ? dialectEngine(customRow.runtime) : engine;
     const pin = nonBlankModel(space, sessionModel);
     const retired = retiredPin(customRow, space, args, pin);
     // A custom provider's model space is its own; never coerce it through the claude/gpt
@@ -747,7 +784,10 @@ export function resolveProviderExec(args: {
       // Provider env wins over any user-set workspace env (e.g. a hand-typed ANTHROPIC_BASE_URL).
       // The kimi runtime also reads the model from here, so it can only be built once the
       // model above is resolved.
-      env: { ...(workspaceEnv ?? {}), ...injectedEnv(engine, customRow, model, apiKey) },
+      env: {
+        ...(workspaceEnv ?? {}),
+        ...injectedEnv(engine, customRow, model, apiKey, customRow.codexLogin ? catalogWindow(args.modelCatalog, model) : undefined),
+      },
       ...(retired ? { retiredPin: true } : {}),
       ...(reasoningLevels ? { reasoningLevels } : {}),
     };
@@ -926,4 +966,17 @@ function firstCompatibleModel(
     if (model && modelForProvider(provider, model, offered) === model) return model;
   }
   return undefined;
+}
+
+/**
+ * The window the runner's own Codex catalogue reports for `model` (`codex debug models`), which is what the
+ * Codex backend serves a ChatGPT plan: Claude Code on a Codex login pool is told it as
+ * CLAUDE_CODE_MAX_CONTEXT_TOKENS, or it would assume 200k. Undefined when the runner reported none.
+ */
+function catalogWindow(modelCatalog: unknown, model: string): number | undefined {
+  if (modelCatalog === null || typeof modelCatalog !== 'object' || Array.isArray(modelCatalog)) return undefined;
+  const rows = (modelCatalog as Record<string, unknown>)[AgentProvider.CODEX];
+  if (!Array.isArray(rows)) return undefined;
+  const row = rows.find((entry) => entry && (entry as { value?: unknown }).value === model) as { contextWindow?: unknown } | undefined;
+  return typeof row?.contextWindow === 'number' && row.contextWindow > 0 ? row.contextWindow : undefined;
 }

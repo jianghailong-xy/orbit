@@ -7,6 +7,7 @@ import {
   SourceResolutionInput,
   SourceResolutionRefusal,
   classifyPinnedRevision,
+  forkReason,
   resolveSource,
 } from './source-selector';
 
@@ -58,6 +59,7 @@ function input(overrides: {
       attemptGeneration: 0n,
       inheritedKnownGoodSha: null,
       dependsOnTaskIds: [],
+      fork: null,
       ...overrides.task,
     },
     codebase: overrides.codebase === undefined ? CODEBASE : overrides.codebase,
@@ -284,4 +286,80 @@ test('the same task resolves identically however many times it is asked', () => 
     first.state === 'SELECTED' ? first.selector.requiredContains : null,
     [SHA('1'), SHA('2')],
   );
+});
+
+// SR55 — row PF: a task forked from the session that created it.
+
+const FORK = {
+  sessionId: '00000000-0000-4000-8000-0000000000f5',
+  sessionTitle: 'Refactor the claim path',
+  sha: SHA('5'),
+  includesUncommitted: true,
+};
+
+test('PF: a forked task outside any project starts from the snapshot, SHA-valued and RUNNER_LOCAL', () => {
+  const resolved = resolveSource(input({ codebase: null, task: { projectId: null, fork: FORK } }));
+  assert.equal(resolved.state, 'SELECTED');
+  assert.deepEqual(resolved.state === 'SELECTED' && resolved.selector, {
+    kind: 'SESSION_FORK',
+    codebaseId: null,
+    repoUrl: null,
+    rootCommitSha: null,
+    ref: null,
+    revisionSha: SHA('5'),
+    configRevision: null,
+    refAuthority: 'RUNNER_LOCAL',
+    requiredContains: [],
+  });
+  assert.equal(resolved.reason.rank, 'PF');
+  assert.equal(
+    resolved.reason.because,
+    'Forked from session «Refactor the claim path» at 5555555 (includes uncommitted changes)',
+  );
+});
+
+test("D7 PF ∩ P0': a fork beats Legacy, for a non-project task and for a codeless one alike", () => {
+  // Both predicates hold: no binding, and a fork. P0' winning would start the run from whatever the
+  // workspace's checkout has checked out — the one starting point the fork was filed to replace.
+  for (const task of [{ projectId: null, fork: FORK }, { codeless: true, fork: FORK }]) {
+    const resolved = resolveSource(input({ codebase: null, task }));
+    assert.equal(resolved.state === 'SELECTED' && resolved.selector.kind, 'SESSION_FORK');
+    assert.equal(resolved.reason.rank, 'PF');
+  }
+});
+
+test('SR55/SR12: every retry of a forked task resolves the same snapshot, whatever the attempt carries', () => {
+  // PF reads the task's own create-time columns, so a retry with a known-good commit of its own still
+  // starts from S: there is no row underneath PF for a moved tip to win.
+  const first = resolveSource(input({ codebase: null, task: { fork: FORK } }));
+  const retry = resolveSource(input({
+    codebase: null,
+    task: { fork: FORK, attemptGeneration: 3n, inheritedKnownGoodSha: SHA('e') },
+  }));
+  assert.deepEqual(retry, first);
+});
+
+test('D8: a fork in a project with a code binding is refused, never resolved by P1–P5', () => {
+  // SR19's shape: P5 would be a baseline that merely looks runnable, and it would silently drop the fork.
+  for (const task of [{ fork: FORK }, { fork: FORK, codeless: true }, { fork: FORK, pinnedRevision: SHA('9') }]) {
+    assert.throws(
+      () => resolveSource(input({ task })),
+      (error: unknown) =>
+        error instanceof SourceResolutionRefusal && error.code === 'FORK_IN_BOUND_PROJECT'
+        && (error.detail as { forkSessionId?: string }).forkSessionId === FORK.sessionId,
+    );
+  }
+});
+
+test('PF refuses a snapshot that is not a full commit rather than starting elsewhere', () => {
+  assert.throws(
+    () => resolveSource(input({ codebase: null, task: { fork: { ...FORK, sha: 'abc1234' } } })),
+    (error: unknown) => error instanceof SourceResolutionRefusal && error.code === 'BASE_SHA_UNAVAILABLE',
+  );
+});
+
+test("SR18: the fork's reason names the session, the short commit, and uncommitted edits only when there were some", () => {
+  assert.equal(forkReason('Fix login', SHA('a'), false), 'Forked from session «Fix login» at aaaaaaa');
+  assert.equal(forkReason('  ', SHA('b'), true), 'Forked from a session at bbbbbbb (includes uncommitted changes)');
+  assert.equal(forkReason(null, SHA('c'), false), 'Forked from a session at ccccccc');
 });
