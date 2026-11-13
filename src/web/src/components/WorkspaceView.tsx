@@ -448,7 +448,7 @@ import { useConfirm } from './ui/ConfirmDialog';
 import { Image } from './ui/Image';
 import { Menu, type MenuItem } from './ui/Menu';
 import { Popover } from './ui/Popover';
-import { RunnerDrainBanner } from './RunnerDrainBanner';
+import { RunnerUpdateIndicator } from './RunnerUpdateIndicator';
 import { RunnerUpdateLaterMenu } from './RunnerUpdateLater';
 import { RunnerUpdateNowButton } from './RunnerUpdateNow';
 import { runnerTakesUpdateNow } from '../lib/runnerUpdateNow';
@@ -9704,8 +9704,6 @@ export function WorkspaceView({
           )
         ) : (
         <>
-        {/* Board 3 ⑥: this runner drains for its update with something of the reader's waiting on it (D3). */}
-        <RunnerDrainBanner runner={runner} machine={machineName(runner)} />
         <div className="workspace-header">
           {isMobile && (
             <button
@@ -9832,7 +9830,14 @@ export function WorkspaceView({
               )}
             </div>
             <div className="workspace-sub">{headSub}</div>
+            {/* A run of a task forked from a session says where its checkout came from, in the
+                server's own words (docs/task-fork-from-session-design.md §2.3). */}
+            {!composing && detailForSelected?.forkSource && (
+              <div className="workspace-sub" data-fork-source="">{detailForSelected.forkSource}</div>
+            )}
           </div>
+          {/* docs/mocks/runner-update-indicator: this runner drains for its update with the reader's work waiting (D3). */}
+          <RunnerUpdateIndicator runner={runner} machine={machineName(runner)} />
           {selected && !composing && (
             <>
               {titleBarProjectId && !selectedTrashed && (

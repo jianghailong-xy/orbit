@@ -1,0 +1,55 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+body{margin:0;background:#1c1c1e;font-family:-apple-system,"PingFang SC",sans-serif;color:#f2f2f7;padding:28px}
+h1{font-size:22px;margin:0 0 6px}.sub{color:#a1a1a6;font-size:14px;margin-bottom:20px;max-width:1240px;line-height:1.5}
+.row{display:flex;gap:28px;align-items:flex-start}
+.col{width:393px}.cap{font-size:15px;font-weight:600;margin-bottom:4px}.cap2{font-size:13px;color:#a1a1a6;margin-bottom:10px;line-height:1.45;min-height:56px}
+.rec{color:#30d158}
+.phone{width:393px;height:760px;background:#000;border-radius:36px;overflow:hidden;padding:18px 14px;box-sizing:border-box;border:1px solid #333}
+.meta{color:#8e8e93;font-size:15px;margin:10px 4px}
+.card{border:1px solid #1f3a66;background:#0b1424;border-radius:16px;padding:14px;margin:6px 0}
+.hd{display:flex;align-items:center;gap:8px;font-weight:700;font-size:16px}
+.chip{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px}
+.blue{background:rgba(10,132,255,.16);color:#0a84ff}
+.t{font-weight:700;font-size:15px;margin-top:8px;line-height:1.35}
+.l{font-size:15px;margin-top:6px}.s{font-size:13px;color:#8e8e93;margin-top:6px;line-height:1.45}
+.div{border-top:1px solid #2c2c2e;margin:10px 0}
+.act{color:#0a84ff;font-weight:600;font-size:14px;display:flex;justify-content:space-between}
+.gap{height:60px}
+.pill{display:flex;align-items:center;gap:6px;background:rgba(142,142,147,.14);border-radius:999px;padding:7px 12px;font-size:13px;color:#a1a1a6;margin:6px auto;width:fit-content;max-width:350px}
+.pill b{color:#30d158;font-weight:600}.ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tog{font-size:13px;color:#a1a1a6;margin-top:8px}
+.note{border:1px dashed #ff9f0a;color:#ff9f0a;font-size:12px;padding:6px 8px;border-radius:8px;margin-top:8px}
+.big{font-size:20px}
+</style></head><body>
+<h1>Decision receipt fold &amp; coordinator question preview (iOS · dark)</h1>
+<div class="sub">基於 13:08 截圖重繪（手繪，非實機）。兩處：①「An agent recorded a decision」收據太大 → 收起；②「The coordinator has a question」預覽把原文 Markdown 的空行/表格算進 3 行，正文下留一大塊空白 → 預覽改用壓平成一行的引文（已記錄問題卡同款 `CoordinatorQuestions.lead`），不改卡的形狀。</div>
+<div class="row">
+<div class="col"><div class="cap">Before（現狀）</div><div class="cap2">收據：標題 + 任務名 + 回執行 + 整段理由全展開，一張佔了大半屏。問題卡：正文後空 2 行。</div>
+<div class="phone"><div class="meta">Used 1 tool ›</div>
+<div class="card"><div class="hd big"><span class="chip blue">✓</span>An agent recorded a decision</div>
+<div class="t">模擬車停點偏移：到位判定與補位目標不一致修正（SK8）</div><div class="l">Confirm done · rev 1 · 13:04</div>
+<div class="s">the reason it was sent back：主協調核：本任務的驗收逐條成立。<br>- 合入：286d4b186（batch 2132，#2396）在 origin/main 上。白板 drainer 只在合入樹門綠後才 land，批次號不帶 -f，表示首輪即綠……<br>- 產品碼零改：只動 internal/hil/fakevehicle.go +6 行。<br>- 回歸鎖：TestFakeVehicle_TerminalBraking_…<br>- 照表 soak：TUSK 往 S5-004 放貨 completed 1……<br><br>照實記帳：……（再 10 行）</div></div>
+<div class="meta">Used 1 tool ›</div>
+<div class="card"><div class="hd"><span class="chip blue">?</span>The coordinator has a question</div>
+<div class="s">舊任務盤點：本專案除窗口鎖外，還有 27 個未結任務。我逐一讀過最後狀態，建議分成以下 6 類處置，完整表格在對話裡。</div><div style="height:44px"></div><div class="div"></div><div class="act"><span>View details &amp; act</span>›</div></div></div></div>
+
+<div class="col"><div class="cap">A · 收成一行膠囊 <span class="rec">（推薦）</span></div><div class="cap2">和「Sent to the coordinator」同一種膠囊：綠勾 + 誰定的 + 回執行 + 任務名截斷。點開才展開為現在的卡（任務名、理由、Evidence files）。問題卡正文緊貼。</div>
+<div class="phone"><div class="meta">Used 1 tool ›</div>
+<div class="pill"><b>✓</b><span class="ell">Agent · Confirm done · rev 1 · 13:04 · 模擬車停點偏移：到位判定…</span>⌄</div>
+<div class="meta">Used 1 tool ›</div>
+<div class="card"><div class="hd"><span class="chip blue">?</span>The coordinator has a question</div>
+<div class="s">舊任務盤點：本專案除窗口鎖外，還有 27 個未結任務。我逐一讀過最後狀態，建議分成以下 6 類處置，完整表格在對話裡。</div><div class="div"></div><div class="act"><span>View details &amp; act</span>›</div></div>
+<div class="meta">Ran 1 shell command ›</div>
+<div class="note">點膠囊 → 原地展開成 Before 的收據卡內容，再點收回。</div></div></div>
+
+<div class="col"><div class="cap">B · 保留卡框，理由收起</div><div class="cap2">卡還在，但：標題字級降到 label、任務名 1 行、理由折在「Show the reason ⌄」後。約 3 行高。</div>
+<div class="phone"><div class="meta">Used 1 tool ›</div>
+<div class="card" style="padding:10px 12px"><div class="hd" style="font-size:14px"><span class="chip blue">✓</span>An agent recorded a decision<span style="margin-left:auto;color:#8e8e93;font-weight:400;font-size:13px">13:04</span></div>
+<div class="s ell" style="color:#f2f2f7">模擬車停點偏移：到位判定與補位目標不一致修正（SK8）</div><div class="s">Confirm done · rev 1</div><div class="tog">Show the reason ⌄</div></div>
+<div class="meta">Used 1 tool ›</div>
+<div class="card"><div class="hd"><span class="chip blue">?</span>The coordinator has a question</div>
+<div class="s">舊任務盤點：本專案除窗口鎖外，還有 27 個未結任務。我逐一讀過最後狀態，建議分成以下 6 類處置，完整表格在對話裡。</div><div class="div"></div><div class="act"><span>View details &amp; act</span>›</div></div>
+<div class="meta">Ran 1 shell command ›</div></div></div>
+</div>
+<div class="sub" style="margin-top:18px">順帶發現：理由前綴固定寫「the reason it was sent back」，但這張是 Confirm done（確認時的備註也套了「退回原因」）。建議：Confirm 時改為「Note」，Send back 時保留。Web（EvidenceDecisionReceipt）與 iOS/macOS 同改，保持 parity 測試一致。</div>
+</body></html>

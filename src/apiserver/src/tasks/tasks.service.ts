@@ -82,6 +82,7 @@ import {
   sessionHasEnded,
 } from '../projects/project-open-item';
 import { branchName } from '../projects/project-criterion-landing';
+import { forkSourceLine } from '../projects/session-source';
 import { projectAwaitingStart, projectNotStartedRefusal } from '../projects/project-started';
 import {
   cancelledProjectOf,
@@ -232,7 +233,11 @@ export {
   QUOTA_BLIND_RETRY_BACKOFF_MS,
 } from './task-retry-policy';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
-import { clearDispatchRefusal } from './task-dispatch-refusal';
+import {
+  clearDispatchRefusal,
+  FORK_REFUSAL_STANDS_SQL,
+  recordForkDispatchRefusal,
+} from './task-dispatch-refusal';
 import {
   TASK_RUN_ACTION,
   TASK_RUN_LEASE_MS,
@@ -365,6 +370,12 @@ import {
   taskCodelessHasCommitsBody,
   taskCodelessReasonRequiredBody,
 } from './task-codeless';
+import {
+  assertForkCallerOnRunner,
+  assertForkPlacement,
+  resolveTaskFork,
+  type TaskForkColumns,
+} from './task-fork';
 import {
   criterionAsksForOwnerConfirmation,
   ownerConfirmationNotDelegatedBody,
@@ -1110,6 +1121,10 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   -- permission: deleting 112 paused-able lists released 55,513 tasks that then ran for a
   -- fortnight. Every clause here that permits must be positive and read off the task itself.
   AND t.dispatch_hold = false
+  -- ...and so is a forked task whose start was refused on facts that still hold: a code binding on
+  -- its project, or its workspace on another machine (recordForkDispatchRefusal). Offering it again
+  -- before one of them changes is the same 409 every sweep, which is how it went unseen.
+  AND NOT ${FORK_REFUSAL_STANDS_SQL}
   -- ...and so is a task filed under a cancelled project: its owner stopped pursuing the goal the
   -- task is for. Read off the project row, which outlives every task filed under it (see
   -- projectNotCancelledSql), and applied by every automatic door and by execute() alike.
@@ -1226,6 +1241,10 @@ const PROJECT_INDEPENDENT_READY_SQL = Prisma.sql`
   t.status = 'OPEN'::task_status
   AND t.auto_run_when_ready = true
   AND t.dispatch_hold = false
+  -- ...and so is a forked task whose start was refused on facts that still hold: a code binding on
+  -- its project, or its workspace on another machine (recordForkDispatchRefusal). Offering it again
+  -- before one of them changes is the same 409 every sweep, which is how it went unseen.
+  AND NOT ${FORK_REFUSAL_STANDS_SQL}
   AND ${Prisma.raw(projectNotCancelledSql('t'))}
   AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
   AND (t.run_at IS NULL OR t.run_at <= now())
@@ -1369,6 +1388,10 @@ const SCHEDULED_DUE_SQL = Prisma.sql`
   AND t.run_at <= now()
   AND t.status = 'OPEN'::task_status
   AND t.dispatch_hold = false
+  -- ...and so is a forked task whose start was refused on facts that still hold: a code binding on
+  -- its project, or its workspace on another machine (recordForkDispatchRefusal). Offering it again
+  -- before one of them changes is the same 409 every sweep, which is how it went unseen.
+  AND NOT ${FORK_REFUSAL_STANDS_SQL}
   AND ${Prisma.raw(projectNotCancelledSql('t'))}
   -- A schedule is an automatic start like the others: a project its owner has not started, or has
   -- paused, keeps its appointment (not consumed, so it fires once the project moves) and starts
@@ -3828,6 +3851,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * the task is still the user's (`creator` stays unset), and the credential is recorded beside it
    * in `activity` — see `recordTasksCreated`.
    */
+  /**
+   * The runner door's half of SR55's "the calling session": a request carrying a fork must come from a
+   * session this runner credential is running (`task-fork.ts`). The create below checks the rest.
+   */
+  async assertForkCallerOnRunner(ownerId: string, runnerId: string, sessionId: string | undefined): Promise<void> {
+    await assertForkCallerOnRunner(this.prisma, ownerId, runnerId, sessionId);
+  }
+
   async create(
     ownerId: string,
     dto: CreateTaskDto,
@@ -3841,6 +3872,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // reimplemented, because a second writer is a second thing to keep in step with every column a
     // Task has — see `createWithVerifier`.
     const verification = dto.verification;
+    if (verification && dto.fork) {
+      // The paired writer below is a second row builder; a fork it silently dropped would be a task that
+      // starts somewhere nobody chose. Two calls do the same job: the subject forked, its check after.
+      throw new BadRequestException(
+        'fork and verification cannot be used together yet: create the forked task, then its verification task',
+      );
+    }
     if (verification) {
       // One task, one role in the relation: it either IS the check (verifiesTaskId) or is the
       // subject something else checks (verification). Naming both would make it its own subject.
@@ -3962,6 +4000,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     await this.assertFixesOpenItem(
       this.prisma, ownerId, scopedProjectId, dto.fixesOpenItemId, creatorSessionId,
     );
+    // SR55: a fork is from the calling session, runs on its machine, and is not filed into a project
+    // with a code binding — judged against the project the scope admitted, before any transaction.
+    const forkColumns = await resolveTaskFork(
+      this.prisma, ownerId, creatorSessionId, { ...dto, projectId: scopedProjectId }, null,
+    );
     // Against the project this write was ADMITTED into, for the reason stated above: a coordinator
     // that names no project still files its work under the one it coordinates, and refusing that
     // request on the DTO's empty `projectId` would be a refusal of a task that lands in a project.
@@ -4034,6 +4077,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       idempotencyKey,
       await this.pausedListIds(ownerId, [dto.listId]),
       criterionDeclaration,
+      forkColumns,
     );
     // Initial edges and their task must become visible atomically. Taking the same owner lock
     // used by add/replace prevents a concurrent reverse-edge write from observing the new task
@@ -4441,6 +4485,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     heldListIds: ReadonlySet<string>,
     /** Migration 0232: what `dto.criterionKey` resolved to, or null when nothing was declared. */
     criterionDeclaration: { criterionDefinitionId: string; criterionRevision: number } | null,
+    /** Migration 0615: the fork `resolveTaskFork` checked, or null/absent for a task not forked. */
+    fork?: TaskForkColumns | null,
   ): Prisma.TaskUncheckedCreateInput {
     const sessionId = origin?.sessionId;
     return {
@@ -4489,6 +4535,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // SR5's declaration, made with the task: no reason is asked for a task's first statement of
       // what it is (`task-codeless.ts`). Omitted leaves the column default, false.
       codeless: dto.codeless,
+      // SR55's five facts, in this INSERT and never again (0615's `task_fork_guard`). Absent on a task
+      // that was not forked, so the columns stay out of the statement, as on every task before them.
+      ...(fork ?? {}),
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       // Omitted means unscheduled. The `undefined` is what makes that true without a default:
       // Prisma leaves the column out of the INSERT, so the row is born NULL exactly as every task
@@ -5074,6 +5123,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         this.prisma, ownerId, item.projectId, item.fixesOpenItemId, creatorSessionId,
       );
     }
+    // SR55, per item and over the project each was admitted into, like the link check above. A
+    // replayed item's row already carries whatever fork it was written with.
+    const forkColumns = new Map<number, TaskForkColumns>();
+    for (const [index, item] of items.entries()) {
+      if (frozen.has(index)) continue;
+      const fork = await resolveTaskFork(this.prisma, ownerId, creatorSessionId, item, index);
+      if (fork) forkColumns.set(index, fork);
+    }
     // Item by item, over the project each one was ADMITTED into, and above the dry run for the
     // same reason the bound below is. A frozen item is a replay whose row already exists:
     // re-judging it could only refuse a write that already happened.
@@ -5296,6 +5353,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               idempotencyKey,
               heldListIds,
               criterionDeclarations.get(index) ?? null,
+              forkColumns.get(index) ?? null,
             ),
           }));
         if (!existing) {
@@ -6534,6 +6592,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
     const from = asked.fromProjectId;
     const to = asked.toProjectId;
+    // SR55, as on the edit door: a forked task is never moved into a project with a code binding.
+    // Refused before the approval is spent, so the request stays answerable once the fork is resolved.
+    const fork = await this.prisma.task.findFirst({
+      where: { id: taskId, ownerId },
+      select: { forkRunnerId: true, forkSessionId: true },
+    });
+    if (fork?.forkRunnerId && fork.forkSessionId && to) {
+      await assertForkPlacement(this.prisma, ownerId,
+        { forkRunnerId: fork.forkRunnerId, forkSessionId: fork.forkSessionId }, { projectId: to });
+    }
     const moved = await withTransactionRetry(this.prisma, async (tx) => {
       await this.lockDependencyGraph(tx, ownerId);
       const projectIds = orderedIds([from, to]);
@@ -9215,6 +9283,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // and a row with work of its own is one whose detail has a verifier state like any other.
     const [
       dependencyFacts, supersession, autoRunSkipped, workState, progress, verifier, routes, modelHintOptions, integrations,
+      forkSource,
     ] =
       await Promise.all([
         this.dependencyFactsFor(ownerId, [id]),
@@ -9231,6 +9300,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         readTaskRouteSummaries(this.prisma, ownerId, (task.sessions ?? []).map((session) => session.id)),
         this.modelHintOptions(ownerId, task),
         task.projectId ? readTaskIntegrationViews(this.prisma, ownerId, task.projectId, [id]) : new Map(),
+        forkSourceLine(this.prisma, task),
       ]);
     const dependencyState = computeDependencyState(dependencyFacts.get(id) ?? []);
     return {
@@ -9278,6 +9348,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // A task in no project lands on no project's main branch.
         mainBranch: null,
       },
+      // SR18's sentence when this task was forked from a session (design §2.3), null otherwise: the
+      // line every client shows where it shows the task's source.
+      forkSource,
       ...supersession,
     };
   }
@@ -9753,6 +9826,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (dto.assigneeId) await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
     if (dto.projectId) await this.assertOwnedProject(ownerId, dto.projectId);
+    // SR55: an edit may not move a forked task where its next run could only be refused — into a
+    // project with a code binding, or onto a workspace on another machine than its snapshot's. Asked of
+    // what the edit changes only, before the transaction, like every refusal on this path.
+    // `before` is the full row (loadDetail reads every column), so an ordinary task pays no query here.
+    if ((dto.assigneeId || dto.projectId) && (dto.assigneeId !== before.assigneeId || dto.projectId !== before.projectId)) {
+      if (before.forkRunnerId && before.forkSessionId) {
+        await assertForkPlacement(this.prisma, ownerId,
+          { forkRunnerId: before.forkRunnerId, forkSessionId: before.forkSessionId },
+          {
+            assigneeId: dto.assigneeId && dto.assigneeId !== before.assigneeId ? dto.assigneeId : null,
+            projectId: dto.projectId && dto.projectId !== before.projectId ? dto.projectId : null,
+          });
+      }
+    }
     // The engine, provider and model pins as this write leaves them — each three-state; a provider
     // alone carries the engine it runs on by default, and an engine alone is checked against the
     // provider pin the task keeps (docs/provider-engine-contract.md §3.5).
@@ -14832,8 +14919,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (e instanceof TaskRunFenceLost) {
         throw taskRunInProgress(TASK_RUN_ACTION.execute, runRequestToken);
       }
+      // An automatic start of a forked task refused by the session create door: recorded on the
+      // task, so the candidate scans stop offering it until something it was decided on changes.
+      if (auto) await this.recordForkRefusalOf(id, e);
       throw e;
     }
+  }
+
+  /** `recordForkDispatchRefusal` for an error that is a fork refusal; anything else is left alone. */
+  private async recordForkRefusalOf(taskId: string, e: unknown): Promise<void> {
+    if (!(e instanceof ConflictException)) return;
+    const body = e.getResponse() as { code?: unknown; message?: unknown };
+    if (body?.code !== 'FORK_SOURCE_NOT_REACHABLE' && body?.code !== 'FORK_IN_BOUND_PROJECT') return;
+    await recordForkDispatchRefusal(
+      this.prisma, taskId, { code: body.code, message: String(body.message ?? '') }, new Date(),
+    ).catch((err) =>
+      this.logger.warn(`fork refusal of task ${taskId} not recorded: ${err?.message ?? err}`));
   }
 
   /**

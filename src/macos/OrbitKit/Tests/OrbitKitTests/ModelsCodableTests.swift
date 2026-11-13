@@ -112,6 +112,24 @@ final class ModelsCodableTests: XCTestCase {
     }
 
 
+    /// SR18's line for a run of a forked task (docs/task-fork-from-session-design.md §2.3): the
+    /// server's sentence as it is, and nothing from a server that predates it or a task not forked.
+    func testSessionDecodesForkSourceAndOlderPayloadReadsNone() throws {
+        let json = #"""
+        {"id":"s1","status":"RUNNING",
+         "forkSource":"Forked from session «Refactor the claim path» at 5555555 (includes uncommitted changes)"}
+        """#
+        let forked = try JSONDecoder().decode(Session.self, from: Data(json.utf8))
+        XCTAssertEqual(forked.forkSource,
+                       "Forked from session «Refactor the claim path» at 5555555 (includes uncommitted changes)")
+
+        let notForked = try JSONDecoder().decode(
+            Session.self, from: Data(#"{"id":"s2","status":"RUNNING","forkSource":null}"#.utf8))
+        XCTAssertNil(notForked.forkSource)
+        let older = try JSONDecoder().decode(Session.self, from: Data(#"{"id":"s3","status":"RUNNING"}"#.utf8))
+        XCTAssertNil(older.forkSource)
+    }
+
     func testLegacyCanArchiveCapabilityNormalizesToCanComplete() throws {
         let capabilities = try JSONDecoder().decode(
             SessionCapabilities.self,

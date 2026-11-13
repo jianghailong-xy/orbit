@@ -28,6 +28,27 @@ class EngineErrorsTest {
             EngineErrors.isRetryableApiErrorText("API Error: Request rejected (400) · Output blocked by content filtering policy"))
     }
 
+    /** Cloudflare's block page and a dropped socket, verbatim from FAILED sessions on 2026-11-13. Claude Code
+     * wraps both in "Failed to authenticate", so the prefix alone reads as a credential rejection; the page, or
+     * the socket, is what says the connection clears on its own. A credential 403 with neither is still no re-send. */
+    @Test fun retryableForAFailureOfTheConnection() {
+        val blocked = "Failed to authenticate. API Error: 403 Attention Required! | Cloudflare"
+        val reset = "Failed to authenticate. API Error: 403 ECONNRESET: The socket connection was closed unexpectedly. " +
+            "For more information, pass `verbose: true` in the second argument to fetch()"
+        for (text in listOf(blocked, reset)) {
+            assertTrue(EngineErrors.isConnectionFailureText(text))
+            assertTrue(EngineErrors.isRetryableApiErrorText(text))
+            assertFalse("the runtime's sign-in prefix is not what decides", EngineAuth.isAuthErrorText(text))
+        }
+        assertFalse(EngineErrors.isRetryableApiErrorText("Failed to authenticate. API Error: 403 Request not allowed"))
+        assertFalse("every marker of a group has to appear", EngineErrors.isConnectionFailureText("API Error: 403 Attention Required!"))
+        // Anchored like the other classifications: a reply that merely quotes one is an ordinary reply.
+        for (quoted in listOf("The run died on \"$blocked\" — retrying.", "The run died on \"$reset\" — retrying.")) {
+            assertFalse(EngineErrors.isConnectionFailureText(quoted))
+            assertFalse(EngineErrors.isRetryableApiErrorText(quoted))
+        }
+    }
+
     @Test fun retryableFromWordingWhenThereIsNoStatus() {
         assertTrue(EngineErrors.isRetryableApiErrorText("API Error: Connection error."))
         assertTrue(EngineErrors.isRetryableApiErrorText("API Error: connection closed mid-response"))

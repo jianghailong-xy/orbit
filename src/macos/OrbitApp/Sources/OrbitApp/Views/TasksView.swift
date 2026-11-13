@@ -1497,6 +1497,16 @@ private struct TaskDetailContent: View {
                 }
             }
             .font(.orbitSubtext)
+            // Where a task forked from a session took its checkout from (SR18), in the server's
+            // own words. Absent on an older server.
+            if let fork = task.forkSource {
+                Text(fork)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                    .accessibilityIdentifier("task-fork-source")
+            }
             // How this row is judged, which nothing else on the page said.
             if let chip = TaskJudgment.chip(task) { judgmentChip(chip) }
         }

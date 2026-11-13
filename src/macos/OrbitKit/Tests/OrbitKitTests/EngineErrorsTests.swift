@@ -27,6 +27,30 @@ final class EngineErrorsTests: XCTestCase {
         XCTAssertFalse(EngineErrors.isRetryableApiErrorText("API Error: 404 model not found"))
     }
 
+    /// Cloudflare's block page and a dropped socket, verbatim from FAILED sessions on 2026-11-13.
+    /// Claude Code wraps both in "Failed to authenticate", so the prefix alone reads as a credential
+    /// rejection; the page, or the socket, is what says the connection clears on its own. A
+    /// credential 403 with neither is still no re-send.
+    func testRetryableForAFailureOfTheConnection() {
+        let blocked = "Failed to authenticate. API Error: 403 Attention Required! | Cloudflare"
+        let reset = "Failed to authenticate. API Error: 403 ECONNRESET: The socket connection was closed unexpectedly. "
+            + "For more information, pass `verbose: true` in the second argument to fetch()"
+        for text in [blocked, reset] {
+            XCTAssertTrue(EngineErrors.isConnectionFailureText(text))
+            XCTAssertTrue(EngineErrors.isRetryableApiErrorText(text))
+            XCTAssertFalse(EngineAuth.isAuthErrorText(text))
+        }
+        XCTAssertFalse(EngineErrors.isRetryableApiErrorText("Failed to authenticate. API Error: 403 Request not allowed"))
+        XCTAssertFalse(EngineErrors.isConnectionFailureText("API Error: 403 Attention Required!"),
+                       "every marker of a group has to appear")
+        // Anchored like the other classifications: a reply that merely quotes one is an ordinary
+        // reply, and re-sending it would send the user's message twice.
+        for quoted in ["The run died on \"\(blocked)\" — retrying.", "The run died on \"\(reset)\" — retrying."] {
+            XCTAssertFalse(EngineErrors.isConnectionFailureText(quoted))
+            XCTAssertFalse(EngineErrors.isRetryableApiErrorText(quoted))
+        }
+    }
+
     /// The runtime has a second shape for a request the API turned away — prose first, the status in
     /// parentheses. The status inside it still decides, so the wrapper is read for one rather than
     /// trusted or ignored wholesale. Without this the commonest one, a rate limit, matches no marker

@@ -319,6 +319,17 @@ struct ConsoleView: View {
                 // carries — the session's two kinds of output, together.
                 CreatedTasksCard(console: console)
                 WorktreeBar(console: console)
+                // Where a forked task's run took its checkout from (SR18), beside the branch the
+                // bar above names: the server's sentence, as it is.
+                if let fork = console.sessionForkSource {
+                    Text(fork)
+                        .font(.orbitMeta).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.bottom, .composerBandGap)
+                        .accessibilityIdentifier("session-fork-source")
+                }
             }
             .modifier(TypingFold(folded: foldsChrome(console)))
             // The landing this conversation's work fed, at the session's own bottom (owner
