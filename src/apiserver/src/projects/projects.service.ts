@@ -40,6 +40,7 @@ import { SingleFlight } from '../common/single-flight';
 import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { type CoordinatorPendingWait, pendingWaitLabel } from './coordinator-pending-waits';
 import { MergeReceiptRow, mergeReceiptRow } from '../sessions/merge-receipt';
 import {
   DependencyState,
@@ -4692,7 +4693,13 @@ export class ProjectsService {
     id: string,
     workspaceId?: string,
     intent: CoordinatorIntent = 'open',
-  ): Promise<{ sessionId: string; created: boolean; workspaceId: string | null }> {
+  ): Promise<{
+    sessionId: string;
+    created: boolean;
+    workspaceId: string | null;
+    /** How many of the outgoing coordinator's ACTIVE watches now observe the new one; 0 unless this call swapped. */
+    movedWatches: number;
+  }> {
     const project = await this.prisma.project.findFirst({
       where: { id, ownerId },
       select: {
@@ -4741,6 +4748,7 @@ export class ProjectsService {
         sessionId: standing.id,
         created: false,
         workspaceId: project.coordinatorWorkspaceId,
+        movedWatches: 0,
       };
     }
 
@@ -4829,7 +4837,7 @@ export class ProjectsService {
     // The pointer replacement remains one statement inside the transaction below: only a
     // REPLACEMENT counts, and the trigger's condition is the same one this code applied — a first
     // coordinator is generation 0, "the coordinator this project has always had".
-    let claimed: { count: number };
+    let claimed: { count: number; movedWatches: string[] };
     try {
       claimed = await withTransactionRetry(this.prisma, async (tx) => {
         // Updating the Project pointer re-checks its workspace FK. Hold the landing before any
@@ -4869,14 +4877,14 @@ export class ProjectsService {
            WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
            FOR NO KEY UPDATE`);
         if (!locked || locked.coordinator_session_id !== project.coordinatorSessionId) {
-          return { count: 0 };
+          return { count: 0, movedWatches: [] };
         }
 
         const swapped = await tx.project.updateMany({
           where: { id, ownerId, coordinatorSessionId: project.coordinatorSessionId },
           data: { coordinatorSessionId: session.id, coordinatorWorkspaceId: runIn },
         });
-        if (swapped.count === 0) return swapped;
+        if (swapped.count === 0) return { count: 0, movedWatches: [] };
 
         // A manual rename can race in the tiny create-before-bind window. It clears the managed
         // bit, so this conditional write honors that choice while still binding the conversation.
@@ -4884,13 +4892,29 @@ export class ProjectsService {
           where: { id: session.id, ownerId, titleManagedByProject: true },
           data: { title: coordinatorSessionTitle(locked.title) },
         });
+        let movedWatches: string[] = [];
         if (project.coordinatorSessionId && project.coordinatorSessionId !== session.id) {
           await tx.session.updateMany({
             where: { id: project.coordinatorSessionId, titleManagedByProject: true },
             data: { titleManagedByProject: false },
           });
+          // The waits the outgoing coordinator set go to its successor, in this transaction: a
+          // completed observer is refused every delivery (OBSERVER_SESSION_COMPLETED), so a
+          // `task_await` left addressed to it would never wake anyone. ACTIVE only — a watch that has
+          // ended stays with the conversation it ended for. Rank 45, after the project (40), rows
+          // locked in id order in one statement; the new observer's FK check is covered by the
+          // Session lock already held.
+          movedWatches = (await tx.$queryRaw<Array<{ id: string }>>`
+            UPDATE "watch" SET "observer_session_id" = ${session.id}::uuid, "updated_at" = now()
+             WHERE "id" IN (
+               SELECT "id" FROM "watch"
+                WHERE "observer_session_id" = ${project.coordinatorSessionId}::uuid
+                  AND "owner_id" = ${ownerId}::uuid AND "state" = 'ACTIVE'
+                ORDER BY "id"
+                FOR UPDATE)
+            RETURNING "id"`).map((row) => row.id);
         }
-        return swapped;
+        return { count: swapped.count, movedWatches };
       }, loggedRetry(this.logger, 'projects.coordinator'));
     } catch (e) {
       // The swap did not happen — it FAILED, which is not the same as losing the race below and is
@@ -4942,11 +4966,13 @@ export class ProjectsService {
         sessionId: winner.coordinatorSession.id,
         created: false,
         workspaceId: winner.coordinatorWorkspaceId,
+        movedWatches: 0,
       };
     }
     if (project.coordinatorSessionId && project.coordinatorSessionId !== session.id) {
       this.sessions?.announceProjectSessionChanged?.(project.coordinatorSessionId);
     }
+    for (const watchId of claimed.movedWatches) this.realtime?.publishWatchChanged(ownerId, watchId);
     this.sessions?.announceProjectSessionChanged?.(session.id);
     // §4.4 X-D4 (2): the conversation this project's open exceptions are owed to is now this one, so
     // everything still waiting is handed over rather than left addressed to the conversation before.
@@ -4956,7 +4982,45 @@ export class ProjectsService {
     // And the evidence revisions waiting for a coordinator: handed to this one, oldest first
     // (projects/coordinator-evidence-queue.service.ts).
     await this.evidenceQueue?.deliverOwed(id);
-    return { sessionId: session.id, created: true, workspaceId: runIn };
+    return { sessionId: session.id, created: true, workspaceId: runIn, movedWatches: claimed.movedWatches.length };
+  }
+
+  /**
+   * The waits a replacement would move (see the swap in `coordinator`): every ACTIVE watch whose
+   * observer is this project's current coordinator, oldest first, as `{ id, label }` for the
+   * confirm dialog. Empty when the project has no coordinator or it is waiting on nothing.
+   */
+  async coordinatorPendingWaits(ownerId: string, id: string): Promise<CoordinatorPendingWait[]> {
+    const project = await this.prisma.project.findFirst({
+      where: { id, ownerId },
+      select: { coordinatorSessionId: true },
+    });
+    if (!project) throw new NotFoundException('project not found');
+    if (!project.coordinatorSessionId) return [];
+    const watches = await this.prisma.watch.findMany({
+      where: { ownerId, observerSessionId: project.coordinatorSessionId, state: 'ACTIVE' },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        predicate: true,
+        targets: { select: { targetKind: true, targetResourceId: true }, orderBy: { id: 'asc' } },
+      },
+    });
+    if (watches.length === 0) return [];
+    const ids = (kind: string) => [...new Set(watches.flatMap((w) =>
+      w.targets.filter((t) => t.targetKind === kind).map((t) => t.targetResourceId)))];
+    const [tasks, sessions] = await Promise.all([
+      this.prisma.task.findMany({ where: { id: { in: ids('TASK') }, ownerId }, select: { id: true, title: true } }),
+      this.prisma.session.findMany({
+        where: { id: { in: ids('SESSION') }, ownerId },
+        select: { id: true, title: true },
+      }),
+    ]);
+    const titles = new Map<string, string>([...tasks, ...sessions].map((row) => [row.id, row.title ?? 'Untitled']));
+    return watches.map((w) => ({
+      id: w.id,
+      label: pendingWaitLabel(w.predicate, w.targets.map((t) => titles.get(t.targetResourceId) ?? null)),
+    }));
   }
 
   /**
@@ -5086,6 +5150,8 @@ export class ProjectsService {
     replacedSessionId?: string;
     /** Why the conversation it left behind could not be handed a message. */
     replaceReason?: SessionReceiveBlockedReason;
+    /** How many waits moved to the new conversation, when this call opened or replaced one. */
+    movedWatches?: number;
   }> {
     const project = await this.prisma.project.findFirst({
       where: { id, ownerId },

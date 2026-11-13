@@ -127,6 +127,20 @@ export const LOCK_ORDER = [
       'coordinator loop in `6418a1e5` (2026-08-23).',
   },
   {
+    rank: 45,
+    relation: 'watch',
+    modes: 'FOR UPDATE (the evaluator\'s landing; the coordinator swap re-pointing the outgoing coordinator\'s ACTIVE watches, sorted by id in one statement)',
+    why:
+      'Above `project` because the one transaction that holds a project and wants watches, the ' +
+      'coordinator pointer swap in ProjectsService.coordinator, takes its Sessions (30) and the ' +
+      'project (40) first and re-points the outgoing coordinator\'s ACTIVE watches last. Above ' +
+      '`session` for the same reason a session delete reaches its watches through ' +
+      'watch_observer_session_id_fkey ON DELETE CASCADE after it holds the session. The evaluator ' +
+      'holds a watch row and then only reads the task and session rows it targets, and writes child ' +
+      'rows (watch_target, watch_match, watch_delivery) — so no holder of a watch waits on anything ' +
+      'ranked below it.',
+  },
+  {
     rank: 50,
     relation: 'task',
     modes: 'FOR UPDATE (delete) · FOR NO KEY UPDATE (update) · FOR SHARE (the admission and authority re-read: SessionsService.resume, taskWorkRefusalFor, ProjectHandoffService.declare, TasksService.assertPlanAuthorityUnchanged) · FOR KEY SHARE (edge + session.task_id FK, the X-E5 tick\'s SKIP LOCKED hold)',
