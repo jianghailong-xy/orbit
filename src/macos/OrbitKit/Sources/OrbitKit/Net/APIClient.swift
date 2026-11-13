@@ -259,6 +259,25 @@ public final class APIClient: @unchecked Sendable {
 
     public func session(_ id: String) async throws -> Session { try await get("sessions/\(id)") }
 
+    // MARK: a session's Settings panel (docs/mocks/session-settings)
+
+    /// The same `GET /sessions/:id`, read for what the Settings panel shows beyond the session row:
+    /// `settings`, `usage`, `engineVersion`, the working directory and the assigned runner.
+    public func sessionSettingsDetail(_ id: String) async throws -> SessionSettingsDetail {
+        try await get("sessions/\(id)")
+    }
+
+    /// `PATCH /sessions/:id/settings`: only the fields set are sent; answers the settings as they now stand.
+    public func patchSessionSettings(_ id: String, _ body: SessionSettingsPatch) async throws -> SessionSettingsValues {
+        try await patch("sessions/\(id)/settings", body: body)
+    }
+
+    /// `POST /sessions/:id/restart`: reload the live engine with the session's env once the turn in
+    /// flight (if any) ends. Refused 409 `ENGINE_NOT_RUNNING` once the engine has ended.
+    public func restartSession(_ id: String) async throws -> SessionRestartResponse {
+        try await post("sessions/\(id)/restart", body: Optional<Empty>.none)
+    }
+
     /// One session request as it stands now — the state a request card shows (`SessionRequestView`).
     public func sessionRequest(_ id: String) async throws -> SessionRequestView {
         try await get("session-requests/\(id)")

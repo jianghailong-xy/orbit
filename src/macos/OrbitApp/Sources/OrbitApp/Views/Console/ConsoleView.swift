@@ -56,6 +56,9 @@ struct ConsoleView: View {
     @State private var renaming = false
     @State private var renameDraft = ""
     @State private var taggingSession: Session?
+    /// The session whose Settings sheet is open (`SessionSettingsSheet`), from Settings… in the ⋯ menu
+    /// or the Mac toolbar.
+    @State private var settingsSession: Session?
     @State private var confirmPurge = false
     /// Gates the "needs you" banner to the compact shell — see the `safeAreaInset` below.
     @Environment(\.horizontalSizeClass) private var hSize
@@ -517,8 +520,26 @@ struct ConsoleView: View {
                     .disabled(sessionWorkspace(session) == nil)
                 }
             }
+            // Settings…, the iPhone's ⋯ menu item after Tags…: the same sheet. None on a landing
+            // session (LS6), which has no engine to set up.
+            ToolbarItem(placement: .primaryAction) {
+                if let session = appModel.session(id: sessionID), session.isLanding != true {
+                    Button { settingsSession = session } label: {
+                        Label(SessionSettingsPanel.menuItem, systemImage: "gearshape")
+                    }
+                    .help("Session settings: labels, public link, environment, notifications and info")
+                }
+            }
         }
         #endif
+        // Settings… (docs/mocks/session-settings native.html ①–④), on every platform.
+        .sheet(item: $settingsSession) { session in
+            if let baseURL = appModel.baseURL {
+                SessionSettingsSheet(sessionID: session.id,
+                                     api: APIClient(baseURL: baseURL, tokenStore: appModel.tokenStore))
+                    .environment(appModel)
+            }
+        }
         // The Move panel, from Move… or the region card (docs/session-folders-move-design.md §4).
         .sheet(item: $movingSession) { session in
             if let workspace = sessionWorkspace(session) {
@@ -608,6 +629,9 @@ struct ConsoleView: View {
                     .disabled(sessionWorkspace(session) == nil)
                     Button { taggingSession = session } label: {
                         Label("Tags…", systemImage: "tag")
+                    }
+                    Button { settingsSession = session } label: {
+                        Label(SessionSettingsPanel.menuItem, systemImage: "gearshape")
                     }
                 }
                 if let taskID = session.taskId {
