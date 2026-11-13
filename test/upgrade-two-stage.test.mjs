@@ -4,6 +4,7 @@
 // fake `ssh` first on PATH: ssh runs the command it is given here, as the target, in a directory of its own, and docker
 // records every call and answers as each host would. Compose's `config` is the real one, where it is installed, so the
 // files the target is left with are rendered as the target would render them. The real two-stage run is the task's dry run.
+// The target's .env lists the two Compose files 10.66.0.4's does, deploy/postgres-pinned.yml and deploy/db-proxy.yml.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
@@ -22,20 +23,25 @@ const COPIED = [
   ...UPGRADES, 'deploy/two-stage/release.sh', 'deploy/two-stage/deploy-stage.sh', 'deploy/two-stage/base-images.env',
   'docker-compose.yml', '.gitignore', 'gateway/nginx.conf', 'gateway/several-apiservers/http/upstreams.conf',
   'gateway/several-apiservers/server/routes.conf', 'scripts/pg-archive-wal.sh', 'scripts/pg-backup.sh',
-  'src/link-gateway/nats.conf', 'deploy/runner-link/behind-web-gateway.env',
+  'src/link-gateway/nats.conf', 'deploy/runner-link/behind-web-gateway.env', 'deploy/postgres-pinned.yml', 'deploy/db-proxy.yml',
+  'deploy/db-proxy/haproxy.cfg',
 ];
 // What the target is left with besides .env, its ./data and .upgrade/: the release's files, and nothing built from.
 const SHIPPED = [
-  'deploy/runner-link/behind-web-gateway.env', 'docker-compose.yml', 'gateway/nginx.conf', 'gateway/several-apiservers/http/upstreams.conf',
+  'deploy/db-proxy.yml', 'deploy/db-proxy/haproxy.cfg', 'deploy/postgres-pinned.yml', 'deploy/runner-link/behind-web-gateway.env',
+  'docker-compose.yml', 'gateway/nginx.conf', 'gateway/several-apiservers/http/upstreams.conf',
   'gateway/several-apiservers/server/routes.conf', 'scripts/pg-archive-wal.sh', 'scripts/pg-backup.sh', 'src/link-gateway/nats.conf',
 ];
-const DEPLOY_ORDER = ['postgres', 'nats', 'apiserver', 'wiki-worker', 'web', 'link-gateway', 'gateway', 'pgbackup'];
+const DEPLOY_ORDER = ['postgres', 'db-proxy', 'nats', 'apiserver', 'wiki-worker', 'web', 'link-gateway', 'gateway', 'pgbackup'];
+const PINNED = 'docker-compose.yml:deploy/postgres-pinned.yml:deploy/db-proxy.yml';
 const TARGET_ENV = `JWT_SECRET="target-secret"
 PROVIDER_SECRET_KEY="target-key"
 RUNNER_LINK_SIGNING_KEY="target-signing-key"
 PUBLIC_ORIGIN="https://orbit.example.com"
 COMPOSE_PROFILES=runner-link
 RUNNER_LINK_ENV_FILE=./deploy/runner-link/behind-web-gateway.env
+COMPOSE_FILE=${PINNED}
+ORBIT_REGISTRY=${REGISTRY}
 `;
 
 // The fake docker. A call is logged as <side>\t<ORBIT_IMAGE_TAG>\t<args>, the side being "build" or "target". On the target
@@ -67,6 +73,7 @@ case "$side $*" in
   "target inspect --format {{.Config.Image}} c-web") cat "$state/web.image" ;;
   "target compose ps -q "*) [ -e "$state/$4" ] && [ ! -e "$state/$4.stopped" ] && echo "c-$4" ;;
   "target exec c-gateway cat "*) cat "$state/gateway.file" ;;
+  "target exec c-db-proxy cat "*) cat "$state/db-proxy.file" ;;
   "target exec c-pgbackup cat "*) cat "$state/pgbackup.file" ;;
   "target compose up "*)
     service="${'$'}{!#}"
@@ -75,6 +82,7 @@ case "$side $*" in
     rm -f "$state/$service.stopped"
     case "$service" in
       gateway) cp gateway/nginx.conf "$state/gateway.file" ;;
+      db-proxy) cp deploy/db-proxy/haproxy.cfg "$state/db-proxy.file" ;;
       pgbackup) cp scripts/pg-backup.sh "$state/pgbackup.file" ;;
       web) "$FAKE_REAL_DOCKER" compose config --images web >"$state/web.image" ;;
     esac ;;
@@ -175,19 +183,27 @@ function makeFixture(t) {
   return fixture;
 }
 
-/** Every file under dir, relative to it, but for the ones a deployment keeps for itself. */
-function shippedFiles(dir) {
+/** Every file under dir, relative to it, but for the ones a deployment keeps for itself; with directories too, if asked. */
+function shippedFiles(dir, { directories = false } = {}) {
   const files = [];
   const walk = (relative) => {
     for (const entry of readdirSync(path.join(dir, relative), { withFileTypes: true })) {
       const name = path.join(relative, entry.name);
       if (['.env', '.upgrade', 'data'].includes(name)) continue;
-      if (entry.isDirectory()) walk(name);
-      else files.push(name);
+      if (entry.isDirectory()) {
+        if (directories) files.push(`${name}/`);
+        walk(name);
+      } else files.push(name);
     }
   };
   walk('');
   return files.sort();
+}
+
+/** Each file under dir that shippedFiles lists, with its bytes. */
+function snapshot(dir) {
+  return Object.fromEntries(shippedFiles(dir, { directories: true })
+    .map((name) => [name, name.endsWith('/') ? '' : readFileSync(path.join(dir, name), 'utf8')]));
 }
 
 const ups = (run) => run.target.filter((call) => call.args.startsWith('compose up ')).map((call) => call.args);
@@ -205,11 +221,13 @@ test('the two-stage section is the same in both copies of /upgrade\'s script', (
   assert.equal(section(UPGRADES[0]), section(UPGRADES[1]));
 });
 
-test('the deploy ships every file docker-compose.yml reads from its directory, and nothing that builds', () => {
+test('the deploy ships every file the target\'s Compose files read from its directory, and nothing that builds', () => {
   const release = readFileSync(path.join(repo, 'deploy/two-stage/release.sh'), 'utf8');
   const shipped = release.match(/^RELEASE_FILES=\(([^)]*)\)$/m)[1].split(/\s+/).filter(Boolean);
-  const source = readFileSync(path.join(repo, 'docker-compose.yml'), 'utf8').split('\n').filter((line) => !/^\s*#/.test(line)).join('\n');
-  const read = new Set([...source.matchAll(/\.\/([A-Za-z0-9._/-]+)/g)].map((match) => match[1]));
+  const files = PINNED.split(':');
+  const source = files.map((file) => readFileSync(path.join(repo, file), 'utf8')).join('\n').split('\n')
+    .filter((line) => !/^\s*#/.test(line)).join('\n');
+  const read = new Set([...files, ...[...source.matchAll(/\.\/([A-Za-z0-9._/-]+)/g)].map((match) => match[1])]);
   // The env file a same-origin link names in .env (the upgrade scripts' link_lines), which this file defaults to /dev/null.
   read.add('deploy/runner-link/behind-web-gateway.env');
   for (const file of read) {
@@ -236,20 +254,26 @@ test('with ORBIT_REGISTRY unset, Compose renders exactly what the file rendered 
   writeFileSync(path.join(dir, 'now.yml'), now);
   writeFileSync(path.join(dir, '.env'), 'JWT_SECRET=x\nPROVIDER_SECRET_KEY=y\nRUNNER_LINK_SIGNING_KEY=z\n');
   const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^(ORBIT_|COMPOSE_)/.test(name)));
-  const render = (file, ...args) => {
-    const result = spawnSync(realDocker, ['compose', '-f', file, '--project-directory', dir, '--profile', '*', ...args],
+  // The opt-in files 10.66.0.4's .env lists, as they are in this checkout: a single host may list them too.
+  const pinned = PINNED.split(':').slice(1).flatMap((file) => ['-f', path.join(repo, file)]);
+  const render = (files, ...args) => {
+    const result = spawnSync(realDocker, ['compose', ...files, '--project-directory', dir, '--profile', '*', ...args],
       { cwd: dir, env, encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr);
     return result.stdout;
   };
   // Compose lists the services of --hash and --images in no set order.
   const lines = (text) => text.trim().split('\n').sort();
-  assert.equal(render('now.yml', 'config'), render('before.yml', 'config'));
-  for (const args of [['config', '--hash', '*'], ['config', '--images']]) {
-    assert.deepEqual(lines(render('now.yml', ...args)), lines(render('before.yml', ...args)), `docker compose ${args.join(' ')}`);
+  for (const extra of [[], pinned]) {
+    const [after, earlier] = [['-f', 'now.yml', ...extra], ['-f', 'before.yml', ...extra]];
+    assert.equal(render(after, 'config'), render(earlier, 'config'));
+    for (const args of [['config', '--hash', '*'], ['config', '--images']]) {
+      assert.deepEqual(lines(render(after, ...args)), lines(render(earlier, ...args)), `docker compose ${args.join(' ')}`);
+    }
   }
-  // Set, every image but the two managed runners' comes from the registry, by commit or by digest.
-  const set = spawnSync(realDocker, ['compose', '-f', 'now.yml', '--project-directory', dir, '--profile', '*', 'config', '--images'], {
+  // Set, with the files the target lists, every image but the two managed runners' comes from the registry, by commit
+  // or by digest. postgres and pgbackup have theirs from deploy/postgres-pinned.yml, db-proxy from deploy/db-proxy.yml.
+  const set = spawnSync(realDocker, ['compose', '-f', 'now.yml', ...pinned, '--project-directory', dir, '--profile', '*', 'config', '--images'], {
     cwd: dir,
     encoding: 'utf8',
     env: {
@@ -261,6 +285,7 @@ test('with ORBIT_REGISTRY unset, Compose renders exactly what the file rendered 
   assert.equal(set.status, 0, set.stderr);
   assert.deepEqual(set.stdout.trim().split('\n').sort(), [
     'orbit-docker-channel:local', 'orbit-managed-runner-firewall:local',
+    `${REGISTRY}/library/haproxy:3.4.7-alpine@sha256:b9fe316f718d5015c5cfebd8ca019591f3e44656f61d93cb8b59a1028961e530`,
     `${REGISTRY}/library/nats@sha256:7ae34c25dfd6fe2e01c6483eabef20d796690fdcac6c4d94ca780a6cf9877fde`,
     `${REGISTRY}/library/nginx@sha256:8b1e78743a03dbb2c95171cc58639fef29abc8816598e27fb910ed2e621e589a`,
     `${REGISTRY}/library/postgres@sha256:d845e7f0ac8517b9d9868b6d20379f9688ba3676595e50ca7c0b664964b2a760`,
@@ -316,7 +341,7 @@ for (const upgrade of UPGRADES) {
     assert.deepEqual(releaseLines(env), [
       '# >>> The release this host runs: written by /upgrade\'s two-stage deploy, and replaced whole by the next one',
       `ORBIT_REGISTRY=${REGISTRY}`, `ORBIT_IMAGE_TAG=${first}`, `ORBIT_LINK_GATEWAY_TAG=${link}`,
-      `ORBIT_POSTGRES_IMAGE=${base.ORBIT_POSTGRES_IMAGE}`, `ORBIT_NGINX_IMAGE=${base.ORBIT_NGINX_IMAGE}`, `ORBIT_NATS_IMAGE=${base.ORBIT_NATS_IMAGE}`,
+      `ORBIT_NGINX_IMAGE=${base.ORBIT_NGINX_IMAGE}`, `ORBIT_NATS_IMAGE=${base.ORBIT_NATS_IMAGE}`,
       '# <<< The release this host runs',
     ]);
     const rendered = spawnSync(realDocker, ['compose', 'config', '--images'], {
@@ -327,9 +352,10 @@ for (const upgrade of UPGRADES) {
     assert.match(run.stdout, new RegExp(`✓ Release ${first} runs on root@target.invalid`));
     assert.equal(readFileSync(path.join(fixture.target, '.upgrade/history'), 'utf8').trim().split('\n').length, 1);
 
-    // A second release that changes the gateway's configuration: the gateway is recreated to read it, and everything
-    // else that is unchanged stays as it is. postgres, unchanged, is never brought up again.
+    // A second release that changes the gateway's and the database proxy's configuration: each is recreated to read its
+    // own, and everything else that is unchanged stays as it is. postgres, unchanged, is never brought up again.
     appendFileSync(path.join(fixture.checkout, 'gateway/nginx.conf'), '# a change of the second release\n');
+    appendFileSync(path.join(fixture.checkout, 'deploy/db-proxy/haproxy.cfg'), '# a change of the second release\n');
     const second = fixture.commit('the second release');
     run = fixture.run(upgrade);
     assert.equal(run.status, 0, run.output);
@@ -337,7 +363,10 @@ for (const upgrade of UPGRADES) {
     assert.ok(!run.build.some((call) => call.args.startsWith('build ')), 'the link gateway, unchanged, is in the registry already');
     assert.match(run.stdout, /orbit-link-gateway:[0-9a-f]{40} is in the registry already/);
     assert.deepEqual(upped(run), DEPLOY_ORDER.filter((service) => service !== 'postgres'));
-    assert.ok(ups(run).includes('compose up -d --wait --no-deps --no-build --force-recreate gateway'), ups(run).join('\n'));
+    for (const [service, file] of [['gateway', 'gateway/nginx.conf'], ['db-proxy', 'deploy/db-proxy/haproxy.cfg']]) {
+      assert.ok(ups(run).includes(`compose up -d --wait --no-deps --no-build --force-recreate ${service}`), ups(run).join('\n'));
+      assert.match(run.stdout, new RegExp(` {4}${service} +recreate \\(it runs another ${file.replaceAll('.', '\\.')}\\)`));
+    }
     assert.match(run.stdout, /postgres +unchanged/);
     assert.match(run.stdout, /apiserver +recreate/);
     assert.match(readFileSync(path.join(fixture.target, 'gateway/nginx.conf'), 'utf8'), /a change of the second release/);
@@ -367,7 +396,7 @@ test('a deploy that cannot run changes nothing on either host', { skip: !compose
   const upgrade = UPGRADES[0];
   const commit = fixture.commit('a release');
   const unchanged = () => {
-    assert.deepEqual(shippedFiles(fixture.target), []);
+    assert.deepEqual(shippedFiles(fixture.target, { directories: true }), []);
     assert.equal(readFileSync(path.join(fixture.target, '.env'), 'utf8'), TARGET_ENV);
   };
 
@@ -399,7 +428,7 @@ test('a deploy that cannot run changes nothing on either host', { skip: !compose
     assert.notEqual(result.status, 0, result.output);
     assert.match(result.output, message);
     assert.deepEqual(ups(result), [], result.output);
-    assert.ok(!existsSync(path.join(fixture.target, 'docker-compose.yml')), 'the files it put in place are taken back');
+    assert.deepEqual(shippedFiles(fixture.target, { directories: true }), [], 'the files it put in place, and their directories, are taken back');
   };
   const lock = path.join(fixture.root, 'target', 'tmp', 'orbit-upgrade.lock');
   refused({}, () => { mkdirSync(lock, { recursive: true }); writeFileSync(path.join(lock, 'pid'), `${process.pid}\n`); },
@@ -408,6 +437,9 @@ test('a deploy that cannot run changes nothing on either host', { skip: !compose
   refused({ FAKE_PULL_FAIL: '1' }, () => {}, /manifest unknown/);
   refused({}, () => appendFileSync(path.join(fixture.target, '.env'), 'COMPOSE_PROFILES=runner-link,managed-runners-docker\n'),
     /switches on managed runners/);
+  // Without deploy/postgres-pinned.yml, postgres would be Docker Hub's floating tag: the only pin of it is that file.
+  writeFileSync(path.join(fixture.target, '.env'), `${TARGET_ENV}COMPOSE_FILE=docker-compose.yml:deploy/db-proxy.yml\n`);
+  refused({}, () => {}, /names postgres:16-alpine, which is not in registry\.invalid:5000[^]*deploy\/postgres-pinned\.yml/);
   writeFileSync(path.join(fixture.target, '.env'), `${TARGET_ENV}# >>> The release this host runs: written by /upgrade's two-stage deploy, and replaced whole by the next one\n`);
   refused({}, () => {}, /the release's lines in \.env are not as a deploy writes them/);
   rmSync(path.join(fixture.target, '.env'));
@@ -418,7 +450,7 @@ test('a deploy that cannot run changes nothing on either host', { skip: !compose
   // A service that does not come up fails the deploy, after the ones before it.
   run = fixture.run(upgrade, ['--deploy', commit], { FAKE_UP_FAIL: 'apiserver' });
   assert.notEqual(run.status, 0, run.output);
-  assert.deepEqual(upped(run), ['postgres', 'nats', 'apiserver']);
+  assert.deepEqual(upped(run), ['postgres', 'db-proxy', 'nats', 'apiserver']);
   assert.ok(!existsSync(path.join(fixture.target, '.upgrade/history')), 'a failed deploy is not a release this host ran');
 
   // A running postgres whose configuration the release changes is left running, and said so, unless --pull-base.
@@ -438,22 +470,77 @@ test('a host\'s own Compose files, named in COMPOSE_FILE, are rendered with the 
   const fixture = makeFixture(t);
   const upgrade = UPGRADES[1];
   const commit = fixture.commit('a release');
-  // As a host may add a service of its own, a database proxy say, in a file no release ships.
+  // As a host may add a service of its own in a file no release ships.
+  const own = 'services:\n  host-extra:\n    image: busybox:stable\n';
   mkdirSync(path.join(fixture.target, 'deploy'), { recursive: true });
-  writeFileSync(path.join(fixture.target, 'deploy/db-proxy.yml'), 'services:\n  db-proxy:\n    image: haproxy:lts-alpine\n');
-  writeFileSync(path.join(fixture.target, '.env'), `${TARGET_ENV}COMPOSE_FILE=docker-compose.yml:deploy/db-proxy.yml\n`);
+  writeFileSync(path.join(fixture.target, 'deploy/host-extra.yml'), own);
+  writeFileSync(path.join(fixture.target, '.env'), `${TARGET_ENV}COMPOSE_FILE=${PINNED}:deploy/host-extra.yml\n`);
   let run = fixture.run(upgrade);
   assert.equal(run.status, 0, run.output);
-  assert.match(run.stdout, / {4}db-proxy +create \(a deploy leaves it as it is\)/);
-  assert.ok(!upped(run).includes('db-proxy'), ups(run).join('\n'));
-  assert.ok(!run.target.some((call) => / pull .*db-proxy/.test(call.args)), 'its image is not the release\'s to pull');
-  assert.equal(readFileSync(path.join(fixture.target, 'deploy/db-proxy.yml'), 'utf8'), 'services:\n  db-proxy:\n    image: haproxy:lts-alpine\n');
+  assert.match(run.stdout, / {4}host-extra +create \(a deploy leaves it as it is\)/);
+  assert.ok(!upped(run).includes('host-extra'), ups(run).join('\n'));
+  assert.ok(!run.target.some((call) => / pull .*host-extra/.test(call.args)), 'its image is not the release\'s to pull');
+  assert.equal(readFileSync(path.join(fixture.target, 'deploy/host-extra.yml'), 'utf8'), own);
   assert.ok(existsSync(path.join(fixture.target, 'deploy/runner-link/behind-web-gateway.env')), 'beside the release\'s own files');
 
   // One that leaves docker-compose.yml out would deploy nothing of the release.
-  writeFileSync(path.join(fixture.target, '.env'), `${TARGET_ENV}COMPOSE_FILE=deploy/db-proxy.yml\n`);
+  writeFileSync(path.join(fixture.target, '.env'), `${TARGET_ENV}COMPOSE_FILE=deploy/host-extra.yml\n`);
   run = fixture.run(upgrade, ['--deploy', commit]);
   assert.notEqual(run.status, 0, run.output);
   assert.match(run.output, /do not include the release's docker-compose\.yml/);
   assert.deepEqual(ups(run), []);
+});
+
+test('a plan prints what the deploy would change, and changes nothing on the target', { skip: !compose && 'needs docker compose' }, (t) => {
+  const fixture = makeFixture(t);
+  const upgrade = UPGRADES[0];
+  const first = fixture.commit('the first release');
+  // In the registry, and nothing on the target yet: every service would be created, and the target stays empty.
+  let run = fixture.run(upgrade, ['--build-only']);
+  assert.equal(run.status, 0, run.output);
+  run = fixture.run(upgrade, ['--plan', first]);
+  assert.equal(run.status, 0, run.output);
+  for (const service of DEPLOY_ORDER) assert.match(run.stdout, new RegExp(` {4}${service} +create\n`));
+  assert.match(run.stdout, new RegExp(`✓ Planned release ${first} on root@target\\.invalid, and changed nothing there`));
+  assert.deepEqual(shippedFiles(fixture.target, { directories: true }), []);
+  assert.equal(readFileSync(path.join(fixture.target, '.env'), 'utf8'), TARGET_ENV);
+  assert.deepEqual(run.target.filter((call) => /^(pull|compose (.* )?(pull|up|build)|exec)\b/.test(call.args)), [], run.output);
+  assert.ok(!existsSync(path.join(fixture.target, '.upgrade/history')));
+
+  // Deployed, then a release that changes the database proxy's configuration and nothing of postgres or pgbackup: the
+  // plan says so, as the deploy does, and leaves the target as the deploy found it.
+  run = fixture.run(upgrade, ['--deploy', first]);
+  assert.equal(run.status, 0, run.output);
+  // The plan's table: the lines under its heading, each a service.
+  const table = (output) => {
+    const lines = output.split('\n');
+    const start = lines.findIndex((line) => line.startsWith('==> What this release changes')) + 1;
+    assert.ok(start > 0, output);
+    const end = lines.findIndex((line, index) => index >= start && !line.startsWith('    '));
+    return lines.slice(start, end);
+  };
+  appendFileSync(path.join(fixture.checkout, 'deploy/db-proxy/haproxy.cfg'), '# a change of the second release\n');
+  const second = fixture.commit('the second release');
+  run = fixture.run(upgrade, ['--build-only']);
+  assert.equal(run.status, 0, run.output);
+  const before = snapshot(fixture.target);
+  const env = readFileSync(path.join(fixture.target, '.env'), 'utf8');
+  const state = Object.fromEntries(readdirSync(fixture.state).map((name) => [name, readFileSync(path.join(fixture.state, name), 'utf8')]));
+  const plan = fixture.run(upgrade, ['--plan', second]);
+  assert.equal(plan.status, 0, plan.output);
+  assert.match(plan.stdout, / {4}postgres +unchanged\n/);
+  assert.match(plan.stdout, / {4}pgbackup +unchanged\n/);
+  assert.match(plan.stdout, / {4}db-proxy +recreate \(it runs another deploy\/db-proxy\/haproxy\.cfg\)\n/);
+  assert.match(plan.stdout, / {4}apiserver +recreate\n/);
+  assert.deepEqual(snapshot(fixture.target), before, 'every file on the target is as it was');
+  assert.equal(readFileSync(path.join(fixture.target, '.env'), 'utf8'), env);
+  assert.deepEqual(Object.fromEntries(readdirSync(fixture.state).map((name) => [name, readFileSync(path.join(fixture.state, name), 'utf8')])), state);
+  assert.deepEqual(plan.target.filter((call) => /^(pull|compose (.* )?(pull|up|build))\b/.test(call.args)), [], plan.output);
+  assert.equal(readFileSync(path.join(fixture.target, '.upgrade/history'), 'utf8').trim().split('\n').length, 1);
+  // The deploy that follows acts on the same plan.
+  run = fixture.run(upgrade, ['--deploy', second]);
+  assert.equal(run.status, 0, run.output);
+  assert.deepEqual(table(run.stdout), table(plan.stdout));
+  assert.ok(ups(run).includes('compose up -d --wait --no-deps --no-build --force-recreate db-proxy'), ups(run).join('\n'));
+  assert.ok(!upped(run).includes('postgres'), ups(run).join('\n'));
 });

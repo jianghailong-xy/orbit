@@ -9,7 +9,11 @@
 # Both copies of /upgrade's script start this once they hold the upgrade lock and have checked and pulled the checkout,
 # whenever ORBIT_REGISTRY is set; run it through them.
 #
-#   release.sh [--build-only | --deploy <commit>] [--no-cache] [--pull-base] [--prune]
+#   release.sh [--build-only | --deploy <commit> | --plan <commit>] [--no-cache] [--pull-base] [--prune]
+#
+# --plan prints what deploying the commit would change on the target, from its .env and files as they are, and leaves
+# the target as it found it: the files it puts in place to render the release are put back, no image is pulled, and
+# nothing is written to .env or brought up.
 #
 #   ORBIT_REGISTRY      the registry both hosts' Docker pull from and this one pushes to, host[:port] (required)
 #   ORBIT_DEPLOY_HOST   the ssh destination of the host that runs the deployment, such as root@10.66.0.4 (required to deploy)
@@ -24,9 +28,9 @@ PRUNE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --build-only) MODE=build ;;
-    --deploy)
-      [ $# -ge 2 ] || { echo "error: --deploy needs the commit of the release to deploy" >&2; exit 2; }
-      MODE=deploy
+    --deploy|--plan)
+      [ $# -ge 2 ] || { echo "error: $1 needs the commit of the release to deploy" >&2; exit 2; }
+      MODE="${1#--}"
       COMMIT="$2"
       shift
       ;;
@@ -44,8 +48,11 @@ REGISTRY="${ORBIT_REGISTRY:-}"
 HOST="${ORBIT_DEPLOY_HOST:-}"
 DIR="${ORBIT_DEPLOY_DIR:-/root/orbit}"
 # What the deployment's Compose reads from its directory besides .env and ./data: the files and directories it bind-mounts,
-# and the env file it may name. test/upgrade-two-stage.test.mjs holds this list to docker-compose.yml.
-RELEASE_FILES=(docker-compose.yml gateway scripts/pg-archive-wal.sh scripts/pg-backup.sh src/link-gateway/nats.conf deploy/runner-link)
+# the env file it may name, and the two Compose files a target lists in COMPOSE_FILE beside docker-compose.yml, with what
+# they mount: deploy/postgres-pinned.yml, the only pin of postgres and pgbackup, and deploy/db-proxy.yml, the database
+# entry. test/upgrade-two-stage.test.mjs holds this list to those files.
+RELEASE_FILES=(docker-compose.yml gateway scripts/pg-archive-wal.sh scripts/pg-backup.sh src/link-gateway/nats.conf deploy/runner-link
+  deploy/postgres-pinned.yml deploy/db-proxy.yml deploy/db-proxy)
 
 # Every value that reaches the other host's shell is one of these shapes, so none of them needs quoting there.
 if ! [[ "$REGISTRY" =~ ^[A-Za-z0-9.-]+(:[0-9]+)?$ ]]; then
@@ -64,9 +71,9 @@ if [ "$MODE" != build ]; then
   fi
 fi
 HEAD_COMMIT="$(git rev-parse HEAD)"
-if [ "$MODE" = deploy ]; then
+if [ "$MODE" = deploy ] || [ "$MODE" = plan ]; then
   if ! [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || ! git cat-file -e "$COMMIT^{commit}" 2>/dev/null; then
-    echo "error: --deploy takes a release's full 40-character commit, one this checkout has (it got \"$COMMIT\")" >&2
+    echo "error: --$MODE takes a release's full 40-character commit, one this checkout has (it got \"$COMMIT\")" >&2
     exit 2
   fi
 else
@@ -88,7 +95,8 @@ fi
 SSH=(ssh -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=8)
 on_target() { "${SSH[@]}" "$HOST" "$@"; }
 
-# The release a commit names: its three images, and the base images its deploy/two-stage/base-images.env pins.
+# The release a commit names: its three images, and the base images its deploy/two-stage/base-images.env pins (postgres,
+# pgbackup and db-proxy are pinned in the Compose files that run them, which the deploy ships).
 release_of() {
   local base name value
   APISERVER_IMAGE="$REGISTRY/orbit-apiserver:$1"
@@ -102,7 +110,7 @@ release_of() {
   fi
   LINK_IMAGE="$REGISTRY/orbit-link-gateway:$LINK_TAG"
   base="$(git show "$1:deploy/two-stage/base-images.env")"
-  for name in ORBIT_POSTGRES_IMAGE ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE; do
+  for name in ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE; do
     value="$(printf '%s\n' "$base" | sed -n "s/^$name=//p" | tail -n 1)"
     if ! [[ "$value" =~ ^[a-z0-9._/-]+@sha256:[0-9a-f]{64}$ ]]; then
       echo "error: $1's deploy/two-stage/base-images.env does not pin $name as <repository>@sha256:<64 hex>" >&2
@@ -200,9 +208,14 @@ build_stage() {
 }
 
 deploy_stage() {
-  local image stage=".upgrade/release-$COMMIT" status=0
+  local image stage=".upgrade/release-$COMMIT" status=0 plan=0
+  if [ "$MODE" = plan ]; then plan=1; fi
   release_of "$COMMIT"
-  echo "==> Deploy stage, on $HOST in $DIR: release $COMMIT"
+  if [ "$plan" -eq 1 ]; then
+    echo "==> Plan of the deploy stage, on $HOST in $DIR: release $COMMIT (nothing there is changed)"
+  else
+    echo "==> Deploy stage, on $HOST in $DIR: release $COMMIT"
+  fi
   for image in "$APISERVER_IMAGE" "$WEB_IMAGE" "$LINK_IMAGE"; do
     if ! in_registry "$image"; then
       echo "error: $image is not in $REGISTRY. Build the release first, on a checkout of $COMMIT:" >&2
@@ -215,8 +228,8 @@ deploy_stage() {
     | on_target "mkdir -p $DIR/.upgrade && cd $DIR && rm -rf $stage && tar -x"
   on_target "cat > $DIR/.upgrade/deploy-stage.sh" <deploy/two-stage/deploy-stage.sh
   on_target "ORBIT_DEPLOY_DIR=$DIR ORBIT_RELEASE_COMMIT=$COMMIT ORBIT_REGISTRY=$REGISTRY ORBIT_LINK_GATEWAY_TAG=$LINK_TAG \
-ORBIT_POSTGRES_IMAGE=$ORBIT_POSTGRES_IMAGE ORBIT_NGINX_IMAGE=$ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE=$ORBIT_NATS_IMAGE \
-ORBIT_DEPLOY_PULL_BASE=$PULL_BASE ORBIT_DEPLOY_PRUNE=$PRUNE bash $DIR/.upgrade/deploy-stage.sh" || status=$?
+ORBIT_NGINX_IMAGE=$ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE=$ORBIT_NATS_IMAGE \
+ORBIT_DEPLOY_PULL_BASE=$PULL_BASE ORBIT_DEPLOY_PRUNE=$PRUNE ORBIT_DEPLOY_PLAN=$plan bash $DIR/.upgrade/deploy-stage.sh" || status=$?
   if [ "$status" -eq 255 ]; then
     echo "error: the connection to $HOST was lost (ssh exit 255). If the deploy stage had started, it goes on there and" >&2
     echo "       finishes on its own; its log is $HOST:$DIR/.upgrade/deploy.log." >&2
@@ -227,10 +240,11 @@ ORBIT_DEPLOY_PULL_BASE=$PULL_BASE ORBIT_DEPLOY_PRUNE=$PRUNE bash $DIR/.upgrade/d
 case "$MODE" in
   release) build_stage; deploy_stage ;;
   build) build_stage ;;
-  deploy) deploy_stage ;;
+  deploy|plan) deploy_stage ;;
 esac
 case "$MODE" in
   build) echo "✓ Release $COMMIT is in $REGISTRY. Deploy it with: upgrade.sh --deploy $COMMIT" ;;
+  plan) echo "✓ Planned release $COMMIT on $HOST, and changed nothing there. Deploy it with: upgrade.sh --deploy $COMMIT" ;;
   *)
     echo "✓ Release $COMMIT runs on $HOST. To roll back, deploy the one before it (its commit is in"
     echo "  $HOST:$DIR/.upgrade/history): upgrade.sh --deploy <commit>, with the same ORBIT_REGISTRY and ORBIT_DEPLOY_HOST."

@@ -62,8 +62,6 @@ const cases = [
   ].map(([before, after]) => [`postgres change: ${before}`, 'the postgres service definition',
     replace(before, after)]),
   // The two-stage release of 2026-11-13: each image's variables render it as before when unset, and nothing else.
-  ['a two-stage postgres image with another default', 'the postgres service definition',
-    replace('${ORBIT_POSTGRES_IMAGE:-postgres:16-alpine}', '${ORBIT_POSTGRES_IMAGE:-postgres:17-alpine}')],
   ['a two-stage gateway image with another default', 'the gateway service definition',
     replace('${ORBIT_NGINX_IMAGE:-nginx:alpine}', '${ORBIT_NGINX_IMAGE:-nginx:latest}')],
   ['web named the same in every project', 'the two-stage release names each image through variables',

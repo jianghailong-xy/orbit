@@ -9,17 +9,18 @@
 #   ORBIT_RELEASE_COMMIT     the commit the apiserver and web images were built from, and their tag
 #   ORBIT_REGISTRY           the registry every image is pulled from
 #   ORBIT_LINK_GATEWAY_TAG   the link gateway image's tag: the last commit under src/link-gateway
-#   ORBIT_POSTGRES_IMAGE, ORBIT_NGINX_IMAGE, ORBIT_NATS_IMAGE
-#                            the base images by digest, from that commit's deploy/two-stage/base-images.env
+#   ORBIT_NGINX_IMAGE, ORBIT_NATS_IMAGE
+#                            the base images by digest, from that commit's deploy/two-stage/base-images.env (postgres,
+#                            pgbackup and db-proxy are pinned by deploy/postgres-pinned.yml and deploy/db-proxy.yml)
 #   ORBIT_DEPLOY_PULL_BASE   1 lets a running postgres whose configuration changed be recreated (upgrade.sh --pull-base)
 #   ORBIT_DEPLOY_PRUNE       1 prunes dangling images once the release runs (upgrade.sh --prune)
+#   ORBIT_DEPLOY_PLAN        1 prints the plan and stops there, having changed nothing (upgrade.sh --plan)
 #
 # Nothing is built here. Every image is pulled before anything is recreated, every `up` says --no-build, and a release
 # that names an image anywhere but the registry is refused.
 set -euo pipefail
 
-for name in ORBIT_DEPLOY_DIR ORBIT_RELEASE_COMMIT ORBIT_REGISTRY ORBIT_LINK_GATEWAY_TAG ORBIT_POSTGRES_IMAGE \
-  ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE; do
+for name in ORBIT_DEPLOY_DIR ORBIT_RELEASE_COMMIT ORBIT_REGISTRY ORBIT_LINK_GATEWAY_TAG ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE; do
   if [ -z "${!name:-}" ]; then
     echo "error: $name is not set. deploy/two-stage/release.sh starts this script; run upgrade.sh on the build host." >&2
     exit 2
@@ -33,14 +34,14 @@ RELEASE_ENV=(
   "ORBIT_REGISTRY=$REGISTRY"
   "ORBIT_IMAGE_TAG=$COMMIT"
   "ORBIT_LINK_GATEWAY_TAG=$LINK_TAG"
-  "ORBIT_POSTGRES_IMAGE=$ORBIT_POSTGRES_IMAGE"
   "ORBIT_NGINX_IMAGE=$ORBIT_NGINX_IMAGE"
   "ORBIT_NATS_IMAGE=$ORBIT_NATS_IMAGE"
 )
 PULL_BASE="${ORBIT_DEPLOY_PULL_BASE:-0}"
 PRUNE="${ORBIT_DEPLOY_PRUNE:-0}"
+PLAN="${ORBIT_DEPLOY_PLAN:-0}"
 # From here on Compose reads the release from release_dc's environment below, and then from .env, as anyone's would.
-unset ORBIT_REGISTRY ORBIT_IMAGE_TAG ORBIT_LINK_GATEWAY_TAG ORBIT_POSTGRES_IMAGE ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE
+unset ORBIT_REGISTRY ORBIT_IMAGE_TAG ORBIT_LINK_GATEWAY_TAG ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE
 STAGE=".upgrade/release-$COMMIT"
 cd "$DIR"
 mkdir -p .upgrade
@@ -50,7 +51,11 @@ mkdir -p .upgrade
 # inherits, and tee -p keeps writing the log here once the way back is gone. The log is the record either way.
 trap '' HUP PIPE
 exec > >(tee -p -a .upgrade/deploy.log) 2>&1
-echo "==> $(date -u +%Y-%m-%dT%H:%M:%SZ): deploying $COMMIT on $(hostname) in $DIR"
+if [ "$PLAN" = 1 ]; then
+  echo "==> $(date -u +%Y-%m-%dT%H:%M:%SZ): planning $COMMIT on $(hostname) in $DIR, which changes nothing here"
+else
+  echo "==> $(date -u +%Y-%m-%dT%H:%M:%SZ): deploying $COMMIT on $(hostname) in $DIR"
+fi
 
 # The same lock as /upgrade's script on a single host, /tmp/orbit-upgrade.lock: one upgrade at a time on this host, a
 # second one refused at once, and a lock whose holder is gone taken over. (TMPDIR is unset over ssh; tests set it.)
@@ -95,27 +100,40 @@ fi
 
 # The release's files go in place first, each whole by a rename, as Compose has to read them where they are: a file it
 # names relative to this directory, an env_file say, is read here. A running container that bind-mounts one of them keeps
-# the file it started on, which the gateway's and pgbackup's steps below compare with the new one. The files they replace
-# wait in .upgrade/previous/ until the release's images are all here: a deploy that stops before then puts them back, so
-# that it has changed nothing.
+# the file it started on, which the plan below compares with the new one for db-proxy, the gateway and pgbackup. The files
+# they replace wait in .upgrade/previous/ until the release's images are all here: a deploy that stops before then, and a
+# plan, which always stops there, put them back and take away the files and directories they added, so that they have
+# changed nothing.
 PREVIOUS=.upgrade/previous
 rm -rf "$PREVIOUS"
 FILES=()
+MADE=()
 while read -r file; do FILES+=("$file"); done < <(cd "$STAGE" && find . -type f | sed 's|^\./||' | sort)
 for file in "${FILES[@]}"; do
+  made=""
+  IFS=/ read -ra parts <<<"$(dirname "$file")"
+  for part in "${parts[@]}"; do
+    made="${made:+$made/}$part"
+    if [ ! -d "$made" ]; then MADE=("$made" ${MADE[@]+"${MADE[@]}"}); fi
+  done
   mkdir -p "$(dirname "$file")" "$PREVIOUS/$(dirname "$file")"
   if [ -e "$file" ]; then cp -p "$file" "$PREVIOUS/$file"; fi
   mv -f "$STAGE/$file" "$file"
 done
 rm -rf "$STAGE"
-# Stops the deploy before .env names the release: the files it replaced go back, and nothing else was changed.
-refuse() {
+# Every file as it was, and no directory the release's files made: MADE has each one before the one it is in.
+put_back() {
   local file
-  for line in "$@"; do echo "$line" >&2; done
   for file in "${FILES[@]}"; do
     if [ -e "$PREVIOUS/$file" ]; then mv -f "$PREVIOUS/$file" "$file"; else rm -f "$file"; fi
   done
+  for file in ${MADE[@]+"${MADE[@]}"}; do rmdir "$file" 2>/dev/null || true; done
   rm -rf "$PREVIOUS"
+}
+# Stops the deploy before .env names the release: the files it replaced go back, and nothing else was changed.
+refuse() {
+  for line in "$@"; do echo "$line" >&2; done
+  put_back
   echo "       This host's files are as they were, and nothing was changed." >&2
   exit 1
 }
@@ -146,9 +164,10 @@ if [ -n "$ARCHIVE" ] && [ "$ARCHIVE" != "$DIR/data/pg-archive" ]; then
     "       Its mounts are relative, so deploying here would bind this directory's ./data."
 fi
 
-# What the deploy brings up, in the order Compose's depends_on gives them; nats first, as the apiserver publishes to it.
-# Any other service this host's files list is left as it is.
-ORDER=(postgres nats apiserver)
+# What the deploy brings up, in the order Compose's depends_on gives them: db-proxy, where this host's COMPOSE_FILE lists
+# deploy/db-proxy.yml, between postgres and the apiserver, which connects through it, and nats before the apiserver, which
+# publishes to it. Any other service this host's files list is left as it is.
+ORDER=(postgres db-proxy nats apiserver)
 while read -r service; do ORDER+=("$service"); done < <(printf '%s\n' "$SERVICES" | grep -xE 'apiserver-[0-9]+' || true)
 ORDER+=(wiki-worker web link-gateway gateway pgbackup)
 DEPLOYED=()
@@ -156,10 +175,20 @@ for service in "${ORDER[@]}"; do
   if listed "$service"; then DEPLOYED+=("$service"); fi
 done
 
-# The plan: this release's config hash for each service against the hash its container was made with. STATE says what
-# `up` does with it, RUNNING whether a container of it runs now. Compose lists the services in no set order.
+# The file each of these services bind-mounts on its own, and where: a running container keeps the one it started on, and
+# Compose sees no change in it, so a new one reaches the service only by recreating it.
+declare -A MOUNTED=(
+  [db-proxy]="/usr/local/etc/haproxy/haproxy.cfg deploy/db-proxy/haproxy.cfg"
+  [gateway]="/etc/nginx/conf.d/default.conf gateway/nginx.conf"
+  [pgbackup]="/usr/local/bin/pg-backup.sh scripts/pg-backup.sh"
+)
+
+# The plan: this release's config hash for each service against the hash its container was made with, and for those
+# services, the file the running container has against the release's. STATE says what `up` does with it, RUNNING whether
+# a container of it runs now, and FORCE that only a forced recreate brings it the release's file. Compose lists the
+# services in no set order.
 HASHES="$(release_dc config --hash '*' | sort)"
-declare -A STATE=() RUNNING=()
+declare -A STATE=() RUNNING=() FORCE=()
 echo "==> What this release changes, by each service's compose config hash"
 while read -r service hash; do
   ids=()
@@ -186,20 +215,32 @@ while read -r service hash; do
     note=" (left running: only --pull-base recreates a running postgres)"
   elif [ "$service" = pgbackup ] && [ "${STATE[$service]}" != create ] && [ "${RUNNING[$service]}" != true ]; then
     note=" (left stopped, as on a single host)"
+  elif [ -n "${MOUNTED[$service]:-}" ] && [ "${RUNNING[$service]}" = true ] \
+    && ! docker exec "${ids[0]}" cat "${MOUNTED[$service]%% *}" </dev/null | cmp -s - "${MOUNTED[$service]#* }"; then
+    FORCE[$service]=1
+    STATE[$service]=recreate
+    note=" (it runs another ${MOUNTED[$service]#* })"
   fi
   printf '    %-16s %s%s\n' "$service" "${STATE[$service]}" "$note"
 done <<<"$HASHES"
 
 # Every image, before anything changes. Each comes from the registry, or this release is not one this host can run.
-echo "==> Pulling this release's images from $REGISTRY"
 while read -r image; do
   case "$image" in
     "$REGISTRY"/*) ;;
     *)
-      refuse "error: this release names $image, which is not in $REGISTRY: a two-stage deploy builds nothing here."
+      refuse "error: this release names $image, which is not in $REGISTRY: a two-stage deploy builds nothing here, and" \
+        "       every image comes from the registry. postgres and pgbackup take theirs from deploy/postgres-pinned.yml," \
+        "       which this host's COMPOSE_FILE (in .env) has to list after docker-compose.yml."
       ;;
   esac
 done < <(release_dc config --images "${DEPLOYED[@]}")
+if [ "$PLAN" = 1 ]; then
+  put_back
+  echo "✓ Planned $COMMIT on $(hostname). Nothing was pulled, written or brought up, and this host's files are as they were."
+  exit 0
+fi
+echo "==> Pulling this release's images from $REGISTRY"
 release_dc pull "${DEPLOYED[@]}" || refuse "error: an image of this release could not be pulled (above)."
 
 # The release's names go into .env, so that any later `docker compose` here renders what this deploy ran. Only the lines
@@ -236,36 +277,29 @@ for service in "${DEPLOYED[@]}"; do
       echo "==> apiserver: $state (it applies database migrations as it starts)"
       up apiserver
       ;;
-    gateway)
-      # nginx.conf is bind-mounted as a single file, so a new one reaches the gateway only by recreating it.
-      running="$(docker compose ps -q gateway 2>/dev/null || true)"
-      if [ -n "$running" ] && ! docker exec "$running" cat /etc/nginx/conf.d/default.conf | cmp -s - gateway/nginx.conf; then
-        echo "==> gateway: recreated to run this release's gateway/nginx.conf"
-        up --force-recreate gateway
-      else
-        echo "==> gateway: $state"
-        up gateway
-      fi
-      ;;
     pgbackup)
       # As on a single host, with one difference: a sidecar this host has never run is created, as the first deploy needs.
       if [ "$state" != create ] && [ "${RUNNING[$service]}" != true ]; then
         NOTICES+=("!!  pgbackup was NOT updated: it is stopped here, so its script and mounts stay as they were. To update it,
 !!  run this in $DIR: docker compose up -d --no-deps --force-recreate pgbackup")
+      elif [ -n "${FORCE[$service]:-}" ]; then
+        echo "==> pgbackup: recreated to run this release's ${MOUNTED[$service]#* }"
+        up --force-recreate pgbackup
       else
-        running="$(docker compose ps -q pgbackup 2>/dev/null || true)"
-        if [ -n "$running" ] && ! docker exec "$running" cat /usr/local/bin/pg-backup.sh | cmp -s - scripts/pg-backup.sh; then
-          echo "==> pgbackup: recreated to run this release's scripts/pg-backup.sh"
-          up --force-recreate pgbackup
-        else
-          echo "==> pgbackup: $state"
-          up pgbackup
-        fi
+        echo "==> pgbackup: $state"
+        up pgbackup
       fi
       ;;
     *)
-      echo "==> $service: $state"
-      up "$service"
+      # db-proxy and gateway, recreated for the file the plan found they do not run: db-proxy's haproxy.cfg ends every
+      # database connection once, and the apiserver's reconnect on their own (docs/postgres-standby.md).
+      if [ -n "${FORCE[$service]:-}" ]; then
+        echo "==> $service: recreated to run this release's ${MOUNTED[$service]#* }"
+        up --force-recreate "$service"
+      else
+        echo "==> $service: $state"
+        up "$service"
+      fi
       ;;
   esac
 done

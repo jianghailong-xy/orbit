@@ -14,7 +14,7 @@ TWO_STAGE_COMMIT=""
 usage() {
   cat <<'EOF'
 Usage: upgrade.sh [--no-pull] [--pull] [--pull-base] [--no-cache] [--prune] [--allow-dirty]
-       ORBIT_REGISTRY=<host:port> ORBIT_DEPLOY_HOST=<ssh destination> upgrade.sh [--build-only | --deploy <commit>] [...]
+       ORBIT_REGISTRY=<host:port> ORBIT_DEPLOY_HOST=<ssh destination> upgrade.sh [--build-only | --deploy <commit> | --plan <commit>] [...]
 
   --no-pull    deploy the checkout as it is (on main the default is git pull --ff-only first)
   --pull       git pull --ff-only even when the checkout is not on main
@@ -34,6 +34,9 @@ ssh and recreates what changed, building nothing.
   --deploy <commit>
                deploy a release already in the registry, building nothing: a
                rollback is the deploy of an earlier release
+  --plan <commit>
+               print what --deploy <commit> would change on the target, and
+               change nothing there
 EOF
 }
 
@@ -47,21 +50,21 @@ while [ $# -gt 0 ]; do
     --prune) PRUNE=1 ;;
     --allow-dirty) ALLOW_DIRTY=1 ;;
     --build-only) TWO_STAGE_MODE=build ;;
-    --deploy)
-      if [ $# -lt 2 ]; then echo "--deploy needs the commit of the release to deploy" >&2; usage >&2; exit 2; fi
-      TWO_STAGE_MODE=deploy; TWO_STAGE_COMMIT="$2"; shift ;;
+    --deploy|--plan)
+      if [ $# -lt 2 ]; then echo "$1 needs the commit of the release to deploy" >&2; usage >&2; exit 2; fi
+      TWO_STAGE_MODE="${1#--}"; TWO_STAGE_COMMIT="$2"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
   shift
 done
 if [ -n "$TWO_STAGE_MODE" ] && [ -z "${ORBIT_REGISTRY:-}" ]; then
-  echo "error: --build-only and --deploy belong to the two-stage release, which ORBIT_REGISTRY turns on" >&2
+  echo "error: --build-only, --deploy and --plan belong to the two-stage release, which ORBIT_REGISTRY turns on" >&2
   echo "       (SKILL.md, \"Two-stage release\")" >&2
   exit 2
 fi
-# A deploy builds nothing, so there is nothing to pull for it unless asked.
-if [ "$TWO_STAGE_MODE" = deploy ] && [ "$GIT_PULL" = auto ]; then GIT_PULL=0; fi
+# A deploy or its plan builds nothing, so there is nothing to pull for it unless asked.
+if { [ "$TWO_STAGE_MODE" = deploy ] || [ "$TWO_STAGE_MODE" = plan ]; } && [ "$GIT_PULL" = auto ]; then GIT_PULL=0; fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
@@ -640,7 +643,7 @@ if [ -n "${ORBIT_REGISTRY:-}" ]; then
   TWO_STAGE_ARGS=()
   case "$TWO_STAGE_MODE" in
     build) TWO_STAGE_ARGS+=(--build-only) ;;
-    deploy) TWO_STAGE_ARGS+=(--deploy "$TWO_STAGE_COMMIT") ;;
+    deploy|plan) TWO_STAGE_ARGS+=("--$TWO_STAGE_MODE" "$TWO_STAGE_COMMIT") ;;
   esac
   if [ "$NO_CACHE" -eq 1 ]; then TWO_STAGE_ARGS+=(--no-cache); fi
   if [ "$PULL_BASE" -eq 1 ]; then TWO_STAGE_ARGS+=(--pull-base); fi

@@ -14,12 +14,13 @@ x-logging: &logging
 # Docker Hub by tag. /upgrade's two-stage release (.claude/skills/upgrade/SKILL.md, "Two-stage release") builds on
 # one host and sets them on the host it deploys to, which builds nothing: ORBIT_REGISTRY is the registry every image
 # is pulled from, ORBIT_IMAGE_TAG the commit the apiserver and web images were built from, ORBIT_LINK_GATEWAY_TAG the
-# last commit under src/link-gateway, and ORBIT_POSTGRES_IMAGE, ORBIT_NGINX_IMAGE and ORBIT_NATS_IMAGE the base images
-# by digest (deploy/two-stage/base-images.env).
+# last commit under src/link-gateway, and ORBIT_NGINX_IMAGE and ORBIT_NATS_IMAGE the base images by digest
+# (deploy/two-stage/base-images.env). postgres and pgbackup are pinned by deploy/postgres-pinned.yml instead, which
+# that host lists in COMPOSE_FILE.
 
 services:
   postgres:
-    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}${ORBIT_POSTGRES_IMAGE:-postgres:16-alpine}
+    image: postgres:16-alpine
     container_name: orbit-postgres
     restart: unless-stopped
     logging: *logging
@@ -133,7 +134,7 @@ services:
   # Periodic base backups + retention for the WAL archive above. Without a base backup
   # the archived WAL has nothing to replay onto, so the two ship together.
   pgbackup:
-    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}${ORBIT_POSTGRES_IMAGE:-postgres:16-alpine}
+    image: postgres:16-alpine
     container_name: orbit-pgbackup
     restart: unless-stopped
     logging: *logging
