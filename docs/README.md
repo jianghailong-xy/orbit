@@ -131,6 +131,8 @@ than silently rewriting the historical decision.
 - [Code of Conduct](../CODE_OF_CONDUCT.md) — expected community behavior.
 - [Project maturity and brand roadmap](project-maturity.md) — current gaps and a phased path to independent
   open-source operation.
+- [Plan review, 2026-11-13](project-plan-review-2026-11-13.md) — the brand plan reviewed against the
+  2026-11-13 `main`, with task-by-task verdicts, dependency and integration findings, and owner decisions.
 
 ## Documentation conventions
 
