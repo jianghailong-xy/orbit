@@ -12,7 +12,7 @@ import { accountPoolList, poolAccessQuery, sharedPoolsQuery } from '../../lib/sh
 import { useToast } from '../../lib/toast';
 import { AccountPools, NewPoolModal, PoolHint } from '../AccountPools';
 import { KeyImpact } from '../KeyImpact';
-import { ProviderPills, ProviderTile, vendorName, vendorOf } from '../ProviderGallery';
+import { ProviderTile, vendorName, vendorOf } from '../ProviderGallery';
 import { ProviderKeyRows } from '../ProviderKeyCards';
 import { Button } from '../ui/Button';
 import { useConfirm } from '../ui/ConfirmDialog';
@@ -48,7 +48,7 @@ export function SettingsProvidersHome() {
  * (owner's choice A, docs/mocks/settings-providers-compact board-1), a section per vendor with its own
  * Add, so the nav holds one row for keys however many vendors are connected. A vendor in the address
  * shows that vendor's keys alone, its chip chosen; with keys of two vendors or more the chips switch
- * between them. Then the account pools using the keys shown, and the vendors with no key yet.
+ * between them. Then the account pools using the keys shown.
  */
 export function SettingsKeysPage() {
   const vendor = useParams().vendor;
@@ -186,9 +186,6 @@ export function SettingsKeysPage() {
         </SettingsSection>
       )}
 
-      <SettingsSection title="Not connected yet">
-        <ProviderPills />
-      </SettingsSection>
       {confirmHolder}
     </>
   );

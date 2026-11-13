@@ -225,33 +225,3 @@ export function ProviderGallery() {
     </div>
   );
 }
-
-/**
- * The vendor picker under a vendor's keys (docs/mocks/settings-redesign, board-4): one line, a pill for
- * each vendor with no key yet and one for Custom, each a link into its connect page as the gallery's
- * cards are. A vendor already connected takes another key from its own page's Add key.
- */
-export function ProviderPills() {
-  const providers = useQuery({
-    queryKey: PROVIDERS_LIST_KEY,
-    queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
-  });
-  const runners = useQuery(runnersQuery());
-  const connected = connectedCounts(providers.data ?? []);
-  return (
-    <div className="pv-more">
-      {offeredPresets((runners.data ?? []) as SignedInRunner[])
-        .filter((p) => !connected.has(p.slug))
-        .map((p) => (
-          <Link key={p.slug} to={`/settings/providers/new/${p.slug}`} className="pv-pill">
-            <ProviderTile slug={p.slug} label={vendorName(p.slug)} size={18} />
-            {vendorName(p.slug)}
-          </Link>
-        ))}
-      <Link to="/settings/providers/new/custom" className="pv-pill">
-        <ProviderTile slug="custom" label="Custom" size={18} muted />
-        Custom
-      </Link>
-    </div>
-  );
-}
