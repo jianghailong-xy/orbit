@@ -427,7 +427,7 @@
 .sp-chip.on {
   background: var(--text-1);
   border-color: var(--text-1);
-  color: var(--bg);
+  color: var(--bg-base);
 }
 .sp-chip-count {
   opacity: 0.6;
