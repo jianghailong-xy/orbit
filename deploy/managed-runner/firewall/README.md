@@ -49,16 +49,29 @@ rules add, still matching the runners' bridge only:
 | --- | --- |
 | `FORWARD` | A first rule `-i <bridge> -j ORBIT-MR-FORWARD`, the same chain `DOCKER-USER` jumps to (which keeps its jump). |
 | nat `PREROUTING` | A first rule `-i <bridge> -j ORBIT-MR-PREROUTING`. That chain lets the gateway's published port and the `allow`/`dnsServers` destinations go on (`RETURN`) to Docker's DNAT, and `ACCEPT`s everything else, which ends nat `PREROUTING` for that packet: `KUBE-SERVICES` never DNATs or marks it, so a ClusterIP stays a 10/8 address that `ORBIT-MR-FORWARD` rejects. Over IPv6 the chain is one `ACCEPT`. |
+| raw `PREROUTING` | A first rule `-i <bridge> -j ORBIT-MR-RAW`. That chain lets the same destinations go on (`RETURN`) and marks every packet to a refused range (`MARK --set-xmark 0x100000/0x100000`; over IPv6, every packet). |
+| Routing | `ip rule`: `priority 1 iif <bridge> fwmark 0x100000/0x100000 prohibit`, right after the local table's rule. A marked packet bound through the host is refused by routing, before any filter chain sees it, with ICMP "administratively prohibited": the runner gets `EHOSTUNREACH`, as from the filter's reject. |
 
-kube-router puts its jumps back on top as it starts and as it syncs. The rules count as in force only while each jump
-of this program is the first rule of its hook (`INPUT`, `FORWARD`, nat `PREROUTING`). The next check finds what came
+Why the last two. kube-router puts its jumps back first in `FORWARD` and `INPUT` as k3s starts and on its syncs (pod
+and policy changes, and every few minutes), and its per-pod chains (`KUBE-POD-FW-*`, default allow) accept a packet to a
+pod before `ORBIT-MR-FORWARD` sees it: until this program's next check, a runner would reach pods. Kubernetes writes
+neither raw `PREROUTING` nor routing rules, and the mark is set before nat `PREROUTING`, so a ClusterIP that
+`KUBE-SERVICES` might DNAT to a pod is refused too, whatever order the filter and nat chains are in. Packets to the
+host's own addresses are routed locally first; there kube-router's `INPUT` chain accepts only what its pods send, so the
+filter rules still refuse them, also while kube-router's jump is above this program's (measured in the lab).
+
+The rules count as in force only while each jump is the first rule of its hook (`INPUT`, `FORWARD`, nat and raw
+`PREROUTING`) and the routing rule is there with only the local table's rule before it. The next check finds what came
 first, logs it ("FORWARD does not start with the jump for br-…: KUBE-ROUTER-FORWARD come(s) before it ...: writing the
-rules") and puts them first again in the same pass; it reports `failing` only if it cannot. So for up to
-`intervalSeconds` after a k3s start (8 s in the lab) kube-router's chains see a runner's packets before these, while the
-last status still says `enforced`; the nat guard stays first through it (kube-proxy leaves an existing jump where it
-is), so ClusterIPs stay out of reach. `status.json` says `"kubernetes": ["IPv4", ...]` while it keeps the rules this way. A host without Kubernetes gets exactly the rules above and nothing in nat; once
-Kubernetes' chains are gone, the next check takes the `FORWARD` and nat rules away again. Kubernetes must use the same
-iptables backend as Docker (k3s picks the one with rules in it): rules in the other backend are not ordered by these.
+rules") and puts it first again in the same pass, within `intervalSeconds`; it reports `failing` only if it cannot.
+`status.json` says `"kubernetes": ["IPv4", ...]` while it keeps the rules this way.
+
+The first time the service finds Kubernetes it writes `kubernetes-seen` beside its configuration. From then on it puts
+these rules on as soon as it starts, before Kubernetes' own: after a host restart the service may start before k3s.
+A host without Kubernetes gets exactly the rules above: nothing in nat or raw, no routing rule. Once Kubernetes is gone,
+delete `kubernetes-seen` and restart the service, and its next check takes the extra rules off again. Kubernetes must use
+the same iptables backend as Docker (k3s picks the one that already has rules in it): rules in the other backend are not
+ordered by these.
 
 `dnsServers` is not the host's resolvers. With the host's own resolv.conf, Docker's embedded resolver forwards a
 runner's queries from the host's namespace, which these rules do not see (`# ExtServers: [host(...)]` in a container's
