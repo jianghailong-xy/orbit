@@ -120,10 +120,15 @@ ORBIT_TASK_ID; --depends-on is required.
 	"list": `orbit task list — list tasks
 
 Usage:
-  orbit task list [--status OPEN|IN_PROGRESS|DONE|CANCELLED|FAILED] [--list-id ID] [--project-id ID] [--label L] [--min-priority N] [--limit N | --all [--cursor C]] [--json]
+  orbit task list [--status OPEN|IN_PROGRESS|DONE|CANCELLED|FAILED] [--list-id ID] [--project-id ID] [--label L] [--min-priority N] [--limit N | --all] [--cursor C] [--summary] [--json]
 
 Returns the newest tasks first, without their descriptions (use ` + "`orbit task get`" + ` for one
 task in full). --limit defaults to 100 and may not exceed 200.
+
+--summary prints what the task_list tool answers by default: one compact row per task (id, title,
+status, projectId, parentTaskId, assigneeId, listId, labels, priority, updatedAt) under 20,000
+characters, 50 rows unless --limit says otherwise, after a first line naming the cursor of the next
+page. Continue with --summary --cursor CURSOR and the same filters. Not with --all.
 
 --min-priority keeps only the tasks whose priority is at least N: 1 is "the ones somebody raised"
 with ` + "`orbit task update --priority`" + `, so --list-id L --status OPEN --min-priority 1 is the
@@ -175,10 +180,14 @@ task-id defaults to ORBIT_TASK_ID inside an Orbit task session.
 `,
 	"evidence-list": `orbit task evidence-list — list explicit completion-evidence revisions
 Usage:
-  orbit task evidence-list [task-id] [--json]
+  orbit task evidence-list [task-id] [--summary [--before N]] [--revision N] [--json]
 
 Returns every immutable revision in task-local order. This does not inspect task comments or
 Session status. task-id defaults to ORBIT_TASK_ID inside an Orbit task session.
+
+--summary prints what the task_evidence_list tool answers by default: the newest 10 revisions with
+the claim and decision note shortened and checks and gaps counted, under 20,000 characters; --before N
+is the page of revisions older than N. --revision N prints that one revision in full.
 `,
 	"evidence-submit": `orbit task evidence-submit — submit structured completion evidence
 
@@ -1451,6 +1460,7 @@ func cliTaskList(args []string, out io.Writer) error {
 	all := fs.Bool("all", false, "fetch every matching task, paging until the list is exhausted")
 	cursor := fs.String("cursor", "", "resume an interrupted --all walk from this cursor")
 	minPriorityFlag := fs.Int("min-priority", 0, "only tasks whose priority is at least this (1 = the ones somebody raised)")
+	summary := fs.Bool("summary", false, "one compact row per task, under the tool result budget, with the next page's cursor")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -1481,12 +1491,29 @@ func cliTaskList(args []string, out io.Writer) error {
 	if !*all && (*limit < 1 || *limit > maxTaskListLimit) {
 		return fmt.Errorf("--limit must be between 1 and %d", maxTaskListLimit)
 	}
-	// A cursor names a position in a walk; without one there is nothing to resume.
-	if *cursor != "" && !*all {
-		return fmt.Errorf("--cursor is only meaningful with --all")
+	if *summary && *all {
+		return fmt.Errorf("--summary and --all are mutually exclusive: --summary pages, --all walks everything")
+	}
+	// A cursor names a position in a walk or a summary listing; without one there is nothing to resume.
+	if *cursor != "" && !*all && !*summary {
+		return fmt.Errorf("--cursor is only meaningful with --all or --summary")
 	}
 	t, err := cliTaskTransport()
 	if err != nil {
+		return err
+	}
+	if *summary {
+		n := *limit
+		if !flagWasSet(fs, "limit") {
+			n = defaultTaskSummaryLimit
+		}
+		text, err := boundedTaskSummary(func(n int) (json.RawMessage, string, error) {
+			return t.listTaskPage(*status, *listID, *projectID, labels, n, *cursor, minPriority)
+		}, n)
+		if err != nil {
+			return fmt.Errorf("list tasks: %w", err)
+		}
+		_, err = fmt.Fprint(out, text)
 		return err
 	}
 	if *all {
@@ -1564,6 +1591,9 @@ func cliTaskGet(args []string, out io.Writer) error {
 func cliTaskEvidenceList(args []string, out io.Writer) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit task evidence-list")
+	summary := fs.Bool("summary", false, "the newest revisions in summary form, under the tool result budget")
+	before := fs.String("before", "", "with --summary: the page of revisions older than this one")
+	revision := fs.String("revision", "", "one revision in full")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(rest); err != nil {
 		return err
@@ -1576,9 +1606,20 @@ func cliTaskEvidenceList(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if *before != "" && !*summary {
+		return fmt.Errorf("--before is only meaningful with --summary")
+	}
 	raw, err := t.listTaskEvidence(id)
 	if err != nil {
 		return fmt.Errorf("list task evidence: %w", err)
+	}
+	if *summary || *revision != "" {
+		text, err := renderEvidenceView(raw, strings.TrimSpace(*revision), strings.TrimSpace(*before))
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintln(out, text)
+		return err
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }

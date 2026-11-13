@@ -235,6 +235,10 @@ orbit provider delete local-vllm --json
 `claude` (the default: the Anthropic Messages API, e.g. vLLM's `/v1/messages`), `codex` (the OpenAI Responses
 API), `kimi` (Moonshot's API), `antigravity` (the Gemini API) or `cursor` (a Cursor User API Key).
 `orbit provider update --runtime` takes the same five values. `provider list` shows each key's engines.
+Every engine that runs a key gets it in its environment, with one exception. When the deployment turns on
+`ORBIT_CLAUDE_OPENAI_GATEWAY` ([configuration](configuration.md)), an OpenAI key also runs on Claude Code, and on
+Claude Code the key stays on the Orbit server: the session gets a token that works only for it, and the server
+sends its requests to OpenAI.
 
 A Cursor key runs on Cursor CLI alone. It needs only `--label` and the key: `orbit provider create --runtime
 cursor` creates it under the `cursor-api` preset, on Cursor's own API (`https://api2.cursor.sh`) unless

@@ -152,10 +152,15 @@ Usage:
 	"get": `orbit session get — get a session's status and latest output
 
 Usage:
-  orbit session get SESSION_ID [--json]
+  orbit session get SESSION_ID [--summary] [--json]
 
 Reports status, numTurns and lastTurnAt, so a headless poller can tell whether a
 long-lived session has finished the turn it was given.
+
+--summary prints what the session_get tool answers by default: a record over 20,000 characters is
+shortened to fit, the prompt first, then changedFiles, lastToolUse, lastUserText and error;
+lastAssistantText and result stay whole unless nothing else is left to shorten. What was shortened
+is named in truncatedFields.
 `,
 	"send": `orbit session send — add a message to a session
 
@@ -270,6 +275,10 @@ workspace.
 `,
 }
 
+// mergeReceiptCLICapabilities are advertised UNGATED, beside the project reads and for the same
+// reason they are: recording that a merge happened, and reading what was recorded, is not an
+// orchestration power over another session — it is evidence about the caller's own work, and the
+// agent most likely to need it is the plain single-session one with no session_* tools at all.
 // headlessSessionCLICapabilities is what `orbit capabilities` advertises outside a session: the
 // commands this process's credential actually reaches, re-described with their narrower scope.
 func headlessSessionCLICapabilities(allowed map[string]bool) []cliCapabilitySpec {
@@ -861,6 +870,7 @@ func cliSessionSearch(args []string, out io.Writer, ctx cliOrchestrationContext)
 func cliSessionGet(args []string, out io.Writer, ctx cliOrchestrationContext) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit session get")
+	summary := fs.Bool("summary", false, "shorten the record to fit the tool result budget, keeping the collected reply whole")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(rest); err != nil {
 		return err
@@ -876,6 +886,14 @@ func cliSessionGet(args []string, out io.Writer, ctx cliOrchestrationContext) er
 	raw, err := t.getSession(ctx.sessionID, ctx.token, id)
 	if err != nil {
 		return fmt.Errorf("get session: %w", err)
+	}
+	if *summary {
+		text, err := boundSessionRecord(raw)
+		if err != nil {
+			return fmt.Errorf("get session: %w", err)
+		}
+		_, err = fmt.Fprintln(out, text)
+		return err
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }

@@ -375,6 +375,30 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if err != nil {
 			return toolResult(err.Error(), true)
 		}
+		cursor := getString(args, "cursor")
+		if summaryRequested(args) {
+			if _, named := args["limit"]; !named {
+				limit = defaultTaskSummaryLimit
+			}
+			text, err := boundedTaskSummary(func(n int) (json.RawMessage, string, error) {
+				return s.t.listTaskPage(getString(args, "status"), getString(args, "listId"), getString(args, "projectId"), getStringSlice(args, "labels"), n, cursor, minPriority)
+			}, limit)
+			if err != nil {
+				return toolResult("list tasks failed: "+err.Error(), true)
+			}
+			return toolResult(text, false)
+		}
+		if cursor != "" {
+			items, next, err := s.t.listTaskPage(getString(args, "status"), getString(args, "listId"), getString(args, "projectId"), getStringSlice(args, "labels"), limit, cursor, minPriority)
+			if err != nil {
+				return toolResult("list tasks failed: "+err.Error(), true)
+			}
+			more := "This is the last page."
+			if next != "" {
+				more = fmt.Sprintf("More: cursor=%q.", next)
+			}
+			return toolResult(more+"\n"+prettyJSON(items), false)
+		}
 		raw, err := s.t.listTasks(getString(args, "status"), getString(args, "listId"), getString(args, "projectId"), getStringSlice(args, "labels"), limit, minPriority)
 		if err != nil {
 			return toolResult("list tasks failed: "+err.Error(), true)
@@ -412,7 +436,15 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if err != nil {
 			return toolResult("list task evidence failed: "+err.Error(), true)
 		}
-		return toolResult(prettyJSON(raw), false)
+		revision, before := numberArgString(args, "revision"), numberArgString(args, "before")
+		if !summaryRequested(args) && revision == "" {
+			return toolResult(prettyJSON(raw), false)
+		}
+		text, err := renderEvidenceView(raw, revision, before)
+		if err != nil {
+			return toolResult(err.Error(), true)
+		}
+		return toolResult(text, false)
 
 	case "task_evidence_submit":
 		id, ok := s.resolveTaskID(args)
@@ -1585,7 +1617,14 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if err != nil {
 			return toolResult("get session failed: "+err.Error(), true)
 		}
-		return toolResult(prettyJSON(raw), false)
+		if !summaryRequested(args) {
+			return toolResult(prettyJSON(raw), false)
+		}
+		text, err := boundSessionRecord(raw)
+		if err != nil {
+			return toolResult("get session failed: "+err.Error(), true)
+		}
+		return toolResult(text, false)
 
 	case "session_send":
 		if !s.orchestrationEnabled() {
@@ -2955,6 +2994,23 @@ func sessionSettled(status string) bool {
 	default:
 		return true // AWAITING_INPUT, SUCCEEDED, FAILED, CANCELLED, INTERRUPTED
 	}
+}
+
+// summaryRequested is the bounded views' switch (bounded_views.go): on unless summary is false.
+func summaryRequested(args map[string]interface{}) bool {
+	v, ok := args["summary"].(bool)
+	return !ok || v
+}
+
+// numberArgString reads an argument a caller may send as a number or a string, as a string.
+func numberArgString(args map[string]interface{}, key string) string {
+	switch v := args[key].(type) {
+	case float64:
+		return strconv.FormatInt(int64(v), 10)
+	case string:
+		return strings.TrimSpace(v)
+	}
+	return ""
 }
 
 func getBool(args map[string]interface{}, key string) bool {

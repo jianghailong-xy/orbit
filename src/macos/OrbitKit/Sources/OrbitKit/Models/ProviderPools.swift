@@ -133,6 +133,10 @@ public struct ProviderPool: Codable, Equatable, Sendable, Identifiable {
     /// What it runs on: `claude` (the 0265 pools of one's own Claude keys) or `codex` — a pool of
     /// one's own ChatGPT accounts (migration 0323). Absent from an older server: `claude`.
     public let engine: String
+    /// Every engine a Codex pool of one's own runs on, its own first: `["codex", "claude"]` where the
+    /// server runs Claude Code on it too (ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY). Nil otherwise: `engine`
+    /// alone (web's `ProviderPool.engines`).
+    public let engines: [String]?
     /// A Codex pool of one's own: every ChatGPT account it holds, oldest first — the one its sessions
     /// run on being the first of them. Absent from an older server, which names that one only
     /// (`CodexLoginPool.logins` reads either).
@@ -143,7 +147,7 @@ public struct ProviderPool: Codable, Equatable, Sendable, Identifiable {
     public init(id: String, slug: String, label: String, resetsAt: String? = nil,
                 unavailable: String? = nil, members: [PoolMember] = [],
                 shared: SharedPool? = nil, engine: String = "claude", login: CodexLogin? = nil,
-                logins: [CodexLogin]? = nil) {
+                logins: [CodexLogin]? = nil, engines: [String]? = nil) {
         self.id = id
         self.slug = slug
         self.label = label
@@ -152,6 +156,7 @@ public struct ProviderPool: Codable, Equatable, Sendable, Identifiable {
         self.members = members
         self.shared = shared
         self.engine = engine
+        self.engines = engines
         self.logins = logins
         self.login = login
     }
@@ -162,6 +167,7 @@ public struct ProviderPool: Codable, Equatable, Sendable, Identifiable {
         slug = try c.decode(String.self, forKey: .slug)
         label = try c.decodeIfPresent(String.self, forKey: .label) ?? slug
         engine = ((try? c.decodeIfPresent(String.self, forKey: .engine)) ?? nil) ?? "claude"
+        engines = (try? c.decodeIfPresent([String].self, forKey: .engines)) ?? nil
         // An account in a shape this build cannot read is left out rather than losing the pool.
         login = (try? c.decodeIfPresent(CodexLogin.self, forKey: .login)) ?? nil
         logins = (try? c.decodeIfPresent([LossyDecodable<CodexLogin>].self, forKey: .logins))?
