@@ -1738,6 +1738,9 @@ export function TaskDetailPanel({
             {latestModel && <span className="tdp-meta-item muted">· {modelLabel(latestModel)}</span>}
             {totalCost && <span className="tdp-meta-item muted">· {totalCost}</span>}
           </div>
+          {/* A task forked from a session says where its checkout came from, in the server's own
+              words (docs/task-fork-from-session-design.md §2.3). Absent on an older server. */}
+          {q.data?.forkSource && <div className="tdp-fork-source">{q.data.forkSource}</div>}
           {/* How this row is judged, which nothing else on the page said: a row whose completion
               is owned by a check has no work of its own, and every other row names the method
               that settles it. */}
