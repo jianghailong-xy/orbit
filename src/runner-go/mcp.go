@@ -375,6 +375,30 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if err != nil {
 			return toolResult(err.Error(), true)
 		}
+		cursor := getString(args, "cursor")
+		if summaryRequested(args) {
+			if _, named := args["limit"]; !named {
+				limit = defaultTaskSummaryLimit
+			}
+			text, err := boundedTaskSummary(func(n int) (json.RawMessage, string, error) {
+				return s.t.listTaskPage(getString(args, "status"), getString(args, "listId"), getString(args, "projectId"), getStringSlice(args, "labels"), n, cursor, minPriority)
+			}, limit)
+			if err != nil {
+				return toolResult("list tasks failed: "+err.Error(), true)
+			}
+			return toolResult(text, false)
+		}
+		if cursor != "" {
+			items, next, err := s.t.listTaskPage(getString(args, "status"), getString(args, "listId"), getString(args, "projectId"), getStringSlice(args, "labels"), limit, cursor, minPriority)
+			if err != nil {
+				return toolResult("list tasks failed: "+err.Error(), true)
+			}
+			more := "This is the last page."
+			if next != "" {
+				more = fmt.Sprintf("More: cursor=%q.", next)
+			}
+			return toolResult(more+"\n"+prettyJSON(items), false)
+		}
 		raw, err := s.t.listTasks(getString(args, "status"), getString(args, "listId"), getString(args, "projectId"), getStringSlice(args, "labels"), limit, minPriority)
 		if err != nil {
 			return toolResult("list tasks failed: "+err.Error(), true)
@@ -412,7 +436,15 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if err != nil {
 			return toolResult("list task evidence failed: "+err.Error(), true)
 		}
-		return toolResult(prettyJSON(raw), false)
+		revision, before := numberArgString(args, "revision"), numberArgString(args, "before")
+		if !summaryRequested(args) && revision == "" {
+			return toolResult(prettyJSON(raw), false)
+		}
+		text, err := renderEvidenceView(raw, revision, before)
+		if err != nil {
+			return toolResult(err.Error(), true)
+		}
+		return toolResult(text, false)
 
 	case "task_evidence_submit":
 		id, ok := s.resolveTaskID(args)
@@ -1585,7 +1617,14 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if err != nil {
 			return toolResult("get session failed: "+err.Error(), true)
 		}
-		return toolResult(prettyJSON(raw), false)
+		if !summaryRequested(args) {
+			return toolResult(prettyJSON(raw), false)
+		}
+		text, err := boundSessionRecord(raw)
+		if err != nil {
+			return toolResult("get session failed: "+err.Error(), true)
+		}
+		return toolResult(text, false)
 
 	case "session_send":
 		if !s.orchestrationEnabled() {
@@ -3400,7 +3439,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	tools := []map[string]interface{}{
 		{
 			"name":        "task_list",
-			"description": "List the caller's newest tasks, without their descriptions (task_get returns one task in full). Optionally filter by status, listId, projectId, labels or minPriority. Rows carry projectId, parentTaskId, acceptanceCriteria and priority, so which project a task belongs to, what it is part of, what would settle it and where it stands in its list's queue are readable without fetching each task.",
+			"description": fmt.Sprintf("List the caller's newest tasks, without their descriptions (task_get returns one task in full). Optionally filter by status, listId, projectId, labels or minPriority. By default it answers one compact row per task — id, title, status, projectId, parentTaskId, assigneeId, listId, labels, priority, updatedAt — held under %d characters, with a first line naming the cursor of the next page; so which project a task belongs to, what it is part of and where it stands in its list's queue are readable without fetching each task. summary=false answers full rows, acceptanceCriteria included.", toolResultBudget),
 			"inputSchema": obj(map[string]interface{}{
 				"status": status,
 				"listId": str,
@@ -3423,7 +3462,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"maximum":     taskPriorityMax,
 					"description": "Only tasks whose priority is at least this. 1 is \"the ones somebody raised\" with task_update's priority, so listId + status OPEN + minPriority 1 is a list's raised queue in one call — where finding them otherwise means paging through the whole list. 0 includes everything nobody touched, and a negative floor reaches the tasks somebody lowered. Omit for no floor.",
 				},
-				"limit": map[string]interface{}{"type": "integer", "minimum": 1, "maximum": maxTaskListLimit, "description": fmt.Sprintf("Maximum tasks to return (default %d, server cap %d).", defaultTaskListLimit, maxTaskListLimit)},
+				"limit":   map[string]interface{}{"type": "integer", "minimum": 1, "maximum": maxTaskListLimit, "description": fmt.Sprintf("Maximum tasks to return (default %d in summary form, %d with summary=false; server cap %d). A summary page that would pass %d characters comes back smaller, with the cursor that continues it.", defaultTaskSummaryLimit, defaultTaskListLimit, maxTaskListLimit, toolResultBudget)},
+				"summary": map[string]interface{}{"type": "boolean", "description": fmt.Sprintf("Default true: one compact row per task (id, title, status, projectId, parentTaskId, assigneeId, listId, labels, priority, updatedAt), the page held under %d characters, and a first line naming the cursor of the next page. false returns full rows, as large as they are.", toolResultBudget)},
+				"cursor":  map[string]interface{}{"type": "string", "description": "Continue a listing: the cursor the previous call's first line named, with the same filters."},
 			}),
 		},
 		{
@@ -3440,8 +3481,13 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_evidence_list",
-			"description": "List the task's explicit structured completion-evidence revisions in stable task-local order, each carrying its decision — a SEND_BACK's note included — once it has been answered. This reads the evidence ledger directly; comments, final replies and Session lifecycle state are not evidence.",
-			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
+			"description": fmt.Sprintf("List the task's explicit structured completion-evidence revisions in stable task-local order, each carrying its decision — a SEND_BACK's note included — once it has been answered. This reads the evidence ledger directly; comments, final replies and Session lifecycle state are not evidence. By default it answers the newest %d revisions in summary form (claim and decision note shortened, checks and gaps counted), under %d characters; revision=<n> answers one revision in full, before=<n> the page before it, and summary=false the whole ledger.", evidenceSummaryPageSize, toolResultBudget),
+			"inputSchema": obj(map[string]interface{}{
+				"taskId":   taskIDProp,
+				"summary":  map[string]interface{}{"type": "boolean", "description": "Default true: the newest page in summary form. false returns every revision in full."},
+				"revision": map[string]interface{}{"type": "string", "description": "One revision, in full, as the summary's `revision` names it."},
+				"before":   map[string]interface{}{"type": "string", "description": "The summary page of revisions older than this one — the value the previous page's first line names."},
+			}),
 		},
 		{
 			"name":        "task_evidence_submit",
@@ -3593,7 +3639,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"`targetShaBefore`, else `origin/<targetBranch>`. The receipt is refused when it is " +
 				"not, and when git cannot tell (fetch first, or run from inside the repository). " +
 				"Work that landed by cherry-pick or rebase is a DIFFERENT commit on the target: name " +
-				"that commit, never the original branch tip. A receipt's sourceSha goes into every " +
+				"that commit, never the original branch tip. A receipt for a task's branch also ends " +
+				"the account owner's merge card still offering that branch (asking or blocked): after " +
+				"you cherry-pick, rebase or squash a task's work onto its line by hand, record it at " +
+				"once with that task's work session and sourceBranch = the task's branch, or the owner " +
+				"keeps being asked to merge work that is already there. A receipt's sourceSha goes into every " +
 				"dependent task's dependency closure, and one the target does not contain keeps them " +
 				"refused DEPENDENCY_BASE_NOT_LANDED, because a receipt cannot be taken back. " +
 				"`rebaseBaseSha` is the field people skip and the one that decides " +
@@ -4352,7 +4402,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"rewritten: an ending is final. An item whose kind has a press of its own, a merge " +
 				"card or a paused project, is refused here: it is decided by confirming, declining or " +
 				"resuming, and closing it by hand would leave what it is about with no card in front " +
-				"of anybody.",
+				"of anybody. Closing the last failure item about a task branch's blocked merge " +
+				"candidate ends that candidate too, and its card leaves the owner's page; when the " +
+				"work went in as other commits, record merge_receipt for the task's branch as well.",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
 					"type":        "string",
@@ -5093,8 +5145,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			map[string]interface{}{
 				"name":        "session_get",
-				"description": "Get one session's current status and latest output (to collect a spawned sub-task's result). To wait for a session, call session_await instead of calling this in a loop.",
-				"inputSchema": obj(map[string]interface{}{"sessionId": sessionIDProp}, "sessionId"),
+				"description": fmt.Sprintf("Get one session's current status and latest output (to collect a spawned sub-task's result). To wait for a session, call session_await instead of calling this in a loop. A record over %d characters is shortened to fit: the prompt first, then changedFiles, lastToolUse, lastUserText and error; lastAssistantText and result stay whole unless nothing else is left to shorten. What was shortened is named in truncatedFields; summary=false returns the full record.", toolResultBudget),
+				"inputSchema": obj(map[string]interface{}{
+					"sessionId": sessionIDProp,
+					"summary":   map[string]interface{}{"type": "boolean", "description": "Default true: the record held under the budget. false returns it in full."},
+				}, "sessionId"),
 			},
 			map[string]interface{}{
 				"name":        "session_send",
@@ -5567,6 +5622,23 @@ func sessionSettled(status string) bool {
 	default:
 		return true // AWAITING_INPUT, SUCCEEDED, FAILED, CANCELLED, INTERRUPTED
 	}
+}
+
+// summaryRequested is the bounded views' switch (bounded_views.go): on unless summary is false.
+func summaryRequested(args map[string]interface{}) bool {
+	v, ok := args["summary"].(bool)
+	return !ok || v
+}
+
+// numberArgString reads an argument a caller may send as a number or a string, as a string.
+func numberArgString(args map[string]interface{}, key string) string {
+	switch v := args[key].(type) {
+	case float64:
+		return strconv.FormatInt(int64(v), 10)
+	case string:
+		return strings.TrimSpace(v)
+	}
+	return ""
 }
 
 func getBool(args map[string]interface{}, key string) bool {
