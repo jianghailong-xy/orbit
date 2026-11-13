@@ -1,0 +1,20 @@
+SERVER_URL=https://moderators-refer-attract-technological.trycloudflare.com
+FAKE_URL=https://ver-emotional-looks-literacy.trycloudflare.com
+2026-11-13T01:04:36.148Z the first visitor created the administrator
+2026-11-13T01:04:36.190Z the administrator created the second account
+2026-11-13T01:04:36.264Z first: a model key on the fake model at https://ver-emotional-looks-literacy.trycloudflare.com: deepseek
+2026-11-13T01:04:36.286Z second: a model key on the fake model at https://ver-emotional-looks-literacy.trycloudflare.com: deepseek-2
+2026-11-13T01:04:51.327Z first: managed runner READY and usable: after 15 s
+2026-11-13T01:04:51.327Z first: READY {"state":"READY","desired":"RUNNING","usable":true,"reason":null,"lastHeartbeatAt":"2026-11-13T01:04:47.600Z","runnerId":"34wbJyHi07ohKzo0km5nB","workspaceId":"34wbJyI07t6oRYpE5q9BW","initialProvider":"deepseek"}
+2026-11-13T01:04:51.335Z second: managed runner READY and usable: after 0 s
+2026-11-13T01:04:51.335Z second: READY {"state":"READY","desired":"RUNNING","usable":true,"reason":null,"lastHeartbeatAt":"2026-11-13T01:04:47.494Z","runnerId":"34wbJyPhd07opx17qSpw7","workspaceId":"34wbJyPndaTppnrwBqXvX","initialProvider":"deepseek-2"}
+2026-11-13T01:04:51.412Z runner containers on the channel machine: ["mr-01a1d26f-5d79-75a8-94bf-e679c4520b1f orbit-lab-chan gen=1 98bf03329ead Up 12 seconds","mr-01a1d26f-5d27-740a-bf41-dcf5e211845d orbit-lab-chan gen=1 98bf03329ead Up 14 seconds"]
+2026-11-13T01:04:56.771Z first: session 34wbKMKNCIWIlVap3YAmJ answered: after 5 s
+2026-11-13T01:05:01.999Z second: session 34wbKUjzXPteKOSKS9Dgs answered: after 5 s
+2026-11-13T01:05:02.222Z first: mapping {"state":"READY","desired":"RUNNING","usable":true,"reason":null,"lastHeartbeatAt":"2026-11-13T01:04:47.600Z","runnerId":"34wbJyHi07ohKzo0km5nB","workspaceId":"34wbJyI07t6oRYpE5q9BW","initialProvider":"deepseek"}
+2026-11-13T01:05:02.222Z first: runner row "orbit-managed\tONLINE\tmrrh-lab\torbit-lab-chan\tREADY\t1"
+2026-11-13T01:05:02.222Z first: session 34wbKMKNCIWIlVap3YAmJ turns ["1\tmessage\tANSWERED"]
+2026-11-13T01:05:02.447Z second: mapping {"state":"READY","desired":"RUNNING","usable":true,"reason":null,"lastHeartbeatAt":"2026-11-13T01:04:47.494Z","runnerId":"34wbJyPhd07opx17qSpw7","workspaceId":"34wbJyPndaTppnrwBqXvX","initialProvider":"deepseek-2"}
+2026-11-13T01:05:02.447Z second: runner row "orbit-managed\tONLINE\tmrrh-lab\torbit-lab-chan\tREADY\t1"
+2026-11-13T01:05:02.447Z second: session 34wbKUjzXPteKOSKS9Dgs turns ["1\tmessage\tANSWERED"]
+2026-11-13T01:05:02.486Z containers: ["mr-01a1d26f-5d79-75a8-94bf-e679c4520b1f orbit-lab-chan gen=1 98bf03329ead Up 23 seconds","mr-01a1d26f-5d27-740a-bf41-dcf5e211845d orbit-lab-chan gen=1 98bf03329ead Up 25 seconds"]
