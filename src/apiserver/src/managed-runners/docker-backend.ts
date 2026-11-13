@@ -184,6 +184,8 @@ export class DockerBackend implements ManagedRunnerBackend {
   /** The image the channel reported, on a profile that adopts it (D2), and when it was read. */
   private adopted?: { image: string; at: number };
   private channelUnreachable = false;
+  /** When `recheckReachability` last asked the channel. */
+  private rechecked?: number;
   private readonly channel: DockerChannel;
 
   constructor(
@@ -202,6 +204,18 @@ export class DockerBackend implements ManagedRunnerBackend {
    */
   get unreachable(): boolean {
     return this.channelUnreachable;
+  }
+
+  /**
+   * While marked unreachable: one /v1/info, at most once per poll interval, whose answer (any answer)
+   * clears the mark. Nothing while reachable. Its failure is the mark itself, so it is not passed on.
+   */
+  async recheckReachability(): Promise<void> {
+    if (!this.channelUnreachable) return;
+    const now = this.now();
+    if (this.rechecked !== undefined && now - this.rechecked < this.profile.lifecycle.pollIntervalSeconds * 1000) return;
+    this.rechecked = now;
+    await this.channel.info().catch(() => undefined);
   }
 
   names(runnerId: string) {

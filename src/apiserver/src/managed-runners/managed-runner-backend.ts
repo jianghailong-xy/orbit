@@ -253,6 +253,12 @@ export interface ManagedRunnerBackend {
    * reachable (managed-runner-placement.ts). Absent on a backend that does not track it (Kubernetes).
    */
   readonly unreachable?: boolean;
+  /**
+   * While `unreachable` is set, ask the host one cheap question so that a host no mapping calls on is
+   * noticed when it comes back: at most once per poll interval, and nothing at all while reachable.
+   * Called by the loop for each host of a several-host runtime only. Absent where `unreachable` is.
+   */
+  recheckReachability?(): Promise<void>;
 
   /** The fixed names of one runner's objects, from its UUID alone. */
   names(runnerId: string): { volume: string; instance: string; credential: string };

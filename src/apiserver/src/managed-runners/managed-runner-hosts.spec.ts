@@ -413,6 +413,75 @@ test('placement skips a host whose channel cannot be reached while another is re
   assert.equal(asked.length, reads, 'a single host reads no pool');
 });
 
+test('a host marked unreachable with no mapping to call on it is asked once per poll interval, and placed on again once it answers', async () => {
+  let clock = 1_000_000;
+  const channels = new Map<string, FakeDockerChannel>();
+  const hostOf = (namespace: string): ManagedRunnerHostRuntime => {
+    const profile = testDockerRunnerProfile({ instanceId: namespace });
+    const channel = new FakeDockerChannel(namespace, profile.runner.image);
+    channels.set(namespace, channel);
+    const backend = new DockerBackend(channel, profile, () => clock);
+    // A manager with nothing due: no mapping on this host (or all asleep), so no pass calls its channel.
+    const manager = { backend, sweepDemand: async () => 0, dueMappings: async () => [], reconcile: async () => 'IDLE' };
+    return { instanceId: namespace, draining: false, manager: manager as unknown as ManagedRunnerManager };
+  };
+  const rows = [
+    { clusterKey: 'docker-fake', namespace: 'host-a', ...pool(4, 3) },
+    { clusterKey: 'docker-fake', namespace: 'host-b', ...pool(8, 0) },
+  ];
+  const prisma = {
+    managedRunnerCapacity: {
+      findMany: async (query: { where: { OR: Array<{ clusterKey: string; namespace: string }> } }) =>
+        rows.filter((row) => query.where.OR.some((l) => l.clusterKey === row.clusterKey && l.namespace === row.namespace)),
+    },
+  } as unknown as PrismaService;
+  const a = hostOf('host-a');
+  const b = hostOf('host-b');
+  const channelB = channels.get('host-b')!;
+  const backendB = b.manager.backend as DockerBackend;
+  const interval = testDockerRunnerProfile().lifecycle.pollIntervalSeconds * 1000;
+  const worker = new ManagedRunnerWorker([a.manager, b.manager], interval, { error: () => undefined });
+  const place = async () => (await placeNewMapping(prisma, { manager: a.manager, hosts: [a, b] }))?.backend.location.namespace ?? null;
+
+  await worker.drain();
+  assert.equal(channelB.count('info'), 0, 'reachable: a pass asks nothing new');
+  assert.equal(channels.get('host-a')!.count('info'), 0);
+
+  // B is found unreachable once (its pool sync, or the last runner's stop), then has nothing to call on it.
+  channelB.down = true;
+  await assert.rejects(backendB.capacityBudget());
+  const asked = channelB.count('info');
+  assert.equal(await place(), 'host-a');
+  await worker.drain();
+  assert.equal(channelB.count('info'), asked + 1, 'while marked: one /v1/info in the pass');
+  await worker.drain();
+  await worker.drain();
+  assert.equal(channelB.count('info'), asked + 1, 'at most once per poll interval, however many passes are kicked');
+  assert.equal(backendB.unreachable, true, 'still down: still marked');
+
+  // B comes back with no mapping touching it: the next pass after the interval notices.
+  channelB.down = false;
+  clock += interval;
+  await worker.drain();
+  assert.equal(channelB.count('info'), asked + 2);
+  assert.equal(backendB.unreachable, false, 'its answer clears the mark');
+  assert.equal(await place(), 'host-b', 'placed on again');
+  clock += interval;
+  await worker.drain();
+  assert.equal(channelB.count('info'), asked + 2, 'reachable again: nothing new asked');
+
+  // A single host is driven as before: the loop asks nothing of a marked backend.
+  const single = hostOf('host-s');
+  const channelS = channels.get('host-s')!;
+  channelS.down = true;
+  await assert.rejects((single.manager.backend as DockerBackend).capacityBudget());
+  const singleAsked = channelS.count('info');
+  channelS.down = false;
+  clock += interval;
+  await new ManagedRunnerWorker(single.manager, interval, { error: () => undefined }).drain();
+  assert.equal(channelS.count('info'), singleAsked, 'one host: no recheck');
+});
+
 test('the loop drives every host; one whose channel cannot be reached does not stop the others', async () => {
   const visited: string[] = [];
   const errors: string[] = [];

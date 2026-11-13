@@ -16,7 +16,7 @@ import type { ManagedRunnerHostRuntime } from './managed-runner-runtime';
  * with one. Ties go to the earlier host in the profile.
  *
  * A host whose channel this process last found unreachable (`backend.unreachable`, set and cleared by
- * its manager's own passes) is skipped too while any other non-draining host is not, however much room
+ * its manager's own passes, and while set rechecked once per poll interval by the loop) is skipped too while any other non-draining host is not, however much room
  * its stored row shows: that row is as old as the last answer. When every non-draining host is
  * unreachable, the pick is among them by stored room, so the new account still gets a mapping, which
  * starts once its host answers again.
