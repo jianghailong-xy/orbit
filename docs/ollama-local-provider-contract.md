@@ -89,13 +89,18 @@ Every provider read gains `scope`, `authMode` and `runnerId`. A runner-scoped ro
 
 ```ts
 local: {
-  state: 'READY' | 'UNREACHABLE' | 'MALFORMED' | 'CLOUD_ENABLED' | 'UNKNOWN' | 'DISABLED' | 'NO_RUNNER';
+  state: 'READY' | 'UNREACHABLE' | 'MALFORMED' | 'CLOUD_ENABLED' | 'NO_MODELS' | 'MODEL_MISSING'
+       | 'CAPABILITY_MISSING' | 'REFUSED' | 'STALE' | 'UNKNOWN' | 'DISABLED' | 'NO_RUNNER';
   capability: 'SUPPORTED' | 'UNKNOWN';
   probedAt: string | null;
   version: string | null;
-  models: { value: string; label?: string; contextWindow?: number; tools?: boolean }[] | null;
+  latencyMs: number | null;
+  models: { value: string; label?: string; contextWindow?: number; tools?: boolean;
+            parameterSize?: string; quantization?: string }[] | null;
 }
 ```
+
+The probe states and `STALE` are defined in §6.
 
 - `runnerId` is served only while that runner still belongs to the row's owner. Otherwise it is `null` and
   `state` is `NO_RUNNER`. This applies to a runner moved to another account and to one that was removed.
@@ -129,10 +134,75 @@ waits; it is never turned into a built-in Claude or Codex session on the runner'
 
 ## 5. Left to later phases
 
-- Phase 2: the runner probe that writes `probe_*` and `instance_models`, and declares `ollama-probe/v1`.
 - Phase 3: affinity scheduling that assigns a new session to the provider's runner, the capability gate
   (refusing an `UNKNOWN` runner before dispatch), `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, zero cost,
   readable PENDING reasons, and the provider-switch door, which today refuses a local provider for a session
   not yet on its runner.
 - Phases 4A/4B: the connect flow and pickers. The web gallery leaves runner-scoped presets out until 4A
   draws a runner chooser; native clients show the generic mark.
+
+## 6. The runner's probe (phase 2)
+
+Task `34DuK8eT068Um725SVPV7`. The runner probes; the control plane and the browser never reach a local endpoint.
+
+### 6.1 The heartbeat round trip
+
+1. Every full heartbeat answer carries `localProviders: LocalProviderTarget[]`: the enabled runner-scoped rows bound
+   to that runner and owned by its owner, at most 16, each `{ providerId, baseUrl, models }`. `models` is the row's
+   list and default model, with no cloud model. An empty list means none. A quiet link answer leaves the field out,
+   and the runner keeps the set it has. Creating, editing and deleting a local provider marks its runner changed,
+   and both runners when it moves (`HEARTBEAT_DELIVERIES.localProviders`).
+2. The runner (`src/runner-go/local_provider_probe.go`) probes the set right away when it changes, and again every
+   60 s (`LOCAL_PROBE_INTERVAL_MS`). It never waits on the heartbeat, and the heartbeat never waits on it.
+3. The next heartbeat body carries `localProviderProbes: LocalProviderProbe[]`, one per target:
+   `{ providerId, baseUrl, state, version?, checkedAt, latencyMs?, reason?, models }`. `models` is `null` when the
+   server did not answer the inventory.
+4. The server keeps a report only on a row that is `scope = 'runner'`, bound to the reporting runner, owned by that
+   runner's owner, and still at the `baseUrl` that was probed. The HTTPS route and the link's one-statement report
+   writer run the same UPDATE (`localProviderProbesSql`). Every field is sanitized again
+   (`sanitizeLocalProviderProbe`, `sanitizeInstanceModels`). `probed_at` is the runner's `checkedAt`, clamped to
+   now, so a report that is sent again unchanged does not make an old probe look fresh. A report with no
+   catalogue keeps the stored one. Migration 0647 adds `probe_latency_ms`, which is cleared with the other probe
+   columns on a rebind.
+5. Declaring `ollama-probe/v1` turns `capability` to `SUPPORTED`.
+
+### 6.2 What one probe does
+
+| Step | Call | Limits |
+| --- | --- | --- |
+| Readiness | `GET /api/version`, timed: `latencyMs`, `version` | 3 s, 4 KiB |
+| Inventory | `GET /api/tags` | 5 s, 4 MiB, at most 200 models |
+| Capabilities | `POST /api/show {"model": name}`: `capabilities` has `tools`; the largest `*.context_length` in `model_info` | 5 s, 2 MiB, 4 at a time, at most 64 per cycle, cached by digest |
+
+The models the row names are shown first, so the cap never hides them. A whole cycle is bounded at 45 s, with 4
+targets probed at a time. Nothing is installed, pulled or removed. No prompt is sent.
+
+### 6.3 States
+
+| State | When |
+| --- | --- |
+| `READY` | The server answered, and every model the row names is served with `tools` and at least 65,536 tokens of context (`LOCAL_MIN_CONTEXT_WINDOW`). With no model named, any local model will do. |
+| `UNREACHABLE` | Connection refused, a timeout, DNS, or an HTTP error status (`reason`: `connection_refused`, `timeout`, `http_500`, …). |
+| `MALFORMED` | Bad JSON, a redirect, a body over its cap, a content type other than `application/json`, a charset other than UTF-8 or invalid UTF-8, a compressed body, or no version. |
+| `NO_MODELS` | The server serves no local model. Cloud models (`-cloud`/`:cloud`, or a `remote_host`) are not counted. |
+| `MODEL_MISSING` | A named model is not listed, or `/api/show` answers 404 for it (removed). `llama3` matches `llama3:latest`. Tags are part of the name. |
+| `CAPABILITY_MISSING` | A named model has no `tools`, its context is under 65,536, or its capabilities could not be read (`no_tools:m`, `context:m:n`, `context_unknown:m`, `capabilities_unknown:m`). |
+| `REFUSED` | The runner will not probe the endpoint (§6.4). |
+| `STALE` | Read-time only: the stored probe is older than `LOCAL_PROBE_STALE_MS` (5 min), because the runner went offline or its probe stopped. |
+| `UNKNOWN` | Never probed, or the runner does not declare `ollama-probe/v1`. |
+
+`reason` is a short machine code. It is stored in `probe_message` and never served. A probe result never holds a
+response body, a prompt or a key. The catalogue keeps a name, `contextWindow`, `tools`, `parameterSize` and
+`quantization`. Template, licence, system prompt, parameters and every other field of `/api/show` are dropped.
+
+### 6.4 What the runner will connect to
+
+- `http` or `https` only. No userinfo, query or fragment. No path except `/`, and a trailing slash is fine.
+- Loopback only by default: `127.0.0.0/8`, `::1` and `localhost`. The address actually dialled is checked again
+  at connect time, so a name that resolves elsewhere is refused. `0.0.0.0`, private, link-local and metadata
+  addresses are refused.
+- The runner's owner can allow more on that machine only, with `ORBIT_OLLAMA_ALLOWED_HOSTS`: host names, IPs or
+  CIDR prefixes, comma- or space-separated. A host name listed there may resolve to any address. The control plane
+  cannot widen this list.
+- No proxy (the environment's `HTTP_PROXY` is ignored). No redirect is followed. No transparent decompression.
+  Response headers are capped at 16 KiB.

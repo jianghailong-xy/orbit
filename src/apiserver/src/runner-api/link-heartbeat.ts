@@ -7,6 +7,7 @@ import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { PREPARED_STATEMENT } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
+import { localProviderProbesSql } from '../providers/local-provider-probe';
 import { sanitizePlanUsageAccounts } from '../providers/plan-usage-accounts';
 import { countCodexResetSnapshotWrite } from '../runners/codex-reset-metrics';
 import { RUNNER_SILENT_AFTER_MS } from '../runners/runner-presence';
@@ -87,6 +88,7 @@ export const HEARTBEAT_FACTS = {
   runtimeDefaultModels: 'REPORT',
   sessions: 'REPORT',
   agentDirProbes: 'REPORT',
+  localProviderProbes: 'REPORT',
   repos: 'REPORT',
   runsAsRoot: 'REPORT',
   reposRoot: 'REPORT',
@@ -173,6 +175,10 @@ export const HEARTBEAT_DELIVERIES = {
       'workspaces/workspaces.service.ts#create', 'workspaces/workspaces.service.ts#update', 'workspaces/workspaces.service.ts#remove',
       'sessions/sessions.service.ts#createInNewWorkspace',
     ],
+  },
+  localProviders: {
+    how: 'MARKED',
+    writers: ['providers/providers.service.ts#create', 'providers/providers.service.ts#update', 'providers/providers.service.ts#remove'],
   },
   repoCleanupRequest: { how: 'MARKED', writers: ['workspaces/workspaces.service.ts#requestRepoCleanup'], pending: 'a clean-up pending' },
   mainCheckoutRequests: {
@@ -627,6 +633,14 @@ export async function writeLinkBeatReports(
   if (has('agentDirProbes') && Array.isArray(dto.agentDirProbes) && dto.agentDirProbes.length > 0) {
     ctes.push(Prisma.sql`probes AS (${directoryProbesSql(input.runnerId, dto.agentDirProbes, after())}), `);
     previous = 'probes';
+  }
+  // The local model servers' probes, on model_provider rows (rank 15, beside the workspaces): this runner's own only.
+  if (has('localProviderProbes') && Array.isArray(dto.localProviderProbes) && dto.localProviderProbes.length > 0) {
+    const local = localProviderProbesSql(input.runnerId, dto.localProviderProbes, after());
+    if (local) {
+      ctes.push(Prisma.sql`local_probes AS (${local}), `);
+      previous = 'local_probes';
+    }
   }
   if (has('sessions') && Array.isArray(dto.sessions) && dto.sessions.length > 0) {
     ctes.push(Prisma.sql`snapshots AS (${worktreeSnapshotsSql(input.runnerId, input.leaseOwner, dto.sessions, after())}), `);

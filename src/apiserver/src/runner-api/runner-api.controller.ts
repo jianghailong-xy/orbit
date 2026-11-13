@@ -512,6 +512,7 @@ import { gatewayBooksSpend, withKeyGatewayToken } from '../providers/key-gateway
 import { cursorKeyCheckRelay } from '../providers/cursor-key-check-relay';
 import { CursorKeyCheckDto, CursorKeyCheckResultDto } from '../providers/dto';
 import { ProvidersService } from '../providers/providers.service';
+import { localProviderTargets, storeLocalProviderProbes } from '../providers/local-provider-probe';
 import { accountDisabled } from '../auth/disabled-accounts';
 import {
   recordedEngine,
@@ -2507,6 +2508,16 @@ export class RunnerApiController {
         unwritten.add('agentDirProbes');
       }
     }
+    // What the runner found at each local model server bound to it (local-provider-probe.ts): kept only on rows that
+    // are runner-scoped, bound to this runner, its owner's, and still at the endpoint it probed.
+    if (dto?.localProviderProbes?.length) {
+      try {
+        await storeLocalProviderProbes(this.prisma, runner.id, dto.localProviderProbes);
+      } catch {
+        // Advisory telemetry — never fail the heartbeat.
+        unwritten.add('localProviderProbes');
+      }
+    }
     let cancelSessionIds: string[] = [];
     let mergeRequests: RunnerHeartbeatResponse['mergeRequests'] = [];
     let commitRequests: RunnerHeartbeatResponse['commitRequests'] = [];
@@ -2516,6 +2527,7 @@ export class RunnerApiController {
     let accountRemoveRequest: RunnerHeartbeatResponse['accountRemoveRequest'];
     let installRequest: RunnerHeartbeatResponse['installRequest'];
     let agentDirs: RunnerHeartbeatResponse['agentDirs'] = [];
+    let localProviders: RunnerHeartbeatResponse['localProviders'];
     let repoCleanupRequest: RunnerHeartbeatResponse['repoCleanupRequest'];
     let claudeHistoryRequest: RunnerHeartbeatResponse['claudeHistoryRequest'];
     let dirProbeRequest: RunnerHeartbeatResponse['dirProbeRequest'];
@@ -2593,6 +2605,14 @@ export class RunnerApiController {
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
+    // The local model servers to probe before the next beat (local-provider-probe.ts), listed every full beat like
+    // agentDirs. Read on its own, after the drains, so a failure here holds none of them up; a read that fails leaves
+    // the field out, which the runner reads as "keep probing what you have".
+    try {
+      localProviders = await localProviderTargets(this.prisma, runner.id);
+    } catch {
+      localProviders = undefined;
+    }
     // The secrets this runner may hold (design §6.3). A read that fails leaves both fields out, which the runner reads
     // as "nothing stated" — never as "remove everything".
     let secretReconcile: Awaited<ReturnType<OwnerSecretsService['reconcileFor']>> | undefined;
@@ -2640,6 +2660,7 @@ export class RunnerApiController {
       accountRemoveRequest,
       installRequest,
       agentDirs,
+      ...(localProviders ? { localProviders } : {}),
       repoCleanupRequest,
       refreshModelCatalog,
       checkSelfUpdate,

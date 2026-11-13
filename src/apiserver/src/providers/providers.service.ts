@@ -637,6 +637,8 @@ export class ProvidersService {
       this.prisma.modelProvider.create({ data: { ...data, slug }, include: { runner: PROVIDER_RUNNER_SELECT } }),
     );
     this.publishChanged(ownerId, row.id);
+    // Its runner probes it from the next heartbeat on (local-provider-probe.ts): tell a runner on the link now.
+    if (row.runnerId) this.realtime.markRunnerChanged(row.runnerId);
     return this.desensitize(row);
   }
 
@@ -754,6 +756,8 @@ export class ProvidersService {
       await revokeKeyGatewayTokens(this.prisma, row.id);
     }
     this.publishChanged(ownerId, row.id);
+    // What its runner probes may have changed (endpoint, models, runner, enabled): both runners when it moved.
+    for (const runnerId of new Set([current.runnerId, row.runnerId])) if (runnerId) this.realtime.markRunnerChanged(runnerId);
     return this.desensitize(row);
   }
 
@@ -919,6 +923,7 @@ export class ProvidersService {
     await this.recordSessionEngines(current);
     await this.prisma.modelProvider.delete({ where: { id } });
     this.publishChanged(ownerId, id);
+    if (current.runnerId) this.realtime.markRunnerChanged(current.runnerId);
     return { ok: true };
   }
 

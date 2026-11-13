@@ -154,7 +154,7 @@ test('providerScopeFields', async (t) => {
     runnerId: MY_RUNNER,
     enabled: true,
     probeState: 'READY',
-    probedAt: new Date('2026-11-13T00:00:00Z'),
+    probedAt: new Date(), // a fresh probe: an old one reads STALE
     probeVersion: '0.40.16',
     instanceModels: [{ value: 'qwen3.8:27b' }],
   };

@@ -1832,6 +1832,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// in the background, and the answer rides the next heartbeat.
 	agentDirs := newAgentDirProbe(agentDirProbeTimeout)
 	go agentDirs.run(loopCtx)
+	// The local model servers bound to this runner (local_provider_probe.go), probed off the heartbeat path.
+	localProviders := newLocalProviderProbe(newLocalProber(localProbePolicyFromEnv()), localProbeInterval)
+	go localProviders.run(loopCtx)
 
 	// The root this machine reports as where it keeps checkouts. A fact of the account this
 	// process runs as, so it is resolved once rather than on every beat.
@@ -1931,6 +1934,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				RuntimeDefaultModels: runtimeDefaultModels,
 				Engines:              withCodexAccountFingerprints(engineHealth.snapshotNow(), codexUsage),
 				AgentDirProbes:       agentDirs.snapshot(),
+				LocalProviderProbes:  localProviders.snapshot(),
 				Repos:                repoHealth.snapshotNow(),
 				RunsAsRoot:           &runsAsRoot,
 				ReposRoot:            machineReposRoot,
@@ -1974,6 +1978,10 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			// Scan the directories this response named, ready for the next heartbeat. An older
 			// control plane sends none, which parks the scanner rather than clearing what it
 			// last found.
+			// The local model servers to probe; an answer that names none (a quiet one, an older server) keeps the set.
+			if resp.LocalProviders != nil {
+				localProviders.trigger(resp.LocalProviders)
+			}
 			if resp.AgentDirs != nil {
 				agentDirs.trigger(resp.AgentDirs)
 				// Where an owner-request secret file may not go (secret_path.go).
@@ -3086,6 +3094,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	drainTimedOut := left.sessions > 0 || left.operations > 0
 	telemetry.wait()
 	agentDirs.wait()
+	localProviders.wait()
 	login.stop()
 	if left.operations == 0 && heartbeatStopped {
 		// An installer already running is joined, not killed: a half-applied `curl | bash` is worse

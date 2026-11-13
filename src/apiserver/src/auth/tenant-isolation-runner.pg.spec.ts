@@ -341,6 +341,13 @@ test('tenant isolation: past the runner gate and through the share links, anothe
        VALUES ($1,$2,$3,$4,gen_random_uuid(),gen_random_uuid(),'CLAIMED','NONE',$5,1,now(),now(),now())`,
       [codexOperationId, ownerId, of.runnerId, `cxa1_${'2'.repeat(32)}`, leaseOwner],
     );
+    const localProviderId = randomUUID();
+    await sql.query(
+      `INSERT INTO "model_provider"
+         ("id","slug","label","runtime","base_url","api_key_enc","preset_slug","scope","auth_mode","runner_id","owner_id","updated_at")
+       VALUES ($1,$2,'Ollama','claude','http://127.0.0.1:11434','','ollama','runner','none',$3,$4,now())`,
+      [localProviderId, `census-ollama-${localProviderId}`, of.runnerId, ownerId],
+    );
     const spareServiceTokenId = idOf(
       await asRunner(of.runnerId, 'POST', '/runner/service-tokens', { scopes: ['session:get'], ttlSeconds: 3600, workspaceId: of.workspaceId }),
       'a spare service token',
@@ -452,7 +459,7 @@ test('tenant isolation: past the runner gate and through the share links, anothe
       takeoverSessionId, activateSessionId, leaseOwner, leaseGeneration, inboxSessionId, inboxLeaseGeneration, turnSessionId, shellTurnId,
       finalizeSessionId, sessionAttachmentId, uploadedFileId, evidenceRevisionId, runningTaskId, runningTaskSessionId, allowedApprovalId,
       artifactRequestId, integrationJobId, landingTaskId, secretGrantId, removingSecretGrantId,
-      codexOperationId, wikiRepoOpId, spareServiceTokenId, replyRequestId, interruptSessionId, endSessionId, completedSessionId,
+      codexOperationId, localProviderId, wikiRepoOpId, spareServiceTokenId, replyRequestId, interruptSessionId, endSessionId, completedSessionId,
       deletedSessionId, archivedSessionId, coordinatorItemId, handOverItemId, failedTaskId, watchId, verifierTaskId, verifiedTaskId,
       providerSlug: await slugOf(of.providerId), spareProviderSlug: await slugOf(of.spare.providerId), listTaskId,
       confirmTaskId, confirmRunSessionId, confirmRequestId, reviewerSessionId, wikiSessionId,

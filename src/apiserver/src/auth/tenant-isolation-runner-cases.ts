@@ -101,6 +101,8 @@ export interface RunnerObjects {
   /** An integration job, and a Codex reset operation, the machine holds the claim of (`leaseOwner`, generation 1). */
   integrationJobId: string;
   codexOperationId: string;
+  /** A runner-scoped local provider (Ollama) bound to the machine, which its heartbeat's probe reports name. */
+  localProviderId: string;
   /**
    * The task that integration job lands: one of the project's own, not `projectTaskId`, whose one
    * in-flight landing is the first half's queued job. No case names it; it is here so that the write
@@ -907,6 +909,18 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
   'POST /runner/heartbeat body agentDirProbes[].agentId': {
     as: RUNNER,
     request: (of) => ({ params: {}, body: heartbeat({ agentDirProbes: [{ agentId: of.workspaceId, exists: true, isGitRepo: false }] }) }),
+  },
+  'POST /runner/heartbeat body localProviderProbes[].providerId': {
+    as: RUNNER,
+    request: (of) => ({
+      params: {},
+      body: heartbeat({
+        localProviderProbes: [{
+          providerId: of.runner.localProviderId, baseUrl: 'http://127.0.0.1:11434', state: 'NO_MODELS',
+          checkedAt: new Date().toISOString(), models: [],
+        }],
+      }),
+    }),
   },
   // What the link gateway's Welcome says of a process's sessions: B's own process, asking after A's leased session.
   'POST /runner/link/welcome body sessionIds[]': {

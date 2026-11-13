@@ -88,6 +88,9 @@ type HeartbeatRequest struct {
 	// has at each agent working directory. Omitted until the first scan completes, so the
 	// control plane keeps its last snapshot instead of hearing a false "missing".
 	AgentDirProbes []AgentDirProbe `json:"agentDirProbes,omitempty"`
+	// LocalProviderProbes answers the previous answers' LocalProviders: what this runner found at each local model
+	// server bound to it (local_provider_probe.go). Omitted until the first probe completes.
+	LocalProviderProbes []LocalProviderProbe `json:"localProviderProbes,omitempty"`
 	// Repos is the state of the shared checkouts this machine's agents work in (see
 	// RepoHealthReport). Nil until the first scan completes — an omitted field leaves the
 	// server's last snapshot alone rather than claiming every checkout is clean.
@@ -433,6 +436,9 @@ type HeartbeatResponse struct {
 	// Agent working directories to stat before the next heartbeat; answered via
 	// HeartbeatRequest.AgentDirProbes. Absent on older control planes → nothing to probe.
 	AgentDirs []AgentDirTarget `json:"agentDirs,omitempty"`
+	// The runner-scoped providers bound to this runner, to probe before the next heartbeat. Absent on a quiet
+	// answer or an older control plane, which keeps the probe on what it has; an empty list means none.
+	LocalProviders []LocalProviderTarget `json:"localProviders,omitempty"`
 	// A "clean up this checkout" the user asked for after seeing it reported wedged. Nil on older
 	// control planes and whenever no repair is in flight. Redelivered until we report an outcome.
 	RepoCleanupRequest *RepoCleanupCommand `json:"repoCleanupRequest,omitempty"`

@@ -2974,7 +2974,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0646 adds model_provider scope/auth_mode (NOT NULL with constant defaults), a nullable runner_id with its
       // foreign key and index, five nullable probe columns and five CHECKs on model_provider alone; no preserved
       // rows, triggers or DONE fence change, and no row is written.
-      '0646_model_provider_runner_scope'],
+      '0646_model_provider_runner_scope',
+      // 0647 adds one nullable integer column, model_provider.probe_latency_ms; no preserved rows, triggers or DONE
+      // fence change, and no row is written.
+      '0647_model_provider_probe_latency'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

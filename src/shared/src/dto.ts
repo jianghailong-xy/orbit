@@ -30,6 +30,7 @@ import { SessionSourceSnapshot } from './source';
 import type { WikiRepoOpCommand } from './wikiRepoOps';
 import type { ManagedRunnerSleepRequest, ManagedRunnerWorkload } from './managedRunner';
 import type { ExternalMessageFrom } from './session-message';
+import type { LocalProviderProbe, LocalProviderTarget } from './localProvider';
 
 /** Why an ended session cannot currently be resumed on its original runner. */
 export type SessionResumeBlockedReason =
@@ -786,6 +787,10 @@ export interface RunnerHeartbeatRequest {
    *  (see RunnerHeartbeatResponse.agentDirs). Absent on older runners, which leaves the stored
    *  snapshot alone — "never probed" and "probed, missing" have to stay distinguishable. */
   agentDirProbes?: AgentDirProbe[];
+  /** What the runner found at each local model server it was handed (RunnerHeartbeatResponse.localProviders):
+   *  health, version and catalogue, from its own loopback (docs/ollama-local-provider-contract.md §6). Absent on
+   *  runners that cannot probe and before the first probe completes, which leaves the stored probe alone. */
+  localProviderProbes?: LocalProviderProbe[];
   /** State of the shared checkouts this machine's agents work in. Absent on older runners,
    *  which leaves the stored snapshot alone rather than claiming every checkout is clean. */
   repos?: RunnerRepoHealth[];
@@ -1264,6 +1269,10 @@ export interface RunnerHeartbeatResponse {
    *  RunnerHeartbeatRequest.agentDirProbes. Absent on older control planes (the runner then
    *  probes nothing and the form simply shows no path status). */
   agentDirs?: AgentDirTarget[];
+  /** The runner-scoped providers bound to this runner, for it to probe before its next heartbeat and answer in
+   *  RunnerHeartbeatRequest.localProviderProbes. Every full answer names them (an empty list: none); absent from a
+   *  quiet answer, which the runner reads as "keep probing what you have". */
+  localProviders?: LocalProviderTarget[];
   /** A checkout repair the user started after seeing it reported wedged. Absent on older control
    *  planes, and whenever no repair is in flight for this runner. */
   repoCleanupRequest?: RepoCleanupCommand;

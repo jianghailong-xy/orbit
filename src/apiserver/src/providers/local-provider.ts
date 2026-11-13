@@ -34,6 +34,7 @@ export interface ScopedRow {
   probeState: string | null;
   probedAt: Date | null;
   probeVersion: string | null;
+  probeLatencyMs?: number | null;
   instanceModels: unknown;
   runner?: BoundRunner | null;
 }
@@ -47,6 +48,7 @@ export const PROVIDER_SCOPE_SELECT = {
   probeState: true,
   probedAt: true,
   probeVersion: true,
+  probeLatencyMs: true,
   instanceModels: true,
   runner: PROVIDER_RUNNER_SELECT,
 } satisfies Prisma.ModelProviderSelect;
@@ -82,6 +84,7 @@ export function withoutScopeColumns<T extends ScopedRow & { probeMessage?: strin
     probedAt: _probedAt,
     probeVersion: _probeVersion,
     probeMessage: _probeMessage,
+    probeLatencyMs: _probeLatencyMs,
     instanceModels: _instanceModels,
     runner: _runner,
     ...rest
@@ -184,6 +187,7 @@ export const CLEARED_PROBE = {
   probeVersion: null,
   probeMessage: null,
   probedAt: null,
+  probeLatencyMs: null,
   instanceModels: Prisma.DbNull,
 } as const;
 

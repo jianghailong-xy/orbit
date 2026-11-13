@@ -7101,6 +7101,8 @@ model ModelProvider {
   probeVersion  String?   @map("probe_version")
   probeMessage  String?   @map("probe_message")
   probedAt      DateTime? @map("probed_at")
+  // How long that probe's readiness call took, in milliseconds (migration 0647). NULL when it got no answer.
+  probeLatencyMs Int?     @map("probe_latency_ms")
   // The instance's own model catalogue as that runner discovered it ([{ value, label?, contextWindow?, tools? }],
   // @orbit/shared LocalInstanceModel). NULL until a runner reports one. `models` above stays the owner's list.
   instanceModels Json?    @map("instance_models")
