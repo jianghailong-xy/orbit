@@ -353,6 +353,23 @@ COMPOSE_FILE=docker-compose.yml:deploy/postgres-pinned.yml:deploy/db-proxy.yml
 ORBIT_REGISTRY=10.66.0.1:5000
 ```
 
+## Images and the two-stage release
+
+Unset, as on every single-host deployment, these leave each image as Compose has always run it: the apiserver, web
+and link gateway images built on the host from its checkout, and postgres, nginx and nats pulled from Docker Hub by
+tag. The [two-stage release](../.claude/skills/upgrade/SKILL.md#two-stage-release) builds on one host and deploys
+on another, which builds nothing; its deploy stage writes them into a block at the end of that host's `.env`, which
+it replaces whole on every deploy. Do not set them on a single host.
+
+| Variable | Type | Required / default | Purpose | Secret? | Apply change |
+| --- | --- | --- | --- | --- | --- |
+| `ORBIT_REGISTRY` | `string` (`host:port`) | Optional; unset | The registry every image is pulled from, placed in front of each reference. On the build host, set in the environment of the upgrade script, it turns the upgrade into a two-stage release. | No | Written by the deploy stage |
+| `ORBIT_IMAGE_TAG` | `string` (40-character commit) | Optional; `local` for the apiserver, and web keeps the name Compose gives it | The commit the apiserver and web images were built from, which is their tag. A rollback deploys an earlier one. | No | Written by the deploy stage |
+| `ORBIT_LINK_GATEWAY_TAG` | `string` (40-character commit) | Optional; `local` | The link gateway image's tag: the last commit under `src/link-gateway`, its whole build context, so a release that does not change it recreates nothing. | No | Written by the deploy stage |
+| `ORBIT_POSTGRES_IMAGE` | `string` (image reference) | Optional; `postgres:16-alpine` | The image `postgres` and `pgbackup` run, by digest, as [deploy/two-stage/base-images.env](../deploy/two-stage/base-images.env) pins it: `library/postgres@sha256:<digest>`. | No | Written by the deploy stage; a running `postgres` is recreated for a change only with `--pull-base` |
+| `ORBIT_NGINX_IMAGE` | `string` (image reference) | Optional; `nginx:alpine` | The web gateway's image, by digest, as the same file pins it. | No | Written by the deploy stage |
+| `ORBIT_NATS_IMAGE` | `string` (image reference) | Optional; `nats:2.15-alpine` | The runner link's NATS image, by digest, as the same file pins it. | No | Written by the deploy stage |
+
 ## Runner machine only
 
 Do not put runtime credentials in the server's `.env`. Run registration and authentication as the OS

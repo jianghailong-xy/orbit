@@ -9,9 +9,17 @@ x-logging: &logging
     max-file: "5"
     compress: "true"
 
+# Where each image comes from. With none of these variables set, every image is what a single host has always run:
+# the apiserver, web and link gateway images built here from this checkout, postgres, nginx and nats pulled from
+# Docker Hub by tag. /upgrade's two-stage release (.claude/skills/upgrade/SKILL.md, "Two-stage release") builds on
+# one host and sets them on the host it deploys to, which builds nothing: ORBIT_REGISTRY is the registry every image
+# is pulled from, ORBIT_IMAGE_TAG the commit the apiserver and web images were built from, ORBIT_LINK_GATEWAY_TAG the
+# last commit under src/link-gateway, and ORBIT_POSTGRES_IMAGE, ORBIT_NGINX_IMAGE and ORBIT_NATS_IMAGE the base images
+# by digest (deploy/two-stage/base-images.env).
+
 services:
   postgres:
-    image: postgres:16-alpine
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}${ORBIT_POSTGRES_IMAGE:-postgres:16-alpine}
     container_name: orbit-postgres
     restart: unless-stopped
     logging: *logging
@@ -125,7 +133,7 @@ services:
   # Periodic base backups + retention for the WAL archive above. Without a base backup
   # the archived WAL has nothing to replay onto, so the two ship together.
   pgbackup:
-    image: postgres:16-alpine
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}${ORBIT_POSTGRES_IMAGE:-postgres:16-alpine}
     container_name: orbit-pgbackup
     restart: unless-stopped
     logging: *logging
@@ -162,7 +170,7 @@ services:
       - ./data/files:/var/lib/orbit/files:ro
 
   apiserver:
-    image: orbit-apiserver:local
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}orbit-apiserver:${ORBIT_IMAGE_TAG:-local}
     build:
       context: .
       dockerfile: src/apiserver/Dockerfile
@@ -323,7 +331,7 @@ services:
   # key are given to this service and no other: the apiserver reads the model's name and state from the row this one
   # writes (wiki_model_status). Until the wiki's executor is switched to the server, probing the model is all it does.
   wiki-worker:
-    image: orbit-apiserver:local
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}orbit-apiserver:${ORBIT_IMAGE_TAG:-local}
     container_name: orbit-wiki-worker
     restart: unless-stopped
     logging: *logging
@@ -349,6 +357,9 @@ services:
         condition: service_healthy
 
   web:
+    # Empty unless ORBIT_IMAGE_TAG is set, and an empty image is none: Compose names the image it builds after the
+    # project, as it always has.
+    image: ${ORBIT_IMAGE_TAG:+${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}orbit-web:${ORBIT_IMAGE_TAG}}
     build:
       context: .
       dockerfile: src/web/Dockerfile
@@ -375,7 +386,7 @@ services:
       start_period: 10s
 
   gateway:
-    image: nginx:alpine
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}${ORBIT_NGINX_IMAGE:-nginx:alpine}
     container_name: orbit-gateway
     restart: unless-stopped
     logging: *logging
@@ -485,7 +496,7 @@ services:
       context: src/link-gateway
       args:
         ORBIT_SOURCE_SHA: "${ORBIT_SOURCE_SHA:-}"
-    image: orbit-link-gateway:local
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}orbit-link-gateway:${ORBIT_LINK_GATEWAY_TAG:-local}
     container_name: orbit-link-gateway
     restart: unless-stopped
     logging: *logging
@@ -546,7 +557,7 @@ services:
   # the host, monitoring included, and runs only under the runner-link profile, beside the gateway.
   nats:
     profiles: [runner-link]
-    image: nats:2.15-alpine
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}${ORBIT_NATS_IMAGE:-nats:2.15-alpine}
     container_name: orbit-nats
     restart: unless-stopped
     logging: *logging
