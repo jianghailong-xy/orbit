@@ -1,0 +1,199 @@
+{
+  "name": "orbit.agent",
+  "contractVersion": "1.0.0",
+  "doc": "docs/orbit-agent-contract.md",
+  "status": "frozen",
+  "frozenAt": "2026-11-13",
+  "baseline": {
+    "recordedAt": "2026-11-13",
+    "cliVersion": "0.1.254",
+    "cliSourceSha": "d660dc78b7dc92e279ac3c05523ba77b1ee95efa",
+    "repoMainSha": "35fc5b8a0",
+    "server": "https://orbitd.io",
+    "mcpToolsWithOrchestrationClaude": 98,
+    "mcpToolsWithoutOrchestrationClaude": 76,
+    "mcpToolsWithOrchestrationCodex": 97,
+    "mcpToolsWithoutOrchestrationCodex": 75,
+    "mcpToolsListBytes": 254114,
+    "mcpToolsListBytesCodex": 253859,
+    "mcpToolsListBytesWithoutOrchestration": 222152,
+    "mcpToolsListBytesWithoutOrchestrationCodex": 221897,
+    "mcpToolsListBytesNote": "initialize + tools/list stdout; the initialize response is 144 bytes",
+    "orchestrationGatedTools": 22,
+    "cliCapabilitiesByContext": {"sessionOrchestrationOn": 87, "sessionOrchestrationOff": 64, "headless": 53},
+    "cliCapabilitiesBytesApproxByContext": {"sessionOrchestrationOn": 255394, "sessionOrchestrationOff": 214497, "headless": 177062},
+    "cliCapabilitiesBytesNote": "the document embeds the caller's context ids, so exact bytes vary by a few dozen"
+  },
+  "objects": [
+    {
+      "id": "project",
+      "question": "What is the whole thing for, and what settles it?",
+      "durable": true,
+      "startsWork": false,
+      "notes": "Goal, acceptance criteria, instructions, status, optional coordinator session. Completion is derived from its criteria, requested by the coordinator and recorded by the owner."
+    },
+    {
+      "id": "task",
+      "question": "What is the one piece of work?",
+      "durable": true,
+      "startsWork": false,
+      "notes": "One durable work item with exactly one completion criterion. A task may be filed under a project, a list, a parent and prerequisites, but none of those is what it is."
+    },
+    {
+      "id": "task_list",
+      "question": "How is this class of work dispatched?",
+      "durable": true,
+      "startsWork": false,
+      "notes": "Dispatch policy: maxConcurrent, paused (dispatch hold), standing instructions, and the queue task priority orders. It decides when work may run, never what the work is."
+    },
+    {
+      "id": "session",
+      "question": "What is running right now?",
+      "durable": false,
+      "startsWork": true,
+      "notes": "One engine conversation on a runner, task-linked or standalone. A session can end; the task outlives it."
+    },
+    {
+      "id": "agent",
+      "question": "Where does it run, and under which identity?",
+      "durable": true,
+      "startsWork": false,
+      "notes": "Execution identity and location. In the live product this is the workspace row named by MCP agent_* and CLI orbit agent; project-agent-contract.md freezes a future pure-identity split."
+    }
+  ],
+  "intentRoutes": [
+    {"id": "R1.1", "intent": "remember/follow-up work", "object": "task", "mcp": "task_create", "cli": "orbit task create", "approval": "create card"},
+    {"id": "R1.2", "intent": "a plan already worked out and counted", "object": "task[]", "mcp": "task_create_batch", "cli": "orbit task create-batch --tasks-file -", "approval": "one batch card"},
+    {"id": "R1.3", "intent": "a body of work with its own goal and acceptance", "object": "project", "mcp": "project_create", "cli": "orbit project create", "approval": "project card; a yes makes this conversation coordinator"},
+    {"id": "R1.4", "intent": "run now, already recorded", "object": "task", "mcp": "task_start", "cli": "orbit task start", "approval": "none once recorded"},
+    {"id": "R1.5", "intent": "run now, not recorded yet", "object": "task", "mcp": "task_create with startNow true", "cli": "orbit task create --start-now", "approval": "one card covers create and start", "startsWork": true},
+    {"id": "R1.6", "intent": "do it at a set time", "object": "task", "mcp": "task_create/task_update with runAt", "cli": "--run-at", "approval": "create/update card", "startsWork": true},
+    {"id": "R1.7", "intent": "hand work to another agent as a conversation", "object": "session", "mcp": "session_create", "cli": "orbit session create", "approval": "none on the call", "requires": "orchestration"},
+    {"id": "R1.8", "intent": "read the state of a project/task/session", "object": null, "mcp": "project_get/task_get/task_list/session_get", "cli": "orbit project get, orbit task get/list", "approval": "none", "mutates": false},
+    {"id": "R1.9", "intent": "wait for work to finish", "object": "watch", "mcp": "task_await/session_await/watch_create", "cli": "orbit task await, orbit watch", "approval": "none"},
+    {"id": "R1.10", "intent": "keep a lesson about a file or pattern", "object": "wiki", "mcp": "wiki_search then wiki_propose/wiki_note", "cli": "orbit wiki", "approval": "wiki review mode"},
+    {"id": "R1.11", "intent": "keep a file / read a file back", "object": "file", "mcp": "file_upload/file_fetch/file_list", "cli": "orbit file", "approval": "none"},
+    {"id": "R1.12", "intent": "this class of work needs its own dispatch policy", "object": "task_list", "mcp": "tasklist_create/tasklist_update", "cli": "orbit task-list create/update", "approval": "none"},
+    {"id": "R1.13", "intent": "choose an agent / change an agent's defaults", "object": "agent", "mcp": "agent_list (read); agent_create/agent_update (orchestration only)", "cli": "orbit agent", "approval": "agent writes: a card; agent reads: none", "requires": "orchestration for writes"},
+    {"id": "R1.14", "intent": "answer, explain, edit code", "object": null, "mcp": null, "cli": null, "approval": "none"}
+  ],
+  "routingRules": [
+    {"id": "R2", "rule": "The smaller object wins: one task beats a project; one task beats a batch of one."},
+    {"id": "R3", "rule": "Never double-record: not a task per step of the current task, not a task for the current task, not a session to do what this turn can do."},
+    {"id": "R4", "rule": "Read before write when the destination is uncertain: task_list --project-id, project_get, or task_create_batch dryRun."},
+    {"id": "R5", "rule": "An engine plan/todo is private scratch; never call it an Orbit record, never claim a task without its id, never refuse to record work because a private plan covers it."}
+  ],
+  "surfaces": {
+    "mcp": {
+      "default": true,
+      "toolsWithOrchestrationClaude": 98,
+      "toolsWithOrchestrationCodex": 97,
+      "toolsWithoutOrchestrationClaude": 76,
+      "toolsWithoutOrchestrationCodex": 75,
+      "initializeInstructions": null,
+      "resultShape": "one text content block containing JSON on success or refusal prose; no structuredContent",
+      "unknownArguments": "ignored today; must be refused (P0-04)"
+    },
+    "cli": {
+      "default": false,
+      "useFor": ["bulk input from file/stdin", "shell composition and pipes", "operations with no MCP tool", "headless or service-token automation", "work that must outlive the turn"],
+      "capabilities": "orbit capabilities --json (schemaVersion 2; context-dependent)",
+      "capabilitiesByContext": {"sessionOrchestrationOn": 87, "sessionOrchestrationOff": 64, "headless": 53},
+      "discoveryToday": "one ~255 KB document in the fullest context (64 capabilities / ~214 KB with orchestration off, 53 / ~177 KB headless); no graded discovery",
+      "jsonOutput": "entity document on stdout only; hints on stderr",
+      "unknownFlags": "refused with exit 1 before any request"
+    },
+    "parity": {
+      "mcpOnlyTools": ["ask_owner", "bg_kill", "bg_list", "bg_output", "bg_run", "integration_abandon", "integration_observe", "integration_retry", "open_item_hand_over", "open_item_resolve", "permission_prompt", "request_owner_action", "schedule_wakeup", "withdraw_owner_request"],
+      "cliOnlyCapabilities": ["session_import", "wiki_import", "wiki_verify"],
+      "invariants": ["authorization", "approval", "attribution", "identity and ids", "output", "failure"]
+    }
+  },
+  "createVsStart": [
+    {"call": "task_create", "writes": "one task", "dispatches": "not in the call; can start later because autoRunWhenReady defaults to true", "receipt": "task id + status"},
+    {"call": "task_create autoRunWhenReady=false", "writes": "one task", "dispatches": false, "receipt": "task id + status + held for a manual start"},
+    {"call": "task_create startNow=true", "writes": "one task", "dispatches": true, "receipt": "created task + started session/deferred reason", "note": "the runner starts it at once; the once-a-minute scan is the fallback"},
+    {"call": "card answer Create and start", "writes": "one task", "dispatches": true, "receipt": "created task + started session", "note": "the person's override; the agent must not undo it"},
+    {"call": "task_create runAt", "writes": "one task", "dispatches": "once at the set time", "receipt": "task id + schedule"},
+    {"call": "task_create autoRunWhenReady=true (default)", "writes": "one task", "dispatches": "when an assignee is bound and all prerequisites are DONE, and for a project task once the project has started; never for a no-project task with no prerequisites", "receipt": "task id + trigger"},
+    {"call": "task_start", "writes": "none", "dispatches": true, "receipt": "session id + status"},
+    {"call": "task_create_batch", "writes": "up to 50 tasks atomically", "dispatches": "per item, by startNow/runAt/autoRunWhenReady (default true)", "receipt": "per-item id/status + start outcomes"},
+    {"call": "task_create_batch dryRun=true", "writes": "nothing", "dispatches": false, "receipt": "wouldWrite + per-item landing; explicitly not a write receipt"}
+  ],
+  "permission": {
+    "modes": ["plan", "default", "acceptEdits", "dontAsk", "auto", "bypassPermissions"],
+    "backgroundJobsByMode": {"plan": "refused", "default": "card", "acceptEdits": "card", "dontAsk": "refused", "auto": "started", "bypassPermissions": "started"},
+    "claudeEngineShellByMode": {"plan": "card per command, Auto classifier off", "default": "card per command not already allowed", "acceptEdits": "card per command not already allowed", "dontAsk": "refused unless already allowed", "auto": "runs without asking", "bypassPermissions": "runs without asking"},
+    "today": "the runner adds no permission-mode gate of its own; the engines differ: Codex plan refuses every MCP call, Codex default/acceptEdits cards every MCP call, Claude's plan policy is unmeasured",
+    "target": "plan allows Orbit reads and refuses Orbit writes (P1-02)",
+    "humanGates": ["task create card", "batch card", "project card", "provider create/update card", "agent write card", "DAG proposal card", "owner-only decisions", "permission prompt"],
+    "ownerOnly": ["OWNER_CONFIRMED confirmation", "project request-start/request-done", "cross-project moves", "go-live", "orchestration switch"],
+    "orchestration": {
+      "scope": "one account switch",
+      "gates": ["session_*", "agent_*", "runner_*", "project_send", "project_ensure_coordinator"],
+      "requiresLiveSession": true,
+      "revocation": "immediate on session end/reassign or switch off"
+    },
+    "attribution": "in-session writes go to the session's agent and are linked to the session; headless writes fall back to the runner owner"
+  },
+  "errors": {
+    "layers": ["input/schema", "business validation", "authorization", "approval", "conflict", "transport/transient"],
+    "retry": {
+      "reads": "safe",
+      "serverInternal": "task create runs in one transaction retried on transient database conflict; a redelivered turn dedups on a turn-derived key",
+      "callerIdempotencyKey": ["task_evidence_submit", "task_await", "session_await", "watch_create", "wiki_propose", "wiki_draft"],
+      "callerTurnKey": ["session_send", "session_interrupt", "project_send"],
+      "createWithoutKey": "re-read before retrying; a retry in a later turn does not dedup",
+      "never": ["retry by a different surface", "retry a declined card", "retry around a refusal"]
+    },
+    "unknownFields": "contract: refuse before any network write, naming the field; baseline: silently ignored (G1)"
+  },
+  "receipts": [
+    {"write": "task_create", "required": ["id", "status", "title", "projectId", "listId", "assigneeId", "completionCriterion"]},
+    {"write": "task_create with start", "required": ["created task", "session id or deferred reason"]},
+    {"write": "task_create_batch", "required": ["per-item id", "per-item status", "ref mapping", "count written"]},
+    {"write": "task_create_batch dryRun", "required": ["dryRun true", "wouldWrite", "refused", "per-item landing"]},
+    {"write": "task_update", "required": ["id", "fields as written"]},
+    {"write": "task_start", "required": ["session id", "session status"]},
+    {"write": "project_create/project_update", "required": ["id", "status", "criteria as written"]},
+    {"write": "session_create", "required": ["session id", "status"]},
+    {"write": "file_upload", "required": ["file id", "reply link"]},
+    {"write": "declined card", "required": ["distinct refusal outcome", "who declined", "why"]}
+  ],
+  "receiptRules": [
+    "No id, no claim.",
+    "Read back when the claim matters.",
+    "A receipt is the entity document, not prose about it.",
+    "A decline is a refusal, not a success.",
+    "Evidence is its own envelope (task_evidence_submit); a comment is not evidence and evidence is not a status write."
+  ],
+  "scenarios": [
+    {"id": "S1", "case": "E1-record-task", "name": "Record a task", "baseline": "PARTIAL", "baselineEvidence": "tool + card exist; unknown fields ignored (G1); decline is a non-error result (G4); text-only receipt (G3)"},
+    {"id": "S2", "case": "E2-private-plan", "name": "Private plan", "baseline": "PARTIAL", "baselineEvidence": "primer states the rule; no enforcement; plan-mode write gate not implemented (G9)"},
+    {"id": "S3", "case": "E3-create-no-start", "name": "Create without start", "baseline": "PARTIAL", "baselineEvidence": "the separation exists (startNow/runAt/autoRunWhenReady/card override), but autoRunWhenReady defaults to true and the create tool's top-level description does not lead with it: no-start requires an explicit false (G11)"},
+    {"id": "S4", "case": "E4-batch-plan", "name": "Batch plan", "baseline": "PARTIAL", "baselineNote": "capability passes; real-write receipt unmeasured", "baselineEvidence": "dry-run receipt measured; atomic refs; per-item ids on a real write not measured; decline is a non-error result"},
+    {"id": "S5", "case": "E5-read-only-project", "name": "Read-only project inspection", "baseline": "PASS", "baselineEvidence": "project_get measured; no project list surface (G6)"},
+    {"id": "S6", "case": "E6-immediate-delegation", "name": "Immediate delegation", "baseline": "PASS", "baselineEvidence": "task_start/session_create semantics hold; start receipt split (G3); decline parity gap (G4)"},
+    {"id": "S7", "case": "E7-no-orchestration", "name": "No orchestration", "baseline": "PARTIAL", "baselineEvidence": "22 tools disappear (measured); no instruction for the absent family (G2/P0-05)"},
+    {"id": "S8", "case": "E8-compaction-recovery", "name": "Compaction recovery", "baseline": "PARTIAL", "baselineNote": "code-inspected; not black-box measured", "baselineEvidence": "Codex re-injects after compaction; Claude keeps the system prompt; no MCP instructions; no black-box test (G10)"}
+  ],
+  "gaps": [
+    {"id": "G1", "gap": "unknown MCP fields and wrong types silently ignored", "owner": "P0-04"},
+    {"id": "G2", "gap": "no MCP initialize.instructions", "owner": "P0-05"},
+    {"id": "G3", "gap": "write receipts are unversioned text; start outcome split; no structuredContent", "owner": "P0-04"},
+    {"id": "G4", "gap": "declined card is a non-error MCP result and a non-zero CLI error", "owner": "P0-03/P0-04"},
+    {"id": "G5", "gap": "task creates take no caller idempotency key", "owner": "P0-04"},
+    {"id": "G6", "gap": "no project list surface on either agent surface", "owner": "P0-02/P1-01"},
+    {"id": "G7", "gap": "one 255 KB capabilities document; no graded discovery", "owner": "P1-01"},
+    {"id": "G8", "gap": "MCP and CLI surfaces differ by 14 and 3 operations; no single operation catalogue", "owner": "P0-02"},
+    {"id": "G9", "gap": "permission-mode behaviour for Orbit calls is not uniform: no runner gate; Codex plan refuses all MCP calls, Codex default/acceptEdits cards every MCP call, Claude plan policy unmeasured", "owner": "P1-02"},
+    {"id": "G10", "gap": "no black-box evaluation for the eight scenarios", "owner": "P2-01"},
+    {"id": "G11", "gap": "autoRunWhenReady defaults to true and the create tool's top-level description does not lead with it: file-it-for-later can start work once the project starts unless the agent passes false", "owner": "P0-05"}
+  ],
+  "review": {
+    "reviewedAt": "2026-11-13",
+    "reviewer": "independent agent review (fresh context, no part in drafting)",
+    "verdictOnJudgedRevision": "FAIL: 1 blocking, 4 major, 9 minor; all applied",
+    "record": "docs/orbit-agent-contract.md §11"
+  }
+}
