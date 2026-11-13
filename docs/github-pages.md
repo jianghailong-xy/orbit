@@ -24,12 +24,14 @@ order. Every page has an explicit 中文 / English switch; the Chinese page labe
 5. Architecture and security boundary — outbound runner topology, worktree limitation, operator responsibilities,
    and the explicit no-SaaS/no-SLA boundary.
 6. FAQ — hosting, credentials, worktrees, runner loss, runtime support, and release posture.
-7. Community/contribution — Discussions, Issues, contribution guide, and private vulnerability reporting.
-8. Version and roadmap — pre-1.0 release language, tagged-release guidance, and direction without date promises.
+7. Community/contribution — Discussions, Issues, contribution guide, private vulnerability reporting, and the
+   changelog / release-feedback entry.
+8. Version and roadmap — pre-1.0 release language, tagged-release guidance, changelog link, and direction
+   without date promises.
 
-The footer carries the five public destinations a reader needs to verify the project: Docs, GitHub, Releases,
-Support, and Security. The pages link back to the repository for detail; they do not mirror the complete docs/
-directory. The two 404 pages (`site/404.html` and `site/zh/404.html`) carry the same language switch, recovery
+The footer carries the public destinations a reader needs to verify the project: Docs, GitHub, Releases,
+Changelog, Support, and Security. The pages link back to the repository for detail; they do not mirror the
+complete docs/ directory. The two 404 pages (`site/404.html` and `site/zh/404.html`) carry the same language switch, recovery
 links, accessible text, and social metadata.
 
 ## Build and deploy contract
