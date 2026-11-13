@@ -79,15 +79,17 @@ export class RunnerTasksController {
   ) {
     RunnerTasksController.refuseImplicitEvidenceJudgment(dto);
     if (dto.fork) await this.tasks.assertForkCallerOnRunner(runner.ownerId, runner.id, sessionId);
-    const creator = await this.tasks.resolveAgentCreator(runner.ownerId, actingWorkspaceId(workspaceId, legacyAgentId));
     // The machine credential is the agent's credential: this create must name the acting session
     // and be the one that session's answered card covers, whichever surface asked for it
     // (`tasks/task-write-approval.ts`). A headless process acts as the account owner with a
-    // personal access token on the user route instead; there is no card-free write here.
+    // personal access token on the user route instead; there is no card-free write here. Asked
+    // before the caller's workspace is resolved: whether this write may happen at all turns on its
+    // identity, not on which workspace it names.
     await this.tasks.assertSessionTaskWriteApproved(runner.ownerId, runner.id, sessionId, {
       toolName: TASK_CREATE_CARD_TOOL,
       create: dto,
     });
+    const creator = await this.tasks.resolveAgentCreator(runner.ownerId, actingWorkspaceId(workspaceId, legacyAgentId));
     return this.tasks.create(runner.ownerId, dto, creator, sessionId);
   }
 
@@ -111,16 +113,16 @@ export class RunnerTasksController {
     if (dto.tasks?.some((item) => item.fork)) {
       await this.tasks.assertForkCallerOnRunner(runner.ownerId, runner.id, sessionId);
     }
-    const creator = await this.tasks.resolveAgentCreator(runner.ownerId, actingWorkspaceId(workspaceId, legacyAgentId));
     // The write that starts work in bulk takes the same acting session and answered card as the
     // single create — and a dry run writes nothing, so it asks nobody
-    // (`tasks/task-write-approval.ts`).
+    // (`tasks/task-write-approval.ts`). Asked before the caller's workspace is resolved.
     if (!dto.dryRun) {
       await this.tasks.assertSessionTaskWriteApproved(runner.ownerId, runner.id, sessionId, {
         toolName: TASK_BATCH_CARD_TOOL,
         tasks: dto.tasks,
       });
     }
+    const creator = await this.tasks.resolveAgentCreator(runner.ownerId, actingWorkspaceId(workspaceId, legacyAgentId));
     return dto.dryRun
       ? this.tasks.previewPlan(runner.ownerId, dto, creator, sessionId)
       : this.tasks.createMany(runner.ownerId, dto, creator, sessionId);

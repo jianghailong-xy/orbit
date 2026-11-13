@@ -1063,6 +1063,13 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
   'POST /runner/tasks/batch-pin header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({ params: {}, body: { taskIds: [mine.taskId], model: 'census' } })),
   'PATCH /runner/tasks/:id body assigneeId': { as: RUNNER, request: (of, mine) => ({ params: { id: mine.taskId }, body: { assigneeId: of.workspaceId } }) },
   'PATCH /runner/tasks/:id body listId': { as: RUNNER, request: (of, mine) => ({ params: { id: mine.taskId }, body: { listId: of.listId } }) },
+  // Asked BEFORE the move below files the task into a project. A request carrying a session edits
+  // work under that session's project scope (tasks/tasks-service.ts update), and a session on this
+  // machine holds none: once the task belongs to a project, this same rename is refused
+  // PROJECT_SCOPE_MISMATCH instead of answered by the route, which says nothing about tenancy —
+  // the property this census is about. The move is the one case here that changes which scope a
+  // later case is written under, so it runs last among the task's own edits.
+  'PATCH /runner/tasks/:id header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({ params: { id: mine.taskId }, body: { title: 'renamed by the census' } })),
   'PATCH /runner/tasks/:id body projectId': { as: RUNNER, request: (of, mine) => ({ params: { id: mine.taskId }, body: { projectId: of.projectId } }) },
   'PATCH /runner/tasks/:id body fixesOpenItemId': {
     as: RUNNER,
@@ -1083,7 +1090,6 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     as: RUNNER,
     request: (of, mine) => ({ params: { id: mine.taskId }, body: { supersededByTaskId: of.taskId } }),
   },
-  'PATCH /runner/tasks/:id header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({ params: { id: mine.taskId }, body: { title: 'renamed by the census' } })),
   'POST /runner/tasks/:id/execute header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({ params: { id: mine.taskId }, body: {} })),
   'POST /runner/tasks/:id/dependencies body dependsOnTaskId': {
     as: RUNNER,
