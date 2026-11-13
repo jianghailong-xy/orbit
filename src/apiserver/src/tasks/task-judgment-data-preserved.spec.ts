@@ -2933,7 +2933,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0565 adds the terminal_login and terminal_credential tables, their indexes and foreign keys to "user" and
       // "runner" only (docs/terminal-session-design.md); no preserved rows, triggers or DONE fence change, and no row
       // is written.
-      '0565_terminal_credential'],
+      '0565_terminal_credential',
+      // 0595 adds two nullable columns to conversation_turn, sender_client and sender_client_detail (which client
+      // sent the turn, sessions/turn-sender-client.ts); no preserved rows, triggers or DONE fence change, and no row
+      // is written.
+      '0595_turn_sender_client'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
