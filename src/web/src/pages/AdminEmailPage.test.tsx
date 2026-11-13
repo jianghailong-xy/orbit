@@ -105,7 +105,7 @@ const field = (label: string) => {
   return forId ? container!.querySelector<HTMLInputElement>(`[id="${forId}"]`) : null;
 };
 const switches = () => [...container!.querySelectorAll<HTMLElement>('[role="switch"]')];
-const status = () => container!.querySelector('.orbit-card-head .orbit-badge, .orbit-card-head span:last-child')?.textContent;
+const status = () => container!.querySelector('.settings-section-action')?.textContent;
 const button = (label: string) => [...container!.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === label);
 const puts = () => requests.filter((r) => r.method === 'PUT').map((r) => r.body);
 
@@ -164,7 +164,7 @@ describe('Admin → Email', { timeout: 60_000 }, () => {
     expect(container!.querySelector<HTMLAnchorElement>('a[href="https://resend.com/api-keys"]')?.textContent).toBe('Create a key in Resend');
     expect(button('Save')?.disabled).toBe(true);
     expect(button('Send test email')?.disabled).toBe(true);
-    expect(container!.textContent).toContain('Last 7 days · Sent 12 · Failed 0');
+    expect(container!.textContent).toContain('Last 7 daysSent 12 · Failed 0');
   });
 
   it('saves the whole setting in one PUT, the key only when typed, and never shows the key again', async () => {
@@ -199,7 +199,7 @@ describe('Admin → Email', { timeout: 60_000 }, () => {
     await click(button('Send test email'), 'Send test email');
     const answer = container!.querySelector('[role="status"]');
     expect(answer?.textContent).toBe("Couldn't send the test email: Resend answered 403 — The example.com domain is not verified. Please, add and verify your domain.");
-    expect(answer?.className).toContain('admin-email-result-error');
+    expect(answer?.className).toContain('admin-email-failed');
 
     // With unsaved changes the test waits for a save: it sends with what is saved.
     await type(field('From'), 'Other <other@example.com>');
@@ -222,7 +222,7 @@ describe('Admin → Email', { timeout: 60_000 }, () => {
   it('the last seven days: Show failures lists the address, the time and the error', async () => {
     failures = [{ email: 'jordan@example.org', at: '2026-11-11T04:21:00.000Z', error: '422 Invalid `to` field.' }];
     await open();
-    expect(container!.textContent).toContain('Last 7 days · Sent 12 · Failed 1');
+    expect(container!.textContent).toContain('Last 7 daysSent 12 · Failed 1');
     expect(container!.querySelector('.admin-email-failures')).toBeNull();
     await click(button('Show failures'), 'Show failures');
     const item = container!.querySelector('.admin-email-failures li')?.textContent ?? '';

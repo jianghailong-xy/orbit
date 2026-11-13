@@ -3131,10 +3131,14 @@ scanLoop:
 			// A Claude API error — or an expired sign-in — returns as assistant text + a
 			// "success" result with no is_error, so it slips past resultFrom. Treat the turn
 			// as failed so the control plane surfaces it (and reclaims a task session)
-			// instead of parking the session as if the turn succeeded.
+			// instead of parking the session as if the turn succeeded. A failure of the
+			// connection to the API — Cloudflare's block page, a dropped socket — is neither
+			// an API error nor a sign-in failure and is named separately: it is still a dead
+			// turn (control plane arms the retry from it).
 			if turnStatus == stSucceeded &&
 				(isAPIError(r.Result) || isAPIError(lastAssistantText) ||
-					isAuthError(r.Result) || isAuthError(lastAssistantText)) {
+					isAuthError(r.Result) || isAuthError(lastAssistantText) ||
+					isConnectionFailure(r.Result) || isConnectionFailure(lastAssistantText)) {
 				turnStatus = stFailed
 			}
 			lastAssistantText = ""

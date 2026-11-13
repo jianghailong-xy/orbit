@@ -1,5 +1,5 @@
 import { Prisma, RunStatus } from '@prisma/client';
-import type { TaskRunReason } from '@orbit/shared';
+import type { SessionActivity, TaskRunReason } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
 import { freshRunningBgJobs } from './background-job-activity';
@@ -112,10 +112,36 @@ export function taskCarriedSql(task: string, session = 'carrier'): string {
 export function sessionRunReasonSql(session: string): string {
   return `CASE
     WHEN NOT (${session}."starts_task_work" = true AND ${session}."deleted_at" IS NULL) THEN NULL
+    ELSE ${sessionActivitySql(session)}
+  END`;
+}
+
+/**
+ * What `session` is doing, as `SessionActivity` text — any session, task or not: the same answer
+ * `sessionRunReasonSql` gives for a task's carrier, and NULL for a session that is queued for or doing
+ * nothing beyond what its status says (ended, or parked with no wake source). Every surface that words
+ * a session's state reads this beside `status`, so a parked session still working is never "Awaiting
+ * reply".
+ */
+export function sessionActivitySql(session: string): string {
+  return `CASE
     WHEN ${session}."status" IN ('PENDING'::"run_status", 'RUNNING'::"run_status") THEN 'TURN'
     WHEN ${session}."status" <> 'AWAITING_INPUT'::"run_status" THEN NULL
     ${WAKE_SOURCES.map((source) => `WHEN ${source.sql(session)} THEN '${source.reason}'`).join('\n    ')}
   END`;
+}
+
+/** `sessionActivitySql` for the sessions `ids`, by id; a session that is not there is absent. */
+export async function readSessionActivities(
+  prisma: Pick<PrismaService, '$queryRaw'>,
+  ids: readonly string[],
+): Promise<Map<string, SessionActivity | null>> {
+  if (ids.length === 0) return new Map();
+  const rows = await prisma.$queryRaw<Array<{ id: string; activity: SessionActivity | null }>>(Prisma.sql`
+    SELECT s."id" AS "id", (${Prisma.raw(sessionActivitySql('s'))}) AS "activity"
+      FROM "session" s
+     WHERE s."id" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})`);
+  return new Map(rows.map((row) => [row.id, row.activity]));
 }
 
 /** The session columns `runStalled` reads, as a reader selects them beside the run reason. */

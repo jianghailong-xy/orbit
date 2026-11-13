@@ -38,6 +38,11 @@ class EngineErrorsParityTest {
     @Test fun retryableEnginePrefixesAreTheSameOnBothEnds() =
         assertEquals(strings("RETRYABLE_ENGINE_ERROR_PREFIXES"), EngineErrors.retryableEngineErrorPrefixes)
 
+    @Test fun connectionFailureMarkersAreTheSameOnBothEnds() {
+        assertEquals(strings("EDGE_BLOCK_MARKERS"), EngineErrors.edgeBlockMarkers)
+        assertEquals(strings("CONNECTION_DROPPED_MARKERS"), EngineErrors.connectionDroppedMarkers)
+    }
+
     @Test fun usageLimitMarkersAndTheirOffsetAreTheSameOnBothEnds() {
         assertEquals(strings("USAGE_LIMIT_ERROR_MARKERS"), EngineErrors.usageLimitMarkers)
         assertEquals(declared("const USAGE_LIMIT_MARKER_MAX_OFFSET = (\\d+)", "USAGE_LIMIT_MARKER_MAX_OFFSET").toInt(),

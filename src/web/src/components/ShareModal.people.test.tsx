@@ -27,10 +27,10 @@ const { ShareModal } = await import('./ShareModal');
 
 const SESSION = '34ToZJmiOG8Ym1MR6ingQ';
 const ALICE: SessionGuestPerson = {
-  userId: 'u-alice', name: 'Alice Chen', email: 'alice@example.com', addedAt: '2026-11-12T01:00:00.000Z', messagesToday: 12, opened: true,
+  userId: 'u-alice', name: 'Alice Chen', email: 'alice@example.com', addedAt: '2026-11-12T01:00:00.000Z', messagesToday: 12, opened: true, emailSentAt: '2026-11-12T01:00:05.000Z',
 };
 const RAVI: SessionGuestPerson = {
-  userId: 'u-ravi', name: 'Ravi Kumar', email: 'ravi@example.com', addedAt: '2026-11-12T02:00:00.000Z', messagesToday: 0, opened: false,
+  userId: 'u-ravi', name: 'Ravi Kumar', email: 'ravi@example.com', addedAt: '2026-11-12T02:00:00.000Z', messagesToday: 0, opened: false, emailSentAt: null,
 };
 
 /** The owner's guest routes, as far as the section reaches them: one session's people, by email. */
@@ -146,10 +146,22 @@ describe('People who can reply', { timeout: 60_000 }, () => {
       { name: 'Alice Chen', email: 'alice@example.com', today: '12 messages today' },
       { name: 'Ravi Kumar', email: 'ravi@example.com', today: 'Not opened yet' },
     ]);
+    // Copy link hands out the one address the session has, which opens for the people listed too (board 11, D8).
+    expect(document.body.querySelector('.share-dialog-foot')?.textContent).toContain(
+      'Copy link — works for you and the people you invite',
+    );
     // With no public link, the Access line says the people below can still open and reply.
     expect(document.body.querySelector('.share-access-detail')?.textContent).toBe(
       'No public link. People you invite below can still open and reply.',
     );
+  });
+
+  it('a guest who has not opened it yet, emailed the invitation, reads when the email went out (board 11, D7)', async () => {
+    const at = '2026-11-12T02:00:05.000Z';
+    serve([{ ...RAVI, emailSentAt: at }]);
+    await open('acceptEdits');
+    const clock = new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+    expect(rows()).toEqual([{ name: 'Ravi Kumar', email: 'ravi@example.com', today: `Invited by email · ${clock}` }]);
   });
 
   it('invites by email: the person joins the list and the field empties', async () => {
