@@ -41,6 +41,21 @@ final class CrossingBatchesTests: XCTestCase {
         XCTAssertEqual(CrossingBatches.batches(rows, projectID: "uuid-\(Self.here)").count, 1)
     }
 
+    /// A move to no project has no target end: it never joins a batch, whatever id is asked, and
+    /// the rows around it batch as before.
+    func testAMoveToNoProjectTargetsNoProject() {
+        let out = ProjectCrossing(id: "uuid-O", publicId: "O", fromProjectId: "uuid-34bSource",
+                                  fromProjectPublicId: "34bSource", toProjectId: nil, kind: "MOVE_TASK",
+                                  crossingKey: "key-O", state: "PENDING", title: "Task O", requestedAt: at(2))
+        let rows = [row("A", requestedAt: at(1)), out, row("B", requestedAt: at(3))]
+        XCTAssertFalse(CrossingBatches.targets(out, projectID: Self.here))
+        XCTAssertFalse(CrossingBatches.targets(out, projectID: ""))
+        XCTAssertFalse(CrossingBatches.targets(out, projectID: "34bSource"))
+        XCTAssertEqual(CrossingBatches.batches(rows, projectID: Self.here).map { $0.rows.map(\.publicId) },
+                       [["A", "B"]])
+        XCTAssertEqual(CrossingBatches.batches([out], projectID: "34bSource").count, 0)
+    }
+
     func testRowsAskedWhileTheBatchIsOpenJoinItAndLaterOnesStartANewOne() {
         let rows = [
             row("C", state: "DENIED", requestedAt: at(5), decidedAt: at(6)),
