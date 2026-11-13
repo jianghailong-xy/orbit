@@ -277,7 +277,7 @@ suite('a runner-scoped local provider, on real PostgreSQL', { timeout: 600_000 }
       const old = (await providers.listMine(owner)).find((p) => p.id === created.id)!;
       assert.deepEqual([old.local?.capability, old.local?.state], ['UNKNOWN', 'UNKNOWN']);
     } finally {
-      await db.runner.update({ where: { id: home.runnerId }, data: { capabilities: [OLLAMA_PROBE_CAPABILITY], capabilitiesReportedAt: new Date() } });
+      await db.runner.update({ where: { id: home.runnerId }, data: { capabilities: [OLLAMA_PROBE_CAPABILITY, LOCAL_PROVIDER_RUN_CAPABILITY], capabilitiesReportedAt: new Date() } });
     }
     const probed = (await providers.listMine(owner)).find((p) => p.id === created.id)!;
     assert.equal(probed.local?.state, 'READY');
