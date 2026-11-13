@@ -23,6 +23,15 @@ ORBIT-MR-INPUT and ORBIT-MR-FORWARD, reached from the first rule of INPUT and of
 Docker keeps first in FORWARD and never flushes. They are written in one iptables-restore transaction
 of the iptables backend Docker uses (nft or legacy), so a reader finds the old rules or the new ones.
 
+Where Kubernetes shares the host (kube-proxy, kube-router, flannel: chains named KUBE-* or FLANNEL-*),
+DOCKER-USER is no longer first in FORWARD and kube-proxy's nat PREROUTING jump to KUBE-SERVICES DNATs
+a runner's connection to a ClusterIP into the cluster and marks it for KUBE-FORWARD to accept. There,
+FORWARD itself starts with a jump from the bridge to ORBIT-MR-FORWARD, and nat PREROUTING with one to
+ORBIT-MR-PREROUTING, which lets a runner's packet past Docker's DNAT of the gateway's published port
+(and the allowed destinations) and stops every other one from being DNATed or marked (ACCEPT ends
+the nat table's PREROUTING for it). Kubernetes puts its own jumps back on top as it starts and syncs;
+every check puts these first again, and the rules are only in force while they are first.
+
 Commands:
   serve       apply, then check every intervalSeconds and repair what changed; keep the status file
               (state "enforced" with how long that holds, "failing" and why, or "stopped") that the
@@ -58,6 +67,10 @@ STATUS = "/var/lib/orbit-managed-runner-firewall/status.json"
 CHAIN_INPUT = "ORBIT-MR-INPUT"
 CHAIN_FORWARD = "ORBIT-MR-FORWARD"
 CHAINS = (CHAIN_INPUT, CHAIN_FORWARD)
+# The nat table's guard, on a host where Kubernetes runs too.
+CHAIN_NAT = "ORBIT-MR-PREROUTING"
+# The chains Kubernetes' networking makes (kube-proxy, kube-router, flannel): where one is, it shares the host.
+KUBERNETES_CHAINS = ("KUBE-", "FLANNEL-")
 PREFLIGHT_CHAIN = "ORBIT-MR-PREFLIGHT"
 COMMENT = "orbit-managed-runners"
 REJECT_V4 = "-j REJECT --reject-with icmp-admin-prohibited"
@@ -207,15 +220,35 @@ def chain_rules(config, family):
     return {CHAIN_INPUT: to_host, CHAIN_FORWARD: through_host}
 
 
+def nat_rules(config, family):
+    """The nat guard's chain, where Kubernetes shares the host. A runner's packet to the gateway's published port, and to
+    each allowed destination, goes on (RETURN) to Docker's DNAT; every other one is accepted here, which ends the nat
+    table's PREROUTING for it: kube-proxy's KUBE-SERVICES never DNATs it to a pod or marks it for KUBE-FORWARD."""
+    if family == 6:
+        return [f"-A {CHAIN_NAT} -j ACCEPT"]
+    passes = [(f"{config['gateway']}/32", "tcp", config["apiPort"]), *allowed_destinations(config)]
+    return [*(f"-A {CHAIN_NAT} -d {destination} -p {protocol} -m {protocol} --dport {number} -j RETURN"
+              for destination, protocol, number in passes),
+            f"-A {CHAIN_NAT} -j ACCEPT"]
+
+
 def jump_rules(config, hooks):
-    """The jumps into this program's chains: {hook chain: rule}. hooks maps "input"/"forward" to the chain to hook."""
+    """The jumps into this program's filter chains: {hook chain: rule}. hooks maps "input"/"forward" (and, where
+    Kubernetes shares the host, "top") to the chain to hook."""
     match = f"-i {config['bridge']} -m comment --comment {COMMENT}"
-    return {hooks["input"]: f"-A {hooks['input']} {match} -j {CHAIN_INPUT}",
-            hooks["forward"]: f"-A {hooks['forward']} {match} -j {CHAIN_FORWARD}"}
+    jumps = {hooks["input"]: f"-A {hooks['input']} {match} -j {CHAIN_INPUT}",
+             hooks["forward"]: f"-A {hooks['forward']} {match} -j {CHAIN_FORWARD}"}
+    if "top" in hooks:
+        jumps[hooks["top"]] = f"-A {hooks['top']} {match} -j {CHAIN_FORWARD}"
+    return jumps
 
 
-def parse_save(text):
-    """The filter table of iptables-save output: {"chains": set of declared chains, "rules": {chain: [rule, ...]}}."""
+def nat_jump_rule(config):
+    return f"-A PREROUTING -i {config['bridge']} -m comment --comment {COMMENT} -j {CHAIN_NAT}"
+
+
+def parse_save(text, wanted="filter"):
+    """One table of iptables-save output: {"chains": set of declared chains, "rules": {chain: [rule, ...]}}."""
     chains, rules, table = set(), {}, None
     for line in text.splitlines():
         line = line.strip()
@@ -223,7 +256,7 @@ def parse_save(text):
             continue
         if line.startswith("*"):
             table = line[1:]
-        elif table != "filter" or line == "COMMIT":
+        elif table != wanted or line == "COMMIT":
             continue
         elif line.startswith(":"):
             chains.add(line[1:].split()[0])
@@ -232,25 +265,47 @@ def parse_save(text):
     return {"chains": chains, "rules": rules}
 
 
-def jumps_into_ours(saved):
+def target(rule):
+    words = rule.split()
+    return words[words.index("-j") + 1] if "-j" in words and words.index("-j") + 1 < len(words) else None
+
+
+def jumps_into_ours(saved, chains=CHAINS):
     """Every rule, in any chain, that jumps to one of this program's chains: [(chain, rule), ...]."""
-    found = []
-    for chain, rules in saved["rules"].items():
-        for rule in rules:
-            words = rule.split()
-            if "-j" in words and words.index("-j") + 1 < len(words) and words[words.index("-j") + 1] in CHAINS:
-                found.append((chain, rule))
-    return found
+    return [(chain, rule) for chain, rules in saved["rules"].items() for rule in rules if target(rule) in chains]
+
+
+def no_table():
+    return {"chains": set(), "rules": {}}
+
+
+def kubernetes(saved):
+    """Whether Kubernetes' networking shares this family's tables: a chain of kube-proxy, kube-router or flannel."""
+    names = saved["chains"] | saved.get("nat", no_table())["chains"]
+    return any(name.startswith(KUBERNETES_CHAINS) for name in names)
 
 
 def hooks_for(saved, family):
     """Where the jumps go. DOCKER-USER is Docker's: it keeps the jump to it first in FORWARD and never flushes it. Over
-    IPv6, where Docker may manage no ip6tables at all, FORWARD itself carries the jump when DOCKER-USER is not there."""
+    IPv6, where Docker may manage no ip6tables at all, FORWARD itself carries the jump when DOCKER-USER is not there.
+    Where Kubernetes shares the host, its jumps come before DOCKER-USER's, so FORWARD itself starts with one too."""
     if "DOCKER-USER" in saved["chains"]:
-        return {"input": "INPUT", "forward": "DOCKER-USER"}
+        hooks = {"input": "INPUT", "forward": "DOCKER-USER"}
+        if kubernetes(saved):
+            hooks["top"] = "FORWARD"
+        return hooks
     if family == 6:
         return {"input": "INPUT", "forward": "FORWARD"}
     return None
+
+
+def not_first(hook, rules, rule, bridge, table=""):
+    """Why a hook chain does not start with this program's jump, naming what comes before it."""
+    where = f"{table} {hook}" if table else hook
+    if rule not in rules:
+        return f"{where} does not start with the jump for {bridge}: it is missing"
+    ahead = list(dict.fromkeys(target(other) or "a rule" for other in rules[:rules.index(rule)]))
+    return f"{where} does not start with the jump for {bridge}: {', '.join(ahead)} come(s) before it"
 
 
 def assess(saved, config, family):
@@ -260,7 +315,7 @@ def assess(saved, config, family):
         return ["Docker's DOCKER-USER chain is not there: Docker does not manage this backend's iptables (is it its nftables "
                 "backend, iptables turned off, or rootless?)"]
     problems = []
-    if hooks["forward"] == "DOCKER-USER":
+    if hooks["forward"] == "DOCKER-USER" and "top" not in hooks:
         forward = saved["rules"].get("FORWARD", [])
         if not forward or forward[0] != "-A FORWARD -j DOCKER-USER":
             problems.append("FORWARD does not start with Docker's jump to DOCKER-USER")
@@ -272,13 +327,34 @@ def assess(saved, config, family):
     wanted = jump_rules(config, hooks)
     found = jumps_into_ours(saved)
     for hook, rule in wanted.items():
-        first = (saved["rules"].get(hook) or [None])[0]
-        if first != rule:
-            problems.append(f"{hook} does not start with the jump for {config['bridge']}")
+        rules = saved["rules"].get(hook, [])
+        if (rules or [None])[0] != rule:
+            problems.append(not_first(hook, rules, rule, config["bridge"]))
     extra = [rule for _, rule in found if rule not in wanted.values()] + [
         rule for rule in wanted.values() if [r for _, r in found].count(rule) > 1]
     if extra:
         problems.append(f"{len(extra)} other jump(s) into this program's chains")
+    return problems + assess_nat(saved, config, family)
+
+
+def assess_nat(saved, config, family):
+    """Why the nat guard is not as it should be: in force where Kubernetes shares the host, absent where it does not."""
+    nat = saved.get("nat", no_table())
+    found = [rule for _, rule in jumps_into_ours(nat, (CHAIN_NAT,))]
+    if not kubernetes(saved):
+        if CHAIN_NAT in nat["chains"] or found:
+            return ["the nat guard is left from when Kubernetes shared this host"]
+        return []
+    problems, wanted = [], nat_jump_rule(config)
+    if CHAIN_NAT not in nat["chains"]:
+        problems.append(f"nat chain {CHAIN_NAT} is missing")
+    elif nat["rules"].get(CHAIN_NAT, []) != nat_rules(config, family):
+        problems.append(f"nat chain {CHAIN_NAT} does not hold exactly its {len(nat_rules(config, family))} rules")
+    prerouting = nat["rules"].get("PREROUTING", [])
+    if (prerouting or [None])[0] != wanted:
+        problems.append(not_first("PREROUTING", prerouting, wanted, config["bridge"], "nat"))
+    if [rule for rule in found if rule != wanted] or found.count(wanted) > 1:
+        problems.append("other jump(s) into the nat guard")
     return problems
 
 
@@ -292,6 +368,13 @@ def restore_payload(saved, config, family):
         lines += rules
     lines += ["-I" + rule[2:].replace(f"{hook} ", f"{hook} 1 ", 1) for hook, rule in jump_rules(config, hooks).items()]
     lines.append("COMMIT")
+    nat = saved.get("nat", no_table())
+    old = ["-D" + rule[2:] for _, rule in jumps_into_ours(nat, (CHAIN_NAT,))]
+    if kubernetes(saved):
+        lines += ["*nat", f":{CHAIN_NAT} - [0:0]", *old, *nat_rules(config, family),
+                  "-I" + nat_jump_rule(config)[2:].replace("PREROUTING ", "PREROUTING 1 ", 1), "COMMIT"]
+    elif old or CHAIN_NAT in nat["chains"]:
+        lines += ["*nat", *old, *([f":{CHAIN_NAT} - [0:0]", f"-X {CHAIN_NAT}"] if CHAIN_NAT in nat["chains"] else []), "COMMIT"]
     return "\n".join(lines) + "\n"
 
 
@@ -308,11 +391,29 @@ class Iptables:
     def run(self, argv, stdin=None):
         return self._run(argv, stdin)
 
-    def save(self, family):
-        code, out, err = self.run([self.binaries[family][1], "-t", "filter"])
+    def save(self, family, table="filter"):
+        code, out, err = self.run([self.binaries[family][1], "-t", table])
         if code != 0:
             raise RuntimeError(f"{self.binaries[family][1]} failed: {(err or out).strip()[:500]}")
-        return parse_save(out)
+        return parse_save(out, table)
+
+    def save_nat(self, family):
+        """The nat table. The legacy backend's is read only where it exists: reading it would make it."""
+        if self.backend == "legacy" and "nat" not in legacy_table_names(family):
+            raise RuntimeError(f"{self.binaries[family][1]}: there is no legacy nat table")
+        return self.save(family, "nat")
+
+    def save_both(self, family):
+        """The filter table, with the nat table under "nat". A nat table that cannot be read counts as empty unless
+        Kubernetes is in the filter table: its guard is then needed."""
+        saved = self.save(family)
+        try:
+            saved["nat"] = self.save_nat(family)
+        except RuntimeError:
+            if kubernetes(saved):
+                raise
+            saved["nat"] = no_table()
+        return saved
 
     def restore(self, family, payload):
         code, out, err = self.run([self.binaries[family][2], "--noflush", "-w", "10"], payload)
@@ -340,6 +441,13 @@ def legacy_tables_present(proc="/proc/net/ip_tables_names"):
         return bool(Path(proc).read_text().strip())
     except OSError:
         return False
+
+
+def legacy_table_names(family):
+    try:
+        return Path(f"/proc/net/ip{'6' if family == 6 else ''}_tables_names").read_text().split()
+    except OSError:
+        return []
 
 
 def detect_backend(run=None, legacy_present=None):
@@ -410,23 +518,27 @@ def check(config, tables, ipv6=None, address_of=interface_ipv4):
     """Why the rules are not in force on this host: [] when they are."""
     problems = list(bridge_problems(config, address_of))
     for family in families(ipv6):
-        problems += [f"IPv{family}: {problem}" for problem in assess(tables.save(family), config, family)]
+        problems += [f"IPv{family}: {problem}" for problem in assess(tables.save_both(family), config, family)]
     return problems
 
 
-def apply(config, tables, ipv6=None, address_of=interface_ipv4, xtables_lock="/run/xtables.lock"):
+def apply(config, tables, ipv6=None, address_of=interface_ipv4, xtables_lock="/run/xtables.lock", seen=None):
     """Leave exactly this program's rules, writing only a family whose rules are not in force: (families written, why
-    the rules are still not in force or [])."""
+    the rules are still not in force or []). The families where Kubernetes shares the host are added to `seen`."""
     require_lock(tables.backend, xtables_lock)
     changed, problems = [], list(bridge_problems(config, address_of))
     for family in families(ipv6):
-        saved = tables.save(family)
+        saved = tables.save_both(family)
         if hooks_for(saved, family) is None:
             raise RuntimeError(f"IPv{family}: " + assess(saved, config, family)[0])
-        if assess(saved, config, family):
+        found = assess(saved, config, family)
+        if found:
+            log(f"IPv{family}: {'; '.join(found)}: writing the rules")
             tables.restore(family, restore_payload(saved, config, family))
             changed.append(family)
-            saved = tables.save(family)
+            saved = tables.save_both(family)
+        if seen is not None and kubernetes(saved):
+            seen.append(family)
         problems += [f"IPv{family}: {problem}" for problem in assess(saved, config, family)]
     return changed, problems
 
@@ -456,6 +568,21 @@ def remove(run=None, legacy_present=None, ipv6=None):
                         if code != 0:
                             raise RuntimeError(f"{backend} IPv{family}: {' '.join(args)} failed: {err.strip()[:300]}")
                     done.append(f"{backend} IPv{family}: removed chain {chain}")
+            try:
+                nat = tables.save_nat(family)
+            except RuntimeError:
+                nat = no_table()
+            for chain, rule in jumps_into_ours(nat, (CHAIN_NAT,)):
+                code, _, err = tables.command(family, "-t", "nat", "-D", *rule.split()[1:])
+                if code != 0:
+                    raise RuntimeError(f"{backend} IPv{family}: could not delete nat '{rule}': {err.strip()[:300]}")
+                done.append(f"{backend} IPv{family}: deleted nat {rule}")
+            if CHAIN_NAT in nat["chains"]:
+                for args in (("-F", CHAIN_NAT), ("-X", CHAIN_NAT)):
+                    code, _, err = tables.command(family, "-t", "nat", *args)
+                    if code != 0:
+                        raise RuntimeError(f"{backend} IPv{family}: nat {' '.join(args)} failed: {err.strip()[:300]}")
+                done.append(f"{backend} IPv{family}: removed nat chain {CHAIN_NAT}")
     return done
 
 
@@ -467,19 +594,28 @@ def preflight(tables, ipv6=None, xtables_lock="/run/xtables.lock"):
     sample = {"bridge": "orbit-preflight", "gateway": "192.0.2.1", "apiPort": 2086, "dnsServers": ["192.0.2.53"],
               "allow": [{"to": "192.0.2.0/24", "protocol": "tcp", "port": 1}], "network": "preflight"}
     for family in families(ipv6):
-        saved = tables.save(family)
+        saved = tables.save_both(family)
         if hooks_for(saved, family) is None:
             raise RuntimeError(f"IPv{family}: " + assess(saved, sample, family)[0])
         rules = [rule.replace(f"-A {chain} ", f"-A {PREFLIGHT_CHAIN} ", 1)
                  for chain, chain_list in chain_rules(sample, family).items() for rule in chain_list]
         rules += [f"-A {PREFLIGHT_CHAIN} -i orbit-preflight -m comment --comment {COMMENT} -j RETURN"]
         payload = "\n".join(["*filter", f":{PREFLIGHT_CHAIN} - [0:0]", *rules, "COMMIT"]) + "\n"
+        scratch = [()]
+        if kubernetes(saved):
+            # The nat guard's rules too, in a scratch chain of the nat table.
+            nat = [rule.replace(f"-A {CHAIN_NAT} ", f"-A {PREFLIGHT_CHAIN} ", 1) for rule in nat_rules(sample, family)]
+            payload += "\n".join(["*nat", f":{PREFLIGHT_CHAIN} - [0:0]", *nat, "COMMIT"]) + "\n"
+            scratch.append(("-t", "nat"))
         try:
             tables.restore(family, payload)
         finally:
-            for args in (("-F", PREFLIGHT_CHAIN), ("-X", PREFLIGHT_CHAIN)):
-                tables.command(family, *args)
+            for table in scratch:
+                for args in (("-F", PREFLIGHT_CHAIN), ("-X", PREFLIGHT_CHAIN)):
+                    tables.command(family, *table, *args)
         facts[f"ipv{family}Hook"] = hooks_for(saved, family)["forward"]
+        if kubernetes(saved):
+            facts[f"ipv{family}Kubernetes"] = True
     code, out, _ = tables.run([tables.binaries[4][0], "--version"])
     facts["iptables"] = out.strip() if code == 0 else "unknown"
     return facts
@@ -506,9 +642,12 @@ def write_status(path, status):
     os.replace(temporary, target)
 
 
-def status_record(config, backend, state, now, reason=None, interval=None):
+def status_record(config, backend, state, now, reason=None, interval=None, kubernetes_families=()):
     record = {"schemaVersion": 1, "state": state, "backend": backend, "checkedAt": int(now), "bootId": boot_id(),
               **({key: config[key] for key in ("network", "bridge", "gateway", "apiPort")} if config else {})}
+    if kubernetes_families:
+        # Kubernetes shares the host: the rules are first in FORWARD and nat PREROUTING, ahead of its jumps.
+        record["kubernetes"] = [f"IPv{family}" for family in kubernetes_families]
     if state == "enforced":
         # The channel trusts this for three check intervals: a service that stopped checking stops being believed.
         record["validUntil"] = int(now) + 3 * interval
@@ -557,18 +696,18 @@ def serve(config_path, status_path, run=None, address_of=interface_ipv4, ipv6=No
         f"{config['apiPort']}, {len(config['dnsServers'])} DNS server(s) and {len(config['allow'])} allowed destination(s) "
         f"besides public addresses; checked every {interval} s")
     while not stopping:
-        now = time.time()
+        now, seen = time.time(), []
         try:
             backend = backend or detect_backend(run)
             tables = Iptables(backend, run)
-            changed, problems = apply(config, tables, ipv6, address_of, xtables_lock)
+            changed, problems = apply(config, tables, ipv6, address_of, xtables_lock, seen)
             if changed:
                 log(f"rules written for IPv{' and IPv'.join(map(str, changed))} ({backend} backend)")
             state, reason = ("enforced", None) if not problems else ("failing", "; ".join(problems))
         except (RuntimeError, ValueError, OSError) as error:
             backend = None  # detect again: Docker may have come back on another backend
             state, reason = "failing", str(error)
-        write_status(status_path, status_record(config, backend, state, now, reason, interval))
+        write_status(status_path, status_record(config, backend, state, now, reason, interval, seen))
         if (state, reason) != last:
             log(f"{state}{': ' + reason if reason else ''}")
             last = (state, reason)
@@ -699,13 +838,18 @@ def main(argv=None):
         config = load_config(args.config)
         if args.command == "show":
             for family in families():
-                saved = tables.save(family)
-                hooks = hooks_for(saved, family) or {"input": "INPUT", "forward": "DOCKER-USER"}
-                print(f"# IPv{family}, {tables.backend} backend")
-                for hook in (hooks["input"], hooks["forward"]):
-                    print(*[rule for rule in saved["rules"].get(hook, []) if rule.split()[-1] in CHAINS], sep="\n")
+                saved = tables.save_both(family)
+                print(f"# IPv{family}, {tables.backend} backend{', Kubernetes shares the host' if kubernetes(saved) else ''}")
+                for hook, rule in jumps_into_ours(saved):
+                    rules = saved["rules"][hook]
+                    print(f"{rule}  # rule {rules.index(rule) + 1} of {len(rules)} in {hook}")
                 for chain in CHAINS:
                     print(*saved["rules"].get(chain, [f"# chain {chain} is missing"]), sep="\n")
+                for hook, rule in jumps_into_ours(saved["nat"], (CHAIN_NAT,)):
+                    rules = saved["nat"]["rules"][hook]
+                    print(f"-t nat {rule}  # rule {rules.index(rule) + 1} of {len(rules)} in nat {hook}")
+                if CHAIN_NAT in saved["nat"]["chains"]:
+                    print(*[f"-t nat {rule}" for rule in saved["nat"]["rules"].get(CHAIN_NAT, [])], sep="\n")
             return 0
         if args.command == "apply":
             changed, problems = apply(config, tables)
