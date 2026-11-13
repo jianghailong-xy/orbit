@@ -9437,6 +9437,38 @@ button.chat-jump-start:hover {
   flex-wrap: wrap;
   gap: 8px;
 }
+/* A sign-in card the session has moved past: one muted row, the runtime's words behind it. */
+.chat-notice-settled {
+  color: var(--text-3);
+}
+.chat-authfix-settled {
+  margin: 6px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+.chat-authfix-settled > summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+.chat-authfix-settled > summary::-webkit-details-marker {
+  display: none;
+}
+.chat-authfix-settled > summary::after {
+  content: '›';
+  margin-left: auto;
+}
+.chat-authfix-settled[open] > summary::after {
+  content: '⌄';
+}
+.chat-authfix-settled-ok {
+  color: var(--success);
+}
 /* Browser-driven runner sign-in, inside the sign-in card. */
 /* No panel of its own: the card is already the container, and buttons are self-delimiting —
    boxing them only drew a second frame inside the first. Quoted content still gets one
