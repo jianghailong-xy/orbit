@@ -1438,6 +1438,8 @@ export interface SharedSession {
   sessionState?: string;
   runStatus?: string;
   status: string;
+  /** What the session is doing beyond its status (SessionActivity); absent from an older server. */
+  activity?: string | null;
   createdAt: string;
   /** The transcript's newest page, not all of it. */
   events: SharedEvent[];

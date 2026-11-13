@@ -23,7 +23,7 @@ import {
  *      stale line;
  *   2. every guard site's snippet is still in its source — so deleting an assertion (the
  *      "deliberately omit one entry" case the acceptance asks for) turns this red;
- *   3. the six body/query field cases are registered where the isolation census expects them.
+ *   3. the seven body/query field cases are registered where the isolation census expects them.
  */
 const read = (rel: string) => readFileSync(path.resolve(__dirname, '../..', rel), 'utf8');
 
@@ -45,9 +45,9 @@ test('the runner door is exactly the 34 session-naming routes the registries hol
   assert.deepEqual([...mapped].sort(), RUNNER, 'a runner route has no line in ENGINE_SESSION_DOORS, or a line names no route');
 });
 
-test('the six field cases are registered in the tenant-isolation registries', () => {
+test('the seven field cases are registered in the tenant-isolation registries', () => {
   const keys = Object.keys(ENGINE_SESSION_FIELD_CASES);
-  assert.equal(keys.length, 6, `field cases: ${keys.join(', ')}`);
+  assert.equal(keys.length, 7, `field cases: ${keys.join(', ')}`);
   for (const { key, registered } of fieldCaseRegistryStatus()) {
     assert.equal(registered, true, `field case "${key}" is not in either isolation registry: its door moved or was renamed`);
   }

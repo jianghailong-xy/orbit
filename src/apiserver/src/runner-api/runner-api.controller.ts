@@ -142,6 +142,10 @@ import {
   SourcePinResponse,
   TakeoverTurnLeasesRequest,
   TakeoverTurnLeasesResponse,
+  BATCH_TAKEOVER_TURN_LEASES_MAX,
+  type BatchTakeoverTurnLeasesRequest,
+  type BatchTakeoverTurnLeasesResponse,
+  type BatchTakeoverTurnLeasesResult,
   TurnAttachment,
   TurnCompleteRequest,
   type WikiRepoOpCommand,
@@ -221,6 +225,7 @@ import {
   APPROVAL_ABANDONED_STATUS,
   reapApprovalsOfEndedTurns,
   reapApprovalsOfReplacedSupervisor,
+  reapApprovalsOfReplacedSupervisors,
   reapApprovalsOfReturnedCalls,
   reapApprovalsOfReturnedCallsIn,
 } from '../sessions/abandoned-approvals';
@@ -1269,6 +1274,21 @@ export function runnerSupportsCapability(
  *  locked and the transaction declared what the database asks of it, so only a guard refusing it gets
  *  here; the runner retries as it does every refused takeover. */
 const LEASE_WRITE_REFUSED = 'the inbox lease was not written; retry';
+
+/** A batch takeover row's refusal, as the single route would have answered it: its status code, its
+ *  message and the code it carries. Only a refusal (an HttpException) is a row's answer; anything else
+ *  is a fault and is raised as it is. */
+function takeoverRowRefusal(error: unknown): { statusCode: number; message: string; code?: string } {
+  if (!(error instanceof HttpException)) throw error;
+  const body = error.getResponse();
+  if (typeof body === 'string') return { statusCode: error.getStatus(), message: body };
+  const { message, code } = body as { message?: unknown; code?: unknown };
+  return {
+    statusCode: error.getStatus(),
+    message: Array.isArray(message) ? message.join('; ') : String(message ?? error.message),
+    ...(typeof code === 'string' ? { code } : {}),
+  };
+}
 
 /** The repository operations' refusal as a status (contract `repoOps`): 409 for a claim that was taken
  *  over or a row already settled, 404 for one this runner cannot see, 400 for a body that is not a
@@ -4490,6 +4510,206 @@ export class RunnerApiController {
     }
     this.realtime.notifyInbox(sessionId);
     return { ok: true, status: taken.status as SharedRunStatus };
+  }
+
+  /**
+   * The takeover above for every session a reclaim handed back, in one request and one transaction.
+   *
+   * Each row is judged by the same fences, read under the same row lock, and answered with what the
+   * single route would answer: its status, or the 403/409 it would refuse with — and one row's
+   * refusal refuses none of the others. The writes are set-based: one locking read, one lease
+   * write, one generation insert, one turn expiry and one approval reap for the whole batch, so a
+   * restart's few hundred takeovers cost a handful of statements instead of a request each.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/takeover-leases')
+  @HttpCode(200)
+  async takeoverLeasesBatch(
+    @CurrentRunner() runner: { id: string },
+    @Body() dto: BatchTakeoverTurnLeasesRequest,
+    @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
+  ): Promise<BatchTakeoverTurnLeasesResponse> {
+    const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
+    if (!leaseOwner) throw new BadRequestException('leaseOwner is required');
+    const rows = dto?.sessions;
+    if (!Array.isArray(rows) || rows.length === 0) throw new BadRequestException('sessions is required');
+    if (rows.length > BATCH_TAKEOVER_TURN_LEASES_MAX) {
+      throw new BadRequestException(`at most ${BATCH_TAKEOVER_TURN_LEASES_MAX} sessions per takeover`);
+    }
+    const asked = rows.map((row) => {
+      let sessionId: string;
+      try {
+        if (typeof row?.sessionId !== 'string' || row.sessionId === '') throw new Error('no id');
+        sessionId = toUuid(row.sessionId);
+      } catch {
+        throw new BadRequestException('invalid sessionId');
+      }
+      return { sessionId, expectedLeaseOwner: parseLeaseGeneration(row?.expectedLeaseOwner ?? undefined) };
+    });
+    const ids = asked.map((row) => row.sessionId);
+    if (new Set(ids).size !== ids.length) throw new BadRequestException('a session is named twice');
+
+    // The single route's first refusal, on the caller's own account: a landing is the platform's (§2.9 LS6).
+    const refusedBeforeLock = new Map<string, BatchTakeoverTurnLeasesResult['error']>();
+    const ownerId = (runner as { ownerId?: string }).ownerId;
+    const kinds = await this.prisma.session.findMany({
+      where: { id: { in: ids }, ...(ownerId ? { ownerId } : {}) },
+      select: { id: true, sessionKind: true },
+    });
+    for (const row of kinds) {
+      try {
+        assertEngineSessionRow(row);
+      } catch (error) {
+        refusedBeforeLock.set(row.id, takeoverRowRefusal(error));
+      }
+    }
+
+    const taken = await withTransactionRetry(this.prisma, async (tx) => {
+      const answers = new Map<string, BatchTakeoverTurnLeasesResult>();
+      const lockable = ids.filter((id) => !refusedBeforeLock.has(id));
+      // Locked in id order, as every batch takes them, so two batches cannot deadlock on each other.
+      const locked = lockable.length === 0 ? [] : await tx.$queryRaw<
+        Array<{
+          id: string;
+          provider: string;
+          providerBuiltin: boolean;
+          engine: string | null;
+          ownerId: string;
+          inboxLeaseGeneration: string | null;
+          inboxLeaseOwner: string | null;
+          status: RunStatus;
+          mergeStatus: string | null;
+          mergeOperationId: string | null;
+          mergeOperationOwner: string | null;
+          mergeRequestedAt: Date | null;
+          commitStatus: string | null;
+          commitOperationId: string | null;
+          commitOperationOwner: string | null;
+          commitRequestedAt: Date | null;
+        }>
+      >`
+        SELECT id, provider, "provider_builtin" AS "providerBuiltin", engine, "owner_id" AS "ownerId", "inbox_lease_generation" AS "inboxLeaseGeneration",
+               "inbox_lease_owner" AS "inboxLeaseOwner", status,
+               "merge_status" AS "mergeStatus",
+               "merge_operation_id" AS "mergeOperationId",
+               "merge_operation_owner" AS "mergeOperationOwner",
+               "merge_requested_at" AS "mergeRequestedAt",
+               "commit_status" AS "commitStatus",
+               "commit_operation_id" AS "commitOperationId",
+               "commit_operation_owner" AS "commitOperationOwner",
+               "commit_requested_at" AS "commitRequestedAt"
+        FROM "session"
+        WHERE id = ANY(${lockable}::uuid[]) AND "assigned_runner_id" = ${runner.id}::uuid
+        ORDER BY id
+        FOR UPDATE
+      `;
+      const byId = new Map(locked.map((row) => [row.id, row]));
+      const writes: Array<{ id: string; fence: string; predecessor: string | null; status: RunStatus; declared: string | null }> = [];
+      for (const { sessionId, expectedLeaseOwner } of asked) {
+        const refused = refusedBeforeLock.get(sessionId);
+        if (refused) {
+          answers.set(sessionId, { sessionId, error: refused });
+          continue;
+        }
+        const row = byId.get(sessionId);
+        if (!row) {
+          answers.set(sessionId, { sessionId, error: { statusCode: 403, message: 'session does not belong to this runner' } });
+          continue;
+        }
+        let declared: string | null;
+        try {
+          declared = await assertDeclaredLeaseSupport(tx, runner.id, row, providerHeader);
+        } catch (error) {
+          answers.set(sessionId, { sessionId, error: takeoverRowRefusal(error) });
+          continue;
+        }
+        const conflict = (message: string) => answers.set(sessionId, { sessionId, error: { statusCode: 409, message } });
+        if (!OPEN.includes(row.status)) {
+          conflict('session is no longer open');
+          continue;
+        }
+        const currentOwner = row.inboxLeaseOwner;
+        if (currentOwner === leaseOwner) {
+          answers.set(sessionId, { sessionId, status: row.status as SharedRunStatus });
+          continue;
+        }
+        if (
+          pendingWorktreeOperationMayBeExecuting(row.mergeStatus, row.mergeOperationId, row.mergeOperationOwner, row.mergeRequestedAt) ||
+          pendingWorktreeOperationMayBeExecuting(row.commitStatus, row.commitOperationId, row.commitOperationOwner, row.commitRequestedAt)
+        ) {
+          conflict('wait for the pending worktree operation to finish');
+          continue;
+        }
+        if (currentOwner !== expectedLeaseOwner) {
+          conflict('inbox lease owner changed; refresh the session snapshot');
+          continue;
+        }
+        writes.push({ id: sessionId, fence: row.inboxLeaseGeneration ?? randomUUID(), predecessor: currentOwner, status: row.status, declared });
+      }
+
+      const orphanedApprovals: Array<{ sessionId: string; id: string }> = [];
+      if (writes.length > 0) {
+        // The single route's writes, once for the batch. The lease write goes first here so a row a
+        // guard refuses (it skips the row rather than raising) retires nothing and reaps nothing —
+        // what the single route gets by rolling its whole transaction back.
+        await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+        const acquiredRows = await tx.$queryRaw<Array<{ id: string }>>`
+          UPDATE "session" AS s
+          SET "inbox_lease_generation" = w.fence,
+              "inbox_lease_owner" = ${leaseOwner}::uuid,
+              "running_bg_shells" = '{}'::text[],
+              "running_bg_jobs" = '{}'::text[],
+              "running_bg_job_activity" = '{}'::jsonb,
+              "running_subagents" = '{}'::text[],
+              "engine_turn_active" = false
+          FROM unnest(${writes.map((w) => w.id)}::uuid[], ${writes.map((w) => w.fence)}::uuid[]) AS w(id, fence)
+          WHERE s.id = w.id
+          RETURNING s.id
+        `;
+        const acquired = new Set(acquiredRows.map((row) => row.id));
+        const landed = writes.filter((w) => acquired.has(w.id));
+        for (const w of writes) {
+          answers.set(w.id, acquired.has(w.id)
+            ? { sessionId: w.id, status: w.status as SharedRunStatus }
+            : { sessionId: w.id, error: { statusCode: 409, message: w.declared ?? LEASE_WRITE_REFUSED } });
+        }
+        if (landed.length > 0) {
+          await tx.$executeRaw`
+            INSERT INTO "inbox_lease_generation"
+              ("generation", "session_id", "lease_owner", "retired_at")
+            SELECT g.fence, g.session_id, g.owner, now()
+            FROM unnest(${landed.map((w) => w.fence)}::uuid[], ${landed.map((w) => w.id)}::uuid[],
+                        ${landed.map((w) => w.predecessor)}::uuid[]) AS g(fence, session_id, owner)
+            ON CONFLICT ("generation") DO UPDATE
+              SET "retired_at" = COALESCE("inbox_lease_generation"."retired_at", now())
+            WHERE "inbox_lease_generation"."session_id" = EXCLUDED."session_id"
+          `;
+          await tx.$executeRaw`
+            UPDATE "conversation_turn"
+            SET "lease_deadline_at" = now() - interval '1 second'
+            WHERE "session_id" = ANY(${landed.map((w) => w.id)}::uuid[])
+              AND kind IN ('message', 'shell')
+              AND status = 'IN_FLIGHT'
+          `;
+          const replaced = landed.filter((w) => w.predecessor).map((w) => w.id);
+          if (replaced.length > 0) {
+            orphanedApprovals.push(...await reapApprovalsOfReplacedSupervisors(tx, replaced));
+          }
+        }
+      }
+      return { results: ids.map((id) => answers.get(id)!), orphanedApprovals };
+    }, loggedRetry(this.logger, 'runnerApi.takeoverLeasesBatch'));
+
+    for (const { sessionId, id } of taken.orphanedApprovals) {
+      this.realtime.publish(sessionId, {
+        seq: 0,
+        type: RunEventType.APPROVAL_RESOLVED,
+        payload: { id, status: APPROVAL_ABANDONED_STATUS },
+        ts: new Date().toISOString(),
+      });
+    }
+    for (const row of taken.results) if (row.status) this.realtime.notifyInbox(row.sessionId);
+    return { ok: true, results: taken.results };
   }
 
   /** Activate one freshly reserved engine as this session's sole inbox consumer. */

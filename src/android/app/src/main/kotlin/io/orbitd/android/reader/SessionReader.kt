@@ -107,7 +107,7 @@ import kotlinx.serialization.json.*
 
 @Composable
 fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, api: DirectoryApi,
-    data: DirectoryData, open: (OrbitRoute) -> Unit, leave: () -> Unit = {}) {
+    data: DirectoryData, open: (OrbitRoute) -> Unit, leave: () -> Unit = {}, swap: (OrbitRoute) -> Unit = open) {
     // This page shows a conversation, and the store streams the one it shows: selecting it is the reader's own act, so a
     // landing session — which SessionDestination never sends here — is never subscribed to (§2.9 LS6). A reader leaving
     // clears the selection; a reader replacing another (a link to a second session) sets its own after the old one's.
@@ -197,10 +197,11 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }?.queuedGate
     val runnerUpdatingMachine = listRow?.let { data.machineName(it.workspace) }
     // Later… for the runner the update holds this session on (its workspace's runner), and Update Now… when that runner takes it: the
-    // runner's row as GET /runners lists it says so, with the owner's turns in flight (`updateTurns`) the confirmation names.
+    // runner's row as GET /runners lists it says so, with the owner's turns in flight (`updateTurns`) the confirmation names. A runner
+    // that is stopping, not updating, has nothing to postpone or install: neither (board runner-stopping ①).
     val runnerUpdatingRunner = listRow?.let { row -> data.workspaces.firstOrNull { ObjectId.same(it.id, row.workspace) }?.runnerId }
     val runnerUpdatingRow = runnerUpdatingRunner?.let { runnerId -> data.runnerRows.firstOrNull { ObjectId.same(it.text("id"), runnerId) } }
-    val runnerUpdatingLater: (@Composable () -> Unit)? = runnerUpdatingRunner?.let { runnerId -> {
+    val runnerUpdatingLater: (@Composable () -> Unit)? = runnerUpdatingRunner?.takeIf { !RunnerUpdating.isRunnerStopping(runnerUpdatingGate) }?.let { runnerId -> {
         RunnerUpdateLaterButton(runnerUpdatingGate?.queuedRunnerUpdate?.targetVersion, runnerUpdatingMachine, { until ->
             runCatching { api.mutate(RunnerUpdateLater.path(runnerId), body = RunnerUpdateLater.body(until)) }
                 .fold({ app.realtime.refreshDirectory(); null }, { it.message ?: RunnerUpdateLater.POSTPONE_FAILED })
@@ -215,6 +216,16 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         }
     } }
     val actions = remember(api) { SessionActions(api, app) { app.realtime.refreshDirectory(); app.realtime.refreshSession() } }
+    // The project this conversation is the coordinator or a member of (owner 2026-11-11, docs/mocks/project-sessions-column board 5):
+    // its bar carries the button that opens the project's sessions in a sheet. Read off the detail, or the list's row before that.
+    val projectId = listed?.projectMembership?.projectId ?: remember(data.sessions, route.id) {
+        data.sessions.values.firstNotNullOfOrNull { rows -> rows.firstOrNull { ObjectId.same(it.id, route.id) }?.projectMembership?.projectId }
+    }
+    // The button's number is the sheet's head's: the project's Open and Completed sessions as the page reads them, read as the
+    // conversation opens, then what the sheet itself last counted. No number until the first read answers.
+    val readCount by rememberProjectSessionCount(app, api, projectId)
+    var sheetCount by remember(projectId) { mutableStateOf<Int?>(null) }
+    var projectSheet by remember(handle, route.id) { mutableStateOf(false) }
     val link = remember(handle, route.id) { "${handle.account.server.trimEnd('/')}/sessions/${ObjectId.toPublic(route.id!!)}" }
     val currentRows by rememberUpdatedState(shownRows)
     val nested = remember { object : NestedScrollConnection {
@@ -500,9 +511,15 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         PageBar.Bind(route, title = null, folds = foldsChrome, center = {
             if (offTail) question.value?.let { QuestionCapsule(it) { row -> model.show(row.event.seq) } }
         }, actions = {
+            if (projectId != null) ProjectSessionsButton(sheetCount ?: readCount) { projectSheet = true }
             SessionMenu(listed.takeUnless { state.denied }, state.session?.snapshot?.detail, link, state.session?.fresh == true && data.fresh,
                 actions, open, { action = it }, { details = true }, leave)
         })
+        if (projectSheet && projectId != null) ProjectSessionsSheet(app, handle, projectId, route.workspaceId, data, api, open,
+            close = { projectSheet = false }, onCount = { sheetCount = it }) { next ->
+            projectSheet = false
+            if (!ObjectId.same(next.id, route.id)) swap(next)
+        }
         Column(Modifier.fillMaxSize()) {
             val session = state.session
             val detail = session?.snapshot?.detail

@@ -2,8 +2,9 @@
 
 This is the checked-in storyboard for a short GitHub demo. It is intentionally evidence-led: record the three
 scenes in order, keep the runner and repository names visible, and do not imply that a worktree is a security
-sandbox or that an agent works without supervision. A screen recording can follow this script verbatim; the
-repository currently ships the storyboard and UI preview rather than claiming a hosted video URL.
+sandbox or that an agent works without supervision. A screen recording can follow this script verbatim. The public
+site currently ships a four-step walkthrough built from current-UI screenshots, plus this storyboard; neither
+claims a hosted video URL.
 
 ## Opening (0:00–0:08)
 

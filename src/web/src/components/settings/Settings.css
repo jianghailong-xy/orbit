@@ -101,6 +101,17 @@
   background: var(--bg-hover);
   color: var(--text-1);
 }
+/* A group's + shows under the pointer, on keyboard focus, and while the group is empty.
+   Where nothing hovers (touch) it stays in sight. */
+@media (hover: hover) {
+  .settings-nav-group:not(.settings-nav-group--empty) .settings-nav-add {
+    opacity: 0;
+  }
+  .settings-nav-group:hover .settings-nav-add,
+  .settings-nav-group .settings-nav-add:focus-visible {
+    opacity: 1;
+  }
+}
 
 .settings-nav-row {
   display: flex;

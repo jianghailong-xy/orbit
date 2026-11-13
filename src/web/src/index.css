@@ -2975,6 +2975,7 @@ button.toast--pill:focus-visible {
 /* ---- Agent console: two-pane master-detail (session list | conversation) ---- */
 .workspace-split {
   display: flex;
+  position: relative;
   height: 100%;
   min-height: 0;
   /* One gutter token drives every horizontal gap. It lives on the panes (.session-col /
@@ -2991,6 +2992,65 @@ button.toast--pill:focus-visible {
   flex-direction: column;
   min-height: 0;
   padding: 24px var(--pane-gutter);
+}
+/* The project column unfolded on demand in a window too narrow for it beside the conversation:
+   it lies over the conversation's right edge rather than squeezing it under 480px. */
+.session-project-column-over {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  background: var(--bg-raised);
+  border-left: 1px solid var(--border-subtle);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.08);
+}
+/* At phone width the project's sessions page comes up as a bottom sheet over the conversation
+   (owner 2026-11-11, board 5): the shared bottom drawer, rounded on top, its title kept for the
+   reader only (the page head inside draws it), and a grabber that drags it between medium and full. */
+.project-sessions-sheet {
+  border-radius: 14px 14px 0 0;
+  background: var(--bg-raised);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .project-sessions-sheet:not(.dragging) { transition: translate .3s, height .25s; }
+}
+.project-sessions-sheet > .orbit-overlay-header {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  border: 0;
+}
+.project-sessions-sheet > .orbit-overlay-body {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+.project-sessions-sheet-grabber {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 6px;
+  cursor: grab;
+  touch-action: none;
+}
+.project-sessions-sheet-grabber > span {
+  width: 36px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--text-4);
+  opacity: 0.6;
+}
+/* Portalled out of .workspace-split, so it sets the phone's pane gutter itself. */
+.project-sessions-sheet-page {
+  --pane-gutter: 14px;
+  flex: 1;
+  min-height: 0;
+  padding: 0 var(--pane-gutter);
 }
 /* Draggable divider between the session list and the conversation. The visible
    1px line matches the old column border; ::before widens the grab area. */
@@ -3287,6 +3347,11 @@ button.toast--pill:focus-visible {
   padding-bottom: 16px;
   border-bottom: 1px solid var(--border-subtle);
 }
+/* The title bar's Project sessions button (docs/mocks/project-sessions-column, boards 2-4): a text
+   button, tinted like a selected row while the project column is open, plain grey while it is folded. */
+.workspace-header-project { flex: none; color: var(--text-2); }
+.workspace-header-project[aria-pressed='true'],
+.workspace-header-project[aria-pressed='true']:hover:where(:not(:disabled)) { color: var(--brand); background: var(--brand-tint); }
 .workspace-status-dot {
   width: 9px;
   height: 9px;
@@ -9436,6 +9501,38 @@ button.chat-jump-start:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+/* A sign-in card the session has moved past: one muted row, the runtime's words behind it. */
+.chat-notice-settled {
+  color: var(--text-3);
+}
+.chat-authfix-settled {
+  margin: 6px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+.chat-authfix-settled > summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+.chat-authfix-settled > summary::-webkit-details-marker {
+  display: none;
+}
+.chat-authfix-settled > summary::after {
+  content: '›';
+  margin-left: auto;
+}
+.chat-authfix-settled[open] > summary::after {
+  content: '⌄';
+}
+.chat-authfix-settled-ok {
+  color: var(--success);
 }
 /* Browser-driven runner sign-in, inside the sign-in card. */
 /* No panel of its own: the card is already the container, and buttons are self-delimiting —
@@ -15620,6 +15717,34 @@ button.chat-jump-start:hover {
   /* As the sole top bar the header sits a touch tighter than the roomy desktop version. */
   .workspace-split.show-conversation .workspace-header {
     padding-bottom: 10px;
+  }
+  /* Beside ←, the Project sessions button and ⋯, a title sharing its row with the Coordinator badge
+     and the watch chips is left a few letters. Here the title takes the row to itself and the badges
+     and chips drop onto the status line under it: the title line's box steps aside (display:
+     contents) so its children wrap in the header column, the title a full row. The status text
+     follows the badges while it fits beside them and takes the next line when it does not. */
+  .workspace-header-main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 2px;
+  }
+  .workspace-header-main > .workspace-title-line {
+    display: contents;
+  }
+  .workspace-header-main > .workspace-header-task,
+  .workspace-title-line > .workspace-name,
+  .workspace-title-line > .workspace-name-input {
+    flex: 0 0 100%;
+  }
+  .workspace-header-main > .workspace-sub {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-top: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   /* In-pane back button: leaves the open conversation for the session list. */
   .workspace-back-mobile {
@@ -25417,7 +25542,7 @@ button.project-open-item-action:disabled {
   /* Prose: 47 Chinese characters to the line at .wk-art's size, where 880px is 55. */
   .wk-page--reading > .wk-layout > .wk-main > .wk-art-page { max-width: 760px; }
   .wk-layout > .wk-dir-col { position: sticky; top: 0; max-height: calc(var(--app-vh, 100vh) - 48px); overflow-y: auto;
-                             overscroll-behavior: contain; margin-left: -8px; scrollbar-width: thin; }
+                             overscroll-behavior: contain; margin-left: -8px; }
   .wk-layout > .wk-dir-col > .wk-toc { margin-left: 0; }
   /* The head, the search and the directory as one column from the window's top to its foot (board
      docs/mocks/wiki-rail ③): the title and the space, the search, then the rows, which scroll on their own, and
@@ -25433,13 +25558,13 @@ button.project-open-item-action:disabled {
   .wk-page--railed > .wk-layout > .wk-dir-col { grid-column: 1; grid-row: 1 / span 2; display: flex; flex-direction: column;
                                                 top: -24px; height: var(--app-vh, 100vh); max-height: none; overflow: hidden;
                                                 margin: -24px 0 -24px -32px; padding: 16px 0 0 24px;
-                                                border-right: 1px solid var(--border-subtle); background: var(--bg-subtle); }
+                                                border-right: 1px solid var(--border-subtle); background: var(--bg-raised); }
   .wk-rail-top { flex: none; padding: 0 16px 10px 0; }
   .wk-rail-head { display: flex; align-items: center; gap: 12px; height: 32px; }
   .wk-rail-head .wk-select .v, .wk-rail-head .wk-space-tag { max-width: 150px; }
   .wk-rail-top > .wk-search { margin-top: 14px; }
   .wk-page--railed > .wk-layout > .wk-dir-col > .wk-toc { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
-                                                         padding: 0 10px 12px 0; scrollbar-width: thin; }
+                                                         padding: 0 10px 12px 0; }
   .wk-rail-foot { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 16px 12px 0;
                   border-top: 1px solid var(--border-subtle); }
   .wk-rail-foot > .session-shared-pill { height: 32px; padding: 0 12px; font-size: 13px; }

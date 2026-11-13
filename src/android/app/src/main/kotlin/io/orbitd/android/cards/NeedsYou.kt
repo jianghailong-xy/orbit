@@ -63,6 +63,10 @@ object NeedsYouLogic {
     const val belowHint = "Shows what is waiting in this conversation"
     const val sessionHint = "Opens the session waiting on you"
     const val itemHint = "Opens the card waiting on you"
+    /** What the press does while several wait and the bar is folded (iOS `NeedsYouBannerView`). */
+    fun unfoldHint(count: Int) = "Shows all $count waiting on you"
+    /** The ↑ that folds the unfolded bar (iOS's "Collapse"). */
+    const val foldLabel = "Collapse"
 
     /** The bar for what is waiting in this conversation, or null when nothing is. The press goes to the first row. */
     fun below(rows: List<BelowRow>, side: ReaderSide?): WaitingBelow? {
@@ -145,6 +149,32 @@ object NeedsYouLogic {
         // Aged from the conversation's last state move — when it stopped to ask — on the recency key's own fallbacks.
         return NeedsYouBanner(elsewhere.size, target, text(elsewhere.size, target), detail = detail(elsewhere.size, target),
             since = target.text("lastTurnAt") ?: target.text("updatedAt") ?: target.text("createdAt"))
+    }
+
+    /** At most this many capsules unfolded (the owner, 2026-11-13); the last says "+N" for the rest. */
+    const val unfoldedLimit = 5
+
+    /** The bar unfolded (OrbitKit `entries`; the owner, 2026-11-13, option B of `docs/mocks/needs-you-capsule/03-expand.html`):
+     * one line per waiting conversation, in the order the folded bar picks its target by, so the first is the one it names. The
+     * conversations on an owner item first, oldest item first, each named by its own oldest item; then the blocked tool calls,
+     * longest-waiting first. Each line is a bar for one conversation (count 1, no "+N"). */
+    fun entries(open: List<JsonObject>, focused: String? = null): List<NeedsYouBanner> {
+        val elsewhere = open.filter { needsYou(it) && !(focused != null && ObjectId.same(it.text("id"), focused)) }
+        val owned = mutableListOf<Pair<JsonObject, OwnerItem>>()
+        val plain = mutableListOf<JsonObject>()
+        elsewhere.forEach { row ->
+            val found = oldestOwnerItem(listOf(row))
+            if (found != null) owned += found else plain += row
+        }
+        val items = owned.sortedBy { parse(it.second.since) ?: Instant.MAX }.map { (session, item) ->
+            NeedsYouBanner(1, session, ownerItemWord(item), detail = named(session.text("projectTitle")),
+                since = item.since.takeIf { it.isNotEmpty() }, ownerItem = item)
+        }
+        val sessions = plain.sortedBy(::recency).map {
+            NeedsYouBanner(1, it, text(1, it), detail = detail(1, it),
+                since = it.text("lastTurnAt") ?: it.text("updatedAt") ?: it.text("createdAt"))
+        }
+        return items + sessions
     }
 
     /** The words the bar and a session row share for one of the five; null for a kind this build does not know. A merge approval
