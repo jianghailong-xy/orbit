@@ -101,6 +101,7 @@ const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
   'wiki-review-mode-manual': 'Wiki switched to Manual',
   'wiki-review-mode-tiered': 'Wiki switched to Tiered',
   'wiki-maintenance-failing': 'Wiki maintenance needs attention',
+  'project-orphan': 'Nobody has this',
 };
 
 /**
@@ -960,6 +961,32 @@ export class PushService {
       await this.deliver(tokens, body, 'alert', '10', collapseId);
     } catch (err) {
       this.log.warn(`confirmation raised notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * The orphan sweep found a pending item of a project with no coordinator to tell: nobody can move it,
+   * or the one who can was never told (docs/evidence-always-has-an-addressee-design.md §4). Called once
+   * per orphan, after the sweep's ledger row committed (`ProjectOrphanSweepService`), so a push that
+   * fails is not tried again: the item stays on `GET /projects/:id/pending-addressees`.
+   */
+  async notifyProjectOrphan(input: {
+    ownerId: string; projectId: string; noticeId: string; title: string; body: string;
+  }): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const { tokens, feishu } = await this.channels(input.ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const alert = { title: input.title, body: input.body };
+      const collapseId = `project-orphan-${input.noticeId}`;
+      const body = JSON.stringify({
+        aps: { alert, sound: 'default', 'thread-id': input.projectId },
+        kind: 'project-orphan', projectID: input.projectId,
+      });
+      this.background(this.feishuOther(feishu, { kind: 'project-orphan', ...alert, collapseId, projectId: input.projectId }));
+      await this.deliver(tokens, body, 'alert', '10', collapseId);
+    } catch (err) {
+      this.log.warn(`project orphan notify failed: ${(err as Error).message}`);
     }
   }
 

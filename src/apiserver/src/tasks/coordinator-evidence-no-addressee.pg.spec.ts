@@ -11,6 +11,7 @@ import {
   TaskStatus,
 } from '@prisma/client';
 import { Client } from 'pg';
+import { uuidToBase62 } from '@orbit/shared';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -423,7 +424,8 @@ test('a project nobody has opened a coordinator for records the fact and tells n
       assert.equal(row.projectId, projectId);
       assert.equal(row.decidability.decidable, true);
       assert.equal(row.independence.independent, true);
-      assert.deepEqual(row.criterion, { key: criterionKey, text: STANDARD });
+      // The standard the server bound at submit: the declared criterion, keyed as project_get prints it.
+      assert.deepEqual(row.criterion, { key: uuidToBase62(criterionKey), text: STANDARD });
 
       // (4) The person opens the coordinator, and the NEXT revision is recorded exactly like the
       // first and told to that conversation no more than the first was told to anybody. Until
@@ -549,7 +551,8 @@ test('a task in no project derives no fact at all, and is still asked about',
       assert.equal(row.decidability.refusal, null);
       assert.equal(row.independence.independent, true,
         'the owner presses it there, and the door takes that from the owner in the app');
-      assert.deepEqual(row.criterion, { key: unfiled, text: STANDARD });
+      // The standard the server bound at submit: its own criteria, keyed by its public id.
+      assert.deepEqual(row.criterion, { key: uuidToBase62(unfiled), text: STANDARD });
 
       // (4) Answering it — the owner, pressing that card in the app — takes it off, and leaves the
       // sibling on: the read filters by the answer, not by having run out of rows.

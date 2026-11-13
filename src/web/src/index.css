@@ -625,7 +625,10 @@ button.toast--pill:focus-visible {
   flex: 1;
   min-width: 0;
   height: var(--app-vh);
-  overflow: hidden;
+  /* clip, not hidden: a hidden box is still a scroll container, so a scrollIntoView inside it (the
+     sticky `↑` bar's jump to a turn near the tail) scrolled the whole region up once the transcript
+     ran out of room, hiding the header and the list's top under a gap below the composer. */
+  overflow: clip;
 }
 /* A view fills the main region. .app-view--doc adds the page gutter and owns its
    scroll; the bare class is full-bleed (the agent console / runner install guide). */
@@ -8962,6 +8965,13 @@ button.chat-jump-start:hover {
   font-size: 12px;
   line-height: 1.5;
 }
+/* The one press an owner row offers (Restart the task): its sentence, then its action. */
+.evidence-restart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+}
 /* A PENDING session before its first event: instead of a lonely top-left note in a
    blank pane, fill the transcript area with a calm, centered "waiting to run" state. */
 .chat-queued-state {
@@ -16861,35 +16871,6 @@ button.chat-jump-start:hover {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-}
-
-/* The vendors with no key yet, in one line under a vendor's keys (ProviderPills). */
-.pv-more {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-  font-size: 12px;
-  color: var(--text-3);
-}
-.pv-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding: 0 10px 0 4px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-raised);
-  color: var(--text-2);
-  font-size: 12px;
-  white-space: nowrap;
-  text-decoration: none;
-}
-.pv-pill:hover {
-  border-color: var(--brand-border);
-  color: var(--brand);
 }
 
 /* ============================================================================

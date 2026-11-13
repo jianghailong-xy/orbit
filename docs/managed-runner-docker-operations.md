@@ -18,6 +18,58 @@ checked on 2026-10-19 in an isolated Docker host
 host's disk was measured on 2026-10-20 in an isolated Docker host on one spinning disk
 ([evidence](evidence/managed-runner-docker-volume-sync/2026-10-20/README.md)).
 
+## On a channel host
+
+Where the runners live on another machine ([Managed runners on another host](self-hosting.md#managed-runners-on-another-host)),
+the commands below that touch Docker run on that channel host, as root, from the checkout its kit was installed from;
+the ones that read the database or the apiserver run on the server. What changes:
+
+| Here | On a channel host |
+| --- | --- |
+| The deployment's checkout | The kit's checkout on the channel host |
+| `data/managed-runners`: the token, `channel.json`, `state/`, `firewall/` | `data/channel-host` (or `ORBIT_CHANNEL_HOST_DIR`); `profile.json` and a copy of each host's token stay on the server, in its `data/managed-runners` |
+| `docker compose … docker-channel`, `docker compose … managed-runner-firewall` | `docker compose -f deploy/managed-runner/remote-host/compose.yml --env-file data/channel-host/compose.env …`, the same service names (below, `ch`) |
+| `docker ps`, `docker volume …`, `docker inspect`, `scripts/managed-runner/volume-backup.sh`, `fuser`, `iptables`, the firewall's `probe`, a fencing receipt | The channel host |
+| The `psql` queries, `docker compose logs apiserver`, recreating the apiserver, `profile.json` | The server |
+| The channel's API (`curl --unix-socket …`) | The server: the channel answers only the addresses its `allowPeers` names, so not the channel host itself |
+
+```bash
+ch() { docker compose -f deploy/managed-runner/remote-host/compose.yml --env-file data/channel-host/compose.env "$@"; }
+deploy/managed-runner/remote-host/remote-host.sh status   # instance, listener, image, services, firewall, runners, volumes
+ch logs --tail 50 docker-channel
+ch ps managed-runner-firewall
+ch run --rm --no-deps managed-runner-firewall check
+```
+
+From the server, the channel's view and each host's image (the apiserver container has the profile, the tokens and the
+route):
+
+```bash
+docker compose exec -T apiserver node - < deploy/managed-runner/docker-channel/info.js        # one line per host: its image
+printf 'header = "Authorization: Bearer %s"\n' "$(cat data/managed-runners/<instance>.token)" |
+  curl -s --config - http://10.66.0.3:7300/v1/resources                                       # from the server host itself
+```
+
+The procedures carry over with those substitutions:
+
+- **Back up, check, restore a volume:** `volume-backup.sh` on the channel host, and the backup copied off it with
+  `data/channel-host`. Disabling the account and the query that shows it `SLEEPING` are the server's.
+- **Delete a volume:** `allowVolumeRemoval` in `data/channel-host/channel.json`, then
+  `ch run --rm docker-channel check-config --config /var/lib/orbit-managed-runners/channel.json` and
+  `ch up -d --force-recreate docker-channel` on the channel host; the `DELETE` from the server, as above.
+- **The channel is down:** `ch logs` and `ch up -d docker-channel` on the channel host. Only that host's runners wait
+  (`CHANNEL_UNREACHABLE`).
+- **Rotate the token:** a new `data/channel-host/token` (mode 0600) and `ch up -d --force-recreate docker-channel` on
+  the channel host, the same token as `<instance>.token` on the server, then `docker compose up -d --force-recreate
+  apiserver` there.
+- **A fencing receipt:** `data/channel-host/state/fencing/<runner uuid>.json` on the channel host.
+- **The firewall:** every command of [The managed runners' firewall](#the-managed-runners-firewall) with `ch` for
+  `docker compose` and `data/channel-host/firewall` for `data/managed-runners/firewall`. Nothing of Orbit listens on
+  the gateway's port 2086 at the channel host's address on the runners' network, the one port the rules leave a runner
+  there; keep it that way. A channel host always runs its firewall: the kit has no way to turn it off.
+- **Settings:** the `channel.json` and `firewall/config.json` rows of [Where each setting lives](#where-each-setting-lives)
+  are the channel host's, applied with `ch`; the `profile.json` rows are the server's.
+
 ## What there is to keep
 
 | What | Where | Kept by |

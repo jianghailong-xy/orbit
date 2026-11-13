@@ -214,12 +214,12 @@ export class TaskCompletionEvidenceDto {
   decision!: TaskEvidenceRevisionDecisionDto | null;
   /**
    * What this submission's citations resolved to, one per `evidence.checks` entry and in that
-   * order. Present on a submit receipt — including a replayed one — and null on a list read,
-   * which re-derives nothing: the rows a stored envelope cited may have been deleted since, and
-   * a `resolved` that quietly means "as of now" would be a different fact under the same name.
-   *
-   * A revision that cites a file is the exception, resolved as of the read: an id says nothing of a
-   * file, so a reader is told what each one is (docs/orbit-files-design.md §2.4).
+   * order. On a submit receipt — including a replayed one — as of the submission. On a list read,
+   * for every revision with a checks envelope, as of the read: the judge has to see which handles
+   * still hold (a TOOL_CALL's `bgj_…` included, which it cannot read with bg_output), and a row
+   * deleted since submission reads as unresolved with its reason. A file's citation also says what
+   * the file is (docs/orbit-files-design.md §2.4). Null only for a stored evidence object that is
+   * not a checks envelope (a legacy import).
    */
   citations!: TaskEvidenceCitationDto[] | null;
   criterionMatch!: TaskEvidenceCriterionMatchDto | null;

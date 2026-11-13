@@ -16,8 +16,8 @@ import { SettingsVendorPage } from './SettingsProviderPages';
  * split (docs/mocks/provider-engine-decoupling web-1, ③ and ④): a row per key saying which engines it
  * runs on — the server's `engines` — the model a session on it starts on, the account pools it is in,
  * whether it is on and when it was last used, and a DeepSeek key its account balance; Add key in the
- * Keys heading; the account pools using these keys; the vendors not connected yet as a row of pills,
- * DeepSeek Harness among none of them; and a key's ⋯ → Delete asking first what uses it on each of
+ * Keys heading; the account pools using these keys, and no row of vendors not connected yet (the
+ * sidebar's Connect a provider reaches those); and a key's ⋯ → Delete asking first what uses it on each of
  * those engines.
  */
 
@@ -326,20 +326,10 @@ describe('a vendor’s page in Settings', () => {
     expect(section('Account pools using these keys')).toBeNull();
   });
 
-  it('offers each vendor not connected yet as a row of pills, by the vendor’s name, and none for DeepSeek Harness', async () => {
+  it('offers no row of vendors not connected yet', async () => {
     await mount('deepseek');
-    const pills = [...(section('Not connected yet')?.querySelectorAll<HTMLAnchorElement>('.pv-pill') ?? [])];
-    // Every vendor with a key has its own page to add another from — both DeepSeek keys count towards
-    // DeepSeek — so the row is the rest, and Custom.
-    expect(pills.map((pill) => [words(pill), pill.getAttribute('href')])).toEqual([
-      ['OpenAI', '/settings/providers/new/openai'],
-      ['MiniMax', '/settings/providers/new/minimax'],
-      ['Qwen', '/settings/providers/new/qwen'],
-      ['Custom', '/settings/providers/new/custom'],
-    ]);
-    expect(document.body.querySelector('a[href="/settings/providers/new/deepseek-harness"]')).toBeNull();
-    // Nor for Cursor: its keys run on Cursor CLI alone, which the web does not draw yet (webShowsEngine).
-    expect(document.body.querySelector('a[href="/settings/providers/new/cursor-api"]')).toBeNull();
+    expect(section('Not connected yet')).toBeNull();
+    expect(document.body.querySelector('a[href^="/settings/providers/new/"]:not([href="/settings/providers/new/deepseek"])')).toBeNull();
   });
 
   it('asks before deleting a key from its ⋯ what uses it on every engine it works with', async () => {

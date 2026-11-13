@@ -71,7 +71,7 @@ final class TaskDetailLogicTests: XCTestCase {
     private func entry(_ task: TaskItem) -> TaskRunHandoff.Entry { TaskRunHandoff.entry(for: task) }
 
     func testARunningOwnerConfirmedTaskOffersConfirmDoneAndTheRun() {
-        let row = TaskDetailLogic.actionRow(owner: .confirm, reopenable: false, status: vllm.status, gate: false,
+        let row = TaskDetailLogic.actionRow(owner: .confirm, status: vllm.status, gate: false,
                                             entry: entry(vllm))
         XCTAssertEqual(row.leading, .confirmDone)
         XCTAssertEqual(row.trailing, .openRun(sessionID: "5WAUMMyHJRbGucpvcgNs8U"))
@@ -80,31 +80,36 @@ final class TaskDetailLogicTests: XCTestCase {
 
     func testARunWaitingOnTheOwnerPointsAtItsCardAndStacks() {
         let idle = task(#"{"id":"T","title":"t","status":"OPEN","sessions":[{"id":"S","status":"AWAITING_INPUT"}]}"#)
-        let row = TaskDetailLogic.actionRow(owner: .pointer(sessionId: "S"), reopenable: false, status: .open,
+        let row = TaskDetailLogic.actionRow(owner: .pointer(sessionId: "S"), status: .open,
                                             gate: false, entry: entry(idle))
         XCTAssertEqual(row.leading, .waitingForConfirmation(sessionID: "S"))
         XCTAssertEqual(row.trailing, .runNow)
         XCTAssertTrue(row.stacked, "the pointer's label does not fit half a phone's width")
     }
 
-    func testAStoppedTaskIsReopenedBesideItsRetry() {
+    func testAStoppedTaskOffersItsRetryAndLeavesReopenToTheMenu() {
+        // Reopen task is in ⋯ since the page led by the run (board 05); the row keeps one press for
+        // what the task needs next.
         let failed = task(#"{"id":"T","title":"t","status":"FAILED"}"#)
-        let row = TaskDetailLogic.actionRow(owner: nil, reopenable: true, status: .failed, gate: false,
+        let row = TaskDetailLogic.actionRow(owner: nil, status: .failed, gate: false,
                                             entry: entry(failed))
-        XCTAssertEqual(row.leading, .reopen)
+        XCTAssertNil(row.leading)
         XCTAssertEqual(row.trailing, .retry)
         let done = task(#"{"id":"T","title":"t","status":"DONE"}"#)
-        let settled = TaskDetailLogic.actionRow(owner: nil, reopenable: true, status: .done, gate: false,
+        let settled = TaskDetailLogic.actionRow(owner: nil, status: .done, gate: false,
                                                 entry: entry(done))
-        XCTAssertEqual(settled.leading, .reopen)
-        XCTAssertNil(settled.trailing, "a done task offers no run")
+        XCTAssertTrue(settled.isEmpty, "a done task offers no press under its title")
+        let cancelled = task(#"{"id":"T","title":"t","status":"CANCELLED"}"#)
+        XCTAssertTrue(TaskDetailLogic.actionRow(owner: nil, status: .cancelled, gate: false,
+                                                entry: entry(cancelled)).isEmpty,
+                      "Run again is in ⋯ for a cancelled task too")
     }
 
     func testAGateRowSaysWhatItCannotDoAndAPlainTaskOnlyRuns() {
         let open = task(#"{"id":"T","title":"t","status":"OPEN"}"#)
-        XCTAssertEqual(TaskDetailLogic.actionRow(owner: nil, reopenable: false, status: .open, gate: true,
+        XCTAssertEqual(TaskDetailLogic.actionRow(owner: nil, status: .open, gate: true,
                                                  entry: entry(open)).trailing, .gate)
-        let plain = TaskDetailLogic.actionRow(owner: nil, reopenable: false, status: .open, gate: false,
+        let plain = TaskDetailLogic.actionRow(owner: nil, status: .open, gate: false,
                                               entry: entry(open))
         XCTAssertNil(plain.leading)
         XCTAssertEqual(plain.trailing, .runNow)
@@ -135,17 +140,6 @@ final class TaskDetailLogicTests: XCTestCase {
     }
 
     // MARK: details
-
-    func testTheFootnoteSaysWhoMadeTheTaskAndWhen() {
-        XCTAssertEqual(plain(TaskDetailLogic.createdFootnote(creatorName: "rocm", createdAt: vllm.createdAt,
-                                                             timeZone: utc, locale: us)),
-                       "Created by rocm · Sep 26, 4:48 AM")
-        XCTAssertEqual(plain(TaskDetailLogic.createdFootnote(creatorName: nil, createdAt: vllm.createdAt,
-                                                             timeZone: utc, locale: us)),
-                       "Created Sep 26, 4:48 AM")
-        XCTAssertEqual(TaskDetailLogic.createdFootnote(creatorName: "rocm", createdAt: nil), "Created by rocm")
-        XCTAssertNil(TaskDetailLogic.createdFootnote(creatorName: " ", createdAt: "not a date"))
-    }
 
     func testTheCreatorIsNamedFromTheAgentListWhenTheServerSendsNoName() throws {
         let agents = try JSONDecoder().decode([Agent].self, from: Data("""

@@ -204,7 +204,7 @@ final class OwnerConfirmationReviewTests: XCTestCase {
         XCTAssertEqual(action, .underReview(sessionId: "s1"))
         let idle = try JSONDecoder().decode(TaskItem.self, from: Data(
             #"{"id":"t1","title":"t","status":"OPEN","sessions":[{"id":"s1","status":"AWAITING_INPUT"}]}"#.utf8))
-        let row = TaskDetailLogic.actionRow(owner: action, reopenable: false, status: .open, gate: false,
+        let row = TaskDetailLogic.actionRow(owner: action, status: .open, gate: false,
                                             entry: TaskRunHandoff.entry(for: idle))
         XCTAssertEqual(row.leading, .underReview(sessionID: "s1"))
         XCTAssertTrue(row.stacked, "the same stacking as the pointer it stands in for")
