@@ -160,6 +160,18 @@ object OrbitExchangeFold {
     }
 
     /** What a group holds, counted by kind: "3 evidence, 1 can start, 2 watches" (web `exchangeKinds`). */
+    /**
+     * How long an answer may be and still fold (web `foldsAtLength`). Most of what Orbit opens is answered with a result or a question
+     * for the reader, and only a short answer is routine: on 60 answers drawn and labeled on a self-hosted deployment (2026-11-12,
+     * docs/mocks/conversation-fold-rules/02), a watch's under 220 characters and any other's under 80 folded 11 of the 14 routine ones
+     * and none of the 46 that said something. A reply from another session never folds by length.
+     */
+    const val WATCH_FOLDS_BELOW = 220
+    const val OTHER_FOLDS_BELOW = 80
+
+    fun foldsAtLength(category: String, length: Int): Boolean =
+        category != "reply" && length < (if (category == "watch") WATCH_FOLDS_BELOW else OTHER_FOLDS_BELOW)
+
     fun kinds(categories: List<String>): String = categoryWords.mapNotNull { (category, one, many) ->
         val n = categories.count { it == category }
         if (n > 0) "$n ${if (n == 1) one else many}" else null

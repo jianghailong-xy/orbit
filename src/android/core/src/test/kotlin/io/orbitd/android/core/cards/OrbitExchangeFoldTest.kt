@@ -83,6 +83,14 @@ class OrbitExchangeFoldTest {
         assertEquals("reply", replied.category)
     }
 
+    @Test fun onlyAShortAnswerFolds() {
+        assertEquals(listOf(true, false), listOf(OrbitExchangeFold.foldsAtLength("watch", 219), OrbitExchangeFold.foldsAtLength("watch", 220)))
+        listOf("evidence", "ready", "project", "job", "notice", "message").forEach { kind ->
+            assertEquals(kind, listOf(true, false), listOf(OrbitExchangeFold.foldsAtLength(kind, 79), OrbitExchangeFold.foldsAtLength(kind, 80)))
+        }
+        assertFalse(OrbitExchangeFold.foldsAtLength("reply", 0))
+    }
+
     @Test fun aStoppedRunARunNoticeAndATaskRunsMessageFoldUnderTheirTasks() {
         val stopped = OrbitExchangeFold.turnOf(user { put("text", "x"); put("coordinatorDelivery", delivery("TASK_RUN_STOPPED", null)) })!!
         assertEquals("Run stopped: B1 Targeted hints", stopped.what)

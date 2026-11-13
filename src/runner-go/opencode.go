@@ -98,7 +98,7 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 	go func() {
 		select {
 		case <-shutdownCtx.Done():
-			timer := time.NewTimer(shutdownDrainTimeout)
+			timer := time.NewTimer(stopDrainBudget(shutdownCtx, shutdownDrainTimeout))
 			defer timer.Stop()
 			select {
 			case <-timer.C:
@@ -296,6 +296,8 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 			stopInbox()
 			logln("OpenCode drain timeout for", job.SessionID+"; cancelling active turn")
 			if activeCancel != nil {
+				// Marked, as the Claude drain marks its own (watchShutdownDrain).
+				emit(evInterrupt, stopInterruptPayload(shutdownCtx))
 				activeCancel(errOpenCodeShutdownTimeout)
 			}
 		case result := <-activeDone:

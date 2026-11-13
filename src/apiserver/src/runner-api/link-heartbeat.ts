@@ -177,6 +177,12 @@ export const HEARTBEAT_DELIVERIES = {
   repoCleanupRequest: { how: 'MARKED', writers: ['workspaces/workspaces.service.ts#requestRepoCleanup'], pending: 'a clean-up pending' },
   refreshModelCatalog: { how: 'MARKED', writers: ['runners/runners.service.ts#requestModelCatalogRefresh'], pending: 'until a beat claims it' },
   checkSelfUpdate: { how: 'MARKED', writers: ['runners/runners.service.ts#requestSelfUpdate'], pending: 'until a beat claims it' },
+  drainScopedClaims: {
+    how: 'EVERY_BEAT',
+    reads: "the beat's own draining flag: a word about this server, which the quiet answer to a draining beat carries as the full one does",
+  },
+  postponeSelfUpdateUntil: { how: 'MARKED', writers: ['runners/runners.service.ts#postponeSelfUpdate'], pending: 'until a beat claims it' },
+  selfUpdateNow: { how: 'MARKED', writers: ['runners/runners.service.ts#updateSelfNow'], pending: 'until a beat claims it' },
   codexRateLimitResetRequest: {
     how: 'MARKED',
     writers: ['runners/codex-rate-limit-reset.service.ts#create'],
@@ -196,6 +202,16 @@ export const HEARTBEAT_DELIVERIES = {
     how: 'MARKED',
     writers: ['wiki-worker/wiki-repo-ops.ts#enqueueWikiRepoOp'],
     pending: 'an operation of the runner queued or running',
+  },
+  remoteSubagentRuns: {
+    how: 'MARKED',
+    writers: ['runner-api/runner-subagents.controller.ts#openRemoteSubagentRun'],
+    pending: 'a remote SubAgent run of the runner RUNNING: every beat lists it to claim, or to stop once its parent stopped or ended',
+  },
+  stopSubagentRunIds: {
+    how: 'MARKED',
+    writers: ['runner-api/runner-subagents.controller.ts#stopRemoteSubagentRun'],
+    pending: "a remote SubAgent run of the runner RUNNING, whose parent's end is read on every beat (remoteSubagentHeartbeat)",
   },
   managedSleep: { how: 'FULL_ONLY', reads: 'a managed runner is admitted by RunnerAuthGuard and reconciles in full on every beat' },
   cursorKeyChecks: {
@@ -495,7 +511,7 @@ export function linkBeatVerdict(
  */
 export function quietHeartbeatAnswer(
   row: Pick<LinkBeatRow, 'maxConcurrent' | 'minFreeDiskMb'>,
-  extra: Pick<RunnerHeartbeatResponse, 'cursorKeyChecks'> & { linkHints?: RunnerLinkHints },
+  extra: Pick<RunnerHeartbeatResponse, 'cursorKeyChecks'> & { linkHints?: RunnerLinkHints; draining?: boolean },
 ): RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints } {
   return {
     cancelSessionIds: [],
@@ -505,6 +521,9 @@ export function quietHeartbeatAnswer(
     mergeRequests: [],
     commitRequests: [],
     artifactRequests: [],
+    // As the full answer says it, to a draining beat: a runner draining for an update reads its absence as an
+    // older server (runner-go drainClaimScope).
+    ...(extra.draining ? { drainScopedClaims: true } : {}),
     ...(extra.cursorKeyChecks && extra.cursorKeyChecks.length > 0 ? { cursorKeyChecks: extra.cursorKeyChecks } : {}),
     ...(extra.linkHints ? { linkHints: extra.linkHints } : {}),
   };
@@ -795,8 +814,8 @@ function diskBytes(value: unknown): string | null {
 /**
  * What a full reconcile left in flight that a beat renews, settles, redelivers or claims — one statement, read after the
  * reconcile: a merge or commit pending on a session of the runner (whichever process holds it), a Codex reset of the
- * runner still active, an integration job or a repository operation of its workspaces queued or running, a relay slot
- * of its own in flight. Any of them keeps the runner reconciling in full on every beat, as it would over HTTPS.
+ * runner still active, an integration job or a repository operation of its workspaces queued or running, a remote
+ * SubAgent run it is the target of still RUNNING, a relay slot of its own in flight. Any of them keeps the runner reconciling in full on every beat, as it would over HTTPS.
  */
 export async function readLinkReconcilePending(prisma: Pick<PrismaService, '$queryRaw'>, runnerId: string): Promise<boolean> {
   const rows = await prisma.$queryRaw<Array<{ pending: boolean }>>`
@@ -821,6 +840,10 @@ export async function readLinkReconcilePending(prisma: Pick<PrismaService, '$que
          WHERE g."runner_id" = ${runnerId}::uuid AND g."state" IN ('PENDING_DELIVERY', 'REMOVING')
       )
       OR EXISTS (
+        SELECT 1 FROM "subagent_run" sr
+         WHERE sr."target_runner_id" = ${runnerId}::uuid AND sr."status" = 'RUNNING'
+      )
+      OR EXISTS (
         SELECT 1 FROM "wiki_repo_op" o
           JOIN "workspace" w ON w."id" = o."workspace_id"
          WHERE w."runner_id" = ${runnerId}::uuid AND o."state" IN ('queued', 'running')
@@ -835,7 +858,9 @@ export async function readLinkReconcilePending(prisma: Pick<PrismaService, '$que
              OR r."claude_history_status" IN ('pending', 'scanning')
              OR r."dir_probe_status" IN ('pending', 'probing')
              OR r."model_catalog_refresh_at" IS NOT NULL
-             OR r."self_update_requested_at" IS NOT NULL)
+             OR r."self_update_requested_at" IS NOT NULL
+             OR r."self_update_postpone_until" IS NOT NULL
+             OR r."self_update_now_requested_at" IS NOT NULL)
       )
     ) AS "pending"
   `;
@@ -852,6 +877,8 @@ export function heartbeatAnswerHandsOut(answer: RunnerHeartbeatResponse): boolea
     || (answer.artifactRequests?.length ?? 0) > 0
     || (answer.integrationJobs?.length ?? 0) > 0
     || (answer.wikiRepoOps?.length ?? 0) > 0
+    || (answer.remoteSubagentRuns?.length ?? 0) > 0
+    || (answer.stopSubagentRunIds?.length ?? 0) > 0
     || (answer.cursorKeyChecks?.length ?? 0) > 0
     || (answer.secretGrantsRemoving?.length ?? 0) > 0
     || answer.loginRequest !== undefined
@@ -866,6 +893,8 @@ export function heartbeatAnswerHandsOut(answer: RunnerHeartbeatResponse): boolea
     || answer.managedSleep !== undefined
     || answer.refreshModelCatalog === true
     || answer.checkSelfUpdate === true
+    || answer.postponeSelfUpdateUntil !== undefined
+    || answer.selfUpdateNow === true
   );
 }
 

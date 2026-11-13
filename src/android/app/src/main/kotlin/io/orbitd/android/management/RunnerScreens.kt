@@ -74,6 +74,7 @@ import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitRoute
+import io.orbitd.android.navigation.Origin
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -375,6 +376,9 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
     var choosingReserve by remember { mutableStateOf(false) }
     var confirmingRotate by remember { mutableStateOf(false) }
     var confirmingRemove by remember { mutableStateOf(false) }
+    // The postponed Update card's Update Now… asks first.
+    var confirmingUpdateNow by remember { mutableStateOf(false) }
+    val updateVersion = runner.obj("selfUpdate")?.str("targetVersion")
     var rotatedToken by remember(id) { mutableStateOf<String?>(null) }
     fun show(failure: String?) { failure?.let(notice::show) }
     fun keepFree(mb: Int?) {
@@ -391,6 +395,24 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
             RunnerHead(runner, now)
             if (model.failed) model.error?.let { Text("⚠ $it", Modifier.padding(top = 8.dp), color = Ink.amber, style = MaterialTheme.typography.labelMedium) }
+            RunnerPage.updateCard(runner, now)?.let { card ->
+                // Update Now… interrupts the turns in flight on a runner that takes it (available, draining, postponed); an older one's
+                // postponed card keeps the Update Now… that ends the postponement through Update Runner Now.
+                val updateNow = RunnerUpdateNow.offered(runner)
+                val laterActions: (@Composable () -> Unit)? = if (card.phase == "draining" || card.phase == "postponed" || updateNow) { {
+                    if (card.phase == "draining" || card.phase == "postponed") RunnerUpdateLaterButton(updateVersion, RunnerPage.displayName(runner), { until ->
+                        model.press { api.post(RunnerUpdateLater.path(id).joinToString("/"), RunnerUpdateLater.body(until)) }
+                    }, change = card.phase == "postponed")
+                    if (updateNow) RunnerUpdateNowButton(RunnerPage.displayName(runner), updateVersion.orEmpty(), { RunnerPage.updateTurns(runner, System.currentTimeMillis()) }, {
+                        model.press { api.post(RunnerUpdateNow.path(id).joinToString("/"), RunnerUpdateNow.request()) }
+                            .also { if (it == null) notice.show(RunnerUpdateNow.toast(updateVersion.orEmpty())) }
+                    })
+                    else if (card.phase == "postponed") OutlinedButton({ confirmingUpdateNow = true }, Modifier.testTag("runner-update-now")) {
+                        Text(RunnerUpdateLater.UPDATE_NOW)
+                    }
+                } } else null
+                UpdateCardView(card, laterActions) { session -> open(OrbitRoute(Destination.SESSION, session, origin = Origin.LINK)) }
+            }
             if (items.isNotEmpty()) FormSection(RunnerCopy.NEEDS_ATTENTION) {
                 items.forEachIndexed { index, item ->
                     if (index > 0) HorizontalDivider()
@@ -489,6 +511,10 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                 catch (e: CancellationException) { throw e } catch (e: Exception) { notice.show(personalFailure(e)) }
             } }) { Text("Rotate Token", color = Ink.red) }
         }, dismissButton = { TextButton(onClick = { confirmingRotate = false }) { Text("Cancel") } })
+    if (confirmingUpdateNow) AlertDialog(onDismissRequest = { confirmingUpdateNow = false },
+        title = { Text(RunnerUpdateLater.updateNowConfirmTitle(updateVersion ?: "")) }, text = { Text(RunnerUpdateLater.UPDATE_NOW_CONFIRM_BODY) },
+        confirmButton = { TextButton(onClick = { confirmingUpdateNow = false; updateRunner() }) { Text(RunnerUpdateLater.UPDATE_NOW_CONFIRM) } },
+        dismissButton = { TextButton(onClick = { confirmingUpdateNow = false }) { Text("Cancel") } })
     if (confirmingRemove) AlertDialog(onDismissRequest = { confirmingRemove = false }, title = { Text("Remove “$name”?") },
         text = { Text(RunnerCopy.REMOVE_FOOTER) }, confirmButton = {
             TextButton(onClick = { confirmingRemove = false; scope.launch {
@@ -1498,6 +1524,44 @@ internal fun AddRunnerDialog(api: ManagementApi, onDismiss: () -> Unit, open: (S
                     message?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.red) }
                 }
             }
+        }
+    }
+}
+
+/** The Update card (board 4) above Needs Attention: title and phase tag, what happens, and while draining the turns it waits for
+ * with a bar. [actions]: Later… while draining, Change… once postponed, and Update Now… on a runner that takes it. */
+@Composable
+internal fun UpdateCardView(card: RunnerPage.UpdateCard, actions: (@Composable () -> Unit)? = null, openSession: (String) -> Unit = {}) {
+    val tint = if (card.warn) Ink.amber else Ink.muted
+    Surface(Modifier.fillMaxWidth().padding(top = 16.dp).testTag("runner-update-card"), shape = RoundedCornerShape(12.dp),
+        color = if (card.warn) Ink.amber.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceContainerLow,
+        border = androidx.compose.foundation.BorderStroke(1.dp, tint.copy(alpha = 0.3f))) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(card.title, Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.width(8.dp))
+                Text(card.tag, color = tint, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+            }
+            if (card.body.isNotEmpty()) Text(card.body, color = Ink.muted, style = MaterialTheme.typography.bodySmall)
+            card.progressLabel?.let { label ->
+                Text(label, Modifier.padding(top = 4.dp), color = Ink.muted, style = MaterialTheme.typography.labelMedium)
+                LinearProgressIndicator(progress = { card.progress ?: 0f }, modifier = Modifier.fillMaxWidth(), color = Ink.amber)
+            }
+            // The turns it waits for (board 4): one bordered list, each row opening its session.
+            if (card.turns.isNotEmpty()) Surface(Modifier.fillMaxWidth().padding(top = 6.dp), shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surface, border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                Column {
+                    card.turns.forEachIndexed { index, turn ->
+                        if (index > 0) HorizontalDivider()
+                        Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { openSession(turn.id) }.padding(horizontal = 12.dp, vertical = 10.dp)
+                            .testTag("runner-update-turn"), verticalAlignment = Alignment.CenterVertically) {
+                            Text(turn.title, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                            turn.running?.let { Spacer(Modifier.width(8.dp)); Text(it, color = Ink.muted, style = MaterialTheme.typography.labelMedium, maxLines = 1) }
+                        }
+                    }
+                }
+            }
+            actions?.let { Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { it() } }
         }
     }
 }

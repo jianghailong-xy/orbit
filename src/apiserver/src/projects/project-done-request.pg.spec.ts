@@ -19,7 +19,7 @@
  *       for each of LAND_TASK, CHECK_PROMOTION and LAND_PROMOTION — and every one comes back in the
  *       same answer, warnings beside them;
  *   (2) each warning — a criterion not LANDED, with why: IN_FLIGHT, ON_PROJECT_BRANCH,
- *       NOTHING_TO_LAND, NO_RECEIPT, CODELESS — does not refuse: the request is filed and carries
+ *       NOTHING_TO_LAND, NO_RECEIPT, NO_BRANCH — does not refuse: the request is filed and carries
  *       them, and a LANDED criterion has none. The row, its payload and the owner's read of it;
  *   (3) the void rules: the same request again writes nothing, a newer one supersedes it, and a task
  *       serving a criterion filed, the criteria edited or a merge recorded supersedes it the next time it is read; the
@@ -718,9 +718,8 @@ test('a coordinator asks its owner to record the project done, and the project i
       'REFUSE DONE_TASKS_IN_FLIGHT',
       'REFUSE DONE_OWNER_ITEMS_OPEN',
       'REFUSE DONE_INTEGRATION_IN_FLIGHT',
-      'WARN DONE_CRITERION_UNLANDED',
-      'WARN DONE_CRITERION_UNLANDED',
-    ], 'every finding, refusals first — a coordinator fixes the project in one pass');
+    ], 'every finding, refusals first — a coordinator fixes the project in one pass; an unmet '
+      + 'criterion is not also reported unlanded');
     assert.match(refusal.body.message ?? '', /5 checks refused it/);
     const findings = refusal.body.findings!;
     assert.deepEqual(findings[0].tasks, [ref(unmet)]);
@@ -798,7 +797,7 @@ test('a coordinator asks its owner to record the project done, and the project i
       '2 ON_PROJECT_BRANCH',
       '3 NOTHING_TO_LAND',
       '4 NO_RECEIPT',
-      '5 CODELESS',
+      '5 NO_BRANCH',
     ], 'one warning per criterion not LANDED — and none for the one merged into main');
     assert.deepEqual(codes(filed.warnings), Array(4).fill('WARN DONE_CRITERION_UNLANDED'));
     const byOrdinal = new Map(filed.warnings.map((finding) => [finding.criterion!.ordinal, finding]));
@@ -926,7 +925,7 @@ test('a coordinator asks its owner to record the project done, and the project i
   await t.test('(3d) a merge recorded after the request supersedes it: where the work is has moved', async () => {
     const refiled = await ask(p.id, p.sessionId, GAPS);
     assert.deepEqual(reasons(refiled.warnings),
-      ['2 ON_PROJECT_BRANCH', '3 NOTHING_TO_LAND', '4 NO_RECEIPT', '5 CODELESS']);
+      ['2 ON_PROJECT_BRANCH', '3 NOTHING_TO_LAND', '4 NO_RECEIPT', '5 NO_BRANCH']);
     // The branch that was merged by hand gets its receipt.
     const [handSession] = (await sql.query<{ id: string }>(
       `SELECT "id" FROM "session" WHERE "task_id" = $1::uuid`, [receiptlessTask.id],
@@ -938,7 +937,7 @@ test('a coordinator asks its owner to record the project done, and the project i
     assert.match(row.resolution_note ?? '', /landed/);
     // And asked again, the criterion that landed no longer warns.
     filed = await ask(p.id, p.sessionId, GAPS);
-    assert.deepEqual(reasons(filed.warnings), ['2 ON_PROJECT_BRANCH', '3 NOTHING_TO_LAND', '5 CODELESS']);
+    assert.deepEqual(reasons(filed.warnings), ['2 ON_PROJECT_BRANCH', '3 NOTHING_TO_LAND', '5 NO_BRANCH']);
   });
 
   await t.test('(3e) the owner’s press on a request whose work moved since is 409, and writes nothing', async () => {

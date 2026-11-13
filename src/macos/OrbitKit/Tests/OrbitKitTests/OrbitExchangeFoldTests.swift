@@ -100,6 +100,54 @@ final class OrbitExchangeFoldTests: XCTestCase {
         }
     }
 
+    private func jobWake(_ id: String, _ name: String) -> [String: Any] {
+        let wake = [
+            "<background-job-wake>",
+            "  A background job you started with bg_run has news you were waiting for; the control plane opened this turn for it:",
+            "    \(id)｜query｜bash q.sh｜\(name)",
+            "      ended｜completed｜exit code 0",
+            "      output /root/.orbit/runs/x/\(id).output｜this covers bytes 0–20",
+            "  The control plane recorded this for you; the user did not write it. Read the whole output with mcp__orbit__bg_output by id.",
+            "</background-job-wake>",
+        ].joined(separator: "\n")
+        return ["text": wake, "controlPlaneNote": wake]
+    }
+
+    /// Only a short answer folds: a watch's under 220 characters, any other's under 80, and a reply
+    /// from another session never (web parity: `foldsAtLength`, Transcript.orbitFold.test.tsx).
+    func testOnlyAShortAnswerFolds() throws {
+        let replyTurn: [String: Any] = ["text": "", "sessionReplies": [["requestId": "r", "fromSessionId": Self.runOfB1,
+                                                                        "fromTitle": "B1 run", "outcome": "REPLIED"]]]
+        exchange(0, ["text": "Why is 11-10 not ready?"], reply: "I started a query.", tools: [])
+        exchange(5, jobWake("bgj_1", "Ledger"), reply: "Still running.", tools: ["mcp__orbit__bg_output"])
+        exchange(10, jobWake("bgj_2", "Script"),
+                 reply: "Found it: " + String(repeating: "the job waits on lane 7, which never arrives. ", count: 2),
+                 tools: ["mcp__orbit__bg_output"])
+        exchange(15, ["text": watchText(kind: "SESSION", id: Self.runOfB1)],
+                 reply: "Duplicate wake; " + String(repeating: "nothing new. ", count: 15))
+        exchange(20, ["text": watchText(kind: "SESSION", id: Self.runOfB1)],
+                 reply: "B1 landed. " + String(repeating: "All three gates are green on main. ", count: 7))
+        exchange(25, replyTurn, reply: "Exempt.")
+        exchange(30, ["text": "ok"], reply: "Done.", tools: [])
+
+        let built = try rows()
+        // Each folds alone: the job's long answer (102 characters) stands between them.
+        XCTAssertEqual(groups(built).map { $0.map(\.category) }, [[.job], [.watch]])
+        let drawn = texts(built)
+        XCTAssertTrue(drawn.contains { $0.hasPrefix("Found it:") }, "a job's answer of 80 or more stays")
+        XCTAssertTrue(drawn.contains { $0.hasPrefix("B1 landed.") }, "a watch's answer of 220 or more (256) stays")
+        XCTAssertTrue(drawn.contains("Exempt."), "a reply never folds by length")
+        XCTAssertFalse(drawn.contains { $0.hasPrefix("Duplicate wake") }, "a watch's 211 characters fold")
+    }
+
+    func testTheLengthLineIsTheWebs() {
+        XCTAssertEqual([OrbitExchangeFold.foldsAtLength(.watch, 219), OrbitExchangeFold.foldsAtLength(.watch, 220)], [true, false])
+        for kind in [ExchangeCategory.evidence, .ready, .project, .job, .notice, .message] {
+            XCTAssertEqual([OrbitExchangeFold.foldsAtLength(kind, 79), OrbitExchangeFold.foldsAtLength(kind, 80)], [true, false])
+        }
+        XCTAssertFalse(OrbitExchangeFold.foldsAtLength(.reply, 0))
+    }
+
     func testARunOfOrbitTurnsIsOneGroupAndTheReaderAndTheNewestTurnStay() throws {
         conversation()
         let built = try rows()

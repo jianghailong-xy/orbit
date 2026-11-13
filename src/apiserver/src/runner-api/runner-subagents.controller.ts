@@ -10,13 +10,19 @@ import {
   NotFoundException,
   Optional,
   Param,
+  Get,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
   type AgentExecConfig,
   PermissionMode,
+  type RemoteSubagentClaim,
+  type RemoteSubagentEventBatch,
+  type RemoteSubagentEventsPage,
+  type SubagentRemoteRunCreateResponse,
   type SubagentCandidateTarget,
   type SubagentDecision,
   type SubagentFallbackResponse,
@@ -44,6 +50,7 @@ import { RunnerAuthGuard } from './runner-auth.guard';
 import { reapApprovalsOfEndedSubagents } from '../sessions/abandoned-approvals';
 import { assertEngineSession } from '../sessions/engine-session';
 import { SessionsService } from '../sessions/sessions.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { sessionProviderExec } from './session-provider-exec';
 import { stripNul } from './strip-nul';
 import {
@@ -61,6 +68,21 @@ import {
   truncateResultSummary,
 } from './subagent-run';
 import { planSubagentRoute } from './subagent-route';
+import {
+  chooseSubagentWorkspace,
+  neededCapabilities,
+  readRelayBatch,
+  remoteFactsOf,
+  remoteRunEndRefusal,
+  remoteSubagentExec,
+  rewriteRemoteSubagentEvent,
+  runOfTarget,
+  STOPPED_BEFORE_CLAIM_RESULT,
+  SUBAGENT_RELAY_BATCH_MAX,
+  type SubagentRemoteFacts,
+  type SubagentWorkspacePick,
+  workspaceChoice,
+} from './subagent-remote';
 import { fileSubagentWake } from './subagent-wake';
 
 const TERMINAL: RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
@@ -122,6 +144,8 @@ export class RunnerSubagentsController {
      * sweep files any wake this could not.
      */
     @Optional() private readonly sessions?: SessionsService,
+    /** Marks a remote run's target runner changed, so its next beat over the runner link lists the run (§10.2). */
+    @Optional() private readonly realtime?: RealtimeService,
   ) {}
 
   /** Mark a run's end as owing its parent a wake, whatever its status, and read the status back. */
@@ -166,13 +190,46 @@ export class RunnerSubagentsController {
    * parent's model. The row is written RUNNING with that decision, and an account pool's member chosen for it
    * on its first attempt, never on the parent's session. A retry with the same tool_use id answers with the run
    * it opened, whose decision is frozen, on the candidate its last attempt runs on.
+   *
+   * A call that names a `workspace` or `needs` capabilities is placed first (docs/subagent-design.md §10.1,
+   * chooseSubagentWorkspace): on another workspace of the parent's repository it is opened there
+   * (openRemoteSubagentRun), and answered without `exec`; on the parent's own it is opened here, the choice's
+   * reason heading the Why. The refusals of §10.1 are thrown before anything is written.
    */
   @Post('sessions/:id/subagents')
   @HttpCode(200)
-  async createSubagentRun(
+  async openSubagentRun(
     @CurrentRunner() runner: Runner,
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: SubagentRunCreateDto,
+  ): Promise<SubagentRunCreateResponse | SubagentRemoteRunCreateResponse> {
+    await this.assertParentOfRunner(sessionId, runner);
+    const opened = await this.prisma.subagentRun.findUnique({
+      where: { sessionId_toolUseId: { sessionId, toolUseId: dto.toolUseId } },
+    });
+    // A retry answers with the run it opened, wherever it was placed.
+    if (opened?.targetRunnerId) return this.remoteAnswer(opened);
+    if (!opened && (dto.workspace?.trim() || neededCapabilities(dto.needs).length > 0)) {
+      const parent = await this.prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: { ownerId: true, workspaceId: true } });
+      const pick = await chooseSubagentWorkspace(this.prisma, {
+        ownerId: parent.ownerId,
+        parentWorkspaceId: parent.workspaceId,
+        workspace: dto.workspace,
+        needs: dto.needs,
+      });
+      if (pick.kind === 'remote') return this.openRemoteSubagentRun(sessionId, dto, pick);
+      return this.createSubagentRun(runner, sessionId, dto, pick.reason);
+    }
+    return this.createSubagentRun(runner, sessionId, dto);
+  }
+
+  /** A run on the parent's own machine (§5.1): openSubagentRun's local case, and what the specs open directly. */
+  async createSubagentRun(
+    runner: Runner,
+    sessionId: string,
+    dto: SubagentRunCreateDto,
+    /** Why this machine was chosen for a call that asked for a workspace or capabilities (§10.1). */
+    workspaceReason?: string | null,
   ): Promise<SubagentRunCreateResponse> {
     await this.assertParentOfRunner(sessionId, runner);
     return withTransactionRetry(this.prisma, async (tx) => {
@@ -245,6 +302,8 @@ export class RunnerSubagentsController {
         });
       }
       const decision = appliedDecision(route, chosen.target, passedOver);
+      // A call that asked for a workspace or capabilities and was placed here says why first (§10.1).
+      if (workspaceReason) decision.reasons = [workspaceReason, ...decision.reasons];
       const { note: _note, ...target } = chosen.target;
       const row = await tx.subagentRun.create({
         data: {
@@ -273,6 +332,290 @@ export class RunnerSubagentsController {
         exec: chosen.built.exec,
       };
     }, loggedRetry(this.logger, 'runnerSubagents.createSubagentRun'));
+  }
+
+  /** A remote run as openSubagentRun answers it. */
+  private remoteAnswer(row: { id: string; status: string; decision: unknown; workspaceId: string | null }): SubagentRemoteRunCreateResponse {
+    const decision = row.decision as unknown as SubagentDecision;
+    return {
+      runId: row.id,
+      status: row.status as SubagentRunStatus,
+      decision,
+      remote: { workspaceId: row.workspaceId ?? decision.workspace?.id ?? '', workspaceName: decision.workspace?.name ?? '' },
+    };
+  }
+
+  /**
+   * Open a SubAgent run on another workspace (docs/subagent-design.md §10): written RUNNING with that workspace and
+   * its runner as the target, the brief and the definition's flags kept for the target's claim, and a decision that
+   * names the workspace and why it was chosen. In this phase routing does not apply to it: it runs on the target
+   * workspace's own default engine and model, which is checked here so a workspace that cannot run it refuses now
+   * (409 SUBAGENT_TARGET_CANNOT_RUN). The parent's limits count it like any other of its SubAgents. The target
+   * runner is hinted once this commits; its heartbeat lists the run until it claims it.
+   */
+  private async openRemoteSubagentRun(
+    sessionId: string,
+    dto: SubagentRunCreateDto,
+    pick: Extract<SubagentWorkspacePick, { kind: 'remote' }>,
+  ): Promise<SubagentRemoteRunCreateResponse> {
+    const prompt = stripNul(dto.prompt ?? '');
+    if (!prompt.trim()) {
+      throw new BadRequestException({
+        code: 'SUBAGENT_PROMPT_REQUIRED',
+        message: 'A SubAgent on another workspace needs its prompt in the request: that machine does not have it.',
+      });
+    }
+    const answer = await withTransactionRetry(this.prisma, async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR UPDATE`;
+      const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId }, select: SUBAGENT_PARENT_SELECT });
+      if (TERMINAL.includes(session.status)) throw new ConflictException('the session has ended');
+      const opened = await tx.subagentRun.findUnique({ where: { sessionId_toolUseId: { sessionId, toolUseId: dto.toolUseId } } });
+      if (opened) return this.remoteAnswer(opened);
+      if (session.workspace?.subagentsEnabled === false) {
+        throw new ForbiddenException({
+          code: 'SUBAGENTS_DISABLED',
+          message: 'SubAgents are turned off for this agent. Do the work in this session instead.',
+        });
+      }
+      const limit = session.workspace?.subagentsMaxRunning ?? 4;
+      const running = await tx.subagentRun.count({ where: { sessionId, status: 'RUNNING' } });
+      if (running >= limit) {
+        throw new ConflictException({
+          code: 'SUBAGENT_LIMIT_REACHED',
+          message: `This session already has ${running} SubAgents running, the most its agent allows at once (${limit}). Wait for one to finish.`,
+        });
+      }
+      const facts: SubagentRemoteFacts = {
+        prompt,
+        ...(dto.readonly ? { readonly: true } : {}),
+        ...(dto.permissionMode ? { permissionMode: dto.permissionMode } : {}),
+        ...(dto.needs?.length ? { needs: neededCapabilities(dto.needs) } : {}),
+      };
+      const built = await remoteSubagentExec(tx, { workspaceId: pick.workspace.id, parentSessionId: sessionId, facts });
+      if (!built.exec) {
+        throw new ConflictException({
+          code: 'SUBAGENT_TARGET_CANNOT_RUN',
+          message: `${pick.workspace.name} cannot run this SubAgent: ${built.refusal}.`,
+        });
+      }
+      const parentMode = resolvePermissionMode(session.permissionMode, session.owner);
+      const childEngine = String(built.exec.provider);
+      const parentEngine = session.provider ?? childEngine;
+      if (!dto.readonly && dto.permissionMode
+        && isWiderThanParent({ mode: parentMode, engine: parentEngine }, dto.permissionMode, childEngine)) {
+        throw widerModeRefusal(parentMode, dto.permissionMode, childEngine,
+          "Remove permissionMode from the SubAgent's definition to run it in this session's mode.");
+      }
+      const target = { engine: built.engine!, provider: built.provider!, model: built.model!, effort: built.effort ?? null };
+      const decision: SubagentDecision = {
+        level: null,
+        tierSource: 'not-routed',
+        optimizeFor: null,
+        ...target,
+        reasons: [pick.reason, `Runs on ${pick.workspace.name}'s own default engine and model, ${target.model}`],
+        candidates: [],
+        policyVersion: 'subagent-remote-v1',
+        applied: true,
+        workspace: workspaceChoice(pick.workspace, pick.reason),
+      };
+      const row = await tx.subagentRun.create({
+        data: {
+          ownerId: session.ownerId,
+          sessionId,
+          toolUseId: dto.toolUseId,
+          type: dto.type,
+          definitionSource: dto.definitionSource,
+          background: dto.background ?? false,
+          wakeOwed: dto.background ?? false,
+          ...(dto.description ? { description: stripNul(dto.description) } : {}),
+          status: 'RUNNING',
+          decision: decision as unknown as Prisma.InputJsonValue,
+          attempts: [firstAttempt(target)] as unknown as Prisma.InputJsonValue,
+          workspaceId: pick.workspace.id,
+          targetRunnerId: pick.workspace.runnerId,
+          remote: facts as unknown as Prisma.InputJsonValue,
+        },
+      });
+      return this.remoteAnswer(row);
+    }, loggedRetry(this.logger, 'runnerSubagents.openRemoteSubagentRun'));
+    this.realtime?.markRunnerChanged(pick.workspace.runnerId);
+    return answer;
+  }
+
+  /**
+   * The target runner claims a remote SubAgent run its heartbeat listed (docs/subagent-design.md §10.2): what to run,
+   * in which workspace, and how — the target workspace's own default engine and model, as remoteSubagentExec builds
+   * it now, in a session claim's shape. Only the run's target runner may (403 SUBAGENT_RUN_NOT_TARGET). A claim sent
+   * again answers the same; one for a run that ended or whose parent stopped it is 409. When the workspace can no
+   * longer run it, the run ends FAILED with the reason, which reaches the parent as its result.
+   */
+  @Post('subagent-runs/:runId/claim')
+  @HttpCode(200)
+  async claimRemoteSubagentRun(
+    @CurrentRunner() runner: Runner,
+    @Param('runId', PublicIdPipe) runId: string,
+  ): Promise<RemoteSubagentClaim> {
+    const { sessionId } = await runOfTarget(this.prisma, runId, runner);
+    const outcome = await withTransactionRetry(this.prisma, async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR UPDATE`;
+      const run = await runOfTarget(tx, runId, runner);
+      if (run.status !== 'RUNNING') throw new ConflictException({ code: 'SUBAGENT_RUN_ENDED', message: `SubAgent run ${runId} has already ended` });
+      if (run.stopRequestedAt) throw new ConflictException({ code: 'SUBAGENT_RUN_STOPPED', message: `SubAgent run ${runId} was stopped by its parent` });
+      const facts = remoteFactsOf(run.remote);
+      const built = run.workspaceId
+        ? await remoteSubagentExec(tx, { workspaceId: run.workspaceId, parentSessionId: run.sessionId, facts })
+        : { refusal: 'its workspace is gone' };
+      if (!built.exec) {
+        await tx.subagentRun.update({
+          where: { id: run.id },
+          data: { status: 'FAILED', resultSummary: `The workspace it was handed to cannot run it: ${built.refusal}.`, endedAt: new Date() },
+        });
+        await reapApprovalsOfEndedSubagents(tx, run.sessionId, run.id);
+        return { refusal: built.refusal! };
+      }
+      if (!run.claimedAt) await tx.subagentRun.update({ where: { id: run.id }, data: { claimedAt: new Date() } });
+      const workspace = await tx.workspace.findUnique({ where: { id: run.workspaceId! }, select: { workDir: true } });
+      const claim: RemoteSubagentClaim = {
+        runId: run.id,
+        sessionId: run.sessionId,
+        toolUseId: run.toolUseId,
+        workspaceId: run.workspaceId!,
+        workDir: workspace?.workDir ?? null,
+        type: run.type,
+        definitionSource: run.definitionSource,
+        description: run.description,
+        background: run.background,
+        prompt: facts.prompt,
+        exec: built.exec,
+      };
+      return { claim };
+    }, loggedRetry(this.logger, 'runnerSubagents.claimRemoteSubagentRun'));
+    if (outcome.refusal !== undefined) {
+      await this.fileWake(runId);
+      throw new ConflictException({ code: 'SUBAGENT_TARGET_CANNOT_RUN', message: outcome.refusal });
+    }
+    return outcome.claim!;
+  }
+
+  /**
+   * The target runner relays a batch of its child's events (docs/subagent-design.md §10.3). Accepted only from the
+   * run's target runner, while the run is RUNNING and claimed. Each event is stored as the parent's stream carries it
+   * (rewriteRemoteSubagentEvent: nested under the delegate call, child ids prefixed with the run id), once per seq;
+   * the kinds the parent's stream never carries are dropped. The parent's runner reads them back
+   * (readRelayedSubagentEvents) and emits them into the parent session's stream, which only it numbers.
+   */
+  @Post('subagent-runs/:runId/events')
+  @HttpCode(202)
+  async relaySubagentEvents(
+    @CurrentRunner() runner: Runner,
+    @Param('runId', PublicIdPipe) runId: string,
+    @Body() batch: RemoteSubagentEventBatch,
+  ): Promise<{ ok: true; stored: number; dropped: number }> {
+    const events = readRelayBatch(batch?.events);
+    const run = await runOfTarget(this.prisma, runId, runner);
+    if (run.status !== 'RUNNING') throw new ConflictException({ code: 'SUBAGENT_RUN_ENDED', message: `SubAgent run ${runId} has already ended` });
+    if (!run.claimedAt) throw new ConflictException({ code: 'SUBAGENT_RUN_NOT_CLAIMED', message: 'Claim the SubAgent run before relaying its events.' });
+    const rows = events.flatMap((event) => {
+      const payload = rewriteRemoteSubagentEvent(run.id, run.toolUseId, event.type, event.payload);
+      return payload ? [{ runId: run.id, seq: event.seq, type: event.type, payload: payload as Prisma.InputJsonValue }] : [];
+    });
+    const stored = rows.length ? (await this.prisma.subagentRelayEvent.createMany({ data: rows, skipDuplicates: true })).count : 0;
+    return { ok: true, stored, dropped: events.length - rows.length };
+  }
+
+  /**
+   * The parent's runner reads a remote run's relayed events after `after` (docs/subagent-design.md §10.3), already
+   * rewritten for its stream, with the run's status and result so it knows when no more will come. Only for a run of
+   * a session this runner hosts.
+   */
+  @Get('sessions/:id/subagents/:runId/events')
+  async readRelayedSubagentEvents(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Param('runId', PublicIdPipe) runId: string,
+    @Query('after') after?: string,
+  ): Promise<RemoteSubagentEventsPage> {
+    await this.assertParentOfRunner(sessionId, runner);
+    const run = await this.prisma.subagentRun.findFirst({
+      where: { id: runId, sessionId },
+      select: { id: true, status: true, resultSummary: true, targetRunnerId: true },
+    });
+    if (!run) throw new NotFoundException('SubAgent run not found');
+    if (!run.targetRunnerId) {
+      throw new ConflictException({ code: 'SUBAGENT_RUN_IS_LOCAL', message: 'This SubAgent runs on this machine; it relays nothing.' });
+    }
+    const from = Number.parseInt(after ?? '0', 10);
+    const events = await this.prisma.subagentRelayEvent.findMany({
+      where: { runId: run.id, seq: { gt: Number.isFinite(from) && from > 0 ? from : 0 } },
+      orderBy: { seq: 'asc' },
+      take: SUBAGENT_RELAY_BATCH_MAX,
+      select: { seq: true, type: true, payload: true },
+    });
+    return {
+      events: events.map((event) => ({ seq: event.seq, type: event.type, payload: event.payload as Record<string, unknown> })),
+      status: run.status as SubagentRunStatus,
+      resultSummary: run.resultSummary,
+    };
+  }
+
+  /**
+   * The parent stops a remote run (docs/subagent-design.md §10.3): its runner, stopping its own SubAgents on a stop or
+   * an end, asks here for one another runner hosts. A run not claimed yet ends STOPPED at once; a claimed one is
+   * marked, and the target's heartbeat tells it to stop the child (10 s grace, then kill) until it reports the end.
+   * The target is hinted to beat now. A parent that ended is stopped the same way without asking (remoteSubagentHeartbeat).
+   */
+  @Post('sessions/:id/subagents/:runId/stop')
+  @HttpCode(200)
+  async stopRemoteSubagentRun(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Param('runId', PublicIdPipe) runId: string,
+  ): Promise<SubagentRunUpdateResponse> {
+    await this.assertParentOfRunner(sessionId, runner);
+    const outcome = await withTransactionRetry(this.prisma, async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR UPDATE`;
+      const run = await tx.subagentRun.findFirst({ where: { id: runId, sessionId } });
+      if (!run) throw new NotFoundException('SubAgent run not found');
+      if (!run.targetRunnerId) {
+        throw new ConflictException({ code: 'SUBAGENT_RUN_IS_LOCAL', message: 'This SubAgent runs on this machine; stop its child here.' });
+      }
+      if (run.status !== 'RUNNING') return { answer: { runId, status: run.status as SubagentRunStatus, applied: false }, ended: false, target: null };
+      if (!run.claimedAt) {
+        const attempts = attemptsOf(run.attempts);
+        const last = attempts.at(-1);
+        if (last?.outcome === 'RUNNING') Object.assign(last, { outcome: 'STOPPED', endedAt: new Date().toISOString() });
+        await tx.subagentRun.update({
+          where: { id: run.id },
+          data: {
+            status: 'STOPPED', resultSummary: STOPPED_BEFORE_CLAIM_RESULT, endedAt: new Date(), stopRequestedAt: new Date(),
+            attempts: attempts as unknown as Prisma.InputJsonValue,
+          },
+        });
+        await reapApprovalsOfEndedSubagents(tx, sessionId, run.id);
+        return { answer: { runId, status: 'STOPPED' as SubagentRunStatus, applied: true }, ended: true, target: null };
+      }
+      if (!run.stopRequestedAt) await tx.subagentRun.update({ where: { id: run.id }, data: { stopRequestedAt: new Date() } });
+      return { answer: { runId, status: 'RUNNING' as SubagentRunStatus, applied: !run.stopRequestedAt }, ended: false, target: run.targetRunnerId };
+    }, loggedRetry(this.logger, 'runnerSubagents.stopRemoteSubagentRun'));
+    if (outcome.ended) await this.fileWake(runId);
+    if (outcome.target) this.realtime?.markRunnerChanged(outcome.target);
+    return outcome.answer;
+  }
+
+  /**
+   * The target runner reports a remote run's end (docs/subagent-design.md §10.3): the same end the parent's runner
+   * reports for a run on its own machine (endRun) — status, result, cost added to the parent once, the parent's wake
+   * filed — accepted only from the run's target runner.
+   */
+  @Patch('subagent-runs/:runId')
+  async endRemoteSubagentRun(
+    @CurrentRunner() runner: Runner,
+    @Param('runId', PublicIdPipe) runId: string,
+    @Body() dto: SubagentRunUpdateDto,
+  ): Promise<SubagentRunUpdateResponse> {
+    const run = await runOfTarget(this.prisma, runId, runner);
+    if (dto.status === 'RUNNING') throw new BadRequestException('report the run\'s end: DONE, FAILED, INTERRUPTED or STOPPED');
+    return this.endRun(run.sessionId, run.id, dto);
   }
 
   /**
@@ -455,6 +798,13 @@ export class RunnerSubagentsController {
       if (row.status !== 'RUNNING') await this.fileWake(runId);
       return { runId, status: row.status as SubagentRunStatus, applied: row.status === 'RUNNING' };
     }
+    const remote = await this.prisma.subagentRun.findFirst({ where: { id: runId, sessionId }, select: { targetRunnerId: true } });
+    if (remote?.targetRunnerId) throw remoteRunEndRefusal();
+    return this.endRun(sessionId, runId, dto);
+  }
+
+  /** A run's end, reported by the runner that ran it: the parent's for its own machine, the target's for a remote one. */
+  private async endRun(sessionId: string, runId: string, dto: SubagentRunUpdateDto): Promise<SubagentRunUpdateResponse> {
     const costUsd = dto.costUsd ?? 0;
     const answer = await withTransactionRetry(this.prisma, async (tx) => {
       // The parent first, as every writer of a session and its children takes them (rank 30, then 60).

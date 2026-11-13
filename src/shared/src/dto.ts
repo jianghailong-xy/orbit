@@ -847,7 +847,73 @@ export interface RunnerSelfUpdate {
   lastUpdatedAt?: string;
   lastUpdatedFrom?: string;
   lastUpdatedTo?: string;
+  /** Where a release the runner is behind stands, for the runner page's Update card
+   *  (docs/runner-update-drain-design.md §4). Absent when none is waiting, and from every runner
+   *  too old to say: the clients keep the wording they had before for those. */
+  phase?: RunnerSelfUpdatePhase;
+  /** The release it is waiting to install. */
+  targetVersion?: string;
+  /** ISO-8601: when the release was first found waiting for a busy runner, when the drain began
+   *  (taking no new work), and until when the owner postponed it. */
+  availableSince?: string;
+  drainingSince?: string;
+  postponedUntil?: string;
+  /** While draining: the turns still in flight, and how many there were when the drain began. */
+  turnsInFlight?: number;
+  turnsAtDrain?: number;
+  /** While restarting for the owner's Update Now: how many turns it interrupted, which continue once
+   *  it is back. Absent for an update that waited for idle. */
+  interruptedTurns?: number;
+  /** The last update's restart: seconds from the stop to the new image starting, and how many turns
+   *  an Update Now interrupted for it. Absent when the runner did not measure them (an older one). */
+  lastUpdateSeconds?: number;
+  lastUpdateInterruptedTurns?: number;
+  /** How long, in seconds, the runner must have been quiet (no turn ended, nothing claimed) before an
+   *  automatic update installs. Sent with every report by runners that wait for one; absent from older
+   *  runners, which install at the first check with no turn in flight, and keep that wording. */
+  quietWindowSeconds?: number;
 }
+
+/** One of the viewer's turns a runner draining for its self-update waits for: the runner page's
+ *  Update card lists them (board 4), each with a link and how long it has run. `startedAt` is when the
+ *  current run was claimed; null when the server never stamped one. */
+export interface RunnerUpdateTurn {
+  id: string;
+  title: string | null;
+  startedAt: string | null;
+}
+
+/** What of the viewer's waits on a runner draining for its self-update (D3): sessions on it that have not
+ *  started, and messages not yet delivered to its sessions — queued behind a running turn, or a follow-up
+ *  the runner holds for the update. Present on GET /runners only
+ *  while the runner drains and something of the viewer's waits; the web's banner, the native
+ *  attention item and the drain's one push all say these counts. */
+export interface RunnerDrainWaiting {
+  sessions: number;
+  messages: number;
+}
+
+/** Why a queued session waits on its runner's self-update (queuedReason 'runner_updating'): the
+ *  release, the owner's turns the drain waits for, and when the wait began. */
+export interface QueuedRunnerUpdate {
+  targetVersion: string | null;
+  since: string | null;
+  turns: Array<{ id: string; title: string | null }>;
+}
+
+/** A waiting release's phase, as the runner reports it:
+ *  - `available`: waiting for the turns in flight to end, under the 1 h limit; work goes on.
+ *  - `draining`: past the limit; the runner takes no new work until its turns end.
+ *  - `restarting`: nothing in flight; installing the release and starting again.
+ *  - `postponed`: the owner put it off until `postponedUntil`; work goes on. */
+export type RunnerSelfUpdatePhase = 'available' | 'draining' | 'restarting' | 'postponed';
+
+export const RUNNER_SELF_UPDATE_PHASES: readonly RunnerSelfUpdatePhase[] = [
+  'available',
+  'draining',
+  'restarting',
+  'postponed',
+];
 
 /** What the runner saw at one agent's working directory. Reported from the runner's own disk,
  *  so it answers the question the config form asks: does this path exist on that machine, and
@@ -1151,6 +1217,12 @@ export interface StorageBudget {
 export interface RunnerHeartbeatResponse {
   /** Session IDs the control plane wants the runner to interrupt / end. */
   cancelSessionIds: string[];
+  /** Remote SubAgent runs this runner is the target of and has not claimed (docs/subagent-design.md §10.2):
+   *  claim each with POST /runner/subagent-runs/:runId/claim. Absent when there are none. */
+  remoteSubagentRuns?: string[];
+  /** Remote SubAgent runs on this runner to stop, because their parent stopped them or ended (§10.3): stop the
+   *  child (10 s grace, then kill) and report STOPPED. Absent when there are none. */
+  stopSubagentRunIds?: string[];
   /** Supervised sessions that no longer belong to this exact runner process.
    *  Kept separate from durable user cancellation: a cold supervisor detaches
    *  without finalizing, while active/warm engines observe their endpoint fence. */
@@ -1202,6 +1274,20 @@ export interface RunnerHeartbeatResponse {
    *  runner then reports as `waitingForIdle`. Set once per request and cleared as it is handed
    *  over, like `refreshModelCatalog`. */
   checkSelfUpdate?: boolean;
+  /** This server takes a session claim scoped to named sessions (`GET /runner/sessions/claim?drainScope=`),
+   *  which a runner draining for an update sends for the sessions whose engine is running a turn on it.
+   *  Absent from an older server, to which such a runner sends no claim while it drains. */
+  drainScopedClaims?: boolean;
+  /** The owner's Later (ISO time): stop draining for the waiting release now and put it off until
+   *  then, when it waits for idle again under a fresh deferral limit. Set once per request and
+   *  cleared as it is handed over, like `checkSelfUpdate`; only a runner that declares
+   *  SELF_UPDATE_POSTPONE_V1 is asked. */
+  postponeSelfUpdateUntil?: string;
+  /** The owner's Update Now (POST /runners/:id/self-update/now): install the waiting release now,
+   *  interrupting the turns in flight through the graceful stop so their sessions resume after the
+   *  restart. Set once per request and cleared as it is handed over, like `checkSelfUpdate`; only a
+   *  runner that declares SELF_UPDATE_NOW_V1 is asked. */
+  selfUpdateNow?: boolean;
   /** This machine's free-space floor in MB (Runner.minFreeDiskMb), the same number the auto-run
    *  disk gate reads. Sent so the runner can apply it to work only it can see — reclaiming the
    *  session checkouts on its own disk — without keeping a second copy of the setting.
@@ -1278,6 +1364,49 @@ export interface RunnerHeartbeatResponse {
   secretGrants?: Array<{ id: string; expiresAt: string }>;
   /** Grants of this runner being removed: remove the copy if held, then confirm with /removed either way. */
   secretGrantsRemoving?: string[];
+}
+
+/** Declared by a runner that honours the owner's Later (`postponeSelfUpdateUntil`,
+ *  docs/runner-update-drain-design.md §4). A runner without it is refused a postpone as too old.
+ *  runner-go asserts the same string. */
+export const SELF_UPDATE_POSTPONE_V1 = 'self-update-postpone/v1';
+
+/** Declared by a runner that honours the owner's Update Now (`selfUpdateNow`,
+ *  docs/runner-update-drain-design.md §4): it interrupts the turns in flight, installs and restarts.
+ *  A runner without it is refused Update Now as too old. runner-go asserts the same string. */
+export const SELF_UPDATE_NOW_V1 = 'self-update-now/v1';
+
+/** The body of POST /runners/:id/self-update/now: the owner's explicit "interrupt these turns". */
+export interface RunnerSelfUpdateNowRequest {
+  interruptTurns: true;
+}
+
+/** Its answer: when it was asked, and how many of the owner's turns were running then. */
+export interface RunnerSelfUpdateNowResponse {
+  requestedAt: string;
+  turns: number;
+}
+
+/** The interrupt event's reason for a turn the owner's Update Now stopped (beside `runner_restart`). */
+export const RUNNER_UPDATE_INTERRUPT_REASON = 'runner_update';
+
+/** The interrupt event's reason for a turn a runner stop cut once its drain ran out (runner-go selfupdate_now.go). */
+export const RUNNER_RESTART_INTERRUPT_REASON = 'runner_restart';
+
+/** The first sentence of the turn Orbit sends a session whose turn Update Now interrupted (D4). The
+ *  clients draw a user turn that opens with it as one Orbit line, not as the owner's bubble. */
+export const RUNNER_UPDATE_RESUME_NOTE = 'The runner update interrupted this turn; continue.';
+
+/** The body of POST /runners/:id/self-update/postpone. `timeZone` is the owner's IANA zone, which
+ *  `until` is capped in: at most 09:00 tomorrow there (D2). */
+export interface RunnerSelfUpdatePostponeRequest {
+  until: string;
+  timeZone?: string;
+}
+
+/** Its answer: the time the runner is asked to wait until, after the cap. */
+export interface RunnerSelfUpdatePostponeResponse {
+  until: string;
 }
 
 // ── Claude region check (docs/claude-region-check-contract.md) ──
@@ -2138,6 +2267,17 @@ export interface SubagentDecision {
   note?: string;
   /** One short line per move after a usage limit or capacity (§4.3), e.g. `Moved to glm-5 after …`. */
   moves?: string[];
+  /** The workspace a remote SubAgent runs on (§10.1) and why it was chosen. Absent for one on the parent's machine. */
+  workspace?: SubagentWorkspaceChoice;
+}
+
+/** Where a remote SubAgent runs (docs/subagent-design.md §10.1): another workspace of the parent's repository. */
+export interface SubagentWorkspaceChoice {
+  /** The workspace's id, as the runner has it (a UUID). */
+  id: string;
+  name: string;
+  /** How it was chosen, English: named by the call, or the capabilities it was asked to have. */
+  reason: string;
 }
 
 /** One engine, provider, model and effort a SubAgent may run on. */
@@ -2210,6 +2350,8 @@ export interface SubagentRunView {
   costUsd: number;
   /** What it handed back, truncated: the result of a background run, whose call only returned its receipt. */
   resultSummary: string | null;
+  /** The workspace a remote SubAgent ran on, which the block names as `on <workspace>`; null on the parent's machine. */
+  workspaceName: string | null;
   createdAt: string;
   endedAt: string | null;
 }
@@ -2238,6 +2380,12 @@ export interface SubagentRunCreateRequest {
   permissionMode?: string;
   /** The delegate call's description, which the wake for the run's end names. */
   description?: string;
+  /** A workspace to run on, by name (§10.1 row 1): another workspace of the parent's repository. */
+  workspace?: string;
+  /** Runner capabilities the work needs, e.g. `os:darwin` (§10.1 row 2): the call's and its definition's. */
+  needs?: string[];
+  /** The brief. Sent for a call that may run remotely: the target runner needs it, the parent's machine has it. */
+  prompt?: string;
 }
 
 export interface SubagentRunCreateResponse {
@@ -2246,6 +2394,59 @@ export interface SubagentRunCreateResponse {
   decision: SubagentDecision;
   /** How to run the child: the same shape a session claim hands the runner. */
   exec: AgentExecConfig;
+}
+
+/**
+ * The answer for a delegate call that runs on another workspace (§10): no `exec`, because the parent's machine
+ * runs nothing and the target's credential never reaches it. The parent reads the run's events from
+ * `GET /runner/sessions/:id/subagents/:runId/events` and its end from the run.
+ */
+export interface SubagentRemoteRunCreateResponse {
+  runId: string;
+  status: SubagentRunStatus;
+  decision: SubagentDecision;
+  remote: { workspaceId: string; workspaceName: string };
+}
+
+/** A remote SubAgent run as its target runner claims it (§10.2): what to run, where, and how. */
+export interface RemoteSubagentClaim {
+  runId: string;
+  /** The parent session; events and cards of the run are written under it. */
+  sessionId: string;
+  /** The delegate call: the parent's events nest under it. */
+  toolUseId: string;
+  workspaceId: string;
+  /** The target workspace's work dir, which the runner makes a temporary detached worktree of. */
+  workDir: string | null;
+  type: string;
+  definitionSource: string;
+  description: string | null;
+  background: boolean;
+  prompt: string;
+  /** How to run the child: the target workspace's own default engine and model, as a session claim hands it. */
+  exec: AgentExecConfig;
+}
+
+/** One child event the target runner relays (§10.3), numbered by the run from 1. */
+export interface RemoteSubagentEvent {
+  seq: number;
+  type: string;
+  payload: Record<string, unknown>;
+}
+
+export interface RemoteSubagentEventBatch {
+  events: RemoteSubagentEvent[];
+}
+
+/**
+ * The relayed events as the parent's runner reads them, in seq order and already rewritten: nested under the
+ * delegate call (`parentToolUseId`), every child tool id prefixed with the run id. The parent's runner emits them
+ * into its own stream, which it numbers. `status` is the run's, so a reader knows when no more will come.
+ */
+export interface RemoteSubagentEventsPage {
+  events: RemoteSubagentEvent[];
+  status: SubagentRunStatus;
+  resultSummary: string | null;
 }
 
 /**

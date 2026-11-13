@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>macOS menu bar icon · board 01</title>
+<style>
+  body { margin: 0; background: #f2f3f5; }
+  .b-part { font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: #1f2329; background: #fff;
+    width: 1000px; padding: 28px 32px 32px; box-sizing: border-box; margin: 0 0 16px; }
+  .b-part h2 { font-size: 20px; margin: 0 0 4px; }
+  .b-part .b-sub { color: #646a73; margin: 0 0 20px; }
+  .b-row { display: flex; align-items: center; gap: 24px; margin: 0 0 18px; }
+  .b-lab { width: 150px; flex: none; font-weight: 600; }
+  .b-lab small { display: block; font-weight: 400; color: #646a73; font-size: 13px; }
+  .b-real { position: relative; width: 480px; height: 216px; flex: none; border-radius: 8px; overflow: hidden;
+    background-size: 480px 216px; }
+  .b-real svg { position: absolute; }
+  .b-real1 { position: relative; width: 240px; height: 108px; flex: none; border-radius: 6px; overflow: hidden;
+    background-size: 240px 108px; }
+  .b-real1 svg { position: absolute; }
+  .b-bar { height: 24px; display: flex; align-items: center; justify-content: flex-end; gap: 14px;
+    padding: 0 12px; font-size: 13px; border-radius: 6px; width: 340px; box-sizing: border-box; }
+  .b-bar.light { background: #ececec; color: #1d1d1f; }
+  .b-bar.dark { background: #2a2a2c; color: #f5f5f7; }
+  .b-bar svg { display: block; }
+  .b-bar .b-cnt { display: flex; align-items: center; gap: 7px; font-weight: 500; }
+  .b-hl { outline: 2px dashed #3370ff; outline-offset: 3px; border-radius: 3px; }
+  .b-grid { display: grid; grid-template-columns: 170px 1fr 1fr; gap: 14px 24px; align-items: center; }
+  .b-grid .b-h { font-weight: 600; color: #646a73; font-size: 13px; }
+  .b-px { display: flex; gap: 18px; align-items: flex-end; }
+  .b-px figure { margin: 0; text-align: center; font-size: 12px; color: #646a73; }
+  .b-px canvas { image-rendering: pixelated; display: block; border-radius: 4px; }
+  .b-note { background: #f5f6f7; border-radius: 8px; padding: 12px 16px; margin: 6px 0 0; }
+  .b-note ol, .b-note ul { margin: 4px 0; padding-left: 22px; }
+  .b-pick { border: 1.5px solid #dee0e3; border-radius: 10px; padding: 14px 18px; flex: 1; }
+  .b-pick.rec { border-color: #3370ff; background: #f0f4ff; }
+  .b-pick h3 { margin: 0 0 6px; font-size: 16px; }
+  .b-tag { display: inline-block; font-size: 12px; color: #fff; background: #3370ff; border-radius: 4px;
+    padding: 0 6px; margin-left: 6px; vertical-align: 2px; }
+  code { font: 13px "JetBrains Mono", monospace; background: #f0f1f3; padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<script>
+// Template glyphs, 64-unit box. Color comes from currentColor; knockouts are masks, like an
+// NSImage template (one color, alpha only).
+const SAT = (cx, cy, hollow) => hollow
+  ? `<circle cx="${cx}" cy="${cy}" r="5.2" fill="none" stroke="currentColor" stroke-width="3.2"/>`
+  : `<circle cx="${cx}" cy="${cy}" r="6.6" fill="currentColor"/>`;
+let uid = 0;
+// A: the orbit: tilted ring + a planet in the middle + the satellite, the ring cut where the
+// satellite and the planet cross it.
+function iconA({ hollow = false, noSat = false } = {}) {
+  const id = 'ma' + (uid++);
+  return `<svg viewBox="0 0 64 64" fill="none">
+    <defs><mask id="${id}"><rect width="64" height="64" fill="#fff"/>
+      <g transform="rotate(-34 32 32)">${noSat ? '' : '<circle cx="54.8" cy="23.9" r="10.5" fill="#000"/>'}
+        <circle cx="32" cy="32" r="11.5" fill="#000"/></g></mask></defs>
+    <g transform="rotate(-34 32 32)">
+      <ellipse cx="32" cy="32" rx="29" ry="14" stroke="currentColor" stroke-width="5.6" mask="url(#${id})"/>
+      <circle cx="32" cy="32" r="8" fill="currentColor"/>
+      ${noSat ? '' : SAT(54.8, 23.9, hollow)}
+    </g></svg>`;
+}
+// B: the app icon's mark: ring + satellite + a terminal block with ">_" knocked out.
+function iconB({ hollow = false } = {}) {
+  const id = 'mb' + (uid++), id2 = 'mc' + (uid++);
+  return `<svg viewBox="0 0 64 64" fill="none">
+    <defs>
+      <mask id="${id}"><rect width="64" height="64" fill="#fff"/>
+        <rect x="15" y="16" width="34" height="32" rx="10" fill="#000"/>
+        <g transform="rotate(-26 32 32)"><circle cx="57.4" cy="25.1" r="10" fill="#000"/></g></mask>
+      <mask id="${id2}"><rect width="64" height="64" fill="#fff"/>
+        <path d="M25.5 26.5 L31.5 32 L25.5 37.5" stroke="#000" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="34.5" y1="37.2" x2="40" y2="37.2" stroke="#000" stroke-width="4.4" stroke-linecap="round"/></mask>
+    </defs>
+    <g transform="rotate(-26 32 32)">
+      <ellipse cx="32" cy="32" rx="30" ry="13" stroke="currentColor" stroke-width="4.6" mask="url(#${id})"/>
+      ${SAT(57.4, 25.1, hollow)}
+    </g>
+    <rect x="18" y="19" width="28" height="26" rx="7.5" fill="currentColor" mask="url(#${id2})"/>
+  </svg>`;
+}
+// Today: SF Symbol circle.hexagongrid, approximated (7 dots on a hex grid).
+function iconToday() {
+  const d = [[32,32],[46,32],[18,32],[25,20],[39,20],[25,44],[39,44]];
+  return `<svg viewBox="0 0 64 64">${d.map(([x,y]) => `<circle cx="${x}" cy="${y}" r="5.6" fill="currentColor"/>`).join('')}</svg>`;
+}
+const sized = (svg, px, extra = '') => svg.replace('<svg ', `<svg width="${px}" height="${px}" ${extra} `);
+
+// Neutral menu-bar neighbours (system glyphs only; no third-party marks on the synthetic bars).
+const WIFI = `<svg width="17" height="13" viewBox="0 0 17 13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+  <path d="M1.5 4.6a10 10 0 0 1 14 0"/><path d="M4 7.3a6.3 6.3 0 0 1 9 0"/><circle cx="8.5" cy="10.6" r="1.2" fill="currentColor" stroke="none"/></svg>`;
+const BATT = `<svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" stroke="currentColor" stroke-opacity=".45"/>
+  <rect x="2.2" y="2.2" width="14" height="7.6" rx="1.6" fill="currentColor"/><rect x="22.6" y="4" width="1.6" height="4" rx=".8" fill="currentColor" fill-opacity=".45"/></svg>`;
+const CC = `<svg width="15" height="13" viewBox="0 0 15 13" fill="none" stroke="currentColor" stroke-width="1.5">
+  <rect x="1" y="1" width="13" height="4.6" rx="2.3"/><rect x="1" y="7.4" width="13" height="4.6" rx="2.3"/>
+  <circle cx="11.7" cy="3.3" r="1.5" fill="currentColor"/><circle cx="3.3" cy="9.7" r="1.5" fill="currentColor"/></svg>`;
+
+function realBar(kind, k) {
+  // kind: today | A | B. k = CSS px per screenshot px. Orbit's icon sat at (120.5, 42.5) in the
+  // 240x108 retina crop; the menu bar's glyph box is 16 pt = 32 px there.
+  const bg = kind === 'today' ? 'menubar-today.png' : 'menubar-erased.png';
+  const cls = k === 2 ? 'b-real' : 'b-real1';
+  let inner = '';
+  if (kind !== 'today') {
+    const s = 32 * k, l = 120.5 * k - s / 2, t = 42.5 * k - s / 2;
+    inner = sized(kind === 'A' ? iconA() : iconB(), s, `style="left:${l}px;top:${t}px;color:#fff"`);
+  }
+  return `<div class="${cls}" style="background-image:url(${bg})">${inner}</div>`;
+}
+function synthBar(theme, icon, count) {
+  const glyph = sized(icon, 16, 'class="b-hl"');
+  const orbit = count ? `<span class="b-cnt">${glyph}${count}</span>` : glyph;
+  return `<div class="b-bar ${theme}">${orbit}${WIFI}${CC}${BATT}<span>周四 14:32</span></div>`;
+}
+const pxSpecs = [];
+function pxBlock(icon, theme) {
+  const fg = theme === 'dark' ? '#f5f5f7' : '#1d1d1f', bg = theme === 'dark' ? '#2a2a2c' : '#ececec';
+  const out = [];
+  for (const [scale, label] of [[1, '外接屏 1x · 16 px'], [2, 'Retina 2x · 32 px']]) {
+    const id = 'cv' + pxSpecs.length;
+    pxSpecs.push({ id, icon, fg, bg, n: 16 * scale });
+    out.push(`<figure><canvas id="${id}" width="${16 * scale}" height="${16 * scale}" style="width:${64}px;height:${64}px"></canvas>${label}</figure>`);
+  }
+  return `<div class="b-px">${out.join('')}</div>`;
+}
+window.drawCanvases = async () => {
+  for (const s of pxSpecs) {
+    const c = document.getElementById(s.id), g = c.getContext('2d');
+    g.fillStyle = s.bg; g.fillRect(0, 0, s.n, s.n);
+    const svg = s.icon.replace('currentColor', s.fg).replaceAll('currentColor', s.fg)
+      .replace('<svg ', `<svg xmlns="http://www.w3.org/2000/svg" width="${s.n}" height="${s.n}" `);
+    const img = new Image();
+    await new Promise(r => { img.onload = r; img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); });
+    g.drawImage(img, 0, 0, s.n, s.n);
+  }
+};
+</script>
+
+<section class="b-part" id="part-1">
+  <h2>① 放进你现在的菜单栏里</h2>
+  <p class="b-sub">底图是你发来的截图（Retina，2 倍放大展示），只把中间的 Orbit 图标换掉，两边的图标原样保留。右边一列是 1:1 实际大小。</p>
+  <div class="b-row"><div class="b-lab">今天<small>SF Symbol <code>circle.hexagongrid</code></small></div>
+    <script>document.write(realBar('today', 2) + realBar('today', 1))</script></div>
+  <div class="b-row"><div class="b-lab">方案 A · 轨道<small>轨道环 + 行星 + 卫星</small></div>
+    <script>document.write(realBar('A', 2) + realBar('A', 1))</script></div>
+  <div class="b-row"><div class="b-lab">方案 B · 完整标志<small>轨道 + 终端块 <code>&gt;_</code></small></div>
+    <script>document.write(realBar('B', 2) + realBar('B', 1))</script></div>
+</section>
+
+<section class="b-part" id="part-2">
+  <h2>② 浅色 / 深色菜单栏，以及外接 1x 屏</h2>
+  <p class="b-sub">做成单色模板图（template image），系统自动染成黑色或白色。蓝色虚线框是 Orbit。右侧像素格放大 4 倍，模拟非 Retina 外接显示器上的样子。</p>
+  <div class="b-grid">
+    <div></div><div class="b-h">菜单栏</div><div class="b-h">像素（深色）</div>
+    <div class="b-lab">今天</div>
+    <div><script>document.write(synthBar('light', iconToday()) + '<div style="height:8px"></div>' + synthBar('dark', iconToday()))</script></div>
+    <div><script>document.write(pxBlock(iconToday(), 'dark'))</script></div>
+    <div class="b-lab">方案 A</div>
+    <div><script>document.write(synthBar('light', iconA()) + '<div style="height:8px"></div>' + synthBar('dark', iconA()))</script></div>
+    <div><script>document.write(pxBlock(iconA(), 'dark'))</script></div>
+    <div class="b-lab">方案 B</div>
+    <div><script>document.write(synthBar('light', iconB()) + '<div style="height:8px"></div>' + synthBar('dark', iconB()))</script></div>
+    <div><script>document.write(pxBlock(iconB(), 'dark'))</script></div>
+  </div>
+  <div class="b-note">在 1x 屏上，B 里的 <code>&gt;_</code> 只剩 2–3 个像素，糊成一块；A 只有环和两颗点，到 16 px 依然清楚。</div>
+</section>
+
+<section class="b-part" id="part-3">
+  <h2>③ 状态（以方案 A 为例，实际大小）</h2>
+  <p class="b-sub">今天：没事和有会话在跑时图标完全一样；有事要你处理时换成实心变体，并显示数字。</p>
+  <div class="b-grid">
+    <div></div><div class="b-h">浅色</div><div class="b-h">深色</div>
+    <div class="b-lab">没事<small>没有会话在跑：不画卫星（可选）</small></div>
+    <div><script>document.write(synthBar('light', iconA({ noSat: true })))</script></div>
+    <div><script>document.write(synthBar('dark', iconA({ noSat: true })))</script></div>
+    <div class="b-lab">有会话在跑<small>卫星出现（可选）</small></div>
+    <div><script>document.write(synthBar('light', iconA()))</script></div>
+    <div><script>document.write(synthBar('dark', iconA()))</script></div>
+    <div class="b-lab">要你处理 3 项<small>沿用今天的数字</small></div>
+    <div><script>document.write(synthBar('light', iconA(), '3'))</script></div>
+    <div><script>document.write(synthBar('dark', iconA(), '3'))</script></div>
+    <div class="b-lab" style="color:#8f959e">试过：卫星空心<small>16 pt 下和实心分不出来，放弃</small></div>
+    <div><script>document.write(synthBar('light', iconA({ hollow: true })))</script></div>
+    <div><script>document.write(synthBar('dark', iconA({ hollow: true })))</script></div>
+  </div>
+  <div class="b-note">数字由今天的 <code>MenuBar.badge</code> 给出（超过 99 显示 99+），逻辑不变。最开始画的是空心/实心卫星，实际大小下几乎看不出差别；改成卫星有或无后好一些，但仍要盯着看才发现。所以建议不加“在跑”这一位，三种状态都画卫星，只用数字表示“要你处理”。</div>
+</section>
+
+<section class="b-part" id="part-4">
+  <h2>待定 · 要你拍板</h2>
+  <div class="b-row" style="align-items:stretch">
+    <div class="b-pick rec"><h3>方案 A · 轨道<span class="b-tag">建议</span></h3>
+      倾斜的轨道环、中间一颗行星、环上一颗卫星，取自 App 图标的外圈（终端块换成行星）。16 px 下依然清楚，轮廓和系统图标、其它应用的图标都不撞，和 Dock 里的 Orbit 也能对上。</div>
+    <div class="b-pick"><h3>方案 B · 完整标志</h3>
+      和 App 图标几乎一样，在 Retina 屏上辨识度最高；但中间的 <code>&gt;_</code> 在 1x 外接屏上会糊，整体也比旁边的图标“重”。</div>
+  </div>
+  <div class="b-row" style="align-items:stretch">
+    <div class="b-pick"><h3>状态：卫星有或无</h3>没事时只有环和行星，有会话在跑时卫星出现，要你处理时再加数字。比空心/实心好认，但实际大小下仍然偏细微，要盯着看才发现。</div>
+    <div class="b-pick rec"><h3>状态：只看数字<span class="b-tag">建议</span></h3>和今天一样，只有要你处理时才变化。菜单栏里真正需要一眼看到的只有“要你处理”，数字已经足够。</div>
+  </div>
+  <h2 style="margin-top:18px">落地（按代价排）</h2>
+  <div class="b-note"><ol>
+    <li>把选中的图标导出成矢量 PDF 模板图，放进 <code>src/macos/Assets.xcassets</code>，勾选 Template（一份文件同时适配浅色和深色）。</li>
+    <li><code>OrbitApp.swift</code> 里的 <code>MenuBarExtra</code> label 从 <code>systemImage: "circle.hexagongrid"</code> 改为 <code>Image("MenuBarIcon")</code>，数字仍用 <code>Label</code>。</li>
+    <li>（仅当选“卫星有或无”）多导出一张不带卫星的变体，按 <code>menuSummary.running &gt; 0</code> 切换。</li>
+  </ol></div>
+</section>
+</body>
+</html>

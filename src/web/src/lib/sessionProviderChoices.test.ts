@@ -201,7 +201,7 @@ describe('DeepSeek Harness, on the DeepSeek keys', () => {
   it('offers to connect a DeepSeek key when there is none, at the DeepSeek connect page', () => {
     const dsh = engineOf(engineChoices(sources({ configured: [moonshot], dshRunner: dshReady })), DSH)!;
     expect(dsh).toMatchObject({ slug: 'dsh', label: 'DeepSeek Harness', provider: null, unavailable: 'Connect a DeepSeek key' });
-    expect(dsh.fixHref).toBe('/providers/new/deepseek');
+    expect(dsh.fixHref).toBe('/settings/providers/new/deepseek');
     expect(dsh.providers).toEqual([]);
   });
 
@@ -905,7 +905,7 @@ describe('a Codex pool somebody was added to, in their picker', () => {
     const logins = ACCOUNTS.map((login) => account(login.email!, { state: 'SIGNED_OUT' }));
     const tile = tileOf(codexPool('zhang', keys, {}, logins));
     expect(tile.unavailable).toBe('Signed out');
-    expect(tile.fixHref).toBe(`/providers/pools/${encodeId(POOL_ID)}`);
+    expect(tile.fixHref).toBe(`/settings/providers/pools/${encodeId(POOL_ID)}`);
     expect(tile.fixEngine).toBeUndefined();
   });
 

@@ -17,6 +17,8 @@ import { RETRY_CLAIM_WINDOW_MS } from '../sessions/session-request';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import { BACKGROUND_WAKE_TURN_PREFIX, sessionHasEnded, undeliveredWakeTurn } from './background-job-wake';
 import { fileSubagentWake, type SubagentWakeOutcome, unfiledSubagentWakes } from './subagent-wake';
+import { interruptRunsOfOfflineTargets } from './subagent-remote';
+import { reapApprovalsOfEndedSubagents } from '../sessions/abandoned-approvals';
 import {
   claimLoopAlert,
   clearLoopAlert,
@@ -175,6 +177,7 @@ export class ScheduledWakeupWorker implements OnModuleInit, OnModuleDestroy {
     // The SubAgent wakes a first filing missed ride on the same pass (subagent-wake.ts): the same clock, the
     // same createTurn, and nothing a runner has to do.
     this.pass = this.drain()
+      .then(() => this.interruptRemoteSubagentsOfOfflineRunners())
       .then(() => this.fileOwedSubagentWakes())
       .then(
         () => undefined,
@@ -189,6 +192,23 @@ export class ScheduledWakeupWorker implements OnModuleInit, OnModuleDestroy {
         }, this.pollIntervalMs);
         this.timer.unref(); // never what keeps a process alive
       });
+  }
+
+  /**
+   * End the remote SubAgent runs whose target runner went offline as INTERRUPTED (docs/subagent-design.md §10.3),
+   * reaping the cards their child asked; each now owes its parent a wake, which fileOwedSubagentWakes files on the
+   * same pass. Returns the runs it ended.
+   */
+  async interruptRemoteSubagentsOfOfflineRunners(): Promise<string[]> {
+    const ended = await interruptRunsOfOfflineTargets(this.prisma);
+    for (const run of ended) {
+      try {
+        await reapApprovalsOfEndedSubagents(this.prisma, run.sessionId, run.id);
+      } catch (error) {
+        this.log.error(`the cards of interrupted SubAgent run ${run.id} were not reaped: ${messageOf(error)}`);
+      }
+    }
+    return ended.map((run) => run.id);
   }
 
   /**

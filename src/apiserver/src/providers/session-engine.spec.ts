@@ -198,7 +198,7 @@ test('T2 the reaper watches a configured non-Claude session initialize', async (
     assignedRunner: { status: 'ONLINE', lastHeartbeatAt: new Date() }, ...over,
   });
   const sweep = async (session: Record<string, unknown>, db: Record<string, unknown> = {}) => {
-    const service = new ReaperService({ session: { findMany: async () => [session] }, ...db } as never, {} as never);
+    const service = new ReaperService({ session: { findMany: async () => [session] }, runEvent: { findMany: async () => [] }, ...db } as never, {} as never);
     let reason: string | undefined;
     (service as unknown as { forceFinalize(...args: unknown[]): Promise<void> }).forceFinalize = async (...args: unknown[]) => {
       reason = args[3] as string;
