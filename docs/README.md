@@ -16,6 +16,8 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 | Tag launch links per channel and write the 30-day review | [First-launch tracking and 30-day review](launch-tracking.md) |
 | Collect a design-partner story | [Design partner case-study template](design-partner-case-study-template.md) |
 | Follow project direction | [Public roadmap](../ROADMAP.md) |
+| Read what changed recently | [Public changelog](../CHANGELOG.md) |
+| Give feedback on a release | [Release feedback discussion](https://github.com/jianghailong-xy/orbit/discussions/159) |
 | Run Orbit on your own server | [Self-hosting](self-hosting.md) |
 | Complete the first task on a fresh host | [Clean-machine first-run checklist](first-run.md) |
 | See the first seven screens, step by step | [Onboarding, step by step](onboarding.md) |
@@ -138,8 +140,10 @@ than silently rewriting the historical decision.
 ## Project and community
 
 - [Community guide](../COMMUNITY.md) — channel choice, labels, good first issues, maintainer response targets,
-  and the boundary between current guides and design history.
+  community update cadence, and the boundary between current guides and design history.
 - [Public roadmap](../ROADMAP.md) — now / next / later direction without date promises.
+- [Public changelog](../CHANGELOG.md) — maintainer-curated notable changes across releases, with links to each
+  tag's operator notes.
 - [Contributing](../CONTRIBUTING.md) — workflow, tests, and pull-request expectations.
 - [Governance](../GOVERNANCE.md) — decision making and the path to maintainership.
 - [Security](../SECURITY.md) — supported versions and vulnerability reporting.
