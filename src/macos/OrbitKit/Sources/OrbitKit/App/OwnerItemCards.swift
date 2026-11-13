@@ -214,9 +214,11 @@ public enum CoordinatorQuestions {
     }
 
     /// The question's opening as one run of plain text — the Markdown's marks gone, its lines
-    /// joined — which the card cuts at two lines. The browser's `markdownToPlainText`.
+    /// joined — which the card cuts at two lines. The browser's `markdownToPlainText`. A table's
+    /// rows are dropped: flattened they read as `| A | 9 | |---|`, and a preview cannot hold one.
     public static func lead(_ question: CoordinatorQuestion) -> String {
-        OwnerConfirmations.plainText(question.question)
+        OwnerConfirmations.plainText(question.question
+            .replacingOccurrences(of: "(?m)^[ \\t]*\\|.*$", with: "", options: .regularExpression))
             .replacingOccurrences(of: "(?m)^[ \\t]*(?:•|[0-9]{1,9}[.)])[ \\t]+", with: "",
                                   options: .regularExpression)
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)

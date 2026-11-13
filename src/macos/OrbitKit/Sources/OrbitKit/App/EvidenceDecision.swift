@@ -842,6 +842,19 @@ public enum EvidenceDecisions {
     public static let agentRecordedHeading = "An agent recorded a decision"
     /// The label over a send-back's reason, as the receipt shows it (web: `DECISION_RECEIPT_REASON`).
     public static let receiptReasonLabel = "the reason it was sent back"
+    /// The label over a confirm's note: it is not a reason anything was sent back (web:
+    /// `DECISION_RECEIPT_NOTE`).
+    public static let receiptNoteLabel = "Note"
+
+    /// The label over a receipt's note: a send-back's reason, or a confirm's note.
+    public static func noteLabel(_ decided: RecordedEvidenceDecision) -> String {
+        decided.decision == .confirm ? receiptNoteLabel : receiptReasonLabel
+    }
+
+    /// The fold over a receipt's note on a native receipt, which shows it only when asked.
+    public static func noteToggle(_ decided: RecordedEvidenceDecision, open: Bool) -> String {
+        "\(open ? "Hide" : "Show") the \(decided.decision == .confirm ? "note" : "reason")"
+    }
 
     private static let receiptClockFormatter: DateFormatter = {
         let f = DateFormatter()
