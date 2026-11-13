@@ -351,7 +351,8 @@ public struct TranscriptReducer: Sendable, Codable {
             if let item = mainCheckoutNotice(ev) {
                 state.items.append(.mainCheckout(item))
             } else if let notice = nonEmpty(str(ev, "notice")) {
-                state.items.append(.notice(id: nextID(), message: notice))
+                state.items.append(.notice(id: nextID(), message: notice,
+                                           accountSwitch: str(ev, "noticeKind") == "pool-member-switched"))
             } else if let diagnostic = recoverableDiagnostic(ev) {
                 // Current runners attach impact metadata to known startup/auxiliary failures. Keep
                 // a recoverable diagnostic as a calm row of its own kind on native too; an
