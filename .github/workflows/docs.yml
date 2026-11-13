@@ -34,6 +34,7 @@ jobs:
           elif [ -n "$(git diff --name-only "$BASE_SHA" HEAD -- '*.md' '.github/ISSUE_TEMPLATE/**' \
             '.github/workflows/docs.yml' '.github/workflows/ci.yml' '.markdownlint-cli2.jsonc' '.markdown-link-check.json' \
             'scripts/check-docs.mjs' 'scripts/docs-public-files.txt' 'test/check-docs.test.mjs' \
+            'test/configuration-reference.test.mjs' \
             'package.json' 'package-lock.json')" ]; then
             echo 'check=true' >> "$GITHUB_OUTPUT"
           else

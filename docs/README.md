@@ -18,7 +18,9 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 | Follow project direction | [Public roadmap](../ROADMAP.md) |
 | Run Orbit on your own server | [Self-hosting](self-hosting.md) |
 | Complete the first task on a fresh host | [Clean-machine first-run checklist](first-run.md) |
+| See the first seven screens, step by step | [Onboarding, step by step](onboarding.md) |
 | Find deployment settings and defaults | [Configuration reference](configuration.md) |
+| Call the HTTP API from a script or integration | [External HTTP API reference](api-reference.md) |
 | Diagnose runner enrollment, heartbeat, or runtime failures | [Runner troubleshooting](runner-troubleshooting.md) |
 | Publish or upgrade a release | [Release process](release-process.md) |
 | Write the notes a release publishes | [Release notes template](release-notes-template.md) |
@@ -49,7 +51,12 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 - [Self-hosting](self-hosting.md) — Docker Compose, secrets, runners, TLS, upgrades, and production checks.
 - [Clean-machine first-run checklist](first-run.md) — prerequisites, bootstrap, enrollment, one completed task,
   and a reusable evidence table.
-- [Configuration reference](configuration.md) — server, backup, and runner settings with defaults and change procedures.
+- [Onboarding, step by step](onboarding.md) — the first administrator, runner, workspace, session, task graph,
+  approval, and recovery, with a screenshot of the current UI for each.
+- [Configuration reference](configuration.md) — every Compose and runner setting with its type, requirement,
+  default, secret status, and change procedure; ports, storage paths, and retention.
+- [External HTTP API reference](api-reference.md) — every route the control plane mounts, generated from the
+  controllers, with who may call it and the request DTO it validates.
 - [Runner troubleshooting](runner-troubleshooting.md) — enrollment, heartbeat/connectivity, runtime authentication,
   and safe support evidence.
 - [Runner CLI and automation](runner-cli.md) — task/session commands, service tokens, and authorization

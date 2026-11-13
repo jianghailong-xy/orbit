@@ -23,3 +23,5 @@ docs/release-notes-template.md
 docs/runner-cli.md
 docs/runner-troubleshooting.md
 docs/self-hosting.md
+docs/api-reference.md
+docs/onboarding.md
