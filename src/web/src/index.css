@@ -15619,6 +15619,34 @@ button.chat-jump-start:hover {
   .workspace-split.show-conversation .workspace-header {
     padding-bottom: 10px;
   }
+  /* Beside ←, the Project sessions button and ⋯, a title sharing its row with the Coordinator badge
+     and the watch chips is left a few letters. Here the title takes the row to itself and the badges
+     and chips drop onto the status line under it: the title line's box steps aside (display:
+     contents) so its children wrap in the header column, the title a full row. The status text
+     follows the badges while it fits beside them and takes the next line when it does not. */
+  .workspace-header-main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 2px;
+  }
+  .workspace-header-main > .workspace-title-line {
+    display: contents;
+  }
+  .workspace-header-main > .workspace-header-task,
+  .workspace-title-line > .workspace-name,
+  .workspace-title-line > .workspace-name-input {
+    flex: 0 0 100%;
+  }
+  .workspace-header-main > .workspace-sub {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-top: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   /* In-pane back button: leaves the open conversation for the session list. */
   .workspace-back-mobile {
     display: flex;
