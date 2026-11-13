@@ -10,6 +10,8 @@ brief](docs/messaging-brief.md) for the public promise and its boundaries.
 | I want to… | Start with |
 | --- | --- |
 | Understand what is planned | [Public roadmap](ROADMAP.md) |
+| Read what changed recently | [Public changelog](CHANGELOG.md) |
+| Give feedback on a release | [Release feedback discussion](https://github.com/jianghailong-xy/orbit/discussions/159) |
 | Install or operate Orbit | [Documentation index](docs/README.md) and [self-hosting guide](docs/self-hosting.md) |
 | Contribute code or docs | [Contributing guide](CONTRIBUTING.md) |
 | Ask a question or share a use case | [GitHub Discussions](https://github.com/jianghailong-xy/orbit/discussions) |
@@ -33,6 +35,12 @@ maintainers use these categories:
   scope and acceptance criteria are clear.
 - [**Show and tell**](https://github.com/jianghailong-xy/orbit/discussions/categories/show-and-tell) — deployments, integrations, workflows, and demos from the community.
 - [**Announcements**](https://github.com/jianghailong-xy/orbit/discussions/categories/announcements) — maintainer-owned release, deprecation, and project updates.
+
+Release feedback has one fixed, standing thread: [**Release feedback · how did the upgrade go?**](https://github.com/jianghailong-xy/orbit/discussions/159).
+Reply there after upgrading to a tagged release with the tag, the deployment shape, whether the notes and
+upgrade steps matched, and sanitized evidence. Maintainers read it within the response targets below and fold
+recurring points into the roadmap, changelog, and next release notes. Use Issues for a reproducible bug or a
+scoped change; a release thread is not a substitute for an actionable report.
 
 Discussions are conversational and do not promise implementation. Link a relevant roadmap item or issue when
 one exists so that useful context is not lost.
@@ -69,19 +77,21 @@ Maintainers keep labels deliberately small and composable:
 contributor can complete it without another Issue. Maintainers remove that label when the task becomes stale,
 already has an owner, or needs design work first. The live list is the [good first issue query](https://github.com/jianghailong-xy/orbit/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
 
-The initial independent tasks are:
+The completed first batch (#93–#97) added the clean-machine checklist, the runner troubleshooting decision
+tree, the release verification and rollback checklist, the configuration reference, and the documentation
+check. The current open tasks are:
 
-- [#93 Add a clean-machine first-run checklist](https://github.com/jianghailong-xy/orbit/issues/93)
-- [#94 Add a runner troubleshooting decision tree](https://github.com/jianghailong-xy/orbit/issues/94)
-- [#95 Add a release verification and rollback checklist](https://github.com/jianghailong-xy/orbit/issues/95)
-- [#96 Add a self-hosting configuration reference](https://github.com/jianghailong-xy/orbit/issues/96)
-- [#97 Run Markdown lint and link checks on documentation changes](https://github.com/jianghailong-xy/orbit/issues/97)
+- [#160 Add a glossary of Orbit terms](https://github.com/jianghailong-xy/orbit/issues/160)
+- [#161 Add a deployment secret-rotation runbook](https://github.com/jianghailong-xy/orbit/issues/161)
+- [#162 Add copy-paste TLS reverse-proxy examples for the Compose gateway](https://github.com/jianghailong-xy/orbit/issues/162)
+- [#163 Add an end-to-end first-contribution walkthrough](https://github.com/jianghailong-xy/orbit/issues/163)
+- [#164 Add a runner error-message index](https://github.com/jianghailong-xy/orbit/issues/164)
 
 ## Maintainer response convention
 
 Orbit is a volunteer, pre-1.0 project; these are response targets, not an SLA:
 
-- acknowledge a new Issue or Discussion within **3 business days**;
+- acknowledge a new Issue, Discussion, or release feedback reply within **3 business days**;
 - add an initial triage decision, owner, or request for missing information within **7 business days**;
 - acknowledge a pull request within **5 business days** when it is ready for review;
 - summarize the decision, next action, or reason for closing in the thread so the record remains useful;
@@ -92,12 +102,34 @@ Security reports follow the stricter private process and targets in [SECURITY.md
 reports are handled privately under the [Code of Conduct](CODE_OF_CONDUCT.md). No public channel promises a
 fix date, a support contract, or emergency response.
 
+## Community update cadence
+
+Maintainers keep the public record current on a cadence a small volunteer team can sustain:
+
+- **Each release:** publish the operator notes with the tag, move the `Unreleased` entries in the
+  [changelog](CHANGELOG.md) under the new version, announce the release in Announcements, and link the
+  release feedback thread.
+- **Monthly, in the first business week:** review open Issues and Discussions against the
+  [roadmap](ROADMAP.md) and changelog, sweep `good first issue` tasks for stale scope, an owner, or completed
+  work, and post a short Announcements update when direction or priorities changed.
+- **Quarterly:** review the response targets, label set, Issue Forms, and maintainer coverage, and record a
+  change in this guide, [GOVERNANCE.md](GOVERNANCE.md), or the roadmap.
+- **When a decision is made:** summarize the decision and its reason in the thread that raised it, so the
+  public record explains the outcome rather than only the request.
+
+These are volunteer targets, not an SLA. A quiet month is reported as quiet rather than filled with invented
+progress, and a cadence item that cannot be kept is moved or dropped in public.
+
 ## Releases and current support
 
 The [release process](docs/release-process.md) describes tags, release notes, checks, artifacts, and upgrade
 communication. Releases use one `vX.Y.Z` (or `vX.Y.Z-beta.N`) tag for the product; the tag-triggered workflow
 builds the native artifacts. Release notes must state the user-visible changes, upgrade impact, known limits,
 verification evidence, and the exact commit or tag. `main` is a development branch, not a supported release.
+
+The [curated changelog](CHANGELOG.md) summarizes notable changes across releases and links each version's
+operator notes. Release feedback is collected in the fixed [release feedback
+thread](https://github.com/jianghailong-xy/orbit/discussions/159), not in the changelog.
 
 The latest release and all prereleases are listed on the [GitHub Releases page](https://github.com/jianghailong-xy/orbit/releases).
 
