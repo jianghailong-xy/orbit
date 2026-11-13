@@ -246,8 +246,8 @@ the two Compose files a target lists beside `docker-compose.yml`, `deploy/postgr
 8. brings each service up on its own, `docker compose up -d --wait --no-deps --no-build <service>`, in the
    order `depends_on` gives: `postgres` only when it is new or not running (a running one whose configuration
    the release changes is left running, and the run says so, unless `--pull-base`), `db-proxy` where the
-   target lists `deploy/db-proxy.yml` (recreating it ends every database connection once, and the apiserver's
-   reconnect on their own), `nats`, `apiserver`, which applies the database migrations as it starts,
+   target lists `deploy/db-proxy.yml` (recreating it ends every database connection once, and the apiserver
+   reconnects on its own), `nats`, `apiserver`, which applies the database migrations as it starts,
    `apiserver-2` and on, `wiki-worker`, `web`, `link-gateway`, `gateway`, and `pgbackup`, as on a single host,
    but created where the target has never run one. `up` recreates only what changed, and `--force-recreate`
    what the plan found running another file;
@@ -257,10 +257,12 @@ the two Compose files a target lists beside `docker-compose.yml`, `deploy/postgr
 A lost ssh connection does not stop it halfway: it ignores the hangup and goes on, writing its log.
 
 **Plan.** `--plan <commit>` runs the deploy stage up to step 5 and stops there: it prints the plan of deploying
-that release, from the target's own `.env` and files, and changes nothing there. No image is pulled, nothing is
-written to `.env` or brought up, and every file it put in place to render the release is put back. It holds the
-target's lock while it reads, a few seconds. Run it before a deploy or a rollback whose effect on a running
-`postgres` or `db-proxy` matters.
+that release, from the target's own `.env` and files, and leaves the target as it found it. No image is pulled,
+nothing is written to `.env` or brought up, and every file it put in place to render the release is put back with
+its bytes, mode and modification time. As in a deploy, the files move by rename, so each comes back as a new file:
+a running container that bind-mounts one keeps the one it started on, which has the same bytes. It holds the
+target's lock for the few seconds it reads, and adds its output to `.upgrade/deploy.log` there. Run it before a
+deploy or a rollback whose effect on a running `postgres` or `db-proxy` matters.
 
 **What the target keeps.** Its `.env` is its own: its secrets and settings, which no deploy ships or copies
 back. Make it once, before the first deploy; for the move to `10.66.0.4`, a copy of the build host's
