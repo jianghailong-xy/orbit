@@ -653,6 +653,8 @@ func claimedSessionFromReclaim(r ReclaimSession) *ClaimedSession {
 		WorkDir:            r.WorkDir,
 		Branch:             r.Branch,
 		AutoInitGit:        r.AutoInitGit,
+		CodelessCheckout:   r.CodelessCheckout,
+		CodelessBranch:     r.CodelessBranch,
 		CreateWorkDir:      r.CreateWorkDir,
 		MergeTarget:        r.MergeTarget,
 		AgentID:            r.AgentID,

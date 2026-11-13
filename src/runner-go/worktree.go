@@ -792,6 +792,9 @@ func setupCheckout(job *ClaimedSession, baseDir string, atRest bool) string {
 			logln(fmt.Sprintf("session %s — created missing workDir %q", job.SessionID, baseDir))
 		}
 	}
+	if job.Branch == "" && job.CodelessCheckout && isGitRepo(baseDir) {
+		return setupCodelessCheckout(job, baseDir)
+	}
 	if job.Branch == "" {
 		job.IsolationStatus = isoShared
 		return baseDir

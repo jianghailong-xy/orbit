@@ -1872,6 +1872,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	if runtimeProvider(job) == providerClaude {
 		finalizeRequest.ClaudeSessionID = job.SessionUUID
 	}
+	// A codeless run's detached checkout goes, or becomes job.WT on its branch, before the report is made.
+	if job.Detached != nil {
+		finalizeCodelessCheckout(job)
+	}
 	if job.WT != nil {
 		finalizeWorktreeReport(&finalizeRequest, job.SessionID, job.WT, status)
 	}

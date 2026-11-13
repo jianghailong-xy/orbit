@@ -48,7 +48,13 @@ type forkSnapshot struct {
 	Sha       string // S
 	BaseHead  string // the checkout's HEAD
 	Ref       string // refs/orbit/fork/<snapshotId>
+	// ChangedFiles are the paths S changed relative to BaseHead, which the task_await payload of the task names
+	// (design §2.7 F4): an edit the forking session reverts after the snapshot comes back through the merge.
+	ChangedFiles []string
 }
+
+// forkChangedFilesMax is the most paths a fork names, the create doors' TASK_FORK_CHANGED_FILES_MAX.
+const forkChangedFilesMax = 1000
 
 // payload is the `fork` the create doors accept (apiserver tasks/task-fork.ts).
 func (f *forkSnapshot) payload() map[string]interface{} {
@@ -57,7 +63,25 @@ func (f *forkSnapshot) payload() map[string]interface{} {
 		"sha":                 f.Sha,
 		"baseHead":            f.BaseHead,
 		"includesUncommitted": f.Sha != f.BaseHead,
+		"changedFiles":        append([]string{}, f.ChangedFiles...),
 	}
+}
+
+// forkChangedFiles is `git diff --name-only <head> <sha>`, at most forkChangedFilesMax paths; none when S is
+// HEAD, or when git cannot say (the fork goes on without them rather than failing over a list).
+func forkChangedFiles(dir, head, sha string) []string {
+	if sha == head {
+		return nil
+	}
+	out, err := git(dir, "-c", "core.quotePath=false", "diff", "--name-only", "--no-renames", head, sha)
+	if err != nil || out == "" {
+		return nil
+	}
+	files := strings.Split(out, "\n")
+	if len(files) > forkChangedFilesMax {
+		files = files[:forkChangedFilesMax]
+	}
+	return files
 }
 
 // release deletes the keep-alive ref of a snapshot no task was created from (a declined card, a refused
@@ -107,7 +131,8 @@ func takeForkSnapshot(sessionID, title string) (*forkSnapshot, error) {
 	if _, err := git(dir, "update-ref", ref, sha, ""); err != nil {
 		return nil, fmt.Errorf("forkFromSession: cannot write the keep-alive ref %s: %w", ref, err)
 	}
-	return &forkSnapshot{SessionID: sessionID, Dir: dir, Sha: sha, BaseHead: head, Ref: ref}, nil
+	return &forkSnapshot{SessionID: sessionID, Dir: dir, Sha: sha, BaseHead: head, Ref: ref,
+		ChangedFiles: forkChangedFiles(dir, head, sha)}, nil
 }
 
 // snapshotCheckout returns S and HEAD for the checkout at dir, leaving its index, its files and every

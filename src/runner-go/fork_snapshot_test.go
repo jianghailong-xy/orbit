@@ -131,6 +131,31 @@ func TestForkSnapshotOfADirtyCheckout(t *testing.T) {
 	}
 }
 
+// The files S changed relative to HEAD, which the task_await payload names (design §2.7 F4): every edit the
+// snapshot carries — modified, deleted, untracked — and nothing ignored; none for a clean checkout.
+func TestForkChangedFilesNameWhatTheSnapshotChanged(t *testing.T) {
+	repo := initRepo(t)
+	writeForkFile(t, filepath.Join(repo, ".gitignore"), "*.log\n")
+	commitFile(t, repo, "gone.txt", "gone\n", "more")
+	if sha, head := snapshotOrFail(t, repo); forkChangedFiles(repo, head, sha) != nil {
+		t.Fatal("a clean checkout's snapshot names changed files")
+	}
+	writeForkFile(t, filepath.Join(repo, "base.txt"), "base edited\n")
+	_ = os.Remove(filepath.Join(repo, "gone.txt"))
+	writeForkFile(t, filepath.Join(repo, "new/untracked.txt"), "fresh\n")
+	writeForkFile(t, filepath.Join(repo, "scratch.log"), "ignored\n")
+
+	sha, head := snapshotOrFail(t, repo)
+	got := strings.Join(forkChangedFiles(repo, head, sha), ",")
+	if want := "base.txt,gone.txt,new/untracked.txt"; got != want {
+		t.Fatalf("changed files = %q, want %q", got, want)
+	}
+	f := &forkSnapshot{Sha: sha, BaseHead: head, ChangedFiles: forkChangedFiles(repo, head, sha)}
+	if files, _ := f.payload()["changedFiles"].([]string); len(files) != 3 {
+		t.Fatalf("the posted fork carries changedFiles %v", f.payload()["changedFiles"])
+	}
+}
+
 func TestForkSnapshotOfACleanCheckoutIsHead(t *testing.T) {
 	repo := initRepo(t)
 	writeForkFile(t, filepath.Join(repo, ".gitignore"), "*.log\n")
