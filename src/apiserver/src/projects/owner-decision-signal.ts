@@ -554,13 +554,13 @@ async function readMoveRequestSignals(
   const open = await openSessionsAmong(
     tx,
     ownerId,
-    rows.flatMap((row) => [row.requestedBySessionId, ...(row.toProject.coordinatorSessionId ? [row.toProject.coordinatorSessionId] : [])]),
+    rows.flatMap((row) => [row.requestedBySessionId, ...(row.toProject?.coordinatorSessionId ? [row.toProject.coordinatorSessionId] : [])]),
     sessionIds,
   );
 
   const bySession = new Map<string, { signal: OwnerDecisionSignal; groups: Map<string, SessionTaskMoveGroup<Date>> }>();
   for (const row of rows) {
-    const on = new Set([row.requestedBySessionId, row.toProject.coordinatorSessionId]);
+    const on = new Set([row.requestedBySessionId, row.toProject?.coordinatorSessionId]);
     for (const sessionId of on) {
       if (sessionId == null || !open.has(sessionId)) continue;
       const entry = bySession.get(sessionId) ?? {

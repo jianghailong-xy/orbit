@@ -1982,7 +1982,8 @@ export interface SessionOwnerRequest<Instant = string> {
 export interface SessionTaskMoveGroup<Instant = string> {
   requestedBySessionId: string;
   fromProjectId: string;
-  toProjectId: string;
+  /** null: the moves take their tasks out of every project (migration 0610). */
+  toProjectId: string | null;
   /** How many moves are waiting in the group. Always ≥ 1. */
   count: number;
   /** The oldest move's request time. */

@@ -264,7 +264,8 @@ export interface TaskMoveBatch {
   batchKey: string;
   requestedBySessionId: string;
   fromProjectId: string;
-  toProjectId: string;
+  /** null: the moves take their tasks out of every project (0610). */
+  toProjectId: string | null;
   /** PENDING while waiting; APPLIED, DENIED (or APPROVED, a yes an earlier build recorded without
    *  moving) once answered. */
   state: string;
@@ -317,10 +318,13 @@ export class ProjectHandoffService {
     const announcer = this.announcer;
     if (!announcer || row.kind !== 'MOVE_TASK') return;
     try {
-      const target = await this.prisma.project.findFirst({
-        where: { id: row.toProjectId, ownerId },
-        select: { coordinatorSessionId: true },
-      });
+      // A move out of every project has no target, so no coordinator draws it.
+      const target = row.toProjectId
+        ? await this.prisma.project.findFirst({
+            where: { id: row.toProjectId, ownerId },
+            select: { coordinatorSessionId: true },
+          })
+        : null;
       announcer.ownerSignalChanged(ownerId, [
         row.requestedBySessionId,
         ...(target?.coordinatorSessionId ? [target.coordinatorSessionId] : []),
@@ -341,10 +345,13 @@ export class ProjectHandoffService {
   ): Promise<void> {
     if (row.kind !== 'MOVE_TASK') return;
     try {
-      const target = await this.prisma.project.findFirst({
-        where: { id: row.toProjectId, ownerId },
-        select: { coordinatorSessionId: true },
-      });
+      // A move out of every project has no target, so no coordinator draws it.
+      const target = row.toProjectId
+        ? await this.prisma.project.findFirst({
+            where: { id: row.toProjectId, ownerId },
+            select: { coordinatorSessionId: true },
+          })
+        : null;
       const moved = await returnSessionsToOpen(
         this.prisma, ownerId, [row.requestedBySessionId, target?.coordinatorSessionId], this.log,
       );
@@ -1207,7 +1214,7 @@ export class ProjectHandoffService {
           decidedAt: row.state === 'PENDING' ? null : row.decidedAt,
           drawnAs: [
             ...(row.requestedBySessionId === sessionId ? ['REQUESTER' as const] : []),
-            ...(coordinated.has(row.toProjectId) ? ['TARGET_COORDINATOR' as const] : []),
+            ...(row.toProjectId && coordinated.has(row.toProjectId) ? ['TARGET_COORDINATOR' as const] : []),
           ],
           moves: [],
         };
@@ -1338,7 +1345,7 @@ export class ProjectHandoffService {
       if (row.kind !== 'MOVE_TASK') {
         throw new BadRequestException(`handoff approval ${uuidToBase62(row.id)} is not a task move`);
       }
-      if (row.requestedBySessionId !== sessionId && row.toProject.coordinatorSessionId !== sessionId) {
+      if (row.requestedBySessionId !== sessionId && row.toProject?.coordinatorSessionId !== sessionId) {
         throw new BadRequestException(
           `the move ${uuidToBase62(row.id)} is not drawn in this session — it neither asked for it `
           + 'nor coordinates the project it goes into',
