@@ -241,9 +241,9 @@ final class ProjectsWiringTests: XCTestCase {
     func testTheMacSidebarIsTheDrawersRail() throws {
         let main = code(try appSource("Views/MainView.swift"))
         let sidebar = try slice(main, from: "struct SectionSidebar: View {", to: "struct AccountFooter: View {")
-        try assertInOrder(sidebar, ["ForEach(AppSection.workSections) { section in", "OwnerRequestInboxEntry()",
+        try assertInOrder(sidebar, ["ForEach(sections) { row in", "OwnerRequestInboxEntry()",
                                     "Section(AppSection.agents.title, isExpanded: $workspacesExpanded)",
-                                    "ForEach(openProjects) { project in"],
+                                    "ForEach(projects) { row in"],
                           "the drawer's order")
         XCTAssertTrue(sidebar.contains("model.projects?.drawerProjects(coordinators: model.projectCoordinators)"),
                       "every open project, as the drawer lists them")
