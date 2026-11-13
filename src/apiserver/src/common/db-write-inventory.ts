@@ -225,6 +225,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 after retry exhaustion; the caller pins again. 410 when the bytes have gone.',
   },
   {
+    at: 'files/files.service.ts#deleteEverywhere',
+    shape: 'TX_RETRIED',
+    locks: 'The attachment rows of one content this account keeps without a tombstone, FOR UPDATE in id order (rank 60), and nothing else. Evidence that cites one of them writes it under its task\'s lock, so it either committed first, and this reads the row as held, or waits for this commit and finds the tombstone it refuses (task-completion-evidence.service.ts). The sweep tombstones with SKIP LOCKED and passes these rows by.',
+    identity: 'The content: the sha256 of the row the caller named, read outside the transaction, or that row alone when it has none. Every attempt re-reads the rows under the lock.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Every attempt locks and reads the rows again. A row a rolled-back attempt tombstoned or deleted is as it was; a content with no live row left answers done and writes nothing.',
+    effects: 'None. The bytes go later, by the sweep, a grace period after the last row lets them go.',
+    answer: 'Typed 503 after retry exhaustion; the caller deletes again. 409 FILE_HELD, written nothing, while evidence or a session holds a row.',
+  },
+  {
     at: 'push/push.controller.ts#register',
     shape: 'TX_RETRIED',
     locks: 'device_token rows and unique indexes for the token and Android installation. The user FK takes FOR KEY SHARE; no user graph mutex or other business row is locked.',
