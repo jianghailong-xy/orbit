@@ -299,10 +299,10 @@ describe('Activity', () => {
     expect(html.match(/class="project-integration wk-status-row"/g)).toHaveLength(1);
     // `← Wiki` goes back to the space's home; the page is its own, not a reading page.
     expect(html).toContain('href="/wiki/orbit"');
-    expect(html).toContain('class="wk-page wk-page--activity"');
-    // The directory stands beside it with none of its rows lit.
+    expect(html).toContain('class="wk-page wk-page--activity wk-page--railed"');
+    // The directory stands beside it with its own Activity row lit, and no other (board docs/mocks/wiki-rail ③).
     expect(html).toContain('class="wk-dir-col"');
-    expect(html).not.toMatch(/wk-toc-item[^"]* active/);
+    expect(html.match(/class="wk-toc-item[^"]* active"[^>]*>(?:(?!<\/a>).)*/g)?.map((row) => row.includes('>Activity<'))).toEqual([true]);
     // Principles are content: they stay on the home.
     expect(html).not.toContain('>Principles<');
   });

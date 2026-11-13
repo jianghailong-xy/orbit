@@ -406,8 +406,15 @@ export function wikiChatPanelWidth(layout: WikiChatLayout, dragged: number | nul
 /** Whether the open panel pushes the page over (it docks) rather than lying over it. */
 export const wikiChatDocks = (layout: WikiChatLayout): boolean => layout === 'wide' || layout === 'docked';
 
-/** Whether the open panel folds the directory column into the Contents drawer: everywhere narrower than wide. */
-export const wikiChatFoldsDirectory = (layout: WikiChatLayout): boolean => layout !== 'wide';
+/**
+ * Whether the open panel folds the directory column into the Contents drawer: where it lies over the page. Where it is a
+ * column of its own the directory stays, and narrower than wide the app sidebar gives up its width instead
+ * (`wikiChatFoldsSidebar`, board docs/mocks/wiki-rail 03 C2).
+ */
+export const wikiChatFoldsDirectory = (layout: WikiChatLayout): boolean => !wikiChatDocks(layout);
+
+/** Whether the open panel shows the app sidebar as its icon rail: a column in a window narrower than wide. */
+export const wikiChatFoldsSidebar = (layout: WikiChatLayout): boolean => layout === 'docked';
 
 const WIDTH_KEY = 'orbit.wikiChat.width';
 

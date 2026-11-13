@@ -17,7 +17,7 @@ public protocol TranscriptPersisting: Sendable {
 public struct FileTranscriptStore: TranscriptPersisting {
     public let directory: URL
     private let maxFiles: Int
-    private static let schemaVersion = 9
+    private static let schemaVersion = 10
 
     public init(directory: URL, maxFiles: Int = 200) {
         self.directory = directory
@@ -49,6 +49,8 @@ public struct FileTranscriptStore: TranscriptPersisting {
     /// orange notices, a row each, or as red error rows, and never reclassify them, so re-fetch.
     /// v9: an interrupt row says when the owner's Update Now cut the turn off (`runnerUpdate`). Old
     /// snapshots drew those as a Stop, so re-fetch them.
+    /// v10: a main checkout notice (`noticeKind` main-checkout-*) is a `.mainCheckout` card or result line.
+    /// Old snapshots keep it as a plain notice with no buttons, so re-fetch.
     private struct Envelope: Codable { var version: Int; var reducer: TranscriptReducer }
 
     public func load(sessionID: String) -> TranscriptReducer? {

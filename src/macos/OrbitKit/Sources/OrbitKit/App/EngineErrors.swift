@@ -61,6 +61,26 @@ public enum EngineErrors {
         "exceeded retry limit, last status: 429 too many requests",
     ]
 
+    /// Wording of a failure in the *connection* to the API rather than a credential it rejected:
+    /// Cloudflare's block page at the edge, and a socket the request died on. Claude Code wraps both
+    /// in "Failed to authenticate", so without one the failure reads as a sign-in and the session is
+    /// moved off an account whose credentials are intact. Every marker of a group must appear.
+    static let edgeBlockMarkers = ["attention required", "cloudflare"]
+    static let connectionDroppedMarkers = ["econnreset"]
+
+    static let connectionFailureMarkers = [edgeBlockMarkers, connectionDroppedMarkers]
+
+    /// The connection's answer, not the request's: it clears on its own, so the text is retried
+    /// rather than handed to a human as a sign-in. Anchored at the start, like the other
+    /// classifications: a reply that merely quotes one is an ordinary reply. Mirrors
+    /// `isConnectionFailureText` in @orbit/shared and the runner's `isConnectionFailure`.
+    public static func isConnectionFailureText(_ text: String?) -> Bool {
+        guard let text else { return false }
+        let opening = text.drop(while: { $0.isWhitespace }).lowercased()
+        guard opening.hasPrefix("failed to authenticate") || opening.hasPrefix("api error") else { return false }
+        return connectionFailureMarkers.contains { markers in markers.allSatisfy { opening.contains($0) } }
+    }
+
     /// Is this the transient kind — the provider briefly unable to answer, rather than anything
     /// about the message? Such a failure says nothing about the work, which is what makes it safe to
     /// re-send on the user's behalf. Default is NOT retryable: guessing wrong means an automatic
@@ -69,6 +89,9 @@ public enum EngineErrors {
         guard let text else { return false }
         let opening = text.drop(while: { $0.isWhitespace }).lowercased()
         if retryableEngineErrorPrefixes.contains(where: { opening.hasPrefix($0) }) { return true }
+        // A failure of the connection is the one 403 a re-send does fix; a credential 403 below
+        // stays non-retryable.
+        if isConnectionFailureText(text) { return true }
         guard isApiErrorText(text) else { return false }
         let lower = text.lowercased()
         // The status, when there is one, is authoritative: a 400 whose message happens to contain

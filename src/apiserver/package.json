@@ -15,7 +15,8 @@
     "ops:task-signoff-migration": "node dist/tasks/task-signoff-migration.cli.js",
     "ops:task-judgment-repair": "node dist/tasks/task-judgment-repair.cli.js",
     "ops:wiki-backfill": "node dist/wiki/wiki-backfill.cli.js",
-    "test": "tsc -p tsconfig.test.json && SPECS=$(ls build/*/*.spec.js | grep -v '\\.pg\\.spec\\.js$') && node --test $SPECS"
+    "test": "tsc -p tsconfig.test.json && SPECS=$(ls build/*/*.spec.js | grep -v '\\.pg\\.spec\\.js$') && node --test $SPECS",
+    "test:gateway-cli": "tsc -p tsconfig.test.json && node --test --test-concurrency=1 --test-reporter=spec build/providers/anthropic-gateway-cli.e2e.js"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"

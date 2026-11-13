@@ -158,6 +158,10 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
   // that session is gone; no branch compares it, and it grants or refuses nothing.
   'src/apiserver/src/projects/landing-view.ts':
     'renders the landing attempt source session as evidence; decides nothing',
+  // The runner's bounded task view copies an evidence revision's `sourceSessionId` (the N10
+  // completion-evidence fact above, not Task.sourceSessionId) into its summary; nothing compares it.
+  'src/runner-go/bounded_views.go':
+    'copies completion-evidence source provenance into a bounded summary; decides nothing',
   'src/shared/src/project-progress.ts':
     'types the landing attempt source session for the wire; reads no task provenance',
   // The decision door reads the same N10 column, and reads it to REFUSE: a session that submitted

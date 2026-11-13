@@ -110,6 +110,15 @@ class TaskLogicTest {
         assertNull(TaskDetailLogic.runNowHint(task()))
     }
 
+    @Test fun aForkedTaskOrSessionSaysItsSourceVerbatimAndAnOlderServerSaysNothing() {
+        val sentence = "Forked from session «Refactor the claim path» at 5555555 (includes uncommitted changes)"
+        assertEquals(sentence, TaskDetailLogic.forkSource(task(""","forkSource":"$sentence"""")))
+        assertEquals(sentence, TaskDetailLogic.forkSource(json("""{"id":"s","title":"Run","forkSource":"$sentence"}""")))
+        assertNull(TaskDetailLogic.forkSource(task()))
+        assertNull(TaskDetailLogic.forkSource(task(""","forkSource":null""")))
+        assertNull(TaskDetailLogic.forkSource(task(""","forkSource":""""")))
+    }
+
     @Test fun ownerConfirmationIsOnePlaceToAnswer() {
         val owned = task(""","completionCriterion":"OWNER_CONFIRMED"""")
         assertEquals(OwnerPanelAction.Pointer("run"), OwnerConfirmations.panelAction(json("""{"waiting":{"sessionId":"run","requestId":"r"}}"""), owned))
