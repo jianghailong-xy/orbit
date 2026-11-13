@@ -212,7 +212,11 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
   const runners = (useQuery(runnersQuery()).data ?? []) as Runner[];
   const workspaces = (useQuery(workspacesQuery()).data ?? []) as SettingsWorkspace[];
   const latestVersion = latestRunnerVersion(useQuery(publishedRunnerVersionQuery()).data, runners);
-  const providers = useQuery({ queryKey: PROVIDERS_LIST_KEY, queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE) });
+  const providers = useQuery({
+    queryKey: PROVIDERS_LIST_KEY,
+    meta: { entities: ['provider'] },
+    queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
+  });
   const pools = useQuery(providerPoolsQuery());
   const nowMs = Date.now();
   // The keys page is every key, or one vendor's (/settings/providers/:vendor); not a key's own pages.

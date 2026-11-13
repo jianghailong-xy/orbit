@@ -98,6 +98,7 @@ export function SessionMoveModal({
   const sessionId = session?.id ?? '';
   const targetsQ = useQuery({
     queryKey: moveTargetsKey(sessionId),
+    meta: { entities: ['project', 'session'] },
     queryFn: () => getSessionMoveTargets(sessionId),
     enabled: open && !!session,
     staleTime: 0,

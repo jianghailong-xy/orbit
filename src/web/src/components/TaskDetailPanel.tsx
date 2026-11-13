@@ -772,6 +772,7 @@ export function TaskDetailPanel({
   // list row lacks; show `summary` meanwhile so the header doesn't flash.
   const q = useQuery({
     queryKey: ['task', taskId],
+    meta: { entities: ['task'] },
     queryFn: () => api<any>(`/tasks/${taskId}`),
     // While the task has a busy (queued/running) session, poll so the 开始执行 button
     // leaves its running state once the run ends; stay idle otherwise.
@@ -803,6 +804,7 @@ export function TaskDetailPanel({
   // task refreshes this too.
   const evidenceQ = useQuery({
     queryKey: ['task', taskId, 'evidence'],
+    meta: { entities: ['task'] },
     queryFn: () => api<TaskEvidenceRevision[]>(`/tasks/${taskId}/evidence`),
     enabled: !!q.data,
   });
@@ -821,6 +823,7 @@ export function TaskDetailPanel({
   // wide single-depth fan-in fits whole.
   const dependencyGraphQ = useQuery({
     queryKey: ['task', taskId, 'dependency-graph'],
+    meta: { entities: ['task'] },
     queryFn: () =>
       api<TaskDependencyGraphResponse>(
         `/tasks/${taskId}/dependency-graph?direction=both&pairUnary=true&maxNodes=500`,
@@ -862,6 +865,7 @@ export function TaskDetailPanel({
   );
   const dependencyGraphNodesQ = useQuery({
     queryKey: ['task', taskId, 'dependency-graph-nodes', dependencyGraphKnownTaskIds],
+    meta: { entities: ['task'] },
     queryFn: () =>
       api<TaskDependencyGraphNodesResponse>(`/tasks/${taskId}/dependency-graph/nodes`, {
         method: 'POST',
@@ -912,12 +916,17 @@ export function TaskDetailPanel({
   useEffect(() => setDependencyViewOverride(null), [taskId]);
 
   // Owner's workspaces, for @-mention autocomplete and to label/trigger mentions.
-  const workspacesQ = useQuery({ queryKey: ['workspaces'], queryFn: () => api<WorkspaceRow[]>('/workspaces') });
+  const workspacesQ = useQuery({
+    queryKey: ['workspaces'],
+    meta: { entities: ['workspace'] },
+    queryFn: () => api<WorkspaceRow[]>('/workspaces'),
+  });
   const workspaceList = useMemo(() => workspacesQ.data ?? [], [workspacesQ.data]);
 
   // Owner's task lists, to move this task into a list (or detach it to 未分组).
   const taskListsQ = useQuery({
     queryKey: ['task-lists'],
+    meta: { entities: ['task'] },
     queryFn: () => api<{ id: string; title: string }[]>('/task-lists'),
   });
 
@@ -1153,6 +1162,7 @@ export function TaskDetailPanel({
   const [dependencyQuery, setDependencyQuery] = useState('');
   const dependencyTasksQ = useQuery({
     queryKey: ['tasks', 'dependency-search', dependencyQuery],
+    meta: { entities: ['task'] },
     // Only the options list is read, and this refires on every keystroke — skip the counts.
     queryFn: () => api<TaskPage>(taskPagePath({ limit: 50, q: dependencyQuery, counts: 'none' })),
   });

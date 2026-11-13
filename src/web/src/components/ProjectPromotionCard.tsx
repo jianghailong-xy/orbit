@@ -1003,6 +1003,7 @@ export function ProjectPromotion({
   });
   const project = useQuery({
     queryKey: ['project', projectId],
+    meta: { entities: ['project', 'task'] },
     queryFn: () => api<PromotionProjectView>(`/projects/${encodeURIComponent(projectId!)}`),
     enabled: Boolean(projectId),
   });

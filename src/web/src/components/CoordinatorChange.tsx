@@ -98,6 +98,7 @@ export function CoordinatorChangeDialog({
   const sessionId = coordinator.sessionId;
   const targetsQ = useQuery({
     queryKey: ['session', sessionId, 'move-targets'],
+    meta: { entities: ['project', 'session'] },
     queryFn: () => getSessionMoveTargets(sessionId as string),
     enabled: !!sessionId,
     staleTime: 0,

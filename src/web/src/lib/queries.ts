@@ -137,13 +137,18 @@ export const setupStatusQuery = () =>
   });
 
 export const workspacesQuery = () =>
-  queryOptions({ queryKey: ['workspaces'], queryFn: () => api<any[]>('/workspaces') });
+  queryOptions({
+    queryKey: ['workspaces'],
+    meta: { entities: ['workspace'] },
+    queryFn: () => api<any[]>('/workspaces'),
+  });
 
 /** What a workspace's sessions no longer ask about: the "always allow" answers that outlived
  *  the session they were given in. Read where they can be reviewed and revoked. */
 export const workspacePermissionRulesQuery = (workspaceId: string) =>
   queryOptions({
     queryKey: ['workspace-permission-rules', workspaceId] as const,
+    meta: { entities: ['workspace'] },
     queryFn: () =>
       api<WorkspacePermissionRuleInfo[]>(`/workspaces/${workspaceId}/permission-rules`),
   });
@@ -154,6 +159,7 @@ export const workspacePermissionRulesQuery = (workspaceId: string) =>
 export const providersQuery = () =>
   queryOptions({
     queryKey: ['providers'] as const,
+    meta: { entities: ['provider'] },
     queryFn: () => api<ConfiguredProvider[]>('/providers'),
   });
 
@@ -170,6 +176,7 @@ export interface PresetCatalogEntry {
 export const presetModelsQuery = () =>
   queryOptions({
     queryKey: ['providers', 'presets'] as const,
+    meta: { entities: ['provider'] },
     queryFn: () => api<Record<string, PresetCatalogEntry>>('/providers/presets'),
     staleTime: 5 * 60_000,
   });
@@ -336,6 +343,7 @@ export const sessionsQuery = (
   const limit = opts.limit ?? null;
   return queryOptions({
     queryKey: ['sessions', runnerId, workspaceId, view, tagId, limit] as const,
+    meta: { entities: ['session', 'workspace', 'tag', 'folder', 'project'] },
     queryFn: () => fetchSessions(runnerId, workspaceId, view, tagId, limit),
     // The stream marks a list stale the moment an event touches it, so while it is live what was
     // just read is still good to show: the console mounting on the list the splash read moments ago
@@ -399,6 +407,7 @@ export const projectSessionsQuery = (opts: {
 }) =>
   queryOptions({
     queryKey: ['project-sessions', opts.projectId, opts.view, opts.includeLanding === true] as const,
+    meta: { entities: ['session', 'workspace', 'tag', 'folder', 'project'] },
     queryFn: () => {
       const qs = new URLSearchParams({ projectId: opts.projectId, view: opts.view });
       if (opts.includeLanding) qs.set('includeLanding', '1');
@@ -432,6 +441,7 @@ export interface WorkspaceSessionCounts {
 export const workspaceSessionCountsQuery = () =>
   queryOptions({
     queryKey: ['session-counts'] as const,
+    meta: { entities: ['session', 'workspace'] },
     queryFn: () => api<WorkspaceSessionCounts[]>('/sessions/counts'),
   });
 
@@ -444,6 +454,7 @@ export const workspaceSessionCountsQuery = () =>
 export const sessionSearchQuery = (q: string) =>
   queryOptions({
     queryKey: ['session-search', q] as const,
+    meta: { entities: ['session', 'workspace', 'task'] },
     queryFn: () =>
       api<SessionSearchResponse>(`/sessions/search?q=${encodeURIComponent(q)}&limit=20`),
     // A search result is a snapshot of a moving list; a minute of staleness is invisible inside
@@ -462,6 +473,7 @@ export const sessionSearchQuery = (q: string) =>
 export const sessionEventSearchQuery = (sessionId: string, q: string) =>
   queryOptions({
     queryKey: ['session-event-search', sessionId, q] as const,
+    meta: { entities: ['session'] },
     queryFn: () =>
       api<EventSearchResponse>(
         `/sessions/${sessionId}/events/search?q=${encodeURIComponent(q)}&limit=200`,
@@ -477,6 +489,7 @@ export const sessionEventSearchQuery = (sessionId: string, q: string) =>
 export const sessionTagsQuery = () =>
   queryOptions({
     queryKey: ['session-tags'] as const,
+    meta: { entities: ['tag'] },
     queryFn: () => api<SessionTagRef[]>('/session-tags'),
     staleTime: 5 * 60_000,
   });
@@ -489,6 +502,7 @@ export const sessionTagsQuery = () =>
 export const sessionFoldersQuery = () =>
   queryOptions({
     queryKey: ['session-folders'] as const,
+    meta: { entities: ['folder'] },
     queryFn: () => api<SessionFolder[]>('/session-folders'),
     staleTime: 5 * 60_000,
   });
@@ -501,6 +515,7 @@ export const sessionFoldersQuery = () =>
 export const sessionQuery = (id: string | null | undefined) =>
   queryOptions({
     queryKey: ['session', id ?? null] as const,
+    meta: { entities: ['session'] },
     queryFn: () => getSession(id!),
     enabled: id != null,
   });
@@ -515,6 +530,7 @@ export const sessionQuery = (id: string | null | undefined) =>
 export const sessionRequestQuery = (requestId: string) =>
   queryOptions({
     queryKey: ['sessions', 'request', requestId] as const,
+    meta: { entities: ['session'] },
     queryFn: () => getSessionRequest(requestId),
     // A run's question can still move after its request closes: passed to the owner, it waits for
     // their answer (OrbitTurnCards `RunQuestionTurnCard`).
@@ -535,6 +551,7 @@ export const sessionRequestQuery = (requestId: string) =>
 export const sessionDiffQuery = (id: string | null | undefined) =>
   queryOptions({
     queryKey: ['session', id ?? null, 'diff'] as const,
+    meta: { entities: ['session'] },
     queryFn: () => getSessionDiff(id!),
     enabled: id != null,
   });
@@ -550,6 +567,7 @@ export const sessionDiffQuery = (id: string | null | undefined) =>
 export const worktreeFileQuery = (sessionId: string, path: string) =>
   queryOptions({
     queryKey: ['session', sessionId, 'worktree-file', path] as const,
+    meta: { entities: ['session'] },
     queryFn: ({ signal }) => getWorktreeFile(sessionId, path, signal),
     retry: false,
     staleTime: 30_000,
@@ -567,6 +585,7 @@ export const labelSummaryQuery = (listId?: string, projectId?: string) =>
   queryOptions({
     // The project scope enters the key only when there is one, so every other scope keeps its key.
     queryKey: ['task-labels', listId ?? null, ...(projectId ? [{ projectId }] : [])] as const,
+    meta: { entities: ['task'] },
     queryFn: () => api<LabelSummary>(labelSummaryPath(listId, projectId)),
     staleTime: 10_000,
   });
@@ -580,6 +599,7 @@ export const labelSummaryQuery = (listId?: string, projectId?: string) =>
 export const activeTasksQuery = (listId?: string, projectId?: string) =>
   queryOptions({
     queryKey: ['tasks', 'active', listId ?? null, ...(projectId ? [{ projectId }] : [])] as const,
+    meta: { entities: ['task'] },
     queryFn: () => api<ActiveTasks>(activeTasksPath(listId, projectId)),
     // `task.*` events refresh it; this is the safety read (listBudget).
     refetchInterval: streamPoll(5_000),
@@ -609,6 +629,7 @@ export const taskCountsQuery = (
       ...(creatorSessionId ? [{ creatorSessionId }] : []),
       ...(projectId ? [{ projectId }] : []),
     ] as const,
+    meta: { entities: ['task'] },
     queryFn: () => api<TaskCounts>(taskCountsPath(listId, labels, creatorSessionId, projectId)),
     staleTime: 10_000,
   });
@@ -622,6 +643,7 @@ export const taskCountsQuery = (
 export const sessionCreatedTasksQuery = (sessionId: string) =>
   queryOptions({
     queryKey: ['tasks', 'created-by-session', sessionId] as const,
+    meta: { entities: ['task'] },
     queryFn: () => api<SessionCreatedTasks>(`/sessions/${sessionId}/created-tasks`),
     refetchInterval: (q) =>
       q.state.data?.items.some((row) => row.running || row.queued) ? 15_000 : false,
@@ -667,6 +689,7 @@ export function projectsQueryKey(filter: ProjectFilter): [string, ProjectFilter]
 export const openProjectsQuery = () =>
   queryOptions({
     queryKey: ['projects', 'sidebar'] as const,
+    meta: { entities: ['project', 'task', 'session'] },
     queryFn: () => api<SidebarProject[]>('/projects/sidebar'),
     refetchInterval: streamPoll(15_000),
     // The splash reads it to decide the Open list's shape (BootGate); the rail mounting a moment
@@ -681,6 +704,7 @@ export const openProjectsQuery = () =>
 export const ownerRequestsQuery = (filter: OwnerRequestListFilter) =>
   queryOptions({
     queryKey: ['owner-requests', filter] as const,
+    meta: { entities: ['session'] },
     queryFn: () => api<{ requests: OwnerRequest[] }>(`/owner-requests?state=${filter}`),
     refetchInterval: streamPoll(20_000),
   });
@@ -698,6 +722,7 @@ export const accountSecretsQuery = () =>
 export const projectDetailsQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId] as const,
+    meta: { entities: ['project', 'task'] },
     queryFn: () =>
       api<{
         id: string;
@@ -726,6 +751,7 @@ export const projectDetailsQuery = (projectId: string) =>
 export const projectCoordinatorStatusQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId, 'coordinator', 'status'] as const,
+    meta: { entities: ['project', 'session'] },
     queryFn: () =>
       api<CoordinatorStatus>(`/projects/${encodeURIComponent(projectId)}/coordinator/status`),
     // Project and member-session events refresh it (useControlPlane); this is the safety read.
@@ -763,6 +789,7 @@ export interface ProjectBlockingLeaderboard {
 export const projectPanoramaBlockingQuery = (projectId: string, limit = 5) =>
   queryOptions({
     queryKey: ['project', projectId, 'panorama', 'blocking', limit] as const,
+    meta: { entities: ['task'] },
     queryFn: () =>
       api<ProjectBlockingLeaderboard>(
         `/projects/${encodeURIComponent(projectId)}/panorama/blocking?limit=${limit}`,
@@ -819,6 +846,7 @@ export interface ProjectReadyToRun {
 export const projectReadyToRunQuery = (projectId: string, limit = 5) =>
   queryOptions({
     queryKey: ['project', projectId, 'panorama', 'ready', limit] as const,
+    meta: { entities: ['task'] },
     queryFn: () =>
       api<ProjectReadyToRun>(
         `/projects/${encodeURIComponent(projectId)}/panorama/ready?limit=${limit}`,
@@ -844,6 +872,7 @@ export const projectReadyToRunQuery = (projectId: string, limit = 5) =>
 export const projectDependencyGraphQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId, 'dependency-graph'] as const,
+    meta: { entities: ['task'] },
     queryFn: () =>
       api<ProjectDependencyGraphResponse>(
         `/projects/${encodeURIComponent(projectId)}/dependency-graph`,
@@ -865,6 +894,7 @@ export const projectDependencyGraphQuery = (projectId: string) =>
 export const taskAttributionQuery = (taskId: string) =>
   queryOptions({
     queryKey: ['task', taskId, 'attribution'] as const,
+    meta: { entities: ['task'] },
     queryFn: () => api<TaskAttribution>(`/tasks/${encodeURIComponent(taskId)}/attribution`),
   });
 
@@ -879,6 +909,7 @@ export const taskAttributionQuery = (taskId: string) =>
 export const projectCrossingsQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId, 'crossings'] as const,
+    meta: { entities: ['project', 'task'] },
     queryFn: () =>
       api<ProjectCrossingRow[]>(`/projects/${encodeURIComponent(projectId)}/handoffs`),
   });
@@ -894,6 +925,7 @@ export const projectCrossingsQuery = (projectId: string) =>
 export const pendingDecisionsQuery = (decidingSessionId: string) =>
   queryOptions({
     queryKey: ['session', decidingSessionId, 'pending-decisions'] as const,
+    meta: { entities: ['task'] },
     queryFn: () =>
       api<PendingDecisionQueue>(
         `/tasks/evidence-decisions/pending?decidingSessionId=${encodeURIComponent(decidingSessionId)}`,
@@ -918,6 +950,7 @@ export interface TaskEvidenceRevision {
 export const taskEvidenceQuery = (taskId: string) =>
   queryOptions({
     queryKey: ['task-evidence', taskId] as const,
+    meta: { entities: ['task'] },
     queryFn: () => api<TaskEvidenceRevision[]>(`/tasks/${encodeURIComponent(taskId)}/evidence`),
   });
 
@@ -930,6 +963,7 @@ export const evidenceFilesKey = (taskId: string) => ['task-evidence', taskId, 'f
 export const evidenceFilesQuery = (taskId: string, revision: string) =>
   infiniteQueryOptions({
     queryKey: [...evidenceFilesKey(taskId), revision] as const,
+    meta: { entities: ['task'] },
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
       api<EvidenceFilePage>(
@@ -947,6 +981,7 @@ export const evidenceFilesQuery = (taskId: string, revision: string) =>
 export const ownerConfirmationQuery = (taskId: string) =>
   queryOptions({
     queryKey: ['task', taskId, 'owner-confirmation'] as const,
+    meta: { entities: ['task'] },
     queryFn: () =>
       api<OwnerConfirmationView>(`/tasks/${encodeURIComponent(taskId)}/owner-confirmation`),
   });
@@ -965,6 +1000,7 @@ export const ownerConfirmationQuery = (taskId: string) =>
 export const pendingCriteriaDecisionsQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId, 'pending-criteria-decisions'] as const,
+    meta: { entities: ['project', 'task'] },
     queryFn: () =>
       api<PendingCriteriaDecisionQueue>(
         `/projects/${encodeURIComponent(projectId)}/acceptance/criteria-decisions/pending`,
@@ -984,6 +1020,7 @@ export const pendingCriteriaDecisionsQuery = (projectId: string) =>
 export const projectOpenItemsQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId, 'open-items'] as const,
+    meta: { entities: ['project', 'task', 'session'] },
     queryFn: () =>
       api<ProjectOpenItemsView>(`/projects/${encodeURIComponent(projectId)}/open-items`),
   });
@@ -1000,6 +1037,7 @@ export const projectOpenItemsQuery = (projectId: string) =>
 export const projectPromotionQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId, 'promotion'] as const,
+    meta: { entities: ['project', 'task'] },
     queryFn: () =>
       api<ProjectPromotionView | null>(
         `/projects/${encodeURIComponent(projectId)}/promotions/current`,
@@ -1023,6 +1061,7 @@ export const projectPromotionQuery = (projectId: string) =>
 export const projectMergedPromotionsQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId, 'promotions', 'merged'] as const,
+    meta: { entities: ['project', 'task'] },
     queryFn: () =>
       api<ProjectPromotionView[]>(
         `/projects/${encodeURIComponent(projectId)}/promotions/merged`,
@@ -1046,6 +1085,7 @@ export const projectMergedPromotionsQuery = (projectId: string) =>
 export const projectIntegrationQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId, 'integration'] as const,
+    meta: { entities: ['project', 'task', 'session'] },
     queryFn: () =>
       api<ProjectIntegrationView>(`/projects/${encodeURIComponent(projectId)}/integration`),
     // A landing or a merge in flight announces nothing on the stream (LANDING sessions publish no
@@ -1074,6 +1114,7 @@ export const landingLogQuery = (sessionId: string, selectors: LandingLogSelector
       selectors.jobId, selectors.claim ?? null, selectors.round ?? null,
       selectors.check ?? null, selectors.cursor ?? null,
     ] as const,
+    meta: { entities: ['session'] },
     queryFn: () => {
       const query = new URLSearchParams({ jobId: selectors.jobId });
       if (selectors.claim != null) query.set('claim', String(selectors.claim));
@@ -1103,6 +1144,7 @@ export const landingLogQuery = (sessionId: string, selectors: LandingLogSelector
 export const watchesQuery = () =>
   queryOptions({
     queryKey: ['watches'] as const,
+    meta: { entities: ['watch', 'session', 'task'] },
     queryFn: async () =>
       mergeWatches(
         await Promise.all([
@@ -1139,6 +1181,7 @@ export const accessTokensQuery = () =>
 export const watchQuery = (watchId: string) =>
   queryOptions({
     queryKey: ['watches', 'one', watchId] as const,
+    meta: { entities: ['watch', 'session', 'task'] },
     queryFn: () => api<WatchView>(`/watches/${encodeURIComponent(watchId)}`),
   });
 
@@ -1149,6 +1192,7 @@ export const watchQuery = (watchId: string) =>
 export const taskRowQuery = (taskId: string) =>
   queryOptions({
     queryKey: ['task-row', taskId] as const,
+    meta: { entities: ['task'] },
     queryFn: () =>
       api<{ id: string; title?: string; status?: string; terminalReason?: string | null }>(
         `/tasks/${encodeURIComponent(taskId)}/row`,
@@ -1192,6 +1236,7 @@ export const taskRowQuery = (taskId: string) =>
 export const wikiSpacesQuery = () =>
   queryOptions({
     queryKey: ['wiki', 'spaces'] as const,
+    meta: { entities: ['wiki'] },
     queryFn: async (): Promise<WikiSpaceRow[] | null> => {
       try {
         return await api<WikiSpaceRow[]>('/wiki/spaces');
@@ -1212,6 +1257,7 @@ export const wikiSpacesQuery = () =>
 export const wikiSpaceQuery = (spaceId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId] as const,
+    meta: { entities: ['wiki'] },
     queryFn: () => api<WikiSpaceWithUsage>(`/wiki/spaces/${encodeURIComponent(spaceId!)}?include=usage`),
     enabled: spaceId !== null,
   });
@@ -1220,6 +1266,7 @@ export const wikiSpaceQuery = (spaceId: string | null) =>
 export const wikiSpaceWorkspacesQuery = (spaceId: string) =>
   queryOptions({
     queryKey: ['wiki', 'space-workspaces', spaceId] as const,
+    meta: { entities: ['wiki'] },
     queryFn: () => api<WikiSpaceWorkspaces>(`/wiki/spaces/${encodeURIComponent(spaceId)}/workspaces`),
   });
 
@@ -1237,6 +1284,7 @@ export const wikiSpaceWorkspacesQuery = (spaceId: string) =>
 export const wikiTrashQuery = () =>
   queryOptions({
     queryKey: ['wiki', 'trash'] as const,
+    meta: { entities: ['wiki'] },
     queryFn: async (): Promise<WikiTrash | null> => {
       try {
         return await api<WikiTrash>('/wiki/trash');
@@ -1251,6 +1299,7 @@ export const wikiTrashQuery = () =>
 export const wikiHealthQuery = (spaceId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'health'] as const,
+    meta: { entities: ['wiki'] },
     queryFn: () => api<WikiSpaceHealth>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/health`),
     enabled: spaceId !== null,
     staleTime: 30_000,
@@ -1264,6 +1313,7 @@ export const wikiHealthQuery = (spaceId: string | null) =>
 export const wikiSystemModelQuery = () =>
   queryOptions({
     queryKey: ['wiki', 'system-model'] as const,
+    meta: { entities: ['wiki'] },
     queryFn: async (): Promise<WikiSystemModelRead | null> => {
       try {
         return await api<WikiSystemModelRead>('/wiki/system-model');
@@ -1283,6 +1333,7 @@ export const wikiSystemModelQuery = () =>
 export const wikiJobsQuery = (spaceId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'jobs'] as const,
+    meta: { entities: ['wiki'] },
     queryFn: async (): Promise<WikiJobsRead | null> => {
       try {
         return await api<WikiJobsRead>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/jobs`);
@@ -1303,6 +1354,7 @@ export const wikiJobsQuery = (spaceId: string | null) =>
 export const wikiEntriesQuery = (spaceId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'entries'] as const,
+    meta: { entities: ['wiki'] },
     queryFn: () => api<WikiEntry[]>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/entries?limit=200`),
     enabled: spaceId !== null,
   });
@@ -1318,6 +1370,7 @@ export const wikiEntriesQuery = (spaceId: string | null) =>
 export const wikiEntriesOfKindQuery = (spaceId: string | null, kind: WikiEntryKind, limit: number) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'entries', kind, limit] as const,
+    meta: { entities: ['wiki'] },
     queryFn: () =>
       api<WikiEntry[]>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/entries?kind=${kind}&limit=${limit}`),
     enabled: spaceId !== null,
@@ -1327,6 +1380,7 @@ export const wikiEntriesOfKindQuery = (spaceId: string | null, kind: WikiEntryKi
 export const wikiTopicQuery = (spaceId: string | null, slug: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'topic', slug] as const,
+    meta: { entities: ['wiki'] },
     queryFn: () =>
       api<WikiTopicView>(
         `/wiki/spaces/${encodeURIComponent(spaceId!)}/topics/${encodeURIComponent(slug!)}`,
@@ -1342,6 +1396,7 @@ export const wikiTopicQuery = (spaceId: string | null, slug: string | null) =>
 export const wikiArticlesQuery = (spaceId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'articles'] as const,
+    meta: { entities: ['wiki'] },
     queryFn: () => api<WikiArticleDirectory>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/articles`),
     enabled: spaceId !== null,
     staleTime: 30_000,
@@ -1357,6 +1412,7 @@ export const wikiArticlesQuery = (spaceId: string | null) =>
 export const wikiArticleQuery = (spaceId: string | null, slug: string | null, part: number) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'article', slug, part] as const,
+    meta: { entities: ['wiki'] },
     queryFn: async (): Promise<WikiArticleView | null> => {
       const path = `/wiki/spaces/${encodeURIComponent(spaceId!)}/articles/${encodeURIComponent(slug!)}`;
       try {
@@ -1373,6 +1429,7 @@ export const wikiArticleQuery = (spaceId: string | null, slug: string | null, pa
 export const wikiArticleIndexQuery = (spaceId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'article-index'] as const,
+    meta: { entities: ['wiki'] },
     queryFn: () => api<WikiArticleIndex>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/article-index`),
     enabled: spaceId !== null,
   });
@@ -1381,6 +1438,7 @@ export const wikiArticleIndexQuery = (spaceId: string | null) =>
 export const wikiTimelineQuery = (spaceId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'timeline'] as const,
+    meta: { entities: ['wiki'] },
     queryFn: () => api<WikiTimeline>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/timeline`),
     enabled: spaceId !== null,
   });
@@ -1393,6 +1451,7 @@ export const wikiTimelineQuery = (spaceId: string | null) =>
 export const wikiChangesetQuery = (changesetId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'changeset', changesetId] as const,
+    meta: { entities: ['wiki'] },
     queryFn: () => api<WikiChangesetView>(`/wiki/changesets/${encodeURIComponent(changesetId!)}`),
     enabled: changesetId !== null,
   });
@@ -1401,6 +1460,7 @@ export const wikiChangesetQuery = (changesetId: string | null) =>
 export const wikiEntryQuery = (entryId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'entry', entryId] as const,
+    meta: { entities: ['wiki'] },
     queryFn: () =>
       api<WikiEntryDetail>(`/wiki/entries/${encodeURIComponent(entryId!)}?include=sources,history,exposure`),
     enabled: entryId !== null,
@@ -1422,6 +1482,7 @@ export const wikiEntryQuery = (entryId: string | null) =>
 export const wikiSearchQuery = (q: string) =>
   queryOptions({
     queryKey: ['wiki', 'search', q] as const,
+    meta: { entities: ['wiki'] },
     queryFn: () =>
       api<{ q: string; semantic: boolean; hits: WikiSearchRow[] }>(
         `/wiki/search?q=${encodeURIComponent(q)}&include=space,topics`,
@@ -1441,6 +1502,7 @@ export const wikiSearchQuery = (q: string) =>
 export const wikiReviewQuery = (spaceId?: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'review', spaceId ?? null] as const,
+    meta: { entities: ['wiki'] },
     queryFn: () =>
       api<WikiChangeset[]>(
         spaceId ? `/wiki/review?space=${encodeURIComponent(spaceId)}` : '/wiki/review',
@@ -1455,6 +1517,7 @@ export const wikiReviewQuery = (spaceId?: string | null) =>
 export const wikiDocsQuery = (spaceId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'docs'] as const,
+    meta: { entities: ['wiki'] },
     queryFn: () => api<WikiDocsDirectory>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/docs`),
     enabled: spaceId !== null,
     staleTime: 30_000,
@@ -1467,6 +1530,7 @@ export const wikiDocsQuery = (spaceId: string | null) =>
 export const wikiDocQuery = (spaceId: string | null, slug: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'doc', slug] as const,
+    meta: { entities: ['wiki'] },
     queryFn: async (): Promise<WikiDocView | null> => {
       try {
         return await api<WikiDocView>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/docs/${encodeURIComponent(slug!)}`);
@@ -1491,6 +1555,7 @@ export const wikiDocQuery = (spaceId: string | null, slug: string | null) =>
 export const wikiChatHistoryQuery = (spaceId: string, q: string) =>
   infiniteQueryOptions({
     queryKey: ['wiki', 'chats', spaceId, 'history', q] as const,
+    meta: { entities: ['wiki'] },
     initialPageParam: 0,
     queryFn: ({ pageParam }) => getWikiChats(spaceId, { q, offset: pageParam }),
     getNextPageParam: (page, pages) => (page?.more ? pages.reduce((n, one) => n + (one?.chats.length ?? 0), 0) : undefined),
@@ -1500,6 +1565,7 @@ export const wikiChatHistoryQuery = (spaceId: string, q: string) =>
 export const wikiChatsQuery = (spaceId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'chats', spaceId] as const,
+    meta: { entities: ['wiki'] },
     queryFn: () => getWikiChats(spaceId!),
     enabled: spaceId !== null,
     staleTime: 15_000,
@@ -1514,6 +1580,7 @@ export const wikiChatsQuery = (spaceId: string | null) =>
 export const wikiChatDraftQuery = (draftId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'chat-draft', draftId] as const,
+    meta: { entities: ['wiki'] },
     queryFn: () => getWikiChatDraft(draftId!),
     enabled: draftId !== null,
     staleTime: 5_000,
@@ -1527,6 +1594,7 @@ export const wikiChatDraftQuery = (draftId: string | null) =>
 export const wikiChatDraftsQuery = (chatId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'chat-drafts', chatId] as const,
+    meta: { entities: ['wiki'] },
     queryFn: () => getWikiChatDrafts(chatId!),
     enabled: chatId !== null,
     staleTime: 15_000,
@@ -1536,6 +1604,7 @@ export const wikiChatDraftsQuery = (chatId: string | null) =>
 export const wikiDocVersionsQuery = (spaceId: string | null, slug: string | null, key: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'doc-versions', slug, key] as const,
+    meta: { entities: ['wiki'] },
     queryFn: () => getWikiDocVersions(spaceId!, slug!, key!),
     enabled: spaceId !== null && slug !== null && key !== null,
     staleTime: 30_000,
@@ -1548,6 +1617,7 @@ export const wikiDocVersionsQuery = (spaceId: string | null, slug: string | null
 export const wikiDocChangesQuery = (spaceId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'doc-changes'] as const,
+    meta: { entities: ['wiki'] },
     queryFn: async (): Promise<WikiDocChanges | null> => {
       try {
         return await api<WikiDocChanges>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/doc-changes`);
@@ -1563,6 +1633,7 @@ export const wikiDocChangesQuery = (spaceId: string | null) =>
 export const wikiDocIndexQuery = (spaceId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'doc-index'] as const,
+    meta: { entities: ['wiki'] },
     queryFn: () => api<WikiDocsIndex>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/doc-index`),
     enabled: spaceId !== null,
   });
@@ -1575,6 +1646,7 @@ export const wikiDocIndexQuery = (spaceId: string | null) =>
 export const wikiPlanQuery = (spaceId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'plan'] as const,
+    meta: { entities: ['wiki'] },
     queryFn: async (): Promise<WikiPlanState | null> => {
       try {
         return wikiPlanStateOf(await api<unknown>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/plan`));
@@ -1613,6 +1685,7 @@ export function wikiPlanStateOf(raw: unknown): WikiPlanState | null {
 export const wikiPlanVersionsQuery = (spaceId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'plan', 'versions'] as const,
+    meta: { entities: ['wiki'] },
     queryFn: async () =>
       (await api<{ spaceId: string; versions: WikiPlanVersionSummary[] }>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/plan/versions`)).versions,
     enabled: spaceId !== null,
@@ -1622,6 +1695,7 @@ export const wikiPlanVersionsQuery = (spaceId: string | null) =>
 export const wikiPlanVersionQuery = (spaceId: string | null, version: number | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'plan', 'version', version] as const,
+    meta: { entities: ['wiki'] },
     queryFn: () => api<WikiPlanVersion>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/plan/versions/${version}`),
     enabled: spaceId !== null && version !== null,
   });

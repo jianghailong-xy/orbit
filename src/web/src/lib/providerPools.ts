@@ -97,6 +97,7 @@ export const PROVIDER_POOLS_KEY = ['providers', 'pools'] as const;
 export const providerPoolsQuery = () =>
   queryOptions({
     queryKey: PROVIDER_POOLS_KEY,
+    meta: { entities: ['provider'] },
     queryFn: async () => (await api<ProviderPool[]>('/providers/pools')).map((pool) => withLogin(pool)),
   });
 

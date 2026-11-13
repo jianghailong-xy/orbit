@@ -232,6 +232,7 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
   // Its session count is read for this one workspace only (the list does not carry it).
   const detail = useQuery({
     queryKey: ['workspaces', id, 'detail'],
+    meta: { entities: ['workspace'] },
     queryFn: () => api<SettingsWorkspace>(`/workspaces/${id}`),
     enabled: !!workspace,
   });
@@ -243,6 +244,7 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
   const rules = useQuery({ ...workspacePermissionRulesQuery(id), enabled: !!workspace });
   const imported = useQuery({
     queryKey: ['imported-sessions', id],
+    meta: { entities: ['session'] },
     queryFn: () => countImportedSessions(id),
     enabled: !!workspace,
   });

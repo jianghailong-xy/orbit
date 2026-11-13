@@ -41,6 +41,7 @@ export function useNewAccount(enabled: boolean): boolean {
   const read = (view: 'open' | 'completed') =>
     ({
       queryKey: ['welcome', 'any-session', view] as const,
+      meta: { entities: ['session'] },
       queryFn: () => api<unknown>(`/sessions?view=${view}&limit=1`),
       enabled,
       retry: false,

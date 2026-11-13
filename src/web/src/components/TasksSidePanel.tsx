@@ -569,7 +569,11 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   }, [runners.data]);
 
   // The "Workspaces" list is the user's workspace definitions (model + tools).
-  const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<Workspace[]>('/workspaces') });
+  const workspaces = useQuery({
+    queryKey: ['workspaces'],
+    meta: { entities: ['workspace'] },
+    queryFn: () => api<Workspace[]>('/workspaces'),
+  });
   // One order, the user's: the rows below, ⌘1‒9 and ⌘↑/↓ all read it (lib/workspaceOrder). The
   // runner is metadata on each row, not a sort key.
   const orderedWorkspaces = useMemo(() => orderWorkspaces(workspaces.data ?? []), [workspaces.data]);

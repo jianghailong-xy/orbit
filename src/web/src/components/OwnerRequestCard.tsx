@@ -75,6 +75,7 @@ function HoldingUp({ taskIds }: { taskIds: readonly string[] }): JSX.Element {
   const tasks = useQueries({
     queries: taskIds.map((id) => ({
       queryKey: ['owner-request-task', id] as const,
+      meta: { entities: ['task'] },
       queryFn: () => api<{ title?: string }>(`/tasks/${encodeURIComponent(id)}`),
       staleTime: 300_000,
       retry: false,

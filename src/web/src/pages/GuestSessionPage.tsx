@@ -68,6 +68,7 @@ function GuestConversation() {
   const sessionId = routeId(param) ?? param;
   const { data, isLoading, error } = useQuery({
     queryKey: ['guest-session', sessionId],
+    meta: { entities: ['session'] },
     queryFn: () => getGuestSession(sessionId, TAIL_PAGE),
     retry: false,
     staleTime: Infinity,

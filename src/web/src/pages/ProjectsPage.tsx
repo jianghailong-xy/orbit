@@ -427,6 +427,7 @@ export function ProjectsPage() {
   const runners = useQuery(runnersQuery());
   const projects = useQuery({
     queryKey: projectsQueryKey(filter),
+    meta: { entities: ['project', 'task', 'session'] },
     queryFn: () => api<Project[]>(projectsPath(filter)),
     // Task writes and blocker ownership are server facts. Advancing only the local clock would
     // eventually label a still-active project quiet, so refresh the evidence at the same cadence.
@@ -1063,6 +1064,7 @@ export function ProjectDetailPage() {
   const openTaskId = routeId(params.taskId);
   const project = useQuery({
     queryKey: ['project', id],
+    meta: { entities: ['project', 'task'] },
     queryFn: () => api<ProjectDetail>(`/projects/${encodeURIComponent(id!)}`),
     enabled: Boolean(id),
   });
@@ -2263,6 +2265,7 @@ export function ProjectTasks({ projectId }: { projectId: string }) {
   const { open } = useOpenProjectCoordinator(projectId, NEW_TASK_INTENT);
   const tasks = useQuery({
     queryKey: ['project', projectId, 'tasks', 'root'],
+    meta: { entities: ['task'] },
     queryFn: () =>
       api<ProjectTaskPage>(`/projects/${encodeURIComponent(projectId)}/tasks/page?limit=100`),
   });
@@ -2565,6 +2568,7 @@ function ProjectTaskRow({
 function ProjectTaskPrerequisites({ task }: { task: ProjectTask }) {
   const graph = useQuery({
     queryKey: ['task', task.id, 'prerequisites'],
+    meta: { entities: ['task'] },
     queryFn: () =>
       api<TaskDependencyGraphResponse>(
         `/tasks/${encodeURIComponent(encodeId(task.id))}/dependency-graph?direction=upstream&maxDepth=1`,
@@ -2629,6 +2633,7 @@ export function ProjectTaskLevel({
 }) {
   const children = useQuery({
     queryKey: ['project', projectId, 'tasks', 'children', parentTaskId],
+    meta: { entities: ['task'] },
     queryFn: () =>
       api<ProjectTaskPage>(
         `/projects/${encodeURIComponent(projectId)}/tasks/page?parentId=${encodeURIComponent(encodeId(parentTaskId))}&limit=100`,

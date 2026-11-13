@@ -847,6 +847,7 @@ export function SessionStartProjectCard({
   const standingRead = useQuery({ ...acceptanceConfirmationQuery(project), enabled });
   const documentRead = useQuery({
     queryKey: ['project', project],
+    meta: { entities: ['project', 'task'] },
     queryFn: () => api<StartProjectDocument>(`/projects/${encodeURIComponent(project)}`),
     enabled,
     refetchInterval: streamPoll(20_000),
@@ -1077,6 +1078,7 @@ function OwnerStartProjectCard({
   const standingRead = useQuery(acceptanceConfirmationQuery(projectId));
   const documentRead = useQuery({
     queryKey: ['project', projectId],
+    meta: { entities: ['project', 'task'] },
     queryFn: () => api<StartProjectDocument>(`/projects/${encodeURIComponent(projectId)}`),
   });
   const integrationRead = useQuery(projectIntegrationQuery(projectId));

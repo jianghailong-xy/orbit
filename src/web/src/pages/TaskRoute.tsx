@@ -35,6 +35,7 @@ export function TaskRoute() {
   const browsing = !((list != null && list !== 'none') || search.has('createdIn'));
   const task = useQuery({
     queryKey: ['task', taskId],
+    meta: { entities: ['task'] },
     queryFn: () => api<any>(`/tasks/${taskId}`),
     enabled: Boolean(taskId) && browsing,
   });

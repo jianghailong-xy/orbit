@@ -20,7 +20,11 @@ import { ProjectLandingsWindow } from './ProjectLandingsWindow';
 export function WorkspaceConsole() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<any[]>('/workspaces') });
+  const workspaces = useQuery({
+    queryKey: ['workspaces'],
+    meta: { entities: ['workspace'] },
+    queryFn: () => api<any[]>('/workspaces'),
+  });
   // Poll while the console is open so the composer's plan-usage gauge stays current
   // (the runner refreshes its usage roughly every 2 min while busy).
   const runners = useQuery({

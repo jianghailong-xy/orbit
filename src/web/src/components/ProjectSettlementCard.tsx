@@ -702,12 +702,14 @@ export function SessionProjectSettlementCard({
   const project = projectId ?? '';
   const documentRead = useQuery({
     queryKey: ['project', project],
+    meta: { entities: ['project', 'task'] },
     queryFn: () => api<SettlementProjectDocument>(`/projects/${encodeURIComponent(project)}`),
     enabled: Boolean(projectId) && coordinator,
     refetchInterval: streamPoll(20_000),
   });
   const openItemsRead = useQuery({
     queryKey: ['project', project, 'open-items'],
+    meta: { entities: ['project', 'task', 'session'] },
     queryFn: () => api<{ doneRequest?: ProjectOpenItemRow | null; startRequest?: ProjectOpenItemRow | null; needsYou?: ProjectOpenItemRow[]; withCoordinator?: ProjectOpenItemRow[] }>(`/projects/${encodeURIComponent(project)}/open-items`),
     enabled: Boolean(projectId) && coordinator,
     refetchInterval: streamPoll(20_000),
@@ -742,12 +744,14 @@ export function SessionProjectSettlementCard({
   const needsStanding = doneDelivered || doneRequest !== null || hasDoneSignal;
   const standingRead = useQuery({
     queryKey: acceptanceConfirmationKey(project),
+    meta: { entities: ['project', 'task'] },
     queryFn: () => readAcceptanceConfirmation(project),
     enabled: Boolean(projectId) && needsStanding,
     refetchInterval: needsStanding ? streamPoll(20_000) : false,
   });
   const doneCheckRead = useQuery({
     queryKey: ['project', project, 'done-check'],
+    meta: { entities: ['project', 'task', 'session'] },
     queryFn: () => api<ProjectDoneCheck>(`/projects/${encodeURIComponent(project)}/done-check`),
     enabled: Boolean(projectId) && needsStanding && !doneRequest,
     refetchInterval: needsStanding ? streamPoll(20_000) : false,
@@ -1344,23 +1348,27 @@ export function ProjectDoneDialog({
   const qc = useQueryClient();
   const projectRead = useQuery({
     queryKey: ['project', projectId],
+    meta: { entities: ['project', 'task'] },
     queryFn: () => api<ProjectDoneDocument>(`/projects/${encodeURIComponent(projectId)}`),
     enabled: open && Boolean(projectId) && suppliedProject == null,
   });
   const openItemsRead = useQuery({
     queryKey: ['project', projectId, 'open-items'],
+    meta: { entities: ['project', 'task', 'session'] },
     queryFn: () => api<{ doneRequest?: ProjectOpenItemRow | null; startRequest?: ProjectOpenItemRow | null; needsYou?: ProjectOpenItemRow[]; withCoordinator?: ProjectOpenItemRow[] }>(`/projects/${encodeURIComponent(projectId)}/open-items`),
     enabled: open && Boolean(projectId) && suppliedRow === undefined,
     refetchInterval: open ? streamPoll(20_000) : false,
   });
   const standingRead = useQuery({
     queryKey: acceptanceConfirmationKey(projectId),
+    meta: { entities: ['project', 'task'] },
     queryFn: () => readAcceptanceConfirmation(projectId),
     enabled: open && Boolean(projectId),
     refetchInterval: open ? streamPoll(20_000) : false,
   });
   const doneCheckRead = useQuery({
     queryKey: ['project', projectId, 'done-check'],
+    meta: { entities: ['project', 'task', 'session'] },
     queryFn: () => api<ProjectDoneCheck>(`/projects/${encodeURIComponent(projectId)}/done-check`),
     enabled: open && Boolean(projectId) && !(suppliedRow ?? openItemsRead.data?.doneRequest)?.doneRequest,
     refetchInterval: open ? streamPoll(20_000) : false,
@@ -1445,6 +1453,7 @@ export function ProjectSessionsDoneCard({ projectId, project }: { projectId: str
   const qc = useQueryClient();
   const standing = useQuery({
     queryKey: acceptanceConfirmationKey(projectId),
+    meta: { entities: ['project', 'task'] },
     queryFn: () => readAcceptanceConfirmation(projectId),
     enabled: project.doneBy === 'DERIVED',
   });

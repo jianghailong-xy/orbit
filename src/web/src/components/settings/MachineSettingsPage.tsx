@@ -221,7 +221,11 @@ export function MachineSettingsPage() {
   });
   const runner = (runners.data ?? []).find((r) => r.id === runnerId) ?? null;
 
-  const workspacesQ = useQuery({ queryKey: ['workspaces'], queryFn: () => api<MachineWorkspace[]>('/workspaces') });
+  const workspacesQ = useQuery({
+    queryKey: ['workspaces'],
+    meta: { entities: ['workspace'] },
+    queryFn: () => api<MachineWorkspace[]>('/workspaces'),
+  });
   const workspaces = (workspacesQ.data ?? []).filter((a) => a.runnerId === runnerId);
   // Each workspace's sessions in flight, for its row's "N running" — the sidebar's own tallies.
   const sessionCounts = useQuery(workspaceSessionCountsQuery()).data ?? [];

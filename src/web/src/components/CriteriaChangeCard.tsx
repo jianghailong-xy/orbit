@@ -252,6 +252,7 @@ export function SessionCriteriaChangeCard({
   const standingRead = useQuery({ ...acceptanceConfirmationQuery(project), enabled });
   const documentRead = useQuery({
     queryKey: ['project', project],
+    meta: { entities: ['project', 'task'] },
     queryFn: () => api<ConfirmationProjectDocument>(`/projects/${encodeURIComponent(project)}`),
     enabled,
     refetchInterval: streamPoll(20_000),

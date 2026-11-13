@@ -26,7 +26,11 @@ import { SettingsCard, SettingsRow, SettingsSection } from './SettingsBlocks';
  * sections held.
  */
 
-const useKeys = () => useQuery({ queryKey: PROVIDERS_LIST_KEY, queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE) });
+const useKeys = () => useQuery({
+  queryKey: PROVIDERS_LIST_KEY,
+  meta: { entities: ['provider'] },
+  queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
+});
 
 function Loading() {
   return (

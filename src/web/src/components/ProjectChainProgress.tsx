@@ -74,6 +74,7 @@ export interface ProjectBlockingLeaderboard {
 export const projectChainPanoramaQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId, 'panorama'] as const,
+    meta: { entities: ['task', 'session'] },
     queryFn: () => api<ProjectPanorama>(`/projects/${encodeURIComponent(projectId)}/panorama`),
     refetchInterval: streamPoll(30_000),
   });
@@ -85,6 +86,7 @@ export const CHAIN_RANKING_LIMIT = 5;
 export const projectChainRankingQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId, 'panorama', 'blocking', CHAIN_RANKING_LIMIT] as const,
+    meta: { entities: ['task'] },
     queryFn: () =>
       api<ProjectBlockingLeaderboard>(
         `/projects/${encodeURIComponent(projectId)}/panorama/blocking?limit=${CHAIN_RANKING_LIMIT}`,

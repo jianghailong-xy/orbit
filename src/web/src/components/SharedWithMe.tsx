@@ -33,6 +33,7 @@ export function SharedWithMeGroup({ onOpen }: { onOpen: (path: string) => void }
   const [open, setOpen] = useState(true);
   const q = useQuery({
     queryKey: guestSessionsQueryKey,
+    meta: { entities: ['session'] },
     queryFn: listGuestSessions,
     refetchInterval: SHARED_WITH_ME_POLL_MS,
   });

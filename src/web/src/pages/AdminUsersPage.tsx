@@ -660,7 +660,11 @@ function UserWikiDocs({ user, onClose }: { user: AdminUser; onClose: () => void 
   const [spaceId, setSpaceId] = useState('');
   const [why, setWhy] = useState('');
   const key = ['admin', 'users', user.id, 'wiki-spaces'] as const;
-  const spacesQ = useQuery({ queryKey: key, queryFn: () => api<WikiSupportSpaces>(`/admin/wiki/users/${user.id}/spaces`) });
+  const spacesQ = useQuery({
+    queryKey: key,
+    meta: { entities: ['wiki'] },
+    queryFn: () => api<WikiSupportSpaces>(`/admin/wiki/users/${user.id}/spaces`),
+  });
   const build = useMutation({
     mutationFn: ({ space, reason }: { space: WikiSupportSpace; reason: string }) =>
       api<WikiPlanSupportBuildResult>(`/admin/wiki/spaces/${space.id}/plan/build`, { method: 'POST', body: { reason } }),

@@ -24,7 +24,11 @@ export function ProjectTaskPanel({ projectId, taskId }: { projectId: string; tas
   const openTask = useOpenProjectTask(projectId);
   const close = useCloseProjectTask(projectId);
   // The panel's own read, under its own key: the two are one request and one cache entry.
-  const task = useQuery({ queryKey: ['task', taskId], queryFn: () => api<any>(`/tasks/${taskId}`) });
+  const task = useQuery({
+    queryKey: ['task', taskId],
+    meta: { entities: ['task'] },
+    queryFn: () => api<any>(`/tasks/${taskId}`),
+  });
   const remove = useMutation({
     mutationFn: deleteTask,
     onSuccess: async () => {

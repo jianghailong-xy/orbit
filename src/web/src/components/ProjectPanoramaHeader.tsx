@@ -108,6 +108,7 @@ export interface ProjectPanorama {
 export const projectPanoramaQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId, 'panorama'] as const,
+    meta: { entities: ['task', 'session'] },
     queryFn: () => api<ProjectPanorama>(`/projects/${encodeURIComponent(projectId)}/panorama`),
     refetchInterval: streamPoll(30_000),
   });

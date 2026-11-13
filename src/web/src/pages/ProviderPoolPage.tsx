@@ -59,7 +59,11 @@ export function ProviderPoolPage() {
   const poolId = routeId(useParams().id);
   const pools = useQuery(providerPoolsQuery());
   const shared = useQuery(sharedPoolsQuery());
-  const keys = useQuery({ queryKey: PROVIDERS_LIST_KEY, queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE) });
+  const keys = useQuery({
+    queryKey: PROVIDERS_LIST_KEY,
+    meta: { entities: ['provider'] },
+    queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
+  });
   const [adding, setAdding] = useState(false);
   const pool = pools.data?.find((row) => routeId(row.id) === poolId);
   // A Codex pool of the user's own: who can use it and its API keys, read beside its accounts.

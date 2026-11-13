@@ -87,6 +87,7 @@ export const readAcceptanceConfirmation = (
  *  Both poll: the door is written by a person at either end, and no push stream mentions it. */
 export const acceptanceConfirmationQuery = (projectId: string) => ({
   queryKey: acceptanceConfirmationKey(projectId),
+  meta: { entities: ['project', 'task'] },
   queryFn: () => readAcceptanceConfirmation(projectId),
   refetchInterval: streamPoll(20_000),
 });

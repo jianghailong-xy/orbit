@@ -119,6 +119,7 @@ export function WikiSetUpDialog({ space, onClose }: { space: WikiSpaceRow; onClo
   // answer that does not come is said, and Turn on stays open.
   const probe = useQuery({
     queryKey: ['wiki', 'space', space.id, 'probe', chosen] as const,
+    meta: { entities: ['wiki'] },
     queryFn: () => probeWikiMaintenance(space.id, chosen!),
     enabled: chosen !== null,
     retry: false,

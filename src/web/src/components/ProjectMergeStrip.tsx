@@ -118,6 +118,7 @@ export function ProjectMergeStrip({
   // How far the criteria have got, for the asking card's line — the project document's own words.
   const project = useQuery({
     queryKey: ['project', projectId],
+    meta: { entities: ['project', 'task'] },
     queryFn: () => api<PromotionProjectView>(`/projects/${encodeURIComponent(projectId)}`),
     enabled: shape === 'asking',
   });

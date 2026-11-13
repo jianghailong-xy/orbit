@@ -56,7 +56,11 @@ export function SessionGuestsSection({
   const qc = useQueryClient();
   const message = useToast();
   const key = guestsQueryKey(sessionId);
-  const guestsQ = useQuery({ queryKey: key, queryFn: () => getSessionGuests(sessionId) });
+  const guestsQ = useQuery({
+    queryKey: key,
+    meta: { entities: ['session'] },
+    queryFn: () => getSessionGuests(sessionId),
+  });
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);

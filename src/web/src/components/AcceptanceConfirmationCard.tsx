@@ -730,6 +730,7 @@ export function SessionCriteriaConfirmationCard({
   });
   const documentRead = useQuery({
     queryKey: ['project', project],
+    meta: { entities: ['project', 'task'] },
     queryFn: () =>
       api<ConfirmationProjectDocument>(`/projects/${encodeURIComponent(project)}`),
     enabled: Boolean(projectId),

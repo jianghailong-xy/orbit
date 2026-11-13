@@ -848,6 +848,7 @@ export function ProjectAcceptanceCard({
 }) {
   const detail = useQuery({
     queryKey: ['project', projectId],
+    meta: { entities: ['project', 'task'] },
     queryFn: () => api<ProjectAcceptanceDetail>(`/projects/${encodeURIComponent(projectId)}`),
     enabled: Boolean(projectId),
   });

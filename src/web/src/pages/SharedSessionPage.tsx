@@ -67,6 +67,7 @@ export function followDelay(state: SessionStateSource, moved: boolean): number |
  */
 export const sharedRootQuery = (token: string, preview = false) => ({
   queryKey: ['shared', token] as QueryKey,
+  meta: { entities: ['session'] },
   queryFn: () => getSharedSession(token, { limit: TAIL_PAGE, preview }),
   enabled: !!token,
   retry: false,
@@ -150,6 +151,7 @@ function SharedConversation() {
     sessionId
       ? {
           queryKey: ['shared', token, 'c', sessionId] as QueryKey,
+          meta: { entities: ['session'] },
           queryFn: () => getSharedSession(token, { limit: TAIL_PAGE, sessionId }),
           enabled: !!token,
           retry: false,

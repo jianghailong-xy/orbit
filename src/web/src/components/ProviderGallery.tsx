@@ -159,6 +159,7 @@ function connectedCounts(rows: readonly ProviderRow[]): Map<string, number> {
 export function ProviderGallery() {
   const providers = useQuery({
     queryKey: PROVIDERS_LIST_KEY,
+    meta: { entities: ['provider'] },
     queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
   });
   const runners = useQuery(runnersQuery());

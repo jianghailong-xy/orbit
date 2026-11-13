@@ -280,6 +280,7 @@ interface RefusedTaskRow {
 function RefusedTaskList({ projectId, taskIds }: { projectId: string; taskIds: string[] }) {
   const tasks = useQuery({
     queryKey: ['project', projectId, 'tasks', 'root'],
+    meta: { entities: ['task'] },
     queryFn: () =>
       api<{ items: RefusedTaskRow[] }>(
         `/projects/${encodeURIComponent(projectId)}/tasks/page?limit=100`,
