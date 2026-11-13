@@ -808,29 +808,22 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
   });
 
   // ── 13 ─────────────────────────────────────────────────────────────────────────────────────────────────
-  await t.test('13. work queuing behind a drain is pushed on the next quiet beat, once per drain (D3)', async () => {
+  await t.test('13. a draining beat stays one statement, and work queuing behind the drain is pushed to no one', async () => {
     const draining = { draining: true, selfUpdate: { state: 'waitingForIdle', phase: 'draining', targetVersion: '0.1.254', turnsInFlight: 1 } } as
       Partial<RunnerHeartbeatRequest>;
     for (let i = 0; i < 4 && isFull((await beat(draining)).answer); i += 1);
     const idleDrain = await beat(draining);
     assert.equal(isFull(idleDrain.answer), false, 'a draining beat with nothing changed is quiet');
-    assert.equal(idleDrain.statements.length, 2, idleDrain.statements.join('\n---\n'));
-    assert.match(idleDrain.statements[1], /UPDATE "runner" r SET "drain_waiting_pushed_at"/, 'and asks for the drain push in one more statement');
-    assert.equal(drainPushes.length, 0, 'nothing of the owner\'s waits yet');
+    assert.equal(idleDrain.statements.length, 1, idleDrain.statements.join('\n---\n'));
 
     const waiting = await session(RunStatus.PENDING, { numTurns: 0, inboxLeaseOwner: null });
     const queued = await beat(draining);
     assert.equal(isFull(queued.answer), false, 'the work queued moved nothing a quiet beat reads');
-    assert.deepEqual(drainPushes.map((p) => [p.runnerId, p.waiting]), [[runnerId, { sessions: 1, messages: 0 }]]);
-    await beat(draining);
-    await beat(draining);
-    assert.equal(drainPushes.length, 1, 'one push per drain');
+    assert.equal(queued.statements.length, 1, queued.statements.join('\n---\n'));
+    assert.equal(drainPushes.length, 0, 'the web\'s update indicator says it; nothing is pushed (docs/mocks/runner-update-indicator)');
 
-    // The drain ends: the work no longer waits on it, and the record of its push goes with it.
     await prisma.session.update({ where: { id: waiting }, data: { status: RunStatus.CANCELLED } });
     for (let i = 0; i < 4 && isFull((await beat()).answer); i += 1);
-    const after = await sql.query(`SELECT drain_waiting_pushed_at FROM "runner" WHERE id = $1`, [runnerId]);
-    assert.equal(after.rows[0].drain_waiting_pushed_at, null);
     await settle();
   });
 
