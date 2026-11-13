@@ -32,7 +32,14 @@ type recoveryContractFile struct {
 	LegacyCodes           map[string]recoveryLegacyCode `json:"legacyCodes"`
 	LegacyOwnerToActor    map[string]string             `json:"legacyOwnerToActor"`
 	LegacyResourceKeys    [][2]string                   `json:"legacyResourceKeys"`
-	StatusPolicies        struct {
+	ResendActionCodes     []string                      `json:"resendActionCodes"`
+	RequestIDResourceType string                        `json:"requestIdResourceType"`
+	Invariants            struct {
+		Rules []struct {
+			ID string `json:"id"`
+		} `json:"rules"`
+	} `json:"invariants"`
+	StatusPolicies struct {
 		Safe             []int `json:"SAFE"`
 		AfterStateChange []int `json:"AFTER_STATE_CHANGE"`
 	} `json:"statusPolicies"`
@@ -123,6 +130,19 @@ func TestRecoveryContractTablesMatchTheContract(t *testing.T) {
 	if !reflect.DeepEqual(contract.StatusPolicies.Safe, recoveryStatusSafe) ||
 		!reflect.DeepEqual(contract.StatusPolicies.AfterStateChange, recoveryStatusAfterStateChg) {
 		t.Errorf("statusPolicies: contract %+v", contract.StatusPolicies)
+	}
+	if !reflect.DeepEqual(contract.ResendActionCodes, recoveryResendActionCodes) ||
+		contract.RequestIDResourceType != recoveryRequestIDResourceType {
+		t.Errorf("resendActionCodes %v / requestIdResourceType %q", contract.ResendActionCodes, contract.RequestIDResourceType)
+	}
+	var ruleIDs []string
+	for _, r := range contract.Invariants.Rules {
+		ruleIDs = append(ruleIDs, r.ID)
+	}
+	wantRules := []string{"COMMITTED_NEVER_RESENT", "UNKNOWN_VERIFIES_FIRST", "SAME_REQUEST_ID_NEEDS_AN_ID",
+		"CONFIRMATION_BLOCKS_AUTOMATIC_RESEND", "RESEND_ACTION_MATCHES_POLICY", "NEVER_HAS_NO_WAIT"}
+	if !reflect.DeepEqual(ruleIDs, wantRules) {
+		t.Errorf("invariant rules: contract %v, Go %v", ruleIDs, wantRules)
 	}
 	// The envelope's JSON fields, in the contract's order.
 	env, _ := parseRecovery(recoveryObservation{Source: "UNKNOWN", Message: "x"})
@@ -283,5 +303,106 @@ func TestRecoveryOfReadsEveryErrorThisClientMeets(t *testing.T) {
 	unknown := recoveryOf(errors.New("boom"), false)
 	if unknown.Kind != "UNKNOWN" || unknown.Code != "UNKNOWN_ERROR" || unknown.Effect != "UNKNOWN" {
 		t.Errorf("unknown: %+v", unknown)
+	}
+}
+
+// recoveryInvariantViolations is contract `invariants.holdsOnEveryEnvelope`, as checks.
+func recoveryInvariantViolations(e recoveryEnvelope, requestIDSent bool) []string {
+	var out []string
+	action := ""
+	if e.ActionCode != nil {
+		action = *e.ActionCode
+	}
+	resend := recoveryIsResend(action)
+	hasRequestID := requestIDSent
+	for _, r := range e.Resources {
+		if r.Type == recoveryRequestIDResourceType {
+			hasRequestID = true
+		}
+	}
+	p := e.Retry.Policy
+	if e.Effect == "COMMITTED" && (p != "NEVER" || resend) {
+		out = append(out, "COMMITTED resent")
+	}
+	if e.Effect == "UNKNOWN" && !((p == "VERIFY_THEN_RETRY" || p == "SAME_REQUEST_ID") && action == recoveryDefaultActionByPolicy[p]) {
+		out = append(out, "UNKNOWN not verified first")
+	}
+	if p == "SAFE" && e.Effect != "NONE" {
+		out = append(out, "SAFE without NONE")
+	}
+	if p == "SAME_REQUEST_ID" && !hasRequestID {
+		out = append(out, "SAME_REQUEST_ID without a request id")
+	}
+	if e.UserConfirmation == "REQUIRED" && (p == "SAFE" || p == "SAME_REQUEST_ID" || resend) {
+		out = append(out, "automatic resend past a confirmation")
+	}
+	if action == "RETRY" && p != "SAFE" {
+		out = append(out, "RETRY off SAFE")
+	}
+	if action == "RETRY_SAME_REQUEST" && p != "SAME_REQUEST_ID" {
+		out = append(out, "RETRY_SAME_REQUEST off SAME_REQUEST_ID")
+	}
+	if p == "NEVER" && e.Retry.AfterSeconds != nil {
+		out = append(out, "NEVER with a wait")
+	}
+	return out
+}
+
+func TestRecoveryInvariantsHoldOnEveryFixture(t *testing.T) {
+	for _, c := range loadRecoveryFixtures(t) {
+		env, ok := parseRecovery(c.Input)
+		if !ok {
+			continue
+		}
+		if v := recoveryInvariantViolations(env, c.Input.RequestIDSent); len(v) > 0 {
+			t.Errorf("%s: %v", c.Name, v)
+		}
+	}
+}
+
+// Every stated (effect, retryPolicy, actionCode, userConfirmation) a server block can carry, with no request
+// id, one sent by the client, or one named by the answer, on a 409, a 503 and a 201, with and without
+// `retryable: true`: the same enumeration as recovery.spec.ts's.
+func TestRecoveryInvariantsHoldOnEveryServerBlockCombination(t *testing.T) {
+	actions := append([]string{""}, recoveryActionCodes...)
+	checked := 0
+	for _, status := range []int{409, 503, 201} {
+		for _, retryable := range []bool{false, true} {
+			for _, effect := range recoveryEffects {
+				for _, policy := range recoveryRetryPolicies {
+					for _, action := range actions {
+						for _, confirmation := range recoveryUserConfirmations {
+							for _, id := range []string{"none", "sent", "named"} {
+								block := map[string]interface{}{"effect": effect, "retryPolicy": policy,
+									"userConfirmation": confirmation, "retryAfterSeconds": 2}
+								if action != "" {
+									block["actionCode"] = action
+								}
+								body := map[string]interface{}{"code": "X_COMBINATION", "message": "combination", "recovery": block}
+								if retryable {
+									body["retryable"] = true
+								}
+								if id == "named" {
+									body["triggerId"] = "trg_x"
+								}
+								data, _ := json.Marshal(body)
+								obs := recoveryObservation{Source: "HTTP", Status: status, Body: string(data), RequestIDSent: id == "sent"}
+								env, ok := parseRecovery(obs)
+								if !ok {
+									t.Fatalf("%s: no envelope", data)
+								}
+								if v := recoveryInvariantViolations(env, obs.RequestIDSent); len(v) > 0 {
+									t.Fatalf("%s -> %+v: %v", data, env, v)
+								}
+								checked++
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	if want := 3 * 2 * len(recoveryEffects) * len(recoveryRetryPolicies) * len(actions) * len(recoveryUserConfirmations) * 3; checked != want || want != 4860 {
+		t.Errorf("checked %d combinations, want %d (4860)", checked, want)
 	}
 }

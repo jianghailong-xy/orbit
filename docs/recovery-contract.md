@@ -51,8 +51,9 @@ had happened. And remedies were written either as prose or as a client-side gues
 
 A server states what it knows in a `recovery` block next to the legacy flat fields:
 `{effect, retryPolicy, retryAfterSeconds, actionCode, actor, userConfirmation, resources}`. Every
-field is optional. A stated value always beats an inferred one. A value outside its enum, or an
-action code that is not a token, is ignored. Older clients ignore the block, so adding it changes
+field is optional. A stated value beats an inferred one, but the result is then held to the
+cross-field invariants (§3.1), so no combination of stated fields can advise an unsafe resend. A
+value outside its enum, or an action code that is not a token, is ignored. Older clients ignore the block, so adding it changes
 nothing for them.
 
 ## 3. Decision rules
@@ -63,6 +64,9 @@ The parser reads only these fields: `code`, the status, the `recovery` block, `r
 request id. A token `requiredAction` (matching `^[A-Z][A-Z0-9_]*$`) also counts as stable. A prose
 `message` or `requiredAction` is never read: the "prose rewording" tests replace every sentence and
 check that the branch stays the same.
+
+Each field below is first resolved on its own. The policy and action code that come out are only
+candidates: §3.1 decides what the envelope finally carries.
 
 **Retry policy.** The first rule that matches wins:
 
@@ -120,6 +124,32 @@ is `TRANSPORT`. No answer is `TRANSPORT`, local validation is `VALIDATION`, and 
 `taskId`→`TASK`, `sessionId`→`SESSION`, `projectId`→`PROJECT`, `crossingId`→`CROSSING` and
 `triggerId`→`REQUEST`.
 
+### 3.1 Cross-field invariants
+
+Both parsers apply the same normalization (`normalizeRecovery`) after every field is resolved. The
+steps run in this order, and the contract lists them under `invariants.rules`. *Has a request id*
+means the client sent one, or the answer names one (a `REQUEST` resource).
+
+1. `COMMITTED_NEVER_RESENT`: if the effect is `COMMITTED`, the policy is `NEVER` and the action is
+   never `RETRY` or `RETRY_SAME_REQUEST`.
+2. `UNKNOWN_VERIFIES_FIRST`: if the effect is `UNKNOWN`, the policy stays `SAME_REQUEST_ID` only when
+   it already was and there is a request id. Anything else (`SAFE`, `NEVER`, `AFTER_STATE_CHANGE`,
+   or `SAME_REQUEST_ID` without an id) becomes `VERIFY_THEN_RETRY`. The action is the policy's own:
+   `VERIFY_STATE` or `RETRY_SAME_REQUEST`. A `500` with `retryable: false` therefore says verify
+   first, not `FIX_REQUEST`.
+3. `SAME_REQUEST_ID_NEEDS_AN_ID`: with no request id, `SAME_REQUEST_ID` becomes `VERIFY_THEN_RETRY`.
+4. `CONFIRMATION_BLOCKS_AUTOMATIC_RESEND`: if `userConfirmation` is `REQUIRED`, `SAFE` and
+   `SAME_REQUEST_ID` become `AFTER_STATE_CHANGE` (or `VERIFY_THEN_RETRY` when the effect is
+   `UNKNOWN`), and a resend action becomes `AWAIT_OWNER_DECISION`.
+5. `RESEND_ACTION_MATCHES_POLICY`: a resend action that does not match the final policy is dropped.
+   The policy's default then fills an empty action, except for `COMMITTED` and 2xx answers.
+6. `NEVER_HAS_NO_WAIT`: if the policy is `NEVER`, `afterSeconds` is `null`.
+
+As a result, `SAFE` survives only on effect `NONE`. Every envelope satisfies the checks in
+`invariants.holdsOnEveryEnvelope`. Both test suites check them on every fixture, and on all 4,860
+combinations a server block can state (effect × policy × action × confirmation × request id × status
+× `retryable`).
+
 ## 4. Action codes: semantic, never a tool or a command
 
 The server names *what* has to happen, for example `AWAIT_OWNER_DECISION` or `VERIFY_STATE`. It never
@@ -129,8 +159,8 @@ server. `TestRecoveryActionCodesAreNeverToolNamesOrCommands` checks that no acti
 tool name in any case.
 
 The action code comes from the first of these that applies: `recovery.actionCode`, then
-`legacyCodes`, then a token `requiredAction`, then the policy's default. A 2xx response gets no
-default. The defaults are:
+`legacyCodes`, then a token `requiredAction`, then the policy's default. The result is held to §3.1.
+A 2xx response or a `COMMITTED` effect gets no default. The defaults are:
 
 | Policy | Default action |
 | --- | --- |

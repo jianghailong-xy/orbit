@@ -194,22 +194,115 @@ function actionCodeOf(v: unknown): string | null {
   return typeof v === 'string' && RECOVERY_ACTION_CODE_PATTERN.test(v) ? v : null;
 }
 
-function base(fields: Omit<RecoveryEnvelope, 'contractVersion' | 'owner' | 'requiredAction' | 'userConfirmation' | 'resources' | 'actor' | 'status' | 'actionCode'>
-  & Partial<RecoveryEnvelope>): RecoveryEnvelope {
+/** The actions that send the same request again. Only a write known not to have happened may lead to one. */
+export const RECOVERY_RESEND_ACTION_CODES: readonly string[] = ['RETRY', 'RETRY_SAME_REQUEST'];
+
+/** The resource type that names a request id the server can read an earlier answer back by. */
+export const RECOVERY_REQUEST_ID_RESOURCE_TYPE = 'REQUEST';
+
+/** What the parser resolved from the fields, before the cross-field invariants are applied. */
+export interface RecoveryCandidate {
+  effect: RecoveryEffect;
+  policy: RecoveryRetryPolicy;
+  /** The stated action code (server block, legacy table, or a token requiredAction); null when none was stated. */
+  actionCode: string | null;
+  afterSeconds: number | null;
+  userConfirmation: RecoveryUserConfirmation;
+  /** Whether a request id that reads the first answer back provably exists: one was sent, or the answer names one. */
+  hasRequestId: boolean;
+  /** A 2xx answer: a result, never given a default action. */
+  success: boolean;
+}
+
+/**
+ * The cross-field invariants every envelope keeps, whatever the fields said one by one
+ * (contract `invariants`). Each field may be stated or inferred on its own; their combination must never
+ * advise a resend that could apply a write twice. So, in this order:
+ *
+ * 1. COMMITTED: the write stands. Policy NEVER, and no resend action.
+ * 2. UNKNOWN: nobody can tell whether it was written. SAME_REQUEST_ID is kept only when it was the policy
+ *    and a request id provably exists; everything else becomes VERIFY_THEN_RETRY. The action is the
+ *    policy's own (VERIFY_STATE or RETRY_SAME_REQUEST).
+ * 3. SAME_REQUEST_ID without a provable request id becomes VERIFY_THEN_RETRY.
+ * 4. userConfirmation REQUIRED: no automatic resend. SAFE and SAME_REQUEST_ID become AFTER_STATE_CHANGE
+ *    (VERIFY_THEN_RETRY when the effect is UNKNOWN), and a resend action becomes AWAIT_OWNER_DECISION.
+ * 5. A resend action that does not match the final policy is dropped, then the policy's default fills
+ *    an empty action (never for COMMITTED or a 2xx).
+ * 6. NEVER carries no wait.
+ *
+ * SAFE is therefore only ever left standing on effect NONE.
+ */
+export function normalizeRecovery(c: RecoveryCandidate): { policy: RecoveryRetryPolicy; actionCode: string | null; afterSeconds: number | null } {
+  let { policy, actionCode } = c;
+  if (c.effect === 'COMMITTED') {
+    policy = 'NEVER';
+  } else if (c.effect === 'UNKNOWN') {
+    policy = policy === 'SAME_REQUEST_ID' && c.hasRequestId ? 'SAME_REQUEST_ID' : 'VERIFY_THEN_RETRY';
+  } else if (policy === 'SAME_REQUEST_ID' && !c.hasRequestId) {
+    policy = 'VERIFY_THEN_RETRY';
+  }
+  const confirm = c.userConfirmation === 'REQUIRED';
+  if (confirm && (policy === 'SAFE' || policy === 'SAME_REQUEST_ID')) {
+    policy = c.effect === 'UNKNOWN' ? 'VERIFY_THEN_RETRY' : 'AFTER_STATE_CHANGE';
+  }
+  if (c.effect === 'UNKNOWN') {
+    actionCode = RECOVERY_DEFAULT_ACTION_BY_POLICY[policy];
+  } else {
+    if (actionCode !== null && RECOVERY_RESEND_ACTION_CODES.includes(actionCode)) {
+      if (confirm) actionCode = 'AWAIT_OWNER_DECISION';
+      else if (actionCode !== RECOVERY_DEFAULT_ACTION_BY_POLICY[policy]) actionCode = null;
+    }
+    if (actionCode === null && c.effect !== 'COMMITTED' && !c.success) {
+      actionCode = RECOVERY_DEFAULT_ACTION_BY_POLICY[policy] ?? (confirm ? 'AWAIT_OWNER_DECISION' : null);
+    }
+  }
+  return { policy, actionCode, afterSeconds: policy === 'NEVER' ? null : c.afterSeconds };
+}
+
+interface EnvelopeFields {
+  code: string;
+  message: string;
+  kind: RecoveryKind;
+  status?: number | null;
+  effect: RecoveryEffect;
+  policy: RecoveryRetryPolicy;
+  actionCode?: string | null;
+  afterSeconds?: number | null;
+  actor?: RecoveryActor;
+  owner?: string | null;
+  requiredAction?: string | null;
+  userConfirmation?: RecoveryUserConfirmation;
+  resources?: RecoveryResource[];
+  requestIdSent?: boolean;
+  success?: boolean;
+}
+
+function base(f: EnvelopeFields): RecoveryEnvelope {
+  const resources = f.resources ?? [];
+  const userConfirmation = f.userConfirmation ?? 'NOT_REQUIRED';
+  const normalized = normalizeRecovery({
+    effect: f.effect,
+    policy: f.policy,
+    actionCode: f.actionCode ?? null,
+    afterSeconds: f.afterSeconds ?? null,
+    userConfirmation,
+    hasRequestId: f.requestIdSent === true || resources.some((r) => r.type === RECOVERY_REQUEST_ID_RESOURCE_TYPE),
+    success: f.success === true,
+  });
   return {
     contractVersion: RECOVERY_CONTRACT_VERSION,
-    code: fields.code,
-    message: fields.message,
-    kind: fields.kind,
-    status: fields.status ?? null,
-    effect: fields.effect,
-    retry: fields.retry,
-    actor: fields.actor ?? 'CALLER',
-    owner: fields.owner ?? null,
-    actionCode: fields.actionCode !== undefined ? fields.actionCode : RECOVERY_DEFAULT_ACTION_BY_POLICY[fields.retry.policy],
-    requiredAction: fields.requiredAction ?? null,
-    userConfirmation: fields.userConfirmation ?? 'NOT_REQUIRED',
-    resources: fields.resources ?? [],
+    code: f.code,
+    message: f.message,
+    kind: f.kind,
+    status: f.status ?? null,
+    effect: f.effect,
+    retry: { policy: normalized.policy, afterSeconds: normalized.afterSeconds },
+    actor: f.actor ?? 'CALLER',
+    owner: f.owner ?? null,
+    actionCode: normalized.actionCode,
+    requiredAction: f.requiredAction ?? null,
+    userConfirmation,
+    resources,
   };
 }
 
@@ -222,8 +315,7 @@ export function parseRecovery(obs: RecoveryObservation): RecoveryEnvelope | null
     case 'LOCAL': {
       const code = obs.code.startsWith('LOCAL_') ? obs.code : `LOCAL_${obs.code}`;
       return base({
-        code, message: obs.message, kind: 'VALIDATION', effect: 'NONE',
-        retry: { policy: 'NEVER', afterSeconds: null }, resources: obs.resources ?? [],
+        code, message: obs.message, kind: 'VALIDATION', effect: 'NONE', policy: 'NEVER', resources: obs.resources ?? [],
       });
     }
     case 'NETWORK':
@@ -233,7 +325,8 @@ export function parseRecovery(obs: RecoveryObservation): RecoveryEnvelope | null
         message: obs.message,
         kind: obs.source === 'NETWORK' ? 'TRANSPORT' : 'UNKNOWN',
         effect: 'UNKNOWN',
-        retry: { policy: obs.requestIdSent ? 'SAME_REQUEST_ID' : 'VERIFY_THEN_RETRY', afterSeconds: null },
+        policy: obs.requestIdSent ? 'SAME_REQUEST_ID' : 'VERIFY_THEN_RETRY',
+        requestIdSent: obs.requestIdSent,
       });
     case 'HTTP':
       return parseHttp(obs);
@@ -283,13 +376,11 @@ function parseHttp(obs: Extract<RecoveryObservation, { source: 'HTTP' }>): Recov
     else effect = 'UNKNOWN';
   }
 
-  const afterSeconds = policy === 'NEVER'
-    ? null
-    : seconds(stated?.retryAfterSeconds)
-      ?? seconds(body?.retryAfterSeconds)
-      ?? millisToSeconds(body?.retryAfterMs)
-      ?? millisToSeconds(headerDigits(header(obs.headers, 'Retry-After-Ms')) ?? undefined)
-      ?? headerDigits(header(obs.headers, 'Retry-After'));
+  const afterSeconds = seconds(stated?.retryAfterSeconds)
+    ?? seconds(body?.retryAfterSeconds)
+    ?? millisToSeconds(body?.retryAfterMs)
+    ?? millisToSeconds(headerDigits(header(obs.headers, 'Retry-After-Ms')) ?? undefined)
+    ?? headerDigits(header(obs.headers, 'Retry-After'));
 
   const owner = nonEmpty(body?.owner);
   const requiredAction = nonEmpty(body?.requiredAction);
@@ -299,8 +390,7 @@ function parseHttp(obs: Extract<RecoveryObservation, { source: 'HTTP' }>): Recov
     ?? 'CALLER';
   const actionCode = actionCodeOf(stated?.actionCode)
     ?? legacy?.actionCode
-    ?? actionCodeOf(requiredAction)
-    ?? (success ? null : RECOVERY_DEFAULT_ACTION_BY_POLICY[policy]);
+    ?? actionCodeOf(requiredAction);
   const userConfirmation = oneOf(RECOVERY_USER_CONFIRMATIONS, stated?.userConfirmation)
     ?? legacy?.userConfirmation
     ?? 'NOT_REQUIRED';
@@ -314,8 +404,8 @@ function parseHttp(obs: Extract<RecoveryObservation, { source: 'HTTP' }>): Recov
   }
 
   return base({
-    code, message, kind, status, effect, retry: { policy, afterSeconds }, actor, owner, actionCode,
-    requiredAction, userConfirmation, resources,
+    code, message, kind, status, effect, policy, actionCode, afterSeconds, actor, owner,
+    requiredAction, userConfirmation, resources, requestIdSent: obs.requestIdSent, success,
   });
 }
 

@@ -204,10 +204,98 @@ func newRecoveryEnvelope(code, message, kind, effect, policy string) recoveryEnv
 		Effect:           effect,
 		Retry:            recoveryRetry{Policy: policy},
 		Actor:            "CALLER",
-		ActionCode:       optionalString(recoveryDefaultActionByPolicy[policy]),
 		UserConfirmation: "NOT_REQUIRED",
 		Resources:        []recoveryResource{},
 	}
+}
+
+// The actions that send the same request again: only a write known not to have happened may lead to one.
+var recoveryResendActionCodes = []string{"RETRY", "RETRY_SAME_REQUEST"}
+
+// The resource type that names a request id the server can read an earlier answer back by.
+const recoveryRequestIDResourceType = "REQUEST"
+
+// recoveryCandidate is what the parser resolved from the fields, before the cross-field invariants.
+type recoveryCandidate struct {
+	effect           string
+	policy           string
+	actionCode       string // the stated action; "" when none was stated
+	afterSeconds     *int
+	userConfirmation string
+	hasRequestID     bool // a request id provably exists: one was sent, or the answer names one
+	success          bool // a 2xx answer, never given a default action
+}
+
+func recoveryIsResend(action string) bool {
+	for _, a := range recoveryResendActionCodes {
+		if a == action {
+			return true
+		}
+	}
+	return false
+}
+
+// normalizeRecovery applies the contract's cross-field invariants (contracts/recovery.contract.json
+// `invariants`), the same steps in the same order as src/shared/src/recovery.ts normalizeRecovery: no
+// combination of fields, stated or inferred, may advise a resend that could apply a write twice.
+func normalizeRecovery(c recoveryCandidate) (policy, action string, afterSeconds *int) {
+	policy, action = c.policy, c.actionCode
+	switch {
+	case c.effect == "COMMITTED":
+		policy = "NEVER"
+	case c.effect == "UNKNOWN":
+		if policy != "SAME_REQUEST_ID" || !c.hasRequestID {
+			policy = "VERIFY_THEN_RETRY"
+		}
+	case policy == "SAME_REQUEST_ID" && !c.hasRequestID:
+		policy = "VERIFY_THEN_RETRY"
+	}
+	confirm := c.userConfirmation == "REQUIRED"
+	if confirm && (policy == "SAFE" || policy == "SAME_REQUEST_ID") {
+		if c.effect == "UNKNOWN" {
+			policy = "VERIFY_THEN_RETRY"
+		} else {
+			policy = "AFTER_STATE_CHANGE"
+		}
+	}
+	if c.effect == "UNKNOWN" {
+		action = recoveryDefaultActionByPolicy[policy]
+	} else {
+		if action != "" && recoveryIsResend(action) {
+			if confirm {
+				action = "AWAIT_OWNER_DECISION"
+			} else if action != recoveryDefaultActionByPolicy[policy] {
+				action = ""
+			}
+		}
+		if action == "" && c.effect != "COMMITTED" && !c.success {
+			action = recoveryDefaultActionByPolicy[policy]
+			if action == "" && confirm {
+				action = "AWAIT_OWNER_DECISION"
+			}
+		}
+	}
+	if policy != "NEVER" {
+		afterSeconds = c.afterSeconds
+	}
+	return policy, action, afterSeconds
+}
+
+// finishRecovery holds env to the invariants: its effect, userConfirmation and resources are final, its
+// Retry.Policy is the resolved one, and statedAction/afterSeconds are what the fields said.
+func finishRecovery(env *recoveryEnvelope, statedAction string, afterSeconds *int, requestIDSent, success bool) {
+	hasRequestID := requestIDSent
+	for _, r := range env.Resources {
+		if r.Type == recoveryRequestIDResourceType {
+			hasRequestID = true
+		}
+	}
+	policy, action, after := normalizeRecovery(recoveryCandidate{
+		effect: env.Effect, policy: env.Retry.Policy, actionCode: statedAction, afterSeconds: afterSeconds,
+		userConfirmation: env.UserConfirmation, hasRequestID: hasRequestID, success: success,
+	})
+	env.Retry = recoveryRetry{Policy: policy, AfterSeconds: after}
+	env.ActionCode = optionalString(action)
 }
 
 // parseRecovery reads one failure into the envelope. It answers false only for a successful HTTP
@@ -223,16 +311,19 @@ func parseRecovery(obs recoveryObservation) (recoveryEnvelope, bool) {
 		if obs.Resources != nil {
 			env.Resources = obs.Resources
 		}
+		finishRecovery(&env, "", nil, false, false)
 		return env, true
 	case "NETWORK", "UNKNOWN":
 		policy := "VERIFY_THEN_RETRY"
 		if obs.RequestIDSent {
 			policy = "SAME_REQUEST_ID"
 		}
+		env := newRecoveryEnvelope("UNKNOWN_ERROR", obs.Message, "UNKNOWN", "UNKNOWN", policy)
 		if obs.Source == "NETWORK" {
-			return newRecoveryEnvelope("TRANSPORT_NO_ANSWER", obs.Message, "TRANSPORT", "UNKNOWN", policy), true
+			env = newRecoveryEnvelope("TRANSPORT_NO_ANSWER", obs.Message, "TRANSPORT", "UNKNOWN", policy)
 		}
-		return newRecoveryEnvelope("UNKNOWN_ERROR", obs.Message, "UNKNOWN", "UNKNOWN", policy), true
+		finishRecovery(&env, "", nil, obs.RequestIDSent, false)
+		return env, true
 	}
 	return parseHTTPRecovery(obs)
 }
@@ -332,23 +423,22 @@ func parseHTTPRecovery(obs recoveryObservation) (recoveryEnvelope, bool) {
 
 	env := newRecoveryEnvelope(code, message, kind, effect, policy)
 	env.Status = &status
-	if policy != "NEVER" {
-		for _, candidate := range []*int{
-			recoverySeconds(stated["retryAfterSeconds"]),
-			recoverySeconds(body["retryAfterSeconds"]),
-			recoveryMillisToSeconds(body["retryAfterMs"]),
-		} {
-			if candidate != nil {
-				env.Retry.AfterSeconds = candidate
-				break
-			}
+	var afterSeconds *int
+	for _, candidate := range []*int{
+		recoverySeconds(stated["retryAfterSeconds"]),
+		recoverySeconds(body["retryAfterSeconds"]),
+		recoveryMillisToSeconds(body["retryAfterMs"]),
+	} {
+		if candidate != nil {
+			afterSeconds = candidate
+			break
 		}
-		if env.Retry.AfterSeconds == nil {
-			if ms := recoveryHeaderDigits(obs.Headers, "Retry-After-Ms"); ms != nil {
-				env.Retry.AfterSeconds = recoveryMillisToSeconds(float64(*ms))
-			} else {
-				env.Retry.AfterSeconds = recoveryHeaderDigits(obs.Headers, "Retry-After")
-			}
+	}
+	if afterSeconds == nil {
+		if ms := recoveryHeaderDigits(obs.Headers, "Retry-After-Ms"); ms != nil {
+			afterSeconds = recoveryMillisToSeconds(float64(*ms))
+		} else {
+			afterSeconds = recoveryHeaderDigits(obs.Headers, "Retry-After")
 		}
 	}
 
@@ -373,10 +463,6 @@ func parseHTTPRecovery(obs recoveryObservation) (recoveryEnvelope, bool) {
 	if action == "" {
 		action = recoveryActionCodeOf(requiredAction)
 	}
-	if action == "" && !success {
-		action = recoveryDefaultActionByPolicy[policy]
-	}
-	env.ActionCode = optionalString(action)
 
 	if c := recoveryOneOf(recoveryUserConfirmations, stated["userConfirmation"]); c != "" {
 		env.UserConfirmation = c
@@ -393,6 +479,7 @@ func parseHTTPRecovery(obs recoveryObservation) (recoveryEnvelope, bool) {
 			}
 		}
 	}
+	finishRecovery(&env, action, afterSeconds, obs.RequestIDSent, success)
 	return env, true
 }
 

@@ -99,7 +99,7 @@
       "legacyText": "  refused: TASK_RUN_REQUEST_MISMATCH\n  what:    retry the same request, it will work\n  do:      just retry the same request\n"
     },
     {
-      "name": "refusal: a stated recovery block wins over everything inferred",
+      "name": "refusal: a stated recovery block wins over inference, inside the invariants (COMMITTED is never resent)",
       "input": {
         "source": "HTTP",
         "status": 409,
@@ -113,8 +113,8 @@
         "status": 409,
         "effect": "COMMITTED",
         "retry": {
-          "policy": "VERIFY_THEN_RETRY",
-          "afterSeconds": 5
+          "policy": "NEVER",
+          "afterSeconds": null
         },
         "actor": "CALLER",
         "owner": "USER",
@@ -203,7 +203,7 @@
       "legacyText": "  refused: CROSS_PROJECT_APPROVAL_REQUIRED\n  what:    this crossing has to be approved by the account owner\n"
     },
     {
-      "name": "refusal: a coded 500 that says it is not retryable is never resent",
+      "name": "invariant: a coded 500 that says it is not retryable left the write UNKNOWN, so it is verified first",
       "input": {
         "source": "HTTP",
         "status": 500,
@@ -217,12 +217,12 @@
         "status": 500,
         "effect": "UNKNOWN",
         "retry": {
-          "policy": "NEVER",
+          "policy": "VERIFY_THEN_RETRY",
           "afterSeconds": null
         },
         "actor": "CALLER",
         "owner": null,
-        "actionCode": "FIX_REQUEST",
+        "actionCode": "VERIFY_STATE",
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
         "resources": []
@@ -657,6 +657,282 @@
         "resources": []
       },
       "legacyText": ""
+    },
+    {
+      "name": "invariant: UNKNOWN + SAFE with no request id verifies first",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"X_UNKNOWN_SAFE\",\"message\":\"the write may or may not have happened\",\"recovery\":{\"effect\":\"UNKNOWN\",\"retryPolicy\":\"SAFE\",\"actionCode\":\"RETRY\",\"retryAfterSeconds\":2}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_UNKNOWN_SAFE",
+        "message": "the write may or may not have happened",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "UNKNOWN",
+        "retry": {
+          "policy": "VERIFY_THEN_RETRY",
+          "afterSeconds": 2
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "VERIFY_STATE",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": []
+      },
+      "legacyText": "  refused: X_UNKNOWN_SAFE\n  what:    the write may or may not have happened\n"
+    },
+    {
+      "name": "invariant: UNKNOWN + SAME_REQUEST_ID is kept when the request id was sent",
+      "input": {
+        "source": "HTTP",
+        "status": 503,
+        "requestIdSent": true,
+        "body": "{\"code\":\"X_UNKNOWN_REPLAY\",\"message\":\"ask again under the same id\",\"recovery\":{\"effect\":\"UNKNOWN\",\"retryPolicy\":\"SAME_REQUEST_ID\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_UNKNOWN_REPLAY",
+        "message": "ask again under the same id",
+        "kind": "REFUSAL",
+        "status": 503,
+        "effect": "UNKNOWN",
+        "retry": {
+          "policy": "SAME_REQUEST_ID",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "RETRY_SAME_REQUEST",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": []
+      },
+      "legacyText": "  refused: X_UNKNOWN_REPLAY\n  what:    ask again under the same id\n"
+    },
+    {
+      "name": "invariant: UNKNOWN + SAME_REQUEST_ID with no request id anywhere verifies first",
+      "input": {
+        "source": "HTTP",
+        "status": 503,
+        "body": "{\"code\":\"X_UNKNOWN_REPLAY\",\"message\":\"ask again under the same id\",\"recovery\":{\"effect\":\"UNKNOWN\",\"retryPolicy\":\"SAME_REQUEST_ID\",\"actionCode\":\"RETRY_SAME_REQUEST\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_UNKNOWN_REPLAY",
+        "message": "ask again under the same id",
+        "kind": "REFUSAL",
+        "status": 503,
+        "effect": "UNKNOWN",
+        "retry": {
+          "policy": "VERIFY_THEN_RETRY",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "VERIFY_STATE",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": []
+      },
+      "legacyText": "  refused: X_UNKNOWN_REPLAY\n  what:    ask again under the same id\n"
+    },
+    {
+      "name": "invariant: UNKNOWN + NEVER + FIX_REQUEST verifies first",
+      "input": {
+        "source": "HTTP",
+        "status": 500,
+        "body": "{\"code\":\"X_UNKNOWN_NEVER\",\"message\":\"do not send this again\",\"recovery\":{\"effect\":\"UNKNOWN\",\"retryPolicy\":\"NEVER\",\"actionCode\":\"FIX_REQUEST\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_UNKNOWN_NEVER",
+        "message": "do not send this again",
+        "kind": "REFUSAL",
+        "status": 500,
+        "effect": "UNKNOWN",
+        "retry": {
+          "policy": "VERIFY_THEN_RETRY",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "VERIFY_STATE",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": []
+      },
+      "legacyText": "  refused: X_UNKNOWN_NEVER\n  what:    do not send this again\n"
+    },
+    {
+      "name": "invariant: COMMITTED + SAFE + RETRY is never resent",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"X_COMMITTED_SAFE\",\"message\":\"it was saved; send it again\",\"recovery\":{\"effect\":\"COMMITTED\",\"retryPolicy\":\"SAFE\",\"actionCode\":\"RETRY\",\"retryAfterSeconds\":3}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_COMMITTED_SAFE",
+        "message": "it was saved; send it again",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "COMMITTED",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": []
+      },
+      "legacyText": "  refused: X_COMMITTED_SAFE\n  what:    it was saved; send it again\n"
+    },
+    {
+      "name": "invariant: SAME_REQUEST_ID with no provable request id is verified, not replayed",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"X_REPLAY_NO_ID\",\"message\":\"ask again with the same id\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"SAME_REQUEST_ID\",\"actionCode\":\"RETRY_SAME_REQUEST\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_REPLAY_NO_ID",
+        "message": "ask again with the same id",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "VERIFY_THEN_RETRY",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "VERIFY_STATE",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": []
+      },
+      "legacyText": "  refused: X_REPLAY_NO_ID\n  what:    ask again with the same id\n"
+    },
+    {
+      "name": "invariant: a legacy SAME_REQUEST_ID code whose answer names no request id is verified",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"TASK_RUN_REQUEST_UNREADABLE\",\"message\":\"planned by a different version\",\"owner\":\"SYSTEM\",\"requiredAction\":\"retry the same request; a replica that understands it will answer\"}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "TASK_RUN_REQUEST_UNREADABLE",
+        "message": "planned by a different version",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "VERIFY_THEN_RETRY",
+          "afterSeconds": null
+        },
+        "actor": "SYSTEM",
+        "owner": "SYSTEM",
+        "actionCode": "VERIFY_STATE",
+        "requiredAction": "retry the same request; a replica that understands it will answer",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": []
+      },
+      "legacyText": "  refused: TASK_RUN_REQUEST_UNREADABLE\n  what:    planned by a different version\n  owner:   SYSTEM\n  do:      retry the same request; a replica that understands it will answer\n"
+    },
+    {
+      "name": "invariant: a required confirmation turns an automatic retry into waiting for the decision",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"X_CONFIRM_THEN_RETRY\",\"message\":\"the owner has to confirm this\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"SAFE\",\"actionCode\":\"RETRY\",\"userConfirmation\":\"REQUIRED\",\"actor\":\"USER\",\"retryAfterSeconds\":4}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_CONFIRM_THEN_RETRY",
+        "message": "the owner has to confirm this",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": 4
+        },
+        "actor": "USER",
+        "owner": null,
+        "actionCode": "AWAIT_OWNER_DECISION",
+        "requiredAction": null,
+        "userConfirmation": "REQUIRED",
+        "resources": []
+      },
+      "legacyText": "  refused: X_CONFIRM_THEN_RETRY\n  what:    the owner has to confirm this\n"
+    },
+    {
+      "name": "invariant: a required confirmation also stops a same-id replay",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"X_CONFIRM_THEN_REPLAY\",\"message\":\"the owner has to confirm this run\",\"triggerId\":\"trg_9\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"SAME_REQUEST_ID\",\"userConfirmation\":\"REQUIRED\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_CONFIRM_THEN_REPLAY",
+        "message": "the owner has to confirm this run",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "AWAIT_OWNER_DECISION",
+        "requiredAction": null,
+        "userConfirmation": "REQUIRED",
+        "resources": [
+          {
+            "type": "REQUEST",
+            "id": "trg_9"
+          }
+        ]
+      },
+      "legacyText": "  refused: X_CONFIRM_THEN_REPLAY\n  what:    the owner has to confirm this run\n"
+    },
+    {
+      "name": "invariant: retryable:true contradicted by a stated UNKNOWN effect verifies first",
+      "input": {
+        "source": "HTTP",
+        "status": 503,
+        "body": "{\"code\":\"X_RETRYABLE_BUT_UNKNOWN\",\"message\":\"safe to send again\",\"retryable\":true,\"retryAfterSeconds\":1,\"recovery\":{\"effect\":\"UNKNOWN\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_RETRYABLE_BUT_UNKNOWN",
+        "message": "safe to send again",
+        "kind": "REFUSAL",
+        "status": 503,
+        "effect": "UNKNOWN",
+        "retry": {
+          "policy": "VERIFY_THEN_RETRY",
+          "afterSeconds": 1
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "VERIFY_STATE",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": []
+      },
+      "legacyText": "  refused: X_RETRYABLE_BUT_UNKNOWN\n  what:    safe to send again\n"
     }
   ]
 }

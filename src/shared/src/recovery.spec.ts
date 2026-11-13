@@ -12,6 +12,8 @@ import {
   RECOVERY_LEGACY_CODES,
   RECOVERY_LEGACY_OWNER_TO_ACTOR,
   RECOVERY_LEGACY_RESOURCE_KEYS,
+  RECOVERY_REQUEST_ID_RESOURCE_TYPE,
+  RECOVERY_RESEND_ACTION_CODES,
   RECOVERY_RETRY_POLICIES,
   RECOVERY_STATUS_AFTER_STATE_CHANGE,
   RECOVERY_STATUS_SAFE,
@@ -74,6 +76,9 @@ describe('recovery contract', () => {
     expect(CONTRACT.statusPolicies.SAFE).toEqual(RECOVERY_STATUS_SAFE);
     expect(CONTRACT.statusPolicies.AFTER_STATE_CHANGE).toEqual(RECOVERY_STATUS_AFTER_STATE_CHANGE);
     expect(new RegExp(CONTRACT.actionCodePattern).source).toBe(RECOVERY_ACTION_CODE_PATTERN.source);
+    expect(CONTRACT.resendActionCodes).toEqual(RECOVERY_RESEND_ACTION_CODES);
+    expect(CONTRACT.requestIdResourceType).toBe(RECOVERY_REQUEST_ID_RESOURCE_TYPE);
+    expect(CONTRACT.invariants.rules.map((r: { id: string }) => r.id)).toEqual(INVARIANT_RULE_IDS);
   });
 
   it('names actions as semantic tokens, never as a tool or a command', () => {
@@ -111,6 +116,26 @@ describe('recovery contract', () => {
     }
   }
 
+  it('keeps every cross-field invariant on every fixture', () => {
+    for (const c of CASES) {
+      if (!c.expect) continue;
+      const requestIdSent = 'requestIdSent' in c.input && c.input.requestIdSent === true;
+      expect(invariantViolations(parseRecovery(c.input)!, requestIdSent), c.name).toEqual([]);
+    }
+  });
+
+  it('keeps every cross-field invariant on every combination a server block can state', () => {
+    let checked = 0;
+    for (const combo of serverBlockCombinations()) {
+      const env = parseRecovery(combo.obs);
+      expect(env, JSON.stringify(combo.obs)).not.toBeNull();
+      const violations = invariantViolations(env!, combo.obs.requestIdSent === true);
+      if (violations.length) throw new Error(`${JSON.stringify(combo.obs)} -> ${JSON.stringify(env)}: ${violations.join('; ')}`);
+      checked++;
+    }
+    expect(checked).toBe(SERVER_BLOCK_COMBINATIONS);
+  });
+
   it('decides the branch from stable fields only: rewording the prose changes nothing', () => {
     for (const c of CASES) {
       const reworded = reword(c.input);
@@ -119,6 +144,55 @@ describe('recovery contract', () => {
     }
   });
 });
+
+const INVARIANT_RULE_IDS = [
+  'COMMITTED_NEVER_RESENT',
+  'UNKNOWN_VERIFIES_FIRST',
+  'SAME_REQUEST_ID_NEEDS_AN_ID',
+  'CONFIRMATION_BLOCKS_AUTOMATIC_RESEND',
+  'RESEND_ACTION_MATCHES_POLICY',
+  'NEVER_HAS_NO_WAIT',
+];
+
+/** contract `invariants.holdsOnEveryEnvelope`, as checks. */
+function invariantViolations(e: RecoveryEnvelope, requestIdSent: boolean): string[] {
+  const out: string[] = [];
+  const resend = e.actionCode !== null && RECOVERY_RESEND_ACTION_CODES.includes(e.actionCode);
+  const hasRequestId = requestIdSent || e.resources.some((r) => r.type === RECOVERY_REQUEST_ID_RESOURCE_TYPE);
+  if (e.effect === 'COMMITTED' && (e.retry.policy !== 'NEVER' || resend)) out.push('COMMITTED resent');
+  if (e.effect === 'UNKNOWN' && !(['VERIFY_THEN_RETRY', 'SAME_REQUEST_ID'].includes(e.retry.policy)
+    && e.actionCode === RECOVERY_DEFAULT_ACTION_BY_POLICY[e.retry.policy])) out.push('UNKNOWN not verified first');
+  if (e.retry.policy === 'SAFE' && e.effect !== 'NONE') out.push('SAFE without NONE');
+  if (e.retry.policy === 'SAME_REQUEST_ID' && !hasRequestId) out.push('SAME_REQUEST_ID without a request id');
+  if (e.userConfirmation === 'REQUIRED' && (['SAFE', 'SAME_REQUEST_ID'].includes(e.retry.policy) || resend)) out.push('automatic resend past a confirmation');
+  if (e.actionCode === 'RETRY' && e.retry.policy !== 'SAFE') out.push('RETRY off SAFE');
+  if (e.actionCode === 'RETRY_SAME_REQUEST' && e.retry.policy !== 'SAME_REQUEST_ID') out.push('RETRY_SAME_REQUEST off SAME_REQUEST_ID');
+  if (e.retry.policy === 'NEVER' && e.retry.afterSeconds !== null) out.push('NEVER with a wait');
+  return out;
+}
+
+/**
+ * Every stated (effect, retryPolicy, actionCode, userConfirmation) a server block can carry, each also with and
+ * without a request id — sent by the client or named by the answer — on a 409, a 503 and a 201, with and without
+ * `retryable: true`. The same enumeration as recovery_test.go's.
+ */
+const STATUSES = [409, 503, 201];
+const ACTIONS: Array<string | undefined> = [undefined, ...RECOVERY_ACTION_CODES];
+const SERVER_BLOCK_COMBINATIONS = STATUSES.length * 2 * RECOVERY_EFFECTS.length * RECOVERY_RETRY_POLICIES.length
+  * ACTIONS.length * RECOVERY_USER_CONFIRMATIONS.length * 3;
+function* serverBlockCombinations(): Generator<{ obs: Extract<RecoveryObservation, { source: 'HTTP' }> }> {
+  for (const status of STATUSES) for (const retryable of [false, true]) for (const effect of RECOVERY_EFFECTS)
+    for (const retryPolicy of RECOVERY_RETRY_POLICIES) for (const actionCode of ACTIONS)
+      for (const userConfirmation of RECOVERY_USER_CONFIRMATIONS) for (const id of ['none', 'sent', 'named'] as const) {
+        const body: Record<string, unknown> = {
+          code: 'X_COMBINATION', message: 'combination',
+          recovery: { effect, retryPolicy, userConfirmation, retryAfterSeconds: 2, ...(actionCode ? { actionCode } : {}) },
+        };
+        if (retryable) body.retryable = true;
+        if (id === 'named') body.triggerId = 'trg_x';
+        yield { obs: { source: 'HTTP', status, body: JSON.stringify(body), requestIdSent: id === 'sent' } };
+      }
+}
 
 /** The same failure with every English sentence replaced; tokens (UPPER_SNAKE) are left alone. */
 function reword(obs: RecoveryObservation): RecoveryObservation | null {

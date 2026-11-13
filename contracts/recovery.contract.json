@@ -19,16 +19,48 @@
     "resources"
   ],
   "enums": {
-    "kind": ["REFUSAL", "ADVISORY", "VALIDATION", "TRANSPORT", "UNKNOWN"],
-    "effect": ["NONE", "COMMITTED", "UNKNOWN"],
-    "retryPolicy": ["SAFE", "SAME_REQUEST_ID", "VERIFY_THEN_RETRY", "AFTER_STATE_CHANGE", "NEVER"],
-    "actor": ["CALLER", "COORDINATOR", "USER", "SYSTEM"],
-    "userConfirmation": ["REQUIRED", "NOT_REQUIRED"]
+    "kind": [
+      "REFUSAL",
+      "ADVISORY",
+      "VALIDATION",
+      "TRANSPORT",
+      "UNKNOWN"
+    ],
+    "effect": [
+      "NONE",
+      "COMMITTED",
+      "UNKNOWN"
+    ],
+    "retryPolicy": [
+      "SAFE",
+      "SAME_REQUEST_ID",
+      "VERIFY_THEN_RETRY",
+      "AFTER_STATE_CHANGE",
+      "NEVER"
+    ],
+    "actor": [
+      "CALLER",
+      "COORDINATOR",
+      "USER",
+      "SYSTEM"
+    ],
+    "userConfirmation": [
+      "REQUIRED",
+      "NOT_REQUIRED"
+    ]
   },
   "serverBlock": {
     "field": "recovery",
-    "fields": ["effect", "retryPolicy", "retryAfterSeconds", "actionCode", "actor", "userConfirmation", "resources"],
-    "note": "What a server answer states outright, beside the legacy flat fields it keeps. Every field is optional; a stated value always wins over anything the parser would infer."
+    "fields": [
+      "effect",
+      "retryPolicy",
+      "retryAfterSeconds",
+      "actionCode",
+      "actor",
+      "userConfirmation",
+      "resources"
+    ],
+    "note": "What a server answer states outright, beside the legacy flat fields it keeps. Every field is optional. A stated value wins over anything the parser would infer, and is then held to the invariants below: no combination of stated fields can advise an unsafe resend."
   },
   "actionCodePattern": "^[A-Z][A-Z0-9_]*$",
   "actionCodes": {
@@ -48,27 +80,171 @@
     "AFTER_STATE_CHANGE": null,
     "NEVER": "FIX_REQUEST"
   },
-  "legacyCodes": {
-    "TASK_RUN_REQUEST_IN_PROGRESS": { "retryPolicy": "SAME_REQUEST_ID", "effect": "NONE" },
-    "TASK_RUN_REQUEST_UNREADABLE": { "retryPolicy": "SAME_REQUEST_ID", "effect": "NONE" },
-    "TASK_RUN_REQUEST_MISMATCH": { "retryPolicy": "NEVER", "effect": "NONE", "actionCode": "USE_NEW_REQUEST_ID" },
-    "TRANSIENT_DB_CONFLICT": { "retryPolicy": "SAFE", "effect": "NONE" },
-    "DATABASE_UNAVAILABLE": { "retryPolicy": "SAFE", "effect": "NONE" },
-    "CROSS_PROJECT_APPROVAL_REQUIRED": { "retryPolicy": "AFTER_STATE_CHANGE", "effect": "NONE", "actionCode": "AWAIT_OWNER_DECISION", "actor": "USER", "userConfirmation": "REQUIRED" },
-    "APPROVAL_PENDING": { "retryPolicy": "AFTER_STATE_CHANGE", "effect": "NONE", "actionCode": "AWAIT_OWNER_DECISION", "actor": "USER", "userConfirmation": "REQUIRED" },
-    "TASK_CRITERION_SHAPE_ADVICE": { "retryPolicy": "NEVER", "effect": "NONE", "actionCode": "ANSWER_ADVICE" }
+  "resendActionCodes": [
+    "RETRY",
+    "RETRY_SAME_REQUEST"
+  ],
+  "requestIdResourceType": "REQUEST",
+  "invariants": {
+    "note": "Applied after every field is resolved, stated or inferred, in this order, by both parsers (normalizeRecovery). hasRequestId = the client sent a request id, or resources names one of type requestIdResourceType.",
+    "rules": [
+      {
+        "id": "COMMITTED_NEVER_RESENT",
+        "when": {
+          "effect": "COMMITTED"
+        },
+        "then": {
+          "retryPolicy": "NEVER",
+          "actionCodeNotIn": "resendActionCodes"
+        }
+      },
+      {
+        "id": "UNKNOWN_VERIFIES_FIRST",
+        "when": {
+          "effect": "UNKNOWN"
+        },
+        "then": {
+          "retryPolicy": "SAME_REQUEST_ID only if it was the policy and hasRequestId, else VERIFY_THEN_RETRY",
+          "actionCode": "defaultActionByPolicy[retryPolicy]"
+        }
+      },
+      {
+        "id": "SAME_REQUEST_ID_NEEDS_AN_ID",
+        "when": {
+          "retryPolicy": "SAME_REQUEST_ID",
+          "hasRequestId": false
+        },
+        "then": {
+          "retryPolicy": "VERIFY_THEN_RETRY"
+        }
+      },
+      {
+        "id": "CONFIRMATION_BLOCKS_AUTOMATIC_RESEND",
+        "when": {
+          "userConfirmation": "REQUIRED",
+          "retryPolicy": [
+            "SAFE",
+            "SAME_REQUEST_ID"
+          ]
+        },
+        "then": {
+          "retryPolicy": "AFTER_STATE_CHANGE (VERIFY_THEN_RETRY when effect is UNKNOWN)",
+          "resendActionCodeBecomes": "AWAIT_OWNER_DECISION"
+        }
+      },
+      {
+        "id": "RESEND_ACTION_MATCHES_POLICY",
+        "when": {
+          "actionCodeIn": "resendActionCodes",
+          "actionCodeNot": "defaultActionByPolicy[retryPolicy]"
+        },
+        "then": {
+          "actionCode": "defaultActionByPolicy[retryPolicy], or AWAIT_OWNER_DECISION when userConfirmation is REQUIRED; none for COMMITTED or a 2xx"
+        }
+      },
+      {
+        "id": "NEVER_HAS_NO_WAIT",
+        "when": {
+          "retryPolicy": "NEVER"
+        },
+        "then": {
+          "afterSeconds": null
+        }
+      }
+    ],
+    "holdsOnEveryEnvelope": [
+      "effect COMMITTED => retryPolicy NEVER and actionCode not in resendActionCodes",
+      "effect UNKNOWN => retryPolicy in [VERIFY_THEN_RETRY, SAME_REQUEST_ID] and actionCode == defaultActionByPolicy[retryPolicy]",
+      "retryPolicy SAFE => effect NONE",
+      "retryPolicy SAME_REQUEST_ID => hasRequestId",
+      "userConfirmation REQUIRED => retryPolicy not in [SAFE, SAME_REQUEST_ID] and actionCode not in resendActionCodes",
+      "actionCode RETRY => retryPolicy SAFE; actionCode RETRY_SAME_REQUEST => retryPolicy SAME_REQUEST_ID",
+      "retryPolicy NEVER => afterSeconds null"
+    ]
   },
-  "legacyOwnerToActor": { "USER": "USER", "COORDINATOR": "COORDINATOR", "SYSTEM": "SYSTEM" },
+  "legacyCodes": {
+    "TASK_RUN_REQUEST_IN_PROGRESS": {
+      "retryPolicy": "SAME_REQUEST_ID",
+      "effect": "NONE"
+    },
+    "TASK_RUN_REQUEST_UNREADABLE": {
+      "retryPolicy": "SAME_REQUEST_ID",
+      "effect": "NONE"
+    },
+    "TASK_RUN_REQUEST_MISMATCH": {
+      "retryPolicy": "NEVER",
+      "effect": "NONE",
+      "actionCode": "USE_NEW_REQUEST_ID"
+    },
+    "TRANSIENT_DB_CONFLICT": {
+      "retryPolicy": "SAFE",
+      "effect": "NONE"
+    },
+    "DATABASE_UNAVAILABLE": {
+      "retryPolicy": "SAFE",
+      "effect": "NONE"
+    },
+    "CROSS_PROJECT_APPROVAL_REQUIRED": {
+      "retryPolicy": "AFTER_STATE_CHANGE",
+      "effect": "NONE",
+      "actionCode": "AWAIT_OWNER_DECISION",
+      "actor": "USER",
+      "userConfirmation": "REQUIRED"
+    },
+    "APPROVAL_PENDING": {
+      "retryPolicy": "AFTER_STATE_CHANGE",
+      "effect": "NONE",
+      "actionCode": "AWAIT_OWNER_DECISION",
+      "actor": "USER",
+      "userConfirmation": "REQUIRED"
+    },
+    "TASK_CRITERION_SHAPE_ADVICE": {
+      "retryPolicy": "NEVER",
+      "effect": "NONE",
+      "actionCode": "ANSWER_ADVICE"
+    }
+  },
+  "legacyOwnerToActor": {
+    "USER": "USER",
+    "COORDINATOR": "COORDINATOR",
+    "SYSTEM": "SYSTEM"
+  },
   "legacyResourceKeys": [
-    ["taskId", "TASK"],
-    ["sessionId", "SESSION"],
-    ["projectId", "PROJECT"],
-    ["crossingId", "CROSSING"],
-    ["triggerId", "REQUEST"]
+    [
+      "taskId",
+      "TASK"
+    ],
+    [
+      "sessionId",
+      "SESSION"
+    ],
+    [
+      "projectId",
+      "PROJECT"
+    ],
+    [
+      "crossingId",
+      "CROSSING"
+    ],
+    [
+      "triggerId",
+      "REQUEST"
+    ]
   ],
   "statusPolicies": {
-    "SAFE": [408, 429],
-    "AFTER_STATE_CHANGE": [401, 403, 409, 412, 423, 424, 428],
+    "SAFE": [
+      408,
+      429
+    ],
+    "AFTER_STATE_CHANGE": [
+      401,
+      403,
+      409,
+      412,
+      423,
+      424,
+      428
+    ],
     "otherClientError": "NEVER",
     "serverError": "VERIFY_THEN_RETRY"
   },
