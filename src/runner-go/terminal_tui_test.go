@@ -214,8 +214,10 @@ type tuiFakeServer struct {
 	sessionJSON   string
 	runnersJSON   string
 	providersJSON string
-	stream        []byte
-	sent          chan string
+	// workspacesJSON is what GET /workspaces answers: bare `orbit`'s cwd lookup.
+	workspacesJSON string
+	stream         []byte
+	sent           chan string
 }
 
 func newTUIFakeServer(t *testing.T) *tuiFakeServer {
@@ -250,6 +252,8 @@ func newTUIFakeServer(t *testing.T) *tuiFakeServer {
 			io.WriteString(w, f.runnersJSON)
 		case key == "GET /api/providers":
 			io.WriteString(w, f.providersJSON)
+		case key == "GET /api/workspaces":
+			io.WriteString(w, f.workspacesJSON)
 		case key == "GET "+base+"/events/page":
 			w.Write(readFixture(t, "page.json"))
 		case key == "GET "+base+"/approvals":
