@@ -515,6 +515,11 @@ type HeartbeatResponse struct {
 	// response until the control plane records a check made at or after it. Nil on older control
 	// planes and whenever nobody is asking.
 	RegionCheckRequest *ClaudeRegionCheckRequest `json:"regionCheckRequest,omitempty"`
+	// The snapshots this runner's open forked tasks start from (docs/task-fork-from-session-design.md
+	// §2.6): the keep-alive refs whose snapshot is not listed are this runner's to delete (forkRefGC). A
+	// POINTER because only a present list states anything: absent (an older control plane, a quiet link
+	// beat, a read that failed) deletes nothing. Sent only to a runner that declares task-fork/v1.
+	ForkSnapshotsOpen *[]string `json:"forkSnapshotsOpen,omitempty"`
 }
 
 // StorageBudget is the storage a runner's checkouts may take where statfs cannot say: a Docker local

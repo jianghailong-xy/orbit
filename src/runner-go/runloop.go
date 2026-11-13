@@ -1307,6 +1307,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	defer runnerSecretStore.Store(nil)
 	// Heartbeat answers are applied here, and the ledger's expiries are checked every minute.
 	secretSync := newSecretReconciler(secrets)
+	forkRefs := newForkRefSweeper()
 	secretCtx, stopSecrets := context.WithCancel(context.Background())
 	defer stopSecrets()
 	go secretSync.run(secretCtx, secretExpiryInterval)
@@ -1787,6 +1788,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			// Owner-request secrets: fetch what is newly listed and remove what is not. Off this goroutine, which
 			// the fetches must not hold up; one reconcile runs at a time, in the order the answers came.
 			secretSync.post(resp.SecretGrants, resp.SecretGrantsRemoving)
+			// Fork keep-alive refs no open task names any more (design §2.6). Only on a beat that states
+			// both the open snapshots and the workspaces' directories, which is a full reconcile.
+			forkRefs.post(resp.ForkSnapshotsOpen, resp.AgentDirs)
 			// The legacy half of the scratch sweep: builds before the move staged a job's
 			// throwaway worktree beside its workspace, and only the control plane knows those
 			// directories. Once, before this response's jobs are launched, the parent of every

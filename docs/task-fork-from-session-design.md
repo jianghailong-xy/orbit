@@ -113,8 +113,11 @@ Orbit does not merge into a live session's checkout for it in v1 (D3).
 
 ### 2.6 Cleanup
 
-`refs/orbit/fork/<snapshotId>` is deleted when no task that names `S` remains open. The runner's existing gc pass
-reads the task states it already receives.
+`refs/orbit/fork/<snapshotId>` is deleted when no task that names `S` remains open. The runner received no task
+states before this, so P2 added the minimum to the heartbeat: a full reconcile answers a runner that declares
+`task-fork/v1` with `forkSnapshotsOpen`, the snapshots of its OPEN and IN_PROGRESS forked tasks. The runner deletes a
+ref whose `S` is not listed once it has seen `S` listed before, or once the ref is an hour old (a task still behind
+its card, or never created). A declined card or a refused create deletes the ref at once.
 
 ### 2.7 Limits found by P0 (2026-11-11), and what v1 does
 

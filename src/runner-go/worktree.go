@@ -664,6 +664,20 @@ func setupSourceWorktree(job *ClaimedSession, baseDir string, atRest bool) strin
 		return execDir
 	}
 
+	if src.Kind == sourceKindSessionFork {
+		// A fork's snapshot exists only in the forking session's repository on its machine (SR55): the
+		// authority is this machine's checkout, and nothing is fetched. Any other authority is not one
+		// this build can honour for a snapshot, and guessing would start the task from something else.
+		if src.RefAuthority != refAuthorityRunnerLocal {
+			return refuseSourceWorktree(job, sourceRefusalAuthorityUnreachable,
+				fmt.Sprintf("a forked run's snapshot is %s-authoritative, and only a RUNNER_LOCAL snapshot can be checked out", src.RefAuthority))
+		}
+		if _, err := git(repoRoot, "cat-file", "-e", pin+"^{commit}"); err != nil {
+			return refuseSourceWorktree(job, sourceRefusalShaUnavailable,
+				fmt.Sprintf("the session snapshot %s this task was forked from is not in the repository at %s: "+
+					"the task must run in a workspace whose workDir is the forking session's repository", pin, repoRoot))
+		}
+	}
 	if _, err := git(repoRoot, "cat-file", "-e", pin+"^{commit}"); err != nil {
 		return refuseSourceWorktree(job, sourceRefusalShaUnavailable,
 			fmt.Sprintf("pinned commit %s is not in the repository at %s", pin, repoRoot))

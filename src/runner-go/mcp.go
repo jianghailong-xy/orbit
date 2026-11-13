@@ -270,13 +270,6 @@ const orchestrationOffMsg = "session orchestration is turned off for this accoun
 // TASK_BATCH_CREATE_MAX so the tool rejects an oversized batch before the round-trip.
 const maxTaskBatchCreate = 50
 
-// forkFromSessionNotYet is what the create doors answer to forkFromSession until this runner takes the
-// snapshot itself (design §2.2, phase P2). The server already accepts the fork it would post; refusing
-// here, before the card, is what keeps the flag from quietly creating a task that starts from the
-// workspace's checkout instead of this session's.
-const forkFromSessionNotYet = "forkFromSession is not available on this runner yet: it cannot snapshot this session's checkout. " +
-	"Create the task without it, or commit and merge this session's work first so the task starts from it."
-
 // How many labels one task may carry. Mirrors the server's TASK_LABEL_MAX_COUNT so the schema
 // states the bound the write would be rejected against anyway.
 const maxTaskLabels = 16
@@ -1131,9 +1124,6 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if title == "" {
 			return toolResult("title is required", true)
 		}
-		if getBool(args, "forkFromSession") {
-			return toolResult(forkFromSessionNotYet, true)
-		}
 		body := map[string]interface{}{"title": title}
 		copyIfPresent(body, args, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "engine", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff")
 		// Before the card, so the card's forecast says what the yes will do (task_start_now.go).
@@ -1154,10 +1144,22 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if err := requireRunnerTaskCompletionDeclaration(body); err != nil {
 			return toolResult(err.Error(), true)
 		}
+		// The snapshot is taken at the start of the call, before the card (design §2.1): the task
+		// starts from what this session had when it asked, and the card shows the fork it will carry.
+		var fork *forkSnapshot
+		if getBool(args, "forkFromSession") {
+			var err error
+			if fork, err = takeForkSnapshot(s.sessionID, title); err != nil {
+				return toolResult(err.Error(), true)
+			}
+			body["fork"] = fork.payload()
+		}
 		declined, startAfterCreate, err := askBeforeTaskCreate(s.t, s.sessionID, body)
 		if err != nil {
+			fork.release()
 			return toolResult(err.Error(), true)
 		} else if declined != "" {
+			fork.release()
 			return toolResult("the human rejected this task: "+declined, false)
 		}
 		// The owner's "Create and start" does what startNow does. It is their later and explicit
@@ -1167,6 +1169,9 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		raw, err := s.t.createTask(s.agentID, s.sessionID, body)
 		if err != nil {
+			if createRefused(err) {
+				fork.release()
+			}
 			// Verbatim, plus how to ASK when the refusal is the one whose own requiredAction says
 			// a handoff may be requested. This is the door where asking gets somewhere.
 			return toolResult("create task failed: "+err.Error()+
@@ -1187,6 +1192,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult(fmt.Sprintf("tasks accepts at most %d items per call", maxTaskBatchCreate), true)
 		}
 		bodies := make([]map[string]interface{}, 0, len(items))
+		var forking []int
 		for i, raw := range items {
 			item, ok := raw.(map[string]interface{})
 			if !ok {
@@ -1195,9 +1201,6 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			title := getString(item, "title")
 			if title == "" {
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
-			}
-			if getBool(item, "forkFromSession") {
-				return toolResult(fmt.Sprintf("tasks[%d]: %s", i, forkFromSessionNotYet), true)
 			}
 			body := map[string]interface{}{"title": title}
 			copyIfPresent(body, item, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "engine", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef", "handoff")
@@ -1223,6 +1226,25 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: %s", i, err), true)
 			}
 			bodies = append(bodies, body)
+			if getBool(item, "forkFromSession") {
+				forking = append(forking, i)
+			}
+		}
+		// One snapshot for the call, shared by every item that forks (design §2.1). Not for a dry run,
+		// which writes nothing: its items are judged without the fork.
+		var fork *forkSnapshot
+		if len(forking) > 0 && !getBool(args, "dryRun") {
+			title := getString(bodies[forking[0]], "title")
+			if len(forking) > 1 {
+				title = fmt.Sprintf("%s (and %d more)", title, len(forking)-1)
+			}
+			var err error
+			if fork, err = takeForkSnapshot(s.sessionID, title); err != nil {
+				return toolResult(err.Error(), true)
+			}
+			for _, i := range forking {
+				bodies[i]["fork"] = fork.payload()
+			}
 		}
 		// Unit L7: a dry run writes nothing, so there is nothing to ask a person about. It goes
 		// straight through rather than through `createBatchWithApproval`, whose whole subject is
@@ -1231,7 +1253,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if getBool(args, "dryRun") {
 			return s.createBatchNow(map[string]interface{}{"tasks": bodies, "dryRun": true})
 		}
-		return s.createBatchWithApproval(bodies)
+		return s.createBatchWithApproval(bodies, fork)
 
 	case "task_batch_pin":
 		body := map[string]interface{}{}
@@ -2172,15 +2194,33 @@ func askBeforeBatch(t *Transport, agentID, sessionID string, bodies []map[string
 // while looking like the least: fifty titles say nothing, and what actually happens is some number
 // of runs starting within the minute. This deployment has the cautionary case — one session
 // created 43 lists and ~21,500 tasks before anybody looked.
-func (s *mcpServer) createBatchWithApproval(bodies []map[string]interface{}) map[string]interface{} {
+func (s *mcpServer) createBatchWithApproval(bodies []map[string]interface{}, fork *forkSnapshot) map[string]interface{} {
 	declined, err := askBeforeBatch(s.t, s.agentID, s.sessionID, bodies)
 	if err != nil {
+		fork.release()
 		return toolResult(err.Error(), true)
 	}
 	if declined != "" {
+		fork.release()
 		return toolResult("the human rejected this batch: "+declined, false)
 	}
-	return s.createBatchNow(map[string]interface{}{"tasks": bodies})
+	raw, err := s.t.createTasksBatch(s.agentID, s.sessionID, map[string]interface{}{"tasks": bodies})
+	if err != nil {
+		if createRefused(err) {
+			fork.release()
+		}
+		return toolResult("create tasks failed: "+err.Error()+
+			crossProjectCrossingGuidance(err), true)
+	}
+	return toolResult(prettyJSON(raw), false)
+}
+
+// createRefused reports whether a create failed with the server's answer, so nothing was written and a
+// fork's keep-alive ref has no task to keep alive. A request that may have reached the server and been
+// lost on the way back keeps the ref: the gc removes it once no open task names it.
+func createRefused(err error) bool {
+	var httpErr *transportHTTPError
+	return errors.As(err, &httpErr) && httpErr.statusCode >= 400 && httpErr.statusCode < 500
 }
 
 func (s *mcpServer) createBatchNow(body map[string]interface{}) map[string]interface{} {
