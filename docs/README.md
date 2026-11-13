@@ -16,9 +16,13 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 | Tag launch links per channel and write the 30-day review | [First-launch tracking and 30-day review](launch-tracking.md) |
 | Collect a design-partner story | [Design partner case-study template](design-partner-case-study-template.md) |
 | Follow project direction | [Public roadmap](../ROADMAP.md) |
+| Read what changed recently | [Public changelog](../CHANGELOG.md) |
+| Give feedback on a release | [Release feedback discussion](https://github.com/jianghailong-xy/orbit/discussions/159) |
 | Run Orbit on your own server | [Self-hosting](self-hosting.md) |
 | Complete the first task on a fresh host | [Clean-machine first-run checklist](first-run.md) |
+| See the first seven screens, step by step | [Onboarding, step by step](onboarding.md) |
 | Find deployment settings and defaults | [Configuration reference](configuration.md) |
+| Call the HTTP API from a script or integration | [External HTTP API reference](api-reference.md) |
 | Diagnose runner enrollment, heartbeat, or runtime failures | [Runner troubleshooting](runner-troubleshooting.md) |
 | Publish or upgrade a release | [Release process](release-process.md) |
 | Verify a release's checksums, SBOM, provenance and signing identity | [Verifiable release supply chain](supply-chain.md) |
@@ -50,7 +54,12 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 - [Self-hosting](self-hosting.md) — Docker Compose, secrets, runners, TLS, upgrades, and production checks.
 - [Clean-machine first-run checklist](first-run.md) — prerequisites, bootstrap, enrollment, one completed task,
   and a reusable evidence table.
-- [Configuration reference](configuration.md) — server, backup, and runner settings with defaults and change procedures.
+- [Onboarding, step by step](onboarding.md) — the first administrator, runner, workspace, session, task graph,
+  approval, and recovery, with a screenshot of the current UI for each.
+- [Configuration reference](configuration.md) — every Compose and runner setting with its type, requirement,
+  default, secret status, and change procedure; ports, storage paths, and retention.
+- [External HTTP API reference](api-reference.md) — every route the control plane mounts, generated from the
+  controllers, with who may call it and the request DTO it validates.
 - [Runner troubleshooting](runner-troubleshooting.md) — enrollment, heartbeat/connectivity, runtime authentication,
   and safe support evidence.
 - [Runner CLI and automation](runner-cli.md) — task/session commands, service tokens, and authorization
@@ -126,8 +135,10 @@ than silently rewriting the historical decision.
 ## Project and community
 
 - [Community guide](../COMMUNITY.md) — channel choice, labels, good first issues, maintainer response targets,
-  and the boundary between current guides and design history.
+  community update cadence, and the boundary between current guides and design history.
 - [Public roadmap](../ROADMAP.md) — now / next / later direction without date promises.
+- [Public changelog](../CHANGELOG.md) — maintainer-curated notable changes across releases, with links to each
+  tag's operator notes.
 - [Contributing](../CONTRIBUTING.md) — workflow, tests, and pull-request expectations.
 - [Governance](../GOVERNANCE.md) — decision making and the path to maintainership.
 - [Security](../SECURITY.md) — supported versions and vulnerability reporting.

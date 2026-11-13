@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import type { RunnerDrainWaiting } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
+import { runnerDrainIsStop, sanitizeRunnerSelfUpdate } from './runner-self-update';
 
 /**
  * What of a runner's owner waits on the runner's drain for a self-update (docs/runner-update-drain-design.md
@@ -35,9 +36,12 @@ function waitingSql(runnerId: Prisma.Sql, ownerId: Prisma.Sql): Prisma.Sql {
 export async function drainWaitingOf(
   prisma: PrismaService,
   ownerId: string,
-  runners: Array<{ id: string; heartbeatDraining: boolean | null }>,
+  runners: Array<{ id: string; heartbeatDraining: boolean | null; selfUpdate: unknown }>,
 ): Promise<Map<string, RunnerDrainWaiting>> {
-  const draining = runners.filter((r) => r.heartbeatDraining === true).map((r) => r.id);
+  const drainingRunners = runners.filter((r) => r.heartbeatDraining === true);
+  const draining = drainingRunners.map((r) => r.id);
+  // A drain that is not an update's is the runner's process stopping (docs/mocks/runner-stopping).
+  const stopping = new Map(drainingRunners.map((r) => [r.id, runnerDrainIsStop(sanitizeRunnerSelfUpdate(r.selfUpdate))]));
   const waiting = new Map<string, RunnerDrainWaiting>();
   if (draining.length === 0) return waiting;
   const rows = await prisma.$queryRaw<Array<{ runnerId: string; sessions: number; messages: number }>>(Prisma.sql`
@@ -45,6 +49,8 @@ export async function drainWaitingOf(
       FROM unnest(${draining}::uuid[]) AS r(id)
       CROSS JOIN LATERAL (${waitingSql(Prisma.sql`r.id`, Prisma.sql`${ownerId}::uuid`)}) w
      WHERE w.sessions + w.messages > 0`);
-  for (const row of rows) waiting.set(row.runnerId, { sessions: row.sessions, messages: row.messages });
+  for (const row of rows) {
+    waiting.set(row.runnerId, { sessions: row.sessions, messages: row.messages, stopping: stopping.get(row.runnerId) ?? false });
+  }
   return waiting;
 }

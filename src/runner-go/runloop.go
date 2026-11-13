@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -859,17 +860,54 @@ func reclaimMissingSessions(
 	knownStates func() map[string]bool,
 	prepareTakeover func(*ClaimedSession) (func(), error),
 ) ([]reclaimedStart, bool, error) {
+	starts, _, skipped, err := reclaimSessions(ctx, t, knownStates, prepareTakeover, false)
+	return starts, skipped, err
+}
+
+// reclaimWaitedOnSessions is the startup reclaim's priority phase: reclaimMissingSessions over the
+// sessions somebody may be waiting on, RUNNING (or a legacy server's statusless row, which is RUNNING)
+// and PENDING, and nothing else. The rest of the snapshot comes back untaken, in ascending id order, for
+// the idle phase to take over in the background (reclaimStarter.takeOverIdle): on 2026-11-13 the
+// takeovers of 339 mostly idle sessions held the claim loop for three minutes.
+//
+// Each phase takes its rows over in ascending id order. Two overlapping processes therefore each take
+// the waited-on rows over before the idle ones, every row of a tier in the one order they agree on; a
+// row whose status changed between their snapshots can put it in different phases for each, and that
+// conflict is bounded as every other is: takeoverConflictLimit refreshes per session, then it is set
+// aside for the deferred retry. Nothing either phase has handed over is ever taken over again by it,
+// so no refresh undoes progress.
+func reclaimWaitedOnSessions(
+	ctx context.Context,
+	t *Transport,
+	knownStates func() map[string]bool,
+	prepareTakeover func(*ClaimedSession) (func(), error),
+) ([]reclaimedStart, []*ClaimedSession, bool, error) {
+	return reclaimSessions(ctx, t, knownStates, prepareTakeover, true)
+}
+
+// reclaimWaitedOn says whether a snapshot row is one the startup reclaim's priority phase takes over.
+func reclaimWaitedOn(status string) bool {
+	return status == "" || status == stRunning || status == stPending
+}
+
+func reclaimSessions(
+	ctx context.Context,
+	t *Transport,
+	knownStates func() map[string]bool,
+	prepareTakeover func(*ClaimedSession) (func(), error),
+	leaveIdle bool,
+) ([]reclaimedStart, []*ClaimedSession, bool, error) {
 	delay := 250 * time.Millisecond
 	conflicts := map[string]int{}
 	for ctx.Err() == nil {
 		rec, err := t.reclaim(ctx)
 		if err != nil {
 			if !isRetryableTransportError(err) {
-				return nil, false, err
+				return nil, nil, false, err
 			}
 			select {
 			case <-ctx.Done():
-				return nil, false, ctx.Err()
+				return nil, nil, false, ctx.Err()
 			case <-time.After(delay):
 			}
 			if delay < 5*time.Second {
@@ -884,6 +922,8 @@ func reclaimMissingSessions(
 		})
 		localStates := knownStates()
 		pending := make([]reclaimedStart, 0, len(sessions))
+		// The rows left to the idle phase (leaveIdle), in ascending id order.
+		var idle []*ClaimedSession
 		// Every takeover this pass began. A row it hands to no supervisor — terminal,
 		// conflicted, or dropped when the snapshot is refreshed — ends its takeover here, or
 		// its checkout stays fenced against merges with nothing left to lift the fence.
@@ -902,6 +942,16 @@ func reclaimMissingSessions(
 		retrySnapshot := false
 		skippedAny := false
 		lastID := ""
+		// The rows this pass takes over, in ascending id order. They are taken over in chunks of
+		// takeoverBatchSize, one request each, and each row's answer is judged in that order as the
+		// one request per row was judged; a conflict that refreshes the snapshot leaves the rest of
+		// its chunk's answers unread, and their takeovers are ended with the pass's.
+		type takeoverCandidate struct {
+			job          *ClaimedSession
+			locallyKnown bool
+			status       string
+		}
+		var candidates []takeoverCandidate
 		for i := range sessions {
 			r := sessions[i]
 			if r.SessionID == "" || r.SessionID == lastID {
@@ -927,68 +977,127 @@ func reclaimMissingSessions(
 				continue
 			}
 			job := claimedSessionFromReclaim(r)
-			endTakeover := func() {}
-			if prepareTakeover != nil {
-				prepared, prepareErr := prepareTakeover(job)
-				if prepareErr != nil {
-					endTakeoversExcept(nil)
-					return nil, false, prepareErr
-				}
-				endTakeover = prepared
-				begun[r.SessionID] = prepared
+			if leaveIdle && !reclaimWaitedOn(r.Status) {
+				idle = append(idle, job)
+				continue
 			}
-			status, takeoverErr := takeoverClaimedSession(ctx, t, job)
-			if takeoverErr != nil {
-				// 409 means another process advanced the snapshot owner or the server
-				// is fail-closing the row (e.g. a fenced worktree operation); 403 means
-				// the assignment changed after reclaim. Refresh the whole ordered set —
-				// a bounded number of times per session, so one persistently rejected
-				// row cannot livelock this loop and starve the claim loop.
-				if isTransportHTTPStatus(takeoverErr, 409) || isTransportHTTPStatus(takeoverErr, 403) {
-					conflicts[r.SessionID]++
-					if conflicts[r.SessionID] >= takeoverConflictLimit {
-						logln(fmt.Sprintf("reclaim: setting session %s aside after %d takeover conflicts (last: %v); retrying on a later reclaim",
-							r.SessionID, conflicts[r.SessionID], takeoverErr))
-						skippedAny = true
-						continue
+			candidates = append(candidates, takeoverCandidate{job: job, locallyKnown: locallyKnown, status: r.Status})
+		}
+	chunks:
+		for start := 0; start < len(candidates); {
+			end := start + t.takeoverBatchSize()
+			if end > len(candidates) {
+				end = len(candidates)
+			}
+			chunk := candidates[start:end]
+			jobs := make([]*ClaimedSession, len(chunk))
+			endTakeovers := make([]func(), len(chunk))
+			for k, c := range chunk {
+				jobs[k] = c.job
+				endTakeovers[k] = func() {}
+				if prepareTakeover != nil {
+					prepared, prepareErr := prepareTakeover(c.job)
+					if prepareErr != nil {
+						endTakeoversExcept(nil)
+						return nil, nil, false, prepareErr
 					}
-					logln(fmt.Sprintf("reclaim: takeover conflict for %s: %v; refreshing snapshot", r.SessionID, takeoverErr))
-					retrySnapshot = true
-					break
+					endTakeovers[k] = prepared
+					begun[c.job.SessionID] = prepared
 				}
+			}
+			rows, chunkErr := takeoverChunk(ctx, t, jobs)
+			if errors.Is(chunkErr, errTakeoverBatchUnsupported) {
+				// A control plane older than the batch takeover: nothing was taken over. The chunk is
+				// taken over again one session at a time, as it was before there was one.
+				for k, c := range chunk {
+					endTakeovers[k]()
+					delete(begun, c.job.SessionID)
+				}
+				continue
+			}
+			if chunkErr != nil {
 				endTakeoversExcept(nil)
-				return nil, false, takeoverErr
+				return nil, nil, false, chunkErr
 			}
-			if !reclaimStatusOpen(status) {
-				continue
+			for k, c := range chunk {
+				job := c.job
+				status, takeoverErr := rows[k].status, rows[k].err
+				if takeoverErr != nil {
+					// 409 means another process advanced the snapshot owner or the server
+					// is fail-closing the row (e.g. a fenced worktree operation); 403 means
+					// the assignment changed after reclaim. Refresh the whole ordered set —
+					// a bounded number of times per session, so one persistently rejected
+					// row cannot livelock this loop and starve the claim loop.
+					if isTransportHTTPStatus(takeoverErr, 409) || isTransportHTTPStatus(takeoverErr, 403) {
+						conflicts[job.SessionID]++
+						if conflicts[job.SessionID] >= takeoverConflictLimit {
+							logln(fmt.Sprintf("reclaim: setting session %s aside after %d takeover conflicts (last: %v); retrying on a later reclaim",
+								job.SessionID, conflicts[job.SessionID], takeoverErr))
+							skippedAny = true
+							continue
+						}
+						logln(fmt.Sprintf("reclaim: takeover conflict for %s: %v; refreshing snapshot", job.SessionID, takeoverErr))
+						retrySnapshot = true
+						break chunks
+					}
+					endTakeoversExcept(nil)
+					return nil, nil, false, takeoverErr
+				}
+				if !reclaimStatusOpen(status) {
+					continue
+				}
+				if c.locallyKnown && !reclaimInitiallyActive(status) {
+					continue
+				}
+				pending = append(pending, reclaimedStart{
+					job:             job,
+					initiallyActive: reclaimInitiallyActive(status),
+					endTakeover:     endTakeovers[k],
+					status:          c.status,
+				})
 			}
-			if locallyKnown && !reclaimInitiallyActive(status) {
-				continue
-			}
-			pending = append(pending, reclaimedStart{
-				job:             job,
-				initiallyActive: reclaimInitiallyActive(status),
-				endTakeover:     endTakeover,
-				status:          r.Status,
-			})
+			start = end
 		}
 		if !retrySnapshot {
 			endTakeoversExcept(pending)
 			orderReclaimedStarts(pending)
-			return pending, skippedAny, nil
+			return pending, idle, skippedAny, nil
 		}
 		// The refreshed snapshot prepares its own takeovers; end this pass's first.
 		endTakeoversExcept(nil)
 		select {
 		case <-ctx.Done():
-			return nil, false, ctx.Err()
+			return nil, nil, false, ctx.Err()
 		case <-time.After(delay):
 		}
 		if delay < 5*time.Second {
 			delay *= 2
 		}
 	}
-	return nil, false, ctx.Err()
+	return nil, nil, false, ctx.Err()
+}
+
+// reclaimSnapshot reads the reclaim snapshot, retrying a transport failure with reclaimMissingSessions'
+// backoff, and returns its rows.
+func reclaimSnapshot(ctx context.Context, t *Transport) ([]ReclaimSession, error) {
+	delay := 250 * time.Millisecond
+	for {
+		rec, err := t.reclaim(ctx)
+		if err == nil {
+			return rec.Sessions, nil
+		}
+		if !isRetryableTransportError(err) {
+			return nil, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(delay):
+		}
+		if delay < 5*time.Second {
+			delay *= 2
+		}
+	}
 }
 
 // A terminal revive rotates the Session owner before it can be claimed. If this
@@ -1143,6 +1252,24 @@ type manualWorktreeOperationKey struct {
 	sessionID   string
 	operationID string
 	leaseOwner  string
+}
+
+// answeredOperations is, per session, the last operation whose result the control plane took. The
+// heartbeat redelivers an operation until its result is stored, so an answer drained before that —
+// on a slow link it arrives after the result was posted (2026-11-13: answers 11.7 s late) — still
+// names it. Run again, a merge recovery check runs with the record the first run was handed, and
+// its answer is refused as no longer current. One entry per session: a session's next operation
+// has a new id.
+type answeredOperations map[string]manualWorktreeOperationKey
+
+func (a answeredOperations) answered(key manualWorktreeOperationKey) bool {
+	return key.operationID != "" && a[key.sessionID] == key
+}
+
+func (a answeredOperations) answer(key manualWorktreeOperationKey) {
+	if key.operationID != "" {
+		a[key.sessionID] = key
+	}
 }
 
 // unstartedWorktreeCommands picks the merge/commit commands a draining process must hand
@@ -1761,6 +1888,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		mergingNow := map[string]bool{}
 		committingNow := map[string]bool{}
 		mergeOutcomes := map[manualWorktreeOperationKey]mergeOutcome{}
+		mergesAnswered := answeredOperations{}
 		commitOutcomes := map[manualWorktreeOperationKey]commitOutcome{}
 		artifactNow := map[string]bool{}
 		// Integration jobs this process has in flight. A claim is already exclusive in the control
@@ -2021,8 +2149,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				if reclaimDeferred.deferForReclaim(pool, m.SessionID, "merge", snapshot, beatNow) {
 					continue
 				}
+				answeredKey := manualWorktreeOperationKey{
+					kind: "merge", sessionID: m.SessionID,
+					operationID: m.OperationID, leaseOwner: m.LeaseOwner,
+				}
 				mergeMu.Lock()
-				busy := mergingNow[m.SessionID]
+				busy := mergingNow[m.SessionID] || mergesAnswered.answered(answeredKey)
 				if !busy {
 					mergingNow[m.SessionID] = true
 				}
@@ -2075,6 +2207,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					} else {
 						mergeMu.Lock()
 						delete(mergeOutcomes, key)
+						mergesAnswered.answer(key)
 						mergeMu.Unlock()
 					}
 				}(m, snapshot)
@@ -2545,10 +2678,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// 2026-10-03 a session claimed while this reclaim was still running read "Starting" for 15 minutes.
 	lateClaimCheckAt := time.Now().Add(lateClaimWindow)
 	// The startup reclaim's sessions start in the background once their takeovers have answered
-	// (reclaimStarter); nil until then, and if the reclaim never answers.
+	// (reclaimStarter); nil until then, and if the reclaim never answers. Only the takeovers of the
+	// sessions somebody may be waiting on (RUNNING, PENDING) are made before the claim loop opens; the
+	// idle ones are made in the background (reclaimWaitedOnSessions, reclaimStarter.takeOverIdle).
 	var startupStarts *reclaimStarter
 	reclaimBegan := time.Now()
-	pendingStarts, reclaimSkipped, reclaimErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
+	pendingStarts, idleReclaims, reclaimSkipped, reclaimErr := reclaimWaitedOnSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
 	if reclaimErr != nil && loopCtx.Err() == nil {
 		logln("reclaim permanently failed; stopping runner:", reclaimErr)
 		loopCancel()
@@ -2559,25 +2694,53 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// Prune crash leftovers before any reclaimed provider can start and refresh
 		// its credential. This avoids racing cleanup against the atomic temp file used
 		// by a live refresh.
-		credentialLiveSet := make(map[string]bool, len(pendingStarts))
+		credentialLiveSet := make(map[string]bool, len(pendingStarts)+len(idleReclaims))
 		for _, pending := range pendingStarts {
 			credentialLiveSet[pending.job.SessionID] = true
+		}
+		for _, job := range idleReclaims {
+			credentialLiveSet[job.SessionID] = true
 		}
 		if err := pruneOrchestrationCredentials(credentialLiveSet); err != nil {
 			logln("credential cleanup failed:", err)
 		}
-		// Every session's takeover has answered and holds its fence; each start ends its own
-		// (reclaimStarter). The claim loop and the first heartbeat do not wait for them.
+		// Every waited-on session's takeover has answered and holds its fence; each start ends its own
+		// (reclaimStarter). The idle sessions are counted as being reclaimed from here on, and are taken
+		// over in the background. The claim loop and the first heartbeat wait for neither.
 		answeredIn := time.Since(reclaimBegan)
-		startupStarts = newReclaimStarter(pool, pendingStarts, func(pending reclaimedStart) {
+		startupStarts = newReclaimStarter(pool, pendingStarts, idleReclaims, func(pending reclaimedStart) {
 			logln(fmt.Sprintf("reclaiming session %s — %s", pending.job.SessionID, pending.job.Title))
 			startSession(pending.job, pending.initiallyActive)
 		})
+		startupStarts.takeover = func(job *ClaimedSession) (func(), string, error) {
+			endTakeover, err := prepareTakeover(job)
+			if err != nil {
+				return nil, "", err
+			}
+			status, err := takeoverClaimedSession(loopCtx, t, job)
+			if err != nil {
+				endTakeover()
+				return nil, "", err
+			}
+			return endTakeover, status, nil
+		}
+		// The idle phase takes its sessions over a chunk per request (takeoverClaimedSessions), each
+		// prepared locally first as the single takeover above prepares one.
+		startupStarts.batchSize = t.takeoverBatchSize
+		startupStarts.takeoverMany = batchIdleTakeover(loopCtx, t, prepareTakeover)
 		startupStarts.onStarted = func(id string) { reclaimDeferred.started(id, beatNow) }
 		startupStarts.run(reclaimStartWorkers, func() {
-			logln(fmt.Sprintf("startup reclaim finished: %d session(s) in %s (snapshot and takeovers %s)",
-				len(pendingStarts), time.Since(reclaimBegan).Round(time.Millisecond), answeredIn.Round(time.Millisecond)))
+			idleHanded, idleTook := startupStarts.idlePhase()
+			logln(startupReclaimFinishedLine(time.Since(reclaimBegan), len(pendingStarts), answeredIn, idleHanded, idleTook))
 		})
+		go func() {
+			if err := startupStarts.takeOverIdle(loopCtx, func(ctx context.Context) ([]ReclaimSession, error) {
+				return reclaimSnapshot(ctx, t)
+			}); err != nil && loopCtx.Err() == nil {
+				logln("reclaim of idle sessions permanently failed; stopping runner:", err)
+				loopCancel()
+			}
+		}()
 		reclaimed = true
 	}
 
@@ -2653,9 +2816,15 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// startup (worktreeSweeper's `armed`).
 		if armOnceStarted && startupStarts.finished() {
 			armOnceStarted = false
-			worktreeGC.armed = true
-			pool.endUnclaimedHostlessJobs()
-			gcUploads(pool.ids())
+			if startupStarts.setAside() {
+				// The idle phase set sessions aside over takeover conflicts: as when the startup reclaim
+				// sets one aside, the deferred retry takes them over, and arms the sweep once nothing is left.
+				reclaimRetryAt = time.Now().Add(reclaimRetryInterval)
+			} else {
+				worktreeGC.armed = true
+				pool.endUnclaimedHostlessJobs()
+				gcUploads(pool.ids())
+			}
 		}
 		// Sessions set aside by an earlier reclaim have authoritative rows but no local
 		// supervisor; their inbox is never polled until a takeover succeeds. Keep retrying
@@ -2815,7 +2984,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		}
 		// A session the startup reclaim has not started yet starts first, or its start is waited for:
 		// the claim then meets the supervisor the reclaim made, and never makes a second one.
-		startupStarts.settle(job.SessionID)
+		// An idle session the startup reclaim had not taken over when this claim was answered is taken over
+		// by settle, or by the idle phase meanwhile: the claim still names the owner that takeover replaced,
+		// and takes the session over from this process instead.
+		if replaced, tookOver := startupStarts.settle(job.SessionID); tookOver && strings.EqualFold(job.LeaseOwner, replaced) {
+			job.LeaseOwner = t.leaseOwner
+		}
 		// A successful claim response can narrowly win the race with loopCtx
 		// cancellation. Register it rather than orphaning an already-claimed session;
 		// startSession observes the cancelled shutdown context and detaches without

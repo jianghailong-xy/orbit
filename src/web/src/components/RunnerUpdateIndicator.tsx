@@ -54,8 +54,9 @@ export function RunnerUpdateIndicator({ runner, machine }: { runner: Runner; mac
       )}
       <p className="runner-update-popover-waits">{indicator.waits}</p>
       <div className="runner-update-popover-actions">
-        <RunnerUpdateLaterMenu runnerId={runner.id} />
-        {runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={machine} />}
+        {/* A runner that is stopping has no update to postpone or install now (docs/mocks/runner-stopping). */}
+        {!indicator.stopping && <RunnerUpdateLaterMenu runnerId={runner.id} />}
+        {!indicator.stopping && runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={machine} />}
         <Link className="runner-update-popover-open" to={`/settings/machines/${encodeId(runner.id)}`}>
           {runnerUpdateIndicatorOpen(machine)}
         </Link>

@@ -260,6 +260,25 @@ describe('the Settings window', () => {
     expect(group('Workspaces').querySelector('.settings-nav-add')?.getAttribute('aria-label')).toBe('New workspace');
   });
 
+  // Settings.css shows a group's + under the pointer only, except on a group marked empty.
+  it('marks no group empty while each has something in it', async () => {
+    await visit('/settings/general');
+    for (const title of ['Machines', 'Providers', 'Workspaces']) {
+      expect(group(title).classList.contains('settings-nav-group--empty')).toBe(false);
+    }
+  });
+
+  it('marks a group with nothing in it empty, so its + stays in sight', async () => {
+    runners = [];
+    workspaces = [];
+    keys = [];
+    pools = [];
+    await visit('/settings/general');
+    for (const title of ['Machines', 'Providers', 'Workspaces']) {
+      expect(group(title).classList.contains('settings-nav-group--empty')).toBe(true);
+    }
+  });
+
   it('lists Personal, each machine with its status dot, API keys and Account pools, and each workspace with its machine', async () => {
     await visit('/settings/general');
     expect(rows('Personal').map((r) => [r.label, r.href])).toEqual([
