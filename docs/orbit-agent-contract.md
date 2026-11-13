@@ -172,7 +172,7 @@ argument.
 | Approval | Inside a session, a create/batch/project/provider write files the same card and waits for the same answer. Headless writes have no card because there is no session to ask — they act as the runner owner. |
 | Attribution | Inside a session, the write is attributed to this agent and linked to this session; headless writes fall back to the runner owner. The model never invents an author. |
 | Identity and ids | Same entity, same public id, same status. A task created over the CLI is fetchable by the MCP `task_get` with no translation. |
-| Output | Every catalogued MCP tool answers with the receipt (§6.3) as `structuredContent`; a write's text is that same receipt, a read's text is the document it always was. At the CLI `--json` emits the entity document on stdout and nothing else — the receipt's `entity` — and `--receipt` emits the receipt itself; hints go to stderr. |
+| Output | Every catalogued MCP tool that writes answers with the receipt (§6.3) as `structuredContent` and as its text; a read keeps the text it always was and carries the receipt beside it when its answer is a JSON document (or it failed). At the CLI `--json` emits the entity document on stdout and nothing else — the receipt's `entity` — and `--receipt` emits the receipt itself; hints go to stderr. |
 | Failure | A refusal is a refusal on both surfaces, in one shape: the receipt's `ok: false` with an `outcome` and an `error` (code, message, retry rule). A declined card is `outcome: declined`, `error.code: APPROVAL_DECLINED` on both; the transport still differs (a non-error MCP result; a non-zero CLI exit). |
 
 ### 2.5 Discovery
@@ -388,8 +388,9 @@ calls): 0.4% would have been refused, every one a field the handler had been dro
 `bg_run.timeout` (91), `task_await.statuses` (19), `wiki_get.id` (17), `notify.projectId` (8),
 `task_create.priority` (6) and batch items' `priority` (6), `task_evidence_decide.reason` (5), the
 evidence envelope's fields sent beside `evidence` instead of in it, and others. The one deliberate
-leniency found, `task_evidence_list.revision`/`before` sent as numbers and `project_integration_get`
-claim/round/check sent as digits, is now declared in the schema (`["string","integer"]`).
+leniency in use, `task_evidence_list.revision`/`before` sent as numbers (10 calls), is now declared in
+the schema (`["string","integer"]`); `project_integration_get`'s claim/round/check stay integers, as
+their schema has always told an agent to send them.
 
 ---
 
@@ -428,10 +429,15 @@ claim/round/check sent as digits, is now declared in the schema (`["string","int
 
 ### 6.3 The receipt (since 1.2.0)
 
-Every catalogued MCP tool answers with one document of one shape — `receiptVersion: 1` — as its
-`structuredContent`; for every tool that writes, and for a call refused before it ran, the text
-content is the same document, so a client that reads only the text reads the receipt too. A read's
-text is the document it always was. The creates and updates of tasks, projects, task lists,
+Every catalogued MCP tool that writes answers with one document of one shape — `receiptVersion: 1` —
+as its `structuredContent` and as its text content, so a client that reads only the text reads the
+receipt too; so does every call refused before it ran. A read keeps the text it always had, and
+carries the receipt as `structuredContent` when it answered with a JSON document or failed; a read
+answered in prose (a summary, a background job's output) keeps its text alone. That split is what an
+engine shows its model: measured 2026-11-13 with Claude Code 2.1.325, a successful result's
+`structuredContent` reaches the model (compact JSON) in place of its text and an error's text is
+shown as it is, and Codex prefers `structuredContent` the same way — so prose inside a receipt would
+reach the model as an escaped string. The creates and updates of tasks, projects, task lists,
 sessions and agents, and `task_start`, advertise its schema as their `outputSchema`
 (`receiptSchemaTools`); the schema is published once in `contracts/orbit-agent.contract.json`
 (`receipt.schema`). The two exceptions keep the answer their own schema promises: the wiki tools,
@@ -441,12 +447,12 @@ whose outputSchema describes their answer, and `permission_prompt`, the engine's
 | --- | --- | --- |
 | `ok` | yes | The call did what it asked: `true` exactly for `written`, `read` and `dry_run`. |
 | `outcome` | yes | `written` · `read` · `dry_run` · `declined` (a person said no) · `pending` (a person has not answered; the call was handed to a runner-hosted job) · `refused` (the server, or the tool's own rule, said no; nothing written) · `invalid` (refused before anything was sent, §5.3) · `unknown` (no answer, or a 5xx: the write may have landed) · `failed` (a read that could not be answered). |
-| `operation` / `action` / `entityType` | yes | The catalogue's operation id (= the MCP tool = the capability id), its verb (`create`, `update`, `start`, `read`, …) and the object (`task`, `project`, `task_list`, `session`, `agent`, …). |
+| `operation` / `action` / `entityType` | yes | The catalogue's operation id (= the MCP tool = the capability id), its verb (`create`, `update`, `start`, `read`, …) and the object the answer is (`task`, `project`, `task_list`, `session`, `agent`, …) — `task_start`'s is the `session` it started. |
 | `id` / `status` | yes (null when none) | The entity's own public id and status as the server answered — the id to link as `orbit-<kind>:<id>`. For an answer that is not one entity, the id the call addressed. A batch has none: see `items`. |
 | `changedFields` | yes | The fields this call wrote, sorted, including the defaults the tool filled in (a create's `assigneeId`, a `startNow`'s `runAt`); a clear is listed like any write. Empty unless `outcome` is `written`. |
 | `approval` | yes | `{required, kind, card?, outcome, decision?, decidedBy?, message?, startAfterCreate?}`: `kind` is the catalogue's (`none`/`card`/`owner`), `outcome` one of `not_required` · `not_asked` (the call stopped before the card) · `approved` · `declined` · `pending`; `decision` is the card's own status (`ALLOWED`, `DENIED`, `ABANDONED`, …). |
 | `idempotency` | yes | `{kind, key?}`: `caller_key` when this call carried a key (and the key), `server_key` for a keyless create (only a redelivered turn deduplicates), `none`, or `read`. |
-| `error` | when `ok` is false | `{code, message, httpStatus?, retryable, retry, retryAfterSeconds?, requiredAction?, violations?, accepts?}`. `code` is the server's own refusal code when it sent one (`PROJECT_SCOPE_MISMATCH`, `TASK_WRITE_NEEDS_OWNER_CARD`, …), else `HTTP_<status>`, or the runner's: `INVALID_ARGUMENTS`, `APPROVAL_DECLINED`, `AWAITING_OWNER`, `NO_RESPONSE`, `ORCHESTRATION_OFF`, `TASK_ID_REQUIRED`, `TOOL_REFUSED`. `retry` is §5.2 rule 7. `message` is the sentence a person reads. |
+| `error` | when `ok` is false | `{code, message, httpStatus?, retryable, retry, retryAfterSeconds?, requiredAction?, violations?, accepts?}`. `code` is the server's own refusal code when it sent one (`PROJECT_SCOPE_MISMATCH`, `TASK_WRITE_NEEDS_OWNER_CARD`, …), else `HTTP_<status>`, or the runner's: `INVALID_ARGUMENTS`, `APPROVAL_DECLINED`, `AWAITING_OWNER`, `NO_RESPONSE` (sent, never answered: `unknown`), `NOT_SENT` (the connection was never made: `failed`, safe to `resend`), `NOT_DONE` (a 2xx answer that says `ok: false`, such as a skipped start: `refused`), `ORCHESTRATION_OFF`, `TASK_ID_REQUIRED`, `TOOL_REFUSED`. `retry` is §5.2 rule 7. `message` is the sentence a person reads. |
 | `start` | a create that also started | `{by: startNow\|owner, started, sessionId, status, deferred?, session?}` — the started session, or why its start was deferred. |
 | `items` / `count` | a written batch | `[{index, ref?, id, status}]` in input order, and how many were written. |
 | `notes` / `text` | when there are any | Sentences that used to travel as prose beside the document; `text` is an answer that is not JSON. |
@@ -699,8 +705,8 @@ Other measured facts:
 - **MCP results are a single text content block**; a successful read or write puts the entity JSON in
   it, while a refusal puts the refusal prose there. There is no `structuredContent` and no envelope
   version (`mcp.go` `toolResult`). The result is parseable but not machine-typed. *Since 1.2.0:* every
-  catalogued tool answers with the versioned receipt as `structuredContent`, and a write's text is
-  that receipt (§6.3, G3 satisfied).
+  catalogued write answers with the versioned receipt as `structuredContent` and as its text, and a
+  read answered with a document carries it beside its text (§6.3, G3 satisfied).
 - **The MCP server ignores unknown arguments** and copies only known keys into the request body
   (`copyIfPresent`). A read-only probe with `bogusField` on `task_list`, `project_get` and `task_get`
   returned the normal result; `labels: "not-an-array"` returned `[]`. *Since 1.2.0:* refused before

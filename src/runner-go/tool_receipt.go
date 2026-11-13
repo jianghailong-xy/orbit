@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"sort"
 	"strconv"
@@ -80,6 +81,7 @@ const (
 	errorCodeApprovalDeclined = "APPROVAL_DECLINED"
 	errorCodeAwaitingOwner    = "AWAITING_OWNER"
 	errorCodeNoResponse       = "NO_RESPONSE"
+	errorCodeNotSent          = "NOT_SENT"
 	errorCodeOrchestrationOff = "ORCHESTRATION_OFF"
 	errorCodeTaskIDRequired   = "TASK_ID_REQUIRED"
 	errorCodeToolRefused      = "TOOL_REFUSED"
@@ -588,6 +590,11 @@ func (rec *callRecord) failure(text string) (*receiptError, string) {
 			e.Retryable = e.Retry == retryResend
 			return e, outcome
 		}
+		// Never sent: the connection was not made, so nothing reached the server and the same call
+		// may simply be sent again.
+		if requestNeverLeft(failed.Err) {
+			return &receiptError{Code: errorCodeNotSent, Message: text, Retry: retryResend, Retryable: true}, outcomeFailed
+		}
 		// No answer came back: the request may have been received and acted on.
 		e := &receiptError{Code: errorCodeNoResponse, Message: text}
 		if resendIsSafe {
@@ -609,6 +616,17 @@ func (rec *callRecord) failure(text string) (*receiptError, string) {
 		e.Code = errorCodeTaskIDRequired
 	}
 	return e, outcomeRefused
+}
+
+// requestNeverLeft says whether a request failed before any byte of it reached the server: the
+// connection itself could not be made (refused, unreachable, no such host).
+func requestNeverLeft(err error) bool {
+	var opErr *net.OpError
+	if errors.As(err, &opErr) && opErr.Op == "dial" {
+		return true
+	}
+	var dnsErr *net.DNSError
+	return errors.As(err, &dnsErr)
 }
 
 func declineMessage(text string, decision *ApprovalDecisionResponse) string {
@@ -837,7 +855,8 @@ func mcpResultText(result map[string]interface{}) string {
 }
 
 // structure turns a handler's result into the receipt result. A write's text becomes the receipt; a
-// read keeps the text it always had, with the receipt beside it as structuredContent.
+// read keeps the text it always had, with the receipt beside it as structuredContent when the read
+// answered with a document (or failed), and alone when it answered in prose.
 func (rec *callRecord) structure(result map[string]interface{}) map[string]interface{} {
 	if result == nil {
 		return result
@@ -850,6 +869,13 @@ func (rec *callRecord) structure(result map[string]interface{}) map[string]inter
 	r := rec.receipt(text, isErr)
 	if rec.op.Mutates {
 		return receiptResult(r, isErr)
+	}
+	if !isErr && r.Entity == nil {
+		// A read answered in prose — a summary, a job's output — keeps its text and nothing else. An
+		// engine shows the model the structured content of a successful result in place of its text
+		// (Claude Code does, and so does Codex), and prose inside a JSON string is prose made harder
+		// to read for nothing a caller could branch on.
+		return result
 	}
 	out := make(map[string]interface{}, len(result)+1)
 	for key, value := range result {

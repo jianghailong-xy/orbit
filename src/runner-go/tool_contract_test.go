@@ -132,7 +132,12 @@ func rpcCall(t *testing.T, s *mcpServer, name string, args map[string]interface{
 		t.Fatal(err)
 	}
 	structured, ok := result["structuredContent"]
+	op := lookupCatalogOperation(name)
 	if !ok {
+		// Only a read answered in prose goes without it: its text is the answer.
+		if !op.Mutates && result["isError"] != true {
+			return result, toolReceipt{Operation: name, OK: true, Outcome: outcomeRead}
+		}
 		t.Fatalf("%s answered without structuredContent: %s", name, blob)
 	}
 	var receipt toolReceipt
@@ -141,7 +146,6 @@ func rpcCall(t *testing.T, s *mcpServer, name string, args map[string]interface{
 		t.Fatalf("%s: structuredContent is not a receipt: %v", name, err)
 	}
 	assertReceiptMatchesItsSchema(t, name, structured)
-	op := lookupCatalogOperation(name)
 	if op.Mutates || receipt.Outcome == outcomeInvalid {
 		// The text of a write, and of a call refused before it ran, IS the receipt: a client that
 		// reads only the text reads the same document. A read keeps the text it always had.
@@ -998,5 +1002,30 @@ func TestContractTaskStartReceiptIsTheStartedSessionAndASkipIsARefusal(t *testin
 	_, created := rpcCall(t, contractMCP(srv3.URL), "task_create", map[string]interface{}{"title": "Now", "completionCriterion": "EVIDENCE_JUDGMENT", "startNow": true})
 	if !created.OK || idOf(created) != "t1" || created.Start == nil || created.Start.Started || !strings.Contains(created.Start.Deferred, "project-cancelled") {
 		t.Fatalf("receipt = %+v start = %+v", created, created.Start)
+	}
+}
+
+// A read answered in prose keeps exactly the text it always had and carries no structured content:
+// an engine would show the model the escaped JSON string instead of the prose. A read answered with
+// a document carries the receipt beside its unchanged text.
+func TestContractReadsKeepTheirTextAndStructureOnlyADocument(t *testing.T) {
+	_, srv := newContractServer(t, `{"status":"ALLOWED"}`, func(*http.Request, map[string]interface{}) (int, string) {
+		return 200, `{"id":"t1","status":"OPEN","title":"Fix login"}`
+	})
+	s := contractMCP(srv.URL)
+	params, _ := json.Marshal(map[string]interface{}{"name": "task_get", "arguments": map[string]interface{}{"taskId": "t1"}})
+	resp, _ := s.handle(&rpcRequest{JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "tools/call", Params: params})
+	result := resp.Result.(map[string]interface{})
+	if mcpResultText(result) != prettyJSON(json.RawMessage(`{"id":"t1","status":"OPEN","title":"Fix login"}`)) {
+		t.Fatalf("task_get's text changed: %q", mcpResultText(result))
+	}
+	receipt, ok := result["structuredContent"].(toolReceipt)
+	if !ok || !receipt.OK || receipt.Outcome != outcomeRead || idOf(receipt) != "t1" || receipt.Action != "read" {
+		t.Fatalf("task_get structuredContent = %#v", result["structuredContent"])
+	}
+
+	prose := (&callRecord{op: lookupCatalogOperation("task_list")}).structure(toolResult("3 open tasks:\n- a\n- b\n- c", false))
+	if _, structured := prose["structuredContent"]; structured || mcpResultText(prose) != "3 open tasks:\n- a\n- b\n- c" {
+		t.Fatalf("a prose read was restructured: %#v", prose)
 	}
 }

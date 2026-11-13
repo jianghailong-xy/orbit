@@ -223,8 +223,12 @@ func validateObject(schema map[string]interface{}, obj map[string]interface{}, p
 	props, _ := schema["properties"].(map[string]interface{})
 	for _, name := range schemaRequired(schema["required"]) {
 		if _, present := obj[name]; !present {
+			message := fmt.Sprintf("%q is required", joinPath(path, name))
+			if reason := requiredFieldReasons[name]; reason != "" {
+				message += ": " + reason
+			}
 			*out = append(*out, argumentViolation{Path: joinPath(path, name), Problem: violationMissingRequired,
-				Message: fmt.Sprintf("%q is required", joinPath(path, name))})
+				Message: message})
 		}
 	}
 	keys := make([]string, 0, len(obj))
@@ -251,6 +255,13 @@ func validateObject(schema map[string]interface{}, obj map[string]interface{}, p
 			validateSchemaValue(extra, value, joinPath(path, key), out)
 		}
 	}
+}
+
+// requiredFieldReasons say why a required field may not be left out, where the reason is the rule a
+// caller needs: a create's completionCriterion is never inferred.
+var requiredFieldReasons = map[string]string{
+	"completionCriterion": "omission would implicitly create EVIDENCE_JUDGMENT; set EXECUTABLE, VERIFICATION, " +
+		"EVIDENCE_JUDGMENT, or OWNER_CONFIRMED explicitly (command, policy, and verifier fields do not replace that declaration)",
 }
 
 // unknownFieldMessage names the field, the nearest declared one when the key looks like a misspelling

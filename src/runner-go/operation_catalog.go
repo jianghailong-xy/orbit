@@ -1112,16 +1112,16 @@ func buildOperationCatalog() []*operation {
 					"description": "Narrow the page to one job, as the queue or a task's landing names it.",
 				},
 				"claim": map[string]interface{}{
-					"type":        []string{"integer", "string"},
-					"description": "Narrow the page to one claim generation, from 0 (the enqueue). A number or its digits.",
+					"type":        "integer",
+					"description": "Narrow the page to one claim generation, from 0 (the enqueue).",
 				},
 				"round": map[string]interface{}{
-					"type":        []string{"integer", "string"},
-					"description": "Narrow the page to one round inside the claim, from 0 (the facts from before its first round). A number or its digits.",
+					"type":        "integer",
+					"description": "Narrow the page to one round inside the claim, from 0 (the facts from before its first round).",
 				},
 				"check": map[string]interface{}{
-					"type":        []string{"integer", "string"},
-					"description": "Narrow the check log to one check's position in the run, from 1. A number or its digits.",
+					"type":        "integer",
+					"description": "Narrow the check log to one check's position in the run, from 1.",
 				},
 				"cursor": map[string]interface{}{
 					"type":        "string",
