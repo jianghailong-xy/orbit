@@ -1,19 +1,41 @@
-#if os(iOS)
 import SwiftUI
 import OrbitKit
 
 /// The project occupies its coordinator's place, with the same two scan lines as a session row.
 /// A tap opens the project's sessions; Open Session in the menu reaches the grouping target.
 struct SessionProjectRowView: View {
+    #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
     let row: SessionProjectRow
     let onOpen: () -> Void
+    #if os(macOS)
+    /// The leading glyph's box, the session rows' (`StatusGlyphView`), so the two titles line up.
+    @ScaledMetric(relativeTo: .subheadline) private var glyphBox: CGFloat = 20
+    #endif
 
     private var regular: Bool {
+        #if os(iOS)
         SessionListPresentation.resolve(isCompactWidth: horizontalSizeClass == .compact) == .regular
+        #else
+        true
+        #endif
     }
 
     var body: some View {
+        #if os(macOS)
+        Button(action: onOpen) {
+            macRow
+                .contentShape(Rectangle())
+                .accessibilityElement(children: .combine)
+                .accessibilityValue(statusWords)
+        }
+        .buttonStyle(.plain)
+        // The session row's own cell metrics (`AgentSessionRow`): zeroed insets, its pin bar flush
+        // to the edge, and the separator under the title.
+        .listRowInsets(EdgeInsets())
+        .alignmentGuide(.listRowSeparatorLeading) { _ in 44 }
+        #else
         Button(action: onOpen) {
             Group {
                 if regular { regularIOSRow } else { compactRow }
@@ -23,7 +45,61 @@ struct SessionProjectRowView: View {
             .accessibilityValue(statusWords)
         }
         .buttonStyle(.plain)
+        #endif
     }
+
+    #if os(macOS)
+    /// The Mac's row, laid out as a session row beside it is (web's `SessionProjectListRow`): the
+    /// coordinator's pin bar, the Projects glyph where a session's status glyph goes — the spinner
+    /// while a member runs, otherwise the glyph with a dot for waiting on you or background jobs —
+    /// then the title and time over the progress and the line.
+    private var macRow: some View {
+        HStack(spacing: 0) {
+            Rectangle()
+                .fill(row.pinnedAt != nil ? Color.accentColor : .clear)
+                .frame(width: 3)
+            HStack(spacing: 8) {
+                projectGlyph
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 8) {
+                        Text(row.title).foregroundStyle(.primary).lineLimit(1).layoutPriority(1)
+                        Spacer(minLength: 8)
+                        if let timestamp = row.lastTurnAt ?? row.createdAt,
+                           let relative = RelativeTime.format(timestamp) {
+                            Text(relative).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1).fixedSize()
+                        }
+                    }
+                    secondLine
+                }
+            }
+            .padding(.leading, 13)
+            .padding(.trailing, 16)
+            .padding(.vertical, 10)
+        }
+    }
+
+    private var projectGlyph: some View {
+        Group {
+            if row.indicator == .running {
+                SpinnerGlyph(color: .secondary)
+            } else {
+                Image(systemName: AppSection.projects.systemImage)
+                    .font(.orbitGlyph)
+                    .foregroundStyle(.secondary)
+                    .overlay(alignment: .bottomTrailing) {
+                        if let indicator = row.indicator {
+                            Circle()
+                                .fill(indicator == .needsYou ? Color.orange : Color.accentColor)
+                                .frame(width: 6, height: 6)
+                                .offset(x: 3, y: 3)
+                        }
+                    }
+            }
+        }
+        .frame(width: glyphBox, height: glyphBox)
+        .help(statusWords)
+    }
+    #endif
 
     private var compactRow: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -173,7 +249,9 @@ private struct SessionProjectProgressBar: View {
 /// action; a finished one in Open leads with Complete, which moves all its open sessions (§4.3).
 private struct SessionProjectRowActions: ViewModifier {
     @Environment(AppModel.self) private var app
+    #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
     let row: SessionProjectRow
     let view: SessionView
     let onOpen: () -> Void
@@ -182,6 +260,9 @@ private struct SessionProjectRowActions: ViewModifier {
     let onMove: () -> Void
 
     func body(content: Content) -> some View {
+        #if os(macOS)
+        content.contextMenu { menu }
+        #else
         if #available(iOS 26.0, *), horizontalSizeClass == .compact {
             content
                 .contextMenu { menu }
@@ -197,6 +278,7 @@ private struct SessionProjectRowActions: ViewModifier {
                 }
                 .contextMenu { menu }
         }
+        #endif
     }
 
     @ViewBuilder
@@ -260,10 +342,12 @@ struct SessionProjectPage: View {
     let address: SessionProjectAddress
     var rowNavigation: SessionRowNavigation = .push
 
+    #if os(iOS)
     @State private var rowSwipe = RowSwipeState()
+    #endif
+    @State private var movingSession: Session?
     @State private var taggingSession: Session?
     @State private var sharingSession: Session?
-    @State private var movingSession: Session?
     @State private var promotionReview: PromotionReviewTarget?
     @State private var startSheet: StartSheet?
     /// The jobs a landing row counts, opened by pressing that row on a server that lists them.
@@ -399,8 +483,14 @@ struct SessionProjectPage: View {
             }
         }
         .listStyle(.plain)
+        // The Sessions list's soft top edge, not the hard strip iOS 26 picks here: the pinned
+        // section header floats on it with no line (the owner, 2026-11-12,
+        // docs/mocks/ios-header-soft-edge/04-board.html).
+        .softTopEdgeEffect()
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         .rowSwipeList(rowSwipe)
+        #endif
         .refreshable {
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { @MainActor in await app.loadProjectSessions(address) }
@@ -426,7 +516,7 @@ struct SessionProjectPage: View {
         }
         .toolbar {
             if rowNavigation == .selection {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: backPlacement) {
                     Button { app.leaveProjectSessions(address.projectID) } label: {
                         Label("Back", systemImage: "chevron.backward")
                     }
@@ -434,12 +524,13 @@ struct SessionProjectPage: View {
                 }
             }
             ToolbarItem(placement: .principal) { title }
-            ToolbarItem(placement: .topBarTrailing) { openProjectButton }
+            ToolbarItem(placement: openPlacement) { openProjectButton }
         }
         .sheet(item: $taggingSession) { SessionTagSheet(session: $0).environment(app) }
         .sheet(item: $sharingSession) { session in
             if let baseURL = app.baseURL {
-                ShareSheet(kind: .session, rootID: session.id, baseURL: baseURL, tokenStore: app.tokenStore)
+                ShareSheet(kind: .session, rootID: session.id, baseURL: baseURL, tokenStore: app.tokenStore,
+                           guests: .of(session, agents: app.agents))
             }
         }
         .sheet(item: $movingSession) { session in
@@ -537,6 +628,22 @@ struct SessionProjectPage: View {
         }
     }
 
+    /// The way back to the workspace's list and the project's page, where each platform's bar puts them.
+    private var backPlacement: ToolbarItemPlacement {
+        #if os(iOS)
+        .topBarLeading
+        #else
+        .navigation
+        #endif
+    }
+    private var openPlacement: ToolbarItemPlacement {
+        #if os(iOS)
+        .topBarTrailing
+        #else
+        .primaryAction
+        #endif
+    }
+
     private var title: some View {
         VStack(spacing: 1) {
             Text(titleText).font(.headline).lineLimit(1)
@@ -580,6 +687,17 @@ struct SessionProjectPage: View {
     private var progressCard: some View {
         VStack(spacing: 0) {
             progressLine
+            // A non-code project reads no landing (board 01 E): the mark, under the progress.
+            if doneSubject?.nonCode == true {
+                Text(ProjectDone.nonCodeProjectLine)
+                    .font(.orbitMeta)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 12)
+                    .padding(.top, -4)
+            }
             startLine
         }
         .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
@@ -836,13 +954,18 @@ struct SessionProjectPage: View {
         switch rowNavigation {
         case .selection:
             row.sessionRowActions(session, scope: scope, onTag: { taggingSession = session },
-                                  onShare: { sharingSession = session }, onMove: { movingSession = session })
+                                  onShare: { sharingSession = session }, onMove: moveAction(session))
                 .tag(session.id)
         case .push:
             Button { app.openProjectMember(session, push: true) } label: { row.foregroundStyle(.primary) }
                 .sessionRowActions(session, scope: scope, onTag: { taggingSession = session },
-                                   onShare: { sharingSession = session }, onMove: { movingSession = session })
+                                   onShare: { sharingSession = session }, onMove: moveAction(session))
         }
+    }
+
+    /// Move: the Move panel for this row, on every platform.
+    private func moveAction(_ session: Session) -> (() -> Void)? {
+        { movingSession = session }
     }
 }
 /// The merge into main as the project's sessions page draws it, under the progress card (owner
@@ -1270,7 +1393,9 @@ private struct RequestedStartProjectSheet: View {
                     .frame(maxWidth: 640)
                     .frame(maxWidth: .infinity)
             }
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -1338,5 +1463,3 @@ private struct RequestedStartProjectSheet: View {
         }
     }
 }
-
-#endif

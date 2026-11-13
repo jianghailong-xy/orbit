@@ -43,11 +43,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
-import { movedEvidenceTurnId } from './moved-task-evidence';
 import { readPendingEvidenceJudgments } from './pending-evidence-judgments';
 import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
 import { CRITERION_MOVED_CODE, TASK_IN_ANOTHER_PROJECT_CODE } from './task-evidence-decision';
 import { TasksService } from './tasks.service';
+import { standardDigest, undecidableEvidenceTurnId } from './undecidable-evidence';
 
 /**
  * A CONFIRMED MOVE HANDS THE EVIDENCE NOBODY HAS DECIDED TO THE PROJECT THE TASK MOVED INTO.
@@ -600,7 +600,8 @@ test('(b) a revision quoting the criterion the move took back is decided by nobo
       // The run: one message, keyed by the revision and B, saying what to quote instead.
       assert.equal(after.run.length, 1, 'the run was told other than once');
       const [toRun] = after.run;
-      assert.equal(toRun!.clientTurnId, movedEvidenceTurnId('run', receipt.id, w.projectB));
+      const heldToB = standardDigest({ kind: 'PROJECT_CRITERION', key: criterionKeyOf(w.criterionB), text: WANTS_B });
+      assert.equal(toRun!.clientTurnId, undecidableEvidenceTurnId('run', receipt.id, heldToB));
       const runSays = toRun!.content ?? '';
       assert.ok(runSays.includes(w.title));
       assert.ok(runSays.includes(uuidToBase62(w.projectB)), 'the run is not told where the task went');
@@ -613,7 +614,7 @@ test('(b) a revision quoting the criterion the move took back is decided by nobo
       // B's coordinator: one message, not a decision request, saying the task arrived owing a new one.
       assert.equal(after.coordB.length, 1, 'B\'s coordinator was told other than once');
       const [toB] = after.coordB;
-      assert.equal(toB!.clientTurnId, movedEvidenceTurnId('coordinator', receipt.id, w.projectB));
+      assert.equal(toB!.clientTurnId, undecidableEvidenceTurnId('coordinator', receipt.id, heldToB));
       assert.equal(toB!.sendIntent, 'NEXT_TURN');
       const coordinatorSays = toB!.content ?? '';
       assert.ok(coordinatorSays.includes(w.title));
@@ -668,7 +669,9 @@ test('(c) with no target criterion the standard is the task own criteria, and a 
       assert.deepEqual(after.coordA, before.coordA);
       assert.equal(after.coordB.length, 1);
       const [toB] = after.coordB;
-      assert.equal(toB!.clientTurnId, movedEvidenceTurnId('coordinator', receipt.id, w.projectB));
+      assert.equal(toB!.clientTurnId, undecidableEvidenceTurnId('coordinator', receipt.id, standardDigest({
+        kind: 'TASK_ACCEPTANCE_CRITERIA', key: uuidToBase62(w.task), text: OWN,
+      })));
       const says = toB!.content ?? '';
       // The standard is the task's own criteria, quoted under the task's own id.
       assert.ok(says.includes(`key ${uuidToBase62(w.task)}`), 'the key to quote is not the task\'s own id');

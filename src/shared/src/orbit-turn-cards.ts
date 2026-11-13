@@ -60,6 +60,9 @@ export interface RunQuestionCard {
   answeredBy: 'SESSION' | 'OWNER' | null;
 }
 
+/** How much of a run's `notify` message is stored and handed to its coordinator. */
+export const RUN_NOTICE_MESSAGE_MAX = 2000;
+
 /** `run-notify:v1:` — a task run's notify, which reaches its coordinator and not the owner. */
 export interface RunNoticeCard {
   requestId: string;

@@ -1,6 +1,6 @@
 /**
  * What a Claude Code session on an OpenAI key spends, as the /api/gw/anthropic gateway books it
- * (docs/claude-engine-openai-gateway-design.md §5.5, decision D8, migration 0525), on real PostgreSQL.
+ * (docs/claude-engine-openai-gateway-design.md §5.5, decision D8, migration 0613), on real PostgreSQL.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/providers/key-gateway-usage.pg.spec.ts
  *

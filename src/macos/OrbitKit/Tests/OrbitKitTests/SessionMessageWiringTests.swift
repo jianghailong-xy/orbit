@@ -72,10 +72,12 @@ final class SessionMessageWiringTests: XCTestCase {
                        "the card is no longer the first thing a user turn is asked about")
         // The branch itself: the card, drawn from the turn's own words and note, and then on to the
         // readings every other turn has always had.
-        XCTAssertEqual(Array(user[(first + 1)...].prefix(4)), [
+        XCTAssertEqual(Array(user[(first + 1)...].prefix(6)), [
+            "let note = SessionMessageCard.splitNote(b.note)",
             "SessionMessageCardView(card: card, text: b.text, ts: b.ts,",
-            "undelivered: undelivered,",
-            "attached: b.attached, onCancelQueued: cancel)",
+            "undelivered: undelivered, narrower: note.narrower,",
+            "attached: note.attached, onCancelQueued: cancel,",
+            "revealed: revealedItemID == b.id)",
             "} else if let card = b.itemCard {",
         ], "a turn with a sender is not drawn as the session-message card")
         XCTAssertTrue(row.contains("UserBubbleView(bubble: b, onCancelQueued: cancel, steer: steer, onPutBack: putBack)"),
@@ -123,8 +125,12 @@ final class SessionMessageWiringTests: XCTestCase {
         let card = statements(try source(Self.cardPath))
         XCTAssertTrue(card.contains("if let url = SessionMessageCard.sessionLink(card) {"),
                       "the sender's title is no longer a link to the sending session")
-        XCTAssertTrue(card.contains("openURL(url)"), "the link opens nowhere")
-        XCTAssertTrue(card.contains("Text(SessionMessageCard.title(card))"))
+        // The title and "Its task" go through the app's own door, told by the console's
+        // `opensPagesOverConsole` that it is a phone's conversation, and fall back to the
+        // environment action elsewhere.
+        XCTAssertTrue(card.contains("private func openLink(_ url: URL) {"), "the link opens nowhere")
+        XCTAssertTrue(card.contains("if app?.openOrbitLink(url, overConsole: overConsole, overPage: opensTasksOverPage) != true { openURL(url) }"))
+        XCTAssertTrue(card.contains { $0.contains("Text(SessionMessageCard.title(card))") })
         XCTAssertFalse(card.contains { $0.hasPrefix("#if os(") }, "the card differs by platform")
     }
 
@@ -141,5 +147,24 @@ final class SessionMessageWiringTests: XCTestCase {
                        "the iOS target no longer compiles the session-message card")
         XCTAssertFalse(sources.contains("ConsoleView.swift"),
                        "the iOS target no longer compiles the transcript that draws the card")
+    }
+
+    /// A long message folds by its height (docs/mocks/session-message-clamp): measured as drawn,
+    /// clipped to `clampLines` with a fade, opened by its own button or by a record/search reveal, and
+    /// never cut by character count any more.
+    func testALongMessageFoldsByItsHeight() throws {
+        let card = try source(Self.cardPath)
+        XCTAssertFalse(card.contains("truncateAt"), "the card still cuts the message by character count")
+        XCTAssertTrue(card.contains("SessionMessageCard.folds(height: bodyHeight, lineHeight: lineHeight)"),
+                      "whether the message folds is no longer read off its measured height")
+        XCTAssertTrue(card.contains(".frame(maxHeight: clamped ? lineHeight * CGFloat(SessionMessageCard.clampLines) : nil, alignment: .top)"),
+                      "the folded message no longer shows its first clampLines lines")
+        XCTAssertTrue(card.contains("Button(expanded ? SessionMessageCard.showLess : SessionMessageCard.showMore)"),
+                      "the fold's button no longer says the web's words")
+        XCTAssertTrue(card.contains("private var clamped: Bool { tall && !expanded && !revealed }"),
+                      "a revealed message stays folded")
+        let console = try source(Self.consolePath)
+        XCTAssertTrue(console.contains(".environment(\\.revealedItemID, console.revealedItemID)"),
+                      "the transcript no longer tells its rows which item a link asked for")
     }
 }

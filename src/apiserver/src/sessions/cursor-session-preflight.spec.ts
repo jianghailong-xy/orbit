@@ -179,7 +179,7 @@ test('P1 cursor preflight: resume and reconfiguration refuse a runner that withd
 test('P1 cursor preflight: a Cursor CLI session does not move to another workspace', () => {
   const verdict = sessionMoveVerdict({
     status: RunStatus.SUCCEEDED, deletedAt: null, completedAt: new Date(), importSourceCwd: null, taskId: null,
-    dispatchOrigin: 'USER', coordinatesProject: false, cancelRequestedAt: null, engineTurnActive: false,
+    dispatchOrigin: 'USER', cancelRequestedAt: null, engineTurnActive: false,
     runningBgShells: [], runningBgJobs: [], runningSubagents: [], mergeStatus: null, commitStatus: null,
     retryAt: null, runtime: AgentProvider.CURSOR,
   } as never);

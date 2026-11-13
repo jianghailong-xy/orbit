@@ -8,8 +8,9 @@ import OrbitKit
 /// The words are the sending agent's and are drawn as they were sent; what the card adds is who sent
 /// them — the session's title, which opens it, the agent it runs as, and the task it runs — from the
 /// payload the control plane recorded beside the echo (OrbitKit's `SessionMessage`, read out of
-/// `sessionMessage`). The block delivery appended to tell the recipient the same thing rides inside,
-/// folded, with anything else delivery appended.
+/// `sessionMessage`). The block delivery appended to tell the recipient the same thing is not shown
+/// again (`SessionMessageCard.splitNote`); anything else delivery appended is named on the foot line,
+/// folded.
 ///
 /// One view for both native clients: `src/ios/project.yml` compiles this folder in place. Web parity:
 /// `SessionMessageCard.tsx`, with every word from OrbitKit's `SessionMessageCard`, which
@@ -20,58 +21,126 @@ struct SessionMessageCardView: View {
     let text: String
     var ts: String?
     var undelivered: Bool = false
+    /// The line for a sender that runs narrower than this session (`SessionMessageCard.narrower`).
+    var narrower: String? = nil
     /// What delivery appended to the same turn (a `controlPlaneNote`), as its own folded entry.
     var attached: (kind: String, text: String)?
     /// Withdraws the message while it is still queued behind the running turn; nil once a runner has
     /// taken it. Withdrawing hands none of it back to the composer: the words are the sending
     /// session's, not the reader's (`ComposerLogic.restorableText`).
     var onCancelQueued: (() -> Void)? = nil
+    /// A record link or a search hit asked for this turn: a folded message opens to show it.
+    var revealed: Bool = false
 
     @Environment(\.openURL) private var openURL
+    /// The app's own link door: the sender's session and its task are pushed over a phone's
+    /// conversation (see `opensPagesOverConsole`), so the back swipe returns to it.
+    @Environment(AppModel.self) private var app: AppModel?
+    @Environment(\.opensPagesOverConsole) private var overConsole
+    /// On a wide shell a task opens over the page instead of switching sections
+    /// (`opensTasksOverPage`, owner decision 2026-11-12).
+    @Environment(\.opensTasksOverPage) private var opensTasksOverPage
     @State private var expanded = false
-    /// Collapse a giant message past this many characters, as the owner's own bubble does: one huge
-    /// Text lays out synchronously and stalls the console.
-    private let truncateAt = 6000
+    /// The "⊕ Orbit attached" line in the foot is open: what it names is drawn under the foot.
+    @State private var attachedOpen = false
+    /// The body's full height and one line of its font, measured as drawn: a message taller than
+    /// `SessionMessageCard.clampFrom` lines shows its first `clampLines` until "Show more" (web parity:
+    /// `SessionMessageCard.tsx`, measured rather than counted, which replaced a 6,000-character cut).
+    @State private var bodyHeight: CGFloat = 0
+    @State private var lineHeight: CGFloat = 0
 
     private var queued: Bool { onCancelQueued != nil }
+    private var tall: Bool { SessionMessageCard.folds(height: bodyHeight, lineHeight: lineHeight) }
+    private var clamped: Bool { tall && !expanded && !revealed }
 
     var body: some View {
-        let long = text.count > truncateAt
-        let shown = long && !expanded ? String(text.prefix(truncateAt)) : text
-        VStack(alignment: .leading, spacing: 6) {
+        // Drawn the way a chat draws somebody else's message (docs/mocks/session-message-bubble,
+        // owner 2026-11-12): who sent it on one grey line, their words in a bubble on the incoming
+        // side that hugs them, and everything else on one grey foot line.
+        VStack(alignment: .leading, spacing: 3) {
             head
-            if !shown.isEmpty {
-                MarkdownView(source: shown, base: .body, ink: .primary)
-                    .font(.orbitProse)
-                    .textSelection(.enabled)
-            }
-            if long {
-                Button(expanded ? "Show less" : "Show more") { expanded.toggle() }
-                    .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.tint)
-            }
+            bubble
             foot
-            if let requestId = card.requestId {
-                // The message asks for a reply: what it asks, by when, and where it stands — read live.
-                SessionRequestStatusView(requestId: requestId)
+            if let narrower {
+                // A sender that runs narrower than this session: in the foot line's voice, under it.
+                Text(narrower)
+                    .font(.orbitMeta).foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            if attachedOpen, let attached { AttachedNoteBody(attached: attached) }
             if undelivered {
                 // Amber, not red: the message was handed to a session that has not confirmed it.
                 Text(SessionMessageCard.undelivered)
                     .font(.orbitMeta).foregroundStyle(.orange)
             }
-            if let attached { AttachedNoteEntry(attached: attached) }
             if let onCancelQueued { queuedFoot(onCancelQueued) }
         }
-        .padding(.horizontal, 10)
+        .orbitCardWidth()
+    }
+
+    /// The sending agent's words, in a bubble no wider than they need.
+    private var bubble: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if !text.isEmpty {
+                messageBody
+            }
+            if tall && !revealed {
+                Button(expanded ? SessionMessageCard.showLess : SessionMessageCard.showMore) { expanded.toggle() }
+                    .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.tint)
+            }
+        }
+        .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
-        // Dashed while it is still queued, as the control plane's own cards are.
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+        // A hairline, dashed while it is still queued, as the control plane's own cards are.
         .overlay(
-            RoundedRectangle(cornerRadius: 8).strokeBorder(
-                .tint.opacity(0.28),
+            RoundedRectangle(cornerRadius: 10).strokeBorder(
+                Color.primary.opacity(0.12),
                 style: StrokeStyle(lineWidth: 1, dash: queued ? [4, 3] : []))
         )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text(SessionMessageCard.notYou))
+        // The paragraphs fill what they are offered on macOS; this offers them only their own width.
+        .hugWidth()
+    }
+
+    /// The sending agent's words: whole, or their first lines fading out while the message is folded.
+    /// The text is laid out at its full height and measured there, then clipped, so opening it moves
+    /// nothing but the foot.
+    private var messageBody: some View {
+        MarkdownView(source: text, base: .body, ink: .primary, fillWidth: false)
+            .font(.orbitProse)
+            .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
+            .background(GeometryReader { proxy in
+                Color.clear.preference(key: SessionMessageBodyHeightKey.self, value: proxy.size.height)
+            })
+            .background(alignment: .topLeading) {
+                // One line of the body's font, never shown: what "a line" is on this device and size.
+                Text(verbatim: "Ag").font(.orbitProse).fixedSize().hidden()
+                    .background(GeometryReader { proxy in
+                        Color.clear.preference(key: SessionMessageLineHeightKey.self, value: proxy.size.height)
+                    })
+            }
+            .onPreferenceChange(SessionMessageBodyHeightKey.self) { bodyHeight = $0 }
+            .onPreferenceChange(SessionMessageLineHeightKey.self) { lineHeight = $0 }
+            .frame(maxHeight: clamped ? lineHeight * CGFloat(SessionMessageCard.clampLines) : nil, alignment: .top)
+            .clipped()
+            .mask {
+                if clamped {
+                    LinearGradient(stops: [.init(color: .black, location: 0.55), .init(color: .clear, location: 1)],
+                                   startPoint: .top, endPoint: .bottom)
+                } else {
+                    Rectangle()
+                }
+            }
+    }
+
+    /// One of this card's links through the app's own link door, told whether the card is in a
+    /// phone's conversation (there what it opens is pushed over it) or on a wide shell (there a
+    /// task opens over the page; anything else routes).
+    private func openLink(_ url: URL) {
+        if app?.openOrbitLink(url, overConsole: overConsole, overPage: opensTasksOverPage) != true { openURL(url) }
     }
 
     /// The queue's own line while the message waits behind a running turn: how it stands, and Cancel.
@@ -86,50 +155,121 @@ struct SessionMessageCardView: View {
         }
     }
 
-    /// "From <session title> · orbit" — who is speaking, before what they said. The title is the way
-    /// into that session, through the app's own `orbit-session:` door.
+    /// "From <session title> · orbit" — who is speaking, on one grey line over what they said. The
+    /// line is the way into that session, through the app's own `orbit-session:` door; that this is
+    /// not the reader's own message is its help and its accessibility label, not a sentence on screen.
     private var head: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "bubble.left.and.bubble.right")
-                .font(.orbitMeta).foregroundStyle(.tint)
-            Text(SessionMessageCard.from)
-                .font(.orbitLabel).foregroundStyle(.secondary)
+        Group {
             if let url = SessionMessageCard.sessionLink(card) {
                 Button {
-                    openURL(url)
+                    openLink(url)
                 } label: {
-                    Text(SessionMessageCard.title(card))
-                        .font(.orbitLabel.weight(.semibold))
-                        .multilineTextAlignment(.leading)
+                    headText.multilineTextAlignment(.leading)
                 }
-                .buttonStyle(.plain).foregroundStyle(.tint)
+                .buttonStyle(.plain)
             } else {
-                Text(SessionMessageCard.title(card))
-                    .font(.orbitLabel.weight(.semibold))
-            }
-            Spacer(minLength: 6)
-            if !card.fromAgentName.isEmpty {
-                Text(card.fromAgentName)
-                    .font(.orbitMeta).foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .padding(.horizontal, 7).padding(.vertical, 2)
-                    .background(Color.primary.opacity(0.05), in: Capsule())
-                    .overlay(Capsule().strokeBorder(.tint.opacity(0.35), lineWidth: 1))
+                headText
             }
         }
+        .font(.orbitLabel)
+        .foregroundStyle(.secondary)
+        .help(SessionMessageCard.notYou)
+        .accessibilityLabel(Text(headLabel))
     }
 
-    /// "Sent by another Orbit session, not by you · 2m ago", and the sender's task when it runs one.
+    private var headText: Text {
+        let agent = card.fromAgentName.isEmpty ? Text("") : Text(" · \(card.fromAgentName)").foregroundStyle(.tertiary)
+        return Text(Image(systemName: "bubble.left.and.bubble.right")).foregroundStyle(.tertiary)
+            + Text(" \(SessionMessageCard.from) ")
+            + Text(SessionMessageCard.title(card)).fontWeight(.semibold)
+            + agent
+    }
+
+    private var headLabel: String {
+        var label = "\(SessionMessageCard.from) \(SessionMessageCard.title(card))"
+        if !card.fromAgentName.isEmpty { label += " · \(card.fromAgentName)" }
+        return "\(label). \(SessionMessageCard.notYou)"
+    }
+
+    /// One grey line under the bubble: "2m ago · Its task ↗ · Asked for a reply · Replied · ⊕ Orbit
+    /// attached: …", each item that applies, wrapping between items when the column is narrow.
     private var foot: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(SessionMessageCard.meta(ts: ts))
-                .font(.orbitMeta).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
-            if let url = SessionMessageCard.taskLink(card) {
-                Button(SessionMessageCard.openTask) { openURL(url) }
-                    .buttonStyle(.plain).font(.orbitMeta).foregroundStyle(.tint)
+        let time = SessionMessageCard.meta(ts: ts)
+        let task = SessionMessageCard.taskLink(card)
+        let request = card.requestId != nil
+        return FlowLayout(spacing: 0) {
+            if let time {
+                footItem(more: task != nil || request || attached != nil) { Text(time) }
+            }
+            if let url = task {
+                footItem(more: request || attached != nil) {
+                    Button(SessionMessageCard.openTask) { openLink(url) }
+                        .buttonStyle(.plain)
+                }
+            }
+            if let requestId = card.requestId {
+                // The message asks for a reply: what it asks, by when, and where it stands — read live.
+                footItem(more: attached != nil) {
+                    SessionRequestStatusView(requestId: requestId)
+                }
+            }
+            if let attached {
+                footItem(more: false) { AttachedNoteLine(attached: attached, open: $attachedOpen) }
             }
         }
+        .font(.orbitMeta)
+        .foregroundStyle(.tertiary)
     }
+
+    /// One item of the foot line, with the separator after it when another follows.
+    private func footItem(more: Bool, @ViewBuilder _ content: () -> some View) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            content()
+            if more { Text(" · ") }
+        }
+    }
+}
+
+/// Lays its one view out no wider than that view's own single-line width, nor than it is offered:
+/// a bubble that hugs short words and wraps long ones at the column, even when what it holds would
+/// take every point it is offered.
+private extension View {
+    func hugWidth() -> some View { HugWidthLayout { self } }
+}
+
+private struct HugWidthLayout: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let view = subviews.first else { return .zero }
+        let ideal = view.sizeThatFits(.unspecified).width
+        let width = min(ideal, proposal.width ?? ideal)
+        return view.sizeThatFits(ProposedViewSize(width: width, height: proposal.height))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, anchor: .topLeading,
+                              proposal: ProposedViewSize(width: bounds.width, height: bounds.height))
+    }
+}
+
+/// The widest an Orbit card in a conversation draws: on the agent's side, from the leading edge, and
+/// no wider than this however wide the window (docs/mocks/session-message-bubble, owner 2026-11-12;
+/// web's `max-width: 720px` on `.oic/.tsc/.psc/.crc` and `.smc-wrap`). A phone's column is narrower,
+/// and there a card takes the column.
+extension View {
+    func orbitCardWidth() -> some View {
+        frame(maxWidth: 720, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// The message body's full height, as laid out before it is clipped.
+private struct SessionMessageBodyHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+/// One line of the body's font.
+private struct SessionMessageLineHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }

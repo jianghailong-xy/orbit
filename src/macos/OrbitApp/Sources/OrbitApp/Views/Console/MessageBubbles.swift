@@ -44,6 +44,13 @@ struct UserBubbleView: View {
     // own where there's no console. Unused on macOS, where thumbnails aren't tappable.
     @State private var previewTarget: ImagePreviewTarget?
     @Environment(\.sessionImagePreview) private var sessionPreview
+    /// Set while the session is held by its runner's update, naming the bubble whose foot row says so.
+    @Environment(\.runnerUpdatingFoot) private var runnerUpdatingFoot
+    /// This bubble's `Queued · runner updating`, where it is the one the update holds.
+    private var heldFoot: RunnerUpdatingFoot? {
+        guard let foot = runnerUpdatingFoot, foot.bubbleID == bubble.id, !bubble.pending else { return nil }
+        return foot
+    }
 
     private var images: [TurnAttachment] { bubble.attachments.filter(\.isImage) }
     /// This bubble's images as viewer pages, keyed the way `SessionPreviewImages` keys them.
@@ -231,7 +238,7 @@ struct UserBubbleView: View {
     // to copy, so the row is suppressed unless it has a state or a note to show — web parity.
     @ViewBuilder
     private var meta: some View {
-        if !bubble.text.isEmpty || unconfirmed || bubble.attached != nil {
+        if !bubble.text.isEmpty || unconfirmed || bubble.attached != nil || heldFoot != nil {
             HStack(spacing: 6) {
                 if !bubble.text.isEmpty {
                     Button { copy() } label: {
@@ -297,6 +304,10 @@ struct UserBubbleView: View {
                     // can be shown on its own (see `copyShown` / `timeShown`).
                     Text(rel).font(.orbitMeta).foregroundStyle(.secondary)
                         .opacity(timeShown ? 1 : 0)
+                }
+                // What holds this message (web `QueuedFootCtx`): always shown, unlike the time.
+                if let heldFoot {
+                    RunnerUpdatingTagView(foot: heldFoot)
                 }
                 if let attached = bubble.attached {
                     // Named, not hidden: without it the agent answers about a quota outage nobody
@@ -528,5 +539,30 @@ struct WorkingIndicatorView: View {
         TypingDots()
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityLabel("Working")
+    }
+}
+
+/// The head of a turn, under the message that opened it: "Worked for 1m 4s", or, while the turn
+/// runs, "Working for 12s" counting up once a second (`TurnHead`; web parity: `TurnHead` in
+/// Transcript.tsx).
+struct TurnHeadRowView: View {
+    /// Only drawn when it has something to say (`TranscriptRows.build`): one with no end yet is the
+    /// running turn.
+    let line: TurnHeadLine
+
+    var body: some View {
+        if line.endTs == nil {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                label(at: context.date)
+            }
+        } else {
+            label(at: Date())
+        }
+    }
+
+    private func label(at now: Date) -> some View {
+        Text(TurnHead.label(line, running: true, now: now) ?? "")
+            .font(.orbitLabel).monospacedDigit().foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

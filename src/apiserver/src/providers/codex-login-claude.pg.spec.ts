@@ -304,6 +304,7 @@ suite("Claude Code on the owner's own Codex login pool — on real PostgreSQL", 
     assert.equal(sent.headers.authorization, `Bearer ${pool.access}`);
     assert.equal(sent.headers['chatgpt-account-id'], pool.accountId);
     assert.equal(sent.headers['user-agent'], CLAUDE_UA, "Claude Code's own User-Agent");
+    assert.equal(sent.headers['session-id'], claudeSession, "the Orbit session, which keeps the session's prompt cache");
     for (const codexOnly of ['version', 'x-codex-routing-hint', 'content-encoding', 'originator', 'anthropic-version']) {
       assert.equal(sent.headers[codexOnly], undefined, `${codexOnly} was sent`);
     }

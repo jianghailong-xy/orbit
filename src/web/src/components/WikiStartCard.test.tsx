@@ -172,7 +172,7 @@ async function open(path = '/wiki/github-com-acme-shop-cli'): Promise<void> {
             <Route path="/wiki" element={<WikiPage route="home" />} />
             <Route path="/wiki/:space" element={<WikiPage route="home" />} />
             <Route path="/wiki/:space/plan" element={<span data-page="plan" />} />
-            <Route path="/infrastructure" element={<span data-page="runners" />} />
+            <Route path="/settings/machines/:id" element={<span data-page="runners" />} />
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>,
@@ -223,7 +223,10 @@ describe('the home of a wiki with nothing to read', () => {
     await open();
     await press(button('Set up…'));
     await press(button('Turn on', dialog()));
-    expect(writes).toEqual([
+    // The chosen workspace's folder is probed first (docs/wiki-repo-tiers-design.md §7.3); then the one write.
+    const probe = `/api/wiki/spaces/${SPACE_ID}/maintenance/probe`;
+    expect(writes.filter((write) => write.path === probe).map((write) => write.body)).toContainEqual({ workspaceId: US });
+    expect(writes.filter((write) => write.path !== probe)).toEqual([
       { method: 'PATCH', path: `/api/wiki/spaces/${SPACE_ID}`, body: { maintenance: { enabled: true, workspaceId: US, dailyRunLimit: 8, lookbackDays: 14 } } },
     ]);
     expect(document.querySelector('.wk-setup-dialog')).toBeNull();

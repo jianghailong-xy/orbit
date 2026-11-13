@@ -42,6 +42,8 @@ final class WikiModel {
     private(set) var busy = false
     /// Wiki settings' Workspaces section, by space id.
     private(set) var spaceWorkspaces: [String: WikiSpaceWorkspaces] = [:]
+    /// Each space's health as Wiki settings read it: what the maintenance card's repository part says (§7.3).
+    private(set) var settingsHealth: [String: WikiSpaceHealth] = [:]
     /// The wikis in Trash, the newest move first (docs/mocks/wiki-trash): read with the spaces, and what draws a way to
     /// Trash while it holds any — Wiki settings' Trash row, the space menu's Trash, the empty Wiki's line.
     private(set) var trash: [WikiTrashRow] = []
@@ -845,6 +847,31 @@ final class WikiModel {
             await loadSpaces()
             return nil
         } catch {
+            return Self.refusal(error)
+        }
+    }
+
+    /// The space's health for Wiki settings' maintenance card: what the last run read, and whether a run may be asked for.
+    func loadSettingsHealth(_ space: WikiSpace) async {
+        guard let health = try? await api.wikiHealth(spaceID: space.id) else { return }
+        if settingsHealth[space.id] != health { settingsHealth[space.id] = health }
+    }
+
+    /// The settings' probe of a workspace (docs/wiki-repo-tiers-design.md §7.3): nil when it could not be asked.
+    func probeWorkspace(_ space: WikiSpace, workspaceID: String) async -> WikiRepoProbeAnswer? {
+        try? await api.probeWikiMaintenance(spaceID: space.id, workspaceID: workspaceID)
+    }
+
+    /// Check again and run now, or Use this folder: nil once the run is made, else the sentence to show.
+    func runMaintenanceNow(_ space: WikiSpace, acceptFolder: Bool = false) async -> String? {
+        busy = true
+        defer { busy = false }
+        do {
+            _ = try await api.runWikiMaintenance(spaceID: space.id, acceptFolder: acceptFolder)
+            await loadSettingsHealth(space)
+            return nil
+        } catch {
+            await loadSettingsHealth(space)
             return Self.refusal(error)
         }
     }

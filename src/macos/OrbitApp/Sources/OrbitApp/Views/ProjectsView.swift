@@ -153,6 +153,7 @@ struct ProjectsListView: View {
                 // Plain, like the sessions list: light section headers over full-width rows, not
                 // boxed inset-grouped cards.
                 .listStyle(.plain)
+                .softTopEdgeEffect()
                 #endif
             }
             #if os(iOS)
@@ -376,6 +377,11 @@ struct ProjectDetailView: View {
     @State private var confirmingStatus: ProjectStatus?
     @State private var confirmingDelete = false
     @State private var confirmingReplace = false
+    /// Change workspace's pick, while its confirmation is up: the row, and the `move-targets` answer
+    /// it was read from (nil when there is no conversation to bring).
+    @State private var changingTo: CoordinatorChangePick?
+    /// Move conversation's step while it runs (an End first can take a while).
+    @State private var changePhase: SessionWorkspaceMove.Phase?
     /// Delivery's press to the agent's way while a merge into main is live: asked first, then
     /// written (owner decision 2026-11-10). Nil while nothing is being asked.
     @State private var confirmingAgentPush: ProjectIntegrationView?
@@ -398,6 +404,14 @@ struct ProjectDetailView: View {
     @State private var shareRead: ShareLinkRead?
     /// The page's open items, the owner's own start card, or the merge check's editor.
     @State private var pageSheet: ProjectPageSheet?
+    /// Delivers' press while its question is up: the mark it would write (board 01 ③).
+    @State private var confirmingDelivers: Bool?
+    /// A criterion's Confirm sheet, opened from its row.
+    @State private var confirmingCriterion: ConfirmCriterionSubject?
+    /// Stale rows whose What changed is open.
+    @State private var comparing: Set<String> = []
+    /// The server's notice when it held a change of mode for a decision, by criterion.
+    @State private var modeNotices: [String: String] = [:]
     /// The crossing whose second press is showing, and the answer it would give. One at a time:
     /// opening another question closes this one.
     @State private var crossingAsk: ProjectCrossingAsk?
@@ -502,7 +516,7 @@ struct ProjectDetailView: View {
                 graphSection(store)
                 blockersSection(store, document, now: now)
                 runQueueSection(store)
-                criteriaSection(document)
+                criteriaSection(store, document)
                 instructionsSection(document)
                 tasksSection(store, document)
                 crossingsSection(store)
@@ -522,7 +536,15 @@ struct ProjectDetailView: View {
                         }
                     }
                 case .done:
-                    ProjectDoneSheet(store: store)
+                    ProjectDoneSheet(store: store, openTask: { taskID in
+                        pageSheet = nil
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { openTask(taskID) }
+                    }, openDelivers: {
+                        pageSheet = nil
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                            withAnimation { proxy.scrollTo(ProjectDone.nonCodeAnchor, anchor: .center) }
+                        }
+                    })
                 case .mergeCheck:
                     if let view = store.integration {
                         MergeCheckEditor(store: store, view: view,
@@ -551,8 +573,41 @@ struct ProjectDetailView: View {
                             pageSheet = nil
                             openTask(taskID)
                         })
+                case .coordinatorChange:
+                    CoordinatorChangeSheet(projectTitle: document.title,
+                                           sessionID: CoordinatorChangeLogic.conversationID(store.coordinator),
+                                           currentWorkspaceID: store.coordinator?.coordination.workspaceId,
+                                           currentWorkspaceName: store.coordinator?.coordination.workspaceName) { row, targets in
+                        pageSheet = nil
+                        // The question goes up once the sheet is down: one panel at a time.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                            changingTo = CoordinatorChangePick(row: row, targets: targets)
+                        }
+                    }
                 }
             }
+        }
+        .sheet(item: $confirmingCriterion) { subject in
+            ConfirmCriterionSheet(subject: subject,
+                                  confirm: { id, body in await store.confirmCriterion(id, body) },
+                                  upload: { data, name, mime in
+                                      try await store.uploadConfirmationShot(data, filename: name, mimeType: mime)
+                                  })
+        }
+        // Delivers asks before it writes (board 01 ③): iOS has no Save to say it above.
+        .alert(confirmingDelivers == true ? ProjectDone.runMarkNotCodeTitle : ProjectDone.runMarkCodeTitle,
+               isPresented: Binding(get: { confirmingDelivers != nil }, set: { if !$0 { confirmingDelivers = nil } }),
+               presenting: confirmingDelivers) { nonCode in
+            Button(ProjectDone.confirmSheetCancel, role: .cancel) { confirmingDelivers = nil }
+            Button(nonCode ? ProjectDone.runMarkNotCodeAction : ProjectDone.runMarkCodeAction) {
+                Task { notice = await store.setNonCode(nonCode) }
+            }
+        } message: { nonCode in
+            Text(nonCode
+                 ? ProjectDone.runToNotCode.replacingOccurrences(of: "{branch}", with: RunSettings.shortBranch(
+                    store.integration?.line == .projectBranch ? (store.integration?.ref ?? "project/\(document.id)")
+                                                               : "project/\(document.id)"))
+                 : ProjectDone.runToCode)
         }
         // Held on the list rather than beside the page's own alert: one view, one alert.
         .alert(blockerToResolve.map(ProjectPage.resolveBlockerTitle) ?? "",
@@ -569,6 +624,27 @@ struct ProjectDetailView: View {
             .disabled(resolveReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         } message: { blocker in
             Text(ProjectPage.resolveBlockerMessage(blocker))
+        }
+        // Change workspace's one question (04-change): Move conversation or Start a new one there
+        // where both work, only the new start — saying why — where the conversation cannot come.
+        .orbitConfirmation({ CoordinatorChangeCopy.title(project: document.title, to: $0.row.name) },
+                           isPresented: Binding(get: { changingTo != nil }, set: { if !$0 { changingTo = nil } }),
+                           presenting: changingTo) { pick in
+            if pick.row.way == .move, let targets = pick.targets {
+                Button(CoordinatorChangeCopy.move) { moveCoordinatorConversation(store, to: pick.row, targets: targets) }
+                    .keyboardShortcut(.defaultAction)
+                Button(CoordinatorChangeCopy.startThere) { replaceCoordinator(store, inWorkspace: pick.row.workspaceId) }
+                Button(CoordinatorChangeCopy.cancel, role: .cancel) {}
+            } else {
+                let outgoing = OutgoingCoordinator(store.coordinator)
+                Button(CoordinatorChangeCopy.newAction(pick.row.name, outgoing: outgoing),
+                       role: outgoing == .open ? .destructive : nil) {
+                    replaceCoordinator(store, inWorkspace: pick.row.workspaceId)
+                }
+                Button(CoordinatorChangeCopy.cancel, role: .cancel) {}
+            }
+        } message: { pick in
+            Text(changeParagraphs(pick, store).joined(separator: "\n\n"))
         }
     }
 
@@ -598,6 +674,15 @@ struct ProjectDetailView: View {
                         .foregroundStyle(ProjectPalette.warningInk)
                         .background(Color.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: 6))
                 }
+                // The explicit non-code mark (board 01 G).
+                if document.nonCode {
+                    Text(ProjectDone.nonCodeBadge)
+                        .font(.orbitLabel.weight(.semibold))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .foregroundStyle(Color.secondary)
+                        .background(Color.secondary.opacity(0.13), in: RoundedRectangle(cornerRadius: 6))
+                }
                 Text("\(document.taskCount) task\(document.taskCount == 1 ? "" : "s")")
                     .font(.orbitLabel)
                     .foregroundStyle(.secondary)
@@ -609,7 +694,13 @@ struct ProjectDetailView: View {
                     .font(.orbitLabel)
                     .foregroundStyle(.secondary)
             }
-            if let view = store.integration, let facts = ProjectPage.integrationFacts(view, now: now) {
+            if document.nonCode {
+                // A non-code project reads no landing: the mark, where the branch would be.
+                Label(ProjectDone.nonCodeProjectLine, systemImage: "doc.text")
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if let view = store.integration, let facts = ProjectPage.integrationFacts(view, now: now) {
                 Label {
                     Text(facts.joined(separator: " · "))
                 } icon: {
@@ -965,10 +1056,11 @@ struct ProjectDetailView: View {
         }
     }
 
-    /// Start the next coordinator and go to it, empty.
-    private func replaceCoordinator(_ store: ProjectDetailModel) {
+    /// Start the next coordinator and go to it, empty — where the project is coordinated now, or in
+    /// the workspace Change workspace picked.
+    private func replaceCoordinator(_ store: ProjectDetailModel, inWorkspace workspaceID: String? = nil) {
         Task {
-            switch await store.replaceCoordinator() {
+            switch await store.replaceCoordinator(inWorkspace: workspaceID) {
             case .success(let opened):
                 model.openProjectCoordinator(sessionID: opened.sessionId,
                                              agentID: opened.workspaceId
@@ -976,6 +1068,38 @@ struct ProjectDetailView: View {
             case .failure(let error):
                 notice = error.message
             }
+        }
+    }
+
+    /// The confirmation's words for a pick: both ways when the conversation can come along, else the
+    /// new start with why.
+    private func changeParagraphs(_ pick: CoordinatorChangePick, _ store: ProjectDetailModel) -> [String] {
+        let from = store.coordinator?.coordination.workspaceName
+        if pick.row.way == .move, let targets = pick.targets {
+            return CoordinatorChangeCopy.moveParagraphs(
+                to: pick.row.name, from: from ?? "", needsEnd: targets.needsEnd,
+                files: SessionMoveCopy.filesSentence(targets, from: from ?? ""))
+        }
+        return CoordinatorChangeCopy.newParagraphs(to: pick.row.name, from: from,
+                                                   outgoing: OutgoingCoordinator(store.coordinator),
+                                                   reason: pick.row.reason)
+    }
+
+    /// Move conversation: End it first when the server says so, then move it into the picked
+    /// workspace's No Folder (the project page files nothing); the project's coordination goes with
+    /// it on the server. The page is read again either way, since a move stopped after the End has
+    /// still ended the conversation.
+    private func moveCoordinatorConversation(_ store: ProjectDetailModel, to row: CoordinatorChangeRow,
+                                             targets: SessionMoveTargets) {
+        guard let sessionID = CoordinatorChangeLogic.conversationID(store.coordinator),
+              let target = targets.targets.first(where: { $0.workspaceId == row.workspaceId }) else { return }
+        changePhase = targets.needsEnd ? .ending : .moving
+        Task {
+            let refused = await model.moveSession(sessionID, to: target, folder: nil,
+                                                  endingFirst: targets.needsEnd) { changePhase = $0 }
+            changePhase = nil
+            await store.load()
+            if let refused { notice = refused }
         }
     }
 
@@ -1164,6 +1288,18 @@ struct ProjectDetailView: View {
                 if status.state == .unavailable, let action = status.openability.requiredAction {
                     Text(action).font(.orbitLabel).foregroundStyle(.red)
                 }
+                // The way out of a workspace that broke, or of a conversation in Trash: the next
+                // coordinator, somewhere it can open.
+                if status.state == .unavailable || status.state == .trashed {
+                    Button(CoordinatorChangeCopy.button) { pageSheet = .coordinatorChange }
+                        .disabled(store.busy || changePhase != nil)
+                }
+                if let changePhase {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text(SessionMoveCopy.progress(changePhase)).font(.orbitLabel).foregroundStyle(.secondary)
+                    }
+                }
                 if status.state == .live, coordination.session != nil {
                     let note = ProjectPage.dispatchNote(openTaskCount: document.tasksByStatus.map { $0["OPEN"] ?? 0 },
                                                         finished: finished)
@@ -1178,6 +1314,7 @@ struct ProjectDetailView: View {
                     // coordinator is a one-way door, so it is held behind the press, where it is
                     // chosen rather than hit.
                     Menu {
+                        Button(CoordinatorChangeCopy.button) { pageSheet = .coordinatorChange }
                         Button {
                             if finished { replaceCoordinator(store) } else { confirmingReplace = true }
                         } label: {
@@ -1194,7 +1331,7 @@ struct ProjectDetailView: View {
                     .menuStyle(.button)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
-                    .disabled(store.busy)
+                    .disabled(store.busy || changePhase != nil)
                     // On the menu that asks, so the panel opens against it rather than at the top of
                     // the page.
                     .orbitConfirmation(ProjectPage.replaceCoordinatorQuestion, isPresented: $confirmingReplace) {
@@ -1253,13 +1390,21 @@ struct ProjectDetailView: View {
         if RunSettings.shown(started: document.started) {
             Section {
                 if let view = store.integration {
-                    lineSetting(store, view, document: document, now: now)
-                    // Directly under the line it depends on (owner decision 2026-11-10).
-                    deliverySetting(store, view)
-                    mainBranchSetting(store, view, now: now)
+                    // First, because it decides whether the landing settings under it mean anything.
+                    deliversSetting(store, view, document: document)
+                    if document.nonCode {
+                        landingOffSetting
+                    } else {
+                        lineSetting(store, view, document: document, now: now)
+                        // Directly under the line it depends on (owner decision 2026-11-10).
+                        deliverySetting(store, view)
+                        mainBranchSetting(store, view, now: now)
+                    }
                     automaticSetting(store, view, document: document)
                     atMostSetting(store, document: document)
-                    mergeCheckSetting(store, view, document: document)
+                    if !document.nonCode {
+                        mergeCheckSetting(store, view, document: document)
+                    }
                     if let seconds = view.escalationSeconds {
                         escalationSetting(store, view, seconds: seconds)
                     }
@@ -1273,6 +1418,75 @@ struct ProjectDetailView: View {
             } header: {
                 sectionHeader(StartProject.howItRuns, detail: RunSettings.appliesFromNextTask)
             }
+        }
+    }
+
+    /// Delivers (board 01 A–C): Code or Not code, each with what choosing it means, and — on a marked
+    /// project — who marked it, when, and why. A press asks first, then writes the owner's mark.
+    private func deliversSetting(_ store: ProjectDetailModel, _ view: ProjectIntegrationView,
+                                 document: ProjectDocument) -> some View {
+        let main = RunSettings.storedMainBranch(view) ?? RunSettings.defaultMainBranch
+        let mark = document.followUps.nonCodeMark
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(ProjectDone.runDelivers)
+            deliversOption(nonCode: false, chosen: !document.nonCode, title: ProjectDone.runDeliversCode,
+                           hint: ProjectDone.runDeliversCodeHint.replacingOccurrences(of: "{main}", with: main),
+                           busy: store.busy)
+            deliversOption(nonCode: true, chosen: document.nonCode, title: ProjectDone.runDeliversNotCode,
+                           hint: ProjectDone.runDeliversNotCodeHint, busy: store.busy)
+            if let provenance = ProjectDone.nonCodeProvenance(mark, withTime: true) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(provenance)
+                    if let reason = ProjectDone.nonCodeReasonLine(mark) {
+                        Text(reason).foregroundStyle(.secondary)
+                    }
+                }
+                .font(.orbitLabel)
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("non-code-provenance")
+            }
+        }
+        .id(ProjectDone.nonCodeAnchor)
+    }
+
+    private func deliversOption(nonCode: Bool, chosen: Bool, title: String, hint: String, busy: Bool) -> some View {
+        Button {
+            if !chosen { confirmingDelivers = nonCode }
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: chosen ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(chosen ? Color.accentColor : Color.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).fontWeight(.semibold)
+                    Text(hint)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(busy)
+        .accessibilityIdentifier(nonCode ? "delivers-not-code" : "delivers-code")
+    }
+
+    /// Landing, Off (board 01 C): what a non-code project folds the landing settings into.
+    private var landingOffSetting: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(ProjectDone.runLanding)
+                Spacer(minLength: 8)
+                Text(RunSettings.switchOff).foregroundStyle(.secondary)
+            }
+            Text(ProjectDone.runLandingOffHint)
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -1846,19 +2060,21 @@ struct ProjectDetailView: View {
         compact ? ProjectPage.criteriaPreviewCompact : ProjectPage.criteriaPreviewRegular
     }
 
-    private func criteriaSection(_ document: ProjectDocument) -> some View {
+    private func criteriaSection(_ store: ProjectDetailModel, _ document: ProjectDocument) -> some View {
         let criteria = document.acceptanceCriteriaItems
         let shown = criteriaExpanded ? criteria : Array(criteria.prefix(criteriaLimit))
+        let confirmed = criteria.filter { $0.satisfiedBy == .confirmation }.count
         return Section {
             if criteria.isEmpty {
                 Text(ProjectPage.noCriteria).font(.orbitLabel).foregroundStyle(.secondary)
             } else {
-                Text(ProjectPage.criteriaStanding(count: criteria.count))
+                Text(confirmed > 0 ? ProjectDone.acceptanceStanding(total: criteria.count, confirmed: confirmed)
+                                   : ProjectPage.criteriaStanding(count: criteria.count))
                     .font(.orbitLabel)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 ForEach(shown) { criterion in
-                    criterionRow(criterion, ref: document.integration?.ref,
+                    criterionRow(store, criterion, ref: document.integration?.ref,
                                  main: RunSettings.mainBranchName(document.integration?.upstreamRef))
                 }
                 if let disclosure = ProjectPage.criteriaDisclosure(total: criteria.count, limit: criteriaLimit,
@@ -1879,22 +2095,38 @@ struct ProjectDetailView: View {
                     }
                 }
             }
+            if !document.followUps.criteriaMovedOut.isEmpty {
+                MovedOutLines(movedOut: document.followUps.criteriaMovedOut,
+                              openProject: { model.openProject($0) })
+            }
         } header: {
             sectionHeader("Acceptance criteria", detail: nil)
         } footer: {
             if !criteria.isEmpty {
-                Text(ProjectPage.criteriaOutcomeNote)
+                Text(confirmed > 0 ? ProjectDone.acceptanceNoteMixed : ProjectPage.criteriaOutcomeNote)
             }
         }
     }
 
     /// `main` is the project's main branch by name, which where met work landed says.
-    private func criterionRow(_ criterion: ProjectCriterion, ref: String?, main: String) -> some View {
+    private func criterionRow(_ store: ProjectDetailModel, _ criterion: ProjectCriterion, ref: String?,
+                              main: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
             ordinalMark(criterion)
             VStack(alignment: .leading, spacing: 4) {
                 Text(criterion.text).font(.orbitSubtext).fixedSize(horizontal: false, vertical: true)
-                if let work = ProjectPage.criterionWork(criterion, integrationRef: ref, main: main) {
+                if let moved = criterion.movedFrom {
+                    // Board 02 I: where it came from.
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(ProjectDone.movedFrom).foregroundStyle(.secondary)
+                        Button(moved.fromProjectTitle) { model.openProject(moved.fromProjectId) }.linkButtonStyle()
+                        Text(ProjectDone.movedByLine(moved.movedAt, withTime: false)).foregroundStyle(.secondary)
+                    }
+                    .font(.orbitLabel)
+                }
+                if criterion.satisfiedBy == .confirmation {
+                    confirmationWork(store, criterion)
+                } else if let work = ProjectPage.criterionWork(criterion, integrationRef: ref, main: main) {
                     (Text(work.state).fontWeight(.semibold)
                         .foregroundColor(criterion.satisfied == true ? .green : .primary)
                      + Text(work.landing.map { " · \($0)" } ?? "")
@@ -1936,9 +2168,144 @@ struct ProjectDetailView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+                modeMenu(store, criterion)
             }
         }
         .padding(.vertical, 2)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("criterion-\(criterion.ordinal)")
+    }
+
+    /// A criterion met by confirmation (board 03 ⑤): its state in one sentence — who confirmed it
+    /// and when, an Agent check's verdict, a check still running, a confirmation of an earlier
+    /// wording, or nobody yet — what they said under it, and the owner's presses.
+    @ViewBuilder
+    private func confirmationWork(_ store: ProjectDetailModel, _ criterion: ProjectCriterion) -> some View {
+        let row = ProjectDone.confirmationRow(criterion.confirmation)
+        (Text(row.sentence).fontWeight(.semibold)
+            .foregroundColor(row.met ? .green : row.failed || row.stale ? .red : .primary)
+         + Text(row.when.map { " · \($0)" } ?? "").foregroundColor(.secondary))
+            .font(.orbitLabel)
+            .fixedSize(horizontal: false, vertical: true)
+        if let note = row.note {
+            Text(note)
+                .font(.orbitLabel)
+                .foregroundStyle(row.failed ? Color.red : Color.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        if let shots = ProjectDone.screenshotCount(row.screenshots.count) {
+            Label(shots, systemImage: "photo").font(.orbitLabel).foregroundStyle(.secondary)
+        }
+        if row.stale, comparing.contains(criterion.id), let then = row.staleConfirmation {
+            whatChanged(criterion, then: then)
+        }
+        HStack(spacing: 8) {
+            if row.met {
+                Button(ProjectDone.criterionWithdraw) {
+                    Task { if let refused = await store.withdrawConfirmation(criterion.id) {
+                        notice = "\(ProjectDone.criterionActionFailed) — \(refused)"
+                    } }
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("criterion-withdraw-\(criterion.ordinal)")
+            } else {
+                Button(ProjectDone.confirmLabel(criterion.confirmation)) {
+                    confirmingCriterion = ConfirmCriterionSubject(
+                        criterionID: criterion.id, ordinal: criterion.ordinal, text: criterion.text,
+                        verificationMethod: criterion.verificationMethod, revision: criterion.revision)
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("criterion-confirm-\(criterion.ordinal)")
+                if !row.running {
+                    Button(ProjectDone.runCheckLabel(criterion.confirmation)) {
+                        Task { if let refused = await store.startCriterionCheck(criterion.id) {
+                            notice = "\(ProjectDone.criterionActionFailed) — \(refused)"
+                        } }
+                    }
+                    .buttonStyle(.bordered)
+                }
+                if row.stale {
+                    let open = comparing.contains(criterion.id)
+                    Button(open ? ProjectDone.criterionHideChanges : ProjectDone.criterionWhatChanged) {
+                        if open { comparing.remove(criterion.id) } else { comparing.insert(criterion.id) }
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+            if let run = row.viewRun {
+                Button(ProjectDone.criterionViewRun) { model.pushConsole(run) }.buttonStyle(.bordered)
+            }
+            if let conversation = row.openConversation, row.met {
+                Button(ProjectDone.criterionOpenConversation) { model.pushConsole(conversation) }
+                    .buttonStyle(.bordered)
+            }
+        }
+        .font(.orbitLabel)
+        .controlSize(.small)
+        .disabled(store.busy)
+    }
+
+    /// Board 03 J's What changed: the wording that was confirmed beside the wording now.
+    private func whatChanged(_ criterion: ProjectCriterion, then: CriterionConfirmationView) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(ProjectDone.criterionWordingConfirmed.replacingOccurrences(of: "{r}", with: String(then.revision)))
+                    .font(.orbitMeta.weight(.semibold)).foregroundStyle(.secondary)
+                Text(then.criterionText ?? ProjectDone.criterionWordingNotKept)
+                    .strikethrough(then.criterionText != nil)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(ProjectDone.criterionWordingNow.replacingOccurrences(of: "{r}", with: String(criterion.revision ?? 0)))
+                    .font(.orbitMeta.weight(.semibold)).foregroundStyle(.secondary)
+                Text(criterion.text)
+            }
+        }
+        .font(.orbitLabel)
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    /// "Met by: its tasks ▾" (board 03 ③): the owner sets how a criterion is met. A change of mode
+    /// is a criteria change, so the server may hold it for a decision, and then says so.
+    @ViewBuilder
+    private func modeMenu(_ store: ProjectDetailModel, _ criterion: ProjectCriterion) -> some View {
+        Menu {
+            modeOption(store, criterion, .tasks, ProjectDone.criterionModeTasks, ProjectDone.criterionModeTasksHint)
+            modeOption(store, criterion, .confirmation, ProjectDone.criterionModeConfirmation,
+                       ProjectDone.criterionModeConfirmationHint)
+        } label: {
+            HStack(spacing: 3) {
+                Text(ProjectDone.metByLabel(criterion.satisfiedBy))
+                Image(systemName: "chevron.down").font(.orbitMeta.weight(.semibold))
+            }
+            .font(.orbitLabel)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .disabled(store.busy)
+        .accessibilityIdentifier("criterion-mode-\(criterion.ordinal)")
+        if let held = modeNotices[criterion.id] {
+            Text(held).font(.orbitLabel).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func modeOption(_ store: ProjectDetailModel, _ criterion: ProjectCriterion, _ mode: CriterionSatisfiedBy,
+                            _ title: String, _ hint: String) -> some View {
+        Button {
+            guard mode != criterion.satisfiedBy else { return }
+            Task {
+                let answer = await store.setCriterionMode(criterion.id, mode)
+                if let refused = answer.error { notice = "\(ProjectDone.criterionModeNotChanged) — \(refused)" }
+                modeNotices[criterion.id] = answer.notice
+            }
+        } label: {
+            if mode == criterion.satisfiedBy {
+                Label { Text(title); Text(hint) } icon: { Image(systemName: "checkmark") }
+            } else {
+                Text(title); Text(hint)
+            }
+        }
     }
 
     /// The ordinal is the row's one mark: a filled disc for met, a ring for unmet, a dashed ring for
@@ -2296,6 +2663,13 @@ private func projectStatusLabel(_ document: ProjectDocument) -> String {
     return document.status == .done ? "Completed" : document.status.label
 }
 
+/// A workspace picked in Change workspace, and the `move-targets` answer it was read from (nil when
+/// there was no conversation to bring).
+private struct CoordinatorChangePick {
+    let row: CoordinatorChangeRow
+    let targets: SessionMoveTargets?
+}
+
 /// The sheets the project page puts up over itself.
 private enum ProjectPageSheet: String, Identifiable {
     case openItems
@@ -2309,6 +2683,8 @@ private enum ProjectPageSheet: String, Identifiable {
     case mainBranch
     /// The jobs the Work overview's landing row counts, from a press on that row.
     case landingJobs
+    /// Change workspace: where the project is coordinated from.
+    case coordinatorChange
 
     var id: String { rawValue }
 }
@@ -2414,6 +2790,11 @@ struct OwnerStartProjectSheet: View {
 /// `ProjectDoneDialog`.
 private struct ProjectDoneSheet: View {
     let store: ProjectDetailModel
+    /// Open, on a task holding an unmet criterion; Change, on the non-code banner. Both put the
+    /// sheet down first.
+    var openTask: ((String) -> Void)? = nil
+    var openDelivers: (() -> Void)? = nil
+    @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var record: ProjectDoneRecord?
     @State private var error: String?
@@ -2457,7 +2838,16 @@ private struct ProjectDoneSheet: View {
                 doneCheck: store.doneCheck,
                 onRecord: { await recordDone(subject, row: row, digest: digest) },
                 onNotYet: notYet(row),
-                onReopen: { await reopen() })
+                onReopen: { await reopen() },
+                followUps: ProjectDoneFollowUpActions(
+                    openTask: openTask,
+                    openDelivers: openDelivers,
+                    move: { key, body in await store.moveCriterion(key, body) },
+                    openProjects: { model.projects?.projects ?? [] },
+                    confirm: { id, body in await store.confirmCriterion(id, body) },
+                    upload: { data, name, mime in
+                        try await store.uploadConfirmationShot(data, filename: name, mimeType: mime)
+                    }))
         } else {
             ProgressView().frame(maxWidth: .infinity)
         }

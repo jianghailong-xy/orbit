@@ -172,7 +172,7 @@ the server keeps nothing. Reasoning comes back encrypted and travels inside the 
 | effort (`output_config.effort`, or a `thinking` budget when no effort is sent) | `reasoning: {effort, summary: "auto"}`: low, medium, high, xhigh; `max` → `xhigh`; held to the model's highest declared level; no effort and no thinking → no `reasoning` |
 | `thinking: {type: "adaptive", display: "updates"}`, `context_management` | dropped |
 | `temperature`, `top_p`, `top_k`, `stop_sequences` | dropped (reasoning models reject them) |
-| `metadata.user_id` | not sent; `prompt_cache_key` = the session id, so OpenAI's own caching keeps one prefix per session |
+| `metadata.user_id` | not sent; `prompt_cache_key` = the session id, so OpenAI's own caching keeps one prefix per session (a login pool also sends the id as the `session-id` header, §9.3) |
 | `model` | §4.5 |
 
 **The reasoning envelope.** Claude Code keeps `thinking` blocks in its transcript and sends them back with their
@@ -320,7 +320,7 @@ every one of them up to ten times over about three minutes, a 401 and a 429 incl
 | 403 | 403 `permission_error` "The key "<label>" may not use the model "<model>" on OpenAI: …" | fails the turn: "Failed to authenticate. API Error: 403 …" | nothing armed |
 | 404 / `model_not_found` | 404 `not_found_error` "OpenAI has no model "<model>" for the key "<label>": …" | fails the turn in its own words: "There's an issue with the selected model (<model>) …" | nothing armed |
 | 429 `rate_limit_exceeded` | waited out on the same key within `sendUpstream`'s bound (`rateLimitWait`: 4 sends, ≤ 20 s a wait, ≤ 40 s in all); then 429 `rate_limit_error` "OpenAI is rate-limiting the key "<label>", and was still refusing after the Orbit gateway waited: …" | inside the bound it never sees the limit. Past it, it fails the turn once: "API Error: Request rejected (429) · …" | auto-retry arms on the API-error ladder |
-| 429 `insufficient_quota` (and the rest of `SPENT_ERROR_CODES`) | 429 `rate_limit_error` "You hit your usage limit on the OpenAI key "<label>" · resets Dec 1, 12:00am (UTC)" | fails the turn once: "API Error: Request rejected (429) · You hit your usage limit …" | records `model_provider.spent_until` (migration 0520). It is the reset OpenAI names, else the first of next month (`spentUntil`). The next answered request clears it, and so does a new secret. Ingestion reads the words as a spent quota and arms the retry for that reset (below). |
+| 429 `insufficient_quota` (and the rest of `SPENT_ERROR_CODES`) | 429 `rate_limit_error` "You hit your usage limit on the OpenAI key "<label>" · resets Dec 1, 12:00am (UTC)" | fails the turn once: "API Error: Request rejected (429) · You hit your usage limit …" | records `model_provider.spent_until` (migration 0612). It is the reset OpenAI names, else the first of next month (`spentUntil`). The next answered request clears it, and so does a new secret. Ingestion reads the words as a spent quota and arms the retry for that reset (below). |
 | 5xx / overload / unreachable | 529 `overloaded_error` "OpenAI could not answer (<status>): …" | retries on its own and usually completes. If it still fails: "API Error: 529 …" | auto-retry re-sends on the API-error ladder |
 | `context_length_exceeded` | 400 `invalid_request_error` "prompt is too long: N tokens > M maximum" | compacts and retries the turn (§4.6) | |
 
@@ -346,7 +346,7 @@ so a failure there is answered with its status too, never as a 200. Either way, 
   (`responses-stream-tap.ts`), and never buffers the stream for it. An unstreamed answer is read the same way, from
   the body it already reads whole. The usage is priced with `openai-prices.ts` at the model and tier the answer
   names. One write per answer, after the answer is out, records it three ways: a `key_gateway_usage` row per session
-  and key (migration 0525: input with cached included, cached, output with reasoning included, reasoning, and
+  and key (migration 0613: input with cached included, cached, output with reasoning included, reasoning, and
   `cost_micros`), a `usage` row (input counted without the cached part, as a Claude row counts it, with the cached
   part as `cache_read_input_tokens`), and the cost added to `session.cost_usd`.
 - Claude Code's own `total_cost_usd` for a GPT id is its guess from its own price table. Under D8, turn-complete
@@ -500,9 +500,19 @@ open session on engine `claude` on its owner's own unshared Codex pool, with the
 `/api/gw/anthropic` refuses a codex session's.
 
 - The request is translated as an OpenAI key's is (§4.3) and sent to `CHATGPT_CODEX_BASE/responses` with
-  `content-type`, `accept`, `Authorization: Bearer <access token>`, `ChatGPT-Account-ID`, and Claude Code's own
-  `User-Agent` as it came. Nothing else is sent: no `version`, `x-codex-routing-hint`, zstd body or guardian
-  metadata (those stay codex-only in `loginProviderRequest`), and no Codex prompt.
+  `content-type`, `accept`, `Authorization: Bearer <access token>`, `ChatGPT-Account-ID`, Claude Code's own
+  `User-Agent` as it came, and `session-id` = the Orbit session's id. Nothing else is sent: no `version`,
+  `x-codex-routing-hint`, zstd body or guardian metadata (those stay codex-only in `loginProviderRequest`), and no
+  Codex prompt.
+- **Prompt cache (added 2026-11-12, task 34vo71QVar9g6lKUCHxAd).** The backend keeps a session's cached prefix
+  by the `session-id` header; `prompt_cache_key` alone does not do it. Without the header, the CLI's requests were
+  each an exact extension of the one before, yet often missed: they hit only the prefix every session shares
+  (tools and instructions, 8,832 tokens) or the first request's (11,136). Even an identical request sent twice in a
+  row missed once. P3 measured 76.7% of input tokens cached; two real sessions of one P3 task measured 58.0% and
+  66.7%. With the header, a third session of the same task measured 93.6%. Replays of one recorded session
+  measured 78.0% and 82.2% without the header and 96.3% and 94.0% with it. The header carries the same session id
+  as `prompt_cache_key`. It names the session, not a client: the User-Agent stays Claude Code's, and nothing
+  Codex-only is sent. This is not a disguise under D4, since the backend accepted the requests without it.
 - The account checks, the refresh (ahead of expiry, and once on a 401), the rate-limit wait, the `spent_until` and
   `throttled_until` marks, the transcript notices and the usage ledger are the login gateway's own code, split
   out of `PoolLoginGatewayService.forward` (`accountFor`, `exchange`, `readUsage`, `answeredWhole`,

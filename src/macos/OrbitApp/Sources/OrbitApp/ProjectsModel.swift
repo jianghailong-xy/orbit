@@ -400,6 +400,80 @@ final class ProjectDetailModel {
         }
     }
 
+    // MARK: the done card's follow-ups
+
+    /// Move to a follow-up… from the done card over the page. Nil when it moved; otherwise the
+    /// door's own words, which the sheet says under its press.
+    func moveCriterion(_ criterionKey: String, _ body: MoveCriterionBody) async -> String? {
+        await followUpWrite {
+            _ = try await self.api.moveCriterion(projectID: self.projectID, criterionKey: criterionKey, body)
+        }
+    }
+
+    /// The owner's Confirm sheet.
+    func confirmCriterion(_ criterionID: String, _ body: ConfirmCriterionBody) async -> String? {
+        await followUpWrite {
+            try await self.api.confirmCriterion(projectID: self.projectID, criterionID: criterionID, body)
+        }
+    }
+
+    /// The Confirm sheet's one screenshot, uploaded when it is picked: Confirm sends its id.
+    func uploadConfirmationShot(_ data: Data, filename: String, mimeType: String) async throws -> String {
+        try await api.uploadAttachment(sessionID: nil, filename: filename, mimeType: mimeType, data: data)
+    }
+
+    /// Withdraw, on a criterion's standing confirmation.
+    func withdrawConfirmation(_ criterionID: String) async -> String? {
+        await followUpWrite {
+            try await self.api.withdrawCriterionConfirmation(projectID: self.projectID, criterionID: criterionID)
+        }
+    }
+
+    /// Run an Agent check of a criterion.
+    func startCriterionCheck(_ criterionID: String) async -> String? {
+        await followUpWrite {
+            try await self.api.startCriterionCheck(projectID: self.projectID, criterionID: criterionID)
+        }
+    }
+
+    /// "Met by: …": the set restated with one criterion's mode changed. The server's notice when it
+    /// held the change for a decision, or the door's refusal.
+    func setCriterionMode(_ criterionID: String, _ mode: CriterionSatisfiedBy) async -> (notice: String?, error: String?) {
+        guard let criteria = document?.acceptanceCriteriaItems else { return (nil, nil) }
+        var notice: String?
+        let error = await followUpWrite {
+            let answer = try await self.api.setCriteriaModes(
+                self.projectID, CriteriaModeBody(criteria: criteria, criterionID: criterionID, mode: mode))
+            notice = answer.acceptanceCriteriaHold?.notice
+        }
+        return (notice, error)
+    }
+
+    /// How it runs' Delivers: the owner's non-code mark.
+    func setNonCode(_ nonCode: Bool) async -> String? {
+        await runWrite(ProjectDone.runMarkNotSaved) {
+            try await self.api.setProjectNonCode(self.projectID, nonCode: nonCode)
+        }
+    }
+
+    /// A follow-up's write: the page and the done card's check read again either way, and a
+    /// refusal in the door's own words.
+    private func followUpWrite(_ body: @escaping () async throws -> Void) async -> String? {
+        guard !busy else { return nil }
+        busy = true
+        defer { busy = false }
+        var refused: String?
+        do {
+            try await body()
+            onChanged()
+        } catch {
+            refused = APIClient.failureReason(error)
+        }
+        await load()
+        if doneCheck != nil || doneCheckError != nil { await loadDoneCard() }
+        return refused
+    }
+
     /// Remove the project. Only an empty one can go; the server's refusal says how many tasks it
     /// still holds.
     func delete() async -> String? {
@@ -461,11 +535,12 @@ final class ProjectDetailModel {
     }
 
     /// Replace the coordinator conversation with an empty one; the server completes an open one first.
-    func replaceCoordinator() async -> Result<ProjectCoordinatorOpened, ProjectActionError> {
+    /// A workspace named opens the new one there (Change workspace's Start a new one there).
+    func replaceCoordinator(inWorkspace workspaceID: String? = nil) async -> Result<ProjectCoordinatorOpened, ProjectActionError> {
         busy = true
         defer { busy = false }
         do {
-            let opened = try await api.replaceProjectCoordinator(projectID)
+            let opened = try await api.replaceProjectCoordinator(projectID, workspaceID: workspaceID)
             onChanged()
             await load()
             return .success(opened)

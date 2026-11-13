@@ -69,6 +69,23 @@ extension EnvironmentValues {
     }
 }
 
+/// Whether a page this view is on is one of the wide shells' pages (macOS, and the iPad's split
+/// view), where a task link opens the task detail over the page it was pressed on rather than
+/// switching to the Tasks section (owner decision 2026-11-12). Set once by `MainView`, so every
+/// conversation, wiki page and watch card inside it says the same thing; the phone's shell leaves it
+/// false, where a task link keeps its own way out. The view knows its shell; the model is handed the
+/// answer (`AppModel.openFromConversation(_:overConsole:overPage:)`), never told which shell it is in.
+private struct OpensTasksOverPageKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var opensTasksOverPage: Bool {
+        get { self[OpensTasksOverPageKey.self] }
+        set { self[OpensTasksOverPageKey.self] = newValue }
+    }
+}
+
 /// Whether a view stands in a composer band that floats over the transcript (iOS 26,
 /// `ConsoleView.transcriptAndBand`), with the rows passing behind it — where a card washed with a
 /// faint tint has to be glass instead (`composerBandWash`).
@@ -195,6 +212,8 @@ struct ComposerView: View {
     @Bindable var console: ConsoleModel
     /// On the phone's console a page this conversation opens is pushed over it (`OpensPagesOverConsoleKey`).
     @Environment(\.opensPagesOverConsole) private var opensPagesOverConsole
+    /// On a wide shell a task this conversation opens opens over it (`OpensTasksOverPageKey`).
+    @Environment(\.opensTasksOverPage) private var opensTasksOverPage
     /// Focus the field as soon as it appears — used by the draft "new session" composer, where the
     /// user came here to type. A live console leaves it false so opening a session doesn't grab focus.
     /// Turning it on later focuses too: an iPad's draft appears unasked with it off, and ✎ turns it on.
@@ -1061,7 +1080,8 @@ struct ComposerView: View {
             if smartRoute != nil, let taskID = console.taskID {
                 Divider()
                 Button(TaskDetailCopy.openTask) {
-                    app.openFromConversation(.task(taskID), overConsole: opensPagesOverConsole)
+                    app.openFromConversation(.task(taskID), overConsole: opensPagesOverConsole,
+                                             overPage: opensTasksOverPage)
                 }
             }
         } label: {

@@ -341,7 +341,7 @@ private struct CompactSections: View {
                             case .createdTasks(let sessionID):  CreatedTasksPage(sessionID: sessionID)
                             case .watches:                      FollowingListView(rowNavigation: .push)
                             case .watchDetail(let watchID):     WatchDetailView(watchID: watchID)
-                            case .wikiEntry(let entryID):       WikiEntryView(entryID: entryID)
+                            case .wikiEntry(let entryID):       WikiEntryView(entryID: entryID, rowNavigation: .push)
                             // The other sections' pages ride their own stacks, not this one.
                             default:                         EmptyView()
                             }
@@ -377,7 +377,10 @@ private struct CompactSections: View {
                     .drawerToggle(open: openDrawer)
                     .navigationDestination(for: NavNode.self) { node in
                         switch node {
-                        case .wikiEntry(let entryID): WikiEntryView(entryID: entryID)
+                        case .wikiEntry(let entryID): WikiEntryView(entryID: entryID, rowNavigation: .push)
+                        // A task cited by an entry's source or a document's footnote is pushed over
+                        // the page that cited it, so the back swipe returns to that page.
+                        case .taskDetail(let taskID): TaskDetailPage(taskID: taskID)
                         case .wikiReview:             WikiReviewView()
                         case .wikiActivity:           WikiActivityView()
                         case .wikiSettings:           WikiSettingsView()
@@ -389,7 +392,7 @@ private struct CompactSections: View {
                         case .wikiBrowse:             WikiBrowseScreen()
                         case .wikiIndex:              WikiIndexScreen()
                         case .wikiDoc(let slug, let section):
-                            WikiDocScreen(address: WikiDocAddress(slug: slug, section: section))
+                            WikiDocScreen(address: WikiDocAddress(slug: slug, section: section), rowNavigation: .push)
                         case .wikiPlan(let version):
                             WikiPlanScreen(address: WikiPlanAddress(version: version))
                         case .wikiPlanDoc(let slug, let version):
@@ -404,12 +407,12 @@ private struct CompactSections: View {
             // and the line a rewrite floats (docs/wiki-chat-design.md §9).
             .wikiChatHost()
 
-        // RUNNERS — the Infrastructure page → a machine's record → an engine's or its name's page, a
+        // RUNNERS — the Machines & models page → a machine's record → an engine's or its name's page, a
         // pool's page, and a DeepSeek key's. Same single stack as Agents: the rows carry their own destination and push it, so a
         // deep link (`.runner(id)`) and a row tap are one navigation.
         // The section isn't in the drawer rail, so it is only ever entered by that deep link or an
         // engine's way to its fix (`AppModel.openRunnerEngine`) — neither of which is a `List`
-        // selection in this shell. Settings › Infrastructure is the same page on Settings' own stack.
+        // selection in this shell. Settings › Machines & models is the same page on Settings' own stack.
         case .runners:
             NavigationStack(path: $model.nav.path) {
                 // A new account with no machine lands here: the welcome card (docs/mocks/new-user-onboarding).
@@ -739,25 +742,10 @@ struct NavigationDrawer: View {
 
     var body: some View {
         return VStack(alignment: .leading, spacing: 0) {
-            if !inSidebarColumn {
-                HStack {
-                    drawerTitle
-                    Spacer()
-                    searchButton {
-                        DrawerCircleGlyph(systemName: "magnifyingglass")
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.leading, DrawerMetrics.textLeading)
-                .padding(.trailing, DrawerMetrics.hInset)
-                .padding(.top, 14)
-                .padding(.bottom, 8)
-            }
-
             List {
                 // The work leads the rail — projects and tasks — ABOVE the Workspaces and set apart
                 // from them by a rule; the open projects themselves close it, where the task lists
-                // and Recents used to be. Infrastructure lives under Settings, Settings is the action bar's
+                // and Recents used to be. Machines & models lives under Settings, Settings is the action bar's
                 // gear below, Admin sits inside Settings, and Following has no row (see its section).
                 ForEach(AppSection.workSections) { section in
                     if section == .projects {
@@ -799,10 +787,26 @@ struct NavigationDrawer: View {
             // divider, so the list keeps the full drawer height and rows slide under the buttons. The
             // matching bottom scroll margin lets the last row still be scrolled clear of them.
             .contentMargins(.bottom, 60, for: .scrollContent)
+            // The header floats over the rail rather than sitting above it, so the rows run on up to
+            // the top of the screen and fade under it instead of being cut at its lower edge (the
+            // owner, 2026-11-12, board docs/mocks/ios-header-soft-edge/03-board.html).
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if !inSidebarColumn { drawerHeader }
+            }
             .overlay(alignment: .bottom) {
                 VStack(alignment: .leading, spacing: 8) {
                     newSessionBlockedNote
                     actionBar
+                }
+                // The same soft edge under the action bar, from the bottom of the screen up: rows
+                // fade out behind the buttons rather than reading through around them.
+                .background {
+                    if !inSidebarColumn {
+                        SoftEdgeLayer(solidAt: .bottom, color: drawerSurface)
+                            .padding(.top, -16)
+                            .ignoresSafeArea(edges: .bottom)
+                            .allowsHitTesting(false)
+                    }
                 }
             }
         }
@@ -827,6 +831,30 @@ struct NavigationDrawer: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
+    /// The phone drawer's header: title and search, standing on a soft edge of the drawer's own
+    /// colour that runs up behind the status bar and fades out just past the header, over the rows
+    /// scrolled under it. The iPad column has none: its title rides the column's bar (`columnBar`).
+    private var drawerHeader: some View {
+        HStack {
+            drawerTitle
+            Spacer()
+            searchButton {
+                DrawerCircleGlyph(systemName: "magnifyingglass")
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.leading, DrawerMetrics.textLeading)
+        .padding(.trailing, DrawerMetrics.hInset)
+        .padding(.top, 14)
+        .padding(.bottom, 8)
+        .background {
+            SoftEdgeLayer(solidAt: .top, color: drawerSurface)
+                .padding(.bottom, -12)
+                .ignoresSafeArea(edges: .top)
+                .allowsHitTesting(false)
+        }
+    }
+
     private var drawerTitle: some View {
         Text("Orbit")
             .font(.title2.weight(.bold))
@@ -847,14 +875,15 @@ struct NavigationDrawer: View {
 
     /// The header, on the iPad column's bar: the title drawn on the bar itself — off the shared glass
     /// (iOS 26), as the session list's workspace title is — and the search button beside the system's
-    /// sidebar toggle.
+    /// sidebar toggle. `.fixedSize()` because iOS 26 proposes a leading item far less than its width,
+    /// which drew the title as "Or…" (see `WorkspaceTitleSwitcher`).
     @ToolbarContentBuilder
     private var columnBar: some ToolbarContent {
         if #available(iOS 26.0, *) {
-            ToolbarItem(placement: .topBarLeading) { drawerTitle }
+            ToolbarItem(placement: .topBarLeading) { drawerTitle.fixedSize() }
                 .sharedBackgroundVisibility(.hidden)
         } else {
-            ToolbarItem(placement: .topBarLeading) { drawerTitle }
+            ToolbarItem(placement: .topBarLeading) { drawerTitle.fixedSize() }
         }
         ToolbarItem(placement: .topBarTrailing) {
             searchButton { Image(systemName: "magnifyingglass") }

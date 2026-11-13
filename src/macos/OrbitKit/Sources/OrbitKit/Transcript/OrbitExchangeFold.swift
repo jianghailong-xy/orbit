@@ -134,6 +134,20 @@ public enum OrbitExchangeFold {
     ]
 
     /// What a group holds, counted by kind: `3 evidence, 1 can start, 2 watches`.
+    /// How long an answer may be and still fold (web parity: `foldsAtLength` in lib/orbitExchangeFold).
+    /// Most of what Orbit opens is answered with a result or a question for the reader, and only a short
+    /// answer is routine: on 60 answers drawn and labeled on a self-hosted deployment (2026-11-12,
+    /// docs/mocks/conversation-fold-rules/02), a watch's under 220 characters and any other's under 80
+    /// folded 11 of the 14 routine ones and none of the 46 that said something. A reply from another
+    /// session never folds by length: a short one was as often a ruling as a receipt.
+    public static let watchFoldsBelow = 220
+    public static let otherFoldsBelow = 80
+
+    public static func foldsAtLength(_ category: ExchangeCategory, _ length: Int) -> Bool {
+        if category == .reply { return false }
+        return length < (category == .watch ? watchFoldsBelow : otherFoldsBelow)
+    }
+
     public static func kinds(_ exchanges: [OrbitExchange]) -> String {
         categoryWords.compactMap { category, one, many in
             let n = exchanges.filter { $0.category == category }.count
@@ -300,7 +314,7 @@ public enum OrbitExchangeFold {
     /// working indicator, the queue, the tail — ends the turn and is never folded.
     private static func belongsToTurn(_ row: TranscriptRow) -> Bool {
         switch row {
-        case .item, .steps, .statusCard, .decisionCard: return true
+        case .item, .turnHead, .steps, .statusCard, .decisionCard: return true
         default: return false
         }
     }
@@ -378,6 +392,9 @@ public enum OrbitExchangeFold {
         // An exchange is the turn and its answer: one the agent has not answered yet is already the
         // single line its card draws, and folding it would only take that line away.
         guard let last = replies.last else { return nil }
+        // An answer long enough to say something stays drawn too (`foldsAtLength`). Counted in UTF-16
+        // units, as the browser counts it, so every client cuts at the same character.
+        guard foldsAtLength(orbit.category, replies.reduce(0) { $0 + $1.utf16.count }) else { return nil }
         return OrbitExchange(id: orbit.id, ts: orbit.ts, what: orbit.what, whatInTask: orbit.whatInTask,
                              reply: replyGist(last), category: orbit.category, target: orbit.target, rows: rows)
     }

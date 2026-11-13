@@ -342,6 +342,7 @@ struct TasksListView: View {
         .orbitRevealSurface()
         // Sessions use a calm, full-width plain list on iPhone; Tasks share that surface.
         .listStyle(.plain)
+        .softTopEdgeEffect()
         .overlay { emptyOverlay(tasks) }
         #else
         List(selection: selection) {
@@ -769,6 +770,7 @@ struct TaskListsDirectoryView: View {
             }
         }
         .listStyle(.plain)
+        .softTopEdgeEffect()
         .navigationTitle(TaskListCopy.taskListsTitle)
         .navigationBarTitleDisplayMode(inSheet ? .inline : .large)
         .searchable(text: $query, prompt: TaskListCopy.searchLists)
@@ -1092,10 +1094,14 @@ struct TaskDetailView: View {
 struct TaskDetailPage: View {
     @Environment(AppModel.self) private var model
     let taskID: String
+    /// Drawn over another page rather than as a stack frame — the wide shells' sheet
+    /// (`TaskOverPageSheet`). The page's task presses then replace it instead of leaving the page
+    /// under it (owner decision 2026-11-12).
+    var overPage = false
 
     var body: some View {
         if let tasks = model.tasks {
-            TaskDetailContent(tasks: tasks, taskID: taskID).id(taskID)
+            TaskDetailContent(tasks: tasks, taskID: taskID, overPage: overPage).id(taskID)
         } else {
             ProgressView()
         }
@@ -1106,6 +1112,8 @@ private struct TaskDetailContent: View {
     @Environment(AppModel.self) private var model
     let tasks: TasksModel
     let taskID: String
+    /// Shown over another page (see `TaskDetailPage.overPage`).
+    var overPage = false
 
     @State private var newComment = ""
     @State private var confirmingDelete = false
@@ -1127,8 +1135,33 @@ private struct TaskDetailContent: View {
     @State private var dependencyView: DependencyView?
     /// The run whose Why is open: the decision smart selection made for it.
     @State private var routeWhy: TaskRouteWhy?
+    /// Runs with → its sheet, the plan's graph opened in place, the sheet's own file picker, and whom
+    /// the comment box writes to (nil: the run while one is going).
+    @State private var editingEnvelope = false
+    @State private var planOpen = false
+    @State private var importingInputInSheet = false
+    @State private var composeTo: ComposeTarget?
 
     private enum DependencyView: Hashable { case graph, list }
+    private enum ComposeTarget: Hashable { case run, comment }
+
+    /// A press that leaves this page. Opened over a page (`overPage`, owner decision 2026-11-12), a
+    /// task — a dependency, the verifier — replaces the task on screen rather than stacking or
+    /// switching sections; anything else takes the page down and goes where it always did.
+    private func openRoute(_ route: Route) {
+        if overPage {
+            if case .task(let id) = route { return model.openTaskOverPage(id) }
+            model.closeTaskOverPage()
+        }
+        model.route(to: route)
+    }
+
+    /// The project line over the title. Over a page it is the way out to the project: the task goes
+    /// down and the project opens as it does from anywhere else.
+    private func openTaskProject(_ id: String) {
+        if overPage { model.closeTaskOverPage() }
+        model.openTaskProject(id)
+    }
 
     var body: some View {
         Group {
@@ -1161,6 +1194,33 @@ private struct TaskDetailContent: View {
             if tasks.detail?.id == taskID {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
+                        // The presses a stopped task's header no longer draws, and the two that used to
+                        // be blocks of their own (docs/mocks/task-detail-agent-first, board 05).
+                        if let task = tasks.detail {
+                            if TaskReopen.isOffered(task) {
+                                Button { confirmingReopen = true } label: {
+                                    Label(TaskReopenCopy.actionLabel, systemImage: "arrow.uturn.backward")
+                                }
+                                .disabled(tasks.isMutating(taskID))
+                            }
+                            if (task.status == .done || task.status == .cancelled) && !TaskJudgment.isGateRow(task) {
+                                Button { Task { _ = await tasks.execute(task.id) } } label: {
+                                    Label(TaskDetailCopy.runAgain, systemImage: "arrow.clockwise")
+                                }
+                                .disabled(!canStart(task) || tasks.isMutating(taskID))
+                            }
+                            Button { following = true } label: {
+                                Label(TaskDetailCopy.followTask, systemImage: "eye")
+                            }
+                            .disabled(model.watches == nil)
+                            if !TaskDetailLogic.hasDependencies(task) {
+                                Button { showingDependencyPicker = true } label: {
+                                    Label(TaskDetailCopy.addPrerequisite, systemImage: "plus.circle")
+                                }
+                                .disabled(tasks.isMutating(taskID))
+                            }
+                            Divider()
+                        }
                         // Two words for two links (docs/share-links-design.md §8). Copy Link is the
                         // signed-in address, for yourself; Share… is the public read-only link, and
                         // says under itself whether one is open. Copy as Markdown needs neither.
@@ -1212,8 +1272,9 @@ private struct TaskDetailContent: View {
                     .orbitConfirmation("Delete this task?", isPresented: $confirmingDelete) {
                         Button("Delete task", role: .destructive) {
                             Task {
-                                if await tasks.deleteTask(taskID), model.selectedTaskID == taskID {
-                                    model.selectedTaskID = nil
+                                if await tasks.deleteTask(taskID) {
+                                    if overPage { model.closeTaskOverPage() }
+                                    else if model.selectedTaskID == taskID { model.selectedTaskID = nil }
                                 }
                             }
                         }
@@ -1231,10 +1292,21 @@ private struct TaskDetailContent: View {
             // reads: this task's criterion and status, and what a run of it is waiting on.
             await tasks.loadOwnerConfirmation(taskID)
             await tasks.loadAttribution(taskID)
+            await tasks.loadEvidence(taskID)
             await tasks.loadDependencyGraph(taskID)
             if model.agents?.items.isEmpty == true { await model.agents?.load() }
             await tasks.loadNavigation()
             await model.watches?.load()
+        }
+        // Reopen is asked from ⋯ now; the question and its sentences are the browser's, as before.
+        .orbitConfirmation(TaskReopenCopy.modalTitle, isPresented: $confirmingReopen) {
+            Button(TaskReopenCopy.modalOK) {
+                Task { _ = await tasks.reopen(taskID) }
+            }
+            .disabled(tasks.isMutating(taskID))
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text(TaskReopen.paragraphs(tasks.detail).joined(separator: "\n\n"))
         }
         .task(id: detailPollKey) { await pollBusyDetail() }
         .task(id: landingPollKey) { await pollLanding() }
@@ -1253,19 +1325,6 @@ private struct TaskDetailContent: View {
         .sheet(isPresented: $showingDependencyPicker) {
             let existing = Set((tasks.detail?.dependsOn ?? []).compactMap { $0.dependsOnTask?.id })
             TaskDependencyPicker(tasks: tasks, taskID: taskID, existing: existing)
-        }
-        .sheet(isPresented: $editingSchedule) {
-            if let task = tasks.detail, task.id == taskID {
-                TaskScheduleSheet(task: task, onSave: { date in
-                    let saved = await tasks.setRunAt(task.id, date)
-                    if saved { model.showToast(TaskDetailCopy.scheduleSaved) }
-                    return saved
-                }, onCancelSchedule: {
-                    let cancelled = await tasks.setRunAt(task.id, nil)
-                    if cancelled { model.showToast(TaskDetailCopy.scheduleCancelled) }
-                    return cancelled
-                })
-            }
         }
         .sheet(isPresented: $editingAcceptance) {
             if let task = tasks.detail, task.id == taskID {
@@ -1286,6 +1345,7 @@ private struct TaskDetailContent: View {
         .sheet(item: $routeWhy) { why in
             TaskRouteWhySheet(why: why)
         }
+        .sheet(isPresented: $editingEnvelope) { envelopeSheet }
         .fileImporter(isPresented: $importingInput, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result else { return }
             Task { await addInputs(urls) }
@@ -1322,8 +1382,9 @@ private struct TaskDetailContent: View {
 
     private func loadDetail() async {
         let loaded = await tasks.loadDetail(taskID)
-        if !loaded, tasks.detailMissing, model.selectedTaskID == taskID {
-            model.selectedTaskID = nil
+        if !loaded, tasks.detailMissing, model.taskDetailIsOpen(taskID) {
+            if overPage { model.closeTaskOverPage() }
+            else { model.selectedTaskID = nil }
         }
     }
 
@@ -1332,6 +1393,7 @@ private struct TaskDetailContent: View {
         await loadDetail()
         await tasks.loadOwnerConfirmation(taskID)
         await tasks.loadAttribution(taskID)
+        await tasks.loadEvidence(taskID)
         await tasks.loadDependencyGraph(taskID)
         await model.watches?.load()
     }
@@ -1341,11 +1403,13 @@ private struct TaskDetailContent: View {
         // turn, and therefore when the owner may have just been asked something. The read is what
         // turns that into the card's pointer rather than into a stale `Confirm done`.
         await tasks.loadOwnerConfirmation(taskID)
+        // The same moment is when a run that just stopped has submitted its evidence.
+        await tasks.loadEvidence(taskID)
         guard let task = tasks.detail, task.id == taskID, TaskListLogic.isBusy(task) else { return }
         while !Task.isCancelled {
             do { try await Task.sleep(nanoseconds: 4_000_000_000) }
             catch { return }
-            guard model.selectedTaskID == taskID else { return }
+            guard model.taskDetailIsOpen(taskID) else { return }
             _ = await tasks.loadDetail(taskID)
             guard let current = tasks.detail, TaskListLogic.isBusy(current) else { return }
         }
@@ -1353,9 +1417,11 @@ private struct TaskDetailContent: View {
 
     // MARK: the page
 
-    /// The web's `TaskDetailPanel`, block for block and in its order: the head and its presses,
-    /// [the check that settles the row], Details, Dependencies, Description, Acceptance, Inputs,
-    /// Attribution, Followed by, Runs, Comments — and the comment box, which stays on screen.
+    /// The web's `TaskDetailPanel`, block for block and in its order since the page leads with the
+    /// agent's work (docs/mocks/task-detail-agent-first, boards 04–05): the head and its presses,
+    /// [the check that settles the row], Now, Delivered, [Landing], Done means, the brief, In the plan,
+    /// Runs with, [Inputs], [Attribution], [Followed by], Activity — and the comment box, which stays
+    /// on screen. A bracketed block is drawn only when it has something to say.
     private func page(_ task: TaskItem) -> some View {
         List {
             Section {
@@ -1369,22 +1435,25 @@ private struct TaskDetailContent: View {
             .listRowSeparator(.hidden)
             // Where the task's work stands after DONE (§2.7a): the newest landing attempt and why
             // it waits or where it stopped, apart from the status above — the web's first block.
-            if let landing = TaskLandingLogic.status(task.integration, taskStatus: task.status.rawValue) {
-                landingSection(landing)
-            }
             // A row settled by a check always gets the card — with the check, or with the fact that
             // there isn't one. That empty state is where a reader otherwise reads the header hint's
             // sentence and finds nothing behind it.
             if TaskJudgment.isGateRow(task) || task.verifier != nil { verifierSection(task) }
-            detailsSection(task)
-            dependenciesSection(task)
-            descriptionSection(task)
+            if let run = TaskDetailLogic.liveRun(task) { nowSection(task, run) }
+            if let latest = tasks.evidence.last { evidenceSection(task, latest) }
+            if let landing = TaskLandingLogic.status(task.integration, taskStatus: task.status.rawValue) {
+                landingSection(landing)
+            }
             acceptanceSection(task)
-            inputsSection(task)
-            attributionSection(task)
-            followedBySection(task)
-            runsSection(task)
-            commentsSection(task)
+            briefSection(task)
+            if TaskDetailLogic.hasDependencies(task) { planSection(task) }
+            runsWithSection(task)
+            if !(task.attachments ?? []).isEmpty { inputsSection(task, addFile: { importingInput = true }) }
+            if let view = tasks.attribution, TaskDetailLogic.attributionNeedsCard(view, projectId: task.projectId) {
+                attributionSection(task)
+            }
+            if hasFollowers(task) { followedBySection(task) }
+            activitySection(task)
         }
         .taskPageListStyle()
         .safeAreaInset(edge: .bottom) { composer(task) }
@@ -1409,17 +1478,22 @@ private struct TaskDetailContent: View {
                 .font(.title2.weight(.bold))
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
-            // The browser's meta line: the status, who has the task, and when it was made.
+            // The browser's status line: one status (with how long a run has been going), who has the
+            // task, what its newest run is on, and what its runs have cost. When it was filed is on
+            // the Activity timeline.
             HStack(spacing: 8) {
-                TaskStatusPill(pill: TaskListLogic.pill(task))
+                TaskStatusPill(pill: TaskDetailLogic.headPill(task))
                 if let assignee = task.assignee {
                     HStack(spacing: 5) {
                         TaskAvatar(name: assignee.name)
                         Text(assignee.name ?? "Unassigned").lineLimit(1)
                     }
                 }
-                if let created = task.createdAt, let relative = RelativeTime.format(created) {
-                    Text("· \(relative)").foregroundStyle(.secondary).lineLimit(1)
+                if let ranOn = (task.sessions ?? []).first(where: { $0.model != nil })?.model {
+                    Text("· \(runModelName(ranOn, task))").foregroundStyle(.secondary).lineLimit(1)
+                }
+                if let cost = TaskDetailLogic.totalCost(task) {
+                    Text("· \(cost)").foregroundStyle(.secondary).lineLimit(1)
                 }
             }
             .font(.orbitSubtext)
@@ -1431,7 +1505,7 @@ private struct TaskDetailContent: View {
 
     private func projectLine(_ project: TaskProjectRef) -> some View {
         // Over that project's page (a row of it opened this task) it is the way back down to it.
-        Button { model.openTaskProject(project.id) } label: {
+        Button { openTaskProject(project.id) } label: {
             HStack(spacing: 5) {
                 Image(systemName: AppSection.projects.systemImage)
                 Text(project.title).lineLimit(1)
@@ -1552,7 +1626,7 @@ private struct TaskDetailContent: View {
                 { Task { await tasks.clearRunPin(id) } }
             }
             TaskRunHandoffCard(conflict: conflict,
-                               onOpenRun: { model.route(to: .session($0)) },
+                               onOpenRun: { openRoute(.session($0)) },
                                onClearPin: clearPin,
                                onDismiss: { tasks.clearRunConflict() })
         }
@@ -1569,7 +1643,7 @@ private struct TaskDetailContent: View {
             taskHasRuns: !(task.sessions ?? []).isEmpty)
         // The detail carries the task's sessions, so when a run has it this knows WHICH one and
         // links straight there. The live run wins over `status`, which lags.
-        return TaskDetailLogic.actionRow(owner: owner, reopenable: TaskReopen.isOffered(task), status: task.status,
+        return TaskDetailLogic.actionRow(owner: owner, status: task.status,
                                          gate: TaskJudgment.isGateRow(task), entry: TaskRunHandoff.entry(for: task))
     }
 
@@ -1617,7 +1691,7 @@ private struct TaskDetailContent: View {
     private func leadingButton(_ leading: TaskDetailActionRow.Leading, _ task: TaskItem) -> some View {
         switch leading {
         case .waitingForConfirmation(let sessionID):
-            Button { model.route(to: .session(sessionID)) } label: {
+            Button { openRoute(.session(sessionID)) } label: {
                 Label(OwnerConfirmations.waitingForConfirmation, systemImage: "arrow.turn.down.right")
                     .lineLimit(1)
                     .frame(maxWidth: .infinity)
@@ -1628,7 +1702,7 @@ private struct TaskDetailContent: View {
         case .underReview(let sessionID):
             // The same way to the card while its report is still with its reviewer — not orange:
             // nobody is asking the owner yet (contract §5 N3).
-            Button { model.route(to: .session(sessionID)) } label: {
+            Button { openRoute(.session(sessionID)) } label: {
                 Label(OwnerConfirmations.underReview, systemImage: "clock")
                     .lineLimit(1)
                     .frame(maxWidth: .infinity)
@@ -1644,33 +1718,6 @@ private struct TaskDetailContent: View {
             .buttonStyle(.bordered)
             .controlSize(.large)
             .disabled(tasks.isMutating(task.id))
-        case .reopen:
-            // Beside Run/Retry rather than instead of it, and deliberately not the prominent press:
-            // this one starts nothing. It only takes the status back — the sole move for a DONE task,
-            // and the only one that lifts a supersession record a replaced attempt's Run is refused by.
-            Button { confirmingReopen = true } label: {
-                Label(TaskReopenCopy.actionLabel, systemImage: "arrow.uturn.backward")
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .disabled(tasks.isMutating(task.id))
-            // The way back from a status already written — offered on the three statuses that mean
-            // the work has stopped, and asked once, on the button that asks. Answered with
-            // `TaskReopen.modalOK` rather than the question's words: the press has already been made
-            // once.
-            .orbitConfirmation(TaskReopenCopy.modalTitle, isPresented: $confirmingReopen) {
-                Button(TaskReopenCopy.modalOK) {
-                    Task { _ = await tasks.reopen(taskID) }
-                }
-                .disabled(tasks.isMutating(taskID))
-                Button("Cancel", role: .cancel) { }
-            } message: {
-                // The sentences the browser's question carries, in the same order — the conditional
-                // ones are included by `paragraphs` only when they are true of this row.
-                Text(TaskReopen.paragraphs(tasks.detail).joined(separator: "\n\n"))
-            }
         }
     }
 
@@ -1684,7 +1731,7 @@ private struct TaskDetailContent: View {
         let button = Group {
             switch trailing {
             case .openRun(let sessionID):
-                Button { if let sessionID { model.route(to: .session(sessionID)) } } label: {
+                Button { if let sessionID { openRoute(.session(sessionID)) } } label: {
                     Label(TaskRunHandoff.openTheRun, systemImage: "arrow.right")
                         .lineLimit(1)
                         .frame(maxWidth: .infinity)
@@ -1739,6 +1786,131 @@ private struct TaskDetailContent: View {
         return nil
     }
 
+    // MARK: now, delivered
+
+    /// What the agent is doing now: the run that is going and the position it last reported
+    /// (`task_progress_report`). The card is the way into the run, as the header's press is.
+    private func nowSection(_ task: TaskItem, _ run: SessionRef) -> some View {
+        let name = run.agent?.name ?? task.assignee?.name ?? TaskDetailCopy.theAgent
+        let progress = TaskDetailLogic.progress(task)
+        return Section {
+            Button { openRoute(.session(run.id)) } label: {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 10) {
+                        TaskAvatar(name: name)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(run.resolvedRunState == .running ? TaskDetailCopy.isWorking(name) : sessionLabel(run))
+                                .font(.orbitSubtext.weight(.semibold))
+                                .foregroundStyle(Color.primary)
+                            Text(nowSubline(run, task))
+                                .font(.orbitLabel)
+                                .foregroundStyle(Color.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.orbitLabel.weight(.semibold))
+                            .foregroundStyle(Color.secondary.opacity(0.7))
+                    }
+                    if let progress {
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            if let step = TaskDetailLogic.progressStep(progress) {
+                                Text(step).font(.orbitSubtext.weight(.semibold)).foregroundStyle(Color.primary)
+                            }
+                            if let phase = progress.phase {
+                                Text(phase).font(.orbitSubtext).foregroundStyle(Color.secondary).lineLimit(2)
+                            }
+                        }
+                        if let fraction = TaskDetailLogic.progressFraction(progress) {
+                            ProgressView(value: fraction).tint(.accentColor)
+                        }
+                        if let message = progress.message {
+                            Text(message)
+                                .font(.orbitSubtext)
+                                .foregroundStyle(Color.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                        }
+                        if let at = progress.lastProgressAt, let ago = RelativeTime.format(at) {
+                            Text("Last progress \(ago)").font(.orbitLabel).foregroundStyle(Color.secondary)
+                        }
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } header: {
+            sectionHeader(TaskDetailCopy.nowHeading)
+        }
+    }
+
+    /// `Started 7m ago · Opus 5.5 · $0.84 so far`.
+    private func nowSubline(_ run: SessionRef, _ task: TaskItem) -> String {
+        [run.createdAt.flatMap { RelativeTime.format($0) }.map { "Started \($0)" },
+         run.model.map { runModelName($0, task) },
+         TaskDetailLogic.costLabel(run.costUsd).map { "\($0) so far" }]
+            .compactMap { $0 }
+            .joined(separator: " · ")
+    }
+
+    /// What the work delivered, and on what grounds: the newest evidence version and its decision.
+    private func evidenceSection(_ task: TaskItem, _ row: TaskEvidenceRevision) -> some View {
+        let outcome = TaskDetailLogic.evidenceOutcome(row)
+        let tint: Color = outcome.accepted == true ? .green : outcome.accepted == false ? .orange : .secondary
+        let checks = row.evidence?.checks ?? []
+        let gaps = row.evidence?.gaps ?? []
+        return Section {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Text(outcome.label)
+                        .font(.orbitMeta.weight(.semibold))
+                        .foregroundStyle(tint)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(tint.opacity(0.15), in: Capsule())
+                    Text(TaskDetailLogic.evidenceMeta(row) { $0.flatMap { RelativeTime.format($0) } ?? "" })
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                if let claim = row.evidence?.claim?.trimmingCharacters(in: .whitespacesAndNewlines), !claim.isEmpty {
+                    Text(claim)
+                        .font(.orbitSubtext)
+                        .lineLimit(5)
+                        .padding(.leading, 9)
+                        .overlay(alignment: .leading) {
+                            Rectangle().fill(tint.opacity(0.4)).frame(width: 3)
+                        }
+                }
+                ForEach(Array(checks.enumerated()), id: \.offset) { _, check in
+                    HStack(alignment: .firstTextBaseline, spacing: 7) {
+                        Text(check.succeeded == false ? "✕" : check.succeeded == true ? "✓" : "•")
+                            .font(.orbitSubtext.weight(.bold))
+                            .foregroundStyle(check.succeeded == false ? Color.red : Color.green)
+                            .frame(width: 14)
+                        Text(TaskDetailLogic.evidenceCheckText(check))
+                            .font(check.kind == "TOOL_CALL" ? .orbitMono : .orbitSubtext)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                    }
+                }
+                if !gaps.isEmpty {
+                    Text(TaskDetailCopy.notCovered + gaps.joined(separator: "; "))
+                        .font(.orbitLabel)
+                        .foregroundStyle(.orange)
+                }
+                if row.decision?.decision == "SEND_BACK", let note = row.decision?.note, !note.isEmpty {
+                    Text(note).font(.orbitLabel).foregroundStyle(.orange)
+                }
+            }
+            .padding(.vertical, 2)
+        } header: {
+            sectionHeader(task.status == .done ? TaskDetailCopy.deliveredHeading : TaskDetailCopy.evidenceHeading)
+        }
+    }
+
     // MARK: verification task
 
     /// The check that settles this row, under the row it checks — the relation the database has
@@ -1751,7 +1923,7 @@ private struct TaskDetailContent: View {
                     Text(verifier.title ?? "Untitled task").font(.orbitSubtext).lineLimit(2)
                     TaskStatusPill(pill: TaskJudgment.pill(verifier))
                     Spacer(minLength: 8)
-                    Button(TaskJudgmentCopy.verifierCardEntry) { model.route(to: .task(verifier.id)) }
+                    Button(TaskJudgmentCopy.verifierCardEntry) { openRoute(.task(verifier.id)) }
                         .buttonStyle(.bordered)
                 }
             } else {
@@ -1766,42 +1938,138 @@ private struct TaskDetailContent: View {
 
     // MARK: details
 
-    /// The fields that can be changed, as the platform's form rows: the label on the left, the value
-    /// on the right in grey with its chooser mark. The one row that goes somewhere carries `›`, and
-    /// who made the task and when read under the card.
-    private func detailsSection(_ task: TaskItem) -> some View {
+    // MARK: runs with (the envelope)
+
+    /// Who runs the task and on what, as one line at rest: tapping it opens the fields in a sheet
+    /// (board 05 D), where the schedule and the inputs are too.
+    private func runsWithSection(_ task: TaskItem) -> some View {
         Section {
-            assigneePicker(task)
-            if smartSelection { suggestedPicker(task) }
-            enginePicker(task)
-            providerPicker(task)
-            modelPicker(task)
-            listPicker(task)
-            Button { editingSchedule = true } label: {
-                detailRow(TaskDetailCopy.startAtLabel, value: TaskDetailLogic.scheduleValue(task.runAt),
-                          glyph: "chevron.up.chevron.down")
-            }
-            .disabled(tasks.isMutating(task.id))
-            if let source = task.creatorSession {
-                Button { model.route(to: .session(source.id)) } label: {
-                    detailRow(TaskDetailCopy.createdFromLabel, value: source.title ?? "Untitled session",
-                              glyph: "chevron.right")
+            Button { editingEnvelope = true } label: {
+                HStack(spacing: 8) {
+                    envelopeLine(task)
+                        .font(.orbitSubtext)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "chevron.right")
+                        .font(.orbitLabel.weight(.semibold))
+                        .foregroundStyle(Color.secondary.opacity(0.7))
                 }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
         } header: {
-            sectionHeader(TaskDetailCopy.detailsHeading)
+            sectionHeader(TaskDetailCopy.runsWithHeading)
         } footer: {
-            VStack(alignment: .leading, spacing: 4) {
-                // The coordinator's reason for the suggested tier, in grey under the card.
-                if smartSelection, let note = TaskDetailLogic.modelHintNote(task) {
-                    Text(note)
+            Text(envelopeNote(task))
+        }
+    }
+
+    /// `Agent orbit-develop · Engine Claude Code · Provider … · Model …`, labels in grey.
+    private func envelopeLine(_ task: TaskItem) -> Text {
+        let pairs: [(String, String)] = [
+            ("Agent", task.assignee?.name ?? "Unassigned"),
+            (TaskDetailCopy.engineLabel, ProviderEngines.cliName(runPin(task).runEngine)),
+            (TaskDetailCopy.providerLabel, providerSummary(task)),
+            (TaskDetailCopy.modelLabel, task.model.map { runModelName($0, task) }
+                ?? (smartSelection && assigneeAgent(task)?.modelRouting == true
+                    ? TaskDetailCopy.smartSelectionPlaceholder : "Provider default")),
+        ]
+        return pairs.enumerated().reduce(Text("")) { line, entry in
+            let (index, pair) = entry
+            let label = Text("\(pair.0) ").foregroundStyle(Color.secondary)
+            let value = Text(pair.1).foregroundStyle(Color.primary)
+            return index == 0 ? line + label + value : line + Text("  ·  ").foregroundStyle(Color.secondary) + label + value
+        }
+    }
+
+    /// What the Provider field reads at rest: the pinned credential, or what Engine default runs on.
+    private func providerSummary(_ task: TaskItem) -> String {
+        let pin = runPin(task)
+        let sources = pinSources(task)
+        let firstDeepSeekKey = SessionProviderChoices.providers(for: "dsh", sources: sources).first { $0.kind == .key }
+        let runnerName = assigneeRunner(task).map { RunnerPageFormat.displayName($0) }
+        guard let pinned = task.provider else {
+            return TaskRunPin.engineDefaultLabel(engine: pin.runEngine, firstDeepSeekKey: firstDeepSeekKey?.label,
+                                                 runnerName: runnerName)
+        }
+        if ProviderEngines.isLoginProvider(pinned) { return runnerName.map { "Sign-in on \($0)" } ?? "Runner sign-in" }
+        let rows = SessionProviderChoices.providers(for: pin.runEngine, sources: sources)
+        return SessionProviderChoices.current(engine: pin.runEngine, provider: pinned, in: rows, sources: sources).label
+    }
+
+    /// Under the line: the list, the schedule when there is one, and the inputs.
+    private func envelopeNote(_ task: TaskItem) -> String {
+        let list = task.listId.flatMap { id in tasks.lists.first { $0.id == id }?.title }
+        let inputs = (task.attachments ?? []).count
+        return [list.map { "List: \($0)" } ?? "No list",
+                task.runAt.map { _ in "\(TaskDetailCopy.startAtLabel) \(TaskDetailLogic.scheduleValue(task.runAt))" },
+                inputs == 0 ? "No input files" : "\(inputs) input \(inputs == 1 ? "file" : "files")"]
+            .compactMap { $0 }
+            .joined(separator: " · ")
+    }
+
+    /// The fields, as the platform's form rows in a sheet: the label on the left, the value on the
+    /// right in grey with its chooser mark. Start at opens its own sheet from here, and the inputs
+    /// are listed under them.
+    @ViewBuilder
+    private var envelopeSheet: some View {
+        if let task = tasks.detail, task.id == taskID {
+            NavigationStack {
+                List {
+                    Section {
+                        assigneePicker(task)
+                        if smartSelection { suggestedPicker(task) }
+                        enginePicker(task)
+                        providerPicker(task)
+                        modelPicker(task)
+                        listPicker(task)
+                        Button { editingSchedule = true } label: {
+                            detailRow(TaskDetailCopy.startAtLabel, value: TaskDetailLogic.scheduleValue(task.runAt),
+                                      glyph: "chevron.up.chevron.down")
+                        }
+                        .disabled(tasks.isMutating(task.id))
+                    } footer: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            // The coordinator's reason for the suggested tier, in grey under the card.
+                            if smartSelection, let note = TaskDetailLogic.modelHintNote(task) {
+                                Text(note)
+                            }
+                            if TaskListLogic.isBusy(task) { Text(TaskDetailCopy.changesApplyToNextRun) }
+                        }
+                    }
+                    inputsSection(task, addFile: { importingInputInSheet = true })
                 }
-                if let footnote = TaskDetailLogic.createdFootnote(
-                    creatorName: TaskDetailLogic.creatorName(task, agents: model.agents?.items ?? [])
-                        ?? tasks.item(task.id)?.creatorName,
-                    createdAt: task.createdAt) {
-                    Text(footnote)
+                .taskPageListStyle()
+                .navigationTitle(TaskDetailCopy.runsWithHeading)
+                #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+                #endif
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { editingEnvelope = false }
+                    }
                 }
+            }
+            #if os(macOS)
+            .frame(minWidth: 460, minHeight: 520)
+            #endif
+            .sheet(isPresented: $editingSchedule) {
+                if let task = tasks.detail, task.id == taskID {
+                    TaskScheduleSheet(task: task, onSave: { date in
+                        let saved = await tasks.setRunAt(task.id, date)
+                        if saved { model.showToast(TaskDetailCopy.scheduleSaved) }
+                        return saved
+                    }, onCancelSchedule: {
+                        let cancelled = await tasks.setRunAt(task.id, nil)
+                        if cancelled { model.showToast(TaskDetailCopy.scheduleCancelled) }
+                        return cancelled
+                    })
+                }
+            }
+            .fileImporter(isPresented: $importingInputInSheet, allowedContentTypes: [.item],
+                          allowsMultipleSelection: true) { result in
+                guard case .success(let urls) = result else { return }
+                Task { await addInputs(urls) }
             }
         }
     }
@@ -2061,54 +2329,82 @@ private struct TaskDetailContent: View {
 
     // MARK: dependencies
 
-    private func dependenciesSection(_ task: TaskItem) -> some View {
+    /// Where the task sits in the plan: whether anything blocks it and what waits on it, in one
+    /// sentence; the graph, the list and the prerequisite controls open in place. Drawn only for a
+    /// task with relations — ⋯ → Add prerequisite starts the first one.
+    private func planSection(_ task: TaskItem) -> some View {
         let graph = TaskDetailLogic.dependencyGraph(for: task, loaded: tasks.dependencyGraph)
         let related = TaskDetailLogic.hasDependencies(task)
         let showGraph = (dependencyView ?? (TaskDetailLogic.prefersGraph(graph) ? .graph : .list)) == .graph
         return Section {
-            if let summary = TaskDetailLogic.dependencySummary(for: task, graph: graph) {
-                Text(summary).font(.orbitLabel).foregroundStyle(.secondary)
-            }
             if let notice = TaskDetailLogic.blockedNotice(for: task) {
                 Label(notice.text, systemImage: notice.failed ? "exclamationmark.lock.fill" : "lock.fill")
                     .font(.orbitSubtext)
                     .foregroundStyle(notice.failed ? Color.red : Color.orange)
             }
-            if !related {
-                Text(TaskDetailCopy.noDependencies).foregroundStyle(.secondary)
-            } else {
-                Picker(TaskDetailCopy.dependenciesHeading, selection: Binding(
-                    get: { showGraph ? DependencyView.graph : .list },
-                    set: { dependencyView = $0 }
-                )) {
-                    Text(TaskDetailCopy.graphView).tag(DependencyView.graph)
-                    Text(TaskDetailCopy.listView).tag(DependencyView.list)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                if showGraph {
-                    TaskDependencyGraphView(graph: graph) { model.route(to: .task($0)) }
-                } else {
-                    ForEach(TaskDetailLogic.dependencyRows(graph)) { row in dependencyRow(row) }
-                }
-                if let notice = TaskDetailLogic.truncationNotice(graph) {
-                    Text(notice).font(.orbitLabel).foregroundStyle(.secondary)
-                }
+            let sentence = TaskDetailLogic.planSentence(task)
+            if !sentence.isEmpty {
+                Text(sentence).font(.orbitSubtext).fixedSize(horizontal: false, vertical: true)
             }
-            if !(task.dependsOn ?? []).isEmpty {
-                Toggle(TaskDetailCopy.autoRunWhenReady, isOn: Binding(
-                    get: { task.autoRunWhenReady ?? true },
-                    set: { value in Task { await tasks.setAutoRun(task.id, value) } }
-                ))
-                .disabled(tasks.isMutating(task.id))
+            Button { planOpen.toggle() } label: {
+                HStack(spacing: 8) {
+                    Text(planOpen ? TaskDetailCopy.hideGraph : TaskDetailCopy.showGraph)
+                        .foregroundStyle(Color.accentColor)
+                    Spacer(minLength: 8)
+                    if let summary = TaskDetailLogic.dependencySummary(for: task, graph: graph) {
+                        Text(summary).font(.orbitLabel).foregroundStyle(Color.secondary).lineLimit(1)
+                    }
+                    Image(systemName: planOpen ? "chevron.down" : "chevron.right")
+                        .font(.orbitLabel.weight(.semibold))
+                        .foregroundStyle(Color.secondary.opacity(0.7))
+                }
+                .contentShape(Rectangle())
             }
-            Button { showingDependencyPicker = true } label: {
-                Label(TaskDetailCopy.addPrerequisite, systemImage: "plus.circle")
+            .buttonStyle(.plain)
+            if planOpen {
+                planDetail(task, graph: graph, related: related, showGraph: showGraph)
             }
-            .disabled(tasks.isMutating(task.id))
         } header: {
-            sectionHeader(TaskDetailCopy.dependenciesHeading)
+            sectionHeader(TaskDetailCopy.planHeading)
         }
+    }
+
+    /// The component itself, as the Dependencies block drew it before: Graph or List, the truncation
+    /// note, the auto-run switch and Add prerequisite.
+    @ViewBuilder
+    private func planDetail(_ task: TaskItem, graph: TaskDependencyGraph, related: Bool, showGraph: Bool) -> some View {
+        if !related {
+            Text(TaskDetailCopy.noDependencies).foregroundStyle(.secondary)
+        } else {
+            Picker(TaskDetailCopy.dependenciesHeading, selection: Binding(
+                get: { showGraph ? DependencyView.graph : .list },
+                set: { dependencyView = $0 }
+            )) {
+                Text(TaskDetailCopy.graphView).tag(DependencyView.graph)
+                Text(TaskDetailCopy.listView).tag(DependencyView.list)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            if showGraph {
+                TaskDependencyGraphView(graph: graph) { openRoute(.task($0)) }
+            } else {
+                ForEach(TaskDetailLogic.dependencyRows(graph)) { row in dependencyRow(row) }
+            }
+            if let notice = TaskDetailLogic.truncationNotice(graph) {
+                Text(notice).font(.orbitLabel).foregroundStyle(.secondary)
+            }
+        }
+        if !(task.dependsOn ?? []).isEmpty {
+            Toggle(TaskDetailCopy.autoRunWhenReady, isOn: Binding(
+                get: { task.autoRunWhenReady ?? true },
+                set: { value in Task { await tasks.setAutoRun(task.id, value) } }
+            ))
+            .disabled(tasks.isMutating(task.id))
+        }
+        Button { showingDependencyPicker = true } label: {
+            Label(TaskDetailCopy.addPrerequisite, systemImage: "plus.circle")
+        }
+        .disabled(tasks.isMutating(task.id))
     }
 
     /// One task of the component: its status, its title (the task being read says so), how it
@@ -2116,7 +2412,7 @@ private struct TaskDetailContent: View {
     private func dependencyRow(_ row: TaskDependencyListRow) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Button {
-                if !row.isFocus { model.route(to: .task(row.id)) }
+                if !row.isFocus { openRoute(.task(row.id)) }
             } label: {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
@@ -2170,25 +2466,28 @@ private struct TaskDetailContent: View {
 
     // MARK: description, acceptance
 
+    /// The instructions the agent was given, under what done means: written for the agent and
+    /// long, so folded to a few lines under `Show more`.
     @ViewBuilder
-    private func descriptionSection(_ task: TaskItem) -> some View {
+    private func briefSection(_ task: TaskItem) -> some View {
         if let description = task.description, !description.isEmpty {
             Section {
-                // Descriptions are written as agent-ready prompts, so render their Markdown like
-                // comments do; a long one folds under `Show more`.
-                FoldableMarkdown(source: description, foldedHeight: 300)
+                // Written as agent-ready prompts, so rendered as Markdown like comments are.
+                FoldableMarkdown(source: description, foldedHeight: 120)
             } header: {
-                sectionHeader(TaskDetailCopy.descriptionHeading)
+                sectionHeader(TaskDetailCopy.briefHeading)
             }
         }
     }
 
-    /// What "done" means for this task, and who decides it: the criteria, and the command with the
-    /// exit code that settles it with nobody in the loop. Under the description, because it is the
-    /// work's other statement about itself, and above the runs, because a reader about to start one
-    /// — or to confirm it — is deciding against this.
+    /// What "done" means for this task, and who decides it: the criteria, and — when it is set — the
+    /// command with the exit code that settles it with nobody in the loop. Before the brief: it is
+    /// the contract the run and its reader are both held to.
     private func acceptanceSection(_ task: TaskItem) -> some View {
         let draft = TaskAcceptanceDraft(task: task)
+        let command = draft.command.trimmingCharacters(in: .whitespacesAndNewlines)
+        let exit = draft.exitCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        let judged = !command.isEmpty && !exit.isEmpty
         return Section {
             VStack(alignment: .leading, spacing: 6) {
                 Text(TaskDetailCopy.acceptanceCriteriaLabel).font(.orbitLabel).foregroundStyle(.secondary)
@@ -2198,32 +2497,32 @@ private struct TaskDetailContent: View {
                     Text(TaskDetailCopy.acceptanceEmpty).foregroundStyle(.secondary)
                 }
             }
-            VStack(alignment: .leading, spacing: 4) {
-                Text(TaskDetailCopy.automaticJudgementLabel).font(.orbitLabel).foregroundStyle(.secondary)
-                let command = draft.command.trimmingCharacters(in: .whitespacesAndNewlines)
-                let exit = draft.exitCode.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !command.isEmpty, !exit.isEmpty {
+            // Unset, the pair is not drawn: its "a person decides" contradicted a task judged by
+            // evidence or a check. Edit still opens it.
+            if judged {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(TaskDetailCopy.automaticJudgementLabel).font(.orbitLabel).foregroundStyle(.secondary)
                     Text(command).font(.orbitMono).textSelection(.enabled)
                     (Text("\(TaskDetailCopy.doneWhenItExits) ") + Text(exit).font(.orbitMono))
                         .font(.orbitSubtext)
                         .foregroundStyle(.secondary)
-                } else {
-                    Text(TaskDetailCopy.acceptancePairEmpty)
                 }
             }
         } header: {
-            sectionHeader(TaskDetailCopy.acceptanceHeading) {
+            sectionHeader(TaskDetailCopy.doneMeansHeading) {
                 Button(TaskDetailCopy.edit) { editingAcceptance = true }
                     .disabled(tasks.isMutating(task.id))
             }
         } footer: {
-            Text(TaskDetailCopy.acceptanceAutomaticHint)
+            if judged { Text(TaskDetailCopy.acceptanceAutomaticHint) }
         }
     }
 
     // MARK: inputs
 
-    private func inputsSection(_ task: TaskItem) -> some View {
+    /// The task's input files. On the page when there are some, and in the Runs with sheet, each
+    /// with its own file picker (`addFile`): a sheet cannot raise the page's.
+    private func inputsSection(_ task: TaskItem, addFile: @escaping () -> Void) -> some View {
         let inputs = task.attachments ?? []
         return Section {
             Text(TaskDetailCopy.inputsHint).font(.orbitSubtext).foregroundStyle(.secondary)
@@ -2259,7 +2558,7 @@ private struct TaskDetailContent: View {
                     }
                 }
             }
-            Button { importingInput = true } label: {
+            Button { addFile() } label: {
                 Label(TaskDetailCopy.addFile, systemImage: "paperclip")
             }
             .disabled(tasks.isMutating(task.id))
@@ -2346,13 +2645,20 @@ private struct TaskDetailContent: View {
 
     private func open(_ link: TaskAttributionRow.Link) {
         switch link {
-        case .session(let id): model.route(to: .session(id))
-        case .task(let id): model.route(to: .task(id))
-        case .project(let id): model.openProject(id)
+        case .session(let id): openRoute(.session(id))
+        case .task(let id): openRoute(.task(id))
+        case .project(let id): openTaskProject(id)
         }
     }
 
     // MARK: followed by
+
+    /// Whether anything follows the task, live or ended — the block is drawn only then; Follow task
+    /// is in ⋯.
+    private func hasFollowers(_ task: TaskItem) -> Bool {
+        let followers = TaskDetailLogic.followers(of: task.id, in: model.watches?.watches ?? [])
+        return !followers.live.isEmpty || followers.ended > 0
+    }
 
     private func followedBySection(_ task: TaskItem) -> some View {
         let store = model.watches
@@ -2366,7 +2672,7 @@ private struct TaskDetailContent: View {
                 Text(TaskDetailCopy.nothingWatching).foregroundStyle(.secondary)
             } else {
                 ForEach(followers.live) { watch in
-                    Button { model.route(to: .watch(watch.id)) } label: {
+                    Button { openRoute(.watch(watch.id)) } label: {
                         FollowingRow(watch: watch, now: Date()).foregroundStyle(Color.primary)
                     }
                     .buttonStyle(.plain)
@@ -2386,48 +2692,96 @@ private struct TaskDetailContent: View {
         }
     }
 
-    // MARK: runs, comments
+    // MARK: activity
 
-    private func runsSection(_ task: TaskItem) -> some View {
-        let sessions = task.sessions ?? []
-        return Section {
-            if sessions.isEmpty {
-                Text(TaskDetailCopy.noRuns).foregroundStyle(.secondary)
-            }
-            ForEach(sessions) { session in
-                // The row is the way into the run; ⓘ beside a routed one answers why instead.
-                HStack(spacing: 8) {
-                    Button { model.route(to: .session(session.id)) } label: { runRow(session, task) }
-                        .buttonStyle(.plain)
-                    if let route = TaskDetailLogic.runRoute(session, smartSelection: smartSelection) {
-                        let pick = TaskDetailLogic.routePick(route) { runModelName($0, task) }
-                        Button {
-                            routeWhy = TaskRouteWhy(id: session.id, title: TaskDetailCopy.why(pick),
-                                                    reasons: route.reasons,
-                                                    footer: TaskDetailLogic.routeWhyFooter(route))
-                        } label: {
-                            Image(systemName: "info.circle")
-                                .font(.orbitControl)
-                                .frame(minWidth: 32, minHeight: 44)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel(TaskDetailCopy.why(pick))
-                    }
-                    // The way in too, beside ⓘ rather than under it: the row's own press, again.
-                    Button { model.route(to: .session(session.id)) } label: {
-                        Image(systemName: "chevron.right")
-                            .font(.orbitLabel.weight(.semibold))
-                            .foregroundStyle(Color.secondary.opacity(0.7))
-                            .frame(minHeight: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityHidden(true)
-                }
+    /// One timeline: when the task was filed, its runs, its evidence and decisions, and the comments
+    /// — oldest first, so the newest sits above the comment box.
+    private func activitySection(_ task: TaskItem) -> some View {
+        Section {
+            ForEach(TaskDetailLogic.activity(task, evidence: tasks.evidence)) { item in
+                activityRow(item, task)
             }
         } header: {
-            sectionHeader(TaskDetailCopy.runsHeading, detail: "\(sessions.count)")
+            sectionHeader(TaskDetailCopy.activityHeading)
+        }
+    }
+
+    @ViewBuilder
+    private func activityRow(_ item: TaskActivityItem, _ task: TaskItem) -> some View {
+        switch item {
+        case .filed(let at):
+            filedRow(task, at: at)
+        case .run(let session):
+            runEntry(session, task)
+        case .comment(let comment):
+            commentEntry(comment)
+        case .evidenceSubmitted(_, let at), .evidenceDecided(_, _, _, let at):
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(TaskDetailLogic.activityText(item) ?? "").font(.orbitSubtext)
+                Spacer(minLength: 8)
+                if let at, let when = RelativeTime.format(at) {
+                    Text(when).font(.orbitLabel).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    /// `Filed by orbit · from <session>`: who made the task, and the conversation it came from.
+    private func filedRow(_ task: TaskItem, at: String?) -> some View {
+        let creator = TaskDetailLogic.creatorName(task, agents: model.agents?.items ?? [])
+            ?? tasks.item(task.id)?.creatorName
+        return HStack(alignment: .firstTextBaseline, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                (Text(TaskDetailCopy.filed).fontWeight(.semibold)
+                    + Text(creator.map { " by \($0)" } ?? ""))
+                    .font(.orbitSubtext)
+                if let source = task.creatorSession {
+                    Button { openRoute(.session(source.id)) } label: {
+                        Text("from \(source.title ?? "Untitled session")")
+                            .font(.orbitLabel)
+                            .foregroundStyle(Color.accentColor)
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            Spacer(minLength: 8)
+            if let at, let when = RelativeTime.format(at) {
+                Text(when).font(.orbitLabel).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// A run on the timeline: the row is the way into the run; ⓘ beside a routed one answers why.
+    private func runEntry(_ session: SessionRef, _ task: TaskItem) -> some View {
+        HStack(spacing: 8) {
+            Button { openRoute(.session(session.id)) } label: { runRow(session, task) }
+                .buttonStyle(.plain)
+            if let route = TaskDetailLogic.runRoute(session, smartSelection: smartSelection) {
+                let pick = TaskDetailLogic.routePick(route) { runModelName($0, task) }
+                Button {
+                    routeWhy = TaskRouteWhy(id: session.id, title: TaskDetailCopy.why(pick),
+                                            reasons: route.reasons,
+                                            footer: TaskDetailLogic.routeWhyFooter(route))
+                } label: {
+                    Image(systemName: "info.circle")
+                        .font(.orbitControl)
+                        .frame(minWidth: 32, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(TaskDetailCopy.why(pick))
+            }
+            // The way in too, beside ⓘ rather than under it: the row's own press, again.
+            Button { openRoute(.session(session.id)) } label: {
+                Image(systemName: "chevron.right")
+                    .font(.orbitLabel.weight(.semibold))
+                    .foregroundStyle(Color.secondary.opacity(0.7))
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHidden(true)
         }
     }
 
@@ -2470,6 +2824,9 @@ private struct TaskDetailContent: View {
                     }
                     if let route, route.applied {
                         routeTierTag(route)
+                    }
+                    if let cost = TaskDetailLogic.costLabel(session.costUsd) {
+                        Text("· \(cost)").foregroundStyle(Color.secondary).lineLimit(1)
                     }
                 }
                 .font(.orbitSubtext)
@@ -2536,44 +2893,65 @@ private struct TaskDetailContent: View {
         }
     }
 
-    private func commentsSection(_ task: TaskItem) -> some View {
-        let comments = task.comments ?? []
-        return Section {
-            if comments.isEmpty {
-                Text(TaskDetailCopy.noComments).foregroundStyle(.secondary)
-            }
-            ForEach(comments) { comment in
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 6) {
-                        TaskAvatar(name: comment.authorName)
-                        Text(comment.authorName ?? "Unknown").font(.orbitSubtext.weight(.semibold))
-                        if let created = comment.createdAt, let relative = RelativeTime.format(created) {
-                            Text("· \(relative)").font(.orbitSubtext).foregroundStyle(.secondary)
-                        }
-                    }
-                    FoldableMarkdown(source: comment.body, foldedHeight: 140)
+    /// A comment on the timeline, as the Comments block drew it.
+    private func commentEntry(_ comment: TaskComment) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                TaskAvatar(name: comment.authorName)
+                Text(comment.authorName ?? "Unknown").font(.orbitSubtext.weight(.semibold))
+                if let created = comment.createdAt, let relative = RelativeTime.format(created) {
+                    Text("· \(relative)").font(.orbitSubtext).foregroundStyle(.secondary)
                 }
-                .padding(.vertical, 2)
             }
-        } header: {
-            sectionHeader(TaskDetailCopy.commentsHeading, detail: "\(comments.count)")
+            FoldableMarkdown(source: comment.body, foldedHeight: 140)
         }
+        .padding(.vertical, 2)
     }
 
     /// The comment box, held at the bottom of the screen rather than at the bottom of the page, so a
     /// comment — the way an agent is asked about this task — is one tap away wherever the reader is.
     private func composer(_ task: TaskItem) -> some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            TextField("Add a comment… type @Workspace to mention", text: $newComment, axis: .vertical)
+        // To the run while one is going: the comment mentions the run's workspace, and the mention
+        // delivery puts it into that workspace's live run on this task (board 04 ⑤).
+        let recipient = TaskDetailLogic.runRecipient(task)
+        let target: ComposeTarget = recipient == nil ? .comment : (composeTo ?? .run)
+        return HStack(alignment: .bottom, spacing: 8) {
+            if recipient != nil {
+                Menu {
+                    Picker(TaskDetailCopy.toTheRun, selection: Binding(get: { target }, set: { composeTo = $0 })) {
+                        Text(TaskDetailCopy.toTheRun).tag(ComposeTarget.run)
+                        Text(TaskDetailCopy.comment).tag(ComposeTarget.comment)
+                    }
+                } label: {
+                    HStack(spacing: 3) {
+                        Text(target == .run ? TaskDetailCopy.toTheRun : TaskDetailCopy.comment)
+                        Image(systemName: "chevron.down").font(.orbitMeta.weight(.semibold))
+                    }
+                    .font(.orbitLabel.weight(.semibold))
+                    .foregroundStyle(target == .run ? Color.accentColor : Color.secondary)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background((target == .run ? Color.accentColor : Color.secondary).opacity(0.12), in: Capsule())
+                }
+                .borderlessMenuStyle()
+                .fixedSize()
+                .padding(.bottom, 3)
+            }
+            TextField(target == .run
+                      ? TaskDetailCopy.messageWhileItWorks(task.assignee?.name ?? TaskDetailCopy.theAgentInASentence)
+                      : "Add a comment… type @Workspace to mention", text: $newComment, axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(1...4)
                 .padding(.vertical, 6)
             Button {
                 let body = newComment.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !body.isEmpty else { return }
+                let toRun = target == .run ? recipient : nil
                 Task {
-                    if await tasks.addComment(task.id, body, mentions: mentionedAgentIDs(in: body)) {
+                    if await tasks.addComment(task.id, body,
+                                              mentions: TaskDetailLogic.mentions(mentionedAgentIDs(in: body), toRun: toRun)) {
                         newComment = ""
+                        if toRun != nil { model.showToast(TaskDetailCopy.sentToTheRun) }
                     }
                 }
             } label: {

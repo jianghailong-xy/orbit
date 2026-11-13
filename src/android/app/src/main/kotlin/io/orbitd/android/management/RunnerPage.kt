@@ -19,6 +19,55 @@ import kotlin.math.floor
  * the latest release are inputs — so RunnerPageTest runs the web's runnerAttention.cases.json on it.
  */
 internal object RunnerCopy {
+    // The Update card (docs/runner-update-drain-design.md, board 4): OrbitKit RunnerPageCopy's words.
+    const val UPDATE_TAG_AVAILABLE = "Available"
+    const val UPDATE_TAG_DRAINING = "Not taking new work"
+    const val UPDATE_TAG_RESTARTING = "Restarting"
+    const val UPDATE_TAG_POSTPONED = "Postponed"
+    fun updateAvailableTitle(version: String) = "$version is available"
+    const val UPDATE_AVAILABLE_BODY = "It installs when no turn is running. If turns keep running for an hour, it stops taking new " +
+        "work so they can finish."
+    /** The Available card's body for a runner that reports its quiet window (`selfUpdate.quietWindowSeconds`), in whole
+     * [minutes]; [unit] is "minute" or "minutes". OrbitKit RunnerPageCopy.runnerUpdateAvailableBodyQuiet. */
+    fun updateAvailableBodyQuiet(minutes: Int, unit: String) =
+        "It installs once the runner has been idle for $minutes $unit. If it stays busy for an hour, it stops taking new work so its turns can finish."
+    /** About's version note for a runner that reports its quiet window. OrbitKit RunnerPageCopy.runnerVersionInstallsWhenQuiet. */
+    fun versionInstallsWhenQuiet(minutes: Int) = "installs when the runner has been idle for $minutes min"
+    /** A quiet window in whole minutes, at least one. */
+    fun quietMinutes(seconds: Int): Int = maxOf(1, Math.round(seconds / 60.0).toInt())
+    /** The Available card's body for a runner with a quiet window of [seconds]. */
+    fun availableBodyQuiet(seconds: Int): String = quietMinutes(seconds).let { updateAvailableBodyQuiet(it, if (it == 1) "minute" else "minutes") }
+    fun updateDrainingTitle(version: String) = "Updating to $version"
+    fun updateDrainingBody(version: String, since: String) = "$version has been waiting since $since. After an hour it stopped taking " +
+        "new work so the turns in flight can finish; then it installs and restarts."
+    const val UPDATE_DRAINING_BODY_NO_SINCE = "It stopped taking new work so the turns in flight can finish; then it installs and restarts."
+    fun updateWaitingForOf(left: Int, of: Int, unit: String) = "Waiting for $left of $of $unit"
+    fun updateWaitingFor(left: Int, unit: String) = "Waiting for $left $unit"
+    fun updateTurnRunning(duration: String) = "running $duration"
+    const val UPDATE_UNTITLED_TURN = "Untitled session"
+    fun updateRestartingTitle(version: String) = "Restarting into $version…"
+    const val UPDATE_RESTARTING_BODY = "Usually under a minute."
+    /** Restarting for the owner's Update Now: `2 interrupted turns continue once it is back. Usually under a minute.` */
+    fun updateRestartingBodyInterrupted(turns: Int) =
+        (if (turns == 1) "1 interrupted turn continues once it is back. " else "$turns interrupted turns continue once it is back. ") + UPDATE_RESTARTING_BODY
+    // The Updated card (board 4): shown for a day after the update, then About's Last Update says it.
+    const val UPDATE_TAG_UPDATED_HOURS = 24
+    fun updateUpdatedTitle(version: String) = "Updated to $version"
+    /** `34 s`, `1 min 12 s`, `2 min`. */
+    fun updateTook(seconds: Int): String = when {
+        seconds < 60 -> "$seconds s"
+        seconds % 60 == 0 -> "${seconds / 60} min"
+        else -> "${seconds / 60} min ${seconds % 60} s"
+    }
+    /** `Took 34 s. 2 interrupted turns resumed.`; either half alone when the runner measured only that. */
+    fun updateUpdatedBody(took: String?, interruptedTurns: Int): String = listOfNotNull(took?.let { "Took $it." }, when {
+        interruptedTurns == 1 -> "1 interrupted turn resumed."
+        interruptedTurns > 1 -> "$interruptedTurns interrupted turns resumed."
+        else -> null
+    }).joinToString(" ")
+    fun updatePostponedTitle(version: String, until: String) = "$version postponed until $until"
+    fun updatePostponedBody(until: String) = "Taking work as usual. At $until it waits for the turns in flight again, for up to an hour."
+    fun versionUpdatingTo(version: String) = "updating to $version"
     const val ONLINE = "Online"
     const val OFFLINE = "Offline"
     const val SEP = " · "
@@ -618,7 +667,7 @@ internal object RunnerPage {
      * on a key or a pool instead — then nothing can run on it, with a workspace or without one (OrbitKit RunnerAttention.noCliSignedIn,
      * the web's noCliSignedIn). Null when one is signed in or its sign-in is unknown, when none is installed, and when a workspace runs
      * on a key: that machine runs without any sign-in, so a signed-out login is news only to the workspaces on it. Settings counts the
-     * machine by the same answer (Infrastructure.attention).
+     * machine by the same answer (MachinesAndModels.attention).
      */
     fun noCliSignedIn(runner: JsonObject, workspaces: List<JsonObject>): List<String>? {
         // A signed-out Claude Code on a machine blocked for the Claude region is no CLI to sign in: Orbit won't start a Claude sign-in
@@ -1229,14 +1278,90 @@ internal object RunnerPage {
         val version = runner.str("version")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val newest = latest?.trim()?.takeIf { it.isNotEmpty() } ?: return version
         if (compareRunnerVersions(version, newest) >= 0) return version + RunnerCopy.SEP + "Latest"
+        // Draining or restarting for a release: `0.1.253 · updating to 0.1.254`.
+        val report = runner.obj("selfUpdate")
+        val target = report?.str("targetVersion")
+        if (target != null && report.str("phase") in setOf("draining", "restarting")) return version + RunnerCopy.SEP + RunnerCopy.versionUpdatingTo(target)
         val note = when (runner.obj("selfUpdate")?.str("state")) {
             null -> if (runner.bool("runsAsRoot") == true) "installs when no turn is running" else null
-            "enabled", "waitingForIdle" -> "installs when no turn is running"
+            "enabled", "waitingForIdle" -> runner.obj("selfUpdate")?.int("quietWindowSeconds")?.takeIf { it > 0 }
+                ?.let { RunnerCopy.versionInstallsWhenQuiet(RunnerCopy.quietMinutes(it)) } ?: "installs when no turn is running"
             "heldByRollout" -> "not rolled out to it yet"
             else -> null
         } ?: return version
         return "$version${RunnerCopy.SEP}$newest $note"
     }
+
+    /** The runner page's Update card (board 4): a release this runner is behind, in the phase it reports — OrbitKit
+     * RunnerPageFormat.UpdateCard. [warn]: amber while it holds work back or restarts. [progressLabel] and [progress]: draining only. */
+    data class UpdateCard(val phase: String, val warn: Boolean, val title: String, val tag: String, val body: String,
+                          val progressLabel: String? = null, val progress: Float? = null, val turns: List<UpdateTurn> = emptyList())
+
+    /** A turn the drain waits for (the runner's `updateTurns`): its session, title, and `running 1 h 52 min` when the server knows
+     * when the run began. */
+    data class UpdateTurn(val id: String, val title: String, val running: String?)
+
+    /** The card a runner's report calls for; none with no phase (nothing waiting, or a runner too old to say), no version to
+     * name, or a phase this client doesn't know — those keep the page's wording from before. */
+    fun updateCard(runner: JsonObject, nowMs: Long, zone: ZoneId = ZoneId.systemDefault()): UpdateCard? {
+        val report = runner.obj("selfUpdate") ?: return null
+        val phase = report.str("phase") ?: return updatedCard(report, nowMs, zone)
+        val version = report.str("targetVersion") ?: return null
+        return when (phase) {
+            // A runner that reports its quiet window waits for it; one that doesn't keeps the old wording.
+            "available" -> UpdateCard(phase, false, RunnerCopy.updateAvailableTitle(version), RunnerCopy.UPDATE_TAG_AVAILABLE,
+                report.int("quietWindowSeconds")?.takeIf { it > 0 }?.let { RunnerCopy.availableBodyQuiet(it) } ?: RunnerCopy.UPDATE_AVAILABLE_BODY)
+            "draining" -> {
+                val left = report.int("turnsInFlight") ?: 0
+                val of = report.int("turnsAtDrain")?.let { maxOf(it, left) }
+                val waited = isoMs(report.str("drainingSince"))?.let { updateWaited(maxOf(0L, (nowMs - it) / 60_000).toInt()) }
+                val unit = if ((of ?: left) == 1) "turn" else "turns"
+                val count = if (of != null) RunnerCopy.updateWaitingForOf(left, of, unit) else RunnerCopy.updateWaitingFor(left, unit)
+                val since = report.str("availableSince")?.let { updateClock(it, zone) }
+                UpdateCard(phase, true, RunnerCopy.updateDrainingTitle(version), RunnerCopy.UPDATE_TAG_DRAINING,
+                    since?.let { RunnerCopy.updateDrainingBody(version, it) } ?: RunnerCopy.UPDATE_DRAINING_BODY_NO_SINCE,
+                    progressLabel = waited?.let { count + RunnerCopy.SEP + it } ?: count,
+                    progress = if (of != null && of > 0) (of - left).toFloat() / of else 0f,
+                    turns = updateTurns(runner, nowMs))
+            }
+            // After the owner's Update Now, the turns it interrupted continue once it is back.
+            "restarting" -> UpdateCard(phase, true, RunnerCopy.updateRestartingTitle(version), RunnerCopy.UPDATE_TAG_RESTARTING,
+                report.int("interruptedTurns")?.takeIf { it > 0 }?.let(RunnerCopy::updateRestartingBodyInterrupted) ?: RunnerCopy.UPDATE_RESTARTING_BODY)
+            "postponed" -> report.str("postponedUntil")?.let { updateClock(it, zone) }?.let { until ->
+                UpdateCard(phase, false, RunnerCopy.updatePostponedTitle(version, until), RunnerCopy.UPDATE_TAG_POSTPONED, RunnerCopy.updatePostponedBody(until))
+            }
+            else -> null
+        }
+    }
+
+    /** The owner's running turns on this runner (its `updateTurns`, longest first): the draining card's rows and Update Now's list. */
+    fun updateTurns(runner: JsonObject, nowMs: Long): List<UpdateTurn> = runner.list("updateTurns").mapNotNull { turn ->
+        val turnId = turn.str("id") ?: return@mapNotNull null
+        UpdateTurn(turnId, turn.str("title")?.trim()?.takeIf { it.isNotEmpty() } ?: RunnerCopy.UPDATE_UNTITLED_TURN,
+            isoMs(turn.str("startedAt"))?.let { RunnerCopy.updateTurnRunning(updateWaited(maxOf(0L, (nowMs - it) / 60_000).toInt())) })
+    }
+
+    /** The Updated card (board 4): the last update, for a day after it was installed — how long the restart took and how many turns
+     * an Update Now interrupted for it, as far as the runner measured them. None with no update recorded, or an older one. */
+    private fun updatedCard(report: JsonObject, nowMs: Long, zone: ZoneId): UpdateCard? {
+        val to = report.str("lastUpdatedTo") ?: return null
+        val atIso = report.str("lastUpdatedAt") ?: return null
+        val at = isoMs(atIso) ?: return null
+        if (nowMs - at > RunnerCopy.UPDATE_TAG_UPDATED_HOURS * 3_600_000L || at - nowMs > 60_000) return null
+        return UpdateCard("updated", false, RunnerCopy.updateUpdatedTitle(to), updateClock(atIso, zone) ?: return null,
+            RunnerCopy.updateUpdatedBody(report.int("lastUpdateSeconds")?.takeIf { it > 0 }?.let(RunnerCopy::updateTook),
+                report.int("lastUpdateInterruptedTurns") ?: 0))
+    }
+
+    /** How long it has waited: `38 min`, `1 h 52 min`, `2 h`. */
+    fun updateWaited(minutes: Int): String = when {
+        minutes < 60 -> "$minutes min"
+        minutes % 60 == 0 -> "${minutes / 60} h"
+        else -> "${minutes / 60} h ${minutes % 60} min"
+    }
+
+    /** The clock time the card names, as the board writes it: `09:58`. */
+    fun updateClock(iso: String, zone: ZoneId = ZoneId.systemDefault()) = isoMs(iso)?.let { format("HH:mm", it, zone) }
 
     /** `Sep 20, 4:00 PM · 0.1.189 → 0.1.190`: when the runner last updated itself, in the reader's time zone, and between
      * which versions; none from a runner that doesn't report its updates, or hasn't updated itself yet. */

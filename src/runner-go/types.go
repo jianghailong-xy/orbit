@@ -131,6 +131,32 @@ type SelfUpdateReport struct {
 	LastUpdatedAt   string `json:"lastUpdatedAt,omitempty"`
 	LastUpdatedFrom string `json:"lastUpdatedFrom,omitempty"`
 	LastUpdatedTo   string `json:"lastUpdatedTo,omitempty"`
+	// Where a release this runner is behind stands, for the runner page's Update card
+	// (docs/runner-update-drain-design.md §4): available | draining | restarting | postponed, the
+	// selfUpdatePhase* constants. Omitted when no release is waiting, as by every runner before it.
+	Phase string `json:"phase,omitempty"`
+	// The release the phase is about.
+	TargetVersion string `json:"targetVersion,omitempty"`
+	// RFC3339: when the release was first found waiting for a busy runner (the deferral clock's
+	// start), when the drain began, and until when the owner postponed it.
+	AvailableSince string `json:"availableSince,omitempty"`
+	DrainingSince  string `json:"drainingSince,omitempty"`
+	PostponedUntil string `json:"postponedUntil,omitempty"`
+	// While draining: the turns still in flight, and how many there were when the drain began (never
+	// fewer than are in flight now), so the page can say "Waiting for 2 of 8 turns".
+	TurnsInFlight int `json:"turnsInFlight,omitempty"`
+	TurnsAtDrain  int `json:"turnsAtDrain,omitempty"`
+	// Restarting for the owner's Update Now: how many turns it interrupted, which continue once the
+	// runner is back.
+	InterruptedTurns int `json:"interruptedTurns,omitempty"`
+	// The last update's restart: seconds from its stop to the new image starting, and the turns an
+	// Update Now interrupted for it (selfUpdateRecord). Omitted when not measured.
+	LastUpdateSeconds          int `json:"lastUpdateSeconds,omitempty"`
+	LastUpdateInterruptedTurns int `json:"lastUpdateInterruptedTurns,omitempty"`
+	// How long, in seconds, this runner must have been quiet (no turn ended, nothing claimed) before
+	// an automatic update installs (selfUpdateQuietWindow). Sent with every report; a runner that
+	// sends none installs at the first check with no turn in flight, and the clients keep that wording.
+	QuietWindowSeconds int `json:"quietWindowSeconds,omitempty"`
 }
 
 // AgentDirProbe is what the runner found at one agent's working directory: whether the path is
@@ -420,6 +446,20 @@ type HeartbeatResponse struct {
 	// RefreshModelCatalog: the outcome is what later heartbeats report. False/absent on older
 	// control planes.
 	CheckSelfUpdate bool `json:"checkSelfUpdate,omitempty"`
+	// The control plane takes a claim scoped to named sessions (GET /runner/sessions/claim?drainScope=):
+	// a pool draining for an update claims only for sessions whose engine is running a turn here
+	// (drainClaimScope). False/absent on older control planes, which would ignore the scope, so the
+	// runner claims nothing while it drains, as before.
+	DrainScopedClaims bool `json:"drainScopedClaims,omitempty"`
+	// The owner's Later (RFC3339): stop draining for the waiting release now and put it off until
+	// this time, then wait for idle again under a fresh deferral limit (selfUpdateGate.postpone).
+	// Handed over once and cleared, like CheckSelfUpdate; sent only to a runner that declares
+	// self-update-postpone/v1. Empty on older control planes.
+	PostponeSelfUpdateUntil string `json:"postponeSelfUpdateUntil,omitempty"`
+	// The owner's Update Now: install the waiting release now, interrupting the turns in flight
+	// (selfUpdateGate.updateNow). Handed over once and cleared, like CheckSelfUpdate; sent only to a
+	// runner that declares self-update-now/v1. False on older control planes.
+	SelfUpdateNow bool `json:"selfUpdateNow,omitempty"`
 	// A working directory to report local Claude Code history for, answered by POSTing
 	// /runner/claude-history-result. Handed over once rather than redelivered: the form that asked
 	// is waiting on a person, and a retype asks again. Nil on older control planes and whenever
@@ -552,6 +592,8 @@ type WikiRepoOpResultRequest struct {
 	State           string                 `json:"state"`
 	Result          map[string]interface{} `json:"result,omitempty"`
 	Error           string                 `json:"error,omitempty"`
+	// Why a failure failed (contract `repoOps.reasons`), beside the words in Error; absent when it is none of them.
+	Reason string `json:"reason,omitempty"`
 }
 
 // WikiRepoOpResultResponse says whether the result was taken; a 409 means this process's claim had

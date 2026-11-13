@@ -636,6 +636,23 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			}
 			body["integration"] = settings
 		}
+		// The explicit non-code mark: true sets it, false clears it. Only a boolean: the server
+		// records who wrote it, so an accidental string must not reach it as some other value.
+		if nonCode, present := args["nonCode"]; present {
+			value, ok := nonCode.(bool)
+			if !ok {
+				return toolResult("nonCode must be true or false", true)
+			}
+			body["nonCode"] = value
+		}
+		// The mark's optional reason travels with it; the server refuses it sent alone.
+		if reason, present := args["nonCodeReason"]; present && reason != nil {
+			value, ok := reason.(string)
+			if !ok {
+				return toolResult("nonCodeReason must be a string", true)
+			}
+			body["nonCodeReason"] = value
+		}
 		if structuredCriteria {
 			items, err := normalizeMCPProjectAcceptanceItems(args["acceptanceCriteriaItems"], true)
 			if err != nil {
@@ -833,6 +850,47 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult(projectDoneRequestRefusal(err), true)
 		}
 		return toolResult(projectDoneRequestFiled(raw), false)
+
+	case "criterion_confirm", "criterion_confirmation_withdraw", "criterion_check_start":
+		id := getString(args, "projectId")
+		criterionID := getString(args, "criterionId")
+		if id == "" || criterionID == "" {
+			return toolResult("projectId and criterionId are required", true)
+		}
+		body := map[string]interface{}{}
+		path := "/confirmations"
+		switch name {
+		case "criterion_confirm":
+			copyIfPresent(body, args, "note", "attachmentIds", "revision")
+		case "criterion_confirmation_withdraw":
+			path = "/confirmations/withdraw"
+		case "criterion_check_start":
+			path = "/checks"
+			copyIfPresent(body, args, "workspaceId", "instructions")
+		}
+		// The acting session IS the authority: the server checks it against the project's own
+		// coordinator pointer, so a call from any other conversation writes nothing.
+		raw, err := s.t.criterionConfirmationCall(s.sessionID, id, criterionID, path, body)
+		if err != nil {
+			return toolResult(name+" failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "criterion_check_report":
+		verdict := getString(args, "verdict")
+		if verdict != "PASS" && verdict != "FAIL" {
+			return toolResult("verdict must be PASS or FAIL", true)
+		}
+		if s.sessionID == "" {
+			return toolResult("criterion_check_report requires an Orbit Session: it reports the check that session is running", true)
+		}
+		body := map[string]interface{}{"verdict": verdict}
+		copyIfPresent(body, args, "note", "attachmentIds")
+		raw, err := s.t.reportCriterionCheck(s.sessionID, body)
+		if err != nil {
+			return toolResult("criterion_check_report failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
 
 	case "open_item_resolve":
 		id := getString(args, "projectId")
@@ -2806,7 +2864,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"decides: the ACCOUNT OWNER may file work anywhere and may unfile it, while a session " +
 			"acting under a project scope is refused UNMAPPED_PROJECT_WORK for null (work under no " +
 			"goal is counted by nothing) and PROJECT_SCOPE_MISMATCH for another project unless it " +
-			"ASKS for the move with `handoff`. Asking moves nothing by itself: the server files a " +
+			"ASKS for either with `handoff` (null with `handoff` asks for the task to be taken out " +
+			"of its project). Asking moves nothing by itself: the server files a " +
 			"move request and answers CROSS_PROJECT_APPROVAL_REQUIRED (filed now) or " +
 			"APPROVAL_PENDING (one is already waiting for this task and project), and the task " +
 			"stays where it is. No tool can answer that request; once the ACCOUNT OWNER confirms " +
@@ -2837,15 +2896,16 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		"description": "DECLARE that this write moves the task into another project, which makes it " +
 			"a REQUEST for the move. Send it together with the projectId it moves the task into — a " +
-			"crossing has to name where it is going, and a handoff with no destination is refused " +
-			"before the request is made. Presence is the declaration and it CARRIES NO AUTHORITY: " +
+			"crossing has to say where it is going — or with projectId null to ask for the task " +
+			"to be taken out of every project (only from the project it is in, and with no " +
+			"criterionKey: a task in no project serves no criterion). Presence is the declaration and it CARRIES NO AUTHORITY: " +
 			"it moves nothing, it asks. The server files a MOVE_TASK request and answers " +
 			"CROSS_PROJECT_APPROVAL_REQUIRED (filed now) or APPROVAL_PENDING (a request for this " +
 			"task and project is already waiting and comes back as it stands; to change it, the " +
 			"owner refuses it and you ask again), naming it by handoffId, and the task stays where " +
 			"it is. Only the ACCOUNT OWNER answers it, on the project page — no agent, and no " +
 			"coordinator of either project, can. Their confirmation IS the move: the task joins " +
-			"the target project at once and nothing has to be sent again; read the request back " +
+			"the target project (or, for null, leaves its project) at once and nothing has to be sent again; read the request back " +
 			"with project_crossings. Who may ask: a session whose own project — the one a " +
 			"coordinator coordinates, or the project of the task an execution session runs — is " +
 			"the move's source or its target; any other session is refused PROJECT_SCOPE_MISMATCH. " +
@@ -3385,12 +3445,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_evidence_submit",
-			"description": "Submit the completion-evidence envelope as a first-class immutable fact from the current task Session. The server checks it in three layers: the four fields are required and no fifth is accepted; every citation is resolved against rows of THIS task under THIS owner and at least one must resolve, or the whole submission is refused; and a declared command must equal the cited tool_call's input.command byte for byte, with a declared success over a failed call refused. The receipt echoes citations[].resolved and criterionMatch.matchesLive, so you learn whether your handles held instead of inferring it from the absence of an error. A retry key and canonical evidence digest replay the same revision; substantively changed evidence appends one. This does not write task.status, change Session state, add a comment or send a notification.",
+			"description": "Submit the completion-evidence envelope as a first-class immutable fact from the current task Session. The server checks it in three layers: the three fields are required, `gapClauses` is the one optional field, and no other is accepted; every citation is resolved against rows of THIS task under THIS owner and at least one must resolve, or the whole submission is refused; and a declared command must equal the cited tool_call's input.command byte for byte, with a declared success over a failed call refused. The envelope names no standard: Orbit records the one the task is held to (its declared criterion, else its own acceptance criteria) with the revision itself, and an older client's `criterion` is accepted and ignored. The receipt echoes citations[].resolved, so you learn whether your handles held instead of inferring it from the absence of an error, and criterionMatch, the standard Orbit recorded. A retry key and canonical evidence digest replay the same revision; substantively changed evidence appends one. This does not write task.status, change Session state, add a comment or send a notification.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId": taskIDProp,
 				"evidence": map[string]interface{}{
 					"type":        "object",
-					"description": "The envelope, exactly four fields: `claim` (what you assert you completed), `criterion` ({key, text} copied from the project's stated criteria), `checks` (each {kind, ref}, kind one of TOOL_CALL / COMMIT / ARTIFACT / FILE, ref naming a row recorded under this task — a TOOL_CALL may also carry `command` and `succeeded`, which are checked against the cited row; a FILE ref is the id file_upload returned for a file or folder bundle of this task, and one that names none refuses the whole submission; Orbit writes the file's sha256 into the check, so the digest binds those bytes and you leave it out), and `gaps` (what this evidence does NOT establish; [] says nothing is missing). Do not copy command output in: it is part of the evidence digest, where whitespace is significant, and Orbit already stores it on the cited row. Work whose answer is only an exit code belongs to EXECUTABLE acceptance, not here. Object-key order is not significant; array order and string whitespace are.",
+					"description": "The envelope, three fields: `claim` (what you assert you completed), `checks` (each {kind, ref}, kind one of TOOL_CALL / COMMIT / ARTIFACT / FILE, ref naming a row recorded under this task — a TOOL_CALL may also carry `command` and `succeeded`, which are checked against the cited row; a FILE ref is the id file_upload returned for a file or folder bundle of this task, and one that names none refuses the whole submission; Orbit writes the file's sha256 into the check, so the digest binds those bytes and you leave it out), and `gaps` (what this evidence does NOT establish, each a plain sentence; [] says nothing is missing). Optionally `gapClauses`, parallel to `gaps`: when a gap leaves a clause of the task's standard unproven, add {gap, criterionClause, followUpTaskId?} — gap is its 0-based index in `gaps`, criterionClause names the clause it hits, followUpTaskId the task in this project that will prove it (file it with task_create first; one that is not a task of this project is refused). Evidence with a clause-naming gap and no followUpTaskId cannot be CONFIRMed, only sent back, so mark every gap that hits the standard and name its follow-up. Do not copy command output in: it is part of the evidence digest, where whitespace is significant, and Orbit already stores it on the cited row. Work whose answer is only an exit code belongs to EXECUTABLE acceptance, not here. Object-key order is not significant; array order and string whitespace are.",
 				},
 				"idempotencyKey": map[string]interface{}{
 					"type":        "string",
@@ -3402,7 +3462,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_evidence_decide",
-			"description": "Record THIS session's decision about one version of another task's completion evidence: CONFIRM that the evidence settles the criterion it quotes, or SEND_BACK with a note saying what the next revision has to show. It writes one row and the status that row derives (a CONFIRM of an EVIDENCE_JUDGMENT task's current revision settles it DONE); a SEND_BACK's note is then delivered to the run that submitted the revision as a platform message, so the next attempt knows what to show, and the decision — note included — is readable on the revision in task_evidence_list. Six things are checked at decision time and each refusal names what to do instead: the revision you answer must still be the task's LATEST (EVIDENCE_JUDGMENT_EVIDENCE_SUPERSEDED — read task_evidence_list again and decide the current one); the criterion the evidence quotes must still be worded the way the project states it today (EVIDENCE_JUDGMENT_CRITERION_MOVED — the standard moved, so ask for evidence against the new one); this session must not have done the work being judged (EVIDENCE_JUDGMENT_REQUIRES_INDEPENDENT_SESSION — a run cannot decide its own evidence, which is what makes a CONFIRM a check rather than a signature on your own homework); a session that acts for one project — its coordinator, a judgment session opened for it, a run of one of its tasks — must not decide a task that is in another project (EVIDENCE_JUDGMENT_TASK_IN_ANOTHER_PROJECT — a task's evidence is decided from the project it is in now, and a task moved out takes its undecided evidence with it, so the project it left can no longer decide it); a run of another task, or a conversation a run opened, must not decide it unless the evidence is addressed to that session, as the subject of the task it verifies or a task in no project it dispatched (EVIDENCE_JUDGMENT_FROM_RUN_REFUSED — a task's evidence is decided by the project's coordinator or a judgment session opened for the project, by the session that dispatched a task in no project, by a run of a task that verifies this one, or by the account owner in the app); and SEND_BACK must carry a note. One version is decided once: answering it again says the same thing or is refused as already decided. Outside a project, the session that filed an EVIDENCE_JUDGMENT task is handed each revision its run submits (an <orbit-evidence-review> message naming the taskId and evidenceRevision): deciding it is that session's job, and the account owner is asked only if it has not decided within 30 minutes or has ended.",
+			"description": "Record THIS session's decision about one version of another task's completion evidence: CONFIRM that the evidence settles the criterion it quotes, or SEND_BACK with a note saying what the next revision has to show. It writes one row and the status that row derives (a CONFIRM of an EVIDENCE_JUDGMENT task's current revision settles it DONE); a SEND_BACK's note is then delivered to the run that submitted the revision as a platform message, so the next attempt knows what to show, and the decision — note included — is readable on the revision in task_evidence_list. Seven things are checked at decision time and each refusal names what to do instead: the revision you answer must still be the task's LATEST (EVIDENCE_JUDGMENT_EVIDENCE_SUPERSEDED — read task_evidence_list again and decide the current one); the criterion the evidence quotes must still be worded the way the project states it today (EVIDENCE_JUDGMENT_CRITERION_MOVED — the standard moved, so ask for evidence against the new one); this session must not have done the work being judged (EVIDENCE_JUDGMENT_REQUIRES_INDEPENDENT_SESSION — a run cannot decide its own evidence, which is what makes a CONFIRM a check rather than a signature on your own homework); a session that acts for one project — its coordinator, a judgment session opened for it, a run of one of its tasks — must not decide a task that is in another project (EVIDENCE_JUDGMENT_TASK_IN_ANOTHER_PROJECT — a task's evidence is decided from the project it is in now, and a task moved out takes its undecided evidence with it, so the project it left can no longer decide it); a run of another task, or a conversation a run opened, must not decide it unless the evidence is addressed to that session, as the subject of the task it verifies or a task in no project it dispatched (EVIDENCE_JUDGMENT_FROM_RUN_REFUSED — a task's evidence is decided by the project's coordinator or a judgment session opened for the project, by the session that dispatched a task in no project, by a run of a task that verifies this one, or by the account owner in the app); a CONFIRM is refused while a gap names a clause of the task's standard in `gapClauses` without a followUpTaskId, or names one that is not a task in the same project (EVIDENCE_JUDGMENT_GAP_WITHOUT_FOLLOW_UP — a gap that hits the standard is accepted only with the task that will prove it: SEND_BACK asking for one; a plain-text gap with no clause does not block a CONFIRM, and SEND_BACK is never blocked by gaps); and SEND_BACK must carry a note. One version is decided once: answering it again says the same thing or is refused as already decided. Outside a project, the session that filed an EVIDENCE_JUDGMENT task is handed each revision its run submits (an <orbit-evidence-review> message naming the taskId and evidenceRevision): deciding it is that session's job, and the account owner is asked only if it has not decided within 30 minutes or has ended.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId": taskIDProp,
 				"decision": map[string]interface{}{
@@ -3767,6 +3827,24 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"the check. Once a project has started integrating the line is locked, and " +
 						"a request to move it is refused even from the owner: to change it, its " +
 						"project branch reaches main first.",
+				},
+				"nonCode": map[string]interface{}{
+					"type": "boolean",
+					"description": "Mark this project non-code (true) or clear the mark (false). A project is " +
+						"non-code only by this explicit mark, never inferred: set it when the project's goal is " +
+						"met by work that changes no code in this repository (a filing, an approval, research). " +
+						"A marked project reads no landing — its criteria carry no landingReason, the done check " +
+						"reports nothing unlanded, and recording it done stores no landing gaps — while whether " +
+						"each criterion is met is unchanged. Only the conversation this project is coordinated " +
+						"from may write it; project_get returns it with nonCodeSetBy (OWNER or COORDINATOR), " +
+						"nonCodeSetBySessionId, nonCodeSetAt and nonCodeReason.",
+				},
+				"nonCodeReason": map[string]interface{}{
+					"type": "string",
+					"description": "Optional, sent only with nonCode: one short sentence (at most 280 characters) " +
+						"saying why, e.g. \"All work is documents and vendor accounts; no repository.\" The owner " +
+						"sees it under \"Marked by the coordinator\" on the project page and the done card. Each " +
+						"nonCode write replaces it; omit it to store none.",
 				},
 				"expectedConfigRevision": map[string]interface{}{
 					"type": "string",
@@ -4153,6 +4231,111 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			}, "projectId", "judgment", "gaps"),
 		},
 		{
+			"name": "criterion_confirm",
+			"description": "Confirm that one of this project's acceptance criteria holds, for a " +
+				"criterion met by confirmation (satisfiedBy CONFIRMATION in project_get's " +
+				"acceptanceCriteriaItems; set it with project_update). Only the conversation " +
+				"coordinating this project may call it. The confirmation names the criterion's " +
+				"current revision: it stops counting the moment the criterion's text, method or mode " +
+				"is revised, and the criterion is unmet again until somebody confirms the new one. " +
+				"Pass `revision` (the one you read) so a criterion revised under you is refused " +
+				"(409 CRITERION_REVISION_MOVED) rather than confirmed. A criterion met by its tasks " +
+				"is refused (409 CRITERION_NOT_CONFIRMATION_MODE). To have an agent decide instead, " +
+				"start an Agent check with criterion_check_start.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project, as shown in its web UI URL (/projects/<id>).",
+				},
+				"criterionId": map[string]interface{}{
+					"type":        "string",
+					"description": "The criterion, as project_get spells it in acceptanceCriteriaItems[].id.",
+				},
+				"note": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional: what you checked. Shown beside the confirmation.",
+				},
+				"attachmentIds": map[string]interface{}{
+					"type":        "array",
+					"items":       map[string]interface{}{"type": "string"},
+					"description": "Optional: uploads (file_upload ids) that back it up.",
+				},
+				"revision": map[string]interface{}{
+					"type":        "integer",
+					"description": "Optional: the criterion revision you read; refused if it has moved.",
+				},
+			}, "projectId", "criterionId"),
+		},
+		{
+			"name": "criterion_confirmation_withdraw",
+			"description": "Withdraw the standing confirmation of one of this project's criteria met " +
+				"by confirmation, whoever gave it — the owner, this coordinator or an Agent check. " +
+				"The criterion is unmet again until somebody confirms it. The confirmation stays on " +
+				"record, stamped as withdrawn. Only the conversation coordinating this project may " +
+				"call it; a criterion with nothing standing is refused (409 CRITERION_NOTHING_TO_WITHDRAW).",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project, as shown in its web UI URL (/projects/<id>).",
+				},
+				"criterionId": map[string]interface{}{
+					"type":        "string",
+					"description": "The criterion, as project_get spells it in acceptanceCriteriaItems[].id.",
+				},
+			}, "projectId", "criterionId"),
+		},
+		{
+			"name": "criterion_check_start",
+			"description": "Start an Agent check of one of this project's criteria met by " +
+				"confirmation: a run, dispatched as a codeless task of this project, that reads the " +
+				"criterion and its verification method and reports PASS or FAIL. A PASS confirms the " +
+				"criterion's current revision (confirmer AGENT_CHECK); a FAIL is recorded as a failed " +
+				"attempt and leaves it unmet. Returns at once with the check's task id; the verdict " +
+				"shows in project_get's confirmation. Only the conversation coordinating this project " +
+				"may call it.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project, as shown in its web UI URL (/projects/<id>).",
+				},
+				"criterionId": map[string]interface{}{
+					"type":        "string",
+					"description": "The criterion, as project_get spells it in acceptanceCriteriaItems[].id.",
+				},
+				"workspaceId": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional: the workspace whose agent runs the check. Defaults to this project's coordinator workspace.",
+				},
+				"instructions": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional: anything the check should know beyond the criterion and its method.",
+				},
+			}, "projectId", "criterionId"),
+		},
+		{
+			"name": "criterion_check_report",
+			"description": "Report the verdict of the Agent check this session is running: PASS when " +
+				"the criterion it was started for holds by its verification method, FAIL otherwise — " +
+				"including when you could not establish it. Call it once, at the end. Only a session " +
+				"started as an Agent check may call it (404 CRITERION_CHECK_NOT_FOUND otherwise).",
+			"inputSchema": obj(map[string]interface{}{
+				"verdict": map[string]interface{}{
+					"type":        "string",
+					"enum":        []string{"PASS", "FAIL"},
+					"description": "PASS or FAIL.",
+				},
+				"note": map[string]interface{}{
+					"type":        "string",
+					"description": "What you checked and what you found. Shown beside the verdict.",
+				},
+				"attachmentIds": map[string]interface{}{
+					"type":        "array",
+					"items":       map[string]interface{}{"type": "string"},
+					"description": "Optional: uploads (file_upload ids) that back it up.",
+				},
+			}, "verdict"),
+		},
+		{
 			"name": "open_item_resolve",
 			"description": "Close one of this project's exception items that you have handled, and " +
 				"say why. Every other ending of an item is a fact the platform reads for itself — a " +
@@ -4493,7 +4676,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_update",
-			"description": "Update a task's fields. Direct status DONE is refused for every actor; the refusal names the declared EXECUTABLE, VERIFICATION, EVIDENCE_JUDGMENT, or OWNER_CONFIRMED path, and an OWNER_CONFIRMED task is confirmed only by the account owner in the Orbit app. A write that lands a task on OWNER_CONFIRMED in no project, or in a project whose Automatic is off — by changing the criterion, the project or the criterion it serves — needs ownerConfirmationReason (stored or sent), or it is refused 409 OWNER_CONFIRMATION_REASON_REQUIRED and nothing is written. FAILED remains writable as a run's conservative self-report. A run, or a conversation a run opened, may not write completionCriterion, acceptanceCommand, acceptanceExpectedExitCode, completionPolicy or acceptanceCriteria on another task unless it filed that task itself and the task serves no acceptance criterion of its project: it is refused with COMPLETION_STANDARD_FROM_RUN_REFUSED, and the account owner, the project's coordinator or a judgment session can make the edit. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. `projectId` re-files this task under another project, or null takes it out of every project — how a mis-filing is corrected. The account owner writes it directly; a session acting under a project scope is refused UNMAPPED_PROJECT_WORK for null and PROJECT_SCOPE_MISMATCH for another project unless it asks for the move with `handoff`: the server then files a move request, answers CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING and leaves the task where it is, and the account owner's confirmation moves the task at once, with nothing to send again (read the request with project_crossings; `handoff` says who may ask and which moves are refused). Pass null for assigneeId/listId/parentTaskId/projectId/dueDate/runAt/engine/provider/model/modelHint/modelHintReason to clear them. `codeless: true` declares that the task produces no code, which takes it out of its acceptance criterion's landing: it needs `codelessReason` in the same call, and is refused for a task that already has commits of its own.",
+			"description": "Update a task's fields. Direct status DONE is refused for every actor; the refusal names the declared EXECUTABLE, VERIFICATION, EVIDENCE_JUDGMENT, or OWNER_CONFIRMED path, and an OWNER_CONFIRMED task is confirmed only by the account owner in the Orbit app. A write that lands a task on OWNER_CONFIRMED in no project, or in a project whose Automatic is off — by changing the criterion, the project or the criterion it serves — needs ownerConfirmationReason (stored or sent), or it is refused 409 OWNER_CONFIRMATION_REASON_REQUIRED and nothing is written. FAILED remains writable as a run's conservative self-report. A run, or a conversation a run opened, may not write completionCriterion, acceptanceCommand, acceptanceExpectedExitCode, completionPolicy or acceptanceCriteria on another task unless it filed that task itself and the task serves no acceptance criterion of its project: it is refused with COMPLETION_STANDARD_FROM_RUN_REFUSED, and the account owner, the project's coordinator or a judgment session can make the edit. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. `projectId` re-files this task under another project, or null takes it out of every project — how a mis-filing is corrected. The account owner writes it directly; a session acting under a project scope is refused UNMAPPED_PROJECT_WORK for null and PROJECT_SCOPE_MISMATCH for another project unless it asks for either with `handoff`: the server then files a move request, answers CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING and leaves the task where it is, and the account owner's confirmation moves the task at once, with nothing to send again (read the request with project_crossings; `handoff` says who may ask and which moves are refused). Pass null for assigneeId/listId/parentTaskId/projectId/dueDate/runAt/engine/provider/model/modelHint/modelHintReason to clear them. `codeless: true` declares that the task produces no code, which takes it out of its acceptance criterion's landing: it needs `codelessReason` in the same call, and is refused for a task that already has commits of its own.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId":      taskIDProp,
 				"title":       str,

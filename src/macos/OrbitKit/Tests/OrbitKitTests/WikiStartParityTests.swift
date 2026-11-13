@@ -610,7 +610,7 @@ final class WikiStartParityTests: XCTestCase {
         assertSays(card, "if (!plan.data) return null;", in: Self.card)
         assertSays(card, "if (to === 'setUp') return setSettingUp(true);", in: Self.card)
         assertSays(card, "if (to === 'plan') return navigate(wikiPlanPath(space.slug));", in: Self.card)
-        assertSays(card, "if (to === 'runners') return navigate('/infrastructure');", in: Self.card)
+        assertSays(card, "if (to === 'runners') return navigate(machinesHref);", in: Self.card)
         assertSays(card, "const answer = await draft.mutateAsync(undefined);", in: Self.card)
         assertSays(card, "message.success(answer.created ? WIKI_PLAN_REDRAFT_ASKED : WIKI_PLAN_REDRAFT_ALREADY);", in: Self.card)
         assertSays(card, "message.error(\"\(WikiCopy.planDraftFailed)\"", in: Self.card)
@@ -654,7 +654,7 @@ final class WikiStartParityTests: XCTestCase {
                            "if chosen == nil { Text(WikiModeCopy.noWorkspace).tag(String?.none) }", "if let repository = group.repository {",
                            "Section(repository) { options(group.choices) }"], "the form's picker")
         assertOrder(form, ["if let refusal {", "Text(refusal).foregroundStyle(.red)", "Button(submitLabel) {"], "the form's end")
-        let answer = try slice(form, from: "Button(submitLabel) {", to: ".disabled(saving || chosen == nil)")
+        let answer = try slice(form, from: "Button(submitLabel) {", to: ".disabled(saving || chosen == nil || probed?.canTurnOn == false)")
         assertOrder(answer, ["answer.workspaceID = chosen", "refusal = await submit(answer)", "saving = false", "if refusal == nil { dismiss() }"],
                     "the form stays open on a refusal")
         let setUp = try slice(settings, from: "struct WikiSetUpSheet: View {", to: "struct WikiCreateSheet: View {")

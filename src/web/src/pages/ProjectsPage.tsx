@@ -88,6 +88,13 @@ import { Alert } from '../components/ui/Alert';
 import { Badge, type BadgeProps } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { useConfirm } from '../components/ui/ConfirmDialog';
+import { CHANGE_COPY } from '../lib/coordinatorWorkspace';
+import {
+  CoordinatorChangeDialog,
+  coordinatorSessionPath,
+  replaceProjectCoordinator,
+  type CoordinatorResult,
+} from '../components/CoordinatorChange';
 import { Dialog } from '../components/ui/Dialog';
 import { Empty } from '../components/ui/Empty';
 import { Popconfirm } from '../components/ui/Popconfirm';
@@ -102,8 +109,11 @@ import { useMediaQuery } from '../lib/useMediaQuery';
 import {
   updateProjectStatus,
   doneProvenance,
+  NON_CODE_BADGE,
+  NON_CODE_PROJECT_LINE,
   PROJECT_DONE_COPY,
   type ProjectDerivedDone,
+  type CriterionMovedOut,
   type ProjectDoneDocument,
 } from '../lib/projectDone';
 
@@ -203,6 +213,15 @@ interface ProjectDetail extends Omit<Project, 'integration'> {
    *  the other endpoint's payload. */
   integration?: ProjectIntegrationSettings;
   derivedDone?: ProjectDerivedDone;
+  /** The explicit non-code mark (migration 0535) and who set it, when: a marked project reads no
+   *  landing, so the page names the mark where it would name the branch. */
+  nonCode?: boolean;
+  nonCodeSetBy?: 'OWNER' | 'COORDINATOR' | null;
+  nonCodeSetAt?: string | null;
+  /** The short reason given with the mark (0555). */
+  nonCodeReason?: string | null;
+  /** The criteria this project moved out to a follow-up (board 02 G). */
+  criteriaMovedOut?: readonly CriterionMovedOut[];
 }
 
 export const STATUS_COLOR: Record<Project['status'], string> = {
@@ -506,10 +525,9 @@ export function ProjectsPage() {
     }
 
     // Keep the no-workspace route identical to DefaultLanding: registration for a new account,
-    // the machine page when there is only one choice, otherwise Infrastructure's machines.
+    // otherwise the first machine's Settings page.
     if (runnerList.length === 0) navigate('/runners/register');
-    else if (runnerList.length === 1) navigate(`/runners/${encodeId(runnerList[0].id)}`);
-    else navigate('/infrastructure');
+    else navigate(`/settings/machines/${encodeId(runnerList[0].id)}`);
   };
 
   return (
@@ -1133,6 +1151,7 @@ export function ProjectDetailPage() {
               ) : (
                 <Badge tone={tagTone(STATUS_COLOR[p.status])}>{STATUS_LABEL[p.status]}</Badge>
               )}
+              {p.nonCode ? <Badge className="project-non-code-badge">{NON_CODE_BADGE}</Badge> : null}
               {p.status === 'OPEN' && doneRequest ? (
                 <Badge tone="gold">{PROJECT_DONE_COPY.readyToClose}</Badge>
               ) : null}
@@ -1184,7 +1203,16 @@ export function ProjectDetailPage() {
               it runs', below. A project nobody has started says the start decides the line; a
               started one with no line draws nothing here at all. */}
           <ProjectPageBlock name="integration-line">
-            <ProjectIntegrationLine projectId={id!} started={started} />
+            {/* A non-code project reads no landing (board 01 G): the mark, where the branch would be. */}
+            {p.nonCode ? (
+              <div className="project-integration project-integration-non-code">
+                <div className="project-integration-row">
+                  <span className="project-integration-facts">{NON_CODE_PROJECT_LINE}</span>
+                </div>
+              </div>
+            ) : (
+              <ProjectIntegrationLine projectId={id!} started={started} />
+            )}
           </ProjectPageBlock>
 
           {/* A refused delete, in the server's own words. 409 here is a downstream reference — the
@@ -1274,6 +1302,7 @@ export function ProjectDetailPage() {
                 projectId={id}
                 layout={narrow ? 'narrow' : 'desktop'}
                 openTaskCount={p.tasksByStatus ? (p.tasksByStatus.OPEN ?? 0) : undefined}
+                projectTitle={p.title}
               />
             </div>
           </div>
@@ -1361,19 +1390,9 @@ export function ProjectDetailPage() {
   );
 }
 
-/** What POST /projects/:id/coordinator answers with. `created` tells the session this call opened
- *  apart from the one it found already bound; both are this project's coordinator, and this unit
- *  opens either of them the same way. */
-export interface CoordinatorResult {
-  sessionId: string;
-  created: boolean;
-  workspaceId: string | null;
-}
-
-/** Where a resolved coordinator is read. Through `encodeId`, like every other link in the app, so
- *  a response carrying the raw UUID and one carrying the short public id land on one route. */
-export const coordinatorSessionPath = (sessionId: string): string =>
-  `/sessions/${encodeURIComponent(encodeId(sessionId))}`;
+// What POST /projects/:id/coordinator answers with, where its conversation is read, and the
+// replace door: shared with the coordinator's Change (components/CoordinatorChange).
+export { coordinatorSessionPath, replaceProjectCoordinator, type CoordinatorResult };
 
 /**
  * Why a reader is arriving, when a door opened a coordinator ON THEIR BEHALF — the one piece of
@@ -1466,24 +1485,6 @@ function useOpenProjectCoordinator(projectId: string, intent?: string) {
 }
 
 /**
- * Leave a COMPLETED coordinator behind and open this project's next one.
- *
- * A different route from the open above, not a flag on it, and the card is why: `openProjectCoordinator`
- * is what every link to a coordinator presses, and it RESOLVES — pressing it on a finished
- * conversation hands that same conversation back. Only this one replaces, and it is reachable only
- * from the button that says it will.
- *
- * No body. Where the replacement opens is fixed by the project, and a workspace named here would be
- * a move rather than a replacement — that is `rebindProjectCoordinator`.
- *
- * On a conversation that is still open the server COMPLETES it before the new one is created, which
- * is the whole reason the caller asks first: this request ends a conversation that may be mid-turn.
- */
-export function replaceProjectCoordinator(projectId: string): Promise<CoordinatorResult> {
-  return api<CoordinatorResult>(`/projects/${encodeURIComponent(projectId)}/coordinator/replace`, { method: 'POST' });
-}
-
-/**
  * The Coordinator, as the project header's right-hand column.
  *
  * Self-contained on the same terms as every other card on this page: it runs its own read, draws
@@ -1499,17 +1500,22 @@ export function ProjectCoordinatorSection({
   projectId,
   layout,
   openTaskCount,
+  projectTitle = 'This project',
 }: {
   projectId: string;
   layout: CoordinatorCardLayout;
   /** Open tasks in this project — the card says what the conversation is FOR, and the status
    *  payload deliberately carries no task tally. */
   openTaskCount?: number;
+  /** The project's name, for the sentences that say what moves with a new coordinator. */
+  projectTitle?: string;
 }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [confirm, confirmation] = useConfirm();
-  const [rebinding, setRebinding] = useState(false);
+  // Change (docs/mocks/coordinator-move-workspace/04-change): where this project is coordinated
+  // from — the conversation moves along, or a new one opens there.
+  const [changing, setChanging] = useState(false);
   const [choosingLanding, setChoosingLanding] = useState(false);
   // The workspace the reader named for a coordinator that has never opened. Kept rather than sent
   // and forgotten, because every later press has to carry the same choice — a Retry that fell back
@@ -1582,6 +1588,11 @@ export function ProjectCoordinatorSection({
           onConfirm: () => replace.mutate(),
         });
         return;
+      // Where the project is coordinated from. It also stands in for rebinding: a project whose
+      // workspace broke starts its next coordinator somewhere that works, in one step.
+      case 'change-coordinator-workspace':
+        setChanging(true);
+        return;
       // Two different things, and only the second is a write of its own. Naming the landing of a
       // coordinator that has never opened records nothing: the name rides along with the open that
       // same press performs, so the landing and the conversation are bound together. Rebinding
@@ -1590,9 +1601,6 @@ export function ProjectCoordinatorSection({
       // Moving one that DOES have a home is the other case, and there the write is the point.
       case 'change-workspace':
         setChoosingLanding(true);
-        return;
-      case 'rebind-workspace':
-        setRebinding(true);
         return;
       // The workspace itself is what is broken; it is repaired where it is configured.
       case 'enable-workspace':
@@ -1664,8 +1672,8 @@ export function ProjectCoordinatorSection({
               description={failure.message}
               action={
                 unavailable ? (
-                  <Button size="small" onClick={() => setRebinding(true)}>
-                    Rebind workspace…
+                  <Button size="small" onClick={() => setChanging(true)}>
+                    {CHANGE_COPY.button}
                   </Button>
                 ) : (
                   // Retries the press that FAILED, not the other one: a replacement that lost a race
@@ -1689,11 +1697,25 @@ export function ProjectCoordinatorSection({
         </>
       )}
 
-      {rebinding ? (
-        <CoordinatorRebindDialog
+      {changing && status.data ? (
+        <CoordinatorChangeDialog
           projectId={projectId}
-          currentWorkspaceId={boundWorkspaceId}
-          onClose={() => setRebinding(false)}
+          projectTitle={projectTitle}
+          coordinator={{
+            sessionId:
+              status.data.coordination.session && !status.data.coordination.session.deletedAt
+                ? status.data.coordination.session.id
+                : null,
+            outgoing:
+              !status.data.coordination.session || status.data.coordination.session.deletedAt
+                ? 'none'
+                : status.data.coordination.session.lifecycleState === SessionLifecycleState.COMPLETED
+                  ? 'completed'
+                  : 'open',
+            workspaceId: boundWorkspaceId,
+            workspaceName: status.data.coordination.workspaceName ?? null,
+          }}
+          onClose={() => setChanging(false)}
         />
       ) : null}
 
@@ -1720,101 +1742,6 @@ export const COORDINATOR_UNAVAILABLE = 'COORDINATOR_UNAVAILABLE';
 
 export function isCoordinatorUnavailable(error: unknown): boolean {
   return error instanceof ApiError && error.status === 409 && error.code === COORDINATOR_UNAVAILABLE;
-}
-
-/** What POST /projects/:id/coordinator/rebind answers with. `moved` is false when the project
- *  already recorded this landing — a replay writes nothing. */
-export interface CoordinatorRebindResult {
-  projectId: string;
-  coordinatorWorkspaceId: string;
-  coordinatorSessionId: string | null;
-  moved: boolean;
-}
-
-/**
- * Move where this project's coordinator opens.
- *
- * The verb behind every `COORDINATOR_UNAVAILABLE`, whose `requiredAction` has always read "rebind
- * this project's coordination workspace, then open the coordinator again". It writes the landing
- * and nothing else — not the session pointer, which is a rotation, and not the coordinator
- * identity — so a project with a live conversation keeps it and opens the NEXT one elsewhere.
- */
-export function rebindProjectCoordinator(
-  projectId: string,
-  workspaceId: string,
-): Promise<CoordinatorRebindResult> {
-  return api<CoordinatorRebindResult>(`/projects/${encodeURIComponent(projectId)}/coordinator/rebind`, { method: 'POST', body: { workspaceId } });
-}
-
-/** Pick the workspace this project's coordinator opens in. Mounted only while open, so a project
- *  page that nobody rebinds never asks for the workspace list. */
-function CoordinatorRebindDialog({
-  projectId,
-  currentWorkspaceId,
-  onClose,
-}: {
-  projectId: string;
-  currentWorkspaceId: string | null;
-  onClose: () => void;
-}) {
-  const qc = useQueryClient();
-  const workspaces = useQuery(workspacesQuery());
-  const [picked, setPicked] = useState<string | null>(null);
-  const rebind = useMutation({
-    mutationFn: (workspaceId: string) => rebindProjectCoordinator(projectId, workspaceId),
-    onSuccess: () => {
-      // Both the project document and the status read live under this prefix, and the refusal the
-      // card is showing is decided by the row this just wrote.
-      void qc.invalidateQueries({ queryKey: ['project', projectId] });
-      onClose();
-    },
-  });
-
-  return (
-    <Dialog
-      className="project-coordinator-dialog"
-      open
-      title="Rebind coordination workspace"
-      onClose={onClose}
-      footer={
-        <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button
-            variant="primary"
-            disabled={!picked}
-            loading={rebind.isPending}
-            onClick={() => picked && rebind.mutate(picked)}
-          >
-            Rebind
-          </Button>
-        </>
-      }
-    >
-      <div className="orbit-typography orbit-typography-secondary">
-        The coordinator opens in this workspace from now on. The conversation already recorded is
-        left where it is — this decides where the NEXT one opens.
-      </div>
-      <Select
-        style={{ width: '100%' }}
-        placeholder="Workspace"
-        loading={workspaces.isPending}
-        value={picked}
-        onValueChange={setPicked}
-        options={(workspaces.data ?? []).map((w: { id: string; name: string }) => ({
-          value: w.id,
-          label: w.id === currentWorkspaceId ? `${w.name} (current)` : w.name,
-        }))}
-      />
-      {rebind.error ? (
-        <Alert
-          style={{ marginTop: 12 }}
-          type="error"
-          title="Could not rebind"
-          description={rebind.error.message}
-        />
-      ) : null}
-    </Dialog>
-  );
 }
 
 /**
@@ -1862,8 +1789,7 @@ function CoordinatorLandingDialog({
       }
     >
       <div className="orbit-typography orbit-typography-secondary">
-        The conversation opens here now and stays here — a coordinator cannot be moved to another
-        workspace later.
+        The conversation opens here now. You can move it to another workspace later.
       </div>
       <Select
         style={{ width: '100%' }}

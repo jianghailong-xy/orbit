@@ -218,7 +218,6 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
                 let openTrash: String
                 let counts: [Count]
                 let page: Page
-                let pickerItem: String
             }
             let trash: Trash
             let reviewModeHint: String
@@ -438,7 +437,6 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
                         .joined(separator: "\n\n"))
 
         XCTAssertEqual(WikiModeCopy.trashOpenTrash, trash.openTrash)
-        XCTAssertEqual(WikiModeCopy.trashPickerItem, trash.pickerItem)
         XCTAssertFalse(trash.counts.isEmpty)
         for count in trash.counts {
             XCTAssertEqual(WikiModeCopy.trashHoldsWhenEmpty(count.wikis), count.empty)
@@ -752,8 +750,8 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
     /// privacy note after them.
     func testTheSettingsPagesDrawTheSameBlocksInTheSameOrder() throws {
         let page = try web(Self.settingsPage)
-        assertOrder(page, ["title={WIKI_REVIEW_MODE}", "title={WIKI_MAINTENANCE}"], "the web page's cards")
-        let reviewMode = try slice(page, from: "title={WIKI_REVIEW_MODE}", to: "title={WIKI_MAINTENANCE}")
+        assertOrder(page, ["title={WIKI_REVIEW_MODE}", "title={<MaintenanceTitle space={space} />}"], "the web page's cards")
+        let reviewMode = try slice(page, from: "title={WIKI_REVIEW_MODE}", to: "title={<MaintenanceTitle space={space} />}")
         assertSays(page, "const fallback = wikiModeFallback(settings);", in: Self.settingsPage)
         assertOrder(reviewMode, ["{fallback && (", "{WIKI_REVIEW_MODE_LEAD}", "WIKI_MODE_ORDER.map(",
                                  "{WIKI_MODE_DEFAULT}", "{WIKI_MODE_NOTES[value]}", "{WIKI_SPOT_CHECK}",
@@ -1011,24 +1009,23 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
 
         let view = try native("Views/WikiView.swift")
         let picker = try slice(view, from: "struct WikiSpacePicker: View {", to: "private extension View {")
-        assertOrder(picker, ["Label(WikiCopy.manageSpaces, systemImage: \"gearshape\")", "if trashed > 0 {", "Button(action: openTrash)",
-                             "Label(WikiModeCopy.trashPickerItem, systemImage: \"trash\")"], "the space menu's Trash, under Manage spaces")
+        // The space menu ends at Manage spaces: Trash opens from Wiki settings (docs/mocks/wiki-trash/02-trash-entry).
+        assertSays(picker, "Label(WikiCopy.manageSpaces, systemImage: \"gearshape\")", in: "WikiView.swift")
+        XCTAssertFalse(picker.contains("openTrash"), "the space menu still opens Trash")
         let home = try slice(view, from: "struct WikiHomePage: View {", to: "struct WikiSpacePicker: View {")
-        assertSays(home, "trashed: trashed, openTrash: actions.openTrash)", in: "WikiView.swift")
+        XCTAssertFalse(home.contains("openTrash: actions.openTrash"), "the home still hands the space menu a way to Trash")
         let first = try slice(view, from: "struct WikiFirstStartPage: View {", to: "struct WikiSpacePicker: View {")
         assertOrder(first, ["WikiStartSection(card: card, act: act)", "if trashed > 0 {", "Button(WikiModeCopy.trashOpenTrash, action: openTrash)",
                             "Text(WikiModeCopy.trashHoldsWhenEmpty(trashed))"], "the empty Wiki's way to Trash, under its card")
         let screens = try native("Views/WikiScreens.swift")
-        for wiring in ["trashed: wiki.trash.count,", "openTrash: { open(.wikiTrash) },",
-                       "WikiFirstStartPage(card: WikiStartLogic.firstCard(workspaces: workspaces), trashed: wiki.trash.count,",
+        for wiring in ["WikiFirstStartPage(card: WikiStartLogic.firstCard(workspaces: workspaces), trashed: wiki.trash.count,",
                        "openTrash: { model.push(.wikiTrash) }) { _ in creating = true }"] {
             assertSays(screens, wiring, in: "WikiScreens.swift")
         }
         let pane = try slice(screens, from: "struct WikiDetailPane: View {", to: "struct WikiDisabledNote: View {")
         assertOrder(pane, ["model.nav.wikiSettingsOnTop", "WikiSettingsView()", "model.nav.wikiTrashOnTop", "WikiTrashView()"],
                     "the wide shells' detail pane")
-        assertSays(try native("Views/WikiContentsColumn.swift"), "trashed: wiki.trash.count, openTrash: { open(.wikiTrash) })",
-                   in: "WikiContentsColumn.swift")
+        XCTAssertFalse(try native("Views/WikiContentsColumn.swift").contains("openTrash"), "the directory column's space menu still opens Trash")
         XCTAssertTrue(try native("Views/CompactShell.swift").contains("case .wikiTrash:              WikiTrashView()"))
 
         let model = try native("WikiModel.swift")

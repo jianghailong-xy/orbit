@@ -72,6 +72,9 @@ public struct TranscriptState: Equatable, Sendable, Codable {
     /// started itself included) clears it. The composer decides whether to offer it
     /// (`ComposerLogic.offeredPromptSuggestion`).
     public var promptSuggestion: String?
+    /// Every `turn_end` in the window: where the turns the window's messages opened stopped working
+    /// (`TurnHead.lines`).
+    public var turnEnds: [TurnEndMark] = []
     public init() {}
 
     /// Every server turn the tail draws — accepted, queued or steering — which is what a listing of
@@ -81,7 +84,7 @@ public struct TranscriptState: Equatable, Sendable, Codable {
     // Tolerant decode so snapshots written before `queued` (or the history-window cursor) existed
     // still rehydrate (the keys just default) instead of discarding the whole cached session; the
     // other fields keep their prior strictness. `encode(to:)` stays synthesized from these keys.
-    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, accepted, unreadSteers, status, maxSeq, oldestSeq, hasMoreOlder, contextTokens, contextWindow, subagentItems, taskProgress, promptSuggestion }
+    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, accepted, unreadSteers, status, maxSeq, oldestSeq, hasMoreOlder, contextTokens, contextWindow, subagentItems, taskProgress, promptSuggestion, turnEnds }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         items = try c.decode([TranscriptItem].self, forKey: .items)
@@ -99,6 +102,7 @@ public struct TranscriptState: Equatable, Sendable, Codable {
         subagentItems = (try? c.decodeIfPresent([String: [TranscriptItem]].self, forKey: .subagentItems)) ?? [:]
         taskProgress = (try? c.decodeIfPresent([String: TaskProgress].self, forKey: .taskProgress)) ?? [:]
         promptSuggestion = (try? c.decodeIfPresent(String.self, forKey: .promptSuggestion)) ?? nil
+        turnEnds = (try? c.decodeIfPresent([TurnEndMark].self, forKey: .turnEnds)) ?? []
     }
 }
 
@@ -246,13 +250,22 @@ public struct TranscriptReducer: Sendable, Codable {
     /// `watchShutdownDrain`): nobody asked for that one, and the control plane goes on to deliver the
     /// turn it cut short and every turn queued behind it.
     public static func dropsQueue(_ ev: RunEvent) -> Bool {
-        ev.type == .interrupt && !cutByRunnerRestart(ev)
+        ev.type == .interrupt && !cutByRunnerRestart(ev) && cutByRunnerUpdate(ev) == nil
     }
 
     /// Whether this interrupt is that one of the runner's own: its row names the restart instead of
     /// reading as a Stop nobody pressed (web parity).
     static func cutByRunnerRestart(_ ev: RunEvent) -> Bool {
         ev.payload["reason"]?.stringValue == "runner_restart"
+    }
+
+    /// The interrupt the owner's Update Now made (`reason: runner_update`), with the release it named:
+    /// nobody pressed Stop either, and the control plane continues the turn once the runner is back,
+    /// so it drops no queue and its row says the runner updated. Nil for every other interrupt.
+    static func cutByRunnerUpdate(_ ev: RunEvent) -> RunnerUpdateCut? {
+        guard ev.payload["reason"]?.stringValue == RunnerUpdateNow.interruptReason else { return nil }
+        let version = ev.payload["targetVersion"]?.stringValue
+        return RunnerUpdateCut(targetVersion: version?.isEmpty == false ? version : nil)
     }
 
     public mutating func apply(_ ev: RunEvent) {
@@ -305,7 +318,8 @@ public struct TranscriptReducer: Sendable, Codable {
         case .user:           state.promptSuggestion = nil; appendUser(ev)
         case .promptSuggestion: state.promptSuggestion = nonEmpty(str(ev, "text")?.trimmingCharacters(in: .whitespacesAndNewlines))
         case .userDelivery:   applyUserDelivery(ev)
-        case .interrupt:      appendInterrupt(seq: ev.seq, runnerRestart: Self.cutByRunnerRestart(ev))
+        case .interrupt:      appendInterrupt(seq: ev.seq, runnerRestart: Self.cutByRunnerRestart(ev),
+                                              runnerUpdate: Self.cutByRunnerUpdate(ev))
         case .error:          appendError(ev)
         case .approvalRequest:  upsertApproval(ev)
         case .approvalResolved: resolveApproval(ev)
@@ -428,6 +442,7 @@ public struct TranscriptReducer: Sendable, Codable {
         lastStderr = nil
         lastToolFailure = nil
         state.subagentItems = [:]
+        state.turnEnds = []
     }
 
     /// Fold the tail-first initial page (the newest N persisted events) and record whether older
@@ -519,6 +534,7 @@ public struct TranscriptReducer: Sendable, Codable {
         for (id, progress) in sub.state.taskProgress where state.taskProgress[id] == nil {
             state.taskProgress[id] = progress
         }
+        state.turnEnds = sub.state.turnEnds + state.turnEnds
         seen.formUnion(sub.seen)
         // The open-bubble cursors are item INDICES — shift them past the prepended rows, or the
         // next live delta would stream into an old bubble. (`maxSeq` keeps the parent's — the
@@ -584,6 +600,8 @@ public struct TranscriptReducer: Sendable, Codable {
         state.hasMoreOlder = true
         seen = seen.filter { $0 >= newOldest }
         trimSubagentItems(below: newOldest)
+        // A paged-back cut brings its ends back with its messages.
+        state.turnEnds.removeAll { $0.seq < newOldest }
         return true
     }
 
@@ -614,7 +632,7 @@ public struct TranscriptReducer: Sendable, Codable {
         case .assistant(let b):         seq = b.seq
         case .thinking(let b):          seq = b.seq
         case .toolCall(let c):          seq = c.inputSeq
-        case .interrupt(_, let s, _):   seq = s
+        case .interrupt(_, let s, _, _): seq = s
         case .autoRetry(let n):         seq = n.seq
         case .user, .error, .authError: seq = nil
         case .notice, .diagnostic:      seq = nil
@@ -1226,6 +1244,12 @@ public struct TranscriptReducer: Sendable, Codable {
     /// subtype (`session.go`'s `resultFrom` maps it to interrupted), and the session really is
     /// still alive — so the composer stays on Send, which is the action the marker asks for.
     private mutating func endTurn(_ ev: RunEvent) {
+        // However the turn went, it was working until now: its head row states that span. A live
+        // broadcast with no stored row of its own ends the turn where the window is.
+        let endSeq = ev.seq > 0 && ev.seq != RunEvent.sentinelSeq ? ev.seq : state.maxSeq
+        if !state.turnEnds.contains(where: { $0.seq == endSeq }) {
+            state.turnEnds.append(TurnEndMark(seq: endSeq, ts: ev.ts))
+        }
         flushStreaming()
         clearLiveToolOutputsAtBoundary()
         defer { turnAccountedFor = false }
@@ -1436,6 +1460,12 @@ public struct TranscriptReducer: Sendable, Codable {
         // A steer waiting in the tray that this turn's echo now speaks for: a re-steer replaces it
         // below, and the message it was handed back as is drawn as a turn of its own.
         if let tid = ev.turnId { state.unreadSteers.removeAll { $0.turnId == tid } }
+        // Every message but a steer opens a turn, whose head row is drawn under it (`TurnHead`). A
+        // steer joins the turn already running, and a sub-agent's message is that sub-agent's, which
+        // never gets a `turn_end` of its own.
+        let topLevel = (str(ev, "parentToolUseId") ?? "").isEmpty
+        let opening = topLevel && ev.seq > 0 && ev.seq != RunEvent.sentinelSeq
+            ? TurnOpening(seq: ev.seq, ts: ev.ts) : nil
         // One message, one row. A steer the engine provably never read is handed back and delivered
         // again as the ordinary turn it would have been — the same row, the same turn id — so its
         // second `user` event is that message arriving, not another one: it amends the row already
@@ -1450,6 +1480,7 @@ public struct TranscriptReducer: Sendable, Codable {
         }), case .user(var b) = state.items[i] {
             b.steer = false
             b.withdrawable = false
+            b.opensTurn = opening
             b.delivery = delivery
             b.undelivered = delivery == "failed"
             if str(ev, "text") != nil {
@@ -1490,6 +1521,7 @@ public struct TranscriptReducer: Sendable, Codable {
                 if !atts.isEmpty { b.attachments = atts }   // durable refs carry mime; keep ids if absent
                 b.ts = ev.ts ?? b.ts
                 b.steer = b.steer || steer
+                b.opensTurn = b.steer ? nil : opening
                 b.withdrawable = withdrawable
                 // Only a runner that reports delivery at all gets to settle this: an older one
                 // says nothing, and reading its silence as "arrived" would clear a bubble the
@@ -1530,7 +1562,8 @@ public struct TranscriptReducer: Sendable, Codable {
                                 reviewRequest: reviewRequest,
                                 reviewReturn: reviewReturn,
                                 reviewAnswers: reviewAnswers,
-                                evidenceReview: evidenceReview, evidenceSendBack: evidenceSendBack, runQuestion: runQuestion, runNotice: runNotice, sessionOpening: sessionOpening)
+                                evidenceReview: evidenceReview, evidenceSendBack: evidenceSendBack, runQuestion: runQuestion, runNotice: runNotice, sessionOpening: sessionOpening,
+                                opensTurn: steer ? nil : opening)
         // A steer of the reader's that nothing has read yet is not part of the conversation: it
         // waits in the tray — the row it was drawn as while queued, under the same id — until its
         // delivery settles (`applyUserDelivery`).
@@ -1548,15 +1581,15 @@ public struct TranscriptReducer: Sendable, Codable {
         }
     }
 
-    private mutating func appendInterrupt(seq: Int, runnerRestart: Bool) {
+    private mutating func appendInterrupt(seq: Int, runnerRestart: Bool, runnerUpdate: RunnerUpdateCut? = nil) {
         turnAccountedFor = true
         flushStreaming()
-        state.items.append(.interrupt(id: nextID(), seq: seq, runnerRestart: runnerRestart))
+        state.items.append(.interrupt(id: nextID(), seq: seq, runnerRestart: runnerRestart, runnerUpdate: runnerUpdate))
         state.status = .interrupted
         // A Stop drops still-queued follow-ups server-side — they never get a durable `user` event
         // to reconcile them — so clear the local queue to match (web parity). A runner restart drops
         // nothing, and its queue reconciles as each turn in it is delivered.
-        if !runnerRestart { state.queued.removeAll() }
+        if !runnerRestart && runnerUpdate == nil { state.queued.removeAll() }
     }
 
     private mutating func appendError(_ ev: RunEvent) {

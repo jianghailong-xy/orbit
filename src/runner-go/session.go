@@ -964,8 +964,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// once emitFor exists: the server's next-message guess for an engine without one
 	// (orbit_prompt_suggestion.go), filed against the turn it follows like the engine's own.
 	var requestOrbitSuggestion func(turnID string, at int)
-	// emitThrough buffers one event, filed against turnID, if gate still admits it.
-	emitThrough := func(gate *eventEmissionGate, turnID, eventType string, payload map[string]interface{}) {
+	// emitOne buffers one event, filed against turnID, if gate still admits it (emitThrough).
+	emitOne := func(gate *eventEmissionGate, turnID, eventType string, payload map[string]interface{}) {
 		// Every owner-request secret this runner holds is scrubbed from every string of the payload before anything
 		// below reads it, the spool included (secret_store.go).
 		payload = runnerSecrets().scrubPayload(payload)
@@ -1014,6 +1014,17 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// Do NOT postEvents inline: emit runs on the stdout-reader goroutine, and a
 		// slow post must never stall draining claude's stdout (backpressure freeze).
 		// The 250ms flush goroutine owns all network sends.
+	}
+	// The tool calls each turn has open, so a runner stop that cuts the turn answers them in the
+	// transcript before its interrupt (interrupted_tool_calls.go): every engine's events pass here.
+	toolCalls := &interruptedToolCalls{}
+	// emitThrough buffers one event, filed against turnID, if gate still admits it — preceded, for a
+	// runner stop's interrupt, by the synthetic results of the calls that turn leaves open.
+	emitThrough := func(gate *eventEmissionGate, turnID, eventType string, payload map[string]interface{}) {
+		for _, result := range toolCalls.observe(turnID, eventType, payload) {
+			emitOne(gate, turnID, evToolResult, result)
+		}
+		emitOne(gate, turnID, eventType, payload)
 	}
 	// emitFor files one event against a turn the caller names, instead of against whatever
 	// the attribution cursor happens to hold. Only one thing needs it: a steer's own `user`
@@ -1153,7 +1164,18 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		defer cancelReport()
 		return flushWithContext(reportCtx)
 	})
-	bg.adoptJobs(pool.takeHostlessJobs(sessionID))
+	if adopted := pool.takeHostlessJobs(sessionID); len(adopted) > 0 {
+		bg.adoptJobs(adopted)
+		// Announced before this session's first inbox fetch: the control plane writes the turn it hands
+		// out with a <background-jobs> note, and a job last reported by the image before reads there as
+		// one whose runner went away, ended. The Update Now drill (2026-11-12) caught a Claude session
+		// told its adopted ticker had ended while the same jobs on a Codex session read as running.
+		flushCtx, cancelFlush := context.WithTimeout(context.Background(), bgHandedOnReportTimeout)
+		if err := flushWithContext(flushCtx); err != nil {
+			logln("could not report the background jobs adopted for", sessionID, "before its first turn:", err)
+		}
+		cancelFlush()
+	}
 	// Claude records background-shell completions in its transcript even while the session is
 	// idle, but only streams them to stdout on the next turn; tail the transcript so a shell
 	// that finishes between turns still clears from the "Background processes" tray. (Claude
@@ -1312,7 +1334,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				// AWAITING_INPUT, a new send/claim may reach pool.activate before this
 				// response returns; generation matching prevents this old ack from
 				// releasing the new claim's permit.
-				permitGeneration = pool.permitGeneration(live)
+				permitGeneration = pool.beginTurnCompletion(live)
 				// What the turn wrote — the engine's transcript, its Git work — is on the volume
 				// before the control plane hears the turn is over.
 				syncManagedVolume("a turn", execDir)
@@ -1331,6 +1353,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			// The permit went straight to a queued follow-up; a drain for an update holds it back.
 			pool.holdFollowUpForUpdate(live, permitGeneration)
 		}
+		pool.endTurnCompletion(live)
 		return err
 	}
 	// The server changes PENDING -> RUNNING before returning a claim and may wake
@@ -2071,18 +2094,32 @@ func watchShutdownDrain(procCtx, shutdownCtx context.Context, pending <-chan str
 	pollCancel()
 	tk := time.NewTicker(drainPollInterval)
 	defer tk.Stop()
+	// The owner's Update Now cuts a turn in the engine at once (stopDrainBudget); a shell turn the
+	// runner runs itself — a `!cmd`, an acceptance command whose -1 would fail its task — still gets
+	// the whole drain.
+	turnDeadline := time.After(stopDrainBudget(shutdownCtx, timeout))
 	deadline := time.After(timeout)
 	for len(pending) > 0 || shells.Load() > 0 {
 		select {
 		case <-tk.C:
+			continue
 		case <-procCtx.Done():
 			return
+		case <-turnDeadline:
+			turnDeadline = nil
+			if len(pending) == 0 {
+				continue
+			}
 		case <-deadline:
-			emit(evInterrupt, map[string]interface{}{"reason": "runner_restart"})
-			logln("drain timeout for", sessionID+"; tearing down mid-turn")
-			procCancel()
-			return
 		}
+		emit(evInterrupt, stopInterruptPayload(shutdownCtx))
+		if stoppingForUpdateNow(shutdownCtx) {
+			logln("update now for", sessionID+"; interrupting the turn in flight")
+		} else {
+			logln("drain timeout for", sessionID+"; tearing down mid-turn")
+		}
+		procCancel()
+		return
 	}
 	procCancel()
 }

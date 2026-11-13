@@ -17,7 +17,13 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'DELETE /account-secrets/:id',
   'POST /tasks/:taskId/owner-confirmation',
   'POST /tasks/:taskId/evidence/decision',
+  'POST /tasks/:taskId/evidence/:revision/restart',
   'POST /sessions/:id/approvals/:approvalId/decision',
+  // Session guests (docs/session-guests-design.md §3): who may drive the agent on the owner's machine, with the
+  // owner's accounts, is the owner's to decide and to see.
+  'GET /sessions/:id/guests',
+  'POST /sessions/:id/guests',
+  'DELETE /sessions/:id/guests/:userId',
   'POST /projects/:id/acceptance/confirmation',
   'POST /projects/:id/acceptance/criteria-decisions/:intentId',
   'POST /projects/:projectId/promotions/:promotionId/confirm',
@@ -32,6 +38,8 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /projects/:id/done',
   'POST /projects/:id/pause',
   'POST /projects/:id/resume',
+  // Move to a follow-up… on the done card: it refuses an acting session, as pause and resume do.
+  'POST /projects/:id/criteria/:criterionKey/move',
   // Complete on a finished project's row (session-list-projects-design §3.6): it refuses an acting
   // session, as pause and resume do.
   'POST /projects/:id/sessions/complete',
@@ -69,6 +77,9 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /wiki/spaces/:id/verifications/reopen',
   'POST /wiki/spaces/:id/workspaces',
   'DELETE /wiki/spaces/:id/workspaces/:workspaceId',
+  // The maintenance settings' probe and Check again and run now (docs/wiki-repo-tiers-design.md §7.3).
+  'POST /wiki/spaces/:id/maintenance/probe',
+  'POST /wiki/spaces/:id/maintenance/run',
   'DELETE /wiki/spaces/:id',
   'POST /wiki/spaces/:id/restore',
   'DELETE /wiki/spaces/:id/purge',

@@ -247,11 +247,14 @@ public struct WikiAnchor: Codable, Equatable, Sendable {
     public let expectedExit: Int?
     public let ref: String?
     public let check: Check?
+    /// A code anchor learned when no code could be read, held to no tree yet (contract `anchorRules.deferred`);
+    /// its first check drops it.
+    public let deferred: Bool?
 
     public init(type: WikiAnchorType?, path: String? = nil, symbol: String? = nil,
                 regionSha256: String? = nil, sha: String? = nil, criterionId: String? = nil,
                 semanticHash: String? = nil, contentHash: String? = nil, command: String? = nil,
-                expectedExit: Int? = nil, ref: String? = nil, check: Check? = nil) {
+                expectedExit: Int? = nil, ref: String? = nil, check: Check? = nil, deferred: Bool? = nil) {
         self.type = type
         self.path = path
         self.symbol = symbol
@@ -264,6 +267,7 @@ public struct WikiAnchor: Codable, Equatable, Sendable {
         self.expectedExit = expectedExit
         self.ref = ref
         self.check = check
+        self.deferred = deferred
     }
 }
 
@@ -978,6 +982,22 @@ public struct WikiTimelineItem: Codable, Equatable, Sendable, Identifiable {
 public struct WikiSearchResponse: Codable, Equatable, Sendable {
     public let q: String?
     public let hits: [WikiSearchHit]?
+    /// Why nothing could be looked up (contract `searchUnavailable`); nil on an answer that searched a wiki. Kept as the
+    /// server spelled it, so a value newer than this build still decodes; `WikiSearchUnavailable` names the known ones.
+    public let unavailable: String?
+
+    public init(q: String?, hits: [WikiSearchHit]?, unavailable: String? = nil) {
+        self.q = q
+        self.hits = hits
+        self.unavailable = unavailable
+    }
+}
+
+/// The closed set behind `WikiSearchResponse.unavailable` (src/shared `WIKI_SEARCH_UNAVAILABLE`): the workspace has no
+/// wiki, or the wiki for its repository is in Trash.
+public enum WikiSearchUnavailable: String, CaseIterable, Sendable {
+    case noWiki = "no_wiki"
+    case wikiInTrash = "wiki_in_trash"
 }
 
 public struct WikiSearchHit: Codable, Equatable, Sendable, Identifiable {

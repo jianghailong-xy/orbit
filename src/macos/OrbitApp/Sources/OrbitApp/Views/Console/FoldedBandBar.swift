@@ -2,9 +2,12 @@ import SwiftUI
 import OrbitKit
 
 extension CGFloat {
-    /// The folded composer band's one bar (`FoldedBandBar`): thin beside the composer, and still a
-    /// capsule a thumb finds.
-    static let foldedBandBar: CGFloat = 36
+    /// The folded composer band's pill (`FoldedBandBar`): small, as Safari's folded address bar is,
+    /// and still a capsule a thumb finds.
+    static let foldedBandPill: CGFloat = 30
+    /// How far the pill stands off the screen's bottom edge — over the home indicator, inside the
+    /// strip the screen's own bottom inset keeps, as Safari's folded bar does.
+    static let foldedBandPillFoot: CGFloat = 22
 }
 
 /// The band behind its bar while it is folded (`ConsoleView.foldsBand`): no height, faded, out of
@@ -24,70 +27,80 @@ struct ComposerBandFold: ViewModifier {
 }
 
 #if os(iOS)
-/// A phone's composer band folded to one line while the reader goes back through the history (the
-/// owner, 2026-10-16: the parking strip and the composer shrink to a thin row, and a tap brings them
-/// back). Left, what the composer holds: the draft's first line, or its placeholder. Right, one mark
-/// for each of the session's cards (`FoldedBand`), then the jump to the latest, which the bar carries
-/// in the floating disc's place while it stands — with an arc turning round it while a turn runs, as
-/// the composer's Stop is folded away with the rest. Anything but the jump opens the band where the
-/// reader is: no scroll, no keyboard. When the bar stands is `ConsoleView.foldsBand`'s to say.
+/// A phone's composer band folded to one small pill while the reader goes back through the history
+/// (the owner, 2026-10-16: the parking strip and the composer shrink to a thin row, and a tap brings
+/// them back; 2026-11-11: like Safari's address bar, one centred pill that says one thing). It leads
+/// with a blue dot while a turn runs, and an orange mark when something in the band waits on the
+/// reader; then a draft not yet sent, or else one mark for each of the session's cards
+/// (`FoldedBand`), or else the composer's placeholder. It carries no jump: the floating disc is back
+/// once the band opens. A tap opens the band where the reader is: no scroll, no keyboard. When the
+/// pill stands is `ConsoleView.foldsBand`'s to say.
 @available(iOS 26.0, *)
 struct FoldedBandBar: View {
     @Environment(AppModel.self) private var app
     let console: ConsoleModel
     /// Open the band where the reader is.
     let open: () -> Void
-    /// The floating disc's jump (`TranscriptView.jumpToLatest`).
-    let jump: () -> Void
 
     var body: some View {
         let draft = FoldedBand.draftLine(console.composerText)
         let session = app.session(id: console.sessionID)
-        // What holds the branch bar's Merge back, and what the arc says: a turn in flight.
+        // What holds the branch bar's Merge back, and what the dot says: a turn in flight.
         let turnActive = WorktreeBarLogic.turnActive(status: session?.effectiveRunStatus ?? console.sessionStatus,
                                                      runningSubagents: session?.runningSubagentCount,
                                                      sending: console.sending || console.awaitingReply)
         let tasks = taskCard
         let branch = branchMark(turnActive: turnActive)
-        HStack(spacing: 0) {
-            Button(action: open) {
-                HStack(spacing: 8) {
-                    if needsAttention {
-                        Image(systemName: "exclamationmark.circle.fill")
-                            .font(.orbitLabel)
-                            .foregroundStyle(.orange)
-                    }
-                    Text(draft ?? console.replyContext?.placeholder ?? FoldedBand.placeholder)
-                        .font(.orbitSubtext)
-                        .foregroundStyle(draft == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
+        let lead = FoldedBand.lead(draft: draft, hasMarks: watching != nil || !console.state.background.isEmpty
+                                   || tasks != nil || branch != nil)
+        Button(action: open) {
+            HStack(spacing: 8) {
+                if turnActive {
+                    Circle().fill(Color.accentColor).frame(width: 7, height: 7)
+                }
+                if needsAttention {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .font(.orbitLabel)
+                        .foregroundStyle(.orange)
+                }
+                switch lead {
+                case .draft(let words):
+                    Image(systemName: "pencil").font(.orbitMeta).foregroundStyle(.secondary)
+                    Text(words)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
                         .truncationMode(.tail)
-                    Spacer(minLength: 8)
+                case .marks:
                     marks(tasks: tasks, branch: branch)
+                case .placeholder:
+                    Text(console.replyContext?.placeholder ?? FoldedBand.placeholder)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
                 }
-                .padding(.leading, 14)
-                .padding(.trailing, 6)
-                .frame(maxHeight: .infinity)
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Show the composer")
-            .accessibilityValue(spoken(draft: draft, tasks: tasks, branch: branch))
-            jumpButton(turnActive: turnActive)
-                .padding(.trailing, 4)
+            .padding(.horizontal, 13)
+            .frame(height: .foldedBandPill)
+            .contentShape(Capsule())
         }
-        .frame(height: .foldedBandBar)
+        .buttonStyle(.plain)
         .glassEffect(.regular.interactive(), in: Capsule())
+        .accessibilityLabel("Show the composer")
+        .accessibilityValue(spoken(draft: draft, turnActive: turnActive, tasks: tasks, branch: branch))
     }
 
     // MARK: - the marks
 
+    private var watching: Int? {
+        app.watches?.summary(for: console.sessionID)?.beyondTasks?.watches.count
+    }
+
     /// One mark per card, in the band's order: Watching, Background processes, Tasks, the branch.
-    /// They keep their size; the draft is what gives way.
     private func marks(tasks: SessionTaskCard?, branch: FoldedBand.Branch?) -> some View {
         HStack(spacing: 10) {
-            if let watching = app.watches?.summary(for: console.sessionID)?.beyondTasks {
-                mark("eye", "\(watching.watches.count)")
+            if let watching {
+                mark("eye", "\(watching)")
             }
             if !console.state.background.isEmpty {
                 mark("terminal", FoldedBand.processes(console.state.background))
@@ -174,12 +187,12 @@ struct FoldedBandBar: View {
     }
 
     /// What VoiceOver reads for the bar: the draft, then each card's count.
-    private func spoken(draft: String?, tasks: SessionTaskCard?, branch: FoldedBand.Branch?) -> String {
+    private func spoken(draft: String?, turnActive: Bool, tasks: SessionTaskCard?,
+                        branch: FoldedBand.Branch?) -> String {
         var parts = [draft ?? "Empty"]
+        if turnActive { parts.append("Working") }
         if needsAttention { parts.append("Needs attention") }
-        if let watching = app.watches?.summary(for: console.sessionID)?.beyondTasks {
-            parts.append("Watching: \(watching.watches.count)")
-        }
+        if let watching { parts.append("Watching: \(watching)") }
         if !console.state.background.isEmpty {
             parts.append("Background processes: \(FoldedBand.processes(console.state.background))")
         }
@@ -191,45 +204,6 @@ struct FoldedBandBar: View {
         case nil: break
         }
         return parts.joined(separator: ", ")
-    }
-
-    // MARK: - the jump
-
-    /// The floating disc's jump at the bar's right end, where the composer keeps Send: a 28pt disc 4pt
-    /// in, in a 36pt target.
-    private func jumpButton(turnActive: Bool) -> some View {
-        Button(action: jump) {
-            Image(systemName: "arrow.down")
-                .font(.orbitBarGlyph)
-                .foregroundStyle(.primary)
-                .frame(width: 28, height: 28)
-                .background { Circle().fill(.primary.opacity(0.07)) }
-                .overlay { if turnActive { TurnArc() } }
-                .frame(width: .foldedBandBar, height: .foldedBandBar)
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(console.detached ? SessionRecordLink.Copy.jumpToLatest : "Scroll to latest")
-        .accessibilityValue(turnActive ? "Working" : "")
-    }
-}
-
-/// The arc turning round the bar's jump while a turn runs: the latest is still being written below.
-/// Held still for Reduce Motion.
-private struct TurnArc: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { context in
-            let turn = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.2) / 1.2
-            Circle()
-                .trim(from: 0, to: 0.3)
-                .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                .rotationEffect(.degrees(turn * 360 - 90))
-        }
-        .frame(width: 32, height: 32)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
     }
 }
 #endif

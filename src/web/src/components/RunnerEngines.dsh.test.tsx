@@ -5,8 +5,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { RunnerEngineHealth, RunnerInstallState } from '@orbit/shared';
-import { RunnerEngines } from './RunnerEngines';
-import { openRunnerCards } from './RunnerEngines.test-helpers';
+import { EngineRows } from './RunnerEngines.test-rows';
+import { openAccountGroups } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -74,7 +74,7 @@ afterEach(() => {
 
 function mount(box: Runner) {
   sent = [];
-  openRunnerCards([box]);
+  openAccountGroups([box]);
   apiMock.mockImplementation((async (path: string, options?: { method?: string; body?: unknown }) => {
     const method = options?.method ?? 'GET';
     if (method !== 'GET') {
@@ -93,7 +93,7 @@ function mount(box: Runner) {
     root!.render(
       <MemoryRouter initialEntries={['/infrastructure']}>
         <QueryClientProvider client={qc}>
-          <RunnerEngines />
+          <EngineRows />
         </QueryClientProvider>
       </MemoryRouter>,
     ),

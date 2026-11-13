@@ -10,6 +10,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { PushService } from '../push/push.service';
+import { ProjectOrphanSweepService } from '../projects/project-orphan-sweep.service';
 import {
   CreatorType,
   Prisma,
@@ -135,13 +136,7 @@ import type { RunStop } from '../projects/task-run-stopped.producer';
 import { refreshProjectDone } from '../projects/project-done-request';
 import { completionEvidenceRevisedFact } from '../projects/completion-input';
 import { criterionStandingRefusal, quotedCriterion } from './task-evidence-decision';
-import {
-  arrivalMessage,
-  movedEvidenceTurnId,
-  resubmitMessage,
-  resubmitStandard,
-  type MovedEvidence,
-} from './moved-task-evidence';
+import { tellEvidenceUndecidable } from './undecidable-evidence';
 import {
   planPreflightRefusalBody,
   planPreflightRefusals,
@@ -335,7 +330,7 @@ import {
   verificationSubjectNeedsVerifierRefusal,
   type TaskCompletionCriterionValue,
 } from './task-completion-criterion';
-import { TASK_DELIVERY_SELECT, buildTaskExecutionPrompt } from './task-execution-prompt';
+import { TASK_DELIVERY_SELECT, TASK_STANDARD_SELECT, buildTaskExecutionPrompt } from './task-execution-prompt';
 import {
   MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS,
   normaliseTaskCriterionOverrideReason,
@@ -2138,6 +2133,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     @Optional() private readonly evidenceReviews?: EvidenceReviewService,
     @Optional() private readonly confirmationReviews?: OwnerConfirmationReviewService,
     @Optional() private readonly push?: PushService,
+    /**
+     * The orphan sweep (docs/evidence-always-has-an-addressee-design.md §4), on the reconcile timer.
+     * `@Optional()` and last for the places that build this service directly: they run no sweep.
+     */
+    @Optional() private readonly orphanSweep?: ProjectOrphanSweepService,
   ) {
     this.handoffs = handoffs ?? new ProjectHandoffService(prisma);
     this.files = files ?? new FilesService(prisma);
@@ -2588,7 +2588,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       .then(() => this.confirmationReviews?.deliverPendingFor())
       .catch((e) =>
         this.logger.error(`waiting evidence sweep failed: ${e instanceof Error ? e.message : e}`),
-      );
+      )
+      // The orphan sweep, last and on this timer for the reason at the top of this block: it reads
+      // what the sweeps before it have just delivered, so it does not report as untold what this
+      // same tick handed over. It runs every few ticks (`ORPHAN_SWEEP_INTERVAL_MS`) and never rejects.
+      .then(() => this.orphanSweep?.tick());
   }
 
   onModuleDestroy(): void {
@@ -6299,7 +6303,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     sessionId: string,
   ): Promise<never> {
     const from = task.projectId;
-    const to = dto.projectId as string;
+    // null: take the task out of every project. The confirmation files it under none.
+    const to = (dto.projectId ?? null) as string | null;
     const extra = Object.entries(dto)
       .filter(([field, value]) => value !== undefined && !MOVE_REQUEST_FIELDS.has(field))
       .map(([field]) => field)
@@ -6320,7 +6325,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         'a blank key names no criterion. Leave criterionKey out to ask for the move without one, '
         + 'or pass one of the keys project_get returns for the project the task would move into.'));
     }
-    await this.assertOwnedProject(ownerId, to);
+    if (criterionKey && to === null) {
+      throw new BadRequestException(this.criterionUnknown(JSON.stringify(criterionKey),
+        'a task taken out of every project serves no project\'s criterion. Leave criterionKey out '
+        + 'to ask for it to be taken out, or name the project it should move into instead.'));
+    }
+    if (to !== null) await this.assertOwnedProject(ownerId, to);
 
     const write: ScopeWriteInput = {
       operation: 'HANDOFF_TASK',
@@ -6347,7 +6357,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
     // Resolved in the target and nowhere else, by the rule every declaration is resolved by, and
     // refused as the malformed request it is rather than as an authority refusal.
-    const criterion = criterionKey
+    const criterion = criterionKey && to
       ? (await this.resolveCriterionDeclarations(ownerId, [{ projectId: to, criterionKey }])
           .catch((error: unknown) => {
             if (error instanceof ForbiddenException) throw new BadRequestException(error.getResponse());
@@ -6584,12 +6594,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // work, and gives up only a task none of its criteria count. What the task serves is read
       // under this transaction's lock on it, so a declaration made while the request waited counts.
       const ends = await tx.project.findMany({
-        where: { id: { in: [from, to] }, ownerId },
+        where: { id: { in: orderedIds([from, to]) }, ownerId },
         select: { id: true, status: true },
       });
-      // A project this read does not find is not open: fail closed, as R8 does.
-      const statusOf = (id: string): HandoffProjectFacts =>
-        ({ status: ends.find((end) => end.id === id)?.status ?? 'CANCELLED' });
+      // A project this read does not find is not open: fail closed, as R8 does. A move out of
+      // every project lands nowhere, and nowhere is always open to take it.
+      const statusOf = (id: string | null): HandoffProjectFacts =>
+        id === null
+          ? { status: 'OPEN' }
+          : { status: ends.find((end) => end.id === id)?.status ?? 'CANCELLED' };
       const acceptance = decideHandoffAcceptance(statusOf(from), statusOf(to), {
         servesSourceCriterion: await this.handoffs.servesCriterionOf(tx, ownerId, taskId, from),
       });
@@ -6599,7 +6612,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             ? `task ${uuidToBase62(taskId)} serves an acceptance criterion of project `
               + `${uuidToBase62(from)}, which is settled, and a settled project gives up only work `
               + 'none of its criteria count'
-            : `project ${uuidToBase62(to)} is not open, and a settled project takes no work until `
+            : `project ${to ? uuidToBase62(to) : '(none)'} is not open, and a settled project takes no work until `
               + 'it is reopened');
       }
       await this.handoffs.assertMoveNotLanding(tx, ownerId, taskId, {
@@ -6608,7 +6621,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       });
       // What the task will declare over there: the criterion the request named, at its revision
       // NOW — the same snapshot `resolveCriterionDeclarations` takes — read under the target's lock.
-      const criterion = row.requestedCriterionDefinitionId
+      const criterion = row.requestedCriterionDefinitionId && to
         ? await tx.projectAcceptanceCriterionDefinition.findFirst({
             where: { id: row.requestedCriterionDefinitionId, projectId: to, project: { ownerId } },
             select: { id: true, revision: true },
@@ -6616,7 +6629,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         : null;
       if (row.requestedCriterionDefinitionId && !criterion) {
         throw refuse('MOVE_TASK_CRITERION_GONE', 'DENY_THE_REQUEST',
-          `the criterion this request would have the task serve in project ${uuidToBase62(to)} `
+          `the criterion this request would have the task serve in project ${to ? uuidToBase62(to) : '(none)'} `
           + `(${criterionKeyOf(row.requestedCriterionDefinitionId)}) is no longer one that project `
           + 'states');
       }
@@ -6709,17 +6722,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     await this.openItems?.deliverForTasks([taskId]);
     // And the evidence it brought along, which the project it is in now decides (the same decision
     // that moves the run with it): handed to that project's decider, or — when the move left it
-    // quoting a standard the task is no longer held to — sent back to be filed again.
-    await this.handOverMovedEvidence(ownerId, {
-      taskId,
-      fromProjectId: from,
-      toProjectId: to,
-      withdrawnCriterionDefinitionId: moved.criterionDefinitionId,
-    });
+    // quoting a standard the task is no longer held to — sent back to be filed again. A task taken
+    // out of every project has no project to decide it, and is left as the owner's own unfiling
+    // leaves it.
+    if (to) {
+      await this.handOverMovedEvidence(ownerId, {
+        taskId,
+        fromProjectId: from,
+        toProjectId: to,
+        withdrawnCriterionDefinitionId: moved.criterionDefinitionId,
+      });
+    }
   }
 
   /**
-   * A confirmed move's evidence hand-over (`moved-task-evidence.ts` says what and why), after the
+   * A confirmed move's evidence hand-over (`undecidable-evidence.ts` says what and why), after the
    * move's commit and from the rows it committed, the way every other delivery of that edge is.
    *
    * Nothing is said when there is nothing undecided: a task that is not EVIDENCE_JUDGMENT, one that
@@ -6728,10 +6745,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    *
    * A revision the decision door would take in the target is routed through the evidence door again,
    * keyed with the target (`completionEvidenceRevisedFact`'s `movedFromProjectId`). One it would
-   * refuse is sent back: each live run of the task is told what to quote instead, written into the
-   * turn it is running where it can be, and an Automatic target's live coordinator is told the task
-   * arrived owing a new revision. Each message is keyed by the revision and the target, so a repeat
-   * says nothing twice; neither revives a conversation that has ended.
+   * refuse takes the shared undecidable path (`tellEvidenceUndecidable`): each live run of the task
+   * is steered with the standard it is held to now, and an Automatic target's live coordinator is
+   * told the task arrived owing a new revision. Each message is keyed by the revision and the
+   * standard, so a repeat says nothing twice; neither revives a conversation that has ended.
    *
    * Like every delivery on this edge, a failure is logged and never reported as a failed move: the
    * move committed. What a failed hand-over leaves is the state before this unit existed — the
@@ -6792,95 +6809,26 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
-      const projects = await this.prisma.project.findMany({
-        where: { id: { in: [move.fromProjectId, move.toProjectId] }, ownerId },
-        select: {
-          id: true,
-          title: true,
-          coordinatorEnabled: true,
-          coordinatorSessionId: true,
-          coordinatorSession: { select: SESSION_ENDING_SELECT },
+      // Not decidable there: the one shared path every undecidable revision takes
+      // (`undecidable-evidence.ts`) — the live runs are steered, an Automatic target's coordinator
+      // is told, each once per revision and standard.
+      const from = await this.prisma.project.findFirst({
+        where: { id: move.fromProjectId, ownerId },
+        select: { id: true, title: true },
+      });
+      if (!from) return;
+      await tellEvidenceUndecidable(this.prisma, this.sessions, {
+        ownerId,
+        taskId: task.id,
+        cause: {
+          kind: 'MOVED',
+          from,
+          withdrawnCriterionDefinitionId: move.withdrawnCriterionDefinitionId,
         },
       });
-      const from = projects.find((project) => project.id === move.fromProjectId);
-      const to = projects.find((project) => project.id === move.toProjectId);
-      if (!from || !to) return;
-      const declared = task.criterionDefinitionId
-        ? await this.prisma.projectAcceptanceCriterionDefinition.findFirst({
-            where: { id: task.criterionDefinitionId, projectId: move.toProjectId },
-            select: { id: true, text: true },
-          })
-        : null;
-      const moved: MovedEvidence = {
-        taskId: task.id,
-        title: task.title,
-        revision: latest.revision.toString(),
-        from: { id: from.id, title: from.title },
-        to: { id: to.id, title: to.title },
-        quoted: quotedCriterion(latest.evidence),
-        withdrawnCriterionDefinitionId: move.withdrawnCriterionDefinitionId,
-        standard: resubmitStandard({ id: task.id, acceptanceCriteria: task.acceptanceCriteria, declared }),
-      };
-
-      const runs = (await this.prisma.session.findMany({
-        where: { ownerId, taskId: task.id },
-        select: { id: true, ...SESSION_ENDING_SELECT },
-        orderBy: { id: 'asc' },
-      })).filter((run) => !sessionHasEnded(run));
-      const told: string[] = [];
-      for (const run of runs) {
-        if (await this.tellMovedEvidence(ownerId, run.id, {
-          clientTurnId: movedEvidenceTurnId('run', latest.id, move.toProjectId),
-          content: resubmitMessage(moved),
-          steerIfLive: true,
-        })) told.push(run.id);
-      }
-      // The coordinator of an Automatic target, as the evidence door itself would reach it: a project
-      // whose switch is off is told no evidence fact, and an ended conversation is not revived.
-      if (to.coordinatorEnabled && to.coordinatorSessionId && to.coordinatorSession
-        && !sessionHasEnded(to.coordinatorSession)) {
-        await this.tellMovedEvidence(ownerId, to.coordinatorSessionId, {
-          clientTurnId: movedEvidenceTurnId('coordinator', latest.id, move.toProjectId),
-          content: arrivalMessage(moved, told),
-          steerIfLive: false,
-        });
-      }
     } catch (error) {
       this.logger.warn(`evidence of task ${move.taskId} was not handed over to project `
         + `${move.toProjectId} after its move: ${error instanceof Error ? error.message : error}`);
-    }
-  }
-
-  /**
-   * One message of the hand-over above, as a platform turn under a key derived from the revision.
-   * True when it is on the conversation; false when the conversation refused it for a state of the
-   * world (gone, ended, busy being written, unable to run) — the refusals every delivery here takes
-   * as such. A fault is raised to the caller, which logs it.
-   */
-  private async tellMovedEvidence(
-    ownerId: string,
-    sessionId: string,
-    turn: { clientTurnId: string; content: string; steerIfLive: boolean },
-  ): Promise<boolean> {
-    try {
-      await this.sessions.createTurn(ownerId, sessionId, {
-        clientTurnId: turn.clientTurnId,
-        content: turn.content,
-        intent: 'NEXT_TURN',
-      }, turn.steerIfLive ? { steerIfLive: true } : undefined);
-      return true;
-    } catch (error) {
-      if (
-        error instanceof NotFoundException
-        || error instanceof ConflictException
-        || error instanceof ForbiddenException
-        || error instanceof BadRequestException
-      ) {
-        this.logger.log(`moved-evidence message to session ${sessionId} was not written: `
-          + `${error.message}`);
-        return false;
-      }
-      throw error;
     }
   }
 
@@ -9223,6 +9171,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // the route beside it says what smart selection picked, or would have picked.
             model: true,
             effort: true,
+            // What the run has cost so far, for the panel's status line and its Now card.
+            costUsd: true,
             workspace: { select: { name: true } },
           },
         },
@@ -9549,8 +9499,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // finds the one already waiting) and moves nothing. Only a session asks: the owner's own move
     // is §4 R1's and goes on below exactly as before, `handoff` or not. Only from a project, since
     // a move leaves one. And only while the contract is enforced: in `observe` nothing is refused,
-    // so the write proceeds as it did before this door existed.
-    if (actingSessionId && dto.handoff != null && typeof dto.projectId === 'string'
+    // so the write proceeds as it did before this door existed. `projectId: null` with a `handoff`
+    // asks for the task to be taken out of its project (account owner, 2026-11-13): §4 R4 refuses
+    // a session that writes that, and this is how it asks instead.
+    if (actingSessionId && dto.handoff != null
+      && (typeof dto.projectId === 'string' || dto.projectId === null)
       && before.projectId && dto.projectId !== before.projectId
       && projectScopeMode() === 'enforce') {
       return this.requestMove(ownerId, { ...before, projectId: before.projectId }, dto, actingSessionId);
@@ -15022,6 +14975,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // How the run's work reaches its line, which the prompt says (§10.5 O-L3).
         codeless: true,
         project: { select: TASK_DELIVERY_SELECT },
+        // The standard the prompt states for its evidence (step 3).
+        ...TASK_STANDARD_SELECT,
       },
     });
     if (!task) throw new NotFoundException('task not found');
@@ -15497,6 +15452,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * as it always did.
    */
   private buildExecutePrompt(task: {
+    id: string;
+    projectId?: string | null;
+    criterionRevision?: number | null;
+    criterionDefinition?: { id: string; text: string } | null;
     title: string;
     description?: string | null;
     acceptanceCriteria?: string | null;
@@ -15634,6 +15593,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // and how the run's work reaches its line, which the prompt says (§10.5 O-L3).
         codeless: true,
         project: { select: { status: true, ...TASK_DELIVERY_SELECT } },
+        // The standard the prompt states for its evidence (step 3).
+        ...TASK_STANDARD_SELECT,
         list: { select: { instructions: true } },
         assignee: { select: { id: true, runnerId: true } },
       },

@@ -142,6 +142,26 @@ public struct RunQuestionCard: Codable, Equatable, Sendable {
 
     public static func parse(_ payload: JSONValue) -> RunQuestionCard? { parseCard(payload["runQuestion"]) }
 
+    /// Whether the card is worth reading live (`SessionRequestView.runQuestion`): not once the stored
+    /// card already says who answered, which never changes.
+    public var readsLive: Bool { answeredBy == nil }
+
+    /// The card to draw: the request's card as it stands now over the one the echo stored, while the
+    /// stored one is unanswered (web parity: `RunQuestionTurnCard`'s `live ?? stored`).
+    public static func drawn(stored: RunQuestionCard, live: SessionRequestView?) -> RunQuestionCard {
+        guard stored.readsLive, let card = live?.runQuestion else { return stored }
+        return card
+    }
+
+    /// Whether to look again on the slow poll: before the first read, while the request waits, and
+    /// while the card, passed to the owner, waits for their answer (web parity: `sessionRequestQuery`).
+    public static func keepsReading(_ live: SessionRequestView?) -> Bool {
+        guard let live else { return true }
+        if live.state == .open { return true }
+        guard let card = live.runQuestion else { return false }
+        return card.answeredBy == nil && card.approvalStatus == "PENDING"
+    }
+
     public static func parseCard(_ value: JSONValue?) -> RunQuestionCard? {
         guard let card = value, case .object = card,
               let requestId = card["requestId"]?.stringValue,

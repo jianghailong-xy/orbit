@@ -9,6 +9,10 @@ import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.taskprojects.FeatureWriteRefused
 import io.orbitd.android.taskprojects.FeatureWrites
 import kotlinx.serialization.json.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import okio.Buffer
 
 /** The project reads and writes OrbitKit's APIClient makes (`ProjectsModel`), over A03's handle.
  * Each section is its own read, so one that fails keeps what it last showed. */
@@ -61,6 +65,33 @@ class ProjectApi(private val auth: AuthSession, private val handle: SessionHandl
         body = buildJsonObject { put("note", note) })
     suspend fun setStatus(id: String, status: String, revision: String) = send(revision, listOf("projects", id), HttpMethod.PATCH, buildJsonObject { put("status", status) })
     suspend fun authorize(id: String, body: JsonObject) = send(body.text("expectedConfigRevision").orEmpty(), listOf("projects", id), HttpMethod.PATCH, body)
+    /** The owner's non-code mark (Delivers on How it runs): written at the press, who and when kept by the server. */
+    suspend fun setNonCode(id: String, nonCode: Boolean) = send("non-code:$nonCode", listOf("projects", id), HttpMethod.PATCH,
+        buildJsonObject { put("nonCode", nonCode) })
+    /** How one criterion is met: the whole set restated (`DoneFollowUps.modeBody`); the server may hold it for a decision and
+     * answers `acceptanceCriteriaHold.notice` then. */
+    suspend fun setCriteria(id: String, body: JsonObject) = send("criteria:$body", listOf("projects", id), HttpMethod.PATCH, body) as? JsonObject
+    /** Move to a follow-up… — the owner's alone: the criterion and its open serving tasks go to a chosen or a new project. */
+    suspend fun moveCriterion(id: String, criterionKey: String, body: JsonObject) =
+        send("move:$criterionKey", listOf("projects", id, "criteria", criterionKey, "move"), body = body) as? JsonObject
+    /** The owner's three doors on a criterion met by confirmation. */
+    suspend fun confirmCriterion(id: String, criterionId: String, body: JsonObject) =
+        send("confirm:$criterionId", listOf("projects", id, "criteria", criterionId, "confirmations"), body = body)
+    suspend fun withdrawConfirmation(id: String, criterionId: String) =
+        send("withdraw:$criterionId", listOf("projects", id, "criteria", criterionId, "confirmations", "withdraw"))
+    suspend fun startCheck(id: String, criterionId: String) =
+        send("check:$criterionId", listOf("projects", id, "criteria", criterionId, "checks"), body = buildJsonObject {})
+    /** The Confirm sheet's one screenshot, uploaded on its own (`POST /attachments`): its id travels with Confirm. */
+    suspend fun uploadImage(name: String, mime: String, bytes: ByteArray): String {
+        if (!writable()) throw FeatureWriteRefused()
+        val multipart = MultipartBody.Builder().setType(MultipartBody.FORM)
+            .addFormDataPart("file", name, bytes.toRequestBody(mime.toMediaType())).build()
+        val encoded = Buffer().apply { multipart.writeTo(this) }.readByteArray()
+        val answer = auth.request(handle, ApiRequest(listOf("attachments"), HttpMethod.POST, body = encoded, contentType = multipart.contentType().toString()))
+        return (Wire.decode(answer.body, JsonElement.serializer()) as? JsonObject)?.text("id") ?: throw ProtocolException()
+    }
+    /** An attachment's bytes, for a confirmation's screenshot thumbnail. */
+    suspend fun attachmentBytes(attachmentId: String): ByteArray = auth.request(handle, ApiRequest(listOf("attachments", attachmentId), maxResponseBytes = 25L * 1024 * 1024)).body
     suspend fun updateIntegration(id: String, body: JsonObject, revision: String) = send(revision, listOf("projects", id, "integration"), HttpMethod.PATCH, body)
     suspend fun pause(id: String, paused: Boolean, revision: String) = send(revision, listOf("projects", id, if (paused) "pause" else "resume"))
     /** One answer to a crossing, from its row's second press: the crossing key travels with it, so an answer given on a list that
@@ -115,7 +146,13 @@ class ProjectApi(private val auth: AuthSession, private val handle: SessionHandl
         if (!writable()) throw FeatureWriteRefused()
         return Wire.decode(auth.request(handle, ApiRequest(listOf("projects", id, "coordinator"), HttpMethod.POST)).body, JsonObject.serializer())
     }
-    suspend fun replaceCoordinator(id: String, revision: String) = send(revision, listOf("projects", id, "coordinator", "replace")) as? JsonObject
+    /** A [workspaceId] opens the new coordinator there (Change workspace…), and the project is coordinated from there
+     * afterwards; none opens it where the last one ran. */
+    suspend fun replaceCoordinator(id: String, revision: String, workspaceId: String? = null) = send(revision, listOf("projects", id, "coordinator", "replace"),
+        body = workspaceId?.let { buildJsonObject { put("workspaceId", it) } }) as? JsonObject
+    /** The owner's workspaces and runners, for Change workspace…'s list. */
+    suspend fun workspaces(): List<JsonObject> = (read(listOf("workspaces")) as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
+    suspend fun runners(): List<JsonObject> = (read(listOf("runners")) as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
 }
 
 /** What `GET /projects/:id/integration` says about the project's main branch (`ProjectIntegrationView`, contract L6): the
