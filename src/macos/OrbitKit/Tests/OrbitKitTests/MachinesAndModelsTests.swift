@@ -2,11 +2,11 @@ import Foundation
 import XCTest
 @testable import OrbitKit
 
-/// The top of the Infrastructure page on iOS and macOS — what needs a person — held to the cases the web
-/// had for the same block until it dropped it (src/web/src/pages/InfrastructurePage.overview.test.tsx):
+/// The top of the Machines & models page on iOS and macOS — what needs a person — held to the cases the web
+/// had for the same block until it dropped it (src/web/src/pages/MachinesAndModelsPage.overview.test.tsx):
 /// the same three machines and pool, and the same lines out of them. Then a key's row, a machine's row in
 /// the list (03-ios.png), and what an engine's page offers to install.
-final class InfrastructureTests: XCTestCase {
+final class MachinesAndModelsTests: XCTestCase {
 
     // MARK: - The mock's account, as the web's cases have it
 
@@ -71,12 +71,12 @@ final class InfrastructureTests: XCTestCase {
     }
 
     private func attention(_ runners: [Runner], workspaces: [Agent] = [], own: [ProviderPool] = [],
-                           member: [ProviderPool] = []) -> [Infrastructure.Attention] {
-        Infrastructure.attention(runners: runners, workspaces: workspaces, memberPools: member, ownPools: own,
+                           member: [ProviderPool] = []) -> [MachinesAndModels.Attention] {
+        MachinesAndModels.attention(runners: runners, workspaces: workspaces, memberPools: member, ownPools: own,
                                  now: Self.now)
     }
 
-    private func says(_ line: Infrastructure.Attention) -> String { "\(line.line) · \(line.detail)" }
+    private func says(_ line: MachinesAndModels.Attention) -> String { "\(line.line) · \(line.detail)" }
 
     // MARK: - Needs you
 
@@ -192,14 +192,14 @@ final class InfrastructureTests: XCTestCase {
     /// the id itself when the list doesn't name it. A key keeps the name its owner gave it, and a Claude
     /// subscription token's line says what it is.
     func testAKeysModelIsNamedAsItsListNamesIt() {
-        XCTAssertEqual(Infrastructure.defaultModel(anthropicWork), "Claude Sonnet 5")
-        XCTAssertEqual(Infrastructure.defaultModel(key("A", defaultModel: nil)), "Claude Opus 5")
-        XCTAssertEqual(Infrastructure.defaultModel(key("A", defaultModel: "")), "Claude Opus 5")
-        XCTAssertEqual(Infrastructure.defaultModel(key("A", defaultModel: "claude-haiku-5")), "claude-haiku-5")
-        XCTAssertNil(Infrastructure.defaultModel(key("A", models: [], defaultModel: nil)))
-        XCTAssertEqual(Infrastructure.keyLabel("Gemini", presetSlug: "gemini"), "Gemini", "a Gemini key keeps its own name")
-        XCTAssertEqual(Infrastructure.keyLabel("My Gemini", presetSlug: "gemini"), "My Gemini")
-        XCTAssertEqual(Infrastructure.keyLabel("Gemini", presetSlug: nil), "Gemini")
+        XCTAssertEqual(MachinesAndModels.defaultModel(anthropicWork), "Claude Sonnet 5")
+        XCTAssertEqual(MachinesAndModels.defaultModel(key("A", defaultModel: nil)), "Claude Opus 5")
+        XCTAssertEqual(MachinesAndModels.defaultModel(key("A", defaultModel: "")), "Claude Opus 5")
+        XCTAssertEqual(MachinesAndModels.defaultModel(key("A", defaultModel: "claude-haiku-5")), "claude-haiku-5")
+        XCTAssertNil(MachinesAndModels.defaultModel(key("A", models: [], defaultModel: nil)))
+        XCTAssertEqual(MachinesAndModels.keyLabel("Gemini", presetSlug: "gemini"), "Gemini", "a Gemini key keeps its own name")
+        XCTAssertEqual(MachinesAndModels.keyLabel("My Gemini", presetSlug: "gemini"), "My Gemini")
+        XCTAssertEqual(MachinesAndModels.keyLabel("Gemini", presetSlug: nil), "Gemini")
         XCTAssertEqual(ProvidersOverview.keyLine(key("Claude Max", engines: ["claude"])), "Claude Code · subscription token")
         XCTAssertEqual(ProvidersOverview.keyLine(anthropicWork), "Claude Code · OpenCode")
     }
@@ -210,12 +210,12 @@ final class InfrastructureTests: XCTestCase {
     /// engines stand rather than counting that, as the web's card does; "5 / 8 running · All signed in";
     /// offline, where its engines stood: "1 of 3 signed in".
     func testAMachinesLineSaysItsSlotsAndWhereItsEnginesStand() throws {
-        XCTAssertEqual(Infrastructure.machineLine(try macStudio(), now: Self.now), "2 / 4 running · 1 of 3 signed in")
-        XCTAssertEqual(Infrastructure.machineLine(try hpc(), now: Self.now), "5 / 8 running · All signed in")
-        XCTAssertEqual(Infrastructure.machineLine(try thinkPad(), now: Self.now), "1 of 3 signed in")
-        XCTAssertEqual(Infrastructure.machinesCount(try fleet()), "3 machines · 7 / 12 slots busy")
-        XCTAssertEqual(Infrastructure.machinesCount([try hpc()]), "1 machine · 5 / 8 slots busy")
-        XCTAssertNil(Infrastructure.machinesCount([]))
+        XCTAssertEqual(MachinesAndModels.machineLine(try macStudio(), now: Self.now), "2 / 4 running · 1 of 3 signed in")
+        XCTAssertEqual(MachinesAndModels.machineLine(try hpc(), now: Self.now), "5 / 8 running · All signed in")
+        XCTAssertEqual(MachinesAndModels.machineLine(try thinkPad(), now: Self.now), "1 of 3 signed in")
+        XCTAssertEqual(MachinesAndModels.machinesCount(try fleet()), "3 machines · 7 / 12 slots busy")
+        XCTAssertEqual(MachinesAndModels.machinesCount([try hpc()]), "1 machine · 5 / 8 slots busy")
+        XCTAssertNil(MachinesAndModels.machinesCount([]))
     }
 
     /// The web card's folded summary: an install or update under way or failed first, then engines not
@@ -224,23 +224,23 @@ final class InfrastructureTests: XCTestCase {
         let relay = { (status: String, mode: String) in
             try self.runner(#"{"id":"r","name":"r","online":true,"engines":[],"install":{"status":"\#(status)","engine":"claude","mode":"\#(mode)"}}"#)
         }
-        XCTAssertEqual(Infrastructure.summary(try relay("failed", "install")), "Install failed")
-        XCTAssertEqual(Infrastructure.summary(try relay("failed", "update")), "Update failed")
-        XCTAssertEqual(Infrastructure.summary(try relay("installing", "install")), "Installing…")
-        XCTAssertEqual(Infrastructure.summary(try relay("pending", "update")), "Updating…")
-        XCTAssertEqual(Infrastructure.summary(try runner(#"{"id":"r","name":"r","online":true}"#)), "Engines not reported")
+        XCTAssertEqual(MachinesAndModels.summary(try relay("failed", "install")), "Install failed")
+        XCTAssertEqual(MachinesAndModels.summary(try relay("failed", "update")), "Update failed")
+        XCTAssertEqual(MachinesAndModels.summary(try relay("installing", "install")), "Installing…")
+        XCTAssertEqual(MachinesAndModels.summary(try relay("pending", "update")), "Updating…")
+        XCTAssertEqual(MachinesAndModels.summary(try runner(#"{"id":"r","name":"r","online":true}"#)), "Engines not reported")
         let behind = try runner(#"""
         {"id":"r","name":"r","online":true,"engines":[
           {"engine":"claude","installed":true,"auth":"yes","update":{"status":"ok","behindSince":"2026-09-01T00:00:00.000Z","latest":"2.1.300"}}]}
         """#)
-        XCTAssertEqual(Infrastructure.summary(behind, now: Self.now), "1 engine not updating")
+        XCTAssertEqual(MachinesAndModels.summary(behind, now: Self.now), "1 engine not updating")
         // An account signed out leaves its engine short of all signed in.
         let half = try runner(#"""
         {"id":"r","name":"r","online":true,"engines":[
           {"engine":"claude","installed":true,"auth":"yes","accounts":[{"id":"default","auth":"yes"},{"id":"slot-2","auth":"no"}]},
           {"engine":"codex","installed":true,"auth":"yes"},{"engine":"kimi","installed":true,"auth":"yes"}]}
         """#)
-        XCTAssertEqual(Infrastructure.summary(half, now: Self.now), "2 of 3 signed in")
+        XCTAssertEqual(MachinesAndModels.summary(half, now: Self.now), "2 of 3 signed in")
     }
 
     // MARK: - What an engine's page installs
@@ -249,22 +249,22 @@ final class InfrastructureTests: XCTestCase {
     /// under way, for one installed, or for an Antigravity the runner can't run.
     func testAnEnginesPageInstallsWhatTheMachineLacks() throws {
         let mac = try macStudio()
-        XCTAssertTrue(Infrastructure.installable(mac, .kimi))
-        XCTAssertFalse(Infrastructure.installable(mac, .claude))
-        XCTAssertTrue(Infrastructure.installable(mac, .antigravity), "not reported, and the runner says nothing against it")
+        XCTAssertTrue(MachinesAndModels.installable(mac, .kimi))
+        XCTAssertFalse(MachinesAndModels.installable(mac, .claude))
+        XCTAssertTrue(MachinesAndModels.installable(mac, .antigravity), "not reported, and the runner says nothing against it")
 
         let installing = try runner(#"{"id":"r","name":"r","online":true,"engines":[],"install":{"status":"installing","engine":"kimi"}}"#)
-        XCTAssertEqual(Infrastructure.rowKind(Infrastructure.engineHealth(installing, .kimi), install: installing.install, engine: .kimi),
+        XCTAssertEqual(MachinesAndModels.rowKind(MachinesAndModels.engineHealth(installing, .kimi), install: installing.install, engine: .kimi),
                        .installing)
-        XCTAssertFalse(Infrastructure.installable(installing, .kimi))
+        XCTAssertFalse(MachinesAndModels.installable(installing, .kimi))
         let failed = try runner(#"{"id":"r","name":"r","online":true,"engines":[],"install":{"status":"failed","engine":"kimi"}}"#)
-        XCTAssertEqual(Infrastructure.rowKind(Infrastructure.engineHealth(failed, .kimi), install: failed.install, engine: .kimi),
+        XCTAssertEqual(MachinesAndModels.rowKind(MachinesAndModels.engineHealth(failed, .kimi), install: failed.install, engine: .kimi),
                        .installFailed)
-        XCTAssertTrue(Infrastructure.installable(failed, .kimi))
+        XCTAssertTrue(MachinesAndModels.installable(failed, .kimi))
         let unsupported = try runner(#"""
         {"id":"r","name":"r","online":true,"antigravity":{"supported":false,"envKeyAvailable":false}}
         """#)
-        XCTAssertFalse(Infrastructure.installable(unsupported, .antigravity))
+        XCTAssertFalse(MachinesAndModels.installable(unsupported, .antigravity))
     }
 
     /// OpenCode signs in nowhere here, so its page's one press is its install (web's OpenCode row): on a
@@ -274,28 +274,28 @@ final class InfrastructureTests: XCTestCase {
         let missing = try runner(#"""
         {"id":"r","name":"r","online":true,"engines":[{"engine":"opencode","installed":false,"auth":"unknown"}]}
         """#)
-        XCTAssertTrue(Infrastructure.installsOpenCode(missing))
+        XCTAssertTrue(MachinesAndModels.installsOpenCode(missing))
         let installed = try runner(#"""
         {"id":"r","name":"r","online":true,"engines":[{"engine":"opencode","installed":true,"auth":"unknown"}]}
         """#)
-        XCTAssertFalse(Infrastructure.installsOpenCode(installed))
+        XCTAssertFalse(MachinesAndModels.installsOpenCode(installed))
         let silent = try runner(#"{"id":"r","name":"r","online":true,"engines":[{"engine":"claude","installed":true,"auth":"yes"}]}"#)
-        XCTAssertFalse(Infrastructure.installsOpenCode(silent))
+        XCTAssertFalse(MachinesAndModels.installsOpenCode(silent))
 
         let installing = try runner(#"""
         {"id":"r","name":"r","online":true,"engines":[{"engine":"opencode","installed":false,"auth":"unknown"}],
          "install":{"status":"installing","engine":"opencode"}}
         """#)
-        XCTAssertEqual(Infrastructure.rowKind(installing.engines?.first, install: installing.install, slug: "opencode"),
+        XCTAssertEqual(MachinesAndModels.rowKind(installing.engines?.first, install: installing.install, slug: "opencode"),
                        .installing)
-        XCTAssertFalse(Infrastructure.installsOpenCode(installing))
+        XCTAssertFalse(MachinesAndModels.installsOpenCode(installing))
         let failed = try runner(#"""
         {"id":"r","name":"r","online":true,"engines":[{"engine":"opencode","installed":false,"auth":"unknown"}],
          "install":{"status":"failed","engine":"opencode"}}
         """#)
-        XCTAssertEqual(Infrastructure.rowKind(failed.engines?.first, install: failed.install, slug: "opencode"),
+        XCTAssertEqual(MachinesAndModels.rowKind(failed.engines?.first, install: failed.install, slug: "opencode"),
                        .installFailed)
-        XCTAssertTrue(Infrastructure.installsOpenCode(failed))
+        XCTAssertTrue(MachinesAndModels.installsOpenCode(failed))
     }
 
     /// A machine's row for an engine it lacks opens that engine's page where the page installs it — Install,
@@ -303,24 +303,24 @@ final class InfrastructureTests: XCTestCase {
     /// runner can't run, OpenCode on a runner that never mentions it, or a DeepSeek Harness that is there.
     func testAMissingEnginesRowOpensThePageThatInstallsIt() throws {
         let mac = try macStudio()
-        XCTAssertTrue(Infrastructure.installsFromPage(mac, engine: "kimi"))
-        XCTAssertFalse(Infrastructure.installsFromPage(mac, engine: "claude"))
-        XCTAssertFalse(Infrastructure.installsFromPage(mac, engine: "opencode"), "a runner that never mentions it")
+        XCTAssertTrue(MachinesAndModels.installsFromPage(mac, engine: "kimi"))
+        XCTAssertFalse(MachinesAndModels.installsFromPage(mac, engine: "claude"))
+        XCTAssertFalse(MachinesAndModels.installsFromPage(mac, engine: "opencode"), "a runner that never mentions it")
         let installing = try runner(#"{"id":"r","name":"r","online":true,"engines":[],"install":{"status":"installing","engine":"kimi"}}"#)
-        XCTAssertTrue(Infrastructure.installsFromPage(installing, engine: "kimi"), "its page says how the install is going")
+        XCTAssertTrue(MachinesAndModels.installsFromPage(installing, engine: "kimi"), "its page says how the install is going")
         let unsupported = try runner(#"""
         {"id":"r","name":"r","online":true,"antigravity":{"supported":false,"envKeyAvailable":false}}
         """#)
-        XCTAssertFalse(Infrastructure.installsFromPage(unsupported, engine: "antigravity"))
+        XCTAssertFalse(MachinesAndModels.installsFromPage(unsupported, engine: "antigravity"))
         let openCode = try runner(#"""
         {"id":"r","name":"r","online":true,"engines":[{"engine":"opencode","installed":false,"auth":"unknown"}]}
         """#)
-        XCTAssertTrue(Infrastructure.installsFromPage(openCode, engine: "opencode"))
+        XCTAssertTrue(MachinesAndModels.installsFromPage(openCode, engine: "opencode"))
         let harness = { (installed: Bool) in try self.runner(#"""
             {"id":"r","name":"r","online":true,"capabilities":["provider:dsh"],
              "engines":[{"engine":"dsh","installed":\#(installed),"auth":"unknown"}]}
             """#) }
-        XCTAssertTrue(Infrastructure.installsFromPage(try harness(false), engine: "dsh"))
-        XCTAssertFalse(Infrastructure.installsFromPage(try harness(true), engine: "dsh"))
+        XCTAssertTrue(MachinesAndModels.installsFromPage(try harness(false), engine: "dsh"))
+        XCTAssertFalse(MachinesAndModels.installsFromPage(try harness(true), engine: "dsh"))
     }
 }

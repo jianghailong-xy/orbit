@@ -407,12 +407,12 @@ private struct CompactSections: View {
             // and the line a rewrite floats (docs/wiki-chat-design.md §9).
             .wikiChatHost()
 
-        // RUNNERS — the Infrastructure page → a machine's record → an engine's or its name's page, a
+        // RUNNERS — the Machines & models page → a machine's record → an engine's or its name's page, a
         // pool's page, and a DeepSeek key's. Same single stack as Agents: the rows carry their own destination and push it, so a
         // deep link (`.runner(id)`) and a row tap are one navigation.
         // The section isn't in the drawer rail, so it is only ever entered by that deep link or an
         // engine's way to its fix (`AppModel.openRunnerEngine`) — neither of which is a `List`
-        // selection in this shell. Settings › Infrastructure is the same page on Settings' own stack.
+        // selection in this shell. Settings › Machines & models is the same page on Settings' own stack.
         case .runners:
             NavigationStack(path: $model.nav.path) {
                 // A new account with no machine lands here: the welcome card (docs/mocks/new-user-onboarding).
@@ -745,7 +745,7 @@ struct NavigationDrawer: View {
             List {
                 // The work leads the rail — projects and tasks — ABOVE the Workspaces and set apart
                 // from them by a rule; the open projects themselves close it, where the task lists
-                // and Recents used to be. Infrastructure lives under Settings, Settings is the action bar's
+                // and Recents used to be. Machines & models lives under Settings, Settings is the action bar's
                 // gear below, Admin sits inside Settings, and Following has no row (see its section).
                 ForEach(AppSection.workSections) { section in
                     if section == .projects {

@@ -298,7 +298,7 @@ final class ConsoleModel {
         if let key = keys?.first(where: { $0.slug == sessionProvider }), let id = key.providerID {
             return api.baseURL.appendingPathComponent("providers/\(id)")
         }
-        let page = api.baseURL.appendingPathComponent("infrastructure")
+        let page = api.baseURL.appendingPathComponent("machines-and-models")
         var keysSection = URLComponents(url: page, resolvingAgainstBaseURL: false)
         keysSection?.fragment = "keys"
         return keysSection?.url ?? page

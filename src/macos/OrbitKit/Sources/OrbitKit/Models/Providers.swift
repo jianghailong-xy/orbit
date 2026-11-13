@@ -65,7 +65,7 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
     public var baseUrl: String? = nil
     public var hasApiKey: Bool? = nil
     /// Whether the key is switched on. Only GET /providers/mine says — the account's own keys, disabled
-    /// ones included (the Infrastructure page's API keys); the catalogue lists enabled keys alone, and
+    /// ones included (the Machines & models page's API keys); the catalogue lists enabled keys alone, and
     /// nil reads as on.
     public var enabled: Bool? = nil
     /// A Cursor key only: what Cursor CLI on one of the owner's runners last answered when asked with the
