@@ -338,6 +338,21 @@ ORBIT_MACOS_SIGNING_PASSWORD_FILE=/root/orbit-signing/developer-id.password
 
 Both files stay on the host, readable only by the deploying account, outside the checkout.
 
+Two more files pin the PostgreSQL image and put a TCP proxy in front of the database, for a host that runs its
+database as a standby first or moves it later ([PostgreSQL standby and database proxy](postgres-standby.md)):
+`deploy/postgres-pinned.yml` pins `postgres` and `pgbackup` to PostgreSQL 16.14 by digest, and
+`deploy/db-proxy.yml` adds `db-proxy` and points the apiserver and wiki-worker at it.
+
+| Variable | Type | Required / default | Purpose | Secret? | Apply change |
+| --- | --- | --- | --- | --- | --- |
+| `ORBIT_REGISTRY` | `string` (host[:port]) | Optional; `docker.io` | Where those two files pull their images from, each by a fixed digest, so the registry cannot change what runs. Production's is the WireGuard-only `10.66.0.1:5000`. | No | The next `up` recreates `postgres`, `pgbackup` and `db-proxy`: a database restart |
+| `ORBIT_DB_PROXY_TARGET` | `string` (host:port) | Optional with `deploy/db-proxy.yml`; `postgres:5432` | The database `db-proxy` forwards to. A name is resolved through Docker's DNS and followed when its container is recreated. To move it without recreating the proxy, use the proxy's runtime API ([switching the target](postgres-standby.md#switching-the-target)). | No | `docker compose up -d --no-deps db-proxy`: every database connection ends once and reconnects; the apiserver is not restarted |
+
+```dotenv
+COMPOSE_FILE=docker-compose.yml:deploy/postgres-pinned.yml:deploy/db-proxy.yml
+ORBIT_REGISTRY=10.66.0.1:5000
+```
+
 ## Runner machine only
 
 Do not put runtime credentials in the server's `.env`. Run registration and authentication as the OS

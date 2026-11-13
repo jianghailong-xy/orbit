@@ -1,0 +1,15 @@
+# Pins postgres and pgbackup to PostgreSQL 16.14 by digest. The tag docker-compose.yml names,
+# postgres:16-alpine, has moved on to 16.16, so a host that pulls it, or has never pulled it, would
+# start another minor version on the same data. With ORBIT_REGISTRY set, the image comes from that
+# registry (production's is 10.66.0.1:5000, which holds this index by the same digest); unset, from
+# Docker Hub. A deployment opts in from its .env, which every Compose command in the directory reads:
+#
+#   COMPOSE_FILE=docker-compose.yml:deploy/postgres-pinned.yml
+#
+# The digest is the image index of postgres:16.14-alpine that production's orbit-postgres runs. The reference
+# has no tag, so any other digest-only pin of this image renders the same string, and Compose sees no change.
+services:
+  postgres:
+    image: "${ORBIT_REGISTRY:-docker.io}/library/postgres@sha256:d845e7f0ac8517b9d9868b6d20379f9688ba3676595e50ca7c0b664964b2a760"
+  pgbackup:
+    image: "${ORBIT_REGISTRY:-docker.io}/library/postgres@sha256:d845e7f0ac8517b9d9868b6d20379f9688ba3676595e50ca7c0b664964b2a760"
