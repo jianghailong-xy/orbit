@@ -12739,6 +12739,42 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   white-space: nowrap;
 }
+/* A provider write's fields: caption and value side by side, so a short write reads as one line. */
+.provider-write-fields {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 18px;
+  margin: 0 0 12px;
+  font-size: 12.5px;
+}
+.provider-write-fields > div {
+  display: contents;
+}
+.provider-write-fields dt {
+  color: var(--text-2);
+}
+.provider-write-fields dd {
+  margin: 0;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+.provider-write-models li {
+  padding: 4px 0;
+}
+.provider-write-model {
+  color: var(--text-2);
+  text-align: right;
+}
+.provider-write-default {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 5px;
+  border: 1px solid var(--brand-border);
+  background: var(--brand-tint);
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 600;
+}
 .dag-approval-foot {
   margin: 0;
   color: var(--text-3);
@@ -15844,41 +15880,6 @@ button.chat-jump-start:hover {
   background: var(--success-solid);
   box-shadow: 0 0 0 3px var(--success-bg);
 }
-.share-download {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg-sunken);
-  color: var(--text-1);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s, border-color 0.15s;
-}
-.share-download:hover:not(:disabled) {
-  background: var(--bg-hover-strong);
-}
-.share-download:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.share-download-icon {
-  flex: none;
-}
-.share-download-spin {
-  flex: none;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  border: 2px solid var(--border);
-  border-top-color: var(--text-1);
-  animation: runner-spin 0.7s linear infinite;
-}
 .share-badge {
   padding: 1px 8px;
   border-radius: 999px;
@@ -15905,9 +15906,8 @@ button.chat-jump-start:hover {
   font-size: 12px;
   color: var(--text-3);
 }
-/* Phone: the header runs out of room, so tighten it and collapse the download
-   button to a square icon — the title keeps the space instead of the action. Read-only
-   goes too: the footer says it. */
+/* Phone: the header runs out of room, so tighten it — the title keeps the space.
+   Read-only goes: the footer says it. */
 @media (max-width: 600px) {
   .share-header {
     gap: 10px;
@@ -15917,15 +15917,6 @@ button.chat-jump-start:hover {
     gap: 8px;
   }
   .share-right .share-badge {
-    display: none;
-  }
-  .share-download {
-    width: 40px;
-    height: 40px;
-    padding: 0;
-    justify-content: center;
-  }
-  .share-download-label {
     display: none;
   }
 }
