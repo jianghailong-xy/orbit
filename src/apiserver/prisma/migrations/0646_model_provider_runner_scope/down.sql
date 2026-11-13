@@ -3,11 +3,18 @@
 -- one runner only, so it would read as an ordinary key with an empty secret. Delete those rows first, and only
 -- where they are no longer wanted. Every other row comes back exactly as it was before 0646.
 
+-- The row check is dynamic SQL: PL/pgSQL parses a static query naming "scope" even when the column test
+-- before it is false, so a second run (the columns already gone) would fail instead of doing nothing.
 DO $$
+DECLARE
+  stranded boolean := false;
 BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'model_provider' AND column_name = 'scope')
-     AND EXISTS (SELECT 1 FROM "model_provider" WHERE "scope" <> 'account' OR "auth_mode" <> 'bearer') THEN
+              WHERE table_name = 'model_provider' AND column_name = 'scope') THEN
+    EXECUTE 'SELECT EXISTS (SELECT 1 FROM "model_provider" WHERE "scope" <> ''account'' OR "auth_mode" <> ''bearer'')'
+      INTO stranded;
+  END IF;
+  IF stranded THEN
     RAISE EXCEPTION '0646 down: runner-scoped model_provider rows exist; delete them before rolling back';
   END IF;
 END $$;

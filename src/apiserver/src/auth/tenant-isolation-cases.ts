@@ -1011,19 +1011,12 @@ const taskFilterCases = (route: string, filters: readonly string[]) =>
 
 export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCase>> = {
   // A local Ollama is bound to one of the caller's own runners (docs/ollama-local-provider-contract.md §3.1):
-  // another account's runner is answered as a runner that does not exist, and nothing is written. A shared
-  // (admin) provider is never bound to a runner at all.
+  // another account's runner is answered as a runner that does not exist, and nothing is written.
   'POST /providers/mine body runnerId': {
     request: (of) => ({ params: {}, body: { label: 'census ollama', presetSlug: 'ollama', baseUrl: 'http://127.0.0.1:11434', runnerId: of.runnerId } }),
   },
   'PATCH /providers/mine/:id body runnerId': {
     request: (of, mine) => ({ params: { id: mine.providerId }, body: { runnerId: of.runnerId } }),
-  },
-  'POST /admin/providers body runnerId': {
-    request: (of) => ({ params: {}, body: { label: 'census ollama', presetSlug: 'ollama', baseUrl: 'http://127.0.0.1:11434', runnerId: of.runnerId } }),
-  },
-  'PATCH /admin/providers/:id body runnerId': {
-    request: (of, mine) => ({ params: { id: mine.adminProviderId }, body: { runnerId: of.runnerId } }),
   },
   'POST /access-tokens body workspaceIds[]': {
     request: (of) => ({ params: {}, body: { name: 'census token', scopes: ['tasks:read'], workspaceIds: [of.workspaceId] } }),
@@ -1378,6 +1371,10 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
 
 /** Ids a request carries that name nothing of an account's to reach, each with why and where that is so. */
 export const TENANT_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
+  'POST /admin/providers body runnerId':
+    'a shared (admin) provider is never runner-scoped: createScope refuses runner scope on a row with no owner (PROVIDER_RUNNER_SHARED), or a runnerId on an account-scoped one (PROVIDER_RUNNER_NOT_SCOPED), before any runner is read, so no id is looked up at all (providers/local-provider.ts createScope); local-provider.spec.ts "createScope" sends both',
+  'PATCH /admin/providers/:id body runnerId':
+    'a shared (admin) provider is account-scoped, and updateScope refuses a runnerId on an account-scoped row (PROVIDER_RUNNER_NOT_SCOPED) before any runner is read (providers/local-provider.ts updateScope); local-provider.spec.ts "updateScope" sends one',
   'POST /workspaces/:id/main-checkout/actions body targetSessionId':
     'read by (id, the caller, not deleted) and required to be a session of this workspace before anything is written, so another account\'s is the 404 of one that does not exist (workspaces/main-checkout.service.ts:553); main-checkout.pg.spec.ts "move: the target must be…" sends one that does not exist',
   'POST /workspaces/:id/main-checkout/actions body initiatedFromSessionId':
