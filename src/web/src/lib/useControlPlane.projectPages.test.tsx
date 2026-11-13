@@ -10,8 +10,11 @@ import { ControlPlaneProvider } from './useControlPlane';
  * `tasksByStatus` counts) — are read only when the stream asks for them: none of them polls. The
  * events that move them name a task (`task.changed`) or a member session (`session.*` with a
  * `projectMembership`), so `refetchProjectPages` is the only path that can reach them; a read that
- * is missing from its whitelist stays stale until the page is reloaded (the 2026-11-13 report: a
- * task started by the Automatic dispatcher stayed `ready` on screen).
+ * declares itself derived from neither entity stays stale until the page is reloaded (the
+ * 2026-11-13 report: a task started by the Automatic dispatcher stayed `ready` on screen).
+ *
+ * What the path selects is each query's own `meta.entities` declaration — not the shape of its key.
+ * Every query below is synthetic, so each carries the declaration its real counterpart does.
  */
 
 vi.mock('../api', () => ({ getToken: () => 'token' }));
@@ -59,8 +62,9 @@ async function mount(): Promise<QueryClient> {
   return client;
 }
 
-/** Puts a read on screen, cached already, so it asks for nothing until the stream nudges it. */
-function onScreen(client: QueryClient, key: QueryKey): Read {
+/** Puts a read on screen, cached already, so it asks for nothing until the stream nudges it. The
+ *  `entities` are the query's own declaration, as its real counterpart makes it. */
+function onScreen(client: QueryClient, key: QueryKey, entities: string[]): Read {
   const pending: Array<() => void> = [];
   const read: Read = {
     asked: 0,
@@ -72,6 +76,7 @@ function onScreen(client: QueryClient, key: QueryKey): Read {
   client.setQueryData(key, []);
   const observer = new QueryObserver(client, {
     queryKey: key,
+    meta: { entities },
     queryFn: () => {
       read.asked += 1;
       return new Promise<never[]>((resolve) => pending.push(() => resolve([])));
@@ -131,17 +136,18 @@ afterEach(async () => {
 describe('the stream re-reads the project page on a task event', () => {
   it('reads the task tree, a task\'s children and the project detail once each, and nothing else', async () => {
     const client = await mount();
-    const tree = onScreen(client, ['project', 'p1', 'tasks', 'root']);
-    const children = onScreen(client, ['project', 'p1', 'tasks', 'children', 't1']);
-    const detail = onScreen(client, ['project', 'p1']);
-    // A project read outside the whitelist, on screen in the same fixture: the three reads below
-    // are what proves the stream ran at all, so this one's silence means something.
-    const offList = onScreen(client, ['project', 'p1', 'not-on-the-list']);
+    const tree = onScreen(client, ['project', 'p1', 'tasks', 'root'], ['task', 'session']);
+    const children = onScreen(client, ['project', 'p1', 'tasks', 'children', 't1'], ['task', 'session']);
+    const detail = onScreen(client, ['project', 'p1'], ['project', 'task']);
+    // A project read that declares no `task`, on screen in the same fixture: the three reads above
+    // are what proves the stream ran, so this one's silence means the selection is the declaration
+    // and not the key.
+    const offList = onScreen(client, ['project', 'p1', 'not-on-the-list'], ['project']);
 
     await publish('task.changed', { taskIds: ['t1'] });
     await advance(5_000);
 
-    expect(offList.asked, 'a project read outside the whitelist was re-read').toBe(0);
+    expect(offList.asked, 'a project read that declares no task was re-read').toBe(0);
     expect([tree.asked, children.asked, detail.asked], 'the project page was not read after the task event').toEqual([1, 1, 1]);
 
     for (const read of [tree, children, detail]) await answer(read);
@@ -152,8 +158,8 @@ describe('the stream re-reads the project page on a task event', () => {
 
   it('reads one project\'s task tree for a member session event, and no other project\'s', async () => {
     const client = await mount();
-    const p1Tree = onScreen(client, ['project', 'p1', 'tasks', 'root']);
-    const p2Tree = onScreen(client, ['project', 'p2', 'tasks', 'root']);
+    const p1Tree = onScreen(client, ['project', 'p1', 'tasks', 'root'], ['task', 'session']);
+    const p2Tree = onScreen(client, ['project', 'p2', 'tasks', 'root'], ['task', 'session']);
 
     await publish('session.updated', { id: 'S1', projectMembership: { projectId: 'p1', role: 'TASK' } });
     await advance(5_000);

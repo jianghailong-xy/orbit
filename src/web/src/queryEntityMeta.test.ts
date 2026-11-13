@@ -29,7 +29,7 @@ import { describe, expect, it } from 'vitest';
  *   Comments and string literals cannot fake a site, because this reads the AST.
  *
  * ENTITY NAMES
- *   The names are the entities of the control-plane events `groupsFor` already routes on:
+ *   The names are the entities of the control-plane events `entitiesFor` routes on:
  *   `task.*` → task (incl. task.list.changed), `session.*` / `approval.*` / `background.task` /
  *   sessions.list_changed → session, `agent.changed` / `workspace.*` → workspace, `tag.*` → tag,
  *   `folder.*` → folder, `provider.*` → provider, `project.*` → project, `watch.*` → watch,
@@ -48,7 +48,7 @@ import { describe, expect, it } from 'vitest';
 
 const WEB_SRC = fileURLToPath(new URL('./', import.meta.url));
 
-/** The control-plane entities, as `groupsFor` (lib/useControlPlane.tsx) groups its events. */
+/** The control-plane entities, as `entitiesFor` (lib/useControlPlane.tsx) names its events. */
 const ENTITIES = new Set(['task', 'session', 'project', 'workspace', 'tag', 'folder', 'provider', 'watch', 'wiki']);
 
 /**

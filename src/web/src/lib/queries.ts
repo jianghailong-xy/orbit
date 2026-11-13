@@ -1231,11 +1231,11 @@ export const taskRowQuery = (taskId: string) =>
  *
  * ONE PREFIX FOR THE WHOLE FEATURE, because `wiki.changed` is the only thing that announces a wiki
  * write and it names nothing but the space that moved (`contracts/wiki.contract.json`
- * `realtime.redaction`): the control plane invalidates `['wiki']` and this page re-reads whatever it
- * is showing, which is what decides what it may see. A key outside the prefix is a view the event
- * cannot reach, and one under a foreign root is a re-read of something the event said nothing about
- * — the default `groupsFor` branch is `['sessions']`, so an unmapped wiki key would refresh the
- * session list on every wiki write.
+ * `realtime.redaction`): every read here declares `meta.entities: ['wiki']`, which is what the
+ * control plane selects on, so the page re-reads whatever it is showing — what decides what it may
+ * see. One shared root keeps that declaration a single fact, and keeps a wiki write out of every
+ * other list: a query under a foreign root would have to repeat the declaration, and would share
+ * that list's read budget.
  *
  * The space is addressed by its SLUG in the URL and by its id on the wire, so the two helpers below
  * are the only places that spelling changes.

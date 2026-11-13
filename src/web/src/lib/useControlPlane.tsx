@@ -70,17 +70,24 @@ export function useRefreshSessionLists(): () => void {
 const isOpenList = (queryKey: readonly unknown[]): boolean =>
   queryKey[0] === 'sessions' && queryKey.length === 6 && (queryKey[3] === 'open' || queryKey[3] === null);
 
-/** A read of a project page: its panorama, its task tree (root and children), or the project itself
- *  (the detail, whose `tasksByStatus` counts ride the same two-segment key). What useControlPlane
- *  re-reads on the events that move it. */
-const isProjectPageRead = (queryKey: readonly unknown[], projectId: string): boolean =>
-  queryKey[0] === 'project' &&
-  (!projectId || queryKey[1] === projectId) &&
-  (queryKey.length === 2 ||
-    queryKey[2] === 'panorama' ||
-    queryKey[2] === 'tasks' ||
-    queryKey[2] === 'dependency-graph' ||
-    queryKey[2] === 'coordinator');
+/** Every entity a control-plane event can move, as the query declarations name them. Used by the
+ *  reconnect's sweep, which has to reach all of them at once. */
+const ENTITIES = ['task', 'session', 'project', 'workspace', 'tag', 'folder', 'provider', 'watch', 'wiki'] as const;
+
+/**
+ * Whether a cached query says, in `meta.entities`, that it derives from one of `entities`. Every
+ * query definition in the tree makes this declaration (src/queryEntityMeta.test.ts), and it is the
+ * only thing the stream selects on: a view is refreshed by the events naming the entities it
+ * depends on, without anyone having to add it to a list here.
+ *
+ * The predicate is a linear scan of the query cache, where the key prefixes it replaces were
+ * indexed lookups. The cache holds what a tab has mounted — tens of queries, one page's worth — so
+ * the scan costs less than the hand-kept whitelist it removes. That trade is deliberate.
+ */
+const derivedFrom = (query: Query, entities: readonly string[]): boolean => {
+  const declared = (query.meta?.entities as string[] | undefined) ?? [];
+  return declared.some((entity) => entities.includes(entity));
+};
 
 /** The ids a `task.changed` names: `taskIds`, and `taskId` from an older server. */
 const taskIdsOf = (data: { taskId?: unknown; taskIds?: unknown } | null | undefined): string[] => [
@@ -115,8 +122,9 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     let projectsTimer: ReturnType<typeof setTimeout> | undefined;
     let projectPagesTimer: ReturnType<typeof setTimeout> | undefined;
     let projectPagesReadAt = -Infinity;
-    // The projects whose page reads are due ('' for every project).
-    const projectPagesDue = new Set<string>();
+    // The project pages whose reads are due ('' for every project), with the entities the events
+    // that queued them said moved.
+    const projectPagesDue = new Map<string, Set<string>>();
     // Whether this connection has delivered a `sessions.list_changed`. The server sends the first
     // within a second of a connection that declared the hint (docs/realtime-control-plane-stream.md
     // §4.8); from then on that hint is what reads the Open lists, and no other event reads them. Until
@@ -193,42 +201,45 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    // The session lists an event moves. Once the stream carries the Open list's hint, the Open lists
-    // and the tallies drawn from them are left to it (refetchOpenList): every write to what an Open
-    // row draws moves the version the hint carries, so the event that accompanies it would only read
-    // them a second time. Completed and Trash have no hint, and are still read on the event.
-    const refetchSessions = (): void => {
-      if (hinted) {
-        refresh({ predicate: ({ queryKey }) => queryKey[0] === 'sessions' && !isOpenList(queryKey) });
-        return;
-      }
-      refresh({ queryKey: ['sessions'] });
-      // The sidebar's per-workspace tallies are derived from the same rows, but keyed apart so the
-      // list's optimistic edits can't touch them — so they need their own invalidation here.
-      refresh({ queryKey: ['session-counts'] });
-    };
     // `sessions.list_changed`: the Open list may read differently now. Each Open list on screen is
     // read once, as a delta against its own copy (lib/openListDelta), which the server answers empty
-    // without building anything when nothing it shows moved. Before this connection's first hint the
-    // session group reads the Open lists (refetchSessions), so this reads nothing then: a write's
-    // read, or a reconnect's, would otherwise read each of them twice.
+    // without building anything when nothing it shows moved. Before this connection's first hint
+    // the session events read the Open lists, so this reads nothing then: a write's read, or a
+    // reconnect's, would otherwise read each of them twice.
     const refetchOpenList = (): void => {
       if (!hinted) return;
       refresh({ predicate: ({ queryKey }) => isOpenList(queryKey) });
       refresh({ queryKey: ['session-counts'] });
     };
-    // The project pages on screen: the events below name the project, or ('') every project. One
-    // read per PROJECT_PAGE_MIN_INTERVAL_MS at most, and never sooner than the coalescing window.
-    const refetchProjectPages = (projectId: string): void => {
-      projectPagesDue.add(projectId);
+    // The project pages on screen: the events below name the project, or ('') every project, and
+    // the entities they say moved. Which of a page's reads that dirties is their own declaration —
+    // the task tree and its children say `task`, the rows whose work lane is a session also say
+    // `session`, the project document says `project` — so a page read added under
+    // `['project', id, …]` is reached without an entry here. A hand-kept list of key segments was
+    // what missed the task tree until 2026-11-13.
+    //
+    // One read per PROJECT_PAGE_MIN_INTERVAL_MS at most, and never sooner than the coalescing
+    // window: these are the expensive reads, and the floor is the list budget's
+    // (docs/list-freshness-design.md §4).
+    const refetchProjectPages = (projectId: string, entities: readonly string[]): void => {
+      let due = projectPagesDue.get(projectId);
+      if (!due) projectPagesDue.set(projectId, (due = new Set()));
+      for (const entity of entities) due.add(entity);
       if (projectPagesTimer) return;
       const wait = Math.max(REFRESH_DEBOUNCE_MS, PROJECT_PAGE_MIN_INTERVAL_MS - (Date.now() - projectPagesReadAt));
       projectPagesTimer = setTimeout(() => {
         projectPagesTimer = undefined;
         projectPagesReadAt = Date.now();
-        const due = [...projectPagesDue];
+        const due = [...projectPagesDue].map(([id, entities]) => [id, [...entities]] as const);
         projectPagesDue.clear();
-        refresh({ predicate: ({ queryKey }) => due.some((id) => isProjectPageRead(queryKey, id)) });
+        refresh({
+          predicate: (query) =>
+            query.queryKey[0] === 'project' &&
+            // A held proposal's queue has its own event and its own narrowed path
+            // (refetchCriteriaDecisions); a task event says nothing about a proposal.
+            query.queryKey[2] !== 'pending-criteria-decisions' &&
+            due.some(([id, entities]) => (!id || query.queryKey[1] === id) && derivedFrom(query, entities)),
+        });
       }, wait);
     };
     // The lists index, rate-limited to one refetch per LISTS_MIN_INTERVAL_MS. Leading —
@@ -245,36 +256,56 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         refresh({ queryKey: ['task-lists'] });
       }, wait);
     };
-    // The task list/board queries: every paged view — all tasks, one list, the unlisted bucket —
-    // plus the No-list count (['tasks']), the lists index (['task-lists']), and an open detail
-    // (['task', id]). Refetched only on a `task.*` event (or on reconnect), so an unrelated
-    // session event doesn't needlessly refetch them. This is what makes MCP-created/updated tasks
-    // appear without a manual page refresh; before, tasks had no push path and rode a 5–15s poll only.
-    const refetchTasks = (): void => {
-      refresh({ queryKey: ['tasks'] });
-      refetchTaskLists();
-      refresh({ queryKey: ['task'] });
+    /**
+     * A read the stream leaves to a budget of its own. These are the list budget's cost exclusions
+     * (docs/list-freshness-design.md §4), not a whitelist of what an event may refresh: a read not
+     * named here is selected by its `meta.entities` declaration alone.
+     */
+    const hasOwnBudget = (query: Query): boolean => {
+      const root = query.queryKey[0];
+      // The project page's reads: refetchProjectPages, floored at PROJECT_PAGE_MIN_INTERVAL_MS.
+      if (root === 'project') return true;
+      // One project's member list: one project at a time, scheduleProjectSessions.
+      if (root === 'project-sessions') return true;
+      // The rail's summaries and the Projects page's entries: refetchProjects, or the page's own poll.
+      if (root === 'projects') return true;
+      // The watch cards: they follow their own targets (watchFollows), not the entities they draw.
+      if (root === 'watches') return true;
+      // The lists index: its own longer floor, refetchTaskLists.
+      if (root === 'task-lists') return true;
+      // The sidebar's tallies: once the hint drives the Open lists, it reads them too
+      // (refetchOpenList), so an event's path must not ask for them a second time.
+      if (root === 'session-counts' && hinted) return true;
+      // An evidence revision: an answered revision never changes.
+      if (root === 'task-evidence') return true;
+      // A search is a snapshot of a moving list, asked when its query changes and held for a
+      // minute (sessionSearchQuery / sessionEventSearchQuery in queries.ts); re-running a
+      // whole-history search on every session event is not what the event is for.
+      if (root === 'session-search' || root === 'session-event-search') return true;
+      // One session's own reads: the detail is refreshed by id (refetchSessionDetail); the diff and
+      // the worktree file are the console's, on a turn end. A queue keyed by a session is the
+      // exception when it derives from tasks — the evidence-decision read.
+      if (root === 'session' && !derivedFrom(query, ['task'])) return true;
+      // The Open lists once the hint drives them (refetchOpenList).
+      if (hinted && isOpenList(query.queryKey)) return true;
+      return false;
     };
-    // The workspace list (sidebar, pickers, workspace page). Like the task queries it only refetches on an
-    // `workspace.*` event or on reconnect — it has no interval poll at all, so before this a workspace
-    // created/updated through MCP (workspace_create/workspace_update) only appeared after a page reload.
-    const refetchWorkspaces = (): void => {
-      refresh({ queryKey: ['workspaces'] });
+    /**
+     * Marks stale every cached read that declares one of the entities an event named. A query's own
+     * `meta.entities` is the whole map from events to views: a view added anywhere in the tree is
+     * reached by the first event naming an entity it declares, with no entry to keep here. A pair
+     * is not repeated either — a workspace rename or a tag recolor moves the rows of every session
+     * list, and those lists declare `workspace` / `tag` themselves.
+     */
+    const refetchEntities = (entities: ReadonlySet<string>): void => {
+      if (entities.size === 0) return;
+      const named = [...entities];
+      refresh({ predicate: (query) => derivedFrom(query, named) && !hasOwnBudget(query) });
     };
-    // The owner's tag library and the deployment's provider catalog: both are edited elsewhere
-    // (tags on the native clients, providers in the admin area) and neither polls, so push is the
-    // only way another client's edit reaches this tab.
-    const refetchTags = (): void => {
-      refresh({ queryKey: ['session-tags'] });
-    };
-    const refetchProviders = (): void => {
-      refresh({ queryKey: ['providers'] });
-    };
-    // The owner's session folders, made, renamed or deleted on another client. Filing a session
-    // moves one list row and arrives as `session.updated` instead.
-    const refetchFolders = (): void => {
-      refresh({ queryKey: ['session-folders'] });
-    };
+    // The rail's project summaries. The session lists draw each row's project membership and
+    // declare `project`, so a project change reaches them through refetchEntities; the Projects
+    // page's filter entries are left out — they classify every task of every project and keep
+    // their own poll.
     const refetchProjects = (): void => {
       refresh({ queryKey: ['projects', 'sidebar'] });
     };
@@ -293,16 +324,10 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         refresh({ queryKey: ['project-sessions', projectId] });
       }, REFRESH_DEBOUNCE_MS));
     };
-    // The two reads a decision card is drawn from, which none of the list refetches above reach.
-    // Evidence being submitted or decided arrives as `task.changed`, and its read is keyed by the
-    // session DECIDING rather than by the task, so every session's copy is dirty. A held criteria
-    // proposal being filed or decided arrives as its own event naming the project; an event that
-    // names none dirties every project's copy.
-    const refetchPendingDecisions = (): void => {
-      refresh({
-        predicate: ({ queryKey }) => queryKey[0] === 'session' && queryKey[2] === 'pending-decisions',
-      });
-    };
+    // A held criteria proposal being filed or decided arrives as its own event naming the project;
+    // an event that names none dirties every project's copy. The evidence-decision queue needs no
+    // path of its own: it declares `task`, so a `task.changed` reaches it in refetchEntities, even
+    // though it is keyed by the session DECIDING rather than by the task.
     const refetchCriteriaDecisions = (projectId: string): void => {
       refresh({
         predicate: ({ queryKey }) =>
@@ -325,11 +350,11 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       // itself, and is far too expensive to re-run on every status change.
       refresh({ queryKey: ['session', id], exact: true });
     };
-    // The owner's watches, once per window. `['watches']` is the whole group — the four list reads
-    // and any single watch under `['watches', 'one', id]` (queries.ts) — so one invalidation reaches
-    // every card on screen. Which events ask for it is `watchFollows` below.
+    // The owner's watches, once per window. Every cached watch declares `watch` — the four list
+    // reads and any single watch under `['watches', 'one', id]` (queries.ts) — so one invalidation
+    // reaches every card on screen. Which events ask for it is `watchFollows` below.
     const refetchWatches = (): void => {
-      refresh({ queryKey: ['watches'] });
+      refresh({ predicate: (query) => derivedFrom(query, ['watch']) });
     };
     // Whether an event is about something a watch on hand follows. A watch's targets are read with
     // it, their standing drawn on its card (`targetStatus`, `targetTask`), so a session's, an
@@ -360,54 +385,41 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       }
       return false;
     };
-    // The owner's wiki: `['wiki']` is the whole group — the space list, a space's entries, one
-    // entry, and the Review queue all hang off it — so one invalidation reaches every wiki view on
-    // screen. Every write path (a recorded changeset, a decided one) says only "this space moved",
-    // so the group is what gets re-read; the event names no entry, op or count (contract
+    // The owner's wiki reads need no path of their own: every cached one — the space list, a
+    // space's entries, one entry, the Review queue — declares `wiki`, so refetchEntities reaches
+    // them. Every write path (a recorded changeset, a decided one) says only "this space moved", so
+    // the whole group is what gets re-read; the event names no entry, op or count (contract
     // `realtime.redaction`). It is an accelerant and nothing more (contract `realtime.correctness`),
     // which is why no wiki read is made to depend on it.
-    const refetchWiki = (): void => {
-      refresh({ queryKey: ['wiki'] });
-    };
-    const REFETCH: Record<string, () => void> = {
-      sessions: refetchSessions,
-      openList: refetchOpenList,
-      tasks: refetchTasks,
-      workspaces: refetchWorkspaces,
-      tags: refetchTags,
-      folders: refetchFolders,
-      projects: refetchProjects,
-      providers: refetchProviders,
-      decisions: refetchPendingDecisions,
-      watches: refetchWatches,
-      wiki: refetchWiki,
-    };
-    // Which cache groups an event dirties. An event is only ever a nudge to refetch (never a
-    // delta), so this is a plain type → group map, and a type it does not name reads nothing (R5):
-    // `notification`, or whatever a newer server sends that this client predates. Note the pairs: a
-    // workspace rename and a tag recolor both change what the SESSION list rows render, so they
-    // refresh that too — and a held criteria proposal does for the same reason, since its
-    // coordinator's row counts it in pendingApprovals. The watches are not here: see watchFollows.
-    const groupsFor = (type: string): string[] => {
-      if (type === 'sessions.list_changed') return ['openList'];
-      if (type === 'task.changed') return ['tasks', 'decisions'];
-      if (type.startsWith('task.')) return ['tasks']; // incl. task.list.changed
+    // The entities a control-plane event says moved. This is the whole of the event-type knowledge
+    // the stream needs: which cached reads that dirties is their own declaration, so a view added
+    // anywhere in the tree is reached by the first event naming an entity it declares, with no
+    // entry here. A pair is not repeated here: a workspace rename and a tag recolor move the rows of
+    // every session list, and those lists declare `workspace` / `tag`; the session tallies declare
+    // both. An event this does not name reads nothing (R5): `notification`, `runner.*`,
+    // `sessions.list_changed` (the Open list's hint is read through its own path), or whatever a
+    // newer server sends that this client predates.
+    const entitiesFor = (type: string): string[] => {
+      if (type === 'task.changed') return ['task'];
+      if (type.startsWith('task.')) return ['task']; // incl. task.list.changed
       // A workspace made or edited (an agent's workspace_create/workspace_update) arrives as
       // `agent.changed`, the server's older name for one (W7); `workspace.*` for a server that says so.
-      if (type === 'agent.changed' || type.startsWith('workspace.')) return ['workspaces', 'sessions'];
-      if (type.startsWith('tag.')) return ['tags', 'sessions'];
+      if (type === 'agent.changed' || type.startsWith('workspace.')) return ['workspace'];
+      if (type.startsWith('tag.')) return ['tag'];
       // A deleted folder's sessions are back in their workspace's list, so the rows move too.
-      if (type.startsWith('folder.')) return ['folders', 'sessions'];
-      if (type.startsWith('provider.')) return ['providers'];
-      if (type === 'project.changed') return ['projects', 'sessions'];
-      if (type === 'project.criteria_decisions.changed') return ['sessions'];
+      if (type.startsWith('folder.')) return ['folder'];
+      if (type.startsWith('provider.')) return ['provider'];
+      if (type === 'project.changed') return ['project'];
+      // A held criteria proposal filed or decided: what moved is the coordinator's row, which counts
+      // it in `pendingApprovals`, so the session lists are the reads it dirties.
+      if (type === 'project.criteria_decisions.changed') return ['session'];
       // The server naming a watch itself: it was made, edited, paused, resumed or stopped; it
       // matched, expired or ended unmatched; or one of its deliveries delivered or dead-lettered
       // (docs/watch-contract.md §8.1). These are the changes NO other event accompanies — a
       // NOTIFY_USER delivery writes no task or session row, and a deadline passing writes none
       // either — so before this event the list only found them on its 60s poll, which still runs
       // and is still what makes a dropped event a latency bug and nothing more.
-      if (type.startsWith('watch.')) return ['watches'];
+      if (type.startsWith('watch.')) return ['watch'];
       // The owner's wiki: one of its spaces moved — a changeset recorded something, the owner
       // decided ops in Review, or the space's own settings or bindings moved (contract
       // `realtime.publishedWhen`).
@@ -415,21 +427,31 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       // A session's state, its approvals, and a background job of its ending, which moves its row's
       // job mark and its workspace's tally.
       if (type.startsWith('session.') || type.startsWith('approval.') || type === 'background.task') {
-        return ['sessions'];
+        return ['session'];
       }
       return [];
     };
+    // What the stream has queued for this coalescing window: the entities the events named, and
+    // the reads that are reached by a path of their own rather than through an entity.
     const pending = new Set<string>();
+    const pendingFlags = new Set<'openList' | 'watches'>();
     const pendingSessions = new Set<string>();
     const pendingProjects = new Set<string>();
     const openWindow = (): void => {
       if (refreshTimer) return; // coalesce a burst into one refetch
       refreshTimer = setTimeout(() => {
         refreshTimer = undefined;
-        for (const g of pending) REFETCH[g]?.();
+        // One scan for the whole burst: a query several of the window's events reach (a session
+        // list, on a rename and the event that announces it) is marked once, not once per path.
+        refetchEntities(pending);
+        if (pending.has('task')) refetchTaskLists();
+        if (pending.has('project')) refetchProjects();
+        if (pending.has('watch') || pendingFlags.has('watches')) refetchWatches();
+        if (pendingFlags.has('openList')) refetchOpenList();
         for (const id of pendingSessions) refetchSessionDetail(id);
         for (const id of pendingProjects) refetchCriteriaDecisions(id);
         pending.clear();
+        pendingFlags.clear();
         pendingSessions.clear();
         pendingProjects.clear();
       }, REFRESH_DEBOUNCE_MS);
@@ -439,8 +461,12 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       sessionId: string,
       data: { id?: unknown; taskId?: unknown; taskIds?: unknown; resync?: unknown } | null | undefined,
     ): void => {
-      for (const g of groupsFor(type)) pending.add(g);
-      if (watchFollows(type, sessionId, data)) pending.add('watches');
+      // The Open list's hint is the one event whose path is not an entity: it says the list may read
+      // differently, and is read through its own delta read rather than through the session events
+      // that would read every session list for it (sessions.list_changed names no session).
+      if (type === 'sessions.list_changed') pendingFlags.add('openList');
+      for (const entity of entitiesFor(type)) pending.add(entity);
+      if (watchFollows(type, sessionId, data)) pendingFlags.add('watches');
       // Only the `session.*` family: those are the events that can move a session's run state,
       // and so the ones a frozen detail has to be corrected by. An approval or a background task
       // reaches the open console through its own transcript stream, and a task/tag/provider edit
@@ -450,20 +476,24 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       if (type === 'project.criteria_decisions.changed') {
         pendingProjects.add(typeof data?.id === 'string' ? data.id : '');
       }
-      if (pending.size > 0 || pendingSessions.size > 0 || pendingProjects.size > 0) openWindow();
+      if (pending.size > 0 || pendingFlags.size > 0 || pendingSessions.size > 0 || pendingProjects.size > 0) {
+        openWindow();
+      }
     };
     refreshSessionListsRef.current = () => {
-      pending.add('sessions');
+      pending.add('session');
       // The server's hint for the write joins this read in the window.
-      pending.add('openList');
+      pendingFlags.add('openList');
       openWindow();
     };
-    // What a stream that opened after a gap reads again (W6): the lists and details on screen, a few
-    // at a time through `pump`, the watches once. Any open session detail with them: the gap could
-    // have swallowed exactly the revive this tab needs to stop drawing a session as ended (see
-    // refetchSessionDetail). Only the detail itself, not what hangs under its key: a diff or a
-    // worktree file is the console's own read on a turn end, and the costliest one it makes. The
-    // queue serves them in this order, so the project reads, the bulk of it, go last.
+    // What a stream that opened after a gap reads again (W6): every cached read that declares a
+    // control-plane entity, a few at a time through `pump`. The per-event paths hold the Open lists
+    // to the hint and leave the project page to its floor; a reconnect is not an event and reads
+    // once what is on screen, so those cost exclusions do not apply. Three reads stay out — not as a
+    // cost exclusion but because another owner reads them: a session's diff and worktree file are
+    // the console's own, fetched on a turn end and the costliest reads it makes (see
+    // refetchSessionDetail), an answered evidence revision never changes, and the lists index keeps
+    // its longer floor (refetchTaskLists).
     //
     // A browser back online during the gap has already sent this round for the polls it held while
     // offline (React Query resumes them on `online`), so those are not read a second time.
@@ -471,13 +501,15 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       const resumedFrom = onlineAt > droppedAt ? onlineAt : Infinity;
       answered = (query) => (readStartedAt.get(query.queryHash) ?? -Infinity) >= resumedFrom;
       try {
-        for (const refetch of Object.values(REFETCH)) refetch();
-        refresh({ predicate: ({ queryKey }) => queryKey[0] === 'session' && queryKey.length === 2 });
-        // Keyed under ['project'], so the details above miss it: a proposal filed or decided during
-        // the gap would otherwise wait out its poll.
-        refetchCriteriaDecisions('');
-        refresh({ queryKey: ['project-sessions'] });
-        refresh({ predicate: ({ queryKey }) => isProjectPageRead(queryKey, '') });
+        refresh({
+          predicate: (query) =>
+            derivedFrom(query, ENTITIES) &&
+            !(query.queryKey[0] === 'session' &&
+              (query.queryKey[2] === 'diff' || query.queryKey[2] === 'worktree-file')) &&
+            query.queryKey[0] !== 'task-evidence' &&
+            query.queryKey[0] !== 'task-lists',
+        });
+        refetchTaskLists();
       } finally {
         answered = null;
       }
@@ -575,12 +607,15 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         }
         if (ev.type === 'project.changed' && typeof id === 'string' && id) {
           scheduleProjectSessions(id);
-          refetchProjectPages(id);
+          refetchProjectPages(id, ['project']);
         }
-        // What moves a project page's panorama: its own change, a member session's, and any task's
-        // (`task.changed` names tasks, not their project).
-        if (ev.type.startsWith('session.') && typeof projectId === 'string' && projectId) refetchProjectPages(projectId);
-        if (ev.type === 'task.changed') refetchProjectPages('');
+        // What moves a project page: its own change, a member session's, and any task's
+        // (`task.changed` names tasks, not their project). The entities say which of the page's
+        // reads that event can have moved; the floor above keeps them on the list budget.
+        if (ev.type.startsWith('session.') && typeof projectId === 'string' && projectId) {
+          refetchProjectPages(projectId, ['session']);
+        }
+        if (ev.type === 'task.changed') refetchProjectPages('', ['task']);
         // The session an event is about: the envelope's, or a session event's own id from a peer
         // that leaves the envelope's empty. An approval's id is the approval's.
         const subject = ev.sessionId || (ev.type.startsWith('session.') && typeof id === 'string' ? id : '');
