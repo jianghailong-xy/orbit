@@ -49,6 +49,9 @@ struct ConsoleView: View {
     /// and the session's workspace list the Move panel counts its folders over.
     @State private var movingSession: Session?
     @State private var moveListed: [Session] = []
+    /// The session whose Settings sheet is open (`SessionSettingsSheet`), from Settings… in the ⋯ menu
+    /// or the Mac toolbar.
+    @State private var settingsSession: Session?
     #if os(iOS)
     /// The ⋯ menu's Rename… (web double-clicks its header title). Seeded from the session's own
     /// title — not `SessionHeader.title`, whose agent-name fallback would otherwise be typed in as if
@@ -56,9 +59,6 @@ struct ConsoleView: View {
     @State private var renaming = false
     @State private var renameDraft = ""
     @State private var taggingSession: Session?
-    /// The session whose Settings sheet is open (`SessionSettingsSheet`), from Settings… in the ⋯ menu
-    /// or the Mac toolbar.
-    @State private var settingsSession: Session?
     @State private var confirmPurge = false
     /// Gates the "needs you" banner to the compact shell — see the `safeAreaInset` below.
     @Environment(\.horizontalSizeClass) private var hSize
