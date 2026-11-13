@@ -10,6 +10,7 @@ import { RunnerApiController } from './runner-api.controller';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerFilesController } from './runner-files.controller';
 import { RunnerProjectsController } from './runner-projects.controller';
+import { CreateRequestReceipts } from './create-request-receipts';
 import { RunnerTasksController } from './runner-tasks.controller';
 import { RunnerTaskCompletionEvidenceController } from './runner-task-completion-evidence.controller';
 import { RunnerTaskOwnerConfirmationController } from './runner-task-owner-confirmation.controller';
@@ -164,6 +165,8 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     WorkspacesService,
     IntegrationJobRelay,
     WikiRepoOps,
+    // The project_create / session_create receipts (create-request-receipts.ts).
+    CreateRequestReceipts,
   ],
 })
 export class RunnerApiModule {}

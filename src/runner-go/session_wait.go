@@ -59,9 +59,38 @@ type sessionWaitWatch struct {
 	Note    string `json:"note"`
 }
 
+// How a wait ended, under "wait.outcome" whenever it did not end with the session settled. Whatever the
+// outcome, the session was created and its id is in the answer: what to do next is to look at it with
+// session_get, never to create it again.
+const (
+	waitOutcomeSettled   = "SETTLED"
+	waitOutcomeTimeout   = "TIMEOUT"
+	waitOutcomeGetFailed = "GET_FAILED"
+)
+
+// sessionWaitNext is the one next step a wait that did not settle names: read the created session.
+type sessionWaitNext struct {
+	Tool      string            `json:"tool"`
+	Command   string            `json:"command"`
+	Arguments map[string]string `json:"arguments"`
+}
+
+// sessionWaitReport is printed under "wait" whenever the wait ended before the session settled.
+type sessionWaitReport struct {
+	Outcome   string          `json:"outcome"`
+	SessionID string          `json:"sessionId"`
+	Created   bool            `json:"created"`
+	Error     string          `json:"error,omitempty"`
+	Next      sessionWaitNext `json:"next"`
+}
+
 // sessionWait is how one wait ended.
 type sessionWait struct {
 	sessionID string
+	// SETTLED, TIMEOUT or GET_FAILED; "" when the created answer named no session to wait on.
+	outcome string
+	// Why reading the session failed, when the outcome is GET_FAILED.
+	getError string
 	// The session as last seen: settled when the wait ended because it settled.
 	session json.RawMessage
 	settled bool
@@ -76,45 +105,50 @@ type sessionWait struct {
 // the way it always did. When the watch could not be recorded the call still waits inline, unless the
 // control plane refused it: asking again gets the same answer, so the call returns the session as created.
 // Either way an answer that has not settled carries under "watch" why nothing backs the wait.
-func waitForSessionDurably(t *Transport, ctx cliOrchestrationContext, created json.RawMessage) (sessionWait, error) {
+//
+// It never fails once the session exists: a read of it that failed, or a wait that ran out, is an outcome
+// of the wait (wait.outcome), answered with the created session's id and session_get as the next step, so
+// nothing reads it as a create to try again.
+func waitForSessionDurably(t *Transport, ctx cliOrchestrationContext, created json.RawMessage) sessionWait {
 	childID := rawJSONID(created)
 	if childID == "" {
-		return sessionWait{session: created}, nil
+		return sessionWait{session: created}
 	}
 	polls := sessionWaitPolls(spawnDepthFromEnv())
 	wait := sessionWait{sessionID: childID, session: created, budget: time.Duration(polls) * sessionWaitInterval}
 	if strings.TrimSpace(ctx.sessionID) == "" {
-		raw, err := waitForSessionRaw(t, ctx, created)
-		wait.session, wait.settled = raw, sessionRawSettled(raw)
-		return wait, err
+		wait.pollInline(t, ctx)
+		return wait
 	}
 	// Spawned with Watch off (watch_rollout.go): the wait runs the way it did before watches, and an answer that
 	// has not settled says that nothing holds it.
 	if !watchesEnabledFromEnv() {
-		raw, err := waitForSessionRaw(t, ctx, created)
-		if err != nil {
-			return wait, err
+		if !wait.pollInline(t, ctx) {
+			return wait
 		}
-		wait.session, wait.settled = raw, sessionRawSettled(raw)
 		if !wait.settled {
 			wait.watch = &sessionWaitWatch{Code: watchesDisabledCode, Error: "Watch is switched off for this session", Note: sessionWaitUnbackedNote}
 		}
-		return wait, nil
+		return wait
 	}
 	watchID, err := recordSessionWaitWatch(t, ctx, childID)
 	if err != nil {
 		if !sessionWaitWatchRefused(err) {
-			raw, waitErr := waitForSessionRaw(t, ctx, created)
-			if waitErr != nil {
-				return wait, waitErr
+			if !wait.pollInline(t, ctx) {
+				return wait
 			}
-			wait.session = raw
+		} else {
+			wait.settled = sessionRawSettled(wait.session)
+			wait.outcome = waitOutcomeTimeout
+			if wait.settled {
+				wait.outcome = waitOutcomeSettled
+			}
 		}
-		if wait.settled = sessionRawSettled(wait.session); !wait.settled {
+		if !wait.settled {
 			reason, code := unbackedSessionWaitReason(err)
 			wait.watch = &sessionWaitWatch{Code: code, Error: reason, Note: sessionWaitUnbackedNote}
 		}
-		return wait, nil
+		return wait
 	}
 	for i := 0; ; i++ {
 		final := i == polls
@@ -123,19 +157,55 @@ func waitForSessionDurably(t *Transport, ctx cliOrchestrationContext, created js
 		}
 		raw, err := t.getSession(ctx.sessionID, ctx.token, childID)
 		if err != nil {
+			wait.outcome, wait.getError = waitOutcomeGetFailed, err.Error()
 			wait.watch = handedBackWatch(watchID, "TRANSPORT_ERROR", err)
-			return wait, nil
+			return wait
 		}
 		wait.session = raw
 		if sessionRawSettled(raw) {
-			wait.settled = true
+			wait.settled, wait.outcome = true, waitOutcomeSettled
 			wait.watch = releaseSessionWaitWatch(t, ctx, watchID)
-			return wait, nil
+			return wait
 		}
 		if final {
+			wait.outcome = waitOutcomeTimeout
 			wait.watch = handedBackWatch(watchID, "TIMEOUT", nil)
-			return wait, nil
+			return wait
 		}
+	}
+}
+
+// pollInline waits the way session_create(wait) always did, with no watch behind it. It reports false when
+// reading the session failed: the wait then ends GET_FAILED, the session as created kept as the answer.
+func (w *sessionWait) pollInline(t *Transport, ctx cliOrchestrationContext) bool {
+	raw, err := waitForSessionRaw(t, ctx, w.session)
+	if err != nil {
+		w.outcome, w.getError = waitOutcomeGetFailed, err.Error()
+		return false
+	}
+	w.session, w.settled = raw, sessionRawSettled(raw)
+	w.outcome = waitOutcomeTimeout
+	if w.settled {
+		w.outcome = waitOutcomeSettled
+	}
+	return true
+}
+
+// report is what the answer says under "wait", or nil when the session settled.
+func (w sessionWait) report() *sessionWaitReport {
+	if w.sessionID == "" || w.outcome == waitOutcomeSettled || w.outcome == "" {
+		return nil
+	}
+	return &sessionWaitReport{
+		Outcome:   w.outcome,
+		SessionID: w.sessionID,
+		Created:   true,
+		Error:     w.getError,
+		Next: sessionWaitNext{
+			Tool:      "session_get",
+			Command:   "orbit session get " + w.sessionID,
+			Arguments: map[string]string{"sessionId": w.sessionID},
+		},
 	}
 }
 
@@ -208,19 +278,32 @@ func releaseSessionWaitWatch(t *Transport, ctx cliOrchestrationContext, watchID 
 
 // json is what `orbit session create --wait` prints: the session exactly as it always was when the wait
 // ended cleanly, and otherwise that session with the watch beside it under "watch".
+//
+// A wait that ended before the session settled also carries "wait": its outcome, the created session's id
+// and the one next step, session_get.
 func (w sessionWait) json() json.RawMessage {
-	if w.watch == nil {
+	report := w.report()
+	if w.watch == nil && report == nil {
 		return w.session
 	}
 	fields := map[string]json.RawMessage{}
 	if err := json.Unmarshal(w.session, &fields); err != nil || len(fields) == 0 {
 		fields = map[string]json.RawMessage{"session": w.session}
 	}
-	encoded, err := json.Marshal(w.watch)
-	if err != nil {
-		return w.session
+	if w.watch != nil {
+		encoded, err := json.Marshal(w.watch)
+		if err != nil {
+			return w.session
+		}
+		fields["watch"] = encoded
 	}
-	fields["watch"] = encoded
+	if report != nil {
+		encoded, err := json.Marshal(report)
+		if err != nil {
+			return w.session
+		}
+		fields["wait"] = encoded
+	}
 	out, err := json.Marshal(fields)
 	if err != nil {
 		return w.session
@@ -232,6 +315,9 @@ func (w sessionWait) json() json.RawMessage {
 func (w sessionWait) text() string {
 	body := prettyJSON(w.json())
 	switch {
+	case w.outcome == waitOutcomeGetFailed && w.watch == nil:
+		return fmt.Sprintf("Session %s was created, but reading it while waiting failed (%s). It exists: do not call "+
+			"session_create again. Look at it with session_get (sessionId %s).\n%s", w.sessionID, w.getError, w.sessionID, body)
 	case w.watch != nil && w.watch.HandedBack != "":
 		why := fmt.Sprintf("the %s wait ran out", w.budget)
 		if w.watch.HandedBack == "TRANSPORT_ERROR" {

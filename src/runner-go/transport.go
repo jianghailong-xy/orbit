@@ -1656,13 +1656,18 @@ func (t *Transport) recordProjectMergeEvidence(id string, body map[string]interf
 // orchestration grant, so that body, and only that body, travels through doOrchestration: it
 // carries the session-bound credential and refreshes it once if it has expired. A create without
 // the field is byte-identical to what it always sent.
-func (t *Transport) createProject(sessionID, orchestrationToken string, body map[string]interface{}) (json.RawMessage, error) {
+//
+// requestID names this create (create_request.go): sent again under the same id, the server answers with
+// the project the first delivery created instead of creating another. Empty sends no id.
+func (t *Transport) createProject(sessionID, orchestrationToken, requestID string, body map[string]interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
 	if _, named := body["workspaceId"]; named {
-		err := t.doOrchestration("POST", "/runner/projects", body, &out, sessionID, orchestrationToken)
+		err := t.doOrchestrationWith("POST", "/runner/projects", body, &out, sessionID, orchestrationToken, taskOpTimeout,
+			createRequestHeaders(nil, requestID))
 		return out, err
 	}
-	err := t.doHeaders(nil, "POST", "/runner/projects", body, &out, taskOpTimeout, sessionHeader(sessionID))
+	err := t.doHeaders(nil, "POST", "/runner/projects", body, &out, taskOpTimeout,
+		createRequestHeaders(sessionHeader(sessionID), requestID))
 	return out, err
 }
 
@@ -2464,9 +2469,12 @@ func (t *Transport) deleteTaskList(id string) (json.RawMessage, error) {
 // Owner-scoped, runner-token-authenticated. Each call also carries the current session id
 // and its signed credential so the server can prove which claimed process made the request.
 
-func (t *Transport) createSession(parentSessionID, orchestrationToken string, body interface{}) (json.RawMessage, error) {
+// createSession spawns a session. requestID names this create (create_request.go): sent again under the
+// same id, the server answers with the session the first delivery created. Empty sends no id.
+func (t *Transport) createSession(parentSessionID, orchestrationToken, requestID string, body interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
-	err := t.doOrchestration("POST", "/runner/sessions", body, &out, parentSessionID, orchestrationToken)
+	err := t.doOrchestrationWith("POST", "/runner/sessions", body, &out, parentSessionID, orchestrationToken, taskOpTimeout,
+		createRequestHeaders(nil, requestID))
 	return out, err
 }
 
@@ -2901,17 +2909,22 @@ func (t *Transport) doOrchestration(method, path string, body, out interface{}, 
 // outlast the server's wait, or every successful wait comes back as a transport error and the
 // answer the caller asked for is the one thing they never see.
 func (t *Transport) doOrchestrationTimeout(method, path string, body, out interface{}, sessionID, fallbackToken string, timeout time.Duration) error {
+	return t.doOrchestrationWith(method, path, body, out, sessionID, fallbackToken, timeout, nil)
+}
+
+// doOrchestrationWith is doOrchestrationTimeout with headers of the request's own beside the credential.
+func (t *Transport) doOrchestrationWith(method, path string, body, out interface{}, sessionID, fallbackToken string, timeout time.Duration, extra map[string]string) error {
 	// A headless caller (launchd/cron) has no calling session, so there is no session-bound
 	// credential to read or refresh: the runner token alone authenticates, and the server
 	// narrows the request to this runner's own sessions.
 	if strings.TrimSpace(sessionID) == "" {
-		return t.doHeaders(nil, method, path, body, out, timeout, nil)
+		return t.doHeaders(nil, method, path, body, out, timeout, extra)
 	}
 	token, err := credentialForOrchestrationRequest(sessionID, fallbackToken)
 	if err != nil {
 		return err
 	}
-	err = t.doHeaders(nil, method, path, body, out, timeout, orchestratorHeaders(sessionID, token))
+	err = t.doHeaders(nil, method, path, body, out, timeout, createRequestMerge(orchestratorHeaders(sessionID, token), extra))
 	if !isRefreshableOrchestrationCredentialError(err) {
 		return err
 	}
@@ -2919,7 +2932,7 @@ func (t *Transport) doOrchestrationTimeout(method, path string, body, out interf
 	if refreshErr != nil {
 		return fmt.Errorf("refresh session orchestration credential: %w", refreshErr)
 	}
-	return t.doHeaders(nil, method, path, body, out, timeout, orchestratorHeaders(sessionID, token))
+	return t.doHeaders(nil, method, path, body, out, timeout, createRequestMerge(orchestratorHeaders(sessionID, token), extra))
 }
 
 func (t *Transport) listAgents(sessionID, orchestrationToken string) (json.RawMessage, error) {

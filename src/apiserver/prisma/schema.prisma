@@ -340,6 +340,7 @@ model User {
 
   /// Presses of Run Now this user made, and the receipts of their requests (0137).
   runRequests       TaskRunRequest[]
+  createRequests    CreateRequestReceipt[]
 
   /// Cross-project crossings recorded under this account (unit L4, 0155).
   handoffApprovals ProjectHandoffApproval[]
@@ -5027,6 +5028,31 @@ model TaskProgress {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("task_progress")
+}
+
+/// The receipt of one project_create or session_create request (migration 0645,
+/// docs/recovery-contract.md §6). A repeat of the request under the same id reads `result` back
+/// instead of creating a second Project or Session; the same id with another payload is refused.
+model CreateRequestReceipt {
+  ownerId        String   @map("owner_id") @db.Uuid
+  owner          User     @relation(fields: [ownerId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// `PROJECT_CREATE` or `SESSION_CREATE`.
+  actionKind     String   @map("action_kind")
+  /// The caller's X-Orbit-Request-Id.
+  requestToken   String   @map("request_token")
+  /// sha256 of the canonical payload and the session that sent it.
+  fingerprint    String
+  /// OPEN | COMPLETED | UNKNOWN.
+  status         String   @default("OPEN")
+  /// The answer, kept so a repeat returns it.
+  result         Json?
+  /// While OPEN, how long the delivery creating it is waited for.
+  leaseExpiresAt DateTime @map("lease_expires_at") @db.Timestamptz(6)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@id([ownerId, actionKind, requestToken])
+  @@map("create_request_receipt")
 }
 
 model TaskRunRequest {

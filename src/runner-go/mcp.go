@@ -617,6 +617,10 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		_, structuredCriteria := args["acceptanceCriteriaItems"]
+		requestID, err := createRequestID(getString(args, "requestId"))
+		if err != nil {
+			return toolResult(err.Error(), true)
+		}
 		body := map[string]interface{}{"title": title}
 		copyIfPresent(body, args, "goal", "instructions", "workspaceId")
 		if structuredCriteria {
@@ -634,9 +638,10 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// The calling session goes with it, the same as it does on task_create — here so the
 		// server can bind THIS session as the new project's coordinator, which is what makes
 		// opening the project later come back to this conversation instead of starting another.
-		raw, err := s.t.createProject(s.sessionID, s.orchestrationToken, body)
+		// The request id names this call (create_request.go), so a repeat of it never makes a second project.
+		raw, err := s.t.createProject(s.sessionID, s.orchestrationToken, requestID, body)
 		if err != nil {
-			return toolResult("create project failed: "+err.Error(), true)
+			return toolResult(describeCreateFailure("project", "project_create", "task_list or the project list in Orbit", requestID, err), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -1573,9 +1578,13 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		} else if s.agentID != "" {
 			body["agentId"] = s.agentID
 		}
-		raw, err := s.t.createSession(s.sessionID, s.orchestrationToken, body)
+		requestID, err := createRequestID(getString(args, "requestId"))
 		if err != nil {
-			return toolResult("create session failed: "+err.Error(), true)
+			return toolResult(err.Error(), true)
+		}
+		raw, err := s.t.createSession(s.sessionID, s.orchestrationToken, requestID, body)
+		if err != nil {
+			return toolResult(describeCreateFailure("session", "session_create", "session_list with parentSessionId", requestID, err), true)
 		}
 		if getBool(args, "wait") {
 			return s.waitForSession(raw)
@@ -3790,6 +3799,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"just planned this work here. Requires orchestration to be enabled for this " +
 						"session, because it names a workspace rather than inheriting one.",
 				},
+				"requestId": map[string]interface{}{"type": "string", "description": "Leave it out on a first call. When a call failed with an UNKNOWN outcome and its answer named a requestId, send the same arguments again with that requestId: Orbit answers with what that request created, or creates it once, so a lost answer never becomes a duplicate. The same requestId with different arguments is refused."},
 			}, "title"),
 		},
 		{
@@ -5121,7 +5131,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"enum":        offeredPermissionModes(),
 						"description": strings.TrimSpace("How much the sub-session may do without a human: \"plan\" investigates and proposes without touching anything, \"default\" asks before each unapproved action, \"acceptEdits\" pre-approves file edits only, \"auto\" lets the model decide when to ask and is the mode for unattended work that has to run commands, \"dontAsk\" never asks but refuses anything not already approved, commands and background jobs included, \"bypassPermissions\" never asks and allows everything. Omit to use the owner's account default. It can never be wider than this session's own mode: a wider mode is refused, and when the default is wider the sub-session runs in this session's own mode. A mode that asks parks the sub-session on an approval card until a human answers, so pick one only if someone is watching. " + rootWithheldPermissionModeNote()),
 					},
-					"wait": map[string]interface{}{"type": "boolean", "description": "Wait for the new session's first turn to settle and return its full state inline: up to about 10 minutes, less when this session was itself spawned by a wait. The wait is recorded on Orbit's server as a watch before it starts, so when that time runs out or the connection drops, the call returns the session as last seen with the watch under \"watch\", and the watch wakes this session when the turn settles; end your turn then instead of polling. If the server does not record the watch, the result says no server-held watch backs the wait, and a refused watch returns at once. Default false: returns immediately."},
+					"wait":      map[string]interface{}{"type": "boolean", "description": "Wait for the new session's first turn to settle and return its full state inline: up to about 10 minutes, less when this session was itself spawned by a wait. The wait is recorded on Orbit's server as a watch before it starts, so when that time runs out or the connection drops, the call returns the session as last seen with the watch under \"watch\", and the watch wakes this session when the turn settles; end your turn then instead of polling. If the server does not record the watch, the result says no server-held watch backs the wait, and a refused watch returns at once. Default false: returns immediately. Whatever happens while waiting, the session is created: an answer that has not settled names it under \"wait\" with session_get as the next step, never session_create."},
+					"requestId": map[string]interface{}{"type": "string", "description": "Leave it out on a first call. When a call failed with an UNKNOWN outcome and its answer named a requestId, send the same arguments again with that requestId: Orbit answers with what that request created, or creates it once, so a lost answer never becomes a duplicate. The same requestId with different arguments is refused."},
 				}, "prompt"),
 			},
 			map[string]interface{}{
@@ -5598,13 +5609,11 @@ func spawnDepthFromEnv() int {
 // reaching AWAITING_INPUT once its first turn produced a result, or a terminal state — behind a watch
 // that keeps waiting on the server whenever this call cannot (session_wait.go).
 func (s *mcpServer) waitForSession(created json.RawMessage) map[string]interface{} {
-	wait, err := waitForSessionDurably(s.t, cliOrchestrationContext{
+	// Never an error: the session exists, and an error reads as a create to try again (session_wait.go).
+	wait := waitForSessionDurably(s.t, cliOrchestrationContext{
 		sessionID: s.sessionID,
 		token:     s.orchestrationToken,
 	}, created)
-	if err != nil {
-		return toolResult("wait: "+err.Error(), true)
-	}
 	return toolResult(wait.text(), false)
 }
 
