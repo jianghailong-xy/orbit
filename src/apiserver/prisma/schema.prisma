@@ -1378,6 +1378,8 @@ model Workspace {
   managedRunnerDefault ManagedRunner? @relation("ManagedRunnerDefaultWorkspace")
   /// The wiki repository operations read in this workspace's checkout (migration 0402).
   wikiRepoOps WikiRepoOp[]
+  /// Main checkout reads and actions this workspace asked its runner for (migration 0534).
+  mainCheckoutRequests MainCheckoutRequest[]
   /// The Feishu app whose direct-message sessions open here, when its owner chose this one (migration 0489).
   feishuAppDefaults FeishuApp[]
   /// Feishu groups whose sessions open here (migration 0496).
@@ -5759,6 +5761,27 @@ model Task {
   /// declaration takes the task out of its criterion's landing conjunction. NULL on a task that is
   /// not codeless, and on one created codeless — creating it so is the first statement, not a change.
   codelessReason     String?  @map("codeless_reason")
+  /// The session this task was forked from (migration 0615, SOURCE row PF, SR55): the session whose
+  /// create call filed it, on that call's runner credential. The five fork columns are all NULL or
+  /// all set, written by the create doors in the task's own INSERT and never afterwards (0615's
+  /// `task_fork_guard`), so every run of the task, a retry included, starts from the same commit.
+  /// No foreign key: deleting that session does not move where this task starts.
+  forkSessionId           String?  @map("fork_session_id") @db.Uuid
+  /// The machine the forking session ran on when it forked: where the snapshot commit exists, and
+  /// the `RUNNER_LOCAL` authority of a forked run. No foreign key, as above.
+  forkRunnerId            String?  @map("fork_runner_id") @db.Uuid
+  /// The snapshot commit the task starts from, 40 lowercase hex.
+  forkSha                 String?  @map("fork_sha")
+  /// The forking session's HEAD when it took the snapshot, 40 lowercase hex.
+  forkBaseHead            String?  @map("fork_base_head")
+  /// Whether the snapshot carries edits the forking session had not committed: exactly when
+  /// `forkSha` is not `forkBaseHead` (0615's `task_fork_shape_chk`).
+  forkIncludesUncommitted Boolean? @map("fork_includes_uncommitted")
+  /// The paths the snapshot changed relative to `forkBaseHead`, as the runner read them when it took
+  /// it (migration 0617): what a forked task's task_await payload names (design §2.7 F4). Empty when
+  /// the task was not forked, the snapshot changed nothing, or its runner sent none; written once,
+  /// like the five above.
+  forkChangedFiles        String[] @default([]) @map("fork_changed_files")
   /// The refusal this task's most recent start met before its run could begin (migration 0298):
   /// a `TaskDispatchRefusal` (@orbit/shared) — the §10.1 code and its fixAction, when, which run,
   /// the commit it stood on and the prerequisite commits that commit did not contain. NULL when
@@ -9393,6 +9416,44 @@ model ProjectPromotionRequest {
 
   @@index([projectId, createdAt])
   @@map("project_promotion_request")
+}
+
+/// A main checkout read or action relayed to a workspace's runner (docs/main-checkout-git-contract.md §10, migration
+/// 0534): queued here, handed out once on the heartbeat, finished by the runner's answer or by the timeout. A partial
+/// unique index (in the migration; schema.prisma cannot express one) keeps one action in flight per runner and root.
+model MainCheckoutRequest {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  ownerId     String    @map("owner_id") @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "main_checkout_request_workspace_fkey")
+  /// No foreign key, as wiki_repo_op's: the runner is who it was handed to, not what it belongs to.
+  runnerId    String    @map("runner_id") @db.Uuid
+  /// realpath of the checkout the runner reported (RunnerRepoHealth.root).
+  root        String
+  /// 'snapshot' | 'action'.
+  op          String
+  /// The client's requestId (actions only); unique per owner.
+  requestId   String?   @map("request_id")
+  /// move | commit | push | rescue (actions only).
+  kind        String?
+  /// What the runner is handed: the MainCheckoutActionCommand, or the snapshot's root and diff paths.
+  input       Json      @default("{}")
+  /// The session that gets the result line (contract §7). Not a relation: a line is written to it if it still exists.
+  initiatedFromSessionId String? @map("initiated_from_session_id") @db.Uuid
+  /// pending (queued) → claimed (handed to the runner) → finished.
+  state       String    @default("pending")
+  /// The outcome: MainCheckoutActionResult, or for a read the MainCheckoutSnapshotAnswer.
+  result      Json?
+  /// A runner's result that arrived after the request had finished (TIMEOUT, CANCELLED): kept, never replacing it.
+  lateResult  Json?     @map("late_result")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(3)
+  claimedAt   DateTime? @map("claimed_at") @db.Timestamptz(3)
+  finishedAt  DateTime? @map("finished_at") @db.Timestamptz(3)
+
+  @@unique([ownerId, requestId], map: "main_checkout_request_id_key")
+  @@index([workspaceId, ownerId], map: "main_checkout_request_workspace_idx")
+  @@map("main_checkout_request")
 }
 
 /// Someone the owner of a session invited to reply in it (docs/session-guests-design.md §7, migration 0560). A live row

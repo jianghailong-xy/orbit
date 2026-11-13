@@ -15,6 +15,7 @@ function makeService(
   const createdFrom: string[] = [];
   const createdDtos: Array<{ effort?: string }> = [];
   const createdTrees: Array<{ rootSessionId: string; depth: number } | undefined> = [];
+  const createdNoWorktree: Array<boolean | undefined> = [];
   const rootWrites: Array<{ id: string; rootSessionId: string | null }> = [];
   const prisma = {
     session: {
@@ -56,15 +57,27 @@ function makeService(
   (service as unknown as { create: SessionsService['create'] }).create = (async (
     _ownerId: string,
     dto: unknown,
-    opts: { parentSessionId?: string; tree?: { rootSessionId: string; depth: number } },
+    opts: { parentSessionId?: string; tree?: { rootSessionId: string; depth: number }; noWorktree?: boolean },
   ) => {
     createdFrom.push(opts.parentSessionId ?? '');
+    createdNoWorktree.push(opts.noWorktree);
     createdDtos.push(dto as { effort?: string });
     createdTrees.push(opts.tree);
     return { id: 'spawned', status: RunStatus.PENDING, title: 'spawned', workspaceId: null };
   }) as SessionsService['create'];
-  return { service, createdFrom, createdDtos, createdTrees, rootWrites };
+  return { service, createdFrom, createdDtos, createdTrees, createdNoWorktree, rootWrites };
 }
+
+// worktree: false is the only value that changes anything: it can turn isolation off, never on.
+test('a child asked for with worktree: false is created with no worktree, and only then', async () => {
+  const { service, createdNoWorktree } = makeService({ root: { rootSessionId: null, spawnDepth: 0 } });
+
+  await service.spawnFromSession('owner', 'root', { prompt: 'look', worktree: false });
+  await service.spawnFromSession('owner', 'root', { prompt: 'look', worktree: true });
+  await service.spawnFromSession('owner', 'root', { prompt: 'look' });
+
+  assert.deepEqual(createdNoWorktree, [true, undefined, undefined]);
+});
 
 test('a root session may spawn a child at depth 1', async () => {
   const { service, createdFrom, createdTrees } = makeService({

@@ -2275,14 +2275,14 @@ describe('runtime authentication help', () => {
   });
 });
 
-describe('shared-checkout notice', () => {
+describe('main-checkout notice', () => {
   const NOTICE =
-    'This turn left 1 file modified in the shared checkout /root/orbit, outside this session’s worktree: src/a.ts.';
+    "1 file changed in the main checkout during this turn /root/orbit on main, outside this session's worktree. Orbit saw them appear; it can't tell who wrote them.";
 
   it('renders a runner notice as a calm note, not an error', () => {
     const html = renderToStaticMarkup(
       <Transcript
-        events={[{ seq: 1, type: 'system', payload: { notice: NOTICE, noticeKind: 'shared-checkout-dirty' } }]}
+        events={[{ seq: 1, type: 'system', payload: { notice: NOTICE, noticeKind: 'main-checkout-changed' } }]}
       />,
     );
 

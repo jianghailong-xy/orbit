@@ -1,4 +1,12 @@
-import type { GuestSessionSummary, MergeRecovery, MergeRecoveryAction, SessionGuestPerson } from '@orbit/shared';
+import type {
+  GuestSessionSummary,
+  MainCheckoutActionAnswer,
+  MainCheckoutActionPost,
+  MainCheckoutView,
+  MergeRecovery,
+  MergeRecoveryAction,
+  SessionGuestPerson,
+} from '@orbit/shared';
 import type {
   BgShell,
   ConfirmationAnswersCard,
@@ -1917,6 +1925,10 @@ export interface SessionDetail {
   sourceRef?: string | null;
   sourceRefusalCode?: string | null;
   sourceRefusalDetail?: Record<string, unknown> | null;
+  /** The SOURCE line of the task this session runs when that task was forked from a session
+   *  (docs/task-fork-from-session-design.md §2.3), as the server words it; null otherwise.
+   *  Optional, because an older server does not send it. */
+  forkSource?: string | null;
   /** On an account pool: the member its last claim dispatched on (null before the first). */
   poolMemberProviderId?: string | null;
   /** On a shared pool: the key its last claim chose (null before the first, or when none could run). */
@@ -2163,5 +2175,23 @@ export const setWorkspaceWorktree = (workspaceId: string, enableWorktree: boolea
 export const cleanUpWorkspaceRepo = (workspaceId: string) =>
   api<{ repoCleanup?: { status: string; branch?: string | null; message?: string | null } | null }>(
     `/workspaces/${workspaceId}/repo-cleanup`,
+    { method: 'POST' },
+  );
+
+/** The main checkout as the workspace's runner sees it now, with the patches of `diffPaths`
+ *  (docs/main-checkout-git-contract.md §10.4). */
+export const getMainCheckout = (workspaceId: string, diffPaths: readonly string[] = [], signal?: AbortSignal) => {
+  const q = diffPaths.map((p) => `diff=${encodeURIComponent(p)}`).join('&');
+  return api<MainCheckoutView>(`/workspaces/${workspaceId}/main-checkout${q ? `?${q}` : ''}`, { signal });
+};
+
+/** Move, commit, push or rescue the main checkout. Repeating a requestId answers with the first request's state. */
+export const postMainCheckoutAction = (workspaceId: string, body: MainCheckoutActionPost) =>
+  api<MainCheckoutActionAnswer>(`/workspaces/${workspaceId}/main-checkout/actions`, { method: 'POST', body });
+
+/** Cancel an action its runner has not been handed yet. */
+export const cancelMainCheckoutAction = (workspaceId: string, requestId: string) =>
+  api<MainCheckoutActionAnswer>(
+    `/workspaces/${workspaceId}/main-checkout/actions/${encodeURIComponent(requestId)}/cancel`,
     { method: 'POST' },
   );

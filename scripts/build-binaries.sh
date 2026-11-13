@@ -16,6 +16,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 OUT="${1:-dist-bin}"
+# An absolute output directory is used as given (the release supply-chain job stages into a runner
+# temp directory); a bare name stays relative to the repository, as `npm run build:runner` uses it.
+case "$OUT" in
+  /*) ;;
+  *) OUT="$ROOT/$OUT" ;;
+esac
 SRC="src/runner-go"
 # Version of record: the root package.json.
 VER="$(grep -m1 '"version"' package.json | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')"
@@ -155,23 +161,23 @@ for t in "${TARGETS[@]}"; do
   # -buildvcs=false: the commit is already stamped above, and Go's own VCS stamping fails
   # outright on the metadata-only .git the Docker build stage carries.
   (cd "$SRC" && CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
-    go build -trimpath -buildvcs=false -ldflags "$LDFLAGS" -o "$ROOT/$OUT/orbit-$suffix" .)
+    go build -trimpath -buildvcs=false -ldflags "$LDFLAGS" -o "$OUT/orbit-$suffix" .)
   # An unreferenced `-X` target is dropped by the linker without a word, which published
   # anonymous binaries for as long as nothing read main.sourceSHA. Check the stamp landed.
-  if ! grep -qa "$SOURCE_SHA" "$ROOT/$OUT/orbit-$suffix"; then
+  if ! grep -qa "$SOURCE_SHA" "$OUT/orbit-$suffix"; then
     echo "error: orbit-$suffix carries no source stamp — does anything still read main.sourceSHA?" >&2
     exit 1
   fi
   if [ -n "$MACOS_SIGNING_P12" ] && [ "$goos" = darwin ]; then
-    sign_macos "$ROOT/$OUT/orbit-$suffix"
+    sign_macos "$OUT/orbit-$suffix"
   fi
   # Ship the binary gzip-compressed; -f replaces orbit-$suffix with orbit-$suffix.gz.
-  gzip -9 -f "$ROOT/$OUT/orbit-$suffix"
-  ASSETS+=("$ROOT/$OUT/orbit-$suffix.gz")
+  gzip -9 -f "$OUT/orbit-$suffix"
+  ASSETS+=("$OUT/orbit-$suffix.gz")
 done
 
 # Only the .gz files built above: a stale one left in $OUT must not be vouched for.
 (cd "$SRC" && go run ./cmd/release-manifest \
-  "$VER" "$ROOT/contracts/runner-write-protocol.json" "$ROOT/$OUT/version.json" "${ASSETS[@]}")
+  "$VER" "$ROOT/contracts/runner-write-protocol.json" "$OUT/version.json" "${ASSETS[@]}")
 echo ">> wrote $OUT/version.json (v$VER)"
 ls -lh "$OUT"
