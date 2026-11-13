@@ -1,7 +1,7 @@
 # GitHub Pages build
 
 - source: site/
-- source_sha: bd486c5f78644d8fa2af2095c5fec548f9dd0777
+- source_sha: 6760f6f2efc96e9de4b578311e9ec796d9004211
 - languages: English at / and Simplified Chinese at /zh/
 - entry_points: index.html, 404.html, zh/index.html, zh/404.html
 - output: dist/pages
