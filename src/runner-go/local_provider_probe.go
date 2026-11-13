@@ -357,9 +357,10 @@ func localShortText(value string) string {
 	return value
 }
 
-// localDigestRE is a model digest as Ollama spells it: "sha256:" and 64 hex digits, or any other short token of the
-// same alphabet. It keys the /api/show cache and is never reported.
-var localDigestRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9:._+-]{0,127}$`)
+// localDigestRE is a model digest as Ollama spells it: "sha256:" and exactly 64 hex digits. Only such a digest keys
+// the /api/show cache: anything else (a placeholder such as "unknown", a truncated digest, another algorithm) says
+// nothing about whether the model changed, so that model is shown again every cycle. It is never reported.
+var localDigestRE = regexp.MustCompile(`^sha256:[0-9A-Fa-f]{64}$`)
 
 func localDigest(value string) string {
 	value = strings.TrimSpace(value)

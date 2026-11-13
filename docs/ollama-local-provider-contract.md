@@ -172,7 +172,7 @@ Task `34DuK8eT068Um725SVPV7`. The runner probes; the control plane and the brows
 | --- | --- | --- |
 | Readiness | `GET /api/version`, timed: `latencyMs`, `version` | 3 s, 4 KiB |
 | Inventory | `GET /api/tags` | 5 s, 4 MiB, at most 200 models |
-| Capabilities | `POST /api/show {"model": name}`: `capabilities` has `tools`; the largest `*.context_length` in `model_info` | 5 s, 2 MiB, 4 at a time, at most 64 per cycle, cached by the model's full `sha256:` digest; a model with no usable digest is shown every cycle |
+| Capabilities | `POST /api/show {"model": name}`: `capabilities` has `tools`; the largest `*.context_length` in `model_info` | 5 s, 2 MiB, 4 at a time, at most 64 per cycle, cached only by a full digest, exactly `sha256:` and 64 hex digits; a model with any other digest (`unknown`, truncated, another algorithm) is shown every cycle |
 
 The models the row names are shown first, so the cap never hides them. A whole cycle is bounded at 45 s, with 4
 targets probed at a time. Nothing is installed, pulled or removed. No prompt is sent.

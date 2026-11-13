@@ -574,19 +574,53 @@ func TestLocalProbeShowCacheMixesHitsAndMisses(t *testing.T) {
 		t.Errorf("llama3:latest shown %d times, want 1", got)
 	}
 
-	// A digest that is not one is no cache key: that model is shown every time, and nothing is cached for it.
-	odd := newFakeOllama(fakeOllamaModel{name: "odd:1b", tools: true, context: 65536})
-	odd.set("/api/tags", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"models":[{"name":"odd:1b","digest":"not a digest!"}]}`))
-	})
-	oddURL := startOn(t, "tcp4", "127.0.0.1:0", odd)
-	q := loopbackProber()
-	for i := 0; i < 2; i++ {
-		q.probeAll(context.Background(), []LocalProviderTarget{{ProviderID: "o", BaseURL: oddURL}})
+	// Only a full sha256 digest is a cache key. A placeholder, a truncated digest or another algorithm says nothing
+	// about whether the model changed: that model is shown on every probe, and nothing is cached for it.
+	full := models[0].digestOf()
+	for _, digest := range []string{
+		"", "unknown", "sha256:abc", full[:len(full)-1], full + "0", "sha512:" + strings.Repeat("a", 128),
+		"SHA256-" + full[len("sha256:"):], " " + full + "x",
+	} {
+		if localDigest(digest) != "" {
+			t.Errorf("%q is taken as a digest", digest)
+		}
+		odd := newFakeOllama(fakeOllamaModel{name: "odd:1b", tools: true, context: 65536})
+		body, _ := json.Marshal(map[string]any{"models": []map[string]any{{"name": "odd:1b", "digest": digest}}})
+		odd.set("/api/tags", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(body)
+		})
+		oddURL := startOn(t, "tcp4", "127.0.0.1:0", odd)
+		q := loopbackProber()
+		for i := 0; i < 2; i++ {
+			got := q.probeAll(context.Background(), []LocalProviderTarget{{ProviderID: "o", BaseURL: oddURL, Models: []string{"odd:1b"}}})
+			if got[0].State != localStateReady {
+				t.Fatalf("digest %q, probe %d: %s (%s)", digest, i, got[0].State, got[0].Reason)
+			}
+		}
+		if n := odd.showCalls.Load(); n != 2 || len(q.cache.entries) != 0 {
+			t.Errorf("digest %q: %d shows over two probes, %d cached; want 2 and 0", digest, n, len(q.cache.entries))
+		}
 	}
-	if n := odd.showCalls.Load(); n != 2 || len(q.cache.entries) != 0 {
-		t.Fatalf("an unusable digest: %d shows, %d cached", n, len(q.cache.entries))
+	// And the full digest, upper- or lower-case hex, still is one: shown once over two probes, then cached.
+	for _, digest := range []string{full, "sha256:" + strings.ToUpper(full[len("sha256:"):])} {
+		if localDigest(digest) != digest {
+			t.Errorf("a full digest %q is not taken", digest)
+		}
+		whole := newFakeOllama(fakeOllamaModel{name: "whole:1b", tools: true, context: 65536})
+		body, _ := json.Marshal(map[string]any{"models": []map[string]any{{"name": "whole:1b", "digest": digest}}})
+		whole.set("/api/tags", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(body)
+		})
+		wholeURL := startOn(t, "tcp4", "127.0.0.1:0", whole)
+		q := loopbackProber()
+		for i := 0; i < 2; i++ {
+			q.probeAll(context.Background(), []LocalProviderTarget{{ProviderID: "w", BaseURL: wholeURL, Models: []string{"whole:1b"}}})
+		}
+		if n := whole.showCalls.Load(); n != 1 || len(q.cache.entries) != 1 {
+			t.Errorf("full digest %q: %d shows over two probes, %d cached; want 1 and 1", digest, n, len(q.cache.entries))
+		}
 	}
 }
 
