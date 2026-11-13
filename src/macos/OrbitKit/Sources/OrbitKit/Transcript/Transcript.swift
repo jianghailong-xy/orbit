@@ -28,8 +28,9 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
     /// A heads-up carried on a `system` event (`payload.notice`): the turn worked, but something
     /// about it needs saying — the session moved to another account in its pool, fell back to the
     /// runner's own login, left edits in the shared checkout. A calm note, not an error: nothing is
-    /// broken (web parity: `NoticeNode`).
-    case notice(id: String, message: String)
+    /// broken (web parity: `NoticeNode`). `accountSwitch`: the session moved to another account
+    /// (`noticeKind: pool-member-switched`), a line `TranscriptSettlement` mutes once it is history.
+    case notice(id: String, message: String, accountSwitch: Bool = false)
     /// A runtime diagnostic its runner marked recoverable: an auxiliary path degraded while the turn
     /// went on (Codex failing to refresh its model catalog, say). Quieter than a notice, as web's
     /// `.chat-notice.chat-diagnostic` draws it: only the mark keeps the warning tone.
@@ -49,7 +50,7 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
         case .error(let id, _): return id
         case .authError(let id, _): return id
         case .autoRetry(let n): return n.id
-        case .notice(let id, _): return id
+        case .notice(let id, _, _): return id
         case .diagnostic(let d): return d.id
         case .mainCheckout(let m): return m.id
         }

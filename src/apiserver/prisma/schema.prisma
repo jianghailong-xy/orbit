@@ -336,7 +336,7 @@ model User {
   mergeReceipts    SessionMergeReceipt[] // merges recorded against this user's session branches
   agents           Agent[] // Agent identities this user owns (tenant scope)
   avatar           UserAvatar? // the profile photo, when one is set (0335)
-  emailOutbox      EmailOutbox[] // the welcome email of this account, when it was created after 0517
+  emailOutbox      EmailOutbox[] // the welcome email of this account (after 0517), and its session invitations (0618)
 
   /// Presses of Run Now this user made, and the receipts of their requests (0137).
   runRequests       TaskRunRequest[]
@@ -536,16 +536,25 @@ model EmailSettings {
   @@map("email_settings")
 }
 
-/// One email to send (docs/welcome-email-design.md §3.3; migration 0517), written in the transaction that
-/// creates the account. `kind` is only WELCOME; status PENDING | SENT | FAILED | SKIPPED (CHECKs live in
-/// the migration). No body and no secret: the email is rendered when it is sent.
+/// One email to send (docs/welcome-email-design.md §3.3; migrations 0517, 0618): a WELCOME row written in the
+/// transaction that creates the account, or a SESSION_INVITE row written with a session guest's new invitation.
+/// Status PENDING | SENT | FAILED | SKIPPED (CHECKs live in the migrations). No body and no secret: the email
+/// is rendered when it is sent.
+///
+/// 0618 adds the unique index this schema cannot spell — UNIQUE NULLS NOT DISTINCT (kind, user_id, session_id),
+/// one WELCOME per account and one SESSION_INVITE per (account, session) — and the CHECK that session_id is
+/// set exactly when kind is SESSION_INVITE.
 model EmailOutbox {
   id                String    @id @default(uuid(7)) @db.Uuid
   kind              String
   userId            String    @map("user_id") @db.Uuid
   user              User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// The session a SESSION_INVITE is for; null for a WELCOME (0618).
+  sessionId         String?   @map("session_id") @db.Uuid
+  session           Session?  @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   toAddress         String    @map("to_address")
-  /// The administrator who created the account; null for a Google sign-up. No relation, as updatedById.
+  /// The administrator who created the account, or the owner who invited the guest; null for a Google
+  /// sign-up. No relation, as updatedById.
   createdById       String?   @map("created_by_id") @db.Uuid
   status            String
   attempts          Int       @default(0)
@@ -559,7 +568,7 @@ model EmailOutbox {
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  @@unique([kind, userId], map: "email_outbox_kind_user_id_key")
+  @@index([sessionId], map: "email_outbox_session_id_idx")
   @@map("email_outbox")
 }
 
@@ -2301,6 +2310,7 @@ model Session {
   /// Public links with this session as their root, ended ones included (migration 0306).
   shareLinks            ShareLink[]
   guests                SessionGuest[] // the people the owner invited to reply (0560)
+  guestInviteEmails     EmailOutbox[] // the email each invited person was sent (0618)
 
   @@index([assignedRunnerId, status])
   // "what did this workspace last run on", the derived seed a new session inherits when the

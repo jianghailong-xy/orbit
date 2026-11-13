@@ -62,6 +62,12 @@ struct ConsoleView: View {
     /// A phone's stack: the task or project the ⋯ menu opens goes over this console, so the back
     /// swipe returns here (`opensPagesOverConsole`).
     @Environment(\.opensPagesOverConsole) private var opensPagesOverConsole
+    /// The project sessions sheet a phone's navigation bar button puts up (board 5), and what a
+    /// press inside it opens once it has closed.
+    /// Carried by the presentation itself (`.sheet(item:)`): a `.sheet(isPresented:)` whose content
+    /// read the address from a second state built an empty sheet on its first press.
+    @State private var projectSheet: ProjectSheetTarget?
+    @State private var afterProjectSheet: (() -> Void)?
     #endif
 
     var body: some View {
@@ -481,6 +487,13 @@ struct ConsoleView: View {
         // or task a session belongs to are in the menu; whether it runs, the composer's stop button
         // says.
         .toolbar {
+            // The project's sessions, left of the ⋯ menu, on the coordinator's conversation and on
+            // every member's (owner 2026-11-11, docs/mocks/project-sessions-column board 5). Only a
+            // phone's stack: the iPad and the Mac keep the project's page in their own column.
+            if opensPagesOverConsole,
+               let projectID = SessionProjectSheet.projectID(of: appModel.session(id: sessionID)) {
+                ToolbarItem(placement: .topBarTrailing) { projectSessionsButton(projectID) }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 // A landing session is platform work (LS6): its page carries the ⋯ menu the design
                 // gives it, and none of the conversation's own actions — no rename, share, pin,
@@ -497,6 +510,26 @@ struct ConsoleView: View {
             }
         }
         .sessionRenameAlert(isPresented: $renaming, draft: $renameDraft, sessionID: sessionID)
+        // The project's sessions page read as the conversation opens, so the button's count is the
+        // one the sheet will show before the sheet is ever opened (`projectSessionCount`).
+        .task(id: projectSheetAddress) {
+            if let address = projectSheetAddress { await appModel.loadProjectSessions(address) }
+        }
+        .sheet(item: $projectSheet, onDismiss: {
+            let action = afterProjectSheet
+            afterProjectSheet = nil
+            action?()
+        }) { target in
+            NavigationStack {
+                SessionProjectPage(address: target.address, leaveSheet: { action in
+                    afterProjectSheet = action
+                    projectSheet = nil
+                })
+            }
+            .environment(appModel)
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
         .sheet(item: $taggingSession) { session in
             SessionTagSheet(session: session)
                 .environment(appModel)
@@ -560,6 +593,40 @@ struct ConsoleView: View {
         guard let session = appModel.session(id: sessionID), sessionWorkspace(session) != nil else { return nil }
         return { openMove(session) }
     }
+
+    #if os(iOS)
+    /// The sessions page this conversation's button reads and opens, on a phone's stack, for a
+    /// session with a project; nil anywhere else.
+    private var projectSheetAddress: SessionProjectAddress? {
+        guard opensPagesOverConsole else { return nil }
+        let session = appModel.session(id: sessionID)
+        return SessionProjectSheet.projectID(of: session).map { appModel.projectSheetAddress($0, session: session) }
+    }
+
+    /// The project sessions sheet's subject, as `.sheet(item:)` needs it.
+    private struct ProjectSheetTarget: Identifiable {
+        let address: SessionProjectAddress
+        var id: SessionProjectAddress { address }
+    }
+
+    /// The project glyph and the project's session count ("⊞ 11"); a press puts the project's
+    /// sessions page up as a sheet, opening at medium height.
+    private func projectSessionsButton(_ projectID: String) -> some View {
+        let count = appModel.projectSessionCount(projectID)
+        return Button {
+            projectSheet = ProjectSheetTarget(
+                address: appModel.projectSheetAddress(projectID, session: appModel.session(id: sessionID)))
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: SessionProjectSheet.glyph)
+                if let count { Text("\(count)").monospacedDigit() }
+            }
+        }
+        .accessibilityLabel(SessionProjectSheet.buttonLabel)
+        .accessibilityValue(count.map { "\($0) sessions" } ?? "")
+        .accessibilityIdentifier("project-sessions-button")
+    }
+    #endif
 
     private func sessionWorkspace(_ session: Session) -> Agent? {
         appModel.agents?.items.first { $0.id == (session.agent?.id ?? session.agentId) }
@@ -2108,9 +2175,9 @@ struct TranscriptItemView: View {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red).textSelection(.enabled)
             }
-        case .authError(_, let message):
+        case .authError(let id, let message):
             if let console {
-                AuthErrorCardView(console: console, message: message)
+                AuthErrorCardView(console: console, message: message, settled: console.settlement.auth[id])
             } else {
                 // No console to act through (a preview / detached render): the diagnosis alone,
                 // which is what the runtime said in the first place.
@@ -2126,11 +2193,14 @@ struct TranscriptItemView: View {
                 Label(notice.message, systemImage: "clock.fill")
                     .foregroundStyle(.secondary).textSelection(.enabled)
             }
-        case .notice(_, let message):
+        case .notice(let id, let message, _):
             // A heads-up, not a failure — web's `.chat-notice`: the warning tone at label size,
-            // behind the triangle.
+            // behind the triangle. An account switch the conversation has moved past is history,
+            // muted with the sign-in card it came with.
             Label(message, systemImage: "exclamationmark.triangle.fill")
-                .font(.orbitLabel).foregroundStyle(.orange).textSelection(.enabled)
+                .font(.orbitLabel)
+                .foregroundStyle(console?.settlement.settledNotices.contains(id) == true ? Color.secondary : Color.orange)
+                .textSelection(.enabled)
         case .diagnostic(let notice):
             DiagnosticNoticeRow(notice: notice)
         case .mainCheckout(let item):
