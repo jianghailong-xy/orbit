@@ -8,7 +8,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { Prisma, ProjectIdentitySource, ProjectStatus } from '@prisma/client';
-import type { WorkspacePermissionRuleInfo } from '@orbit/shared';
+import { MAIN_CHECKOUT_GIT_CAPABILITY, type WorkspacePermissionRuleInfo } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -143,6 +143,7 @@ export class WorkspacesService {
         repoCleanupStatus: true,
         repoCleanupBranch: true,
         repoCleanupMessage: true,
+        capabilities: true,
       },
     },
   } as const;
@@ -158,18 +159,24 @@ export class WorkspacesService {
   private withRepoHealth<T extends { id: string; runner?: { repoHealth?: unknown } | null }>(
     workspace: T,
   ) {
-    if (!workspace.runner) return { ...workspace, repoHealth: null, repoCleanup: null };
+    if (!workspace.runner) return { ...workspace, repoHealth: null, repoCleanup: null, mainCheckoutActions: false };
     const {
       repoHealth: reported,
       repoCleanupStatus,
       repoCleanupBranch,
       repoCleanupMessage,
+      capabilities,
       ...runner
     } = workspace.runner as Record<string, unknown> & { repoHealth?: unknown };
     return {
       ...workspace,
       runner,
+      // The entry carries the main checkout counts and fingerprint a runner with main-checkout-git/v1 reports
+      // (head, upstream, ahead, behind, fileCount, truncated, fingerprint), for Shared and Worktree workspaces alike:
+      // both work in or fork from this one checkout.
       repoHealth: repoHealthForWorkspace(readRunnerRepoHealth(reported), workspace.id),
+      // Whether its runner can move, commit, push and rescue the main checkout: without it clients show no buttons.
+      mainCheckoutActions: Array.isArray(capabilities) && capabilities.includes(MAIN_CHECKOUT_GIT_CAPABILITY),
       // The repair relay's last word, so the UI can hold "Cleaning up…" and then name the rescue
       // branch instead of silently dropping the warning.
       repoCleanup: repoCleanupStatus

@@ -79,11 +79,8 @@ afterEach(async () => {
 describe('Admin → Integrations', () => {
   it('shows the switch, on, with how many apps accounts connected, and switches it off with one PUT', async () => {
     await open();
-    expect([...container!.querySelectorAll('.admin-nav-link')].map((a) => a.textContent)).toEqual(['Users', 'Sign-in', 'Email', 'Integrations']);
-    expect(container!.querySelector('.admin-nav-link.active')?.textContent).toBe('Integrations');
-    const card = container!.querySelector('.orbit-card')!;
-    expect(card.querySelector('.orbit-card-title')?.textContent).toBe('Feishu bots');
-    expect(card.querySelector('.orbit-badge')?.textContent).toBe('On');
+    expect(container!.querySelector('.settings-header-title')?.textContent).toBe('Feishu bots');
+    const card = container!.querySelector('.settings-card')!;
     expect(card.textContent).toContain(ALLOW_FEISHU_LABEL);
     expect(card.textContent).toContain('2 apps connected, 1 of them switched on.');
     const control = card.querySelector<HTMLElement>('[role="switch"]');
@@ -97,7 +94,6 @@ describe('Admin → Integrations', () => {
     });
     await settle();
     expect(puts).toEqual([{ allowed: false }]);
-    expect(card.querySelector('.orbit-badge')?.textContent).toBe('Off');
     expect(card.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('false');
     expect(toast.success).toHaveBeenCalledWith('Feishu bots turned off');
   });

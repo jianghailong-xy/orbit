@@ -20,7 +20,7 @@ import { TasksService } from '../tasks/tasks.service';
 import { assertCoordinatorPgUrlIsIsolated } from './coordinator-pg-test-safety';
 import { ProjectsService } from './projects.service';
 import { readProjectReadyToRun } from './project-ready-to-run';
-import { decideSessionSource } from './session-source';
+import { decideSessionSource, SESSION_SOURCE_TASK_SELECT } from './session-source';
 
 /**
  * The two spellings of "landed" that `84a5cb89c` deliberately left alone, both driven against a
@@ -281,10 +281,7 @@ async function land(
 async function resolvedSource(stack: Stack, taskId: string) {
   const row = await stack.db.task.findUniqueOrThrow({
     where: { id: taskId },
-    select: {
-      id: true, projectId: true, verifiesTaskId: true, pinnedRevision: true, codeless: true,
-      attemptGeneration: true, knownGoodSha: true,
-    },
+    select: SESSION_SOURCE_TASK_SELECT,
   });
   return await decideSessionSource(stack.prisma, row);
 }

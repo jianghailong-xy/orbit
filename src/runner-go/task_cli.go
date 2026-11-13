@@ -296,6 +296,8 @@ Options:
                               task by itself once this instant has come (see below)
   --start-now                 Start the task as soon as it is created: one approval covers the
                               create and the start (see below); not with --run-at
+  --fork-from-session         Start the task from this session's work, uncommitted edits
+                              included, on this machine in its own checkout
   --engine ENGINE             Pin the CLI the run uses: claude (Claude Code), codex (Codex),
                               kimi (Kimi Code), antigravity (Antigravity CLI), opencode
                               (OpenCode), dsh (DeepSeek Harness) or cursor (Cursor CLI)
@@ -1779,6 +1781,7 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	dueDate := fs.String("due-date", "", "ISO due date")
 	runAt := fs.String("run-at", "", "one-time scheduled start: when the server starts this task by itself (ISO 8601 date-time)")
 	startNow := fs.Bool("start-now", false, "start the task as soon as it is created: one approval covers the create and the start")
+	forkFromSession := fs.Bool("fork-from-session", false, "start the task from this session's work, uncommitted edits included")
 	engine := fs.String("engine", "", "run on this engine (the CLI) instead of the assignee's")
 	provider := fs.String("provider", "", "run on this provider (the credential) instead of the assignee's")
 	model := fs.String("model", "", "run on this model instead of the assignee's")
@@ -2078,6 +2081,14 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	// turn's re-created tasks (see TasksService idempotency). ORBIT_AGENT_ID stays the default
 	// assignee regardless.
 	agentID, sessionID := cliTaskAttribution()
+	// The snapshot the MCP door takes (design §2.2), at the start of the call and before the card.
+	var fork *forkSnapshot
+	if *forkFromSession {
+		if fork, err = takeForkSnapshot(sessionID, *title); err != nil {
+			return fmt.Errorf("--fork-from-session: %w", err)
+		}
+		body["fork"] = fork.payload()
+	}
 	// The same card the MCP tool raises: an agent that shells out to this command must not find a
 	// door the tool keeps closed. Headless there is no session, and so nobody to ask — nor as the
 	// person, who is the one asking: a card is filed by a session, on the runner's routes.
@@ -2085,8 +2096,10 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	if runner, ok := t.(*Transport); ok {
 		declined, start, err := askBeforeTaskCreate(runner, sessionID, body)
 		if err != nil {
+			fork.release()
 			return fmt.Errorf("create task: %w", err)
 		} else if declined != "" {
+			fork.release()
 			return fmt.Errorf("create task: the human rejected this task: %s", declined)
 		}
 		startAfterCreate = start
@@ -2097,6 +2110,9 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	}
 	raw, err := t.createTask(agentID, sessionID, body)
 	if err != nil {
+		if createRefused(err) {
+			fork.release()
+		}
 		// Verbatim, plus how to ask when the refusal is the one whose own requiredAction offers a
 		// handoff as the way through.
 		return fmt.Errorf("create task: %w%s", err, crossProjectCrossingGuidance(err))
@@ -2292,6 +2308,27 @@ func cliTaskCreateBatch(args []string, in io.Reader, out io.Writer) error {
 	}
 	// In-session agent attribution + session link, same as `orbit task create`.
 	agentID, sessionID := cliTaskAttribution()
+	// forkFromSession, as on the MCP tool: one snapshot for every item that asks, none for a dry run.
+	var forking []int
+	for i, item := range items {
+		if fork, _ := item["forkFromSession"].(bool); fork {
+			forking = append(forking, i)
+		}
+		delete(item, "forkFromSession")
+	}
+	var fork *forkSnapshot
+	if len(forking) > 0 && !*dryRun {
+		title, _ := items[forking[0]]["title"].(string)
+		if len(forking) > 1 {
+			title = fmt.Sprintf("%s (and %d more)", title, len(forking)-1)
+		}
+		if fork, err = takeForkSnapshot(sessionID, title); err != nil {
+			return fmt.Errorf("create tasks: %w", err)
+		}
+		for _, i := range forking {
+			items[i]["fork"] = fork.payload()
+		}
+	}
 	body := map[string]interface{}{"tasks": items}
 	verb := "create tasks"
 	if *dryRun {
@@ -2302,13 +2339,18 @@ func cliTaskCreateBatch(args []string, in io.Reader, out io.Writer) error {
 	// from a session, whose card rides the runner's routes, as `orbit task create`'s does.
 	if runner, ok := t.(*Transport); ok && !*dryRun {
 		if declined, err := askBeforeBatch(runner, agentID, sessionID, items); err != nil {
+			fork.release()
 			return fmt.Errorf("%s: %w", verb, err)
 		} else if declined != "" {
+			fork.release()
 			return fmt.Errorf("%s: the human rejected this batch: %s", verb, declined)
 		}
 	}
 	out2, err := t.createTasksBatch(agentID, sessionID, body)
 	if err != nil {
+		if createRefused(err) {
+			fork.release()
+		}
 		return fmt.Errorf("%s: %w%s", verb, err, crossProjectCrossingGuidance(err))
 	}
 	return writeCLIRawJSON(out, out2, *jsonOut)

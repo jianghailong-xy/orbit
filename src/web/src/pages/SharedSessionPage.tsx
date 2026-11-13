@@ -25,8 +25,9 @@ import { memoizeEventFull } from '../lib/eventFull';
 import { routeId } from '../lib/idCodec';
 import { projectLinkResolver, taskLinkResolver } from '../lib/publicLinks';
 import {
-  isSessionBusy,
   isSessionLive,
+  isSessionWorking,
+  sessionActivityOf,
   sessionLifecycleStateOf,
   sessionRunStateOf,
   sessionStateWord,
@@ -52,7 +53,8 @@ const WAITING_POLL_MS = 30_000;
 /** How long until a followed conversation is asked again, after an answer that did or did not bring
  *  anything new (`moved`); null once it has stopped and gone quiet — over, or filed Completed. */
 export function followDelay(state: SessionStateSource, moved: boolean): number | null {
-  if (moved || isSessionBusy(state)) return WORKING_POLL_MS;
+  // A turn the engine started for itself streams like a dispatched one, so it is followed as closely.
+  if (moved || isSessionWorking(state)) return WORKING_POLL_MS;
   if (isSessionLive(state) && sessionLifecycleStateOf(state) !== 'COMPLETED') return WAITING_POLL_MS;
   return null;
 }
@@ -107,6 +109,22 @@ export const RUN_TONE: Record<SessionRunState, string> = {
   INTERRUPTED: 'cancelled',
   ENDED: 'cancelled',
 };
+
+/**
+ * The pill's colour for a shared session's header: its run's, except where the run state alone says
+ * the wrong thing. A parked session still working (sessionActivityOf) wears a live colour — the
+ * spinner's for a turn, the in-progress square for a job or a wait — not the amber of a wait on its
+ * reader; and an idle one whose reader cannot reply (`canReply: false`, a public link) is grey.
+ */
+export function sharedStateTone(head: SessionStateSource, canReply: boolean): string {
+  if (sessionLifecycleStateOf(head) === 'COMPLETED') return 'done';
+  const activity = sessionActivityOf(head);
+  if (activity === 'TURN') return 'running';
+  if (activity) return 'ongoing';
+  const state = sessionRunStateOf(head);
+  if (state === 'AWAITING_INPUT' && !canReply) return 'todo';
+  return RUN_TONE[state];
+}
 
 /**
  * Public, read-only view of a conversation a link shares: a session link's own (`/s/<token>`), or
@@ -323,8 +341,8 @@ function SharedConversation() {
 
   if (isLoading) return <SharedLoading />;
   if (isError || !head) return <SharedUnavailable />;
-  const tone =
-    sessionLifecycleStateOf(head) === 'COMPLETED' ? 'done' : RUN_TONE[sessionRunStateOf(head)];
+  // A public link's reader cannot reply, so an idle session is not waiting on them.
+  const tone = sharedStateTone(head, false);
   return (
     <PublicShell
       crumbs={
@@ -352,7 +370,7 @@ function SharedConversation() {
       status={
         <span className={`status-pill ${tone}`}>
           {tone === 'running' ? <LoadingOutlined spin /> : <span className="status-dot" />}
-          {sessionStateWord(head)}
+          {sessionStateWord(head, { canReply: false })}
         </span>
       }
       scrollRef={scrollRef}

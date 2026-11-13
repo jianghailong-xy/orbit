@@ -548,7 +548,7 @@ function WorkspaceRows({
   );
 }
 
-function NavGroup({
+export function NavGroup({
   title,
   add,
   children,
@@ -572,7 +572,7 @@ function NavGroup({
   );
 }
 
-function NavRow({
+export function NavRow({
   to,
   icon,
   label,

@@ -94,4 +94,38 @@ class RunnerUpdatingTest {
         assertEquals("The runner starts no new turns until 2 turns finish, then updates to 0.1.254. This message is sent right after.",
             RunnerUpdating.runnerUpdatingMessageText(gate, " "))
     }
+
+    /** A runner that is stopping, not updating (board runner-stopping, web `runnerSlots.runnerUpdating.test.ts`): it says so everywhere,
+     *  and the session or message goes once it is back. */
+    @Test fun aRunnerThatIsStoppingSaysStopping() {
+        val stopping = gate.copy(queuedRunnerUpdate = update.copy(stopping = true))
+        assertTrue(RunnerUpdating.isRunnerStopping(stopping))
+        assertFalse(RunnerUpdating.isRunnerStopping(gate))
+        assertFalse("only a runner_updating hold", RunnerUpdating.isRunnerStopping(stopping.copy(queuedReason = "runner_offline")))
+        assertEquals("Runner stopping", RunnerUpdating.runnerUpdatingTitle(stopping))
+        assertEquals("runner stopping", RunnerUpdating.runnerUpdatingTag(stopping))
+        assertEquals("Runner updating", RunnerUpdating.runnerUpdatingTitle(gate))
+        assertEquals("HPC is stopping. It starts no new work until 2 turns finish: Backfill missing shard rows and Why are 11-08 metrics zero. " +
+            "This session starts once HPC is back.", RunnerUpdating.runnerUpdatingPlain(RunnerUpdating.runnerUpdatingDescription(stopping, "HPC")))
+        val idle = stopping.copy(queuedActive = 0, queuedRunnerUpdate = stopping.queuedRunnerUpdate!!.copy(turns = emptyList()))
+        assertEquals("The runner is stopping. This session starts once it is back.",
+            RunnerUpdating.runnerUpdatingPlain(RunnerUpdating.runnerUpdatingDescription(idle, null)))
+        assertEquals("HPC starts no new turns until 2 turns finish, then stops. This message is sent once it is back.",
+            RunnerUpdating.runnerUpdatingMessageText(stopping, "HPC"))
+        assertEquals("HPC stops now. This message is sent once it is back.", RunnerUpdating.runnerUpdatingMessageText(idle, "HPC"))
+        // The list line and the state word.
+        val row = DirectorySession("s", status = "PENDING", runState = "QUEUED", queuedReason = "runner_updating", queuedActive = 2,
+            queuedRunnerUpdate = Wire.json.parseToJsonElement("""{"stopping":true,"targetVersion":null,"since":null,"turns":[]}"""))
+        assertEquals(SessionLine("Runner stopping", SessionLine.Tone.WARNING), SessionLine.make(row, live = true, machine = "HPC"))
+        assertEquals("Runner stopping", SessionHeader.statusWord(row))
+    }
+
+    @Test fun readsStoppingFromTheRowAndAnOlderServerIsUpdating() {
+        fun gateOf(update: String) = Wire.json.decodeFromString(DirectorySession.serializer(),
+            """{"id":"s","queuedReason":"runner_updating","queuedRunnerUpdate":$update}""").queuedGate
+        assertTrue(gateOf("""{"stopping":true,"turns":[]}""").queuedRunnerUpdate!!.stopping)
+        assertFalse(gateOf("""{"stopping":false,"turns":[]}""").queuedRunnerUpdate!!.stopping)
+        assertFalse("absent from an older server", gateOf("""{"targetVersion":"0.1.254","turns":[]}""").queuedRunnerUpdate!!.stopping)
+        assertFalse(gateOf("""{"stopping":"true","turns":[]}""").queuedRunnerUpdate!!.stopping)
+    }
 }

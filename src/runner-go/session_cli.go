@@ -121,6 +121,9 @@ Options:
                            run commands, use auto. Inside a session it can never be wider
                            than that session's own mode: a wider mode is refused, and a
                            wider default gives way to its mode
+  --no-worktree            Run in the agent's own checkout with no branch and no worktree,
+                           even when the agent isolates each session: for work that changes
+                           no code. The session shares that checkout and has no branch to merge
   --wait[=BOOL]            Wait until the first turn settles. Inside a session the wait is first
                            recorded as a watch that wakes this session when the turn settles: if
                            the wait runs out or the server stops answering, the output carries
@@ -128,12 +131,6 @@ Options:
                            recorded, a session that has not settled carries why under "watch"
                            instead and stderr says so in one line, and a watch the server
                            refuses ends the wait at once
-  --no-worktree            Run in the agent's own checkout, with no branch and no worktree, even
-                           when the agent isolates each session in a worktree. For work that
-                           changes no code (investigating, reading logs, answering a question):
-                           it leaves no unmerged branch behind. Not for code changes: the
-                           session edits the checkout every other non-isolated session shares,
-                           and has no branch to merge. Omit it to follow the agent's own setting
   --json
 
 --engine and --provider together must be a pair that runs: a provider names the engines it

@@ -55,6 +55,7 @@ import { api, clearToken, logoutSession } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
 import { SharedWithMeGroup } from './SharedWithMe';
 import { useIsMobile } from '../lib/useMediaQuery';
+import { useSidebarFolded } from '../lib/sidebarFold';
 import {
   avatarQuery,
   meQuery,
@@ -497,16 +498,28 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
 
   // Collapse the whole panel to a slim icon rail (desktop) — hands the content
   // region the full width back. Persisted so the choice survives a refresh.
-  const [collapsed, setCollapsed] = useState<boolean>(
+  const [kept, setCollapsed] = useState<boolean>(
     () => localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1',
   );
+  // A page may ask for the icon rail while it needs the width (the Wiki's chat column, `useSidebarFolded`): shown
+  // collapsed then, and the toggle opens it back for that while without changing the choice kept above.
+  const folded = useSidebarFolded();
+  const [unfolded, setUnfolded] = useState(false);
+  useEffect(() => {
+    if (!folded) setUnfolded(false);
+  }, [folded]);
+  const collapsed = kept || (folded && !unfolded);
   const toggleCollapsed = useCallback(() => {
+    if (folded && !kept) {
+      setUnfolded((u) => !u);
+      return;
+    }
     setCollapsed((c) => {
       const next = !c;
       localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0');
       return next;
     });
-  }, []);
+  }, [folded, kept]);
   // Cmd/Ctrl + Backslash toggles the sidebar — the VS Code / Linear / Notion convention.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
