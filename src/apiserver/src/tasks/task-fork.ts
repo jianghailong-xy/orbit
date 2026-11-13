@@ -25,15 +25,24 @@ export interface TaskForkInput {
   sha: string;
   baseHead: string;
   includesUncommitted: boolean;
+  /** The paths the snapshot changed relative to `baseHead`; absent from a runner older than P3. */
+  changedFiles?: string[];
 }
 
-/** The five columns migration 0605 adds, as the task's INSERT writes them. */
+/**
+ * The most paths a fork may name (`changedFiles`). The runner sends at most this many; a snapshot that
+ * touched more is a fork of a checkout in a state nobody would read path by path anyway.
+ */
+export const TASK_FORK_CHANGED_FILES_MAX = 1000;
+
+/** The columns migrations 0605 and 0607 add, as the task's INSERT writes them. */
 export interface TaskForkColumns {
   forkSessionId: string;
   forkRunnerId: string;
   forkSha: string;
   forkBaseHead: string;
   forkIncludesUncommitted: boolean;
+  forkChangedFiles: string[];
 }
 
 /** SR55's two codes. Both are §10.1 rows; neither is ever written on a session. */
@@ -145,6 +154,8 @@ export async function resolveTaskFork(
     forkSha: sha,
     forkBaseHead: baseHead,
     forkIncludesUncommitted: fork.includesUncommitted,
+    // A snapshot that is HEAD changed nothing, whatever a caller sent beside it.
+    forkChangedFiles: fork.includesUncommitted ? [...new Set(fork.changedFiles ?? [])] : [],
   };
 }
 

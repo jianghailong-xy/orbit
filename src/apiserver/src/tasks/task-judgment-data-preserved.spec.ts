@@ -2951,7 +2951,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // and swaps four session SOURCE CHECKs; no preserved rows, triggers or DONE fence change.
       '0605_task_session_fork',
       // 0606 only validates 0605's five CHECKs.
-      '0606_task_session_fork_checks'],
+      '0606_task_session_fork_checks',
+      // 0607 adds `task.fork_changed_files` (TEXT[] NOT NULL DEFAULT '{}', catalog-only) and restates 0605's fork
+      // guard to cover it; no preserved rows, triggers or DONE fence change, and no row is written.
+      '0607_task_fork_changed_files'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

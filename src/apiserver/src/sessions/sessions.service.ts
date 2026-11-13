@@ -180,12 +180,14 @@ import {
 import {
   chatSourceColumns,
   decideSessionSource,
+  forkSourceLine,
   SESSION_SOURCE_TASK_SELECT,
   type SessionSourceDecision,
   type SessionSourceTaskRow,
 } from '../projects/session-source';
 import { SourceResolutionRefusal } from '../projects/source-selector';
 import { forkRefusalBody } from '../tasks/task-fork';
+import { isCodelessTaskRun } from './codeless-checkout';
 import { readWikiChatContext, sameWikiChatContext, wikiContextOutsideChat } from '../wiki/wiki-chat-context';
 import { branchName } from '../projects/project-criterion-landing';
 import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
@@ -1383,7 +1385,17 @@ export class SessionsService {
     // A forked task's run always gets its own branch, whatever the workspace says (SR55, design §2.4):
     // a pinned run with no branch is refused at checkout (WORKTREE_REQUIRED), and running it in the
     // shared workDir would put it in the very directory the session it forked from may be writing.
-    let branch = enableWorktree || source.columns.sourceKind === 'SESSION_FORK' ? makeBranchName(title) : null;
+    //
+    // A codeless task's run gets no branch here (design §3, B2): it is still isolated, in a checkout the claim
+    // asks for detached, and its branch is made at finalize only if the run changed something.
+    const codelessRun = isCodelessTaskRun({
+      taskId: sourceTask?.id ?? null,
+      sourceKind: source.columns.sourceKind ?? null,
+      task: sourceTask,
+    });
+    let branch = (enableWorktree && !codelessRun) || source.columns.sourceKind === 'SESSION_FORK'
+      ? makeBranchName(title)
+      : null;
     // Refuse now if the machine this is bound for cannot start it at all, rather than creating a
     // session (and, on the runner, a git checkout) that dies a second later with the same message.
     // Only for a runtime signed out on an online runner — see signedOutEngineRefusal for
@@ -4370,6 +4382,10 @@ export class SessionsService {
         task: {
           select: {
             codeless: true,
+            // Row PF's facts, for SR18's line (`forkSource` below).
+            forkSessionId: true,
+            forkSha: true,
+            forkIncludesUncommitted: true,
             project: {
               select: {
                 codebases: {
@@ -4533,6 +4549,8 @@ export class SessionsService {
       route,
       poolCodexLogin,
       mergeTarget,
+      // SR18's sentence when the task this session runs was forked from a session (design §2.3).
+      forkSource: await forkSourceLine(this.prisma, task),
       // When its turn last ended or it finished, and what it last said — what a repair waiting for the
       // owner asked — clipped to the session list's preview length, in code points as `left()` counts.
       mergeRepairSession: children[0] ? withSessionState({

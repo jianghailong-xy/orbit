@@ -29,6 +29,7 @@ import {
   OWNER_DECISIONS,
   type OwnerDecisionValue,
 } from './task-owner-confirmation';
+import { TASK_FORK_CHANGED_FILES_MAX } from './task-fork';
 import { TASK_TERMINAL_REASONS, type TaskTerminalReason } from './task-supersession';
 import {
   TASK_COMPLETION_POLICIES,
@@ -401,6 +402,13 @@ export class TaskForkDto {
   @IsString() @Matches(/^[0-9a-fA-F]{40}$/) baseHead!: string;
   /** True exactly when `sha` is not `baseHead`. */
   @IsBoolean() includesUncommitted!: boolean;
+  /**
+   * The paths `sha` changed relative to `baseHead` (`git diff --name-only`), which the task_await
+   * payload names (design §2.7 F4). Optional: a runner from before P3 sends none.
+   */
+  @IsOptional() @IsArray() @ArrayMaxSize(TASK_FORK_CHANGED_FILES_MAX) @IsString({ each: true })
+  @MaxLength(4096, { each: true })
+  changedFiles?: string[];
 }
 
 export class CreateTaskDto {

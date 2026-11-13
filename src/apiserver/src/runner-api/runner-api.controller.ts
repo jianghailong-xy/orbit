@@ -1,5 +1,6 @@
 import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from '../sessions/run-question';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
+import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
 import { readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import {
@@ -3820,7 +3821,7 @@ export class RunnerApiController {
   async reclaim(
     // runsAsRoot rides the authenticated row (RunnerAuthGuard loads it whole): the claim below has
     // to withdraw Bypass for the machine that is about to spawn the process, not for some other.
-    @CurrentRunner() runner: { id: string; ownerId: string; runsAsRoot?: boolean | null },
+    @CurrentRunner() runner: { id: string; ownerId: string; runsAsRoot?: boolean | null; capabilities?: string[] | null },
     @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
   ): Promise<ReclaimResponse> {
     const sessions = await this.prisma.session.findMany({
@@ -4126,6 +4127,8 @@ export class RunnerApiController {
         agent: workspaceCfg,
         workDir: workspace?.workDir ?? undefined,
         branch: s.branch ?? undefined,
+        // cf. the claim path: a codeless run with no branch yet goes back to its detached checkout.
+        ...codelessClaimFields(s, workspace, runner.capabilities),
         autoInitGit: workspace?.autoInitGit ?? undefined,
         // cf. the claim path: a folder Orbit made the workspace in is made on the machine if it is missing.
         ...(workspace?.autoCreateWorkDir ? { createWorkDir: true } : {}),
@@ -9015,6 +9018,9 @@ export class RunnerApiController {
       const current = await tx.session.findUniqueOrThrow({
         where: { id: sessionId },
       });
+      // A branch the session was not created with is accepted only from a codeless task's run, which makes
+      // its branch at finalize (design §3, B2); any other such report is not written (codeless-checkout.ts).
+      dto.branch = await acceptedFinalizeBranch(tx, current, dto.branch);
 
       // If cancel/end won the row lock, its reason is authoritative regardless of what
       // the runner reports. TASK_DONE settles SUCCEEDED; task-cancel/user-end/idle and

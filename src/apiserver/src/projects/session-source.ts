@@ -26,6 +26,7 @@ import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import type { RefusedRunSource } from '../tasks/task-dispatch-refusal';
 import { branchName, LANDED_RESULTS, receiptTargetBranches } from './project-criterion-landing';
 import {
+  forkReason,
   resolveSource,
   SourceReason,
   SourceResolution,
@@ -278,6 +279,21 @@ async function forkInput(
     sha: task.forkSha,
     includesUncommitted: task.forkIncludesUncommitted === true,
   };
+}
+
+/**
+ * SR18's sentence for a forked task, as the task and session detail answer it (`forkSource`), so
+ * every client shows the fork the way the SOURCE reason states it: "Forked from session «title» at
+ * abc1234 (includes uncommitted changes)". Null for a task that was not forked. The title is read
+ * now, so a forking session renamed since is named as it is called today.
+ */
+export async function forkSourceLine(
+  prisma: PrismaService,
+  task: Pick<SessionSourceTaskRow, 'forkSessionId' | 'forkSha' | 'forkIncludesUncommitted'> | null | undefined,
+): Promise<string | null> {
+  if (!task || task.forkSha == null || task.forkSessionId == null) return null;
+  const fork = await forkInput(prisma, { ...task } as SessionSourceTaskRow);
+  return fork ? forkReason(fork.sessionTitle, fork.sha, fork.includesUncommitted) : null;
 }
 
 /**

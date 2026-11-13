@@ -1371,6 +1371,11 @@ export interface RunnerHeartbeatResponse {
  *  the same string. */
 export const TASK_FORK_V1 = 'task-fork/v1';
 
+/** Declared by a runner that runs a codeless task in a detached checkout and makes its branch only at finalize, when
+ *  the run changed something (`ClaimedSession.codelessCheckout`, docs/task-fork-from-session-design.md §3 B2). An
+ *  older runner is handed the branch up front instead. runner-go asserts the same string. */
+export const CODELESS_CHECKOUT_V1 = 'codeless-checkout/v1';
+
 /** Declared by a runner that honours the owner's Later (`postponeSelfUpdateUntil`,
  *  docs/runner-update-drain-design.md §4). A runner without it is refused a postpone as too old.
  *  runner-go asserts the same string. */
@@ -2243,6 +2248,13 @@ export interface ClaimedSession {
    *  and workDir is a git repo, the runner runs claude in a per-session `git worktree` on
    *  this branch instead of the shared workDir. Generated server-side at session creation. */
   branch?: string;
+  /** A codeless task's run with no branch yet (docs/task-fork-from-session-design.md §3 B2), sent only to a runner
+   *  that declares `codeless-checkout/v1` and only when `branch` is absent: run in a checkout of its own, detached
+   *  at the run's base (`git worktree add --detach`). At finalize, nothing changed → the checkout is removed and no
+   *  branch is made; changes → `codelessBranch` is created there, committed to, and reported as the branch. */
+  codelessCheckout?: boolean;
+  /** The branch a `codelessCheckout` run makes at finalize if it changed anything. */
+  codelessBranch?: string;
   /** Agent opt-in: if workDir isn't a git repo, the runner `git init`s it (default
    *  .gitignore + baseline commit) so the session can still be worktree-isolated. */
   autoInitGit?: boolean;
@@ -2703,6 +2715,10 @@ export interface ReclaimSession {
   /** Git branch for this session's worktree, cf. ClaimedSession.branch. On reclaim the
    *  runner re-attaches to (or re-creates from this branch) the same worktree. */
   branch?: string;
+  /** cf. ClaimedSession.codelessCheckout: the codeless run's detached checkout is re-attached. */
+  codelessCheckout?: boolean;
+  /** cf. ClaimedSession.codelessBranch. */
+  codelessBranch?: string;
   /** Agent opt-in to auto-`git init` a non-git workDir, cf. ClaimedSession.autoInitGit. */
   autoInitGit?: boolean;
   /** Make a missing workDir inside reposRoot first, cf. ClaimedSession.createWorkDir. */

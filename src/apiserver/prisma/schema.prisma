@@ -5760,6 +5760,11 @@ model Task {
   /// Whether the snapshot carries edits the forking session had not committed: exactly when
   /// `forkSha` is not `forkBaseHead` (0605's `task_fork_shape_chk`).
   forkIncludesUncommitted Boolean? @map("fork_includes_uncommitted")
+  /// The paths the snapshot changed relative to `forkBaseHead`, as the runner read them when it took
+  /// it (migration 0607): what a forked task's task_await payload names (design §2.7 F4). Empty when
+  /// the task was not forked, the snapshot changed nothing, or its runner sent none; written once,
+  /// like the five above.
+  forkChangedFiles        String[] @default([]) @map("fork_changed_files")
   /// The refusal this task's most recent start met before its run could begin (migration 0298):
   /// a `TaskDispatchRefusal` (@orbit/shared) — the §10.1 code and its fixAction, when, which run,
   /// the commit it stood on and the prerequisite commits that commit did not contain. NULL when

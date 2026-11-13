@@ -874,6 +874,82 @@ test('the wake is auditable in the transcript: the Match\'s reason, the targets 
   assert.deepEqual(listed.map((queued) => [queued.turnId, queued.content]), [[turn.id, content]]);
 });
 
+/**
+ * A task forked from a session (docs/task-fork-from-session-design.md §2.5, §2.7 F4): the forking session merges
+ * the task's branch itself, so the turn task_await wakes it with carries what that takes — the branch, the
+ * snapshot and its base, the files the snapshot changed, and the merge instruction (read `git diff HEAD...<branch>`
+ * first, then `git merge --no-ff <branch>`) — once the Match saw the task DONE.
+ */
+async function insertForkedTask(
+  owner: string, status: string, fork: { runnerId: string; sessionId: string; sha: string; baseHead: string; files: string[] },
+): Promise<string> {
+  const id = randomUUID();
+  await sql.query(
+    `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","updated_at","completion_criterion","status",
+                        "fork_session_id","fork_runner_id","fork_sha","fork_base_head","fork_includes_uncommitted",
+                        "fork_changed_files")
+     VALUES ($1,'forked work',$2,'USER',$2,now(),'EVIDENCE_JUDGMENT',$3,$4,$5,$6,$7,$6 <> $7,$8::text[])`,
+    [id, owner, status, fork.sessionId, fork.runnerId, fork.sha, fork.baseHead, fork.files],
+  );
+  return id;
+}
+
+test('task_await on a forked task: the wake carries its branch, forkSha, the snapshot\'s files and the merge command', { skip, timeout: 120_000 }, async () => {
+  const owner = await insertUser();
+  const runner = await insertRunner(owner);
+  const observer = await insertSession(owner, 'AWAITING_INPUT', runner);
+  const snapshot = 'a'.repeat(40);
+  const baseHead = 'b'.repeat(40);
+  const fork = { runnerId: runner, sessionId: observer, sha: snapshot, baseHead, files: ['src/claim.ts', 'notes/todo.md'] };
+  // Inserted DONE (a direct status write is refused by the DONE fence): the watch matches as it is made.
+  const done = await insertForkedTask(owner, 'DONE', fork);
+  const open = await insertForkedTask(owner, 'OPEN', { ...fork, files: [] , sha: baseHead });
+  const plain = await insertTask(owner, 'DONE');
+  // The forked task's run, on the branch its work is on; the open one's run has not made one yet.
+  await sql.query(
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","status","assigned_runner_id",
+                           "provider","provider_builtin","task_id","branch")
+     VALUES ($1,'the forked run','go',$2,$2,now(),'SUCCEEDED',$3,'claude',TRUE,$4,'orbit/finish-the-claim-refactor-1a2b3c')`,
+    [randomUUID(), owner, runner, done],
+  );
+  const watch = await createWatch(owner, {
+    predicate: { kind: 'ANY', over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' },
+    targets: [done, open, plain],
+    action: 'RESUME_SESSION',
+    observerSessionId: observer,
+  });
+  assert.equal(watch.state, 'MATCHED', 'the condition already held, so the create recorded the Match');
+  const { id: deliveryId } = await onlyDelivery(watch.id);
+  const { delivery } = await worker();
+  assert.deepEqual(outcomesFor(await delivery.drain(), deliveryId), ['DELIVERED']);
+
+  const [turn] = await turnsOn(observer);
+  const fenced = [...(turn.content ?? '').matchAll(/```json\n([\s\S]*?)\n```/g)];
+  assert.equal(fenced.length, 1);
+  const payload = JSON.parse(fenced[0][1]);
+  const branch = 'orbit/finish-the-claim-refactor-1a2b3c';
+  assert.deepEqual(payload.forkedTasks, [
+    {
+      taskId: done,
+      branch,
+      forkSha: snapshot,
+      baseHead,
+      includesUncommitted: true,
+      snapshotChangedFiles: ['src/claim.ts', 'notes/todo.md'],
+      reviewCommand: `git diff HEAD...${branch}`,
+      mergeCommand: `git merge --no-ff ${branch}`,
+      mergeInstruction: `In the checkout of the session this task was forked from, first read \`git diff HEAD...${branch}\`: `
+        + 'an edit you reverted after the snapshot comes back through the merge without a conflict, so check '
+        + `the snapshot's files in that diff. Then run \`git merge --no-ff ${branch}\`.`,
+    },
+    // Still OPEN, with no run on a branch: named, with nothing to merge yet.
+    { taskId: open, branch: null, forkSha: baseHead, baseHead, includesUncommitted: false, snapshotChangedFiles: [] },
+  ], 'one entry per forked target, none for the task that was not forked');
+  // The merge instruction says to read the diff BEFORE merging (§2.7 F4).
+  const instruction = payload.forkedTasks[0].mergeInstruction as string;
+  assert.ok(instruction.indexOf('git diff HEAD...') < instruction.indexOf('git merge --no-ff'));
+});
+
 test('a wake over the largest target set still fits one turn: every changed target is named and the snapshot points at the watch', { skip, timeout: 120_000 }, async () => {
   const owner = await insertUser();
   const observer = await insertSession(owner, 'AWAITING_INPUT', await insertRunner(owner));

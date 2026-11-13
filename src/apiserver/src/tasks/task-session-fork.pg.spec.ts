@@ -32,6 +32,7 @@ import { freezeSessionSourcePin } from '../projects/session-source';
 import { QueueService } from '../queue/queue.service';
 import { RunnerTasksController } from '../runner-api/runner-tasks.controller';
 import { SessionsService } from '../sessions/sessions.service';
+import { acceptedFinalizeBranch, codelessBranchName } from '../sessions/codeless-checkout';
 import { TasksService } from './tasks.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -265,6 +266,100 @@ test('SR55: a task forked from its creating session', { skip, concurrency: 1, ti
     const plainRun = await sessionRow((await startRun(w, plain.id)).id);
     assert.equal(plainRun.branch, null, 'the control: the same workspace gives an ordinary task no branch');
     assert.equal(plainRun.sourceState, 'UNBOUND');
+  });
+
+  await t.test('P3: the fork keeps the files its snapshot changed, and both details state SR18’s line', async () => {
+    const w = await seed('p3-source');
+    const task = await createForked(w, {
+      fork: {
+        sessionId: w.forkingSessionId, sha: SNAPSHOT, baseHead: HEAD, includesUncommitted: true,
+        changedFiles: ['src/claim.ts', 'src/claim.ts', 'notes.md'],
+      },
+    }) as { id: string };
+    const stored = await prisma.task.findUniqueOrThrow({ where: { id: task.id }, select: { forkChangedFiles: true } });
+    assert.deepEqual(stored.forkChangedFiles, ['src/claim.ts', 'notes.md'], 'kept once each, in order');
+    await assert.rejects(
+      admin.query(`UPDATE "task" SET "fork_changed_files" = '{}' WHERE "id" = $1`, [task.id]),
+      /TASK_FORK_IMMUTABLE/,
+      '0607 extends the guard to the new column',
+    );
+    // A snapshot that is HEAD changed nothing, whatever was sent beside it.
+    const clean = await createForked(w, {
+      fork: { sessionId: w.forkingSessionId, sha: HEAD, baseHead: HEAD, includesUncommitted: false, changedFiles: ['x'] },
+    }) as { id: string };
+    const cleanRow = await prisma.task.findUniqueOrThrow({ where: { id: clean.id }, select: { forkChangedFiles: true } });
+    assert.deepEqual(cleanRow.forkChangedFiles, []);
+
+    const line = 'Forked from session «Refactor the claim path» at 5555555 (includes uncommitted changes)';
+    assert.equal((await tasks.get(w.ownerId, task.id) as { forkSource: string | null }).forkSource, line);
+    assert.equal(
+      (await tasks.get(w.ownerId, clean.id) as { forkSource: string | null }).forkSource,
+      'Forked from session «Refactor the claim path» at 4444444',
+    );
+    const run = await startRun(w, task.id);
+    assert.equal((await sessions.get(w.ownerId, run.id) as { forkSource: string | null }).forkSource, line);
+    const plain = await createForked(w, { title: 'Ordinary work', fork: undefined }) as { id: string };
+    assert.equal((await tasks.get(w.ownerId, plain.id) as { forkSource: string | null }).forkSource, null);
+    assert.equal(
+      (await sessions.get(w.ownerId, w.forkingSessionId) as { forkSource: string | null }).forkSource,
+      null,
+      'a session that runs no forked task has no fork line',
+    );
+  });
+
+  await t.test('P3 (design §3 B2): a codeless task’s run is created with no branch and claimed detached', async () => {
+    const w = await seed('p3-codeless');
+    await admin.query('UPDATE "workspace" SET "enable_worktree" = true WHERE "id" = $1', [w.workspaceA]);
+    await admin.query(`UPDATE "runner" SET "capabilities" = '{codeless-checkout/v1}' WHERE "id" = $1`, [w.runnerA]);
+    const codeless = await createForked(w, { title: 'Write the notes', fork: undefined, codeless: true }) as { id: string };
+    const run = await startRun(w, codeless.id);
+    assert.equal((await sessionRow(run.id)).branch, null, 'no branch is named at create');
+
+    const claimed = await queue.claimSessionForRunner({ id: w.runnerA } as never);
+    assert.equal(claimed?.sessionId, run.id);
+    assert.equal(claimed?.branch, undefined);
+    assert.equal(claimed?.codelessCheckout, true);
+    assert.match(claimed?.codelessBranch ?? '', /^orbit\/finish-the-claim-refactor-[0-9a-f]{6}$/);
+    const again = codelessBranchName('Finish the claim refactor', run.id);
+    assert.equal(claimed?.codelessBranch, again, 'every claim of the session names the same branch');
+
+    // The finalize door: a branch first reported at finalize is accepted for this kind of session only.
+    assert.equal(
+      await prisma.$transaction((tx) => acceptedFinalizeBranch(tx as never, { taskId: codeless.id, branch: null, sourceKind: null }, again)),
+      again,
+    );
+    const ordinary = await createForked(w, { title: 'Ordinary work', fork: undefined }) as { id: string };
+    assert.equal(
+      await prisma.$transaction((tx) => acceptedFinalizeBranch(tx as never, { taskId: ordinary.id, branch: null, sourceKind: null }, 'orbit/x')),
+      undefined,
+      'a run created without a branch that is not codeless does not get one from a report',
+    );
+    assert.equal(
+      await prisma.$transaction((tx) => acceptedFinalizeBranch(tx as never, { taskId: null, branch: null, sourceKind: null }, 'orbit/x')),
+      undefined,
+    );
+    assert.equal(
+      await prisma.$transaction((tx) => acceptedFinalizeBranch(tx as never, { taskId: ordinary.id, branch: 'orbit/a', sourceKind: null }, 'orbit/a')),
+      'orbit/a',
+      'a session with a branch reports it as it always has',
+    );
+
+    // The controls: an ordinary task on the same workspace gets its branch at create, and so does a
+    // forked codeless task (SR55's forced branch wins).
+    const ordinaryRun = await startRun(w, ordinary.id);
+    assert.match((await sessionRow(ordinaryRun.id)).branch ?? '', /^orbit\//);
+    const forkedCodeless = await createForked(w, { codeless: true }) as { id: string };
+    assert.match((await sessionRow((await startRun(w, forkedCodeless.id)).id)).branch ?? '', /^orbit\//);
+
+    // A runner too old for codeless-checkout/v1 is handed the branch up front, so its run is still isolated.
+    await admin.query(`UPDATE "runner" SET "capabilities" = '{}' WHERE "id" = $1`, [w.runnerA]);
+    await admin.query(`UPDATE "session" SET "status" = 'SUCCEEDED' WHERE "id" IN ($1, $2)`, [run.id, ordinaryRun.id]);
+    await admin.query(`UPDATE "session" SET "status" = 'SUCCEEDED' WHERE "task_id" = $1`, [forkedCodeless.id]);
+    const older = await startRun(w, (await createForked(w, { title: 'Write more notes', fork: undefined, codeless: true }) as { id: string }).id);
+    const oldClaim = await queue.claimSessionForRunner({ id: w.runnerA } as never);
+    assert.equal(oldClaim?.sessionId, older.id);
+    assert.equal(oldClaim?.codelessCheckout, undefined);
+    assert.equal(oldClaim?.branch, codelessBranchName('Finish the claim refactor', older.id));
   });
 
   await t.test('FORK_SOURCE_NOT_REACHABLE: an assignee on another machine, at create and at dispatch', async () => {

@@ -82,6 +82,7 @@ import {
   sessionHasEnded,
 } from '../projects/project-open-item';
 import { branchName } from '../projects/project-criterion-landing';
+import { forkSourceLine } from '../projects/session-source';
 import { projectAwaitingStart, projectNotStartedRefusal } from '../projects/project-started';
 import {
   cancelledProjectOf,
@@ -9253,6 +9254,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // and a row with work of its own is one whose detail has a verifier state like any other.
     const [
       dependencyFacts, supersession, autoRunSkipped, workState, progress, verifier, routes, modelHintOptions, integrations,
+      forkSource,
     ] =
       await Promise.all([
         this.dependencyFactsFor(ownerId, [id]),
@@ -9269,6 +9271,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         readTaskRouteSummaries(this.prisma, ownerId, (task.sessions ?? []).map((session) => session.id)),
         this.modelHintOptions(ownerId, task),
         task.projectId ? readTaskIntegrationViews(this.prisma, ownerId, task.projectId, [id]) : new Map(),
+        forkSourceLine(this.prisma, task),
       ]);
     const dependencyState = computeDependencyState(dependencyFacts.get(id) ?? []);
     return {
@@ -9316,6 +9319,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // A task in no project lands on no project's main branch.
         mainBranch: null,
       },
+      // SR18's sentence when this task was forked from a session (design §2.3), null otherwise: the
+      // line every client shows where it shows the task's source.
+      forkSource,
       ...supersession,
     };
   }
