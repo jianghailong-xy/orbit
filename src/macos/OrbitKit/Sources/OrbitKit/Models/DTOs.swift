@@ -568,6 +568,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// while tools and replies stream for minutes. Absent from older servers, which simply keeps
     /// the old parked reading. See `isGenerating`.
     public let engineTurnActive: Bool?
+    /// What the session is doing beyond its status, as the server decides it (`SessionActivity`:
+    /// `TURN`, `BACKGROUND_JOB` or `WAITING`; nil when none, and from an older server). See
+    /// `resumesOnItsOwn`.
+    public let activity: String?
     /// Terminal-state detail the status glyph needs (mirrors web `StatusIcon`): `error` tells a
     /// runner-offline disconnect apart from a real crash; `endReason` tells a benign recycle
     /// (idle / task-done / user-ended — shown as dormant) apart from a hard cancel/orphan.
@@ -626,6 +630,13 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public var isGenerating: Bool {
         let state = effectiveRunState
         return state == .running || (state == .awaitingInput && engineTurnActive == true)
+    }
+    /// Whether something will resume this parked session by itself — a watch it observes, a
+    /// scheduled wake-up, an armed auto-retry (the server's `activity` WAITING). The watch strip
+    /// names a watch in its own words; this is what the header, glyph and row say when they hold
+    /// no watch to name, instead of "Waiting for your reply" (web `resumeWords`).
+    public var resumesOnItsOwn: Bool {
+        effectiveRunState == .awaitingInput && activity == "WAITING"
     }
     /// Whether work this session started is still running under a parked turn — a sub-agent or
     /// workflow the runtime started, or a background process. A port of web's
@@ -745,6 +756,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         runningBgJobCount = try values.decodeIfPresent(Int.self, forKey: .runningBgJobCount)
         runningSubagentCount = try values.decodeIfPresent(Int.self, forKey: .runningSubagentCount)
         engineTurnActive = try values.decodeIfPresent(Bool.self, forKey: .engineTurnActive)
+        activity = try values.decodeIfPresent(String.self, forKey: .activity)
         error = try values.decodeIfPresent(String.self, forKey: .error)
         endReason = try values.decodeIfPresent(String.self, forKey: .endReason)
         sourceState = try values.decodeIfPresent(String.self, forKey: .sourceState)
@@ -784,6 +796,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 runningBgJobCount: Int? = nil,
                 runningSubagentCount: Int? = nil,
                 engineTurnActive: Bool? = nil,
+                activity: String? = nil,
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
                 sourceState: String? = nil, sourceRefusalCode: String? = nil,
                 sourceRefusalDetail: SourceRefusalDetail? = nil,
@@ -863,6 +876,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.runningBgJobCount = runningBgJobCount
         self.runningSubagentCount = runningSubagentCount
         self.engineTurnActive = engineTurnActive
+        self.activity = activity
         self.error = error
         self.endReason = endReason
         self.sourceState = sourceState
