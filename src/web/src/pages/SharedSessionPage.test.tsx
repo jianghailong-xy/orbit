@@ -32,8 +32,6 @@ import * as rows from './SharedSessionPage.fixtures';
  * link it would be in the browser.
  */
 
-vi.mock('../lib/sessionExport', () => ({ exportSessionHtml: vi.fn(async () => undefined) }));
-const { exportSessionHtml } = await import('../lib/sessionExport');
 
 const TOKEN = 'k3Qx9vR2mT7wLpN8sYdF0aBcE1gHjKuZ';
 const SHARE = `/api/shared/${TOKEN}`;
@@ -43,7 +41,7 @@ const at = (row: Omit<SharedEvent, 'seq'>, seq: number): SharedEvent => ({ ...ro
 /** The page above the newest one. */
 const OLDER: SharedEvent[] = [at(rows.OLDER_PROGRESS_1, 101), at(rows.OLDER_PROGRESS_2, 102)];
 
-/** The newest page, whole — as the Download HTML walk reads it, and as /events/:seq answers. */
+/** The newest page, whole — as /events/:seq answers. */
 const TAIL_WHOLE: SharedEvent[] = [
   at(rows.SAME_ORIGIN_URL, 201),
   at(rows.TASK_STARTED, 202),
@@ -146,7 +144,6 @@ beforeEach(() => {
       return share(url);
     }),
   );
-  vi.mocked(exportSessionHtml).mockClear();
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -433,11 +430,11 @@ describe('a conversation still going', () => {
 });
 
 describe('the header', () => {
-  it('reads Orbit, the title, the state, Live, Read-only, Download HTML — in that order', async () => {
+  it('reads Orbit, the title, the state, Live, Read-only — in that order, and offers no download', async () => {
     await mountPage();
     const header = container.querySelector('header.share-header')!;
     const parts = [
-      ...header.querySelectorAll('.share-brand, .share-crumb, .status-pill, .share-live, .share-badge, .share-download'),
+      ...header.querySelectorAll('.share-brand, .share-crumb, .status-pill, .share-live, .share-badge'),
     ].map((el) => el.textContent!.trim());
 
     expect(parts).toEqual([
@@ -446,8 +443,8 @@ describe('the header', () => {
       'Completed',
       'Live',
       'Read-only',
-      'Download HTML',
     ]);
+    expect(header.querySelector('button')).toBeNull();
     expect(header.querySelector('.share-live')!.getAttribute('title')).toBe(
       'Live — viewers see changes as they happen',
     );
@@ -520,23 +517,5 @@ describe('links on the shared page', () => {
     ]) {
       expect(text).toContain(words);
     }
-  });
-});
-
-describe('Download HTML', () => {
-  it('saves the whole conversation, every page of it unclipped, linking no further than the page', async () => {
-    await mountPage();
-
-    await click(container.querySelector('button.share-download')!);
-
-    expect(transcriptReads().slice(1)).toEqual([
-      `${SHARE}/events?limit=500`,
-      `${SHARE}/events?before=201&limit=500`,
-    ]);
-    expect(exportSessionHtml).toHaveBeenCalledTimes(1);
-    const [session, events, , resolver] = vi.mocked(exportSessionHtml).mock.calls[0];
-    expect(session.title).toBe(rows.T6_RUN.title);
-    expect(events).toEqual([...OLDER, ...TAIL_WHOLE]);
-    expect(resolver?.({ kind: 'task', id: '34ORZ0jC7dpeqvYxg35Rn' })).toBeNull();
   });
 });

@@ -38,8 +38,8 @@ are none that are not already documented in SUPPORT.md.>
 ## Artifacts and verification
 
 <The tag, the full source SHA, the DMG/TestFlight/APK/runner assets this release publishes, their
-checksums, and the checks that ran (workflow run URL, clean-install result). Link evidence instead of
-claiming a check that did not run.>
+checksums, the SHA256SUMS/SBOM/provenance verification result, and the checks that ran (workflow run URL,
+clean-install result). Link evidence instead of claiming a check that did not run.>
 
 ## Rollback
 

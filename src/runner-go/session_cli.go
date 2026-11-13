@@ -276,7 +276,7 @@ workspace.
 }
 
 var sessionCLICapabilities = []cliCapabilitySpec{
-	{Tool: "session_create", Argv: []string{"orbit", "session", "create"}, Usage: "orbit session create (--prompt TEXT | --prompt-file -) [options]", Arguments: []string{"--prompt <text> | --prompt-file - (required)", "--agent-id <id> | --agent-name <name>", "--title <text>", "--model <model>", engineArgument(), "--provider <slug> (the credential: an engine's own sign-in, opencode, an account pool or an API key; orbit provider list names each with the engines it runs)", permissionModeFlagSpec(), "--wait[=true|false]", "--json"}, Mutates: true},
+	{Tool: "session_create", Argv: []string{"orbit", "session", "create"}, Usage: "orbit session create (--prompt TEXT | --prompt-file -) [options]", Arguments: []string{"--prompt <text> | --prompt-file - (required)", "--agent-id <id> | --agent-name <name>", "--title <text>", "--model <model>", engineArgument(), "--provider <slug> (the credential: an engine's own sign-in, opencode, an account pool or an API key; orbit provider list names each with the engines it runs)", permissionModeFlagSpec(), "--no-worktree (run in the agent's own checkout with no branch or worktree; for work that changes no code)", "--wait[=true|false]", "--json"}, Mutates: true},
 	// No MCP tool stands behind this one, so its description is its own: the transcript it imports
 	// is on this machine's disk, which the CLI here reads, and an agent asked to bring a terminal's
 	// conversation into Orbit runs it as itself. The headless door below describes it for the
@@ -594,6 +594,7 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchest
 	engine := fs.String("engine", "", "the CLI that runs the session")
 	provider := fs.String("provider", "", "where the session's credential comes from")
 	permissionMode := fs.String("permission-mode", "", "session permission mode")
+	noWorktree := fs.Bool("no-worktree", false, "run in the agent's own checkout, with no branch and no worktree")
 	wait := fs.Bool("wait", false, "wait until the first turn settles")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(args); err != nil {
@@ -667,6 +668,9 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchest
 			return fmt.Errorf("--permission-mode cannot be empty")
 		}
 		body["permissionMode"] = *permissionMode
+	}
+	if *noWorktree {
+		body["worktree"] = false
 	}
 	t, err := cliSessionTransport(ctx)
 	if err != nil {

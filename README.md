@@ -267,8 +267,10 @@ The root `package.json` version is the version of record. A release tag is that 
 and the GitHub Release, macOS DMG, TestFlight build, Android APK, runner binaries and update feeds all
 derive from it. The rules, support window, release notes and checklist are in
 [Release process](docs/release-process.md); run `node scripts/release-identity.mjs check-tag <tag>` to check
-one release's identity. Tags published before this rule do not share the package version; treat them as
-history, not as a pattern.
+one release's identity. Every release also publishes `SHA256SUMS`, a CycloneDX SBOM, an in-toto/SLSA
+provenance statement and a GitHub artifact attestation; [Verifiable release supply chain](docs/supply-chain.md)
+gives the commands that verify them and the signing identities behind them. Tags published before this rule
+do not share the package version; treat them as history, not as a pattern.
 
 ## Roadmap (direction, not dates)
 

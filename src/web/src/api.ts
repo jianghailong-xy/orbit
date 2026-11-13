@@ -1675,16 +1675,15 @@ export const getSharedWikiDoc = (token: string, slug: string): Promise<SharedWik
   sharedGet<SharedWikiDocPage>(token, `/docs/${encodeURIComponent(slug)}`);
 
 /** A page of a shared transcript: the `limit` events just older than `before` (or the newest
- *  when it is absent). Clipped like the rest unless `whole`, which the Download HTML walk asks
- *  for — a saved file has no way to fetch a card's full payload when it is opened. */
+ *  when it is absent), clipped like the rest. */
 export const getSharedEventPage = (
   token: string,
-  opts: { before?: number; limit: number; whole?: boolean; sessionId?: string },
+  opts: { before?: number; limit: number; sessionId?: string },
 ): Promise<{ events: SharedEvent[]; hasMore: boolean }> => {
   const qs = new URLSearchParams();
   if (opts.before != null) qs.set('before', String(opts.before));
   qs.set('limit', String(opts.limit));
-  if (!opts.whole) qs.set('maxPayload', String(MAX_EVENT_PAYLOAD));
+  qs.set('maxPayload', String(MAX_EVENT_PAYLOAD));
   return sharedGet(token, `${sharedConversation(opts.sessionId)}/events?${qs.toString()}`);
 };
 
@@ -1758,23 +1757,6 @@ export const fetchSharedArtifactObjectUrl = async (token: string, artifactPath: 
   );
   if (!res.ok) throw new Error(`artifact ${artifactPath}: ${res.status}`);
   return userFileUrl(await res.blob());
-};
-
-/** Base64 data URL for an inline image in a shared transcript, via the public attachment
- *  route (no bearer). The shared-page HTML download embeds the bytes inline so the saved
- *  file works offline. Mirrors fetchAttachmentDataUrl, but for a logged-out viewer. */
-export const fetchSharedAttachmentDataUrl = async (token: string, id: string): Promise<string> => {
-  const res = await fetch(
-    `/api/shared/${encodeURIComponent(token)}/attachments/${encodeURIComponent(id)}`,
-  );
-  if (!res.ok) throw new Error(`attachment ${id}: ${res.status}`);
-  const blob = await res.blob();
-  return await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error ?? new Error('read failed'));
-    reader.readAsDataURL(blob);
-  });
 };
 
 /** One file a worktree-isolated session changed (git diff baseSha..branch); additions/

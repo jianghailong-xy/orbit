@@ -23,6 +23,7 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 | Call the HTTP API from a script or integration | [External HTTP API reference](api-reference.md) |
 | Diagnose runner enrollment, heartbeat, or runtime failures | [Runner troubleshooting](runner-troubleshooting.md) |
 | Publish or upgrade a release | [Release process](release-process.md) |
+| Verify a release's checksums, SBOM, provenance and signing identity | [Verifiable release supply chain](supply-chain.md) |
 | Write the notes a release publishes | [Release notes template](release-notes-template.md) |
 | Verify a fresh install and runner heartbeat | [Clean-host smoke record](evidence/clean-install-2026-09-29.md) |
 | Understand the system and trust boundaries | [Architecture overview](architecture.md) |
@@ -70,6 +71,9 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
   — an authorized test environment's deployment order, finding an account's runner, when the stop-report finalizer may
   and may not be removed, an independent RBD backup checked off the cluster and restored to a new PVC, switching off and
   rolling back, and fencing a node that stops reporting.
+- [Verifiable release supply chain](supply-chain.md) — the checksums, CycloneDX SBOM, SLSA provenance and
+  signing identities every release publishes, the commands that verify them, and the rollback path when a
+  check fails.
 - [PostgreSQL conflict runbook](postgres-conflict-runbook.md) — the transaction-conflict counters and where to
   read them, how to tell an injected fault from absorbed contention, a lock-order defect, a database resource
   fault and an unretried path, alert thresholds, PostgreSQL log correlation, and the deploy, mixed-schema,
