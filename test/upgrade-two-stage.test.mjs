@@ -35,6 +35,7 @@ PROVIDER_SECRET_KEY="target-key"
 RUNNER_LINK_SIGNING_KEY="target-signing-key"
 PUBLIC_ORIGIN="https://orbit.example.com"
 COMPOSE_PROFILES=runner-link
+RUNNER_LINK_ENV_FILE=./deploy/runner-link/behind-web-gateway.env
 `;
 
 // The fake docker. A call is logged as <side>\t<ORBIT_IMAGE_TAG>\t<args>, the side being "build" or "target". On the target
@@ -77,7 +78,8 @@ case "$side $*" in
       pgbackup) cp scripts/pg-backup.sh "$state/pgbackup.file" ;;
       web) "$FAKE_REAL_DOCKER" compose config --images web >"$state/web.image" ;;
     esac ;;
-  "target compose "*" pull "*) [ -z "${'$'}{FAKE_PULL_FAIL:-}" ] || { echo "fake docker: manifest unknown" >&2; exit 1; } ;;
+  "target compose pull "*|"target compose "*" pull "*)
+    [ -z "${'$'}{FAKE_PULL_FAIL:-}" ] || { echo "fake docker: manifest unknown" >&2; exit 1; } ;;
 esac
 exit 0
 `;
@@ -300,7 +302,7 @@ for (const upgrade of UPGRADES) {
     assert.ok(!target.some((call) => /^(build|buildx|compose (.* )?build)\b/.test(call)), `the target built:\n${target.join('\n')}`);
     assert.ok(ups(run).every((call) => /^compose up -d --wait --no-deps --no-build( --force-recreate)? [a-z-]+$/.test(call)), ups(run).join('\n'));
     assert.deepEqual(upped(run), DEPLOY_ORDER);
-    const pull = target.findIndex((call) => /^compose .* pull /.test(call));
+    const pull = target.findIndex((call) => /^compose (.* )?pull /.test(call));
     assert.ok(pull >= 0 && pull < target.indexOf(ups(run)[0]), 'every image is pulled before anything is brought up');
     assert.deepEqual(shippedFiles(fixture.target), SHIPPED);
     assert.equal(readFileSync(path.join(fixture.target, 'docker-compose.yml'), 'utf8'), readFileSync(path.join(fixture.checkout, 'docker-compose.yml'), 'utf8'));
@@ -397,7 +399,7 @@ test('a deploy that cannot run changes nothing on either host', { skip: !compose
     assert.notEqual(result.status, 0, result.output);
     assert.match(result.output, message);
     assert.deepEqual(ups(result), [], result.output);
-    assert.ok(!existsSync(path.join(fixture.target, 'docker-compose.yml')), 'the release\'s files stay staged');
+    assert.ok(!existsSync(path.join(fixture.target, 'docker-compose.yml')), 'the files it put in place are taken back');
   };
   const lock = path.join(fixture.root, 'target', 'tmp', 'orbit-upgrade.lock');
   refused({}, () => { mkdirSync(lock, { recursive: true }); writeFileSync(path.join(lock, 'pid'), `${process.pid}\n`); },
@@ -430,4 +432,28 @@ test('a deploy that cannot run changes nothing on either host', { skip: !compose
   run = fixture.run(upgrade, ['--deploy', commit, '--pull-base']);
   assert.equal(run.status, 0, run.output);
   assert.equal(upped(run)[0], 'postgres');
+});
+
+test('a host\'s own Compose files, named in COMPOSE_FILE, are rendered with the release and left as they are', { skip: !compose && 'needs docker compose' }, (t) => {
+  const fixture = makeFixture(t);
+  const upgrade = UPGRADES[1];
+  const commit = fixture.commit('a release');
+  // As a host may add a service of its own, a database proxy say, in a file no release ships.
+  mkdirSync(path.join(fixture.target, 'deploy'), { recursive: true });
+  writeFileSync(path.join(fixture.target, 'deploy/db-proxy.yml'), 'services:\n  db-proxy:\n    image: haproxy:lts-alpine\n');
+  writeFileSync(path.join(fixture.target, '.env'), `${TARGET_ENV}COMPOSE_FILE=docker-compose.yml:deploy/db-proxy.yml\n`);
+  let run = fixture.run(upgrade);
+  assert.equal(run.status, 0, run.output);
+  assert.match(run.stdout, / {4}db-proxy +create \(a deploy leaves it as it is\)/);
+  assert.ok(!upped(run).includes('db-proxy'), ups(run).join('\n'));
+  assert.ok(!run.target.some((call) => / pull .*db-proxy/.test(call.args)), 'its image is not the release\'s to pull');
+  assert.equal(readFileSync(path.join(fixture.target, 'deploy/db-proxy.yml'), 'utf8'), 'services:\n  db-proxy:\n    image: haproxy:lts-alpine\n');
+  assert.ok(existsSync(path.join(fixture.target, 'deploy/runner-link/behind-web-gateway.env')), 'beside the release\'s own files');
+
+  // One that leaves docker-compose.yml out would deploy nothing of the release.
+  writeFileSync(path.join(fixture.target, '.env'), `${TARGET_ENV}COMPOSE_FILE=deploy/db-proxy.yml\n`);
+  run = fixture.run(upgrade, ['--deploy', commit]);
+  assert.notEqual(run.status, 0, run.output);
+  assert.match(run.output, /do not include the release's docker-compose\.yml/);
+  assert.deepEqual(ups(run), []);
 });

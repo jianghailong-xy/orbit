@@ -14,8 +14,8 @@
 #   ORBIT_DEPLOY_PULL_BASE   1 lets a running postgres whose configuration changed be recreated (upgrade.sh --pull-base)
 #   ORBIT_DEPLOY_PRUNE       1 prunes dangling images once the release runs (upgrade.sh --prune)
 #
-# Nothing is built here. Every image is pulled before anything changes, every `up` says --no-build, and a release that
-# names an image anywhere but the registry stops before its files are put in place.
+# Nothing is built here. Every image is pulled before anything is recreated, every `up` says --no-build, and a release
+# that names an image anywhere but the registry is refused.
 set -euo pipefail
 
 for name in ORBIT_DEPLOY_DIR ORBIT_RELEASE_COMMIT ORBIT_REGISTRY ORBIT_LINK_GATEWAY_TAG ORBIT_POSTGRES_IMAGE \
@@ -39,7 +39,7 @@ RELEASE_ENV=(
 )
 PULL_BASE="${ORBIT_DEPLOY_PULL_BASE:-0}"
 PRUNE="${ORBIT_DEPLOY_PRUNE:-0}"
-# From here on Compose reads the release from the files it renders: the staged ones through new_dc below, then .env.
+# From here on Compose reads the release from release_dc's environment below, and then from .env, as anyone's would.
 unset ORBIT_REGISTRY ORBIT_IMAGE_TAG ORBIT_LINK_GATEWAY_TAG ORBIT_POSTGRES_IMAGE ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE
 STAGE=".upgrade/release-$COMMIT"
 cd "$DIR"
@@ -81,18 +81,6 @@ if [ ! -f .env ]; then
   echo "       naming the release it runs (SKILL.md, \"Two-stage release\"). Nothing was changed." >&2
   exit 1
 fi
-# A name's last value in .env, as Compose reads it. Only ever captured, never printed.
-env_value() {
-  sed -nE "s/^[[:space:]]*(export[[:space:]]+)?$1[[:space:]]*=[[:space:]]*//p" .env | tail -n 1 | tr -d '\r' |
-    sed -E "s/^\"(.*)\"[[:space:]]*\$/\\1/; s/^'(.*)'[[:space:]]*\$/\\1/"
-}
-# The files Compose reads here are docker-compose.yml and docker-compose.override.yml, which is how the release is
-# rendered from its staged copy before it is put in place. Other files named in COMPOSE_FILE would not be.
-if [ -n "$(env_value COMPOSE_FILE)" ]; then
-  echo "error: .env sets COMPOSE_FILE. A two-stage deploy renders docker-compose.yml and docker-compose.override.yml" >&2
-  echo "       only: put this host's additions in docker-compose.override.yml. Nothing was changed." >&2
-  exit 1
-fi
 # The release's names go into .env (below), between these two lines and nowhere else.
 BEGIN="# >>> The release this host runs: written by /upgrade's two-stage deploy, and replaced whole by the next one"
 END="# <<< The release this host runs"
@@ -105,34 +93,57 @@ if [ "$begins" != "$ends" ] || [ "$begins" -gt 1 ] \
   exit 1
 fi
 
-# This release, rendered from its staged files before any of them is put in place.
-STAGED=(-f "$STAGE/docker-compose.yml")
-if [ -f docker-compose.override.yml ]; then STAGED+=(-f docker-compose.override.yml); fi
-new_dc() { env "${RELEASE_ENV[@]}" docker compose "${STAGED[@]}" --project-directory "$DIR" "$@"; }
-if ! new_dc config --quiet; then
-  echo "error: Compose cannot render this release with this host's .env (above). Nothing was changed." >&2
+# The release's files go in place first, each whole by a rename, as Compose has to read them where they are: a file it
+# names relative to this directory, an env_file say, is read here. A running container that bind-mounts one of them keeps
+# the file it started on, which the gateway's and pgbackup's steps below compare with the new one. The files they replace
+# wait in .upgrade/previous/ until the release's images are all here: a deploy that stops before then puts them back, so
+# that it has changed nothing.
+PREVIOUS=.upgrade/previous
+rm -rf "$PREVIOUS"
+FILES=()
+while read -r file; do FILES+=("$file"); done < <(cd "$STAGE" && find . -type f | sed 's|^\./||' | sort)
+for file in "${FILES[@]}"; do
+  mkdir -p "$(dirname "$file")" "$PREVIOUS/$(dirname "$file")"
+  if [ -e "$file" ]; then cp -p "$file" "$PREVIOUS/$file"; fi
+  mv -f "$STAGE/$file" "$file"
+done
+rm -rf "$STAGE"
+# Stops the deploy before .env names the release: the files it replaced go back, and nothing else was changed.
+refuse() {
+  local file
+  for line in "$@"; do echo "$line" >&2; done
+  for file in "${FILES[@]}"; do
+    if [ -e "$PREVIOUS/$file" ]; then mv -f "$PREVIOUS/$file" "$file"; else rm -f "$file"; fi
+  done
+  rm -rf "$PREVIOUS"
+  echo "       This host's files are as they were, and nothing was changed." >&2
   exit 1
-fi
-# sed reads to the end: nothing Compose prints is cut short, and none of it is shown.
-PROJECT="$(new_dc config 2>/dev/null | sed -n 's/^name: //p')"
-SERVICES="$(new_dc config --services)"
-listed() { printf '%s\n' "$SERVICES" | grep -x "$1" >/dev/null; }
+}
 
+# This release as Compose renders it here: the files Compose reads in this directory (docker-compose.yml and
+# docker-compose.override.yml, or what COMPOSE_FILE in .env lists) with the release's names, which win over .env's.
+release_dc() { env "${RELEASE_ENV[@]}" docker compose "$@"; }
+release_dc config --quiet || refuse "error: Compose cannot render this release with this host's .env and files (above)."
+# sed reads to the end: nothing Compose prints is cut short, and none of it is shown.
+PROJECT="$(release_dc config 2>/dev/null | sed -n 's/^name: //p')"
+SERVICES="$(release_dc config --services)"
+listed() { printf '%s\n' "$SERVICES" | grep -x "$1" >/dev/null; }
+if ! listed apiserver; then
+  refuse "error: the Compose files this host reads do not include the release's docker-compose.yml (COMPOSE_FILE in .env?)."
+fi
 if listed docker-channel || listed managed-runner-firewall; then
-  echo "error: this host's .env switches on managed runners, whose images (docker-channel, managed-runner-firewall and" >&2
-  echo "       the runners') are built where they run, and a two-stage release builds nothing here. Nothing was changed." >&2
-  exit 1
+  refuse "error: this host's .env switches on managed runners, whose images (docker-channel, managed-runner-firewall and" \
+    "       the runners') are built where they run, and a two-stage release builds nothing here."
 fi
 
 # The single host's check, here: the deployment's mounts are relative, so a postgres of the name this release renders
 # that keeps its archive anywhere else belongs to another directory, which this one must not be deployed over.
-PG_NAME="$(new_dc config postgres 2>/dev/null | awk '/^[[:space:]]*container_name:/ { found = $2 } END { print found }')"
+PG_NAME="$(release_dc config postgres 2>/dev/null | awk '/^[[:space:]]*container_name:/ { found = $2 } END { print found }')"
 PG_NAME="${PG_NAME:-orbit-postgres}"
 ARCHIVE="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/archive"}}{{.Source}}{{end}}{{end}}' "$PG_NAME" 2>/dev/null || true)"
 if [ -n "$ARCHIVE" ] && [ "$ARCHIVE" != "$DIR/data/pg-archive" ]; then
-  echo "error: $PG_NAME runs from ${ARCHIVE%/data/pg-archive}, not from $DIR: its /archive is $ARCHIVE." >&2
-  echo "       Its mounts are relative, so deploying here would bind this directory's ./data. Nothing was changed." >&2
-  exit 1
+  refuse "error: $PG_NAME runs from ${ARCHIVE%/data/pg-archive}, not from $DIR: its /archive is $ARCHIVE." \
+    "       Its mounts are relative, so deploying here would bind this directory's ./data."
 fi
 
 # What the deploy brings up, in the order Compose's depends_on gives them; nats first, as the apiserver publishes to it.
@@ -147,7 +158,7 @@ done
 
 # The plan: this release's config hash for each service against the hash its container was made with. STATE says what
 # `up` does with it, RUNNING whether a container of it runs now. Compose lists the services in no set order.
-HASHES="$(new_dc config --hash '*' | sort)"
+HASHES="$(release_dc config --hash '*' | sort)"
 declare -A STATE=() RUNNING=()
 echo "==> What this release changes, by each service's compose config hash"
 while read -r service hash; do
@@ -185,22 +196,11 @@ while read -r image; do
   case "$image" in
     "$REGISTRY"/*) ;;
     *)
-      echo "error: this release names $image, which is not in $REGISTRY: a two-stage deploy builds nothing here." >&2
-      echo "       Nothing was changed." >&2
-      exit 1
+      refuse "error: this release names $image, which is not in $REGISTRY: a two-stage deploy builds nothing here."
       ;;
   esac
-done < <(new_dc config --images "${DEPLOYED[@]}")
-new_dc pull "${DEPLOYED[@]}"
-
-# The release's files go in place by rename, each whole: a container bind-mounting one of them keeps the file it
-# started on, which the gateway's and pgbackup's steps below compare with the new one.
-echo "==> Putting the release's files in place"
-while read -r file; do
-  mkdir -p "$(dirname "$file")"
-  mv -f "$STAGE/$file" "$file"
-done < <(cd "$STAGE" && find . -type f | sed 's|^\./||')
-rm -rf "$STAGE"
+done < <(release_dc config --images "${DEPLOYED[@]}")
+release_dc pull "${DEPLOYED[@]}" || refuse "error: an image of this release could not be pulled (above)."
 
 # The release's names go into .env, so that any later `docker compose` here renders what this deploy ran. Only the lines
 # between BEGIN and END are written, and the whole file is replaced by a rename: every other line stays as it was.
@@ -210,6 +210,7 @@ cp -p .env .upgrade/env.new
   printf '%s\n' "$BEGIN" "${RELEASE_ENV[@]}" "$END"
 } >.upgrade/env.new
 mv -f .upgrade/env.new .env
+rm -rf "$PREVIOUS"
 if [ "$(docker compose config --hash '*' | sort)" != "$HASHES" ]; then
   echo "error: with the release's lines in .env, Compose renders something other than this release. Nothing was" >&2
   echo "       recreated; check the lines between \"$BEGIN\" and \"$END\" in .env." >&2
