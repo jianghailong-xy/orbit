@@ -43,7 +43,14 @@ public enum MachinesAndModels {
         var parts: [String] = []
         if waiting.sessions > 0 { parts.append(waiting.sessions == 1 ? "1 session" : "\(waiting.sessions) sessions") }
         if waiting.messages > 0 { parts.append(waiting.messages == 1 ? "1 message" : "\(waiting.messages) messages") }
-        return "\(machine) is updating — \(parts.joined(separator: " and ")) waiting"
+        let doing = waiting.stopping ? "stopping" : "updating"
+        return "\(machine) is \(doing) — \(parts.joined(separator: " and ")) waiting"
+    }
+
+    /// A machine that is stopping rather than updating: "Not taking new work · it stops once 2 turns finish".
+    public static func stoppingDetail(turns: Int) -> String {
+        if turns <= 0 { return "Not taking new work · it stops now" }
+        return "Not taking new work · it stops once " + (turns == 1 ? "1 turn finishes" : "\(turns) turns finish")
     }
 
     /// "Updating to 0.1.254 · it starts no new work until 2 turns finish".
@@ -129,7 +136,8 @@ public enum MachinesAndModels {
             let turns = runner.selfUpdate?.turnsInFlight ?? runner.updateTurns?.count ?? 0
             return Attention(kind: .updating(runnerID: runner.id), line: updatingLine(machine: machine, waiting: waiting),
                              names: [machine],
-                             detail: updatingDetail(targetVersion: runner.selfUpdate?.targetVersion, turns: turns))
+                             detail: waiting.stopping ? stoppingDetail(turns: turns)
+                                 : updatingDetail(targetVersion: runner.selfUpdate?.targetVersion, turns: turns))
         }
         let pools = memberPools.map { (pool: $0, own: false) } + ownPools.map { (pool: $0, own: true) }
         let unavailable = pools.compactMap { entry -> Attention? in

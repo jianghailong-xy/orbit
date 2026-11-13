@@ -952,6 +952,11 @@ test('the drain sentence counts sessions, messages and turns in English', () => 
   assert.equal(say(2, 0, 3), 'studio-mac is updating to 0.1.254 — 2 sessions are waiting for 3 turns to finish.');
   assert.equal(say(0, 1, 2), 'studio-mac is updating to 0.1.254 — 1 message is waiting for 2 turns to finish.');
   assert.equal(say(0, 3, 0, null), 'studio-mac is updating — 3 messages are waiting for it to restart.');
+  // A runner that is stopping rather than updating (docs/mocks/runner-stopping).
+  const stop = (sessions: number, messages: number, turns: number) =>
+    drainWaitingSentence({ machine: 'HPC', targetVersion: '0.1.257', turns, waiting: { sessions, messages, stopping: true } });
+  assert.equal(stop(0, 1, 2), 'HPC is stopping — 1 message is waiting for 2 turns to finish.');
+  assert.equal(stop(1, 1, 0), 'HPC is stopping — 1 session and 1 message are waiting for it to come back.');
 });
 
 function wakeupMissedHarness(deliver?: () => Promise<void>) {

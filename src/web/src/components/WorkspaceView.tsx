@@ -559,12 +559,13 @@ import {
   QUEUED_NOTICE_DELAY_MS,
   STARTING_NOTICE_DELAY_MS,
   type QueuedGate,
-  RUNNER_UPDATING_TAG,
-  RUNNER_UPDATING_TITLE,
+  isRunnerStopping,
   isRunnerUpdating,
   pendingSlotDescription,
   runnerUpdatingDescription,
   runnerUpdatingMessageText,
+  runnerUpdatingTag,
+  runnerUpdatingTitle,
   runnerUpdatingWaited,
   queuedLabel,
   queuedNoticeVisible,
@@ -1935,7 +1936,7 @@ export function RunnerUpdatingQueued({
   const waited = runnerUpdatingWaited(gate, now);
   return (
     <>
-      <div className="chat-queued-title">{RUNNER_UPDATING_TITLE}</div>
+      <div className="chat-queued-title">{runnerUpdatingTitle(gate)}</div>
       <div className="chat-queued-desc chat-runner-updating-desc">
         {runnerUpdatingDescription(gate, machine).map((part, i) =>
           typeof part === 'string' ? (
@@ -1981,12 +1982,12 @@ export function RunnerUpdatingTag({
       Queued
       <span className="chat-meta-sep">·</span>
       <Popover
-        title={RUNNER_UPDATING_TITLE}
+        title={runnerUpdatingTitle(gate)}
         side="bottom"
         align="end"
         trigger={
           <button type="button" className="chat-runner-updating-reason">
-            {RUNNER_UPDATING_TAG}
+            {runnerUpdatingTag(gate)}
           </button>
         }
       >
@@ -4319,7 +4320,7 @@ export function WorkspaceView({
           <RunnerUpdatingTag
             gate={runnerUpdatingGate}
             machine={machineName(runner)}
-            actions={<div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} />{runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={machineName(runner)} />}</div>}
+            actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} />{runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={machineName(runner)} />}</div>}
           />
         ),
       };
@@ -9886,7 +9887,7 @@ export function WorkspaceView({
                       gate={runnerUpdatingGate}
                       machine={machineName(runner)}
                       onOpenSession={(id) => navigate(sessionPath(id))}
-                      actions={<div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} />{runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={machineName(runner)} />}</div>}
+                      actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} />{runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={machineName(runner)} />}</div>}
                     />
                   ) : (
                     <>

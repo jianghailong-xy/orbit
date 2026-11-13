@@ -23,8 +23,9 @@ export function RunnerDrainBanner({ runner, machine }: { runner: Runner; machine
       <ExclamationCircleOutlined className="runner-drain-banner-icon" aria-hidden="true" />
       <span className="runner-drain-banner-text">{banner.text}</span>
       <div className="runner-drain-banner-actions">
-        <RunnerUpdateLaterMenu runnerId={runner.id} />
-        {runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={machine} />}
+        {/* A runner that is stopping has no update to postpone or install now (board runner-stopping ②). */}
+        {!banner.stopping && <RunnerUpdateLaterMenu runnerId={runner.id} />}
+        {!banner.stopping && runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={machine} />}
         <button
           type="button"
           className="runner-drain-banner-close"

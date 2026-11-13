@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import type { RunnerDrainWaiting } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
-import { sanitizeRunnerSelfUpdate } from './runner-self-update';
+import { runnerDrainIsStop, sanitizeRunnerSelfUpdate } from './runner-self-update';
 
 /**
  * What of a runner's owner waits on the runner's drain for a self-update (docs/runner-update-drain-design.md
@@ -35,9 +35,11 @@ function waitingSql(runnerId: Prisma.Sql, ownerId: Prisma.Sql): Prisma.Sql {
 export async function drainWaitingOf(
   prisma: PrismaService,
   ownerId: string,
-  runners: Array<{ id: string; heartbeatDraining: boolean | null }>,
+  runners: Array<{ id: string; heartbeatDraining: boolean | null; selfUpdate: unknown }>,
 ): Promise<Map<string, RunnerDrainWaiting>> {
-  const draining = runners.filter((r) => r.heartbeatDraining === true).map((r) => r.id);
+  const drainingRunners = runners.filter((r) => r.heartbeatDraining === true);
+  const draining = drainingRunners.map((r) => r.id);
+  const stopping = new Map(drainingRunners.map((r) => [r.id, runnerDrainIsStop(sanitizeRunnerSelfUpdate(r.selfUpdate))]));
   const waiting = new Map<string, RunnerDrainWaiting>();
   if (draining.length === 0) return waiting;
   const rows = await prisma.$queryRaw<Array<{ runnerId: string; sessions: number; messages: number }>>(Prisma.sql`
@@ -45,7 +47,9 @@ export async function drainWaitingOf(
       FROM unnest(${draining}::uuid[]) AS r(id)
       CROSS JOIN LATERAL (${waitingSql(Prisma.sql`r.id`, Prisma.sql`${ownerId}::uuid`)}) w
      WHERE w.sessions + w.messages > 0`);
-  for (const row of rows) waiting.set(row.runnerId, { sessions: row.sessions, messages: row.messages });
+  for (const row of rows) {
+    waiting.set(row.runnerId, { sessions: row.sessions, messages: row.messages, stopping: stopping.get(row.runnerId) ?? false });
+  }
   return waiting;
 }
 
@@ -90,7 +94,7 @@ export async function claimDrainWaitingPush(prisma: PrismaService, runnerId: str
     targetVersion: report?.targetVersion ?? null,
     // The runner's own count covers every turn in flight; the rows are the nearest guess from one that sends none.
     turns: report?.turnsInFlight ?? row.activeTurns,
-    waiting: { sessions: row.sessions, messages: row.messages },
+    waiting: { sessions: row.sessions, messages: row.messages, stopping: runnerDrainIsStop(report) },
   };
 }
 
@@ -108,14 +112,19 @@ export function drainWaitingWords(waiting: RunnerDrainWaiting): string {
 
 /**
  * The banner's sentence, which the push says too (board 3 ⑥): `studio-mac is updating to 0.1.254 — 1 session and
- * 1 message are waiting for 2 turns to finish.` The web's runnerDrainBanner.ts says the same words.
+ * 1 message are waiting for 2 turns to finish.` The web's runnerDrainBanner.ts says the same words. A runner that is
+ * stopping rather than updating (docs/mocks/runner-stopping): `HPC is stopping — 1 message is waiting for 2 turns to
+ * finish.`, and `… waiting for it to come back.` once nothing is in flight.
  */
 export function drainWaitingSentence(push: Pick<DrainWaitingPush, 'machine' | 'targetVersion' | 'turns' | 'waiting'>): string {
-  const updating = push.targetVersion ? `${push.machine} is updating to ${push.targetVersion}` : `${push.machine} is updating`;
+  const stopping = push.waiting.stopping;
+  const updating = stopping
+    ? `${push.machine} is stopping`
+    : push.targetVersion ? `${push.machine} is updating to ${push.targetVersion}` : `${push.machine} is updating`;
   const total = push.waiting.sessions + push.waiting.messages;
   const verb = total === 1 ? 'is' : 'are';
   const until = push.turns > 0
     ? `waiting for ${counted(push.turns, 'turn', 'turns')} to finish`
-    : 'waiting for it to restart';
+    : stopping ? 'waiting for it to come back' : 'waiting for it to restart';
   return `${updating} — ${drainWaitingWords(push.waiting)} ${verb} ${until}.`;
 }

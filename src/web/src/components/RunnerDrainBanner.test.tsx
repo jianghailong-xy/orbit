@@ -105,6 +105,21 @@ describe('the banner at the top of the conversation pane', () => {
       .toBe('studio-mac is updating to 0.1.254 — 1 session and 1 message are waiting for 2 turns to finish.');
   });
 
+  it('says the runner is stopping, with only ×, when it drains to stop rather than to update (docs/mocks/runner-stopping)', () => {
+    // A release may be waiting too (phase available): the drain is still the stop's, so nothing to postpone or install now.
+    mount(runner({
+      selfUpdate: { state: 'waitingForIdle', phase: 'available', targetVersion: '0.1.257' },
+      updateTurns: [{ id: 's1', title: 'A', startedAt: null }, { id: 's2', title: 'B', startedAt: null }],
+      drainWaiting: { sessions: 0, messages: 1, stopping: true },
+    }));
+    expect(banner()?.querySelector('.runner-drain-banner-text')?.textContent)
+      .toBe('studio-mac is stopping — 1 message is waiting for 2 turns to finish.');
+    const buttons = [...banner()!.querySelectorAll('button')].map((b) => b.textContent?.trim() || b.getAttribute('aria-label'));
+    expect(buttons).toEqual(['Dismiss']);
+    expect(runnerDrainBannerText('HPC', null, { sessions: 1, messages: 0, stopping: true }, 0))
+      .toBe('HPC is stopping — 1 session is waiting for it to come back.');
+  });
+
   it('offers no Update Now… on a runner too old to take it', () => {
     mount(runner({ capabilities: [] }));
     const buttons = [...banner()!.querySelectorAll('button')].map((b) => b.textContent?.trim() || b.getAttribute('aria-label'));

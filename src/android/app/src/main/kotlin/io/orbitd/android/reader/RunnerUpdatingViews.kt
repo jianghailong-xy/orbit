@@ -48,7 +48,7 @@ internal fun RunnerUpdatingQueued(gate: QueuedGate, machine: String?, openSessio
     val waited = RunnerUpdating.runnerUpdatingWaited(gate, now)
     Column(modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 32.dp).testTag("runner-updating"),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(RunnerUpdating.RUNNER_UPDATING_TITLE, Modifier.testTag("runner-updating:title"), style = MaterialTheme.typography.titleMedium,
+        Text(RunnerUpdating.runnerUpdatingTitle(gate), Modifier.testTag("runner-updating:title"), style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
         val open by rememberUpdatedState(openSession)
         val text = remember(parts, link) { buildAnnotatedString {
@@ -78,7 +78,7 @@ internal fun RunnerUpdatingFoot(gate: QueuedGate, machine: String?, modifier: Mo
     Row(modifier.testTag("runner-updating-foot"), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(RunnerUpdating.QUEUED, style = style, color = secondary)
         Text("·", style = style, color = secondary)
-        Text(RunnerUpdating.RUNNER_UPDATING_TAG, Modifier.clickable(role = Role.Button) { open = true }
+        Text(RunnerUpdating.runnerUpdatingTag(gate), Modifier.clickable(role = Role.Button) { open = true }
             .drawBehind {
                 val y = size.height - 1.dp.toPx()
                 drawLine(secondary, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx(),
@@ -88,7 +88,7 @@ internal fun RunnerUpdatingFoot(gate: QueuedGate, machine: String?, modifier: Mo
     if (open) Dialog({ open = false }) {
         Surface(shape = RoundedCornerShape(14.dp), tonalElevation = 6.dp, modifier = Modifier.widthIn(max = 320.dp).testTag("runner-updating-pop")) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(RunnerUpdating.RUNNER_UPDATING_TITLE, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(RunnerUpdating.runnerUpdatingTitle(gate), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 val waited = RunnerUpdating.runnerUpdatingWaited(gate, now)
                 Text(RunnerUpdating.runnerUpdatingMessageText(gate, machine) + (waited?.let { "\n$it." } ?: ""),
                     Modifier.testTag("runner-updating-pop:text"), style = MaterialTheme.typography.bodyMedium)

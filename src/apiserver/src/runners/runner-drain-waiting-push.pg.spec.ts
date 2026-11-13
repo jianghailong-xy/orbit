@@ -65,9 +65,10 @@ test('one push per drain, only while something of the owner’s waits on it', {
     push as never, {} as never,
     { expand: async (_ownerId: string, content?: string) => content } as never,
     { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never);
-  const beat = (runnerId: string, draining: boolean) =>
+  // `selfUpdate` other than DRAINING: a runner draining for another reason — its process stopping.
+  const beat = (runnerId: string, draining: boolean, selfUpdate: RunnerSelfUpdate = DRAINING) =>
     api.heartbeat({ id: runnerId, version: null },
-      { status: RunnerStatus.ONLINE, idleCapacity: 1, draining, ...(draining ? { selfUpdate: DRAINING } : {}) }, '');
+      { status: RunnerStatus.ONLINE, idleCapacity: 1, draining, ...(draining ? { selfUpdate } : {}) }, '');
   const pushesFor = (runnerId: string) => pushes.filter((p) => p.runnerId === runnerId);
   const listed = async (ownerId: string, runnerId: string) =>
     ((await runners.listRunners(ownerId)) as unknown as Array<{ id: string; drainWaiting?: unknown }>)
@@ -121,18 +122,18 @@ test('one push per drain, only while something of the owner’s waits on it', {
     assert.equal(sent.length, 1);
     assert.deepEqual({ ...sent[0] }, {
       runnerId: f.runnerId, ownerId: f.ownerId, machine: 'studio-mac', targetVersion: '0.1.254', turns: 2,
-      waiting: { sessions: 1, messages: 1 },
+      waiting: { sessions: 1, messages: 1, stopping: false },
     });
     assert.equal(drainWaitingSentence(sent[0]),
       'studio-mac is updating to 0.1.254 — 1 session and 1 message are waiting for 2 turns to finish.');
-    assert.deepEqual(await listed(f.ownerId, f.runnerId), { sessions: 1, messages: 1 });
+    assert.deepEqual(await listed(f.ownerId, f.runnerId), { sessions: 1, messages: 1, stopping: false });
 
     await beat(f.runnerId, true);
     await session(f);
     await beat(f.runnerId, true);
     await beat(f.runnerId, true);
     assert.equal(pushesFor(f.runnerId).length, 1, 'the same drain pushed twice');
-    assert.deepEqual(await listed(f.ownerId, f.runnerId), { sessions: 2, messages: 1 });
+    assert.deepEqual(await listed(f.ownerId, f.runnerId), { sessions: 2, messages: 1, stopping: false });
   });
 
   await t.test('(3) a drain starting with work waiting pushes at once; after the drain ends, the next drain pushes once more', async () => {
@@ -181,10 +182,10 @@ test('one push per drain, only while something of the owner’s waits on it', {
     await turn(running, 4, 'PENDING', 'steer');
     await turn(running, 5, 'PENDING', 'interrupt');
     await beat(f.runnerId, true);
-    assert.deepEqual(await listed(f.ownerId, f.runnerId), { sessions: 0, messages: 1 });
+    assert.deepEqual(await listed(f.ownerId, f.runnerId), { sessions: 0, messages: 1, stopping: false });
     const sent = pushesFor(f.runnerId);
     assert.equal(sent.length, 1);
-    assert.deepEqual(sent[0].waiting, { sessions: 0, messages: 1 });
+    assert.deepEqual(sent[0].waiting, { sessions: 0, messages: 1, stopping: false });
     assert.equal(drainWaitingSentence(sent[0]), 'studio-mac is updating to 0.1.254 — 1 message is waiting for 2 turns to finish.');
     await beat(f.runnerId, true);
     assert.equal(pushesFor(f.runnerId).length, 1, 'the same drain pushed twice');
@@ -197,7 +198,7 @@ test('one push per drain, only while something of the owner’s waits on it', {
     // A new session's first message is a session, not a message.
     const fresh = await session(f);
     await turn(fresh, 1, 'PENDING');
-    assert.deepEqual(await listed(f.ownerId, f.runnerId), { sessions: 1, messages: 3 });
+    assert.deepEqual(await listed(f.ownerId, f.runnerId), { sessions: 1, messages: 3, stopping: false });
   });
 
   await t.test('(5) another account’s, cancelled and deleted work is not waiting work', async () => {
@@ -211,5 +212,21 @@ test('one push per drain, only while something of the owner’s waits on it', {
     await beat(f.runnerId, true);
     assert.equal(pushesFor(f.runnerId).length, 0);
     assert.equal(await listed(f.ownerId, f.runnerId), undefined);
+  });
+
+  await t.test('(6) a runner draining because its process stops, not for a release, says so (docs/mocks/runner-stopping)', async () => {
+    const f = await fixture();
+    await session(f, { status: RunStatus.RUNNING, numTurns: 1 });
+    await session(f);
+    // A release waits too (phase available), but the drain is the stop's: not past the limit, not installing.
+    await beat(f.runnerId, true, { state: 'waitingForIdle', phase: 'available', targetVersion: '0.1.257', turnsInFlight: 1 });
+    const sent = pushesFor(f.runnerId);
+    assert.equal(sent.length, 1);
+    assert.deepEqual(sent[0].waiting, { sessions: 1, messages: 0, stopping: true });
+    assert.equal(drainWaitingSentence(sent[0]), 'studio-mac is stopping — 1 session is waiting for 1 turn to finish.');
+    assert.deepEqual(await listed(f.ownerId, f.runnerId), { sessions: 1, messages: 0, stopping: true });
+    // No release at all: the runner is up to date and only stopping.
+    await beat(f.runnerId, true, { state: 'enabled' });
+    assert.deepEqual(await listed(f.ownerId, f.runnerId), { sessions: 1, messages: 0, stopping: true });
   });
 });

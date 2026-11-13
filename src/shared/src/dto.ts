@@ -891,11 +891,18 @@ export interface RunnerUpdateTurn {
 export interface RunnerDrainWaiting {
   sessions: number;
   messages: number;
+  /** The runner drains because its process is stopping (a stop signal: a service restart or stop, a
+   *  reboot), not for a release: its update phase is neither `draining` nor `restarting`. The clients
+   *  then say "is stopping" and offer neither Later nor Update Now. Absent from an older server. */
+  stopping?: boolean;
 }
 
 /** Why a queued session waits on its runner's self-update (queuedReason 'runner_updating'): the
  *  release, the owner's turns the drain waits for, and when the wait began. */
 export interface QueuedRunnerUpdate {
+  /** The runner is stopping, not updating (RunnerDrainWaiting.stopping): "Runner stopping", no actions.
+   *  Absent from an older server. */
+  stopping?: boolean;
   targetVersion: string | null;
   since: string | null;
   turns: Array<{ id: string; title: string | null }>;

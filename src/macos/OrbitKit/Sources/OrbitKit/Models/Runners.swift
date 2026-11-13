@@ -510,10 +510,21 @@ public struct RunnerSelfUpdate: Codable, Equatable, Sendable {
 public struct RunnerDrainWaiting: Codable, Equatable, Sendable {
     public let sessions: Int
     public let messages: Int
+    /// The runner drains because its process is stopping, not for a release: "is stopping", and no
+    /// Later or Update Now. False from a server that predates the field.
+    public let stopping: Bool
 
-    public init(sessions: Int, messages: Int) {
+    public init(sessions: Int, messages: Int, stopping: Bool = false) {
         self.sessions = sessions
         self.messages = messages
+        self.stopping = stopping
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        sessions = try c.decode(Int.self, forKey: .sessions)
+        messages = try c.decode(Int.self, forKey: .messages)
+        stopping = (try? c.decodeIfPresent(Bool.self, forKey: .stopping)) ?? false
     }
 }
 
