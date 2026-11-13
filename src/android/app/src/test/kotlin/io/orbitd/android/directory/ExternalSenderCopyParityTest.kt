@@ -34,10 +34,32 @@ class ExternalSenderCopyParityTest {
             swift.contains("public static let feishuSource = \"${ExternalSender.feishuSource}\""))
         assertTrue("ExternalSender.swift no longer labels a sender as fromFeishu, separator, name",
             swift.contains("guard let name = from.name else { return fromFeishu }") && swift.contains("return \"\\(fromFeishu)\\(nameSeparator)\\(name)\""))
-        // Every word this object declares is one of the above: a word added here and not there fails.
+        // Every word this object declares is one of the above or the guest's below: a word added here and not there fails.
         val declared = ExternalSender::class.java.declaredFields.filter { it.type == String::class.java }
             .map { it.isAccessible = true; it.get(null) as String }
-        assertEquals(setOf(ExternalSender.fromFeishu, ExternalSender.nameSeparator, ExternalSender.feishuSource), declared.toSet())
+        assertEquals(setOf(ExternalSender.fromFeishu, ExternalSender.nameSeparator, ExternalSender.feishuSource,
+            ExternalSender.fromGuest, ExternalSender.guestSource), declared.toSet())
+    }
+
+    /** A guest the owner invited (docs/session-guests-design.md §3): read only with a name, and labelled `From <name>`, by the web's
+     * rule and the Swift's. */
+    @Test fun theGuestsWordsAndRuleAreTheWebsAndTheSwifts() {
+        assertEquals("From", ExternalSender.fromGuest)
+        assertEquals("ORBIT_GUEST", ExternalSender.guestSource)
+        assertTrue("externalSender.ts no longer says \"${ExternalSender.fromGuest}\" for a guest",
+            web.contains("export const EXTERNAL_SENDER_FROM_GUEST = '${ExternalSender.fromGuest}';"))
+        assertTrue("externalSender.ts no longer reads a guest only with a name",
+            web.contains("if (from.source === '${ExternalSender.guestSource}') return name ? { source: '${ExternalSender.guestSource}', name } : null;"))
+        assertTrue("externalSender.ts no longer labels a guest as fromGuest, a space, name",
+            web.contains("if (from.source === '${ExternalSender.guestSource}') return `\${EXTERNAL_SENDER_FROM_GUEST} \${from.name}`;"))
+        assertTrue("ExternalSender.swift no longer says \"${ExternalSender.fromGuest}\" for a guest",
+            swift.contains("public static let fromGuest = \"${ExternalSender.fromGuest}\""))
+        assertTrue("ExternalSender.swift no longer names the guest source ${ExternalSender.guestSource}",
+            swift.contains("public static let guestSource = \"${ExternalSender.guestSource}\""))
+        assertTrue("ExternalSender.swift no longer reads a guest only with a name",
+            swift.contains("case guestSource: return name.map { ExternalMessageFrom(source: guestSource, name: \$0) }"))
+        assertTrue("ExternalSender.swift no longer labels a guest as fromGuest, a space, name",
+            swift.contains("if from.source == guestSource, let name = from.name { return \"\\(fromGuest) \\(name)\" }"))
     }
 
     /** The row: the sender's label, then what it said, as the owner's "You" and another session's title are said (`SessionLineCopy.sent`). */

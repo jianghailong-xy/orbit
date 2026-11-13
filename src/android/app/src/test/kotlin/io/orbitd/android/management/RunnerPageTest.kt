@@ -202,7 +202,11 @@ class RunnerPageTest {
         }
         val templates = mapOf("attentionNoCliSignedInDetail(cli: String)" to RunnerCopy.noCliSignedInDetail("\\(cli)"),
             "attentionNoCliSignedInDetailMany(clis: String)" to RunnerCopy.noCliSignedInDetailMany("\\(clis)"),
-            "runnerNamesTwo(first: String, second: String)" to RunnerCopy.namesTwo("\\(first)", "\\(second)"))
+            "runnerNamesTwo(first: String, second: String)" to RunnerCopy.namesTwo("\\(first)", "\\(second)"),
+            // The quiet-window wording of a runner update (selfUpdate.quietWindowSeconds); a number is rendered as a sentinel.
+            "runnerVersionInstallsWhenQuiet(minutes: Int)" to RunnerCopy.versionInstallsWhenQuiet(90_001).replace("90001", "\\(minutes)"),
+            "runnerUpdateAvailableBodyQuiet(minutes: Int, unit: String)" to
+                RunnerCopy.updateAvailableBodyQuiet(90_001, "\\(unit)").replace("90001", "\\(minutes)"))
         for ((signature, rendered) in templates) {
             val body = Regex("static func ${Regex.escape(signature)} -> String \\{\\s*\"((?:[^\"\\\\]|\\\\.)*)\"\\s*\\}").find(swift)?.groupValues?.get(1)
             assertEquals(signature, rendered, body)

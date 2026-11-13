@@ -69,9 +69,9 @@ describe('connecting a Gemini key', { timeout: 30_000 }, () => {
         <QueryClientProvider client={client}>
           <MemoryRouter initialEntries={[at]}>
             <Routes>
-              <Route path="/providers" element={<div>providers</div>} />
-              <Route path="/providers/new/:slug" element={<ProviderConnectPage />} />
-              <Route path="/providers/:id" element={<ProviderConnectPage />} />
+              <Route path="/settings/providers/:vendor" element={<div>vendor</div>} />
+              <Route path="/settings/providers/new/:slug" element={<ProviderConnectPage />} />
+              <Route path="/settings/providers/keys/:id" element={<ProviderConnectPage />} />
             </Routes>
           </MemoryRouter>
         </QueryClientProvider>,
@@ -143,7 +143,7 @@ describe('connecting a Gemini key', { timeout: 30_000 }, () => {
   });
 
   it('connects Google Gemini on the Gemini API, says who gets the key and what agy does with it', async () => {
-    await mount('/providers/new/gemini');
+    await mount('/settings/providers/new/gemini');
     expect(container.querySelector('h1')?.textContent).toBe('Connect Google Gemini');
     expect(text()).toContain('Gemini API · models from the runtime CLI');
     expect(text()).not.toContain('Runs on');
@@ -155,7 +155,7 @@ describe('connecting a Gemini key', { timeout: 30_000 }, () => {
   });
 
   it('probes the Gemini API with the model a session would run, then saves the row on agy', async () => {
-    await mount('/providers/new/gemini');
+    await mount('/settings/providers/new/gemini');
     await type(container.querySelector<HTMLInputElement>('input[type="password"]'), 'AIza-test');
     await click(button('Connect'));
 
@@ -186,7 +186,7 @@ describe('connecting a Gemini key', { timeout: 30_000 }, () => {
 
   it('keeps an edited row on agy and preserves its stored name unless renamed', async () => {
     rows = [geminiRow];
-    await mount('/providers/p-gemini');
+    await mount('/settings/providers/keys/p-gemini');
     // No new key, so nothing to probe: Save writes straight away.
     await click(button('Save'));
 

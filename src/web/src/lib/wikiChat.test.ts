@@ -17,6 +17,7 @@ import {
   wikiChatFab,
   wikiChatFabShown,
   wikiChatFoldsDirectory,
+  wikiChatFoldsSidebar,
   wikiChatLayout,
   wikiChatOffline,
   wikiChatPageSection,
@@ -119,7 +120,8 @@ describe("the panel's place", () => {
     ]);
     expect(['wide', 'docked', 'over', 'sheet'].map((layout) => wikiChatDocks(layout as never))).toEqual([true, true, false, false]);
     // The directory stays beside the page only when the window is wide; narrower, it folds into Contents.
-    expect(['wide', 'docked', 'over', 'sheet'].map((layout) => wikiChatFoldsDirectory(layout as never))).toEqual([false, true, true, true]);
+    expect(['wide', 'docked', 'over', 'sheet'].map((layout) => wikiChatFoldsDirectory(layout as never))).toEqual([false, false, true, true]);
+    expect(['wide', 'docked', 'over', 'sheet'].map((layout) => wikiChatFoldsSidebar(layout as never))).toEqual([false, true, false, false]);
   });
 
   it('is a third of the window between 400 and 720 by default, dragged between 320 and half the window where it is wide', () => {

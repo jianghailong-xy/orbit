@@ -257,6 +257,8 @@ final class EvidenceDecisionCopyParityTests: XCTestCase {
                        "the heading of one a run of the session recorded")
         assertDeclares(web, "DECISION_RECEIPT_REASON", EvidenceDecisions.receiptReasonLabel,
                        "the label over a send-back's reason")
+        assertDeclares(web, "DECISION_RECEIPT_NOTE", EvidenceDecisions.receiptNoteLabel,
+                       "the label over a confirm's note")
 
         let decided = RecordedEvidenceDecision(
             taskId: "t", title: "T", projectId: nil, evidenceRevision: "8", decision: .confirm,
@@ -270,6 +272,16 @@ final class EvidenceDecisionCopyParityTests: XCTestCase {
         assertContains(web,
                        "decided.decision === 'CONFIRM' ? DECISION_CONFIRM_ACTION : DECISION_SEND_BACK_ACTION",
                        "which action word the receipt's line quotes")
+        assertContains(web, "decided.decision === 'CONFIRM' ? DECISION_RECEIPT_NOTE : DECISION_RECEIPT_REASON",
+                       "which label the receipt puts over its note")
+
+        let sentBack = RecordedEvidenceDecision(
+            taskId: "t", title: "T", projectId: nil, evidenceRevision: "8", decision: .sendBack,
+            note: "n", decidedAt: "2026-09-16T09:45:00.000Z", decidedByType: "USER")
+        XCTAssertEqual(EvidenceDecisions.noteLabel(decided), EvidenceDecisions.receiptNoteLabel)
+        XCTAssertEqual(EvidenceDecisions.noteLabel(sentBack), EvidenceDecisions.receiptReasonLabel)
+        XCTAssertEqual(EvidenceDecisions.noteToggle(decided, open: false), "Show the note")
+        XCTAssertEqual(EvidenceDecisions.noteToggle(sentBack, open: true), "Hide the reason")
     }
 
     func testTheSentLineMatchesTheWebCard() throws {

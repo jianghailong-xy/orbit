@@ -431,9 +431,12 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     const scheduleRefresh = (
       type: string,
       sessionId: string,
-      data: { id?: unknown; taskId?: unknown; taskIds?: unknown; resync?: unknown } | null | undefined,
+      data: { id?: unknown; taskId?: unknown; taskIds?: unknown; resync?: unknown; repoHealth?: unknown } | null | undefined,
     ): void => {
-      for (const g of groupsFor(type)) pending.add(g);
+      // A runner's heartbeat saw a workspace's checkout change (counts, branch, state): only the workspace list draws
+      // that — the Main checkout bar — so the session lists are not read again for it.
+      const healthOnly = type === 'agent.changed' && data?.repoHealth === true;
+      for (const g of healthOnly ? ['workspaces'] : groupsFor(type)) pending.add(g);
       if (watchFollows(type, sessionId, data)) pending.add('watches');
       // Only the `session.*` family: those are the events that can move a session's run state,
       // and so the ones a frozen detail has to be corrected by. An approval or a background task
@@ -526,6 +529,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
             taskId?: unknown;
             taskIds?: unknown;
             resync?: unknown;
+            repoHealth?: unknown;
           } | null;
         };
         try {

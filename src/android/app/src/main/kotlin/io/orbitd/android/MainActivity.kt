@@ -58,6 +58,11 @@ import io.orbitd.android.watch.WatchStore
 import io.orbitd.android.composer.MachineSetup
 import io.orbitd.android.composer.MachineSetupCopy
 import io.orbitd.android.composer.NewSessionComposer
+import io.orbitd.android.composer.NoMachineWelcomeCard
+import io.orbitd.android.composer.rememberAccountName
+import io.orbitd.android.composer.rememberManagedOffered
+import io.orbitd.android.composer.rememberManagedRunner
+import io.orbitd.android.composer.rememberNewAccount
 import io.orbitd.android.text.LocalReaderResources
 import io.orbitd.android.text.ReaderResources
 import kotlinx.coroutines.delay
@@ -254,6 +259,23 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             navigation = before.landHome(workspaces.map { it.id }.filterNot { ObjectId.same(it, deletedWorkspace) }, lastWorkspace.id, opened, provisionalLanding)
             if (!data.cached) provisionalLanding = null else if (navigation !== before) provisionalLanding = rootOf(navigation)
         }
+        // A new account whose only workspace is its managed runner's default lands on that workspace's draft, where the welcome card
+        // stands (docs/mocks/new-user-onboarding; the web's DefaultLanding + WorkspaceView). Once per sign-in, over the list the launch
+        // landed on, so Back still reaches it; an account that has had a session keeps today's landing.
+        var managedLanded by remember(signedIn.handle) { mutableStateOf(false) }
+        val onlyWorkspace = workspaces.singleOrNull()?.id
+        val managedForLanding = rememberManagedRunner(management, ask = data.ready && onlyWorkspace != null && !managedLanded)
+        val managedDefault = managedForLanding.shown?.status?.workspaceId
+            ?.takeIf { onlyWorkspace != null && ObjectId.same(it, onlyWorkspace) }?.let { onlyWorkspace }
+        val newManagedAccount = rememberNewAccount(management, managedDefault != null && !managedLanded)
+        LaunchedEffect(newManagedAccount, managedDefault, route, navigation.canGoBack) {
+            val workspace = managedDefault ?: return@LaunchedEffect
+            if (!newManagedAccount || managedLanded || navigation.canGoBack) return@LaunchedEffect
+            if (route.destination == Destination.WORKSPACE && ObjectId.same(route.id, workspace)) {
+                managedLanded = true
+                open(OrbitRoute(Destination.DRAFT, workspaceId = workspace))
+            }
+        }
         // A merge's push (A11-9) names its project only: once the directory is read, its sessions page lands as the project's root
         // over the workspace the drawer's row would pick (iOS 6b4bef713 `openProjectMerge`).
         val arrival = navigation.pending?.takeIf { it.waitsForDirectory }
@@ -380,7 +402,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         CompositionLocalProvider(LocalReaderResources provides remember(signedIn.handle) { ReaderResources(app.session, signedIn.handle) }) {
                         holder.SaveableStateProvider(Wire.json.encodeToString(route)) {
                             when (route.destination) {
-                                Destination.WORKSPACES -> WorkspaceHome(data, startSession = { openNewSession() }) { app.realtime.refreshDirectory() }
+                                Destination.WORKSPACES -> WorkspaceHome(data, management, startSession = { openNewSession() }) { app.realtime.refreshDirectory() }
                                 Destination.WORKSPACE, Destination.FOLDER -> DirectoryScreen(route, data, api, signedIn.handle, ::open, { app.realtime.refreshDirectory() },
                                     watches.summaries, scopeList)
                                 Destination.PROJECT_SESSIONS -> SessionProjectPage(app, signedIn.handle, route, data, api, ::open)
@@ -388,7 +410,10 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                     ProjectLandingsWindow(app, signedIn.handle, route, api, project, route.recordId, ::open)
                                 }
                                 Destination.SEARCH -> SearchScreen(api, ::open)
-                                Destination.SESSION -> SessionDestination(app, signedIn.handle, route, api, data, ::open, scopeList::holds) {
+                                // A member picked from a conversation's project sheet takes that conversation's place: Back returns
+                                // to the list it was opened from (owner 2026-11-11, docs/mocks/project-sessions-column board 5).
+                                Destination.SESSION -> SessionDestination(app, signedIn.handle, route, api, data, ::open, scopeList::holds,
+                                    swap = { next -> keyboard?.hide(); focus.clearFocus(); navigation = navigation.back().push(next) }) {
                                     navigation = navigation.dropSession(route.id!!)
                                 }
                                 Destination.DRAFT -> NewSessionComposer(app, signedIn.handle, route, data, ::open) { key, root -> land(key, root) }
@@ -472,10 +497,25 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
 /** What stands in for a workspace's list until the launch has landed on one (iOS `workspaceList`): a bare spinner while the list is
  * coming, or why it can't, or that there is nothing to land on. With workspaces this page is gone a frame later. */
 @Composable
-private fun WorkspaceHome(data: DirectoryData, startSession: () -> Unit, retry: () -> Unit) {
+private fun WorkspaceHome(data: DirectoryData, management: ManagementApi, startSession: () -> Unit, retry: () -> Unit) {
     // Before the phone has said what network it has, having none yet means nothing.
     var patient by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) { delay(2_000); patient = false }
+    // A new account with no machine at all, on a server that starts none for it, meets the welcome card (docs/mocks/new-user-onboarding,
+    // P3): how to connect a computer. Once one comes online the launch's landing takes its setup page.
+    val noMachine = data.ready && data.workspaces.isEmpty() && data.effectiveRunnerRows.isEmpty()
+    val managedOffered = rememberManagedOffered(management, noMachine)
+    val welcome = rememberNewAccount(management, noMachine && managedOffered == false) && noMachine && managedOffered == false
+    val welcomeName = rememberAccountName(management, welcome)
+    var troubled by remember { mutableStateOf(false) }
+    if (troubled) AddRunnerDialog(management, onDismiss = { troubled = false }) { troubled = false; retry() }
+    if (welcome) {
+        ReportDirectoryDrawn(data, rememberLazyListState()) { false }
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 12.dp)) {
+            NoMachineWelcomeCard(welcomeName, management, onTrouble = { troubled = true }, onArrived = retry)
+        }
+        return
+    }
     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         when {
             data.ready && data.workspaces.isEmpty() -> {

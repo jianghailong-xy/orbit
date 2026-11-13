@@ -35,6 +35,7 @@ import {
   countWatchReconcileRepair,
 } from './watch-metrics';
 import { redactErrorText, redactReason, redactSnapshot } from './watch-redaction';
+import { type ForkHandback, readForkHandbacks } from '../tasks/task-fork-handback';
 import { currentWatchRollout, watchWorkersRun, type WatchRollout } from './watch-rollout';
 
 /**
@@ -473,8 +474,12 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
         const end = delivery.kind as BareWatchEnd;
         await this.resumeObserver(claim, watch!, watchEndTurnClientId(watch!.id, end), watchEndTurnContent(watch!.id, end));
       } else if (delivery.action === 'RESUME_SESSION') {
+        // A forked task's hand-back (design §2.5): its branch and the merge the forking session runs. The
+        // fork's columns never change, and the merge command follows the status the Match recorded.
+        const forks = await readForkHandbacks(this.prisma, match.watch.ownerId, forkCandidates(match));
         await this.resumeObserver(
-          claim, match.watch, watchTurnClientId(match.watch.id, match.generation), watchTurnContent(match.watch.id, match), true,
+          claim, match.watch, watchTurnClientId(match.watch.id, match.generation),
+          watchTurnContent(match.watch.id, match, forks), true,
         );
       } else {
         await this.spaceContinuous(this.prisma, match.watch);
@@ -759,7 +764,18 @@ function observerRefusal(session: ObserverRow | null): DeliveryRefused | null {
  * delivery writes the same bytes. A snapshot too large for one turn is replaced by its size and where
  * to read it; the changed targets are still named.
  */
-function watchTurnContent(watchId: string, match: DeliveredMatch): string {
+/** The TASK targets of a Match, with the status it recorded for each: whose fork hand-back its turn may carry. */
+function forkCandidates(match: DeliveredMatch): Array<{ id: string; status: string | null }> {
+  return redactSnapshot(match.perTargetSnapshot).targets
+    // A redacted id is not one to look up.
+    .filter((target) => target.kind === 'TASK' && /^[0-9a-f-]{36}$/i.test(target.id))
+    .map((target) => ({
+      id: target.id,
+      status: typeof target.observed?.status === 'string' ? target.observed.status : null,
+    }));
+}
+
+function watchTurnContent(watchId: string, match: DeliveredMatch, forks: readonly ForkHandback[] = []): string {
   // Contract `deliveryGuards.redaction`: the stored snapshot and reason pass through the allowlist first.
   const snapshot = redactSnapshot(match.perTargetSnapshot);
   const reason = redactReason(match.reason);
@@ -779,15 +795,19 @@ function watchTurnContent(watchId: string, match: DeliveredMatch): string {
     reason,
   };
   const changed = snapshot.targets.filter((target) => target.changed === true);
+  // Design §2.5: a forked task's work comes back by the forking session's own merge, so its turn says how.
+  const forked = forks.length > 0 ? { forkedTasks: forks } : {};
   const whole = render({
     ...base,
     changedTargets: changed.map(({ kind, id, state, observed }) => ({ kind, id, state, ...(observed ? { observed } : {}) })),
+    ...forked,
     latestSnapshot: snapshot,
   });
   if (whole.length <= MAX_PROMPT_CHARS) return whole;
   return render({
     ...base,
     changedTargets: changed.map(({ kind, id, state }) => ({ kind, id, state })),
+    ...forked,
     latestSnapshot: {
       evaluatedAt: snapshot.evaluatedAt,
       targets: snapshot.targets.length,

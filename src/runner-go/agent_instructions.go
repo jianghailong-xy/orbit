@@ -218,7 +218,12 @@ func (s *ClaimedSession) insideRecordedWork() bool {
 // checkout the session runs in (checkoutInstructions). It is read from the checkout each time an engine's
 // instructions are built, so a checkout made or brought back since the last spawn is described as it now is.
 func (s *ClaimedSession) appendSystemPrompt() string {
-	note := checkoutInstructions(s.WT)
+	wt := s.WT
+	if wt == nil {
+		// A codeless run's detached checkout is left out the same way (codeless_checkout.go).
+		wt = s.Detached
+	}
+	note := checkoutInstructions(wt)
 	if note == "" {
 		return s.Agent.AppendSystemPrompt
 	}

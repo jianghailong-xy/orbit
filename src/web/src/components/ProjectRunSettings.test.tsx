@@ -24,6 +24,16 @@ import {
   runLineLocked,
 } from '../lib/projectStart';
 import { ProjectRunSettings, type RunSettingsProject } from './ProjectRunSettings';
+import {
+  NON_CODE_ANCHOR,
+  NON_CODE_MARKED_BY_COORDINATOR,
+  NON_CODE_MARKED_BY_YOU,
+  RUN_DELIVERS,
+  RUN_LANDING,
+  RUN_LANDING_OFF_HINT,
+  RUN_TO_CODE,
+  RUN_TO_NOT_CODE,
+} from '../lib/projectDone';
 
 /**
  * "How it runs" — the settings a start card set, in one block once the project is started (mock
@@ -221,7 +231,7 @@ describe('How it runs — what the block says', () => {
     expect(node.querySelector('.project-open-items-title')?.textContent).toBe('How it runs');
     expect(node.querySelector('.project-open-items-hint')?.textContent).toBe(RUN_APPLIES_FROM_NEXT_TASK);
     expect(RUN_APPLIES_FROM_NEXT_TASK).toBe('applies from the next task');
-    expect(labels(node)).toEqual(['Tasks land on', 'Automatic', 'At most', 'Merge check', 'Escalate after']);
+    expect(labels(node)).toEqual(['Delivers', 'Tasks land on', 'Automatic', 'At most', 'Merge check', 'Escalate after']);
     // The lines by their start-card names, the branch shortened the way every line names one.
     expect(settingRow(node, 'Tasks land on').textContent).toContain('A project branch · project/34Wvw…');
     expect(settingRow(node, 'Tasks land on').textContent).toContain('Directly into main');
@@ -467,7 +477,7 @@ describe('How it runs — the main branch', () => {
   it('draws Main branch under Tasks land on, says a save there is the repository’s next default, and names it everywhere', async () => {
     server.view = onMaster();
     const node = await mount();
-    expect(labels(node)).toEqual(['Tasks land on', 'Main branch', 'Automatic', 'At most', 'Merge check', 'Escalate after']);
+    expect(labels(node)).toEqual(['Delivers', 'Tasks land on', 'Main branch', 'Automatic', 'At most', 'Merge check', 'Escalate after']);
     expect(shown(node)).toBe('master');
     expect(field(node).disabled).toBe(false);
     expect(settingRow(node, 'Main branch').querySelector('.project-integration-setting-hint')?.textContent).toBe(
@@ -550,7 +560,7 @@ describe('How it runs — the main branch', () => {
   it('draws no Main branch for a project with no repository, and keeps why the line is locked under the line', async () => {
     server.view = viewOf({ repository: null, branches: null });
     const node = await mount();
-    expect(labels(node)).toEqual(['Tasks land on', 'Automatic', 'At most', 'Merge check', 'Escalate after']);
+    expect(labels(node)).toEqual(['Delivers', 'Tasks land on', 'Automatic', 'At most', 'Merge check', 'Escalate after']);
     expect(settingRow(node, 'Tasks land on').textContent).toContain(runLineLocked('2h ago'));
     expect(node.querySelector('.main-branch-select')).toBeNull();
   });
@@ -565,7 +575,7 @@ describe('How it runs — how the work reaches main', () => {
   it('offers the agent pushing on a main line, even once it started, and writes the choice alone', async () => {
     server.view = viewOf({ line: 'MAIN', ref: 'main', deliveryMode: 'PLATFORM', deliveryModeChosenAt: null });
     const node = await mount();
-    expect(labels(node)).toEqual(['Tasks land on', 'Delivery', 'Automatic', 'At most', 'Merge check', 'Escalate after']);
+    expect(labels(node)).toEqual(['Delivers', 'Tasks land on', 'Delivery', 'Automatic', 'At most', 'Merge check', 'Escalate after']);
     expect(deliveryInput(node, 'PLATFORM').checked).toBe(true);
     // The line is locked; the delivery mode is not (O-L1).
     expect(lineInput(node, 'MAIN').disabled).toBe(true);
@@ -658,7 +668,7 @@ describe('How it runs — how the work reaches main', () => {
     });
     const node = await mount();
     expect(labels(node)).toEqual(
-      ['Tasks land on', 'Delivery', 'Main branch', 'Automatic', 'At most', 'Merge check', 'Escalate after']);
+      ['Delivers', 'Tasks land on', 'Delivery', 'Main branch', 'Automatic', 'At most', 'Merge check', 'Escalate after']);
     expect(settingRow(node, 'Delivery').id).toBe(RUN_DELIVERY_ANCHOR);
   });
 
@@ -733,4 +743,50 @@ describe('How it runs — switching to the agent while a merge is waiting', () =
       expect(deliveryInput(node, 'AGENT_PUSH').checked).toBe(true);
     });
   }
+});
+
+describe('How it runs — Delivers (board 01)', () => {
+  const deliversInput = (node: ParentNode, value: 'CODE' | 'NOT_CODE'): HTMLInputElement =>
+    settingRow(node, RUN_DELIVERS).querySelector<HTMLInputElement>(`input[value="${value}"]`)!;
+
+  it('draws a coordinator-marked project as Not code with who and when, and folds the landing rows into Landing · Off', async () => {
+    const node = await mount(projectOf({ nonCode: true, nonCodeSetBy: 'COORDINATOR', nonCodeSetAt: '2026-11-11T10:20:00.000Z' }));
+    expect(labels(node)).toEqual([RUN_DELIVERS, 'Automatic', 'At most', RUN_LANDING, 'Escalate after']);
+    expect(deliversInput(node, 'NOT_CODE').checked).toBe(true);
+    expect(settingRow(node, RUN_DELIVERS).id).toBe(NON_CODE_ANCHOR);
+    expect(settingRow(node, RUN_DELIVERS).textContent).toContain(`${NON_CODE_MARKED_BY_COORDINATOR} · Nov 11`);
+    expect(settingRow(node, RUN_LANDING).textContent).toBe(`${RUN_LANDING}${RUN_LANDING_OFF_HINT}`);
+    expect(node.querySelector('.project-run-settings-summary')?.textContent).toContain('Non-code · 3 tasks at a time');
+  });
+
+  it('quotes the reason the coordinator gave under who and when (board 01 B)', async () => {
+    const node = await mount(projectOf({
+      nonCode: true, nonCodeSetBy: 'COORDINATOR', nonCodeSetAt: '2026-11-11T10:20:00.000Z',
+      nonCodeReason: 'All work is documents and vendor accounts; no repository.',
+    }));
+    const by = settingRow(node, RUN_DELIVERS).querySelector('.project-run-non-code-by')!;
+    expect(by.textContent).toContain(`${NON_CODE_MARKED_BY_COORDINATOR} · Nov 11`);
+    expect(by.querySelector('.project-run-non-code-reason')!.textContent)
+      .toBe('“All work is documents and vendor accounts; no repository.”');
+  });
+
+  it('says what switching to Not code does above Save, and writes the mark alone on the owner door', async () => {
+    const node = await mount();
+    expect(deliversInput(node, 'CODE').checked).toBe(true);
+    expect(node.textContent).not.toContain(NON_CODE_MARKED_BY_YOU);
+    await press(deliversInput(node, 'NOT_CODE'));
+    expect(node.querySelector('.project-run-non-code-consequence')?.textContent)
+      .toBe(RUN_TO_NOT_CODE.replace('{branch}', 'project/34Wvw…'));
+    await save(node, 1);
+    expect(writes).toEqual([{ method: 'PATCH', path: `/projects/${PROJECT}`, body: { nonCode: true } }]);
+  });
+
+  it('switching back to Code brings the landing rows back and says branchless work will show', async () => {
+    const node = await mount(projectOf({ nonCode: true, nonCodeSetBy: 'OWNER', nonCodeSetAt: '2026-11-11T10:20:00.000Z' }));
+    await press(deliversInput(node, 'CODE'));
+    expect(labels(node)).toEqual([RUN_DELIVERS, 'Tasks land on', 'Automatic', 'At most', 'Merge check', 'Escalate after']);
+    expect(node.querySelector('.project-run-non-code-consequence')?.textContent).toBe(RUN_TO_CODE);
+    await save(node, 1);
+    expect(writes).toEqual([{ method: 'PATCH', path: `/projects/${PROJECT}`, body: { nonCode: false } }]);
+  });
 });

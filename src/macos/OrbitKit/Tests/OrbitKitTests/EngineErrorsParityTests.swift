@@ -143,6 +143,21 @@ final class EngineErrorsParityTests: XCTestCase {
                            + "RETRYABLE_ENGINE_ERROR_PREFIXES in events.ts.")
     }
 
+    /// The Cloudflare block page's wording and the dropped socket's. A failure this client does not
+    /// recognise is a session told its account was signed out (or drawn as the agent answering a 403
+    /// page) while the server has moved on and is re-sending.
+    func testConnectionFailureMarkersAreTheSameOnBothEnds() throws {
+        XCTAssertEqual(EngineErrors.edgeBlockMarkers.sorted(),
+                       try sharedStrings("EDGE_BLOCK_MARKERS").sorted(),
+                       "the edge-block markers drifted — first is EngineErrors.edgeBlockMarkers "
+                           + "(this client), second is EDGE_BLOCK_MARKERS in events.ts.")
+        XCTAssertEqual(EngineErrors.connectionDroppedMarkers.sorted(),
+                       try sharedStrings("CONNECTION_DROPPED_MARKERS").sorted(),
+                       "the dropped-socket markers drifted — first is "
+                           + "EngineErrors.connectionDroppedMarkers (this client), second is "
+                           + "CONNECTION_DROPPED_MARKERS in events.ts.")
+    }
+
     /// The quota sentences. One end knowing a phrasing the other does not is a spent quota shown as
     /// a card here and as the agent apparently saying it there.
     func testUsageLimitMarkersAreTheSameOnBothEnds() throws {

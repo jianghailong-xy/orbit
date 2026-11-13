@@ -12,7 +12,7 @@ import type {
   TaskStartCard,
 } from '@orbit/shared';
 
-import { buildResumeContinuation } from './resume-continuation';
+import { buildResumeContinuation, buildUpdateResumeContinuation, updateContinuationVersion } from './resume-continuation';
 
 /**
  * The part of a delivered message the control plane appended, recorded beside the runner's echo.
@@ -35,7 +35,11 @@ import { buildResumeContinuation } from './resume-continuation';
 export function controlPlaneNoteOf(echoed: string, authored: string | null): string | null {
   // The continuation first: an empty authored text is a prefix of every echo, while the
   // continuation's head is nothing a person types.
-  for (const delivered of [buildResumeContinuation(authored), authored ?? '']) {
+  const version = updateContinuationVersion(echoed);
+  const continuations = version === undefined
+    ? [buildResumeContinuation(authored)]
+    : [buildUpdateResumeContinuation(authored, version)];
+  for (const delivered of [...continuations, authored ?? '']) {
     if (!echoed.startsWith(delivered)) continue;
     const note = echoed.slice(delivered.length);
     return note.trim() ? note : null;

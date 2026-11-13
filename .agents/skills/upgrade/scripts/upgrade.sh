@@ -75,10 +75,11 @@ MR_TAG=orbit-managed-runner:local
 MR_MOUNT=/var/lib/orbit-managed-runners
 MR_SWITCH=0
 
-# The managed runners' directory on this host: the source Compose binds at $MR_MOUNT. awk reads to the end
-# rather than exiting at the match, which could stop Compose with SIGPIPE and fail the pipeline.
+# The managed runners' directory on this host: the source Compose binds at $MR_MOUNT in service $1 (the channel by
+# default). awk reads to the end rather than exiting at the match, which could stop Compose with SIGPIPE and fail the
+# pipeline.
 managed_runners_dir() {
-  $DC config docker-channel 2>/dev/null | awk -v mount="$MR_MOUNT" '
+  $DC config "${1:-docker-channel}" 2>/dev/null | awk -v mount="$MR_MOUNT" '
     { sub(/^[[:space:]]*-?[[:space:]]*/, "") }
     /^source:/ { source = $0; sub(/^source:[[:space:]]*/, "", source); gsub(/^"|"$/, "", source) }
     /^target:/ { target = $0; sub(/^target:[[:space:]]*/, "", target); gsub(/^"|"$/, "", target)
@@ -96,6 +97,43 @@ managed_runner_image_in() {
     return 1
   fi
   printf '%s\n' "$ids"
+}
+
+# Managed runners on other hosts (docs/self-hosting.md, "Managed runners on another host"): a profile whose every channel
+# is a URL on another machine. Each such host builds its own image with the channel-host kit
+# (deploy/managed-runner/remote-host), so this host builds none and writes neither file. A socket path or a loopback
+# URL anywhere in it is a channel on this host, which keeps the section above.
+managed_runners_remote_only() {
+  local urls
+  [ -f "$1" ] || return 1
+  if grep -q '"socketPath"' "$1"; then return 1; fi
+  urls="$(grep -oE '"url"[[:space:]]*:[[:space:]]*"[^"]*"' "$1" | sed -E 's/.*"([^"]*)"$/\1/' || true)"
+  [ -n "$urls" ] || return 1
+  if printf '%s\n' "$urls" | grep -E '^http://(127\.0\.0\.1|\[::1\])(:|/|$)' >/dev/null; then return 1; fi
+}
+
+# Where the profile is, read from service $1's mount, and whether it names remote hosts only (MR_REMOTE).
+MR_REMOTE=0
+managed_runners_locate() {
+  local dir
+  dir="$(managed_runners_dir "$1")"
+  if [ -n "$dir" ] && managed_runners_remote_only "$dir/profile.json"; then
+    MR_REMOTE=1
+    echo "==> The managed runner profile ($dir/profile.json) names channel hosts on other machines only:"
+    echo "    no managed runner image is built here, and channel.json and profile.json are left as they are"
+    if [ "$1" = docker-channel ]; then
+      echo "    (this host's docker-channel serves none of the profile's hosts: it is neither built nor recreated)"
+    fi
+  fi
+}
+
+# After the upgrade: the image each of those hosts serves, as the apiserver reaches them. Read only, and never a reason
+# to fail: a host that does not answer is said, and its runners wait for it as they would anyway.
+managed_runners_remote_report() {
+  echo "==> Each channel host of the managed runner profile, as the apiserver reaches it"
+  $DC exec -T apiserver node - <deploy/managed-runner/docker-channel/info.js \
+    || echo "warning: the apiserver could not ask the channel hosts for their images (above)" >&2
+  echo "    A channel host moves to a new image with its own kit: deploy/managed-runner/remote-host/remote-host.sh upgrade <sha>"
 }
 
 # Before anything is built: the directory, its two files and the image each names now.
@@ -588,10 +626,17 @@ COMPOSE_SERVICES="$($DC config --services 2>/dev/null || true)"
 # mid-list with SIGPIPE, which pipefail would read as no channel.) The managed runners' firewall
 # (managed-runner-firewall) is never built, started or recreated here: its rules stay as the install or
 # --enable-managed-runner-firewall left them, and a deployment without it gains none.
+# A profile whose channel hosts are all on other machines leaves the image to them, whether or not this host lists the
+# channel; one without the channel is looked for in the apiserver's mount.
 CHANNEL=""
 if printf '%s\n' "$COMPOSE_SERVICES" | grep -x docker-channel >/dev/null; then
-  CHANNEL=docker-channel
-  managed_runners_preflight
+  managed_runners_locate docker-channel
+  if [ "$MR_REMOTE" -eq 0 ]; then
+    CHANNEL=docker-channel
+    managed_runners_preflight
+  fi
+else
+  managed_runners_locate apiserver
 fi
 # Once what can stop this run before anything is built has had its say.
 if [ "$LINK_EARLY" -eq 0 ]; then link_prepare; fi
@@ -640,6 +685,9 @@ if [ -n "$APISERVERS" ]; then
 fi
 if [ -n "$CHANNEL" ]; then
   managed_runner_services_up
+fi
+if [ "$MR_REMOTE" -eq 1 ]; then
+  managed_runners_remote_report
 fi
 if printf '%s\n' "$COMPOSE_SERVICES" | grep -x pgbackup >/dev/null; then
   pgbackup_up

@@ -8,6 +8,7 @@ import { sha256 } from '../common/crypto.util';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { PrismaService } from '../prisma/prisma.service';
 import { poolPauseBlocksRequest } from './pool-pause';
+import { claudeCodexLoginEnabled } from './codex-login-claude';
 import { RealtimeService } from '../realtime/realtime.service';
 import { ACCESS_TOKEN_FALLBACK_MS, accountOf, maskedAccount } from './codex-login';
 import {
@@ -55,8 +56,14 @@ const REFRESH_TIMEOUT_MS = 15_000;
 /** A 429 that is the subscription's limit, which a wait mends — `usage_not_included` is a plan, not a limit. */
 const SPENT = new Set([...SPENT_ERROR_CODES].filter((code) => code !== 'usage_not_included'));
 
+/**
+ * How a refusal reaches the caller, in its own protocol: `refuse` (pool-gateway.service.ts) for codex, which
+ * reads OpenAI's error shape; Anthropic's for Claude Code (anthropic-login-gateway.service.ts).
+ */
+export type LoginRefusal = (res: Response, status: number, code: string, message: string) => void;
+
 /** A login as the gateway uses one. The access token is decrypted only for the request, and never kept. */
-interface GatewayLogin {
+export interface GatewayLogin {
   accountId: string;
   /** Who signed it in: only they can sign it in again (migration 0371). */
   userId: string;
@@ -165,10 +172,56 @@ export class PoolLoginGatewayService {
   async forward(req: Request, res: Response, caller: GatewayCaller): Promise<void> {
     const started = Date.now();
     const target = gatewayTarget(req.originalUrl ?? req.url);
-    if (this.disabled.has(caller.poolOwnerId)) {
-      refuse(res, 403, ACCOUNT_DISABLED, poolOwnerDisabled(caller.poolLabel));
-      this.log.log(`session ${caller.sessionId} pool ${caller.poolId}: its owner's account is disabled — refused`);
+    const login = await this.accountFor(res, caller, refuse);
+    if (!login) return;
+    const account = maskedAccount(login.accountId);
+    let body: Buffer;
+    try {
+      body = await readBody(req);
+    } catch {
+      refuse(res, 413, 'orbit_gateway_request_too_large', 'The request is larger than the Orbit pool gateway forwards');
       return;
+    }
+    const now = new Date();
+    // The turn comes from a session's codex on a configured provider, which omits what only the CLI's
+    // built-in ChatGPT provider adds and never asks for the backend's other paths — so the gateway builds
+    // that shape for `/responses` alone. Every other allowed path is one the CLI sends when it is signed
+    // in itself, and is forwarded as it came, on the login's credential.
+    const turn = target.path === '/responses';
+    const url = `${turn ? this.upstream : loginBackendBase(this.upstream)}${target.path}${target.query}`;
+    const prepared = turn ? loginProviderRequest(req.headers, body) : { body, extra: {} };
+    const answer = await this.exchange(res, caller, login, refuse, (credential) =>
+      sendUpstream(
+        this.agent, req.method, url,
+        loginForwardedHeaders(req.headers, credential, login.accountId, prepared.body.length, prepared.extra),
+        prepared.body, res,
+      ));
+    if (!answer) return;
+    const status = answer.response.statusCode ?? 502;
+    const reading = this.readUsage(caller, login, answer, now);
+    if (answer.body) {
+      const outcome = await this.answeredWhole(caller, login, answer, reading, now);
+      this.record(caller, login, outcome, now);
+      relayHead(res, answer.response);
+      res.end(answer.body);
+      this.log.log(`session ${caller.sessionId} account ${account}: ${req.method} ${target.path} → ${status} in ${Date.now() - started}ms`);
+      return;
+    }
+    await relayStream(answer.response, res, (outcome, complete) => this.streamEnded(caller, login, answer, reading, outcome, complete, now));
+    this.log.log(`session ${caller.sessionId} account ${account}: ${req.method} ${target.path} → ${status} in ${Date.now() - started}ms`);
+  }
+
+  /**
+   * The ChatGPT account `caller`'s session is on, ready to send on — or null with `answer` already called
+   * for why not: its pool's owner or its contributor disabled, the pool no longer holding it (or the session
+   * on none), signed out, or paused. `answer` words the refusal in the caller's own protocol: codex's here
+   * (`refuse`), Anthropic's for Claude Code (AnthropicLoginGatewayService).
+   */
+  async accountFor(res: Response, caller: GatewayCaller, answer: LoginRefusal): Promise<GatewayLogin | null> {
+    if (this.disabled.has(caller.poolOwnerId)) {
+      answer(res, 403, ACCOUNT_DISABLED, poolOwnerDisabled(caller.poolLabel));
+      this.log.log(`session ${caller.sessionId} pool ${caller.poolId}: its owner's account is disabled — refused`);
+      return null;
     }
     // The account the session is on, if the pool still holds it: the token that got here may have been
     // minted on another, before the session moved (migration 0355). None when the session names an
@@ -180,53 +233,48 @@ export class PoolLoginGatewayService {
         })
       : null;
     if (!login) {
-      refuse(res, 403, 'orbit_pool_login_missing', loginMissingReason(caller.poolLabel));
+      answer(res, 403, 'orbit_pool_login_missing', loginMissingReason(caller.poolLabel));
       this.log.log(`session ${caller.sessionId} pool ${caller.poolId}: no account — refused`);
-      return;
+      return null;
     }
     // Whose account it is: the caller's own (their line says "you" where the other says to ask), or
     // somebody else's — its contributor, whoever in the pool signed it in (migration 0371).
     const byContributor = caller.userId === login.userId;
     const account = maskedAccount(login.accountId);
     if (this.disabled.has(login.userId)) {
-      refuse(res, 403, ACCOUNT_DISABLED, credentialOwnerDisabled(`The ChatGPT account ${accountName(login)}`, caller.poolLabel));
+      answer(res, 403, ACCOUNT_DISABLED, credentialOwnerDisabled(`The ChatGPT account ${accountName(login)}`, caller.poolLabel));
       this.log.log(`session ${caller.sessionId} account ${account}: its contributor's account is disabled — refused`);
-      return;
+      return null;
     }
     if (login.state !== 'ACTIVE') {
       // Every session it refuses is told, once, whichever of them saw it signed out first.
       await this.owe(caller.sessionId, loginSignedOutNotice(login, caller.poolLabel, byContributor));
-      refuse(res, 403, 'orbit_pool_login_signed_out', loginSignedOutNotice(login, caller.poolLabel, byContributor));
+      answer(res, 403, 'orbit_pool_login_signed_out', loginSignedOutNotice(login, caller.poolLabel, byContributor));
       this.log.log(`session ${caller.sessionId} account ${account}: signed out — refused`);
-      return;
+      return null;
     }
     if (await poolPauseBlocksRequest(this.prisma, caller.sessionId, login, new Date())) {
-      refuse(res, 403, 'orbit_pool_account_paused', `This account is paused until ${login.pausedUntil!.toISOString()}`);
-      return;
+      answer(res, 403, 'orbit_pool_account_paused', `This account is paused until ${login.pausedUntil!.toISOString()}`);
+      return null;
     }
-    let body: Buffer;
-    try {
-      body = await readBody(req);
-    } catch {
-      refuse(res, 413, 'orbit_gateway_request_too_large', 'The request is larger than the Orbit pool gateway forwards');
-      return;
-    }
+    return login;
+  }
+
+  /**
+   * `send` on the account's access token, kept fresh the codex CLI's way: refreshed ahead of its own expiry,
+   * and on a 401 refreshed and sent once more. Null with `answer` already called when the login cannot be
+   * used (signed out by the refusal, or its refresh unreachable) or the backend cannot be reached.
+   */
+  async exchange(
+    res: Response,
+    caller: GatewayCaller,
+    login: GatewayLogin,
+    answer: LoginRefusal,
+    send: (credential: string) => Promise<Answer>,
+  ): Promise<Answer | null> {
     const now = new Date();
     let access = decryptSecret(login.accessTokenEnc);
-    // The turn comes from a session's codex on a configured provider, which omits what only the CLI's
-    // built-in ChatGPT provider adds and never asks for the backend's other paths — so the gateway builds
-    // that shape for `/responses` alone. Every other allowed path is one the CLI sends when it is signed
-    // in itself, and is forwarded as it came, on the login's credential.
-    const turn = target.path === '/responses';
-    const url = `${turn ? this.upstream : loginBackendBase(this.upstream)}${target.path}${target.query}`;
-    const prepared = turn ? loginProviderRequest(req.headers, body) : { body, extra: {} };
-    const send = (credential: string) =>
-      sendUpstream(
-        this.agent, req.method, url,
-        loginForwardedHeaders(req.headers, credential, login.accountId, prepared.body.length, prepared.extra),
-        prepared.body, res,
-      );
-    let answer: Answer;
+    let result: Answer;
     try {
       // Refreshed ahead of its own expiry, as the codex CLI does. A token endpoint that cannot be reached
       // just then is no reason to refuse a token that has minutes left: it is sent on as it is.
@@ -235,76 +283,103 @@ export class PoolLoginGatewayService {
         if (refreshed.kind === 'OK') {
           access = refreshed.accessToken;
         } else if (refreshed.kind !== 'UNREACHABLE' || login.expiresAt.getTime() <= now.getTime()) {
-          await this.refreshFailed(res, caller, login, refreshed);
-          return;
+          await this.refreshFailed(res, caller, login, refreshed, answer);
+          return null;
         }
       }
-      answer = await send(access);
-      if (answer.response.statusCode === 401) {
+      result = await send(access);
+      if (result.response.statusCode === 401) {
         // The codex CLI's recovery: refresh, and send once more on what comes back.
         const refreshed = await this.refresh(caller.poolId, login.accountId, access);
         if (refreshed.kind !== 'OK') {
-          await this.refreshFailed(res, caller, login, refreshed);
-          return;
+          await this.refreshFailed(res, caller, login, refreshed, answer);
+          return null;
         }
-        answer = await send(refreshed.accessToken);
-        if (answer.response.statusCode === 401) {
+        result = await send(refreshed.accessToken);
+        if (result.response.statusCode === 401) {
           // Refused again on a token just issued: it is the login itself that is refused.
-          const said = (parseJson(answer.body ?? Buffer.alloc(0)) as { error?: { message?: unknown } } | undefined)?.error?.message;
-          await this.signedOut(res, caller, login, typeof said === 'string' && said ? said : 'OpenAI refused the login');
-          return;
+          const said = (parseJson(result.body ?? Buffer.alloc(0)) as { error?: { message?: unknown } } | undefined)?.error?.message;
+          await this.signedOut(res, caller, login, typeof said === 'string' && said ? said : 'OpenAI refused the login', answer);
+          return null;
         }
       }
     } catch (e) {
       if (!res.headersSent) {
-        refuse(res, 502, 'orbit_gateway_upstream_unreachable', `The Orbit pool gateway could not reach OpenAI: ${(e as Error).message}`);
+        answer(res, 502, 'orbit_gateway_upstream_unreachable', `The Orbit pool gateway could not reach OpenAI: ${(e as Error).message}`);
       }
-      this.log.warn(`session ${caller.sessionId} account ${account}: OpenAI unreachable: ${(e as Error).message}`);
-      return;
+      this.log.warn(`session ${caller.sessionId} account ${maskedAccount(login.accountId)}: OpenAI unreachable: ${(e as Error).message}`);
+      return null;
     }
-    const status = answer.response.statusCode ?? 502;
+    return result;
+  }
+
+  /** The subscription's windows the answer's headers carry, into the ledger; null when it carries none. */
+  readUsage(caller: GatewayCaller, login: GatewayLogin, answer: Answer, now: Date): ReturnType<typeof codexUsageSnapshot> {
     const reading = codexUsageSnapshot(answer.response.headers, now);
     if (reading) this.ledger.recordReading(caller.poolId, login.accountId, reading, now);
-    if (answer.body) {
-      const outcome: ResponsesOutcome = {};
-      const parsed = parseJson(answer.body);
-      readResponsesEvent(parsed, outcome);
-      if (status === 429 && outcome.errorCode && SPENT.has(outcome.errorCode)) {
-        // Recorded before the answer goes back, so the retry the failed turn arms waits for this reset.
-        const resetAt = usageLimitResetAt(parsed, answer.response.headers, now);
-        await this.spent(caller, login, resetAt, reading, now);
-      } else if (status === 429 && !(outcome.errorCode && SPENT_ERROR_CODES.has(outcome.errorCode))) {
-        // A rate limit the gateway's own wait did not outlast — the one kind of 429 that reaches codex,
-        // which does not retry one. Recorded before the answer goes back, and short (minutes), so the
-        // claim the failed turn's retry makes already finds this account out: it moves the session to
-        // another account that can run, or the retry waits for the moment this one can.
-        await this.logins.markThrottled(
-          caller.poolId,
-          login.accountId,
-          throttledUntil(answer.response.headers, answer.body, now),
-        );
-      }
-      this.record(caller, login, outcome, now);
-      relayHead(res, answer.response);
-      res.end(answer.body);
-      this.log.log(`session ${caller.sessionId} account ${account}: ${req.method} ${target.path} → ${status} in ${Date.now() - started}ms`);
-      return;
+    return reading;
+  }
+
+  /**
+   * An answer read whole (an error, `answer.body`): a spent subscription or a rate limit the gateway's wait
+   * did not outlast is recorded on the account before the answer goes back. What it says is returned.
+   */
+  async answeredWhole(
+    caller: GatewayCaller,
+    login: GatewayLogin,
+    answer: Answer,
+    reading: ReturnType<typeof codexUsageSnapshot>,
+    now: Date,
+  ): Promise<ResponsesOutcome> {
+    const status = answer.response.statusCode ?? 502;
+    const outcome: ResponsesOutcome = {};
+    const parsed = parseJson(answer.body!);
+    readResponsesEvent(parsed, outcome);
+    if (status === 429 && outcome.errorCode && SPENT.has(outcome.errorCode)) {
+      // Recorded before the answer goes back, so the retry the failed turn arms waits for this reset.
+      const resetAt = usageLimitResetAt(parsed, answer.response.headers, now);
+      await this.spent(caller, login, resetAt, reading, now);
+    } else if (status === 429 && !(outcome.errorCode && SPENT_ERROR_CODES.has(outcome.errorCode))) {
+      // A rate limit the gateway's own wait did not outlast — the one kind of 429 that reaches codex,
+      // which does not retry one. Recorded before the answer goes back, and short (minutes), so the
+      // claim the failed turn's retry makes already finds this account out: it moves the session to
+      // another account that can run, or the retry waits for the moment this one can.
+      await this.logins.markThrottled(
+        caller.poolId,
+        login.accountId,
+        throttledUntil(answer.response.headers, answer.body!, now),
+      );
     }
-    await relayStream(answer.response, res, (outcome, complete) => {
-      if (outcome.errorCode && SPENT.has(outcome.errorCode)) {
-        // Said inside a stream that had already begun: recorded all the same, off the stream's path.
-        void this.spent(caller, login, usageLimitResetAt(undefined, answer.response.headers, now), reading, now).catch((e) =>
-          this.log.warn(`could not record ${account} as spent: ${(e as Error).message}`),
-        );
-      } else if (complete && login.spentUntil && status < 300) {
-        // The backend took it: the limit has reset.
-        void this.logins.clearSpent(caller.poolId, login.accountId).catch((e) =>
-          this.log.warn(`could not clear ${account}'s spent mark: ${(e as Error).message}`),
-        );
-      }
-      this.record(caller, login, outcome, now);
-    });
-    this.log.log(`session ${caller.sessionId} account ${account}: ${req.method} ${target.path} → ${status} in ${Date.now() - started}ms`);
+    return outcome;
+  }
+
+  /**
+   * A streamed answer that ended: a spent subscription said inside it recorded all the same, a limit that
+   * has reset cleared, and its usage into the ledger. Called off the stream's path.
+   */
+  streamEnded(
+    caller: GatewayCaller,
+    login: GatewayLogin,
+    answer: Answer,
+    reading: ReturnType<typeof codexUsageSnapshot>,
+    outcome: ResponsesOutcome,
+    complete: boolean,
+    now: Date,
+  ): void {
+    const status = answer.response.statusCode ?? 502;
+    const account = maskedAccount(login.accountId);
+    if (outcome.errorCode && SPENT.has(outcome.errorCode)) {
+      // Said inside a stream that had already begun: recorded all the same, off the stream's path.
+      void this.spent(caller, login, usageLimitResetAt(undefined, answer.response.headers, now), reading, now).catch((e) =>
+        this.log.warn(`could not record ${account} as spent: ${(e as Error).message}`),
+      );
+    } else if (complete && login.spentUntil && status < 300) {
+      // The backend took it: the limit has reset.
+      void this.logins.clearSpent(caller.poolId, login.accountId).catch((e) =>
+        this.log.warn(`could not clear ${account}'s spent mark: ${(e as Error).message}`),
+      );
+    }
+    this.record(caller, login, outcome, now);
   }
 
   /**
@@ -314,8 +389,17 @@ export class PoolLoginGatewayService {
    * leaving the pool refuses it here: a session whose account the pool no longer holds — or which has
    * none — is answered by `forward` as the pool having no account, unless it runs on one of the pool's API
    * keys.
+   *
+   * `engine` is the CLI the caller's gateway serves. /api/gw/codex (the default) serves codex and never a
+   * session that runs Claude Code, whose token it refuses; /api/gw/anthropic (`claude`) serves only a Claude
+   * Code session, on a pool its owner made and did not share, with ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY on and
+   * the session's end not asked for — and hands back the session's model, which it sends whatever Claude id
+   * the CLI names.
    */
-  async caller(token: string): Promise<GatewayCaller | typeof ACCOUNT_DISABLED | null> {
+  async caller(
+    token: string,
+    engine: AgentProvider.CODEX | AgentProvider.CLAUDE = AgentProvider.CODEX,
+  ): Promise<(GatewayCaller & { sessionModel: string | null }) | typeof ACCOUNT_DISABLED | null> {
     const row = await this.prisma.poolLoginToken.findUnique({
       where: { tokenHash: sha256(token) },
       select: {
@@ -324,11 +408,12 @@ export class PoolLoginGatewayService {
         sessionId: true,
         expiresAt: true,
         revokedAt: true,
-        pool: { select: { slug: true, label: true, engine: true, ownerId: true } },
+        pool: { select: { slug: true, label: true, engine: true, ownerId: true, shared: true } },
         session: {
           select: {
             status: true, ownerId: true, provider: true, poolCodexAccountId: true, poolKeyId: true,
             completedAt: true, deletedAt: true, owner: { select: { disabledAt: true } },
+            engine: true, model: true, cancelRequestedAt: true, endReason: true,
           },
         },
       },
@@ -344,7 +429,16 @@ export class PoolLoginGatewayService {
       // the session has to be theirs too.
       session.ownerId === row.userId &&
       // A session moved onto another provider since: its old tokens name a pool it no longer runs on.
-      session.provider === pool.slug;
+      session.provider === pool.slug &&
+      (engine === AgentProvider.CLAUDE
+        ? session.engine === AgentProvider.CLAUDE &&
+          claudeCodexLoginEnabled() &&
+          !pool.shared &&
+          pool.ownerId === row.userId &&
+          // An end asked for (SessionsService.end): the runner has yet to stop it, but it serves no more turns.
+          !session.cancelRequestedAt &&
+          !session.endReason
+        : session.engine !== AgentProvider.CLAUDE);
     if (!current) return null;
     // Asked last, as the runner credential asks it: the token itself is good, and works again once the
     // account is enabled.
@@ -358,6 +452,7 @@ export class PoolLoginGatewayService {
       sessionOwnerId: session.ownerId,
       accountId: session.poolCodexAccountId,
       keyId: session.poolKeyId,
+      sessionModel: session.model,
     };
   }
 
@@ -369,24 +464,30 @@ export class PoolLoginGatewayService {
   }
 
   /** The login is refused for good: signed out, the session told, and the request answered with that. */
-  private async signedOut(res: Response, caller: GatewayCaller, login: GatewayLogin, reason: string): Promise<void> {
+  private async signedOut(res: Response, caller: GatewayCaller, login: GatewayLogin, reason: string, answer: LoginRefusal): Promise<void> {
     const byContributor = caller.userId === login.userId;
     await this.logins.markSignedOut(caller.poolId, login.accountId, reason);
     await this.owe(caller.sessionId, loginSignedOutNotice(login, caller.poolLabel, byContributor));
-    refuse(res, 403, 'orbit_pool_login_signed_out', loginSignedOutNotice(login, caller.poolLabel, byContributor));
+    answer(res, 403, 'orbit_pool_login_signed_out', loginSignedOutNotice(login, caller.poolLabel, byContributor));
     this.log.log(`session ${caller.sessionId} account ${maskedAccount(login.accountId)}: refused by OpenAI — signed out`);
   }
 
-  private async refreshFailed(res: Response, caller: GatewayCaller, login: GatewayLogin, refreshed: Exclude<Refreshed, { kind: 'OK' }>) {
+  private async refreshFailed(
+    res: Response,
+    caller: GatewayCaller,
+    login: GatewayLogin,
+    refreshed: Exclude<Refreshed, { kind: 'OK' }>,
+    answer: LoginRefusal,
+  ) {
     if (refreshed.kind === 'REFUSED') {
-      await this.signedOut(res, caller, login, refreshed.message);
+      await this.signedOut(res, caller, login, refreshed.message, answer);
     } else if (refreshed.kind === 'UNREACHABLE') {
-      refuse(res, 502, 'orbit_gateway_upstream_unreachable', `The Orbit pool gateway could not refresh the ChatGPT login: ${refreshed.message}`);
+      answer(res, 502, 'orbit_gateway_upstream_unreachable', `The Orbit pool gateway could not refresh the ChatGPT login: ${refreshed.message}`);
       this.log.warn(`account ${maskedAccount(login.accountId)}: refresh failed: ${refreshed.message}`);
     } else {
       // Signed out or taken out of the pool while this request waited.
       const byContributor = caller.userId === login.userId;
-      refuse(res, 403, 'orbit_pool_login_signed_out', loginSignedOutNotice(login, caller.poolLabel, byContributor));
+      answer(res, 403, 'orbit_pool_login_signed_out', loginSignedOutNotice(login, caller.poolLabel, byContributor));
     }
   }
 
@@ -398,7 +499,7 @@ export class PoolLoginGatewayService {
   }
 
   /** What the answer used, into the ledger for this session and account. */
-  private record(caller: GatewayCaller, login: GatewayLogin, outcome: ResponsesOutcome, now: Date): void {
+  record(caller: GatewayCaller, login: GatewayLogin, outcome: ResponsesOutcome, now: Date): void {
     if (!outcome.usage) return;
     this.ledger.record({
       poolId: caller.poolId,

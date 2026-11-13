@@ -314,10 +314,17 @@ func checkEngine(spec engineSpec, servicePath string) engineHealth {
 	return h
 }
 
-// engineVersion runs `<binPath> --version` with a short timeout so a wedged CLI
-// can't hang `orbit doctor`. Returns "" if it errors.
+// engineVersionTimeout is how long a CLI gets to print its version. Five seconds was the number
+// until 2026-11-13, when opencode's 214 MB binary measured 3.3–6.3 s just to answer on a loaded
+// box — so the probe failed often enough that the machine could never be shown as current (the
+// drift clock needs both versions to clear, engineupdate.go's driftSince) and every failure
+// message about it lost its left-hand side.
+const engineVersionTimeout = 20 * time.Second
+
+// engineVersion runs `<binPath> --version` with a timeout so a wedged CLI can't hang
+// `orbit doctor`. Returns "" if it errors.
 func engineVersion(binPath string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), engineVersionTimeout)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, binPath, "--version").Output()
 	if err != nil {

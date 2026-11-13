@@ -126,7 +126,8 @@ final class ProviderPoolsParityTests: XCTestCase {
         let account = CodexLogin(email: "e", fingerprint: "…AB12")
         let pool = ProviderPool(id: "p", slug: "claude-accounts", label: "Claude accounts",
                                 resetsAt: "2026-09-25T10:00:00.000Z", unavailable: "No account can run",
-                                members: [fullMember], engine: "claude", login: account, logins: [account])
+                                members: [fullMember], engine: "claude", login: account, logins: [account],
+                                engines: ["claude"])
         XCTAssertEqual(try encodedKeys(pool), web.subtracting(Self.webSharedPool))
         XCTAssertTrue(Self.webSharedPool.isSubset(of: web),
                       "\(Self.anchor)'s ProviderPool no longer carries the shared pool — drop it from this check")

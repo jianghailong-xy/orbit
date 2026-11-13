@@ -434,7 +434,7 @@ class ProjectMergeShellTest {
     private fun openPage() {
         signIn()
         await { exists(hasTestTag("project-row:$launch")) }
-        compose.onNodeWithTag("project-row:$launch").performClick()
+        compose.openProjectSessionsPage(launch)
         // The coordinator's row: a merge card above it can push the last members out of the lazy list's composed rows.
         await { exists(hasTestTag("project-sessions")) && exists(hasText("Coordinate launch") and hasClickAction()) }
     }

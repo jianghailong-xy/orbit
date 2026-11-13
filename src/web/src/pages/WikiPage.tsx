@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { DownOutlined, SearchOutlined } from '@ant-design/icons';
+import { DownOutlined, HistoryOutlined, SearchOutlined } from '@ant-design/icons';
 import { OrbitLinkCardsProvider } from '../components/OrbitLinkCard';
 import { statusLabel } from '../components/WorkspaceView';
 import { WikiActivityButton, WikiActivityPage } from '../components/WikiActivityPage';
@@ -27,6 +27,7 @@ import { wikiLinkHost } from '../components/WikiSources';
 import { wikiEntriesQuery, wikiEntryQuery, wikiHealthQuery, wikiSpacesQuery } from '../lib/queries';
 import { routeId } from '../lib/idCodec';
 import {
+  WIKI_ACTIVITY,
   WIKI_DISABLED_NOTE,
   WIKI_NO_SPACES,
   WIKI_NO_SUCH_SPACE,
@@ -36,11 +37,14 @@ import {
   WIKI_ENTRY_NOUN,
   WIKI_TITLE,
   WIKI_TO_REVIEW,
+  wikiActivityPath,
   wikiAnchorsVerified,
   wikiSpacePath,
+  wikiWaitingOnYou,
   type WikiSpaceRow,
 } from '../lib/wiki';
 import { wikiArticlePath, wikiCount } from '../lib/wikiArticles';
+import { wikiStatusParts, wikiStatusText } from '../lib/wikiHealth';
 import { wikiDocPath } from '../lib/wikiDocs';
 import {
   readWikiFromWorkspace,
@@ -296,12 +300,14 @@ function RunRoute({ space, runParam }: { space: SpaceRow; runParam: string }) {
 
 /**
  * The chrome every Wiki view wears: the title row (the space, Contents, Activity, Settings, Share — no New entry since
- * board 45: an entry of the owner's own is said in the chat, whose card writes it as theirs),
- * the search line and the status row. It is the project page's own title row and toolbar, which is
+ * board 45: an entry of the owner's own is said in the chat, whose card writes it as theirs)
+ * and the search line. On a desktop beside the directory they are the directory's column instead: the title and the
+ * space, the search, Activity among the rows and Settings and Share at its foot (board docs/mocks/wiki-rail ③). It is the project page's own title row and toolbar, which is
  * what the design's mock links and draws — the counts are the page's counts, not a new row of numbers.
  *
- * THE HOME HAS NO STATUS ROW (design §12.3.1): the line under its head says what the space holds
- * (`WikiHomeState`, mocks 30 ③ and 33 ①), and how the space is kept is Activity's.
+ * ONLY ACTIVITY HAS THE STATUS ROW (design §12.3.1, board docs/mocks/wiki-rail ③): the line under the home's head says
+ * what the space holds (`WikiHomeState`, mocks 30 ③ and 33 ①), how the space is kept is Activity's, and a reading
+ * page leaves it out; the desktop column's Activity row carries its dot.
  *
  * THE DIRECTORY STANDS BESIDE EVERY READING VIEW (`at`: the home, a topic's article, Browse, the
  * index — mocks 11, 13, 15): a column on a desktop, and on anything narrower the Contents drawer the
@@ -326,9 +332,23 @@ function WikiFrame({
   const rows = spaces.data ?? (space ? [space] : []);
   const activity = at?.view === 'activity';
   const home = at?.view === 'home';
+  // A desktop draws the head, the search and the directory as one column (board docs/mocks/wiki-rail ③); the head
+  // row and the search line above stay for a phone and for a docked chat that folds the column away.
+  const search = (
+    <div className="wk-search" role="search">
+      {/* The palette's own search: ⌘K answers entries in its Wiki group, so this line opens it. */}
+      <button type="button" className="wk-search-open" onClick={openSessionSearch}>
+        <SearchOutlined className="ic" />
+        <span className="grow">{WIKI_SEARCH_PLACEHOLDER}</span>
+        <kbd className="wk-kbd">{WIKI_SEARCH_SHORTCUT}</kbd>
+      </button>
+    </div>
+  );
 
   const page = (
-    <div className={`wk-page${at && !home && !activity ? ' wk-page--reading' : ''}${activity ? ' wk-page--activity' : ''}`}>
+    <div
+      className={`wk-page${at && !home && !activity ? ' wk-page--reading' : ''}${activity ? ' wk-page--activity' : ''}${space && at ? ' wk-page--railed' : ''}`}
+    >
       <div className="wk-title-row">
         <h1 className="page-title">{WIKI_TITLE}</h1>
         {space && <WikiHeadSpace space={space} spaces={rows} />}
@@ -342,23 +362,28 @@ function WikiFrame({
 
       {space && (home || activity) && <WikiHomeState spaceId={space.id} />}
 
-      {space && (
-        <div className="wk-search" role="search">
-          {/* The palette's own search: ⌘K answers entries in its Wiki group, so this line opens it. */}
-          <button type="button" className="wk-search-open" onClick={openSessionSearch}>
-            <SearchOutlined className="ic" />
-            <span className="grow">{WIKI_SEARCH_PLACEHOLDER}</span>
-            <kbd className="wk-kbd">{WIKI_SEARCH_SHORTCUT}</kbd>
-          </button>
-        </div>
-      )}
-
-      {!home && !activity && <WikiStatusRow space={space} />}
+      {space && search}
 
       {space && at ? (
         <div className={`wk-layout${home ? ' home' : ''}`}>
-          <div className="wk-dir-col">
-            <WikiDirectory spaceId={space.id} spaceSlug={space.slug} at={at} />
+          <div className="wk-dir-col autohide-scrollbar">
+            <div className="wk-rail-top">
+              <div className="wk-rail-head">
+                <h1 className="page-title">{WIKI_TITLE}</h1>
+                <WikiHeadSpace space={space} spaces={rows} />
+              </div>
+              {search}
+            </div>
+            <WikiDirectory
+              spaceId={space.id}
+              spaceSlug={space.slug}
+              at={at}
+              activity={<WikiActivityRow space={space} waiting={wikiWaiting(rows)} on={activity} />}
+            />
+            <div className="wk-rail-foot">
+              <WikiSettingsButton spaceSlug={space.slug} />
+              <WikiShareButton spaceId={space.id} spaceSlug={space.slug} />
+            </div>
           </div>
           <div className="wk-main">{children}</div>
         </div>
@@ -378,6 +403,32 @@ function WikiFrame({
         page
       )}
     </OrbitLinkCardsProvider>
+  );
+}
+
+/**
+ * Activity as the desktop column's row (board docs/mocks/wiki-rail ③): the head button's amber count, and a dot when the
+ * status line Activity carries has one, coloured as that line colours it — so a broken maintenance shows from every page
+ * though the line itself is drawn on Activity alone.
+ */
+function WikiActivityRow({ space, waiting, on }: { space: SpaceRow; waiting: number; on: boolean }) {
+  const health = useQuery(wikiHealthQuery(space.id));
+  const parts = health.data?.maintenance ? wikiStatusParts(health.data, Date.now()) : [];
+  const dots = parts.filter((part) => part.mark === 'dot' && (part.tone === 'error' || part.tone === 'warn'));
+  const tone = dots.some((part) => part.tone === 'error') ? 'error' : dots.length > 0 ? 'warn' : null;
+  return (
+    <Link className={`wk-toc-item${on ? ' active' : ''}`} to={wikiActivityPath(space.slug)} aria-current={on ? 'page' : undefined}>
+      <span className="tp-ico">
+        <HistoryOutlined />
+      </span>
+      <span className="lb">{WIKI_ACTIVITY}</span>
+      {tone && <span className={`wk-toc-alarm wk-toc-alarm--${tone}`} role="img" aria-label={wikiStatusText(dots)} title={wikiStatusText(dots)} />}
+      {waiting > 0 && (
+        <span className="tp-count needs-you" title={wikiWaitingOnYou(waiting)}>
+          {waiting}
+        </span>
+      )}
+    </Link>
   );
 }
 

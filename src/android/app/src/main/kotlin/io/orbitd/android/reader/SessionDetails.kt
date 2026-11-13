@@ -17,6 +17,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.orbitd.android.core.realtime.SessionState
 import io.orbitd.android.directory.DirectoryApi
+import io.orbitd.android.tasks.TaskDetailLogic
 import io.orbitd.android.text.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.*
@@ -31,6 +32,8 @@ internal fun SessionDetails(session: SessionState?, api: DirectoryApi, open: (St
             TextButton(onClick = close) { Text("Close session details") }
             LazyColumn(Modifier.testTag("session-details"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item { SelectionContainer { Text(detail.string("title") ?: "Session", style = MaterialTheme.typography.headlineMedium) } }
+                TaskDetailLogic.forkSource(detail)?.let { source -> item { Text(source, Modifier.testTag("session-fork-source"),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
                 listOf("taskId" to "task", "projectId" to "project", "parentSessionId" to "session").forEach { (key, kind) ->
                     detail.string(key)?.let { id -> item { TextButton(enabled = session.fresh, onClick = { open("orbit-$kind:$id") }) { Text("Open $kind") } } }
                 }

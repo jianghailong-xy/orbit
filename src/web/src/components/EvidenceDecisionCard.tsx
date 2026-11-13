@@ -937,6 +937,8 @@ export const DECISION_RECEIPT_OPEN = 'Show the claim and the gaps';
 export const DECISION_RECEIPT_LOADING = 'Reading…';
 export const DECISION_RECEIPT_UNREAD = 'This version of the evidence could not be read back just now.';
 export const DECISION_RECEIPT_REASON = 'the reason it was sent back';
+/** The label over a confirm's note: it is not a reason anything was sent back. */
+export const DECISION_RECEIPT_NOTE = 'Note';
 
 /** When a receipt says it was decided: the clock on the day it happened, the date as well after. */
 export function decisionReceiptTime(decidedAt: string, now: Date = new Date()): string {
@@ -1000,9 +1002,6 @@ export function EvidenceDecisionReceipt({ decided }: { decided: RecordedDecision
         <section className="decision-ask-q">
           <div className="decision-ask-chip">{decided.title}</div>
           <div className="decision-ask-picked">{decisionReceiptLine(decided)}</div>
-          {decided.note ? (
-            <div className="decision-ask-picked">{`${DECISION_RECEIPT_REASON}：${decided.note}`}</div>
-          ) : null}
           <button
             type="button"
             className="decision-ask-toggle"
@@ -1011,6 +1010,12 @@ export function EvidenceDecisionReceipt({ decided }: { decided: RecordedDecision
           >
             {open ? 'Show less' : `${DECISION_RECEIPT_OPEN} ▾`}
           </button>
+          {/* Folded with the evidence: a record is a few lines, and its note can be thirty. */}
+          {open && decided.note ? (
+            <div className="decision-ask-picked">
+              {`${decided.decision === 'CONFIRM' ? DECISION_RECEIPT_NOTE : DECISION_RECEIPT_REASON}：${decided.note}`}
+            </div>
+          ) : null}
           {!open ? null : revisions.isPending ? (
             <div className="decision-ask-quiet">{DECISION_RECEIPT_LOADING}</div>
           ) : facts === null ? (

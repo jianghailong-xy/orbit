@@ -100,7 +100,7 @@ class SettingsOrderShotsTest {
     @Test fun theListOpensWithMachinesAndModels() {
         open(null)
         await("1 needs you")
-        assertTrue("Machines & models, then Preferences with Sessions first, then Account", top(Infrastructure.TITLE) < top("Preferences") &&
+        assertTrue("Machines & models, then Preferences with Sessions first, then Account", top(MachinesAndModels.TITLE) < top("Preferences") &&
             top("Preferences") < top(SESSIONS) && top(SESSIONS) < top("Notifications") && top("Notifications") < top("Appearance") &&
             top("Appearance") < top("Account"))
         compose.onAllNodesWithText(SESSION_RECAPS).assertCountEquals(0)

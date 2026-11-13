@@ -13,8 +13,8 @@ import {
   type RunnerLoginState,
 } from '@orbit/shared';
 import { KIMI_ACCOUNT_LOGIN_CAPABILITY } from '../lib/engineAccounts';
-import { machineChipsOf, RunnerEngines, summaryOf } from './RunnerEngines';
-import { clickRunnerMenuItem, openRunnerCards } from './RunnerEngines.test-helpers';
+import { EngineRows } from './RunnerEngines.test-rows';
+import { clickRunnerMenuItem, openAccountGroups } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -118,11 +118,10 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-/** The Providers section over this runner, its card open — and its accounts too, unless `folded`. A
+/** This runner's engine rows, with its accounts open unless `folded`. A
  *  start reaches the device step of the site it names at once, as the runner reports it a beat later. */
 function mount(r: Runner, { folded = false } = {}) {
-  if (folded) localStorage.setItem('orbit:providers-expanded-runners', JSON.stringify([r.id]));
-  else openRunnerCards([r]);
+  if (!folded) openAccountGroups([r]);
   let login = IDLE;
   apiMock.mockImplementation(async (path: string, options?: { method?: string; body?: unknown }) => {
     if (path === '/runners') return [r];
@@ -143,7 +142,7 @@ function mount(r: Runner, { folded = false } = {}) {
     root!.render(
       <MemoryRouter initialEntries={['/providers']}>
         <QueryClientProvider client={qc}>
-          <RunnerEngines />
+          <EngineRows />
         </QueryClientProvider>
       </MemoryRouter>,
     ),
@@ -342,13 +341,6 @@ describe('two Kimi accounts on one runner', () => {
     expect(current(work)).toEqual(['kimi.com']);
     await click(site(work, 'kimi.com'));
     expect(loginPosts()).toEqual([{ engine: 'kimi', account: WORK.id, region: 'mainland-cn' }]);
-    expect(machineChipsOf(out).find((chip) => chip.engine === 'kimi')).toEqual({
-      engine: 'kimi',
-      logins: 1,
-      accounts: 2,
-      signedOut: false,
-    });
-    expect(summaryOf(out)).toBeNull();
   });
 });
 

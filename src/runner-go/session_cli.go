@@ -121,6 +121,9 @@ Options:
                            run commands, use auto. Inside a session it can never be wider
                            than that session's own mode: a wider mode is refused, and a
                            wider default gives way to its mode
+  --no-worktree            Run in the agent's own checkout with no branch and no worktree,
+                           even when the agent isolates each session: for work that changes
+                           no code. The session shares that checkout and has no branch to merge
   --wait[=BOOL]            Wait until the first turn settles. Inside a session the wait is first
                            recorded as a watch that wakes this session when the turn settles: if
                            the wait runs out or the server stops answering, the output carries
@@ -152,10 +155,15 @@ Usage:
 	"get": `orbit session get — get a session's status and latest output
 
 Usage:
-  orbit session get SESSION_ID [--json]
+  orbit session get SESSION_ID [--summary] [--json]
 
 Reports status, numTurns and lastTurnAt, so a headless poller can tell whether a
 long-lived session has finished the turn it was given.
+
+--summary prints what the session_get tool answers by default: a record over 20,000 characters is
+shortened to fit, the prompt first, then changedFiles, lastToolUse, lastUserText and error;
+lastAssistantText and result stay whole unless nothing else is left to shorten. What was shortened
+is named in truncatedFields.
 `,
 	"send": `orbit session send — add a message to a session
 
@@ -271,7 +279,7 @@ workspace.
 }
 
 var sessionCLICapabilities = []cliCapabilitySpec{
-	{Tool: "session_create", Argv: []string{"orbit", "session", "create"}, Usage: "orbit session create (--prompt TEXT | --prompt-file -) [options]", Arguments: []string{"--prompt <text> | --prompt-file - (required)", "--agent-id <id> | --agent-name <name>", "--title <text>", "--model <model>", engineArgument(), "--provider <slug> (the credential: an engine's own sign-in, opencode, an account pool or an API key; orbit provider list names each with the engines it runs)", permissionModeFlagSpec(), "--wait[=true|false]", "--json"}, Mutates: true},
+	{Tool: "session_create", Argv: []string{"orbit", "session", "create"}, Usage: "orbit session create (--prompt TEXT | --prompt-file -) [options]", Arguments: []string{"--prompt <text> | --prompt-file - (required)", "--agent-id <id> | --agent-name <name>", "--title <text>", "--model <model>", engineArgument(), "--provider <slug> (the credential: an engine's own sign-in, opencode, an account pool or an API key; orbit provider list names each with the engines it runs)", permissionModeFlagSpec(), "--no-worktree (run in the agent's own checkout with no branch or worktree; for work that changes no code)", "--wait[=true|false]", "--json"}, Mutates: true},
 	// No MCP tool stands behind this one, so its description is its own: the transcript it imports
 	// is on this machine's disk, which the CLI here reads, and an agent asked to bring a terminal's
 	// conversation into Orbit runs it as itself. The headless door below describes it for the
@@ -280,7 +288,7 @@ var sessionCLICapabilities = []cliCapabilitySpec{
 		Description: "Import a Claude Code transcript from this machine's ~/.claude/projects as an Orbit session on this runner, whose first message resumes the conversation. The workspace defaults to the one on this machine containing the transcript's recorded cwd; when several do, the import is refused with their ids and --workspace picks one."},
 	{Tool: "session_list", Argv: []string{"orbit", "session", "list"}, Usage: "orbit session list [--status STATUS] [--parent-session-id ID] [--json]", Arguments: []string{"--status <PENDING|RUNNING|AWAITING_INPUT|SUCCEEDED|FAILED|CANCELLED|INTERRUPTED>", "--parent-session-id <id>", "--json"}},
 	{Tool: "session_search", Argv: []string{"orbit", "session", "search"}, Usage: "orbit session search --query TEXT [--limit N] [--json]", Arguments: []string{"--query <text> (required)", "--limit <n>", "--json"}},
-	{Tool: "session_get", Argv: []string{"orbit", "session", "get"}, Usage: "orbit session get SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}},
+	{Tool: "session_get", Argv: []string{"orbit", "session", "get"}, Usage: "orbit session get SESSION_ID [--summary] [--json]", Arguments: []string{"[session-id] (required)", "--summary (the record shortened to fit 20,000 characters, the collected reply kept whole; what the MCP tool answers by default, where summary=false asks for the full record)", "--json"}},
 	{Tool: "session_await", Argv: []string{"orbit", "session", "await"}, Usage: "orbit session await --session-id ID[,ID...] [--until PRESET] [--ttl-seconds N] [--idempotency-key KEY] [--json]", Arguments: awaitCLIArguments("session-id", "sessionIds", sessionAwaitPresets), Mutates: true},
 	{Tool: "session_send", Argv: []string{"orbit", "session", "send"}, Usage: "orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--resume-if-ended] [--expect-reply [--reply-options JSON] [--reply-within-seconds N]] [--json]", Arguments: []string{"[session-id] (required)", "--message <text> | --message-file - (required)", "--client-turn-id <id>", "--resume-if-ended", "--expect-reply", "--reply-options <json array of {label, description}>", "--reply-within-seconds <n> (60-2592000)", "--json"}, Mutates: true},
 	{Tool: "session_reply", Argv: []string{"orbit", "session", "reply"}, Usage: "orbit session reply REQUEST_ID (--message TEXT | --message-file - | --option N | --answers-json FILE) [--json]", Arguments: []string{"[request-id] (required)", "--message <text> | --message-file -", "--option <n>", "--answers-json <file|->", "--json"}, Mutates: true},
@@ -589,6 +597,7 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchest
 	engine := fs.String("engine", "", "the CLI that runs the session")
 	provider := fs.String("provider", "", "where the session's credential comes from")
 	permissionMode := fs.String("permission-mode", "", "session permission mode")
+	noWorktree := fs.Bool("no-worktree", false, "run in the agent's own checkout, with no branch and no worktree")
 	wait := fs.Bool("wait", false, "wait until the first turn settles")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(args); err != nil {
@@ -662,6 +671,9 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchest
 			return fmt.Errorf("--permission-mode cannot be empty")
 		}
 		body["permissionMode"] = *permissionMode
+	}
+	if *noWorktree {
+		body["worktree"] = false
 	}
 	t, err := cliSessionTransport(ctx)
 	if err != nil {
@@ -891,6 +903,7 @@ func cliSessionSearch(args []string, out io.Writer, ctx cliOrchestrationContext)
 func cliSessionGet(args []string, out io.Writer, ctx cliOrchestrationContext) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit session get")
+	summary := fs.Bool("summary", false, "shorten the record to fit the tool result budget, keeping the collected reply whole")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(rest); err != nil {
 		return err
@@ -906,6 +919,14 @@ func cliSessionGet(args []string, out io.Writer, ctx cliOrchestrationContext) er
 	raw, err := t.getSession(ctx.sessionID, ctx.token, id)
 	if err != nil {
 		return fmt.Errorf("get session: %w", err)
+	}
+	if *summary {
+		text, err := boundSessionRecord(raw)
+		if err != nil {
+			return fmt.Errorf("get session: %w", err)
+		}
+		_, err = fmt.Fprintln(out, text)
+		return err
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }

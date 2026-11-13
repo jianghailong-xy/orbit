@@ -93,7 +93,8 @@ struct ProjectCrossingRow: View {
     private var ends: some View {
         (end(row.fromProject, id: ProjectCrossings.fromID(row))
             + Text(ProjectCrossings.arrow).foregroundColor(.secondary)
-            + end(row.toProject, id: ProjectCrossings.toID(row)))
+            + (row.isToNoProject ? Text(ProjectCrossings.noProject).bold()
+                : end(row.toProject, id: ProjectCrossings.toID(row))))
             .font(.orbitLabel)
             .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)

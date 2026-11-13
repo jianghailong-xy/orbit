@@ -1,0 +1,1064 @@
+{
+  "_comment": "Main checkout Git contract examples (docs/main-checkout-git-contract.md). Read by src/shared/src/mainCheckoutGit.spec.ts and src/runner-go/main_checkout_types_test.go; neither writes it.",
+  "capability": "main-checkout-git/v1",
+  "fileLimit": 200,
+  "actionKinds": [
+    "move",
+    "commit",
+    "push",
+    "rescue"
+  ],
+  "refusalCodes": [
+    "FINGERPRINT_STALE",
+    "HEAD_MOVED",
+    "MOVE_CONFLICT",
+    "MOVE_SOURCE_CHANGED",
+    "TARGET_BUSY",
+    "CHECKOUT_BLOCKED",
+    "DETACHED",
+    "NO_HEAD",
+    "NOTHING_TO_PUSH",
+    "NO_REMOTE",
+    "PUSH_REJECTED",
+    "PUSH_AUTH_FAILED",
+    "PUSH_FAILED",
+    "RESCUE_FAILED",
+    "ACTION_FAILED",
+    "ACTION_IN_FLIGHT",
+    "CHECKOUT_NOT_REPORTED",
+    "RUNNER_OFFLINE",
+    "TIMEOUT",
+    "CANCELLED"
+  ],
+  "noticeKinds": {
+    "changed": "main-checkout-changed",
+    "result": "main-checkout-action-result"
+  },
+  "snapshot": {
+    "root": "/root/orbit",
+    "branch": "main",
+    "head": "62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7",
+    "state": "dirty",
+    "upstream": "origin/main",
+    "ahead": 1,
+    "behind": 0,
+    "files": [
+      {
+        "path": "assets/logo.png",
+        "status": "M",
+        "contentHash": "f8a161e3e046ed98b46453d77eb998df82d0aedb",
+        "binary": true
+      },
+      {
+        "path": "docs/～.md",
+        "status": "A",
+        "contentHash": "23aef7f12e588e175eba3ee170a8341414a1ac62",
+        "untracked": true,
+        "additions": 1,
+        "deletions": 0
+      },
+      {
+        "path": "docs/😀.md",
+        "status": "A",
+        "contentHash": "0bf212f8e1844e897bcfd5620693931c04e79a73",
+        "untracked": true,
+        "additions": 1,
+        "deletions": 0
+      },
+      {
+        "path": "gone.txt",
+        "status": "D",
+        "contentHash": "-",
+        "additions": 0,
+        "deletions": 4
+      },
+      {
+        "path": "src/api/client.ts",
+        "status": "M",
+        "contentHash": "2b87b8036e28de13d83f3972f3dc8e469e723903",
+        "additions": 12,
+        "deletions": 3
+      },
+      {
+        "path": "src/api/retry.test.ts",
+        "status": "A",
+        "contentHash": "7f1d7c143b260ec2053c09b3f8852acbbaac8bfe",
+        "untracked": true,
+        "additions": 58,
+        "deletions": 0
+      },
+      {
+        "path": "src/api/retry.ts",
+        "status": "A",
+        "contentHash": "77428f7b73e572db500b7c195683e95fb9fe4fe5",
+        "untracked": true,
+        "additions": 41,
+        "deletions": 0
+      }
+    ],
+    "fileCount": 7,
+    "truncated": false,
+    "fingerprint": "mc1:62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7:27a2714bb42c00aee96da70da7154696ed3f0e90e9fa66183614c6e8fdc54ba8",
+    "checkedAt": "2026-11-12T08:00:00.000Z"
+  },
+  "fingerprints": [
+    {
+      "head": "62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7",
+      "files": [
+        {
+          "path": "assets/logo.png",
+          "status": "M",
+          "contentHash": "f8a161e3e046ed98b46453d77eb998df82d0aedb",
+          "binary": true
+        },
+        {
+          "path": "docs/～.md",
+          "status": "A",
+          "contentHash": "23aef7f12e588e175eba3ee170a8341414a1ac62",
+          "untracked": true,
+          "additions": 1,
+          "deletions": 0
+        },
+        {
+          "path": "docs/😀.md",
+          "status": "A",
+          "contentHash": "0bf212f8e1844e897bcfd5620693931c04e79a73",
+          "untracked": true,
+          "additions": 1,
+          "deletions": 0
+        },
+        {
+          "path": "gone.txt",
+          "status": "D",
+          "contentHash": "-",
+          "additions": 0,
+          "deletions": 4
+        },
+        {
+          "path": "src/api/client.ts",
+          "status": "M",
+          "contentHash": "2b87b8036e28de13d83f3972f3dc8e469e723903",
+          "additions": 12,
+          "deletions": 3
+        },
+        {
+          "path": "src/api/retry.test.ts",
+          "status": "A",
+          "contentHash": "7f1d7c143b260ec2053c09b3f8852acbbaac8bfe",
+          "untracked": true,
+          "additions": 58,
+          "deletions": 0
+        },
+        {
+          "path": "src/api/retry.ts",
+          "status": "A",
+          "contentHash": "77428f7b73e572db500b7c195683e95fb9fe4fe5",
+          "untracked": true,
+          "additions": 41,
+          "deletions": 0
+        }
+      ],
+      "fingerprint": "mc1:62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7:27a2714bb42c00aee96da70da7154696ed3f0e90e9fa66183614c6e8fdc54ba8"
+    },
+    {
+      "files": [
+        {
+          "path": "assets/logo.png",
+          "status": "M",
+          "contentHash": "f8a161e3e046ed98b46453d77eb998df82d0aedb",
+          "binary": true
+        }
+      ],
+      "fingerprint": "mc1:-:b9924363d0a305a46f0c6c76013bee5a445a4e8904a7156ddc4b54796966a1fd"
+    }
+  ],
+  "truncatedSnapshot": {
+    "root": "/root/orbit",
+    "branch": "main",
+    "head": "62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7",
+    "state": "dirty",
+    "files": [],
+    "fileCount": 200,
+    "truncated": true,
+    "fingerprint": "mc1:62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7:0000000000000000000000000000000000000000000000000000000000000000",
+    "checkedAt": "2026-11-12T08:00:00.000Z"
+  },
+  "heartbeatRepo": {
+    "root": "/root/orbit",
+    "branch": "main",
+    "state": "dirty",
+    "paths": [
+      "src/api/client.ts"
+    ],
+    "agentIds": [
+      "agent-1"
+    ],
+    "head": "62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7",
+    "upstream": "origin/main",
+    "ahead": 1,
+    "behind": 0,
+    "fileCount": 7,
+    "truncated": false,
+    "fingerprint": "mc1:62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7:27a2714bb42c00aee96da70da7154696ed3f0e90e9fa66183614c6e8fdc54ba8"
+  },
+  "diff": {
+    "path": "src/api/client.ts",
+    "binary": false,
+    "patch": "@@ -18,9 +18,18 @@\n-a\n+b\n"
+  },
+  "requests": [
+    {
+      "kind": "move",
+      "root": "/root/orbit",
+      "fingerprint": "mc1:62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7:27a2714bb42c00aee96da70da7154696ed3f0e90e9fa66183614c6e8fdc54ba8",
+      "files": [
+        "src/api/client.ts",
+        "src/api/retry.ts"
+      ],
+      "targetSessionId": "sess-1",
+      "requestId": "req-move"
+    },
+    {
+      "kind": "commit",
+      "root": "/root/orbit",
+      "fingerprint": "mc1:62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7:27a2714bb42c00aee96da70da7154696ed3f0e90e9fa66183614c6e8fdc54ba8",
+      "files": [
+        "src/api/client.ts"
+      ],
+      "message": "Add retry backoff",
+      "requestId": "req-commit"
+    },
+    {
+      "kind": "push",
+      "root": "/root/orbit",
+      "fingerprint": "mc1:62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7:27a2714bb42c00aee96da70da7154696ed3f0e90e9fa66183614c6e8fdc54ba8",
+      "requestId": "req-push"
+    },
+    {
+      "kind": "rescue",
+      "root": "/root/orbit",
+      "fingerprint": "mc1:62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7:27a2714bb42c00aee96da70da7154696ed3f0e90e9fa66183614c6e8fdc54ba8",
+      "requestId": "req-rescue"
+    }
+  ],
+  "command": {
+    "kind": "move",
+    "root": "/root/orbit",
+    "fingerprint": "mc1:62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7:27a2714bb42c00aee96da70da7154696ed3f0e90e9fa66183614c6e8fdc54ba8",
+    "files": [
+      "src/api/client.ts"
+    ],
+    "targetSessionId": "sess-1",
+    "targetBranch": "orbit/fix-retry-backoff",
+    "requestId": "req-move",
+    "requestedAt": "2026-11-12T08:00:00.000Z",
+    "expiresAt": "2026-11-12T08:05:00.000Z"
+  },
+  "changedNotice": {
+    "noticeKind": "main-checkout-changed",
+    "notice": "3 files changed in the main checkout during this turn /root/orbit on main, outside this session's worktree. Orbit saw them appear; it can't tell who wrote them.",
+    "root": "/root/orbit",
+    "branch": "main",
+    "files": [
+      {
+        "path": "src/api/client.ts",
+        "status": "M",
+        "additions": 12,
+        "deletions": 3
+      },
+      {
+        "path": "src/api/retry.test.ts",
+        "status": "A",
+        "additions": 58,
+        "deletions": 0
+      },
+      {
+        "path": "src/api/retry.ts",
+        "status": "A",
+        "additions": 41,
+        "deletions": 0
+      }
+    ],
+    "fileCount": 3,
+    "truncated": false,
+    "fingerprint": "mc1:62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7:27a2714bb42c00aee96da70da7154696ed3f0e90e9fa66183614c6e8fdc54ba8"
+  },
+  "results": [
+    {
+      "name": "move done",
+      "onBoard": true,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "move",
+        "status": "done",
+        "branch": "main",
+        "fileCount": 3,
+        "remaining": 0,
+        "rescueBranch": "orbit/rescue-5f2c1a9",
+        "targetSessionId": "sess-1",
+        "targetBranch": "orbit/fix-retry-backoff"
+      },
+      "view": {
+        "sessionId": "sess-1"
+      },
+      "lead": "Moved 3 files into this worktree.",
+      "text": "Moved 3 files into this worktree. The main checkout is clean again. A copy of what it held is on orbit/rescue-5f2c1a9.",
+      "link": {
+        "action": "view-changes",
+        "label": "View changes"
+      }
+    },
+    {
+      "name": "commit done",
+      "onBoard": true,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "commit",
+        "status": "done",
+        "branch": "main",
+        "fileCount": 3,
+        "head": "8d41e0c9b2a4f6e8d0c2b4a6f8e0d2c4b6a8f0e2",
+        "subject": "Add retry backoff",
+        "upstream": "origin/main"
+      },
+      "view": {},
+      "lead": "Committed 3 files to main",
+      "text": "Committed 3 files to main in the main checkout as 8d41e0c “Add retry backoff”. Not pushed yet. This session's branch is unchanged.",
+      "link": {
+        "action": "push",
+        "label": "Push to origin/main"
+      }
+    },
+    {
+      "name": "push done",
+      "onBoard": true,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "push",
+        "status": "done",
+        "branch": "main",
+        "upstream": "origin/main",
+        "remoteBefore": "62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7",
+        "remoteAfter": "8d41e0c9b2a4f6e8d0c2b4a6f8e0d2c4b6a8f0e2"
+      },
+      "view": {},
+      "lead": "Pushed main to origin",
+      "text": "Pushed main to origin (62325fb..8d41e0c)."
+    },
+    {
+      "name": "rescue done",
+      "onBoard": true,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "rescue",
+        "status": "done",
+        "branch": "main",
+        "fileCount": 3,
+        "rescueBranch": "orbit/rescue-5f2c1a9",
+        "head": "62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7"
+      },
+      "view": {},
+      "lead": "Saved 3 files to orbit/rescue-5f2c1a9",
+      "text": "Saved 3 files to orbit/rescue-5f2c1a9 and returned the main checkout to 62325fb. Ignored files were left alone.",
+      "link": {
+        "action": "open-in-new-session",
+        "label": "Open in a new session"
+      }
+    },
+    {
+      "name": "FINGERPRINT_STALE",
+      "onBoard": true,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "move",
+        "status": "refused",
+        "code": "FINGERPRINT_STALE",
+        "branch": "main",
+        "paths": [
+          "src/api/retry.ts"
+        ]
+      },
+      "view": {},
+      "lead": "Nothing moved:",
+      "text": "Nothing moved: the main checkout changed since you looked (src/api/retry.ts).",
+      "link": {
+        "action": "review-again",
+        "label": "Review again"
+      }
+    },
+    {
+      "name": "MOVE_CONFLICT",
+      "onBoard": true,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "move",
+        "status": "refused",
+        "code": "MOVE_CONFLICT",
+        "branch": "main",
+        "paths": [
+          "src/api/client.ts"
+        ]
+      },
+      "view": {},
+      "lead": "Nothing moved:",
+      "text": "Nothing moved: src/api/client.ts is also changed in this worktree, in the same lines. Commit it to main or save it to a rescue branch instead, or ask the agent to combine them.",
+      "link": {
+        "action": "ask-agent-combine",
+        "label": "ask the agent to combine them"
+      }
+    },
+    {
+      "name": "PUSH_REJECTED",
+      "onBoard": true,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "push",
+        "status": "refused",
+        "code": "PUSH_REJECTED",
+        "branch": "main",
+        "upstream": "origin/main",
+        "behind": 2
+      },
+      "view": {},
+      "lead": "Push rejected:",
+      "text": "Push rejected: origin/main has 2 commits the main checkout doesn't. Nothing was changed, and Orbit never force-pushes.",
+      "link": {
+        "action": "ask-agent-rebase-push",
+        "label": "Ask the agent to rebase and push"
+      }
+    },
+    {
+      "name": "PUSH_AUTH_FAILED",
+      "onBoard": true,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "push",
+        "status": "refused",
+        "code": "PUSH_AUTH_FAILED",
+        "branch": "main",
+        "upstream": "origin/main",
+        "gitMessage": "Permission denied (publickey)"
+      },
+      "view": {},
+      "lead": "Push failed:",
+      "text": "Push failed: the runner's git couldn't authenticate to origin (“Permission denied (publickey)”). Your commit is still in the main checkout."
+    },
+    {
+      "name": "CHECKOUT_BLOCKED",
+      "onBoard": true,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "commit",
+        "status": "refused",
+        "code": "CHECKOUT_BLOCKED",
+        "branch": "main",
+        "state": "rebase"
+      },
+      "view": {},
+      "lead": "Can't commit right now:",
+      "text": "Can't commit right now: the main checkout is in the middle of a rebase.",
+      "link": {
+        "action": "clean-up-checkout",
+        "label": "Clean up checkout"
+      }
+    },
+    {
+      "name": "RUNNER_OFFLINE",
+      "onBoard": true,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "commit",
+        "status": "waiting",
+        "code": "RUNNER_OFFLINE",
+        "runnerName": "orbit-hpc",
+        "minutes": 3
+      },
+      "view": {},
+      "lead": "Waiting for the runner",
+      "text": "Waiting for the runner — orbit-hpc hasn't checked in for 3 min. Nothing has been changed; this runs when it's back, or you can cancel.",
+      "link": {
+        "action": "cancel",
+        "label": "Cancel"
+      }
+    },
+    {
+      "name": "HEAD_MOVED",
+      "onBoard": false,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "commit",
+        "status": "refused",
+        "code": "HEAD_MOVED",
+        "branch": "main",
+        "head": "9a1b2c3d4e5f60718293a4b5c6d7e8f901234567"
+      },
+      "view": {},
+      "lead": "Nothing committed:",
+      "text": "Nothing committed: main moved to 9a1b2c3 since you looked.",
+      "link": {
+        "action": "review-again",
+        "label": "Review again"
+      }
+    },
+    {
+      "name": "MOVE_SOURCE_CHANGED",
+      "onBoard": false,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "move",
+        "status": "partial",
+        "code": "MOVE_SOURCE_CHANGED",
+        "branch": "main",
+        "fileCount": 3,
+        "rescueBranch": "orbit/rescue-5f2c1a9",
+        "paths": [
+          "src/api/retry.ts"
+        ],
+        "targetSessionId": "sess-1"
+      },
+      "view": {
+        "sessionId": "sess-1"
+      },
+      "lead": "Copied 3 files into this worktree but left them in the main checkout:",
+      "text": "Copied 3 files into this worktree but left them in the main checkout: src/api/retry.ts changed while they were moving. A copy of what it held is on orbit/rescue-5f2c1a9.",
+      "link": {
+        "action": "review-again",
+        "label": "Review main checkout"
+      }
+    },
+    {
+      "name": "TARGET_BUSY",
+      "onBoard": false,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "move",
+        "status": "refused",
+        "code": "TARGET_BUSY",
+        "targetSessionId": "sess-2"
+      },
+      "view": {},
+      "lead": "Nothing moved:",
+      "text": "Nothing moved: that session is working on a turn. Move the files when it ends."
+    },
+    {
+      "name": "DETACHED",
+      "onBoard": false,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "commit",
+        "status": "refused",
+        "code": "DETACHED"
+      },
+      "view": {},
+      "lead": "Can't commit right now:",
+      "text": "Can't commit right now: the main checkout isn't on a branch (detached HEAD)."
+    },
+    {
+      "name": "NO_HEAD",
+      "onBoard": false,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "commit",
+        "status": "refused",
+        "code": "NO_HEAD",
+        "branch": "main"
+      },
+      "view": {},
+      "lead": "Can't commit right now:",
+      "text": "Can't commit right now: the main checkout has no commits yet."
+    },
+    {
+      "name": "NOTHING_TO_PUSH",
+      "onBoard": false,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "push",
+        "status": "refused",
+        "code": "NOTHING_TO_PUSH",
+        "branch": "main",
+        "upstream": "origin/main"
+      },
+      "view": {},
+      "lead": "Nothing to push:",
+      "text": "Nothing to push: main is already on origin/main."
+    },
+    {
+      "name": "NO_REMOTE",
+      "onBoard": false,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "push",
+        "status": "refused",
+        "code": "NO_REMOTE",
+        "branch": "main"
+      },
+      "view": {},
+      "lead": "Nothing pushed:",
+      "text": "Nothing pushed: main has no upstream and the main checkout has no remote named origin."
+    },
+    {
+      "name": "PUSH_FAILED",
+      "onBoard": false,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "push",
+        "status": "refused",
+        "code": "PUSH_FAILED",
+        "branch": "main",
+        "upstream": "origin/main",
+        "gitMessage": "Could not resolve host: github.com"
+      },
+      "view": {},
+      "lead": "Push failed:",
+      "text": "Push failed: git couldn't push to origin (“Could not resolve host: github.com”). Your commit is still in the main checkout."
+    },
+    {
+      "name": "RESCUE_FAILED",
+      "onBoard": false,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "rescue",
+        "status": "refused",
+        "code": "RESCUE_FAILED",
+        "branch": "main",
+        "gitMessage": "fatal: Unable to create '.git/index.lock': File exists."
+      },
+      "view": {},
+      "lead": "Nothing saved:",
+      "text": "Nothing saved: Orbit couldn't save the main checkout to a rescue branch first (“fatal: Unable to create '.git/index.lock': File exists.”). The main checkout was left as it was."
+    },
+    {
+      "name": "ACTION_FAILED",
+      "onBoard": false,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "commit",
+        "status": "refused",
+        "code": "ACTION_FAILED",
+        "branch": "main",
+        "gitMessage": "unable to auto-detect email address (got 'root@hpc.(none)')"
+      },
+      "view": {},
+      "lead": "Nothing committed:",
+      "text": "Nothing committed: git couldn't commit (“unable to auto-detect email address (got 'root@hpc.(none)')”). The main checkout was left as it was."
+    },
+    {
+      "name": "ACTION_IN_FLIGHT",
+      "onBoard": false,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "move",
+        "status": "refused",
+        "code": "ACTION_IN_FLIGHT"
+      },
+      "view": {},
+      "lead": "Nothing moved:",
+      "text": "Nothing moved: another action on this main checkout is still running. Try again when it finishes."
+    },
+    {
+      "name": "CHECKOUT_NOT_REPORTED",
+      "onBoard": false,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "move",
+        "status": "refused",
+        "code": "CHECKOUT_NOT_REPORTED",
+        "runnerName": "orbit-hpc"
+      },
+      "view": {},
+      "lead": "Nothing moved:",
+      "text": "Nothing moved: orbit-hpc hasn't reported this main checkout yet. Try again in a minute."
+    },
+    {
+      "name": "TIMEOUT",
+      "onBoard": false,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "push",
+        "status": "refused",
+        "code": "TIMEOUT",
+        "runnerName": "orbit-hpc",
+        "minutes": 5
+      },
+      "view": {},
+      "lead": "Timed out:",
+      "text": "Timed out: orbit-hpc didn't answer within 5 min, so Orbit stopped waiting. If it ran the action anyway, its result will appear here."
+    },
+    {
+      "name": "CANCELLED",
+      "onBoard": false,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "commit",
+        "status": "refused",
+        "code": "CANCELLED"
+      },
+      "view": {},
+      "lead": "Cancelled:",
+      "text": "Cancelled: nothing was changed."
+    }
+  ],
+  "cardHandled": {
+    "_comment": "Whether the changedNotice card above is handled: results are the ones written after it in the same session, current the checkout as the client knows it now (a snapshot with files, or the heartbeat repo with paths). cardAgeSeconds how long ago the card was written (null: unknown). handled is the MAIN_CHECKOUT_CARD_HANDLED_COPY key, or null for a live card.",
+    "copy": {
+      "result": "Handled — see the result below",
+      "gone": "These changes are no longer in the main checkout"
+    },
+    "healthLagSeconds": 120,
+    "cases": [
+      {
+        "name": "move done for all its files",
+        "results": [
+          {
+            "requestId": "req-1",
+            "root": "/root/orbit",
+            "finishedAt": "2026-11-12T08:00:00.000Z",
+            "kind": "move",
+            "status": "done",
+            "branch": "main",
+            "fileCount": 3,
+            "remaining": 0,
+            "rescueBranch": "orbit/rescue-5f2c1a9",
+            "targetSessionId": "sess-1",
+            "targetBranch": "orbit/fix-retry-backoff"
+          }
+        ],
+        "current": null,
+        "cardAgeSeconds": 600,
+        "handled": "result"
+      },
+      {
+        "name": "saved to a rescue branch",
+        "results": [
+          {
+            "requestId": "req-1",
+            "root": "/root/orbit",
+            "finishedAt": "2026-11-12T08:00:00.000Z",
+            "kind": "rescue",
+            "status": "done",
+            "branch": "main",
+            "fileCount": 7,
+            "rescueBranch": "orbit/rescue-5f2c1a9",
+            "head": "62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7"
+          }
+        ],
+        "current": null,
+        "cardAgeSeconds": 600,
+        "handled": "result"
+      },
+      {
+        "name": "MOVE_CONFLICT keeps it live",
+        "results": [
+          {
+            "requestId": "req-1",
+            "root": "/root/orbit",
+            "finishedAt": "2026-11-12T08:00:00.000Z",
+            "kind": "move",
+            "status": "refused",
+            "code": "MOVE_CONFLICT",
+            "branch": "main",
+            "paths": [
+              "src/api/client.ts"
+            ]
+          }
+        ],
+        "current": {
+          "root": "/root/orbit",
+          "branch": "main",
+          "state": "dirty",
+          "paths": [
+            "src/api/client.ts"
+          ],
+          "agentIds": [
+            "agent-1"
+          ],
+          "head": "62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7",
+          "upstream": "origin/main",
+          "ahead": 1,
+          "behind": 0,
+          "fileCount": 7,
+          "truncated": false,
+          "fingerprint": "mc1:62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7:27a2714bb42c00aee96da70da7154696ed3f0e90e9fa66183614c6e8fdc54ba8"
+        },
+        "cardAgeSeconds": 600,
+        "handled": null
+      },
+      {
+        "name": "MOVE_SOURCE_CHANGED keeps it live",
+        "results": [
+          {
+            "requestId": "req-1",
+            "root": "/root/orbit",
+            "finishedAt": "2026-11-12T08:00:00.000Z",
+            "kind": "move",
+            "status": "partial",
+            "code": "MOVE_SOURCE_CHANGED",
+            "branch": "main",
+            "fileCount": 3,
+            "rescueBranch": "orbit/rescue-5f2c1a9",
+            "paths": [
+              "src/api/retry.ts"
+            ]
+          }
+        ],
+        "current": null,
+        "cardAgeSeconds": 600,
+        "handled": null
+      },
+      {
+        "name": "a move of fewer files than the card lists keeps it live",
+        "results": [
+          {
+            "requestId": "req-1",
+            "root": "/root/orbit",
+            "finishedAt": "2026-11-12T08:00:00.000Z",
+            "kind": "move",
+            "status": "done",
+            "branch": "main",
+            "fileCount": 1,
+            "remaining": 2,
+            "rescueBranch": "orbit/rescue-5f2c1a9",
+            "targetSessionId": "sess-1",
+            "targetBranch": "orbit/fix-retry-backoff"
+          }
+        ],
+        "current": null,
+        "cardAgeSeconds": 600,
+        "handled": null
+      },
+      {
+        "name": "another checkout's move does not count",
+        "results": [
+          {
+            "requestId": "req-1",
+            "root": "/root/other",
+            "finishedAt": "2026-11-12T08:00:00.000Z",
+            "kind": "move",
+            "status": "done",
+            "branch": "main",
+            "fileCount": 3,
+            "remaining": 0,
+            "rescueBranch": "orbit/rescue-5f2c1a9",
+            "targetSessionId": "sess-1",
+            "targetBranch": "orbit/fix-retry-backoff"
+          }
+        ],
+        "current": null,
+        "cardAgeSeconds": 600,
+        "handled": null
+      },
+      {
+        "name": "a clean checkout",
+        "results": [],
+        "current": {
+          "root": "/root/orbit",
+          "state": "clean",
+          "fileCount": 0,
+          "truncated": false
+        },
+        "cardAgeSeconds": 600,
+        "handled": "gone"
+      },
+      {
+        "name": "a snapshot without its paths",
+        "results": [],
+        "current": {
+          "root": "/root/orbit",
+          "state": "dirty",
+          "fileCount": 1,
+          "truncated": false,
+          "files": [
+            {
+              "path": "README.md",
+              "status": "M"
+            }
+          ]
+        },
+        "cardAgeSeconds": 600,
+        "handled": "gone"
+      },
+      {
+        "name": "a snapshot still holding one of its paths keeps it live",
+        "results": [],
+        "current": {
+          "root": "/root/orbit",
+          "state": "dirty",
+          "fileCount": 2,
+          "truncated": false,
+          "files": [
+            {
+              "path": "README.md",
+              "status": "M"
+            },
+            {
+              "path": "src/api/retry.ts",
+              "status": "A"
+            }
+          ]
+        },
+        "cardAgeSeconds": 600,
+        "handled": null
+      },
+      {
+        "name": "heartbeat paths that may be cut short settle nothing",
+        "results": [],
+        "current": {
+          "root": "/root/orbit",
+          "state": "dirty",
+          "fileCount": 7,
+          "truncated": false,
+          "paths": [
+            "README.md"
+          ]
+        },
+        "cardAgeSeconds": 600,
+        "handled": null
+      },
+      {
+        "name": "heartbeat paths that hold every changed file",
+        "results": [],
+        "current": {
+          "root": "/root/orbit",
+          "state": "dirty",
+          "fileCount": 1,
+          "truncated": false,
+          "paths": [
+            "README.md"
+          ]
+        },
+        "cardAgeSeconds": 600,
+        "handled": "gone"
+      },
+      {
+        "name": "a refusal, then a clean checkout",
+        "results": [
+          {
+            "requestId": "req-1",
+            "root": "/root/orbit",
+            "finishedAt": "2026-11-12T08:00:00.000Z",
+            "kind": "move",
+            "status": "refused",
+            "code": "MOVE_CONFLICT",
+            "branch": "main",
+            "paths": [
+              "src/api/client.ts"
+            ]
+          }
+        ],
+        "current": {
+          "root": "/root/orbit",
+          "state": "clean",
+          "fileCount": 0,
+          "truncated": false
+        },
+        "cardAgeSeconds": 600,
+        "handled": "gone"
+      },
+      {
+        "name": "a clean heartbeat right after the card is the checkout from before the turn",
+        "results": [],
+        "current": {
+          "root": "/root/orbit",
+          "state": "clean",
+          "fileCount": 0,
+          "truncated": false
+        },
+        "cardAgeSeconds": 10,
+        "handled": null
+      },
+      {
+        "name": "a clean heartbeat when the card's time is unknown settles nothing",
+        "results": [],
+        "current": {
+          "root": "/root/orbit",
+          "state": "clean",
+          "fileCount": 0,
+          "truncated": false
+        },
+        "cardAgeSeconds": null,
+        "handled": null
+      },
+      {
+        "name": "a clean heartbeat once the card is old enough",
+        "results": [],
+        "current": {
+          "root": "/root/orbit",
+          "state": "clean",
+          "fileCount": 0,
+          "truncated": false
+        },
+        "cardAgeSeconds": 120,
+        "handled": "gone"
+      },
+      {
+        "name": "a result line counts at any age",
+        "results": [
+          {
+            "requestId": "req-1",
+            "root": "/root/orbit",
+            "finishedAt": "2026-11-12T08:00:00.000Z",
+            "kind": "move",
+            "status": "done",
+            "branch": "main",
+            "fileCount": 3,
+            "remaining": 0,
+            "rescueBranch": "orbit/rescue-5f2c1a9",
+            "targetSessionId": "sess-1",
+            "targetBranch": "orbit/fix-retry-backoff"
+          }
+        ],
+        "current": null,
+        "cardAgeSeconds": 1,
+        "handled": "result"
+      }
+    ]
+  }
+}

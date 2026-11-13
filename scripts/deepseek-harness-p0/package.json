@@ -8,6 +8,7 @@
   "overrides": {
     "@deepseek-ai/libreoffice-kit": {
       "fflate": "0.8.3"
-    }
+    },
+    "@modelcontextprotocol/client": "2.4.0"
   }
 }

@@ -4,6 +4,7 @@ import { CheckCircleFilled, CopyOutlined } from '@ant-design/icons';
 import { useSearchParams } from 'react-router-dom';
 import { issueAccessToken, revokeAccessToken, type AccessToken, type IssuedAccessToken } from '../api';
 import { AccessTokenTable } from '../components/AccessTokenTable';
+import { SettingsHeader } from '../components/settings';
 import { NewAccessTokenDialog, type NewAccessToken } from '../components/NewAccessTokenDialog';
 import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
@@ -62,25 +63,22 @@ export function AccessTokensPage() {
   });
 
   return (
-    <div className="following-page access-tokens-page">
-      <header className="following-head access-tokens-head">
-        <div>
-          <h1 className="page-title">Access tokens</h1>
-          <p className="following-sub">
-            Let your scripts and the orbit CLI use the Orbit API as you, with only the access you give each token.
-            Treat a token like a password.
-          </p>
-        </div>
-        <Button
-          variant="primary"
-          onClick={() => {
-            setDialogKey((key) => key + 1);
-            setCreating(true);
-          }}
-        >
-          New token
-        </Button>
-      </header>
+    <div className="settings-page settings-page--wide access-tokens-page">
+      <SettingsHeader
+        title="Access tokens"
+        description="Let your scripts and the orbit CLI use the Orbit API as you, with only the access you give each token. Treat a token like a password."
+        action={
+          <Button
+            variant="primary"
+            onClick={() => {
+              setDialogKey((key) => key + 1);
+              setCreating(true);
+            }}
+          >
+            New token
+          </Button>
+        }
+      />
       {issue.data && <IssuedToken issued={issue.data} onDone={() => issue.reset()} />}
       <div className="following-tabs" role="tablist" aria-label="Access tokens">
         {([

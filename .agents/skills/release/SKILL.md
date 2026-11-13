@@ -9,10 +9,13 @@ Use one `vX.Y.Z` tag to ship all three clients through `.github/workflows/releas
 
 | Job | Output |
 | --- | --- |
+| `identity` | Refuses the tag unless it is `v` + the root `package.json` version and carries a filled-in `release-notes/<version>.md`; every build job waits for it |
 | `dmg` | Signed and notarized macOS DMG, GitHub Release, and Sparkle appcast |
 | `testflight` | Signed iOS `.ipa` uploaded to TestFlight |
 | `android-build` | Signed Android release APK, from the `android-internal` environment |
 | `android-publish` | The APK, its `.sha256` and `android-update.json` attached to the same GitHub Release, after `dmg` and `android-build` succeed |
+
+**The root `package.json` version is the version of record**, and the tag is that version with `v`. The GitHub Release, the DMG/`.zip` names, the TestFlight marketing version, the Android `versionName`, the runner binaries and `/dl/version.json`, the Sparkle appcast and `android-update.json` all derive from it, and `release.yml` refuses a tag that disagrees with the package.
 
 Interpret tags as follows:
 
@@ -22,15 +25,23 @@ Interpret tags as follows:
 
 ## Workflow
 
-1. Resolve the requested version. For `next`, inspect the newest version tag:
+1. Resolve the version. `release.sh next` prints the one tag to cut next, resolved from the package version alone; old tags are never read as a sequence:
 
    ```bash
-   git -c versionsort.suffix=-beta tag --list 'v*' --sort=-v:refname | head -1
+   .agents/skills/release/scripts/release.sh next
    ```
 
-   A beta belongs to the version it precedes. After `X.Y.Z` ships stable, open the next beta at `X.Y.(Z+1)-beta.1`.
+   While the package version has no tag yet (locally or on `origin`), it is the candidate. Once it is tagged, `next` is the next beta in its series, or `X.Y.(Z+1)-beta.1` after a stable `X.Y.Z`: a beta belongs to the version it precedes. `next` only prints. Pass an explicit version for anything else.
 
-2. Verify the release commit is the committed and pushed `main` tip:
+2. If the package version is not the version to release, bump it. This is the release commit: `package.json`, the lockfile and `release-notes/<version>.md` all name the same version.
+
+   ```bash
+   .agents/skills/release/scripts/release.sh bump next          # or: bump 0.2.0-beta.3
+   ```
+
+   Fill in every section of the notes (`docs/release-notes-template.md`) and commit them. `bump next` while the package version is still untagged and its notes exist changes nothing.
+
+3. Verify the release commit is the committed and pushed `main` tip:
 
    ```bash
    git rev-parse --abbrev-ref HEAD
@@ -40,19 +51,17 @@ Interpret tags as follows:
 
    Require `main` and a result of `0`. If a fix exists only on another branch, merge it into `main`; never tag the feature branch.
 
-3. State the exact resolved tag and get explicit user confirmation before running the helper. Creating and pushing the tag is an external, release-triggering action.
+4. State the exact resolved tag and get explicit user confirmation before tagging. Creating and pushing the tag is an external, release-triggering action.
 
-4. Run the helper from the repository:
+5. Tag it with the version `package.json` already carries:
 
    ```bash
-   .agents/skills/release/scripts/release.sh next
-   .agents/skills/release/scripts/release.sh 0.2.0
    .agents/skills/release/scripts/release.sh 0.2.0-beta.3
    ```
 
-   The helper validates the version, refuses tracked uncommitted changes and reused tags, creates an annotated tag, and pushes it to `origin`.
+   The helper runs the same identity gate as CI (`node scripts/release-identity.mjs check-tag vX.Y.Z`): it refuses a tag that disagrees with `package.json`, missing or placeholder notes, tracked uncommitted changes and an already-used tag (local or remote), then creates an annotated tag and pushes it to `origin`.
 
-5. Watch the shared workflow and report every job result:
+6. Watch the shared workflow and report every job result:
 
    ```bash
    gh run watch "$(gh run list --workflow release.yml -L 1 --json databaseId -q '.[0].databaseId')"
@@ -62,7 +71,8 @@ Interpret tags as follows:
 
 ## Constraints
 
-- Accept only `X.Y.Z` or `X.Y.Z-beta.N`-style versions.
+- Accept only `X.Y.Z` or `X.Y.Z-beta.N` versions, and only the one `package.json` carries.
+- `scripts/release.sh` is `.claude/skills/release/release.sh`, byte for byte, and this skill follows the same rules (`npm run test:release-identity` checks it). Change both together.
 - Every pushed `v*` tag starts all the platform jobs. To build one Apple platform only, dispatch `release.yml` on `main` with `platform=macos` or `platform=ios` instead of creating a tag. Android never runs from a dispatch, and `android-v*` tags start nothing.
 - If `dmg` fails, Android is not attached. After the cause is fixed, re-run the failed jobs of that run (`gh run rerun <run-id> --failed`); it rebuilds the DMG and then attaches the Android build already made. Ask before re-running, as it publishes.
 - Required signing and publishing secrets are documented in `.github/workflows/release.yml`; Android signing lives only in the `android-internal` environment.

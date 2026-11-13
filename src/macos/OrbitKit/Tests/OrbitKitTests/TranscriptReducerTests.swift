@@ -546,7 +546,7 @@ final class TranscriptReducerTests: XCTestCase {
         r.apply(RunEvent(seq: 7, type: .interrupt, payload: .object([:])))
 
         let marks = r.state.items.compactMap { item -> String? in
-            guard case .interrupt(_, let seq, let runnerRestart) = item else { return nil }
+            guard case .interrupt(_, let seq, let runnerRestart, _) = item else { return nil }
             return "\(seq):\(runnerRestart ? "runner restart" : "stop")"
         }
         XCTAssertEqual(marks, ["2:stop", "5:runner restart", "7:stop"])
@@ -1496,6 +1496,24 @@ final class TranscriptReducerTests: XCTestCase {
     }
 
     // MARK: - scroll-up history paging (prependOlder — the "can't reach the top" fix)
+
+    /// A call whose result is in the window loaded first and whose `tool_use` is in an older page:
+    /// paging the call in settles it with that result, instead of leaving it "running" for good.
+    func testAnOlderPageSettlesACallWhoseResultTheWindowAlreadyHad() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 5, type: .toolResult, payload: .object(["toolUseId": .string("t1"),
+                                                                     "content": .string("a.txt")])))
+        r.apply(RunEvent(seq: 6, type: .assistant, payload: .object(["text": .string("Done.")])))
+        r.prependOlder(EventPage(events: [
+            RunEvent(seq: 4, type: .toolUse, payload: .object(["toolUseId": .string("t1"), "name": .string("Bash"),
+                                                               "input": .object(["command": .string("ls")])])),
+        ], hasMore: false))
+
+        guard case .toolCall(let card) = r.state.items.first else { return XCTFail("the call comes first") }
+        XCTAssertEqual(card.status, .ok)
+        XCTAssertEqual(card.result, "a.txt")
+        XCTAssertEqual(card.resultSeq, 5)
+    }
 
     func testApplyTailPageTracksHistoryWindow() {
         var r = TranscriptReducer()
@@ -2589,7 +2607,7 @@ extension TranscriptItem {
     var asAssistant: AssistantBubble? { if case .assistant(let b) = self { return b }; return nil }
     var asTool: ToolCard? { if case .toolCall(let c) = self { return c }; return nil }
     var asError: String? { if case .error(_, let m) = self { return m }; return nil }
-    var asNotice: String? { if case .notice(_, let m) = self { return m }; return nil }
+    var asNotice: String? { if case .notice(_, let m, _) = self { return m }; return nil }
     var asDiagnostic: DiagnosticRead? {
         guard case .diagnostic(let d) = self else { return nil }
         return DiagnosticRead(label: d.label, text: d.text, message: d.message, repeats: d.repeats)

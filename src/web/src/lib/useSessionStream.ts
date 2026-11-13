@@ -120,6 +120,18 @@ const AROUND_PAGE = 200;
 // still costing ~12s of the backoff below — short enough that a wedged tab recovers on its own,
 // long enough that an ordinary redeploy blip never throws away a loaded window. See reseed().
 const RESEED_AFTER_STALLED_RECONNECTS = 3;
+// Twelve quick retries ride out a redeploy; past them the stream is asked for once a minute rather
+// than given up on. The control plane learned this the expensive way (useControlPlane, 2026-10-20);
+// here the shape it dies in most is a laptop asleep and awake with the socket half-open, where the
+// person comes back to a console whose events stopped arriving and stays that way until a reload.
+const QUICK_RECONNECTS = 12;
+const SLOW_RECONNECT_MS = 60_000;
+// The server pings ~every 20s (sessions.controller KEEPALIVE_MS); 45s of total silence means the
+// socket went half-dead without firing `onerror`. EventSource has no read timeout, so we watch for
+// it — the same watchdog the control-plane stream runs. Without one a slept-on socket is never
+// noticed at all: nothing arrives, nothing errors, and no reconnect is ever attempted.
+const WATCHDOG_SILENCE_MS = 45_000;
+const WATCHDOG_TICK_MS = 15_000;
 // How long a cached /background scan stays fresh. `/background` scans the session's whole
 // tool-event history, so re-opening a session (or scrubbing the list) within this window paints
 // the cached shells instead of re-running that scan — see bgCacheRef.
@@ -606,6 +618,8 @@ export function useSessionStream({
     // stream can be re-opened in place when the session resumes (see resumeStreamRef).
     let paused = false;
     let fails = 0;
+    // When this connection last heard anything, keepalive included (see WATCHDOG_SILENCE_MS).
+    let lastMsgAt = Date.now();
     // Resume just past what's loaded so only the gap is streamed, not the whole history.
     let lastSeq = cached.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), 0);
     // The cursor the current connection opened at, and how many connections in a row have died
@@ -716,9 +730,16 @@ export function useSessionStream({
       connect();
     };
     const connect = (): void => {
+      // A tab in the background holds no transcript stream: nobody is reading it, and every frame
+      // it took would be growth in a tab nobody is watching — the shape of a tab that gets heavier
+      // the longer it is left open. `onVisibility` reopens it from `lastSeq` on the way back, so the
+      // server replays only the gap (or answers `resync` and the tab re-seeds from a tail page).
+      if (closed || document.visibilityState === 'hidden') return;
       seqAtConnect = lastSeq;
+      lastMsgAt = Date.now();
       es = new EventSource(sessionEventsUrl(selectedId, lastSeq));
       es.onmessage = (e) => {
+        lastMsgAt = Date.now();
         fails = 0; // a message means the stream is healthy
         const ev = JSON.parse(e.data) as RunEvent;
         // Server keepalive (~20s): a health byte with no seq/payload, sent so an idle transcript
@@ -914,23 +935,49 @@ export function useSessionStream({
           refreshQueued();
         }
       };
-      es.onerror = () => {
+      es.onerror = () => dropStream();
+    };
+    // Close the stream and schedule a backoff reconnect. Shared by `onerror` and the silence
+    // watchdog, which can both fire for the same dead socket. Never gives up: past the quick
+    // retries the stream is asked for once a minute (QUICK_RECONNECTS).
+    const dropStream = (): void => {
+      es?.close();
+      es = null;
+      if (closed || paused) return;
+      // A background tab waits for `onVisibility` instead of counting down retries nobody reads.
+      if (document.visibilityState === 'hidden') return;
+      // A connection that died without moving the cursor forward left us exactly where we
+      // started, so reconnecting asks the server for the same replay again. Once is a dropped
+      // connection; three in a row is a replay this tab cannot get through — the shape a single
+      // outsized event makes — and the only way out is to stop asking for it. See reseed().
+      stalled = lastSeq > seqAtConnect ? 0 : stalled + 1;
+      if (stalled >= RESEED_AFTER_STALLED_RECONNECTS) {
+        void reseed();
+        return;
+      }
+      fails += 1;
+      const delay = fails > QUICK_RECONNECTS ? SLOW_RECONNECT_MS : Math.min(2000 * fails, 15_000);
+      retry = setTimeout(connect, delay + Math.random() * 500);
+    };
+    // A tab coming back into view, or a browser back online, asks for the stream at once rather
+    // than waiting out the backoff. Nothing to do while one is open, or while the session is
+    // paused (a finalized turn) or the window is detached from the live tail.
+    const retryNow = (): void => {
+      if (closed || paused || es || newerCursorRef.current !== null) return;
+      if (document.visibilityState === 'hidden') return;
+      if (retry) clearTimeout(retry);
+      connect();
+    };
+    const onVisibility = (): void => {
+      if (closed) return;
+      if (document.visibilityState === 'hidden') {
+        // Nobody is reading this tab; hold no stream for it (see `connect`). A pending retry
+        // fires into the same guard and is left for `onVisibility` to answer.
         es?.close();
-        if (closed || paused) return;
-        // A connection that died without moving the cursor forward left us exactly where we
-        // started, so reconnecting asks the server for the same replay again. Once is a dropped
-        // connection; three in a row is a replay this tab cannot get through — the shape a single
-        // outsized event makes — and the only way out is to stop asking for it. See reseed().
-        stalled = lastSeq > seqAtConnect ? 0 : stalled + 1;
-        if (stalled >= RESEED_AFTER_STALLED_RECONNECTS) {
-          void reseed();
-          return;
-        }
-        // Auto-reconnect, resuming after lastSeq — survives long idle / redeploy
-        // drops (the seq dedup set makes any replay overlap harmless).
-        if (++fails > 12) return;
-        retry = setTimeout(connect, Math.min(2000 * fails, 15000) + Math.random() * 500);
-      };
+        es = null;
+        return;
+      }
+      retryNow();
     };
     // Bridge for the liveness watcher: re-open a stream paused by a `final` event once the
     // session is live again. No-op unless paused (so it's safe to call on any status tick);
@@ -1164,11 +1211,21 @@ export function useSessionStream({
         loadBackgroundShells();
       })();
     }, SWITCH_DEBOUNCE_MS);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('online', retryNow);
+    const watchdog = setInterval(() => {
+      if (closed || paused || !es) return;
+      if (document.visibilityState === 'hidden') return;
+      if (Date.now() - lastMsgAt > WATCHDOG_SILENCE_MS) dropStream();
+    }, WATCHDOG_TICK_MS);
     return () => {
       resumeStreamRef.current = null;
       openRecordRef.current = null;
       joinLiveRef.current = null;
       backToLatestRef.current = null;
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('online', retryNow);
+      clearInterval(watchdog);
       clearTimeout(start);
       stop();
     };

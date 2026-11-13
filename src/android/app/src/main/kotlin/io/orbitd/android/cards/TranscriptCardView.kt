@@ -14,21 +14,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.reader.AttachedNoteEntry
+import io.orbitd.android.reader.SessionMessageBubble
 import io.orbitd.android.reader.personWords
-import io.orbitd.android.text.LocalReaderResources
 import io.orbitd.android.ui.LocalOrbitColors
-import kotlinx.coroutines.CancellationException
 import io.orbitd.android.core.realtime.RunEvent
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -75,32 +72,19 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
     if (card.key.endsWith(":coordinatorDelivery")) {
         CoordinatorDeliveryLineView(card, event, open); return
     }
-    val resources = LocalReaderResources.current
-    val app = LocalContext.current.applicationContext as? OrbitApplication
-    val live = app?.realtime?.state?.collectAsState()?.value
-    val authorized = resources != null && live?.handle === resources.handle && live?.session?.id == resources.sessionId && live?.session?.fresh == true && live?.session?.accessDenied == false
-    var request by remember(card.key) { mutableStateOf<JsonObject?>(null) }
-    var unread by remember(card.key) { mutableStateOf(false) }
-    val requestId = card.source.text("requestId").takeIf { card.key.endsWith(":sessionMessage") }
-    // Behind the conversation's snapshot reads, as its cards (SessionCardsReads): not on every account event.
-    LaunchedEffect(resources, requestId, authorized, live?.session?.snapshotReads) {
-        if (!authorized || requestId == null) { unread = requestId != null; return@LaunchedEffect }
-        try { request = CardAuthority(resources!!.auth, resources.handle).get(listOf("session-requests", requestId)) as? JsonObject; unread = false }
-        catch (cancel: CancellationException) { throw cancel }
-        catch (_: Exception) { request = null; unread = true }
+    // Another session's message is a bubble on the left (docs/mocks/session-message-bubble), queued or not.
+    if (card.key.endsWith(":sessionMessage")) {
+        SessionMessageBubble(card.source, event, open); return
     }
-    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer) {
+    // Orbit's cards on the left stop at 720 dp, as the message bubble beside them does (owner 2026-11-12).
+    val capped = listOf(":taskStart", ":projectStarted", ":openItemDelivery").any { card.key.endsWith(it) }
+    Surface(if (capped) Modifier.widthIn(max = 720.dp) else Modifier, shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(card.title, style = MaterialTheme.typography.titleSmall)
             Text("Recorded by Orbit", style = MaterialTheme.typography.labelSmall)
             CardFields(card.source, listOf("title", "projectTitle", "fromTitle", "preview", "requestPreview", "description", "acceptanceCriteria",
                 "completionCriterion", "reason", "problems", "report", "dueAt", "branch", "sha", "task", "files", "check", "failure", "settings",
                 "differsFromRequest", "startedAt", "outcome", "replyOptionLabel", "replyText", "excerpt", "closeReason", "closedAt", "status", "command", "outputTail", "progress", "state", "generation", "changedTargets", "jobs", "wakeups"), open)
-            if (requestId != null) {
-                Text("The recipient session answers this request.", style = MaterialTheme.typography.bodySmall)
-                if (unread) Text("Current request state unavailable · reconnect to check.")
-                else request?.let { CardFields(it, listOf("state", "replyOptions", "replyBy", "replyText", "excerpt", "closeReason"), open) }
-            }
             listOf("fromSessionId" to "Open sender session", "runSessionId" to "Open task session", "reviewerSessionId" to "Open reviewer session").forEach { (field, label) ->
                 card.source.text(field)?.let { LinkButton(label, "orbit-session:$it", open) }
             }

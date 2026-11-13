@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>其他会话发来的消息：从通屏卡片改成左侧气泡</title>
+<style>
+  body { margin: 0; background: #eceef2; font-family: Inter, 'Noto Sans SC', sans-serif; color: #1d2330; }
+  .board { width: 2240px; padding: 48px; box-sizing: border-box; background: #eceef2; }
+  h1 { font-size: 34px; margin: 0 0 8px; }
+  .sub { font-size: 17px; color: #5b6475; margin-bottom: 28px; line-height: 1.65; max-width: 1900px; }
+  .row { display: flex; gap: 24px; align-items: flex-start; margin-bottom: 28px; }
+  .frame { background: #fff; border-radius: 14px; padding: 18px 18px 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .frame h2 { font-size: 19px; margin: 0 0 4px; }
+  .frame .cap { font-size: 14px; color: #5b6475; margin: 0 0 12px; line-height: 1.55; }
+  .crop { border: 1px solid #e3e6eb; border-radius: 8px; background-repeat: no-repeat; position: relative; }
+  .frame img { display: block; border: 1px solid #e3e6eb; border-radius: 8px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-right: 6px; vertical-align: 2px; }
+  .t-now { background: #fde8e8; color: #b42318; } .t-new { background: #e3f0ff; color: #1757c2; }
+  .pin { position: absolute; width: 26px; height: 26px; border-radius: 13px; background: #e5484d; color: #fff; font: 600 14px/26px Inter, sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; }
+  .bracket { position: absolute; border: 2px dashed #e5484d; border-radius: 6px; }
+  .panel { background: #fff; border-radius: 14px; padding: 22px 26px; box-shadow: 0 1px 3px rgba(0,0,0,.08); font-size: 15px; line-height: 1.65; }
+  .panel h2 { font-size: 20px; margin: 0 0 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid #e8eaee; }
+  th { color: #5b6475; font-weight: 600; background: #f6f7f9; }
+  code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; background: #f1f3f6; padding: 1px 5px; border-radius: 4px; }
+  .q { background: #fff8e6; border: 1px solid #f3d27a; border-radius: 10px; padding: 14px 18px; font-size: 15px; line-height: 1.65; }
+  .q b { color: #8a5a00; }
+  .q li { margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>其他会话发来的消息 · 从通屏卡片改成左侧气泡（按你的选择：最宽 720 px）</h1>
+  <div class="sub">
+    现在：这条消息是一张<b>占满对话栏的大卡片</b>：头部一行、8 行正文、Show more、分隔线下一行 “Sent by another Orbit session, not by you · 6m ago · Its task”、再一行 “Asked for a reply · Replied”、再一行 “⊕ Orbit attached”，一共 6 层，约 340 px 高。<br>
+    方案：照聊天软件里“别人发来的消息”画：<b>左侧一个贴合文字的气泡</b>（最宽 720 px），谁发的放在气泡上方一行灰字，其余全部收进气泡下方<b>一行灰字</b>；正文先显示 4 行。约 170 px，是现在的一半。昨天一起改成通屏的其他 Orbit 卡片（项目开工、任务开工、例外项、确认审核）也改回最宽 720 px、靠左。截图是真实 Web 页面回放 Runner 链路加固协调会话的真实记录（同一条消息，暗色，窗口 2000 px）。
+  </div>
+
+  <div class="row">
+    <div class="frame">
+      <h2><span class="tag t-now">① 现在</span>通屏卡片，6 层</h2>
+      <p class="cap">卡片宽 1359 px（整个对话栏），高 337 px。协调者的回复被挤到下面。</p>
+      <div class="crop" style="width:1380px;height:470px;background-image:url(shots/cur-desktop.png);background-position:-610px -180px">
+        <div class="bracket" style="left:9px;top:26px;width:1362px;height:340px"></div>
+        <div class="pin" style="left:1340px;top:14px">1</div>
+      </div>
+    </div>
+    <div class="frame">
+      <h2>手机 · 现在</h2>
+      <p class="cap">卡片 405 px，第一屏只剩它。</p>
+      <img src="shots/cur-phone.png" width="390">
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="frame">
+      <h2><span class="tag t-new">② 方案</span>左侧气泡 + 上下各一行灰字</h2>
+      <p class="cap">同一条消息：气泡贴合文字，最宽 720 px；高 169 px（含上下两行灰字）。下面紧接着就是协调者怎么处理的。</p>
+      <div class="crop" style="width:1380px;height:470px;background-image:url(shots/prop-desktop.png);background-position:-610px -180px">
+        <div class="pin" style="left:500px;top:20px">2</div>
+        <div class="pin" style="left:745px;top:60px">3</div>
+        <div class="pin" style="left:540px;top:172px">4</div>
+      </div>
+    </div>
+    <div class="frame">
+      <h2>手机 · 方案</h2>
+      <p class="cap">203 px，下面就是回复。手机屏比 720 px 窄，气泡占满对话栏。</p>
+      <img src="shots/prop-phone.png" width="390">
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="frame">
+      <h2><span class="tag t-new">③ 一起改</span>其他 Orbit 卡片：通屏 → 最宽 720 px、靠左</h2>
+      <p class="cap">上：现在（项目开工卡片，宽 1359 px）　下：改后（720 px，内容不变）。任务开工、例外项、确认审核同样处理。</p>
+      <div class="crop" style="width:1380px;height:230px;background-image:url(shots/cur-psc.png);background-position:-610px -190px;margin-bottom:12px"></div>
+      <div class="crop" style="width:1380px;height:230px;background-image:url(shots/prop-psc.png);background-position:-610px -190px"></div>
+    </div>
+    <div style="flex:1; display:flex; flex-direction:column; gap:20px;">
+      <div class="panel">
+        <h2>每个编号改了什么</h2>
+        <table>
+          <tr><th style="width:9%">#</th><th>现在</th><th>方案</th></tr>
+          <tr><td>1</td><td>蓝框卡片，宽度 100%</td><td>不再是卡片</td></tr>
+          <tr><td>2</td><td>卡片头部：图标 + From + 蓝色加粗标题 + 带框的 agent 名</td><td>气泡上方一行 12 px 灰字：<code>From Task: … · orbit-prod</code>；标题仍可点，悬停变蓝；agent 名不加框</td></tr>
+          <tr><td>3</td><td>正文 8 行（超过 12 行才收）</td><td>灰底细边气泡，贴合文字，最宽 720 px；正文 4 行（超过 6 行才收），渐隐 + Show more</td></tr>
+          <tr><td>4</td><td>3 行：Sent by another Orbit session, not by you · 时间 · Its task / Asked for a reply + 绿框 Replied / ⊕ Orbit attached</td><td>合成一行灰字：<code>6m ago · Its task ↗ · Asked for a reply · Replied · ⊕ Orbit attached: session message</code>；只有出问题的状态（No reply、Expired…）用琥珀色</td></tr>
+          <tr><td>—</td><td>“Sent by another Orbit session, not by you” 常显</td><td>移到 From 那一行的悬停提示和读屏文字（左侧 + From 已经说明不是你）</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="panel" style="flex:1">
+      <h2>不变的</h2>
+      <ul style="margin:0; padding-left:20px">
+        <li>文字内容、可点的会话 / 任务链接、⌘F 搜到收起部分会自动展开、导出显示全文。</li>
+        <li>没投递成功的提示、排队中的虚线和取消按钮。</li>
+        <li>其他 Orbit 卡片只改宽度（最宽 720 px），仍在左侧，内容、颜色不变。</li>
+      </ul>
+      <h2 style="margin-top:18px">落地（按代价排）</h2>
+      <ol style="margin:0; padding-left:20px">
+        <li>Web：<code>SessionMessageCard.tsx</code> + <code>index.css</code>（原型 diff 见 <code>capture/prototype.patch</code>）、测试。</li>
+        <li>macOS / iOS：<code>SessionMessageCardView.swift</code>，OrbitKit 的行数常量和 parity 测试。</li>
+        <li>Android：<code>TranscriptRowView.kt</code>，按 iOS 画。</li>
+        <li>不改服务端，不改文案。</li>
+      </ol>
+    </div>
+    <div class="q" style="flex:1.3">
+      <b>已定（11-12 你的选择）</b>
+      <ol style="margin:6px 0 0; padding-left:20px;">
+        <li><b>宽度</b>：贴合文字，最宽 720 px。</li>
+        <li><b>收起后几行</b>：4 行（超过 6 行才收）。</li>
+        <li><b>“Sent by another Orbit session, not by you”</b>：移到悬停提示和读屏文字。</li>
+        <li><b>其他 Orbit 卡片</b>：一起改回最宽 720 px、靠左。</li>
+        <li><b>客户端</b>：Web、macOS/iOS、Android 一起改（推荐，还没问你）。</li>
+      </ol>
+    </div>
+  </div>
+</div>
+</body>
+</html>

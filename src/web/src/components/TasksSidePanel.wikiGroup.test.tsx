@@ -191,7 +191,7 @@ describe('the sidebar’s Wiki group', () => {
       'tp-divider',
       'tp-group tp-group-wiki',
       'tp-divider',
-      'tp-group tp-group-projects autohide-scrollbar',
+      'tp-group tp-group-projects',
     ]);
     await leave();
 
@@ -201,7 +201,7 @@ describe('the sidebar’s Wiki group', () => {
       'tp-group tp-group-workspaces',
       'tp-group tp-group-wiki',
       'tp-divider',
-      'tp-group tp-group-projects autohide-scrollbar',
+      'tp-group tp-group-projects',
     ]);
     await leave();
 
@@ -215,7 +215,7 @@ describe('the sidebar’s Wiki group', () => {
     expect(blocks()).toEqual([
       'tp-group tp-group-workspaces',
       'tp-divider',
-      'tp-group tp-group-projects autohide-scrollbar',
+      'tp-group tp-group-projects',
     ]);
   });
 

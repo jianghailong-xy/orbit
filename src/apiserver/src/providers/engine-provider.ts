@@ -37,6 +37,8 @@ import {
   keyCredential,
   usableProviderScope,
 } from './custom-provider';
+import { engineTableOptions } from './key-gateway';
+import { isOwnCodexLoginPool, poolTableOptions } from './codex-login-claude';
 import { LANDING_PROVIDER_SLUG } from './provider-slug';
 import { SESSION_ENGINE_UNKNOWN_MESSAGE, sessionEngine, type SessionEngineFacts } from './session-engine';
 
@@ -52,8 +54,9 @@ export type ResolvedCredential =
   /** A configured key — named by its own slug, or by a retired name (`alias`) that resolves to it.
    *  `slug` is the key's own, which is what a session or a task stores. */
   | { kind: 'key'; row: KeyRow; slug: string; alias: { slug: string; engine: AgentProvider } | null }
-  /** An account pool, which runs on the engine it was made on. */
-  | { kind: 'pool'; slug: string; engine: AgentProvider }
+  /** An account pool, which runs on the engine it was made on. `ownLogin`: a Codex pool of the owner's own,
+   *  set only with ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY on (codex-login-claude.ts), which then runs Claude Code too. */
+  | { kind: 'pool'; slug: string; engine: AgentProvider; ownLogin?: true }
   /** The built-in `dsh` slug: a legacy session's whose key is its workspace's ORBIT_DSH_API_KEY. A new
    *  write never stores it — it becomes the owner's default DeepSeek key (§3.3). */
   | { kind: 'legacy-dsh' };
@@ -66,11 +69,11 @@ export function resolvedCredentialEngines(credential: ResolvedCredential): Agent
     case 'opencode':
       return [AgentProvider.OPENCODE];
     case 'pool':
-      return [credential.engine];
+      return credentialEngines({ kind: 'pool', engine: credential.engine, ownLogin: credential.ownLogin }, poolTableOptions());
     case 'legacy-dsh':
       return [AgentProvider.DSH];
     case 'key':
-      return credentialEngines(keyCredential(credential.row));
+      return credentialEngines(keyCredential(credential.row), engineTableOptions(credential.row.baseUrl));
   }
 }
 
@@ -245,7 +248,7 @@ export async function classifyProvider(
   if (poolEngine) {
     const refusal = await deps.poolRefusal(ownerId, slug, db);
     if (refusal) throw new BadRequestException(refusal);
-    return { kind: 'pool', slug, engine: poolEngine };
+    return { kind: 'pool', slug, engine: poolEngine, ...(await ownLogin(db, ownerId, slug, poolEngine)) };
   }
   const alias = await aliasedKey(db, ownerId, slug);
   if (alias) {
@@ -564,7 +567,7 @@ export async function storedCredential(
   const row = await db.modelProvider.findFirst({ where: { slug, ...(await usableProviderScope(db, session.ownerId)) } });
   if (row) return { kind: 'key', row, slug, alias: null };
   const poolEngine = await accountPoolRuntime(db, session.ownerId, slug);
-  if (poolEngine) return { kind: 'pool', slug, engine: poolEngine };
+  if (poolEngine) return { kind: 'pool', slug, engine: poolEngine, ...(await ownLogin(db, session.ownerId, slug, poolEngine)) };
   const alias = await aliasedKey(db, session.ownerId, slug);
   return alias ? { kind: 'key', row: alias.row, slug: alias.row.slug, alias: { slug, engine: alias.engine } } : null;
 }
@@ -623,7 +626,7 @@ export async function taskPinCredential(
   const row = await db.modelProvider.findFirst({ where: { slug, ...(await usableProviderScope(db, ownerId)) } });
   if (row) return { kind: 'key', row, slug, alias: null };
   const poolEngine = await accountPoolRuntime(db, ownerId, slug);
-  if (poolEngine) return { kind: 'pool', slug, engine: poolEngine };
+  if (poolEngine) return { kind: 'pool', slug, engine: poolEngine, ...(await ownLogin(db, ownerId, slug, poolEngine)) };
   const alias = await aliasedKey(db, ownerId, slug);
   if (alias) return { kind: 'key', row: alias.row, slug: alias.row.slug, alias: { slug, engine: alias.engine } };
   return slug === AgentProvider.DSH ? { kind: 'legacy-dsh' } : null;
@@ -822,4 +825,14 @@ async function mirrorOldDefaultModel(
     ? credential.alias.engine
     : resolvedCredentialEngines(credential)[0];
   return engine ? { key: defaultModelKey(engine, storedSlug(credential).provider), value } : null;
+}
+
+/** `{ ownLogin: true }` for a Codex pool of the owner's own while Claude Code may run on one, else nothing. */
+async function ownLogin(
+  db: Prisma.TransactionClient,
+  ownerId: string,
+  slug: string,
+  engine: AgentProvider,
+): Promise<{ ownLogin: true } | Record<string, never>> {
+  return engine === AgentProvider.CODEX && (await isOwnCodexLoginPool(db, ownerId, slug)) ? { ownLogin: true } : {};
 }

@@ -85,11 +85,14 @@ import { RunnerSignIn } from './RunnerSignIn';
 import { AppLink } from './AppLink';
 import { SameOriginLink } from './SameOriginLink';
 import { TaskRunHandoffNotice } from './TaskRunHandoffNotice';
+import { MainCheckoutCard, MainCheckoutResultRow } from './MainCheckout';
+import { MainCheckoutResultsCtx, isMainCheckoutChanged, isMainCheckoutResult } from '../lib/mainCheckout';
+import type { MainCheckoutChangedNotice, MainCheckoutResultNotice } from '@orbit/shared';
 import type { TaskRunConflict } from '../lib/taskRunHandoff';
 import { WatchWakeCard, WatchWakeNamesCtx, watchWakeTitle } from './WatchWakeCard';
 import { BackgroundWakeCard, backgroundWakeName, backgroundWakeTitle } from './BackgroundWakeCard';
 import { OrbitExchangeGroup, OrbitExchangeSolo } from './OrbitExchangeFold';
-import { parseRunNotice, replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
+import { foldsAtLength, parseRunNotice, replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
 import { BackgroundJobsNote } from './BackgroundJobsNote';
 import { ReferencedTaskNote } from './ReferencedTaskNote';
 import { WikiContextNote } from './WikiContextNote';
@@ -100,6 +103,8 @@ import { EMPTY_LIVE_TASK_PROGRESS, endedTaskProgress, type LiveTaskProgress } fr
 import { TaskProgressBlock } from './TaskProgressBlock';
 import { parseWatchWake } from '../lib/watches';
 import { resolutionTurnLabel } from '../lib/ownerRequests';
+import { RUNNER_UPDATE_INTERRUPT_REASON, RUNNER_UPDATE_RESUME_NOTE } from '@orbit/shared';
+import { isRunnerUpdateResume, runnerUpdateInterruptedLine } from '../lib/runnerUpdateNow';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import { parseOpenItemDelivery } from '../lib/openItemDelivery';
 import type { OpenItemDeliveryCard as OpenItemDelivery, ProjectStartedCard as Started } from '@orbit/shared';
@@ -116,7 +121,7 @@ import type { TaskStartCard as TaskStart } from '@orbit/shared';
 import { TaskStartCard } from './TaskStartCard';
 import { parseProjectStarted } from '../lib/projectStarted';
 import { ProjectStartedCard } from './ProjectStartedCard';
-import { parseSessionMessage } from '../lib/sessionMessage';
+import { parseSessionMessage, splitSessionMessageNote } from '../lib/sessionMessage';
 import { externalSenderLabel, parseExternalSender } from '../lib/externalSender';
 import {
   parseConfirmationAnswers,
@@ -427,6 +432,10 @@ export interface SteerWithdrawHandle {
   withdrawing: ReadonlySet<string>;
   withdrawn: ReadonlySet<string>;
 }
+/** A tag for one user bubble's foot row, by the bubble's seq: what holds the message the reader sent
+ *  last (WorkspaceView's RunnerUpdatingTag). Null where nothing holds one. */
+export const QueuedFootCtx = createContext<{ seq: number; tag: ReactNode } | null>(null);
+
 export const SteerWithdrawCtx = createContext<SteerWithdrawHandle | null>(null);
 
 /**
@@ -607,6 +616,9 @@ type TextNode = {
   // beside the echo (`externalSender`, lib/externalSender): still a bubble, headed `From Feishu · <name>`
   // so it does not read as the owner's own.
   externalSender?: ExternalMessageFrom;
+  // The reader's own words on a page where the conversation is somebody else's — the guest page
+  // (pages/GuestSessionPage), which marks the guest's own echoes `sentByReader`: headed `You`.
+  sentByReader?: boolean;
   // The outcomes of this session's own requests the turn handed back, when the control plane
   // recorded them beside the echo (`sessionReplies`, lib/sessionRequest). Drawn as reply cards.
   sessionReplies?: SessionReply[];
@@ -630,7 +642,13 @@ type TextNode = {
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
 // `runnerRestart`: nobody pressed Stop — the runner cut the turn short while restarting.
-type MarkerNode = { kind: 'interrupt'; seq: number; runnerRestart?: boolean };
+type MarkerNode = {
+  kind: 'interrupt';
+  seq: number;
+  runnerRestart?: boolean;
+  /** The owner's Update Now cut it (`reason: runner_update`): the release it updated to, or null when unnamed. */
+  runnerUpdate?: string | null;
+};
 // The end of a finished turn (TurnFoot): when it ended, and the reply its copy button hands back —
 // the turn's last top-level assistant text, absent when it wrote none inside the loaded window.
 type DividerNode = { kind: 'divider'; seq: number; ts?: string; reply?: string };
@@ -652,11 +670,23 @@ type DiagnosticNode = {
   code?: string;
   repeats?: number;
 };
-type AuthErrorNode = { kind: 'authError'; seq: number; message: string };
+// `settled`: the session moved past this failure, so the card is history rather than a remedy —
+// 'resolved' once the agent did work after it, 'superseded' once a later message or failure came
+// first. Only an unsettled card offers sign-in and Retry: its Retry re-sends the session's latest
+// message, which above a later bubble is no longer the message this failure ate.
+type AuthErrorNode = { kind: 'authError'; seq: number; message: string; settled?: 'resolved' | 'superseded' };
 /** A runner-side heads-up that isn't a failure: the turn worked, but something about WHERE it
  *  worked needs saying — today, edits it left in the machine's shared checkout instead of this
  *  session's worktree. Rendered as a calm note, not an error: nothing is broken yet. */
-type NoticeNode = { kind: 'notice'; seq: number; message: string };
+type NoticeNode = {
+  kind: 'notice';
+  seq: number;
+  message: string;
+  /** The main checkout's card (board 01) or an action's result line (board 03), drawn instead of the text. */
+  mainCheckout?: MainCheckoutChangedNotice | MainCheckoutResultNotice;
+  /** An account switch the session has since moved past (see `settleAccountSwitches`). */
+  settled?: boolean;
+};
 // A failure that fixes itself, so the card carries a pending retry rather than a remedy: the
 // account's quota spent, or the provider briefly unable to answer. `stale` marks every such
 // card but the most recent one — the armed retry is a single value on the session, so an older
@@ -932,6 +962,7 @@ const readersOwnWords = (node: TextNode): boolean =>
   && !node.sessionOpening
   && !parseWatchWake(node.text)
   && !resolutionTurnLabel(node.text)
+  && !isRunnerUpdateResume(node.text)
   && !parseBackgroundWake(node.note);
 
 function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): Node[] {
@@ -1010,7 +1041,25 @@ function buildTranscript(
     const list = into(parentId);
     const prev = list[list.length - 1];
     if (prev?.kind === 'authError' && prev.message === message) return;
-    list.push({ kind: 'authError', seq, message });
+    if (openAuth) openAuth.settled ??= 'superseded';
+    openAuth = { kind: 'authError', seq, message };
+    list.push(openAuth);
+  };
+  // The latest sign-in card whose outcome is still open. A next message supersedes it (its Retry
+  // would re-send that message, not the one the failure ate); the agent doing work afterwards
+  // resolves it — even past a later message, since that work is what the sign-in was for.
+  let openAuth: AuthErrorNode | undefined;
+  // "Switched to … — … is signed out" lines not yet followed by anything. Once the conversation
+  // moves on, the switch is history and drops to the muted tone with the card it came with.
+  let openSwitches: NoticeNode[] = [];
+  const settleAccountSwitches = () => {
+    for (const n of openSwitches) n.settled = true;
+    openSwitches = [];
+  };
+  const agentWorked = () => {
+    if (openAuth) openAuth.settled = 'resolved';
+    openAuth = undefined;
+    settleAccountSwitches();
   };
   // Only the latest auto-retry card is live; the ones above it describe outages that are over.
   // "Over" is decided by the next user message, whoever sent it: the retry firing, the user
@@ -1198,6 +1247,8 @@ function buildTranscript(
     switch (ev.type) {
       case 'user': {
         outageOver();
+        if (openAuth) openAuth.settled ??= 'superseded';
+        settleAccountSwitches();
         // The composer's just-sent previews join in by turnId (instant, local object URLs);
         // the runner also echoes durable image refs in the event payload, used when there's
         // no local preview (after a reload, or the server-seeded first turn). An image-only
@@ -1288,6 +1339,7 @@ function buildTranscript(
             startedCard,
             sessionMessage,
             externalSender,
+            sentByReader: p.sentByReader === true || undefined,
             sessionReplies,
             reviewRequest,
             reviewReturn,
@@ -1365,6 +1417,7 @@ function buildTranscript(
           else if (isApiErrorText(text)) into(parent).push({ kind: 'error', seq: ev.seq, message: text });
           else {
             const siblings = into(parent);
+            agentWorked();
             siblings.push({ kind: 'assistant', seq: ev.seq, text });
             if (siblings === roots) turnReply = text;
           }
@@ -1403,6 +1456,7 @@ function buildTranscript(
         };
         if (node.id) byId.set(node.id, node);
         openTools.push({ node, parent });
+        agentWorked();
         into(parent).push(node);
         lastOpenTool = node;
         break;
@@ -1460,7 +1514,14 @@ function buildTranscript(
         // A Stop's interrupt carries its `requestId` (or nothing, from engines without one); the
         // runner marks a turn it tore down on its way out with `reason: runner_restart`
         // (runner-go's watchShutdownDrain).
-        into(parent).push({ kind: 'interrupt', seq: ev.seq, runnerRestart: p.reason === 'runner_restart' });
+        into(parent).push({
+          kind: 'interrupt',
+          seq: ev.seq,
+          runnerRestart: p.reason === 'runner_restart',
+          ...(p.reason === RUNNER_UPDATE_INTERRUPT_REASON
+            ? { runnerUpdate: typeof p.targetVersion === 'string' && p.targetVersion ? p.targetVersion : null }
+            : {}),
+        });
         break;
       case 'error': {
         // The runner reports a signed-out engine as an error event rather than assistant text
@@ -1490,7 +1551,14 @@ function buildTranscript(
         // A deliberate heads-up from the runner (see NoticeNode) — the turn itself was fine.
         if (p.notice) {
           lastStderr = undefined;
-          into(parent).push({ kind: 'notice', seq: ev.seq, message: String(p.notice) });
+          const notice: NoticeNode = {
+            kind: 'notice',
+            seq: ev.seq,
+            message: String(p.notice),
+            ...(isMainCheckoutChanged(p) || isMainCheckoutResult(p) ? { mainCheckout: p } : {}),
+          };
+          if (p.noticeKind === 'pool-member-switched') openSwitches.push(notice);
+          into(parent).push(notice);
           break;
         }
         // Runner stderr (e.g. "No conversation found with session ID: …") — surface as
@@ -1777,17 +1845,30 @@ export const Transcript = memo(function Transcript({
     for (let i = events.length - 1; i >= 0; i--) if (events[i].type === 'turn_end') return events[i].seq;
     return 0;
   }, [events]);
+  // The main-checkout cards read the result lines written after them (MainCheckoutCard's handled state).
+  const mainCheckoutResults = useMemo(() => {
+    const results: Array<{ seq: number; result: MainCheckoutResultNotice['result'] }> = [];
+    const writtenAt = new Map<number, string>();
+    for (const ev of events) {
+      if (ev.type !== 'system') continue;
+      if (isMainCheckoutResult(ev.payload)) results.push({ seq: ev.seq, result: ev.payload.result });
+      else if (isMainCheckoutChanged(ev.payload) && ev.ts) writtenAt.set(ev.seq, ev.ts);
+    }
+    return { results, writtenAt };
+  }, [events]);
   const body = (
-    <TaskLookupCtx.Provider value={taskLookup}>
-      <ImagePreviewProvider>
-        {head.map((insert) => (
-          <Fragment key={insert.key}>{insert.element}</Fragment>
-        ))}
-        <NodeList nodes={before} live={live} placed={placed} />
-        <StreamingDrafts lastTurnEnd={lastTurnEnd} />
-        {after.length > 0 && <NodeList nodes={after} live={live} placed={placed} />}
-      </ImagePreviewProvider>
-    </TaskLookupCtx.Provider>
+    <MainCheckoutResultsCtx.Provider value={mainCheckoutResults}>
+      <TaskLookupCtx.Provider value={taskLookup}>
+        <ImagePreviewProvider>
+          {head.map((insert) => (
+            <Fragment key={insert.key}>{insert.element}</Fragment>
+          ))}
+          <NodeList nodes={before} live={live} placed={placed} />
+          <StreamingDrafts lastTurnEnd={lastTurnEnd} />
+          {after.length > 0 && <NodeList nodes={after} live={live} placed={placed} />}
+        </ImagePreviewProvider>
+      </TaskLookupCtx.Provider>
+    </MainCheckoutResultsCtx.Provider>
   );
   return artifactResolve ? (
     <ArtifactResolverContext.Provider value={artifactResolve}>{body}</ArtifactResolverContext.Provider>
@@ -1888,8 +1969,7 @@ const LOUD_DELIVERIES: ReadonlySet<string> = new Set(['TASK_DISPATCH_REFUSED', '
 
 /**
  * What a turn's opening node says happened, when Orbit opened the turn and it is one the reader
- * can be spared: a fact told to a coordinator, a watch or a background job coming back, another
- * session's reply. Null for everything else, and for those that went wrong — a refused start, a
+ * can be spared: a fact told to a coordinator, a watch or a background job coming back, another session's reply. Null for everything else, and for those that went wrong — a refused start, a
  * blocker, a stopped run, a failed target or job, a delivery nobody confirmed — which stay drawn.
  */
 function orbitTurnOf(
@@ -2014,8 +2094,10 @@ function foldOrbitExchanges(
       item.kind === 'node' && item.node.kind === 'assistant' && item.node.text.trim() ? [item.node.text] : [],
     );
     // An exchange is the turn and its answer: one the agent has not answered yet is already the
-    // single line its card draws, and folding it would only take that line away.
-    if (orbit && replies.length > 0 && !turnNeedsReader(turn)) {
+    // single line its card draws, and folding it would only take that line away. An answer long
+    // enough to say something stays drawn too (`foldsAtLength`).
+    const answered = replies.reduce((n, text) => n + text.length, 0);
+    if (orbit && replies.length > 0 && foldsAtLength(orbit.category, answered) && !turnNeedsReader(turn)) {
       const seqs = turn.flatMap((item) => (item.kind === 'steps' ? item.nodes : [item.node]).map((node) => node.seq));
       run.push({
         summary: {
@@ -2145,7 +2227,10 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // the reader's, so not the reader's bubble. Who sent it is what the control plane recorded
       // beside the echo (lib/sessionMessage), so it is asked first — before anything is read out of
       // the words themselves, which are the sending agent's to choose. No payload, the old reading.
+      // The block delivery appended only tells the agent what the card shows, so it is not folded
+      // under it a second time; what else rode along is (lib/sessionMessage).
       if (node.sessionMessage) {
+        const { rest, narrower } = splitSessionMessageNote(node.note);
         return (
           <SessionMessageCard
             card={node.sessionMessage}
@@ -2153,7 +2238,8 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             seq={seq}
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
-            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
+            narrower={narrower}
+            attached={rest && <ControlPlaneNote kind={describeNote(rest)} text={rest} />}
             queued={queued}
           />
         );
@@ -2204,6 +2290,17 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       }
       // The turn Orbit starts when an owner request ends: the card above says how it ended, and the
       // payload is written for the agent.
+      // The turn Orbit sends a session whose turn the owner's Update Now cut (D4): Orbit's words, written
+      // for the agent, so one Orbit line rather than a bubble in the reader's name (owner rule 10-27).
+      if (isRunnerUpdateResume(node.text)) {
+        // What delivery appended — the background jobs that ended while the runner was away — rides under it.
+        return (
+          <>
+            <div className="chat-note runner-update-resume" data-seq={seq} title={node.text}>{RUNNER_UPDATE_RESUME_NOTE}</div>
+            {node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
+          </>
+        );
+      }
       const ownerRequestEnding = resolutionTurnLabel(node.text);
       if (ownerRequestEnding) {
         return <div className="owner-request-turn-divider"><span>{ownerRequestEnding}</span></div>;
@@ -2429,7 +2526,9 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
     case 'interrupt':
       return (
         <div className="chat-note" data-seq={node.seq}>
-          {node.runnerRestart ? '⊘ interrupted — the runner restarted' : '⊘ interrupted'}
+          {node.runnerUpdate !== undefined
+            ? runnerUpdateInterruptedLine(node.runnerUpdate)
+            : node.runnerRestart ? '⊘ interrupted — the runner restarted' : '⊘ interrupted'}
         </div>
       );
     case 'diagnostic': {
@@ -2488,13 +2587,19 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       );
     }
     case 'notice':
+      if (node.mainCheckout && isMainCheckoutChanged(node.mainCheckout)) {
+        return <MainCheckoutCard notice={node.mainCheckout} seq={node.seq} />;
+      }
+      if (node.mainCheckout && isMainCheckoutResult(node.mainCheckout)) {
+        return <MainCheckoutResultRow notice={node.mainCheckout} seq={node.seq} />;
+      }
       return (
-        <div className="chat-notice" data-seq={node.seq}>
+        <div className={node.settled ? 'chat-notice chat-notice-settled' : 'chat-notice'} data-seq={node.seq}>
           ⚠ {node.message}
         </div>
       );
     case 'authError':
-      return <AuthErrorCard message={node.message} seq={node.seq} />;
+      return <AuthErrorCard message={node.message} seq={node.seq} settled={node.settled} />;
     case 'autoRetry':
       return (
         <AutoRetryCard
@@ -2594,13 +2699,13 @@ const RELAY_LOGIN = new Set(['claude', 'codex', 'kimi', 'antigravity']);
  * needs nothing on that box, and the cases it can't cover (a CLI too old to relay, no `script`)
  * report themselves with the command to run — as does the runtime's own message above.
  */
-function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
+function AuthErrorCard({ message, seq, settled }: { message: string; seq?: number; settled?: 'resolved' | 'superseded' }) {
   const help = useContext(AuthErrorCtx);
   // A press that would be the server's own re-send is a promise only the server makes, and the
   // window's last bubble can be somebody else's — so this card asks for the answer rather than
   // quoting the bubble (the same rule, and the same hook, as the quota card's). Above the branches
   // below, which return early.
-  const retryIsTheServers = !!help?.onNeedRetryText && help?.retryWordsAreTheReaders === false;
+  const retryIsTheServers = !settled && !!help?.onNeedRetryText && help?.retryWordsAreTheReaders === false;
   const onNeedRetryText = help?.onNeedRetryText;
   useEffect(() => {
     if (retryIsTheServers) onNeedRetryText?.();
@@ -2608,6 +2713,24 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
   const provider = help?.provider;
   const local = !!provider && LOCAL_LOGIN.has(provider);
   const relayable = !!provider && RELAY_LOGIN.has(provider);
+  const title = !help
+    ? 'Authentication failed'
+    : local
+        ? `Sign-in expired${help.accountLabel ? ` for ${help.accountLabel}` : ''}${help.runnerName ? ` on “${help.runnerName}”` : ''}`
+        : 'Provider authentication failed';
+  // The session moved past it: one muted line, the runtime's words a click away, and no actions —
+  // signing in or re-sending from here would act on a failure that is over.
+  if (settled) {
+    return (
+      <details className="chat-authfix-settled" data-seq={seq} data-settled={settled}>
+        <summary>
+          {settled === 'resolved' ? <span className="chat-authfix-settled-ok">✓</span> : <span>⚠</span>}
+          <span>{settled === 'resolved' ? `${title} — resolved` : title}</span>
+        </summary>
+        <div className="chat-authfix-msg">{message}</div>
+      </details>
+    );
+  }
   if (help && (provider === 'antigravity' || (help.runtime === 'antigravity' && antigravityRepair(message) === 'needsKey'))) {
     return <AntigravityRepairCard repair="needsKey" help={help} seq={seq} />;
   }
@@ -2615,13 +2738,7 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
     <div className="chat-authfix" data-seq={seq}>
       <div className="chat-authfix-head">
         <WarningFilled className="chat-authfix-icon" />
-        <div className="chat-authfix-title">
-          {!help
-            ? 'Authentication failed'
-            : local
-                ? `Sign-in expired${help.accountLabel ? ` for ${help.accountLabel}` : ''}${help.runnerName ? ` on “${help.runnerName}”` : ''}`
-                : 'Provider authentication failed'}
-        </div>
+        <div className="chat-authfix-title">{title}</div>
       </div>
       <div className="chat-authfix-msg">{message}</div>
       {local ? (
@@ -3096,6 +3213,8 @@ function SteerState({ node, typed }: { node: TextNode; typed: string }) {
 function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   const exp = useContext(ExportCtx);
   const putBack = useContext(UndeliveredCtx);
+  const foot = useContext(QueuedFootCtx);
+  const held = foot && !queued && foot.seq === node.seq ? foot.tag : null;
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
   // What the runner echoed back is what it was *given*, which includes anything delivery appended
@@ -3144,6 +3263,7 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   return (
     <div className="chat-user-wrap">
       {node.externalSender && <div className="chat-user-from">{externalSenderLabel(node.externalSender)}</div>}
+      {node.sentByReader && <div className="chat-user-from">You</div>}
       <div
         className={queued ? 'chat-msg chat-user chat-queued' : 'chat-msg chat-user'}
         data-seq={queued ? undefined : node.seq}
@@ -3163,7 +3283,7 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
             : `Show ${(typed.length - USER_BUBBLE_TRUNCATE).toLocaleString()} more characters`}
         </button>
       )}
-      {(typed || status || note) && (
+      {(typed || status || note || held) && (
         <div className="chat-user-meta">
           {typed && (
             <button
@@ -3177,8 +3297,9 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
             </button>
           )}
           {typed && node.ts && <span className="chat-time">{relTime(node.ts)}</span>}
-          {typed && node.ts && (status || note) && <span className="chat-meta-sep">·</span>}
+          {typed && node.ts && (status || note || held) && <span className="chat-meta-sep">·</span>}
           {status}
+          {held}
           {/* Named, not hidden: without it the agent answers about a quota outage nobody appears
               to have raised. */}
           {note?.line}

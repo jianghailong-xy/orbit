@@ -29,8 +29,8 @@ import { ExportCtx, MD, REVEAL_EVENT, relTime } from './Transcript';
  * The words are the sending agent's and are drawn as they were sent; what the card adds is who sent
  * them: the session's title, which opens it, the agent it runs as, and the task it runs, from the
  * payload the control plane recorded beside the echo (`sessionMessage`, lib/sessionMessage). The
- * block delivery appended to tell the recipient the same thing rides inside, folded, with anything
- * else delivery appended.
+ * block delivery appended to tell the recipient the same thing is not shown again; anything else
+ * delivery appended rides inside, folded.
  *
  * Every word is shared with the native card (OrbitKit `SessionMessageCard`), and
  * `SessionMessageCopyParityTests.swift` reads lib/sessionMessage.ts to hold the two to it.
@@ -41,6 +41,7 @@ export function SessionMessageCard({
   seq,
   ts,
   undelivered,
+  narrower,
   attached,
   queued,
 }: {
@@ -50,6 +51,8 @@ export function SessionMessageCard({
   seq?: number;
   ts?: string;
   undelivered?: boolean;
+  /** The line for a sender that runs narrower than this session (`splitSessionMessageNote`). */
+  narrower?: string | null;
   /** What delivery appended to the same turn, as its own folded entry. */
   attached?: ReactNode;
   /** The queue's own line, while the message still waits to be delivered (WorkspaceView's queued
@@ -81,6 +84,11 @@ export function SessionMessageCard({
   const taskPublic = card.fromTaskId ? routeId(card.fromTaskId) : null;
   const taskHref = taskPublic ? `/tasks/${encodeURIComponent(taskPublic)}` : null;
   const sticky = sessionMessageSticky(card, text);
+  const sentAt = ts ? relTime(ts) : null;
+  // Drawn the way a chat draws somebody else's message (docs/mocks/session-message-bubble, approved
+  // 2026-11-12): who sent it on one grey line, their words in a bubble on the incoming side that hugs
+  // them up to 720px, and everything else on one grey foot row. That it is not the reader's own
+  // message is the side it sits on and the "From" line; the sentence saying so is that line's tooltip.
   return (
     <div className="smc-wrap">
       {/* The sticky bar at the top of the transcript names this turn off these two attributes, the
@@ -92,9 +100,10 @@ export function SessionMessageCard({
         data-sticky-label={sticky.label}
         data-sticky-text={sticky.text}
       >
-        <div className="smc-head">
-          <span className="smc-mark"><MessageOutlined /></span>
-          <span>{SESSION_MESSAGE_FROM}</span>
+        <div className="smc-head" title={SESSION_MESSAGE_NOT_YOU}>
+          <span className="smc-mark" aria-hidden><MessageOutlined /></span>
+          <span className="smc-not-you">{SESSION_MESSAGE_NOT_YOU}</span>
+          <span aria-hidden>{SESSION_MESSAGE_FROM}</span>
           {sessionHref ? (
             <AppLink className="smc-from" to={sessionHref}>{title}</AppLink>
           ) : (
@@ -102,31 +111,28 @@ export function SessionMessageCard({
           )}
           {card.fromAgentName && <span className="smc-agent">{card.fromAgentName}</span>}
         </div>
-        {text && (
-          <div ref={bodyRef} className={`smc-body${clamped ? ' is-clamped' : ''}`}>
-            <MD breaks>{text}</MD>
-          </div>
-        )}
-        {tall && !exporting && (
-          <button type="button" className="smc-more" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
-            {expanded ? SESSION_MESSAGE_SHOW_LESS : SESSION_MESSAGE_SHOW_MORE}
-          </button>
-        )}
-        <div className="smc-meta">
-          {SESSION_MESSAGE_NOT_YOU}
-          {ts ? ` · ${relTime(ts)}` : ''}
-          {taskHref && (
-            <>
-              {' · '}
-              <AppLink to={taskHref}>{SESSION_MESSAGE_OPEN_TASK}</AppLink>
-            </>
+        <div className="smc-bubble">
+          {text && (
+            <div ref={bodyRef} className={`smc-body${clamped ? ' is-clamped' : ''}`}>
+              <MD breaks>{text}</MD>
+            </div>
+          )}
+          {tall && !exporting && (
+            <button type="button" className="smc-more" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+              {expanded ? SESSION_MESSAGE_SHOW_LESS : SESSION_MESSAGE_SHOW_MORE}
+            </button>
           )}
         </div>
-        {card.requestId && (exporting
-          ? <div className="smc-request"><span className="smc-request-asks">{SESSION_REQUEST_ASKS}</span></div>
-          : <SessionRequestStatus requestId={card.requestId} />)}
+        <div className="smc-meta">
+          {sentAt && <span>{sentAt}</span>}
+          {taskHref && <AppLink to={taskHref}>{SESSION_MESSAGE_OPEN_TASK}</AppLink>}
+          {card.requestId && (exporting
+            ? <span className="smc-request"><span className="smc-request-asks">{SESSION_REQUEST_ASKS}</span></span>
+            : <SessionRequestStatus requestId={card.requestId} />)}
+          {attached}
+        </div>
+        {narrower && <div className="smc-narrower">{narrower}</div>}
         {undelivered && <div className="smc-undelivered">{SESSION_MESSAGE_UNDELIVERED}</div>}
-        {attached}
         {queued && <div className="smc-queued">{queued}</div>}
       </div>
     </div>
@@ -134,8 +140,8 @@ export function SessionMessageCard({
 }
 
 /** Lines a long message shows while folded, and how many lines make it long enough to fold. */
-export const SESSION_MESSAGE_CLAMP_LINES = 8;
-export const SESSION_MESSAGE_CLAMP_FROM = 12;
+export const SESSION_MESSAGE_CLAMP_LINES = 4;
+export const SESSION_MESSAGE_CLAMP_FROM = 6;
 export const SESSION_MESSAGE_SHOW_MORE = 'Show more';
 export const SESSION_MESSAGE_SHOW_LESS = 'Show less';
 
@@ -172,16 +178,16 @@ export function SessionRequestStatus({ requestId }: { requestId: string }) {
   const request = useQuery(sessionRequestQuery(requestId));
   const view = request.data;
   return (
-    <div className="smc-request" data-state={view?.state}>
+    <span className="smc-request" data-state={view?.state}>
       <span className="smc-request-asks">{SESSION_REQUEST_ASKS}</span>
       {view?.replyBy && view.state === 'OPEN' && (
-        <span className="smc-request-due">{` · ${SESSION_REQUEST_DUE} ${formatReplyBy(view.replyBy)}`}</span>
+        <span className="smc-request-due">{`${SESSION_REQUEST_DUE} ${formatReplyBy(view.replyBy)}`}</span>
       )}
       {view && (
         <span className={`smc-request-state smc-request-state-${view.state.toLowerCase()}`}>
           {SESSION_REQUEST_STATE_LABEL[view.state]}
         </span>
       )}
-    </div>
+    </span>
   );
 }

@@ -7,13 +7,15 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiSpaceRow } from '../lib/wiki';
+import { wikiTrashHolds } from '../lib/wikiReviewMode';
 import { TasksSidePanel } from './TasksSidePanel';
+import { WikiTrashLink } from './WikiTrashDialog';
 
 /**
  * A wiki's row's own actions in the sidebar (docs/mocks/wiki-trash, contract `space.trash`): a ⋯ on the row, and a
  * right-click anywhere on it, open Wiki settings and Move to Trash…, which asks first, naming the wiki and how much
- * Trash keeps. The Wiki group's last row, while anything is in Trash, opens Trash, where a wiki is restored or deleted
- * permanently.
+ * Trash keeps. Trash itself has no row in the sidebar (docs/mocks/wiki-trash/02-trash-entry): it opens from Wiki
+ * settings' line, drawn here beside the sidebar, where a wiki is restored or deleted permanently.
  * The row is a link, so what the claim has to hold is that a press on its menu opens no wiki.
  */
 
@@ -127,6 +129,7 @@ async function visit(path: string): Promise<void> {
       <MemoryRouter initialEntries={[path]}>
         <QueryClientProvider client={client}>
           <TasksSidePanel onNavigate={() => { closed += 1; }} />
+          <WikiTrashLink sentence={wikiTrashHolds} />
           <RouterProbe />
         </QueryClientProvider>
       </MemoryRouter>,
@@ -144,7 +147,7 @@ const menuItem = (label: string) => menuItems().find((item) => text(item) === la
 const dialog = () => document.body.querySelector<HTMLElement>('[role="alertdialog"]');
 const titleOf = (el: Element) => text(document.getElementById(el.getAttribute('aria-labelledby') ?? ''));
 const bodyOf = (el: Element) => [...document.getElementById(el.getAttribute('aria-describedby') ?? '')!.querySelectorAll('.wk-delete-lines > div')].map(text);
-const trashRow = () => container!.querySelector<HTMLElement>('.tp-group-wiki .tp-wiki-trash');
+const trashLink = () => container!.querySelector<HTMLElement>('.wk-trash-open');
 const trashDialog = () => document.body.querySelector<HTMLElement>('.wk-trash-dialog');
 const trashRows = () => [...trashDialog()!.querySelectorAll<HTMLElement>('.wk-trash-row')];
 const trashRowNamed = (name: string) => trashRows().find((one) => text(one.querySelector('.wk-trash-name')) === name)!;
@@ -299,16 +302,17 @@ describe('Move to Trash…', () => {
     expect(dialog()).toBeNull();
     expect(deletes).toEqual([]);
     expect(rowNames()).toEqual(['orbit', 'orbit · vLLM preview']);
-    expect(trashRow()).toBeNull();
+    expect(trashLink()).toBeNull();
   });
 
-  it('moves the wiki to Trash: its row leaves, Trash’s row comes, and another page stays where it is', async () => {
+  it('moves the wiki to Trash: its row leaves, no Trash row comes, and another page stays where it is', async () => {
     await visit('/tasks');
     await click(button('Move to Trash', await askMove('orbit · vLLM preview')));
     expect(deletes).toEqual(['/wiki/spaces/id-orbit-vllm-preview']);
     expect(dialog()).toBeNull();
-    expect(rowNames()).toEqual(['orbit', 'Trash']);
-    expect(text(trashRow()!.querySelector('.tp-count'))).toBe('1');
+    expect(rowNames()).toEqual(['orbit']);
+    expect(container!.querySelector('.tp-group-wiki')!.textContent).not.toContain('Trash');
+    expect(text(trashLink()!.parentElement)).toBe('Trash holds 1 wiki. Open Trash');
     expect(location).toBe('/tasks');
     expect(closed).toBe(0);
     expect(toast.success).toHaveBeenCalledWith('Moved wiki “orbit · vLLM preview” to Trash');
@@ -328,7 +332,7 @@ describe('Move to Trash…', () => {
     expect(closed).toBe(1);
   });
 
-  it('moving the last wiki takes the group away, Trash’s row with it, and leaves the entry', async () => {
+  it('moving the last wiki takes the group away and leaves the entry', async () => {
     wikis = [PREVIEW];
     await visit('/wiki/orbit-vllm-preview');
     await click(button('Move to Trash', await askMove('orbit · vLLM preview')));
@@ -353,10 +357,11 @@ describe('Trash', () => {
     wikis = [space('orbit', { docs: { written: 30, total: 35 } })];
   });
 
-  it('is the Wiki group’s last row while anything is in it, and opens on a press without leaving the page', async () => {
+  it('has no row in the Wiki group, and opens from Wiki settings’ line without leaving the page', async () => {
     await visit('/tasks');
-    expect(rowNames()).toEqual(['orbit', 'Trash']);
-    await click(trashRow()!);
+    expect(rowNames()).toEqual(['orbit']);
+    expect(container!.querySelector('.tp-group-wiki')!.textContent).not.toContain('Trash');
+    await click(trashLink()!);
     expect(location).toBe('/tasks');
     expect(text(trashDialog()!.querySelector('.wk-trash-lead'))).toBe(
       'A wiki stays here for 365 days after it was moved, then it is deleted for good.',
@@ -368,7 +373,7 @@ describe('Trash', () => {
 
   it('restores a wiki: it leaves Trash and comes back to the group', async () => {
     await visit('/tasks');
-    await click(trashRow()!);
+    await click(trashLink()!);
     await click(button('Restore', trashRowNamed('orbit · vLLM preview')));
     expect(restores).toEqual(['/wiki/spaces/id-orbit-vllm-preview/restore']);
     expect(toast.success).toHaveBeenCalledWith('Restored wiki “orbit · vLLM preview”');
@@ -379,15 +384,15 @@ describe('Trash', () => {
   it('says under the row why a restore was refused, in the server’s words, and keeps the wiki in Trash', async () => {
     restoreTaken = true;
     await visit('/tasks');
-    await click(trashRow()!);
+    await click(trashLink()!);
     await click(button('Restore', trashRowNamed('orbit · vLLM preview')));
     expect(text(trashRowNamed('orbit · vLLM preview').querySelector('[role="alert"]'))).toBe(TAKEN);
-    expect(rowNames()).toEqual(['orbit', 'Trash']);
+    expect(rowNames()).toEqual(['orbit']);
   });
 
   it('asks before deleting a wiki permanently, and Cancel deletes nothing', async () => {
     await visit('/tasks');
-    await click(trashRow()!);
+    await click(trashLink()!);
     await click(button('Delete permanently…', trashRowNamed('orbit · vLLM preview')));
     const confirm = dialog()!;
     expect(titleOf(confirm)).toBe('Delete permanently?');
@@ -399,15 +404,16 @@ describe('Trash', () => {
     expect(trashRows()).toHaveLength(1);
   });
 
-  it('deletes a wiki permanently: it leaves Trash, and Trash’s row goes once Trash is empty', async () => {
+  it('deletes a wiki permanently: it leaves Trash, and the line goes once Trash is empty', async () => {
     await visit('/tasks');
-    await click(trashRow()!);
+    await click(trashLink()!);
     await click(button('Delete permanently…', trashRowNamed('orbit · vLLM preview')));
     await click(button('Delete permanently', dialog()!));
     expect(deletes).toEqual(['/wiki/spaces/id-orbit-vllm-preview/purge']);
     expect(text(trashDialog()!.querySelector('.wk-trash-empty'))).toBe('Trash is empty.');
     await click(button('Close', trashDialog()!));
     expect(trashDialog()).toBeNull();
+    expect(trashLink()).toBeNull();
     expect(rowNames()).toEqual(['orbit']);
   });
 });

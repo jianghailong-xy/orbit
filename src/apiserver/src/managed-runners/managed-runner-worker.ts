@@ -11,6 +11,10 @@ export const MANAGED_RUNNER_PASS_BATCH = 50;
  * — the durable work queue, so the first pass after a restart picks up every provisioning that was
  * in flight — and reconciles each under its own lease. A request that changed a mapping kicks a
  * pass at once; otherwise passes run every poll interval.
+ *
+ * With several Docker channel hosts there is one manager per host, each driving only its own
+ * location's mappings, and a pass visits each in turn: a host whose channel cannot be reached (or
+ * whose pool cannot be read) fails its own share of the pass, and the others still run.
  */
 export class ManagedRunnerWorker {
   private running = false;
@@ -20,11 +24,15 @@ export class ManagedRunnerWorker {
   /** A kick that arrived during a pass: run the next one at once. */
   private again = false;
 
+  private readonly managers: readonly ManagedRunnerManager[];
+
   constructor(
-    private readonly manager: ManagedRunnerManager,
+    manager: ManagedRunnerManager | readonly ManagedRunnerManager[],
     private readonly intervalMs: number,
     private readonly log: Pick<Logger, 'error'> = new Logger('ManagedRunnerWorker'),
-  ) {}
+  ) {
+    this.managers = Array.isArray(manager) ? manager : [manager as ManagedRunnerManager];
+  }
 
   start(): void {
     if (this.running) return;
@@ -53,14 +61,27 @@ export class ManagedRunnerWorker {
 
   /** One pass: wake the sleeping mappings that work is waiting for, then every mapping that is due. */
   async drain(): Promise<void> {
+    // The sweep reads every sleeping runner, whatever its host: once a pass is enough.
     try {
-      await this.manager.sweepDemand();
+      await this.managers[0].sweepDemand();
     } catch (error) {
       this.log.error(`managed runner demand sweep failed: ${(error as Error).message}`);
     }
-    for (const id of await this.manager.dueMappings(MANAGED_RUNNER_PASS_BATCH)) {
+    if (this.managers.length === 1) return this.drainOne(this.managers[0]);
+    for (const manager of this.managers) {
       try {
-        await this.manager.reconcile(id);
+        await this.drainOne(manager);
+      } catch (error) {
+        const { clusterKey, namespace } = manager.backend.location;
+        this.log.error(`managed runner pass failed on ${clusterKey}/${namespace}: ${(error as Error).message}`);
+      }
+    }
+  }
+
+  private async drainOne(manager: ManagedRunnerManager): Promise<void> {
+    for (const id of await manager.dueMappings(MANAGED_RUNNER_PASS_BATCH)) {
+      try {
+        await manager.reconcile(id);
       } catch (error) {
         this.log.error(`managed runner ${id}: pass failed: ${(error as Error).message}`);
       }

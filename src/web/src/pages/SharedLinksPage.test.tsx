@@ -207,8 +207,8 @@ describe('Settings → Shared links', { timeout: 60_000 }, () => {
     serve(LINKS);
     await open();
 
-    expect(page().querySelector('.page-title')?.textContent).toBe('Shared links');
-    expect(page().querySelector('.following-sub')?.textContent).toBe(
+    expect(page().querySelector('.settings-header-title')?.textContent).toBe('Shared links');
+    expect(page().querySelector('.settings-header-description')?.textContent).toBe(
       'Everything you’ve made viewable by link. Anyone who has one of these links can open what it includes — no sign-in.',
     );
     expect(tabs()).toEqual([

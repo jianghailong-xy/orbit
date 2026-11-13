@@ -3,7 +3,8 @@
 [channel.py](channel.py) is the only process of a Docker-backend deployment that holds the Docker
 socket. The apiserver's Docker backend
 ([docker-backend.ts](../../../src/apiserver/src/managed-runners/docker-backend.ts)) reaches Docker only
-through it: JSON over HTTP on a local unix socket (or a loopback port), with a bearer token. Neither
+through it: JSON over HTTP on a local unix socket (or a loopback port, or a private address for named
+peers: below), with a bearer token. Neither
 the apiserver process nor any managed runner container is given `docker.sock`.
 
 Root Compose runs it as the `docker-channel` service, built from [Dockerfile](Dockerfile) (Python's
@@ -187,6 +188,22 @@ and the apiserver reachable from it; `limits` the ceilings a request may ask for
 `maxContainers`; `tokenFile` a file only its owner can read; `stateDir` where credentials, evictions
 and receipts live. Optional: `diskProbePath` (above), `allowVolumeRemoval` (`false` unless set),
 `volumeLimitOverrides`, `extraLabels`, `socketMode`, `logMaxSize`, `logMaxFiles`.
+
+`listen` is one of:
+
+- `{"unixSocket": "<absolute path>"}` (the example, and Compose's);
+- `{"tcp": {"host": "127.0.0.1" or "::1", "port": <port>}}`, a loopback port;
+- `{"tcp": {"host": "<one private IPv4 address of this host>", "port": <port>}, "allowPeers": ["<IPv4 address>", ...]}`,
+  for an apiserver on another host over a private link (`wg1` in
+  [docs/managed-runner-remote-host-design.md](../../../docs/managed-runner-remote-host-design.md), D1):
+  for example `{"tcp": {"host": "10.66.0.3", "port": 7300}, "allowPeers": ["10.66.0.1"]}`. The host must be
+  in 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 or 100.64.0.0/10; `0.0.0.0`, `::` and public addresses are
+  refused, and so is a host other than loopback without a non-empty `allowPeers`. `allowPeers` holds
+  private IPv4 addresses (or `127.0.0.1`), written plainly, no ranges. A connection from any other
+  source address is closed before a byte of it is read, and logged as one line with that address. A
+  loopback listener may name `allowPeers` too; without it, it is unchanged.
+
+Every mode still needs the bearer token on every request; `allowPeers` only narrows who may ask.
 
 ```bash
 python3 -I deploy/managed-runner/docker-channel/channel.py check-config --config /etc/orbit-docker-channel/channel.json

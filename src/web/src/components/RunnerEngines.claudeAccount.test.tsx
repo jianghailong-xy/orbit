@@ -6,8 +6,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsage, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
 import { formatResetTime } from '../lib/providerPools';
-import { machineChipsOf, RunnerEngines, summaryOf } from './RunnerEngines';
-import { clickRunnerMenuItem, dialogName, openRunnerCards, openRunnerMenu } from './RunnerEngines.test-helpers';
+import { EngineRows } from './RunnerEngines.test-rows';
+import { clickRunnerMenuItem, dialogName, openAccountGroups, openRunnerMenu } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -92,7 +92,7 @@ afterEach(() => {
 });
 
 function mount(runners: Runner[]) {
-  openRunnerCards(runners);
+  openAccountGroups(runners);
   apiMock.mockImplementation(async (path: string, options?: { method?: string }) => {
     if (path === '/runners') return runners;
     if (path.endsWith('/login') && (options?.method ?? 'GET') === 'GET') {
@@ -109,7 +109,7 @@ function mount(runners: Runner[]) {
     root!.render(
       <MemoryRouter initialEntries={['/providers']}>
         <QueryClientProvider client={qc}>
-          <RunnerEngines />
+          <EngineRows />
         </QueryClientProvider>
       </MemoryRouter>,
     ),
@@ -252,16 +252,8 @@ describe('a runner with two Claude accounts', () => {
     );
   });
 
-  it('counts a signed-out account against the card, and shows nothing on an engine without', () => {
+  it('shows no group on an engine that keeps one login, beside one with a signed-out account', () => {
     const box = runner({ accounts: [DEFAULT, WORK] });
-    // Claude Code's chip says 1 of its 2 accounts is in, and the folded line has nothing to add.
-    expect(machineChipsOf(box).find((chip) => chip.engine === 'claude')).toEqual({
-      engine: 'claude',
-      logins: 1,
-      accounts: 2,
-      signedOut: false,
-    });
-    expect(summaryOf(box)).toBeNull();
     const page = mount([box]);
     // Kimi keeps one login for the machine: no group, no rows, and no Add account anywhere near it.
     const kimiRow = rows(page, '.re-row').find(

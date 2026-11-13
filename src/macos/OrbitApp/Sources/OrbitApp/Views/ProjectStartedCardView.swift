@@ -95,6 +95,7 @@ struct ProjectStartedCardView: View {
                 tone.opacity(0.30),
                 style: StrokeStyle(lineWidth: 1, dash: queued ? [4, 3] : []))
         )
+        .orbitCardWidth()
     }
 
     /// "Project started · Criteria confirmed" — what this turn is, before what it is about.

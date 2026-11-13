@@ -171,7 +171,8 @@ test('the coordinator’s text speaks of the task’s branch in every class, and
     }
   }
   // CONTROL: the census saw real names, or it proved nothing.
-  assert.deepEqual([...found].sort(), ['ask_owner', 'integration_retry', 'open_item_hand_over', 'open_item_resolve', 'task_create']);
+  assert.deepEqual([...found].sort(),
+    ['ask_owner', 'integration_retry', 'merge_receipt', 'open_item_hand_over', 'open_item_resolve', 'task_create']);
 });
 
 test('a conflict on a task’s branch is answered by a new task in ordinary commits, not by the project branch’s recipe', () => {
@@ -184,7 +185,8 @@ test('a conflict on a task’s branch is answered by a new task in ordinary comm
       + 'Do not resolve it in a merge commit: a task’s branch lands by a rebase, which drops merge commits and meets the same conflict again. '
       + 'When that task is DONE its branch becomes a candidate of its own, with its own check and its own card for the account owner. '
       + 'Its landing leaves this candidate and this item as they are and does not bring this item back to you: '
-      + 'once this task’s work is on the project’s main branch, close this item with open_item_resolve.\n',
+      + 'once this task’s work is on the project’s main branch, close this item with open_item_resolve. '
+      + 'Closing the last item about this candidate ends the candidate too, and its card leaves the account owner’s page (M-T14).\n',
   ), told);
   // Everything that recipe said, which is false here.
   assert.doesNotMatch(told, /sync task/);
@@ -193,7 +195,23 @@ test('a conflict on a task’s branch is answered by a new task in ordinary comm
   assert.doesNotMatch(told, /closes this candidate and this item with it/);
   assert.doesNotMatch(told, /superseded by a new landing/);
   // And the doors this cell does not hold, which a reader of a task's item would reach for first.
-  assert.doesNotMatch(told, /task_reopen|task_get|task_start|merge_receipt/);
+  assert.doesNotMatch(told, /task_reopen|task_get|task_start/);
+});
+
+test('M-T13 for a task branch: work already on main as other commits is answered by the receipt, in every class', () => {
+  for (const failureClass of CLASSES) {
+    const told = openItemMessage(failure(failureClass, TASK_TITLE, TASK_BRANCH));
+    assert.ok(told.includes(
+      'If this task’s work is already on the project’s main branch as other commits — cherry-picked, rebased or squashed there by hand — '
+        + 'there is nothing to resolve: record the commit there that carries it with merge_receipt (result: ALREADY_MERGED, '
+        + 'sessionId: the task’s work session, sourceBranch: this task’s branch, sourceSha: that commit, targetBranch: the project’s main branch). '
+        + 'The receipt ends this candidate, its card and this item, and the task reads as landed.',
+    ), `${failureClass}: ${told}`);
+  }
+  // A project branch's candidate is not ended by one task's receipt, so its text never offers one.
+  for (const failureClass of CLASSES) {
+    assert.doesNotMatch(openItemMessage(failure(failureClass, PROJECT_TITLE)), /merge_receipt/, failureClass);
+  }
 });
 
 test('a red on a task’s branch: a fix is its own candidate, and only the account owner confirms the merge', () => {
@@ -204,7 +222,8 @@ test('a red on a task’s branch: a fix is its own candidate, and only the accou
         + `this item with fixesOpenItemId: ${ITEM_SHOWN}. A fix does not change this candidate: it runs on a branch of its own, so it has to `
         + 'carry this task’s work with it. When that task is DONE its branch becomes a candidate of its own, with its own check and its own '
         + 'card for the account owner. Its landing leaves this candidate and this item as they are and does not bring this item back to you: '
-        + 'once this task’s work is on the project’s main branch, close this item with open_item_resolve.\n',
+        + 'once this task’s work is on the project’s main branch, close this item with open_item_resolve. '
+        + 'Closing the last item about this candidate ends the candidate too, and its card leaves the account owner’s page (M-T14).\n',
     ), told);
     assert.ok(told.includes(`rerun this candidate’s check once with integration_retry (projectId: ${PROJECT_SHOWN}, promotionId: ${CANDIDATE_SHOWN}, `
       + 'reason: why this time will be different). Once the check passes, the merge is still confirmed by the account owner on the card, '

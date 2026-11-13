@@ -68,7 +68,7 @@ import kotlinx.serialization.json.JsonObject
  */
 @Composable
 fun SessionDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, api: DirectoryApi, data: DirectoryData,
-    open: (OrbitRoute) -> Unit, listedElsewhere: (String) -> Boolean = { false }, leave: () -> Unit = {}) {
+    open: (OrbitRoute) -> Unit, listedElsewhere: (String) -> Boolean = { false }, swap: (OrbitRoute) -> Unit = open, leave: () -> Unit = {}) {
     val id = route.id ?: return
     val listed = remember(data.sessions, id) { data.sessions.values.any { rows -> rows.any { ObjectId.same(it.id, id) } } || listedElsewhere(id) }
     var kind by remember(id) { mutableStateOf<SessionKind?>(if (listed) SessionKind.Conversation else null) }
@@ -87,7 +87,7 @@ fun SessionDestination(app: OrbitApplication, handle: SessionHandle, route: Orbi
                 Text(LandingSessionCopy.UPDATE_UNAVAILABLE, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else ProjectLandingsWindow(app, handle, route, api, shown.projectId, id, open, shown.detail)
-        SessionKind.Conversation -> SessionReader(app, handle, route, api, data, open, leave)
+        SessionKind.Conversation -> SessionReader(app, handle, route, api, data, open, leave, swap)
     }
 }
 

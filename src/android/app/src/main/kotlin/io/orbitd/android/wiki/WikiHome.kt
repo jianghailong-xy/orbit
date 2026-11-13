@@ -118,7 +118,7 @@ internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: Directory
         seen = store.seen(space.slug); store.moveSeen(space.slug)
         wikiHomeLoad(store)
     }
-    // What Trash holds: the picker offers it, and so does the first-wiki card once no wiki is left.
+    // What Trash holds: the first-wiki card offers it once no wiki is left. The picker does not (docs/mocks/wiki-trash/02-trash-entry).
     LaunchedEffect(store) { store.loadTrash() }
     val openTrash = { nav.open(OrbitRoute(Destination.WIKI_TRASH)) }.takeIf { state.trash.isNotEmpty() }
     if (state.disabled) {
@@ -156,7 +156,7 @@ internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: Directory
     }, modifier = Modifier.fillMaxSize().testTag("wiki-home")) {
         WikiHomePage(space, state, seen, store, data, nav, listState, retry = { scope.launch { wikiHomeLoad(store) } },
             // The home reads the space picked as its effect's key changes.
-            pickSpace = store::select, manageSpaces = { nav.open(OrbitRoute(Destination.WIKI_SETTINGS)) }, openTrash = openTrash,
+            pickSpace = store::select, manageSpaces = { nav.open(OrbitRoute(Destination.WIKI_SETTINGS)) },
             setUp = { settingUp = true })
     }
     if (settingUp) WikiSetUpSheet(store, space, data, close = { settingUp = false })
@@ -329,7 +329,7 @@ private fun WikiStartMark(number: Int, state: WikiStartLogic.StepState) {
 @Composable
 private fun WikiHomePage(space: WikiSpace, state: WikiState, seen: Double?, store: WikiStore, data: DirectoryData, nav: WikiNav,
     listState: androidx.compose.foundation.lazy.LazyListState, retry: () -> Unit, pickSpace: (String) -> Unit, manageSpaces: () -> Unit,
-    openTrash: (() -> Unit)?, setUp: () -> Unit) {
+    setUp: () -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     var hits by remember { mutableStateOf<List<WikiSearchHit>>(emptyList()) }
     var searched by rememberSaveable { mutableStateOf("") }
@@ -351,7 +351,7 @@ private fun WikiHomePage(space: WikiSpace, state: WikiState, seen: Double?, stor
     val line = WikiLogic.homeLine(state.docsDirectory, state.directory, loading)
     val documents = WikiLogic.homeDocuments(state.docsDirectory, state.directory, loading, seen)
     LazyColumn(Modifier.fillMaxSize().testTag("wiki-home-list"), state = listState) {
-        item(key = "header") { HomeHeader(space, state.spaces, pickSpace, manageSpaces, openTrash) }
+        item(key = "header") { HomeHeader(space, state.spaces, pickSpace, manageSpaces) }
         WikiLogic.HomeBand.entries.forEach { band ->
             when (band) {
                 WikiLogic.HomeBand.STATE -> item(key = "state") { HomeLine(line) }
@@ -532,19 +532,19 @@ private fun HomeMore(browse: () -> Unit, index: () -> Unit) {
 
 /** The title and the space on one row — the web's page head. */
 @Composable
-private fun HomeHeader(space: WikiSpace, spaces: List<WikiSpace>, pickSpace: (String) -> Unit, manageSpaces: () -> Unit, openTrash: (() -> Unit)?) {
+private fun HomeHeader(space: WikiSpace, spaces: List<WikiSpace>, pickSpace: (String) -> Unit, manageSpaces: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(WikiCopy.title, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.headlineLarge)
-        WikiSpacePicker(space, spaces, pickSpace, manageSpaces, openTrash)
+        WikiSpacePicker(space, spaces, pickSpace, manageSpaces)
     }
 }
 
 /** The space beside the title, by the name a reader knows it by (design §12.3.4, mock 31 ④; iOS `WikiSpacePicker`): with
  * one space a grey label and no control; with several a menu of every space, the current one ticked — its name, the
  * repository and its documents under it, what waits in it as the amber number — and Manage spaces at the foot, into Wiki
- * settings, with Trash under it while Trash holds a wiki ([trash], docs/mocks/wiki-trash). */
+ * settings. Trash is not in it: it opens from Wiki settings (docs/mocks/wiki-trash/02-trash-entry). */
 @Composable
-internal fun WikiSpacePicker(space: WikiSpace, spaces: List<WikiSpace>, pick: (String) -> Unit, manage: () -> Unit, trash: (() -> Unit)? = null) {
+internal fun WikiSpacePicker(space: WikiSpace, spaces: List<WikiSpace>, pick: (String) -> Unit, manage: () -> Unit) {
     val names = WikiSpaceLogic.names(spaces)
     val name = names[space.id] ?: space.title ?: space.slug
     val capsule = Modifier.background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f), CircleShape)
@@ -581,8 +581,6 @@ internal fun WikiSpacePicker(space: WikiSpace, spaces: List<WikiSpace>, pick: (S
             HorizontalDivider()
             DropdownMenuItem(modifier = Modifier.testTag("wiki-space-manage"), text = { Text(WikiCopy.manageSpaces) },
                 leadingIcon = { Icon(painterResource(R.drawable.ic_settings), null) }, onClick = { expanded = false; manage() })
-            if (trash != null) DropdownMenuItem(modifier = Modifier.testTag("wiki-space-trash"), text = { Text(WikiModeCopy.trash) },
-                leadingIcon = { Icon(painterResource(R.drawable.ic_trash), null) }, onClick = { expanded = false; trash() })
         }
     }
 }

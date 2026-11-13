@@ -5,7 +5,7 @@ import { RunStatus } from '@prisma/client';
 import { RunEventType } from '@orbit/shared';
 import { ListEventsService } from '../task-lists/list-events.service';
 import { appendBackgroundJobsContext } from './background-jobs-context';
-import { buildResumeContinuation } from './resume-continuation';
+import { buildResumeContinuation, buildUpdateResumeContinuation } from './resume-continuation';
 import { RunnerApiController } from './runner-api.controller';
 import { noSessionRequests } from '../test-support/prisma-transaction-double';
 
@@ -201,6 +201,17 @@ test('an interrupted turn handed out again: the continuation is the message, the
   const stored = await ingest(TYPED, { text: delivered });
 
   assert.equal(stored.controlPlaneNote, delivered.slice(continuation.length));
+});
+
+test('a turn Update Now cut, handed out again: the update’s continuation is the message, the block after it is the note', async () => {
+  for (const version of ['0.1.254', null]) {
+    const continuation = buildUpdateResumeContinuation(TYPED, version);
+    const delivered = await withBackgroundJobs(continuation);
+
+    const stored = await ingest(TYPED, { text: delivered });
+
+    assert.equal(stored.controlPlaneNote, delivered.slice(continuation.length));
+  }
 });
 
 test('a message of attachments alone: the whole echo is what delivery appended', async () => {

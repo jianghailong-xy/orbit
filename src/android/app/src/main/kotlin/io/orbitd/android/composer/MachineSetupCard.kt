@@ -62,6 +62,9 @@ internal fun MachineSetupCard(
     onUseKey: () -> Unit,
     onOpenMachine: () -> Unit,
     onSignedIn: () -> Unit,
+    /** A new account's first machine (docs/mocks/new-user-onboarding): the card greets it, and offers first messages to try, which fill
+     *  the page's composer. */
+    welcome: MachineWelcome? = null,
 ) {
     val machine = RunnerPage.displayName(runner)
     val offline = !online
@@ -85,7 +88,8 @@ internal fun MachineSetupCard(
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
-            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (welcome != null) WelcomeHead(welcome.name)
+            else Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box(
                     Modifier
                         .size(32.dp)
@@ -232,7 +236,17 @@ internal fun MachineSetupCard(
                         if (!offline && engine in ProviderEngines.LOGIN_ENGINES) {
                             Box(Modifier.padding(top = 8.dp)) {
                                 key(engine) {
-                                    RunnerSignInCard(
+                                    // A new account's card draws the web's sign-in (Sign in to <engine>, Use an API key instead, and
+                                    // its hint); everybody else's keeps the setup card's own.
+                                    if (welcome != null) RunnerSignInCard(
+                                        api = managementApi,
+                                        runner = runner,
+                                        engine = engine,
+                                        onUseApiKey = if (keyToUse != null) onUseKey else welcome.onOpenKeys,
+                                        onSignedIn = onSignedIn,
+                                        apiKeyLabel = WelcomeSignInCopy.USE_API_KEY_INSTEAD,
+                                        apiKeyHint = WelcomeSignInCopy.KEY_HINT,
+                                    ) else RunnerSignInCard(
                                         api = managementApi,
                                         runner = runner,
                                         engine = engine,
@@ -268,6 +282,11 @@ internal fun MachineSetupCard(
 
             HorizontalDivider()
 
+            if (welcome != null) {
+                WelcomeExamples(step = 3, picked = welcome.composerText, onPick = welcome.onExample)
+                HorizontalDivider()
+            }
+
             val folder = state.folder
             if (ready && folder != null) {
                 Text(
@@ -288,8 +307,17 @@ internal fun MachineSetupCard(
     }
 }
 
+/** What a new account's first machine adds to the setup card. */
+internal data class MachineWelcome(
+    val name: String?,
+    val composerText: String,
+    val onExample: (String) -> Unit,
+    /** Use an API key instead with no key that runs here: where one is connected (Machines & models). */
+    val onOpenKeys: () -> Unit,
+)
+
 @Composable
-private fun SetupStepRow(number: Int, done: Boolean, content: @Composable ColumnScope.() -> Unit) {
+internal fun SetupStepRow(number: Int, done: Boolean, content: @Composable ColumnScope.() -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 9.dp),
         verticalAlignment = Alignment.Top,
@@ -500,12 +528,16 @@ private fun FolderOptionsSection(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
+                            // The folder it goes in shares the row with the name: on a phone a long one is cut from its start, so the
+                            // field keeps room to type in (it was measured first and left the field a sliver).
                             Text(
                                 MachineSetup.newFolderPath(reposRoot, ""),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontFamily = FontFamily.Monospace,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
+                                overflow = TextOverflow.StartEllipsis,
+                                modifier = Modifier.weight(1f, fill = false),
                             )
                             OutlinedTextField(
                                 value = newName,

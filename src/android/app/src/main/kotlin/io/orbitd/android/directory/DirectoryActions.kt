@@ -181,7 +181,10 @@ fun DirectoryActionDialog(dialog: DirectoryDialog, api: DirectoryApi, data: Dire
                         is DirectoryDialog.Move -> MoveChoices(dialog.session, api, canWrite, setDialog) { folder, from ->
                             setDialog(null); actions.file(dialog.session.id, dialog.session.title, folder, from)
                         }
-                        is DirectoryDialog.Share -> io.orbitd.android.management.SessionSharePanel(dialog.session.id)
+                        // People who can reply say where a guest's message runs: the workspace's machine, as web `guestContextOf` falls back to.
+                        is DirectoryDialog.Share -> io.orbitd.android.management.SessionSharePanel(dialog.session.id,
+                            io.orbitd.android.management.SessionGuestContext(data.machineName(dialog.session.workspace) ?: "Shared",
+                                dialog.session.permissionMode ?: "default"))
                         is DirectoryDialog.Purge, is DirectoryDialog.DeleteFolder, is DirectoryDialog.ConfirmMove -> Unit
                     }
                 }

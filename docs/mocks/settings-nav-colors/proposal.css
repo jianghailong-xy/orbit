@@ -1,0 +1,7 @@
+.settings-nav { background: var(--bg-base); }
+.settings-search { height: 34px; padding: 0 8px; border: 1px solid var(--border-subtle); background: var(--bg-sunken); }
+.settings-nav-heading { height: 32px; font-size: 13px; font-weight: 600; color: var(--text-2); }
+.settings-nav-row { height: 36px; font-size: 14px; }
+.settings-nav-row.active { background: var(--brand-tint); color: var(--brand); font-weight: 400; }
+.settings-nav-row.active .settings-nav-icon,
+.settings-nav-row.active .settings-nav-meta { color: var(--brand); }

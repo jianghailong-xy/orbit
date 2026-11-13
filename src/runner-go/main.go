@@ -124,7 +124,7 @@ Options:
   --token <token>          Optional one-time enrollment token (skips browser approval)
   --name <name>            Runner name (default: machine hostname)
   --labels a,b,c           Routing labels (e.g. sg,hdfs)
-  --max-concurrent <n>     Max concurrent jobs (default: 16)
+  --max-concurrent <n>     Max concurrent jobs (default: CPU core count)
   --workdir <path>         Project directory Claude Code runs in (default: current dir)
   --force                  Re-register without confirming, even if this machine is already registered
   --no-service             Register only; don't install/start the background service
@@ -531,7 +531,7 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 		fmt.Printf("\n1 · Name this machine\n    %s (from --name)\n", name)
 	}
 	labels := parseLabels(flags["labels"])
-	maxConcurrent := getInt(flags, "max-concurrent", 16)
+	maxConcurrent := getInt(flags, "max-concurrent", defaultMaxConcurrent())
 	token := flags["token"]
 	// The directory Claude Code runs in (the project to work on). Defaults to the
 	// register cwd so a runner registered inside a repo operates on that repo.
@@ -1276,6 +1276,11 @@ func getStr(m map[string]string, k, def string) string {
 		return v
 	}
 	return def
+}
+
+// defaultMaxConcurrent is the machine's CPU core count.
+func defaultMaxConcurrent() int {
+	return runtime.NumCPU()
 }
 
 func getInt(m map[string]string, k string, def int) int {

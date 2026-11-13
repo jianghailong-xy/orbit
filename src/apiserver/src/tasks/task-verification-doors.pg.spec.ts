@@ -302,6 +302,8 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
 
     const formerlyDone = await tasks.create(w.ownerId, {
       title: 'ordinary task completed before becoming a check', projectId: w.projectId,
+      // Evidence for a task that states no standard is refused at submit.
+      acceptanceCriteria: 'the ordinary work is done',
     });
     await assert.rejects(
       db.task.update({ where: { id: formerlyDone.id }, data: { status: TaskStatus.DONE } }),

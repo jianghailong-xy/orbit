@@ -101,7 +101,8 @@ export interface HandoffRow {
   id: string;
   ownerId: string;
   fromProjectId: string;
-  toProjectId: string;
+  /** null only for a MOVE_TASK that takes the task out of every project (0610). */
+  toProjectId: string | null;
   kind: string;
   subjectTaskId: string | null;
   payloadDigest: string;
@@ -128,7 +129,8 @@ export interface HandoffRow {
  */
 export interface HandoffListRow extends HandoffRow {
   fromProject: { title: string; status: string };
-  toProject: { title: string; status: string };
+  /** null for a move out of every project. */
+  toProject: { title: string; status: string } | null;
   /** The task a MOVE_TASK moves, or a DEPEND_ON_TASK waits on, as it reads now. Null for a filing,
    *  and for a subject that has since been deleted. */
   subjectTask: { id: string; title: string } | null;
@@ -152,7 +154,7 @@ export interface HandoffListRow extends HandoffRow {
 export interface HandoffAuthority {
   ownerId: string;
   fromProjectId: string;
-  toProjectId: string;
+  toProjectId: string | null;
   kind: HandoffKind;
   subjectTaskId: string | null;
   payloadDigest: string;
@@ -164,7 +166,8 @@ export interface HandoffAuthority {
 /** What a crossing IS, before it is looked up or filed. */
 export interface HandoffDeclaration {
   fromProjectId: string;
-  toProjectId: string;
+  /** null only for a MOVE_TASK out of every project: the confirmation files the task under none. */
+  toProjectId: string | null;
   kind: HandoffKind;
   subjectTaskId: string | null;
   /**
@@ -379,7 +382,7 @@ export class ProjectHandoffService {
   async pendingMove(
     db: HandoffReadClient,
     ownerId: string,
-    move: { fromProjectId: string; toProjectId: string; subjectTaskId: string },
+    move: { fromProjectId: string; toProjectId: string | null; subjectTaskId: string },
     now: Date,
   ): Promise<HandoffAnswer | null> {
     const row = (await db.projectHandoffApproval.findFirst({
@@ -589,7 +592,7 @@ export class ProjectHandoffService {
           "requested_criterion_definition_id"
         ) VALUES (
           ${randomUUID()}::uuid, ${ownerId}::uuid, ${declaration.fromProjectId}::uuid,
-          ${declaration.toProjectId}::uuid, ${declaration.kind},
+          ${declaration.toProjectId ?? null}::uuid, ${declaration.kind},
           ${declaration.subjectTaskId}::uuid,
           ${authority.payloadDigest}, ${authority.crossingKey}, ${state}, ${declaration.title},
           ${declaration.reason ?? null}, ${declaration.requestedBySessionId}::uuid, ${now},
@@ -774,7 +777,7 @@ export class ProjectHandoffService {
     // `TasksService.resolveCriterionDeclarations` applies to any declaration, asked again here
     // because this row is what the answer will be about.
     if (declaration.requestedCriterionDefinitionId) {
-      const criterion = isMove
+      const criterion = isMove && declaration.toProjectId
         ? await tx.projectAcceptanceCriterionDefinition.findFirst({
             where: {
               id: declaration.requestedCriterionDefinitionId,
@@ -807,11 +810,14 @@ export class ProjectHandoffService {
     declaration: HandoffDeclaration,
   ): Promise<HandoffAcceptanceDecision> {
     const ends = await tx.project.findMany({
-      where: { id: { in: [declaration.fromProjectId, declaration.toProjectId] }, ownerId },
+      where: { id: { in: orderedIds([declaration.fromProjectId, declaration.toProjectId]) }, ownerId },
       select: { id: true, status: true },
     });
     const from = ends.find((row) => row.id === declaration.fromProjectId);
-    const to = ends.find((row) => row.id === declaration.toProjectId);
+    // A move out of every project lands nowhere, and nowhere is always open to take it.
+    const to = declaration.toProjectId === null
+      ? { status: 'OPEN' }
+      : ends.find((row) => row.id === declaration.toProjectId);
     if (!from || !to) throw new ForbiddenException('project not found');
     // A move's subject is under this transaction's FOR SHARE, so what it serves cannot change
     // before the insert.
@@ -1118,7 +1124,7 @@ export class ProjectHandoffService {
        WHERE "id" = ${row.id}::uuid
          AND "owner_id" = ${authority.ownerId}::uuid
          AND "from_project_id" = ${authority.fromProjectId}::uuid
-         AND "to_project_id" = ${authority.toProjectId}::uuid
+         AND "to_project_id" IS NOT DISTINCT FROM ${authority.toProjectId}::uuid
          AND "kind" = ${authority.kind}
          AND "subject_task_id" IS NOT DISTINCT FROM ${authority.subjectTaskId}::uuid
          AND "payload_digest" = ${authority.payloadDigest}
@@ -1172,7 +1178,7 @@ export class ProjectHandoffService {
        WHERE "id" = ${handoffId}::uuid
          AND "owner_id" = ${authority.ownerId}::uuid
          AND "from_project_id" = ${authority.fromProjectId}::uuid
-         AND "to_project_id" = ${authority.toProjectId}::uuid
+         AND "to_project_id" IS NOT DISTINCT FROM ${authority.toProjectId}::uuid
          AND "kind" = ${authority.kind}
          AND "subject_task_id" IS NOT DISTINCT FROM ${authority.subjectTaskId}::uuid
          AND "payload_digest" = ${authority.payloadDigest}
@@ -1229,7 +1235,7 @@ export class ProjectHandoffService {
     this.assertAuthority(row, authority);
     const ends = await tx.project.findMany({
       where: {
-        id: { in: [authority.fromProjectId, authority.toProjectId] },
+        id: { in: orderedIds([authority.fromProjectId, authority.toProjectId]) },
         ownerId: authority.ownerId,
       },
       select: { id: true, status: true },

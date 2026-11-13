@@ -492,7 +492,7 @@ public enum RunnerAttention {
     /// it has a workspace yet (web's `noCliSignedIn`). Nil when one is signed in or its sign-in is unknown,
     /// when none is installed, and when a workspace runs on a key: that machine runs without any sign-in,
     /// so a signed-out login is news only to the workspaces on it (`signedOutItems`). Settings counts the
-    /// machine by the same answer (`Infrastructure.attention`).
+    /// machine by the same answer (`MachinesAndModels.attention`).
     ///
     /// A signed-out Claude Code on a machine blocked for the Claude region (`region`) is no CLI to sign
     /// in: Orbit won't start a Claude sign-in there, and the region's own item says why.

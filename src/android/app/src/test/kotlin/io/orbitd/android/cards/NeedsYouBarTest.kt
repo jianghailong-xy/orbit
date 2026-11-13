@@ -2,6 +2,7 @@ package io.orbitd.android.cards
 
 import android.content.ComponentName
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
@@ -60,6 +61,24 @@ class NeedsYouBarTest {
         compose.onNodeWithTag("needs-you-bar-chevron:DOWN", useUnmergedTree = true).assertDoesNotExist()
         compose.onNodeWithTag("needs-you-bar").performClick()
         compose.runOnIdle { assertEquals(1, pressed) }
+    }
+
+    /** Several waiting (the owner's 2026-11-13 board, option B): folded, the "+N" carries a ⌄ and the press unfolds; unfolded, the
+     * first capsule's ↑ is a press of its own that folds them, apart from the capsule's own press. */
+    @Test fun theFoldedBarMarksItUnfoldsAndTheFirstUnfoldedCapsuleFolds() {
+        var pressed = 0
+        var folded = 0
+        compose.setContent { OrbitTheme { Column {
+            NeedsYouBar("Question from coordinator", null, NeedsYouLogic.unfoldHint(2), more = 1, unfolds = true) { pressed++ }
+            NeedsYouBar("Approve merge to main", null, NeedsYouLogic.itemHint, onFold = { folded++ }) { pressed++ }
+        } } }
+        compose.onNodeWithTag("needs-you-bar-unfolds", useUnmergedTree = true).assertExists()
+        assertEquals("Shows all 2 waiting on you", compose.onNode(hasClickAction() and hasText("Question from coordinator"))
+            .fetchSemanticsNode().config.getOrNull(SemanticsActions.OnClick)?.label)
+        compose.onNodeWithTag("needs-you-bar-fold").performClick()
+        compose.runOnIdle { assertEquals(1, folded); assertEquals(0, pressed) }
+        compose.onNode(hasClickAction() and hasText("Approve merge to main")).performClick()
+        compose.runOnIdle { assertEquals(1, pressed); assertEquals(1, folded) }
     }
 
     @Test fun theThreeHintsAreIosOwn() {

@@ -64,6 +64,20 @@ async function click(element: Element | null | undefined, what: string): Promise
   await settle();
 }
 
+/** A full pointer press, as Base UI's list takes one to pick an option. */
+async function press(element: HTMLElement | null | undefined, what: string): Promise<void> {
+  expect(element, `${what} is on screen`).toBeTruthy();
+  await act(async () => {
+    const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
+    element!.dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse' }));
+    element!.dispatchEvent(new MouseEvent('mousedown', init));
+    element!.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0, pointerType: 'mouse' }));
+    element!.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
+    element!.dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
+  });
+  await settle();
+}
+
 async function type(input: HTMLInputElement | null | undefined, value: string): Promise<void> {
   expect(input).toBeTruthy();
   await act(async () => {
@@ -99,9 +113,13 @@ const field = (label: string) => {
   return forId ? container!.querySelector<HTMLInputElement>(`[id="${forId}"]`) : null;
 };
 const switchControl = () => container!.querySelector<HTMLElement>('[role="switch"]');
-const radio = (label: string) =>
-  [...container!.querySelectorAll<HTMLElement>('label.orbit-choice')].find((l) => l.textContent?.startsWith(label))?.querySelector<HTMLElement>('[role="radio"]');
-const status = () => container!.querySelector('.orbit-card-head .orbit-badge, .orbit-card-head span:last-child')?.textContent;
+/** Who can sign in with Google: the picker in its row. */
+const policy = () => container!.querySelector<HTMLElement>('[role="combobox"]');
+async function choosePolicy(label: string): Promise<void> {
+  await click(policy(), 'the sign-up picker');
+  await press([...document.body.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')].find((o) => o.textContent === label), label);
+}
+const status = () => container!.querySelector('.settings-section-action')?.textContent;
 const button = (label: string) => [...container!.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === label);
 
 beforeEach(() => {
@@ -156,9 +174,9 @@ describe('Admin → Sign-in', { timeout: 60_000 }, () => {
     expect(field('Client secret')?.type).toBe('password');
     expect(field('Client secret')?.value).toBe('');
     expect(field('Client secret')?.placeholder).toBe('Paste the client secret');
-    expect(radio('Existing accounts only')?.getAttribute('aria-checked')).toBe('true');
+    expect(policy()?.textContent).toContain('Existing accounts only');
     expect(container!.textContent).not.toContain(OPEN_SIGNUP_WARNING);
-    expect(container!.querySelector('.admin-signin-redirect code')?.textContent).toBe(REDIRECT_URI);
+    expect(container!.querySelector('.admin-row-code')?.textContent).toBe(REDIRECT_URI);
     expect(button('Save')?.disabled).toBe(true);
   });
 
@@ -168,7 +186,7 @@ describe('Admin → Sign-in', { timeout: 60_000 }, () => {
     expect(container!.textContent).toContain(INCOMPLETE_WARNING);
     await type(field('Client ID'), '  1234-abc.apps.googleusercontent.com ');
     await type(field('Client secret'), SECRET);
-    await click(radio('Anyone with a Google account'), 'open sign-up');
+    await choosePolicy('Anyone with a Google account');
     expect(container!.querySelector('[role="note"]')?.textContent).toBe(OPEN_SIGNUP_WARNING);
     expect(container!.textContent).not.toContain(INCOMPLETE_WARNING);
 
@@ -191,13 +209,13 @@ describe('Admin → Sign-in', { timeout: 60_000 }, () => {
     expect(status()).toBe('On');
     expect(switchControl()?.getAttribute('aria-checked')).toBe('true');
     expect(field('Client ID')?.value).toBe('1234-abc.apps.googleusercontent.com');
-    expect(radio('Anyone with a Google account')?.getAttribute('aria-checked')).toBe('true');
+    expect(policy()?.textContent).toContain('Anyone with a Google account');
     expect(container!.querySelector('[role="note"]')?.textContent).toBe(OPEN_SIGNUP_WARNING);
     expect(container!.innerHTML).not.toContain(SECRET);
 
     // A save without a secret keeps the saved one.
     await type(field('Client ID'), '5678-def.apps.googleusercontent.com');
-    await click(radio('Existing accounts only'), 'existing accounts only');
+    await choosePolicy('Existing accounts only');
     await click(button('Save'), 'Save');
     expect(puts[1]).toEqual({ enabled: true, clientId: '5678-def.apps.googleusercontent.com', signupPolicy: 'EXISTING_ACCOUNTS' });
     expect(stored?.secret).toBe(SECRET);

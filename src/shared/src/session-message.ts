@@ -87,11 +87,18 @@ export interface OrbitMessageFrom {
  * runner on delivery, which tells the agent the message is not the account owner's.
  */
 export interface ExternalMessageFrom {
-  /** Where the sender is: the one source there is so far. */
-  source: 'FEISHU';
-  /** The sender's name as Feishu gave it when the turn was written; null when Feishu would not say. */
+  /**
+   * Where the sender is: FEISHU, a member of a connected Feishu group; ORBIT_GUEST, another Orbit account the owner
+   * invited to reply in this session (docs/session-guests-design.md §5), drawn as `From <name>`.
+   */
+  source: ExternalMessageSource;
+  /**
+   * The sender's name when the turn was written: as Feishu gave it (null when Feishu would not say), or the guest's
+   * Orbit account name. Never the sender's id, on either source.
+   */
   name: string | null;
 }
 
 /** The sources `ExternalMessageFrom.source` takes, for a reader that has to check a payload. */
-export const EXTERNAL_MESSAGE_SOURCES = ['FEISHU'] as const;
+export const EXTERNAL_MESSAGE_SOURCES = ['FEISHU', 'ORBIT_GUEST'] as const;
+export type ExternalMessageSource = (typeof EXTERNAL_MESSAGE_SOURCES)[number];

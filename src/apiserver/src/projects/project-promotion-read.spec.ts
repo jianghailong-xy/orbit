@@ -77,6 +77,8 @@ interface Reads {
 function prismaStub(
   over: {
     promotion?: Record<string, unknown>;
+    /** Every row the single-candidate read may answer from (the newest-live preference). */
+    rows?: Array<Record<string, unknown>>;
     /** The merges already made, as `/promotions/merged` reads them back. */
     mergedRows?: Array<Record<string, unknown>>;
     tasks?: Array<{ id: string; title: string }>;
@@ -134,9 +136,18 @@ function prismaStub(
     },
     projectOpenItem: { updateMany: async () => ({ count: 0 }) },
   };
+  // The single-candidate read answers the newest row, or the newest LIVE one when it asks for those
+  // (`readCurrent` asks twice: the candidates still standing first, then whatever the newest row is).
+  const promotions = over.rows ?? [row(over.promotion)];
+  const newestRow = (args: Record<string, unknown>) => {
+    const live = (args.where as { state?: { in?: string[] } }).state?.in;
+    return [...promotions]
+      .filter((each) => !live || live.includes(each.state as string))
+      .sort((left, right) => +new Date(right.createdAt as Date) - +new Date(left.createdAt as Date))[0] ?? null;
+  };
   return {
     projectPromotion: {
-      findFirst: async () => row(over.promotion),
+      findFirst: async (args: Record<string, unknown>) => newestRow(args),
       findMany: async (args: Record<string, unknown>) => {
         reads.merged = args;
         return (over.mergedRows ?? []).map((each) => row(each));
@@ -211,6 +222,31 @@ async function current(
 ): Promise<ProjectPromotionView | null> {
   return new ProjectPromotionService(prismaStub(over)).readCurrent('owner-1', 'project-1');
 }
+
+test('a candidate still asking is read even when a newer one has already ended', async () => {
+  // Two task branches can stand as candidates at once (M-F2), and the newer one can merge first.
+  // Reading only the newest row left the older one's card off every surface while its item stayed
+  // open — a "Approve merge" row with nothing to press (2026-11-12, 34uyniLRpsIAr0qQyv2Jf).
+  const view = await current({
+    rows: [
+      row({ id: 'later-merge', state: 'MERGED', createdAt: new Date('2026-09-13T10:10:00.000Z') }),
+      row({ id: 'still-asking', state: 'READY', createdAt: new Date('2026-09-13T10:00:00.000Z') }),
+    ],
+  });
+
+  assert.equal(view?.promotionId, 'still-asking');
+});
+
+test('with nothing live the newest ended row answers, which is the record a page still draws', async () => {
+  const view = await current({
+    rows: [
+      row({ id: 'newest', state: 'MERGED', createdAt: new Date('2026-09-13T10:10:00.000Z') }),
+      row({ id: 'older', state: 'DECLINED', createdAt: new Date('2026-09-13T10:00:00.000Z') }),
+    ],
+  });
+
+  assert.equal(view?.promotionId, 'newest');
+});
 
 test('the Tasks row carries the titles of what this merge would bring, in the row’s own order', async () => {
   const view = await current({

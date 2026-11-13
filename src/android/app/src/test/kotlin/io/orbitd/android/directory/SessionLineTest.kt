@@ -243,4 +243,18 @@ class SessionLineTest {
         assertEquals(SessionLine("You: Look at this run", Tone.PREVIEW), line(session("AWAITING_INPUT", lastUserText = "Look at [this run](https://github.com/o/r/actions/runs/123)")))
         assertEquals(SessionLine("You: 把其他的 tea_user_profile_build_*_cnch 也修复了", Tone.PREVIEW), line(session("AWAITING_INPUT", lastUserText = "把其他的 tea_user_profile_build_*_cnch 也修复了")))
     }
+
+    /** A parked session the server says something will resume — a scheduled wake-up, an armed auto-retry, a watch this client holds
+     * none of (`activity` WAITING) — is not waiting for your reply, on its row or in its word (OrbitKit `resumesOnItsOwn`). */
+    @Test fun aWaitTheServerReportsIsNotAWaitForYourReply() {
+        val waiting = DirectorySession("s", "t", status = "AWAITING_INPUT", activity = "WAITING")
+        assertEquals(SessionLine("Waiting to resume", Tone.WATCHING), line(waiting))
+        assertEquals("Waiting to resume", SessionHeader.statusWord(waiting, now = now))
+        // Nothing is invented when the server says nothing, or says something else.
+        for (activity in listOf(null, "BACKGROUND_JOB", "SOMETHING_NEW"))
+            assertEquals("Waiting for your reply", SessionHeader.statusWord(DirectorySession("s", "t", status = "AWAITING_INPUT", activity = activity), now = now))
+        // A question for you still outranks it.
+        assertEquals("Waiting for approval",
+            SessionHeader.statusWord(DirectorySession("s", "t", status = "AWAITING_INPUT", activity = "WAITING", pendingApprovals = 1), now = now))
+    }
 }

@@ -47,6 +47,7 @@ struct WikiActivityPage: View {
             }
         }
         .listStyle(.plain)
+        .softTopEdgeEffect()
         .navigationTitle(WikiCopy.activity)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)

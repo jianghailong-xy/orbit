@@ -181,6 +181,13 @@ export type WikiExposureChannel = (typeof WIKI_EXPOSURE_CHANNELS)[number];
 export const WIKI_SEARCH_MATCHES = ['keyword', 'semantic', 'path'] as const;
 export type WikiSearchMatch = (typeof WIKI_SEARCH_MATCHES)[number];
 
+/**
+ * Why a session's search could not look anything up (contract `searchUnavailable`, docs/wiki-explicit-creation-design.md
+ * §3.3): its workspace has no wiki, or the wiki for its repository is in Trash. Absent on an answer that searched a wiki.
+ */
+export const WIKI_SEARCH_UNAVAILABLE = ['no_wiki', 'wiki_in_trash'] as const;
+export type WikiSearchUnavailable = (typeof WIKI_SEARCH_UNAVAILABLE)[number];
+
 export const WIKI_REFUSAL_CODES = [
   'WIKI_DISABLED',
   'WIKI_SPACE_UNBOUND',

@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Admin in the Settings style</title>
+<style>
+  body { margin: 0; background: #eef0f3; }
+  .b-part { font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: #1f2329; width: 1500px; box-sizing: border-box;
+    padding: 36px 40px 40px; background: #fff; margin: 0 0 24px; }
+  .b-part h2 { font-size: 26px; margin: 0 0 4px; }
+  .b-sub { color: #646a73; margin: 0 0 22px; }
+  .b-row { display: flex; gap: 20px; align-items: flex-start; }
+  .b-col { flex: 1; min-width: 0; }
+  .b-tag { display: inline-block; font-size: 13px; font-weight: 600; padding: 2px 10px; border-radius: 999px; margin-bottom: 8px; }
+  .b-tag.today { background: #f2f3f5; color: #646a73; }
+  .b-tag.new { background: #e8f0ff; color: #2f6bff; }
+  .b-frame { position: relative; border: 1px solid #dee0e3; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+  .b-frame img { display: block; width: 100%; }
+  .b-pin { position: absolute; transform: translate(-50%, -50%); width: 26px; height: 26px; border-radius: 50%;
+    background: #f54a45; color: #fff; font: 700 14px/26px Inter, sans-serif; text-align: center; box-shadow: 0 0 0 3px #fff; }
+  .b-notes { margin: 18px 0 0; padding: 0; list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 32px; }
+  .b-notes li { display: flex; gap: 10px; }
+  .b-n { flex: none; width: 22px; height: 22px; border-radius: 50%; background: #f54a45; color: #fff; font: 700 12px/22px Inter, sans-serif; text-align: center; margin-top: 2px; }
+  .b-n.g { background: #8f959e; }
+  code { font: 13px "JetBrains Mono", monospace; background: #f2f3f5; padding: 1px 5px; border-radius: 4px; }
+  .b-choice { border: 1px solid #dee0e3; border-radius: 12px; padding: 16px 20px; flex: 1; }
+  .b-choice.rec { border-color: #2f6bff; box-shadow: 0 0 0 3px #e8f0ff; }
+  .b-choice h3 { margin: 0 0 6px; font-size: 17px; }
+  .b-rec { color: #2f6bff; font-weight: 600; font-size: 13px; }
+  .b-q { font-weight: 700; font-size: 17px; margin: 22px 0 10px; }
+  table.b-cost { border-collapse: collapse; width: 100%; margin-top: 8px; }
+  table.b-cost td, table.b-cost th { border-bottom: 1px solid #eceef1; padding: 9px 10px; text-align: left; vertical-align: top; }
+  table.b-cost th { color: #646a73; font-weight: 600; font-size: 13px; }
+  .b-small { font-size: 13px; color: #646a73; }
+</style>
+</head>
+<body>
+
+<section class="b-part" id="part-1">
+  <h2>Admin 改成 Settings 的样子 · ① 今天 vs ② 方案</h2>
+  <p class="b-sub">真实页面截图：左边是今天的 <code>/admin/sign-in</code>，右边是原型树的同一页（同一套 fixtures、1440×900、浅色）。方案只换外壳和排版，接口、文案含义、保存方式都不变。</p>
+  <div class="b-row">
+    <div class="b-col">
+      <span class="b-tag today">① 今天</span>
+      <div class="b-frame"><img src="frames/today-signin.png" alt=""></div>
+    </div>
+    <div class="b-col">
+      <span class="b-tag new">② 方案：Admin 独占窗口，和 Settings 同一套外壳</span>
+      <div class="b-frame"><img src="frames/proto-signin.png" alt="">
+        <span class="b-pin" style="left:16.5%;top:3.6%">1</span>
+        <span class="b-pin" style="left:11.5%;top:10%">2</span>
+        <span class="b-pin" style="left:21%;top:19.7%">3</span>
+        <span class="b-pin" style="left:33%;top:5.3%">4</span>
+        <span class="b-pin" style="left:88.5%;top:15.6%">5</span>
+        <span class="b-pin" style="left:63%;top:29.5%">6</span>
+        <span class="b-pin" style="left:82%;top:58.6%">7</span>
+      </div>
+    </div>
+  </div>
+  <ul class="b-notes">
+    <li><span class="b-n">1</span><span><b>Back to Orbit</b> + Esc 离开，回到打开 Admin 前的页面（和 Settings 同一个 <code>settingsReturnPath()</code>）。App 侧栏不再出现。</span></li>
+    <li><span class="b-n">2</span><span>左侧导航取代顶部 4 个 tab：分组 <b>Accounts</b>（Users、Sign-in）· <b>Server</b>（Email）· <b>Integrations</b>（Feishu bots）。地址不变：<code>/admin</code>、<code>/admin/sign-in</code>、<code>/admin/email</code>、<code>/admin/integrations</code>。</span></li>
+    <li><span class="b-n">3</span><span>行尾状态：Users 显示人数；Sign-in / Email / Feishu 用 Machines 那个绿点 / 灰点表示 On / Off，不点进去也知道哪项没开。</span></li>
+    <li><span class="b-n">4</span><span>页头用 <code>SettingsHeader</code>：标题 + 一句说明，居中 880px 列（Users 用 1080px 宽列）。</span></li>
+    <li><span class="b-n">5</span><span>分区标题 + 右侧 On/Off 徽标，用 <code>SettingsSection</code>，徽标从卡片头挪到分区标题行。</span></li>
+    <li><span class="b-n">6</span><span>每个设置一行 <code>SettingsRow</code>：左边名称 + 一行说明，右边控件（开关 / 300px 输入框 / 下拉 / 按钮）。原来的单选组变成下拉，长说明压成一行。</span></li>
+    <li><span class="b-n">7</span><span>保存方式保持现状：Client ID 与 Secret 必须一起生效，所以整页一个 Save（见「待定」第 2 题）。</span></li>
+    <li><span class="b-n g">·</span><span>窄于 760px 时和 Settings 一样：导航单独一页，页面全宽，顶上「‹ Admin」返回（见图 3）。</span></li>
+  </ul>
+</section>
+
+<section class="b-part" id="part-2">
+  <h2>Users · ① 今天 vs ② 方案</h2>
+  <p class="b-sub">表格本身（列、⋯ 菜单、View as、Enable、对话框）一行不改；只是放进 Settings 外壳的宽列里，搜索框挪到标题下，表格进圆角卡片。</p>
+  <div class="b-row">
+    <div class="b-col">
+      <span class="b-tag today">① 今天</span>
+      <div class="b-frame"><img src="frames/today-users.png" alt=""></div>
+    </div>
+    <div class="b-col">
+      <span class="b-tag new">② 方案</span>
+      <div class="b-frame"><img src="frames/proto-users.png" alt="">
+        <span class="b-pin" style="left:45%;top:8.4%">1</span>
+        <span class="b-pin" style="left:87%;top:6.2%">2</span>
+        <span class="b-pin" style="left:60%;top:16.4%">3</span>
+        <span class="b-pin" style="left:22%;top:47%">4</span>
+      </div>
+    </div>
+  </div>
+  <ul class="b-notes">
+    <li><span class="b-n">1</span><span>标题下一行统计：「6 accounts · 2 administrators · 1 disabled」，和今天同一句。</span></li>
+    <li><span class="b-n">2</span><span><b>Add user</b> 放在页头右侧（<code>SettingsHeader</code> 的 action 位，标题行右侧）。</span></li>
+    <li><span class="b-n">3</span><span>搜索框占满列宽。</span></li>
+    <li><span class="b-n">4</span><span>表格进 12px 圆角描边卡片，和 Settings 的卡片一致；列宽 1080px（Settings 的 <code>settings-page--wide</code>）。</span></li>
+  </ul>
+</section>
+
+<section class="b-part" id="part-3">
+  <h2>Email · Feishu bots · 深色 · 手机</h2>
+  <p class="b-sub">Email 拆成两个分区：Outgoing email（开关、Key、From、Reply-To、测试、近 7 天）和 Welcome email；Integrations 页直接叫 Feishu bots。</p>
+  <div class="b-row">
+    <div class="b-col">
+      <span class="b-tag today">① 今天 · Email</span>
+      <div class="b-frame"><img src="frames/today-email.png" alt=""></div>
+    </div>
+    <div class="b-col">
+      <span class="b-tag new">② 方案 · Email</span>
+      <div class="b-frame"><img src="frames/proto-email.png" alt="">
+        <span class="b-pin" style="left:57%;top:42.5%">1</span>
+        <span class="b-pin" style="left:57%;top:49.6%">2</span>
+        <span class="b-pin" style="left:57%;top:61%">3</span>
+      </div>
+    </div>
+  </div>
+  <ul class="b-notes">
+    <li><span class="b-n">1</span><span>「Send test email」从底部按钮条挪到一行 <b>Test</b>；结果（成功 / Resend 报错）写在这一行的说明里。</span></li>
+    <li><span class="b-n">2</span><span>「Last 7 days」变成卡片里的一行：Sent 14 · Failed 1，右侧 Show failures 展开失败列表。</span></li>
+    <li><span class="b-n">3</span><span>Welcome email 单独一个分区；Save 在页底，管两个分区的改动。</span></li>
+  </ul>
+  <div class="b-row" style="margin-top:26px">
+    <div class="b-col" style="flex:1.25">
+      <span class="b-tag new">② 方案 · Feishu bots</span>
+      <div class="b-frame"><img src="frames/proto-integrations.png" alt=""></div>
+      <span class="b-tag new" style="margin-top:18px">② 方案 · 深色</span>
+      <div class="b-frame"><img src="frames/proto-signin-dark.png" alt=""></div>
+    </div>
+    <div class="b-col" style="flex:.42">
+      <span class="b-tag new">② 方案 · 手机 393pt</span>
+      <div class="b-frame"><img src="frames/proto-phone.png" alt=""></div>
+      <p class="b-small">输入框 / 下拉行在窄屏换行，控件占满宽度。</p>
+    </div>
+  </div>
+</section>
+
+<section class="b-part" id="part-4">
+  <h2>待定 · 要你拍板</h2>
+
+  <div class="b-q">1. Admin 放在哪？</div>
+  <div class="b-row">
+    <div class="b-choice rec">
+      <h3>A · 独立的 Admin 窗口，外壳和 Settings 一样 <span class="b-rec">推荐 · 上面的图都是 A</span></h3>
+      <p>账号菜单的 Admin 入口不变，打开后整窗口换成 Admin 导航 + 页面。</p>
+      <p class="b-small">理由：Settings 管「我自己」，Admin 管「整台服务器」，分开不会混；Settings 的导航已经有 5 组（机器、工作区列表可能很长），再塞一组会被挤到最底下。只有管理员能看到 Admin，普通成员的 Settings 不受影响。</p>
+    </div>
+    <div class="b-choice">
+      <h3>B · 并进 Settings，导航里加一组 Admin（只有管理员可见）</h3>
+      <p>地址改成 <code>/settings/admin/…</code>，<code>/admin</code> 重定向；账号菜单的 Admin 入口去掉。</p>
+      <p class="b-small">好处：只有一个设置入口，Settings 的搜索也能搜到 Admin 的项。代价：个人设置和全服务器设置挨在一起，容易误改；这一组在长列表的最底部。</p>
+    </div>
+  </div>
+
+  <div class="b-q">2. Sign-in / Email 怎么保存？</div>
+  <div class="b-row">
+    <div class="b-choice rec">
+      <h3>A · 保持整页一个 Save <span class="b-rec">推荐</span></h3>
+      <p class="b-small">Client ID + Secret、API key + From 必须一起才有效；逐项保存时，改到一半服务器就处于「开着但配错」的状态。Feishu bots 只有一个开关，今天就是即改即存，不变。</p>
+    </div>
+    <div class="b-choice">
+      <h3>B · 和 Settings 一样逐行即存</h3>
+      <p class="b-small">开关立即生效，输入框失焦保存。和 Settings 更一致，但凭据要拆成「编辑…」对话框才安全，改动更大。</p>
+    </div>
+  </div>
+</section>
+
+<section class="b-part" id="part-5">
+  <h2>落地（按代价排）</h2>
+  <table class="b-cost">
+    <tr><th style="width:44%">改动</th><th>文件</th><th style="width:10%">代价</th></tr>
+    <tr><td>1. <code>AdminLayout</code>：复用 <code>settings-shell</code> / <code>settings-nav</code>，导出 <code>NavGroup</code>、<code>NavRow</code> 复用；Esc / Back to Orbit；窄屏导航页</td><td><code>components/settings/AdminLayout.tsx</code>（新）、<code>SettingsLayout.tsx</code>（两处 export）</td><td>S</td></tr>
+    <tr><td>2. 路由：4 个 <code>/admin*</code> 从 AppShell + DocView 挪到 <code>&lt;AdminLayout&gt;</code> 下，地址不变；删掉 <code>AdminNav</code> tab 条</td><td><code>App.tsx</code>、<code>components/AdminNav.tsx</code>（删）</td><td>S</td></tr>
+    <tr><td>3. Feishu bots、Sign-in、Email 三页改用 <code>SettingsHeader / Section / Card / Row</code>；单选组 → 下拉；测试与近 7 天变行</td><td><code>pages/AdminIntegrationsPage.tsx</code>、<code>AdminSignInPage.tsx</code>、<code>AdminEmailPage.tsx</code> + 它们的测试</td><td>M</td></tr>
+    <tr><td>4. Users：页头换 <code>SettingsHeader</code>，表格进卡片，宽列</td><td><code>pages/AdminUsersPage.tsx</code>、<code>AdminUsersPage.layout.test.tsx</code></td><td>S</td></tr>
+    <tr><td>5. 清理 <code>index.css</code> 里不再使用的 <code>.admin-nav*</code>、<code>.admin-signin-row/field</code> 等</td><td><code>index.css</code>、<code>Settings.css</code></td><td>S</td></tr>
+  </table>
+  <p class="b-small" style="margin-top:14px">原型 diff 见同目录 <code>prototype.patch</code>（只给 web；iOS / macOS / Android 没有 Admin 页，不涉及）。截图工具在 <code>capture/</code>。</p>
+</section>
+
+</body>
+</html>

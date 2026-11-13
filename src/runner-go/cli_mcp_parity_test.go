@@ -18,6 +18,14 @@ import (
 // parity check below must not demand.
 var cliParityExemptTools = map[string]string{
 	"permission_prompt": "runtime approval bridge, called by the engine mid-turn",
+	// The criterion confirmation doors (migration 0545) act AS the calling session: confirm, withdraw
+	// and start a check are checked against the project's coordinator pointer, and the report finds
+	// its attempt through the calling session's task. A terminal outside a session sends no session
+	// header and is refused every time; the owner's own presses are the user API's.
+	"criterion_confirm":               "confirms as the project's coordinator session: a terminal outside one is refused by the server",
+	"criterion_confirmation_withdraw": "withdraws as the project's coordinator session: a terminal outside one is refused by the server",
+	"criterion_check_start":           "starts a check as the project's coordinator session: a terminal outside one is refused by the server",
+	"criterion_check_report":          "reports the Agent check the calling session is running: a terminal is no such session",
 	// The bg_* family is the other kind of exception: not a second door onto the
 	// control-plane API, but a call into the local runner over the socket in one
 	// session's scratch dir (background_socket.go). Typed at a terminal there is
@@ -78,6 +86,9 @@ var cliParityParamAlias = map[string]string{
 	// Singular at a terminal, like --depends-on above: one flag carries one label and repeats,
 	// which is also what makes a label containing a comma expressible.
 	"labels": "--label",
+	// session_create's worktree only ever turns isolation off, so at a terminal it is the switch
+	// that says so.
+	"worktree": "--no-worktree",
 	// One array of {op, taskId, dependsOnTaskId} over MCP; at a terminal the same batch is typed
 	// as repeated --add A:B / --remove C:D, because nobody hand-writes JSON into a flag.
 	"ops": "--add",

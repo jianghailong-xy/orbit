@@ -190,24 +190,18 @@ class WikiTrashPageTest {
     }
     private fun link(tag: String): (AnnotatedString.Range<LinkAnnotation>) -> Boolean = { (it.item as? LinkAnnotation.Clickable)?.tag == tag }
 
-    /** With several wikis the picker is a menu, and Trash is its last item, under Manage spaces, while Trash holds a wiki. */
-    @Test fun thePickerOffersTrashUnderManageSpacesWhileTrashHoldsAWiki() {
+    /** With several wikis the picker is a menu that ends at Manage spaces: Trash is not in it, however much Trash holds — it
+     *  opens from Wiki settings (docs/mocks/wiki-trash/02-trash-entry). */
+    @Test fun thePickerEndsAtManageSpacesWithNoTrashItem() {
         spaces += listOf(space("sp1", "orbit"), space("sp2", "wikova"))
-        home()
-        awaitTag("wiki-space-picker")
-        press("wiki-space-picker")
-        compose.onNodeWithTag("wiki-space-trash").assertTextEquals(WikiModeCopy.trash)
-        assertTrue(top("wiki-space-manage") < top("wiki-space-trash"))
-        press("wiki-space-trash")
-        assertEquals(listOf(OrbitRoute(Destination.WIKI_TRASH)), pushed)
-        trash.clear()
         val reads = trashReads()
         home()
         awaitTag("wiki-space-picker")
-        assertTrue("the home read Trash", trashReads() > reads)
+        compose.waitUntil(5_000) { trashReads() > reads }
         press("wiki-space-picker")
         compose.onNodeWithTag("wiki-space-manage").assertExists()
         compose.onAllNodesWithTag("wiki-space-trash").assertCountEquals(0)
+        compose.onAllNodes(hasText(WikiModeCopy.trash)).assertCountEquals(0)
     }
 
     /** No wiki left: the first-wiki card says, under its lead, what Trash holds, and opens it. */

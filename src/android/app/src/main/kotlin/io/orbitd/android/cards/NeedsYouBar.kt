@@ -64,6 +64,7 @@ internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, se
         NeedsYouLogic.banner(TrashingSessions.without(openRows, trashing) { it.text("id") }, sessionId)
     }
     val shift = remember(list) { BarShift() }
+    var unfolded by remember { mutableStateOf(false) }
     val shown = !hidden && (below != null || banner != null)
     LaunchedEffect(shift, shown) {
         if (shown == shift.shown) return@LaunchedEffect
@@ -80,18 +81,45 @@ internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, se
         return
     }
     val waiting = banner ?: return
-    NeedsYouBar(waiting.text, null, if (waiting.ownerItem == null) NeedsYouLogic.sessionHint else NeedsYouLogic.itemHint, measured,
-        detail = waiting.detail, since = waiting.since, more = waiting.more, glyph = waiting.glyph) {
-        val target = waiting.target.text("id") ?: return@NeedsYouBar
-        val workspace = waiting.target.obj("agent")?.text("id") ?: waiting.target.text("agentId") ?: waiting.target.text("workspaceId")
+    // One of the five owner items opens the card it names; anything else the session. Folds the bar again on the way out.
+    fun go(entry: NeedsYouBanner) {
+        unfolded = false
+        val target = entry.target.text("id") ?: return
+        val workspace = entry.target.obj("agent")?.text("id") ?: entry.target.text("agentId") ?: entry.target.text("workspaceId")
         // A merge into main waiting on the reader is answered on its project's sessions page, where its card is (iOS 6b4bef713).
-        val project = waiting.target.obj("projectMembership")?.text("projectId")
-        if (waiting.ownerItem?.kind == "PROMOTION_APPROVAL" && project != null) {
-            open(OrbitRoute(Destination.PROJECT_SESSIONS, project, workspace, origin = Origin.LIST)); return@NeedsYouBar
+        val project = entry.target.obj("projectMembership")?.text("projectId")
+        if (entry.ownerItem?.kind == "PROMOTION_APPROVAL" && project != null) {
+            open(OrbitRoute(Destination.PROJECT_SESSIONS, project, workspace, origin = Origin.LIST)); return
         }
         // One of the other owner items opens the CARD it names in its coordinator conversation; anything else the session.
-        waiting.ownerItem?.let { CardFocus.request(target, NeedsYouLogic.cardKey(it)) }
+        entry.ownerItem?.let { CardFocus.request(target, NeedsYouLogic.cardKey(it)) }
         open(OrbitRoute(Destination.SESSION, target, workspace))
+    }
+    // Several waiting, unfolded (the owner, 2026-11-13, option B of `docs/mocks/needs-you-capsule/03-expand.html`): one capsule
+    // per conversation, the first the one the folded bar names, pushing the page down. The first carries the ↑ that folds them.
+    val entries = if (unfolded && waiting.count > 1) remember(openRows, sessionId, trashing) {
+        NeedsYouLogic.entries(TrashingSessions.without(openRows, trashing) { it.text("id") }, sessionId)
+    } else emptyList()
+    if (entries.size > 1) {
+        // At most five; the last says "+N" for the ones behind it, as the folded bar does.
+        val shown = entries.take(NeedsYouLogic.unfoldedLimit)
+        Column(measured) {
+            shown.forEachIndexed { index, entry ->
+                NeedsYouBar(entry.text, null, if (entry.ownerItem == null) NeedsYouLogic.sessionHint else NeedsYouLogic.itemHint,
+                    detail = entry.detail, since = entry.since, glyph = entry.glyph,
+                    more = if (index == shown.lastIndex) entries.size - shown.size else 0,
+                    onFold = if (index == 0) ({ unfolded = false }) else null) { go(entry) }
+            }
+        }
+        return
+    }
+    val several = waiting.count > 1
+    NeedsYouBar(waiting.text, null, when {
+        several -> NeedsYouLogic.unfoldHint(waiting.count)
+        waiting.ownerItem == null -> NeedsYouLogic.sessionHint
+        else -> NeedsYouLogic.itemHint
+    }, measured, detail = waiting.detail, since = waiting.since, more = waiting.more, glyph = waiting.glyph, unfolds = several) {
+        if (several) unfolded = true else go(waiting)
     }
 }
 
@@ -110,7 +138,8 @@ internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, se
  */
 @Composable
 internal fun NeedsYouBar(text: String, chevron: NeedsYouChevron?, hint: String, modifier: Modifier = Modifier, detail: String? = null,
-    since: String? = null, more: Int = 0, glyph: NeedsYouGlyph = NeedsYouGlyph.QUESTION, onPress: () -> Unit) {
+    since: String? = null, more: Int = 0, glyph: NeedsYouGlyph = NeedsYouGlyph.QUESTION, unfolds: Boolean = false,
+    onFold: (() -> Unit)? = null, onPress: () -> Unit) {
     val haptics = LocalHapticFeedback.current
     val amber = LocalOrbitColors.current.needsYou
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -118,30 +147,46 @@ internal fun NeedsYouBar(text: String, chevron: NeedsYouChevron?, hint: String, 
     Box(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 16.dp, end = 16.dp, bottom = 6.dp)
         .testTag("needs-you-bar")) {
         // Read as its words, a button, and what the press does (iOS `accessibilityHint`).
-        Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClickLabel = hint, role = Role.Button, onClick = press)
-            .padding(start = 7.dp, end = 16.dp, top = 5.dp, bottom = 5.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            // The one place the amber is; the words stay the surface's own — amber words on amber were the band's trap.
-            Box(Modifier.size(30.dp).background(amber.copy(alpha = 0.15f), CircleShape), contentAlignment = Alignment.Center) {
-                Icon(painterResource(glyph.drawable), null, Modifier.size(16.dp).testTag("needs-you-bar-glyph:${glyph.name}"), tint = amber)
-            }
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(text, Modifier.weight(1f).testTag("needs-you-bar-text"), color = MaterialTheme.colorScheme.onSurface,
-                        style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (more > 0) Text("+$more", Modifier.testTag("needs-you-bar-more").background(muted.copy(alpha = 0.14f), CircleShape)
-                        .padding(horizontal = 6.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = muted)
-                    since?.let { NeedsYouAge(it) }
+        Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant),
+            verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.weight(1f).heightIn(min = 44.dp).clickable(onClickLabel = hint, role = Role.Button, onClick = press)
+                .padding(start = 7.dp, end = if (onFold == null) 16.dp else 0.dp, top = 5.dp, bottom = 5.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                // The one place the amber is; the words stay the surface's own — amber words on amber were the band's trap.
+                Box(Modifier.size(30.dp).background(amber.copy(alpha = 0.15f), CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(painterResource(glyph.drawable), null, Modifier.size(16.dp).testTag("needs-you-bar-glyph:${glyph.name}"), tint = amber)
                 }
-                detail?.let {
-                    Text(it, Modifier.testTag("needs-you-bar-detail"), style = MaterialTheme.typography.bodySmall, color = muted,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(text, Modifier.weight(1f).testTag("needs-you-bar-text"), color = MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        // "+N" for those behind it, with a ⌄ when the press unfolds them rather than going.
+                        if (more > 0 || unfolds) Row(Modifier.background(muted.copy(alpha = 0.14f), CircleShape).padding(horizontal = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (more > 0) Text("+$more", Modifier.testTag("needs-you-bar-more"), style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold, color = muted)
+                            if (unfolds) Icon(painterResource(R.drawable.ic_chevron_down), null,
+                                Modifier.size(10.dp).testTag("needs-you-bar-unfolds"), tint = muted)
+                        }
+                        since?.let { NeedsYouAge(it) }
+                    }
+                    detail?.let {
+                        Text(it, Modifier.testTag("needs-you-bar-detail"), style = MaterialTheme.typography.bodySmall, color = muted,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                chevron?.let {
+                    Icon(painterResource(R.drawable.ic_chevron_down), null,
+                        Modifier.size(14.dp).rotate(if (it == NeedsYouChevron.UP) 180f else 0f).testTag("needs-you-bar-chevron:${it.name}"), tint = muted)
                 }
             }
-            chevron?.let {
-                Icon(painterResource(R.drawable.ic_chevron_down), null,
-                    Modifier.size(14.dp).rotate(if (it == NeedsYouChevron.UP) 180f else 0f).testTag("needs-you-bar-chevron:${it.name}"), tint = muted)
+            // The ↑ on the first capsule of the unfolded stack: a press of its own, folding them back.
+            onFold?.let { fold ->
+                Box(Modifier.size(48.dp).clickable(onClickLabel = NeedsYouLogic.foldLabel, role = Role.Button) {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); fold()
+                }.testTag("needs-you-bar-fold"), contentAlignment = Alignment.Center) {
+                    Icon(painterResource(R.drawable.ic_chevron_down), NeedsYouLogic.foldLabel, Modifier.size(14.dp).rotate(180f), tint = muted)
+                }
             }
         }
     }

@@ -41,7 +41,7 @@ import java.time.Instant
 @Composable
 internal fun RunSettingsSection(state: ProjectPageState, doc: JsonObject, now: Instant, enabled: Boolean, editMergeCheck: () -> Unit,
     integration: (JsonObject?) -> Unit, automatic: (Boolean) -> Unit, stepConcurrency: (Int) -> Unit, pause: (Boolean) -> Unit,
-    mergeLive: suspend () -> Boolean = { false }) {
+    nonCode: (Boolean) -> Unit = {}, mergeLive: suspend () -> Boolean = { false }) {
     Column(Modifier.testTag("project-settings"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionHead(StartProjectCopy.howItRuns, RunSettings.appliesFromNextTask)
         val view = state.integration
@@ -51,17 +51,22 @@ internal fun RunSettingsSection(state: ProjectPageState, doc: JsonObject, now: I
                 // every sentence about where work goes names: that one, or main.
                 val stored = ProjectMainBranch.stored(view)
                 val main = stored ?: RunSettings.defaultMainBranch
-                LineSetting(view, doc, now, enabled, stored != null, main, integration)
-                // A server that predates the delivery mode reports none, and draws no row. Under the line: it only means something
-                // for a project that lands directly on main.
-                if (view.text("deliveryMode") != null) { HorizontalDivider(); DeliverySetting(view, enabled, main, integration, mergeLive) }
-                stored?.let { HorizontalDivider(); MainBranchSetting(view, it, now, enabled, integration) }
-                HorizontalDivider()
+                // What the project delivers (board 01 A–C), first: it decides whether the landing settings under it mean anything. A
+                // server that predates the mark sends none, and draws no row.
+                val marked = doc.flag("nonCode")
+                if (doc["nonCode"] is JsonPrimitive) { DeliversSetting(doc, view, enabled, main, nonCode); HorizontalDivider() }
+                if (marked) { LandingOff(); HorizontalDivider() } else {
+                    LineSetting(view, doc, now, enabled, stored != null, main, integration)
+                    // A server that predates the delivery mode reports none, and draws no row. Under the line: it only means something
+                    // for a project that lands directly on main.
+                    if (view.text("deliveryMode") != null) { HorizontalDivider(); DeliverySetting(view, enabled, main, integration, mergeLive) }
+                    stored?.let { HorizontalDivider(); MainBranchSetting(view, it, now, enabled, integration) }
+                    HorizontalDivider()
+                }
                 AutomaticSetting(view, doc, enabled, main, automatic)
                 HorizontalDivider()
                 AtMostSetting(state, doc, enabled, stepConcurrency)
-                HorizontalDivider()
-                MergeCheckSetting(view, doc, enabled, main, editMergeCheck)
+                if (!marked) { HorizontalDivider(); MergeCheckSetting(view, doc, enabled, main, editMergeCheck) }
                 view.number("escalationSeconds")?.let { seconds -> HorizontalDivider(); EscalationSetting(view, seconds, enabled, integration) }
                 HorizontalDivider()
                 val paused = doc.text("pausedAt") != null
@@ -171,6 +176,47 @@ private fun DeliverySetting(view: JsonObject, enabled: Boolean, main: String, wr
                 Text(RunSettings.agentPushConfirm) } },
             dismissButton = { TextButton(onClick = { asking = null }, modifier = Modifier.testTag("project-delivery-confirm:cancel")) { Text("Cancel") } })
     }
+}
+
+/** Delivers (board 01 ②③): Code or Not code, with who set the mark and when, and its reason. iOS writes it at the press, so a
+ * change asks first, saying what it does — the web says the same above its Save. */
+@Composable
+private fun DeliversSetting(doc: JsonObject, view: JsonObject, enabled: Boolean, main: String, write: (Boolean) -> Unit) {
+    val marked = doc.flag("nonCode")
+    var asking by remember { mutableStateOf<Boolean?>(null) }
+    val branch = view.text("ref")?.takeIf { view.text("line") == "PROJECT_BRANCH" } ?: "project/${doc.text("id").orEmpty()}"
+    Column(Modifier.testTag("project-delivers"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(DoneCopy.RUN_DELIVERS)
+        DeliveryOption(!marked, DoneCopy.RUN_DELIVERS_CODE, DoneCopy.RUN_DELIVERS_CODE_HINT.replace("{main}", main), enabled, offered = true,
+            "project-delivers:CODE") { if (marked) asking = false }
+        DeliveryOption(marked, DoneCopy.RUN_DELIVERS_NOT_CODE, DoneCopy.RUN_DELIVERS_NOT_CODE_HINT, enabled, offered = true,
+            "project-delivers:NOT_CODE") { if (!marked) asking = true }
+        DoneFollowUps.provenance(doc) { ProjectDone.dateTime(it) }?.let { provenance ->
+            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f), RoundedCornerShape(8.dp)).padding(10.dp)
+                .testTag("project-delivers-by"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Note(provenance)
+                DoneFollowUps.reasonLine(doc)?.let { Note(it) }
+            }
+        }
+    }
+    asking?.let { next ->
+        AlertDialog(onDismissRequest = { asking = null }, modifier = Modifier.testTag("project-delivers-confirm"),
+            title = { Text(if (next) DoneCopy.RUN_TO_NOT_CODE_TITLE else DoneCopy.RUN_TO_CODE_TITLE) },
+            text = { Text(if (next) DoneCopy.RUN_TO_NOT_CODE.replace("{branch}", RunSettings.shortBranch(branch)) else DoneCopy.RUN_TO_CODE) },
+            confirmButton = { TextButton(onClick = { asking = null; write(next) }, modifier = Modifier.testTag("project-delivers-confirm:yes")) {
+                Text(if (next) DoneCopy.RUN_TO_NOT_CODE_ACTION else DoneCopy.RUN_TO_CODE_ACTION, fontWeight = FontWeight.Bold) } },
+            dismissButton = { TextButton(onClick = { asking = null }, modifier = Modifier.testTag("project-delivers-confirm:cancel")) { Text("Cancel") } })
+    }
+}
+
+/** Landing · Off (board 01 C): the four landing settings folded into one line while the project is marked non-code. */
+@Composable
+private fun LandingOff() = Column(Modifier.testTag("project-landing-off"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(DoneCopy.RUN_LANDING, Modifier.weight(1f))
+        Text(DoneCopy.RUN_SWITCH_OFF, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    Note(DoneCopy.RUN_LANDING_OFF_HINT)
 }
 
 /** One of the two ways, ticked when it is the one; a way not [offered] here is drawn dimmed, its line saying why. */
@@ -478,7 +524,7 @@ internal fun RequestedStartSheet(api: ProjectApi, id: String, enabled: Boolean, 
  * refusal stays on the card in the door's words. */
 @Composable
 internal fun ProjectDoneSheet(api: ProjectApi, id: String, state: ProjectPageState, now: Instant, enabled: Boolean, close: () -> Unit,
-    write: suspend (String, suspend () -> Unit) -> String?) {
+    actions: CriteriaActions? = null, write: suspend (String, suspend () -> Unit) -> String?) {
     val doc = state.document ?: return
     val row = ProjectDone.live(state.openItems, ProjectDoc.status(doc))
     var doneCheck by remember { mutableStateOf<JsonObject?>(null) }
@@ -488,7 +534,8 @@ internal fun ProjectDoneSheet(api: ProjectApi, id: String, state: ProjectPageSta
     var error by remember { mutableStateOf<String?>(null) }
     // While a press is out the sheet cannot be put away from it.
     var writing by remember { mutableStateOf(false) }
-    LaunchedEffect(id, row?.text("itemId")) {
+    // Read again with the page: a move or a confirmation from this card changes what the check finds.
+    LaunchedEffect(id, row?.text("itemId"), doc) {
         if (row == null) try { doneCheck = api.doneCheck(id) }
         catch (cancel: CancellationException) { throw cancel }
         catch (failure: Exception) { error = failureReason(failure) }
@@ -509,7 +556,7 @@ internal fun ProjectDoneSheet(api: ProjectApi, id: String, state: ProjectPageSta
             Column(Modifier.heightIn(max = 720.dp).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 ProjectDoneCard(doc, row, confirmation?.obj("confirmation")?.text("confirmedAt"), ProjectDone.openItemsCount(state.openItems),
                     ProjectDone.runningCount(doc), record, sealRead = row?.obj("doneRequest") != null || (digest != null && doneCheck != null), now = now, enabled = enabled,
-                    error = error, tag = "project-done", doneCheck = doneCheck,
+                    error = error, tag = "project-done", doneCheck = doneCheck, actions = actions,
                     onRecord = {
                         val body = ProjectDone.body(doc, itemId, row?.obj("doneRequest"), digest)
                         var answer: JsonObject? = null

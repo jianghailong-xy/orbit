@@ -63,10 +63,23 @@ public struct ProjectCriterion: Codable, Equatable, Sendable, Identifiable {
     public let landing: String?
     /// How the owner said anybody would know this criterion holds.
     public let verificationMethod: String?
+    /// Its text revision — what a confirmation names, and what a change of mode restates.
+    public let revision: Int?
+    /// How it is met: by its tasks (the default) or by a confirmation.
+    public let satisfiedBy: CriterionSatisfiedBy
+    /// Where its confirmation stands — a criterion met by confirmation only.
+    public let confirmation: CriterionConfirmationStanding?
+    /// Kept so a change of mode restates the criterion as it stands.
+    public let completionCriterionOverrideReason: String?
+    /// Where it came from, when it was moved here from another project (board 02 I).
+    public let movedFrom: CriterionMovedFrom?
 
     public init(id: String, key: String? = nil, ordinal: Int, text: String, satisfied: Bool? = nil,
                 unmet: [ProjectCriterionUnmet] = [], landing: String? = nil,
-                verificationMethod: String? = nil) {
+                verificationMethod: String? = nil, revision: Int? = nil,
+                satisfiedBy: CriterionSatisfiedBy = .tasks,
+                confirmation: CriterionConfirmationStanding? = nil,
+                completionCriterionOverrideReason: String? = nil, movedFrom: CriterionMovedFrom? = nil) {
         self.id = id
         self.key = key
         self.ordinal = ordinal
@@ -75,6 +88,11 @@ public struct ProjectCriterion: Codable, Equatable, Sendable, Identifiable {
         self.unmet = unmet
         self.landing = landing
         self.verificationMethod = verificationMethod
+        self.revision = revision
+        self.satisfiedBy = satisfiedBy
+        self.confirmation = confirmation
+        self.completionCriterionOverrideReason = completionCriterionOverrideReason
+        self.movedFrom = movedFrom
     }
 
     public init(from decoder: Decoder) throws {
@@ -87,6 +105,18 @@ public struct ProjectCriterion: Codable, Equatable, Sendable, Identifiable {
         unmet = try c.decodeIfPresent([ProjectCriterionUnmet].self, forKey: .unmet) ?? []
         landing = try c.decodeIfPresent(String.self, forKey: .landing)
         verificationMethod = try c.decodeIfPresent(String.self, forKey: .verificationMethod)
+        revision = try? c.decodeIfPresent(Int.self, forKey: .revision)
+        satisfiedBy = (try? c.decodeIfPresent(CriterionSatisfiedBy.self, forKey: .satisfiedBy)) ?? .tasks
+        confirmation = try? c.decodeIfPresent(CriterionConfirmationStanding.self, forKey: .confirmation)
+        completionCriterionOverrideReason = try? c.decodeIfPresent(String.self,
+                                                                   forKey: .completionCriterionOverrideReason)
+        movedFrom = try? c.decodeIfPresent(CriterionMovedFrom.self, forKey: .movedFrom)
+    }
+
+    /// The criterion as the done cards name it.
+    public var doneCriterion: ProjectDoneSubject.Criterion {
+        ProjectDoneSubject.Criterion(id: id, key: key, ordinal: ordinal, text: text, revision: revision,
+                                     verificationMethod: verificationMethod)
     }
 }
 
@@ -169,16 +199,20 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
     public let doneAt: String?
     /// The gaps the owner accepted when they recorded it done.
     public let acceptedGaps: [AcceptedGap]
+    /// The non-code mark and the criteria moved out (`ProjectDoneFollowUps.swift`).
+    public let followUps: ProjectDoneFollowUpFields
+
+    /// The explicit non-code mark: the page names it where it would name the branch.
+    public var nonCode: Bool { followUps.nonCodeMark != nil }
 
     /// What the done cards and rows read off this document.
     public var doneSubject: ProjectDoneSubject {
         ProjectDoneSubject(title: title, status: status.rawValue,
-                           criteria: acceptanceCriteriaItems.map {
-                               ProjectDoneSubject.Criterion(id: $0.id, key: $0.key, ordinal: $0.ordinal,
-                                                            text: $0.text)
-                           },
+                           criteria: acceptanceCriteriaItems.map(\.doneCriterion),
                            derivedDone: derivedDone, doneBy: doneBy, doneAt: doneAt,
-                           acceptedGaps: acceptedGaps, upstreamRef: integration?.upstreamRef)
+                           acceptedGaps: acceptedGaps, upstreamRef: integration?.upstreamRef,
+                           projectID: id, nonCodeMark: followUps.nonCodeMark,
+                           criteriaMovedOut: followUps.criteriaMovedOut)
     }
 
     /// Whether the project has been started, read off `startedAt` and off nothing else — not off
@@ -198,7 +232,8 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
                 tasksByStatus: [String: Int]? = nil, blockers: ProjectBlockers? = nil,
                 startedAt: String? = nil, startedAtRead: Bool = false, pausedAt: String? = nil,
                 maxConcurrentTasks: Int? = nil, derivedDone: ProjectDerivedDone? = nil,
-                doneBy: ProjectDoneBy? = nil, doneAt: String? = nil, acceptedGaps: [AcceptedGap] = []) {
+                doneBy: ProjectDoneBy? = nil, doneAt: String? = nil, acceptedGaps: [AcceptedGap] = [],
+                followUps: ProjectDoneFollowUpFields = ProjectDoneFollowUpFields()) {
         self.id = id
         self.title = title
         self.status = status
@@ -223,6 +258,7 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         self.doneBy = doneBy
         self.doneAt = doneAt
         self.acceptedGaps = acceptedGaps
+        self.followUps = followUps
     }
 
     private struct Counts: Codable {
@@ -264,9 +300,11 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         doneBy = try? c.decodeIfPresent(ProjectDoneBy.self, forKey: .doneBy)
         doneAt = try? c.decodeIfPresent(String.self, forKey: .doneAt)
         acceptedGaps = ((try? c.decodeIfPresent([AcceptedGap].self, forKey: .acceptedGaps)) ?? nil) ?? []
+        followUps = (try? ProjectDoneFollowUpFields(from: decoder)) ?? ProjectDoneFollowUpFields()
     }
 
     public func encode(to encoder: Encoder) throws {
+        try followUps.encode(into: encoder)
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id)
         try c.encode(title, forKey: .title)

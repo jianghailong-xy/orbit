@@ -37,7 +37,7 @@ export function ManagedRunnerNotice({ managed, className }: { managed: ManagedRu
       {(display.retry || display.ensure || display.signIn) && (
         <div className="managed-runner-notice-actions">
           {display.signIn && status.runnerId && (
-            <Link to={`/infrastructure?runner=${encodeId(status.runnerId)}`}>{MANAGED_RUNNER_COPY.signIn}</Link>
+            <Link to={`/settings/machines/${encodeId(status.runnerId)}`}>{MANAGED_RUNNER_COPY.signIn}</Link>
           )}
           {display.retry && (
             <Button size="small" loading={retry.isPending} onClick={() => retry.mutate(status)}>

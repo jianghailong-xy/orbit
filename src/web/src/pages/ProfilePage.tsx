@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState, type FormEvent } from 'react';
 import { api, setAvatar } from '../api';
+import { SettingsCard, SettingsHeader, SettingsRow, SettingsSection } from '../components/settings';
 import { SignInMethodsCard } from '../components/SignInMethodsCard';
 import { Avatar } from '../components/ui/Avatar';
 import { Button } from '../components/ui/Button';
@@ -13,6 +14,7 @@ import { useFormFields } from '../components/ui/useFormFields';
 import { squareJpeg } from '../lib/avatar';
 import { accessTokensQuery, avatarQuery, meQuery, type Me } from '../lib/queries';
 import { useToast } from '../lib/toast';
+import { PERSONAL_SETTINGS as S } from './settings/settingsIndex';
 
 /** Under the name: who sees it besides you. The iOS edit-profile card says the same
  *  (`SettingsCopy.nameCaption`). */
@@ -120,61 +122,67 @@ export function ProfilePage() {
   };
 
   return (
-    <div style={{ maxWidth: 560, margin: '0 auto' }}>
-      <h1 className="page-title">Profile</h1>
+    <div className="settings-page">
+      <SettingsHeader title="Profile" />
 
-      <Card title="Basic information" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'grid', gap: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <Avatar size={64} src={photo.data} style={{ background: 'var(--brand)', flex: 'none', fontSize: 28 }}>
-              {initial}
-            </Avatar>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              <Button loading={upload.isPending} onClick={() => chooser.current?.click()}>
-                {CHOOSE_PHOTO}
-              </Button>
-              {me.data?.avatarUpdatedAt && (
-                <Button loading={remove.isPending} onClick={() => remove.mutate()}>
-                  {REMOVE_PHOTO}
+      <SettingsSection title="Basic information">
+        <SettingsCard>
+          <SettingsRow
+            anchor={S.photo.anchor}
+            title={S.photo.title}
+            control={
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <Avatar size={40} src={photo.data} style={{ background: 'var(--brand)', flex: 'none', fontSize: 18 }}>
+                  {initial}
+                </Avatar>
+                <Button loading={upload.isPending} onClick={() => chooser.current?.click()}>
+                  {CHOOSE_PHOTO}
                 </Button>
-              )}
-            </div>
-            <input
-              ref={chooser}
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                e.target.value = '';
-                if (file) upload.mutate(file);
-              }}
-            />
-          </div>
-          <div>
-            <div style={{ color: 'var(--text-3)', fontSize: 12, marginBottom: 4 }}>Name</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Input
-                value={draft}
-                maxLength={80}
-                autoComplete="name"
-                onChange={(e) => setEdited(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.repeat && !e.nativeEvent.isComposing && canSave) rename.mutate();
-                }}
-              />
-              <Button variant="primary" disabled={!canSave} loading={rename.isPending} onClick={() => rename.mutate()}>
-                Save
-              </Button>
-            </div>
-            <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 6 }}>{NAME_CAPTION}</div>
-          </div>
-          <div>
-            <div style={{ color: 'var(--text-3)', fontSize: 12, marginBottom: 2 }}>Email</div>
-            <div>{me.data?.email ?? '—'}</div>
-          </div>
-        </div>
-      </Card>
+                {me.data?.avatarUpdatedAt && (
+                  <Button loading={remove.isPending} onClick={() => remove.mutate()}>
+                    {REMOVE_PHOTO}
+                  </Button>
+                )}
+                <input
+                  ref={chooser}
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    if (file) upload.mutate(file);
+                  }}
+                />
+              </div>
+            }
+          />
+          <SettingsRow
+            anchor={S.name.anchor}
+            title={S.name.title}
+            description={NAME_CAPTION}
+            control={
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Input
+                  aria-label="Name"
+                  style={{ width: 200 }}
+                  value={draft}
+                  maxLength={80}
+                  autoComplete="name"
+                  onChange={(e) => setEdited(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.repeat && !e.nativeEvent.isComposing && canSave) rename.mutate();
+                  }}
+                />
+                <Button variant="primary" disabled={!canSave} loading={rename.isPending} onClick={() => rename.mutate()}>
+                  Save
+                </Button>
+              </div>
+            }
+          />
+          <SettingsRow anchor={S.email.anchor} title={S.email.title} control={<span style={{ color: 'var(--text-2)' }}>{me.data?.email ?? '—'}</span>} />
+        </SettingsCard>
+      </SettingsSection>
 
       <SignInMethodsCard me={me.data} />
 

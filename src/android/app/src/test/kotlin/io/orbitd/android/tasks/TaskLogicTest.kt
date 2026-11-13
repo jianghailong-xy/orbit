@@ -79,15 +79,18 @@ class TaskLogicTest {
 
     @Test fun theActionRowConcludesOnTheLeftAndMovesOnTheRight() {
         val run = TaskRunHandoff.entry(task())
-        assertEquals(TaskActionRow(null, TaskActionRow.Trailing.RunNow), TaskDetailLogic.actionRow(null, false, "OPEN", false, run))
-        assertEquals(TaskActionRow(TaskActionRow.Leading.Reopen, null), TaskDetailLogic.actionRow(null, true, "DONE", false, run))
-        assertEquals(TaskActionRow.Trailing.Retry, TaskDetailLogic.actionRow(null, true, "FAILED", false, TaskRunHandoff.entry(task(""","status":"FAILED""""))).trailing)
+        assertEquals(TaskActionRow(null, TaskActionRow.Trailing.RunNow), TaskDetailLogic.actionRow(null, "OPEN", false, run))
+        // A stopped task draws no press under its title: Reopen task and Run again are in ⋯ (board 05).
+        assertTrue(TaskDetailLogic.actionRow(null, "DONE", false, run).isEmpty)
+        assertTrue(TaskDetailLogic.actionRow(null, "CANCELLED", false, run).isEmpty)
+        assertEquals(TaskActionRow.Trailing.Retry, TaskDetailLogic.actionRow(null, "FAILED", false, TaskRunHandoff.entry(task(""","status":"FAILED""""))).trailing)
         val busy = TaskRunHandoff.entry(task(""","sessions":[{"id":"run","status":"RUNNING"}]"""))
-        assertEquals(TaskActionRow.Trailing.OpenRun("run"), TaskDetailLogic.actionRow(null, false, "OPEN", false, busy).trailing)
-        assertEquals(TaskActionRow.Trailing.Gate, TaskDetailLogic.actionRow(null, false, "OPEN", true, busy).trailing)
-        val waiting = TaskDetailLogic.actionRow(OwnerPanelAction.Pointer("run"), false, "IN_PROGRESS", false, busy)
+        assertEquals(TaskActionRow.Trailing.OpenRun("run"), TaskDetailLogic.actionRow(null, "OPEN", false, busy).trailing)
+        assertEquals(TaskActionRow.Trailing.OpenRun("run"), TaskDetailLogic.actionRow(null, "CANCELLED", false, busy).trailing)
+        assertEquals(TaskActionRow.Trailing.Gate, TaskDetailLogic.actionRow(null, "OPEN", true, busy).trailing)
+        val waiting = TaskDetailLogic.actionRow(OwnerPanelAction.Pointer("run"), "IN_PROGRESS", false, busy)
         assertEquals(TaskActionRow.Leading.Waiting("run"), waiting.leading); assertTrue(waiting.stacked)
-        assertEquals(TaskActionRow.Leading.ConfirmDone, TaskDetailLogic.actionRow(OwnerPanelAction.Confirm, true, "OPEN", false, run).leading)
+        assertEquals(TaskActionRow.Leading.ConfirmDone, TaskDetailLogic.actionRow(OwnerPanelAction.Confirm, "OPEN", false, run).leading)
         assertEquals(TaskDetailCopy.runDisabledNoRunner, TaskDetailLogic.runDisabledHint(task(""","assignee":{"id":"a"}"""), false))
         assertEquals(TaskJudgmentCopy.verificationSubjectHint["RUNNING"], TaskDetailLogic.runDisabledHint(
             task(""","completionPolicy":"VERIFICATION_PASSED","verificationState":"RUNNING""""), true))
@@ -105,6 +108,15 @@ class TaskLogicTest {
         for (status in listOf("IN_PROGRESS", "DONE", "FAILED", "CANCELLED"))
             assertNull(status, TaskDetailLogic.runNowHint(task(""","status":"$status","dependsOn":[]""")))
         assertNull(TaskDetailLogic.runNowHint(task()))
+    }
+
+    @Test fun aForkedTaskOrSessionSaysItsSourceVerbatimAndAnOlderServerSaysNothing() {
+        val sentence = "Forked from session «Refactor the claim path» at 5555555 (includes uncommitted changes)"
+        assertEquals(sentence, TaskDetailLogic.forkSource(task(""","forkSource":"$sentence"""")))
+        assertEquals(sentence, TaskDetailLogic.forkSource(json("""{"id":"s","title":"Run","forkSource":"$sentence"}""")))
+        assertNull(TaskDetailLogic.forkSource(task()))
+        assertNull(TaskDetailLogic.forkSource(task(""","forkSource":null""")))
+        assertNull(TaskDetailLogic.forkSource(task(""","forkSource":""""")))
     }
 
     @Test fun ownerConfirmationIsOnePlaceToAnswer() {
@@ -243,7 +255,6 @@ class TaskLogicTest {
         assertEquals("Coordinator: Needs care", TaskDetailLogic.modelHintNote(task(""","modelHint":"L","modelHintReason":"Needs care"""")))
         assertEquals("12m", TaskTime.elapsed("2030-01-01T00:00:00Z", Instant.parse("2030-01-01T00:12:30Z")))
         assertEquals("3h ago", TaskTime.relative("2030-01-01T00:00:00Z", Instant.parse("2030-01-01T03:10:00Z")))
-        assertEquals("Created by Ada", TaskDetailLogic.createdFootnote("Ada", null))
         assertEquals(TaskDetailCopy.scheduleNotSet, TaskDetailLogic.scheduleValue(null))
         assertEquals(TaskDetailCopy.scheduleHintUnreadable, TaskDetailLogic.scheduleHint("not a time"))
         assertEquals(listOf("ws1"), mentionedWorkspaceIds("hi @Ada", listOf(json("""{"id":"ws1","name":"ada"}"""), json("""{"id":"ws2","name":"Adam"}"""))))

@@ -102,6 +102,7 @@ struct WikiDocPage: View {
                 }
             }
             .listStyle(.plain)
+            .softTopEdgeEffect()
             // Where the page stands, for the reading line the section in view is read against.
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in headingTops.page = frame }
             // Back on the page from one pushed over it: the chat's page chip is this document's section again.
@@ -1054,6 +1055,7 @@ struct WikiDocsBrowsePage: View {
             }
         }
         .listStyle(.plain)
+        .softTopEdgeEffect()
         .navigationTitle("")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -1196,6 +1198,7 @@ struct WikiDocsIndexPage: View {
             }
         }
         .listStyle(.plain)
+        .softTopEdgeEffect()
         .modifier(WikiDocIndexShown())
         .navigationTitle("")
         #if os(iOS)

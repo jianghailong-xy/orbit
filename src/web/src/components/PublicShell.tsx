@@ -24,6 +24,11 @@ export function PublicShell({
   scrollRef,
   onScroll,
   wide = false,
+  subtitle,
+  badge = 'Read-only',
+  live = true,
+  dock,
+  footer = 'Shared from Orbit · read-only',
   children,
 }: {
   crumbs: PublicCrumb[];
@@ -33,6 +38,16 @@ export function PublicShell({
   onScroll?: UIEventHandler<HTMLElement>;
   /** The app project page's reading width (1040) rather than a conversation's. */
   wide?: boolean;
+  /** Said after the breadcrumb, in grey: the guest page's `Shared by <owner>`. */
+  subtitle?: ReactNode;
+  /** The badge at the right: Read-only on a public page, Guest on the guest page. */
+  badge?: ReactNode;
+  /** Whether to show the Live mark, which a public link's dialog promises. */
+  live?: boolean;
+  /** Held under the scroller, outside it: the guest page's composer. */
+  dock?: ReactNode;
+  /** The footer line; null for none. */
+  footer?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -61,21 +76,25 @@ export function PublicShell({
               </Fragment>
             );
           })}
+          {subtitle && <span className="share-subtitle">{subtitle}</span>}
         </nav>
         <div className="share-right">
           {status}
-          <span className="share-live" title={PUBLIC_LIVE_NOTE}>
-            <i aria-hidden />
-            Live
-          </span>
-          <span className="share-badge">Read-only</span>
+          {live && (
+            <span className="share-live" title={PUBLIC_LIVE_NOTE}>
+              <i aria-hidden />
+              Live
+            </span>
+          )}
+          <span className="share-badge">{badge}</span>
           {actions}
         </div>
       </header>
       <main className="share-scroll" ref={scrollRef} onScroll={onScroll}>
         <div className={`share-inner${wide ? ' is-wide' : ''}`}>{children}</div>
       </main>
-      <footer className="share-footer">Shared from Orbit · read-only</footer>
+      {dock}
+      {footer != null && <footer className="share-footer">{footer}</footer>}
     </div>
   );
 }

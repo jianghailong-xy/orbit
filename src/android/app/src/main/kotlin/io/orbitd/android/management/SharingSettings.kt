@@ -276,28 +276,33 @@ private fun rememberLiveFor(api: ManagementApi): Pair<Long, Boolean> {
     return if (live.handle === api.handle) live.invalidationRevision to live.directoryFresh else 0L to false
 }
 
-/** The directory's session Share dialog hosts the same panel, on the signed-in account's own handle. */
+/** The directory's session Share dialog hosts the same panel, on the signed-in account's own handle, with People who can reply
+ * ([SessionGuestsSection]) given where and how the agent runs a guest's message ([guests]). */
 @Composable
-fun SessionSharePanel(sessionId: String) {
+fun SessionSharePanel(sessionId: String, guests: SessionGuestContext? = null) {
     val app = LocalContext.current.applicationContext as OrbitApplication
     val handle = (app.session.state.collectAsState().value as? AuthState.SignedIn)?.handle ?: return
     val api = remember(handle) { ManagementApi(app.session, handle, app.processScope) }
-    LiveSharePanel(api, "SESSION", sessionId)
+    LiveSharePanel(api, "SESSION", sessionId, guests = guests)
 }
 
 /** The panel on the account's live connection, for a page's own Share dialog: a task's or a project's ⋯ → Share…. */
 @Composable
-fun LiveSharePanel(api: ManagementApi, kind: String, id: String, changed: (JsonObject) -> Unit = {}) {
+fun LiveSharePanel(api: ManagementApi, kind: String, id: String, changed: (JsonObject) -> Unit = {}, guests: SessionGuestContext? = null) {
     val (revision, fresh) = rememberLiveFor(api)
-    ShareResourcePanel(api, revision, kind, id, fresh, changed)
+    ShareResourcePanel(api, revision, kind, id, fresh, guests, changed)
 }
 
 /**
  * SharePanel: access, the link, what it includes, when it stops, and how often it was opened. [changed] hears the
  * server's answer to every read and change, as `{link, counts}`, so a page that says whether its link is live says what the server does.
+ * A session's panel given [guests] also carries People who can reply (docs/session-guests-design.md §3), last, under Access or under
+ * the link's sections while one is open, as web `ShareModal` places it.
  */
 @Composable
-fun ShareResourcePanel(api: ManagementApi, revision: Long, kind: String, id: String, fresh: Boolean = true, changed: (JsonObject) -> Unit = {}) {
+fun ShareResourcePanel(api: ManagementApi, revision: Long, kind: String, id: String, fresh: Boolean = true,
+                       guests: SessionGuestContext? = null, changed: (JsonObject) -> Unit = {}) {
+    val people = guests?.takeIf { kind == "SESSION" }
     val path = remember(kind, id) { sharingPath(kind, id) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -354,7 +359,7 @@ fun ShareResourcePanel(api: ManagementApi, revision: Long, kind: String, id: Str
                 RadioButton(selected = (link != null) == public, onClick = null); Spacer(Modifier.width(8.dp)); Text(label)
             }
         }
-        Text(if (link == null) ShareCopy.privateDetail else ShareCopy.publicDetail(kind), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
+        Text(if (link != null) ShareCopy.publicDetail(kind) else if (people != null) SessionGuestsCopy.privateDetail else ShareCopy.privateDetail, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
         failure?.let { Text(it, color = Ink.red, style = MaterialTheme.typography.labelMedium) }
         link?.let { current ->
             val url = sharingPublicUrl(api.handle.account.server, current.text("token"))
@@ -403,6 +408,7 @@ fun ShareResourcePanel(api: ManagementApi, revision: Long, kind: String, id: Str
             if (selection != "until") ShareCopy.shortDate(current.str("expiresAt"))?.let { Text("Stops working $it", style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
             Text(ShareCopy.viewsLine(current.int("viewCount") ?: 0, current.str("lastViewedAt"), now), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
         }
+        people?.let { HorizontalDivider(); SessionGuestsSection(api, id, it) }
     }
     if (confirmingOff) AlertDialog(onDismissRequest = { confirmingOff = false }, title = { Text(ShareCopy.turnOffTitle) }, text = { Text(ShareCopy.turnOffDetail) },
         confirmButton = { TextButton(enabled = writable, onClick = {

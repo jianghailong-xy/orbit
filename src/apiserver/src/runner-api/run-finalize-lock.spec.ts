@@ -42,6 +42,8 @@ function makeController(current: LockedSnapshot) {
     onConversationTurnUpdateMany: async () => ({ count: 1 }),
   });
   const tx = {
+    // No Agent check is waiting on these runs (projects/criterion-check-ended.ts).
+    projectCriterionConfirmation: { findMany: async () => [] },
     $queryRaw: async () => {
       order.push('lock');
       return [{ id: SESSION_ID, leaseOwnerMatches: true }];

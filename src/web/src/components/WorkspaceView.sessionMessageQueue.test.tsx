@@ -278,7 +278,7 @@ describe('another session’s message, waiting in the queue', { timeout: 60_000 
     expect(waiting.classList.contains('is-queued'), 'drawn as still queued').toBe(true);
     expect(waiting.querySelector('.smc-from')?.textContent).toBe('Worker: migration review');
     expect(waiting.querySelector('.smc-body .md')?.textContent).toBe(SENT);
-    expect(waiting.querySelector('.smc-meta')?.textContent).toContain('Sent by another Orbit session, not by you');
+    expect(waiting.querySelector('.smc-head')?.getAttribute('title')).toBe('Sent by another Orbit session, not by you');
     // The queue's own line: it is waiting, and Cancel withdraws it. No Put back — its words are not
     // the reader's to take back.
     const line = waiting.querySelector('.smc-queued .chat-queued-meta')!;

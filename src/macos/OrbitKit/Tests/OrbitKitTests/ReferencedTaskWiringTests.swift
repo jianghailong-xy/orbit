@@ -99,8 +99,10 @@ final class ReferencedTaskWiringTests: XCTestCase {
         let cards = try section(try source(Self.notePath), from: "struct ReferencedTaskNoteView")
 
         XCTAssertTrue(cards.contains("@Environment(\\.openURL) private var openURL"),
-                      "the card opens links through the environment action both app shells install")
-        XCTAssertTrue(cards.contains("if let url = ReferencedTaskNote.link(task) { openURL(url) }"),
+                      "the card keeps the environment action as the fallback for a link it cannot open")
+        // Over a phone's conversation the app's own door pushes the task over it (`overConsole` is
+        // the console's answer); everywhere else the fallback routes as it always did.
+        XCTAssertTrue(cards.contains("app?.openOrbitLink(url, overConsole: overConsole, overPage: opensTasksOverPage) != true { openURL(url) }"),
                       "tapping the title opens the task it names")
 
         // And the link that wire carries is one this app routes rather than hands to a browser.

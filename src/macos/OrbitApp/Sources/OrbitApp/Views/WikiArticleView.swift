@@ -43,6 +43,7 @@ struct WikiContentsSheet: View {
                 WikiContentsRows(groups: groups, at: at, docGroups: docGroups, planPending: planPending, pick: choose)
             }
             .listStyle(.plain)
+            .softTopEdgeEffect()
             .navigationTitle(WikiArticleCopy.contents)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -243,6 +244,7 @@ struct WikiArticlePage: View {
             }
         }
         .listStyle(.plain)
+        .softTopEdgeEffect()
         .navigationTitle("")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -688,6 +690,7 @@ struct WikiBrowsePage: View {
             }
         }
         .listStyle(.plain)
+        .softTopEdgeEffect()
         .navigationTitle("")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -827,6 +830,7 @@ struct WikiIndexPage: View {
             }
         }
         .listStyle(.plain)
+        .softTopEdgeEffect()
         .modifier(WikiSectionIndexShown())
         .navigationTitle("")
         #if os(iOS)
