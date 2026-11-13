@@ -131,7 +131,7 @@ func runKimiChild(ctx context.Context, c subagentChild) (ExecResult, string, err
 	app.cancelPermissions()
 	var outcome kimiTurnOutcome
 	if promptErr == nil && strings.EqualFold(firstString(result, "stopReason", "stop_reason"), "end_turn") {
-		outcome = readKimiTurnOutcome(ctx, wire, wireFrom)
+		outcome = readKimiTurnOutcome(ctx, wire, wireFrom, nil)
 	}
 	// What the stream said before the answer was handled before it (the barrier); close the turn.
 	activeMu.Lock()

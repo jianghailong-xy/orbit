@@ -20,7 +20,7 @@ public enum DshRuntime {
     /// session.
     public static let runnerCapability = "provider:dsh"
     /// The `fixEngine` of DeepSeek Harness in the new-session hero while there is no DeepSeek key: fixed
-    /// by connecting one in Infrastructure (web `/providers/new/deepseek`), not on any runner.
+    /// by connecting one in Machines & models (web `/providers/new/deepseek`), not on any runner.
     public static let connectFix = "dsh-connect"
     /// What DeepSeek Harness says in the hero while there is no DeepSeek key to run on.
     public static let connectKey = "Connect a DeepSeek key"
@@ -120,7 +120,7 @@ public enum DshRuntime {
             }
         }
 
-        /// Fixed on the session's own key, in Infrastructure.
+        /// Fixed on the session's own key, in Machines & models.
         public var isKeyProblem: Bool { self == .needsKey || self == .invalidKey }
     }
 

@@ -65,12 +65,10 @@ final class AppModel {
     /// `GET /session-tags`. Drives the tag picker sheet and the list's tag filter/group chips; empty
     /// on an older server without the endpoint. See `loadSessionTags` / `setSessionTags`.
     var sessionTags: [SessionTag] = []
-    #if os(iOS)
-    /// The owner's session folders, every workspace's (`GET /session-folders`, by name) — the Move
-    /// panel lists the ones in the session's own workspace. iOS only, as the panel is: macOS shows no
-    /// folders (docs/session-folders-move-design.md §1). See `loadSessionFolders`.
+    /// The owner's session folders, every workspace's (`GET /session-folders`, by name) — the list's
+    /// folder rows, and on iOS the Move panel, which lists the ones in the session's own workspace.
+    /// See `loadSessionFolders`.
     var sessionFolders: [SessionFolder] = []
-    #endif
     // Top-level nav: which AppShell section is showing, and every section's navigation stack. The
     // app lands on the Agents section (the first agent's session list); the agent is selected once
     // the list loads — see `loadAgentsThenLand`.
@@ -402,9 +400,9 @@ final class AppModel {
     /// Entries are released in `applySessionSnapshot` the moment a snapshot without the row lands:
     /// from then on the row isn't in `lastSnapshot` either, so no later diff can announce it.
     private var filedSessions: Set<String> = []
-    /// Sessions being moved to Trash from this device. Delete takes the row out of every loaded list
-    /// on the tap (`hideTrashedSession`), and these stay out of every list written until the move has
-    /// settled — a read that left before the server had the move would put the row back for a beat,
+    /// Sessions being moved to Trash, or completed, from this device. Delete and Complete take the
+    /// row out of every loaded list on the tap (`hideTrashedSession`), and these stay out of every
+    /// list written until the move has settled — a read that left before the server had the move would put the row back for a beat,
     /// and so would the re-read the delete before it started, when rows are deleted one after
     /// another. Released (`revealTrashedSession`) once the lists have been read again behind the
     /// move, at once if the server refuses it, and by an Undo that brings the row back.
@@ -492,7 +490,7 @@ final class AppModel {
 
     /// Per-section shared stores (list + detail observe the same instance). Rebuilt per instance.
     private(set) var tasks: TasksModel?
-    /// The account's managed runner: its state in a managed workspace's console, and on Infrastructure
+    /// The account's managed runner: its state in a managed workspace's console, and on Machines & models
     /// for an account with no runner yet. Inert without the server's capability.
     private(set) var managedRunner: ManagedRunnerModel?
     private(set) var agents: AgentsModel?
@@ -503,7 +501,7 @@ final class AppModel {
     /// Every personal access token the account has issued: Settings → Access tokens, and the count
     /// on its row.
     private(set) var accessTokens: AccessTokensModel?
-    /// The shared pools the account is in: Infrastructure's Account pools, and each pool's page.
+    /// The shared pools the account is in: Machines & models' Account pools, and each pool's page.
     private(set) var sharedPools: SharedPoolsModel?
     /// The account's watches: Following, the console's Watching card, and every session's row and header.
     private(set) var watches: WatchesModel?
@@ -586,7 +584,7 @@ final class AppModel {
         accessTokens = AccessTokensModel(baseURL: url, tokenStore: tokenStore)
         sharedPools = SharedPoolsModel(baseURL: url, tokenStore: tokenStore)
         let managedRunnerModel = ManagedRunnerModel(baseURL: url, tokenStore: tokenStore)
-        // A managed runner set up from Infrastructure brings its runner and default workspace with it.
+        // A managed runner set up from Machines & models brings its runner and default workspace with it.
         managedRunnerModel.onEnsured = { [weak self] in self?.scheduleLibraryRefresh(.agents) }
         // Its default workspace's first session starts where the workspace list says: follow it as the runner comes up.
         managedRunnerModel.onFirstSessionProviderChanged = { [weak self] in self?.scheduleLibraryRefresh(.agents) }
@@ -960,9 +958,7 @@ final class AppModel {
         projectSessionsAddress = nil
         projectSessionsError = nil
         projectCompletedSessions = [:]
-        #if os(iOS)
         sessionFolders = []
-        #endif
         sessionDetails.removeAll()
         resetNavigation()
         lastSnapshot = nil
@@ -1265,10 +1261,8 @@ final class AppModel {
         } else if let wiki, wiki.spacesState.hasLoaded {
             Task { await wiki.loadSpaces() }
         }
-        #if os(iOS)
         // Nor has `folder.changed`: a workspace's list draws its folders, and the Move panel offers them.
         Task { await loadSessionFolders() }
-        #endif
         // Runners has neither push nor poll: a list that failed while offline
         // would otherwise stay on its error until someone pulls to refresh.
         if let runners, runners.loadState.lastLoadFailed {
@@ -1386,20 +1380,16 @@ final class AppModel {
         // A folder was created, renamed or deleted, here or on another device: re-read the library
         // the Move panel lists (docs/session-folders-move-design.md §5.6). The event names the folder
         // and nothing else, and a session moved between folders is a `session.updated` of its own,
-        // so this refetches no list. The Mac draws no folders, so there it reads nothing at all.
+        // so this refetches no list.
         case .folders:
-            #if os(iOS)
             Task { await loadSessionFolders() }
-            #else
-            break
-            #endif
         // AgentsModel.load() fetches the provider catalog with the list; provider edits do not
         // change task-row membership or live overlays.
         case .providers:
             scheduleLibraryRefresh(.agents)
             scheduleControlRefresh()
             // A shared pool's people are told of every change to it — a key going in, a rule — so a
-            // pool page that is open shows it. Read only once Infrastructure has asked for the list —
+            // pool page that is open shows it. Read only once Machines & models has asked for the list —
             // and the account's own keys likewise, which only that page reads.
             if sharedPools?.loadState.hasLoaded == true {
                 Task { await sharedPools?.load() }
@@ -2173,7 +2163,7 @@ final class AppModel {
     /// Enter the Agents section focused on agent `id` — the one navigation transition behind the
     /// macOS sidebar row, the compact drawer row, and ⌘1…⌘9. Switching to a *different* agent pops
     /// that section's stack, so its pane opens on the session list (the console and the draft on it
-    /// belong to the agent you just left) — on iOS, on the folder page that list was left on
+    /// belong to the agent you just left) — on the folder page that list was left on
     /// (`NavState.switchWorkspace`); re-selecting the current agent keeps the stack — a pushed
     /// console stays pushed.
     ///
@@ -2182,11 +2172,7 @@ final class AppModel {
     func openAgent(_ id: String) {
         selectedSection = .agents
         if selectedAgentID != id {
-            #if os(iOS)
             nav.switchWorkspace(from: selectedAgentID, to: id, folders: sessionFolders)
-            #else
-            nav.popToRoot()
-            #endif
             selectedAgentID = id
         } else if nav.machineDraftOnTop != nil {
             nav.popToRoot()
@@ -2198,6 +2184,11 @@ final class AppModel {
     /// the Open list, which `applySessionSnapshot` already narrowed.
     func needsYouBanner(excluding focused: String?) -> NeedsYouBanner? {
         NeedsYouLogic.banner(waiting: needsYouSessions, excluding: focused)
+    }
+
+    /// The banner unfolded: one line per waiting conversation, the first the one the banner names.
+    func needsYouEntries(excluding focused: String?) -> [NeedsYouBanner] {
+        NeedsYouLogic.entries(waiting: needsYouSessions, excluding: focused)
     }
 
     /// Open the session the banner points at. The same navigation as a Recents tap, minus the origin
@@ -2321,7 +2312,7 @@ final class AppModel {
     /// compact shell uses this to yield the left screen edge to its drawer-open gesture only where
     /// no pushed page needs the edge for the system back-swipe. Every section that pushes reads its
     /// own stack — Tasks (a detail, then the list directory), Agents (a draft, then a console),
-    /// Infrastructure, Following, Admin, and Settings (a page, then what that page pushes).
+    /// Machines & models, Following, Admin, and Settings (a page, then what that page pushes).
     var sectionAtRoot: Bool {
         switch selectedSection {
         // Nothing pushed on the Tasks stack: not a task's detail, not the list directory — one
@@ -2334,7 +2325,7 @@ final class AppModel {
         // The sections whose pages are frames of their own stack: one read covers both the
         // three-column selection and the compact push. Skills pushes nothing (always at root); Admin
         // pushes a user's record now, which is what replaced the unconditional `true` this used to
-        // answer with; Settings pushes its pages and what they push in turn (Infrastructure, then a
+        // answer with; Settings pushes its pages and what they push in turn (Machines & models, then a
         // machine's record).
         case .skills, .runners, .following, .admin, .settings: return nav.sectionAtRoot
         // A project's page over the index: the same one read.
@@ -2363,17 +2354,21 @@ final class AppModel {
             return
         }
         filedSessions.insert(id)
+        hideTrashedSession(id)
+        dropIfOpen(id)
         Task { @MainActor in
             defer { filedSessions.remove(id) }
             do {
                 try await api.completeSession(id)
             } catch {
+                revealTrashedSession(id)
                 errorText = "Couldn't complete the session."
+                await reloadSessionLists()
                 return
             }
             sessionDetails.remove(id)
-            dropIfOpen(id)
             await loadSessions()
+            revealTrashedSession(id)
         }
     }
 
@@ -2568,7 +2563,9 @@ final class AppModel {
         }
     }
 
-    /// Complete a session, drop it from any open pane and offer Undo.
+    /// Complete a session, drop it from any open pane and offer Undo. Like Delete, the row leaves
+    /// every list on the tap rather than once the server has answered and the lists have been read
+    /// again (`hideTrashedSession`); a refusal brings it back.
     func completeSession(_ id: String) {
         guard let api else { return }
         guard session(id: id)?.capabilities?.canComplete != false else {
@@ -2577,18 +2574,22 @@ final class AppModel {
         }
         let name = toastSessionTitle(id)
         filedSessions.insert(id)
+        hideTrashedSession(id)
+        dropIfOpen(id)
         Task { @MainActor in
             defer { filedSessions.remove(id) }
             do { try await api.completeSession(id) }
             catch {
+                revealTrashedSession(id)
                 showToast("Couldn't complete the session", sessionID: id, sessionTitle: name,
                           detail: Self.toastDetail(error), tone: .error)
+                await reloadSessionLists()
                 return
             }
             sessionDetails.remove(id)
-            dropIfOpen(id)
-            await reloadSessionLists()
             showToast("Session completed", sessionID: id, sessionTitle: name, canUndo: true)
+            await reloadSessionLists()
+            revealTrashedSession(id)
         }
     }
 
@@ -2851,6 +2852,37 @@ final class AppModel {
                           key: "keep-shared-\(workspaceID)")
             }
             await agents?.load()
+        }
+    }
+
+    // MARK: main checkout Git (docs/main-checkout-git-contract.md)
+
+    /// A review model with no console behind it: the worktree isolation dialog's Review files, opened
+    /// from a workspace's settings rather than a session.
+    func makeMainCheckoutModel() -> MainCheckoutModel? {
+        api.map { MainCheckoutModel(sessionID: "", api: $0) }
+    }
+
+    /// Sessions of a workspace still on a worktree of their own, as the Open list knows them: what
+    /// turning worktree isolation off leaves where it is.
+    func worktreeSessionCount(inWorkspace workspaceID: String) -> Int {
+        sessions.filter { ($0.agent?.id ?? $0.agentId) == workspaceID && ($0.branch?.isEmpty == false) }.count
+    }
+
+    /// A new session in a workspace, its composer holding `text` to read, change and send.
+    func openNewSession(inWorkspace workspaceID: String, text: String) {
+        consoleRegistry?.pendingDraftText[workspaceID] = text
+        show(.compose(agentID: workspaceID, folderID: nil), agent: workspaceID)
+    }
+
+    /// Re-read the workspace list a few times after a main checkout action, so the bar follows the
+    /// runner's next heartbeats (60 s apart) without waiting on the list's own refresh.
+    func refreshMainCheckoutSoon() {
+        Task { @MainActor [weak self] in
+            for seconds in [5, 30, 70] as [UInt64] {
+                try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+                await self?.agents?.load()
+            }
         }
     }
 
@@ -3203,9 +3235,34 @@ final class AppModel {
         }
     }
 
-    // MARK: session folders (iOS — docs/session-folders-move-design.md §3–4)
+    // MARK: session folders (docs/session-folders-move-design.md §3–4)
 
     #if os(iOS)
+    /// A member picked in the project sessions sheet over a phone's conversation (board 5): its
+    /// conversation takes the place of the one the sheet was opened over (`NavState.switchConsole`).
+    func openProjectMemberFromSheet(_ session: Session) {
+        sessionDetails.store(session)
+        nav.switchConsole(to: .console(sessionID: session.id, origin: .list))
+    }
+
+    /// The project's session count, read by both the project sessions button and the page's
+    /// "Project · N sessions" (`SessionProjectSheet.sessionCount`). Nil until the page's read has
+    /// answered for this project.
+    func projectSessionCount(_ projectID: String) -> Int? {
+        SessionProjectSheet.sessionCount(
+            projectID: projectID,
+            page: projectSessionsAddress.map { ($0.projectID, projectSessions) },
+            answered: projectSessionsReadAt != nil)
+    }
+
+    /// The sessions page a conversation's project sessions button reads and opens
+    /// (`SessionProjectSheet.address`).
+    func projectSheetAddress(_ projectID: String, session: Session?) -> SessionProjectAddress {
+        SessionProjectSheet.address(projectID: projectID, shown: projectSessionsAddress,
+                                    agentID: session?.agent?.id ?? session?.agentId ?? selectedAgentID ?? "")
+    }
+    #endif
+
     /// Load the owner's folder library: when a workspace's session list appears, and again when
     /// `folder.changed` says one was created, renamed or deleted, here or on another device.
     /// Best-effort like the tag library — an older server without the endpoint leaves it empty, and
@@ -3227,8 +3284,7 @@ final class AppModel {
     var folderPage: SessionFolderAddress? { nav.folderPage }
 
     /// The folder the wide shells' session column is showing, if one is — the frame the column's
-    /// list draws, with the console the detail pane follows above it. Nil on macOS, which shows no
-    /// folders (§1): nothing there ever puts one on the stack.
+    /// list draws, with the console the detail pane follows above it.
     var folderColumn: SessionFolderAddress? { nav.folderColumn }
 
     /// Open a folder's page from a folder row at the top of a workspace's session list (§3.3). One
@@ -3354,8 +3410,6 @@ final class AppModel {
         agents?.applyMovedSession(id, folderID: folderID)
     }
 
-    #endif
-
     // MARK: moving a session to another workspace (docs/session-folders-move-design.md §4, §5)
     //
     // The Move panel is iOS's; reading the targets and moving are both platforms', for the project
@@ -3369,7 +3423,6 @@ final class AppModel {
         return try await api.sessionMoveTargets(id)
     }
 
-    #if os(iOS)
     /// New Folder… on a workspace's page in the Move panel: a folder in the workspace the session is
     /// about to move to, which the confirmation then files it in. Throws the server's refusal — a name
     /// that workspace already has is a 409 — for the page to put into words.
@@ -3380,7 +3433,6 @@ final class AppModel {
         return folder
     }
 
-    #endif
 
     /// Move a session to another workspace, filed in one of its folders or in none — the
     /// confirmation's Move, or its End and Move (§5.3–5.4): end the session, wait until it has
@@ -3405,9 +3457,7 @@ final class AppModel {
         defer { Task { await reloadSessionLists() } }
         switch outcome {
         case .moved:
-            #if os(iOS)
             patchSessionWorkspace(id, to: target, folder: folderID)
-            #endif
             showToast(SessionMoveCopy.movedToWorkspace(target.name), sessionID: id, sessionTitle: name,
                       tone: .info, icon: "folder")
             return nil
@@ -3416,7 +3466,6 @@ final class AppModel {
         }
     }
 
-    #if os(iOS)
     /// Write a move to another workspace into every loaded copy of a row, as `patchSessionFolder`
     /// writes a folder: the Open snapshot — whose agent filter is what takes the row out of the
     /// workspace's Open list — the pane's own Completed rows, and the detail cache.
@@ -3434,7 +3483,6 @@ final class AppModel {
         if let cached = sessionDetails.resolve(id) { sessionDetails.store(moved(cached)) }
         agents?.applyMovedSession(id, toWorkspace: target.workspaceId)
     }
-    #endif
 
     // MARK: routing + notification intents
 
@@ -3591,9 +3639,9 @@ final class AppModel {
         }
     }
 
-    /// One engine's page on one machine, from outside the Infrastructure page — a session picker's way to
+    /// One engine's page on one machine, from outside the Machines & models page — a session picker's way to
     /// the fix for an engine that machine can't run, and a repair card's: the machine's record in the
-    /// Infrastructure section, and its engine's page over it, where signing in and installing live.
+    /// Machines & models section, and its engine's page over it, where signing in and installing live.
     func openRunnerEngine(_ runnerID: String, engine: String) {
         route(to: .runner(runnerID))
         push(.runnerEngine(runnerID: runnerID, engine: engine))
@@ -3750,7 +3798,7 @@ final class AppModel {
 
     /// The one-shot launch landing: the agent you last used (persisted via `selectedAgentID`), else
     /// the first agent, else the first online machine's new session page when the server says there
-    /// are none, else the Infrastructure section — the native parallel of web's runners/register
+    /// are none, else the Machines & models section — the native parallel of web's runners/register
     /// onboarding. A deep link / notification that already chose
     /// an agent, a session or another section is respected. Decided only off a successful agent
     /// fetch: an offline launch leaves it unlatched, and the control plane's reconnect reload decides

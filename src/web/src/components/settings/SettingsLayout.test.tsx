@@ -66,7 +66,11 @@ vi.mock('./SettingsProviderPages', async (original) => {
   const { useParams } = await import('react-router-dom');
   return {
     ...(await original<typeof import('./SettingsProviderPages')>()),
-    SettingsVendorPage: () => <p data-page={`vendor:${useParams().vendor}`}>vendor</p>,
+    SettingsKeysPage: () => {
+      const { vendor } = useParams();
+      return <p data-page={vendor ? `vendor:${vendor}` : 'keys'}>keys</p>;
+    },
+    SettingsProvidersHome: () => <p data-page="keys">keys</p>,
     SettingsPoolsPage: () => <p data-page="pools">pools</p>,
   };
 });
@@ -244,17 +248,37 @@ describe('the Settings window', () => {
     expect(page()).toBe('/settings/general');
   });
 
-  it('has the four groups, and a + in the heading of Machines, Providers and Workspaces only', async () => {
+  it('has the five groups, and a + in the heading of Machines, Providers and Workspaces only', async () => {
     await visit('/settings/general');
     const titles = [...nav().querySelectorAll('[role="group"]')].map((g) => g.getAttribute('aria-label'));
-    expect(titles).toEqual(['Personal', 'Machines', 'Providers', 'Workspaces']);
+    expect(titles).toEqual(['Personal', 'Integrations', 'Machines', 'Providers', 'Workspaces']);
     expect(group('Personal').querySelector('.settings-nav-add')).toBeNull();
+    expect(group('Integrations').querySelector('.settings-nav-add')).toBeNull();
     expect(group('Machines').querySelector('.settings-nav-add')?.getAttribute('aria-label')).toBe('Register a machine');
     expect(group('Providers').querySelector('.settings-nav-add')?.getAttribute('aria-label')).toBe('Connect a provider');
     expect(group('Workspaces').querySelector('.settings-nav-add')?.getAttribute('aria-label')).toBe('New workspace');
   });
 
-  it('lists Personal, each machine with its status dot, each vendor with its keys, and each workspace with its machine', async () => {
+  // Settings.css shows a group's + under the pointer only, except on a group marked empty.
+  it('marks no group empty while each has something in it', async () => {
+    await visit('/settings/general');
+    for (const title of ['Machines', 'Providers', 'Workspaces']) {
+      expect(group(title).classList.contains('settings-nav-group--empty')).toBe(false);
+    }
+  });
+
+  it('marks a group with nothing in it empty, so its + stays in sight', async () => {
+    runners = [];
+    workspaces = [];
+    keys = [];
+    pools = [];
+    await visit('/settings/general');
+    for (const title of ['Machines', 'Providers', 'Workspaces']) {
+      expect(group(title).classList.contains('settings-nav-group--empty')).toBe(true);
+    }
+  });
+
+  it('lists Personal, each machine with its status dot, API keys and Account pools, and each workspace with its machine', async () => {
     await visit('/settings/general');
     expect(rows('Personal').map((r) => [r.label, r.href])).toEqual([
       ['General', '/settings/general'],
@@ -264,16 +288,16 @@ describe('the Settings window', () => {
       ['Storage', '/settings/storage'],
       ['Shared links', '/settings/shared-links'],
       ['Access tokens', '/settings/access-tokens'],
-      ['Feishu', '/settings/integrations/feishu'],
     ]);
+    expect(rows('Integrations').map((r) => [r.label, r.href])).toEqual([['Feishu', '/settings/integrations/feishu']]);
     expect(rows('Machines').map((r) => [r.label, r.href, r.dot])).toEqual([
       ['gpu-box', '/settings/machines/gpuBox', 'Online'],
       ['old-laptop', '/settings/machines/oldLaptop', 'Needs you'],
       ['Studio Mac', '/settings/machines/studioMac', 'Offline'],
     ]);
     expect(rows('Providers').map((r) => [r.label, r.href, r.meta])).toEqual([
-      ['Anthropic', '/settings/providers/anthropic', '2 keys'],
-      ['OpenAI', '/settings/providers/openai', '1 key'],
+      // Two rows however many vendors the keys are (docs/mocks/settings-providers-compact).
+      ['API keys', '/settings/providers', '3'],
       ['Account pools', '/settings/providers/pools', '1'],
     ]);
     expect(rows('Workspaces').map((r) => [r.label, r.href, r.meta])).toEqual([
@@ -295,8 +319,7 @@ describe('the Settings window', () => {
       '/settings/integrations/feishu': 'feishu',
       '/settings/machines/gpuBox': 'machine:gpuBox:',
       '/settings/machines/studioMac': 'machine:studioMac:',
-      '/settings/providers/anthropic': 'vendor:anthropic',
-      '/settings/providers/openai': 'vendor:openai',
+      '/settings/providers': 'keys',
       '/settings/providers/pools': 'pools',
       '/settings/workspaces/wsOrbit': 'workspace:wsOrbit',
       '/settings/workspaces/wsSite': 'workspace:wsSite',
@@ -318,6 +341,23 @@ describe('the Settings window', () => {
     ]);
     await click(nav().querySelector('a[href="/settings/providers/new"]'));
     expect(page()).toBe('pick-vendor');
+  });
+
+  it('keeps API keys lit on a vendor’s keys, and on none of a key’s own pages', async () => {
+    for (const [path, lit] of [
+      ['/settings/providers/anthropic', '/settings/providers'],
+      ['/settings/providers/pools', '/settings/providers/pools'],
+      ['/settings/providers/new', null],
+      ['/settings/providers/new/anthropic', null],
+      ['/settings/providers/keys/k1', null],
+      ['/settings/providers/pools/p1', '/settings/providers/pools'],
+    ] as const) {
+      await visit(path);
+      expect([path, nav().querySelector('a.active')?.getAttribute('href') ?? null]).toEqual([path, lit]);
+      await act(async () => root?.unmount());
+      root = null;
+      container.remove();
+    }
   });
 
   it('opens connecting a key, editing one and a pool’s page in the right-hand column', async () => {
@@ -394,8 +434,7 @@ describe('the Settings window', () => {
   });
 });
 
-// Owner's choice B1 (board-5 ① ②): the most recently used workspaces, each with its machine in grey,
-// then Show all N, which opens the whole list with a filter.
+// Every workspace, most recently used first, each with its machine in grey: the owner asked for no fold.
 describe('the Workspaces group', () => {
   const hoursAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
   const MANY = [
@@ -409,9 +448,8 @@ describe('the Workspaces group', () => {
     { id: 'w8', name: 'scratch', runnerId: 'oldLaptop', lastActiveAt: hoursAgo(400) },
   ];
   const labels = () => rows('Workspaces').map((r) => [r.label, r.meta]);
-  const filterBox = () => group('Workspaces').querySelector<HTMLInputElement>('input[aria-label="Filter workspaces"]');
 
-  it('lists the five most recently used, each with its machine, then Show all N', async () => {
+  it('lists every workspace, most recently used first and never-used last, each with its machine', async () => {
     workspaces = MANY;
     await visit('/settings/general');
     expect(labels()).toEqual([
@@ -421,57 +459,12 @@ describe('the Workspaces group', () => {
       ['ml-experiments', 'gpu-box'],
       // Two of one name stay apart by their machine.
       ['orbit', 'Studio Mac'],
-    ]);
-    expect(button('Show all 8')).toBeTruthy();
-    expect(filterBox()).toBeNull();
-  });
-
-  it('Show all opens the whole list, never-used last, with a filter over names, machines and folders', async () => {
-    workspaces = MANY;
-    await visit('/settings/general');
-    await click(button('Show all 8'));
-    expect(labels().map(([label]) => label)).toEqual([
-      'orbit',
-      'website',
-      'infra',
-      'ml-experiments',
-      'orbit',
-      'docs',
-      'scratch',
-      'never-used',
-    ]);
-    expect(button('Show all 8')).toBeUndefined();
-    const input = filterBox()!;
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'old-laptop');
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    await settle();
-    expect(labels()).toEqual([
       ['docs', 'old-laptop'],
       ['scratch', 'old-laptop'],
+      ['never-used', 'gpu-box'],
     ]);
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'nothing like it');
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    await settle();
-    expect(labels()).toEqual([]);
-    expect(group('Workspaces').textContent).toContain('No workspace matches.');
-  });
-
-  it('keeps the open workspace’s row though it is not a recent one', async () => {
-    workspaces = MANY;
-    await visit('/settings/workspaces/w8');
-    expect(labels().at(-1)).toEqual(['scratch', 'old-laptop']);
-    expect(nav().querySelector('a.active')?.getAttribute('href')).toBe('/settings/workspaces/w8');
-  });
-
-  it('shows six whole, rather than five and a Show all for one', async () => {
-    workspaces = MANY.slice(0, 6);
-    await visit('/settings/general');
-    expect(labels()).toHaveLength(6);
     expect([...group('Workspaces').querySelectorAll('button')].some((b) => b.textContent?.startsWith('Show all'))).toBe(false);
+    expect(group('Workspaces').querySelector('input')).toBeNull();
   });
 });
 

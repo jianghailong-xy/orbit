@@ -954,6 +954,66 @@ func TestEngineOutputProgress(t *testing.T) {
 	}
 }
 
+// An updater that stops to ask a question leaves a tail that reads like progress — bytes, then
+// silence — unless the message quotes it. This is the tail of `opencode upgrade` on a machine
+// whose npm prefix no longer holds the install: a spinner, then "Install anyways?".
+func TestEngineOutputLastLinesQuotesTheQuestion(t *testing.T) {
+	out := &engineOutput{}
+	_, _ = out.Write([]byte("\x1b[0m\n  ⠀  ▄\n\x1b[?25l│\n⠋  Upgrading\x1b[999D\x1b[J⠙  Upgrading\x1b[999D\x1b[J"))
+	_, _ = out.Write([]byte("\n◇  opencode is installed to /usr/lib/node_modules/opencode-ai and may be managed by a package manager\n│\n●  Install anyways?\n│  ● Yes\n│  ○ No\n└\n"))
+
+	if got, want := out.lastLines(engineOutputQuoteLines, engineOutputQuoteRunes), "● Install anyways? · │ ● Yes · │ ○ No"; got != want {
+		t.Fatalf("lastLines = %q, want %q", got, want)
+	}
+	if strings.ContainsRune(out.lastLines(engineOutputQuoteLines, engineOutputQuoteRunes), '\x1b') {
+		t.Fatal("the quote kept a terminal escape")
+	}
+	if got := (&engineOutput{}).lastLines(engineOutputQuoteLines, engineOutputQuoteRunes); got != "" {
+		t.Fatalf("a silent command quoted %q", got)
+	}
+	// Long tails are clipped rather than carried whole into a heartbeat-sized message.
+	flood := &engineOutput{}
+	_, _ = flood.Write([]byte(strings.Repeat("word ", 500)))
+	if got := flood.lastLines(engineOutputQuoteLines, engineOutputQuoteRunes); len([]rune(got)) > engineOutputQuoteRunes+1 {
+		t.Fatalf("quoted %d runes", len([]rune(got)))
+	}
+}
+
+// The timeout's message has to name the question, because the question is the failure. Live on
+// vmi3129740: `opencode upgrade` asked "Install anyways?" every 30 minutes and the record said
+// only "it printed 543 B, last 4m31s ago" — a stall nobody could act on.
+func TestUpdateEngineTimeoutQuotesWhatItWasWaitingOn(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	dir := t.TempDir()
+	stub := filepath.Join(dir, providerOpenCode)
+	if err := os.WriteFile(stub, []byte("#!/bin/sh\necho '1.18.35'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("1.19.5"))
+	}))
+	defer feed.Close()
+
+	// The prompt, then the wait it turns into with no TTY to answer from. The stub's directory
+	// leads the service PATH; the rest of it is the real one, so the updater has its `sleep`.
+	asking := `printf '\033[?25l│\n●  Install anyways?\n│  ● Yes\n│  ○ No\n└\n'; sleep 60`
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	rec, line := updateEngine(ctx, engineSpec{
+		name: "OpenCode", bin: providerOpenCode, updateCmd: asking, latestURL: feed.URL,
+	}, dir+":"+os.Getenv("PATH"), nil)
+
+	if rec.Status != updateFailed {
+		t.Fatalf("record = %+v, want a failure", rec)
+	}
+	if !strings.Contains(rec.Message, "Install anyways?") {
+		t.Fatalf("message = %q, want the question the command stopped on", rec.Message)
+	}
+	if !strings.Contains(rec.Message, "was still running after") || !strings.Contains(line, "timed out") {
+		t.Fatalf("message = %q, line = %q, want both to report the stopped command", rec.Message, line)
+	}
+}
+
 // An updater that exits 0 and leaves an engine that no longer starts did not leave it "already up
 // to date". Live on 2026-10-05: `codex update` dropped the npm package's native binary and the
 // pass reported the version it had before, while every Codex run on the machine failed.

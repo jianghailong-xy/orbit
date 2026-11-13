@@ -45,10 +45,10 @@ final class AgentsModel {
     /// keys: a new-session draft is what offers pools, and the draft seed resolves a workspace that
     /// runs on one through them.
     private(set) var providerPools: [ProviderPool] = []
-    /// How the pool reads have gone: the Infrastructure page waits for an answer before it says what an
+    /// How the pool reads have gone: the Machines & models page waits for an answer before it says what an
     /// engine can run on.
     private(set) var poolsState = ListLoadState()
-    /// The account's own keys (GET /providers/mine), disabled ones included: the Infrastructure page's API
+    /// The account's own keys (GET /providers/mine), disabled ones included: the Machines & models page's API
     /// keys, and what each engine can run on. Read when that page asks, unlike the catalogue above.
     private(set) var ownKeys: [ConfiguredProvider] = []
     private(set) var ownKeysState = ListLoadState()
@@ -58,14 +58,14 @@ final class AgentsModel {
     private(set) var subagentTiersFailed = false
     /// The shared Codex pools this account is in (GET /providers/shared-pools), read into their own
     /// model. A new-session draft offers them beside the account pools (`allPools`), and the
-    /// Infrastructure page lists them on their own — which is why the two are kept apart here.
+    /// Machines & models page lists them on their own — which is why the two are kept apart here.
     private(set) var sharedPools: [SharedPool] = []
     /// Every pool a new-session draft may offer, in web's order: the shared ones drawn as account
     /// pools whose members are their keys (`SharedPools.asProviderPool`), then this account's own.
     var allPools: [ProviderPool] { SharedPools.asProviderPools(sharedPools) + providerPools }
     /// The account's own providers as its key list reads them (GET /providers/mine), with the ids and
     /// endpoints the catalogue above leaves out: what tells a DeepSeek key, and what its balance is
-    /// asked by. Read for Infrastructure's API keys (`loadDeepSeekBalances`).
+    /// asked by. Read for Machines & models' API keys (`loadDeepSeekBalances`).
     private(set) var personalProviders: [ConfiguredProvider] = []
     /// Each DeepSeek key's account balance by provider id, as the server last answered — or why it
     /// didn't. Absent until asked, which a page reads as loading.
@@ -442,7 +442,6 @@ final class AgentsModel {
         agentSessions[index] = agentSessions[index].settingTitle(title)
     }
 
-    #if os(iOS)
     /// File this pane's row in a folder on the spot, for the same reason: a Completed row isn't in
     /// the Open snapshot. See `AppModel.moveSession`.
     func applyMovedSession(_ id: String, folderID: String?) {
@@ -456,7 +455,6 @@ final class AgentsModel {
         guard lastSessionQuery?.agentID != workspaceID else { return }
         agentSessions = SessionFilter.removing(id, from: agentSessions)
     }
-    #endif
 
     /// Update relation metadata even in this pane's independently loaded Completed/Trash rows.
     /// Open rows are refreshed through `applyOpenSnapshot`, but those two scopes otherwise wait for

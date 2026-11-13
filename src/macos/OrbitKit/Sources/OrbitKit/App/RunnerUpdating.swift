@@ -13,13 +13,17 @@ public struct QueuedRunnerUpdate: Codable, Equatable, Sendable {
         }
     }
 
+    /// The runner is stopping, not updating: its process finishes its turns before it exits on a stop
+    /// signal (docs/mocks/runner-stopping). False from a server that predates the field.
+    public let stopping: Bool
     /// The release it installs next; nil from a runner that does not report it.
     public let targetVersion: String?
     /// When the wait began: the drain's start, or this session's own wait where the runner names none.
     public let since: String?
     public let turns: [Turn]
 
-    public init(targetVersion: String?, since: String?, turns: [Turn]) {
+    public init(targetVersion: String?, since: String?, turns: [Turn], stopping: Bool = false) {
+        self.stopping = stopping
         self.targetVersion = targetVersion
         self.since = since
         self.turns = turns
@@ -27,6 +31,7 @@ public struct QueuedRunnerUpdate: Codable, Equatable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        stopping = (try? c.decodeIfPresent(Bool.self, forKey: .stopping)) ?? false
         targetVersion = try? c.decodeIfPresent(String.self, forKey: .targetVersion)
         since = try? c.decodeIfPresent(String.self, forKey: .since)
         turns = (try? c.decodeIfPresent([Turn].self, forKey: .turns)) ?? []
@@ -44,6 +49,10 @@ public enum RunnerUpdating {
     public static let RUNNER_UPDATING_TITLE = "Runner updating"
     /// The foot-row tag under a message the drain holds: `Queued · ` then this. Web `RUNNER_UPDATING_TAG`.
     public static let RUNNER_UPDATING_TAG = "runner updating"
+    /// The title for a runner that is stopping rather than updating. Web `RUNNER_STOPPING_TITLE`.
+    public static let RUNNER_STOPPING_TITLE = "Runner stopping"
+    /// RUNNER_UPDATING_TAG's words for a runner that is stopping. Web `RUNNER_STOPPING_TAG`.
+    public static let RUNNER_STOPPING_TAG = "runner stopping"
     /// The word before the tag, the queued message's own.
     public static let queuedWord = "Queued"
 
@@ -56,6 +65,23 @@ public enum RunnerUpdating {
     /// Whether this session is held by its runner's update: queued, and the server named that gate.
     public static func holds(_ s: Session) -> Bool {
         s.effectiveRunState == .queued && s.queuedReason == reason
+    }
+
+    /// Whether the runner holding this session is stopping rather than updating (board runner-stopping ①):
+    /// it has nothing to postpone or install now, so neither Later nor Update Now is offered. Web
+    /// `isRunnerStopping`.
+    public static func stopping(_ s: Session) -> Bool {
+        s.queuedReason == reason && s.queuedRunnerUpdate?.stopping == true
+    }
+
+    /// `Runner updating`, or `Runner stopping`. Web `runnerUpdatingTitle`.
+    public static func title(_ s: Session) -> String {
+        stopping(s) ? RUNNER_STOPPING_TITLE : RUNNER_UPDATING_TITLE
+    }
+
+    /// The foot-row tag's words: `runner updating`, or `runner stopping`. Web `runnerUpdatingTag`.
+    public static func tag(_ s: Session) -> String {
+        stopping(s) ? RUNNER_STOPPING_TAG : RUNNER_UPDATING_TAG
     }
 
     private static func turnTitle(_ title: String?) -> String {
@@ -93,10 +119,14 @@ public enum RunnerUpdating {
     }
 
     /// The queued page's explanation: `studio-mac is updating to 0.1.254. It starts no new work until
-    /// 2 turns finish: A and B. This session starts right after.` Web `runnerUpdatingDescription`.
+    /// 2 turns finish: A and B. This session starts right after.` A runner that is stopping says so, and
+    /// the session starts once it is back: `HPC is stopping. … This session starts once HPC is back.`
+    /// Web `runnerUpdatingDescription`.
     public static func description(_ s: Session, machine: String?) -> [Part] {
         let name = who(machine)
-        var parts: [Part] = [.text(s.queuedRunnerUpdate?.targetVersion.map { "\(name) is updating to \($0). " }
+        let isStopping = stopping(s)
+        var parts: [Part] = [.text(isStopping ? "\(name) is stopping. "
+                                   : s.queuedRunnerUpdate?.targetVersion.map { "\(name) is updating to \($0). " }
                                    ?? "\(name) is updating. ")]
         let count = turnCount(s)
         if count > 0 {
@@ -104,7 +134,12 @@ public enum RunnerUpdating {
             parts.append(contentsOf: namedTurns(s))
             parts.append(.text(". "))
         }
-        parts.append(.text("This session starts right after."))
+        if isStopping {
+            let named = machine?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            parts.append(.text("This session starts once \(named.isEmpty ? "it" : named) is back."))
+        } else {
+            parts.append(.text("This session starts right after."))
+        }
         return parts
     }
 
@@ -122,6 +157,12 @@ public enum RunnerUpdating {
     /// to 0.1.254. This message is sent right after.` Web `runnerUpdatingMessageText`.
     public static func messageText(_ s: Session, machine: String?) -> String {
         let name = who(machine)
+        if stopping(s) {
+            // Board runner-stopping ②: `HPC starts no new turns until 2 turns finish, then stops.`
+            let count = turnCount(s)
+            let first = count > 0 ? "\(name) starts no new turns until \(turnsFinish(count)), then stops." : "\(name) stops now."
+            return "\(first) This message is sent once it is back."
+        }
         let update = s.queuedRunnerUpdate?.targetVersion.map { "updates to \($0)" } ?? "updates"
         let count = turnCount(s)
         let first = count > 0

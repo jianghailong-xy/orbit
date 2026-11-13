@@ -11,12 +11,13 @@ import {
   WarningOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AgentProvider, ENGINE_CLI_NAMES, type RunnerRepoHealth } from '@orbit/shared';
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { AgentProvider, ENGINE_CLI_NAMES, type MainCheckoutRepoHealth, type RunnerRepoHealth } from '@orbit/shared';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   api,
   askClaudeHistory,
+  cleanUpWorkspaceRepo,
   countImportedSessions,
   getClaudeHistory,
   importClaudeHistory,
@@ -25,7 +26,16 @@ import {
   type ClaudeHistoryResult,
 } from '../../api';
 import { encodeId, routeId } from '../../lib/idCodec';
-import { meQuery, providersQuery, runnersQuery, workspacePermissionRulesQuery, workspacesQuery } from '../../lib/queries';
+import type { MainCheckoutTarget } from '../../lib/mainCheckout';
+import {
+  meQuery,
+  providersQuery,
+  runnersQuery,
+  sessionsQuery,
+  workspacePermissionRulesQuery,
+  workspacesQuery,
+} from '../../lib/queries';
+import { REPO_CLEANUP_QUEUED, repoCleanupConfirm } from '../../lib/repoCleanup';
 import { runnerIsOffline } from '../../lib/runnerAttention';
 import { ago } from '../../lib/runnerEngines';
 import { CLAUDE_SESSION_ID_RE, importClaudeSessionAndWait } from '../../lib/sessionImport';
@@ -36,6 +46,7 @@ import { sessionEngineOf } from '../../lib/workspaceDefaults';
 import { AccountSelect, offersAccount } from '../AccountSelect';
 import { AUTO_COMPACT_VARIABLE, AutoCompactSelect, withAutoCompact } from '../AutoCompactSelect';
 import { ClaudeHistoryOffer, type ImportMode } from '../ClaudeHistoryOffer';
+import { useMainCheckoutController } from '../MainCheckoutDrawer';
 import { BrandMark } from '../NewSessionProviderHero';
 import type { Runner } from '../TasksSidePanel';
 import { Button } from '../ui/Button';
@@ -50,6 +61,11 @@ import { Spinner } from '../ui/Spinner';
 import { Switch } from '../ui/Switch';
 import { Textarea } from '../ui/Textarea';
 import { SubagentSettings } from '../SubagentSettings';
+import {
+  WorktreeIsolationDialog,
+  worktreeIsolationDialogFor,
+  type WorktreeIsolationDialogKind,
+} from '../WorktreeIsolationDialog';
 import { SettingsCard, SettingsHeader, SettingsRow, SettingsSection } from './SettingsBlocks';
 import './Settings.css';
 
@@ -91,6 +107,8 @@ export interface SettingsWorkspace {
   workDirIsGit?: boolean | null;
   workDirProbedAt?: string | null;
   repoHealth?: RunnerRepoHealth | null;
+  /** The runner declares main-checkout-git/v1: the main checkout's Review files can act. */
+  mainCheckoutActions?: boolean;
   autoInitGit?: boolean;
   /** When a conversation last started or took a turn here (server: lastActiveByWorkspace). */
   lastActiveAt?: string | null;
@@ -333,6 +351,36 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
     },
     onError: (e: Error) => message.error("Couldn't remove the imported conversations", e.message),
   });
+  const repairMut = useMutation({
+    mutationFn: () => cleanUpWorkspaceRepo(id),
+    onSuccess: () => {
+      message.success(REPO_CLEANUP_QUEUED);
+      void qc.invalidateQueries({ queryKey: ['workspaces'] });
+    },
+    onError: (e: Error) => message.error("Couldn't clean up the checkout", e.message),
+  });
+
+  // Board 04: the dialog flipping worktree isolation asks first, and the main checkout its Review files opens.
+  const [isolationDialog, setIsolationDialog] = useState<WorktreeIsolationDialogKind | null>(null);
+  const sessionsQ = useQuery({ ...sessionsQuery({ workspaceId: workspace?.id ?? null, view: 'open' }), enabled: !!workspace });
+  const worktrees = useMemo<MainCheckoutTarget[]>(
+    () =>
+      (sessionsQ.data ?? [])
+        .filter((s) => s.isolationStatus === 'worktree' && !!s.branch && s.mergeStatus !== 'merged' && s.branchMerged !== true)
+        .map((s) => ({
+          id: s.id,
+          title: s.title || 'Untitled session',
+          branch: s.branch,
+          busy: (s.runState ?? s.runStatus ?? s.status) === 'RUNNING',
+        })),
+    [sessionsQ.data],
+  );
+  const isolationCheckout = useMainCheckoutController({
+    workspaceId: workspace?.id ?? null,
+    actionsSupported: workspace?.mainCheckoutActions === true,
+    health: (workspace?.repoHealth as MainCheckoutRepoHealth | null | undefined) ?? null,
+    targets: worktrees,
+  });
 
   if (workspacesQ.isPending) {
     return (
@@ -503,10 +551,47 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
               <Switch
                 aria-label="Worktree isolation"
                 checked={workspace.enableWorktree ?? false}
-                onCheckedChange={(enableWorktree) => save({ enableWorktree })}
+                onCheckedChange={(enableWorktree) => {
+                  // Board 04: the switch says what it means for the main checkout first; it never blocks.
+                  const ask = worktreeIsolationDialogFor(
+                    enableWorktree,
+                    workspace.repoHealth as MainCheckoutRepoHealth | null | undefined,
+                    worktrees.length,
+                    workspace.workDir ?? '',
+                  );
+                  if (ask) setIsolationDialog(ask);
+                  else save({ enableWorktree });
+                }}
               />
             }
           />
+          <WorktreeIsolationDialog
+            dialog={isolationDialog}
+            onCancel={() => setIsolationDialog(null)}
+            onConfirm={() => {
+              save({ enableWorktree: isolationDialog?.kind !== 'off' });
+              setIsolationDialog(null);
+            }}
+            onReview={
+              workspace.mainCheckoutActions
+                ? () => {
+                    setIsolationDialog(null);
+                    isolationCheckout.host?.openReview();
+                  }
+                : undefined
+            }
+            onCleanUp={() => {
+              setIsolationDialog(null);
+              const cleanup = repoCleanupConfirm(isolationDialog && 'root' in isolationDialog ? isolationDialog.root : '');
+              void confirm({
+                title: cleanup.title,
+                description: cleanup.content,
+                confirmText: cleanup.okText,
+                onConfirm: () => repairMut.mutateAsync().catch(() => {}),
+              });
+            }}
+          />
+          {isolationCheckout.drawer}
           {/* Off by default, and only the owner's to turn on: it decides what task runs cost, so the
               agent tools cannot set it (docs/model-routing-design.md §7.2). */}
           {smartSelection && (

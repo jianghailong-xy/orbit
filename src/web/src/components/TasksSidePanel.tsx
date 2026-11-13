@@ -55,6 +55,7 @@ import { api, clearToken, logoutSession } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
 import { SharedWithMeGroup } from './SharedWithMe';
 import { useIsMobile } from '../lib/useMediaQuery';
+import { useSidebarFolded } from '../lib/sidebarFold';
 import {
   avatarQuery,
   meQuery,
@@ -149,8 +150,8 @@ interface TopNavItem {
   shortcut?: string;
 }
 
-// Fixed product destinations, the same for every account: Machines & models and Admin are rows of the
-// account menu at the panel's foot, not among these. Individual Workspace rows are primary destinations
+// Fixed product destinations, the same for every account: Admin is a row of the account menu at the
+// panel's foot, not among these. Individual Workspace rows are primary destinations
 // in their own right, so there is no proxy Workspaces parent here.
 const TOP: TopNavItem[] = [
   {
@@ -176,7 +177,7 @@ const TOP: TopNavItem[] = [
   // in each session's header and Watching strip, and those are what link to /following.
   // No Machines & models either (docs/mocks/machines-and-models, 02): where agents run and whose quota
   // they spend is set up once and fixed when something says so — every card that needs it fixed links
-  // there — so it is reached as the phone reaches it, from Settings, and from the account menu.
+  // there — so it is reached as the phone reaches it, from Settings.
 ];
 
 // The left sidebar is user-resizable; the chosen width persists across refreshes.
@@ -497,16 +498,28 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
 
   // Collapse the whole panel to a slim icon rail (desktop) — hands the content
   // region the full width back. Persisted so the choice survives a refresh.
-  const [collapsed, setCollapsed] = useState<boolean>(
+  const [kept, setCollapsed] = useState<boolean>(
     () => localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1',
   );
+  // A page may ask for the icon rail while it needs the width (the Wiki's chat column, `useSidebarFolded`): shown
+  // collapsed then, and the toggle opens it back for that while without changing the choice kept above.
+  const folded = useSidebarFolded();
+  const [unfolded, setUnfolded] = useState(false);
+  useEffect(() => {
+    if (!folded) setUnfolded(false);
+  }, [folded]);
+  const collapsed = kept || (folded && !unfolded);
   const toggleCollapsed = useCallback(() => {
+    if (folded && !kept) {
+      setUnfolded((u) => !u);
+      return;
+    }
     setCollapsed((c) => {
       const next = !c;
       localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0');
       return next;
     });
-  }, []);
+  }, [folded, kept]);
   // Cmd/Ctrl + Backslash toggles the sidebar — the VS Code / Linear / Notion convention.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1212,18 +1225,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                   if (mode !== it.key) setMode(it.key);
                 },
               })),
-            },
-            // Where agents run and whose quota they spend, two clicks away as the phone has it (Settings, then
-            // its row) — the page left the sidebar's fixed rows for here and Settings
-            // (docs/mocks/machines-and-models, 02).
-            {
-              key: 'machines',
-              icon: <SidebarNavIcon name="runners" />,
-              label: 'Machines & models',
-              onSelect: () => {
-                const first = runners.data?.[0];
-                navigate(first ? `/settings/machines/${encodeId(first.id)}` : '/settings/general');
-              },
             },
             {
               key: 'settings',

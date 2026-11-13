@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SubagentRunView } from '@orbit/shared';
 import { type RunEvent, SubagentRunsCtx, Transcript } from './Transcript';
-import { delegateResultText, delegateRunsSignature, subagentMeta } from '../lib/subagentRuns';
+import { delegateResultText, delegateRunsSignature, subagentMeta, subagentWhy } from '../lib/subagentRuns';
 
 /**
  * Orbit's SubAgent (`mcp__orbit__delegate`) drawn as docs/mocks/subagent/02.png: the Agent card's purple
@@ -67,6 +67,7 @@ const run = (over: Partial<SubagentRunView>): SubagentRunView => ({
   removed: [],
   costUsd: 0.21,
   resultSummary: 'Three callers, all in quota/.',
+  workspaceName: null,
   createdAt: '2026-11-11T10:00:01.000Z',
   endedAt: '2026-11-11T10:00:42.000Z',
   ...over,
@@ -253,6 +254,27 @@ describe('the SubAgent block', () => {
     expect(fg.textContent!.split('Three callers, all in').length - 1).toBe(1);
   });
 
+  it("names the workspace a remote run ran on, and leads its Why with how that workspace was chosen", () => {
+    const chosen = 'Needs os:darwin: orbit-macos is the only workspace of this repository whose runner reports it';
+    // As the server writes a remote run (subagent-remote.ts): no tier, the target's own model, the choice first.
+    const remote = run({
+      level: null,
+      model: 'claude-sonnet-5-5',
+      modelLabel: 'Sonnet 5.5',
+      reasons: [chosen, "Runs on orbit-macos's own default engine and model, claude-sonnet-5-5"],
+      why: null,
+      workspaceName: 'orbit-macos',
+    });
+    render([remote, BG_RUNNING]);
+    const fg = card(1);
+    expect(text(fg.querySelector('.chat-tool-meta'))).toBe('Sonnet 5.5 · on orbit-macos · 41s · $0.21');
+    act(() => (fg.querySelector('.chat-tool-row') as HTMLElement).click());
+    const why = fg.querySelector('.chat-subagent-why')!;
+    expect(why.textContent!.startsWith(`Why · ${chosen}`)).toBe(true);
+    // A run on this machine says nothing of a workspace.
+    expect(text(card(5).querySelector('.chat-tool-meta'))).toBe('M · Opus 5.5 · medium');
+  });
+
   it('draws the row before its run is read, with no meta and no Why', () => {
     render([]);
     const fg = card(1);
@@ -270,6 +292,15 @@ describe('subagentRuns helpers', () => {
     expect(
       delegateRunsSignature([...events, ev(9, 'background_task', { toolUseId: 'toolu_bg', status: 'completed' })]),
     ).toBe('1,4,5,6,9');
+  });
+
+  it("adds ' · on <workspace>' to a remote run's meta, and leads a routed Why with the workspace's choice", () => {
+    const remote = run({ status: 'RUNNING', endedAt: null, level: 'M', effort: 'high', workspaceName: 'orbit-macos' });
+    expect(subagentMeta(remote)).toBe('M · Sonnet 5.5 · high · on orbit-macos');
+    expect(subagentMeta({ ...remote, workspaceName: null })).toBe('M · Sonnet 5.5 · high');
+    const routed = { ...remote, reasons: ['Named by the delegate call: orbit-macos', 'Tier M'], why: 'Tier M, set by the caller · 2 others removed' };
+    expect(subagentWhy(routed)).toBe('Named by the delegate call: orbit-macos · Tier M, set by the caller · 2 others removed');
+    expect(subagentWhy({ ...routed, workspaceName: null })).toBe('Tier M, set by the caller · 2 others removed');
   });
 
   it('says nothing about a run it has not read, and hides a bare receipt', () => {

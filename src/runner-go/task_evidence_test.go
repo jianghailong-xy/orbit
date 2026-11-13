@@ -50,7 +50,7 @@ func TestEvidenceDecideNamesTheRefusalForATaskInAnotherProject(t *testing.T) {
 	tools := toolDescriptors(false, false)
 	description := mcpToolDescription(tools, "task_evidence_decide")
 	assertSaysAll(t, "the task_evidence_decide tool description", description,
-		"Six things are checked at decision time",
+		"Seven things are checked at decision time",
 		"a session that acts for one project — its coordinator, a judgment session opened for it, a run of one of its tasks — must not decide a task that is in another project (EVIDENCE_JUDGMENT_TASK_IN_ANOTHER_PROJECT",
 		"a task's evidence is decided from the project it is in now, and a task moved out takes its undecided evidence with it, so the project it left can no longer decide it",
 	)
@@ -306,4 +306,118 @@ func assertSaysAll(t *testing.T, what, text string, phrases ...string) {
 			t.Errorf("%s does not say %q:\n%s", what, phrase, text)
 		}
 	}
+}
+
+// The server binds the standard a revision is judged against (docs/evidence-always-has-an-addressee-design.md
+// §2, D1), so neither face asks for `criterion` or needs one: the tool schema requires only `evidence`,
+// its description and the CLI help ask for three fields, and an envelope without `criterion` reaches
+// the server as written from both.
+func TestTaskEvidenceSubmitNeedsNoCriterion(t *testing.T) {
+	var submit map[string]interface{}
+	for _, descriptor := range toolDescriptors(false, false) {
+		if descriptor["name"] == "task_evidence_submit" {
+			submit = descriptor
+		}
+	}
+	if submit == nil {
+		t.Fatal("task_evidence_submit descriptor missing")
+	}
+	schema := submit["inputSchema"].(map[string]interface{})
+	if required, _ := json.Marshal(schema["required"]); string(required) != `["evidence"]` {
+		t.Errorf("required = %s, want only evidence", required)
+	}
+	evidence := schema["properties"].(map[string]interface{})["evidence"].(map[string]interface{})
+	if _, ok := evidence["required"]; ok {
+		t.Errorf("evidence schema requires fields: %#v", evidence["required"])
+	}
+	if _, ok := evidence["properties"]; ok {
+		t.Errorf("evidence schema declares properties: %#v", evidence["properties"])
+	}
+	evidenceDescription, _ := evidence["description"].(string)
+	submitDescription, _ := submit["description"].(string)
+	help := collapsedSpace(taskActionHelp["evidence-submit"])
+	assertSaysAll(t, "the evidence property", evidenceDescription, "The envelope, three fields: `claim`")
+	assertSaysAll(t, "the task_evidence_submit description", submitDescription,
+		"the three fields are required",
+		"an older client's `criterion` is accepted and ignored",
+	)
+	assertSaysAll(t, "`orbit task evidence-submit --help`", help,
+		`The envelope is {"claim": ..., "checks": [...], "gaps": [...]}. It names no standard`,
+		`A "criterion" an older client still sends is accepted and ignored.`,
+	)
+	for where, text := range map[string]string{
+		"the evidence property":                evidenceDescription,
+		"the task_evidence_submit description": submitDescription,
+		"`orbit task evidence-submit --help`":  help,
+	} {
+		for _, stale := range []string{"four fields", "criterion` ({key, text}", "criterion{key,text}", "copied from the project"} {
+			if strings.Contains(text, stale) {
+				t.Errorf("%s still asks for a criterion (%q):\n%s", where, stale, text)
+			}
+		}
+	}
+
+	var bodies []map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode evidence body: %v", err)
+		}
+		bodies = append(bodies, body)
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"ev-1","revision":"1"}`))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+	t.Setenv("ORBIT_TASK_ID", "task-1")
+	t.Setenv("ORBIT_SESSION_ID", "session-1")
+	t.Setenv("ORBIT_AGENT_ID", "agent-1")
+
+	const envelope = `{"claim":"done","checks":[{"kind":"TOOL_CALL","ref":"bgj_1"}],"gaps":[]}`
+	var out bytes.Buffer
+	if err := cmdTaskCLI([]string{"evidence-submit", "--evidence", envelope, "--json"}, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("CLI submit without criterion: %v", err)
+	}
+	var want map[string]interface{}
+	if err := json.Unmarshal([]byte(envelope), &want); err != nil {
+		t.Fatal(err)
+	}
+	mcp := &mcpServer{t: NewTransport(srv.URL, "runner-secret"), taskID: "task-1", sessionID: "session-1", agentID: "agent-1"}
+	if result := mcp.callTool("task_evidence_submit", map[string]interface{}{"evidence": want}); result["isError"] == true {
+		t.Fatalf("MCP submit without criterion failed: %#v", result)
+	}
+	if len(bodies) != 2 {
+		t.Fatalf("bodies = %#v", bodies)
+	}
+	for i, body := range bodies {
+		if !reflect.DeepEqual(body["evidence"], want) {
+			t.Errorf("call %d evidence = %#v, want %#v", i, body["evidence"], want)
+		}
+	}
+}
+
+// A gap may name the clause of the task's standard it leaves unproven (gapClauses), and a CONFIRM
+// is refused while such a gap has no follow-up task (EVIDENCE_JUDGMENT_GAP_WITHOUT_FOLLOW_UP). Both
+// tool texts and both help texts say so, so a submitter knows to mark it and a decider knows why.
+func TestEvidenceToolsDescribeGapClausesAndTheirFollowUp(t *testing.T) {
+	tools := toolDescriptors(false, false)
+	assertSaysAll(t, "the task_evidence_submit tool description", mcpToolDescription(tools, "task_evidence_submit"),
+		"`gapClauses` is the one optional field",
+	)
+	submitSchema, _ := json.Marshal(tools)
+	assertSaysAll(t, "the task_evidence_submit evidence schema", string(submitSchema),
+		"{gap, criterionClause, followUpTaskId?}",
+		"Evidence with a clause-naming gap and no followUpTaskId cannot be CONFIRMed, only sent back",
+	)
+	assertSaysAll(t, "the task_evidence_decide tool description", mcpToolDescription(tools, "task_evidence_decide"),
+		"a CONFIRM is refused while a gap names a clause of the task's standard in `gapClauses` without a followUpTaskId",
+		"EVIDENCE_JUDGMENT_GAP_WITHOUT_FOLLOW_UP",
+		"SEND_BACK is never blocked by gaps",
+	)
+	assertSaysAll(t, "`orbit task evidence-submit --help`", collapsedSpace(taskActionHelp["evidence-submit"]),
+		`"gapClauses": [{"gap": <index into gaps>, "criterionClause": ..., "followUpTaskId": ...}]`,
+	)
+	assertSaysAll(t, "`orbit task evidence-decide --help`", collapsedSpace(taskActionHelp["evidence-decide"]),
+		"(EVIDENCE_JUDGMENT_GAP_WITHOUT_FOLLOW_UP)",
+	)
 }

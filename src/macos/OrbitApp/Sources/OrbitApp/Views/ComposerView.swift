@@ -954,6 +954,18 @@ struct ComposerView: View {
                                     providerItems(choice)
                                 }
                             }
+                            // What a pool's row risks (`ProviderChoice.notice`), said once under the
+                            // pools (web parity).
+                            if group.id == "pools" {
+                                ForEach(SessionProviderChoices.notices(group.choices), id: \.self) { notice in
+                                    #if os(macOS)
+                                    ForEach(Array(ComposerLogic.menuLines(notice).enumerated()),
+                                            id: \.offset) { _, line in Text(line) }
+                                    #else
+                                    ForEach(ComposerLogic.sentences(notice), id: \.self) { Text($0) }
+                                    #endif
+                                }
+                            }
                         }
                     }
                     // A Claude subscription token is the one key on Anthropic's protocol OpenCode does

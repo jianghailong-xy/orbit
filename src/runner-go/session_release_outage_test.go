@@ -151,6 +151,10 @@ func (c *releaseOutageControlPlane) serve(w http.ResponseWriter, r *http.Request
 		c.mu.Lock()
 		c.finalizes = append(c.finalizes, req)
 		c.mu.Unlock()
+	case path == "/runner/sessions/takeover-leases":
+		// A control plane from before the batch takeover.
+		http.NotFound(w, r)
+		return
 	case strings.HasSuffix(path, "/takeover-leases"):
 		c.mu.Lock()
 		status := c.takeoverStatus

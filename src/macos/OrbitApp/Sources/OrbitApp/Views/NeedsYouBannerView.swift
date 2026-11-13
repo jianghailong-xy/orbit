@@ -66,6 +66,9 @@ struct NeedsYouBannerView: View {
     var overList = false
     /// The bar's own width, for the margin that lines it up with the nav bar's buttons.
     @State private var width: CGFloat = 0
+    /// Unfolded to one capsule per waiting conversation. Folds again after a press goes somewhere,
+    /// so the page it is left on is as it was.
+    @State private var unfolded = false
 
     var body: some View {
         if let below {
@@ -73,111 +76,176 @@ struct NeedsYouBannerView: View {
             // can be up the conversation from a reader at the live tail, which is the ordinary case
             // here. Unknown (nothing has reported the reader's place) keeps the old down — the
             // press scrolls to the row either way.
-            bar(text: below.text, detail: nil, since: nil, more: 0, glyph: below.glyph,
-                chevron: below.side == .above ? "chevron.up" : "chevron.down",
-                // "what is waiting", not "the question": the bar counts the exceptions too (an
-                // escalation that became the owner's, a pause only they can lift), and a reader
-                // told to look for a question finds a card reading "Escalated to you" — the same
-                // wrong noun the line above stopped using.
-                hint: "Shows what is waiting in this conversation") {
-                onOpenBelow?(below.rowID)
+            chrome {
+                bar(text: below.text, detail: nil, since: nil, more: 0, glyph: below.glyph,
+                    chevron: below.side == .above ? "chevron.up" : "chevron.down",
+                    // "what is waiting", not "the question": the bar counts the exceptions too (an
+                    // escalation that became the owner's, a pause only they can lift), and a reader
+                    // told to look for a question finds a card reading "Escalated to you" — the same
+                    // wrong noun the line above stopped using.
+                    hint: "Shows what is waiting in this conversation") {
+                    onOpenBelow?(below.rowID)
+                }
             }
         } else if let banner = model.needsYouBanner(excluding: excluding) {
-            // No chevron: the whole capsule is the press, as the nav bar's question capsule is — and
-            // where it goes is somewhere else, which the words already say.
-            bar(text: banner.text, detail: banner.detail, since: banner.since, more: banner.more,
-                glyph: banner.glyph, chevron: nil,
-                // One of the four owner items opens the CARD it names, inside the project's
-                // coordinator conversation; everything else opens the session, as it always did.
-                hint: banner.ownerItem == nil
-                    ? "Opens the session waiting on you"
-                    : "Opens the card waiting on you") {
-                if let item = banner.ownerItem {
-                    model.openNeedsYouItem(banner.target, item, projectInColumn: projectInColumn)
-                } else {
-                    model.openNeedsYouSession(banner.target)
+            // Several waiting, unfolded (the owner, 2026-11-13, option B of
+            // docs/mocks/needs-you-capsule/03-expand.html): one capsule per conversation, the first
+            // the one the folded bar names, pushing the page down rather than covering it. The
+            // first carries the ↑ that folds them back.
+            let entries = unfolded && banner.count > 1 ? model.needsYouEntries(excluding: excluding) : []
+            if entries.count > 1 {
+                // At most five; the last says "+N" for the ones behind it, as the folded bar does.
+                let shown = Array(entries.prefix(NeedsYouLogic.unfoldedLimit))
+                chrome {
+                    VStack(spacing: 6) {
+                        ForEach(Array(shown.enumerated()), id: \.element.target.id) { index, entry in
+                            bar(text: entry.text, detail: entry.detail, since: entry.since,
+                                more: index == shown.count - 1 ? entries.count - shown.count : 0,
+                                glyph: entry.glyph, chevron: nil, hint: hint(for: entry),
+                                fold: index == 0 ? { setUnfolded(false) } : nil) {
+                                open(entry)
+                            }
+                        }
+                    }
+                }
+            } else {
+                // No chevron: the whole capsule is the press, as the nav bar's question capsule is —
+                // and where it goes is somewhere else, which the words already say. With more than
+                // one waiting the press unfolds them instead, and the "+N" carries a ⌄ to say so.
+                chrome {
+                    bar(text: banner.text, detail: banner.detail, since: banner.since, more: banner.more,
+                        glyph: banner.glyph, chevron: nil,
+                        hint: banner.count > 1 ? "Shows all \(banner.count) waiting on you" : hint(for: banner),
+                        unfolds: banner.count > 1) {
+                        if banner.count > 1 { setUnfolded(true) } else { open(banner) }
+                    }
                 }
             }
         }
     }
 
+    private func setUnfolded(_ value: Bool) {
+        withAnimation(.easeInOut(duration: 0.25)) { unfolded = value }
+    }
+
+    private func hint(for entry: NeedsYouBanner) -> String {
+        entry.ownerItem == nil ? "Opens the session waiting on you" : "Opens the card waiting on you"
+    }
+
+    /// One of the five owner items opens the CARD it names, inside the project's coordinator
+    /// conversation; everything else opens the session, as it always did.
+    private func open(_ entry: NeedsYouBanner) {
+        unfolded = false
+        if let item = entry.ownerItem {
+            model.openNeedsYouItem(entry.target, item, projectInColumn: projectInColumn)
+        } else {
+            model.openNeedsYouSession(entry.target)
+        }
+    }
+
     /// One capsule, whichever fact it is carrying: the two differ in their words, their mark and
     /// which way a chevron points, and in nothing else — it is one signal, and a second style for it
-    /// would read as a second kind of thing.
+    /// would read as a second kind of thing. `unfolds` marks the "+N" with a ⌄ (the press shows them
+    /// all); `fold` is the ↑ on the first capsule of the unfolded stack, a press of its own.
     private func bar(text: String, detail: String?, since: String?, more: Int, glyph: NeedsYouGlyph,
-                     chevron: String?, hint: String, action: @escaping () -> Void) -> some View {
-        Button {
-            // A press here moves the reader somewhere. The tap feedback is the same one the cards
-            // give, so "I pressed it" is answered before the scroll starts.
-            PlatformHaptics.tap()
-            action()
-        } label: {
-            HStack(spacing: 10) {
-                // The Landing head's circle (`ProjectLandingRow.mark`): the one place the amber is.
-                // Never on the words — amber text on an amber wash was the legibility trap of the
-                // band this replaced.
-                Image(systemName: glyph.symbol)
-                    .font(.orbitGlyph)
-                    .foregroundStyle(.orange)
-                    .frame(width: 30, height: 30)
-                    .background(Color.orange.opacity(0.15), in: Circle())
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(text)
-                            .font(.orbitSubtext.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                        Spacer(minLength: 0)
-                        if more > 0 {
-                            Text("+\(more)")
+                     chevron: String?, hint: String, unfolds: Bool = false, fold: (() -> Void)? = nil,
+                     action: @escaping () -> Void) -> some View {
+        HStack(spacing: 0) {
+            Button {
+                // A press here moves the reader somewhere. The tap feedback is the same one the cards
+                // give, so "I pressed it" is answered before the scroll starts.
+                PlatformHaptics.tap()
+                action()
+            } label: {
+                HStack(spacing: 10) {
+                    // The Landing head's circle (`ProjectLandingRow.mark`): the one place the amber is.
+                    // Never on the words — amber text on an amber wash was the legibility trap of the
+                    // band this replaced.
+                    Image(systemName: glyph.symbol)
+                        .font(.orbitGlyph)
+                        .foregroundStyle(.orange)
+                        .frame(width: 30, height: 30)
+                        .background(Color.orange.opacity(0.15), in: Circle())
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(text)
+                                .font(.orbitSubtext.weight(.semibold))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                            if more > 0 || unfolds {
+                                HStack(spacing: 2) {
+                                    if more > 0 { Text("+\(more)") }
+                                    if unfolds { Image(systemName: "chevron.down").imageScale(.small) }
+                                }
                                 .font(.orbitMeta.weight(.semibold))
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 6)
                                 .background(Color.primary.opacity(0.1), in: Capsule())
+                            }
+                            if let since { NeedsYouAge(since: since) }
                         }
-                        if let since { NeedsYouAge(since: since) }
+                        if let detail {
+                            Text(detail)
+                                .font(.orbitLabel)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
                     }
-                    if let detail {
-                        Text(detail)
-                            .font(.orbitLabel)
+                    if let chevron {
+                        Image(systemName: chevron)
+                            .font(.orbitLabel.weight(.semibold))
                             .foregroundStyle(.secondary)
-                            .lineLimit(1)
                     }
                 }
-                if let chevron {
-                    Image(systemName: chevron)
+                // Concentric: the circle stands in 7pt from the capsule's round end.
+                .padding(.leading, 7)
+                .padding(.trailing, fold == nil ? 16 : 0)
+                .padding(.vertical, 5)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel([text, detail, more > 0 ? "+\(more)" : nil].compactMap { $0 }.joined(separator: ", "))
+            .accessibilityHint(hint)
+            // Android's `needs-you-bar` tag: a session row can carry the same words.
+            .accessibilityIdentifier("needs-you-bar")
+            if let fold {
+                Button {
+                    PlatformHaptics.tap()
+                    fold()
+                } label: {
+                    Image(systemName: "chevron.up")
                         .font(.orbitLabel.weight(.semibold))
                         .foregroundStyle(.secondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 4)
+                .accessibilityLabel("Collapse")
+            }
+        }
+        .needsYouCapsule()
+    }
+
+    /// Where the bar stands: in from the edges by the margin the nav bar sets its own buttons in —
+    /// UIKit's 20pt on a Plus- or Max-width phone, 16pt below that — so a capsule's ends line up
+    /// under the back button and ⋯ (measured on the owner's 440pt phone: 20–64 and 376–420).
+    private func chrome<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .padding(.horizontal, width >= 414 ? 20 : 16)
+            .padding(.bottom, 6)
+            .frame(maxWidth: .infinity)
+            .background {
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear { width = proxy.size.width }
+                        .onChange(of: proxy.size.width) { _, now in width = now }
                 }
             }
-            // Concentric: the circle stands in 7pt from the capsule's round end.
-            .padding(.leading, 7)
-            .padding(.trailing, 16)
-            .padding(.vertical, 5)
-            .frame(minHeight: 44)
-            .needsYouCapsule()
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel([text, detail, more > 0 ? "+\(more)" : nil].compactMap { $0 }.joined(separator: ", "))
-        .accessibilityHint(hint)
-        // Android's `needs-you-bar` tag: a session row can carry the same words.
-        .accessibilityIdentifier("needs-you-bar")
-        // In from the edges by the margin the nav bar sets its own buttons in — UIKit's 20pt on a
-        // Plus- or Max-width phone, 16pt below that — so the capsule's ends line up under the back
-        // button and ⋯ (measured on the owner's 440pt phone: 20–64 and 376–420).
-        .padding(.horizontal, width >= 414 ? 20 : 16)
-        .padding(.bottom, 6)
-        .frame(maxWidth: .infinity)
-        .background {
-            GeometryReader { proxy in
-                Color.clear
-                    .onAppear { width = proxy.size.width }
-                    .onChange(of: proxy.size.width) { _, now in width = now }
-            }
-        }
-        .background { surface }
+            .background { surface }
     }
 
     @ViewBuilder private var surface: some View {

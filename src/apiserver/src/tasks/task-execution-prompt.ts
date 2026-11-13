@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client';
+import { uuidToBase62 } from '@orbit/shared';
 import { branchName } from '../projects/project-criterion-landing';
 import type { TaskCompletionCriterionValue } from './task-completion-criterion';
 
@@ -19,6 +20,79 @@ export const TASK_DELIVERY_SELECT = {
     },
   },
 } satisfies Prisma.ProjectSelect;
+
+/**
+ * What the brief reads to name the standard this task is held to: the project criterion it declares
+ * (its live text), and the revision that still says it declared one after that criterion is deleted.
+ * Selected beside `id`, `projectId` and `acceptanceCriteria` by every reader that builds the brief.
+ */
+export const TASK_STANDARD_SELECT = {
+  criterionRevision: true,
+  criterionDefinition: { select: { id: true, text: true } },
+} satisfies Prisma.TaskSelect;
+
+/**
+ * The standard a submission for this task is judged against, as `liveCriterionText`
+ * (task-evidence-envelope.ts) reads it: the declared project criterion's live text, else the task's
+ * own acceptanceCriteria. The server binds it to each revision itself
+ * (docs/evidence-always-has-an-addressee-design.md §2), so the brief states it and asks for no quote.
+ */
+type TaskStandard =
+  | { kind: 'DECLARED'; key: string; text: string }
+  | { kind: 'OWN' | 'NONE' | 'VERIFIER' | 'DECLARED_GONE' };
+
+function taskStandard(task: {
+  id: string;
+  verifiesTaskId?: string | null;
+  projectId?: string | null;
+  acceptanceCriteria?: string | null;
+  criterionRevision?: number | null;
+  criterionDefinition?: { id: string; text: string } | null;
+}): TaskStandard {
+  if (task.criterionDefinition) {
+    return { kind: 'DECLARED', key: publicIdOf(task.criterionDefinition.id), text: task.criterionDefinition.text.trim() };
+  }
+  // Deleting the criterion nulls only the id; the revision still says the task declared one
+  // (`heldToProjectCriterion`), and neither its own column nor another criterion stands in for it.
+  if (task.projectId != null && task.criterionRevision != null) return { kind: 'DECLARED_GONE' };
+  if (task.acceptanceCriteria?.trim()) return { kind: 'OWN' };
+  // A verifier is settled by its verdict on the task it checks, and the submit path does not hold
+  // it to a standard of its own.
+  return { kind: task.verifiesTaskId != null ? 'VERIFIER' : 'NONE' };
+}
+
+/** A row's public id, as project_get and task_get spell it; anything not a UUID as it is. */
+function publicIdOf(id: string): string {
+  try {
+    return uuidToBase62(id);
+  } catch {
+    return id;
+  }
+}
+
+/** Step 3's sentence on the standard, for a task that submits evidence. The envelope carries no
+ * `criterion`: the server binds this standard to the revision itself (`taskStandard` in
+ * task-evidence-envelope.ts). */
+function evidenceStandardSentence(standard: TaskStandard): string {
+  switch (standard.kind) {
+    case 'DECLARED':
+      return `This task is held to its project's acceptance criterion ${standard.key}, which reads:\n\n`
+        + `${standard.text}\n\nYour evidence has to show that this holds. `;
+    case 'OWN':
+      return `This task is held to its own acceptance criteria, quoted above, and to nothing else: your evidence `
+        + `has to show that they hold. `;
+    case 'DECLARED_GONE':
+      return `The project criterion this task declared has been deleted, so it has no standard and no evidence `
+        + `for it can be decided. Before you submit, say so with task_comment and ask for the task to declare `
+        + `another criterionKey or to clear it. `;
+    case 'VERIFIER':
+      return `This task checks another task and is settled by its verdict, not by a standard of its own. `;
+    case 'NONE':
+      return `This task states no standard: it declares no project criterion (criterionKey) and its `
+        + `acceptanceCriteria are empty, so a submission is refused. Before you submit, write what would settle `
+        + `the work into its acceptanceCriteria with task_update, or declare a criterionKey. `;
+  }
+}
 
 /** One binding, as `TASK_DELIVERY_SELECT` reads it. */
 interface TaskDeliveryBinding {
@@ -70,6 +144,10 @@ function taskDeliverySentence(task: {
  * constructor dependency.
  */
 export function buildTaskExecutionPrompt(task: {
+  id: string;
+  projectId?: string | null;
+  criterionRevision?: number | null;
+  criterionDefinition?: { id: string; text: string } | null;
   title: string;
   description?: string | null;
   acceptanceCriteria?: string | null;
@@ -100,10 +178,21 @@ export function buildTaskExecutionPrompt(task: {
   // runs did as told and filed evidence that criterion never reads — often for a task in no
   // project, with no project_get criterion to copy.
   const ownerConfirmed = task.completionCriterion === 'OWNER_CONFIRMED';
+  // The standard the evidence is judged against, stated in the brief rather than left for the run
+  // to look up: told to copy a criterion from project_get, two runs of a project task that declared
+  // none quoted another criterion of the project and sat undecidable for hours (2026-11-12,
+  // docs/evidence-always-has-an-addressee-design.md §1–§2).
+  const standard = taskStandard(task);
+  const said = evidenceStandardSentence(standard);
   return (
     `Start the task “${task.title}”.\n\n` +
     (task.description ? `Task description:\n${task.description}\n\n` : '') +
-    (acceptance ? `Acceptance criteria (what decides whether this task is done):\n${acceptance}\n\n` : '') +
+    (acceptance
+      ? (standard.kind === 'OWN' || executableAcceptance || ownerConfirmed
+        ? `Acceptance criteria (what decides whether this task is done):\n${acceptance}\n\n`
+        : `Acceptance criteria (the task's own notes; the standard it is judged against is in step 3):\n`
+          + `${acceptance}\n\n`)
+      : '') +
     (instructions ? `List instructions (the same for every task in this list):\n${instructions}\n\n` : '') +
     // Where the work goes once it is done; a project's instructions that say otherwise give way to it.
     (delivery ? `${delivery}\n\n` : '') +
@@ -142,9 +231,11 @@ export function buildTaskExecutionPrompt(task: {
           + `(Send back…), and no agent session (the coordinator included) can confirm it for them; the reason for `
           + `a send-back arrives in this session as the next message — when it does, carry on as it says, and `
           + `declare again once you are done again. Do not call task_evidence_submit, and do not write status.\n`
-        : `3. When you are done, submit the completion evidence envelope with task_evidence_submit. All four `
-          + `fields are required: claim (what you claim to have completed), criterion ({key, text}, copied from the `
-          + `acceptance criteria project_get returns), checks (each {kind, ref}, kind one of `
+        : `3. When you are done, submit the completion evidence envelope with task_evidence_submit. `
+          + said
+          + `Orbit records that standard with the evidence itself, so the envelope does not name one. `
+          + `All three fields are required: claim (what you claim to have completed), `
+          + `checks (each {kind, ref}, kind one of `
           + `TOOL_CALL / COMMIT / ARTIFACT, ref pointing at a row already recorded under this task's sessions; at `
           + `least one must resolve, or the whole submission is refused), and gaps (what this evidence could not `
           + `establish; an empty array if nothing). Run the checks you will cite with bg_run and cite the job id it `

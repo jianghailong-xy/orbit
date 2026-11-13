@@ -101,7 +101,7 @@ vi.mock('./SettingsProviderPages', async (original) => {
   const { SettingsRow } = await import('./SettingsBlocks');
   return {
     ...(await original<typeof import('./SettingsProviderPages')>()),
-    SettingsVendorPage: () => (
+    SettingsKeysPage: () => (
       <div data-page={`vendor:${useParams().vendor}`}>
         {['k1', 'k2', 'k3'].map((id) => (
           <SettingsRow key={id} anchor={`key:${id}`} title={id} />

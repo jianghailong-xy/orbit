@@ -966,10 +966,12 @@ struct StepsRowView: View {
     @State private var expanded = false
     private let summary: StepsSummary
 
-    init(items: [TranscriptItem], fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil) {
+    /// `live`: whether the turn is still running — only then is a call without its answer drawn under
+    /// the line as in flight (`StepsSummary.make`).
+    init(items: [TranscriptItem], live: Bool = true, fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil) {
         self.items = items
         self.fullPayload = fullPayload
-        self.summary = StepsSummary.make(items)
+        self.summary = StepsSummary.make(items, live: live)
     }
 
     var body: some View {

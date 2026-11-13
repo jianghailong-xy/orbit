@@ -51,7 +51,6 @@ vi.mock('./pages/ProviderConnectPage', () => ({
 vi.mock('./pages/ProviderPoolPage', () => ({ ProviderPoolPage: () => <p>a pool’s page</p> }));
 vi.mock('./components/settings/SettingsProviderPages', async (original) => ({
   ...(await original<typeof import('./components/settings/SettingsProviderPages')>()),
-  SettingsVendorPage: () => <p>a vendor’s page</p>,
   SettingsPoolsPage: () => <p>the pools page</p>,
 }));
 
@@ -167,12 +166,12 @@ describe('the Runners and Providers addresses', () => {
   });
 
   it.each(['/providers', '/admin/providers', '/infrastructure#keys'])(
-    '%s lands on the first connected vendor’s page in Settings',
+    '%s lands on the API keys page in Settings',
     async (path) => {
       keys = [{ id: KEY, label: 'Work key', presetSlug: 'anthropic', engines: ['claude'], models: [] }];
       await visit(path);
-      expect(addressBar()).toBe('/settings/providers/anthropic');
-      expect(settingsPage()).toBe('a vendor’s page');
+      expect(addressBar()).toBe('/settings/providers');
+      expect(container.querySelector('.settings-column .sp-vendor-title')?.textContent).toBe('API keys');
     },
   );
 

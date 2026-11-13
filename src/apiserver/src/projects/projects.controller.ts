@@ -874,6 +874,16 @@ export class ProjectsController {
    * it is in Trash and whether the press would refuse — all four BEFORE the press, which is the one
    * thing pressing it can never tell you.
    */
+  /**
+   * Every unfinished task's pending item, who can move it and when they were told, and whether it is
+   * an orphan (docs/evidence-always-has-an-addressee-design.md §4). A read in the strict sense.
+   */
+  @PatScope('projects:read', { workspaceConfinable: false })
+  @Get(':id/pending-addressees')
+  pendingAddressees(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.projects.pendingAddressees(user.userId, id);
+  }
+
   @PatScope('projects:read', { workspaceConfinable: false })
   @Get(':id/coordinator/status')
   coordinatorStatus(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
