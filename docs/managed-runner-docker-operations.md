@@ -730,6 +730,26 @@ Every line says `"ok": true`. A refused connection reads `EHOSTUNREACH` ("No rou
 the firewall not in force. On the host, `iptables -S ORBIT-MR-INPUT`, `iptables -S ORBIT-MR-FORWARD`, and the first
 rule of `iptables -S INPUT` and `iptables -S DOCKER-USER` show the same rules.
 
+### On a host that also runs Kubernetes
+
+k3s (or any kube-proxy, kube-router or flannel) on the same host puts its jumps above Docker's in `FORWARD`, and its
+`KUBE-SERVICES` in nat `PREROUTING` would DNAT a runner's connection to a ClusterIP into the cluster. The firewall finds
+Kubernetes' chains and then also starts `FORWARD` and nat `PREROUTING` with a rule for the runners' bridge
+([Beside Kubernetes](../deploy/managed-runner/firewall/README.md#beside-kubernetes-k3s)): a runner reaches no ClusterIP,
+pod, NodePort or node address. Nothing is configured for it. Check it as above, and also:
+
+```bash
+iptables -S FORWARD | sed -n 2p            # -A FORWARD -i br-… -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD
+iptables -t nat -S PREROUTING | sed -n 2p  # -A PREROUTING -i br-… … -j ORBIT-MR-PREROUTING, before KUBE-SERVICES
+jq .kubernetes data/managed-runners/firewall/status.json   # ["IPv4", ...]
+```
+
+kube-router puts its jumps back on top when k3s starts or restarts, and the service puts the firewall's first again
+within 10 seconds; its log then says `IPv4: FORWARD does not start with the jump for br-…: KUBE-ROUTER-FORWARD come(s)
+before it ...: writing the rules`. That line once per k3s restart is expected. If `check` keeps reporting it, something
+else on the host is fighting for the first place: find it in `iptables -S FORWARD`. k3s must use the iptables backend
+Docker uses (it picks the one that holds rules, so it does when Docker was there first).
+
 ### Let runners reach an internal model endpoint
 
 A model endpoint (or any service) on this host or on the private network behind it is refused until it is allowed.
@@ -791,6 +811,9 @@ host without the image, by hand (or restart the host once the service is gone):
 for t in iptables ip6tables; do
   $t -S | grep -E -- '-j ORBIT-MR-(INPUT|FORWARD)$' | sed 's/^-A /-D /' | while read -r rule; do $t $rule; done
   for chain in ORBIT-MR-INPUT ORBIT-MR-FORWARD; do $t -F "$chain" 2>/dev/null; $t -X "$chain" 2>/dev/null; done
+  # Only on a host that runs Kubernetes too: the nat guard.
+  $t -t nat -S | grep -E -- '-j ORBIT-MR-PREROUTING$' | sed 's/^-A /-D /' | while read -r rule; do $t -t nat $rule; done
+  $t -t nat -F ORBIT-MR-PREROUTING 2>/dev/null; $t -t nat -X ORBIT-MR-PREROUTING 2>/dev/null
 done
 ```
 
