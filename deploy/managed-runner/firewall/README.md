@@ -50,11 +50,13 @@ rules add, still matching the runners' bridge only:
 | `FORWARD` | A first rule `-i <bridge> -j ORBIT-MR-FORWARD`, the same chain `DOCKER-USER` jumps to (which keeps its jump). |
 | nat `PREROUTING` | A first rule `-i <bridge> -j ORBIT-MR-PREROUTING`. That chain lets the gateway's published port and the `allow`/`dnsServers` destinations go on (`RETURN`) to Docker's DNAT, and `ACCEPT`s everything else, which ends nat `PREROUTING` for that packet: `KUBE-SERVICES` never DNATs or marks it, so a ClusterIP stays a 10/8 address that `ORBIT-MR-FORWARD` rejects. Over IPv6 the chain is one `ACCEPT`. |
 
-kube-router puts its jumps back on top as it starts and as it syncs. The rules are in force only while each jump of
-this program is the first rule of its hook (`INPUT`, `FORWARD`, nat `PREROUTING`), and the service puts them first again
-at its next check, within `intervalSeconds`; until then it reports `failing` with what came first ("FORWARD does not
-start with the jump for br-…: KUBE-ROUTER-FORWARD come(s) before it"). `status.json` says `"kubernetes": ["IPv4", ...]`
-while it keeps the rules this way. A host without Kubernetes gets exactly the rules above and nothing in nat; once
+kube-router puts its jumps back on top as it starts and as it syncs. The rules count as in force only while each jump
+of this program is the first rule of its hook (`INPUT`, `FORWARD`, nat `PREROUTING`). The next check finds what came
+first, logs it ("FORWARD does not start with the jump for br-…: KUBE-ROUTER-FORWARD come(s) before it ...: writing the
+rules") and puts them first again in the same pass; it reports `failing` only if it cannot. So for up to
+`intervalSeconds` after a k3s start (8 s in the lab) kube-router's chains see a runner's packets before these, while the
+last status still says `enforced`; the nat guard stays first through it (kube-proxy leaves an existing jump where it
+is), so ClusterIPs stay out of reach. `status.json` says `"kubernetes": ["IPv4", ...]` while it keeps the rules this way. A host without Kubernetes gets exactly the rules above and nothing in nat; once
 Kubernetes' chains are gone, the next check takes the `FORWARD` and nat rules away again. Kubernetes must use the same
 iptables backend as Docker (k3s picks the one with rules in it): rules in the other backend are not ordered by these.
 

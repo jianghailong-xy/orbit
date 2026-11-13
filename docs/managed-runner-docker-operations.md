@@ -745,7 +745,8 @@ jq .kubernetes data/managed-runners/firewall/status.json   # ["IPv4", ...]
 ```
 
 kube-router puts its jumps back on top when k3s starts or restarts, and the service puts the firewall's first again
-within 10 seconds; its log then says `IPv4: FORWARD does not start with the jump for br-…: KUBE-ROUTER-FORWARD come(s)
+within 10 seconds (8 s in the [lab](evidence/managed-runner-firewall-k3s/2026-11-13/README.md); the nat rule is not
+moved, so ClusterIPs stay refused meanwhile); its log then says `IPv4: FORWARD does not start with the jump for br-…: KUBE-ROUTER-FORWARD come(s)
 before it ...: writing the rules`. That line once per k3s restart is expected. If `check` keeps reporting it, something
 else on the host is fighting for the first place: find it in `iptables -S FORWARD`. k3s must use the iptables backend
 Docker uses (it picks the one that holds rules, so it does when Docker was there first).
