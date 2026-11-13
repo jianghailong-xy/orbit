@@ -74,7 +74,7 @@ const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY ??= 'local-provider-dispatch-spec';
 
 const MODEL = 'qwen3.8:27b';
-const WORKSPACE_SECRET = 'sk-ant-api03-workspace-secret-never-local';
+const WORKSPACE_SECRET = 'workspace-anthropic-credential-never-local';
 const TASK_CHECK = { completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0 } as const;
 
 const realtime = new Proxy(
