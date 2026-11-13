@@ -8,6 +8,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiDocView, WikiDocsDirectory } from '@orbit/shared';
 import { wikiChatQuoteCounts, type WikiChatList, type WikiChatWorkspace } from '../lib/wikiChat';
+import { readSidebarFolded } from '../lib/sidebarFold';
 
 // A section's diagram is drawn by Mermaid, which jsdom cannot lay out.
 const mermaid = vi.hoisted(() => ({ initialize: vi.fn(), render: vi.fn() }));
@@ -441,12 +442,17 @@ describe('the panel (design §4.1, board 42 ①)', () => {
     );
   });
 
-  it('still docks from 1200, folding the directory into Contents; lies over the page from 640; is a sheet below', async () => {
+  it('is a column from 1200, the app sidebar its icon rail and the directory where it was; lies over the page from 640; is a sheet below', async () => {
     windowWidth(1300);
     await open('/wiki/orbit/d/session-runtime?chat=new');
     expect(host().className).toMatch(/is-docked/);
-    expect(host().className).toMatch(/is-fold/);
+    // Board docs/mocks/wiki-rail 03 Ⓑ C2: a column beside the page, which keeps its directory; the sidebar gives the width.
+    expect(host().className).not.toMatch(/is-fold/);
+    expect(host().parentElement!.className).toBe('wk-chat-frame is-columned');
+    expect(panel()!.parentElement).toBe(host().parentElement);
     expect(panel()!.style.width, 'a third of 1300').toBe('433px');
+    expect(panel()!.style.top, 'a column has no top of its own').toBe('');
+    expect(readSidebarFolded()).toBe(true);
 
     windowWidth(900);
     await act(async () => window.dispatchEvent(new Event('resize')));
@@ -455,6 +461,7 @@ describe('the panel (design §4.1, board 42 ①)', () => {
     expect(host().className).not.toMatch(/is-docked/);
     expect(host().className).toMatch(/is-fold/);
     expect(panel()!.className).toContain('is-over');
+    expect(readSidebarFolded(), 'over the page, the sidebar keeps its width').toBe(false);
 
     windowWidth(500);
     await act(async () => window.dispatchEvent(new Event('resize')));

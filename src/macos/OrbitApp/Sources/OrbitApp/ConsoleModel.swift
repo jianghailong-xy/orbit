@@ -169,6 +169,9 @@ final class ConsoleModel {
     private(set) var sessionSourceState: String?
     private(set) var sessionSourceRefusalCode: String?
     private(set) var sessionSourceRefusalDetail: SourceRefusalDetail?
+    /// SR18's line for a run of a task forked from a session, as the detail read words it. Nil on
+    /// any other session.
+    private(set) var sessionForkSource: String?
     private(set) var antigravityInstalling = false
     private(set) var runnerInstall: RunnerInstallState?
 
@@ -1069,6 +1072,8 @@ final class ConsoleModel {
     /// The worktree status bar's own model (detail snapshot + diffs + commit/merge actions) —
     /// see `WorktreeModel`. Wired back to this console for the live status + the status line.
     let worktree: WorktreeModel
+    /// The workspace's main checkout as this session reviews and acts on it (card, bar, review sheet).
+    let mainCheckout: MainCheckoutModel
     /// The "Tasks created here" card's own model — see `CreatedTasksModel`. Polled with the stream.
     let createdTasks: CreatedTasksModel
 
@@ -1164,6 +1169,7 @@ final class ConsoleModel {
         let api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
         self.api = api
         self.worktree = WorktreeModel(sessionID: sessionID, api: api)
+        self.mainCheckout = MainCheckoutModel(sessionID: sessionID, api: api)
         self.createdTasks = CreatedTasksModel(sessionID: sessionID, api: api)
         // Live SSE transport on both macOS and iOS — `URLSessionEventStream` is available on both
         // (see EventStream's `#if os(macOS) || os(iOS)` guard). A draft console never starts its
@@ -1200,6 +1206,7 @@ final class ConsoleModel {
         // Inert for a draft (its guards see the empty sessionID); real work starts once the created
         // session's live console replaces this one.
         self.worktree = WorktreeModel(sessionID: "", api: api)
+        self.mainCheckout = MainCheckoutModel(sessionID: "", api: api)
         self.createdTasks = CreatedTasksModel(sessionID: "", api: api)
         // Live SSE transport on both macOS and iOS — `URLSessionEventStream` is available on both
         // (see EventStream's `#if os(macOS) || os(iOS)` guard). A draft console never starts its
@@ -1284,6 +1291,7 @@ final class ConsoleModel {
     private func wireWorktree() {
         worktree.isSessionLive = { [weak self] in self?.sessionStatus.isLive ?? false }
         worktree.onOutcome = { [weak self] request in self?.onToast(request) }
+        mainCheckout.onOutcome = { [weak self] request in self?.onToast(request) }
     }
 
     /// Show a fleeting, informational message — the native equivalent of web's `message.success`
@@ -2071,7 +2079,7 @@ final class ConsoleModel {
         case .assistant(let b): return b.isFinalized
         case .thinking(let b):  return b.isFinalized
         case .toolCall(let c):  return c.status != .running
-        case .user, .interrupt, .error, .authError, .autoRetry, .notice, .diagnostic: return true   // the agent still owes a reply
+        case .user, .interrupt, .error, .authError, .autoRetry, .notice, .diagnostic, .mainCheckout: return true   // the agent still owes a reply
         }
     }
 
@@ -2343,6 +2351,9 @@ final class ConsoleModel {
         sessionSourceState = session.sourceState
         sessionSourceRefusalCode = session.sourceRefusalCode
         sessionSourceRefusalDetail = session.sourceRefusalDetail
+        // Only the detail read carries it, and a fork never changes (SR12): a list row's absence
+        // is not taken as its end.
+        if let fork = session.forkSource { sessionForkSource = fork }
         if let keys = session.agent?.antigravityKeyAvailableByRunner { workspaceAntigravityKeys = keys }
         serverCapabilities = session.capabilities
         // What this row says it is waiting on the owner for moves before any card here does: a

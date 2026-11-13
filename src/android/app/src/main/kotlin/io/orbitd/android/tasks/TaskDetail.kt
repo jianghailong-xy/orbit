@@ -849,6 +849,8 @@ private fun FiledRow(task: JsonObject, at: String?, workspaces: List<JsonObject>
             task.obj("creatorSession")?.let { source -> Text("from ${source.text("title") ?: TaskDetailCopy.untitledSession}",
                 Modifier.clickable(role = Role.Button) { source.text("id")?.let { open(OrbitRoute(Destination.SESSION, it)) } }.testTag("task-created-from"),
                 style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            TaskDetailLogic.forkSource(task)?.let { Text(it, Modifier.testTag("task-fork-source"), style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         at?.let(TaskTime::relative)?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }

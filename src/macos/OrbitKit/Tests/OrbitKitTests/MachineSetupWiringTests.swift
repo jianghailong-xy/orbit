@@ -79,9 +79,14 @@ final class MachineSetupWiringTests: XCTestCase {
         try assertInOrder(row, ["model.machineDraftRunnerID == machine.id ? AnyShapeStyle(.primary) : AnyShapeStyle(Color.accentColor)",
                                 "MachineSetupCopy.setupTitle(machine: machine.name)", "Image(systemName: \"folder.badge.plus\")"],
                           "tinted, until it is the row selected")
-        XCTAssertTrue(main.contains("if let runnerID = model.machineDraftRunnerID { return .machine(runnerID) }"),
-                      "the selection reads the page on screen")
-        XCTAssertTrue(main.contains("case .machine(let runnerID):\n                    model.openMachineDraft(runnerID)"))
+        // The selection is ONE stored value; its actions run in `.onChange`, after the List's update.
+        XCTAssertTrue(main.contains("SidebarLogic.selection(section: model.selectedSection, agentID: model.selectedAgentID,"),
+                      "the stored value reads the page on screen")
+        let onChange = try slice(main, from: ".onChange(of: selection) { _, now in", to: ".onChange(of: modelSelection")
+        try assertInOrder(onChange, ["case .machine(let runnerID):", "model.openMachineDraft(runnerID)"],
+                          "the machine row's one action")
+        XCTAssertTrue(main.contains(".onChange(of: modelSelection, initial: true)"),
+                      "a deep link or shortcut brings the list's stored value along")
     }
 
     /// The page is the same one on every shell.

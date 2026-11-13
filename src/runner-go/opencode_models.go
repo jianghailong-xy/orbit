@@ -28,7 +28,11 @@ func openCodeCLIAvailable() bool {
 }
 
 func fetchOpenCodeModelCatalog(ctx context.Context, dir string) ([]ModelInfo, error) {
-	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	// Reachable only from a background refresh, so the ceiling costs nobody a wait — and it has to
+	// cover a cold start of a 214 MB binary: `opencode models --verbose` measured 17 s on a loaded
+	// runner (2026-11-13), and the old 30 s ceiling was killing it mid-startup every hour, leaving
+	// opencode's model list stale.
+	cctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	// Model discovery is metadata-only; never execute project/global plugins while
 	// probing a runner heartbeat catalog.

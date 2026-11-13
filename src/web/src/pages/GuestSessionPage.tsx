@@ -1,7 +1,7 @@
 import { ArrowUpOutlined, LoadingOutlined } from '@ant-design/icons';
-import { useQuery } from '@tanstack/react-query';
+import { queryOptions, useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Navigate, useParams } from 'react-router-dom';
 import {
   ApiError,
   getGuestEventFull,
@@ -12,10 +12,8 @@ import {
   type GuestSessionNow,
   type SharedEvent,
 } from '../api';
-import { PublicShell } from '../components/PublicShell';
 import { EventFullCtx, PublicLinkResolverCtx, type PublicLinkResolver, Transcript } from '../components/Transcript';
 import { memoizeEventFull } from '../lib/eventFull';
-import { routeId } from '../lib/idCodec';
 import { meQuery } from '../lib/queries';
 import { newRunRequestToken } from '../lib/runRequestToken';
 import {
@@ -52,26 +50,41 @@ const NOTHING_ELSE_SHARED: PublicLinkResolver = () => null;
 const isGone = (e: unknown) => e instanceof ApiError && e.status === 404;
 
 /**
- * The guest page, `/g/<sessionId>` (docs/session-guests-design.md §4; board docs/mocks/share-links/10-session-guests-3):
- * a session someone invited you to reply in. The public page's frame — title, `Shared by <owner>`, the session's
- * status and a Guest badge — over the Transcript the guest door projects, followed as the public page follows it,
- * and a composer that only takes text: no mode, model or effort, no `!` shell, no attachments. A message is a turn
- * of the owner's session, on the owner's machine; one to an ended session restarts it there.
+ * `/g/<sessionId>`, the guest page's first address: a session shared with you now opens at the same `/sessions/<id>`
+ * its owner opens (board docs/mocks/share-links/11-guest-one-link, D8), so an old link goes there.
  */
-export function GuestSessionPage() {
+export function GuestLinkRedirect() {
   const { sessionId = '' } = useParams();
-  return <GuestConversation key={sessionId} />;
+  return <Navigate to={`/sessions/${sessionId}`} replace />;
 }
 
-function GuestConversation() {
-  const { sessionId: param = '' } = useParams();
-  const sessionId = routeId(param) ?? param;
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['guest-session', sessionId],
+/**
+ * The guest view (docs/session-guests-design.md §4; boards docs/mocks/share-links/10-session-guests-3 and
+ * 11-guest-one-link-2): a session someone invited you to reply in, drawn in your own app where `/sessions/<id>`
+ * finds no session of yours (D9). Its head — title, `Shared by <owner>`, the session's status and a Guest badge —
+ * over the Transcript the guest door projects, followed as the public page follows it, and a composer that only
+ * takes text: no mode, model or effort, no `!` shell, no attachments. A message is a turn of the owner's session, on
+ * the owner's machine; one to an ended session restarts it there.
+ */
+export function GuestSessionView({ sessionId }: { sessionId: string }) {
+  return <GuestConversation key={sessionId} sessionId={sessionId} />;
+}
+
+/**
+ * The guest door's read of a session, and its newest page: what the guest view opens on, and what `/sessions/<id>`
+ * asks once the owner's read has found no session of yours there. One query, so the view opens on the answer the
+ * question already fetched.
+ */
+export const guestSessionQuery = (sessionId: string) =>
+  queryOptions({
+    queryKey: ['guest-session', sessionId] as const,
     queryFn: () => getGuestSession(sessionId, TAIL_PAGE),
     retry: false,
     staleTime: Infinity,
   });
+
+function GuestConversation({ sessionId }: { sessionId: string }) {
+  const { data, isLoading, error } = useQuery(guestSessionQuery(sessionId));
   const me = useQuery(meQuery());
   const fetchFull = useMemo(() => memoizeEventFull((seq: number) => getGuestEventFull(sessionId, seq)), [sessionId]);
 
@@ -240,14 +253,14 @@ function GuestConversation() {
 
   if (isLoading) {
     return (
-      <div className="share-page">
+      <div className="share-page guest-view">
         <div className="share-state">Loading…</div>
       </div>
     );
   }
   if (gone || error || !head || !data) {
     return (
-      <div className="share-page">
+      <div className="share-page guest-view">
         <div className="share-state">
           <div className="share-state-title">{GUEST_NOT_SHARED}</div>
           <div className="share-state-desc">Ask the person who shared it if you need it again.</div>
@@ -310,29 +323,38 @@ function GuestConversation() {
   );
 
   return (
-    <PublicShell
-      crumbs={[{ label: titleFirstLine(head.title) }]}
-      subtitle={`Shared by ${owner}`}
-      status={
-        <span className={`status-pill ${tone}`}>
-          {tone === 'running' ? <LoadingOutlined spin /> : <span className="status-dot" />}
-          {sessionStateWord(head)}
-        </span>
-      }
-      live={false}
-      badge="Guest"
-      dock={composer}
-      footer={null}
-      scrollRef={scrollRef}
-      onScroll={(e) => {
-        if (e.currentTarget.scrollTop < LOAD_OLDER_AT) loadOlder();
-      }}
-    >
-      <PublicLinkResolverCtx.Provider value={NOTHING_ELSE_SHARED}>
-        <EventFullCtx.Provider value={fetchFull}>
-          <Transcript events={events} />
-        </EventFullCtx.Provider>
-      </PublicLinkResolverCtx.Provider>
-    </PublicShell>
+    <div className="share-page guest-view">
+      <header className="share-header">
+        <div className="share-crumbs">
+          <span className="share-crumb is-here" title={titleFirstLine(head.title)}>
+            {titleFirstLine(head.title)}
+          </span>
+          <span className="share-subtitle">Shared by {owner}</span>
+        </div>
+        <div className="share-right">
+          <span className={`status-pill ${tone}`}>
+            {tone === 'running' ? <LoadingOutlined spin /> : <span className="status-dot" />}
+            {sessionStateWord(head)}
+          </span>
+          <span className="share-badge">Guest</span>
+        </div>
+      </header>
+      <main
+        className="share-scroll"
+        ref={scrollRef}
+        onScroll={(e) => {
+          if (e.currentTarget.scrollTop < LOAD_OLDER_AT) loadOlder();
+        }}
+      >
+        <div className="share-inner">
+          <PublicLinkResolverCtx.Provider value={NOTHING_ELSE_SHARED}>
+            <EventFullCtx.Provider value={fetchFull}>
+              <Transcript events={events} />
+            </EventFullCtx.Provider>
+          </PublicLinkResolverCtx.Provider>
+        </div>
+      </main>
+      {composer}
+    </div>
   );
 }

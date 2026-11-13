@@ -498,7 +498,11 @@ final class WikiWiringTests: XCTestCase {
     func testTheMacSidebarDrawsNoWikiRowWithoutTheWiki() throws {
         let main = code(try source("Views/MainView.swift"))
         let sidebar = try slice(main, from: "struct SectionSidebar: View {", to: "struct AccountFooter: View {")
-        XCTAssertTrue(sidebar.contains("if section != .wiki || model.wiki?.shown == true {"))
+        // The answer is DATA in the one snapshot now (`SidebarSectionRow`), not an `if` around the
+        // List's row builder — the shape beta.242 crashed in.
+        XCTAssertTrue(sidebar.contains("AgentListLogic.sidebarSections("))
+        XCTAssertTrue(sidebar.contains("wiki: model.wiki?.shown == true"))
+        XCTAssertTrue(sidebar.contains("ForEach(sections) { row in"))
         XCTAssertTrue(sidebar.contains(".task { await model.wiki?.loadSpaces() }"))
     }
 

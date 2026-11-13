@@ -2156,8 +2156,8 @@ func TestACheckoutMissingForAnyOtherReason(t *testing.T) {
 		}
 	})
 	// A run taking over the branch of the run before it never had a checkout, so nothing of its own is being
-	// restored, and it may not stand in that run's. It runs in the workspace as it always did, or a pinned one
-	// not at all, and leaves no base ref behind to say it ever had a checkout.
+	// restored, and it may not stand in that run's. It does not run at all, pinned or not — never in the workspace
+	// (docs/main-checkout-git-contract.md) — and leaves no base ref behind to say it ever had a checkout.
 	t.Run("a run taking over a branch another run's checkout still holds", func(t *testing.T) {
 		for _, pinned := range []bool{false, true} {
 			f := newResumableFixture(t)
@@ -2167,12 +2167,8 @@ func TestACheckoutMissingForAnyOtherReason(t *testing.T) {
 				job.Source = &SessionSource{State: sourceStatePinned, BaseSha: mustGit(t, earlier, "rev-parse", "HEAD")}
 			}
 			execDir := setupWorktree(job, f.repo)
-			if pinned {
-				if execDir != "" || job.SourceRefusal == nil {
-					t.Fatalf("pinned: execDir %q, refusal %+v", execDir, job.SourceRefusal)
-				}
-			} else if execDir != f.repo || job.SourceRefusal != nil || job.IsolationStatus != isoSharedNoGit {
-				t.Fatalf("execDir %q, refusal %+v, isolation %q: this path did not change", execDir, job.SourceRefusal, job.IsolationStatus)
+			if execDir != "" || job.SourceRefusal == nil || job.SourceRefusal.Code != sourceRefusalWorktreeRequired || job.IsolationStatus == isoSharedNoGit {
+				t.Fatalf("pinned %v: execDir %q, refusal %+v, isolation %q", pinned, execDir, job.SourceRefusal, job.IsolationStatus)
 			}
 			if out, err := git(f.repo, "rev-parse", "--verify", "--quiet", baseRefName("sess-later")); err == nil {
 				t.Fatalf("pinned %v: a base ref for a session that never had a checkout: %s", pinned, out)
@@ -2194,12 +2190,12 @@ func TestACheckoutMissingForAnyOtherReason(t *testing.T) {
 			}
 		}
 	})
-	t.Run("a new branch that cannot get a checkout still runs shared", func(t *testing.T) {
+	t.Run("a new branch that cannot get a checkout does not run, never shared", func(t *testing.T) {
 		f := newResumableFixture(t)
 		job := &ClaimedSession{SessionID: "sess-new", Branch: "orbit/sess-new"}
 		writeUnder(t, filepath.Join(worktreesDir(), "sess-new"), "in/the/way.txt", "x\n")
-		if execDir := setupWorktree(job, f.repo); execDir != f.repo || job.SourceRefusal != nil || job.IsolationStatus != isoSharedNoGit {
-			t.Fatalf("execDir %q, refusal %+v, isolation %q: this path did not change", execDir, job.SourceRefusal, job.IsolationStatus)
+		if execDir := setupWorktree(job, f.repo); execDir != "" || job.SourceRefusal == nil || job.SourceRefusal.Code != sourceRefusalWorktreeRequired || job.IsolationStatus == isoSharedNoGit {
+			t.Fatalf("execDir %q, refusal %+v, isolation %q: an isolated session fell back to the shared checkout", execDir, job.SourceRefusal, job.IsolationStatus)
 		}
 	})
 }
