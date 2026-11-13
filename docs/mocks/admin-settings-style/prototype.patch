@@ -1,0 +1,952 @@
+diff --git a/src/web/src/App.tsx b/src/web/src/App.tsx
+index 8bd0cdb..218df6b 100644
+--- a/src/web/src/App.tsx
++++ b/src/web/src/App.tsx
+@@ -7,6 +7,7 @@ import { workspacesQuery, runnersQuery } from './lib/queries';
+ import { machineDraftPath } from './lib/machineSetup';
+ import { firstOpenableWorkspace } from './lib/workspaceOrder';
+ import { AppShell, DocView, FlushView } from './components/AppShell';
++import { AdminLayout } from './components/settings/AdminLayout';
+ import { SettingsLayout } from './components/settings';
+ import { SettingsWorkspacePage } from './components/settings/WorkspaceSettingsPage';
+ import { SettingsKeysPage, SettingsPoolsPage, SettingsProvidersHome } from './components/settings/SettingsProviderPages';
+@@ -263,6 +264,13 @@ export function App() {
+           {/* Settings takes over the window (owner's choice A1, docs/mocks/settings-redesign): its own nav
+               of five groups in place of the app's sidebar, "Back to Orbit" and Esc to leave. Machines and
+               Workspaces open the pages that manage them today until each has its own. */}
++          {/* Admin is drawn as Settings is: its own window, a nav of its pages, the page in a centred column. */}
++          <Route path="admin" element={<AdminLayout />}>
++            <Route index element={<AdminUsersPage />} />
++            <Route path="sign-in" element={<AdminSignInPage />} />
++            <Route path="email" element={<AdminEmailPage />} />
++            <Route path="integrations" element={<AdminIntegrationsPage />} />
++          </Route>
+           <Route path="settings" element={<SettingsLayout />}>
+             <Route index element={<Navigate to="/settings/general" replace />} />
+             <Route path="general" element={<GeneralSettingsPage />} />
+@@ -300,41 +308,6 @@ export function App() {
+             <Route path="tasks" element={<TaskRoute />} />
+             <Route path="tasks/:id" element={<TaskRoute />} />
+             <Route path="lists/:key" element={<TaskRoute />} />
+-            <Route
+-              path="admin"
+-              element={
+-                <DocView>
+-                  <AdminUsersPage />
+-                </DocView>
+-              }
+-            />
+-            {/* The admin area's Sign-in settings, beside its user management (docs/google-sign-in-design.md §7.1). */}
+-            <Route
+-              path="admin/sign-in"
+-              element={
+-                <DocView>
+-                  <AdminSignInPage />
+-                </DocView>
+-              }
+-            />
+-            {/* The admin area's outgoing email: Resend and the welcome email (docs/welcome-email-design.md §3.1). */}
+-            <Route
+-              path="admin/email"
+-              element={
+-                <DocView>
+-                  <AdminEmailPage />
+-                </DocView>
+-              }
+-            />
+-            {/* The admin area's Integrations: Feishu bots' switch (docs/feishu-bot-design.md §4.1). */}
+-            <Route
+-              path="admin/integrations"
+-              element={
+-                <DocView>
+-                  <AdminIntegrationsPage />
+-                </DocView>
+-              }
+-            />
+             {/* Machines are Settings' now: /infrastructure opens one (InfrastructureRoute), its #keys and
+                 #pools, and the old /providers addresses, land on Settings' Providers pages. */}
+             <Route path="infrastructure" element={<InfrastructureRoute />} />
+diff --git a/src/web/src/components/settings/AdminLayout.tsx b/src/web/src/components/settings/AdminLayout.tsx
+new file mode 100644
+index 0000000..94856ee
+--- /dev/null
++++ b/src/web/src/components/settings/AdminLayout.tsx
+@@ -0,0 +1,108 @@
++import { useEffect } from 'react';
++import { Outlet, useLocation, useNavigate } from 'react-router-dom';
++import { useQuery } from '@tanstack/react-query';
++import { ApiOutlined, LeftOutlined, LoginOutlined, MailOutlined, TeamOutlined } from '@ant-design/icons';
++import { api } from '../../api';
++import { settingsReturnPath } from '../../lib/settingsReturn';
++import { useMediaQuery } from '../../lib/useMediaQuery';
++import { feishuAdminQuery } from '../../pages/AdminIntegrationsPage';
++import { googleSignInSettingsQuery } from '../../pages/AdminSignInPage';
++import { emailSettingsQuery } from '../../pages/AdminEmailPage';
++import { ImpersonationBanner } from '../ImpersonationBanner';
++import { NARROW_SETTINGS_QUERY, NavGroup, NavRow } from './SettingsLayout';
++import './Settings.css';
++
++/** A row's On / Off, drawn as the Machines group draws a machine's state. */
++function OnDot({ on }: { on: boolean | undefined }) {
++  if (on === undefined) return null;
++  return (
++    <span
++      className={`settings-dot settings-dot--${on ? 'online' : 'offline'}`}
++      role="img"
++      aria-label={on ? 'On' : 'Off'}
++      title={on ? 'On' : 'Off'}
++    />
++  );
++}
++
++/**
++ * The Admin window, drawn as Settings is: it takes over the window, a nav of its pages on the left, the chosen
++ * page in a centred column on the right, "Back to Orbit" and Esc to leave.
++ */
++export function AdminLayout() {
++  const navigate = useNavigate();
++  const { pathname } = useLocation();
++  const narrow = useMediaQuery(NARROW_SETTINGS_QUERY);
++  const atList = narrow && pathname.replace(/\/+$/, '') === '/admin' && new URLSearchParams(window.location.search).has('list');
++
++  useEffect(() => {
++    const onKey = (event: globalThis.KeyboardEvent) => {
++      if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
++      if (document.querySelector('[role="dialog"], [role="alertdialog"], [aria-modal="true"], [role="menu"], [role="listbox"]')) return;
++      navigate(settingsReturnPath());
++    };
++    document.addEventListener('keydown', onKey);
++    return () => document.removeEventListener('keydown', onKey);
++  }, [navigate]);
++
++  return (
++    <>
++      <ImpersonationBanner />
++      <div className={narrow ? 'settings-shell settings-shell--narrow' : 'settings-shell'}>
++        {(!narrow || atList) && <AdminNav />}
++        {(!narrow || !atList) && (
++          <main className="settings-main">
++            <div className="settings-column">
++              {narrow && (
++                <button type="button" className="settings-back settings-back--list" onClick={() => navigate('/admin?list')}>
++                  <LeftOutlined />
++                  <span>Admin</span>
++                </button>
++              )}
++              <Outlet />
++            </div>
++          </main>
++        )}
++      </div>
++    </>
++  );
++}
++
++function AdminNav() {
++  const navigate = useNavigate();
++  const { pathname } = useLocation();
++  const users = useQuery({ queryKey: ['admin', 'users'], queryFn: () => api<Array<{ id: string }>>('/admin/users') });
++  const google = useQuery(googleSignInSettingsQuery());
++  const email = useQuery(emailSettingsQuery());
++  const feishu = useQuery(feishuAdminQuery());
++  const googleOn = google.data
++    ? google.data.enabled && google.data.clientId !== '' && google.data.hasSecret && !google.data.secretUnreadable
++    : undefined;
++  return (
++    <nav className="settings-nav autohide-scrollbar" aria-label="Admin">
++      <button type="button" className="settings-back" onClick={() => navigate(settingsReturnPath())}>
++        <LeftOutlined />
++        <span>Back to Orbit</span>
++      </button>
++      <h1 className="settings-title">Admin</h1>
++      <div className="settings-nav-groups">
++        <NavGroup title="Accounts">
++          <NavRow
++            to="/admin"
++            icon={<TeamOutlined />}
++            label="Users"
++            active={/^\/admin\/?$/.test(pathname)}
++            trailing={users.data ? <span className="settings-nav-meta">{users.data.length}</span> : undefined}
++          />
++          <NavRow to="/admin/sign-in" icon={<LoginOutlined />} label="Sign-in" trailing={<OnDot on={googleOn} />} />
++        </NavGroup>
++        <NavGroup title="Server">
++          <NavRow to="/admin/email" icon={<MailOutlined />} label="Email" trailing={<OnDot on={email.data?.on} />} />
++        </NavGroup>
++        <NavGroup title="Integrations">
++          <NavRow to="/admin/integrations" icon={<ApiOutlined />} label="Feishu bots" trailing={<OnDot on={feishu.data?.allowed} />} />
++        </NavGroup>
++      </div>
++    </nav>
++  );
++}
+diff --git a/src/web/src/components/settings/Settings.css b/src/web/src/components/settings/Settings.css
+index 3f568c6..e9ba662 100644
+--- a/src/web/src/components/settings/Settings.css
++++ b/src/web/src/components/settings/Settings.css
+@@ -737,3 +737,22 @@
+   gap: 8px;
+   margin-top: 20px;
+ }
++
++/* Admin, drawn as Settings (prototype). */
++.admin-form .settings-row-control .admin-row-input { width: 300px; }
++.admin-row-code { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; word-break: break-all; }
++.admin-row-value { display: inline-flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; color: var(--text-1); }
++.admin-form-note { margin-top: 10px; }
++.admin-form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
++.admin-email-ok { color: var(--success, #16a34a); }
++.admin-users-page .admin-users-search--wide { width: 100%; max-width: none; margin-bottom: 12px; }
++.admin-users-page .admin-users-frame { border-radius: 12px; }
++.admin-form-actions { margin-top: 12px; }
++.admin-users-page .admin-users-frame { border: 1px solid var(--border); overflow: hidden; }
++.admin-users-page .admin-users-frame tbody tr:last-child td { border-bottom: 0; }
++.settings-shell--narrow .settings-row:has(.admin-row-input) { flex-wrap: wrap; }
++.settings-shell--narrow .settings-row:has(.admin-row-input) .settings-row-control { width: 100%; }
++.settings-shell--narrow .admin-form .settings-row-control .admin-row-input { width: 100%; }
++.settings-shell--narrow .admin-form .settings-row:has([role="combobox"]) { flex-wrap: wrap; }
++.settings-shell--narrow .admin-form .settings-row:has([role="combobox"]) .settings-row-control,
++.settings-shell--narrow .admin-form .settings-row:has([role="combobox"]) .settings-row-control > * { width: 100% !important; }
+diff --git a/src/web/src/components/settings/SettingsLayout.tsx b/src/web/src/components/settings/SettingsLayout.tsx
+index a728c83..8a1494b 100644
+--- a/src/web/src/components/settings/SettingsLayout.tsx
++++ b/src/web/src/components/settings/SettingsLayout.tsx
+@@ -591,7 +591,7 @@ function WorkspaceRows({
+   );
+ }
+ 
+-function NavGroup({
++export function NavGroup({
+   title,
+   add,
+   children,
+@@ -615,7 +615,7 @@ function NavGroup({
+   );
+ }
+ 
+-function NavRow({
++export function NavRow({
+   to,
+   icon,
+   label,
+diff --git a/src/web/src/pages/AdminEmailPage.tsx b/src/web/src/pages/AdminEmailPage.tsx
+index 3ca49fd..db814d2 100644
+--- a/src/web/src/pages/AdminEmailPage.tsx
++++ b/src/web/src/pages/AdminEmailPage.tsx
+@@ -1,13 +1,12 @@
+ import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+ import { useId, useState, type FormEvent } from 'react';
+ import { api } from '../api';
+-import { AdminNav } from '../components/AdminNav';
++import { SettingsCard, SettingsHeader, SettingsRow, SettingsSection } from '../components/settings';
+ import { Badge } from '../components/ui/Badge';
+ import { Button } from '../components/ui/Button';
+ import { Input } from '../components/ui/Input';
+ import { Spinner } from '../components/ui/Spinner';
+ import { Switch } from '../components/ui/Switch';
+-import '../components/ui/Card.css';
+ import { useToast } from '../lib/toast';
+ 
+ type EmailMissing = 'SWITCH' | 'API_KEY' | 'FROM' | 'API_KEY_UNREADABLE';
+@@ -96,16 +95,14 @@ export function AdminEmailPage() {
+ 
+   if (saved.isPending) {
+     return (
+-      <div className="admin-page">
+-        <AdminNav />
++      <div className="settings-page">
+         <Spinner />
+       </div>
+     );
+   }
+   if (saved.isError) {
+     return (
+-      <div className="admin-page">
+-        <AdminNav />
++      <div className="settings-page">
+         <h1 className="page-title">Email</h1>
+         <p className="admin-signin-error" role="alert">
+           Couldn’t load the email settings: {saved.error.message}
+@@ -140,118 +137,89 @@ export function AdminEmailPage() {
+   };
+ 
+   return (
+-    <div className="admin-page">
+-      <AdminNav />
+-      <h1 className="page-title">Email</h1>
+-      <form className="orbit-card admin-signin" onSubmit={submit} aria-labelledby={ids.title}>
+-        <div className="orbit-card-head">
+-          <h2 className="orbit-card-title" id={ids.title}>
+-            {EMAIL_SETTINGS_TITLE}
+-          </h2>
+-          <Badge tone={settings.on ? 'success' : 'default'}>{settings.on ? 'On' : 'Off'}</Badge>
++    <form className="settings-page admin-form" onSubmit={submit} aria-labelledby={ids.title}>
++      <SettingsHeader title="Email" description="Email this server sends, through Resend." />
++      {settings.apiKeyUnreadable && (
++        <div className="admin-email-result admin-email-result-error" role="alert">
++          {KEY_UNREADABLE_WARNING}
+         </div>
+-        <div className="orbit-card-body admin-signin-fields">
+-          {settings.apiKeyUnreadable && (
+-            <div className="admin-email-result admin-email-result-error" role="alert">
+-              {KEY_UNREADABLE_WARNING}
+-            </div>
+-          )}
+-          {offNote && <div className="admin-signin-hint admin-email-off">{offNote}</div>}
+-
+-          <div className="admin-signin-row">
+-            <div>
+-              <div className="admin-signin-label" id={ids.enabled}>
+-                Send email from this deployment
+-              </div>
+-              <div className="admin-signin-hint">Orbit sends through Resend. Nothing is sent while this is off.</div>
+-            </div>
+-            <Switch aria-labelledby={ids.enabled} checked={enabled} onCheckedChange={(value) => setDraft((d) => ({ ...d, enabled: value }))} />
+-          </div>
+-
+-          <div className="admin-signin-field">
+-            <label className="admin-signin-label" htmlFor={ids.key}>
+-              Resend API key
+-            </label>
+-            <Input
+-              id={ids.key}
+-              type="password"
+-              value={apiKey}
+-              placeholder={
+-                settings.apiKeyUnreadable
+-                  ? 'Not readable — paste the API key again'
+-                  : settings.hasApiKey
+-                    ? 'Saved — enter a new one to replace it'
+-                    : 're_…'
+-              }
+-              autoComplete="new-password"
+-              spellCheck={false}
+-              onChange={(e) => setApiKey(e.target.value)}
+-            />
+-            <div className="admin-signin-hint">
+-              A key with sending access is enough. It is never shown again; leave this empty to keep it.{' '}
+-              <a href={RESEND_KEYS_URL} target="_blank" rel="noreferrer">
+-                Create a key in Resend
+-              </a>
+-            </div>
+-          </div>
+-
+-          <div className="admin-email-pair">
+-            <div className="admin-signin-field">
+-              <label className="admin-signin-label" htmlFor={ids.from}>
+-                From
+-              </label>
++      )}
++      <SettingsSection
++        title={<span id={ids.title}>{EMAIL_SETTINGS_TITLE}</span>}
++        description={offNote ?? undefined}
++        action={<Badge tone={settings.on ? 'success' : 'default'}>{settings.on ? 'On' : 'Off'}</Badge>}
++      >
++        <SettingsCard>
++          <SettingsRow
++            title={<span id={ids.enabled}>Send email from this deployment</span>}
++            description="Nothing is sent while this is off."
++            control={<Switch aria-labelledby={ids.enabled} checked={enabled} onCheckedChange={(value) => setDraft((d) => ({ ...d, enabled: value }))} />}
++          />
++          <SettingsRow
++            title={<label htmlFor={ids.key}>Resend API key</label>}
++            description={
++              <>
++                {settings.hasApiKey ? 'Saved, never shown again. ' : 'A key with sending access is enough. '}
++                <a href={RESEND_KEYS_URL} target="_blank" rel="noreferrer">
++                  Create a key in Resend
++                </a>
++              </>
++            }
++            control={
++              <Input
++                id={ids.key}
++                className="admin-row-input"
++                type="password"
++                value={apiKey}
++                placeholder={settings.hasApiKey && !settings.apiKeyUnreadable ? '••••••••••••' : 're_…'}
++                autoComplete="new-password"
++                spellCheck={false}
++                onChange={(e) => setApiKey(e.target.value)}
++              />
++            }
++          />
++          <SettingsRow
++            title={<label htmlFor={ids.from}>From</label>}
++            description="Its domain must be verified in Resend."
++            control={
+               <Input
+                 id={ids.from}
++                className="admin-row-input"
+                 value={fromAddress}
+                 placeholder="Orbit <orbit@example.com>"
+                 autoComplete="off"
+                 spellCheck={false}
+                 onChange={(e) => setDraft((d) => ({ ...d, fromAddress: e.target.value }))}
+               />
+-              <div className="admin-signin-hint">Its domain must be verified in Resend.</div>
+-            </div>
+-            <div className="admin-signin-field">
+-              <label className="admin-signin-label" htmlFor={ids.replyTo}>
+-                Reply-To
+-              </label>
++            }
++          />
++          <SettingsRow
++            title={<label htmlFor={ids.replyTo}>Reply-To</label>}
++            description="Empty: the first administrator's address."
++            control={
+               <Input
+                 id={ids.replyTo}
++                className="admin-row-input"
+                 value={replyTo}
+                 placeholder={settings.replyToDefault ?? 'admin@example.com'}
+                 autoComplete="off"
+                 spellCheck={false}
+                 onChange={(e) => setDraft((d) => ({ ...d, replyTo: e.target.value }))}
+               />
+-              <div className="admin-signin-hint">Empty: the first administrator's address.</div>
+-            </div>
+-          </div>
+-
+-          <div className="admin-signin-row admin-email-divided">
+-            <div>
+-              <div className="admin-signin-label" id={ids.welcome}>
+-                Send a welcome email to new accounts
+-              </div>
+-              <div className="admin-signin-hint">
+-                One email when an account is created, by Google sign-up or in Users. Accounts that already exist don't get one.
+-              </div>
+-            </div>
+-            <Switch
+-              aria-labelledby={ids.welcome}
+-              checked={welcomeEnabled}
+-              onCheckedChange={(value) => setDraft((d) => ({ ...d, welcomeEnabled: value }))}
+-            />
+-          </div>
+-
+-          <div className="admin-email-actions">
+-            {test ? (
+-              <div className={`admin-email-result ${test.ok ? 'admin-email-result-ok' : 'admin-email-result-error'}`} role="status">
+-                {testResultText(test)}
+-              </div>
+-            ) : (
+-              <span />
+-            )}
+-            <div className="admin-email-buttons">
++            }
++          />
++          <SettingsRow
++            title="Test"
++            description={
++              test ? (
++                <span className={test.ok ? 'admin-email-ok' : 'admin-email-failed'}>{testResultText(test)}</span>
++              ) : (
++                'Sends one email to your own address.'
++              )
++            }
++            control={
+               <Button
++                size="small"
+                 onClick={() => sendTest.mutate()}
+                 loading={sendTest.isPending}
+                 disabled={changed || !settings.hasApiKey}
+@@ -259,34 +227,58 @@ export function AdminEmailPage() {
+               >
+                 Send test email
+               </Button>
+-              <Button variant="primary" type="submit" disabled={!changed} loading={save.isPending}>
+-                Save
+-              </Button>
+-            </div>
+-          </div>
++            }
++          />
++          <SettingsRow
++            title="Last 7 days"
++            description={
++              showFailures && settings.lastWeek.failures.length > 0 ? (
++                <ul className="admin-email-failures">
++                  {settings.lastWeek.failures.map((f) => (
++                    <li key={`${f.email}-${f.at}`}>
++                      {f.email} · {attemptTime(f.at)} · <span className="admin-email-failed">{f.error}</span>
++                    </li>
++                  ))}
++                </ul>
++              ) : (
++                <>
++                  Sent {settings.lastWeek.sent} ·{' '}
++                  <span className={settings.lastWeek.failed > 0 ? 'admin-email-failed' : undefined}>Failed {settings.lastWeek.failed}</span>
++                </>
++              )
++            }
++            control={
++              settings.lastWeek.failed > 0 ? (
++                <Button size="small" variant="text" onClick={() => setShowFailures((v) => !v)}>
++                  {showFailures ? 'Hide failures' : 'Show failures'}
++                </Button>
++              ) : undefined
++            }
++          />
++        </SettingsCard>
++      </SettingsSection>
+ 
+-          <div className="admin-email-week">
+-            <div>
+-              <span className="admin-signin-label">Last 7 days</span> · Sent {settings.lastWeek.sent} ·{' '}
+-              <span className={settings.lastWeek.failed > 0 ? 'admin-email-failed' : undefined}>Failed {settings.lastWeek.failed}</span>
+-            </div>
+-            {settings.lastWeek.failed > 0 && (
+-              <Button size="small" variant="text" onClick={() => setShowFailures((v) => !v)}>
+-                {showFailures ? 'Hide failures' : 'Show failures'}
+-              </Button>
+-            )}
+-          </div>
+-          {showFailures && settings.lastWeek.failures.length > 0 && (
+-            <ul className="admin-email-failures">
+-              {settings.lastWeek.failures.map((f) => (
+-                <li key={`${f.email}-${f.at}`}>
+-                  <span className="admin-signin-label">{f.email}</span> · {attemptTime(f.at)} · <span className="admin-email-failed">{f.error}</span>
+-                </li>
+-              ))}
+-            </ul>
+-          )}
+-        </div>
+-      </form>
+-    </div>
++      <SettingsSection title="Welcome email">
++        <SettingsCard>
++          <SettingsRow
++            title={<span id={ids.welcome}>Send a welcome email to new accounts</span>}
++            description="One email when an account is created, by Google sign-up or in Users."
++            control={
++              <Switch
++                aria-labelledby={ids.welcome}
++                checked={welcomeEnabled}
++                onCheckedChange={(value) => setDraft((d) => ({ ...d, welcomeEnabled: value }))}
++              />
++            }
++          />
++        </SettingsCard>
++      </SettingsSection>
++
++      <div className="admin-form-actions">
++        <Button variant="primary" type="submit" disabled={!changed} loading={save.isPending}>
++          Save
++        </Button>
++      </div>
++    </form>
+   );
+ }
+diff --git a/src/web/src/pages/AdminIntegrationsPage.tsx b/src/web/src/pages/AdminIntegrationsPage.tsx
+index cc6e417..5a7b897 100644
+--- a/src/web/src/pages/AdminIntegrationsPage.tsx
++++ b/src/web/src/pages/AdminIntegrationsPage.tsx
+@@ -2,9 +2,7 @@ import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/r
+ import { useId } from 'react';
+ import type { FeishuAdminSettings } from '@orbit/shared';
+ import { api } from '../api';
+-import { AdminNav } from '../components/AdminNav';
+-import { Badge } from '../components/ui/Badge';
+-import { Card } from '../components/ui/Card';
++import { SettingsCard, SettingsHeader, SettingsRow } from '../components/settings';
+ import { Spinner } from '../components/ui/Spinner';
+ import { Switch } from '../components/ui/Switch';
+ import { useToast } from '../lib/toast';
+@@ -48,9 +46,8 @@ export function AdminIntegrationsPage() {
+   });
+ 
+   return (
+-    <div className="admin-page">
+-      <AdminNav />
+-      <h1 className="page-title">Integrations</h1>
++    <div className="settings-page">
++      <SettingsHeader title="Feishu bots" description="Lets each account connect a Feishu or Lark app of its own." />
+       {settings.isPending ? (
+         <Spinner />
+       ) : settings.isError ? (
+@@ -58,32 +55,21 @@ export function AdminIntegrationsPage() {
+           Couldn’t load the integrations: {settings.error.message}
+         </p>
+       ) : (
+-        <Card
+-          title="Feishu bots"
+-          className="admin-signin"
+-          extra={<Badge tone={settings.data.allowed ? 'success' : 'default'}>{settings.data.allowed ? 'On' : 'Off'}</Badge>}
+-        >
+-          <div className="admin-signin-fields">
+-            <div className="admin-signin-row">
+-              <div>
+-                <div className="admin-signin-label" id={switchId}>
+-                  {ALLOW_FEISHU_LABEL}
+-                </div>
+-                <div className="admin-signin-hint">{ALLOW_FEISHU_HINT}</div>
+-              </div>
++        <SettingsCard>
++          <SettingsRow
++            title={<span id={switchId}>{ALLOW_FEISHU_LABEL}</span>}
++            description={ALLOW_FEISHU_HINT}
++            control={
+               <Switch
+                 aria-labelledby={switchId}
+                 checked={settings.data.allowed}
+                 loading={save.isPending}
+                 onCheckedChange={(allowed) => save.mutate(allowed)}
+               />
+-            </div>
+-            <div className="admin-signin-field">
+-              <div className="admin-signin-label">Connected apps</div>
+-              <div className="admin-feishu-count">{connectedAppsText(settings.data)}</div>
+-            </div>
+-          </div>
+-        </Card>
++            }
++          />
++          <SettingsRow title="Connected apps" description={connectedAppsText(settings.data)} />
++        </SettingsCard>
+       )}
+     </div>
+   );
+diff --git a/src/web/src/pages/AdminSignInPage.tsx b/src/web/src/pages/AdminSignInPage.tsx
+index ad43da2..bac3b3a 100644
+--- a/src/web/src/pages/AdminSignInPage.tsx
++++ b/src/web/src/pages/AdminSignInPage.tsx
+@@ -1,14 +1,13 @@
+ import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+ import { useId, useState, type FormEvent } from 'react';
+ import { api } from '../api';
+-import { AdminNav } from '../components/AdminNav';
++import { SettingsCard, SettingsHeader, SettingsRow, SettingsSection } from '../components/settings';
+ import { Badge } from '../components/ui/Badge';
+ import { Button } from '../components/ui/Button';
+ import { Input } from '../components/ui/Input';
+-import { Radio, RadioGroup } from '../components/ui/Radio';
++import { Select } from '../components/ui/Select';
+ import { Spinner } from '../components/ui/Spinner';
+ import { Switch } from '../components/ui/Switch';
+-import '../components/ui/Card.css';
+ import { copyText } from '../lib/clipboard';
+ import { authMethodsQuery } from '../lib/googleLink';
+ import { useToast } from '../lib/toast';
+@@ -84,16 +83,14 @@ export function AdminSignInPage() {
+ 
+   if (saved.isPending) {
+     return (
+-      <div className="admin-page">
+-        <AdminNav />
++      <div className="settings-page">
+         <Spinner />
+       </div>
+     );
+   }
+   if (saved.isError) {
+     return (
+-      <div className="admin-page">
+-        <AdminNav />
++      <div className="settings-page">
+         <h1 className="page-title">Sign-in</h1>
+         <p className="admin-signin-error" role="alert">
+           Couldn’t load the sign-in settings: {saved.error.message}
+@@ -126,128 +123,111 @@ export function AdminSignInPage() {
+   };
+ 
+   return (
+-    <div className="admin-page">
+-      <AdminNav />
+-      <h1 className="page-title">Sign-in</h1>
+-      <form className="orbit-card admin-signin" onSubmit={submit} aria-labelledby={ids.title}>
+-        <div className="orbit-card-head">
+-          <h2 className="orbit-card-title" id={ids.title}>
+-            {SIGN_IN_SETTINGS_TITLE}
+-          </h2>
+-          <Badge tone={on ? 'success' : 'default'}>{on ? 'On' : 'Off'}</Badge>
++    <form className="settings-page admin-form" onSubmit={submit} aria-labelledby={ids.title}>
++      <SettingsHeader
++        title="Sign-in"
++        description="How people sign in to this server. A password always works; Google is optional."
++      />
++      {settings.secretUnreadable && (
++        <div className="admin-signin-warning" role="alert">
++          {SECRET_UNREADABLE_WARNING}
+         </div>
+-        <div className="orbit-card-body admin-signin-fields">
+-          {settings.secretUnreadable && (
+-            <div className="admin-signin-warning" role="alert">
+-              {SECRET_UNREADABLE_WARNING}
+-            </div>
+-          )}
+-
+-          <div className="admin-signin-row">
+-            <div>
+-              <div className="admin-signin-label" id={ids.enabled}>
+-                Allow signing in with Google
+-              </div>
+-              <div className="admin-signin-hint">The login page offers Continue with Google, on the web and in the apps.</div>
+-            </div>
+-            <Switch
+-              aria-labelledby={ids.enabled}
+-              checked={enabled}
+-              onCheckedChange={(value) => setDraft((d) => ({ ...d, enabled: value }))}
+-            />
+-          </div>
+-          {incomplete && <div className="admin-signin-note">{INCOMPLETE_WARNING}</div>}
+-
+-          <div className="admin-signin-field">
+-            <label className="admin-signin-label" htmlFor={ids.clientId}>
+-              Client ID
+-            </label>
+-            <Input
+-              id={ids.clientId}
+-              value={clientId}
+-              placeholder="1234567890-abc.apps.googleusercontent.com"
+-              autoComplete="off"
+-              spellCheck={false}
+-              onChange={(e) => setDraft((d) => ({ ...d, clientId: e.target.value }))}
+-            />
+-          </div>
+-
+-          <div className="admin-signin-field">
+-            <label className="admin-signin-label" htmlFor={ids.secret}>
+-              Client secret
+-            </label>
+-            <Input
+-              id={ids.secret}
+-              type="password"
+-              value={secret}
+-              placeholder={
+-                settings.secretUnreadable
+-                  ? 'Not readable — paste the client secret again'
+-                  : settings.hasSecret
+-                    ? 'Saved — enter a new one to replace it'
+-                    : 'Paste the client secret'
+-              }
+-              autoComplete="new-password"
+-              spellCheck={false}
+-              onChange={(e) => setSecret(e.target.value)}
+-            />
+-            <div className="admin-signin-hint">
+-              {settings.secretUnreadable
+-                ? 'The saved secret cannot be decrypted. Paste the client secret again to replace it.'
++      )}
++      <SettingsSection
++        title={<span id={ids.title}>{SIGN_IN_SETTINGS_TITLE}</span>}
++        action={<Badge tone={on ? 'success' : 'default'}>{on ? 'On' : 'Off'}</Badge>}
++      >
++        <SettingsCard>
++          <SettingsRow
++            title={<span id={ids.enabled}>Allow signing in with Google</span>}
++            description="The login page offers Continue with Google, on the web and in the apps."
++            control={
++              <Switch
++                aria-labelledby={ids.enabled}
++                checked={enabled}
++                onCheckedChange={(value) => setDraft((d) => ({ ...d, enabled: value }))}
++              />
++            }
++          />
++          <SettingsRow
++            title={<label htmlFor={ids.clientId}>Client ID</label>}
++            description="From the OAuth client in the Google Cloud console."
++            control={
++              <Input
++                id={ids.clientId}
++                className="admin-row-input"
++                value={clientId}
++                placeholder="1234567890-abc.apps.googleusercontent.com"
++                autoComplete="off"
++                spellCheck={false}
++                onChange={(e) => setDraft((d) => ({ ...d, clientId: e.target.value }))}
++              />
++            }
++          />
++          <SettingsRow
++            title={<label htmlFor={ids.secret}>Client secret</label>}
++            description={
++              settings.secretUnreadable
++                ? 'The saved secret cannot be decrypted. Paste it again.'
+                 : settings.hasSecret
+-                  ? 'A secret is saved. It is never shown again; leave this empty to keep it.'
+-                  : 'No secret is saved yet. Once saved, it is never shown again.'}
+-            </div>
+-          </div>
+-
+-          <div className="admin-signin-field">
+-            <div className="admin-signin-label" id={ids.policy}>
+-              Who can sign in with Google
+-            </div>
+-            <RadioGroup<SignupPolicy>
+-              aria-labelledby={ids.policy}
+-              className="admin-signin-policy"
+-              value={signupPolicy}
+-              onValueChange={(value) => setDraft((d) => ({ ...d, signupPolicy: value }))}
+-            >
+-              <Radio value="EXISTING_ACCOUNTS">
+-                <span className="admin-signin-choice">Existing accounts only</span>
+-                <span className="admin-signin-hint">
+-                  People who already have an account here. Add someone by creating their account in Users.
+-                </span>
+-              </Radio>
+-              <Radio value="OPEN">
+-                <span className="admin-signin-choice">Anyone with a Google account</span>
+-                <span className="admin-signin-hint">Open sign-up.</span>
+-              </Radio>
+-            </RadioGroup>
+-            {signupPolicy === 'OPEN' && (
+-              <div className="admin-signin-warning" role="note">
+-                {OPEN_SIGNUP_WARNING}
+-              </div>
+-            )}
+-          </div>
+-
+-          <div className="admin-signin-field">
+-            <div className="admin-signin-label">Authorized redirect URI</div>
+-            <div className="admin-signin-redirect">
+-              <code>{settings.redirectUri}</code>
++                  ? 'Saved, never shown again. Leave empty to keep it.'
++                  : 'Not saved yet. Once saved, it is never shown again.'
++            }
++            control={
++              <Input
++                id={ids.secret}
++                className="admin-row-input"
++                type="password"
++                value={secret}
++                placeholder={settings.hasSecret && !settings.secretUnreadable ? '••••••••••••' : 'Paste the client secret'}
++                autoComplete="new-password"
++                spellCheck={false}
++                onChange={(e) => setSecret(e.target.value)}
++              />
++            }
++          />
++          <SettingsRow
++            title={<span id={ids.policy}>Who can sign in with Google</span>}
++            description={
++              signupPolicy === 'OPEN'
++                ? 'Open sign-up: any Google account opens a member account here.'
++                : 'People who already have an account. Add someone in Users.'
++            }
++            control={
++              <Select<SignupPolicy>
++                aria-labelledby={ids.policy}
++                style={{ width: 240 }}
++                value={signupPolicy}
++                options={[
++                  { value: 'EXISTING_ACCOUNTS', label: 'Existing accounts only' },
++                  { value: 'OPEN', label: 'Anyone with a Google account' },
++                ]}
++                onValueChange={(value) => value && setDraft((d) => ({ ...d, signupPolicy: value }))}
++              />
++            }
++          />
++          <SettingsRow
++            title="Authorized redirect URI"
++            description={<code className="admin-row-code">{settings.redirectUri}</code>}
++            control={
+               <Button size="small" onClick={() => void copy(settings.redirectUri)}>
+                 Copy
+               </Button>
+-            </div>
+-            <div className="admin-signin-hint">
+-              Register it, exactly as written, as an authorized redirect URI of this OAuth client in the Google Cloud console.
+-            </div>
+-          </div>
+-
+-          <div className="admin-signin-actions">
+-            <Button variant="primary" type="submit" disabled={!changed} loading={save.isPending}>
+-              Save
+-            </Button>
++            }
++          />
++        </SettingsCard>
++        {signupPolicy === 'OPEN' && (
++          <div className="admin-signin-warning admin-form-note" role="note">
++            {OPEN_SIGNUP_WARNING}
+           </div>
+-        </div>
+-      </form>
+-    </div>
++        )}
++        {incomplete && <div className="admin-signin-note admin-form-note">{INCOMPLETE_WARNING}</div>}
++      </SettingsSection>
++      <div className="admin-form-actions">
++        <Button variant="primary" type="submit" disabled={!changed} loading={save.isPending}>
++          Save
++        </Button>
++      </div>
++    </form>
+   );
+ }
+diff --git a/src/web/src/pages/AdminUsersPage.tsx b/src/web/src/pages/AdminUsersPage.tsx
+index a4b3e51..a311a0f 100644
+--- a/src/web/src/pages/AdminUsersPage.tsx
++++ b/src/web/src/pages/AdminUsersPage.tsx
+@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+ import type { WikiPlanSupportBuildResult, WikiSupportSpace, WikiSupportSpaces } from '@orbit/shared';
+ import { api, fetchUserAvatarDataUrl, listUserAccessTokens, revokeUserAccessToken, startImpersonation, type AccessToken } from '../api';
+ import { AccessTokenTable } from '../components/AccessTokenTable';
+-import { AdminNav } from '../components/AdminNav';
++import { SettingsHeader } from '../components/settings';
+ import { Avatar } from '../components/ui/Avatar';
+ import { Badge } from '../components/ui/Badge';
+ import { Button } from '../components/ui/Button';
+@@ -491,38 +491,34 @@ export function AdminUsersPage() {
+     });
+ 
+   return (
+-    <div className="admin-page">
+-      <AdminNav />
+-      <div className="admin-users-head">
+-        <div className="admin-users-heading">
+-          <h1 className="page-title">Users</h1>
+-          {users.data && (
+-            <div className="admin-users-sub">
+-              {[
++    <div className="settings-page settings-page--wide admin-users-page">
++      <SettingsHeader
++        title="Users"
++        description={
++          users.data
++            ? [
+                 plural(all.length, 'account', 'accounts'),
+                 plural(admins, 'administrator', 'administrators'),
+                 ...(disabled ? [`${disabled} disabled`] : []),
+-              ].join(' · ')}
+-            </div>
+-          )}
+-        </div>
+-        <div className="admin-users-tools">
+-          <Input
+-            className="admin-users-search"
+-            prefix={<SearchOutlined />}
+-            placeholder="Search name or email"
+-            aria-label="Search users"
+-            value={query}
+-            allowClear
+-            onClear={() => setQuery('')}
+-            onChange={(e) => setQuery(e.target.value)}
+-          />
++              ].join(' · ')
++            : undefined
++        }
++        action={
+           <Button variant="primary" onClick={() => setCreateOpen(true)}>
+             Add user
+           </Button>
+-        </div>
+-      </div>
+-
++        }
++      />
++      <Input
++        className="admin-users-search admin-users-search--wide"
++        prefix={<SearchOutlined />}
++        placeholder="Search name or email"
++        aria-label="Search users"
++        value={query}
++        allowClear
++        onClear={() => setQuery('')}
++        onChange={(e) => setQuery(e.target.value)}
++      />
+       <TableFrame className="admin-users-frame" loading={users.isLoading}>
+         <table className="orbit-table admin-users-table">
+           <thead>

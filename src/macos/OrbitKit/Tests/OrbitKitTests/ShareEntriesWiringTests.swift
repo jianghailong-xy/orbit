@@ -235,9 +235,9 @@ final class ShareEntriesWiringTests: XCTestCase {
         XCTAssertTrue(item.contains("Label(SharePanelCopy.share, systemImage: shareAction.systemImage)"))
 
         // The list holds the sheet, iOS only like the action, and builds the session page's panel for
-        // the row it was handed. Only the iOS list's rows hand one over.
+        // the row it was handed. The list's rows (the Mac's too, which draws the same rows) hand one
+        // over, but only iOS's row actions ever call it.
         let agents = code(try appSource("Views/AgentsView.swift"))
-        XCTAssertEqual(try branches(of: "@State private var sharingSession: Session?", in: agents), ["os(iOS)"])
         XCTAssertEqual(try branches(of: ".sheet(item: $sharingSession)", in: agents), ["os(iOS)"])
         let presented = try slice(agents, from: ".sheet(item: $sharingSession)",
                                   to: "ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore,")
@@ -246,6 +246,5 @@ final class ShareEntriesWiringTests: XCTestCase {
         XCTAssertEqual(row.components(separatedBy: "onShare: { sharingSession = s }").count - 1, 2,
                        "both of the iOS list's row shapes hand their session over")
         XCTAssertEqual(agents.components(separatedBy: "onShare:").count - 1, 2, "and nothing else does")
-        XCTAssertEqual(try branches(of: "onShare: { sharingSession = s }", in: agents), ["os(iOS)"])
     }
 }

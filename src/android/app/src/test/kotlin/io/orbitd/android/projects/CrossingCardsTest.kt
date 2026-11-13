@@ -52,6 +52,15 @@ class CrossingCardsTest {
         assertEquals("crossing-batch-a", CrossingCards.batches(listOf(row("a", publicId = null)), here).single().id)
     }
 
+    /** A move out of every project asks no project's conversation, and never joins the batch of a move that has a target. */
+    @Test fun aMoveWithNoTargetIsNeverBatchedUnderAProject() {
+        val out = JsonObject(row("out", requestedAt = at(1)) + ("toProjectId" to JsonNull) + ("toProject" to JsonNull))
+        val rows = listOf(row("m1", requestedAt = at(0)), out, row("m2", requestedAt = at(2)))
+        assertEquals(listOf(listOf("m1", "m2")), CrossingCards.batches(rows, here).map { b -> b.rows.map { it.text("id") } })
+        assertEquals(emptyList<CrossingBatch>(), CrossingCards.batches(listOf(out), "AAASource"))
+        assertEquals(emptyList<CrossingBatch>(), CrossingCards.batches(listOf(out), "0195c0de-0000-7000-8000-000000000002"))
+    }
+
     @Test fun aRowJoinsOnlyWhileTheBatchIsStillOpen() {
         val rows = listOf(
             row("a", state = "APPROVED", requestedAt = at(0), decidedAt = at(5)),

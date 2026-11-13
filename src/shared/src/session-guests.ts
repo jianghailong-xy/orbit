@@ -13,6 +13,8 @@ export interface SessionGuestPerson {
   messagesToday: number;
   /** Whether the guest has opened the session at least once. */
   opened: boolean;
+  /** When the invitation email to this person for this session was sent; null while unsent, or never sent. */
+  emailSentAt: string | null;
 }
 
 /** One row of the guest's Shared with me (`GET /guest-sessions`). */

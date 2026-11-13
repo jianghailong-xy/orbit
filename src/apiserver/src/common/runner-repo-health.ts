@@ -1,4 +1,4 @@
-import type { RunnerRepoHealth } from '@orbit/shared';
+import { MAIN_CHECKOUT_FILE_LIMIT, type MainCheckoutRepoHealth } from '@orbit/shared';
 
 /** Working-tree states a runner may report. Anything past 'dirty' is a half-finished git
  *  operation: nothing can fast-forward into that checkout until someone resolves it. A dirty
@@ -26,6 +26,8 @@ export function isBlockingRepoState(state: string | undefined | null): boolean {
 const PATH_CAP = 20;
 const PATH_MAX = 400;
 const ROOT_MAX = 1024;
+/** A ref or a fingerprint: `mc1:<40 or 64 hex>:<64 hex>` fits well inside this. */
+const TOKEN_MAX = 255;
 
 /**
  * Normalize the shared-checkout health a runner reported.
@@ -36,9 +38,9 @@ const ROOT_MAX = 1024;
  * real answer. Returns null when nothing usable is there, which leaves the last snapshot alone
  * instead of asserting every checkout is clean.
  */
-export function sanitizeRunnerRepoHealth(value: unknown): RunnerRepoHealth[] | null {
+export function sanitizeRunnerRepoHealth(value: unknown): MainCheckoutRepoHealth[] | null {
   if (!Array.isArray(value)) return null;
-  const byRoot = new Map<string, RunnerRepoHealth>();
+  const byRoot = new Map<string, MainCheckoutRepoHealth>();
   for (const raw of value) {
     if (!raw || typeof raw !== 'object') continue;
     const entry = raw as Record<string, unknown>;
@@ -56,10 +58,37 @@ export function sanitizeRunnerRepoHealth(value: unknown): RunnerRepoHealth[] | n
       ...(branch ? { branch } : {}),
       ...(stringList(entry.paths, PATH_CAP, PATH_MAX) ?? {}),
       ...(stringList(entry.agentIds, PATH_CAP, 64, 'agentIds') ?? {}),
+      ...mainCheckoutFields(entry),
     });
   }
   if (!byRoot.size) return null;
   return [...byRoot.values()].sort((a, b) => a.root.localeCompare(b.root));
+}
+
+/**
+ * The main checkout counts a runner with `main-checkout-git/v1` adds to each entry (contract §4): HEAD, upstream,
+ * ahead/behind, the changed-file count and the fingerprint. Counts and the fingerprint only, each kept only when it is
+ * the type it claims to be, so an older runner's entry (none of them) and a garbled one read the same: unknown.
+ */
+function mainCheckoutFields(entry: Record<string, unknown>): Partial<MainCheckoutRepoHealth> {
+  const out: Partial<MainCheckoutRepoHealth> = {};
+  const token = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, TOKEN_MAX) : undefined);
+  const count = (v: unknown, cap = Number.MAX_SAFE_INTEGER) =>
+    typeof v === 'number' && Number.isInteger(v) && v >= 0 ? Math.min(v, cap) : undefined;
+  const head = token(entry.head);
+  if (head) out.head = head;
+  const upstream = token(entry.upstream);
+  if (upstream) out.upstream = upstream;
+  const ahead = count(entry.ahead);
+  if (ahead !== undefined) out.ahead = ahead;
+  const behind = count(entry.behind);
+  if (behind !== undefined) out.behind = behind;
+  const fileCount = count(entry.fileCount, MAIN_CHECKOUT_FILE_LIMIT);
+  if (fileCount !== undefined) out.fileCount = fileCount;
+  if (typeof entry.truncated === 'boolean') out.truncated = entry.truncated;
+  const fingerprint = token(entry.fingerprint);
+  if (fingerprint) out.fingerprint = fingerprint;
+  return out;
 }
 
 /** A bounded string array, or nothing when the field is absent/unusable, shaped so it can be
@@ -80,15 +109,29 @@ function stringList(
 
 /** The stored snapshot, re-sanitized on read (the column holds whatever was stored, including
  *  rows written by an older shape). */
-export function readRunnerRepoHealth(value: unknown): RunnerRepoHealth[] {
+export function readRunnerRepoHealth(value: unknown): MainCheckoutRepoHealth[] {
   return sanitizeRunnerRepoHealth(value) ?? [];
 }
 
 /** The checkout a workspace works in, or null when this runner never reported one for it (an older
  *  runner, or a workDir that isn't a git repo — isolation already reports that per session). */
 export function repoHealthForWorkspace(
-  reports: RunnerRepoHealth[],
+  reports: MainCheckoutRepoHealth[],
   workspaceId: string,
-): RunnerRepoHealth | null {
+): MainCheckoutRepoHealth | null {
   return reports.find((r) => r.agentIds?.includes(workspaceId)) ?? null;
+}
+
+/**
+ * The workspaces whose checkout reads differently between two stored snapshots — what a heartbeat tells the owner's
+ * clients about, so a Main checkout bar follows a commit, push, move or clean-up without a reload. Both sides are read
+ * through the same sanitizer, so key order and dropped garbage never read as a change.
+ */
+export function workspacesWithChangedRepoHealth(before: unknown, after: unknown): string[] {
+  const a = readRunnerRepoHealth(before);
+  const b = readRunnerRepoHealth(after);
+  const ids = new Set([...a, ...b].flatMap((r) => r.agentIds ?? []));
+  return [...ids].filter(
+    (id) => JSON.stringify(repoHealthForWorkspace(a, id)) !== JSON.stringify(repoHealthForWorkspace(b, id)),
+  );
 }

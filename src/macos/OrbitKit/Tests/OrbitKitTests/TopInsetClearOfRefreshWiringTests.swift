@@ -35,8 +35,29 @@ final class TopInsetClearOfRefreshWiringTests: XCTestCase {
             .joined(separator: "\n")
     }
 
+    /// The text without the code that compiles on macOS alone: each `#if os(macOS)` branch up to its
+    /// `#else` or `#endif`, nested `#if`s included. The Mac's lists don't pull to refresh.
+    private func withoutMacOSOnly(_ text: String) -> String {
+        var depth = 0
+        var kept: [Substring] = []
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if depth == 0 {
+                if trimmed == "#if os(macOS)" { depth = 1 } else { kept.append(line) }
+            } else if trimmed.hasPrefix("#if") {
+                depth += 1
+            } else if trimmed.hasPrefix("#endif") {
+                depth -= 1
+            } else if depth == 1 && trimmed.hasPrefix("#else") {
+                depth = 0
+            }
+        }
+        return kept.joined(separator: "\n")
+    }
+
     func testTheSessionListsTopBandsStayClearOfTheRefreshControl() throws {
-        let agents = code(try appSource("Views/AgentsView.swift"))
+        // The Mac's scope picker sits over the list in a plain top inset: no pull to refresh there.
+        let agents = withoutMacOSOnly(code(try appSource("Views/AgentsView.swift")))
         XCTAssertTrue(agents.contains(".topInsetClearOfRefresh {"),
                       "the scope picker and the needs-you bar go through the modifier")
         XCTAssertFalse(agents.contains(".safeAreaInset(edge: .top"),
