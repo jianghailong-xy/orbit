@@ -7,17 +7,19 @@
 #                       suffix stripped; build number = commit count)
 #   • android-build   → signed release APK (versionName = X.Y.Z[-beta.N]; versionCode = commit count)
 #   • android-publish → the APK, its .sha256 and android-update.json attached to dmg's GitHub Release
-# Run from anywhere; it resolves the repo root itself.
+# Run from anywhere; it resolves the repo root from its own location. The same file ships as
+# .claude/skills/release/release.sh and .agents/skills/release/scripts/release.sh, byte for byte
+# (test/release-skill.test.mjs checks it), so every engine follows the same rules.
 #
 # The root package.json version is the version of record. The flow is:
+#   release.sh next                # print the one tag to cut next (prints only)
 #   release.sh bump 0.2.0-beta.3   # set package.json + package-lock, open release-notes/0.2.0-beta.3.md
 #   $EDITOR release-notes/0.2.0-beta.3.md
 #   git add -A && git commit ...   # (bump already committed; amend or add a follow-up commit)
 #   release.sh 0.2.0-beta.3        # check the identity, tag, push
 #
-#   .claude/skills/release/release.sh 0.2.0          # or: v0.2.0
-#   .claude/skills/release/release.sh 0.2.0-beta.3   # macOS beta channel; iOS ships 0.2.0 to TestFlight
-#   .claude/skills/release/release.sh next           # print the next beta after the package version
+#   release.sh 0.2.0          # or: v0.2.0
+#   release.sh 0.2.0-beta.3   # macOS beta channel; iOS ships 0.2.0 to TestFlight
 #
 set -euo pipefail
 
@@ -29,16 +31,17 @@ usage() {
 
 ver="${1:-}"
 [ -n "$ver" ] || usage
-cd "$(git rev-parse --show-toplevel)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
 
 package_version() {
   node -p 'JSON.parse(require("fs").readFileSync("package.json", "utf8")).version'
 }
 
-# `next` = the next beta after the package version, so the counter never has to be tracked by hand.
+# The next beta after the package version, so the counter never has to be tracked by hand.
 # A beta sorts BELOW the matching stable (0.1.1-beta.2 < 0.1.1), so once X.Y.Z is the package version its
 # betas are spent: the next beta opens on X.Y.(Z+1).
-next_version() {
+after_package_version() {
   local current rest
   current="$(package_version)"
   case "$current" in
@@ -50,9 +53,38 @@ next_version() {
   esac
 }
 
+# Whether tag v<version> exists, locally or on origin. Old tags are never read as a sequence: the
+# package version alone names the candidate. An unreachable origin is an error, not "untagged".
+tag_exists() {
+  local tag="v$1" rc=0
+  git rev-parse -q --verify "refs/tags/$tag" >/dev/null && return 0
+  git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1 || rc=$?
+  case "$rc" in
+    0) return 0 ;;
+    2) return 1 ;;
+    *) echo "✗ could not read tags from origin (git ls-remote exit $rc)" >&2; exit 1 ;;
+  esac
+}
+
+# `next` = the exact version to tag next. While the package version has no tag yet it is the candidate
+# (the release commit is prepared and waiting for its tag); once it is tagged, the next beta after it.
+next_version() {
+  local current
+  current="$(package_version)"
+  if tag_exists "$current"; then after_package_version; else printf '%s\n' "$current"; fi
+}
+
 if [ "$ver" = "next" ]; then
-  # Print only: tagging needs the package bump and the notes first (use `bump next`).
-  echo "▶ next after $(package_version) → $(next_version)"
+  # Print only: the tag on stdout, the reasoning on stderr. Tagging needs the package bump and the
+  # notes first (use `bump next`).
+  current="$(package_version)"
+  next="$(next_version)"
+  if [ "$next" = "$current" ]; then
+    echo "▶ package version $current has no tag yet — it is the candidate" >&2
+  else
+    echo "▶ v$current is already tagged — next is $next (run: release.sh bump next)" >&2
+  fi
+  echo "v$next"
   exit 0
 fi
 
@@ -61,6 +93,10 @@ if [ "$ver" = "bump" ]; then
   [ -n "$ver" ] || usage
   if [ "$ver" = "next" ]; then ver="$(next_version)"; fi
   ver="${ver#v}"
+  if [ "$ver" = "$(package_version)" ] && [ -e "release-notes/$ver.md" ]; then
+    echo "✓ package version is already $ver and release-notes/$ver.md exists — nothing to bump"
+    exit 0
+  fi
   if ! printf '%s' "$ver" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$'; then
     echo "✗ version must be X.Y.Z or X.Y.Z-beta.N (got '$ver')" >&2
     exit 1

@@ -33,10 +33,11 @@ with the package, so the two cannot drift.
 
 ## How to use
 
-1. **Pick the version.** `release.sh next` resolves the next beta from the **package version** — the
-   next beta in the current series, or `X.Y.(Z+1)-beta.1` once a stable version is the package version.
-   Confirm it before bumping; pass an explicit version for anything else (a stable release, or opening
-   a new minor).
+1. **Pick the version.** `release.sh next` prints the one tag to cut next, resolved from the **package
+   version** alone (old tags are never read as a sequence): the package version itself while it has no
+   tag yet (the release commit is prepared and waiting), otherwise the next beta in the current series,
+   or `X.Y.(Z+1)-beta.1` once a stable version is the package version. It only prints. Confirm it before
+   bumping; pass an explicit version for anything else (a stable release, or opening a new minor).
 
    **A beta belongs to the version it precedes, not the one already out.** `0.1.1-beta.2` sorts
    *below* `0.1.1`, so once `X.Y.Z` ships stable, its betas are spent — the next beta must open on
@@ -48,6 +49,8 @@ with the package, so the two cannot drift.
    ```bash
    .claude/skills/release/release.sh bump next          # or: bump 0.2.0-beta.3
    ```
+
+   `bump next` while the package version is still untagged and its notes exist changes nothing.
 
    Fill in every section of the notes file (`docs/release-notes-template.md`), commit it, and make sure
    the branch is `main` synced with `origin/main` before tagging. Tagging a feature/session branch — or
@@ -88,6 +91,8 @@ with the package, so the two cannot drift.
 
 ## Notes
 
+- `.agents/skills/release/` carries the same rules for other engines; its `scripts/release.sh` is this
+  `release.sh`, byte for byte (`npm run test:release-identity` checks it). Change both together.
 - Accepted: `X.Y.Z` (stable) or `X.Y.Z-beta.N` (macOS beta channel). iOS always ships the numeric
   `X.Y.Z` to TestFlight regardless of suffix.
 - **One tag fires all three** — every `v*` tag also uploads an iOS TestFlight build (two `macos-15`
