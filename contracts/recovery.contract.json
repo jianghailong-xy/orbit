@@ -1,0 +1,79 @@
+{
+  "name": "orbit.recovery",
+  "contractVersion": 1,
+  "doc": "docs/recovery-contract.md",
+  "fixtures": "contracts/recovery.fixtures.json",
+  "envelopeFields": [
+    "contractVersion",
+    "code",
+    "message",
+    "kind",
+    "status",
+    "effect",
+    "retry",
+    "actor",
+    "owner",
+    "actionCode",
+    "requiredAction",
+    "userConfirmation",
+    "resources"
+  ],
+  "enums": {
+    "kind": ["REFUSAL", "ADVISORY", "VALIDATION", "TRANSPORT", "UNKNOWN"],
+    "effect": ["NONE", "COMMITTED", "UNKNOWN"],
+    "retryPolicy": ["SAFE", "SAME_REQUEST_ID", "VERIFY_THEN_RETRY", "AFTER_STATE_CHANGE", "NEVER"],
+    "actor": ["CALLER", "COORDINATOR", "USER", "SYSTEM"],
+    "userConfirmation": ["REQUIRED", "NOT_REQUIRED"]
+  },
+  "serverBlock": {
+    "field": "recovery",
+    "fields": ["effect", "retryPolicy", "retryAfterSeconds", "actionCode", "actor", "userConfirmation", "resources"],
+    "note": "What a server answer states outright, beside the legacy flat fields it keeps. Every field is optional; a stated value always wins over anything the parser would infer."
+  },
+  "actionCodePattern": "^[A-Z][A-Z0-9_]*$",
+  "actionCodes": {
+    "RETRY": "Send the identical request again, after retry.afterSeconds when there is one.",
+    "RETRY_SAME_REQUEST": "Send the identical request again under the same request id; the first answer is read back, never applied twice.",
+    "VERIFY_STATE": "Read the resource the request was about; send it again only if the write is not there.",
+    "FIX_REQUEST": "Change the request: as sent it is never accepted.",
+    "USE_NEW_REQUEST_ID": "The request id already names a different request: draw a new id for this one.",
+    "ANSWER_ADVICE": "Answer the advice: change what it questions, or send the request again with the override it names.",
+    "AWAIT_OWNER_DECISION": "A person has to decide first. Wait for that decision, then send the request again.",
+    "FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF": "Write into the caller's own project, or ask for the crossing with a handoff declaration."
+  },
+  "defaultActionByPolicy": {
+    "SAFE": "RETRY",
+    "SAME_REQUEST_ID": "RETRY_SAME_REQUEST",
+    "VERIFY_THEN_RETRY": "VERIFY_STATE",
+    "AFTER_STATE_CHANGE": null,
+    "NEVER": "FIX_REQUEST"
+  },
+  "legacyCodes": {
+    "TASK_RUN_REQUEST_IN_PROGRESS": { "retryPolicy": "SAME_REQUEST_ID", "effect": "NONE" },
+    "TASK_RUN_REQUEST_UNREADABLE": { "retryPolicy": "SAME_REQUEST_ID", "effect": "NONE" },
+    "TASK_RUN_REQUEST_MISMATCH": { "retryPolicy": "NEVER", "effect": "NONE", "actionCode": "USE_NEW_REQUEST_ID" },
+    "TRANSIENT_DB_CONFLICT": { "retryPolicy": "SAFE", "effect": "NONE" },
+    "DATABASE_UNAVAILABLE": { "retryPolicy": "SAFE", "effect": "NONE" },
+    "CROSS_PROJECT_APPROVAL_REQUIRED": { "retryPolicy": "AFTER_STATE_CHANGE", "effect": "NONE", "actionCode": "AWAIT_OWNER_DECISION", "actor": "USER", "userConfirmation": "REQUIRED" },
+    "APPROVAL_PENDING": { "retryPolicy": "AFTER_STATE_CHANGE", "effect": "NONE", "actionCode": "AWAIT_OWNER_DECISION", "actor": "USER", "userConfirmation": "REQUIRED" },
+    "TASK_CRITERION_SHAPE_ADVICE": { "retryPolicy": "NEVER", "effect": "NONE", "actionCode": "ANSWER_ADVICE" }
+  },
+  "legacyOwnerToActor": { "USER": "USER", "COORDINATOR": "COORDINATOR", "SYSTEM": "SYSTEM" },
+  "legacyResourceKeys": [
+    ["taskId", "TASK"],
+    ["sessionId", "SESSION"],
+    ["projectId", "PROJECT"],
+    ["crossingId", "CROSSING"],
+    ["triggerId", "REQUEST"]
+  ],
+  "statusPolicies": {
+    "SAFE": [408, 429],
+    "AFTER_STATE_CHANGE": [401, 403, 409, 412, 423, 424, 428],
+    "otherClientError": "NEVER",
+    "serverError": "VERIFY_THEN_RETRY"
+  },
+  "localValidationCodePrefix": "LOCAL_",
+  "noAnswerCode": "TRANSPORT_NO_ANSWER",
+  "unknownCode": "UNKNOWN_ERROR",
+  "uncodedHttpCodePrefix": "HTTP_"
+}
