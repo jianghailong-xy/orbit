@@ -13,7 +13,8 @@ const MINUTE = 60_000;
 // The runner page's Update card names the turns a drain waits for (docs/runner-update-drain-design.md
 // §3.5, board 4): GET /runners and GET /runners/:id carry `updateTurns` on a runner draining for its
 // self-update — the viewer's RUNNING sessions on it, longest-running first, with when each current run
-// was claimed. A runner that is not draining carries none; another owner's turns are not named.
+// was claimed. So does one with a release waiting (available, postponed), for Update Now's confirm. A
+// runner with no release waiting carries none; another owner's turns are not named.
 test('a draining runner lists the viewer’s turns it waits for; no other runner does', { skip: !url, timeout: 120_000 }, async (t) => {
   assertCoordinatorPgUrlIsIsolated(url!);
   const sql = new Client({ connectionString: url });
@@ -78,8 +79,22 @@ test('a draining runner lists the viewer’s turns it waits for; no other runner
     assert.deepEqual((await runners.getRunner(alice, r.id)).updateTurns!.map((x) => x.id), [id]);
   });
 
-  await t.test('a runner not draining carries no updateTurns, whatever runs on it', async () => {
-    for (const report of [null, { state: 'waitingForIdle', phase: 'available', targetVersion: '0.1.254' }, { state: 'enabled', phase: 'restarting', targetVersion: '0.1.254' }]) {
+  // Update Now's confirm names the turns it interrupts (board 3 ⑧), and Update Now is offered while a release
+  // waits, not only while it drains: available and postponed list the owner's turns the same way.
+  await t.test('a release waiting (available, postponed) lists the owner’s turns; another owner’s are not named', async () => {
+    for (const report of [
+      { state: 'waitingForIdle', phase: 'available', targetVersion: '0.1.254' },
+      { state: 'waitingForIdle', phase: 'postponed', targetVersion: '0.1.254', postponedUntil: new Date(Date.now() + 60 * MINUTE).toISOString() },
+    ]) {
+      const r = await runner(alice, report, false);
+      const mine = await session(alice, r, 'Running as usual', RunStatus.RUNNING, 5);
+      await session(bob, r, 'Bob’s private turn', RunStatus.RUNNING, 50);
+      assert.deepEqual((await runners.getRunner(alice, r.id)).updateTurns!.map((x) => x.id), [mine], JSON.stringify(report));
+    }
+  });
+
+  await t.test('a runner with no release waiting carries no updateTurns, whatever runs on it', async () => {
+    for (const report of [null, { state: 'enabled' }, { state: 'enabled', phase: 'restarting', targetVersion: '0.1.254' }]) {
       const r = await runner(alice, report, false);
       await session(alice, r, 'Running as usual', RunStatus.RUNNING, 5);
       assert.equal('updateTurns' in (await runners.getRunner(alice, r.id)), false, JSON.stringify(report));

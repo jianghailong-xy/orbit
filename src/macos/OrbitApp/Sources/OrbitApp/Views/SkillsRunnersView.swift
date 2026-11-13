@@ -185,7 +185,7 @@ struct RunnersListView: View {
     /// A line of Needs you, opened: the machine's record, the pool's page.
     private func openAttention(_ item: Infrastructure.Attention) {
         switch item.kind {
-        case .offline(let runnerID), .noCliSignedIn(let runnerID):
+        case .offline(let runnerID), .noCliSignedIn(let runnerID), .updating(let runnerID):
             if rowNavigation == .selection {
                 model.selectedRunnerID = runnerID
             } else {
@@ -489,6 +489,8 @@ struct RunnerDetailContent: View {
     @State private var choosingReserve = false
     @State private var confirmingRotate = false
     @State private var confirmingRemove = false
+    /// The postponed Update card's Update Now… asks first (a runner without `self-update-now/v1`).
+    @State private var confirmingUpdateNow = false
     /// The token a rotation just minted: shown on this page once, and gone with it.
     @State private var rotatedToken: String?
     @State private var notice: String?
@@ -591,7 +593,10 @@ struct RunnerDetailContent: View {
     }
 
     /// The Update card (board 4): a release this runner is behind, in the phase it reports — amber
-    /// while it holds work back or restarts. Later ▾ and Update Now… join it in their own tasks.
+    /// while it holds work back or restarts, and Updated for a day after. Later ▾ while draining;
+    /// Change ▾ once postponed. Update Now… (`RunnerUpdateNowControl`) while available, draining or
+    /// postponed for a runner that declares `self-update-now/v1`; one without it keeps the postponed
+    /// card's Update Now…, which asks for Update Runner Now.
     @ViewBuilder private func updateSection(_ card: RunnerPageFormat.UpdateCard) -> some View {
         Section {
             VStack(alignment: .leading, spacing: 6) {
@@ -604,8 +609,10 @@ struct RunnerDetailContent: View {
                         .foregroundStyle(card.warn ? RunnerInk.amber : Color.secondary)
                         .lineLimit(1)
                 }
-                Text(card.body)
-                    .foregroundStyle(Color.secondary)
+                if !card.body.isEmpty {
+                    Text(card.body)
+                        .foregroundStyle(Color.secondary)
+                }
                 if let label = card.progressLabel {
                     Text(label)
                         .font(.orbitLabel)
@@ -637,6 +644,32 @@ struct RunnerDetailContent: View {
                     .contentShape(Rectangle())
                 }
                 .runnerRowButtonStyle()
+            }
+            if card.phase == "available", RunnerUpdateNow.offered(runner) {
+                RunnerUpdateNowControl(runnerID: runner.id, machine: RunnerPageFormat.displayName(runner),
+                                       onNotice: show)
+            }
+            if card.phase == "draining" || card.phase == "postponed" {
+                HStack(spacing: 8) {
+                    RunnerUpdateLaterControl(runnerID: runner.id, version: runner.selfUpdate?.targetVersion,
+                                             machine: RunnerPageFormat.displayName(runner),
+                                             change: card.phase == "postponed")
+                    if RunnerUpdateNow.offered(runner) {
+                        RunnerUpdateNowControl(runnerID: runner.id, machine: RunnerPageFormat.displayName(runner),
+                                               onNotice: show)
+                    } else if card.phase == "postponed" {
+                        Button(RunnerPageCopy.RUNNER_UPDATE_NOW) { confirmingUpdateNow = true }
+                            .buttonStyle(.bordered)
+                            .accessibilityIdentifier("runner-update-now")
+                    }
+                }
+                .orbitConfirmation(RunnerPageCopy.runnerUpdateNowConfirmTitle(version: runner.selfUpdate?.targetVersion ?? ""),
+                                   isPresented: $confirmingUpdateNow) {
+                    Button(RunnerPageCopy.RUNNER_UPDATE_NOW_CONFIRM) { updateRunner() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text(RunnerPageCopy.RUNNER_UPDATE_NOW_CONFIRM_BODY)
+                }
             }
         }
     }

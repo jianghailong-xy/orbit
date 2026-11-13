@@ -108,7 +108,7 @@ private struct InfrastructureAttentionRow: View {
 
     @ViewBuilder private func press(_ action: @escaping () -> Void) -> some View {
         switch item.kind {
-        case .offline, .noCliSignedIn:
+        case .offline, .noCliSignedIn, .updating:
             Button(Infrastructure.details, action: action)
                 .buttonStyle(.bordered)
         case .poolUnavailable:

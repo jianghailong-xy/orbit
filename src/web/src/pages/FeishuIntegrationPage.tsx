@@ -27,6 +27,7 @@ import { Select } from '../components/ui/Select';
 import { Spinner } from '../components/ui/Spinner';
 import { Switch } from '../components/ui/Switch';
 import '../components/ui/Card.css';
+import { SettingsHeader } from '../components/settings';
 import { copyText } from '../lib/clipboard';
 import { useToast } from '../lib/toast';
 import { workspacesQuery } from '../lib/queries';
@@ -668,15 +669,15 @@ export function FeishuIntegrationPage() {
 
   if (integration.isPending) {
     return (
-      <div className="feishu-page">
+      <div className="settings-page feishu-page">
         <Spinner />
       </div>
     );
   }
   if (integration.isError) {
     return (
-      <div className="feishu-page">
-        <h1 className="page-title">Feishu</h1>
+      <div className="settings-page feishu-page">
+        <SettingsHeader title="Feishu" />
         <Alert
           type="error"
           title="Couldn't load your Feishu settings"
@@ -688,12 +689,11 @@ export function FeishuIntegrationPage() {
   }
   const { allowed, app } = integration.data;
   return (
-    <div className="feishu-page">
-      <h1 className="page-title">Feishu</h1>
-      <p className="feishu-intro">
-        Connect a Feishu or Lark app of your own to Orbit as its bot. Orbit reaches Feishu over a long connection it
-        opens itself, so this server needs no public address.
-      </p>
+    <div className="settings-page feishu-page">
+      <SettingsHeader
+        title="Feishu"
+        description="Connect a Feishu or Lark app of your own to Orbit as its bot. Orbit reaches Feishu over a long connection it opens itself, so this server needs no public address."
+      />
       {!allowed && (
         <Alert
           type="warning"

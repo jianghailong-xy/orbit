@@ -844,12 +844,12 @@ struct TranscriptView: View {
     private var runnerUpdatingFoot: RunnerUpdatingFoot? {
         guard let session = runnerUpdatingSession,
               let id = RunnerUpdating.footBubbleID(console.state.items) else { return nil }
-        return RunnerUpdatingFoot(bubbleID: id, session: session, machine: console.runnerName)
+        return RunnerUpdatingFoot(bubbleID: id, session: session, machine: console.runnerName, runnerID: console.runnerID)
     }
 
     @ViewBuilder private var runnerUpdatingPage: some View {
         if let session = runnerUpdatingSession, RunnerUpdating.footBubbleID(console.state.items) == nil {
-            RunnerUpdatingQueuedView(session: session, machine: console.runnerName,
+            RunnerUpdatingQueuedView(session: session, machine: console.runnerName, runnerID: console.runnerID,
                                      onOpenSession: { app.route(to: .session($0)) })
         }
     }
@@ -2045,10 +2045,16 @@ struct TranscriptItemView: View {
         case .assistant(let b): AssistantBubbleView(bubble: b)
         case .thinking(let b):  ThinkingView(block: b)
         case .toolCall(let c):  ToolCardView(card: c, fullPayload: fullPayload)
-        case .interrupt(_, _, let runnerRestart):
-            // Nobody pressed Stop on a turn the runner's restart cut off: the row says what did (web parity).
-            Label(runnerRestart ? "Interrupted — the runner restarted" : "Interrupted", systemImage: "stop.circle")
-                .font(.orbitLabel).foregroundStyle(.secondary)
+        case .interrupt(_, _, let runnerRestart, let runnerUpdate):
+            if let runnerUpdate {
+                // The owner's Update Now cut it: the web's line, its ⊘ included (D4).
+                Text(RunnerPageCopy.runnerUpdateInterruptedLine(version: runnerUpdate.targetVersion))
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+            } else {
+                // Nobody pressed Stop on a turn the runner's restart cut off: the row says what did (web parity).
+                Label(runnerRestart ? "Interrupted — the runner restarted" : "Interrupted", systemImage: "stop.circle")
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+            }
         case .error(_, let message):
             if let console, console.executesDsh, let repair = DshRuntime.repair(message) {
                 DshRepairCardView(console: console, repair: repair)

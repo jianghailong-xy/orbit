@@ -46,6 +46,7 @@ import type {
   RunnerModelCatalog,
   RunnerRegionView,
   RunnerSelfUpdate,
+  RunnerDrainWaiting,
   RunnerUpdateTurn,
   RuntimeDefaultModels,
   SlashCommandInfo,
@@ -268,6 +269,8 @@ export interface Runner {
   selfUpdate?: RunnerSelfUpdate | null;
   // Only on a runner draining for its self-update: the reader's turns the drain waits for (board 4).
   updateTurns?: RunnerUpdateTurn[];
+  // Only while it drains and something of the reader's waits on it: the workspace banner (D3).
+  drainWaiting?: RunnerDrainWaiting | null;
   // Free-space floor in MB (PATCH minFreeDiskMb): below it this machine takes no new task runs.
   // null = no floor.
   minFreeDiskMb?: number | null;
@@ -619,7 +622,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
               label: 'Configure',
               onSelect: () => {
                 onNavigate?.();
-                navigate(`/runners/${encodeId(runnerId)}?workspace=${encodeId(a.id)}`);
+                navigate(`/settings/workspaces/${encodeId(a.id)}`);
               },
             },
             { type: 'separator' as const, key: 'divider' },
@@ -1217,7 +1220,10 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
               key: 'machines',
               icon: <SidebarNavIcon name="runners" />,
               label: 'Machines & models',
-              onSelect: () => navigate('/infrastructure'),
+              onSelect: () => {
+                const first = runners.data?.[0];
+                navigate(first ? `/settings/machines/${encodeId(first.id)}` : '/settings/general');
+              },
             },
             {
               key: 'settings',

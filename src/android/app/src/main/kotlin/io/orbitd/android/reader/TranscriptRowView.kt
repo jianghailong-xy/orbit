@@ -39,6 +39,7 @@ import io.orbitd.android.cards.TranscriptCardView
 import io.orbitd.android.cards.isOrbitTurnCard
 import io.orbitd.android.cards.DetailFold
 import io.orbitd.android.directory.ExternalSender
+import io.orbitd.android.management.RunnerUpdateNow
 import io.orbitd.android.text.*
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.CancellationException
@@ -124,15 +125,23 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
         "tool_use" -> if (questions.isNotEmpty()) "Question" else shown.fields.string("name") ?: shown.fields.string("toolName") ?: "Tool"
         "tool_result" -> "Tool output"
         // Nobody pressed Stop on a turn the runner tore down while restarting (runner-go's watchShutdownDrain): say what did.
-        "interrupt" -> if (event.fields.string("reason") == "runner_restart") "Interrupted — the runner restarted" else "Interrupted"
+        "interrupt" -> when (event.fields.string("reason")) {
+            "runner_restart" -> "Interrupted — the runner restarted"
+            // The owner's Update Now stopped it to install a release (docs/runner-update-drain-design.md D4).
+            RunnerUpdateNow.INTERRUPT_REASON -> RunnerUpdateNow.interruptedTitle(event.fields.string("targetVersion"))
+            else -> "Interrupted"
+        }
         "error", "auth_error" -> "Error"
         "notice", "diagnostic" -> "Notice"
         "auto_retry" -> EngineErrors.autoRetryTitle(shown.fields.string("variant") == "quota", shown.body())
         "background_task" -> "Background work"
         else -> event.type.replace('_', ' ').replaceFirstChar(Char::uppercase)
     }
+    // The turn Orbit sent to continue a turn the owner's Update Now cut: Orbit's words, written for the agent, so one grey Orbit line
+    // rather than a message in the reader's name (web `runner-update-resume`).
+    val updateResume = event.type == "user" && RunnerUpdateNow.isResume(shown.fields.string("text"))
     val bg = when { highlighted -> MaterialTheme.colorScheme.secondaryContainer
-        event.type == "user" && answerLine == null && bubble == null -> MaterialTheme.colorScheme.surfaceVariant
+        event.type == "user" && answerLine == null && bubble == null && !updateResume -> MaterialTheme.colorScheme.surfaceVariant
         else -> MaterialTheme.colorScheme.surface }
     // The runtime's calls whose work outlives them: a sub-agent (Agent; Task before 2.x) and a Workflow.
     val taskKind = (shown.fields.string("name") ?: shown.fields.string("toolName")).takeIf { event.type == "tool_use" && it in setOf("Agent", "Task", "Workflow") }
@@ -145,6 +154,13 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
     val dshRepair = if (event.type == "error") DshRuntime.repair(shown.body().trim())?.takeIf { console?.executesDsh == true } else null
     Column(Modifier.fillMaxWidth().background(bg).padding(10.dp).testTag(row.key), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (answerLine != null) { cards.forEach { TranscriptCardView(it, open, shown) }; return@Column }
+        if (updateResume) {
+            Text(RunnerUpdateNow.RESUME_NOTE, Modifier.testTag("runner-update-resume"), style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // What delivery appended — the background jobs that ended while the runner was away — rides under it.
+            shown.fields.string("controlPlaneNote")?.takeIf { it.isNotBlank() }?.let { AttachedNoteEntry(it.trim()) }
+            return@Column
+        }
         if (dshRepair != null && console != null) { DshRepairCard(dshRepair, console); return@Column }
         if (repair != null && console != null) { AntigravityRepairCard(repair, console); return@Column }
         if (event.type == "auto_retry" && console != null) {
