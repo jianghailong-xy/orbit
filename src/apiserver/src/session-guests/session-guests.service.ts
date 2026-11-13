@@ -4,11 +4,13 @@ import {
 import { Prisma, RunStatus } from '@prisma/client';
 import type { GuestSessionSummary, SessionGuestPerson } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import { enqueueSessionInvite, SESSION_INVITE } from '../email/email-outbox';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import type { ExternalTurnSender } from '../sessions/session-message';
 import { assertEngineSession } from '../sessions/engine-session';
 import { withSessionState } from '../sessions/session-state';
+import { readSessionActivities } from '../sessions/task-work-carrier';
 import { parseMaxPayload } from '../sessions/truncate-payload';
 import { visibleQuestions } from '../sessions/run-question';
 
@@ -94,7 +96,10 @@ export class SessionGuestsService {
     return session;
   }
 
-  /** The people who can reply in the session: each one's name and email, today's messages and whether they opened it. */
+  /**
+   * The people who can reply in the session: each one's name and email, today's messages, whether they opened it, and
+   * when their invitation email was sent.
+   */
   async list(ownerId: string, sessionId: string): Promise<{ guests: SessionGuestPerson[] }> {
     await this.ownedSession(ownerId, sessionId, { live: false, write: false });
     const rows = await this.prisma.sessionGuest.findMany({
@@ -113,6 +118,11 @@ export class SessionGuestsService {
       _count: { _all: true },
     });
     const counted = new Map(today.map((t) => [t.externalSenderId, t._count._all]));
+    const emails = rows.length === 0 ? [] : await this.prisma.emailOutbox.findMany({
+      where: { kind: SESSION_INVITE, sessionId, userId: { in: rows.map((r) => r.userId) } },
+      select: { userId: true, sentAt: true },
+    });
+    const sent = new Map(emails.map((m) => [m.userId, m.sentAt]));
     return {
       guests: rows.map((r) => ({
         userId: r.userId,
@@ -121,6 +131,7 @@ export class SessionGuestsService {
         addedAt: r.addedAt.toISOString(),
         messagesToday: counted.get(r.userId) ?? 0,
         opened: r.openedAt !== null,
+        emailSentAt: sent.get(r.userId)?.toISOString() ?? null,
       })),
     };
   }
@@ -128,21 +139,26 @@ export class SessionGuestsService {
   /**
    * Invite an account by the email it signs in with. Only a registered, enabled account other than the owner; an
    * email nobody uses — or a disabled account's, which reads the same — is refused and nothing is written. Inviting
-   * someone already invited changes nothing.
+   * someone already invited changes nothing. A new invitation queues one email to the person (email/email-outbox.ts
+   * enqueueSessionInvite), in the same transaction; a person this session already emailed, removed and invited again
+   * included, gets none.
    */
   async invite(ownerId: string, sessionId: string, email: unknown) {
     if (typeof email !== 'string' || email.trim() === '') throw new BadRequestException('email is required');
     await this.ownedSession(ownerId, sessionId, { live: true, write: true });
     const person = await this.prisma.user.findFirst({
       where: { email: { equals: email.trim(), mode: 'insensitive' }, disabledAt: null },
-      select: { id: true },
+      select: { id: true, email: true },
     });
     if (!person) throw new NotFoundException(GUEST_NO_ACCOUNT);
     if (person.id === ownerId) throw new BadRequestException(GUEST_NOT_YOURSELF);
-    await this.prisma.$executeRaw`
-      INSERT INTO "session_guest" ("id", "session_id", "owner_id", "user_id")
-      VALUES (gen_random_uuid(), ${sessionId}::uuid, ${ownerId}::uuid, ${person.id}::uuid)
-      ON CONFLICT ("session_id", "user_id") WHERE "removed_at" IS NULL DO NOTHING`;
+    await withTransactionRetry(this.prisma, async (tx) => {
+      const added = await tx.$executeRaw`
+        INSERT INTO "session_guest" ("id", "session_id", "owner_id", "user_id")
+        VALUES (gen_random_uuid(), ${sessionId}::uuid, ${ownerId}::uuid, ${person.id}::uuid)
+        ON CONFLICT ("session_id", "user_id") WHERE "removed_at" IS NULL DO NOTHING`;
+      if (added === 1) await enqueueSessionInvite(tx, { guestId: person.id, toAddress: person.email, sessionId, ownerId });
+    }, loggedRetry(this.logger, 'sessionGuests.invite'));
     return this.list(ownerId, sessionId);
   }
 
@@ -253,6 +269,7 @@ export class SessionGuestsService {
         },
       },
     });
+    const activities = await readSessionActivities(this.prisma, rows.map(({ session }) => session.id));
     return {
       sessions: rows.map(({ addedAt, session }) => {
         const state = withSessionState(session);
@@ -263,6 +280,7 @@ export class SessionGuestsService {
           status: state.status,
           sessionState: state.sessionState,
           lifecycleState: state.lifecycleState,
+          activity: activities.get(session.id) ?? null,
           addedAt: addedAt.toISOString(),
           lastTurnAt: session.lastTurnAt?.toISOString() ?? null,
         };

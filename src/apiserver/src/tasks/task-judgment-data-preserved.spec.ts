@@ -2972,6 +2972,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0617 adds `task.fork_changed_files` (TEXT[] NOT NULL DEFAULT '{}', catalog-only) and restates 0615's fork
       // guard to cover it; no preserved rows, triggers or DONE fence change, and no row is written.
       '0617_task_fork_changed_files',
+      // 0618 adds a nullable email_outbox.session_id, its foreign key and index, two CHECKs and a wider unique index
+      // only; no preserved rows, triggers or DONE fence change, and no row is written.
+      '0618_email_outbox_session_invite',
       // 0625 adds the terminal_login and terminal_credential tables, their indexes and foreign keys to "user" and
       // "runner" only (docs/terminal-session-design.md); no preserved rows, triggers or DONE fence change, and no row
       // is written.

@@ -2108,9 +2108,9 @@ struct TranscriptItemView: View {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red).textSelection(.enabled)
             }
-        case .authError(_, let message):
+        case .authError(let id, let message):
             if let console {
-                AuthErrorCardView(console: console, message: message)
+                AuthErrorCardView(console: console, message: message, settled: console.settlement.auth[id])
             } else {
                 // No console to act through (a preview / detached render): the diagnosis alone,
                 // which is what the runtime said in the first place.
@@ -2126,11 +2126,14 @@ struct TranscriptItemView: View {
                 Label(notice.message, systemImage: "clock.fill")
                     .foregroundStyle(.secondary).textSelection(.enabled)
             }
-        case .notice(_, let message):
+        case .notice(let id, let message, _):
             // A heads-up, not a failure — web's `.chat-notice`: the warning tone at label size,
-            // behind the triangle.
+            // behind the triangle. An account switch the conversation has moved past is history,
+            // muted with the sign-in card it came with.
             Label(message, systemImage: "exclamationmark.triangle.fill")
-                .font(.orbitLabel).foregroundStyle(.orange).textSelection(.enabled)
+                .font(.orbitLabel)
+                .foregroundStyle(console?.settlement.settledNotices.contains(id) == true ? Color.secondary : Color.orange)
+                .textSelection(.enabled)
         case .diagnostic(let notice):
             DiagnosticNoticeRow(notice: notice)
         case .mainCheckout(let item):

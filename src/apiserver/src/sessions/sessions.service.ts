@@ -2,7 +2,7 @@ import { visibleQuestions, questionsWithCoordinator } from './run-question';
 import { isRunNotifyTurn, runNotifyContent } from './run-notify';
 import {
   SESSION_MERGE_RECOVERY_V1, readMergeRecovery, mergeRecoveryConfirmable, mergeRecoveryContinuePrompt, mergeRecoveryPrompt,
-  mergeRecoveryReady, type MergeRecovery, type MergeRecoveryAction,
+  mergeRecoveryReady, type MergeRecovery, type MergeRecoveryAction, type SessionActivity,
 } from '@orbit/shared';
 import {
   BadRequestException,
@@ -30,6 +30,7 @@ import { appendScheduledWakeupContext, endWakeupLoop, readSessionWakeups } from 
 import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
 import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
+import { readSessionActivities, sessionActivitySql } from './task-work-carrier';
 import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
@@ -3869,6 +3870,7 @@ export class SessionsService {
       runningBgJobs: string[];
       runningBgJobActivity: Prisma.JsonValue;
       runningSubagentCount: number;      engineTurnActive: boolean;
+      activity: SessionActivity | null;
       engineStartedAt: Date | null;
       enginePhase: string | null;
       runClaimedAt: Date | null;
@@ -4008,6 +4010,9 @@ export class SessionsService {
         s.running_bg_job_activity AS "runningBgJobActivity",
         cardinality(s.running_subagents)::int AS "runningSubagentCount",
         s.engine_turn_active AS "engineTurnActive",
+        -- What it is doing beyond its status (sessionActivitySql): the one answer to whether a parked
+        -- session is still working, so no client has to rebuild it from the columns around it.
+        (${Prisma.raw(sessionActivitySql('s'))}) AS "activity",
         s.engine_started_at AS "engineStartedAt",
         s.engine_phase AS "enginePhase",
         s.run_claimed_at AS "runClaimedAt",
@@ -4220,6 +4225,7 @@ export class SessionsService {
         runningBgJobCount: freshRunningBgJobs(r.runningBgJobs, r.runningBgJobActivity).length,
         runningSubagentCount: r.runningSubagentCount,
         engineTurnActive: r.engineTurnActive,
+        activity: r.activity,
         engineStartedAt: r.engineStartedAt,
         // What the list row needs to tell a three-second cold start from an engine that has been
         // compacting for four minutes; both are RUNNING with a null engineStartedAt.
@@ -4906,10 +4912,14 @@ export class SessionsService {
     });
     if (!session) throw linkNotFound();
     const stateful = withSessionState(session);
+    // A parked session can still be working (a self-driven turn, a sub-agent, a job, a wait that
+    // wakes it): without this the page read its AWAITING_INPUT as idle and said "Awaiting reply".
+    const activity = (await readSessionActivities(this.prisma, [session.id])).get(session.id) ?? null;
     return {
       title: session.title,
       workspaceName: session.workspace?.name ?? null,
       status: stateful.status,
+      activity,
       runStatus: stateful.runStatus,
       sessionState: stateful.sessionState,
       runState: stateful.runState,

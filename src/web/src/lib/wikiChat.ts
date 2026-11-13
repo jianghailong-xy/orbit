@@ -361,8 +361,9 @@ export function writeWikiChatOpen(spaceSlug: string, chat: string | null): void 
 
 /**
  * The panel by the window's width (design §4.1, contract `chat.panel.widths`):
- * - wide (≥ 1440): docked on the right, pushing the page over; dragged between 320 and half the window; the directory stays;
- * - docked (1200–1439): docked on the right; the directory folds into the Contents drawer;
+ * - wide (≥ 1440): a column right of the page, from the window's top to its foot; dragged between 320 and half the window;
+ *   the directory stays;
+ * - docked (1200–1439): the same column; the directory stays and the app sidebar shows as its icon rail;
  * - over (640–1199): slides in over the right of the page, with no scrim; Contents drawer;
  * - sheet (< 640): a sheet from the bottom, at half or full height; Contents drawer.
  */
