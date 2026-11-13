@@ -421,9 +421,24 @@ export class ProjectPromotionService {
     return this.view(after);
   }
 
-  /** The candidate this project's card is drawn from, or null when there is nothing on offer (§3.6). */
+  /**
+   * The candidate this project's card is drawn from, or null when there is nothing on offer (§3.6).
+   *
+   * A LIVE candidate first, even when a newer one has already ended. A main-line project makes one
+   * candidate per finished task (M-F2), so two can stand at once — and the newest row can be a merge
+   * that happened while an older candidate still asks. Reading only the newest row took that older
+   * one's card off every surface while its item stayed open, so the owner had a row saying "Approve
+   * merge" and nothing to press (2026-11-12, project 34uyniLRpsIAr0qQyv2Jf). Only when nothing is
+   * live does the newest ended row answer, which is the record the project page still draws.
+   */
   async readCurrent(userId: string, projectId: string): Promise<ProjectPromotionView | null> {
     await this.assertOwnProject(userId, projectId);
+    const live = await this.prisma.projectPromotion.findFirst({
+      where: { projectId, ownerId: userId, state: { in: [...LIVE_PROMOTION_STATES] } },
+      orderBy: { createdAt: 'desc' },
+      select: PROMOTION_COLUMNS,
+    });
+    if (live) return this.view(live);
     const row = await this.prisma.projectPromotion.findFirst({
       where: { projectId, ownerId: userId },
       orderBy: { createdAt: 'desc' },
