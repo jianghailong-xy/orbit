@@ -278,11 +278,18 @@ const (
 	selfUpdatePhasePostponed = "postponed"
 )
 
+// selfUpdatePostponeCapabilityV1 declares that this runner honours the owner's Later
+// (HeartbeatResponse.PostponeSelfUpdateUntil): @orbit/shared's SELF_UPDATE_POSTPONE_V1. The control
+// plane refuses a postpone for a runner that does not declare it, which would drop it unread.
+const selfUpdatePostponeCapabilityV1 = "self-update-postpone/v1"
+
 // selfUpdatePhase is the part of the report about a waiting release; the zero value is none.
 type selfUpdatePhase struct {
 	phase, targetVersion                          string
 	availableSince, drainingSince, postponedUntil time.Time
 	turnsInFlight, turnsAtDrain                   int
+	// Restarting for the owner's Update Now: the turns it interrupted.
+	interruptedTurns int
 }
 
 // selfUpdateStatus is where this runner's updates of itself stand, for the heartbeat: set by the
@@ -348,6 +355,10 @@ func selfUpdateReport() *SelfUpdateReport {
 		DrainingSince:  rfc3339OrEmpty(phase.drainingSince),
 		PostponedUntil: rfc3339OrEmpty(phase.postponedUntil),
 		TurnsInFlight:  phase.turnsInFlight, TurnsAtDrain: phase.turnsAtDrain,
+		InterruptedTurns:           phase.interruptedTurns,
+		LastUpdateSeconds:          last.restartSeconds(),
+		LastUpdateInterruptedTurns: last.InterruptedTurns,
+		QuietWindowSeconds:         int(selfUpdateQuietWindow / time.Second),
 	}
 }
 
@@ -364,6 +375,34 @@ type selfUpdateRecord struct {
 	At   string `json:"lastUpdatedAt"`
 	From string `json:"lastUpdatedFrom"`
 	To   string `json:"lastUpdatedTo"`
+	// The restart, for the Updated card: when the stop for it began, how many turns an Update Now
+	// interrupted for it, and when the image it restarted into started (markSelfUpdateBack). Absent in
+	// a record an older runner wrote.
+	StoppedAt        string `json:"stoppedAt,omitempty"`
+	InterruptedTurns int    `json:"interruptedTurns,omitempty"`
+	BackAt           string `json:"backAt,omitempty"`
+}
+
+// restartSeconds is how long the restart took, from the stop to the new image starting; 0 when the
+// record does not say.
+func (r selfUpdateRecord) restartSeconds() int {
+	stopped, err1 := time.Parse(time.RFC3339, r.StoppedAt)
+	back, err2 := time.Parse(time.RFC3339, r.BackAt)
+	if err1 != nil || err2 != nil || back.Before(stopped) {
+		return 0
+	}
+	return max(1, int(back.Sub(stopped).Round(time.Second)/time.Second))
+}
+
+// markSelfUpdateBack is the first thing the image an update restarted into says about it: it is
+// back, now. Only once per update — a later start of the same image is not the restart.
+func markSelfUpdateBack(now time.Time) {
+	rec := lastSelfUpdate()
+	if rec.StoppedAt == "" || rec.BackAt != "" || rec.To != version {
+		return
+	}
+	rec.BackAt = now.UTC().Format(time.RFC3339)
+	writeSelfUpdateRecord(rec)
 }
 
 func selfUpdateRecordPath() string { return filepath.Join(machineHome(), "self-update.json") }
@@ -381,7 +420,16 @@ func lastSelfUpdate() selfUpdateRecord {
 // recordSelfUpdate files an installed update. Best-effort, like engineUpdateLog: losing it costs the
 // "last updated" line, never the update.
 func recordSelfUpdate(from, to string, at time.Time) {
-	b, err := json.Marshal(selfUpdateRecord{At: at.UTC().Format(time.RFC3339), From: from, To: to})
+	rec := selfUpdateRecord{At: at.UTC().Format(time.RFC3339), From: from, To: to}
+	if stopped := updateNowRestart.startedAt.Load(); stopped != nil {
+		rec.StoppedAt = stopped.UTC().Format(time.RFC3339)
+		rec.InterruptedTurns = int(updateNowRestart.interrupted.Load())
+	}
+	writeSelfUpdateRecord(rec)
+}
+
+func writeSelfUpdateRecord(rec selfUpdateRecord) {
+	b, err := json.Marshal(rec)
 	if err != nil {
 		return
 	}

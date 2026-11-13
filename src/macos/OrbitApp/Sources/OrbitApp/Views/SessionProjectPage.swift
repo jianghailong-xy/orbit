@@ -412,6 +412,10 @@ struct SessionProjectPage: View {
             }
         }
         .listStyle(.plain)
+        // The Sessions list's soft top edge, not the hard strip iOS 26 picks here: the pinned
+        // section header floats on it with no line (the owner, 2026-11-12,
+        // docs/mocks/ios-header-soft-edge/04-board.html).
+        .softTopEdgeEffect()
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         .rowSwipeList(rowSwipe)
@@ -454,7 +458,8 @@ struct SessionProjectPage: View {
         .sheet(item: $taggingSession) { SessionTagSheet(session: $0).environment(app) }
         .sheet(item: $sharingSession) { session in
             if let baseURL = app.baseURL {
-                ShareSheet(kind: .session, rootID: session.id, baseURL: baseURL, tokenStore: app.tokenStore)
+                ShareSheet(kind: .session, rootID: session.id, baseURL: baseURL, tokenStore: app.tokenStore,
+                           guests: .of(session, agents: app.agents))
             }
         }
         #if os(iOS)

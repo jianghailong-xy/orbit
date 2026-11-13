@@ -6,6 +6,7 @@ import { uuidToBase62 } from '@orbit/shared';
 import { test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { RunStatus } from '@prisma/client';
+import { drainWaitingSentence } from '../common/runner-drain-waiting';
 import { PushService } from './push.service';
 
 function enabledConfig(): ConfigService {
@@ -908,6 +909,51 @@ test('the shared Android fixture carries what notifyClaudeRegionBlocked sends, k
   assert.deepEqual([sample.pushType, sample.collapseId], [sent[0].type, sent[0].collapseId]);
 });
 
+/** The drain's one push (docs/runner-update-drain-design.md D3), as the heartbeat's claim hands it over. */
+async function drainPush(runnerId: string) {
+  const prisma = { deviceToken: { findMany: async () => [{ token: 'device-1', userId: 'owner-1' }] } };
+  const service = new PushService(prisma as any, enabledConfig());
+  (service as any).authToken = () => 'auth-token';
+  const sent: { body: string; type: unknown; collapseId?: string }[] = [];
+  (service as any).deliver = async (_tokens: unknown, body: string, type: unknown, _priority: unknown, collapseId?: string) => {
+    sent.push({ body, type, collapseId });
+  };
+  await service.notifyRunnerDrainWaiting({
+    runnerId, ownerId: 'owner-1', machine: 'studio-mac', targetVersion: '0.1.254', turns: 2, waiting: { sessions: 1, messages: 1 },
+  });
+  return sent;
+}
+
+test('a drain with the owner’s work waiting is announced about the machine, in the banner’s words', async () => {
+  const sent = await drainPush('runner-1');
+  assert.equal(sent.length, 1);
+  const payload = JSON.parse(sent[0].body);
+  assert.equal(payload.aps.alert.title, 'studio-mac');
+  assert.equal(payload.aps.alert.body, 'studio-mac is updating to 0.1.254 — 1 session and 1 message are waiting for 2 turns to finish.');
+  assert.equal(payload.aps.badge, undefined);
+  assert.equal(payload.sessionID, undefined);
+  assert.deepEqual([payload.kind, payload.runnerID], ['runner-updating', 'runner-1']);
+  assert.equal(sent[0].collapseId, 'runner-updating-runner-1');
+});
+
+test('the shared Android fixture carries what notifyRunnerDrainWaiting sends, key for key', async () => {
+  const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/android-push.fixture.json'), 'utf8'));
+  const sample = fixture.samples.find((candidate: { name: string }) => candidate.name === 'runner-updating');
+  assert.ok(sample, 'the shared Android fixture has no runner-updating sample');
+  const sent = await drainPush(sample.source.runnerID);
+  assert.equal(sent[0].body, JSON.stringify(sample.source));
+  assert.deepEqual([sample.pushType, sample.collapseId], [sent[0].type, sent[0].collapseId]);
+});
+
+test('the drain sentence counts sessions, messages and turns in English', () => {
+  const say = (sessions: number, messages: number, turns: number, targetVersion: string | null = '0.1.254') =>
+    drainWaitingSentence({ machine: 'studio-mac', targetVersion, turns, waiting: { sessions, messages } });
+  assert.equal(say(1, 0, 1), 'studio-mac is updating to 0.1.254 — 1 session is waiting for 1 turn to finish.');
+  assert.equal(say(2, 0, 3), 'studio-mac is updating to 0.1.254 — 2 sessions are waiting for 3 turns to finish.');
+  assert.equal(say(0, 1, 2), 'studio-mac is updating to 0.1.254 — 1 message is waiting for 2 turns to finish.');
+  assert.equal(say(0, 3, 0, null), 'studio-mac is updating — 3 messages are waiting for it to restart.');
+});
+
 function wakeupMissedHarness(deliver?: () => Promise<void>) {
   const prisma = { deviceToken: { findMany: async () => [{ token: 'device-1', userId: 'owner-1' }] } };
   const service = new PushService(prisma as any, enabledConfig());
@@ -994,6 +1040,42 @@ test('the shared Android fixture carries what notifyLoopMissed sends, key for ke
     assert.equal(JSON.stringify(sent[0].payload), JSON.stringify(sample.source), name);
     assert.deepEqual([sample.pushType, sample.collapseId], ['alert', sent[0].collapseId], name);
   }
+});
+
+// A terminal asking to be approved (docs/terminal-session-design.md): the owner's devices ring with the machine and the
+// code, collapsed per request. The shared Android fixture's `terminal-login` sample is this send, so Android's
+// PushMessage parses exactly what is sent (PushAuthorityTest) and fcm-transport.spec converts it to the data it holds.
+function terminalLoginHarness(status = 'PENDING') {
+  const { service, sent } = wakeupMissedHarness();
+  (service as any).prisma.terminalLogin = {
+    findUnique: async () => ({
+      ownerId: 'owner-1', runnerId: '019a0000-0000-7000-8000-00000000000c', machineName: 'dev-laptop', userCode: '7KQ-4MZ', status,
+    }),
+  };
+  return { service, sent };
+}
+
+test('a terminal asking to be approved rings with its machine and code, and the shared Android fixture is that send', async () => {
+  const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/android-push.fixture.json'), 'utf8'));
+  const { service, sent } = terminalLoginHarness();
+  await service.notifyTerminalLogin('019a0000-0000-7000-8000-00000000000b');
+  assert.equal(sent.length, 1);
+  const { payload, collapseId } = sent[0];
+  assert.deepEqual(payload.aps.alert, { title: 'Approve a terminal?', body: 'Terminal on dev-laptop · code 7KQ-4MZ' });
+  assert.deepEqual([payload.kind, payload.terminalLoginID, payload.runnerID],
+    ['terminal-login', '019a0000-0000-7000-8000-00000000000b', '019a0000-0000-7000-8000-00000000000c']);
+  assert.equal(payload.aps.badge, undefined);
+  assert.equal(collapseId, 'terminal-login-019a0000-0000-7000-8000-00000000000b');
+  const sample = fixture.samples.find((candidate: { name: string }) => candidate.name === 'terminal-login');
+  assert.ok(sample, 'the shared Android fixture has no terminal-login sample');
+  assert.equal(JSON.stringify(payload), JSON.stringify(sample.source));
+  assert.deepEqual([sample.pushType, sample.collapseId], ['alert', collapseId]);
+});
+
+test('a terminal request already decided rings nothing', async () => {
+  const { service, sent } = terminalLoginHarness('APPROVED');
+  await service.notifyTerminalLogin('019a0000-0000-7000-8000-00000000000b');
+  assert.equal(sent.length, 0);
 });
 
 test('a wakeup-missed push that fails is logged, never thrown at the worker', async () => {

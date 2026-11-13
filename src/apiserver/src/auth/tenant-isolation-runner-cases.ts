@@ -1356,7 +1356,7 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'the session is read by (id, the runner\'s owner), and the attempt it settles by (its task, that owner); another account\'s session finds nothing and answers 404 (projects/project-criterion-confirmation.service.ts:197)',
   'POST /runner/criterion-checks/report body attachmentIds[]':
     'counted among the runner owner\'s own uploads before anything is written; one that is not answers 404 (projects/project-criterion-confirmation.service.ts:281)',
-  // ── terminal sign-in (0565) ───────────────────────────────────────────────────────────────────────
+  // ── terminal sign-in (0597) ───────────────────────────────────────────────────────────────────────
   'POST /runner/terminal-login/start header x-orbit-session-id':
     'never looked up: any non-blank value refuses the request 403 before anything is read or written (terminals/runner-terminal-login.controller.ts:41), since a terminal signs in as a person, not on behalf of a session; terminal-credential.pg.spec.ts (a) sends one',
   'POST /runner/terminal-login/poll header x-orbit-session-id':

@@ -80,6 +80,7 @@ private struct SettingsPageView: View {
         case .notifications:  NotificationSettingsPage()
         case .sharedLinks:    SharedLinksSettingsPage()
         case .accessTokens:   AccessTokensSettingsPage()
+        case .terminals:      TerminalsSettingsPage()
         case .changePassword: ChangePasswordPage()
         case .admin:          AdminUsersView(rowNavigation: .push)
         }
@@ -160,6 +161,7 @@ struct SettingsHomeView: View {
         }
         .task { await model.sharedLinks?.load() }
         .task { await model.accessTokens?.load() }
+        .task { await model.terminals?.load() }
         // Back from the system's Settings, where the card sends you: say what it is now.
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
@@ -244,7 +246,7 @@ struct SettingsHomeView: View {
                     }
                 } label: { label }
             }
-        case .sessions, .notifications, .sharedLinks, .accessTokens, .changePassword, .admin:
+        case .sessions, .notifications, .sharedLinks, .accessTokens, .terminals, .changePassword, .admin:
             if let page = SettingsHome.page(row) {
                 NavigationLink(value: NavNode.settingsPage(page)) {
                     LabeledContent { if let value = value(of: row) { Text(value) } } label: { label }
@@ -269,6 +271,8 @@ struct SettingsHomeView: View {
             return model.sharedLinks?.activeCount.map(SettingsHome.sharedLinksValue)
         case .accessTokens:
             return model.accessTokens?.activeCount.map(SettingsHome.accessTokensValue)
+        case .terminals:
+            return model.terminals?.count.map { Terminals.settingsValue(count: $0) }
         default:
             return nil
         }
@@ -1347,6 +1351,111 @@ private struct AccessTokensSettingsPage: View {
             show(AccessTokensList.notRevoked(reason))
         } else {
             show(AccessTokensList.revoked)
+        }
+    }
+
+    /// A line over the list's foot for a moment — the app's toast lives under this sheet.
+    private func show(_ text: String) {
+        notice = text
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            if notice == text { notice = nil }
+        }
+    }
+}
+// MARK: - Terminals
+
+/// Settings → Terminals (docs/terminal-session-design.md, "The terminal credential"): every live terminal — its
+/// machine, when it was approved, last used and when it expires — each with Revoke, which asks first. A revoked
+/// terminal leaves the list. Web parity: `TerminalsPage.tsx`; the words are OrbitKit's `Terminals`.
+private struct TerminalsSettingsPage: View {
+    @Environment(AppModel.self) private var model
+
+    @State private var pendingRevoke: Terminal?
+    @State private var notice: String?
+
+    var body: some View {
+        let terminals = model.terminals?.terminals ?? []
+        List {
+            Section {
+                switch LoadFailureLogic.presentation(model.terminals?.loadState ?? ListLoadState(),
+                                                     isEmpty: terminals.isEmpty) {
+                case .loading:
+                    HStack { Spacer(); ProgressView(); Spacer() }
+                case .failed:
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(model.terminals?.errorText ?? Terminals.couldNotLoad)
+                            .foregroundStyle(.secondary)
+                        Button(SharePanelCopy.retry) { Task { await model.terminals?.load() } }
+                    }
+                case .empty, .content:
+                    if terminals.isEmpty {
+                        Text(Terminals.empty).foregroundStyle(.secondary)
+                    }
+                    ForEach(terminals) { terminal in
+                        row(terminal)
+                    }
+                }
+            } footer: {
+                Text(Terminals.hint)
+            }
+        }
+        .navigationTitle(Terminals.title)
+        .task { await model.terminals?.load() }
+        .refreshable { await model.terminals?.load() }
+        .orbitConfirmation(Terminals.revokeTitle, isPresented: revokeAsked,
+                           presenting: pendingRevoke) { terminal in
+            Button(Terminals.revoke, role: .destructive) { Task { await revoke(terminal) } }
+            Button(SharePanelCopy.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(Terminals.revokeDetail)
+        }
+        .overlay(alignment: .bottom) {
+            if let notice {
+                Text(notice)
+                    .font(.orbitListSubtitle.weight(.semibold))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.bottom, 24)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.default, value: notice)
+    }
+
+    private var revokeAsked: Binding<Bool> {
+        Binding(get: { pendingRevoke != nil }, set: { if !$0 { pendingRevoke = nil } })
+    }
+
+    private func row(_ terminal: Terminal) -> some View {
+        let now = Date()
+        return HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(terminal.machineName)
+                ForEach([Terminals.approvedLine(terminal), Terminals.lastUsedLine(terminal, now: now),
+                         Terminals.expiresLine(terminal, now: now)], id: \.self) { line in
+                    Text(line).font(.orbitListSubtitle).foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 8)
+            Button(Terminals.revoke, role: .destructive) { pendingRevoke = terminal }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(model.terminals?.revokingID == terminal.id)
+                .accessibilityIdentifier("terminal-revoke-\(terminal.id)")
+        }
+        .padding(.vertical, 2)
+        .opacity(model.terminals?.revokingID == terminal.id ? 0.5 : 1)
+    }
+
+    private func revoke(_ terminal: Terminal) async {
+        guard let terminals = model.terminals else { return }
+        if let reason = await terminals.revoke(terminal) {
+            show(Terminals.notRevoked(reason))
+        } else {
+            show(Terminals.revoked)
         }
     }
 

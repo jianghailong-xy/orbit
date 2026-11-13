@@ -4,6 +4,7 @@ import { AgentProvider } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { SessionsService } from '../sessions/sessions.service';
 import { WorkspacesService } from './workspaces.service';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 
 /** Records what reached the database; `$queryRaw` stands in for the derived-provider lookup. */
 function prismaStub(writes: Record<string, unknown>[]) {
@@ -305,4 +306,64 @@ test('deleting an agent that is already deleted is a no-op, not a second stamp',
     ok: true,
   });
   assert.deepEqual(deleted, []);
+});
+
+test('GET /workspaces/:id says when the workspace was last used and how many conversations it holds', async () => {
+  const lastActive = new Date('2026-11-11T10:00:00.000Z');
+  const counted: unknown[] = [];
+  const prisma = {
+    runner: { findMany: async () => [] },
+    workspace: { findFirst: async () => ({ id: 'workspace-1', name: 'orbit', runner: null }) },
+    session: {
+      count: async (args: unknown) => {
+        counted.push(args);
+        return 37;
+      },
+    },
+    // The usage read is the one that names last_turn_at; the provider read answers nothing here.
+    $queryRaw: async (...args: unknown[]) =>
+      renderRawQuery(args).text.includes('last_turn_at')
+        ? [{ workspace_id: 'workspace-1', last_active_at: lastActive }]
+        : [],
+  } as unknown as PrismaService;
+  const service = new WorkspacesService(prisma);
+
+  const read = await service.getWithUsage('owner-1', 'workspace-1');
+  assert.equal(read.sessionCount, 37);
+  assert.deepEqual(read.lastActiveAt, lastActive);
+  // Conversations only: not the sessions spawned from another, and not the trashed ones.
+  assert.deepEqual(counted, [
+    { where: { workspaceId: 'workspace-1', sessionKind: 'CONVERSATION', parentSessionId: null, deletedAt: null } },
+  ]);
+
+  // A save reads the workspace back without counting.
+  counted.length = 0;
+  await service.get('owner-1', 'workspace-1');
+  assert.deepEqual(counted, []);
+});
+
+test('the workspace list carries when each was last used, and never counts sessions', async () => {
+  const lastActive = new Date('2026-11-11T10:00:00.000Z');
+  const prisma = {
+    runner: { findMany: async () => [] },
+    workspace: {
+      findMany: async () => [
+        { id: 'workspace-1', name: 'orbit', runner: null },
+        { id: 'workspace-2', name: 'never-used', runner: null },
+      ],
+    },
+    $queryRaw: async (...args: unknown[]) =>
+      renderRawQuery(args).text.includes('last_turn_at')
+        ? [{ workspace_id: 'workspace-1', last_active_at: lastActive }]
+        : [],
+  } as unknown as PrismaService;
+
+  const rows = await new WorkspacesService(prisma).list('owner-1');
+  assert.deepEqual(
+    rows.map((row) => [row.id, row.lastActiveAt, 'sessionCount' in row]),
+    [
+      ['workspace-1', lastActive, false],
+      ['workspace-2', null, false],
+    ],
+  );
 });

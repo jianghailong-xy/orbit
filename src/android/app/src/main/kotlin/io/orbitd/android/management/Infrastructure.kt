@@ -47,6 +47,23 @@ internal object Infrastructure {
     fun offlineDetail(lastHeartbeatAt: String?, nowMs: Long) =
         (lastHeartbeatAt?.let { "Last seen ${RunnerPage.ago(it, nowMs)}" } ?: "Never checked in") + " · its subscriptions are unavailable until it’s back"
     fun poolLine(pool: String) = "$pool is unavailable"
+
+    /** A machine draining for its update with the reader's work waiting on it (board 5's note, D3): "studio-mac is updating — 1 session
+     * and 1 message waiting" (OrbitKit `Infrastructure.updatingLine`). */
+    fun updatingLine(machine: String, sessions: Int, messages: Int): String {
+        val parts = buildList {
+            if (sessions > 0) add(if (sessions == 1) "1 session" else "$sessions sessions")
+            if (messages > 0) add(if (messages == 1) "1 message" else "$messages messages")
+        }
+        return "$machine is updating — ${parts.joinToString(" and ")} waiting"
+    }
+
+    /** "Updating to 0.1.254 · it starts no new work until 2 turns finish" (OrbitKit `Infrastructure.updatingDetail`). */
+    fun updatingDetail(targetVersion: String?, turns: Int): String {
+        val updating = targetVersion?.let { "Updating to $it" } ?: "Updating"
+        if (turns <= 0) return "$updating · it restarts once nothing is running"
+        return "$updating · it starts no new work until " + (if (turns == 1) "1 turn finishes" else "$turns turns finish")
+    }
     /** "No account can run · no session can start on it" — the pool's own reason first. */
     fun poolDetail(reason: String) = "$reason · no session can start on it"
     /** Install, on an engine's page, for an engine its machine lacks: "Install Kimi Code". */
@@ -73,6 +90,8 @@ internal object Infrastructure {
     sealed interface Kind {
         data class Offline(val runnerId: String) : Kind
         data class NoCliSignedIn(val runnerId: String) : Kind
+        /** Draining for its update with the reader's work waiting: its record, where Later and Update Now are. */
+        data class Updating(val runnerId: String) : Kind
         data class PoolUnavailable(val poolId: String, val own: Boolean) : Kind
     }
 
@@ -82,6 +101,7 @@ internal object Infrastructure {
         val id: String get() = when (kind) {
             is Kind.Offline -> "offline:${kind.runnerId}"
             is Kind.NoCliSignedIn -> "nocli:${kind.runnerId}"
+            is Kind.Updating -> "updating:${kind.runnerId}"
             is Kind.PoolUnavailable -> "pool:${kind.poolId}"
         }
     }
@@ -103,11 +123,23 @@ internal object Infrastructure {
             val machine = RunnerPage.displayName(runner)
             Attention(Kind.NoCliSignedIn(runner.text("id")), noCliLine(machine), listOf(machine), RunnerPage.noCliSignedInDetail(engines))
         }
+        // Draining for its update while something of the reader's waits on it: GET /runners sends drainWaiting only then (D3).
+        val updating = runners.filter { it.bool("online") == true }.mapNotNull { runner ->
+            val waiting = runner.obj("drainWaiting") ?: return@mapNotNull null
+            val sessions = waiting.int("sessions") ?: 0
+            val messages = waiting.int("messages") ?: 0
+            if (sessions + messages <= 0) return@mapNotNull null
+            val machine = RunnerPage.displayName(runner)
+            val report = runner.obj("selfUpdate")
+            val turns = report?.int("turnsInFlight") ?: runner.list("updateTurns").size
+            Attention(Kind.Updating(runner.text("id")), updatingLine(machine, sessions, messages), listOf(machine),
+                updatingDetail(report?.str("targetVersion"), turns))
+        }
         val unavailable = (memberPools.map { it to false } + ownPools.map { it to true }).mapNotNull { (pool, own) ->
             val reason = pool.unavailable ?: return@mapNotNull null
             Attention(Kind.PoolUnavailable(pool.id, own), poolLine(pool.label), listOf(pool.label), poolDetail(reason))
         }
-        return offline + noCli + unavailable
+        return offline + noCli + updating + unavailable
     }
 
     // A key's model

@@ -1,5 +1,5 @@
 {
-  "comment": "RunnerHeartbeatRequest.selfUpdate as the runner sends it, one case per Update card phase plus a runner too old to send a phase. Written by the Go runner (selfupdate_phase_test.go replays available, draining and restarting on a fake clock that starts at 2023-11-14T22:13:20Z and compares field for field), read by the shared and apiserver specs.",
+  "comment": "RunnerHeartbeatRequest.selfUpdate as the runner sends it, one case per Update card phase plus a runner too old to send a phase (or its quiet window). Written by the Go runner (selfupdate_phase_test.go replays available, draining and restarting on a fake clock that starts at 2023-11-14T22:13:20Z and compares field for field), read by the shared and apiserver specs.",
   "cases": [
     {
       "name": "oldRunner",
@@ -12,7 +12,8 @@
         "phase": "available",
         "targetVersion": "0.1.254",
         "availableSince": "2023-11-14T22:13:20Z",
-        "turnsInFlight": 2
+        "turnsInFlight": 2,
+        "quietWindowSeconds": 600
       }
     },
     {
@@ -25,7 +26,8 @@
         "availableSince": "2023-11-14T22:13:20Z",
         "drainingSince": "2023-11-14T23:13:20Z",
         "turnsInFlight": 1,
-        "turnsAtDrain": 2
+        "turnsAtDrain": 2,
+        "quietWindowSeconds": 600
       }
     },
     {
@@ -35,7 +37,8 @@
         "phase": "restarting",
         "targetVersion": "0.1.254",
         "availableSince": "2023-11-14T22:13:20Z",
-        "drainingSince": "2023-11-14T23:13:20Z"
+        "drainingSince": "2023-11-14T23:13:20Z",
+        "quietWindowSeconds": 600
       }
     },
     {
@@ -45,7 +48,8 @@
         "phase": "postponed",
         "targetVersion": "0.1.254",
         "availableSince": "2023-11-14T22:13:20Z",
-        "postponedUntil": "2023-11-15T02:00:00Z"
+        "postponedUntil": "2023-11-15T02:00:00Z",
+        "quietWindowSeconds": 600
       }
     }
   ]

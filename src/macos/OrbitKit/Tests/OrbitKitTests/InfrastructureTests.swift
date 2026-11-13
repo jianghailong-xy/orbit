@@ -99,6 +99,37 @@ final class InfrastructureTests: XCTestCase {
                        "New box is offline · Never checked in · its subscriptions are unavailable until it’s back")
     }
 
+    /// A machine draining for its update with the reader's work waiting on it (board 5's note, D3): a line
+    /// that opens its record, where Later and Update Now are. Not draining, or nothing waiting: no line.
+    func testAMachineUpdatingWithWorkWaitingIsALine() throws {
+        let studio = try runner(#"""
+        {"id":"studio","name":"studio-mac","online":true,"activeSessions":2,"maxConcurrent":4,
+         "lastHeartbeatAt":"2026-10-07T08:59:50.000Z",
+         "selfUpdate":{"state":"waitingForIdle","phase":"draining","targetVersion":"0.1.254","turnsInFlight":2},
+         "drainWaiting":{"sessions":1,"messages":1}}
+        """#)
+        XCTAssertEqual(studio.drainWaiting, RunnerDrainWaiting(sessions: 1, messages: 1))
+        let lines = attention([try hpc(), studio])
+        XCTAssertEqual(lines.map(\.kind), [.updating(runnerID: "studio")])
+        XCTAssertEqual(lines[0].id, "updating:studio")
+        XCTAssertEqual(lines[0].names, ["studio-mac"])
+        XCTAssertEqual(says(lines[0]),
+                       "studio-mac is updating — 1 session and 1 message waiting · Updating to 0.1.254 · it starts no new work until 2 turns finish")
+
+        let one = try runner(#"""
+        {"id":"studio","name":"studio-mac","online":true,"selfUpdate":{"state":"waitingForIdle","phase":"draining",
+         "targetVersion":"0.1.254","turnsInFlight":1},"drainWaiting":{"sessions":1,"messages":0}}
+        """#)
+        XCTAssertEqual(says(attention([one])[0]),
+                       "studio-mac is updating — 1 session waiting · Updating to 0.1.254 · it starts no new work until 1 turn finishes")
+
+        let nothingWaits = try runner(#"""
+        {"id":"studio","name":"studio-mac","online":true,"selfUpdate":{"state":"waitingForIdle","phase":"draining",
+         "targetVersion":"0.1.254","turnsInFlight":2}}
+        """#)
+        XCTAssertEqual(attention([nothingWaits]), [], "a drain nothing waits on needs nobody")
+    }
+
     /// orbit@austin on 2026-10-31: online, Claude Code and Codex installed, neither signed in.
     private func austin(online: Bool = true) throws -> Runner {
         try runner(#"""

@@ -242,7 +242,7 @@ describe('Machines & models, which has no sidebar row (docs/mocks/machines-and-m
     const labels = rows.map((row) => row.textContent);
     expect(labels.indexOf('Machines & models')).toBe(labels.indexOf('Settings') - 1);
     await click(rows.find((row) => row.textContent === 'Machines & models')!);
-    expect(location).toBe('/infrastructure');
+    expect(location).toBe(`/settings/machines/${RUNNER}`);
   });
 
   it.each([

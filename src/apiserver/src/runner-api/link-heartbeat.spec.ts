@@ -299,6 +299,13 @@ test('the quiet answer is, to the byte, what the runner\'s own test applies (src
   assert.equal(JSON.stringify(quietHeartbeatAnswer({ maxConcurrent: 4, minFreeDiskMb: 2048 }, {})), fixture);
 });
 
+// A runner draining for an update claims for its engines at work only on this word (runner-go drainClaimScope),
+// so the quiet answer to its beat says it as the full one does; to any other beat neither does.
+test('the quiet answer to a draining beat says the claim takes a drain scope', () => {
+  assert.equal(quietHeartbeatAnswer({ maxConcurrent: 4, minFreeDiskMb: 2048 }, { draining: true }).drainScopedClaims, true);
+  assert.equal('drainScopedClaims' in quietHeartbeatAnswer({ maxConcurrent: 4, minFreeDiskMb: 2048 }, { draining: false }), false);
+});
+
 test('the beat statement is a prepared one: it opens with the mark, and its text is one of two whatever the beat says', async () => {
   const texts = new Set<string>();
   const prisma = {

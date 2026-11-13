@@ -17,7 +17,8 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 0600: the highest number on main and every pushed branch is 0595. Can run twice: DROP CONSTRAINT IF EXISTS.
+-- 0600: after 0597 (this project line's terminal_credential); free on main and every pushed branch (others hold 0605-0607).
+-- Can run twice: DROP CONSTRAINT IF EXISTS.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 
 ALTER TABLE "approval" DROP CONSTRAINT IF EXISTS "approval_decided_via_chk";

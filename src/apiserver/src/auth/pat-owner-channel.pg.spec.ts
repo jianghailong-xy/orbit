@@ -200,6 +200,13 @@ test('the owner channel refuses a personal access token door by door and field b
   const terminalToApprove = await terminalRequest();
   const terminalToDeny = await terminalRequest();
   const terminalStatus = async (id: string) => (await db.terminalLogin.findUniqueOrThrow({ where: { id } })).status;
+  // Two other accounts: one to invite through the guest door, one already invited for the remove door to take out.
+  const guestEmail = `owner-channel-guest-${RUN}@personal-access-token.invalid`;
+  await db.user.create({ data: { email: guestEmail, name: 'Invited' } });
+  const guestToRemove = (await db.user.create({
+    data: { email: `owner-channel-removed-${RUN}@personal-access-token.invalid`, name: 'Removed' },
+  })).id;
+  await db.sessionGuest.create({ data: { sessionId, ownerId: userId, userId: guestToRemove } });
 
   // ── (1) the owner channel, door by door ────────────────────────────────────────────────────
 
@@ -238,6 +245,18 @@ test('the owner channel refuses a personal access token door by door and field b
       path: `/sessions/${sessionId}/approvals/${nobody()}/decision`,
       body: { behavior: 'allow' },
       login: 404,
+    },
+    // Session guests (docs/session-guests-design.md §3): the People list, inviting by email, removing.
+    { route: 'GET /sessions/:id/guests', path: `/sessions/${sessionId}/guests`, login: 200 },
+    {
+      route: 'POST /sessions/:id/guests', path: `/sessions/${sessionId}/guests`,
+      body: { email: guestEmail }, login: 201,
+      observe: () => db.sessionGuest.count({ where: { sessionId, removedAt: null } }),
+    },
+    {
+      route: 'DELETE /sessions/:id/guests/:userId', path: `/sessions/${sessionId}/guests/${guestToRemove}`,
+      login: 200,
+      observe: () => db.sessionGuest.count({ where: { sessionId, userId: guestToRemove, removedAt: null } }),
     },
     {
       route: 'POST /projects/:id/acceptance/confirmation',

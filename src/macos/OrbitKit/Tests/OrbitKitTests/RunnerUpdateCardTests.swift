@@ -51,7 +51,11 @@ final class RunnerUpdateCardTests: XCTestCase {
     private func date(_ iso: String) throws -> Date { try XCTUnwrap(RelativeTime.parse(iso)) }
 
     func testAvailableIsQuietAndSaysWhenItInstalls() throws {
-        let r = try runner(try report("available") { $0["targetVersion"] = "0.1.254" })
+        // A runner that sends no quiet window keeps today's wording exactly.
+        let r = try runner(try report("available") {
+            $0["targetVersion"] = "0.1.254"
+            $0.removeValue(forKey: "quietWindowSeconds")
+        })
         let card = try XCTUnwrap(RunnerPageFormat.updateCard(r, now: try date("2023-11-14T22:33:20Z"), timeZone: Self.utc))
         XCTAssertEqual(card, .init(phase: "available", warn: false, title: "0.1.254 is available", tag: "Available",
                                    body: "It installs when no turn is running. If turns keep running for an hour, "
@@ -59,6 +63,28 @@ final class RunnerUpdateCardTests: XCTestCase {
                                    progressLabel: nil, progress: nil))
         XCTAssertEqual(RunnerPageFormat.versionValue(r, latest: "0.1.254"),
                        "0.1.253 · 0.1.254 installs when no turn is running")
+    }
+
+    func testAvailableFromARunnerWithAQuietWindowSaysItInstallsOnceIdleThatLong() throws {
+        let r = try runner(try report("available") { $0["targetVersion"] = "0.1.254" })
+        XCTAssertEqual(r.selfUpdate?.quietWindowSeconds, 600)
+        let card = try XCTUnwrap(RunnerPageFormat.updateCard(r, now: try date("2023-11-14T22:33:20Z"), timeZone: Self.utc))
+        XCTAssertEqual(card.body, "It installs once the runner has been idle for 10 minutes. If it stays busy for an hour, "
+                           + "it stops taking new work so its turns can finish.")
+        XCTAssertEqual(RunnerPageFormat.versionValue(r, latest: "0.1.254"),
+                       "0.1.253 · 0.1.254 installs when the runner has been idle for 10 min")
+    }
+
+    func testTheQuietWindowIsWordedFromTheValueTheRunnerSends() throws {
+        let r = try runner(try report("available") {
+            $0["targetVersion"] = "0.1.254"
+            $0["quietWindowSeconds"] = 60
+        })
+        let card = try XCTUnwrap(RunnerPageFormat.updateCard(r, now: try date("2023-11-14T22:33:20Z"), timeZone: Self.utc))
+        XCTAssertEqual(card.body, "It installs once the runner has been idle for 1 minute. If it stays busy for an hour, "
+                           + "it stops taking new work so its turns can finish.")
+        XCTAssertEqual(RunnerPageFormat.versionValue(r, latest: "0.1.254"),
+                       "0.1.253 · 0.1.254 installs when the runner has been idle for 1 min")
     }
 
     func testDrainingCountsTheTurnsAndTheTimeAndAboutSaysUpdatingTo() throws {

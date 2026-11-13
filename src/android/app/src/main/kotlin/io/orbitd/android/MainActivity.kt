@@ -54,6 +54,7 @@ import io.orbitd.android.watch.WatchDestination
 import io.orbitd.android.cards.OwnerRequestStore
 import io.orbitd.android.cards.WaitingOnYouDestination
 import io.orbitd.android.cards.WaitingOnYouDrawerCount
+import io.orbitd.android.cards.rememberTerminalsChanged
 import io.orbitd.android.watch.WatchStore
 import io.orbitd.android.composer.MachineSetup
 import io.orbitd.android.composer.MachineSetupCopy
@@ -176,6 +177,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         val live by remember(app) { app.realtime.state.map { it.handle to it.invalidationRevision }.distinctUntilChanged() }
             .collectAsState(null to 0L)
         val revision = if (live.first === signedIn.handle) live.second else 0L
+        // `terminals.changed`: the approve cards' requests and Settings → Terminals are read again, and nothing else (iOS `AppModel`).
+        val terminalsChanged = rememberTerminalsChanged(app, signedIn.handle)
         // The sessions parked on a watch that will resume them, as Following last read them: a project row's line says so (A05-6).
         val watches by remember(signedIn.handle) { WatchStore.of(app.session, signedIn.handle, app.processScope).state }.collectAsState()
         val holder = rememberSaveableStateHolder()
@@ -305,7 +308,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         NavigationDrawerItem(label = { Text(WAITING_ON_YOU) }, selected = navigation.section == WAITING_ON_YOU,
                             icon = { Icon(painterResource(R.drawable.ic_bell), null) },
                             onClick = { select(WAITING_ON_YOU, OrbitRoute(Destination.WAITING_ON_YOU, origin = Origin.DRAWER)) },
-                            badge = { WaitingOnYouDrawerCount(remember(signedIn.handle) { OwnerRequestStore.of(app.session, signedIn.handle, app.processScope) }, projects.projects, revision) },
+                            badge = { WaitingOnYouDrawerCount(remember(signedIn.handle) { OwnerRequestStore.of(app.session, signedIn.handle, app.processScope) }, projects.projects, revision, terminalsChanged) },
                             modifier = Modifier.testTag("drawer:waiting-on-you"))
                         SectionHeading("Workspaces")
                         DrawerUnreachableRow(data) { app.realtime.refreshDirectory() }
@@ -405,7 +408,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                     changed = { app.realtime.refreshDirectory() },
                                     workspaceDeleted = { deletedWorkspace = route.workspaceId; land("workspaces", OrbitRoute(Destination.WORKSPACES)) },
                                     deviceAlerts = { if (app.push.configured) app.push.notifications.allowed() else null },
-                                    notifications = { NotificationSettings(app.push) }, about = { AboutSection(app.updates) })
+                                    notifications = { NotificationSettings(app.push) }, about = { AboutSection(app.updates) }, terminalsChanged = terminalsChanged)
                                 Destination.RUNNER -> RunnerScreen(management, route.id, route.recordId, revision, ::open, { navigation = navigation.back() }) {
                                     land(it, OrbitRoute(Destination.WORKSPACE, it, it))
                                 }

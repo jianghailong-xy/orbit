@@ -59,6 +59,12 @@ class PushAuthority(private val api: OrbitApi, private val handle: SessionHandle
                 if (!ObjectId.same(row.text("id"), payload.ownerRequestId) || row.text("state") == null) throw ProtocolException()
                 if (row.text("state") == "PENDING") PushCheck.ACTIVE else PushCheck.STALE
             }
+            // A terminal's request stands while it is still waiting: approved, denied or expired anywhere, it takes its
+            // notification with it.
+            payload.isTerminalLogin -> {
+                val rows = array(objectRead(listOf("terminals", "requests"))["requests"])
+                if (rows.any { ObjectId.same(canonical(it.text("id")), payload.terminalLoginId) }) PushCheck.ACTIVE else PushCheck.STALE
+            }
             payload.sessionId != null -> {
                 val row = sessionRead(payload.sessionId)
                 if (row.present("deletedAt")) PushCheck.MISSING
@@ -72,7 +78,10 @@ class PushAuthority(private val api: OrbitApi, private val handle: SessionHandle
                 if (runner == null) PushCheck.MISSING
                 // The runner's effective region verdict (docs/claude-region-check-contract.md §6): the flip stands while it
                 // reads blocked. A runner that reads no region says nothing either way.
-                else if (payload.kind == "claude-region-blocked") {
+                // Something of the owner's waits on its drain while GET /runners says so (D3); the drain's end, or the wait's, retires it.
+                else if (payload.kind == "runner-updating") {
+                    if (runner["drainWaiting"] is JsonObject) PushCheck.ACTIVE else PushCheck.STALE
+                } else if (payload.kind == "claude-region-blocked") {
                     when (runner.obj("region")?.text("verdict")) { "blocked" -> PushCheck.ACTIVE; "allowed" -> PushCheck.STALE; else -> PushCheck.UNKNOWN }
                 } else {
                     val engine = runner.optionalArray("engines").firstOrNull { it.text("engine") == payload.engine }

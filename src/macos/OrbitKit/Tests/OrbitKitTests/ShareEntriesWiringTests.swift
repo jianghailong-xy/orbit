@@ -132,7 +132,7 @@ final class ShareEntriesWiringTests: XCTestCase {
         // ShareSheet: nothing else is presented between the flag's sheet and the ShareSheet it builds.
         XCTAssertEqual(try branches(of: ".sheet(isPresented: $showShare)", in: console), [])
         let presented = try slice(body, from: ".sheet(isPresented: $showShare)",
-                                  to: "ShareSheet(kind: .session, rootID: sessionID, baseURL: baseURL, tokenStore: appModel.tokenStore)")
+                                  to: "ShareSheet(kind: .session, rootID: sessionID, baseURL: baseURL, tokenStore: appModel.tokenStore,")
         XCTAssertEqual(presented.components(separatedBy: ".sheet(").count, 2, "one sheet, the flag's own")
         XCTAssertFalse(presented.contains("#"), "the sheet's content isn't gated either")
         XCTAssertEqual(console.components(separatedBy: "ShareSheet(").count, 2, "one place builds the sheet")
@@ -240,7 +240,7 @@ final class ShareEntriesWiringTests: XCTestCase {
         XCTAssertEqual(try branches(of: "@State private var sharingSession: Session?", in: agents), ["os(iOS)"])
         XCTAssertEqual(try branches(of: ".sheet(item: $sharingSession)", in: agents), ["os(iOS)"])
         let presented = try slice(agents, from: ".sheet(item: $sharingSession)",
-                                  to: "ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore)")
+                                  to: "ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore,")
         XCTAssertEqual(presented.components(separatedBy: ".sheet(").count, 2, "one sheet, the list's own")
         let row = try slice(agents, from: "@ViewBuilder private func sessionRow(", to: "private func tagSectionHeader(")
         XCTAssertEqual(row.components(separatedBy: "onShare: { sharingSession = s }").count - 1, 2,
