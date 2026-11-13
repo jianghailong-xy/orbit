@@ -417,7 +417,6 @@ final class AgentsModel {
         agentSessions[index] = agentSessions[index].settingTitle(title)
     }
 
-    #if os(iOS)
     /// File this pane's row in a folder on the spot, for the same reason: a Completed row isn't in
     /// the Open snapshot. See `AppModel.moveSession`.
     func applyMovedSession(_ id: String, folderID: String?) {
@@ -425,6 +424,7 @@ final class AgentsModel {
         agentSessions[index] = agentSessions[index].settingFolder(folderID)
     }
 
+    #if os(iOS)
     /// Take a row moved to another workspace out of this pane's list, which is one workspace's — for
     /// the same reason: a Completed row isn't in the Open snapshot. See `AppModel.moveSession(_:to:…)`.
     func applyMovedSession(_ id: String, toWorkspace workspaceID: String) {

@@ -6,7 +6,8 @@ import XCTest
 /// reads Share · Move · Delete from left to right, with Delete outermost and never fired by a full
 /// swipe; the long-press menu has Move… after Share…; Move opens the Move panel, a native sheet the
 /// list holds; and the app files the row at once, puts it back when the server refuses, and keeps
-/// the folder library fresh. All of it is iOS only — the Mac shows no folders (§1).
+/// the folder library fresh. Move is iOS only; the Mac draws the folders (and reads their library)
+/// but files nothing in them.
 ///
 /// SwiftUI doesn't exist on Linux, so nothing here compiles the shells. Each check reads the part of
 /// the source it is about and asks which `#if` branch that part sits in: the branch is what decides
@@ -191,39 +192,39 @@ final class SessionMoveWiringTests: XCTestCase {
         XCTAssertEqual(try branches(of: "RowSwipeAction(title: \"Share\"", in: actions), ["os(iOS)"])
 
         let agents = code(try appSource("Views/AgentsView.swift"))
-        for part in ["@State private var movingSession: Session?", ".sheet(item: $movingSession)",
-                     "onMove: { movingSession = s }", "await app.loadSessionFolders()"] {
-            XCTAssertEqual(try branches(of: part, in: agents), ["os(iOS)"], "`\(part)` is iOS only")
-        }
+        // The panel is iOS's. The list's rows hand their session over on every platform, but only
+        // iOS's row actions (above) ever call it, so on the Mac nothing sets it.
+        XCTAssertEqual(try branches(of: ".sheet(item: $movingSession)", in: agents), ["os(iOS)"])
+        XCTAssertEqual(try branches(of: "await app.loadSessionFolders()", in: agents), [],
+                       "the Mac reads the library too: its list draws the folder rows")
         let row = try slice(agents, from: "@ViewBuilder private func sessionRow(", to: "private func tagSectionHeader(")
         XCTAssertEqual(row.components(separatedBy: "onMove: { movingSession = s }").count - 1, 2,
-                       "both of the iOS list's row shapes hand their session over")
+                       "both of the list's row shapes hand their session over")
         let projectRow = try slice(agents, from: "private func projectRow(_ row: SessionProjectRow)", to: "\n    }")
         XCTAssertEqual(projectRow.components(separatedBy: "onMove:").count - 1, 1,
                        "the project row has one Move callback, acting on its coordinator")
-        let projectMove = "onMove: { if let coordinator = row.coordinator { movingSession = coordinator } }"
-        XCTAssertTrue(projectRow.contains(projectMove))
-        XCTAssertEqual(try branches(of: projectMove, in: agents), ["os(iOS)"])
+        XCTAssertTrue(projectRow.contains("onMove: { if let coordinator = row.coordinator { movingSession = coordinator } }"))
         XCTAssertEqual(agents.components(separatedBy: "onMove:").count - 1, 3,
                        "two ordinary row shapes and one project coordinator hand a session over")
-        let mac = try slice(agents, from: "ForEach(agents.agentSessions) { s in", to: "\n            }")
-        XCTAssertEqual(try branches(of: "ForEach(agents.agentSessions) { s in", in: agents), ["!os(iOS)"])
-        XCTAssertTrue(mac.contains(".sessionRowActions(s, scope: view, onTag: { taggingSession = s })"),
-                      "the Mac's rows offer no Move")
+        // The project row's menu offers Move on iOS alone.
+        let projectMenu = code(try appSource("Views/SessionProjectPage.swift"))
+        XCTAssertEqual(try branches(of: "Button(action: onMove) { Label(SessionProjectCopy.move, systemImage: \"folder\") }",
+                                    in: projectMenu), ["os(iOS)"])
 
         let sheet = code(try appSource("Views/SessionMoveSheet.swift"))
         XCTAssertEqual(try branches(of: "struct SessionMoveSheet: View", in: sheet), ["os(iOS)"])
 
+        // The model's folder entries are every platform's (the Mac's list draws folders); only the
+        // views above ever ask it to move a row, and those are iOS's.
         let app = code(try appSource("AppModel.swift"))
         for part in ["var sessionFolders: [SessionFolder] = []", "func loadSessionFolders() async",
                      "func moveSession(_ id: String, toFolder folderID: String?)",
                      "func createSessionFolder(named name: String, in workspace: Agent, moving sessionID: String)",
                      "private func patchSessionFolder(", "Task { await loadSessionFolders() }"] {
-            XCTAssertEqual(try branches(of: part, in: app), ["os(iOS)"], "`\(part)` is iOS only")
+            XCTAssertEqual(try branches(of: part, in: app), [], "`\(part)` is every platform's")
         }
         let model = code(try appSource("AgentsModel.swift"))
-        XCTAssertEqual(try branches(of: "func applyMovedSession(_ id: String, folderID: String?)", in: model),
-                       ["os(iOS)"])
+        XCTAssertEqual(try branches(of: "func applyMovedSession(_ id: String, folderID: String?)", in: model), [])
     }
 
     // MARK: the panel
@@ -327,10 +328,10 @@ final class SessionMoveWiringTests: XCTestCase {
 
         let app = code(try appSource("AppModel.swift"))
         let apply = try slice(app, from: "private func apply(_ ev: ControlEvent) {", to: "\n    }\n")
-        let branch = try slice(apply, from: "case .folders:", to: "#endif")
+        let branch = try slice(apply, from: "case .folders:", to: "case .providers:")
         XCTAssertTrue(branch.contains("Task { await loadSessionFolders() }"))
         XCTAssertFalse(branch.contains("scheduleControlRefresh()"), "a folder change refetches no list")
-        XCTAssertTrue(branch.contains("#else\n            break"), "the Mac draws no folders: it reads nothing")
+        XCTAssertFalse(branch.contains("#else"), "the Mac draws folders too: it reads them on every platform")
 
         let connected = try slice(app, from: "private func reconcileOnConnect() async {", to: "\n    }\n")
         XCTAssertTrue(connected.contains("Task { await loadSessionFolders() }"))

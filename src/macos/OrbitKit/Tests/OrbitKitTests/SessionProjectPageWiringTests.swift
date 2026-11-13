@@ -91,7 +91,8 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(row.contains("if let project = projects[s.id]"))
         XCTAssertTrue(row.contains("projectRow(project)"), "the recency projection is rendered as a project, never as a session")
         XCTAssertTrue(row.contains("sessionRow(s, mark: marks[s.id])"))
-        XCTAssertEqual(try branches(of: "private static func projectListing(_ inputs: SessionListInputs, _ lines: SessionLineCache) -> SessionProjectListing {", in: agents), ["os(iOS)"])
+        XCTAssertEqual(try branches(of: "private static func projectListing(_ inputs: SessionListInputs, _ lines: SessionLineCache) -> SessionProjectListing {", in: agents), [],
+                       "the Mac's list groups as the iPad's and web's do")
 
         let page = code(try appSource("Views/SessionFolderPage.swift"))
         let folderListing = try slice(page, from: "private static func projectListing(_ inputs: SessionListInputs, _ lines: SessionLineCache) -> SessionProjectListing {", to: "\n    }")
@@ -905,7 +906,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
     }
 
     /// The page is the iPad's and the Mac's session column's alike (owner 2026-11-12: the Mac sidebar's
-    /// project row opens it "和 iPad 一样"); the Mac's own workspace list still draws no project rows.
+    /// project row opens it "like the iPad"); the Mac's workspace list draws the project rows too.
     func testTheProjectUILayerIsCompiledForIOSAndTheMac() throws {
         let page = try appSource("Views/SessionProjectPage.swift")
         for part in ["struct SessionProjectRowView: View", "struct SessionProjectPage: View",
@@ -927,9 +928,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
                                to: "workspaceList")
         XCTAssertTrue(column.contains("SessionProjectPage(address: address, rowNavigation: rowNavigation)"),
                       "the Mac's session column draws the page")
-        let mac = try slice(agents, from: "ForEach(agents.agentSessions) { s in", to: "\n            }")
-        XCTAssertFalse(mac.contains("SessionProject"))
-        XCTAssertFalse(mac.contains("projectRow("))
+        XCTAssertEqual(try branches(of: "private func projectRow(_ row: SessionProjectRow)", in: agents), [])
     }
 
     /// Where a project has no row (owner 2026-11-07, docs/mocks/project-rows-by-workspace, option A), a
@@ -948,8 +947,6 @@ final class SessionProjectPageWiringTests: XCTestCase {
                            "\(layout) leads its second line with the mark")
         }
         XCTAssertEqual(try branches(of: "SessionProjectMarkChip(mark: projectMark)", in: agents), ["os(iOS)"])
-        let mac = try slice(agents, from: "ForEach(agents.agentSessions) { s in", to: "\n            }")
-        XCTAssertFalse(mac.contains("projectMark"), "the Mac's list does not group (design §8)")
 
         let page = code(try appSource("Views/SessionProjectPage.swift"))
         let chip = try slice(page, from: "struct SessionProjectMarkChip: View {", to: "\n}\n")

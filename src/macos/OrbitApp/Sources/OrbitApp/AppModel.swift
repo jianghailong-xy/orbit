@@ -65,12 +65,10 @@ final class AppModel {
     /// `GET /session-tags`. Drives the tag picker sheet and the list's tag filter/group chips; empty
     /// on an older server without the endpoint. See `loadSessionTags` / `setSessionTags`.
     var sessionTags: [SessionTag] = []
-    #if os(iOS)
-    /// The owner's session folders, every workspace's (`GET /session-folders`, by name) — the Move
-    /// panel lists the ones in the session's own workspace. iOS only, as the panel is: macOS shows no
-    /// folders (docs/session-folders-move-design.md §1). See `loadSessionFolders`.
+    /// The owner's session folders, every workspace's (`GET /session-folders`, by name) — the list's
+    /// folder rows, and on iOS the Move panel, which lists the ones in the session's own workspace.
+    /// See `loadSessionFolders`.
     var sessionFolders: [SessionFolder] = []
-    #endif
     // Top-level nav: which AppShell section is showing, and every section's navigation stack. The
     // app lands on the Agents section (the first agent's session list); the agent is selected once
     // the list loads — see `loadAgentsThenLand`.
@@ -960,9 +958,7 @@ final class AppModel {
         projectSessionsAddress = nil
         projectSessionsError = nil
         projectCompletedSessions = [:]
-        #if os(iOS)
         sessionFolders = []
-        #endif
         sessionDetails.removeAll()
         resetNavigation()
         lastSnapshot = nil
@@ -1265,10 +1261,8 @@ final class AppModel {
         } else if let wiki, wiki.spacesState.hasLoaded {
             Task { await wiki.loadSpaces() }
         }
-        #if os(iOS)
         // Nor has `folder.changed`: a workspace's list draws its folders, and the Move panel offers them.
         Task { await loadSessionFolders() }
-        #endif
         // Runners has neither push nor poll: a list that failed while offline
         // would otherwise stay on its error until someone pulls to refresh.
         if let runners, runners.loadState.lastLoadFailed {
@@ -1386,13 +1380,9 @@ final class AppModel {
         // A folder was created, renamed or deleted, here or on another device: re-read the library
         // the Move panel lists (docs/session-folders-move-design.md §5.6). The event names the folder
         // and nothing else, and a session moved between folders is a `session.updated` of its own,
-        // so this refetches no list. The Mac draws no folders, so there it reads nothing at all.
+        // so this refetches no list.
         case .folders:
-            #if os(iOS)
             Task { await loadSessionFolders() }
-            #else
-            break
-            #endif
         // AgentsModel.load() fetches the provider catalog with the list; provider edits do not
         // change task-row membership or live overlays.
         case .providers:
@@ -2173,7 +2163,7 @@ final class AppModel {
     /// Enter the Agents section focused on agent `id` — the one navigation transition behind the
     /// macOS sidebar row, the compact drawer row, and ⌘1…⌘9. Switching to a *different* agent pops
     /// that section's stack, so its pane opens on the session list (the console and the draft on it
-    /// belong to the agent you just left) — on iOS, on the folder page that list was left on
+    /// belong to the agent you just left) — on the folder page that list was left on
     /// (`NavState.switchWorkspace`); re-selecting the current agent keeps the stack — a pushed
     /// console stays pushed.
     ///
@@ -2182,11 +2172,7 @@ final class AppModel {
     func openAgent(_ id: String) {
         selectedSection = .agents
         if selectedAgentID != id {
-            #if os(iOS)
             nav.switchWorkspace(from: selectedAgentID, to: id, folders: sessionFolders)
-            #else
-            nav.popToRoot()
-            #endif
             selectedAgentID = id
         } else if nav.machineDraftOnTop != nil {
             nav.popToRoot()
@@ -3203,9 +3189,8 @@ final class AppModel {
         }
     }
 
-    // MARK: session folders (iOS — docs/session-folders-move-design.md §3–4)
+    // MARK: session folders (docs/session-folders-move-design.md §3–4)
 
-    #if os(iOS)
     /// Load the owner's folder library: when a workspace's session list appears, and again when
     /// `folder.changed` says one was created, renamed or deleted, here or on another device.
     /// Best-effort like the tag library — an older server without the endpoint leaves it empty, and
@@ -3227,8 +3212,7 @@ final class AppModel {
     var folderPage: SessionFolderAddress? { nav.folderPage }
 
     /// The folder the wide shells' session column is showing, if one is — the frame the column's
-    /// list draws, with the console the detail pane follows above it. Nil on macOS, which shows no
-    /// folders (§1): nothing there ever puts one on the stack.
+    /// list draws, with the console the detail pane follows above it.
     var folderColumn: SessionFolderAddress? { nav.folderColumn }
 
     /// Open a folder's page from a folder row at the top of a workspace's session list (§3.3). One
@@ -3353,8 +3337,6 @@ final class AppModel {
         if let cached = sessionDetails.resolve(id) { sessionDetails.store(cached.settingFolder(folderID)) }
         agents?.applyMovedSession(id, folderID: folderID)
     }
-
-    #endif
 
     // MARK: moving a session to another workspace (docs/session-folders-move-design.md §4, §5)
     //

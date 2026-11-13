@@ -5,8 +5,8 @@ import XCTest
 /// The iOS folders' surfaces (docs/session-folders-move-design.md §3.3–3.4): the folder rows at the
 /// top of a workspace's session list — only in Open and Completed, never in Trash or under a tag
 /// grouping — the folder page they open (its title, its ⋯ and its ✎), where the new session's
-/// `folderId` rides, and the two shells' different ways in and out. All of it is iOS only: macOS
-/// shows no folders (§1).
+/// `folderId` rides, and the two shells' different ways in and out. The Mac draws them as the iPad
+/// does, in its session column, as web's list does; only Move to a folder stays iOS's.
 ///
 /// SwiftUI doesn't exist on Linux, so nothing here compiles the shells. Each check reads the part of
 /// the source it is about and asks which `#if` branch that part sits in.
@@ -97,14 +97,18 @@ final class SessionFolderPageWiringTests: XCTestCase {
 
         // The folder rows come before the time sections in the list itself, and the whole block is
         // where a folder is drawn at all — the tag-grouped and searching branches are above it.
-        let body = try slice(agents, from: "List(selection: listSelection) {", to: "\n        .listStyle(.plain)")
+        let list = try slice(agents, from: "List(selection: listSelection) {", to: ".orbitRevealSurface()")
+        XCTAssertEqual(list.components(separatedBy: "groupedSections(folderListing: folderListing,").count - 1, 2,
+                       "the iOS list (unless searching or by tag) and the Mac's draw the same sections")
+        let body = try slice(agents, from: "@ViewBuilder private func groupedSections(", to: "\n    }\n")
         let order = try [
             XCTUnwrap(body.range(of: "ForEach(Array(folderListing.folders.enumerated())")?.lowerBound),
             XCTUnwrap(body.range(of: "ForEach(Array(timeSections.enumerated())")?.lowerBound),
         ]
         XCTAssertEqual(order, order.sorted(), "folders at the very top, the time sections under them")
-        XCTAssertEqual(try branches(of: "SessionFolderGrouping.listing(inputs.shownSessions,", in: agents), ["os(iOS)"])
-        XCTAssertEqual(try branches(of: "private func folderRow(_ row: SessionFolderRow)", in: agents), ["os(iOS)"])
+        XCTAssertEqual(try branches(of: "SessionFolderGrouping.listing(inputs.shownSessions,", in: agents), [])
+        XCTAssertEqual(try branches(of: "private func folderRow(_ row: SessionFolderRow)", in: agents), [])
+        XCTAssertEqual(try branches(of: "@ViewBuilder private func groupedSections(", in: agents), [])
     }
 
     /// A folder row opens the folder's page through the model's one entry point, carrying the
@@ -204,7 +208,7 @@ final class SessionFolderPageWiringTests: XCTestCase {
         XCTAssertTrue(back.contains("Label(\"Back\", systemImage: \"chevron.backward\")"))
         XCTAssertTrue(page.contains("if rowNavigation == .selection {"), "only the wide shell gets one")
 
-        XCTAssertTrue(page.contains("ToolbarItem(placement: .topBarTrailing) { folderMenu }"))
+        XCTAssertTrue(page.contains("ToolbarItem(placement: actionPlacement) { folderMenu }"))
         let newSession = try slice(page, from: "app.startComposingSession(inFolder:", to: ")")
         XCTAssertTrue(newSession.contains("address.folderID, of: address.agentID"),
                       "the ✎ composes for the folder's own workspace")
@@ -286,8 +290,11 @@ final class SessionFolderPageWiringTests: XCTestCase {
         let agents = code(try appSource("Views/AgentsView.swift"))
         let column = try slice(agents, from: "if let address = app.folderColumn {", to: "} else {")
         XCTAssertTrue(column.contains("SessionFolderPage(address: address, rowNavigation: rowNavigation, searchQuery: $searchQuery)"))
-        XCTAssertEqual(try branches(of: "if let address = app.folderColumn {", in: agents), ["os(iOS)"],
-                       "macOS draws no folders (§1)")
+        XCTAssertEqual(try branches(of: "if let address = app.folderColumn {", in: agents), ["os(iOS)"])
+        // The Mac's column draws the page too, with no search field over it (⌘K searches there).
+        let mac = try slice(agents, from: "} else if let address = app.folderColumn {", to: "} else {")
+        XCTAssertTrue(mac.contains("SessionFolderPage(address: address, rowNavigation: rowNavigation)"))
+        XCTAssertEqual(try branches(of: "} else if let address = app.folderColumn {", in: agents), ["!os(iOS)"])
         XCTAssertTrue(try slice(agents, from: "@ViewBuilder private var workspaceList: some View {", to: "\n    }")
             .contains("AgentPanes(agents: agents"), "the column's own list is still what is under it")
     }
@@ -318,26 +325,29 @@ final class SessionFolderPageWiringTests: XCTestCase {
         XCTAssertTrue(rename.contains("SessionFolderCopy.renameFailure(error, name: name, workspace: workspace)"))
     }
 
-    /// The whole layer is iOS only: the page, the rows' menu modifier and the model's folder page /
-    /// rename / delete / create entries compile for iOS alone (§1).
-    func testTheFoldersLayerIsCompiledForIOSOnly() throws {
-        XCTAssertEqual(try branches(of: "struct SessionFolderPage: View", in: try appSource("Views/SessionFolderPage.swift")),
-                       ["os(iOS)"])
-        XCTAssertEqual(try branches(of: "struct SessionFolderRowView: View", in: try appSource("Views/SessionFolderPage.swift")),
-                       ["os(iOS)"])
-        XCTAssertEqual(try branches(of: "private struct SessionFolderManagement: ViewModifier",
-                                    in: try appSource("Views/SessionFolderPage.swift")),
-                       ["os(iOS)"])
+    /// The layer is every platform's: the page, the rows' menu modifier and the model's folder page /
+    /// rename / delete / create entries compile for the Mac as for iOS (the Mac's list draws folders
+    /// as web's does). New Folder… in the ≡ menu and Move stay iOS's.
+    func testTheFoldersLayerIsCompiledForEveryPlatform() throws {
+        let page = try appSource("Views/SessionFolderPage.swift")
+        for part in ["struct SessionFolderPage: View", "struct SessionFolderRowView: View",
+                     "private struct SessionFolderManagement: ViewModifier"] {
+            XCTAssertEqual(try branches(of: part, in: page), [], "`\(part)` is every platform's")
+        }
+        XCTAssertEqual(try branches(of: "SessionMoveSheet(session: s,", in: page), ["os(iOS)"],
+                       "the Mac's folder page has no Move panel")
+        XCTAssertEqual(try branches(of: ".rowSwipeList(rowSwipe)", in: page), ["os(iOS)"])
 
         let agents = code(try appSource("Views/AgentsView.swift"))
         for part in ["@State private var renamingFolder: SessionFolder?",
                      "@State private var deletingFolder: SessionFolderDeletion?",
-                     "@State private var namingFolder = false"] {
-            XCTAssertEqual(try branches(of: part, in: agents), ["os(iOS)"], "`\(part)` is iOS only")
+                     "@AppStorage(\"sessionList.pinnedCollapsed\") private var pinnedCollapsed = false",
+                     "private func pinnedSectionHeader(_ title: String) -> some View"] {
+            XCTAssertEqual(try branches(of: part, in: agents), [], "`\(part)` is every platform's")
         }
-        // The Mac's rows are untouched: it keeps its own ForEach, with no folder row anywhere.
-        let mac = try slice(agents, from: "ForEach(agents.agentSessions) { s in", to: "\n            }")
-        XCTAssertFalse(mac.contains("folderRow("))
+        XCTAssertEqual(try branches(of: "@State private var namingFolder = false", in: agents), ["os(iOS)"])
+        XCTAssertFalse(agents.contains("ForEach(agents.agentSessions) { s in"),
+                       "the Mac's flat list is gone: it draws the folder rows and sections")
 
         let app = code(try appSource("AppModel.swift"))
         for part in ["func openFolder(_ address: SessionFolderAddress)",
@@ -347,7 +357,7 @@ final class SessionFolderPageWiringTests: XCTestCase {
                      "func createSessionFolder(named name: String, in workspace: Agent) async -> String?",
                      "var folderPage: SessionFolderAddress? { nav.folderPage }",
                      "var folderColumn: SessionFolderAddress? { nav.folderColumn }"] {
-            XCTAssertEqual(try branches(of: part, in: app), ["os(iOS)"], "`\(part)` is iOS only")
+            XCTAssertEqual(try branches(of: part, in: app), [], "`\(part)` is every platform's")
         }
     }
 }

@@ -226,8 +226,11 @@ private struct SessionProjectRowActions: ViewModifier {
         Button(action: onProject) { Label(SessionProjectCopy.openProject, systemImage: "square.grid.2x2") }
         Divider()
         actionButton(pinAction)
+        // Move to a folder is the phone's and the iPad's; the Mac's rows have none.
+        #if os(iOS)
         Button(action: onMove) { Label(SessionProjectCopy.move, systemImage: "folder") }
             .disabled(row.coordinator == nil)
+        #endif
     }
 
     private var canOpenSession: Bool {

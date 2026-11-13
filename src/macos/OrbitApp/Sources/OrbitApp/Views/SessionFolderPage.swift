@@ -1,4 +1,3 @@
-#if os(iOS)
 import SwiftUI
 import OrbitKit
 
@@ -100,9 +99,12 @@ struct SessionFolderPage: View {
     /// passes nil.
     var searchQuery: Binding<String>? = nil
 
+    #if os(iOS)
     @State private var rowSwipe = RowSwipeState()
+    #endif
     /// The row whose action was tapped — the sheets below are held by the page, as the workspace
-    /// list holds its own, so they present reliably from a row's swipe or long-press menu.
+    /// list holds its own, so they present reliably from a row's swipe or long-press menu. (Move is
+    /// iOS's row action, so on the Mac `movingSession` is never set and has no panel.)
     @State private var taggingSession: Session?
     @State private var sharingSession: Session?
     @State private var movingSession: Session?
@@ -194,7 +196,7 @@ struct SessionFolderPage: View {
             // The phone's back button is the stack's; the wide shell's column has no stack, so the
             // page brings its own (§3.3).
             if rowNavigation == .selection {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: backPlacement) {
                     Button {
                         app.leaveFolder(address.folderID)
                     } label: {
@@ -204,8 +206,8 @@ struct SessionFolderPage: View {
                 }
             }
             ToolbarItem(placement: .principal) { title }
-            ToolbarItem(placement: .topBarTrailing) { folderMenu }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: actionPlacement) { folderMenu }
+            ToolbarItem(placement: actionPlacement) {
                 Button {
                     app.startComposingSession(inFolder: address.folderID, of: address.agentID)
                 } label: {
@@ -225,11 +227,13 @@ struct SessionFolderPage: View {
                            guests: .of(s, agents: app.agents))
             }
         }
+        #if os(iOS)
         .sheet(item: $movingSession) { s in
             if let workspace = app.agents?.agent(s.agent?.id ?? s.agentId ?? address.agentID) {
                 SessionMoveSheet(session: s, workspace: workspace, listed: app.agents?.allSessions ?? []).environment(app)
             }
         }
+        #endif
         // Keep the page's rows fresh while it is the page on screen: pushing it cancels the list
         // beneath (`AgentPanes`' own task), and in a wide shell it replaces that list outright.
         // Completed keeps its poll; Open is served by the app's shared snapshot, so one read is
@@ -295,7 +299,9 @@ struct SessionFolderPage: View {
         // The Sessions list's soft top edge, not the hard strip iOS 26 picks here (the owner,
         // 2026-11-12, docs/mocks/ios-header-soft-edge/04-board.html).
         .softTopEdgeEffect()
+        #if os(iOS)
         .rowSwipeList(rowSwipe)
+        #endif
         .refreshable {
             await app.agents?.loadSessions(agentID: address.agentID, view: address.view)
         }
@@ -330,6 +336,23 @@ struct SessionFolderPage: View {
     }
 
     private var titleText: String { folder?.name ?? "Folder" }
+
+    /// The way back to the workspace's list and the page's actions, where each platform's bar puts
+    /// them (as the project's sessions page places its own).
+    private var backPlacement: ToolbarItemPlacement {
+        #if os(iOS)
+        .topBarLeading
+        #else
+        .navigation
+        #endif
+    }
+    private var actionPlacement: ToolbarItemPlacement {
+        #if os(iOS)
+        .topBarTrailing
+        #else
+        .primaryAction
+        #endif
+    }
 
     /// ⋯ — Rename… and Delete Folder…, the same two the row's long-press menu offers (§3.4).
     private var folderMenu: some View {
@@ -555,4 +578,3 @@ extension View {
         modifier(SessionFolderManagement(renaming: renaming, deleting: deleting))
     }
 }
-#endif
