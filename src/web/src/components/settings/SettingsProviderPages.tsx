@@ -12,7 +12,7 @@ import { accountPoolList, poolAccessQuery, sharedPoolsQuery } from '../../lib/sh
 import { useToast } from '../../lib/toast';
 import { AccountPools, NewPoolModal, PoolHint } from '../AccountPools';
 import { KeyImpact } from '../KeyImpact';
-import { ProviderPills, ProviderTile, vendorName, vendorOf } from '../ProviderGallery';
+import { ProviderTile, vendorName, vendorOf } from '../ProviderGallery';
 import { ProviderKeyRows } from '../ProviderKeyCards';
 import { Button } from '../ui/Button';
 import { useConfirm } from '../ui/ConfirmDialog';
@@ -21,8 +21,7 @@ import { SettingsCard, SettingsRow, SettingsSection } from './SettingsBlocks';
 
 /*
  * Settings' Providers group (owner's choice C1, docs/mocks/settings-redesign board-4): a page per
- * connected vendor with its API keys, the account pools using them and the vendors not connected yet,
- * and Account pools on a page of its own — what Infrastructure's API keys and Account pools sections
+ * connected vendor with its API keys and the account pools using them, and Account pools on a page of its own — what Infrastructure's API keys and Account pools sections
  * held, split by vendor.
  */
 
@@ -46,8 +45,7 @@ export function SettingsProvidersHome() {
 
 /**
  * /settings/providers/:vendor — one vendor's API keys: a row each (ProviderKeyRows), Add key in the
- * section's heading; the account pools any of them is in, each a row into the pools page; and the
- * vendors with no key yet, a pill each (ProviderPills).
+ * section's heading; and the account pools any of them is in, each a row into the pools page.
  */
 export function SettingsVendorPage() {
   const vendor = useParams().vendor ?? '';
@@ -145,9 +143,6 @@ export function SettingsVendorPage() {
         </SettingsSection>
       )}
 
-      <SettingsSection title="Not connected yet">
-        <ProviderPills />
-      </SettingsSection>
       {confirmHolder}
     </>
   );
