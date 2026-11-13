@@ -2702,6 +2702,30 @@ export interface TakeoverTurnLeasesResponse {
   status: RunStatus;
 }
 
+/** The most sessions one batch takeover may name. */
+export const BATCH_TAKEOVER_TURN_LEASES_MAX = 500;
+
+/** Runner process → control plane: the takeover above for many sessions in one request, as a
+ *  restarted runner makes for the sessions a reclaim handed back. Each row is judged exactly as
+ *  the single route judges it, and one row's refusal does not refuse the others. */
+export interface BatchTakeoverTurnLeasesRequest {
+  leaseOwner: string;
+  sessions: Array<{ sessionId: string; expectedLeaseOwner?: string | null }>;
+}
+
+/** One row's answer, in request order: the status the single route answers with, or the
+ *  status code and reason it refuses with (403 not this runner's, 409 a conflict). */
+export interface BatchTakeoverTurnLeasesResult {
+  sessionId: string;
+  status?: RunStatus;
+  error?: { statusCode: number; message: string; code?: string };
+}
+
+export interface BatchTakeoverTurnLeasesResponse {
+  ok: true;
+  results: BatchTakeoverTurnLeasesResult[];
+}
+
 /** One open interactive session a restarted runner must retain. Only RUNNING is
  *  re-attached as an active turn; queued/idle sessions are registered cold so their
  *  worktree survives and a later claim can resume them without spawning eagerly. */

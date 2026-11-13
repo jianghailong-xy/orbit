@@ -111,7 +111,7 @@ export function WikiDirectory({
   const section = useDocSection(openDoc);
 
   return (
-    <nav className="wk-toc" aria-label={WIKI_CONTENTS}>
+    <nav className="wk-toc autohide-scrollbar" aria-label={WIKI_CONTENTS}>
       <Link className={`wk-toc-item${at.view === 'home' ? ' active' : ''}`} to={wikiSpacePath(spaceSlug)}>
         <span className="tp-ico">
           <HomeOutlined />
