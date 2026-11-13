@@ -11,7 +11,7 @@
   flex: 0 0 272px;
   overflow-y: auto;
   padding: 18px 12px 24px;
-  background: var(--bg-subtle);
+  background: var(--bg-base);
   border-right: 1px solid var(--border-subtle);
 }
 
@@ -47,11 +47,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 32px;
-  padding: 0 10px;
+  height: 34px;
+  padding: 0 8px;
   margin-bottom: 18px;
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  background: var(--fill-muted);
+  background: var(--bg-sunken);
   color: var(--text-3);
 }
 .settings-search input {
@@ -78,10 +79,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 26px;
+  height: 32px;
   padding: 0 8px;
-  font-size: 12px;
-  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
 }
 .settings-nav-add {
   display: inline-flex;
@@ -104,11 +106,11 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 30px;
+  height: 36px;
   padding: 0 8px;
   border-radius: 6px;
   color: var(--text-1);
-  font-size: 13px;
+  font-size: 14px;
   text-decoration: none;
 }
 .settings-nav-row:hover {
@@ -116,8 +118,12 @@
   color: var(--text-1);
 }
 .settings-nav-row.active {
-  background: var(--bg-hover-strong);
-  font-weight: 500;
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.settings-nav-row.active .settings-nav-icon,
+.settings-nav-row.active .settings-nav-meta {
+  color: var(--brand);
 }
 .settings-nav-icon {
   display: inline-flex;
