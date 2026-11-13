@@ -312,13 +312,16 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
     const state = withSessionState(row);
 
     // The root: every old field, then the tail page (200) and hasMore, and the link's own three
-    // (kind, include, sharedAt) — nothing else.
+    // (kind, include, sharedAt), and what the session is still doing while parked (`activity`, one of
+    // TURN, BACKGROUND_JOB or WAITING, or null: 29fc026c1, read by the shared page to say it is ongoing)
+    // — nothing else.
     const root = await visit(at(''));
     assert.equal(root.status, 200, root.body.toString());
     assert.deepEqual(
       Object.keys(root.json).sort(),
-      [...OLD_FIELDS, ...LINK_FIELDS, 'events', 'hasMore', 'agentName'].sort(),
+      [...OLD_FIELDS, ...LINK_FIELDS, 'events', 'hasMore', 'agentName', 'activity'].sort(),
     );
+    assert.ok(root.json.activity === null || ['TURN', 'BACKGROUND_JOB', 'WAITING'].includes(root.json.activity));
     assert.equal(root.json.kind, 'SESSION');
     assert.equal(root.json.title, 'Draw the mock and show me');
     assert.equal(root.json.workspaceName, workspaceName);
@@ -478,8 +481,8 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
 
     // The header is the root's — its fields, as the root answers them, and nothing else.
     const root = await visit(at(''));
-    assert.deepEqual(Object.keys(rest.json).sort(), [...OLD_FIELDS, 'agentName', 'events', 'after'].sort());
-    for (const field of [...OLD_FIELDS, 'agentName']) assert.deepEqual(rest.json[field], root.json[field], field);
+    assert.deepEqual(Object.keys(rest.json).sort(), [...OLD_FIELDS, 'agentName', 'activity', 'events', 'after'].sort());
+    for (const field of [...OLD_FIELDS, 'agentName', 'activity']) assert.deepEqual(rest.json[field], root.json[field], field);
 
     // A conversation that moves on: the next read holds what it added and how it stands now.
     const liveToken = newToken();
