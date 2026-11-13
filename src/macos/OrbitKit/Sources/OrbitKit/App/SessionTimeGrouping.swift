@@ -21,8 +21,8 @@ public struct SessionTimeSection: Identifiable, Equatable, Sendable {
 /// leading "Pinned" section, and the rest are grouped by the calendar day of their last activity.
 public enum SessionTimeGrouping {
     /// Group a **console-sorted** list (pinned-first, then most-recent activity — see `SessionFilter`)
-    /// into ordered sections. When `pinnedFirst` (Open, where pinning applies — mirrors the
-    /// row's `showsPin`), pinned sessions become a leading "Pinned" section in their given order;
+    /// into ordered sections. When `pinnedFirst` (Open, where pinning applies), pinned sessions
+    /// become a leading "Pinned" section in their given order;
     /// every other session buckets by the calendar day of `lastTurnAt ?? createdAt` into Today /
     /// Yesterday / 2–7 days ago / 8–30 days ago / Older. Order within each bucket is preserved
     /// (so recency still holds), empty buckets are dropped, and a session with no/unparseable
