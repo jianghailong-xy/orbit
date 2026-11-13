@@ -37,7 +37,7 @@ final class MainCheckoutTests: XCTestCase {
     /// Every result the fixture holds reads, word for word, as the shared builder writes it.
     func testEveryFixtureResultReadsAsTheSharedLine() throws {
         let results = try XCTUnwrap(Self.fixture()["results"] as? [[String: Any]])
-        XCTAssertEqual(results.count, 23)
+        XCTAssertEqual(results.count, 24)
         for sample in results {
             let name = sample["name"] as? String ?? "?"
             let result = try Self.decode(MainCheckoutActionResult.self, try XCTUnwrap(sample["result"]))
