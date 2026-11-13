@@ -584,6 +584,11 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// §10.1's fifth column with `fixAction` folded in — what the refusal was about, in the ref's
     /// and the runner's own words.
     public let sourceRefusalDetail: SourceRefusalDetail?
+    /// SR18's sentence for a session of a task forked from another session
+    /// (docs/task-fork-from-session-design.md §2.3), finished by the server — "Forked from session
+    /// «title» at abc1234 (includes uncommitted changes)" — and drawn as it is. The detail read's
+    /// only: nil on a list row, on a task that was not forked, and from an older server.
+    public let forkSource: String?
     /// When the server will re-send the message a self-healing failure killed — a spent quota, a
     /// 529, a runner that vanished mid-turn — or nil when nothing is armed. What makes a FAILED
     /// row not yet an outcome: the run continues on its own when this fires, so `isSettled` (and
@@ -751,6 +756,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         sourceRefusalCode = try values.decodeIfPresent(String.self, forKey: .sourceRefusalCode)
         sourceRefusalDetail = try? values.decodeIfPresent(SourceRefusalDetail.self,
                                                           forKey: .sourceRefusalDetail)
+        forkSource = try? values.decodeIfPresent(String.self, forKey: .forkSource)
         retryAt = try values.decodeIfPresent(String.self, forKey: .retryAt)
         agent = try values.decodeIfPresent(SessionAgentRef.self, forKey: .agent)
         tags = try values.decodeIfPresent([SessionTag].self, forKey: .tags)
@@ -786,7 +792,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 engineTurnActive: Bool? = nil,
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
                 sourceState: String? = nil, sourceRefusalCode: String? = nil,
-                sourceRefusalDetail: SourceRefusalDetail? = nil,
+                sourceRefusalDetail: SourceRefusalDetail? = nil, forkSource: String? = nil,
                 pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil,
                 currentTurnStartedAt: String? = nil,
                 tags: [SessionTag]? = nil, retryAt: String? = nil,
@@ -868,6 +874,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.sourceState = sourceState
         self.sourceRefusalCode = sourceRefusalCode
         self.sourceRefusalDetail = sourceRefusalDetail
+        self.forkSource = forkSource
         self.retryAt = retryAt
         self.agent = agent
         self.pinnedAt = pinnedAt
