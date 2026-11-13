@@ -515,6 +515,11 @@ type HeartbeatResponse struct {
 	// response until the control plane records a check made at or after it. Nil on older control
 	// planes and whenever nobody is asking.
 	RegionCheckRequest *ClaudeRegionCheckRequest `json:"regionCheckRequest,omitempty"`
+	// Remote SubAgent runs this runner is the target of (docs/subagent-design.md §10.2, §10.3): the ones to claim,
+	// and the ones to stop because their parent session stopped them or ended (subagent_remote.go). Absent when
+	// there are none, and from older control planes.
+	RemoteSubagentRuns []string `json:"remoteSubagentRuns,omitempty"`
+	StopSubagentRunIDs []string `json:"stopSubagentRunIds,omitempty"`
 }
 
 // StorageBudget is the storage a runner's checkouts may take where statfs cannot say: a Docker local

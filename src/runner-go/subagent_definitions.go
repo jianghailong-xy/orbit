@@ -240,6 +240,17 @@ func subagentStartBody(args map[string]interface{}, def subagentDefinition, tool
 			body[key] = v
 		}
 	}
+	// Another workspace (docs/subagent-design.md §10.1): by name, or by the capabilities the work needs. Its runner
+	// does not have this machine's copy of the brief, so the prompt goes along.
+	if workspace := strings.TrimSpace(getString(args, "workspace")); workspace != "" {
+		body["workspace"] = workspace
+	}
+	if needs := subagentNeeds(args); len(needs) > 0 {
+		body["needs"] = needs
+	}
+	if subagentWantsRemote(args) {
+		body["prompt"] = getString(args, "prompt")
+	}
 	// A built-in's tier is the type's default, which the router already knows; only a file's are sent.
 	if !def.builtin() {
 		if def.Model != "" {
@@ -261,4 +272,33 @@ func subagentSystemPrompt(def subagentDefinition) string {
 		return subagentPreamble
 	}
 	return subagentPreamble + "\n\n" + def.Prompt
+}
+
+// subagentNeeds is the call's needs: runner capabilities, trimmed, without blanks. A single string counts as one.
+func subagentNeeds(args map[string]interface{}) []string {
+	var needs []string
+	switch v := args["needs"].(type) {
+	case string:
+		if n := strings.TrimSpace(v); n != "" {
+			needs = append(needs, n)
+		}
+	case []interface{}:
+		for _, item := range v {
+			if n := strings.TrimSpace(asString(item)); n != "" {
+				needs = append(needs, n)
+			}
+		}
+	case []string:
+		for _, item := range v {
+			if n := strings.TrimSpace(item); n != "" {
+				needs = append(needs, n)
+			}
+		}
+	}
+	return needs
+}
+
+// subagentWantsRemote is whether the call asks for another workspace, by name or by needs.
+func subagentWantsRemote(args map[string]interface{}) bool {
+	return strings.TrimSpace(getString(args, "workspace")) != "" || len(subagentNeeds(args)) > 0
 }

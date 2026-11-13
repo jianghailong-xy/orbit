@@ -56,8 +56,9 @@ export function useSubagentRuns(sessionId: string, events: readonly RunEvent[]):
 }
 
 /**
- * The block's grey meta: `M · Opus 5.5 · high`, then ` · 3m 12s · $0.21` once the run has ended. Null when
- * there is nothing to say yet.
+ * The block's grey meta: `M · Opus 5.5 · high`, then ` · on orbit-macos` for a run on another workspace
+ * (docs/subagent-design.md §10.3), then ` · 3m 12s · $0.21` once the run has ended. Null when there is nothing
+ * to say yet.
  */
 export function subagentMeta(run: SubagentRunView | undefined): string | null {
   if (!run) return null;
@@ -65,6 +66,7 @@ export function subagentMeta(run: SubagentRunView | undefined): string | null {
   if (run.level) parts.push(run.level);
   if (run.modelLabel ?? run.model) parts.push((run.modelLabel ?? run.model)!);
   if (run.effort) parts.push(run.effort);
+  if (run.workspaceName) parts.push(`on ${run.workspaceName}`);
   if (run.status !== 'RUNNING' && run.endedAt) {
     parts.push(wikiDuration((Date.parse(run.endedAt) - Date.parse(run.createdAt)) / 1000));
     parts.push(`$${run.costUsd.toFixed(2)}`);
@@ -75,12 +77,15 @@ export function subagentMeta(run: SubagentRunView | undefined): string | null {
 /**
  * The opened block's first line, after its bold `Why`: the run's one-clause Why — the tier, the pick with its
  * provider once and why, any move, how many candidates were removed — or, for a row from before it was kept,
- * the router's reasons in order.
+ * the router's reasons in order. A run on another workspace starts with how the workspace was chosen.
  */
 export function subagentWhy(run: SubagentRunView | undefined): string | null {
   if (!run) return null;
-  if (run.why) return run.why;
-  return run.reasons?.length ? run.reasons.join(' · ') : null;
+  const why = run.why ?? (run.reasons?.length ? run.reasons.join(' · ') : null);
+  // A run on another workspace leads with how that workspace was chosen (§10.3): its first reason.
+  const chosen = run.workspaceName ? run.reasons?.[0] : undefined;
+  if (chosen && why && !why.startsWith(chosen)) return `${chosen} · ${why}`;
+  return why;
 }
 
 /** What the Why line opens to: every reason the router gave, then every candidate it removed with its reason. */

@@ -182,7 +182,11 @@ func delegateToolDescriptor(obj func(map[string]interface{}, ...string) map[stri
 			" a turn in this session with the result when it ends: end your turn then instead of polling. With" +
 			" background: true it returns { runId, status: \"running\" } at once and Orbit wakes this session with the" +
 			" result when it ends. SubAgents share your working tree; give parallel ones disjoint files. A SubAgent cannot" +
-			" ask the user anything and cannot delegate further. " + subagentTypesDescription(defs),
+			" ask the user anything and cannot delegate further. With workspace (another workspace of this repository, by" +
+			" name) or needs (runner capabilities such as \"os:darwin\"), it runs on that workspace's machine instead:" +
+			" remote SubAgents run on that workspace's own HEAD and return text only. They do not see your uncommitted" +
+			" changes (commit and push first if they must), and nothing they change comes back; the result names what" +
+			" they discarded. " + subagentTypesDescription(defs),
 		"inputSchema": obj(map[string]interface{}{
 			"description": str("3 to 8 words saying what the SubAgent does; shown on its block."),
 			"prompt":      str("The complete brief. The SubAgent has none of your context: say what to do, where, and what to hand back."),
@@ -197,7 +201,12 @@ func delegateToolDescriptor(obj func(map[string]interface{}, ...string) map[stri
 				"type":        "boolean",
 				"description": "Return at once and be woken with the result when the SubAgent ends (default false, or the type's is_background).",
 			},
-			"resume": str("The runId of a finished SubAgent of this session to continue: it keeps its own conversation and gets prompt as its next message."),
+			"resume":    str("The runId of a finished SubAgent of this session to continue: it keeps its own conversation and gets prompt as its next message."),
+			"workspace": str("Run on another workspace of this repository, by name (e.g. one on a Mac). Runs on that workspace's own HEAD and returns text only."),
+			"needs": map[string]interface{}{
+				"type": "array", "items": map[string]interface{}{"type": "string"},
+				"description": "Runner capabilities the work needs, e.g. [\"os:darwin\"]: Orbit picks a workspace of this repository whose runner reports them. Runs on that workspace's own HEAD and returns text only.",
+			},
 		}, "description", "prompt"),
 	}
 }
@@ -223,7 +232,7 @@ func (s *mcpServer) callDelegate(args map[string]interface{}, toolUseID string) 
 	// Claude Code says which call this is (_meta "claudecode/toolUseId"); for an engine that does not, the runner
 	// reads the call from the session's own stream (delegateCallLog).
 	forward := map[string]interface{}{"toolUseId": toolUseID}
-	for _, key := range []string{"description", "prompt", "type", "size", "sizeReason", "model", "background", "resume"} {
+	for _, key := range []string{"description", "prompt", "type", "size", "sizeReason", "model", "background", "resume", "workspace", "needs"} {
 		if v, ok := args[key]; ok {
 			forward[key] = v
 		}
@@ -279,14 +288,18 @@ func (s *mcpServer) callDelegate(args map[string]interface{}, toolUseID string) 
 }
 
 func delegateResult(r subagentReport) map[string]interface{} {
-	return toolResult(prettyJSON(subagentJSON(map[string]interface{}{
+	out := map[string]interface{}{
 		"runId":        r.RunID,
 		"status":       r.Status,
 		"result":       r.Result,
 		"changedFiles": nonNilStrings(r.ChangedFiles),
 		"model":        r.Model,
 		"costUsd":      r.CostUsd,
-	})), r.Status == subagentStatusFailed)
+	}
+	if r.Workspace != "" {
+		out["workspace"] = r.Workspace
+	}
+	return toolResult(prettyJSON(subagentJSON(out)), r.Status == subagentStatusFailed)
 }
 
 func subagentJSON(v interface{}) json.RawMessage {
@@ -311,6 +324,8 @@ type subagentReport struct {
 	ChangedFiles []string `json:"changedFiles,omitempty"`
 	Model        string   `json:"model,omitempty"`
 	CostUsd      float64  `json:"costUsd"`
+	// Workspace is the workspace a remote run runs on; empty for one on this machine.
+	Workspace string `json:"workspace,omitempty"`
 }
 
 // subagentRun is one SubAgent the runner hosts for a session.
@@ -341,12 +356,15 @@ type subagentRun struct {
 	cmd        *exec.Cmd
 	stopReason string
 	cancel     context.CancelFunc
+	// workspace names the workspace a remote run runs on (§10): its child is another runner's, and this one only
+	// follows its events. Empty for a run on this machine.
+	workspace string
 }
 
 func (r *subagentRun) reportLocked() subagentReport {
 	return subagentReport{
 		RunID: r.id, Status: r.status, Result: r.result, ChangedFiles: append([]string(nil), r.changed...),
-		Model: r.model, CostUsd: r.costUsd,
+		Model: r.model, CostUsd: r.costUsd, Workspace: r.workspace,
 	}
 }
 
@@ -569,6 +587,11 @@ type subagentCreateResponse struct {
 	Status   string          `json:"status"`
 	Decision json.RawMessage `json:"decision"`
 	Exec     AgentExecConfig `json:"exec"`
+	// Remote is set, and Exec empty, for a run the server placed on another workspace (§10).
+	Remote *struct {
+		WorkspaceID   string `json:"workspaceId"`
+		WorkspaceName string `json:"workspaceName"`
+	} `json:"remote,omitempty"`
 }
 
 // subagentRecord is what the runner keeps on disk of a finished run so resume finds its conversation after a
@@ -669,6 +692,9 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 		if err := subagentResumeRefusal(resumeFrom); err != nil {
 			return subagentReport{}, err
 		}
+		if subagentWantsRemote(args) {
+			return subagentReport{}, errors.New("resume continues a SubAgent on this machine; leave out workspace and needs, or start a new SubAgent with the full brief")
+		}
 	}
 	if strings.TrimSpace(toolUseID) == "" {
 		// An engine that does not say which call this is: the call its engine announced in the session's stream.
@@ -700,6 +726,21 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 		s.subagents.mu.Lock()
 		defer s.subagents.mu.Unlock()
 		return existing.reportLocked(), nil
+	}
+	if created.Remote != nil {
+		// Another workspace's runner runs it (§10): this one follows its events into the session's stream.
+		ctx, cancel := context.WithCancel(context.Background())
+		run := &subagentRun{
+			id: created.RunID, toolUseID: toolUseID, description: getString(args, "description"), background: background,
+			kind: def.Name, done: make(chan struct{}), startedAt: time.Now(), status: subagentStatusRunning, cancel: cancel,
+			workspace: firstNonEmpty(created.Remote.WorkspaceName, created.Remote.WorkspaceID),
+		}
+		s.subagents.add(run)
+		s.bg.subagentsLive.Add(1)
+		go s.followRemoteSubagent(ctx, run)
+		s.subagents.mu.Lock()
+		defer s.subagents.mu.Unlock()
+		return run.reportLocked(), nil
 	}
 	engine := subagentEngine(created.Exec, s.job)
 	if resumeFrom != nil && resumeFrom.Engine != "" {
@@ -955,7 +996,10 @@ func (s *bgJobService) stopSubagents(reason string) {
 			r.stopReason = reason
 		}
 		running = append(running, r)
-		if r.cmd != nil {
+		if r.workspace != "" {
+			// Another runner hosts its child: the server tells it to stop, with the same grace.
+			go s.requestRemoteStop(r.id)
+		} else if r.cmd != nil {
 			_ = interruptSessionProcessGroup(r.cmd)
 		}
 	}

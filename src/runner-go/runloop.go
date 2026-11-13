@@ -1296,6 +1296,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// job the image before handed on as it re-executed is still this process's child, and until the
 	// pool holds it again the sweep takes its checkout for one nobody is using.
 	pool.adoptRecordedJobs()
+	// Remote SubAgents a previous process was hosting when it ended unreported: worktrees removed, runs INTERRUPTED.
+	go recoverRemoteSubagents(t)
 	// A copy of the Google sign-in lives in a session's directory only while an agy runs on it; the
 	// copies a crash or a kill left behind go before any session starts again.
 	pruneAntigravityTokenCopies()
@@ -1840,6 +1842,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					snapshot.cancel()
 				}
 			}
+			// Remote SubAgents this runner is the target of: claimed while it takes work, stopped whenever asked.
+			remoteSubagents.onHeartbeat(t, resp.RemoteSubagentRuns, resp.StopSubagentRunIDs, draining)
 			if loopCtx.Err() != nil {
 				// Drain began after the server claimed this cycle's git commands, so nothing
 				// below will run them and this process image is about to be replaced. Hand
@@ -2790,6 +2794,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// A start still running registers its supervisor (it observes the cancelled loop context and
 	// detaches), and the drain below must see it.
 	startupStarts.wait()
+	// The remote SubAgents this process hosts end with it, reported INTERRUPTED; beside the sessions' drain, which
+	// keeps the heartbeat beating meanwhile. One not reported in time is reported by the next start.
+	go remoteSubagents.stopAll(subagentStopRunnerStopped)
 	logln("runner stopping; draining session supervisors...")
 	// Keep the heartbeat goroutine alive through the drain: the server's reaper force-fails
 	// any live session whose runner has been silent >90s, so going quiet while we finish an
