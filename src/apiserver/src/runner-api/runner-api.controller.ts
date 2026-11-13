@@ -65,6 +65,8 @@ import {
   IntegrationJobRelay,
 } from './integration-job-relay';
 import { WikiRepoOpRefused, WikiRepoOps, WIKI_REPO_OP_REFUSAL_STATUS } from '../wiki-worker/wiki-repo-ops';
+import { MainCheckoutService } from '../workspaces/main-checkout.service';
+import type { MainCheckoutActionResult, MainCheckoutSnapshotAnswer } from '@orbit/shared';
 import {
   AgentProvider,
   openCodeKeyOf,
@@ -462,7 +464,7 @@ import { antigravityGoogleLoginRefusal, antigravitySignInUnderWay } from '../com
 import { RUNNER_OS_HEADER, withRunnerOs } from '../common/runner-platform';
 import { loginCodeRelay } from '../runners/login-code-relay';
 import { readDirProbeResult } from '../runners/dir-probe';
-import { readRunnerRepoHealth, sanitizeRunnerRepoHealth } from '../common/runner-repo-health';
+import { readRunnerRepoHealth, sanitizeRunnerRepoHealth, workspacesWithChangedRepoHealth } from '../common/runner-repo-health';
 import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
 import { claimDrainWaitingPush } from '../common/runner-drain-waiting';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
@@ -1606,6 +1608,12 @@ export class RunnerApiController {
      * without it the answer leaves both fields out, which states nothing.
      */
     @Optional() private readonly ownerSecrets?: OwnerSecretsService,
+    /**
+     * Main checkout reads and actions (workspaces/main-checkout.service.ts): the heartbeat's half of the relay and the
+     * two answer routes. `@Optional()` like the rest: a control plane built without it hands none out, and the two
+     * routes answer 503.
+     */
+    @Optional() private readonly mainCheckout?: MainCheckoutService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -1936,6 +1944,12 @@ export class RunnerApiController {
     if (row.landingNamed) assertEngineSessionRow({ sessionKind: 'LANDING' });
     let verdict = linkBeatVerdict(runnerId, row, digests, supervised.length);
     if (verdict.answer === 'REPORT') {
+      // A beat whose checkout report changed is written here, not by the full reconcile: read what it overwrites, so
+      // the owner's clients are told which workspaces' checkouts moved, as reconcileHeartbeat tells them.
+      const reposChanged = verdict.reports.includes('repos') && dto?.repos != null;
+      const priorRepoHealth = reposChanged
+        ? (await this.prisma.runner.findUnique({ where: { id: runnerId }, select: { repoHealth: true } }))?.repoHealth
+        : undefined;
       try {
         await writeLinkBeatReports(this.prisma, {
           runnerId,
@@ -1947,6 +1961,11 @@ export class RunnerApiController {
           storedPlanUsage: row.planUsage,
           now: new Date(),
         });
+        if (reposChanged) {
+          for (const workspaceId of workspacesWithChangedRepoHealth(priorRepoHealth, sanitizeRunnerRepoHealth(dto.repos) ?? [])) {
+            this.realtime.publishWorkspaceRepoHealthChanged(admission.ownerId, workspaceId);
+          }
+        }
       } catch (error) {
         if (!(error instanceof LinkReportUnwritable)) throw error;
         // What one statement cannot write, the full reconcile writes, and refuses, as an HTTPS beat does.
@@ -2076,6 +2095,14 @@ export class RunnerApiController {
     const storedFacts = linkBeat ? readFactsHash(linkBeat.row.factsHash) : null;
     const runnerRowUnchanged = !!linkBeat && !!storedFacts && !managedSleepOn
       && RUNNER_ROW_FACTS.every((kind) => storedFacts[kind] === linkBeat.digests.facts[kind]);
+    // The checkout health this beat overwrites, read only when it reports one and the row is written: a change is told
+    // to the owner's clients below, which is how a Main checkout bar follows an action without a reload.
+    const priorRepoHealth =
+      dto?.repos != null && !runnerRowUnchanged
+        ? 'repoHealth' in runner
+          ? (runner as { repoHealth?: unknown }).repoHealth
+          : (await this.prisma.runner.findUnique({ where: { id: runner.id }, select: { repoHealth: true } }))?.repoHealth
+        : undefined;
     const updated = runnerRowUnchanged
       ? durableBeatDue(runner.lastHeartbeatAt, beatAt)
         ? await this.prisma.runner.update({ where: { id: runner.id }, data: { lastHeartbeatAt: beatAt } }).catch(beatLost)
@@ -2154,6 +2181,12 @@ export class RunnerApiController {
           : {}),
       },
     }).catch(beatLost);
+    if (dto?.repos != null && !runnerRowUnchanged) {
+      // Advisory like every realtime nudge: a dropped one leaves the bar to the next read of the workspace list.
+      for (const workspaceId of workspacesWithChangedRepoHealth(priorRepoHealth, updated.repoHealth)) {
+        this.realtime.publishWorkspaceRepoHealthChanged(updated.ownerId, workspaceId);
+      }
+    }
     // Heard over HTTPS, or forwarded by the link gateway: either way this beat sent its facts in full
     // above, so none of the hashes a link heartbeat may carry instead. A forwarded beat names the gateway
     // node holding the connection (X-Orbit-Link-Gateway-Id). A link beat the beat statement recorded is
@@ -2256,6 +2289,19 @@ export class RunnerApiController {
     // same shape as the integration queue above and for the same reason — the claim is a
     // compare-and-set on a row, so an operation named here is already RUNNING and is nobody else's —
     // and on its own try, so a failure costs this beat's operations and not the heartbeat itself.
+    // Main checkout reads and actions (docs/main-checkout-git-contract.md §10), claimed once each, the same way and
+    // on their own try: a failure costs this beat's requests, which a later beat claims while they have not expired.
+    let mainCheckoutRequests: RunnerHeartbeatResponse['mainCheckoutRequests'];
+    try {
+      const claimed = (await this.mainCheckout?.dispatch({
+        runnerId: runner.id,
+        capabilities: reportedCapabilities,
+        draining,
+      })) ?? [];
+      if (claimed.length > 0) mainCheckoutRequests = claimed;
+    } catch (error) {
+      this.logger.warn(`runner ${runner.id}: main checkout requests skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+    }
     let wikiRepoOps: RunnerHeartbeatResponse['wikiRepoOps'];
     try {
       const claimed = (await this.wikiRepoOps?.dispatch({
@@ -2607,6 +2653,7 @@ export class RunnerApiController {
       // Present only when this beat claimed something, for the same reason.
       ...(integrationJobs ? { integrationJobs } : {}),
       ...(wikiRepoOps ? { wikiRepoOps } : {}),
+      ...(mainCheckoutRequests ? { mainCheckoutRequests } : {}),
       // Only to the instance being drained to sleep: every other runner's response keeps its shape.
       ...(managedBeat.sleep ? { managedSleep: managedBeat.sleep } : {}),
       // Only to a managed instance whose volume the channel has measured: every other runner's response keeps its shape.
@@ -3132,6 +3179,39 @@ export class RunnerApiController {
       },
     });
     return { ok: true };
+  }
+
+  /** The main checkout relay, or the reason an answer to it cannot be taken without it. */
+  private mainCheckoutRelay(): MainCheckoutService {
+    if (!this.mainCheckout) {
+      throw new HttpException({ code: 'MAIN_CHECKOUT_RELAY_UNAVAILABLE', message: 'this control plane runs no main checkout relay' }, 503);
+    }
+    return this.mainCheckout;
+  }
+
+  /** Runner → control plane: the snapshot (and patches) a main checkout read asked for (contract §10). */
+  @UseGuards(RunnerAuthGuard)
+  @Post('main-checkout/:id/snapshot')
+  @HttpCode(200)
+  mainCheckoutSnapshot(
+    @CurrentRunner() runner: { id: string },
+    @Param('id', PublicIdPipe) id: string,
+    @Body() body: MainCheckoutSnapshotAnswer,
+  ): Promise<{ accepted: boolean }> {
+    return this.mainCheckoutRelay().snapshotAnswer(runner.id, id, body);
+  }
+
+  /** Runner → control plane: how a main checkout action went (contract §6, §10). A repeat, or a result after the
+   *  control plane already finished the request, is accepted and changes nothing it decided. */
+  @UseGuards(RunnerAuthGuard)
+  @Post('main-checkout/:id/result')
+  @HttpCode(200)
+  mainCheckoutResult(
+    @CurrentRunner() runner: { id: string },
+    @Param('id', PublicIdPipe) id: string,
+    @Body() body: MainCheckoutActionResult,
+  ): Promise<{ accepted: boolean }> {
+    return this.mainCheckoutRelay().actionResult(runner.id, id, body);
   }
 
   /**
@@ -5116,6 +5196,10 @@ export class RunnerApiController {
               -- does have to replace the process the running turn is executing in.
               (turn."kind" IN ('interrupt', 'end', 'diff', 'setconfig')
                 AND (turn."status" = 'PENDING' OR (turn."status" = 'IN_FLIGHT' AND turn."lease_deadline_at" < now())))
+              -- notice is a main checkout result line (docs/main-checkout-git-contract.md §10.3) the
+              -- runner writes as a system event under its own numbering: no engine, no turn, so it
+              -- lands at once like the control turns above, and is answered as it is handed out.
+              OR (turn."kind" = 'notice' AND turn."status" = 'PENDING')
               -- withdraw lands at once for the same reason interrupt does: the steer it names is
               -- waiting inside the running turn, and somebody is waiting on the answer. Only while
               -- fresh: past the window it is past the point the request that filed it waits to,
