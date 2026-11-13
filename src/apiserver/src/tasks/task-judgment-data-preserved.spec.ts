@@ -2911,17 +2911,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0517 adds the email_outbox table, its indexes and its foreign key to "user" only; no preserved rows,
       // triggers or DONE fence change, and no row is written.
       '0517_email_outbox',
-      // 0519 creates `key_gateway_token` only; no existing table, trigger or DONE fence is touched.
-      '0519_key_gateway_token',
       // 0519 adds two nullable wiki_maintenance_run columns and one defaulted wiki_cursor counter; no preserved rows,
       // triggers or DONE fence change.
       '0519_wiki_repo_attention',
-      // 0520 adds a nullable `model_provider.spent_until` only; no preserved row, trigger or DONE fence changes.
-      '0520_model_provider_spent_until',
       // 0521 adds a defaulted wiki_repo_snapshot column and its CHECK only; no preserved rows, triggers or DONE fence change.
       '0521_wiki_repo_snapshot_source',
-      // 0525 creates `key_gateway_usage` only; no existing table, trigger or DONE fence is touched.
-      '0525_key_gateway_usage',
       // 0530 swaps two CHECKs and lets a probe's wiki_repo_op name no job; no preserved rows, triggers or DONE fence change.
       '0530_wiki_repo_probe',
       // 0535 adds project's non-code mark, who wrote it and when, and one CHECK; no preserved rows, triggers or DONE
@@ -2957,7 +2951,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // rebuilds 0386's pending-move index NULLS NOT DISTINCT, and restates 0389's
       // task_claimed_project_move_guard with the target compared IS NOT DISTINCT FROM. No preserved
       // rows, triggers or DONE fence change, and no row is written.
-      '0610_project_handoff_move_out'],
+      '0610_project_handoff_move_out',
+      // 0611 creates `key_gateway_token` only; no existing table, trigger or DONE fence is touched.
+      '0611_key_gateway_token',
+      // 0612 adds a nullable `model_provider.spent_until` only; no preserved row, trigger or DONE fence changes.
+      '0612_model_provider_spent_until',
+      // 0613 creates `key_gateway_usage` only; no existing table, trigger or DONE fence is touched.
+      '0613_key_gateway_usage'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -56,7 +56,7 @@ export interface AnthropicGatewayCaller {
     models: unknown;
     /** INVALID once OpenAI refused it (a 401 here), until a new secret clears it. */
     keyCheckState: string | null;
-    /** Until when OpenAI said its budget is spent (migration 0520). */
+    /** Until when OpenAI said its budget is spent (migration 0612). */
     spentUntil: Date | null;
   };
 }

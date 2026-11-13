@@ -7043,7 +7043,7 @@ model ModelProvider {
   // Cursor key is ever checked.
   keyCheckState String?   @map("key_check_state")
   keyCheckedAt  DateTime? @map("key_checked_at")
-  // An OpenAI key's spent budget (migration 0520): until when OpenAI said `insufficient_quota` for it, as
+  // An OpenAI key's spent budget (migration 0612): until when OpenAI said `insufficient_quota` for it, as
   // the /api/gw/anthropic gateway read it (docs/claude-engine-openai-gateway-design.md §5.4). The same
   // gateway sets keyCheckState INVALID when OpenAI refuses the key (401). NULL = not known to be spent;
   // cleared by the key's next answered request and by a new secret.
@@ -7059,9 +7059,9 @@ model ModelProvider {
   poolMemberships ProviderPoolMember[]
   // The retired provider names that resolve to this key (ProviderSlugAlias).
   aliases       ProviderSlugAlias[]
-  // The tokens Claude Code sessions on this key run with instead of it (migration 0519).
+  // The tokens Claude Code sessions on this key run with instead of it (migration 0611).
   gatewayTokens KeyGatewayToken[]
-  // What those sessions' answers used and cost, as the gateway read them (migration 0525).
+  // What those sessions' answers used and cost, as the gateway read them (migration 0613).
   gatewayUsage  KeyGatewayUsage[]
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
@@ -7283,7 +7283,7 @@ model PoolGatewayToken {
   @@map("pool_gateway_token")
 }
 
-/// The credential a Claude Code session on an OpenAI key runs with instead of the key (migration 0519,
+/// The credential a Claude Code session on an OpenAI key runs with instead of the key (migration 0611,
 /// docs/claude-engine-openai-gateway-design.md §4.2): the session reaches /api/gw/anthropic with it, and the
 /// gateway sends on with the key, which never leaves the server. Only `tokenHash` (SHA-256) is stored. Minted on
 /// each claim, reclaim and provider-switch reload; earlier tokens of the same session and key stay good, their
@@ -7308,7 +7308,7 @@ model KeyGatewayToken {
   @@map("key_gateway_token")
 }
 
-/// One answer OpenAI gave a Claude Code session on an OpenAI key through /api/gw/anthropic (migration 0525):
+/// One answer OpenAI gave a Claude Code session on an OpenAI key through /api/gw/anthropic (migration 0613):
 /// its tokens as the Responses stream's final event counted them, read off the stream as it passed, and their
 /// price from openai-prices.ts (design §5.5, decision D8). Per session and key; the same answer is also a
 /// `usage` row and part of `session.cost_usd`, written with it.

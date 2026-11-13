@@ -1,6 +1,6 @@
 /**
  * What the /api/gw/anthropic gateway writes on an OpenAI key's row when OpenAI refuses it or says its budget is
- * spent (docs/claude-engine-openai-gateway-design.md §5.4, migration 0520), on real PostgreSQL. The key is made
+ * spent (docs/claude-engine-openai-gateway-design.md §5.4, migration 0612), on real PostgreSQL. The key is made
  * by ProvidersService.create, the session claimed by QueueService (which mints the token), and the real controller
  * answers behind Nest; a scripted stand-in answers for OpenAI.
  *

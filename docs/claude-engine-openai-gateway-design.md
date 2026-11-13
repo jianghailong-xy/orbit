@@ -320,7 +320,7 @@ every one of them up to ten times over about three minutes, a 401 and a 429 incl
 | 403 | 403 `permission_error` "The key "<label>" may not use the model "<model>" on OpenAI: …" | fails the turn: "Failed to authenticate. API Error: 403 …" | nothing armed |
 | 404 / `model_not_found` | 404 `not_found_error` "OpenAI has no model "<model>" for the key "<label>": …" | fails the turn in its own words: "There's an issue with the selected model (<model>) …" | nothing armed |
 | 429 `rate_limit_exceeded` | waited out on the same key within `sendUpstream`'s bound (`rateLimitWait`: 4 sends, ≤ 20 s a wait, ≤ 40 s in all); then 429 `rate_limit_error` "OpenAI is rate-limiting the key "<label>", and was still refusing after the Orbit gateway waited: …" | inside the bound it never sees the limit. Past it, it fails the turn once: "API Error: Request rejected (429) · …" | auto-retry arms on the API-error ladder |
-| 429 `insufficient_quota` (and the rest of `SPENT_ERROR_CODES`) | 429 `rate_limit_error` "You hit your usage limit on the OpenAI key "<label>" · resets Dec 1, 12:00am (UTC)" | fails the turn once: "API Error: Request rejected (429) · You hit your usage limit …" | records `model_provider.spent_until` (migration 0520). It is the reset OpenAI names, else the first of next month (`spentUntil`). The next answered request clears it, and so does a new secret. Ingestion reads the words as a spent quota and arms the retry for that reset (below). |
+| 429 `insufficient_quota` (and the rest of `SPENT_ERROR_CODES`) | 429 `rate_limit_error` "You hit your usage limit on the OpenAI key "<label>" · resets Dec 1, 12:00am (UTC)" | fails the turn once: "API Error: Request rejected (429) · You hit your usage limit …" | records `model_provider.spent_until` (migration 0612). It is the reset OpenAI names, else the first of next month (`spentUntil`). The next answered request clears it, and so does a new secret. Ingestion reads the words as a spent quota and arms the retry for that reset (below). |
 | 5xx / overload / unreachable | 529 `overloaded_error` "OpenAI could not answer (<status>): …" | retries on its own and usually completes. If it still fails: "API Error: 529 …" | auto-retry re-sends on the API-error ladder |
 | `context_length_exceeded` | 400 `invalid_request_error` "prompt is too long: N tokens > M maximum" | compacts and retries the turn (§4.6) | |
 
@@ -346,7 +346,7 @@ so a failure there is answered with its status too, never as a 200. Either way, 
   (`responses-stream-tap.ts`), and never buffers the stream for it. An unstreamed answer is read the same way, from
   the body it already reads whole. The usage is priced with `openai-prices.ts` at the model and tier the answer
   names. One write per answer, after the answer is out, records it three ways: a `key_gateway_usage` row per session
-  and key (migration 0525: input with cached included, cached, output with reasoning included, reasoning, and
+  and key (migration 0613: input with cached included, cached, output with reasoning included, reasoning, and
   `cost_micros`), a `usage` row (input counted without the cached part, as a Claude row counts it, with the cached
   part as `cache_read_input_tokens`), and the cost added to `session.cost_usd`.
 - Claude Code's own `total_cost_usd` for a GPT id is its guess from its own price table. Under D8, turn-complete
