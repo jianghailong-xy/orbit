@@ -9,7 +9,9 @@ Orbit is a community-maintained, pre-1.0 open-source project. Support is provide
 | Installation or usage question | Search the [documentation](docs/README.md), then open a GitHub issue |
 | Reproducible bug | Use the bug-report issue form |
 | Feature or product proposal | Use the feature-request issue form |
-| Question, idea, release feedback, or showcase | Use [GitHub Discussions](https://github.com/jianghailong-xy/orbit/discussions) |
+| What changed in a release | Read the [changelog](CHANGELOG.md) and that tag's [release notes](https://github.com/jianghailong-xy/orbit/releases) |
+| Feedback on a release you upgraded to | Reply in the fixed [Release feedback discussion](https://github.com/jianghailong-xy/orbit/discussions/159) |
+| Question, idea, or showcase | Use [GitHub Discussions](https://github.com/jianghailong-xy/orbit/discussions) |
 | Contribution help | Comment on the relevant issue or pull request |
 | Security vulnerability | Follow [SECURITY.md](SECURITY.md); do not open a detailed public issue |
 | Community conduct concern | Follow [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) |
