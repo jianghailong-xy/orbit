@@ -149,7 +149,7 @@ export interface SessionSourceTaskRow {
   codeless: boolean;
   attemptGeneration: bigint;
   knownGoodSha: string | null;
-  /** Row PF's facts (migration 0605): all null on a task that was not forked. */
+  /** Row PF's facts (migration 0615): all null on a task that was not forked. */
   forkSessionId: string | null;
   forkRunnerId: string | null;
   forkSha: string | null;

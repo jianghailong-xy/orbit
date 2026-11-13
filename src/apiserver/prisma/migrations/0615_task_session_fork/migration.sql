@@ -1,5 +1,5 @@
--- 0605 — a task forked from the session that created it (docs/task-fork-from-session-design.md §2.3, §2.4;
--- docs/project-source-contract.md SR55, row PF of §4.1; task P1 of project 34vgIh3m69UttihIN8M38). 0606
+-- 0615 — a task forked from the session that created it (docs/task-fork-from-session-design.md §2.3, §2.4;
+-- docs/project-source-contract.md SR55, row PF of §4.1; task P1 of project 34vgIh3m69UttihIN8M38). 0616
 -- validates the CHECKs below.
 --
 -- WHAT IT ADDS
@@ -27,7 +27,7 @@
 --   3. The two fork refusal codes join `session_source_refusal_code_chk`, which 0231 keeps word for
 --      word equal to §10.1's table. Neither can land on a row (both are decided before a session
 --      exists, and the pin door refuses them), exactly as SOURCE_PROTOCOL_UNSUPPORTED cannot.
---   The CHECKs are added back NOT VALID, which every new and updated row is held to at once, and 0606
+--   The CHECKs are added back NOT VALID, which every new and updated row is held to at once, and 0616
 --   validates them. No row holds the new kind or a fork column before this migration, so every row
 --   passes as it passed the CHECKs these replace.
 --
@@ -47,7 +47,7 @@
 --     that cannot have both gives back what it had, waits 1 s and tries again; a deadlock is a failed
 --     try too. At most 45 tries, each at most 5 s: under 4 minutes, inside statement_timeout's 300 s.
 --   - Inside the try, catalog changes only: nullable columns with no default write no row, and NOT
---     VALID CHECKs scan none. The scans are 0606's, a file whose statements go one by one.
+--     VALID CHECKs scan none. The scans are 0616's, a file whose statements go one by one.
 -- Every statement is safe to run twice (IF NOT EXISTS, IF EXISTS).
 --
 -- BACKWARD COMPATIBLE
@@ -159,7 +159,7 @@ BEGIN
     EXCEPTION WHEN lock_not_available OR deadlock_detected THEN
       tries := tries + 1;
       IF tries >= 45 THEN
-        RAISE EXCEPTION '0605: "session" and "task" were not both free in 45 tries of 2 s each. Once what holds them has ended, mark the migration rolled back (prisma migrate resolve --rolled-back 0605_task_session_fork) and deploy again: it is safe to run twice.'
+        RAISE EXCEPTION '0615: "session" and "task" were not both free in 45 tries of 2 s each. Once what holds them has ended, mark the migration rolled back (prisma migrate resolve --rolled-back 0615_task_session_fork) and deploy again: it is safe to run twice.'
           USING ERRCODE = 'lock_not_available';
       END IF;
       PERFORM pg_sleep(1);

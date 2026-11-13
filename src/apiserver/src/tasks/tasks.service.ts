@@ -4469,7 +4469,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     heldListIds: ReadonlySet<string>,
     /** Migration 0232: what `dto.criterionKey` resolved to, or null when nothing was declared. */
     criterionDeclaration: { criterionDefinitionId: string; criterionRevision: number } | null,
-    /** Migration 0605: the fork `resolveTaskFork` checked, or null/absent for a task not forked. */
+    /** Migration 0615: the fork `resolveTaskFork` checked, or null/absent for a task not forked. */
     fork?: TaskForkColumns | null,
   ): Prisma.TaskUncheckedCreateInput {
     const sessionId = origin?.sessionId;
@@ -4519,7 +4519,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // SR5's declaration, made with the task: no reason is asked for a task's first statement of
       // what it is (`task-codeless.ts`). Omitted leaves the column default, false.
       codeless: dto.codeless,
-      // SR55's five facts, in this INSERT and never again (0605's `task_fork_guard`). Absent on a task
+      // SR55's five facts, in this INSERT and never again (0615's `task_fork_guard`). Absent on a task
       // that was not forked, so the columns stay out of the statement, as on every task before them.
       ...(fork ?? {}),
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,

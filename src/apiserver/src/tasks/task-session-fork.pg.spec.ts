@@ -13,7 +13,7 @@
  *   - FORK_SOURCE_NOT_REACHABLE, at the create door and again when a run would be placed elsewhere;
  *   - FORK_IN_BOUND_PROJECT, at the create door and again when the binding came after the task;
  *   - task_update refuses both: a reassignment to another machine and a move into a bound project;
- *   - the five fork columns cannot be rewritten (0605's guard), and a fork is only ever of the caller.
+ *   - the five fork columns cannot be rewritten (0615's guard), and a fork is only ever of the caller.
  *
  * Destructive only for the rows it makes (one owner, deleted at the end). Run it the way every pg spec
  * runs: `scripts/run-pg-spec.sh src/apiserver/src/tasks/task-session-fork.pg.spec.ts`.
@@ -281,7 +281,7 @@ test('SR55: a task forked from its creating session', { skip, concurrency: 1, ti
     await assert.rejects(
       admin.query(`UPDATE "task" SET "fork_changed_files" = '{}' WHERE "id" = $1`, [task.id]),
       /TASK_FORK_IMMUTABLE/,
-      '0607 extends the guard to the new column',
+      '0617 extends the guard to the new column',
     );
     // A snapshot that is HEAD changed nothing, whatever was sent beside it.
     const clean = await createForked(w, {

@@ -748,7 +748,7 @@ suite('(q) the core tables keep every trigger that predates this project', async
   // `session_wiki_chat_space_guard`, which refuses an UPDATE that would change which wiki space a
   // session is a chat of, and writes nothing. 24 and 35 since 0484 gave both tables the Open
   // list's three version counters (`<table>_open_list_epoch_insert`/`_update`/`_delete`), which
-  // write only `open_list_epoch`. `task` 36 since 0605 added `task_fork_guard`, which refuses a
+  // write only `open_list_epoch`. `task` 36 since 0615 added `task_fork_guard`, which refuses a
   // rewrite of a forked task's start and writes nothing.
   assert.deepEqual(counts, { run_event: 1, session: 24, task: 36 });
 

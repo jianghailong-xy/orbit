@@ -1,4 +1,4 @@
--- 0607 — the files a fork's snapshot changed (docs/task-fork-from-session-design.md §2.5, §2.7 F4; task P3
+-- 0617 — the files a fork's snapshot changed (docs/task-fork-from-session-design.md §2.5, §2.7 F4; task P3
 -- of project 34vgIh3m69UttihIN8M38).
 --
 -- WHAT IT ADDS
@@ -10,12 +10,12 @@
 --   the snapshot comes back through the merge without a conflict (F4), and these are the files where that
 --   can happen. '{}' on a task that was not forked, on a fork of a clean checkout, and on one forked by a
 --   runner too old to send them (`fork_includes_uncommitted` tells the first two apart). Written by the
---   create doors only, like 0605's five columns, so 0605's `task_fork_guard` is replaced to refuse a later
+--   create doors only, like 0615's five columns, so 0615's `task_fork_guard` is replaced to refuse a later
 --   write of it as well.
 --
 -- LOCKS
 -- =====
--- As 0605: one DO taking `task` in short tries (2 s each, at most 45), catalog changes only — a column
+-- As 0615: one DO taking `task` in short tries (2 s each, at most 45), catalog changes only — a column
 -- whose default is a constant is added without rewriting a row (PostgreSQL 11+). Replacing the function first locks no table. Safe to run twice.
 --
 -- BACKWARD COMPATIBLE
@@ -59,7 +59,7 @@ BEGIN
     EXCEPTION WHEN lock_not_available OR deadlock_detected THEN
       tries := tries + 1;
       IF tries >= 45 THEN
-        RAISE EXCEPTION '0607: "task" was not free in 45 tries of 2 s each. Once what holds it has ended, mark the migration rolled back (prisma migrate resolve --rolled-back 0607_task_fork_changed_files) and deploy again: it is safe to run twice.'
+        RAISE EXCEPTION '0617: "task" was not free in 45 tries of 2 s each. Once what holds it has ended, mark the migration rolled back (prisma migrate resolve --rolled-back 0617_task_fork_changed_files) and deploy again: it is safe to run twice.'
           USING ERRCODE = 'lock_not_available';
       END IF;
       PERFORM pg_sleep(1);

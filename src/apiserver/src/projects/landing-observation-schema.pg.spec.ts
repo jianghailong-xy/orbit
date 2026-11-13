@@ -731,16 +731,16 @@ test('0453 §10.4 §10.9 on the schema before it, over rows of every table it al
     const applied0453 = await shape(sql);
 
     await t.test('the result is the schema a database migrated from empty has', async () => {
-      // 0508 and 0513 extend the codebase and job after 0453, and 0605/0606/0607 the task (its fork
+      // 0508 and 0513 extend the codebase and job after 0453, and 0615/0616/0617 the task (its fork
       // columns). Compare at that frontier,
       // then restore 0453 so the next assertion still proves its own replay is unchanged.
       await sql.query('BEGIN');
       try {
         await sql.query(readFileSync(path.join(MIGRATIONS, '0508_project_landing_check', 'migration.sql'), 'utf8'));
         await sql.query(readFileSync(path.join(MIGRATIONS, '0513_integration_baseline_red', 'migration.sql'), 'utf8'));
-        await sql.query(readFileSync(path.join(MIGRATIONS, '0605_task_session_fork', 'migration.sql'), 'utf8'));
-        await sql.query(readFileSync(path.join(MIGRATIONS, '0606_task_session_fork_checks', 'migration.sql'), 'utf8'));
-        await sql.query(readFileSync(path.join(MIGRATIONS, '0607_task_fork_changed_files', 'migration.sql'), 'utf8'));
+        await sql.query(readFileSync(path.join(MIGRATIONS, '0615_task_session_fork', 'migration.sql'), 'utf8'));
+        await sql.query(readFileSync(path.join(MIGRATIONS, '0616_task_session_fork_checks', 'migration.sql'), 'utf8'));
+        await sql.query(readFileSync(path.join(MIGRATIONS, '0617_task_fork_changed_files', 'migration.sql'), 'utf8'));
         assert.deepEqual(await shape(sql), await shape(caseClient),
           'the tables 0453 alters differ between a database migrated over data and one migrated from empty');
       } finally {

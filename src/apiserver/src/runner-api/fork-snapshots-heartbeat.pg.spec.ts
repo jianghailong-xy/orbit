@@ -105,7 +105,7 @@ test('forkSnapshotsOpen on the heartbeat', { skip: !URL_, concurrency: 1, timeou
   const otherRunner = await machine(ownerId, 'other-machine');
   const strangerId = await owner();
 
-  /** A task row as the create door writes a fork (the five columns at INSERT, migration 0605), or not forked. */
+  /** A task row as the create door writes a fork (the five columns at INSERT, migration 0615), or not forked. */
   const task = async (o: {
     owner?: string; status: TaskStatus; forkRunnerId?: string | null; forkSha?: string; title: string;
   }) => {

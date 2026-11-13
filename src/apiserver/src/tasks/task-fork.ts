@@ -35,7 +35,7 @@ export interface TaskForkInput {
  */
 export const TASK_FORK_CHANGED_FILES_MAX = 1000;
 
-/** The columns migrations 0605 and 0607 add, as the task's INSERT writes them. */
+/** The columns migrations 0615 and 0617 add, as the task's INSERT writes them. */
 export interface TaskForkColumns {
   forkSessionId: string;
   forkRunnerId: string;

@@ -650,7 +650,7 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // session page's From Wiki label opens. A history reference with no foreign key, so it may 404 —
   // never a fence.
   'wikiChatSpaceId',
-  // A forked task's session and that session's machine (migration 0605, SR55): addresses a reader follows to the
+  // A forked task's session and that session's machine (migration 0615, SR55): addresses a reader follows to the
   // session the task started from and the runner its snapshot is on. History references with no foreign key — never a
   // fence: the fork's placement is decided on the task's own row.
   'forkSessionId',

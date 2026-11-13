@@ -103,7 +103,7 @@ In v1 the **forking session merges it itself**:
 - The `task_await` payload for a forked task carries `branch`, `forkSha` and the one command to run in the
   forking session's checkout: `git merge --no-ff <branch>`. As built (P3), the wake's `forkedTasks` entry names
   `branch`, `forkSha`, `baseHead`, `snapshotChangedFiles` (the files S changed relative to `baseHead`, sent by
-  the runner at the snapshot and stored in `task.fork_changed_files`, migration 0607) and, once the task is DONE,
+  the runner at the snapshot and stored in `task.fork_changed_files`, migration 0617) and, once the task is DONE,
   `reviewCommand` (`git diff HEAD...<branch>`), `mergeCommand` and a `mergeInstruction` saying to read the first
   before running the second (§2.7 F4).
 - If the forking session committed `S`'s edits in the meantime (its own turn-end commit, for example), git sees

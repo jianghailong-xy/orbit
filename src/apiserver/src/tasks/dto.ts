@@ -472,7 +472,7 @@ export class CreateTaskDto {
   @IsOptional() @IsBoolean() codeless?: boolean;
   // SR55: start this task from a snapshot of the session making the call (the runner door posts it;
   // the MCP tool calls it `forkFromSession`). Create-time only: the five columns it becomes are never
-  // written again (migration 0605).
+  // written again (migration 0615).
   @IsOptional() @ValidateNested() @Type(() => TaskForkDto) fork?: TaskForkDto;
   // EXECUTABLE is intentionally only this pair: one command, one expected exit code.
   @IsOptional() @IsString() acceptanceCommand?: string;

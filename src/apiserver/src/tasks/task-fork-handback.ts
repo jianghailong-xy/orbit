@@ -9,7 +9,7 @@ import type { PrismaService } from '../prisma/prisma.service';
  *  - `branch`: the branch the task's work is on — the delivered branch of a DONE task, else its newest run's;
  *    null while no run has one.
  *  - `forkSha` / `baseHead`: the snapshot the task started from, and the forking session's HEAD under it.
- *  - `snapshotChangedFiles`: the paths the snapshot changed relative to `baseHead` (migration 0607). An edit
+ *  - `snapshotChangedFiles`: the paths the snapshot changed relative to `baseHead` (migration 0617). An edit
  *    the forking session reverted after the snapshot comes back through the merge without a conflict (§2.7
  *    F4), and these are the files where that can happen.
  *  - `reviewCommand` / `mergeCommand` / `mergeInstruction`: only once the task is DONE and has a branch. Read

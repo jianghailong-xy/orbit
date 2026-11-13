@@ -3509,7 +3509,7 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   {"table":"task","trigger":"task_dispatch_epoch_seed","event":"AFTER INSERT","kind":"ROW/STATEMENT","since":"0137_task_run_request_receipt","takes":["task_dispatch_epoch WRITE"]},
   {"table":"task","trigger":"task_dispatch_epoch_update","event":"AFTER UPDATE","kind":"ROW/STATEMENT","since":"0137_task_run_request_receipt","takes":["task_dispatch_epoch LOCK"]},
   {"table":"task","trigger":"task_done_canonical_writer_fence","event":"BEFORE UPDATE OF \"status\", \"completion_fence_revision\"","kind":"ROW/STATEMENT","since":"0193_task_done_writer_fence","takes":[]},
-  {"table":"task","trigger":"task_fork_guard","event":"BEFORE UPDATE OF \"fork_session_id\", \"fork_runner_id\", \"fork_sha\", \"fork_base_head\", \"fork_includes_uncommitted\", \"fork_changed_files\"","kind":"ROW/STATEMENT","since":"0607_task_fork_changed_files","takes":[]},
+  {"table":"task","trigger":"task_fork_guard","event":"BEFORE UPDATE OF \"fork_session_id\", \"fork_runner_id\", \"fork_sha\", \"fork_base_head\", \"fork_includes_uncommitted\", \"fork_changed_files\"","kind":"ROW/STATEMENT","since":"0617_task_fork_changed_files","takes":[]},
   {"table":"task","trigger":"task_list_task_count_delete","event":"AFTER DELETE","kind":"ROW/STATEMENT","since":"0280_task_list_task_count","takes":["task_list WRITE"]},
   {"table":"task","trigger":"task_list_task_count_insert","event":"AFTER INSERT","kind":"ROW/STATEMENT","since":"0280_task_list_task_count","takes":["task_list WRITE"]},
   {"table":"task","trigger":"task_list_task_count_relist","event":"AFTER UPDATE","kind":"ROW/STATEMENT","since":"0280_task_list_task_count","takes":["task_list WRITE"]},

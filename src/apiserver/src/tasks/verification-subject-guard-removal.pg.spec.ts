@@ -243,7 +243,7 @@ suite('(g) the core tables carry exactly the triggers the inventory registers, m
     + 'wiki space a session is a chat of, and 64 once 0484 gave `conversation_turn`, `session` and '
     + '`task` the Open list\'s version counters (`<table>_open_list_epoch_insert`/`_update`/`_delete`, '
     + 'plus `conversation_turn_evidence_review_deadline`), which write only `open_list_epoch`, and 65 '
-    + 'once 0605 added `task_fork_guard` to `task`, which refuses a rewrite of a forked task\'s start');
+    + 'once 0615 added `task_fork_guard` to `task`, which refuses a rewrite of a forked task\'s start');
   for (const [, trigger] of DROPPED_TRIGGERS) {
     assert.equal(installed.rows.some((row) => row.trigger === trigger), false);
   }

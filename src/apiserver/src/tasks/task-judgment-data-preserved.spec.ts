@@ -2947,14 +2947,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0595 adds one nullable TIMESTAMP(3) `drain_waiting_pushed_at` on `runner` (no default, catalog-only); no
       // preserved rows, triggers or DONE fence change, and no row is written.
       '0595_runner_drain_waiting_push',
-      // 0605 adds five nullable task fork columns, their CHECK and an immutability trigger on them alone,
+      // 0615 adds five nullable task fork columns, their CHECK and an immutability trigger on them alone,
       // and swaps four session SOURCE CHECKs; no preserved rows, triggers or DONE fence change.
-      '0605_task_session_fork',
-      // 0606 only validates 0605's five CHECKs.
-      '0606_task_session_fork_checks',
-      // 0607 adds `task.fork_changed_files` (TEXT[] NOT NULL DEFAULT '{}', catalog-only) and restates 0605's fork
+      '0615_task_session_fork',
+      // 0616 only validates 0615's five CHECKs.
+      '0616_task_session_fork_checks',
+      // 0617 adds `task.fork_changed_files` (TEXT[] NOT NULL DEFAULT '{}', catalog-only) and restates 0615's fork
       // guard to cover it; no preserved rows, triggers or DONE fence change, and no row is written.
-      '0607_task_fork_changed_files'],
+      '0617_task_fork_changed_files'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

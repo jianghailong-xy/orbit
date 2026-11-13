@@ -5744,9 +5744,9 @@ model Task {
   /// declaration takes the task out of its criterion's landing conjunction. NULL on a task that is
   /// not codeless, and on one created codeless — creating it so is the first statement, not a change.
   codelessReason     String?  @map("codeless_reason")
-  /// The session this task was forked from (migration 0605, SOURCE row PF, SR55): the session whose
+  /// The session this task was forked from (migration 0615, SOURCE row PF, SR55): the session whose
   /// create call filed it, on that call's runner credential. The five fork columns are all NULL or
-  /// all set, written by the create doors in the task's own INSERT and never afterwards (0605's
+  /// all set, written by the create doors in the task's own INSERT and never afterwards (0615's
   /// `task_fork_guard`), so every run of the task, a retry included, starts from the same commit.
   /// No foreign key: deleting that session does not move where this task starts.
   forkSessionId           String?  @map("fork_session_id") @db.Uuid
@@ -5758,10 +5758,10 @@ model Task {
   /// The forking session's HEAD when it took the snapshot, 40 lowercase hex.
   forkBaseHead            String?  @map("fork_base_head")
   /// Whether the snapshot carries edits the forking session had not committed: exactly when
-  /// `forkSha` is not `forkBaseHead` (0605's `task_fork_shape_chk`).
+  /// `forkSha` is not `forkBaseHead` (0615's `task_fork_shape_chk`).
   forkIncludesUncommitted Boolean? @map("fork_includes_uncommitted")
   /// The paths the snapshot changed relative to `forkBaseHead`, as the runner read them when it took
-  /// it (migration 0607): what a forked task's task_await payload names (design §2.7 F4). Empty when
+  /// it (migration 0617): what a forked task's task_await payload names (design §2.7 F4). Empty when
   /// the task was not forked, the snapshot changed nothing, or its runner sent none; written once,
   /// like the five above.
   forkChangedFiles        String[] @default([]) @map("fork_changed_files")
