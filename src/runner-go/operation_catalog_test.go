@@ -136,7 +136,7 @@ func TestCLICapabilitiesAreProjectedFromCatalog(t *testing.T) {
 		if capability.Usage != op.CLI.Usage {
 			t.Errorf("%s usage = %q, catalogue says %q", capability.ID, capability.Usage, op.CLI.Usage)
 		}
-		if strings.Join(capability.Arguments, "\x00") != strings.Join(op.CLI.Arguments, "\x00") {
+		if strings.Join(capability.Arguments, "\x00") != strings.Join(runtimeCLIArguments(op), "\x00") {
 			t.Errorf("%s arguments are not the catalogue's", capability.ID)
 		}
 		if capability.Mutates != op.Mutates {
@@ -524,7 +524,17 @@ func TestCapabilitiesDocumentStaysBackwardCompatibleAndCarriesCatalogIdentity(t 
 // catalogue change.
 func TestPublicCatalogDocIsGenerated(t *testing.T) {
 	path := filepath.Join("..", "..", "docs", "operation-catalog.md")
+	// The document, and the content hash in it, must not depend on whether this runner is root:
+	// the catalogue declares the whole contract and the surfaces narrow it, so CI (non-root) and a
+	// root runner render the same file.
+	restore := runsAsRoot
+	t.Cleanup(func() { runsAsRoot = restore })
+	runsAsRoot = false
 	want := renderOperationCatalogMarkdown()
+	runsAsRoot = true
+	if asRoot := renderOperationCatalogMarkdown(); asRoot != want {
+		t.Fatal("the operation catalogue's public document depends on whether the runner is root")
+	}
 	if os.Getenv("ORBIT_UPDATE_CATALOG_DOC") == "1" {
 		if err := os.WriteFile(path, []byte(want), 0o644); err != nil {
 			t.Fatal(err)

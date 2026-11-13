@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 )
 
 // The Orbit operation catalog.
@@ -3837,7 +3836,7 @@ var notifyCLICapabilities = []cliCapabilitySpec{
 }
 
 var sessionCLICapabilities = []cliCapabilitySpec{
-	{Tool: "session_create", Argv: []string{"orbit", "session", "create"}, Usage: "orbit session create (--prompt TEXT | --prompt-file -) [options]", Arguments: []string{"--prompt <text> | --prompt-file - (required)", "--agent-id <id> | --agent-name <name>", "--title <text>", "--model <model>", engineArgument(), "--provider <slug> (the credential: an engine's own sign-in, opencode, an account pool or an API key; orbit provider list names each with the engines it runs)", permissionModeFlagSpec(), "--no-worktree (run in the agent's own checkout with no branch or worktree; for work that changes no code)", "--wait[=true|false]", "--json"}, Mutates: true},
+	{Tool: "session_create", Argv: []string{"orbit", "session", "create"}, Usage: "orbit session create (--prompt TEXT | --prompt-file -) [options]", Arguments: []string{"--prompt <text> | --prompt-file - (required)", "--agent-id <id> | --agent-name <name>", "--title <text>", "--model <model>", engineArgument(), "--provider <slug> (the credential: an engine's own sign-in, opencode, an account pool or an API key; orbit provider list names each with the engines it runs)", canonicalPermissionModeFlagSpec(), "--no-worktree (run in the agent's own checkout with no branch or worktree; for work that changes no code)", "--wait[=true|false]", "--json"}, Mutates: true},
 	// No MCP tool stands behind this one, so its description is its own: the transcript it imports
 	// is on this machine's disk, which the CLI here reads, and an agent asked to bring a terminal's
 	// conversation into Orbit runs it as itself. The headless door below describes it for the
@@ -4995,6 +4994,31 @@ func catalogSurfaceSwitch(parts []string, op *operation) []string {
 // cannot leave a stale name in Claude's configuration.
 func claudeToolName(tool string) string { return "mcp__orbit__" + tool }
 
+// canonicalPermissionModeFlagSpec is the catalogue's flag form of the permission-mode list: every
+// mode, in the order the pickers show them. buildCLICapabilities narrows it to this machine at
+// projection time, the same way the tool schema is narrowed.
+func canonicalPermissionModeFlagSpec() string {
+	return "--permission-mode <" + strings.Join(allPermissionModes, "|") + ">"
+}
+
+// runtimeCLIArguments is the capability's argument list as THIS machine advertises it. The
+// catalogue keeps the canonical list so its identity does not depend on the runner; the one
+// argument that varies (the modes a root runner cannot offer) is narrowed here.
+func runtimeCLIArguments(op *operation) []string {
+	if op == nil || op.CLI == nil {
+		return nil
+	}
+	args := append([]string{}, op.CLI.Arguments...)
+	if op.Tool == "session_create" {
+		for i, arg := range args {
+			if strings.HasPrefix(arg, "--permission-mode ") {
+				args[i] = permissionModeFlagSpec()
+			}
+		}
+	}
+	return args
+}
+
 // applyPermissionModeOffer narrows the catalogue's canonical session_create permission-mode enum
 // and description to what THIS machine can run. The catalogue keeps the full list so its content
 // hash is the same on every runner and in CI; the tool list, and the capability schema built from
@@ -5073,14 +5097,18 @@ type builtOperationCatalog struct {
 	Hash   string
 }
 
-var operationCatalog = sync.OnceValue(func() *builtOperationCatalog {
+// operationCatalog builds the catalogue for the caller's environment. It is deliberately not
+// cached: the permission-mode offer and the root note are resolved when a surface is projected, and
+// a caller that flips runsAsRoot (a test, or a runner that changes identity) has to see the new
+// answer — caching froze the first build's environment and made the tool list say the wrong thing.
+func operationCatalog() *builtOperationCatalog {
 	ops := buildOperationCatalog()
 	byTool := make(map[string]*operation, len(ops))
 	for _, op := range ops {
 		byTool[op.Tool] = op
 	}
 	return &builtOperationCatalog{Ops: ops, ByTool: byTool, Hash: operationCatalogHash(ops)}
-})
+}
 
 func catalogOperation(tool string) *operation {
 	if built := operationCatalog(); built != nil {

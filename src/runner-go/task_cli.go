@@ -3420,6 +3420,7 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	} else if includeHeadlessSession {
 		specs = append(specs, headlessSessionCLICapabilities(headlessAllowedActions(service))...)
 	}
+	built := operationCatalog()
 	commands := make([]cliCapability, 0, len(specs))
 	for _, spec := range specs {
 		if spec.SessionOnly && ctx.SessionID == "" {
@@ -3448,19 +3449,24 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 		argv := append([]string{}, spec.Argv...)
 		argv[0] = executable
 		available, unavailableReason := capabilityAvailability(identity, spec.Argv)
+		arguments := append([]string{}, spec.Arguments...)
+		op := built.ByTool[spec.Tool]
+		if op != nil {
+			arguments = runtimeCLIArguments(op)
+		}
 		command := cliCapability{
 			ID:                spec.Tool,
 			Argv:              argv,
 			HelpArgv:          append(append([]string{}, argv...), "--help"),
 			Usage:             spec.Usage,
-			Arguments:         append([]string{}, spec.Arguments...),
+			Arguments:         arguments,
 			Description:       description,
 			MCPInputSchema:    schema,
 			Mutates:           spec.Mutates,
 			Available:         available,
 			UnavailableReason: unavailableReason,
 		}
-		if op := catalogOperation(spec.Tool); op != nil {
+		if op != nil {
 			command.Object = op.Object
 			command.Intent = op.Intent
 			command.Risk = op.Risk
@@ -3492,7 +3498,7 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 		ServerSchemaRevision:     runnerWriteSchemaRevision,
 		ContractDigest:           runnerWriteContractDigest,
 		CatalogVersion:           operationCatalogVersion,
-		CatalogHash:              operationCatalog().Hash,
+		CatalogHash:              built.Hash,
 		CapabilityCount:          len(commands),
 		CLIVersion:               version,
 		SourceSha:                sourceSHA,
