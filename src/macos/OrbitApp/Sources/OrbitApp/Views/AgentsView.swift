@@ -1204,7 +1204,12 @@ struct AgentConsoleDetail: View {
     }
 
     var body: some View {
-        if let runnerID = app.machineDraftRunnerID {
+        if let guestID = app.guestSessionID {
+            // A session somebody shared with this account: its guest view (Shared with me, or a
+            // session id the owner's read found nothing of yours at).
+            GuestSessionView(sessionID: guestID)
+                .id(guestID)
+        } else if let runnerID = app.machineDraftRunnerID {
             // A machine's own new session page, whose Set up row put it here (board rule 1).
             MachineDraftPage(runnerID: runnerID)
                 .id(runnerID)
