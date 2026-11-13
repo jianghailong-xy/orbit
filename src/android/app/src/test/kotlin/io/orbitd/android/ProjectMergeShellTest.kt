@@ -335,7 +335,8 @@ class ProjectMergeShellTest {
     }
 
     /** The needs-you bar's merge waiting elsewhere opens its project's sessions page, where its card is (iOS 6b4bef713), and not the
-     * coordinator conversation. */
+     * coordinator conversation. Quota retry waits too, so the first press unfolds the bar (31a1adad3, the owner's 2026-11-13 pick)
+     * and the merge's own capsule is the one pressed. */
     @Test fun theNeedsYouBarOpensAWaitingMergeOnItsProjectsSessionsPage() {
         ProjectShell.promotion = candidate("READY"); ProjectShell.mergeWaiting = true
         signIn()
@@ -343,7 +344,9 @@ class ProjectMergeShellTest {
         compose.onNode(hasText("Plain notes") and hasClickAction()).performClick()
         await { exists(hasTestTag("needs-you-bar-text") and hasText("Approve merge to main"), unmerged = true) &&
             exists(hasTestTag("needs-you-bar-detail") and hasText("Launch"), unmerged = true) }
-        compose.onNodeWithTag("needs-you-bar").performClick()
+        compose.onNode(hasText("Approve merge to main") and hasClickAction()).performClick()
+        await { exists(hasTestTag("needs-you-bar-fold")) }
+        compose.onNode(hasText("Approve merge to main") and hasClickAction()).performClick()
         await { exists(hasTestTag("project-sessions")) && exists(hasTestTag("project-merge-card:asking")) }
         assertFalse("the coordinator conversation is not where it opens", ProjectShell.calls.contains("GET sessions/${ProjectShell.COORD}"))
         compose.onNodeWithContentDescription("Back").assertExists()
