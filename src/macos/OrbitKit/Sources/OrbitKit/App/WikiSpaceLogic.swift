@@ -70,6 +70,9 @@ public enum WikiSpaceLogic {
                                        coordinatorWorkspace: (String) -> String?) -> String? {
         switch nav.section {
         case .agents:
+            if let project = nav.projectSessionsColumn, nav.machineDraftOnTop == nil {
+                return coordinatorWorkspace(project.projectID)
+            }
             switch nav.drawerDestination(agentID: agentID) {
             case .workspace(let id):      return id
             case .project(let projectID): return coordinatorWorkspace(projectID)

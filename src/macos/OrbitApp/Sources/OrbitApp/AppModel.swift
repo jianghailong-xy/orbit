@@ -2941,6 +2941,7 @@ final class AppModel {
     private(set) var projectSessionsConfirmedAt: String?
 
     var projectSessionsColumn: SessionProjectAddress? { nav.projectSessionsColumn }
+    var projectSessionsColumnDestination: SessionProjectAddress? { nav.projectSessionsColumnDestination }
 
     func openProjectSessions(_ address: SessionProjectAddress) {
         nav.enterProjectSessions(address)
@@ -2999,7 +3000,7 @@ final class AppModel {
         }
         let address = SessionProjectAddress(projectID: projectID, agentID: agentID, view: .open)
         if inColumn {
-            nav.enterProjectSessions(address)
+            nav.enterProjectSessions(address, asDestination: true)
         } else {
             nav.path = [.sessionProject(address, asDestination: true)]
         }
