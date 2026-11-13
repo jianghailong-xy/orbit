@@ -10,7 +10,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * The account pools' rules and words, on Infrastructure and on each pool's page: a port of OrbitKit ProvidersOverview,
+ * The account pools' rules and words, on Machines & models and on each pool's page: a port of OrbitKit ProvidersOverview,
  * ProviderPools, SharedPoolPage, CodexLoginPool, SharedPools (adapter), CodexPoolPage, WhoCanUseIt, SharePool, JustMine,
  * AddPoolKey and CodexSignIn. Pure, so PoolLogicTest pins it to the iOS wording and gates.
  */

@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { base62ToUuid, uuidToBase62 } from '@orbit/shared';
+import { base62ToUuid, uuidToBase62, type EvidenceGapClause } from '@orbit/shared';
 import type { ImageSize } from '../files/image-size';
 import { testReportLine, type TestReportSummary } from '../files/test-report';
 
@@ -60,20 +60,28 @@ export interface EvidenceCheck {
 export interface EvidenceEnvelope {
   claim: string;
   /**
-   * The stated standard this evidence is measured against, quoted by key AND by text.
+   * The stated standard this evidence is measured against, by key AND by text — written by the
+   * SERVER at submit time, never by the submitter (docs/evidence-always-has-an-addressee-design.md
+   * §2.2). `submit` binds the standard the task is held to (`taskStandard`): the project criterion
+   * it declares, keyed as `project_get` prints it, with that criterion's live wording; else its own
+   * `acceptanceCriteria`, keyed by the task's public id. Already released runners and CLIs still
+   * send a quote of their own; it is accepted and dropped, never checked.
    *
-   * `key` says WHICH standard and `text` says what it said (`evidenceCriterionMatch`). For a task
-   * that declares one of its project's criteria the key is the one `project_get` prints beside THAT
-   * criterion — it has to name the declared one, not any of the project's — and the text has to be
-   * its current wording. For any other task — in NO project, or filed under one without declaring a
-   * criterion — there is nothing to select: such a task has exactly one standard, its own
-   * `acceptanceCriteria`, so the convention is the task's own public id, which is what submitters
-   * already write, and only the text is checked. The field is required in both cases because the
-   * envelope has no optional halves; what changes is only whether anything reads the key.
+   * Absent on a revision whose task had no live standard when it was submitted. A revision stored
+   * before the server bound it carries the submitter's quote here, and is read exactly as the
+   * server's snapshot is: the decision door holds it against the live standard
+   * (`evidenceCriterionMatch`), so such a revision keeps the answer it always had.
    */
-  criterion: { key: string; text: string };
+  criterion?: { key: string; text: string };
   checks: EvidenceCheck[];
   gaps: string[];
+  /**
+   * Optional, parallel to `gaps`: which gap hits which clause of the task's standard, and the
+   * follow-up task that will prove it (`EvidenceGapClause`, documented in @orbit/shared). `gaps`
+   * itself stays an array of strings so released clients keep rendering it as text. Absent when the
+   * submission marked no gap; the decision door refuses CONFIRM while an entry has no follow-up.
+   */
+  gapClauses?: EvidenceGapClause[];
 }
 
 export interface EvidenceCitation {
@@ -136,6 +144,15 @@ export function heldToProjectCriterion(
     && (task.criterionDefinitionId !== null || task.criterionRevision !== null);
 }
 
+/** Whether the task states any standard at all: a declared project criterion (even one since
+ * deleted, which the decision door then routes), or non-blank `acceptanceCriteria` of its own. A
+ * submission for a task that states none can never be decided, and the submitter is the one who can
+ * fix it, so the submit path refuses it (docs/evidence-always-has-an-addressee-design.md §2.3). */
+export function statesAStandard(task: CriterionStandingTask): boolean {
+  return heldToProjectCriterion(task)
+    || (task.acceptanceCriteria !== null && comparableCriterionText(task.acceptanceCriteria) !== '');
+}
+
 /** Whether `key` names the project criterion this task declares — the one criterion of its project
  * it is held to. Another criterion of the project is not its standard, however live. */
 export function quotesDeclaredCriterion(task: CriterionStandingTask, key: string): boolean {
@@ -146,14 +163,18 @@ export function quotesDeclaredCriterion(task: CriterionStandingTask, key: string
 
 const MAX_CLAIM = 2_000;
 const MAX_CRITERION_KEY = 200;
-const MAX_CRITERION_TEXT = 4_000;
 const MAX_CHECKS = 50;
 const MAX_REF = 500;
 const MAX_COMMAND = 4_000;
 const MAX_GAPS = 50;
 const MAX_GAP = 1_000;
+const MAX_GAP_CLAUSE = 1_000;
 
-const ENVELOPE_FIELDS = ['claim', 'checks', 'criterion', 'gaps'];
+/** What a submission has to carry. `criterion` is no longer one of them: the server binds it. */
+const ENVELOPE_FIELDS = ['claim', 'checks', 'gaps'];
+/** What an envelope may carry: the required fields, the optional `gapClauses` and the server-bound `criterion`. */
+const ENVELOPE_ALLOWED_FIELDS = ['claim', 'checks', 'criterion', 'gapClauses', 'gaps'];
+const GAP_CLAUSE_FIELDS = ['criterionClause', 'followUpTaskId', 'gap'];
 const CRITERION_FIELDS = ['key', 'text'];
 const CHECK_FIELDS = ['command', 'kind', 'ref', 'succeeded'];
 const STORED_FILE_CHECK_FIELDS = [...CHECK_FIELDS, 'height', 'sha256', 'width'];
@@ -212,16 +233,24 @@ export function parseEvidenceEnvelope(
   origin: 'submitted' | 'stored' = 'submitted',
 ): EvidenceEnvelope {
   const root = requireExactFields(evidence, 'evidence', ENVELOPE_FIELDS);
-  requireNoUnknownFields(root, 'evidence', ENVELOPE_FIELDS);
+  requireNoUnknownFields(root, 'evidence', ENVELOPE_ALLOWED_FIELDS);
 
   const claim = requireText(root.claim, 'evidence.claim', MAX_CLAIM);
 
-  const criterionObject = requireExactFields(root.criterion, 'evidence.criterion', CRITERION_FIELDS);
-  requireNoUnknownFields(criterionObject, 'evidence.criterion', CRITERION_FIELDS);
-  const criterion = {
-    key: requireText(criterionObject.key, 'evidence.criterion.key', MAX_CRITERION_KEY),
-    text: requireText(criterionObject.text, 'evidence.criterion.text', MAX_CRITERION_TEXT),
-  };
+  // A submitted quote is not read at all: the server binds the standard (`taskStandard`), and an
+  // already released runner or CLI that still sends one is never refused because of it. A stored
+  // one is the server's snapshot — or, on a revision from before it bound one, the submitter's
+  // quote, which was checked when it was submitted. Its text is the standard's whole wording, which
+  // a task's own acceptanceCriteria do not cap, so the stored read does not cap it either.
+  let criterion: { key: string; text: string } | undefined;
+  if (origin === 'stored' && root.criterion !== undefined) {
+    const criterionObject = requireExactFields(root.criterion, 'evidence.criterion', CRITERION_FIELDS);
+    requireNoUnknownFields(criterionObject, 'evidence.criterion', CRITERION_FIELDS);
+    criterion = {
+      key: requireText(criterionObject.key, 'evidence.criterion.key', MAX_CRITERION_KEY),
+      text: requireText(criterionObject.text, 'evidence.criterion.text', Number.MAX_SAFE_INTEGER),
+    };
+  }
 
   if (!Array.isArray(root.checks)) refuseShape('evidence.checks must be an array');
   if (root.checks.length > MAX_CHECKS) {
@@ -268,7 +297,37 @@ export function parseEvidenceEnvelope(
   // unestablished. That is why the field is required even when there is nothing to put in it.
   const gaps = root.gaps.map((gap, index) => requireText(gap, `evidence.gaps[${index}]`, MAX_GAP));
 
-  return { claim, criterion, checks, gaps };
+  // Optional and parallel to `gaps`, so `gaps` stays plain text for released clients. Its shape is
+  // checked here; whether each follow-up exists in the task's project is checked against the rows,
+  // at submit time and again at the decision door (`gapFollowUpRefusal`).
+  let gapClauses: EvidenceGapClause[] | undefined;
+  if (root.gapClauses !== undefined) {
+    if (!Array.isArray(root.gapClauses)) refuseShape('evidence.gapClauses must be an array');
+    const marked = new Set<number>();
+    gapClauses = root.gapClauses.map((entry, index) => {
+      const path = `evidence.gapClauses[${index}]`;
+      const object = requireExactFields(entry, path, ['criterionClause', 'gap']);
+      requireNoUnknownFields(object, path, GAP_CLAUSE_FIELDS);
+      const gap = object.gap;
+      if (typeof gap !== 'number' || !Number.isInteger(gap) || gap < 0 || gap >= gaps.length) {
+        refuseShape(`${path}.gap must be the index of one of evidence.gaps (0 to ${gaps.length - 1})`);
+      }
+      if (marked.has(gap as number)) refuseShape(`${path}.gap marks evidence.gaps[${gap}] a second time`);
+      marked.add(gap as number);
+      const clause: EvidenceGapClause = {
+        gap: gap as number,
+        criterionClause: requireText(object.criterionClause, `${path}.criterionClause`, MAX_GAP_CLAUSE),
+      };
+      if (object.followUpTaskId !== undefined) {
+        const ref = requireText(object.followUpTaskId, `${path}.followUpTaskId`, MAX_REF);
+        if (rowIdOf(ref) === null) refuseShape(`${path}.followUpTaskId must be a task id`);
+        clause.followUpTaskId = ref;
+      }
+      return clause;
+    });
+  }
+
+  return { claim, ...(criterion ? { criterion } : {}), checks, gaps, ...(gapClauses ? { gapClauses } : {}) };
 }
 
 /**
@@ -720,7 +779,7 @@ export function citedFilesBlock(files: ReadonlyArray<CitedFileLine>): string {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /** The row a public id names, or the UUID itself; null for anything else. */
-function rowIdOf(ref: string): string | null {
+export function rowIdOf(ref: string): string | null {
   if (UUID_RE.test(ref)) return ref;
   try {
     const id = base62ToUuid(ref);
@@ -815,4 +874,27 @@ export async function evidenceCriterionMatch(
     text: criterion.text,
     matchesLive: live !== null && comparableCriterionText(live) === comparableCriterionText(criterion.text),
   };
+}
+
+/**
+ * The standard this task is held to right now, as `submit` binds it into a revision: the project
+ * criterion it declares, keyed as `project_get` prints it, with that criterion's live wording; else
+ * its own `acceptanceCriteria`, keyed by the task's public id. Null when there is no live standard
+ * — a declared criterion since deleted, or no criteria at all — and then the revision carries none.
+ *
+ * Read through `liveCriterionText`, the same function the decision door's `evidenceCriterionMatch`
+ * holds a stored snapshot against, so a revision bound here is decidable until the standard itself
+ * is reworded or deleted, and undecidable from then on.
+ */
+export async function taskStandard(
+  tx: Prisma.TransactionClient,
+  task: CriterionStandingTask,
+  taskId: string,
+): Promise<{ key: string; text: string } | null> {
+  const key = heldToProjectCriterion(task)
+    ? (task.criterionDefinitionId === null ? null : uuidToBase62(task.criterionDefinitionId))
+    : uuidToBase62(taskId);
+  if (key === null) return null;
+  const text = await liveCriterionText(tx, task, key);
+  return text === null ? null : { key, text };
 }

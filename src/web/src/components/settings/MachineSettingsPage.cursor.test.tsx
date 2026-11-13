@@ -10,7 +10,7 @@ import { encodeId } from '../../lib/idCodec';
 import type { ProviderRow } from '../../lib/providerAdmin';
 import { ProviderPickPage } from '../../pages/ProviderConnectPage';
 import { MachineSettingsPage } from './MachineSettingsPage';
-import { SettingsVendorPage } from './SettingsProviderPages';
+import { SettingsKeysPage } from './SettingsProviderPages';
 
 /**
  * Cursor CLI on a machine's Settings page and Cursor's vendor page (the owner's board, docs/mocks/cursor-engine Web 2 and Web 4): nothing of
@@ -131,7 +131,7 @@ async function mount(at = `/settings/machines/${HPC}`) {
           <Routes>
             <Route path="/settings/machines/:id" element={<MachineSettingsPage />} />
             <Route path="/settings/providers/new" element={<ProviderPickPage />} />
-            <Route path="/settings/providers/:vendor" element={<SettingsVendorPage />} />
+            <Route path="/settings/providers/:vendor" element={<SettingsKeysPage />} />
             <Route path="*" element={<div>elsewhere</div>} />
           </Routes>
         </MemoryRouter>

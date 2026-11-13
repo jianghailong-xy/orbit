@@ -35,7 +35,7 @@ object ProviderEngines {
      * one it is about (web `webShowsEngine`, OrbitKit `appleShowsEngine`). Every engine but Cursor CLI always; Cursor CLI once one of
      * those runners knows it (CursorRuntime.knows: it declares `provider:cursor` or reports the engine), which is the order its rollout
      * keeps: the runners and what they declare first, then the entrances (project P9). Until then the New Session's engines, a task's
-     * engine pin, Infrastructure's engine cards and a runner's Engines rows leave it out, and the app reads as it did before Cursor CLI;
+     * engine pin, Machines & models' engine cards and a runner's Engines rows leave it out, and the app reads as it did before Cursor CLI;
      * from then on a machine that predates it says so on its row.
      */
     fun androidShowsEngine(engine: String?, runners: List<JsonObject>?) = engine != CURSOR || runners.orEmpty().any(CursorRuntime::knows)

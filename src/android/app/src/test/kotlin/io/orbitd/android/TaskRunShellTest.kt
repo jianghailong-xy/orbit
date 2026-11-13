@@ -61,7 +61,7 @@ class TaskRunShellTest {
         compose.waitForIdle()
         // The server has started the run; the page still draws the task before it, and none of its controls can be pressed.
         compose.onNodeWithTag("task-run").assertIsNotEnabled()
-        compose.onNodeWithTag("task-assignee").assertIsNotEnabled()
+        assertFields(enabled = false)
         compose.onNodeWithTag("task-edit-acceptance").assertIsNotEnabled()
         compose.onNodeWithTag("task-run").performClick()
         compose.waitForIdle()
@@ -71,7 +71,7 @@ class TaskRunShellTest {
         ProjectShell.holdTask!!.complete(Unit)
         await { label("task-run") == TaskRunHandoff.openTheRun && enabled("task-edit-acceptance") }
         compose.onNodeWithTag("task-run").assertIsEnabled()
-        compose.onNodeWithTag("task-assignee").assertIsEnabled()
+        assertFields(enabled = true)
         settle()
         assertEquals(1, runs())
         assertFalse(exists(hasTestTag("task-run-conflict")))
@@ -106,4 +106,13 @@ class TaskRunShellTest {
     }
     private fun exists(matcher: SemanticsMatcher) = compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
     private fun await(condition: () -> Boolean) = compose.waitUntil(60_000, condition)
+    /** The run fields are in the Runs with sheet (board 05 D): open it, read the Assignee row, put it away. */
+    private fun assertFields(enabled: Boolean) {
+        compose.onNodeWithTag("task-runs-with").performScrollTo().performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("task-assignee").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("task-assignee").apply { if (enabled) assertIsEnabled() else assertIsNotEnabled() }
+        compose.onNodeWithTag("task-runs-with-done").performClick()
+        compose.waitForIdle()
+    }
+
 }

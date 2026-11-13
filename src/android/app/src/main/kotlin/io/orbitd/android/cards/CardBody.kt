@@ -102,8 +102,14 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
                 Text("${citation.text("kind")}: ${citation.text("label") ?: citation.text("ref")}")
                 Text(if (citation.flag("resolved")) "Reference found" else "Reference not found: ${citation.text("reason") ?: "unresolved"}", style = MaterialTheme.typography.bodySmall)
             }
-            row.obj("decidability")?.takeIf { !it.flag("decidable") }?.let { CardFields(it, listOf("refusal", "requiredAction"), open) }
+            // A row that offers Restart the task names no required action of somebody else's (§3.3): the owner reads why it cannot
+            // be decided, then the one move that is theirs.
+            val restart = EvidenceRestart.offered(row)
+            row.obj("decidability")?.takeIf { !it.flag("decidable") }?.let {
+                CardFields(it, if (restart) listOf("refusal") else listOf("refusal", "requiredAction"), open)
+            }
             row.obj("independence")?.takeIf { !it.flag("independent") }?.let { CardFields(it, listOf("disqualification", "requiredAction"), open) }
+            if (restart) Text(EvidenceRestart.explanation, Modifier.testTag("evidence-restart-explanation"))
         }
         CardFamily.OWNER_CONFIRMATION -> OwnerCardBody(card, open, owner, reopen, recorded)
         CardFamily.CRITERIA_CHANGE -> {

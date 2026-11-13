@@ -69,7 +69,7 @@ object DshRuntime {
          * the engine nor "the key" says which. */
         fun detail(keyName: String?) = if (this == INVALID_KEY && keyName != null) "Update $keyName on the Machines & models page, then send your message again." else detail
 
-        /** Fixed on the session's own key, in Infrastructure. */
+        /** Fixed on the session's own key, in Machines & models. */
         val isKeyProblem get() = this == NEEDS_KEY || this == INVALID_KEY
     }
 

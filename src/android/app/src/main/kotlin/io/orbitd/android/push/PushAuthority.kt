@@ -35,6 +35,12 @@ class PushAuthority(private val api: OrbitApi, private val handle: SessionHandle
                 if (!ObjectId.same(project.text("id"), payload.projectId)) throw ProtocolException()
                 if (project.text("status") == "DONE") PushCheck.ACTIVE else PushCheck.STALE
             }
+            // The orphan sweep's report to an owner with no coordinator: it stands while its project is still open.
+            payload.kind == "project-orphan" -> {
+                val project = objectRead(listOf("projects", payload.projectId!!))
+                if (!ObjectId.same(project.text("id"), payload.projectId)) throw ProtocolException()
+                if (project.text("status") == "OPEN") PushCheck.ACTIVE else PushCheck.STALE
+            }
             payload.kind == "watch-matched" -> {
                 val row = objectRead(listOf("watches", payload.watchId!!))
                 if (!ObjectId.same(row.text("id"), payload.watchId) || row.text("action") == null) throw ProtocolException()

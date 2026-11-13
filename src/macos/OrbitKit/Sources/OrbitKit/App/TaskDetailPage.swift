@@ -1,8 +1,8 @@
 import Foundation
 
 // The task detail page on the native clients: the web's `TaskDetailPanel` block for block, in its
-// order — Head, Actions, [Verification task], Details, Dependencies, Description, Acceptance,
-// Inputs, Attribution, Followed by, Runs, Comments, and the comment box under them. The words are
+// order — Head, Actions, [Verification task], Now, Delivered, Done means, the brief, In the plan,
+// Runs with, Activity, and the comment box under them (TaskDetailAgentFirst.swift). The words are
 // the browser's own (`TaskDetailCopyParityTests` reads the web sources and holds every one of them
 // here to its declaration there); what differs is only the container a phone gives them.
 
@@ -10,15 +10,11 @@ import Foundation
 public enum TaskDetailCopy {
     // MARK: section headings (`tdp-section-title`)
 
-    public static let detailsHeading = "Details"
     public static let dependenciesHeading = "Dependencies"
-    public static let descriptionHeading = "Description"
     public static let acceptanceHeading = "Acceptance"
     public static let inputsHeading = "Inputs"
     public static let attributionHeading = "Attribution"
     public static let followedByHeading = "Followed by"
-    public static let runsHeading = "Runs"
-    public static let commentsHeading = "Comments"
 
     // MARK: actions
 
@@ -41,9 +37,6 @@ public enum TaskDetailCopy {
     public static let engineDefault = "Engine default"
     public static let listLabel = "List"
     public static let startAtLabel = "Start at"
-    public static let createdByLabel = "Created by"
-    public static let createdFromLabel = "Created from"
-    public static let createdLabel = "Created"
 
     /// Under the project line when that project was cancelled: no door starts its tasks. The web
     /// panel's `PROJECT_CANCELLED_NOTE`.
@@ -111,7 +104,6 @@ public enum TaskDetailCopy {
     public static let automaticJudgementLabel = "Automatic judgement"
     public static let edit = "Edit"
     public static let acceptanceEmpty = "No acceptance criteria set."
-    public static let acceptancePairEmpty = "Not set — a person decides when this task is done."
     public static let acceptanceAutomaticHint =
         "Filled in as a pair, the task is judged by running this command and reading its exit code — nobody has to decide by hand."
     public static let acceptancePairIncomplete =
@@ -190,8 +182,6 @@ public enum TaskDetailCopy {
 
     // MARK: runs and comments
 
-    public static let noRuns = "No runs yet"
-    public static let noComments = "No comments yet"
 
     // MARK: smart model selection (docs/model-routing-design.md §9)
 
@@ -249,8 +239,6 @@ public struct TaskDetailActionRow: Equatable, Sendable {
         case underReview(sessionID: String)
         /// Confirm it from here (`OwnerConfirmations.PanelAction.confirm`).
         case confirmDone
-        /// Take a stopped task back to Open (`TaskReopen.isOffered`).
-        case reopen
     }
 
     public enum Trailing: Equatable, Sendable {
@@ -400,18 +388,20 @@ public enum TaskDetailLogic {
     // MARK: actions
 
     /// The action row from the verdicts the page already reads: what the owner's confirmation offers,
-    /// whether the task can be reopened, whether it is a gate row, and the entry its live run gives.
-    public static func actionRow(owner: OwnerConfirmations.PanelAction?, reopenable: Bool, status: TaskStatus,
+    /// whether it is a gate row, and the entry its live run gives. A stopped task — done or cancelled
+    /// — draws no run here; Reopen task and Run again are in ⋯ (docs/mocks/task-detail-agent-first,
+    /// board 05), as on the web.
+    public static func actionRow(owner: OwnerConfirmations.PanelAction?, status: TaskStatus,
                                  gate: Bool, entry: TaskRunHandoff.Entry) -> TaskDetailActionRow {
         let leading: TaskDetailActionRow.Leading?
         switch owner {
         case .pointer(let sessionId): leading = .waitingForConfirmation(sessionID: sessionId)
         case .underReview(let sessionId): leading = .underReview(sessionID: sessionId)
         case .confirm: leading = .confirmDone
-        case nil: leading = reopenable ? .reopen : nil
+        case nil: leading = nil
         }
         let trailing: TaskDetailActionRow.Trailing?
-        if status == .done {
+        if status == .done || (status == .cancelled && !gate && entry.kind != .openRun) {
             trailing = nil
         } else if !gate, entry.kind == .openRun {
             trailing = .openRun(sessionID: entry.sessionID)
@@ -437,20 +427,6 @@ public enum TaskDetailLogic {
     }
 
     // MARK: details
-
-    /// The one line under the Details card: who made the task and when (the web's `Created by` and
-    /// `Created` rows).
-    public static func createdFootnote(creatorName: String?, createdAt: String?,
-                                       timeZone: TimeZone = .current, locale: Locale = .current) -> String? {
-        let when = createdAt.flatMap { formatted($0, timeZone: timeZone, locale: locale) }
-        let who = creatorName.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
-        switch (who, when) {
-        case let (who?, when?): return "\(TaskDetailCopy.createdByLabel) \(who) · \(when)"
-        case let (who?, nil): return "\(TaskDetailCopy.createdByLabel) \(who)"
-        case let (nil, when?): return "\(TaskDetailCopy.createdLabel) \(when)"
-        case (nil, nil): return nil
-        }
-    }
 
     /// Who made the task, by name: the server's own when it sent one — neither the detail nor the
     /// list page does today, which is why the browser's row reads `—` — else the agent the creator
