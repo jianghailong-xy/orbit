@@ -1564,6 +1564,9 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		body := map[string]interface{}{"prompt": prompt}
 		copyIfPresent(body, args, "title", "model", "engine", "provider", "permissionMode")
+		if v, ok := args["worktree"].(bool); ok && !v {
+			body["worktree"] = false
+		}
 		// Route to a target agent: an explicit agentId wins; else an @-mentioned agentName
 		// (resolved to that owner's agent server-side); else default to the current agent.
 		if id := getString(args, "agentId"); id != "" {
@@ -3639,7 +3642,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"`targetShaBefore`, else `origin/<targetBranch>`. The receipt is refused when it is " +
 				"not, and when git cannot tell (fetch first, or run from inside the repository). " +
 				"Work that landed by cherry-pick or rebase is a DIFFERENT commit on the target: name " +
-				"that commit, never the original branch tip. A receipt's sourceSha goes into every " +
+				"that commit, never the original branch tip. A receipt for a task's branch also ends " +
+				"the account owner's merge card still offering that branch (asking or blocked): after " +
+				"you cherry-pick, rebase or squash a task's work onto its line by hand, record it at " +
+				"once with that task's work session and sourceBranch = the task's branch, or the owner " +
+				"keeps being asked to merge work that is already there. A receipt's sourceSha goes into every " +
 				"dependent task's dependency closure, and one the target does not contain keeps them " +
 				"refused DEPENDENCY_BASE_NOT_LANDED, because a receipt cannot be taken back. " +
 				"`rebaseBaseSha` is the field people skip and the one that decides " +
@@ -4398,7 +4405,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"rewritten: an ending is final. An item whose kind has a press of its own, a merge " +
 				"card or a paused project, is refused here: it is decided by confirming, declining or " +
 				"resuming, and closing it by hand would leave what it is about with no card in front " +
-				"of anybody.",
+				"of anybody. Closing the last failure item about a task branch's blocked merge " +
+				"candidate ends that candidate too, and its card leaves the owner's page; when the " +
+				"work went in as other commits, record merge_receipt for the task's branch as well.",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
 					"type":        "string",
@@ -5121,7 +5130,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"enum":        offeredPermissionModes(),
 						"description": strings.TrimSpace("How much the sub-session may do without a human: \"plan\" investigates and proposes without touching anything, \"default\" asks before each unapproved action, \"acceptEdits\" pre-approves file edits only, \"auto\" lets the model decide when to ask and is the mode for unattended work that has to run commands, \"dontAsk\" never asks but refuses anything not already approved, commands and background jobs included, \"bypassPermissions\" never asks and allows everything. Omit to use the owner's account default. It can never be wider than this session's own mode: a wider mode is refused, and when the default is wider the sub-session runs in this session's own mode. A mode that asks parks the sub-session on an approval card until a human answers, so pick one only if someone is watching. " + rootWithheldPermissionModeNote()),
 					},
-					"wait": map[string]interface{}{"type": "boolean", "description": "Wait for the new session's first turn to settle and return its full state inline: up to about 10 minutes, less when this session was itself spawned by a wait. The wait is recorded on Orbit's server as a watch before it starts, so when that time runs out or the connection drops, the call returns the session as last seen with the watch under \"watch\", and the watch wakes this session when the turn settles; end your turn then instead of polling. If the server does not record the watch, the result says no server-held watch backs the wait, and a refused watch returns at once. Default false: returns immediately."},
+					"worktree": map[string]interface{}{"type": "boolean", "description": "Pass false to run the session in the agent's own checkout, with no branch and no worktree, even when the agent isolates each session in a worktree. For work that changes no code (investigating, reading logs, answering a question, read-only queries): it leaves no unmerged branch behind. Not for code changes: the session edits the checkout every other non-isolated session shares, and has no branch to merge. Omit it to follow the agent's own setting; true cannot turn isolation on for an agent that has it off."},
+					"wait":     map[string]interface{}{"type": "boolean", "description": "Wait for the new session's first turn to settle and return its full state inline: up to about 10 minutes, less when this session was itself spawned by a wait. The wait is recorded on Orbit's server as a watch before it starts, so when that time runs out or the connection drops, the call returns the session as last seen with the watch under \"watch\", and the watch wakes this session when the turn settles; end your turn then instead of polling. If the server does not record the watch, the result says no server-held watch backs the wait, and a refused watch returns at once. Default false: returns immediately."},
 				}, "prompt"),
 			},
 			map[string]interface{}{

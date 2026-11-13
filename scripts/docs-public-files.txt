@@ -1,5 +1,5 @@
-docs/README.md
 docs/90-second-demo.md
+docs/README.md
 docs/architecture.md
 docs/article-durable-agent-work.md
 docs/article-private-multi-runtime-control-plane.md
@@ -17,7 +17,10 @@ docs/postgres-backup-restore.md
 docs/postgres-conflict-runbook.md
 docs/product-intro.md
 docs/project-maturity.md
+docs/project-plan-review-2026-11-13.md
+docs/release-notes-template.md
 docs/release-process.md
 docs/runner-cli.md
 docs/runner-troubleshooting.md
 docs/self-hosting.md
+docs/supply-chain.md

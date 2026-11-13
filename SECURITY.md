@@ -7,7 +7,8 @@ machines. Please report suspected vulnerabilities carefully.
 
 Orbit is pre-1.0 and evolving quickly. Security fixes are normally made on `main` and included in the next
 release. The latest published release is the only release line that receives best-effort security updates;
-older releases are not maintained as separate security branches.
+older releases are not maintained as separate security branches. The release process's
+[support window](docs/release-process.md#support-window) states the same boundary operationally.
 
 | Version | Support |
 | --- | --- |
