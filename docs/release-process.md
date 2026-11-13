@@ -85,7 +85,9 @@ verified. `release.sh bump` opens the file, and the tag is refused while a secti
 ## Before tagging
 
 1. Run `release.sh bump <version>` and fill in `release-notes/<version>.md`; commit both. Confirm
-   `node scripts/release-identity.mjs check-tag v<version>` passes (it runs `check-notes` too).
+   `node scripts/release-identity.mjs check-tag v<version>` passes (it runs `check-notes` too). Before the
+   tag exists, `bash scripts/supply-chain-dry-run.sh` dry-runs the supply chain with representative local
+   artifacts and checks that the same gate release.yml runs accepts the bundle and refuses tampering.
 2. Run the required checks for the candidate: JavaScript build/tests, PostgreSQL specs, Go runner tests, Swift
    core tests, container image build/boot, and the client workflow when native artifacts change.
 3. Verify a clean-machine Compose install and record the OS, Docker/runtime versions, tag/SHA, and sanitized
@@ -97,13 +99,23 @@ verified. `release.sh bump` opens the file, and the tag is refused while a secti
 
 Pushing a `v*` tag starts [.github/workflows/release.yml](../.github/workflows/release.yml). Its `identity`
 job checks the tag against the root package version and the release notes; `dmg`, `testflight` and
-`android-build` wait for it, so a tag that fails the check builds and publishes nothing. The macOS job
-creates the GitHub Release — its body is `release-notes/<version>.md` — and the Sparkle appcast for tag
-pushes. Once it and the Android build have succeeded, the Android publishing job attaches
-`orbit-android-<version>.apk`, its `.sha256` and `android-update.json` to that same Release
+`android-build` wait for it, so a tag that fails the check builds and publishes nothing.
+
+The build jobs upload their artifacts instead of publishing. The `supply-chain` job then builds the runner
+binaries and both service images from the tag, writes `SHA256SUMS`, the CycloneDX SBOM, the SLSA provenance
+and `release-manifest.json`, and re-verifies them; GitHub's artifact attestation is signed over the bundle.
+The `publish` job waits for that gate and creates the GitHub Release — its body is
+`release-notes/<version>.md` — with the DMG, Sparkle payload, runner reference binaries, checksums, SBOM,
+provenance and manifest, and publishes the Sparkle appcast. A version, checksum, SBOM or provenance
+mismatch fails `supply-chain` and the release is never created. Once the Release exists, the Android
+publishing job attaches `orbit-android-<version>.apk`, its `.sha256` and `android-update.json`
 ([Android releases](../src/android/docs/release.md)). Maintainers must read the published release body once
 more before sharing it in Discussions or other channels, and must confirm it is marked prerelease when the
 tag contains `-`.
+
+What the bundle contains and how to verify each part — checksums, the SBOM, the provenance, the Apple,
+Android and Sparkle signing identities, and the rollback path — is the
+[verifiable release supply chain](supply-chain.md).
 
 Do not publish signing credentials, private logs, or a claim that a generated changelog is a substitute for
 human upgrade notes. If a required gate is unavailable, say so in the release body and delay the release
@@ -111,8 +123,8 @@ unless the maintainer explicitly records the exception.
 
 ## After publishing
 
-- Check that the release assets, checksums (when provided), appcast, TestFlight build, and Android
-  `android-update.json` identify the same tag.
+- Check that the release assets, `SHA256SUMS`/SBOM/provenance bundle, appcast, TestFlight build, and
+  Android `android-update.json` identify the same tag.
 - Announce the release in [Discussions](https://github.com/jianghailong-xy/orbit/discussions) with upgrade notes,
   known limits, and a link to the exact release.
 - Keep the previous supported release and rollback instructions discoverable.
@@ -173,11 +185,16 @@ gh release download "$ORBIT_RELEASE_TAG" --repo jianghailong-xy/orbit --dir "$OR
   `(cd "$ORBIT_RELEASE_ASSETS" && sha256sum -c orbit-android-*.apk.sha256)` passes; the manifest's `tag`,
   `versionName` and `sourceSha` must be this tag, its version and `ORBIT_RELEASE_SHA`. A second tag on an
   already released commit carries no Android files (its Android jobs skip); record which release has them.
-- [ ] If the publisher supplies `SHA256SUMS`, verify it from the asset directory using
+- [ ] Verify `SHA256SUMS` from the asset directory with
   `(cd "$ORBIT_RELEASE_ASSETS" && sha256sum -c SHA256SUMS)` on Linux, or
-  `(cd "$ORBIT_RELEASE_ASSETS" && shasum -a 256 -c SHA256SUMS)` on macOS. For another checksum filename,
-  use that file instead. If no checksums were published, record “not provided” and compute local audit hashes
-  with `shasum -a 256 "$ORBIT_RELEASE_ASSETS"/*`; local hashes alone do not authenticate the publisher.
+  `(cd "$ORBIT_RELEASE_ASSETS" && shasum -a 256 -c SHA256SUMS)` on macOS. A missing `SHA256SUMS`, SBOM or
+  provenance file is a failed release, not a skipped check.
+- [ ] Re-verify the bundle against the tag and its commit with
+  `node scripts/supply-chain.mjs verify --dir "$ORBIT_RELEASE_ASSETS" --tag "$ORBIT_RELEASE_TAG"
+  --source-sha "$ORBIT_RELEASE_SHA" --repository jianghailong-xy/orbit --require-ci`, and confirm the
+  provenance's workflow, tag, commit and run URL, the SBOM's version and components, and the Apple/Android
+  signing identities described in the [supply chain guide](supply-chain.md). Record the results in the
+  release evidence.
 
 ### Deployed version agreement
 
@@ -439,7 +456,8 @@ time; get the operator's decision and record that impact in the incident/release
 ## Release evidence and exceptions
 
 The release body should retain the tag/full source SHA, previous rollback tag/SHA, migration and compatibility
-notes, workflow run URLs, asset names/checksum status, image identities, native processing/test results, and a
+notes, workflow run URLs, asset names/checksum status, the `SHA256SUMS` and SBOM/provenance verification results,
+image identities, native processing/test results, and a
 sanitized [first-run evidence table](first-run.md#evidence-to-retain). Name every skipped/blocked gate and its
 reason, approving maintainer, impact, follow-up issue, and next verification step. Record rollback failures
 or a schema-compatibility exception there too; do not silently mark a failed check as passed.

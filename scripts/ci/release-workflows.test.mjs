@@ -49,14 +49,20 @@ function step(jobName, stepName) {
   return source.slice(start, next < 0 ? undefined : next);
 }
 
-function evaluate(expression, event, ref, platform = '', outputs = {}) {
+function evaluate(expression, event, ref, platform = '', outputs = {}, results = {}) {
   // GitHub compares strings and startsWith without case sensitivity. All literals in these
   // guards are lowercase; normalize input strings to preserve that behavior in the test.
-  // needs.<job>.outputs.<name> becomes a property read (job ids contain '-').
-  // The timeout only stops a runaway expression; a loaded host can stall a call past 100 ms.
-  const source = expression.replace(/\bneeds\.([\w-]+)\.outputs\.(\w+)/g,
-    (_, jobName, name) => `needs[${JSON.stringify(jobName)}].outputs.${name}`);
-  const needs = Object.fromEntries(Object.entries(outputs).map(([name, values]) => [name, { outputs: values }]));
+  // needs.<job>.outputs.<name> / needs.<job>.result become property reads (job ids contain '-').
+  // The timeout only stops a runaway expression; a loaded host can stall a call past 5000 ms.
+  const source = expression
+    .replace(/\bneeds\.([\w-]+)\.outputs\.(\w+)/g,
+      (_, jobName, name) => `needs[${JSON.stringify(jobName)}].outputs.${name}`)
+    .replace(/\bneeds\.([\w-]+)\.result\b/g,
+      (_, jobName) => `needs[${JSON.stringify(jobName)}].result`);
+  const names = new Set([...Object.keys(outputs), ...Object.keys(results)]);
+  const needs = Object.fromEntries([...names].map((name) => [name, {
+    outputs: outputs[name] ?? {}, result: results[name] ?? 'success',
+  }]));
   return runInNewContext(source, {
     github: {
       event_name: event.toLowerCase(), ref: ref.toLowerCase(),
@@ -65,21 +71,31 @@ function evaluate(expression, event, ref, platform = '', outputs = {}) {
     inputs: { platform: platform.toLowerCase() },
     needs,
     startsWith: (value, prefix) => value.toLowerCase().startsWith(prefix.toLowerCase()),
+    always: () => true,
   }, { timeout: 5000 });
 }
 
 /**
  * Which jobs a run of release.yml performs: a job's guard holds (a job with no `if` always runs) and every
- * job it needs ran and succeeded (an `if` without a status function implies success()). `failed` jobs ran
- * but failed.
+ * job it needs ran and succeeded (an `if` without a status function implies success()). A guard that calls
+ * a status function (always()) runs even when a job it needs failed or was skipped. `failed` jobs ran but
+ * failed; `skipped` jobs ran their guard and did not hold.
  */
 function selection(event, ref, platform, { skip = 'false', failed = [] } = {}) {
   const ran = new Map();
   const runs = (name) => {
     if (!ran.has(name)) {
       const guard = job(name).match(/^    if: (.+)$/m)?.[1];
-      ran.set(name, needsOf(name).every((need) => runs(need) && !failed.includes(need))
-        && (guard === undefined || evaluate(guard, event, ref, platform, { 'android-build': { skip } })));
+      const statusFunction = guard !== undefined && /\b(always|success|failure|cancelled)\(\)/.test(guard);
+      const needs = needsOf(name);
+      const dependenciesRan = needs.every((need) => runs(need));
+      const dependenciesOk = dependenciesRan && needs.every((need) => !failed.includes(need));
+      // Only the dependencies a guard can name; asking about a dependent job would recurse.
+      const results = Object.fromEntries(needs.map((need) => [
+        need, failed.includes(need) ? 'failure' : runs(need) ? 'success' : 'skipped',
+      ]));
+      ran.set(name, (statusFunction ? true : dependenciesOk)
+        && (guard === undefined || evaluate(guard, event, ref, platform, { 'android-build': { skip } }, results)));
     }
     return ran.get(name);
   };
@@ -183,13 +199,17 @@ const scenarios = [
 ];
 const platforms = ['both', 'macos', 'ios', 'android', 'unknown', '', 'MACOS'];
 
-test('release.yml holds the identity gate, the two Apple jobs and the two Android jobs, publishing after both builds', () => {
-  assert.deepEqual(jobNames, ['identity', 'dmg', 'testflight', 'android-build', 'android-publish']);
+test('release.yml holds the identity gate, the build jobs, the supply-chain gate and the publishers', () => {
+  assert.deepEqual(jobNames, ['identity', 'dmg', 'testflight', 'android-build', 'supply-chain', 'publish', 'android-publish']);
   assert.deepEqual(needsOf('identity'), []);
   assert.deepEqual(needsOf('dmg'), ['identity']);
   assert.deepEqual(needsOf('testflight'), ['identity']);
   assert.deepEqual(needsOf('android-build'), ['identity']);
-  assert.deepEqual(needsOf('android-publish').sort(), ['android-build', 'dmg']);
+  assert.deepEqual(needsOf('supply-chain').sort(), ['android-build', 'dmg']);
+  // Publishing is unreachable without the verified bundle: an artifact mismatch fails supply-chain,
+  // and GitHub skips publish, so nothing reaches the GitHub Release.
+  assert.deepEqual(needsOf('publish'), ['supply-chain']);
+  assert.deepEqual(needsOf('android-publish').sort(), ['android-build', 'publish']);
 });
 
 test('a tag is refused unless it names the package version and carries the release notes', () => {
@@ -203,7 +223,7 @@ test('a tag is refused unless it names the package version and carries the relea
 });
 
 test('the GitHub Release body is the human-written release notes, not a generated changelog', () => {
-  const create = step('dmg', 'Create GitHub Release');
+  const create = step('publish', 'Create GitHub Release');
   assert.match(create, /--notes-file "release-notes\/\$ver\.md"/);
   assert.doesNotMatch(create, /--generate-notes/);
   // The Android update manifest carries the same notes.
@@ -214,7 +234,7 @@ test('omitted dispatch platform resolves to the workflow default before job sele
   const defaultPlatform = release.match(/^        default: (\w+)$/m)?.[1];
   assert.equal(defaultPlatform, 'both');
   assert.deepEqual(selection('workflow_dispatch', 'refs/heads/main', defaultPlatform),
-    { identity: true, dmg: true, testflight: true, 'android-build': false, 'android-publish': false });
+    { identity: true, dmg: true, testflight: true, 'android-build': false, 'supply-chain': false, publish: false, 'android-publish': false });
 });
 
 for (const [event, ref] of scenarios) {
@@ -227,36 +247,53 @@ for (const [event, ref] of scenarios) {
         dmg: tagPush || (manual && ['both', 'macos'].includes(platform.toLowerCase())),
         testflight: tagPush || (manual && ['both', 'ios'].includes(platform.toLowerCase())),
         'android-build': tagPush,
+        'supply-chain': tagPush,
+        publish: tagPush,
         'android-publish': tagPush,
       });
     });
   }
 }
 
-test('a v* tag push runs all four jobs; Android publishing waits for dmg and the Android build', () => {
+test('a v* tag push runs every job; a failed DMG blocks publishing and a failed Android build blocks only Android', () => {
   for (const ref of ['refs/tags/v0.1.0', 'refs/tags/v0.1.2-beta.195']) {
-    assert.deepEqual(selection('push', ref, ''),
-      { identity: true, dmg: true, testflight: true, 'android-build': true, 'android-publish': true }, ref);
-    // A failed DMG leaves Android unpublished (Re-run failed jobs publishes it once dmg is fixed);
-    // a failed TestFlight upload does not hold it back.
+    assert.deepEqual(selection('push', ref, ''), {
+      identity: true, dmg: true, testflight: true, 'android-build': true,
+      'supply-chain': true, publish: true, 'android-publish': true,
+    }, ref);
+    // A failed DMG has nothing to verify and nothing to publish; fixing dmg and re-running publishes.
+    assert.equal(selection('push', ref, '', { failed: ['dmg'] })['supply-chain'], false);
+    assert.equal(selection('push', ref, '', { failed: ['dmg'] }).publish, false);
     assert.equal(selection('push', ref, '', { failed: ['dmg'] })['android-publish'], false);
+    // A failed Android build does not hold the macOS release back: the bundle is still verified and
+    // published, and only the Android attachment is skipped.
+    assert.equal(selection('push', ref, '', { failed: ['android-build'] })['supply-chain'], true);
+    assert.equal(selection('push', ref, '', { failed: ['android-build'] }).publish, true);
     assert.equal(selection('push', ref, '', { failed: ['android-build'] })['android-publish'], false);
+    // A failed TestFlight upload does not hold the published release back either.
+    assert.equal(selection('push', ref, '', { failed: ['testflight'] }).publish, true);
     assert.equal(selection('push', ref, '', { failed: ['testflight'] })['android-publish'], true);
-    // A commit already published by another v* tag: android-build succeeds without building, publish is skipped.
+    // A commit already published by another v* tag: android-build succeeds without building, Android is skipped.
+    assert.equal(selection('push', ref, '', { skip: 'true' }).publish, true);
     assert.equal(selection('push', ref, '', { skip: 'true' })['android-publish'], false);
     assert.equal(selection('push', ref, '', { skip: '' })['android-publish'], false, 'a missing output never publishes');
   }
 });
 
-test('macOS publishing steps require a v* tag push, including when dispatch selects a tag', () => {
-  const guards = job('dmg').matchAll(/^        if: (.+)$/gm);
-  const expressions = [...guards].map((match) => match[1]);
-  assert.equal(expressions.length, 3, 'Release, appcast generation, and Pages publishing');
-  for (const expression of expressions) {
-    for (const [event, ref] of scenarios) {
-      assert.equal(evaluate(expression, event, ref), event === 'push' && /^refs\/tags\/v/.test(ref),
-        `${event} ${ref}`);
-    }
+test('only a v* tag push publishes, and only after the supply chain has verified the bundle', () => {
+  // The build job no longer creates the Release; it builds, uploads and (on a tag) generates the appcast.
+  assert.doesNotMatch(job('dmg'), /gh release (create|upload|edit|delete)/);
+  assert.doesNotMatch(job('supply-chain'), /gh release (create|upload|edit|delete)/);
+  const create = step('publish', 'Create GitHub Release');
+  assert.match(create, /gh release create "\$GITHUB_REF_NAME"/);
+  // The appcast is generated on the tag push only, and published by the gated job.
+  for (const name of ['Generate Sparkle appcast', 'Upload the Sparkle appcast']) {
+    assert.match(step('dmg', name), /^        if: github\.event_name == 'push' && github\.ref_type == 'tag' && startsWith\(github\.ref, 'refs\/tags\/v'\)$/m, name);
+  }
+  const guard = job('publish').match(/^    if: (.+)$/m)?.[1];
+  assert.ok(guard, 'publish has no guard');
+  for (const [event, ref] of scenarios) {
+    assert.equal(evaluate(guard, event, ref), event === 'push' && /^refs\/tags\/v/.test(ref), `${event} ${ref}`);
   }
 });
 
@@ -365,6 +402,52 @@ test('Android publishing attaches to the existing release and never creates, edi
   assert.match(attach, /^        if: steps\.manifest\.outputs\.skip == 'false'$/m);
   assert.match(step('android-publish', 'Write update manifest'), /github-release\.py manifest --tag "\$GITHUB_REF_NAME"/);
   assert.match(step('android-publish', 'Verify published assets'), /github-release\.py verify-published/);
+});
+
+test('the supply chain generates, verifies and attests before anything can be published', () => {
+  const jobSource = job('supply-chain');
+  const order = ['Build the runner binaries', 'Build the service images', 'Generate the bundle', 'Verify the bundle', 'Attest the bundle', 'Keep the verified bundle'];
+  const positions = order.map((name) => jobSource.indexOf(`      - name: ${name}\n`));
+  for (let index = 1; index < positions.length; index += 1) {
+    assert.ok(positions[index - 1] >= 0, `${order[index - 1]} is missing`);
+    assert.ok(positions[index - 1] < positions[index], `${order[index - 1]} must come before ${order[index]}`);
+  }
+  assert.match(step('supply-chain', 'Generate the bundle'), /scripts\/supply-chain\.mjs generate/);
+  assert.match(step('supply-chain', 'Generate the bundle'), /--run-id "\$GITHUB_RUN_ID"/);
+  assert.match(step('supply-chain', 'Generate the bundle'), /--tag "\$GITHUB_REF_NAME"/);
+  assert.match(step('supply-chain', 'Generate the bundle'), /--source-sha "\$GITHUB_SHA"/);
+  assert.match(step('supply-chain', 'Verify the bundle'), /scripts\/supply-chain\.mjs verify/);
+  assert.match(step('supply-chain', 'Verify the bundle'), /--require-ci/);
+  assert.match(step('supply-chain', 'Attest the bundle'),
+    /uses: actions\/attest-build-provenance@[0-9a-f]{40} # v\d+\.\d+\.\d+/);
+  // The attestation and the write token never share a job.
+  assert.match(job('supply-chain'), /^    permissions:\n      contents: read\n      id-token: write\b/m);
+  assert.match(job('supply-chain'), /^      attestations: write\b/m);
+  assert.match(job('publish'), /^    permissions:\n      contents: write$/m);
+  assert.doesNotMatch(job('publish'), /id-token: write|attestations: write|secrets\.[A-Z_]/);
+  // A failed verification fails the job, which skips publish through needs.
+  assert.match(job('supply-chain'), /^    if: always\(\) .*needs\.dmg\.result == 'success'$/m);
+});
+
+test('every workflow uses least privilege and pins every action to a full commit', () => {
+  const writable = new Set(['contents', 'attestations', 'id-token', 'actions']);
+  for (const [name, source] of Object.entries(workflows)) {
+    assert.match(source, /^permissions:/m, `${name} declares no workflow-level permissions`);
+    assert.doesNotMatch(source, /permissions:\s*write-all|contents:\s*write\s*\n\s*[a-z-]+:\s*write-all/, name);
+    const writes = [...source.matchAll(/^\s+([a-z-]+): write$/gm)].map((match) => match[1]);
+    for (const scope of writes) assert.ok(writable.has(scope), `${name} grants ${scope}: write`);
+    for (const line of source.split('\n')) {
+      const match = /^\s*(?:- )?uses: (\S+)(?:\s+#\s+(\S+))?\s*$/.exec(line);
+      if (!match) continue;
+      assert.match(match[1], /^[^@\s]+@[0-9a-f]{40}$/, `${name}: ${match[1]} is not pinned to a commit`);
+      assert.match(match[2] ?? '', /^v\d+\.\d+\.\d+$/, `${name}: ${match[1]} carries no version comment`);
+    }
+  }
+  // The two publishing jobs are the only holders of the repository write token in release.yml.
+  assert.equal([...release.matchAll(/^      contents: write$/gm)].length, 2);
+  assert.match(release, /^permissions:\n  contents: read$/m);
+  assert.equal([...release.matchAll(/^      id-token: write\b/gm)].length, 1);
+  assert.equal([...release.matchAll(/^      attestations: write\b/gm)].length, 1);
 });
 
 test('ordinary Android PR verification never receives release signing secrets', () => {

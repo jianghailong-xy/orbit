@@ -21,6 +21,7 @@
     "docs:check": "node scripts/check-docs.mjs",
     "test:docs": "node --test test/check-docs.test.mjs",
     "test:release-identity": "node --test test/release-identity.test.mjs",
+    "test:supply-chain": "node --test test/supply-chain.test.mjs",
     "build": "npm run build -w @orbit/shared && npm run build -w @orbit/apiserver && npm run build -w @orbit/web",
     "build:runner": "bash scripts/build-binaries.sh dist-bin",
     "db:up": "docker compose up -d postgres",
