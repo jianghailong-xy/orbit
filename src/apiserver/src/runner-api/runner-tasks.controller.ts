@@ -27,6 +27,11 @@ import {
 } from '../tasks/dto';
 import { ProjectAttributionService } from '../projects/project-attribution.service';
 import { TasksService } from '../tasks/tasks.service';
+import {
+  DAG_CHANGE_CARD_TOOL,
+  TASK_BATCH_CARD_TOOL,
+  TASK_CREATE_CARD_TOOL,
+} from '../tasks/verifier-write-authority';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerWriteProtocolInterceptor } from './runner-write-protocol';
@@ -74,6 +79,14 @@ export class RunnerTasksController {
   ) {
     RunnerTasksController.refuseImplicitEvidenceJudgment(dto);
     const creator = await this.tasks.resolveAgentCreator(runner.ownerId, actingWorkspaceId(workspaceId, legacyAgentId));
+    // The machine credential is the agent's credential: this create must name the acting session
+    // and be the one that session's answered card covers, whichever surface asked for it
+    // (`tasks/task-write-approval.ts`). A headless process acts as the account owner with a
+    // personal access token on the user route instead; there is no card-free write here.
+    await this.tasks.assertSessionTaskWriteApproved(runner.ownerId, runner.id, sessionId, {
+      toolName: TASK_CREATE_CARD_TOOL,
+      create: dto,
+    });
     return this.tasks.create(runner.ownerId, dto, creator, sessionId);
   }
 
@@ -94,6 +107,15 @@ export class RunnerTasksController {
   ) {
     RunnerTasksController.refuseImplicitEvidenceJudgmentBatch(dto);
     const creator = await this.tasks.resolveAgentCreator(runner.ownerId, actingWorkspaceId(workspaceId, legacyAgentId));
+    // The write that starts work in bulk takes the same acting session and answered card as the
+    // single create — and a dry run writes nothing, so it asks nobody
+    // (`tasks/task-write-approval.ts`).
+    if (!dto.dryRun) {
+      await this.tasks.assertSessionTaskWriteApproved(runner.ownerId, runner.id, sessionId, {
+        toolName: TASK_BATCH_CARD_TOOL,
+        tasks: dto.tasks,
+      });
+    }
     return dto.dryRun
       ? this.tasks.previewPlan(runner.ownerId, dto, creator, sessionId)
       : this.tasks.createMany(runner.ownerId, dto, creator, sessionId);
@@ -428,12 +450,22 @@ export class RunnerTasksController {
    * run, an edit of a verifier's dependencies needs that card to be here as well.
    */
   @Post('task-lists/:id/dag-apply')
-  applyDag(
+  async applyDag(
     @CurrentRunner() runner: Runner,
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: ProposeDagDto,
     @Headers('x-orbit-session-id') sessionId?: string,
   ) {
+    // A restructure can release a column of work into the dispatcher at once, so on the machine
+    // credential it takes the acting session and the answered card — the same one
+    // `tasklist_propose_dag` and `orbit task-list propose-dag --apply` raise, matched against this
+    // list and these edges (`tasks/task-write-approval.ts`). The CLI door used to apply with none;
+    // the server is where that stays closed, whichever surface asks.
+    await this.tasks.assertSessionTaskWriteApproved(runner.ownerId, runner.id, sessionId, {
+      toolName: DAG_CHANGE_CARD_TOOL,
+      listId: id,
+      ops: dto.ops,
+    });
     return this.tasks.applyDag(runner.ownerId, id, dto.ops, sessionId);
   }
 

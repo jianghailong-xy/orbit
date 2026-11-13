@@ -1147,8 +1147,8 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		declined, startAfterCreate, err := askBeforeTaskCreate(s.t, s.sessionID, body)
 		if err != nil {
 			return toolResult(err.Error(), true)
-		} else if declined != "" {
-			return toolResult("the human rejected this task: "+declined, false)
+		} else if declined != nil {
+			return toolResult(declinedCardRefusal(taskCreateApprovalToolName, "this task", declined), false)
 		}
 		// The owner's "Create and start" does what startNow does. It is their later and explicit
 		// answer, so it takes the place of any schedule the agent proposed on the card.
@@ -2018,21 +2018,23 @@ func askBeforeCreate(t *Transport, sessionID, toolName string, input interface{}
 
 // askBeforeTaskCreate is askBeforeCreate for a single task create, the one card whose yes can carry a
 // second choice: the owner's "Create and start" (startAfterCreate), which asks for the task to be
-// started as soon as it is written (task_start_now.go). Anything but a yes carries no start.
+// started as soon as it is written (task_start_now.go). Anything but a yes carries no start, and
+// comes back as the decision itself so both surfaces can report the SAME refusal document
+// (`declinedCardRefusal`) rather than two sentences.
 //
 // The card says that this asker acts on that choice (acceptsStartAfterCreate, beside the input, never
 // in the body the create sends). Clients offer the button, and the server takes the choice, only on a
 // card that says so — a runner that predates it would read the yes and only create the task.
-func askBeforeTaskCreate(t *Transport, sessionID string, body map[string]interface{}) (declined string, startAfterCreate bool, err error) {
+func askBeforeTaskCreate(t *Transport, sessionID string, body map[string]interface{}) (declined *ApprovalDecisionResponse, startAfterCreate bool, err error) {
 	dec, err := askCreateCard(t, sessionID, taskCreateApprovalToolName, body,
 		map[string]interface{}{"acceptsStartAfterCreate": true})
 	if err != nil || dec == nil {
-		return "", false, err
+		return nil, false, err
 	}
-	if declined := declinedReason(dec); declined != "" {
-		return declined, false, nil
+	if dec.Status != "ALLOWED" {
+		return dec, false, nil
 	}
-	return "", dec.StartAfterCreate, nil
+	return nil, dec.StartAfterCreate, nil
 }
 
 // declinedReason is "" for a yes, and otherwise what to hand back in place of the write.
@@ -2138,19 +2140,28 @@ func approvalPollIsAnswered(err error) bool {
 
 // askBeforeBatch is askBeforeCreate for a batch, whose card carries the server-computed preview:
 // fifty titles say nothing, and the counts — above all how many start running within the minute —
-// are what the human is actually deciding on.
-func askBeforeBatch(t *Transport, agentID, sessionID string, bodies []map[string]interface{}) (declined string, err error) {
+// are what the human is actually deciding on. A decision that is not a yes comes back as the
+// decision itself, so the MCP tool and the CLI report the one refusal document
+// (`declinedCardRefusal`).
+func askBeforeBatch(t *Transport, agentID, sessionID string, bodies []map[string]interface{}) (declined *ApprovalDecisionResponse, err error) {
 	if sessionID == "" {
-		return "", nil
+		return nil, nil
 	}
 	preview, err := t.batchPreview(agentID, sessionID, map[string]interface{}{"tasks": bodies})
 	if err != nil {
-		return "", fmt.Errorf("batch preview failed: %w", err)
+		return nil, fmt.Errorf("batch preview failed: %w", err)
 	}
-	return askBeforeCreate(t, sessionID, batchApprovalToolName, map[string]interface{}{
+	dec, err := askCreateCard(t, sessionID, batchApprovalToolName, map[string]interface{}{
 		"tasks":   bodies,
 		"preview": json.RawMessage(preview),
-	})
+	}, nil)
+	if err != nil || dec == nil {
+		return nil, err
+	}
+	if dec.Status != "ALLOWED" {
+		return dec, nil
+	}
+	return nil, nil
 }
 
 // createBatchWithApproval puts a batch of new tasks in front of a human before writing any of it.
@@ -2164,8 +2175,8 @@ func (s *mcpServer) createBatchWithApproval(bodies []map[string]interface{}) map
 	if err != nil {
 		return toolResult(err.Error(), true)
 	}
-	if declined != "" {
-		return toolResult("the human rejected this batch: "+declined, false)
+	if declined != nil {
+		return toolResult(declinedCardRefusal(batchApprovalToolName, "this batch", declined), false)
 	}
 	return s.createBatchNow(map[string]interface{}{"tasks": bodies})
 }
@@ -2533,6 +2544,9 @@ const dagApprovalToolName = "orbit_dag_change"
 // permissively the write would land silently, and "silently" is the one thing a batch that can
 // release forty tasks into the dispatcher must never be. One card for the whole batch, carrying
 // the server-computed impact — the human is approving what results, not fourteen edge writes.
+//
+// The preview, the card and the apply are `dagChangeWithApproval`'s, the same path
+// `orbit task-list propose-dag --apply` takes (dag_approval.go).
 func (s *mcpServer) proposeDag(args map[string]interface{}) map[string]interface{} {
 	if s.sessionID == "" {
 		return toolResult("no session context (ORBIT_SESSION_ID unset)", true)
@@ -2545,67 +2559,14 @@ func (s *mcpServer) proposeDag(args map[string]interface{}) map[string]interface
 	if !ok || len(ops) == 0 {
 		return toolResult("ops is required and must be a non-empty array", true)
 	}
-	body := map[string]interface{}{"ops": ops}
-	if note := getString(args, "note"); note != "" {
-		body["note"] = note
-	}
-	preview, err := s.t.dagPreview(listID, body)
+	applied, declined, err := dagChangeWithApproval(s.t, s.sessionID, listID, ops, getString(args, "note"))
 	if err != nil {
-		return toolResult("dag preview failed: "+err.Error(), true)
+		return toolResult(err.Error(), true)
 	}
-	// A batch that cannot be applied is not a decision to put in front of a human — it is a
-	// mistake to hand straight back, with the cycle named so it can be fixed in one more turn.
-	var p struct {
-		Cycle []struct {
-			Title string `json:"title"`
-		} `json:"cycle"`
-		EffectiveCount int `json:"effectiveCount"`
-		NoopCount      int `json:"noopCount"`
+	if declined != nil {
+		return toolResult(declinedCardRefusal(dagApprovalToolName, "this DAG change", declined), false)
 	}
-	if err := json.Unmarshal(preview, &p); err == nil {
-		if len(p.Cycle) > 0 {
-			titles := make([]string, 0, len(p.Cycle))
-			for _, c := range p.Cycle {
-				titles = append(titles, c.Title)
-			}
-			return toolResult("rejected: these changes would create a cycle: "+strings.Join(titles, " -> "), true)
-		}
-		if p.EffectiveCount == 0 {
-			return toolResult("nothing to do: every proposed edge is already in the state you asked for ("+
-				strconv.Itoa(p.NoopCount)+" no-op(s)). Re-read the graph with task_dependency_graph before proposing again.", true)
-		}
-	}
-	input := map[string]interface{}{"listId": listID, "ops": ops, "preview": json.RawMessage(preview)}
-	if note := getString(args, "note"); note != "" {
-		input["note"] = note
-	}
-	id, err := s.t.createApproval(context.Background(), s.sessionID, map[string]interface{}{
-		"toolName": dagApprovalToolName,
-		"input":    input,
-	})
-	if err != nil {
-		return toolResult("could not register approval: "+err.Error(), true)
-	}
-	// Unbounded, exactly like permissionPrompt: this asks a human who may be asleep, and a
-	// deadline here would turn "not answered yet" into a silent abandonment of the restructure.
-	dec, err := awaitApprovalDecision(context.Background(), s.t, s.sessionID, id)
-	if err != nil {
-		return toolResult("approval poll failed: "+err.Error(), true)
-	}
-	if dec.Status == "ALLOWED" {
-		applied, err := s.t.dagApply(listID, body)
-		if err != nil {
-			// Approved but unapplicable: the graph moved while the card was open. Say so
-			// plainly — the alternative is an agent that believes it restructured the list.
-			return toolResult("approved, but applying failed: "+err.Error(), true)
-		}
-		return toolResult(prettyJSON(applied), false)
-	}
-	msg := dec.Message
-	if msg == "" {
-		msg = "denied by the user"
-	}
-	return toolResult("the human rejected this DAG change: "+msg, false)
+	return toolResult(prettyJSON(applied), false)
 }
 
 // permissionPrompt is claude's --permission-prompt-tool: it registers the gated tool

@@ -1,10 +1,11 @@
 # Orbit Agent Contract v1
 
-> **Status:** frozen at v1.0.0, reviewed 2026-11-13 (review record in §11).
-> This file is the authority for how an in-session Claude or Codex agent uses Orbit: which object an
-> intent belongs to, whether it travels over MCP or the CLI, what a person must approve, how failures
-> and retries are handled, and what counts as a success receipt. The implementation tasks P0-02 … P2-01
-> work from this file. If the code conflicts with it, change this file first and say why.
+> **Status:** frozen at v1.2.0, 2026-11-13 (v1.0.0 review record in §11; the 1.1.0 and 1.2.0 changes
+> are in §10). This file is the authority for how an in-session Claude or Codex agent uses Orbit:
+> which object an intent belongs to, whether it travels over MCP or the CLI, what a person must
+> approve, how failures and retries are handled, and what counts as a success receipt. The
+> implementation tasks P0-02 … P2-01 work from this file. If the code conflicts with it, change this
+> file first and say why.
 >
 > **Machine-readable index:** [`contracts/orbit-agent.contract.json`](../contracts/orbit-agent.contract.json)
 > carries the same version, the route table, the scenario ids and the baseline verdicts.
@@ -46,7 +47,8 @@
    first attempt did not land. A create answered by nothing is re-read before it is sent twice.
 8. **Same semantics on both surfaces.** MCP and the in-session CLI must produce the same
    authorization, approval, attribution, side effects and ids for the same input. A difference is a
-   defect in the surface, not a licence for the agent.
+   defect in the surface, not a licence for the agent. Since v1.1.0 the rule is enforced in the
+   control plane by caller identity, not by whichever surface remembered to ask: see §2.4.
 9. **Orchestration is one account switch, and it is not a mode.** With it off there are no session,
    agent or runner tools; file durable work as tasks and say where the switch is; never claim a
    delegation.
@@ -148,7 +150,7 @@ argument.
 | Bulk input from a file or stdin | the MCP schema takes a JSON array, but a plan is easier to write and review as a file | `orbit task create-batch --tasks-file - < plan.json` |
 | Shell composition / pipelines | the result feeds another command | `orbit task list --json \| jq '.[].id'` |
 | An operation with no MCP tool | the MCP surface is smaller than the CLI in a few places | `session_import`, `wiki_import`, `wiki_verify` (baseline §8.2) |
-| Headless or service-token automation | there is no live session to attribute to or to card | `ORBIT_USER_TOKEN=… orbit task create …` |
+| Headless or service-token automation | there is no live session to attribute to or to card; the machine credential cannot write carded work without one | `ORBIT_USER_TOKEN=… orbit task create …` |
 | A command that must outlive the turn | a long build/test is a background job, whichever surface starts it | `bg_run` (MCP) or `orbit …` inside it |
 
 ### 2.3 When the CLI is *not* allowed
@@ -167,11 +169,22 @@ argument.
 | Invariant | Meaning |
 | --- | --- |
 | Authorization | The same credential, account, live session and orchestration evaluation. No surface is a wider door. |
-| Approval | Inside a session, a create/batch/project/provider write files the same card and waits for the same answer. Headless writes have no card because there is no session to ask — they act as the runner owner. |
-| Attribution | Inside a session, the write is attributed to this agent and linked to this session; headless writes fall back to the runner owner. The model never invents an author. |
+| Approval | Inside a session, a create/batch/project/provider write files the same card and waits for the same answer. The runner's machine credential has no card-free write of its own; a headless process that must file work acts as the owner with a personal access token (§4.5). |
+| Attribution | Inside a session, the write is attributed to this agent and linked to this session; a person's own credential is recorded as the person. The model never invents an author. |
 | Identity and ids | Same entity, same public id, same status. A task created over the CLI is fetchable by the MCP `task_get` with no translation. |
 | Output | `--json` emits the entity document on stdout and nothing else; hints go to stderr. MCP returns the entity document as the tool result text. |
-| Failure | A refusal is a refusal on both surfaces. (Today the two disagree on how a *declined card* is reported — §8.4 G4.) |
+| Failure | A refusal is a refusal on both surfaces, and a declined card is ONE document: `{"refused":true,"code":"APPROVAL_DECLINED","tool":…,"message":…,"decidedBy":…}`. MCP returns it as the tool result text; the CLI returns it as the command's error (stderr, non-zero exit). The transport differs because a tool result is not a process; the outcome does not. |
+
+**Since v1.1.0 the approval row is enforced by the control plane, by caller; since v1.2.0 it has no
+session-less exception on the machine credential.** The runner's machine credential is the agent's
+credential: `POST /runner/tasks`, `POST /runner/tasks/batch-create` and
+`POST /runner/task-lists/:id/dag-apply` each require a usable acting session (this runner's, this
+account's, not ended) and an ALLOWED approval card filed by that session covering the exact write
+(its items, its edges, its body); otherwise they refuse with `TASK_WRITE_NEEDS_OWNER_CARD` and write
+nothing. A request that names no session is refused too — the header is attribution, not
+authentication, so "no session" may be an agent that unset it. The card-free door belongs to the
+person's own credential on the user routes (`POST /api/tasks`, `/api/tasks/batch-create`), which is
+deliberate and is stated in §4.5.
 
 ### 2.5 Discovery
 
@@ -283,11 +296,32 @@ a session was started.
 
 - In a session, writes are attributed to the session's agent and linked to the session. The runner
   and MCP read the same `ORBIT_AGENT_ID`; the two write paths must not disagree on who created a task.
-- Headless (runner credential, no session) writes fall back to the runner owner.
+- A person's own credential (`orbit login` or a personal access token) is recorded as the person:
+  `creatorType: USER` with the account as the author and no session link.
+- Other headless mutations made on the runner credential (a comment, a policy update) fall back to
+  the runner owner; the carded task writes do not have that fallback (§4.5).
 - A sub-session created with `session_create` runs under the named agent; it can never have a wider
   permission mode than its parent, and an agent cannot grant itself a mode it does not hold.
 - The human is never impersonated: no tool lets an agent answer an owner-only decision, and no
   agent writes "the owner approved" in a comment as a substitute for the owner's own record.
+
+### 4.5 Who may write card-free, and why
+
+The runner's machine credential is shared by the runner and every engine it spawns; an agent's
+shell can read it and can unset `ORBIT_SESSION_ID`. So a card-free write on that credential would be
+a door any agent could take by dropping one environment variable — the gate would hold only while
+the model chose to send the header. It therefore has none: a task create, a create-batch and a DAG
+apply on the machine credential always need the acting session and the owner's answered card for
+that exact write, and a request that names no usable session (missing, forged, another account's,
+another runner's, or ended) is refused with `TASK_WRITE_NEEDS_OWNER_CARD` and
+`requiredAction: USE_A_PERSONAL_ACCESS_TOKEN`.
+
+The card-free door that remains is **a person's credential, deliberately**: `orbit login` or
+`ORBIT_USER_TOKEN` writes through the user routes (`POST /api/tasks`, `/api/tasks/batch-create`),
+is recorded as the person, and needs no card because there is no agent writing on somebody's behalf.
+Headless automation files work that way; the machine credential is for work done inside a session.
+A DAG batch restructure has no person route today: a person's terminal edits edges one at a time
+(`task dependency-add/remove`), and the batch form is an agent's, on its card.
 
 ---
 
@@ -300,7 +334,7 @@ a session was started.
 | Input / schema | missing required field, wrong type, mutually exclusive fields, cap exceeded | fix the call; do not retry blind |
 | Business validation | `OWNER_CONFIRMATION_REASON_REQUIRED`, a criterion shape the server refuses, a batch item invalid (`itemIndex`) | fix the named field/item; a batch is all-or-nothing |
 | Authorization | orchestration off, not the owner, cross-project crossing needs the owner, no live session | report the boundary; never swap doors |
-| Approval | card declined, card pending, permission prompt denied | treat as a refusal; ask a new question only if the person asks |
+| Approval | card declined, card pending, permission prompt denied, a session write no answered card covers (`TASK_WRITE_NEEDS_OWNER_CARD`) | treat as a refusal; ask a new question only if the person asks |
 | Conflict | task already running, generation/revision conflict (`409 PROGRESS_REVISION_CONFLICT`), dependency not done | re-read, reconcile, then retry the corrected call |
 | Transport / transient | 5xx, 429 with `Retry-After`, a transient database conflict | see §5.2 |
 
@@ -350,7 +384,20 @@ closing this.
 | `project_create` / `project_update` | the project id and status; the criterion set as written |
 | `session_create` | the session id and status |
 | `file_upload` | the file/attachment id and a link that works in a reply |
-| A declined card | an explicit refusal outcome, distinguishable from a write, naming who declined and why |
+| A declined card | the `APPROVAL_DECLINED` document below, distinguishable from a write, naming the card's tool, who declined it and why |
+
+**The one refusal document (v1.1.0).** A card the person declined produces this document on both
+surfaces — the MCP tool as its result text, the CLI as its error (non-zero exit):
+
+```json
+{"refused":true,"code":"APPROVAL_DECLINED","tool":"orbit_task_create","message":"the human rejected this task: …","decidedBy":"<user id>"}
+```
+
+`tool` is the card's tool name (`orbit_task_create`, `orbit_task_batch`, `orbit_dag_change`), and
+`decidedBy` is absent when the answer was not a person's (an abandoned card, a policy). Classify by
+`code`; never by whether an exception was raised. The shape covers the task writes and the DAG
+change; the other card families (project, provider, agent, runner delete) still report their decline
+in prose, and their receipt format belongs to P0-04.
 
 ### 6.2 The rules
 
@@ -361,10 +408,9 @@ closing this.
 3. **A receipt is the entity document, not prose about it.** MCP returns the JSON as the tool result
    text; the CLI prints it on stdout with `--json`. A start outcome printed beside the document must
    be read too, not dropped (baseline §8.4 G3).
-4. **A decline is a refusal, not a success.** Today the MCP tools return a declined create as a
-   non-error result whose text begins "the human rejected this task"; the CLI exits non-zero. Both
-   are refusals; the agent must classify by the outcome, never by the absence of an exception
-   (baseline §8.4 G4).
+4. **A decline is a refusal, not a success.** Both surfaces report it as the `APPROVAL_DECLINED`
+   document above — the difference is the transport (an MCP tool result, a non-zero CLI exit), not
+   the outcome. Classify by the document, never by the absence of an exception.
 5. **Evidence is its own envelope.** A task's completion evidence is submitted with
    `task_evidence_submit` (`claim`, `checks`, `gaps`); a comment is not evidence, and evidence is not
    a status write. The completion criterion decides DONE, never the agent's summary.
@@ -609,12 +655,12 @@ Other measured facts:
 
 | Case | Verdict | Evidence | What does not hold (feeds which task) |
 | --- | --- | --- | --- |
-| S1 record task | **PARTIAL** | Tool exists and the card is filed (`task_create` handler; card `acceptsStartAfterCreate`); create receipt is the entity JSON. | Unknown fields ignored (G1); decline reported as a non-error result (G4); receipt is text-only (G3). P0-04. |
+| S1 record task | **PARTIAL** | Tool exists and the card is filed (`task_create` handler; card `acceptsStartAfterCreate`); create receipt is the entity JSON; a declined card is the `APPROVAL_DECLINED` document on both surfaces (v1.1.0, G4 closed). | Unknown fields ignored (G1); receipt is text-only (G3). P0-04. |
 | S2 private plan | **PARTIAL** | The injected primer states the durable-vs-private rule (`agent_instructions.go`, tested by `agent_instructions_test.go`); no structural enforcement; the runner adds no plan-mode gate to Orbit calls (P1-02). | No test that a private plan is not presented as a record; whether an engine's own plan mode refuses an Orbit write is not measured. P1-02, P2-01. |
 | S3 create without start | **PARTIAL** | `task_create` supports the full separation (`startNow`/`runAt`/`autoRunWhenReady`/card override; `mcp.go` `askBeforeTaskCreate`, `task_start_now.go`). | `autoRunWhenReady` defaults to true (`schema.prisma:5602`; the tool property says so), and the create card's top-level description does not lead with it, so "file it for later" can start work unless the agent sets false (G11). P0-05. |
-| S4 batch plan | **PARTIAL** (capability passes; real-write receipt unmeasured) | Measured dry-run receipt; atomic items with `ref`/`dependsOnRefs`/`parentRef`; one card. | No per-item id receipt observed for a real write (not measured); decline is a non-error result. P0-04. |
+| S4 batch plan | **PARTIAL** (capability passes; real-write receipt unmeasured) | Measured dry-run receipt; atomic items with `ref`/`dependsOnRefs`/`parentRef`; one card. Since v1.1.0 the server refuses a session batch no answered card covers (`TASK_WRITE_NEEDS_OWNER_CARD`), so the CLI cannot write one unasked. | No per-item id receipt observed for a real write (not measured). P0-04. |
 | S5 read-only inspection | **PASS** | `project_get` returned the project (5,219 chars) over a read-only MCP call; `task_list --project-id` exists. | No project list surface (§8.2); project id must be learned elsewhere (P0-02/P1-01); in Codex plan mode even the read is refused (G9, P1-02). |
-| S6 immediate delegation | **PASS** | `task_start` returns the session id; `startNow` covers create+start; `session_create` is orchestration-gated (tool descriptions + code). | Start receipt split across document and prose/stderr (G3); decline semantics differ (G4). P0-04. |
+| S6 immediate delegation | **PASS** | `task_start` returns the session id; `startNow` covers create+start; `session_create` is orchestration-gated (tool descriptions + code); a declined card is one document on both surfaces (v1.1.0). | Start receipt split across document and prose/stderr (G3). P0-04. |
 | S7 no orchestration | **PARTIAL** | Measured: 22 tools disappear; `orchestrationOffMsg` names the switch; CLI hides the commands. | No injected instruction tells an agent what to do when the family is absent; it only says "when your tool list has them". P0-05/P1-02. |
 | S8 compaction recovery | **PARTIAL** (code-inspected; not black-box measured) | Codex: three instruction modes with an explicit refresh after `thread/compacted` (`codex_appserver.go`); Claude: `--append-system-prompt` persists per process and MCP tools are re-sent per request; no MCP `initialize.instructions`. | No black-box compaction test for either engine; the project scope is not surfaced by any tool default, so a compacted agent must re-read it. P0-05, P2-01. |
 
@@ -625,7 +671,7 @@ Other measured facts:
 | G1 | Unknown MCP fields and wrong types are silently ignored; CLI JSON payloads are not strict either. | P0-04 |
 | G2 | No MCP `initialize.instructions`; the agent primer exists only as an engine-injected prompt. | P0-05 |
 | G3 | Write receipts are unversioned text blocks; a start outcome is split across document and prose/stderr; no `structuredContent`. | P0-04 |
-| G4 | A declined card is a non-error MCP result and a non-zero CLI error — the same refusal, two shapes. | P0-03 / P0-04 |
+| G4 | ~~A declined card is a non-error MCP result and a non-zero CLI error — the same refusal, two shapes.~~ **Closed by P0-03 (v1.1.0):** both surfaces return the same `APPROVAL_DECLINED` document; the transport difference stays, the outcome does not differ. | P0-03 (closed); P0-04 owns the remaining receipt format |
 | G5 | Task creates take no caller idempotency key; a retry in a later turn can duplicate work. | P0-04 |
 | G6 | No project list surface on either agent surface. | P0-02 / P1-01 |
 | G7 | The catalogue is one 255 KB document in the fullest context (214 KB with orchestration off, 177 KB headless); there is no graded discovery (`summary`/`family`/`id`/guide). | P1-01 |
@@ -656,6 +702,8 @@ Other measured facts:
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.2.0 | 2026-11-13 | P0-03 revision: the machine credential has no card-free task write. `POST /runner/tasks`, `/runner/tasks/batch-create` and `/runner/task-lists/:id/dag-apply` now require a usable acting session (this runner's, this account's, not ended) as well as the answered card covering the exact write; a request naming no session, a forged id or an ended one is refused `TASK_WRITE_NEEDS_OWNER_CARD` with `USE_A_PERSONAL_ACCESS_TOKEN`, because `x-orbit-session-id` is attribution and an agent can unset it. The card-free door is a person's own credential on the user routes, stated as deliberate in the new §4.5. §2.2, §2.4, §4.4 updated; the CLI copy no longer offers a headless machine-credential create. |
+| 1.1.0 | 2026-11-13 | P0-03. The approval row is enforced by the control plane, by caller: a session's `task_create`, `task_create_batch` (including one that starts work at once) and `task-list propose-dag --apply` each require an ALLOWED card covering that exact write, refused otherwise as `TASK_WRITE_NEEDS_OWNER_CARD`. The in-session CLI's DAG restructure now asks on the same card as the MCP tool (it previously applied with no approval); the injected primer no longer says the two surfaces are interchangeable, and says instead that they take the same approval. A declined card is one document, `APPROVAL_DECLINED` (G4 closed). §0 rule 8, §2.4, §6.1–2, §8.3, §8.4 updated. |
 | 1.0.0 | 2026-11-13 | First frozen version: object model, routing, surfaces, create/start, permissions, errors, receipts, eight scenarios, baseline. |
 
 ---
