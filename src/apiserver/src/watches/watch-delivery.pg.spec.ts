@@ -928,7 +928,9 @@ test('task_await on a forked task: the wake carries its branch, forkSha, the sna
   assert.equal(fenced.length, 1);
   const payload = JSON.parse(fenced[0][1]);
   const branch = 'orbit/finish-the-claim-refactor-1a2b3c';
-  assert.deepEqual(payload.forkedTasks, [
+  // In the snapshot's target order, which follows the targets' ids rather than the order they were named in.
+  const byTask = (a: { taskId: string }, b: { taskId: string }) => a.taskId.localeCompare(b.taskId);
+  assert.deepEqual([...payload.forkedTasks].sort(byTask), [
     {
       taskId: done,
       branch,
@@ -944,9 +946,9 @@ test('task_await on a forked task: the wake carries its branch, forkSha, the sna
     },
     // Still OPEN, with no run on a branch: named, with nothing to merge yet.
     { taskId: open, branch: null, forkSha: baseHead, baseHead, includesUncommitted: false, snapshotChangedFiles: [] },
-  ], 'one entry per forked target, none for the task that was not forked');
+  ].sort(byTask), 'one entry per forked target, none for the task that was not forked');
   // The merge instruction says to read the diff BEFORE merging (§2.7 F4).
-  const instruction = payload.forkedTasks[0].mergeInstruction as string;
+  const instruction = payload.forkedTasks.find((f: { taskId: string }) => f.taskId === done).mergeInstruction as string;
   assert.ok(instruction.indexOf('git diff HEAD...') < instruction.indexOf('git merge --no-ff'));
 });
 
