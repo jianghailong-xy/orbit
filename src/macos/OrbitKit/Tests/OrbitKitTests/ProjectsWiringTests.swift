@@ -218,7 +218,12 @@ final class ProjectsWiringTests: XCTestCase {
             "MachineDraftPage(runnerID: runnerID)\n                                    .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }\n"
             + "                                    .navigationBarBackButtonHidden()\n                                    .drawerToggle(open: openDrawer)"),
                       "a machine's new session page is its Set up row's own page, and leads the same way")
-        XCTAssertEqual(shell.components(separatedBy: "SwipeBackGestureToggle(enabled:").count - 1, 2,
+        XCTAssertTrue(agents.contains(
+            "GuestSessionView(sessionID: sessionID)\n                                    .id(sessionID)\n"
+            + "                                    .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }\n"
+            + "                                    .navigationBarBackButtonHidden()\n                                    .drawerToggle(open: openDrawer)"),
+                      "a shared session's guest view is its Shared with me row's own page, and leads the same way")
+        XCTAssertEqual(shell.components(separatedBy: "SwipeBackGestureToggle(enabled:").count - 1, 3,
                        "no other page turns the system back-swipe off")
         let toggle = try slice(shell, from: "private func setSwipeBacks(enabled: Bool) {", to: "\n        }")
         XCTAssertTrue(toggle.contains("interactiveContentPopGestureRecognizer?.isEnabled = enabled"),
