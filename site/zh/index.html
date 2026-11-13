@@ -17,14 +17,16 @@
     <meta property="og:title" content="Orbit — 编码代理任务控制台">
     <meta property="og:description" content="面向编码代理的自托管任务控制台。">
     <meta property="og:url" content="https://jianghailong-xy.github.io/orbit/zh/">
-    <meta property="og:image" content="https://jianghailong-xy.github.io/orbit/assets/social/og-image.svg">
-    <meta property="og:image:type" content="image/svg+xml">
+    <meta property="og:image" content="https://jianghailong-xy.github.io/orbit/assets/social/og-image.png">
+    <meta property="og:image:type" content="image/png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Orbit — 编码代理任务控制台。持久任务、本地 runner 和人工审批。">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Orbit — 编码代理任务控制台">
     <meta name="twitter:description" content="面向编码代理的自托管任务控制台。">
-    <meta name="twitter:image" content="https://jianghailong-xy.github.io/orbit/assets/social/og-image.svg">
+    <meta name="twitter:image" content="https://jianghailong-xy.github.io/orbit/assets/social/og-image.png">
+    <meta name="twitter:image:alt" content="Orbit — 编码代理任务控制台。持久任务、本地 runner 和人工审批。">
     <link rel="stylesheet" href="../assets/site.css">
   </head>
   <body>
@@ -54,6 +56,13 @@
             <p class="eyebrow">Orbit — 编码代理任务控制台</p>
             <h1>面向编码代理的自托管任务控制台。</h1>
             <p class="hero-copy">在自己的机器上运行编码代理，把计划、历史和控制权放在一个自托管的地方。</p>
+            <p class="hero-audience"><strong>适用对象</strong> 在私有代码和内部系统上运行编码代理的小型工程与基础设施团队。</p>
+            <p class="hero-problem"><strong>要解决的问题</strong> 代理工作会跨越一次聊天和一台机器。计划、历史与审批散落在会话、checkout 和 provider 控制台之间。</p>
+            <ul class="proofs" aria-label="三项核心证明">
+              <li><strong>持久的工作</strong><span>任务图、依赖和可恢复会话可以跨越重启。</span></li>
+              <li><strong>本地执行</strong><span>runner 从拥有代码和凭据的机器向外轮询。</span></li>
+              <li><strong>受监督的并行</strong><span>worktree 减少冲突；风险命令与合并由人把关。</span></li>
+            </ul>
             <div class="hero-meta" aria-label="项目状态">
               <span class="pill">Pre-1.0，持续开发中</span>
               <span class="pill">MIT 许可</span>
@@ -61,13 +70,13 @@
             </div>
             <div class="hero-actions">
               <a class="button" href="#quick-start" data-funnel="quick-start">从快速开始入手 <span aria-hidden="true">→</span></a>
-              <a class="button secondary" href="#demo">查看 90 秒演示</a>
+              <a class="button secondary" href="#demo">查看四步演示</a>
             </div>
             <p class="hero-note">控制平面、runner、凭据、TLS、备份和访问控制由你负责。Orbit 不是托管 SaaS，也不是无需设置即可自治的编码服务。</p>
           </div>
           <figure class="hero-art" data-asset-slot="product-screenshot">
-            <img src="../assets/product/hero-preview.svg" width="760" height="520" alt="Orbit 产品预览插图，展示持久任务图、在线 runner 和审批卡片">
-            <figcaption class="asset-caption">产品预览插图 · 可按<a href="../assets/README.md">公开站点资产契约</a>替换</figcaption>
+            <img src="../assets/product/screenshot-task-graph.png" width="2880" height="2102" alt="Orbit 当前 Web UI：项目页展示任务图、就绪任务队列和验收标准，箭头从前置任务指向依赖任务。" fetchpriority="high">
+            <figcaption class="asset-caption">当前 UI · 任务图、run queue 与验收标准。演示数据来自 onboarding 截图集；参见<a href="../assets/README.md">资产契约</a>。</figcaption>
           </figure>
         </div>
       </section>
@@ -104,32 +113,44 @@
         </div>
       </section>
 
-      <section class="section tight" id="demo">
+      <section class="section" id="demo">
         <div class="wrap">
           <div class="section-heading">
             <div>
-              <p class="kicker">90 秒演示</p>
-              <h2>三个场景，一个清晰的人工介入点。</h2>
+              <p class="kicker">产品演示 · 四步</p>
+              <h2>跟着一件工作从计划走到结果。</h2>
             </div>
-            <p>使用带标签或明确写出的 commit。录制前请遮盖仓库名、主机名、token、cookie、内部 URL 和 provider 细节。</p>
+            <p>以下每张图都是演示部署中当前 Web UI 的截图。数据是 onboarding 指南中的示例数据。</p>
           </div>
-          <div class="demo-layout">
-            <div class="demo-intro" data-asset-slot="demo-gif">
-              <h3>查看演示脚本</h3>
-              <p>公开录制准备好前，以仓库中的 storyboard 作为事实来源。画面应持续展示 runner、仓库、审批卡和人工合并决定。</p>
-              <div class="button-row">
-                <a class="button" href="https://github.com/jianghailong-xy/orbit/blob/main/docs/90-second-demo.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=demo-zh">打开完整脚本（英文） <span aria-hidden="true">↗</span></a>
-                <a class="button text" href="https://github.com/jianghailong-xy/orbit/blob/main/docs/messaging-brief.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=messaging-zh">阅读 messaging brief（英文） <span aria-hidden="true">↗</span></a>
-              </div>
-              <p class="hero-note">预留媒体槽位：可将经过批准的短 GIF 放入 <code>site/assets/product/demo.gif</code>，并配上事实准确的说明。</p>
-            </div>
-            <div class="timeline" aria-label="演示时间线">
-              <div class="timeline-item"><span class="time">0:00–0:08</span><div><strong>开场</strong><span>项目页面 + 在线 runner。说出产品类别和核心承诺。</span></div></div>
-              <div class="timeline-item"><span class="time">0:08–0:32</span><div><strong>让工作超越一次聊天</strong><span>任务依赖、可恢复会话、结果与评论历史。</span></div></div>
-              <div class="timeline-item"><span class="time">0:32–0:56</span><div><strong>并行代理，避免 checkout 冲突</strong><span>两个隔离 worktree、差异和人工合并审查动作。</span></div></div>
-              <div class="timeline-item"><span class="time">0:56–1:18</span><div><strong>访问私有基础设施</strong><span>runner 心跳、内部工具、审批卡、transcript 和结果。</span></div></div>
-              <div class="timeline-item"><span class="time">1:18–1:30</span><div><strong>收尾</strong><span>Pre-1.0 边界、带标签的 release、加固指南和限制。</span></div></div>
-            </div>
+          <ol class="demo-steps">
+            <li class="demo-step" data-demo-step="task-graph">
+              <figure>
+                <img src="../assets/product/screenshot-task-graph.png" width="2880" height="2102" decoding="async" alt="任务图步骤：项目页展示任务框、从前置任务指向依赖任务的箭头、两个就绪任务的 run queue，以及一条验收标准。">
+                <figcaption><span class="step-label">1 · 任务图</span> 项目页绘制前置任务、依赖任务、run queue 和验收标准。计划保存在控制平面，而不是一个聊天窗口里。</figcaption>
+              </figure>
+            </li>
+            <li class="demo-step" data-demo-step="runner">
+              <figure>
+                <img src="../assets/product/screenshot-runner.png" width="2880" height="2048" decoding="async" alt="Runner 步骤：新建 workspace 表单说明将在 build-01 机器上创建 workspace，设置侧栏中的 build-01 带有绿色在线圆点。">
+                <figcaption><span class="step-label">2 · Runner</span> workspace 是注册机器上的一个文件夹。build-01 旁的绿点是它的心跳；会话在那台机器上使用它的工具和凭据执行。</figcaption>
+              </figure>
+            </li>
+            <li class="demo-step" data-demo-step="approval">
+              <figure>
+                <img src="../assets/product/screenshot-approval.png" width="2880" height="2048" decoding="async" alt="审批步骤：会话正在等待审批，审批卡展示确切的 psql 命令，以及允许、始终允许 psql 和拒绝三个按钮。">
+                <figcaption><span class="step-label">3 · 审批</span> 默认权限模式下，风险命令会停在审批卡。人在允许、始终允许该命令或拒绝之前，能看到确切的命令。</figcaption>
+              </figure>
+            </li>
+            <li class="demo-step" data-demo-step="result">
+              <figure>
+                <img src="../assets/product/screenshot-result.png" width="2880" height="2048" decoding="async" alt="结果步骤：已成功的会话展示请求、工具调用、通过的测试结果和回复，输入框可继续下一条消息。">
+                <figcaption><span class="step-label">4 · 结果</span> 完成的回合保留请求、工具调用、测试输出和回复。会话停在等待输入状态，下一条消息可以带着上下文继续。</figcaption>
+              </figure>
+            </li>
+          </ol>
+          <div class="demo-footer">
+            <a class="button secondary" href="https://github.com/jianghailong-xy/orbit/blob/main/docs/90-second-demo.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=demo-zh">阅读 90 秒录制脚本（英文） <span aria-hidden="true">↗</span></a>
+            <p class="hero-note">尚未托管录像；本四步走查即公开演示，仓库中的 90 秒演示脚本用于现场录制。</p>
           </div>
         </div>
       </section>
@@ -259,8 +280,8 @@ docker compose ps</code></pre>
             <article class="roadmap-card">
               <h3>方向，不是日期</h3>
               <ul>
-                <li><strong>现在：</strong>可重复的 clean-install 证据和一致的版本叙事。</li>
-                <li><strong>下一步：</strong>以截图为主的 onboarding、operator 配置参考、公开 changelog 和更强的社区运营。</li>
+                <li><strong>现在：</strong>以截图为主的 onboarding、可重复的 clean-install 证据和一致的版本叙事。</li>
+                <li><strong>下一步：</strong>operator 配置参考、公开 changelog 和更强的社区运营。</li>
                 <li><strong>之后：</strong>定时任务与入站任务源目前只完成设计、尚未实现；v1.0 兼容性取决于证据门槛。</li>
               </ul>
               <p class="version-note">查看 <a href="https://github.com/jianghailong-xy/orbit/blob/main/ROADMAP.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=roadmap-zh">完整路线图（英文）↗</a> 和 <a href="https://github.com/jianghailong-xy/orbit/blob/main/docs/project-maturity.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=maturity-zh">成熟度门槛（英文）↗</a>。</p>
@@ -275,7 +296,18 @@ docker compose ps</code></pre>
       <div class="wrap">
         <div class="footer-row">
           <div><a class="footer-brand" href="./">Orbit — 编码代理任务控制台</a><p class="footer-copy">面向编码代理的自托管任务控制台。把计划、历史和控制权放在一个自托管的地方。</p></div>
-          <div class="footer-links" aria-label="页脚导航"><a href="#quick-start">快速开始</a><a href="#boundaries">安全边界</a><a href="#community">社区</a><a href="https://github.com/jianghailong-xy/orbit?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=footer-zh">仓库 ↗</a><a href="../appcast.xml">macOS 更新</a><span class="footer-language"><a href="../" lang="en">English</a> / <a href="./" lang="zh-CN" aria-current="page">中文</a></span></div>
+          <div class="footer-links" aria-label="页脚导航">
+            <a href="#quick-start">快速开始</a>
+            <a href="#boundaries">安全边界</a>
+            <a href="#community">社区</a>
+            <a href="https://github.com/jianghailong-xy/orbit/blob/main/docs/README.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=footer-docs-zh" data-public-link="docs">文档（英文）↗</a>
+            <a href="https://github.com/jianghailong-xy/orbit?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=footer-zh" data-public-link="github">GitHub ↗</a>
+            <a href="https://github.com/jianghailong-xy/orbit/releases?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=footer-releases-zh" data-public-link="releases">Releases ↗</a>
+            <a href="https://github.com/jianghailong-xy/orbit/blob/main/SUPPORT.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=footer-support-zh" data-public-link="support">支持（英文）↗</a>
+            <a href="https://github.com/jianghailong-xy/orbit/blob/main/SECURITY.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=footer-security-zh" data-public-link="security">安全（英文）↗</a>
+            <a href="../appcast.xml">macOS 更新</a>
+            <span class="footer-language"><a href="../" lang="en">English</a> / <a href="./" lang="zh-CN" aria-current="page">中文</a></span>
+          </div>
         </div>
         <p class="footer-legal">MIT 许可 · Pre-1.0 · 本公开入口是仓库文档的精选指引，不是内部文档集合的复制品。</p>
       </div>
