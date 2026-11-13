@@ -1497,6 +1497,24 @@ final class TranscriptReducerTests: XCTestCase {
 
     // MARK: - scroll-up history paging (prependOlder — the "can't reach the top" fix)
 
+    /// A call whose result is in the window loaded first and whose `tool_use` is in an older page:
+    /// paging the call in settles it with that result, instead of leaving it "running" for good.
+    func testAnOlderPageSettlesACallWhoseResultTheWindowAlreadyHad() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 5, type: .toolResult, payload: .object(["toolUseId": .string("t1"),
+                                                                     "content": .string("a.txt")])))
+        r.apply(RunEvent(seq: 6, type: .assistant, payload: .object(["text": .string("Done.")])))
+        r.prependOlder(EventPage(events: [
+            RunEvent(seq: 4, type: .toolUse, payload: .object(["toolUseId": .string("t1"), "name": .string("Bash"),
+                                                               "input": .object(["command": .string("ls")])])),
+        ], hasMore: false))
+
+        guard case .toolCall(let card) = r.state.items.first else { return XCTFail("the call comes first") }
+        XCTAssertEqual(card.status, .ok)
+        XCTAssertEqual(card.result, "a.txt")
+        XCTAssertEqual(card.resultSeq, 5)
+    }
+
     func testApplyTailPageTracksHistoryWindow() {
         var r = TranscriptReducer()
         r.applyTailPage(EventPage(events: [

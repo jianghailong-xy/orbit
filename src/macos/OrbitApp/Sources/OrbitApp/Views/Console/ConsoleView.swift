@@ -1358,7 +1358,7 @@ struct TranscriptView: View {
         case .steps(let items):
             // No `AnchorRow`: a steps line is never the "Your question" the sticky header names,
             // so it has no business moving that anchor.
-            StepsRowView(items: items, fullPayload: console.fullPayload)
+            StepsRowView(items: items, live: console.state.status == .running, fullPayload: console.fullPayload)
         case .exchanges(let turns):
             // No `AnchorRow`, for the steps line's reason: a fold over turns Orbit opened is no
             // "Your question". Opened, it draws each turn's rows through this same function.
@@ -2189,6 +2189,17 @@ struct TranscriptItemView: View {
                 .font(.orbitLabel).foregroundStyle(.orange).textSelection(.enabled)
         case .diagnostic(let notice):
             DiagnosticNoticeRow(notice: notice)
+        case .mainCheckout(let item):
+            // The main checkout's card (board 01) or one action's line (board 03). Without a console to
+            // act through, the event's own sentence, as the notice it used to be.
+            if let console, let changed = item.changed {
+                MainCheckoutCardView(console: console, item: item, notice: changed)
+            } else if let console, let result = item.result {
+                MainCheckoutResultRow(console: console, result: result)
+            } else {
+                Label(item.notice, systemImage: "exclamationmark.triangle.fill")
+                    .font(.orbitLabel).foregroundStyle(.orange).textSelection(.enabled)
+            }
         }
     }
 

@@ -158,11 +158,13 @@ object ProviderEngines {
         return if (vendor != null) "the $vendor key “$label”" else "the key “$label”"
     }
 
-    /** An account pool read as a provider row: it runs on the engine it was made on and nowhere else — Claude Code for one's own
-     * unless it says otherwise, Codex for a shared one ([fallback]) — with that engine's catalogue as its model space. [shared]
-     * marks one shared with the account, whose members are keys picked for it rather than its own accounts. */
+    /** An account pool read as a provider row: it runs on the engine it was made on — Claude Code for one's own unless it says
+     * otherwise, Codex for a shared one ([fallback]) — with that engine's catalogue as its model space, and on no other unless the
+     * server lists more for a pool of one's own (`engines`: a Codex pool Claude Code runs on too, ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY).
+     * [shared] marks one shared with the account, whose members are keys picked for it rather than its own accounts. */
     fun poolRow(row: JsonObject, fallback: String, shared: Boolean = false): JsonObject = (row.text("engine") ?: fallback).let { engine ->
-        JsonObject(row + mapOf("runtime" to JsonPrimitive(engine), "engines" to JsonArray(listOf(JsonPrimitive(engine))),
+        val engines = (row["engines"] as? JsonArray)?.takeIf { !shared } ?: JsonArray(listOf(JsonPrimitive(engine)))
+        JsonObject(row + mapOf("runtime" to JsonPrimitive(engine), "engines" to engines,
             "pool" to JsonPrimitive(true), "modelsFromRuntime" to JsonPrimitive(true), "sharedPool" to JsonPrimitive(shared)))
     }
 

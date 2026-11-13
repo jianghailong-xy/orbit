@@ -384,8 +384,7 @@ struct SessionFolderPage: View {
 
     /// `mark`: as on the workspace list's rows (`AgentPanes.sessionRow`).
     @ViewBuilder private func sessionRow(_ s: Session, mark: SessionProjectMark?) -> some View {
-        let row = AgentSessionRow(session: s, deleted: address.view == .trash, showsPin: address.view == .open,
-                                  projectMark: mark)
+        let row = AgentSessionRow(session: s, deleted: address.view == .trash, projectMark: mark)
         let onSessions: (() -> Void)? = mark.map { mark in
             { app.openProjectSessions(SessionProjectAddress(projectID: mark.projectId, agentID: address.agentID,
                                                             view: address.view)) }

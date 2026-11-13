@@ -515,6 +515,9 @@ import {
 } from '../lib/sessionState';
 import { deliveryFailureExplanation, offersSteerWithdraw, steerDeliveryState } from '../lib/steerDelivery';
 import { backgroundWorkIsActive, isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
+import { MainCheckoutCtx, type MainCheckoutTarget } from '../lib/mainCheckout';
+import { useMainCheckoutController } from './MainCheckoutDrawer';
+import type { MainCheckoutRepoHealth } from '@orbit/shared';
 import type { OutlivingWork } from '../lib/sessionActivity';
 import { shouldPollSessionDetail } from '../lib/sessionDetailPolling';
 import { SESSION_MESSAGE_UNTITLED } from '../lib/sessionMessage';
@@ -6102,10 +6105,16 @@ export function WorkspaceView({
   // completed/trashed until the refetch lands. Drop it now so auto-open can't re-select
   // the removed session (which would null out `selected`, collapse the workspace scope, and
   // leak every workspace's sessions into the list). The invalidate below still reconciles.
+  // A list read already out was asked before the write, and its answer still holds the row: left
+  // to land, it draws the row again until the next read takes it away. The stream's reads do not
+  // cancel one another (useControlPlane's `refresh`), so cancel those here, after the drop: a
+  // cancel restores the cache as it stood, and that now includes the drop. The refresh the caller
+  // asks for next reads the lists again.
   const dropFromLists = (id: string, projectId?: string): void => {
     qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
       Array.isArray(old) ? old.filter((s) => s.id !== id) : old,
     );
+    void qc.cancelQueries({ queryKey: ['sessions'], fetchStatus: 'fetching' });
     qc.setQueriesData<any[]>({ queryKey: ['project-sessions'] }, (old) =>
       Array.isArray(old) ? old.filter((s) => s.id !== id) : old,
     );
@@ -7615,6 +7624,71 @@ export function WorkspaceView({
     if (held.content.trim()) restoreUndelivered?.(held.shell ? `!${held.content}` : held.content, held.attachments);
     else stageRestored(held.attachments);
   };
+  // The main checkout behind this console (docs/main-checkout-git-contract.md): its card and result lines in the
+  // conversation, its bar above the worktree bar, and the review drawer they open.
+  const consoleWorkspace = workspacesForRunner.find((a) => a.id === consoleWorkspaceId);
+  const [openDiffSignal, setOpenDiffSignal] = useState(0);
+  const mainCheckoutTargets = useMemo<MainCheckoutTarget[]>(
+    () =>
+      (sessionsQ.data ?? [])
+        .filter(
+          (s) =>
+            s.workspace?.id === consoleWorkspaceId &&
+            s.isolationStatus === 'worktree' &&
+            !!s.branch &&
+            s.mergeStatus !== 'merged' &&
+            s.branchMerged !== true &&
+            !s.deletedAt,
+        )
+        .map((s) => ({
+          id: s.id,
+          title: s.title || 'Untitled session',
+          branch: s.branch,
+          busy: (s.runState ?? s.runStatus ?? s.status) === 'RUNNING',
+        })),
+    [sessionsQ.data, consoleWorkspaceId],
+  );
+  const consoleRepoRoot = consoleWorkspaceRepoHealth?.root;
+  // Stable, so the main checkout's context changes only when what it says does.
+  const mainCheckoutCleanUp = useMemo(
+    () => (consoleWorkspaceId && consoleRepoRoot ? () => askCleanUpRepo(consoleWorkspaceId, consoleRepoRoot) : undefined),
+    // askCleanUpRepo reads only the confirm dialog and the mutation's stable mutateAsync.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [consoleWorkspaceId, consoleRepoRoot],
+  );
+  const viewSessionChanges = useCallback(() => setOpenDiffSignal((n) => n + 1), []);
+  // The rescue line's Open in a new session: this workspace's new-session draft, the prompt waiting in it. The switch
+  // effect restores the 'new' draft on arrival, so the prompt is put there rather than into `text`.
+  const openMainCheckoutSession = useMemo(
+    () =>
+      consoleWorkspaceId
+        ? (prompt: string) => {
+            const kept = drafts.current.get('new')?.trim();
+            drafts.current.set('new', kept ? `${kept}\n\n${prompt}` : prompt);
+            navigateWithPaneSlide('push', () =>
+              navigate(`/workspaces/${encodeId(consoleWorkspaceId)}/new`, { state: stampFromList() }),
+            );
+            setTimeout(() => taRef.current?.focus(), 0);
+          }
+        : undefined,
+    // navigate, navigateWithPaneSlide and stampFromList read only refs and the router.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [consoleWorkspaceId],
+  );
+  const mainCheckout = useMainCheckoutController({
+    workspaceId: consoleWorkspaceId,
+    sessionId: selectedId && !selectedTrashed && !selectedMissing ? selectedId : undefined,
+    sessionTitle: selectedSession?.title ?? undefined,
+    sessionBranch:
+      detailForSelected?.isolationStatus === 'worktree' ? (detailForSelected.branch ?? undefined) : undefined,
+    actionsSupported: consoleWorkspace?.mainCheckoutActions === true,
+    health: (consoleWorkspace?.repoHealth as MainCheckoutRepoHealth | null | undefined) ?? null,
+    targets: mainCheckoutTargets,
+    askAgent: restoreUndelivered ?? undefined,
+    openNewSession: openMainCheckoutSession,
+    cleanUp: mainCheckoutCleanUp,
+    viewChanges: viewSessionChanges,
+  });
   // Both steps done with a message waiting: it goes, with nobody pressing anything (rule 6). Once per
   // waiting message: the send makes a workspace, so it must not go twice, and a refusal leaves it
   // waiting on the person (`error`) rather than on another try.
@@ -8743,6 +8817,12 @@ export function WorkspaceView({
       ownCredential,
     ),
     ...providerGroup('pools', 'Account pools', listedChoices.filter((c) => c.kind === 'pool')),
+    // What a pool's row risks (ProviderChoice.notice), said once under the pools, as the feet below are.
+    ...[...new Set(listedChoices.flatMap((c) => (c.kind === 'pool' && c.notice ? [c.notice] : [])))].map((notice) => ({
+      key: `provider-foot-pool:${notice}`,
+      type: 'group' as const,
+      label: <span className="composer-provider-foot">{notice}</span>,
+    })),
     ...providerGroup('keys', 'API keys', listedChoices.filter((c) => c.kind === 'key')),
     ...(cursorMoveBlocked
       ? [
@@ -10144,6 +10224,7 @@ export function WorkspaceView({
                   conversation instead of a blank pane. */}
               {placeholder === 'skeleton' && <TranscriptSkeleton />}
               {/* The transcript, in the contexts its cards read (SessionConversation). */}
+              <MainCheckoutCtx.Provider value={mainCheckout.host}>
               <QueuedFootCtx.Provider value={queuedFoot}>
               <SessionConversation
                 sessionId={selectedId}
@@ -10162,6 +10243,7 @@ export function WorkspaceView({
                 wikiChat={wikiChatCards}
               />
               </QueuedFootCtx.Provider>
+              </MainCheckoutCtx.Provider>
               {/* The conversation's last row while it is at rest: its recap whole, the line its list
                   row reads in one (SessionRecapCard). Above the cards that ask the owner something,
                   which stay nearest the composer, and only once the transcript it sums up is drawn.
@@ -10581,7 +10663,10 @@ export function WorkspaceView({
         {selectedId && !selectedTrashed && (
           <SessionCreatedTasksStrip sessionId={selectedId} openRequest={createdTasksOpenRequest} />
         )}
+        {mainCheckout.drawer}
+        <MainCheckoutCtx.Provider value={mainCheckout.host}>
         <SessionOutputs
+          openDiffSignal={openDiffSignal}
           // Only the open session has a worktree to show. With nothing selected (new-session
           // draft, empty list) `keepPreviousData` still holds the previously-open session's
           // detail, which would render its stale branch/diff bar over a fresh draft — so gate
@@ -10679,6 +10764,7 @@ export function WorkspaceView({
               : undefined
           }
         />
+        </MainCheckoutCtx.Provider>
         {replyTo && (
           <div className="composer-replyto">
             <span className="composer-replyto-icon">↩</span>

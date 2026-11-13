@@ -128,7 +128,7 @@ type Sent = { method: string; path: string; body?: Record<string, unknown> };
 async function mount(
   path: string,
   workspaces = [workspace(ORBIT, 'orbit'), workspace(SITE, 'site')],
-  { rules = 2, preferences = {} as Record<string, unknown> } = {},
+  { rules = 2, preferences = {} as Record<string, unknown>, sessions = [] as unknown[] } = {},
 ) {
   const sent: Sent[] = [];
   let rows = workspaces;
@@ -158,6 +158,7 @@ async function mount(
       return Array.from({ length: rules }, (_, i) => ({ id: `r${i}`, toolName: 'Bash', ruleContent: `npm test:${i}` }));
     }
     if (url.includes('imported')) return { count: 0 };
+    if (url.startsWith('/sessions')) return sessions;
     return [];
   });
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -422,6 +423,21 @@ describe('every edit is one PATCH carrying only that field', () => {
     await click(toggle('Worktree isolation'));
     expect(toast.error).toHaveBeenCalledWith("Couldn't save the setting", 'runner is gone');
     expect(toggle('Worktree isolation').getAttribute('aria-checked')).toBe('true');
+  });
+});
+
+describe('Worktree isolation asks first (main checkout board 04)', () => {
+  it('turning it off with an unmerged worktree session asks, and saves only on Turn off', async () => {
+    const { sent } = await mount(`/settings/workspaces/${ORBIT}`, undefined, {
+      sessions: [{ id: 's1', title: 'Fix it', isolationStatus: 'worktree', branch: 'orbit/fix-it', status: 'IDLE' }],
+    });
+    await click(toggle('Worktree isolation'));
+    expect(sent).toEqual([]);
+    expect(document.body.textContent).toContain('Turn off worktree isolation?');
+    await click(button('Turn off'));
+    expect(sent.map(({ method, path, body }) => ({ method, path, body }))).toEqual([
+      { method: 'PATCH', path: `/workspaces/${ORBIT}`, body: { enableWorktree: false } },
+    ]);
   });
 });
 

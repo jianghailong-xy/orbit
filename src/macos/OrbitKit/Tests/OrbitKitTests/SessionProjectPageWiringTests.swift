@@ -421,7 +421,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let row = try slice(page, from: "@ViewBuilder private func sessionRow(_ session: Session)", to: "\n    }")
         for part in ["AgentSessionRow(session: session", "Button { openMember(session) }",
                      "let scope: SessionView = session.effectiveLifecycleState == .completed ? .completed : .open",
-                     "showsPin: scope == .open", ".sessionRowActions(session, scope: scope", "onTag: { taggingSession = session }",
+                     ".sessionRowActions(session, scope: scope", "onTag: { taggingSession = session }",
                      "onShare: { sharingSession = session }", "onMove: moveAction(session)", ".tag(session.id)"] {
             XCTAssertTrue(row.contains(part), "member rows preserve `\(part)`")
         }

@@ -1,5 +1,8 @@
 name: GitHub Pages
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main]
@@ -20,10 +23,10 @@ jobs:
       contents: write
     steps:
       - name: Check out source
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node for the dependency-free link checker
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 20
 
@@ -34,7 +37,7 @@ jobs:
       # ::error and $GITHUB_STEP_SUMMARY details so a failed build is visible in the run.
       - name: Upload Pages build diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: github-pages-build-diagnostics
           path: |
@@ -57,7 +60,7 @@ jobs:
 
       - name: Deploy to the existing gh-pages branch
         if: success()
-        uses: peaceiris/actions-gh-pages@v4
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
