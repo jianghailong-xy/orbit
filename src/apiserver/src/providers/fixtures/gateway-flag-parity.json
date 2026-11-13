@@ -1,0 +1,507 @@
+{
+  "runner-login/claude": {
+    "resolution": {
+      "provider": "claude",
+      "runtimeSessionId": "runtime-runner-login/claude",
+      "engine": "claude",
+      "keyFingerprint": null,
+      "endpoint": null,
+      "model": "claude-opus-5-5",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": {
+      "PARITY_WORKSPACE_VAR": "kept"
+    },
+    "refusal": null,
+    "engines": [
+      "claude"
+    ]
+  },
+  "runner-login-account/claude": {
+    "resolution": {
+      "provider": "claude",
+      "runtimeSessionId": "runtime-runner-login-account/claude",
+      "engine": "claude",
+      "keyFingerprint": null,
+      "endpoint": null,
+      "model": "claude-opus-5-5",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": {
+      "PARITY_WORKSPACE_VAR": "kept",
+      "CLAUDE_CONFIG_DIR": "/home/dev/.orbit/claude-accounts/7a1b2c3d"
+    },
+    "refusal": null,
+    "engines": [
+      "claude"
+    ]
+  },
+  "runner-login/codex": {
+    "resolution": {
+      "provider": "codex",
+      "runtimeSessionId": "runtime-runner-login/codex",
+      "engine": "codex",
+      "keyFingerprint": null,
+      "endpoint": null,
+      "model": "gpt-5.1",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": {
+      "PARITY_WORKSPACE_VAR": "kept"
+    },
+    "refusal": null,
+    "engines": [
+      "codex"
+    ]
+  },
+  "account-pool/claude": {
+    "resolution": {
+      "provider": "claude-pool",
+      "runtimeSessionId": "runtime-account-pool/claude",
+      "engine": "claude",
+      "keyFingerprint": null,
+      "endpoint": null,
+      "model": "claude-opus-5-5",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": {
+      "PARITY_WORKSPACE_VAR": "kept",
+      "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
+      "ANTHROPIC_AUTH_TOKEN": "fake-pool-member-key-parity-0008",
+      "ANTHROPIC_MODEL": "claude-opus-5-5",
+      "ENABLE_CLAUDEAI_MCP_SERVERS": "0",
+      "CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP": "1"
+    },
+    "refusal": null,
+    "engines": [
+      "claude"
+    ]
+  },
+  "account-pool/codex": {
+    "resolution": {
+      "provider": "codex-pool",
+      "runtimeSessionId": "runtime-account-pool/codex",
+      "engine": "codex",
+      "keyFingerprint": null,
+      "endpoint": null,
+      "model": "gpt-5.1",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": {
+      "PARITY_WORKSPACE_VAR": "kept",
+      "OPENAI_BASE_URL": "https://orbit.parity.invalid/api/gw/codex",
+      "OPENAI_API_KEY": "orbit-gwl-parity-session-token"
+    },
+    "refusal": null,
+    "engines": [
+      "codex"
+    ]
+  },
+  "account-pool/claude-on-own-codex-pool": {
+    "resolution": {
+      "provider": "codex-pool",
+      "runtimeSessionId": "runtime-account-pool/claude-on-own-codex-pool",
+      "engine": "claude",
+      "keyFingerprint": null,
+      "endpoint": null,
+      "model": "gpt-5.6-sol",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": null,
+    "refusal": "provider \"codex-pool\" cannot run on Claude Code; it runs on Codex, OpenCode",
+    "engines": [
+      "codex"
+    ]
+  },
+  "account-pool/codex-on-shared-codex-pool": {
+    "resolution": {
+      "provider": "shared-codex-pool",
+      "runtimeSessionId": "runtime-account-pool/codex-on-shared-codex-pool",
+      "engine": "codex",
+      "keyFingerprint": null,
+      "endpoint": null,
+      "model": "gpt-5.1",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": {
+      "PARITY_WORKSPACE_VAR": "kept",
+      "OPENAI_BASE_URL": "https://orbit.parity.invalid/api/gw/codex",
+      "OPENAI_API_KEY": "orbit-gw-parity-shared-token"
+    },
+    "refusal": null,
+    "engines": [
+      "codex"
+    ]
+  },
+  "account-pool/claude-on-shared-codex-pool": {
+    "resolution": {
+      "provider": "shared-codex-pool",
+      "runtimeSessionId": "runtime-account-pool/claude-on-shared-codex-pool",
+      "engine": "claude",
+      "keyFingerprint": null,
+      "endpoint": null,
+      "model": "gpt-5.1",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": null,
+    "refusal": "provider \"shared-codex-pool\" cannot run on Claude Code; it runs on Codex, OpenCode",
+    "engines": [
+      "codex"
+    ]
+  },
+  "anthropic-key/claude": {
+    "resolution": {
+      "provider": "anthropic",
+      "runtimeSessionId": "runtime-anthropic-key/claude",
+      "engine": "claude",
+      "keyFingerprint": "86e3dfc94026f4fb",
+      "endpoint": "https://api.anthropic.com",
+      "model": "claude-opus-5-5",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": {
+      "PARITY_WORKSPACE_VAR": "kept",
+      "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
+      "ANTHROPIC_AUTH_TOKEN": "fake-anthropic-key-parity-0001",
+      "ANTHROPIC_MODEL": "claude-opus-5-5",
+      "ENABLE_CLAUDEAI_MCP_SERVERS": "0",
+      "CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP": "1"
+    },
+    "refusal": null,
+    "engines": [
+      "claude",
+      "opencode"
+    ]
+  },
+  "anthropic-key/opencode": {
+    "resolution": {
+      "provider": "anthropic",
+      "runtimeSessionId": "runtime-anthropic-key/opencode",
+      "engine": "opencode",
+      "keyFingerprint": "86e3dfc94026f4fb",
+      "endpoint": "https://api.anthropic.com/v1",
+      "model": "claude-opus-5-5",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": {
+      "PARITY_WORKSPACE_VAR": "kept",
+      "OPENCODE_CONFIG_CONTENT": "{\"provider\":{\"orbit-anthropic\":{\"npm\":\"@ai-sdk/anthropic\",\"options\":{\"baseURL\":\"https://api.anthropic.com/v1\",\"apiKey\":\"fake-anthropic-key-parity-0001\"},\"models\":{\"claude-opus-5-5\":{\"name\":\"claude-opus-5-5\"}}}}}"
+    },
+    "refusal": null,
+    "engines": [
+      "claude",
+      "opencode"
+    ]
+  },
+  "deepseek-key/claude": {
+    "resolution": {
+      "provider": "deepseek",
+      "runtimeSessionId": "runtime-deepseek-key/claude",
+      "engine": "claude",
+      "keyFingerprint": "3f5bb5d7d463b844",
+      "endpoint": "https://api.deepseek.com/anthropic",
+      "model": "deepseek-chat",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": {
+      "PARITY_WORKSPACE_VAR": "kept",
+      "ANTHROPIC_BASE_URL": "https://api.deepseek.com/anthropic",
+      "ANTHROPIC_AUTH_TOKEN": "fake-deepseek-key-parity-0002",
+      "ANTHROPIC_MODEL": "deepseek-chat",
+      "ENABLE_CLAUDEAI_MCP_SERVERS": "0",
+      "CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP": "1",
+      "CLAUDE_CODE_INLINE_TOOLS": "false"
+    },
+    "refusal": null,
+    "engines": [
+      "claude",
+      "opencode",
+      "dsh"
+    ]
+  },
+  "deepseek-key/dsh": {
+    "resolution": {
+      "provider": "deepseek",
+      "runtimeSessionId": "runtime-deepseek-key/dsh",
+      "engine": "dsh",
+      "keyFingerprint": "3f5bb5d7d463b844",
+      "endpoint": "https://api.deepseek.com/anthropic",
+      "model": "deepseek-chat",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": {
+      "PARITY_WORKSPACE_VAR": "kept",
+      "ORBIT_DSH_API_KEY": "fake-deepseek-key-parity-0002",
+      "ORBIT_DSH_BASE_URL": "https://api.deepseek.com/anthropic"
+    },
+    "refusal": null,
+    "engines": [
+      "claude",
+      "opencode",
+      "dsh"
+    ]
+  },
+  "deepseek-key/opencode": {
+    "resolution": {
+      "provider": "deepseek",
+      "runtimeSessionId": "runtime-deepseek-key/opencode",
+      "engine": "opencode",
+      "keyFingerprint": "3f5bb5d7d463b844",
+      "endpoint": "https://api.deepseek.com/anthropic/v1",
+      "model": "deepseek-chat",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": {
+      "PARITY_WORKSPACE_VAR": "kept",
+      "OPENCODE_CONFIG_CONTENT": "{\"provider\":{\"orbit-deepseek\":{\"npm\":\"@ai-sdk/anthropic\",\"options\":{\"baseURL\":\"https://api.deepseek.com/anthropic/v1\",\"apiKey\":\"fake-deepseek-key-parity-0002\"},\"models\":{\"deepseek-chat\":{\"name\":\"deepseek-chat\"}}}}}"
+    },
+    "refusal": null,
+    "engines": [
+      "claude",
+      "opencode",
+      "dsh"
+    ]
+  },
+  "subscription-token/claude": {
+    "resolution": {
+      "provider": "claude-sub",
+      "runtimeSessionId": "runtime-subscription-token/claude",
+      "engine": "claude",
+      "keyFingerprint": "e69dad9f201d25b7",
+      "endpoint": "https://api.anthropic.com",
+      "model": "claude-opus-5-5",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": {
+      "PARITY_WORKSPACE_VAR": "kept",
+      "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
+      "ANTHROPIC_AUTH_TOKEN": "sk-ant-oat01-fake-parity-0003",
+      "ANTHROPIC_MODEL": "claude-opus-5-5",
+      "ENABLE_CLAUDEAI_MCP_SERVERS": "0",
+      "CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP": "1"
+    },
+    "refusal": null,
+    "engines": [
+      "claude"
+    ]
+  },
+  "subscription-token/opencode": {
+    "resolution": {
+      "provider": "claude-sub",
+      "runtimeSessionId": "runtime-subscription-token/opencode",
+      "engine": "opencode",
+      "keyFingerprint": "e69dad9f201d25b7",
+      "endpoint": "https://api.anthropic.com/v1",
+      "model": "claude-opus-5-5",
+      "dispatchable": false,
+      "refusal": "provider \"claude-sub\" cannot run on OpenCode; it runs on Claude Code"
+    },
+    "env": null,
+    "refusal": "provider \"claude-sub\" cannot run on OpenCode; it runs on Claude Code",
+    "engines": [
+      "claude"
+    ]
+  },
+  "openai-key/codex": {
+    "resolution": {
+      "provider": "openai",
+      "runtimeSessionId": "runtime-openai-key/codex",
+      "engine": "codex",
+      "keyFingerprint": "036c3e8120d0c656",
+      "endpoint": "https://api.openai.com/v1",
+      "model": "gpt-5.1",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": {
+      "PARITY_WORKSPACE_VAR": "kept",
+      "OPENAI_BASE_URL": "https://api.openai.com/v1",
+      "OPENAI_API_KEY": "fake-openai-key-parity-0004"
+    },
+    "refusal": null,
+    "engines": [
+      "codex",
+      "opencode"
+    ]
+  },
+  "openai-key/opencode": {
+    "resolution": {
+      "provider": "openai",
+      "runtimeSessionId": "runtime-openai-key/opencode",
+      "engine": "opencode",
+      "keyFingerprint": "036c3e8120d0c656",
+      "endpoint": "https://api.openai.com/v1",
+      "model": "gpt-5.1",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": {
+      "PARITY_WORKSPACE_VAR": "kept",
+      "OPENCODE_CONFIG_CONTENT": "{\"provider\":{\"orbit-openai\":{\"npm\":\"@ai-sdk/openai\",\"options\":{\"baseURL\":\"https://api.openai.com/v1\",\"apiKey\":\"fake-openai-key-parity-0004\"},\"models\":{\"gpt-5.1\":{\"name\":\"gpt-5.1\"}}}}}"
+    },
+    "refusal": null,
+    "engines": [
+      "codex",
+      "opencode"
+    ]
+  },
+  "openai-key/claude": {
+    "resolution": {
+      "provider": "openai",
+      "runtimeSessionId": "runtime-openai-key/claude",
+      "engine": "claude",
+      "keyFingerprint": "036c3e8120d0c656",
+      "endpoint": "https://api.openai.com/v1",
+      "model": "gpt-5.1",
+      "dispatchable": false,
+      "refusal": "provider \"openai\" cannot run on Claude Code; it runs on Codex, OpenCode"
+    },
+    "env": null,
+    "refusal": "provider \"openai\" cannot run on Claude Code; it runs on Codex, OpenCode",
+    "engines": [
+      "codex",
+      "opencode"
+    ]
+  },
+  "moonshot-key/kimi": {
+    "resolution": {
+      "provider": "moonshot",
+      "runtimeSessionId": "runtime-moonshot-key/kimi",
+      "engine": "kimi",
+      "keyFingerprint": "aef7d1c6c94f138e",
+      "endpoint": "https://api.moonshot.ai/v1",
+      "model": "kimi-k2",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": {
+      "PARITY_WORKSPACE_VAR": "kept",
+      "KIMI_MODEL_NAME": "kimi-k2",
+      "KIMI_MODEL_API_KEY": "fake-moonshot-key-parity-0005",
+      "KIMI_MODEL_PROVIDER_TYPE": "kimi",
+      "KIMI_MODEL_BASE_URL": "https://api.moonshot.ai/v1"
+    },
+    "refusal": null,
+    "engines": [
+      "kimi",
+      "opencode"
+    ]
+  },
+  "moonshot-key/opencode": {
+    "resolution": {
+      "provider": "moonshot",
+      "runtimeSessionId": "runtime-moonshot-key/opencode",
+      "engine": "opencode",
+      "keyFingerprint": "aef7d1c6c94f138e",
+      "endpoint": "https://api.moonshot.ai/v1",
+      "model": "kimi-k2",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": {
+      "PARITY_WORKSPACE_VAR": "kept",
+      "OPENCODE_CONFIG_CONTENT": "{\"provider\":{\"orbit-moonshot\":{\"npm\":\"@ai-sdk/openai-compatible\",\"options\":{\"baseURL\":\"https://api.moonshot.ai/v1\",\"apiKey\":\"fake-moonshot-key-parity-0005\"},\"models\":{\"kimi-k2\":{\"name\":\"kimi-k2\"}}}}}"
+    },
+    "refusal": null,
+    "engines": [
+      "kimi",
+      "opencode"
+    ]
+  },
+  "gemini-key/antigravity": {
+    "resolution": {
+      "provider": "gemini",
+      "runtimeSessionId": "runtime-gemini-key/antigravity",
+      "engine": "antigravity",
+      "keyFingerprint": "b25487b25a930070",
+      "endpoint": "https://generativelanguage.googleapis.com",
+      "model": "gemini-3-pro",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": {
+      "PARITY_WORKSPACE_VAR": "kept",
+      "GEMINI_API_KEY": "fake-gemini-key-parity-0006",
+      "GOOGLE_GEMINI_BASE_URL": "https://generativelanguage.googleapis.com"
+    },
+    "refusal": null,
+    "engines": [
+      "antigravity",
+      "opencode"
+    ]
+  },
+  "gemini-key/opencode": {
+    "resolution": {
+      "provider": "gemini",
+      "runtimeSessionId": "runtime-gemini-key/opencode",
+      "engine": "opencode",
+      "keyFingerprint": "b25487b25a930070",
+      "endpoint": "https://generativelanguage.googleapis.com/v1beta",
+      "model": "gemini-3-pro",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": {
+      "PARITY_WORKSPACE_VAR": "kept",
+      "OPENCODE_CONFIG_CONTENT": "{\"provider\":{\"orbit-gemini\":{\"npm\":\"@ai-sdk/google\",\"options\":{\"baseURL\":\"https://generativelanguage.googleapis.com/v1beta\",\"apiKey\":\"fake-gemini-key-parity-0006\"},\"models\":{\"gemini-3-pro\":{\"name\":\"gemini-3-pro\"}}}}}"
+    },
+    "refusal": null,
+    "engines": [
+      "antigravity",
+      "opencode"
+    ]
+  },
+  "cursor-key/cursor": {
+    "resolution": {
+      "provider": "cursor-key",
+      "runtimeSessionId": "runtime-cursor-key/cursor",
+      "engine": "cursor",
+      "keyFingerprint": "b0386ab0ce85cd88",
+      "endpoint": null,
+      "model": "auto",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": {
+      "PARITY_WORKSPACE_VAR": "kept",
+      "ORBIT_CURSOR_API_KEY": "fake-cursor-key-parity-0007"
+    },
+    "refusal": null,
+    "engines": [
+      "cursor"
+    ]
+  },
+  "opencode-config/opencode": {
+    "resolution": {
+      "provider": "opencode",
+      "runtimeSessionId": "runtime-opencode-config/opencode",
+      "engine": "opencode",
+      "keyFingerprint": null,
+      "endpoint": null,
+      "model": "anthropic/claude-sonnet-4-5",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": {
+      "PARITY_WORKSPACE_VAR": "kept"
+    },
+    "refusal": null,
+    "engines": [
+      "opencode"
+    ]
+  }
+}

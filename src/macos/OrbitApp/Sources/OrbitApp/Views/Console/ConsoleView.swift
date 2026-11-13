@@ -1315,7 +1315,7 @@ struct TranscriptView: View {
         case .steps(let items):
             // No `AnchorRow`: a steps line is never the "Your question" the sticky header names,
             // so it has no business moving that anchor.
-            StepsRowView(items: items, fullPayload: console.fullPayload)
+            StepsRowView(items: items, live: console.state.status == .running, fullPayload: console.fullPayload)
         case .exchanges(let turns):
             // No `AnchorRow`, for the steps line's reason: a fold over turns Orbit opened is no
             // "Your question". Opened, it draws each turn's rows through this same function.

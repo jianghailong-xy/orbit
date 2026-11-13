@@ -31,8 +31,8 @@ struct SessionProjectRowView: View {
                 .accessibilityValue(statusWords)
         }
         .buttonStyle(.plain)
-        // The session row's own cell metrics (`AgentSessionRow`): zeroed insets, its pin bar flush
-        // to the edge, and the separator under the title.
+        // The session row's own cell metrics (`AgentSessionRow`): zeroed insets and the
+        // separator under the title.
         .listRowInsets(EdgeInsets())
         .alignmentGuide(.listRowSeparatorLeading) { _ in 44 }
         #else
@@ -50,14 +50,11 @@ struct SessionProjectRowView: View {
 
     #if os(macOS)
     /// The Mac's row, laid out as a session row beside it is (web's `SessionProjectListRow`): the
-    /// coordinator's pin bar, the Projects glyph where a session's status glyph goes — the spinner
-    /// while a member runs, otherwise the glyph with a dot for waiting on you or background jobs —
-    /// then the title and time over the progress and the line.
+    /// Projects glyph where a session's status glyph goes — the spinner while a member runs,
+    /// otherwise the glyph with a dot for waiting on you or background jobs — then the title
+    /// and time over the progress and the line.
     private var macRow: some View {
         HStack(spacing: 0) {
-            Rectangle()
-                .fill(row.pinnedAt != nil ? Color.accentColor : .clear)
-                .frame(width: 3)
             HStack(spacing: 8) {
                 projectGlyph
                 VStack(alignment: .leading, spacing: 2) {
@@ -72,7 +69,7 @@ struct SessionProjectRowView: View {
                     secondLine
                 }
             }
-            .padding(.leading, 13)
+            .padding(.leading, 16)
             .padding(.trailing, 16)
             .padding(.vertical, 10)
         }
@@ -950,7 +947,7 @@ struct SessionProjectPage: View {
 
     @ViewBuilder private func sessionRow(_ session: Session) -> some View {
         let scope: SessionView = session.effectiveLifecycleState == .completed ? .completed : .open
-        let row = AgentSessionRow(session: session, showsPin: scope == .open)
+        let row = AgentSessionRow(session: session)
         switch rowNavigation {
         case .selection:
             row.sessionRowActions(session, scope: scope, onTag: { taggingSession = session },

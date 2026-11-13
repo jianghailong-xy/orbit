@@ -2730,6 +2730,7 @@ export class ProjectOpenItemService {
         resolvedAt: true,
         payload: true,
         answer: true,
+        askedBySessionId: true,
         project: { select: { coordinatorSessionId: true } },
       },
     });
@@ -2738,10 +2739,16 @@ export class ProjectOpenItemService {
     const sessionId = item.project.coordinatorSessionId;
     if (!sessionId) return null;
     const clientTurnId = ownerAnswerTurnId(item.id, sessionId);
+    const question = item.payload as unknown as CoordinatorQuestion;
+    // §5.2 R11: told to a conversation that did not ask, it says who did and whether it still blocks.
+    const redelivered = item.askedBySessionId && item.askedBySessionId !== sessionId
+      ? { stillBlocks: await this.blocksUnsettledWork(item.ownerId, question.blocksTaskIds) }
+      : undefined;
     const content = ownerAnswerMessage(
-      item.payload as unknown as CoordinatorQuestion,
+      question,
       item.answer as unknown as OwnerAnswer,
       item.resolvedAt,
+      redelivered,
     );
     try {
       const turn = await this.sessions.createTurn(item.ownerId, sessionId, {
