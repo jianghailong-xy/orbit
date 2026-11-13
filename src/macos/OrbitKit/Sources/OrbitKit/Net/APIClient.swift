@@ -628,6 +628,14 @@ public final class APIClient: @unchecked Sendable {
         try await post("tasks/\(taskID)/evidence/decision", body: req)
     }
 
+    /// Restart the task from the owner's pending row that offers it (`EvidenceRestart`). A Run press:
+    /// `triggerId` is drawn at the gesture (`PublicID.newToken`) and names it.
+    public func restartTaskFromEvidence(taskID: String, evidenceRevision: String,
+                                        triggerId: String) async throws -> EvidenceRestartResult {
+        try await post(EvidenceRestart.path(taskID: taskID, evidenceRevision: evidenceRevision),
+                       body: EvidenceRestartRequest(triggerId: triggerId))
+    }
+
     /// What one version of a task's evidence cites, a page at a time, for the card that shows it
     /// (`EvidenceFiles.swift`): read from rows, so a file reads the same after it has expired. The
     /// first page leaves the offset out, as web's read does.

@@ -969,6 +969,8 @@ private struct EvidenceDecisionCard: View {
         switch standing.state {
         case .sent(let sent) where !inReview:
             SentToCoordinatorLine(sent: sent)
+        case .restart(let row):
+            EvidenceRestartCard(row: row) { await console.restartFromEvidence(row) }
         default:
             if inReview { review(standing) } else { card(standing) }
         }
@@ -1090,6 +1092,79 @@ private struct EvidenceDecisionCard: View {
         Task {
             await console.decideEvidence(row, decision)
             deciding = false
+        }
+    }
+}
+
+/// Restart the task, on a revision nobody else can move (`EvidenceRestart`): which task and revision,
+/// the door's reason it cannot be decided, what the press does, and the press with its busy, refused
+/// and started states. Web's `EvidenceRestartAction`, in the same words. The press is handed in
+/// (`ConsoleModel.restartFromEvidence`) and answers nil for a start or the refusal.
+struct EvidenceRestartCard: View {
+    let row: EvidenceDecisionRow
+    let restart: () async -> Error?
+    @State private var restarting = false
+    @State private var started = false
+    @State private var refusal: (title: String, reason: String)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+            ApprovalHeader(symbol: "arrow.clockwise.circle.fill",
+                           title: EvidenceRestart.heading, tone: .orange)
+            Text(row.title)
+                .font(.orbitProse.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(EvidenceDecisions.addressLine(EvidenceDecisionStanding(
+                taskId: row.taskId, evidenceRevision: row.evidenceRevision, state: .restart(row))))
+                .font(.orbitMonoFine).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let reason = row.decidability.refusal {
+                Text(reason)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .padding(.horizontal, 10).padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.orange.opacity(0.08),
+                                in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+            }
+            Text(EvidenceRestart.explanation)
+                .font(.orbitLabel)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let refusal {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(refusal.title).font(.orbitLabel.weight(.semibold))
+                    Text(refusal.reason).font(.orbitLabel).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if started {
+                Text(EvidenceRestart.started)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                ApprovalActions {
+                    Button { press() } label: {
+                        Text(EvidenceRestart.action).approvalActionLabel()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(restarting)
+                }
+            }
+        }
+        .approvalChrome(.orange)
+    }
+
+    private func press() {
+        guard !restarting, !started else { return }
+        PlatformHaptics.tap()
+        restarting = true
+        refusal = nil
+        Task {
+            if let error = await restart() {
+                refusal = (EvidenceRestart.refusalTitle(error), APIClient.failureReason(error))
+            } else {
+                started = true
+            }
+            restarting = false
         }
     }
 }
