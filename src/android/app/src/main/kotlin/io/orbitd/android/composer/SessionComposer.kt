@@ -75,7 +75,9 @@ import kotlinx.serialization.json.*
 @Composable
 internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: String, session: SessionState?, target: DraftTarget? = null, focusRequest: Int = 0,
     inputFocusChanged: (Boolean) -> Unit = {}, foldsChrome: Boolean = false,
-    openTask: ((String) -> Unit)? = null, openRunner: ((runner: String, engine: String) -> Unit)? = null) {
+    openTask: ((String) -> Unit)? = null, openRunner: ((runner: String, engine: String) -> Unit)? = null,
+    /** The page's own placeholder, over the composer's: a new account's welcome card (WelcomeCopy.WELCOME_PLACEHOLDER). */
+    placeholder: String? = null) {
     val model = remember(app, handle, sessionId) { app.composer(handle, sessionId, target) }
     val state by model.state.collectAsState()
     val context = LocalContext.current
@@ -238,6 +240,7 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                         if (suggestion != null) SuggestionPlaceholder(suggestion)
                         // Cursor CLI takes no message mid-turn: one written now waits for the turn to end (iOS 5 ⑥).
                         else Text(when {
+                            placeholder != null -> placeholder
                             target?.isMachineDraft == true || (target != null && MachineSetup.standsInForMachine(detail)) ->
                                 detail.text("name")?.takeIf { it.isNotEmpty() }?.let(MachineSetupCopy::composerPlaceholderFor) ?: "Message…"
                             target == null && running && engine == CursorRuntime.ENGINE -> CursorRuntime.RUNNING_PLACEHOLDER
