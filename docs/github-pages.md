@@ -12,11 +12,14 @@ Live URLs: <https://jianghailong-xy.github.io/orbit/> (English) ·
 order. Every page has an explicit 中文 / English switch; the Chinese page labels repository documentation links as
 英文 rather than implying that those linked documents have been translated.
 
-1. First screen — **Orbit — Agent Mission Control**, the category line, the core promise, Quick Start CTA, and
-   a 90-second demo CTA.
+1. First screen — **Orbit — Agent Mission Control**, the category line, the core promise, the target audience,
+   the problem, and the three proof pillars (durable work, local execution, supervised parallelism), followed by
+   the Quick Start CTA and a four-step demo CTA. The hero image is the current UI's task-graph screenshot.
 2. Three launch scenarios — **Work that outlives a chat**, **Parallel agents without checkout collisions**, and
    **Access to private infrastructure**, in that order.
-3. 90-second demo storyboard — a link to the checked-in script rather than an invented hosted video.
+3. Product demo — four screenshots of the current web UI covering the task graph, a registered runner, an approval
+   card, and a finished result, with the checked-in 90-second script offered as the recording source. The
+   walkthrough is the public demo; no video URL is invented.
 4. Quick Start — the three operator decisions and a link to the complete README/self-hosting instructions.
 5. Architecture and security boundary — outbound runner topology, worktree limitation, operator responsibilities,
    and the explicit no-SaaS/no-SLA boundary.
@@ -24,8 +27,10 @@ order. Every page has an explicit 中文 / English switch; the Chinese page labe
 7. Community/contribution — Discussions, Issues, contribution guide, and private vulnerability reporting.
 8. Version and roadmap — pre-1.0 release language, tagged-release guidance, and direction without date promises.
 
-The pages link back to the repository for detail; they do not mirror the complete docs/ directory. The two 404 pages
-(`site/404.html` and `site/zh/404.html`) carry the same language switch, recovery links, and accessible text.
+The footer carries the five public destinations a reader needs to verify the project: Docs, GitHub, Releases,
+Support, and Security. The pages link back to the repository for detail; they do not mirror the complete docs/
+directory. The two 404 pages (`site/404.html` and `site/zh/404.html`) carry the same language switch, recovery
+links, accessible text, and social metadata.
 
 ## Build and deploy contract
 
@@ -37,13 +42,18 @@ The site has no package or bundler dependency:
 
 The script copies site/, creates an empty .nojekyll, checks the four HTML entry points (`index.html`, `404.html`,
 `zh/index.html`, and `zh/404.html`), validates language metadata, language switches, equivalent section IDs, local
-links and fragments, and writes dist/pages/build-report.md. A failed command emits a GitHub ::error annotation,
-appends the command and line to GITHUB_STEP_SUMMARY, and writes dist/pages-build-diagnostics.txt for the workflow
-artifact.
+links and fragments, required copy, social metadata, public-link destinations, non-empty alt text, and intrinsic
+image dimensions. It then runs `scripts/check-pages-media.mjs`, which verifies that the four product screenshots
+are byte-identical to the onboarding evidence set, that every declared image size matches its PNG, and that the
+social image is a 1200×630 PNG. The build writes dist/pages/build-report.md. A failed command emits a GitHub
+::error annotation, appends the command and line to GITHUB_STEP_SUMMARY, and writes
+dist/pages-build-diagnostics.txt for the workflow artifact.
 
 .github/workflows/pages.yml runs on main and supports workflow_dispatch. It publishes the generated tree to
 the existing gh-pages branch with peaceiris/actions-gh-pages@v4 and keep_files: true. The existing release
 workflow publishes Sparkle's appcast.xml to that same branch; keep_files is a required compatibility boundary.
+A task branch can build and verify the complete artifact, but the public origin changes only after the change
+lands on main and that workflow runs.
 Do not replace it with a deployment that prunes the branch or switches Pages to an artifact-only source
 without carrying the appcast forward.
 
@@ -59,12 +69,18 @@ Stable slots are documented in [site/assets/README.md](../site/assets/README.md)
 
 - assets/brand/logo.svg
 - assets/brand/favicon.svg
-- assets/social/og-image.svg (1200×630)
-- assets/product/hero-preview.svg
-- reserved assets/product/screenshot-*.webp and assets/product/demo.gif
+- assets/social/og-image.svg (editable 1200×630 source)
+- assets/social/og-image.png (shipped 1200×630 raster; social platforms do not reliably render SVG)
+- assets/product/screenshot-task-graph.png
+- assets/product/screenshot-runner.png
+- assets/product/screenshot-approval.png
+- assets/product/screenshot-result.png
 
-The current preview is explicitly labelled illustrative. A future screenshot/GIF must carry an accurate caption
-and must not describe a worktree as a security boundary or imply autonomous completion, an SLA, or managed hosting.
+The four screenshots are byte-identical copies of the onboarding evidence set
+([docs/images/onboarding](images/onboarding)), so the public media is current-UI evidence rather than an
+illustration. Refresh the site copies with the evidence set; `check-pages-media.mjs` fails on drift.
+Captions and alt text must stay factual and must not describe a worktree as a security boundary or imply
+autonomous completion, an SLA, or managed hosting.
 
 ## Funnel and UTM rules
 
@@ -94,13 +110,25 @@ From a checkout:
 ./scripts/build-pages.sh --output /tmp/orbit-pages
 test -f /tmp/orbit-pages/.nojekyll
 test -f /tmp/orbit-pages/404.html
+node scripts/check-pages-layout.mjs /tmp/orbit-pages /tmp/orbit-pages-layout
+node scripts/check-pages-external-links.mjs /tmp/orbit-pages
+npm run docs:check
 ~~~
+
+The layout probe needs headless Chromium; it renders both language pages and both 404 pages at 1440×900 and
+390×844, asserts no horizontal overflow, no unloaded images, the four demo steps in order, and that the audience,
+problem, and all three hero proofs finish inside the first viewport on the two entry pages. It writes the
+desktop/mobile screenshots to the output directory. The external-link check follows Docs, GitHub, Releases,
+Support, Security, and the other repository links in the built pages; it needs network access and is not part of
+the Pages workflow.
 
 After a successful Pages workflow, check both language URLs from a desktop and a narrow/mobile viewport:
 
 - first screen, nav anchors, language switch, Quick Start and repository links;
-- all external links and both branded 404 routes (including a deep-link refresh);
-- `<html lang>`, title/description, canonical, hreflang, social metadata, image alt text, and equivalent section IDs;
+- the four demo screenshots, their captions, and both branded 404 routes (including a deep-link refresh);
+- all external links and the footer's Docs/GitHub/Releases/Support/Security row;
+- `<html lang>`, title/description, canonical, hreflang, `og:*`/`twitter:*` metadata with a PNG 1200×630 image,
+  image alt text, and equivalent section IDs;
 - the exact pre-1.0/security-boundary wording;
 - `curl -I https://jianghailong-xy.github.io/orbit/` returns 200;
 - `curl -I https://jianghailong-xy.github.io/orbit/zh/` returns 200;
@@ -115,3 +143,7 @@ instead of claiming an unmeasured setup time. That record establishes Compose bo
 heartbeat online, and workspace/worktree checks. It explicitly does **not** establish a successful first real agent
 task: the provider weekly quota blocked that step. The README task record likewise treats “runner online” and “first
 task completed” as separate funnel milestones; a later evidence revision must not collapse them.
+
+The four product screenshots come from the current-UI captures in [the onboarding guide](onboarding.md) and are
+copied byte for byte into `site/assets/product/`. The demo data in them is a demo team's, not a shipped fixture,
+and the captions say so. Refreshing the onboarding captures must refresh the site copies in the same change.
