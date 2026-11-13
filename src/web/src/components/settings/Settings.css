@@ -1,0 +1,739 @@
+/* The Settings window (docs/mocks/settings-redesign, board-2): the nav on the left, the page in a
+   centred column on the right. Theme tokens only, so dark mode follows. */
+.settings-shell {
+  display: flex;
+  height: var(--app-vh);
+  background: var(--bg-base);
+  color: var(--text-1);
+}
+
+.settings-nav {
+  flex: 0 0 272px;
+  overflow-y: auto;
+  padding: 18px 12px 24px;
+  background: var(--bg-base);
+  border-right: 1px solid var(--border-subtle);
+}
+
+.settings-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.settings-back:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.settings-back .anticon {
+  font-size: 11px;
+}
+
+.settings-title {
+  margin: 10px 8px 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.settings-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 8px;
+  margin-bottom: 18px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  color: var(--text-3);
+}
+.settings-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+}
+.settings-search input::placeholder {
+  color: var(--text-3);
+}
+.settings-search:focus-within {
+  box-shadow: 0 0 0 2px var(--brand-border);
+}
+
+.settings-nav-group + .settings-nav-group {
+  margin-top: 16px;
+}
+.settings-nav-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.settings-nav-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.settings-nav-add:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.settings-nav-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 8px;
+  border-radius: 6px;
+  color: var(--text-1);
+  font-size: 14px;
+  text-decoration: none;
+}
+.settings-nav-row:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.settings-nav-row.active {
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.settings-nav-row.active .settings-nav-icon,
+.settings-nav-row.active .settings-nav-meta {
+  color: var(--brand);
+}
+.settings-nav-icon {
+  display: inline-flex;
+  width: 16px;
+  justify-content: center;
+  color: var(--text-2);
+  font-size: 14px;
+}
+/* A machine's row (MachineRows): its grip takes the icon's place on hover or focus, so at rest the
+   group looks like every other (board-3). */
+.settings-nav-sortable {
+  position: relative;
+}
+.settings-nav-sortable.dragging {
+  z-index: 1;
+}
+.settings-nav-sortable.dragging .settings-nav-row {
+  background: var(--bg-hover-strong);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  cursor: grabbing;
+}
+.settings-nav-grip {
+  position: absolute;
+  top: 5px;
+  left: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 13px;
+  cursor: grab;
+  touch-action: none;
+  opacity: 0;
+}
+.settings-nav-sortable:hover .settings-nav-grip,
+.settings-nav-sortable.dragging .settings-nav-grip,
+.settings-nav-grip:focus-visible {
+  opacity: 1;
+}
+.settings-nav-sortable:hover .settings-nav-icon,
+.settings-nav-sortable.dragging .settings-nav-icon,
+.settings-nav-sortable:has(.settings-nav-grip:focus-visible) .settings-nav-icon {
+  visibility: hidden;
+}
+.settings-nav-grip:hover,
+.settings-nav-grip:focus-visible {
+  background: var(--bg-hover-strong);
+  color: var(--text-1);
+  outline: none;
+}
+.settings-nav-grip:disabled {
+  cursor: default;
+}
+.settings-nav-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-nav-meta {
+  flex-shrink: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.settings-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  margin-right: 4px;
+  border-radius: 50%;
+}
+.settings-dot--online {
+  background: var(--success-solid);
+}
+.settings-dot--attention {
+  background: var(--warning-solid);
+}
+.settings-dot--offline {
+  background: var(--dot-idle);
+}
+
+/* Search results (SettingsSearch), in place of the nav while there is a query. */
+.settings-search-hit {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.settings-search-hit:hover,
+.settings-search-hit.chosen {
+  background: var(--bg-hover);
+}
+.settings-search-hit.chosen {
+  background: var(--bg-hover-strong);
+}
+.settings-search-hit-label,
+.settings-search-hit-detail {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-search-hit-detail {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.settings-search-hit mark {
+  border-radius: 2px;
+  background: var(--brand-tint);
+  color: var(--text-1);
+}
+
+.settings-main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+.settings-column {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 40px 24px 64px;
+}
+
+/* SettingsSection, SettingsCard, SettingsRow */
+.settings-section + .settings-section {
+  margin-top: 28px;
+}
+.settings-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.settings-section-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.settings-section-description {
+  margin: -4px 0 10px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.settings-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  padding: 0 16px;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+}
+.settings-row + .settings-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.settings-row-text {
+  flex: 1;
+  min-width: 0;
+}
+.settings-row-title {
+  font-size: 14px;
+  color: var(--text-1);
+}
+.settings-row-description {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.settings-row-control {
+  flex-shrink: 0;
+}
+/* The row a search result opened, lit for a moment across the card's width (useFoundRowFlash). */
+.settings-row--found {
+  animation: settings-row-found 2s ease-out;
+}
+@keyframes settings-row-found {
+  0%,
+  60% {
+    background: var(--brand-tint);
+    box-shadow:
+      -16px 0 0 var(--brand-tint),
+      16px 0 0 var(--brand-tint);
+  }
+  100% {
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
+/* Narrower than 760px (board-6): the nav is a page of its own at /settings, and a page opens full
+   width under "‹ Settings". SettingsLayout draws one or the other; these give each the window. */
+.settings-shell--narrow .settings-nav {
+  flex: 1 1 auto;
+  padding: 18px 16px 24px;
+  border-right: 0;
+  background: var(--bg-base);
+}
+.settings-shell--narrow .settings-nav-row,
+.settings-shell--narrow .settings-search-hit {
+  min-height: 40px;
+  font-size: 14px;
+}
+.settings-shell--narrow .settings-search {
+  height: 36px;
+}
+.settings-shell--narrow .settings-column {
+  padding: 14px 16px 48px;
+}
+.settings-back--list {
+  margin: 0 0 12px -8px;
+}
+.settings-empty {
+  color: var(--text-2);
+}
+
+/* Providers: the API keys page (settings-providers-compact board-1) and Account pools. */
+.sp-vendor-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sp-vendor-title {
+  flex: 1;
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.sp-vendor-sub {
+  margin: 6px 0 28px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.sp-count {
+  margin-left: 4px;
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+.sp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -12px 0 20px;
+}
+.sp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  font-size: 12px;
+  color: var(--text-2);
+  text-decoration: none;
+}
+.sp-chip:hover {
+  color: var(--text-1);
+  background: var(--bg-hover);
+}
+.sp-chip.on {
+  background: var(--text-1);
+  border-color: var(--text-1);
+  color: var(--bg);
+}
+.sp-chip-count {
+  opacity: 0.6;
+}
+.sp-vendor-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.sp-pools-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-2);
+  text-decoration: none;
+}
+.sp-pools-link:hover {
+  color: var(--text-1);
+}
+.pool-sec-action {
+  margin-left: auto;
+  align-self: center;
+}
+/* A pool's account rows, sized for a 900px page, in Settings' narrower column: the status and quota
+   columns give the name the room they don't need. Below 700px index.css stacks the row anyway. */
+@media (min-width: 701px) {
+  .settings-column .pool-row,
+  .settings-column .pool-detail .pool-row {
+    grid-template-columns: minmax(0, 1fr) 120px 110px auto;
+  }
+}
+
+/* SettingsHeader: the page's name and the line under it (board-2). */
+.settings-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.settings-header-text {
+  min-width: 0;
+}
+.settings-header-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.settings-header-description {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.settings-header-action {
+  flex-shrink: 0;
+}
+.settings-row-description {
+  max-width: 600px;
+}
+
+/* A Personal page drawn from ui/Card (Profile's sign-in methods and password, Feishu's sections) reads as a
+   SettingsSection: the card's title above, its body as the rounded card. */
+.settings-page .orbit-card {
+  margin-bottom: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+.settings-page .orbit-card + .orbit-card,
+.settings-page .settings-section + .orbit-card,
+.settings-page .orbit-card + .settings-section {
+  margin-top: 28px;
+}
+.settings-page .orbit-card > .orbit-card-head {
+  min-height: 0;
+  margin: 0 0 10px;
+  padding: 0;
+  border: 0;
+}
+.settings-page .orbit-card > .orbit-card-head > .orbit-card-title {
+  font-size: 15px;
+}
+.settings-page .orbit-card > .orbit-card-body {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  padding: 16px;
+}
+.settings-storage-size {
+  font-size: 13px;
+  color: var(--text-2);
+}
+.settings-card + .settings-section {
+  margin-top: 28px;
+}
+
+/* A page whose body is a table or list of many columns (Shared links, Access tokens) takes the room the
+   window has, rather than the settings rows' 880px. */
+.settings-column:has(> .settings-page--wide) {
+  max-width: 1080px;
+}
+
+/* A machine's page (board-3): its name, a status pill and ⋯, then the sections. */
+.machine-page > .settings-section,
+.machine-page > .rd-section,
+.machine-page > .machine-capacity {
+  margin-top: 32px;
+}
+.machine-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.machine-title {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.machine-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.machine-pill .settings-dot {
+  margin-right: 0;
+}
+.machine-pill--online {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.machine-pill--attention {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.machine-pill--offline {
+  background: var(--fill-muted);
+  color: var(--text-2);
+}
+.machine-more.orbit-button {
+  border-radius: 16px;
+}
+.machine-metaline {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+.machine-attention {
+  margin-top: 20px;
+}
+.machine-section-note {
+  font-size: 12.5px;
+  color: var(--text-3);
+  text-align: right;
+}
+.machine-engines {
+  border-radius: 12px;
+}
+.machine-disk-bar.rd-disk-bar {
+  width: 180px;
+  margin-top: 0;
+}
+.machine-workspace-row {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+.machine-workspace-row + .machine-workspace-row .settings-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.machine-workspace-row:hover .settings-row-title {
+  color: var(--brand);
+}
+.machine-workdir {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  background: none;
+  padding: 0;
+}
+.machine-workspace-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-3);
+}
+.machine-empty {
+  padding: 16px 0;
+}
+.machine-about-value {
+  font-size: 13px;
+  color: var(--text-1);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.machine-about-value small {
+  margin-left: 5px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.machine-about-value small.warn {
+  color: var(--warning);
+  font-weight: 500;
+}
+
+/* Workspaces (board-5): the nav group's Show all and its filter, and a workspace's own page. */
+.settings-nav-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  margin: 2px 0 4px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: var(--fill-muted);
+  color: var(--text-3);
+}
+.settings-nav-filter input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 12.5px;
+}
+.settings-nav-filter:focus-within {
+  box-shadow: 0 0 0 2px var(--brand-border);
+}
+.settings-nav-more {
+  display: block;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px 0 34px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.settings-nav-more:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.settings-nav-none {
+  padding: 4px 8px 4px 34px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.settings-row--block {
+  display: block;
+}
+.settings-row--block > .rd-form-field,
+.settings-row--block > .rd-route-engines {
+  margin: 0;
+}
+.workspace-text-setting.orbit-input,
+.settings-row-control .workspace-text-setting {
+  width: 300px;
+}
+.workspace-text-setting--mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12.5px;
+}
+.workspace-machine-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  text-decoration: none;
+}
+.workspace-machine-link:hover {
+  color: var(--text-1);
+}
+.workspace-machine-choice {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+.workspace-machine-choice + .workspace-machine-choice .settings-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.workspace-machine-choice:hover .settings-row-title {
+  color: var(--brand);
+}
+.workspace-change-machine {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--brand);
+  cursor: pointer;
+}
+.workspace-new-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+}

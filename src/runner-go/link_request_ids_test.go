@@ -439,7 +439,7 @@ func TestTheClaimLoopHoldsItsReconciliationsWhileAClaimWaitsForItsAnswer(t *test
 	for _, want := range []string{
 		"if !reclaimRetryAt.IsZero() && time.Now().After(reclaimRetryAt) && !claims.kept() && startupStarts.finished() {",
 		"if !lateClaimCheckAt.IsZero() && time.Now().After(lateClaimCheckAt) && !claims.kept() && startupStarts.finished() {",
-		"job, err := t.claimSession(loopCtx, &claims)",
+		"job, err := t.claimSession(loopCtx, &claims, scope...)",
 	} {
 		if !strings.Contains(inLoop, want) {
 			t.Errorf("the claim loop no longer reads: %s", want)

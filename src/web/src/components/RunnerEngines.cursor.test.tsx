@@ -5,8 +5,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsageSnapshot, RunnerEngineAccount, RunnerEngineHealth, RunnerLoginState } from '@orbit/shared';
-import { machineChipsOf, RunnerEngines, summaryOf } from './RunnerEngines';
-import { openRunnerCards } from './RunnerEngines.test-helpers';
+import { EngineRows } from './RunnerEngines.test-rows';
+import { openAccountGroups } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -102,10 +102,9 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-/** The Infrastructure section over these runners, every card open — and its accounts, unless `folded`. */
+/** These runners' engine rows, with their accounts open unless `folded`. */
 function mount(runners: Runner[], { folded = false } = {}) {
-  if (folded) localStorage.setItem('orbit:providers-expanded-runners', JSON.stringify(runners.map((r) => r.id)));
-  else openRunnerCards(runners);
+  if (!folded) openAccountGroups(runners);
   apiMock.mockImplementation(async (path: string) => {
     if (path === '/runners') return runners;
     if (path.endsWith('/login')) return IDLE;
@@ -121,7 +120,7 @@ function mount(runners: Runner[], { folded = false } = {}) {
     root!.render(
       <MemoryRouter initialEntries={['/infrastructure']}>
         <QueryClientProvider client={qc}>
-          <RunnerEngines />
+          <EngineRows />
         </QueryClientProvider>
       </MemoryRouter>,
     ),
@@ -149,12 +148,10 @@ const accountRow = (page: ParentNode, name: string) => {
 };
 
 describe('Cursor CLI on a machine’s card', () => {
-  it('has no row while no runner of the account knows it, and the card is what it was', () => {
+  it('has no row while no runner of the account knows it', () => {
     const old = runner(null, { capabilities: ['provider:dsh'] });
     const page = mount([old]);
     expect(page.querySelector('[data-engine="cursor"]')).toBeNull();
-    expect(page.querySelector('.mc-row')?.textContent).not.toContain('Cursor');
-    expect(summaryOf(old)).toBeNull();
   });
 
   it('comes last, after DeepSeek Harness, with the pinned version, the accounts it can run on and Add account', () => {
@@ -207,9 +204,6 @@ describe('Cursor CLI on a machine’s card', () => {
     expect(text(row.querySelector('.re-login-note'))).toBe(
       'This runner predates Cursor CLI. It updates itself when no session is running on it.',
     );
-    // A machine with nothing of Cursor CLI to sign in draws no chip of it.
-    expect(machineChipsOf(old).map((chip) => chip.engine)).not.toContain('cursor');
-    expect(summaryOf(old)).toBeNull();
   });
 
   it('offers to install the pinned build where none is, and to put it back over another build', async () => {
@@ -221,8 +215,6 @@ describe('Cursor CLI on a machine’s card', () => {
     let row = cursorRow(page);
     expect(text(row.querySelector('.re-meta'))).toBe('Not installed — Orbit can install it here');
     expect(tags(row)).toEqual(['Not installed']);
-    // Nothing on the head, as any engine it hasn't installed.
-    expect(machineChipsOf(missing).map((chip) => chip.engine)).not.toContain('cursor');
     await act(async () => all(row, 'button').find((b) => labelOf(b) === 'Install')!.click());
     expect(apiMock).toHaveBeenCalledWith(`/runners/${RUNNER_ID}/install`, { method: 'POST', body: { engine: 'cursor' } });
 
@@ -261,8 +253,6 @@ describe('Cursor CLI on a machine’s card', () => {
     const page = mount([mac]);
     const row = cursorRow(page);
     expect(tags(row)).toEqual(['Not supported here']);
-    // Nothing of Cursor CLI to sign in there, so the machine's head leaves it out.
-    expect(machineChipsOf(mac).map((chip) => chip.engine)).not.toContain('cursor');
     expect(buttons(row)).toEqual([]);
     expect(text(row.querySelector('.re-login-note'))).toBe(
       `Orbit runs Cursor CLI ${PIN} only on linux/amd64 runners; this runner is darwin/arm64.`,
@@ -278,7 +268,5 @@ describe('Cursor CLI on a machine’s card', () => {
     // No Add account until a first account is in: the way to one is the row's own Sign in.
     expect(buttons(row)).toEqual(['Sign in']);
     expect(text(row.querySelector('.re-dup'))).toBe('Sessions on this runner can’t use Cursor CLI until you sign in again.');
-    // And the head says so with an amber chip of its own.
-    expect(machineChipsOf(r).find((chip) => chip.engine === 'cursor')).toEqual({ engine: 'cursor', logins: 0, accounts: 0, signedOut: true });
   });
 });

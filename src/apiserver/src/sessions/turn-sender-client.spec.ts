@@ -44,6 +44,8 @@ test('sentFrom is read off the sender session, the outside sender, or the turnâ€
   assert.deepEqual(sentFromOf({ senderClient: 'feishu' }, undefined, { source: 'FEISHU', name: 'Li Wei' }),
     { client: 'feishu', name: 'Li Wei' });
   assert.deepEqual(sentFromOf({ senderClient: 'feishu' }, undefined, null), { client: 'feishu' });
+  // A session guest (main's ORBIT_GUEST, 0560) is not Feishu: the turn's own columns say where it came from.
+  assert.deepEqual(sentFromOf({ senderClient: 'web' }, undefined, { source: 'ORBIT_GUEST', name: 'Ana' }), { client: 'web' });
   assert.deepEqual(sentFromOf({ senderClient: 'ios', senderClientDetail: 'ipad' }, undefined, null), { client: 'ios', device: 'ipad' });
   assert.deepEqual(sentFromOf({ senderClient: 'ios', senderClientDetail: 'watch' }, undefined, null), { client: 'ios' });
   assert.deepEqual(sentFromOf({ senderClient: 'terminal', senderClientDetail: 'build-box' }, undefined, null),

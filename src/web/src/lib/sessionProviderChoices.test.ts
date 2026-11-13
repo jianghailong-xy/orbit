@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AgentProvider } from '@orbit/shared';
 import {
   brandForProvider,
+  CODEX_POOL_ON_CLAUDE_NOTICE,
   currentEngineChoice,
   currentProviderChoice,
   defaultModelLabel,
@@ -201,7 +202,7 @@ describe('DeepSeek Harness, on the DeepSeek keys', () => {
   it('offers to connect a DeepSeek key when there is none, at the DeepSeek connect page', () => {
     const dsh = engineOf(engineChoices(sources({ configured: [moonshot], dshRunner: dshReady })), DSH)!;
     expect(dsh).toMatchObject({ slug: 'dsh', label: 'DeepSeek Harness', provider: null, unavailable: 'Connect a DeepSeek key' });
-    expect(dsh.fixHref).toBe('/providers/new/deepseek');
+    expect(dsh.fixHref).toBe('/settings/providers/new/deepseek');
     expect(dsh.providers).toEqual([]);
   });
 
@@ -799,6 +800,34 @@ describe('shared pools among the credentials', () => {
   });
 });
 
+describe('a Codex pool of one’s own under Claude Code (ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY)', () => {
+  const mine = { id: 'mine', slug: 'my-chatgpt', label: 'My ChatGPT', engine: 'codex', members: [{ slug: 'my-chatgpt' }] };
+  const configured: ConfiguredProvider[] = [
+    deepseek,
+    { slug: mine.slug, label: mine.label, runtime: 'codex', models: [], presetSlug: 'openai', modelsFromRuntime: true },
+  ];
+
+  it('is not offered under Claude Code while the server lists no engines for it', () => {
+    expect(slugs(engineProviders(CLAUDE, sources({ configured, pools: [mine] })))).not.toContain('my-chatgpt');
+    expect(slugs(engineProviders(CODEX, sources({ configured, pools: [mine] })))).toContain('my-chatgpt');
+  });
+
+  it('is offered under Claude Code with the notice once the server lists claude, and under Codex without it', () => {
+    const pool = { ...mine, engines: ['codex', 'claude'] };
+    const underClaude = engineProviders(CLAUDE, sources({ configured, pools: [pool] })).find((row) => row.slug === 'my-chatgpt');
+    expect(underClaude).toMatchObject({ kind: 'pool', notice: CODEX_POOL_ON_CLAUDE_NOTICE, glyphKey: 'openai' });
+    const underCodex = engineProviders(CODEX, sources({ configured, pools: [pool] })).find((row) => row.slug === 'my-chatgpt');
+    expect(underCodex).toMatchObject({ kind: 'pool' });
+    expect(underCodex?.notice).toBeUndefined();
+  });
+
+  it('never offers a shared pool under Claude Code, whatever it lists', () => {
+    const team = { ...mine, slug: 'team-codex', engines: ['codex', 'claude'], shared: {} as never };
+    expect(slugs(engineProviders(CLAUDE, sources({ configured, pools: [team] })))).not.toContain('team-codex');
+    expect(slugs(engineProviders(CODEX, sources({ configured, pools: [team] })))).toContain('team-codex');
+  });
+});
+
 describe('a Codex pool somebody was added to, in their picker', () => {
   // jianghailong's Codex Pool (docs/mocks/account-pool-access/02), as Zhang Min, whom he added, reads it —
   // and as WorkspaceView hands it in: its ChatGPT accounts and its keys as members
@@ -905,7 +934,7 @@ describe('a Codex pool somebody was added to, in their picker', () => {
     const logins = ACCOUNTS.map((login) => account(login.email!, { state: 'SIGNED_OUT' }));
     const tile = tileOf(codexPool('zhang', keys, {}, logins));
     expect(tile.unavailable).toBe('Signed out');
-    expect(tile.fixHref).toBe(`/providers/pools/${encodeId(POOL_ID)}`);
+    expect(tile.fixHref).toBe(`/settings/providers/pools/${encodeId(POOL_ID)}`);
     expect(tile.fixEngine).toBeUndefined();
   });
 

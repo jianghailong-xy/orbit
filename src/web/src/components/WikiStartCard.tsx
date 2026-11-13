@@ -8,6 +8,7 @@ import { encodeId } from '../lib/idCodec';
 import { wikiDocsQuery, wikiPlanQuery } from '../lib/queries';
 import { useToast } from '../lib/toast';
 import { useWikiMaintenanceWhere } from '../lib/useWikiMaintenanceWhere';
+import { useMachinesHref } from '../lib/useMachinesHref';
 import { wikiSpaceSettings } from '@orbit/shared';
 import type { WikiSpaceRow } from '../lib/wiki';
 import { WIKI_PLAN_REDRAFT_ALREADY, WIKI_PLAN_REDRAFT_ASKED, WIKI_PLAN_WRITING_NOW, wikiPlanPath } from '../lib/wikiPlan';
@@ -89,6 +90,7 @@ export function WikiStartCard({ space }: { space: WikiSpaceRow }) {
   const plan = useQuery(wikiPlanQuery(space.id));
   const docs = useQuery(wikiDocsQuery(space.id));
   const { runnerOnline } = useWikiMaintenanceWhere(space);
+  const machinesHref = useMachinesHref();
   const { choices } = useWikiWorkspaceChoices();
   const draft = useWikiWrite(() => redraftWikiPlan(space.id, null));
   const [settingUp, setSettingUp] = useState(false);
@@ -107,7 +109,7 @@ export function WikiStartCard({ space }: { space: WikiSpaceRow }) {
   const act = async (to: WikiStartActionTo) => {
     if (to === 'setUp') return setSettingUp(true);
     if (to === 'plan') return navigate(wikiPlanPath(space.slug));
-    if (to === 'runners') return navigate('/infrastructure');
+    if (to === 'runners') return navigate(machinesHref);
     try {
       const answer = await draft.mutateAsync(undefined);
       message.success(answer.created ? WIKI_PLAN_REDRAFT_ASKED : WIKI_PLAN_REDRAFT_ALREADY);

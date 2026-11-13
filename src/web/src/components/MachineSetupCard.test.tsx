@@ -718,7 +718,7 @@ describe('a runner from before dir-probe/v1', () => {
     expect(said(page.querySelector('.msc-notice'))).toBe(
       'orbit@austin can’t check folders on this version, and it can’t update itself. Open machine',
     );
-    expect(page.querySelector('.msc-notice a')?.getAttribute('href')).toBe(`/runners/${RUNNER_ID}`);
+    expect(page.querySelector('.msc-notice a')?.getAttribute('href')).toBe(`/settings/machines/${RUNNER_ID}`);
   });
 
   it('offline, the offline sentence is the one that says why', async () => {

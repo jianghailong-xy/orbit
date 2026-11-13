@@ -1,5 +1,5 @@
 /**
- * Which client sent each turn (migration 0595, sessions/turn-sender-client.ts), against a real PostgreSQL: what
+ * Which client sent each turn (migration 0627, sessions/turn-sender-client.ts), against a real PostgreSQL: what
  * `orbit` in a terminal reads to draw "· from iPhone" beside a message it did not send (project criterion 6,
  * docs/mocks/terminal-session/board-1.png marker 3).
  *

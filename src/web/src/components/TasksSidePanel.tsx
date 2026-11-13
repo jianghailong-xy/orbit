@@ -46,12 +46,14 @@ import type {
   RunnerModelCatalog,
   RunnerRegionView,
   RunnerSelfUpdate,
+  RunnerDrainWaiting,
   RunnerUpdateTurn,
   RuntimeDefaultModels,
   SlashCommandInfo,
 } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
+import { SharedWithMeGroup } from './SharedWithMe';
 import { useIsMobile } from '../lib/useMediaQuery';
 import {
   avatarQuery,
@@ -147,8 +149,8 @@ interface TopNavItem {
   shortcut?: string;
 }
 
-// Fixed product destinations, the same for every account: Machines & models and Admin are rows of the
-// account menu at the panel's foot, not among these. Individual Workspace rows are primary destinations
+// Fixed product destinations, the same for every account: Admin is a row of the account menu at the
+// panel's foot, not among these. Individual Workspace rows are primary destinations
 // in their own right, so there is no proxy Workspaces parent here.
 const TOP: TopNavItem[] = [
   {
@@ -174,7 +176,7 @@ const TOP: TopNavItem[] = [
   // in each session's header and Watching strip, and those are what link to /following.
   // No Machines & models either (docs/mocks/machines-and-models, 02): where agents run and whose quota
   // they spend is set up once and fixed when something says so — every card that needs it fixed links
-  // there — so it is reached as the phone reaches it, from Settings, and from the account menu.
+  // there — so it is reached as the phone reaches it, from Settings.
 ];
 
 // The left sidebar is user-resizable; the chosen width persists across refreshes.
@@ -267,6 +269,8 @@ export interface Runner {
   selfUpdate?: RunnerSelfUpdate | null;
   // Only on a runner draining for its self-update: the reader's turns the drain waits for (board 4).
   updateTurns?: RunnerUpdateTurn[];
+  // Only while it drains and something of the reader's waits on it: the workspace banner (D3).
+  drainWaiting?: RunnerDrainWaiting | null;
   // Free-space floor in MB (PATCH minFreeDiskMb): below it this machine takes no new task runs.
   // null = no floor.
   minFreeDiskMb?: number | null;
@@ -618,7 +622,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
               label: 'Configure',
               onSelect: () => {
                 onNavigate?.();
-                navigate(`/runners/${encodeId(runnerId)}?workspace=${encodeId(a.id)}`);
+                navigate(`/settings/workspaces/${encodeId(a.id)}`);
               },
             },
             { type: 'separator' as const, key: 'divider' },
@@ -1135,6 +1139,14 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                 ))}
             </div>
           )}
+
+          {/* Sessions other people invited you to reply in: the rail's last group (session guests §4). */}
+          <SharedWithMeGroup
+            onOpen={(path) => {
+              onNavigate?.();
+              navigate(path);
+            }}
+          />
         </div>
       </div>
 
@@ -1200,15 +1212,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                   if (mode !== it.key) setMode(it.key);
                 },
               })),
-            },
-            // Where agents run and whose quota they spend, two clicks away as the phone has it (Settings, then
-            // its row) — the page left the sidebar's fixed rows for here and Settings
-            // (docs/mocks/machines-and-models, 02).
-            {
-              key: 'machines',
-              icon: <SidebarNavIcon name="runners" />,
-              label: 'Machines & models',
-              onSelect: () => navigate('/infrastructure'),
             },
             {
               key: 'settings',

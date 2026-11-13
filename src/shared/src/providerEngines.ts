@@ -48,8 +48,10 @@ export function isEngine(value: unknown): value is AgentProvider {
 export type EngineCredential =
   /** The engine's own sign-in on the runner; the provider slug is the engine's name. */
   | { kind: 'login'; engine: LoginEngine }
-  /** An account pool (ProviderPool), which runs on the engine it was made on. */
-  | { kind: 'pool'; engine: AgentProvider }
+  /** An account pool (ProviderPool), which runs on the engine it was made on. `ownLogin` says it is a
+   *  Codex pool of the caller's own ChatGPT accounts (not shared, not somebody else's), the one kind
+   *  of pool Claude Code may also run on, through Orbit's gateway (EngineTableOptions.codexLoginGateway). */
+  | { kind: 'pool'; engine: AgentProvider; ownLogin?: boolean }
   /** A configured key (ModelProvider). `runtime` is the row's column, which names the protocol its
    *  endpoint speaks; `subscriptionToken` is whether the decrypted key is a Claude subscription
    *  token (`sk-ant-oat…`), which Anthropic serves to Claude Code alone. */
@@ -90,21 +92,40 @@ export function isDeepSeekKey(row: { presetSlug: string | null; baseUrl: string 
   }
 }
 
+/**
+ * What the deployment has switched on, which the table reads beside the credential. Not a field of the
+ * credential: the server that holds the switch passes it when it builds a key's `engines` list, and a
+ * caller that passes nothing gets the table as it is with every switch off.
+ */
+export interface EngineTableOptions {
+  /** Orbit's /api/gw/anthropic gateway is on (docs/claude-engine-openai-gateway-design.md §4.2, D6):
+   *  an OpenAI key also runs on Claude Code, after its default engine Codex (D7). */
+  anthropicGateway?: boolean;
+  /** Claude Code on the account owner's own Codex login pool is on (ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY;
+   *  docs/claude-engine-openai-gateway-design.md §9): such a pool also runs on Claude Code, after its
+   *  default engine Codex (D7). A shared pool, or anybody else's, never does. */
+  codexLoginGateway?: boolean;
+}
+
 /** The engines `credential` can run on, its default engine first and the rest in ALL_ENGINES order;
  *  empty when nothing can run it (a key on a protocol no engine speaks). */
-export function credentialEngines(credential: EngineCredential): AgentProvider[] {
+export function credentialEngines(credential: EngineCredential, options: EngineTableOptions = {}): AgentProvider[] {
   switch (credential.kind) {
     case 'login':
-    case 'pool':
       return isEngine(credential.engine) ? [credential.engine] : [];
+    case 'pool':
+      if (!isEngine(credential.engine)) return [];
+      return credential.engine === AgentProvider.CODEX && credential.ownLogin && options.codexLoginGateway
+        ? [AgentProvider.CODEX, AgentProvider.CLAUDE]
+        : [credential.engine];
     case 'opencode':
       return [AgentProvider.OPENCODE];
     case 'key':
-      return keyEngines(credential);
+      return keyEngines(credential, options);
   }
 }
 
-function keyEngines(key: Extract<EngineCredential, { kind: 'key' }>): AgentProvider[] {
+function keyEngines(key: Extract<EngineCredential, { kind: 'key' }>, options: EngineTableOptions): AgentProvider[] {
   const dialect = keyDialect(key.runtime);
   if (!dialect) return [];
   if (key.subscriptionToken) return dialect === 'anthropic' ? [AgentProvider.CLAUDE] : [];
@@ -115,14 +136,16 @@ function keyEngines(key: Extract<EngineCredential, { kind: 'key' }>): AgentProvi
   const native = legacyDsh ? AgentProvider.DSH : NATIVE_ENGINE[dialect];
   const runs = new Set<AgentProvider>([NATIVE_ENGINE[dialect], AgentProvider.OPENCODE]);
   if (dialect === 'anthropic' && (legacyDsh || isDeepSeekKey(key))) runs.add(AgentProvider.DSH);
+  // Claude Code on an OpenAI key through Orbit's own gateway, which holds the key (design §4.2).
+  if (dialect === 'openai' && options.anthropicGateway) runs.add(AgentProvider.CLAUDE);
   return [native, ...ALL_ENGINES.filter((engine) => engine !== native && runs.has(engine))];
 }
 
 /** The engine a caller that names only the credential gets, or null when nothing can run it. */
-export function defaultEngineOf(credential: EngineCredential): AgentProvider | null {
-  return credentialEngines(credential)[0] ?? null;
+export function defaultEngineOf(credential: EngineCredential, options: EngineTableOptions = {}): AgentProvider | null {
+  return credentialEngines(credential, options)[0] ?? null;
 }
 
-export function isEngineCompatible(engine: string, credential: EngineCredential): boolean {
-  return (credentialEngines(credential) as string[]).includes(engine);
+export function isEngineCompatible(engine: string, credential: EngineCredential, options: EngineTableOptions = {}): boolean {
+  return (credentialEngines(credential, options) as string[]).includes(engine);
 }

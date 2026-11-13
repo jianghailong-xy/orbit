@@ -2,7 +2,7 @@ import type { ExternalMessageFrom, MessageSentFrom, SessionMessageCard } from '@
 import type { AuthCredential } from '../common/current-user.decorator';
 
 /**
- * Which client sent a turn (`conversation_turn.sender_client` / `sender_client_detail`, migration 0595), and the
+ * Which client sent a turn (`conversation_turn.sender_client` / `sender_client_detail`, migration 0627), and the
  * `sentFrom` card a `user` event carries for it (`MessageSentFrom`, @orbit/shared).
  *
  * Written by the doors that know, from what the request proved or the apps already send on every request —
@@ -59,7 +59,9 @@ export function sentFromOf(
   externalSender: ExternalMessageFrom | null | undefined,
 ): MessageSentFrom | null {
   if (sessionMessage) return { client: 'session', sessionTitle: sessionMessage.fromTitle };
-  if (externalSender) return { client: 'feishu', ...(externalSender.name ? { name: externalSender.name } : {}) };
+  if (externalSender?.source === 'FEISHU') {
+    return { client: 'feishu', ...(externalSender.name ? { name: externalSender.name } : {}) };
+  }
   const detail = turn.senderClientDetail ?? undefined;
   switch (turn.senderClient) {
     case 'ios':

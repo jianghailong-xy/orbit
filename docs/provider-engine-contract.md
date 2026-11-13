@@ -142,13 +142,13 @@ CREATE INDEX "provider_slug_alias_provider_id_idx" ON "provider_slug_alias" ("pr
 | 凭据 | 可用 engine（第一个为默认） |
 | --- | --- |
 | runner 登录 `<e>` | `<e>` |
-| 账号池 | 池的 engine |
+| 账号池 | 池的 engine；部署开关 `ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY=true` 时，自己建且未共享的 Codex 登录池为 `codex`、`claude`（默认仍是 `codex`，D7）；共享池、别人的池不变 |
 | OpenCode 自身配置 | `opencode` |
 | Anthropic 方言 key（非 DeepSeek） | `claude`、`opencode` |
 | DeepSeek key（Anthropic 方言） | `claude`、`opencode`、`dsh` |
 | 遗留 `runtime='dsh'` 行 | `dsh`、`claude`、`opencode` |
 | Claude 订阅 token（`sk-ant-oat…`） | 只有 `claude`；方言不是 Anthropic 时没有可用 engine |
-| OpenAI Responses key | `codex`、`opencode` |
+| OpenAI Responses key | `codex`、`opencode`；部署开关 `ORBIT_CLAUDE_OPENAI_GATEWAY=true` 时为 `codex`、`claude`、`opencode`（默认仍是 `codex`，D7） |
 | Moonshot key | `kimi`、`opencode` |
 | Gemini key | `antigravity`、`opencode` |
 | Cursor key（`runtime='cursor'`） | 只有 `cursor`：它不是模型 API，OpenCode 用不了（`keyEngines`，`openCodeDialect` 不认它） |
@@ -161,6 +161,13 @@ CREATE INDEX "provider_slug_alias_provider_id_idx" ON "provider_slug_alias" ("pr
 - 订阅 token 的判定需要解密 key（`trim()` 后以 `sk-ant-oat` 开头），只能在服务端做。共享模块接收调用方给的布尔值；客户端从接口的 `engines` 字段读取结果（§6.3）。
 - 订阅 token 的规则优先于遗留行的默认：持有订阅 token 的遗留 `runtime='dsh'` 行只能跑 `claude`，默认 engine 也是 `claude`。
 - 停用不影响兼容性：停用的 key 仍然「兼容」，只是不可用（§3.6）。
+- OpenAI key 上的 `claude` 走 Orbit 自己的网关 `/api/gw/anthropic`（`docs/claude-engine-openai-gateway-design.md` §4.2），只在部署开关 `ORBIT_CLAUDE_OPENAI_GATEWAY` 为 `true` 时成立（`docs/configuration.md`，默认关，D6）：
+  - 开关不是凭据的字段。持有开关的服务端在算 `engines` 时传 `EngineTableOptions { anthropicGateway: true }`（`key-gateway.ts` 的 `engineTableOptions()`）；不传等于全部关闭。`keyEngines`、`resolveProviderExec` 的兼容校验、`resolvedCredentialEngines`、领取时的 `pausedPendingSessions` 都读同一个 `engineTableOptions()`，领取 SQL 里 `claude` 也只在开关开时接受 `runtime='codex'` 的 key。
+  - 关闭时，每类凭据的 `engines`、解析结果和派发环境与网关出现前逐字段相同，由 `src/apiserver/src/providers/gateway-flag-parity.spec.ts` 对照从改动前的 main（ccdef0955）录下的 `fixtures/gateway-flag-parity.json` 保证；打开时只有 OpenAI key 的 `engines` 和该 key 上 `claude` 会话的环境不同。
+  - Codex 登录池上的 `claude`（P2b，`docs/claude-engine-openai-gateway-design.md` §9，D4 修订）只在另一个部署开关 `ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY` 为 `true` 时成立，与 `ORBIT_CLAUDE_OPENAI_GATEWAY` 互不依赖：
+    - 只限账号主人自己建、未共享（`shared=false`、`owner_id` 是会话主人）的 `codex` 池。共享池、别人把你加进去的池永远不给 `claude`。
+    - 共享模块的凭据 `{ kind: 'pool', engine: 'codex', ownLogin: true }` 配 `EngineTableOptions { codexLoginGateway: true }`（`codex-login-claude.ts` 的 `poolTableOptions()`）才得到 `codex`、`claude`；`ownLogin` 只在开关开时由 `engine-provider.ts` 判定写入。`resolvedCredentialEngines`、`pausedPendingSessions`、`listUsable`、领取 SQL（`provider_pool` 分支）读同一开关；池视图（`GET /providers/pools`）只在开关开时多一个 `engines` 字段，客户端据它在 Claude Code 下列出该池。
+    - 关闭时，`gateway-flag-parity.spec.ts` 的三个新用例（自己的池上 `claude`、共享池上 `codex` 与 `claude`，录自 P2b 前的项目分支 d07cdd060）与之前逐字段相同；打开时只有自己池的 `engines` 和该池上 `claude` 会话的环境不同，共享池上的 `claude` 仍被拒。
 
 共享模块 `src/shared/src/providerEngines.ts` 从包入口导出：
 
@@ -423,12 +430,18 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
 | `claude` | Anthropic 方言 key（含 DeepSeek key、遗留 dsh 行） | 现有的 `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_MODEL` 等（`custom-provider.ts` 的 claudeEnv） |
 | `dsh` | DeepSeek key | `ORBIT_DSH_API_KEY`、`ORBIT_DSH_BASE_URL`（key 的 baseUrl） |
 | `opencode` | 任一可用 key | `OPENCODE_CONFIG_CONTENT`：只写这一把 key，按其方言的 AI SDK 包（`openCodeKeyConfig`） |
+| `claude` | OpenAI Responses key（仅 `ORBIT_CLAUDE_OPENAI_GATEWAY=true`，§2.1） | `ANTHROPIC_BASE_URL` = `PUBLIC_ORIGIN` + `/api/gw/anthropic`；`ANTHROPIC_AUTH_TOKEN` = 本次构建铸的 `orbit-gwk-` 会话 token（`withKeyGatewayToken`，库里只存哈希），没铸 token 的构建为空，绝不是 key；`ANTHROPIC_MODEL`；`ANTHROPIC_DEFAULT_HAIKU_MODEL` = key 的 mini 模型（有才注入）；`CLAUDE_CODE_INLINE_TOOLS=false`；`CLAUDE_CODE_MAX_CONTEXT_TOKENS` 按 preset 的窗口留出八分之一；`ENABLE_CLAUDEAI_MCP_SERVERS=0`、`CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP=1` 与 Anthropic 方言 key 的 claudeEnv 相同 |
+| `claude` | 自己的 Codex 登录池（仅 `ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY=true`，§2.1） | `ANTHROPIC_BASE_URL` = `PUBLIC_ORIGIN` + `/api/gw/anthropic`；`ANTHROPIC_AUTH_TOKEN` = 池自己的 `orbit-gwl-` 会话 token（`mintPoolLoginToken`，与 codex 会话同一张 `pool_login_token` 表，只存哈希，不含账号）；`ANTHROPIC_MODEL`；不注入 `ANTHROPIC_DEFAULT_HAIKU_MODEL`；`CLAUDE_CODE_MAX_CONTEXT_TOKENS` 按 runner 上报的 Codex 目录窗口留出八分之一；其余与 OpenAI key 上的 `claude` 相同。没有 `OPENAI_*`、`CODEX_HOME`、账号 id 或账号 token |
 | `codex` | Responses key | `OPENAI_BASE_URL`、`OPENAI_API_KEY` |
 | `kimi` | Moonshot key | `KIMI_MODEL_*` |
 | `antigravity` | Gemini key | `GEMINI_API_KEY`、`GOOGLE_GEMINI_BASE_URL` |
 | `cursor` | Cursor key | 只有 `ORBIT_CURSOR_API_KEY`（`custom-provider.ts` 的 `CURSOR_KEY_VAR`），没有 endpoint：runner 读出后以 `CURSOR_API_KEY` 交给 CLI，memory 存储，这个变量本身到不了 CLI（`docs/cursor-runtime-contract.md` §16.3） |
 
 同一把 DeepSeek key 在三种 engine 上的 endpoint 都是它自己的 `baseUrl`。
+
+OpenAI key 上的 `claude` 是唯一拿不到 key 本身的注入：key 留在 API 服务端，网关用它向 `<baseUrl>/responses` 发 OpenAI Responses（`docs/claude-engine-openai-gateway-design.md` §4.2）。token 绑定（会话、key、用户），会话结束、key 停用或换 secret/endpoint/协议、账号停用时失效；领取、reclaim 和切换 provider 的 reload 各铸一枚。开关关闭时这一行不存在：该组合在兼容校验处被拒（`engineIncompatible`），其他各行的注入与开关无关（`gateway-flag-parity.spec.ts`）。
+
+自己 Codex 登录池上的 `claude` 同样拿不到账号：每次领取按 codex 的规则（`resolveLoginPool` → `choosePoolCredential`）在会话主人自己登录的账号中选一个（不用池里的 API key，也不用别人登录的账号），记到 `pool_codex_account_id`；网关按会话当前账号发请求，刷新、限流等待、spent/throttled 标记和用量账本都走 `PoolLoginGatewayService` 的原有代码。该会话的 token 在 `/api/gw/codex` 上被拒，codex 会话的 token 在 `/api/gw/anthropic` 上被拒。开关关闭时该组合在领取 SQL 和兼容校验处被拒（`codex-login-claude.pg.spec.ts`）。
 
 ### 4.3 其它读 engine 的地方
 
@@ -480,6 +493,7 @@ Orbit 把 key 写进 engine 进程的环境（§4.2）。agent 跑的命令是 e
 - 按 Claude Code 与 agy 的文档，MCP 服务器和 hook 也继承同样的环境，未逐一实测。
 - 账号池的会话 token 也经 `OPENAI_API_KEY` 交给 Codex，按源码同样可见。
 - 让命令看不到 key 的开关（Claude Code 的 `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`、Codex 的 `ignore_default_excludes=false`）各有副作用，不在本项目范围：前者要求 runner 装 bubblewrap，并把权限模式强制为 Default；后者会去掉所有名字含 KEY、SECRET、TOKEN 的变量。
+- OpenAI key 上的 Claude Code（部署开关 `ORBIT_CLAUDE_OPENAI_GATEWAY`，§2.1）不在本表：它的环境里只有 `orbit-gwk-` 会话 token，key 留在 API 服务器上（§4.2）。web 的 OpenAI 连接表单（`ProviderConnectPage.tsx`）据此写「Who gets this key」：Codex 和 OpenCode 那一行照本表；服务端把 Claude Code 列进这把 key 的 `engines` 时，加一行「Sessions on Claude Code never get it: the key stays on the Orbit server, which sends their requests on. Their runner gets a token that works only for that session.」。iOS、macOS、Android 没有连接表单（加 key、改 key 都在 web 上）。
 - 给 T6：DeepSeek 连接表单的「Who gets this key」可以写：
 
   > Sessions on Claude Code and OpenCode hand this key to the CLI in its environment, where commands the agent runs can read it. DeepSeek Harness keeps it out of the commands it runs, but any program running as the runner's user can still read it from the Harness process.

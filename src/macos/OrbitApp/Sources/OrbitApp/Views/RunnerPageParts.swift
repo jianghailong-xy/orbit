@@ -11,7 +11,7 @@ import OrbitKit
 // `RunnerPageFormat`), where they are tested; iOS and macOS draw these same views.
 
 /// The inks the runner pages speak in: the mock's on light — the system green/orange/red read too
-/// faint on white — and the system colours on dark. The same inks `PoolTone` (InfrastructureSections)
+/// faint on white — and the system colours on dark. The same inks `PoolTone` (MachinesAndModelsSections)
 /// uses; that one lived with the iOS-only pool pages when these were drawn, and these are macOS's too.
 enum RunnerInk {
     static let green = Color(light: Color(red: 0.141, green: 0.541, blue: 0.239), dark: .green)   // #248A3D
@@ -374,12 +374,12 @@ struct RunnerEngineRow: View {
     static let textInset: CGFloat = 28 + 12
 
     /// Whether the row opens the engine's page: an engine the machine has, one it lacks whose page installs
-    /// it (`Infrastructure.installsFromPage`) — and Cursor CLI where the fix is on its page, its Install
+    /// it (`MachinesAndModels.installsFromPage`) — and Cursor CLI where the fix is on its page, its Install
     /// (board iOS 2, the four states).
     static func opensPage(_ health: RunnerEngineHealth, runner: Runner) -> Bool {
         if health.installed == true { return true }
         if health.engine == CursorRuntime.engine { return CursorRuntime.state(of: runner) == .notInstalled }
-        return Infrastructure.installsFromPage(runner, engine: health.engine)
+        return MachinesAndModels.installsFromPage(runner, engine: health.engine)
     }
 
     /// `2.1.284 · Signed in`, the state in its colour — and Kimi's site after its version,

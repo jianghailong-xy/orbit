@@ -110,6 +110,8 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     /// task in no project, and from a server that predates the read.
     public let integration: TaskIntegrationView?
     public let assignee: TaskAssignee?
+    /// Where a run of this task last said it was (`task_progress_report`). Detail payload only.
+    public let progress: TaskProgressView?
     public let comments: [TaskComment]?
     public let sessions: [SessionRef]?
     public let creatorSession: SessionRef?
@@ -136,7 +138,7 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
         case running, queued, runningSince, awaitingOwnerConfirmation, confirmationUnderReview, blocked
         case dependencyState, runnable
         case integration
-        case assignee, comments, sessions, creatorSession, dependsOn, dependedOnBy
+        case assignee, progress, comments, sessions, creatorSession, dependsOn, dependedOnBy
         case counts = "_count"
     }
 }
@@ -280,6 +282,8 @@ public struct SessionRef: Codable, Equatable, Sendable, Identifiable {
     /// says what it used. Nil before it was claimed, and on `creatorSession`.
     public let model: String?
     public let effort: String?
+    /// What the run has cost so far, in US dollars. Nil from a server that does not send it.
+    public let costUsd: Double?
     /// The routing decision this run was planned with (§7.5); nil on any other session.
     public let route: TaskRunRoute?
 

@@ -21,6 +21,7 @@ import { Menu } from './ui/Menu';
 import { Popconfirm } from './ui/Popconfirm';
 import { Select } from './ui/Select';
 import { Spinner } from './ui/Spinner';
+import { SessionGuestsSection } from './SessionGuests';
 
 /** One row of Includes. `layer: null` is the root's own content, which a link always includes.
  *  `warn` marks the row whose detail is a risk, said in amber once the layer is on. `under` names
@@ -195,6 +196,7 @@ export function ShareModal({
   rootId,
   returnFocus,
   appPath,
+  guests,
 }: {
   open: boolean;
   onClose: () => void;
@@ -204,6 +206,9 @@ export function ShareModal({
   returnFocus?: RefObject<HTMLElement | null>;
   /** The root's signed-in address, when its id alone does not make it: a wiki space's is its slug's. */
   appPath?: string;
+  /** A session's People who can reply (docs/session-guests-design.md §3): where and how the agent runs a guest's
+   *  message, which the section's consequence line says. Without it the dialog has no People section. */
+  guests?: { runnerName: string; permissionMode: string };
 }) {
   const spec = ROOT_KINDS[kind];
   const message = useToast();
@@ -279,6 +284,11 @@ export function ShareModal({
     });
   };
 
+  const people =
+    kind === 'SESSION' && guests ? (
+      <SessionGuestsSection sessionId={rootId} runnerName={guests.runnerName} permissionMode={guests.permissionMode} />
+    ) : null;
+
   const access = (
     <>
       <div className="share-access" ref={accessRow}>
@@ -326,7 +336,9 @@ export function ShareModal({
           <div className="share-access-detail">
             {link
               ? spec.publicDetail
-              : 'Only you can open it, signed in. Choose “Anyone with the link” to make a public link.'}
+              : people
+                ? 'No public link. People you invite below can still open and reply.'
+                : 'Only you can open it, signed in. Choose “Anyone with the link” to make a public link.'}
           </div>
         </div>
       </div>
@@ -370,6 +382,7 @@ export function ShareModal({
       ) : !link ? (
         <>
           {access}
+          {people}
           <div className="share-dialog-foot">
             <span className="share-dialog-stat">
               Copy link <span className="share-dialog-muted">— the signed-in link, for yourself</span>
@@ -466,6 +479,7 @@ export function ShareModal({
             )}
           </div>
 
+          {people}
           <div className="share-dialog-foot">
             <span className="share-dialog-stat">{viewsLine(link, Date.now())}</span>
             {/* The owner looking at their own link before handing it out is not a visit (?preview=1). */}

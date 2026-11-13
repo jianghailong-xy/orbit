@@ -87,22 +87,29 @@ export interface OrbitMessageFrom {
  * runner on delivery, which tells the agent the message is not the account owner's.
  */
 export interface ExternalMessageFrom {
-  /** Where the sender is: the one source there is so far. */
-  source: 'FEISHU';
-  /** The sender's name as Feishu gave it when the turn was written; null when Feishu would not say. */
+  /**
+   * Where the sender is: FEISHU, a member of a connected Feishu group; ORBIT_GUEST, another Orbit account the owner
+   * invited to reply in this session (docs/session-guests-design.md §5), drawn as `From <name>`.
+   */
+  source: ExternalMessageSource;
+  /**
+   * The sender's name when the turn was written: as Feishu gave it (null when Feishu would not say), or the guest's
+   * Orbit account name. Never the sender's id, on either source.
+   */
   name: string | null;
 }
 
 /** The sources `ExternalMessageFrom.source` takes, for a reader that has to check a payload. */
-export const EXTERNAL_MESSAGE_SOURCES = ['FEISHU'] as const;
+export const EXTERNAL_MESSAGE_SOURCES = ['FEISHU', 'ORBIT_GUEST'] as const;
+export type ExternalMessageSource = (typeof EXTERNAL_MESSAGE_SOURCES)[number];
 
 /**
- * Which client sent a `user` turn (`sentFrom` on the event's payload, migration 0595): what `orbit` in a terminal
+ * Which client sent a `user` turn (`sentFrom` on the event's payload, migration 0627): what `orbit` in a terminal
  * draws "· from iPhone" beside a message it did not send with. Recorded by the server from the door the turn came
  * in through — the credential's kind, the `X-Orbit-Client` header the apps send on every request (and
  * `X-Orbit-Device` for an iPhone or an iPad), the session an orchestration credential proved — never from a
  * request body. Absent on a turn no door recorded one for (the platform's own deliveries, a turn written before
- * 0595, a personal access token) and from a server older than the field.
+ * 0627, a personal access token) and from a server older than the field.
  */
 export interface MessageSentFrom {
   client: MessageSenderClient;

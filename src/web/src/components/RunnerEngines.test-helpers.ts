@@ -2,10 +2,9 @@ import { act } from 'react';
 import { vi } from 'vitest';
 import { ACCOUNT_ENGINES } from '../lib/engineAccounts';
 
-/** Open these runners' cards, and every engine's accounts on them: the page as a user who opened them
- *  sees it. Both start folded, and the section remembers the open ones in localStorage. */
-export function openRunnerCards(runners: readonly { id: string }[]) {
-  localStorage.setItem('orbit:providers-expanded-runners', JSON.stringify(runners.map((r) => r.id)));
+/** Open every engine's accounts on these runners: the rows as a user who opened them sees them. A
+ *  group starts folded, and the open ones are remembered in localStorage (useOpenAccounts). */
+export function openAccountGroups(runners: readonly { id: string }[]) {
   localStorage.setItem(
     'orbit:providers-open-accounts',
     JSON.stringify(runners.flatMap((r) => ACCOUNT_ENGINES.map((engine) => `${r.id}/${engine}`))),
