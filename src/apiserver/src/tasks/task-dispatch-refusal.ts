@@ -11,6 +11,9 @@ import {
   uuidToBase62,
 } from '@orbit/shared';
 
+import { Logger } from '@nestjs/common';
+
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import type { PrismaService } from '../prisma/prisma.service';
 import { branchName, LANDED_RESULTS } from '../projects/project-criterion-landing';
 import { hasResolvedSource } from '../projects/session-source';
@@ -390,7 +393,7 @@ export async function recordForkDispatchRefusal(
   refused: { code: 'FORK_SOURCE_NOT_REACHABLE' | 'FORK_IN_BOUND_PROJECT'; message: string },
   at: Date,
 ): Promise<TaskDispatchRefusal | null> {
-  return prisma.$transaction(async (tx) => {
+  return withTransactionRetry(prisma, async (tx) => {
     // Locked so two automatic doors refused at once leave one record and one comment.
     await tx.$queryRaw`SELECT 1 FROM "task" WHERE "id" = ${taskId}::uuid FOR UPDATE`;
     const task = await tx.task.findUnique({
@@ -444,8 +447,10 @@ export async function recordForkDispatchRefusal(
       },
     });
     return refusal;
-  });
+  }, loggedRetry(logger, 'tasks.recordForkDispatchRefusal'));
 }
+
+const logger = new Logger('TaskDispatchRefusal');
 
 /** The note a refused forked start leaves on the task's timeline. */
 function forkDispatchRefusalComment(refusal: TaskDispatchRefusal): string {
