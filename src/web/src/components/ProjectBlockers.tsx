@@ -280,7 +280,10 @@ interface RefusedTaskRow {
 function RefusedTaskList({ projectId, taskIds }: { projectId: string; taskIds: string[] }) {
   const tasks = useQuery({
     queryKey: ['project', projectId, 'tasks', 'root'],
-    meta: { entities: ['task'] },
+    // The project task page's own key — one cache entry with the task list below, so it declares
+    // what that entry carries (a row's Running lane is its session's), not only what this card
+    // reads off it.
+    meta: { entities: ['task', 'session'] },
     queryFn: () =>
       api<{ items: RefusedTaskRow[] }>(
         `/projects/${encodeURIComponent(projectId)}/tasks/page?limit=100`,

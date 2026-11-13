@@ -772,7 +772,15 @@ export function TaskDetailPanel({
   // list row lacks; show `summary` meanwhile so the header doesn't flash.
   const q = useQuery({
     queryKey: ['task', taskId],
-    meta: { entities: ['task'] },
+    // The document carries the task's sessions, which is what the header's Run/Queued state, the
+    // busy-session poll below and the panel's session rows are read from. A run starting or ending
+    // need not write the task row at all — the control plane's `task.changed` fires only when it is
+    // created or updated — so `task` alone would leave the panel showing a run that is over.
+    //
+    // One cache entry with ProjectTaskPanel's and TaskRoute's reads of the same key; all three
+    // declare the same entities so whichever observer sets the entry's options last says the same
+    // thing.
+    meta: { entities: ['task', 'session'] },
     queryFn: () => api<any>(`/tasks/${taskId}`),
     // While the task has a busy (queued/running) session, poll so the 开始执行 button
     // leaves its running state once the run ends; stay idle otherwise.
@@ -823,7 +831,9 @@ export function TaskDetailPanel({
   // wide single-depth fan-in fits whole.
   const dependencyGraphQ = useQuery({
     queryKey: ['task', taskId, 'dependency-graph'],
-    meta: { entities: ['task'] },
+    // The graph's nodes carry live run state (`running` / `queued`) from their sessions; a run
+    // starting or ending writes no task row.
+    meta: { entities: ['task', 'session'] },
     queryFn: () =>
       api<TaskDependencyGraphResponse>(
         `/tasks/${taskId}/dependency-graph?direction=both&pairUnary=true&maxNodes=500`,
@@ -865,7 +875,8 @@ export function TaskDetailPanel({
   );
   const dependencyGraphNodesQ = useQuery({
     queryKey: ['task', taskId, 'dependency-graph-nodes', dependencyGraphKnownTaskIds],
-    meta: { entities: ['task'] },
+    // Same nodes, same live run state, read again for the expanded branches.
+    meta: { entities: ['task', 'session'] },
     queryFn: () =>
       api<TaskDependencyGraphNodesResponse>(`/tasks/${taskId}/dependency-graph/nodes`, {
         method: 'POST',

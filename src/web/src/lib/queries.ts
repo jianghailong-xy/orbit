@@ -599,7 +599,10 @@ export const labelSummaryQuery = (listId?: string, projectId?: string) =>
 export const activeTasksQuery = (listId?: string, projectId?: string) =>
   queryOptions({
     queryKey: ['tasks', 'active', listId ?? null, ...(projectId ? [{ projectId }] : [])] as const,
-    meta: { entities: ['task'] },
+    // Every row here is on the strip BECAUSE a session is running or queued on it, and a run
+    // starting or ending writes no task row — only `session.*`. `task` alone would leave the strip
+    // showing work that has already finished.
+    meta: { entities: ['task', 'session'] },
     queryFn: () => api<ActiveTasks>(activeTasksPath(listId, projectId)),
     // `task.*` events refresh it; this is the safety read (listBudget).
     refetchInterval: streamPoll(5_000),
@@ -629,7 +632,10 @@ export const taskCountsQuery = (
       ...(creatorSessionId ? [{ creatorSessionId }] : []),
       ...(projectId ? [{ projectId }] : []),
     ] as const,
-    meta: { entities: ['task'] },
+    // `running` and `queued` are counted from open sessions, not from task columns: a run that
+    // starts or ends moves these two numbers without writing a task row, so `task` alone would
+    // leave the Running tab and the progress bar counting a run that is over.
+    meta: { entities: ['task', 'session'] },
     queryFn: () => api<TaskCounts>(taskCountsPath(listId, labels, creatorSessionId, projectId)),
     staleTime: 10_000,
   });
@@ -643,7 +649,9 @@ export const taskCountsQuery = (
 export const sessionCreatedTasksQuery = (sessionId: string) =>
   queryOptions({
     queryKey: ['tasks', 'created-by-session', sessionId] as const,
-    meta: { entities: ['task'] },
+    // The rows carry `running` / `queued`, which come from the sessions carrying the tasks — the
+    // poll below is the safety read of exactly that fact, so the declaration names its source.
+    meta: { entities: ['task', 'session'] },
     queryFn: () => api<SessionCreatedTasks>(`/sessions/${sessionId}/created-tasks`),
     refetchInterval: (q) =>
       q.state.data?.items.some((row) => row.running || row.queued) ? 15_000 : false,
@@ -846,7 +854,11 @@ export interface ProjectReadyToRun {
 export const projectReadyToRunQuery = (projectId: string, limit = 5) =>
   queryOptions({
     queryKey: ['project', projectId, 'panorama', 'ready', limit] as const,
-    meta: { entities: ['task'] },
+    // The rows are a task queue, but a row's `runState` (QUEUED/RUNNING/PAUSED), its `sessionId`
+    // and the running/queued counts are read off the sessions carrying those tasks. A run that
+    // starts or ends writes no task row, so without `session` this queue would keep saying
+    // Running after the run has finished.
+    meta: { entities: ['task', 'session'] },
     queryFn: () =>
       api<ProjectReadyToRun>(
         `/projects/${encodeURIComponent(projectId)}/panorama/ready?limit=${limit}`,
@@ -872,7 +884,10 @@ export const projectReadyToRunQuery = (projectId: string, limit = 5) =>
 export const projectDependencyGraphQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId, 'dependency-graph'] as const,
-    meta: { entities: ['task'] },
+    // The marks on the graph carry live run state (`running` / `queued`, and the reason a running
+    // task gives), which the server reads off the work sessions. A run starting or ending writes
+    // no task row — only `session.*` — so the graph needs `session` as well as `task`.
+    meta: { entities: ['task', 'session'] },
     queryFn: () =>
       api<ProjectDependencyGraphResponse>(
         `/projects/${encodeURIComponent(projectId)}/dependency-graph`,

@@ -35,7 +35,10 @@ export function TaskRoute() {
   const browsing = !((list != null && list !== 'none') || search.has('createdIn'));
   const task = useQuery({
     queryKey: ['task', taskId],
-    meta: { entities: ['task'] },
+    // The panel's own read, under its own key: one cache entry with TaskDetailPanel's and
+    // ProjectTaskPanel's reads, so it declares what that entry carries — the task's sessions
+    // included, which is where its Running/Queued state comes from.
+    meta: { entities: ['task', 'session'] },
     queryFn: () => api<any>(`/tasks/${taskId}`),
     enabled: Boolean(taskId) && browsing,
   });

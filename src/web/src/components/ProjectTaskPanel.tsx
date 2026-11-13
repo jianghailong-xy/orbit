@@ -26,7 +26,9 @@ export function ProjectTaskPanel({ projectId, taskId }: { projectId: string; tas
   // The panel's own read, under its own key: the two are one request and one cache entry.
   const task = useQuery({
     queryKey: ['task', taskId],
-    meta: { entities: ['task'] },
+    // The panel's own read, shared with TaskDetailPanel and TaskRoute under one cache entry: the
+    // document carries the task's sessions, which is where its Running/Queued state comes from.
+    meta: { entities: ['task', 'session'] },
     queryFn: () => api<any>(`/tasks/${taskId}`),
   });
   const remove = useMutation({

@@ -2265,7 +2265,14 @@ export function ProjectTasks({ projectId }: { projectId: string }) {
   const { open } = useOpenProjectCoordinator(projectId, NEW_TASK_INTENT);
   const tasks = useQuery({
     queryKey: ['project', projectId, 'tasks', 'root'],
-    meta: { entities: ['task'] },
+    // A row's work lane — Running above all — is read off the session carrying the task
+    // (`workState`), and a run starting or ending writes no task row: only `session.*` announces
+    // it. `task` alone would leave a row saying Running after its run had ended.
+    //
+    // Also the key ProjectBlockers reads (`RefusedTaskList`): the two are one cache entry, and
+    // react-query keeps one `meta` on it, taken from whichever observer set its options last, so
+    // every site on this key must declare the same entities or the declaration is a coin toss.
+    meta: { entities: ['task', 'session'] },
     queryFn: () =>
       api<ProjectTaskPage>(`/projects/${encodeURIComponent(projectId)}/tasks/page?limit=100`),
   });
@@ -2633,7 +2640,9 @@ export function ProjectTaskLevel({
 }) {
   const children = useQuery({
     queryKey: ['project', projectId, 'tasks', 'children', parentTaskId],
-    meta: { entities: ['task'] },
+    // The same project task page as the root level, row for row: a subtask's Running mark is its
+    // work session's, and a run starting or ending writes no task row.
+    meta: { entities: ['task', 'session'] },
     queryFn: () =>
       api<ProjectTaskPage>(
         `/projects/${encodeURIComponent(projectId)}/tasks/page?parentId=${encodeURIComponent(encodeId(parentTaskId))}&limit=100`,

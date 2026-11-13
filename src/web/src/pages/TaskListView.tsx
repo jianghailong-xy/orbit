@@ -550,7 +550,10 @@ export function TaskListView() {
         creatorSessionId: createdIn,
       },
     ],
-    meta: { entities: ['task'] },
+    // A row's pill is `running` / `queued` from the session carrying the task, and page one's
+    // `counts` counts those same session-derived states — neither moves when only the task row is
+    // written, and both move on every run that starts or ends.
+    meta: { entities: ['task', 'session'] },
     queryFn: ({ pageParam }) =>
       api<TaskPage>(
         taskPagePath({
