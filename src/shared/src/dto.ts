@@ -104,6 +104,19 @@ export interface SessionSettings {
   envPendingRestart: boolean;
 }
 
+/**
+ * What a session has spent over all its turns: what `GET /sessions/:id` carries as `usage`, beside
+ * `engineVersion` (the assigned runner's reported version of the session's engine, null when unknown).
+ */
+export interface SessionUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  costUsd: number;
+  numTurns: number;
+}
+
 /** `PATCH /sessions/:id/settings`. Every field optional; an omitted one is unchanged. */
 export interface SessionSettingsPatch {
   /** Replaces the whole session map; null clears it. Keys match ^[A-Za-z_][A-Za-z0-9_]*$, no ORBIT_*. */

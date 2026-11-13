@@ -2,7 +2,7 @@ import { visibleQuestions, questionsWithCoordinator } from './run-question';
 import { isRunNotifyTurn, runNotifyContent } from './run-notify';
 import {
   SESSION_MERGE_RECOVERY_V1, readMergeRecovery, mergeRecoveryConfirmable, mergeRecoveryContinuePrompt, mergeRecoveryPrompt,
-  mergeRecoveryReady, type MergeRecovery, type MergeRecoveryAction, type SessionSettings,
+  mergeRecoveryReady, type MergeRecovery, type MergeRecoveryAction, type SessionSettings, type SessionUsage,
   type SessionRestartResponse,
 } from '@orbit/shared';
 import {
@@ -246,6 +246,7 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
   parseSessionSettingsPatch, reloadCarriesEnv, RESTART_RELOAD_CONTENT, sameEnv, sessionSettingsOf, stringEnv,
 } from './session-settings';
+import { sessionTokenTotals } from '../runner-api/running-totals';
 import {
   normalizeBuiltinPermissionMode,
   normalizeEffortForProvider,
@@ -4501,11 +4502,22 @@ export class SessionsService {
       : undefined;
     // As clients have always read it: `lastHeartbeatAt` is its last beat, from either record of it.
     const assignedRunner = session.assignedRunner && servedRunner(withRunnerLastBeat(session.assignedRunner));
+    // The engine it runs on: its recorded one, else what the old rules derive, null when nobody can
+    // tell (docs/provider-engine-contract.md §6.1).
+    const engine = await sessionEngine(this.prisma, session);
+    // Settings → Info: tokens in one aggregate (only Claude ever wrote running totals), and cost and
+    // turns from the row as booked — `numTurns` from the row itself, not the resume projection above.
+    const usage: SessionUsage = {
+      ...(await sessionTokenTotals(this.prisma, session.id, engine === 'claude')),
+      costUsd: session.costUsd,
+      numTurns: session.numTurns,
+    };
+    // Not stored per session: what the assigned runner last reported for this engine.
+    const engineVersion = (engine
+      && sanitizeRunnerEngines(session.assignedRunner?.engines)?.find((e) => e.engine === engine)?.version) || null;
     return withSessionCapabilities({
       ...rest,
-      // The engine it runs on: its recorded one, else what the old rules derive, null when nobody can
-      // tell (docs/provider-engine-contract.md §6.1).
-      engine: await sessionEngine(this.prisma, session),
+      engine,
       // What its Trash note says when a file is keeping it there past the 30 days.
       trashHold: session.deletedAt ? await trashHoldOf(this.prisma, session.id) : null,
       workspace: session.workspace ? {
@@ -4553,6 +4565,8 @@ export class SessionsService {
       shareToken: shareLinks?.[0]?.token ?? null,
       sharedAt: shareLinks?.[0]?.createdAt ?? null,
       settings: sessionSettingsOf(session, session.workspace?.env, SessionsService.engineLive(session)),
+      usage,
+      engineVersion,
     });
   }
 
