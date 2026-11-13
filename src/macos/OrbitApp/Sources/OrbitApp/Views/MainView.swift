@@ -1,5 +1,8 @@
 import SwiftUI
 import OrbitKit
+#if os(macOS)
+import AppKit
+#endif
 
 /// The app shell: a three-column split mirroring the web AppShell — navigation/Workspaces, the
 /// selected section's list, and a detail pane. On iPad the first column is the iPhone's navigation
@@ -162,6 +165,9 @@ struct SectionSidebar: View {
     @AppStorage("sidebar.projectsExpanded") private var projectsExpanded = true
     /// The workspace whose settings its row's menu opened.
     @State private var editingWorkspace: Agent?
+    /// ⌘ is down: the workspace rows show their ⌘1…⌘9 shortcuts only then, as Safari shows its tab
+    /// numbers, instead of a column of faint hints beside the state marks all the time.
+    @State private var commandHeld = false
 
     /// Bridge the model's fields to the List's single selection.
     private var selection: Binding<SidebarSelection?> {
@@ -210,7 +216,7 @@ struct SectionSidebar: View {
             OwnerRequestInboxEntry()
 
             Section(AppSection.agents.title, isExpanded: $workspacesExpanded) {
-                workspaceRows(shortcutIndex: shortcutIndex)
+                workspaceRows(shortcutIndex: commandHeld ? shortcutIndex : [:])
             }
 
             if !openProjects.isEmpty {
@@ -243,12 +249,15 @@ struct SectionSidebar: View {
                 Divider()
                 AccountFooter(isAdmin: isAdmin)
             }
-            .background(.bar)
+            // The sidebar's own material, so the footer reads as part of the rail (`.bar` drew it
+            // a lighter band) while still covering the rows that scroll under it.
+            .background(SidebarMaterial())
         }
         .sheet(item: $editingWorkspace) { agent in
             if let agents = model.agents { AgentSettingsSheet(agents: agents, agent: agent) }
         }
         .task { await model.loadAgentsThenLand() }
+        .task { await watchCommandKey() }
         // Whether the Wiki row is drawn at all is the spaces read's answer (WIKI_DISABLED, `WikiLogic.shown`).
         .task { await model.wiki?.loadSpaces() }
         // The Projects row counts the projects waiting on you, and the last group lists the open ones.
@@ -287,18 +296,36 @@ struct SectionSidebar: View {
         }
     }
 
+    /// Follows ⌘ for as long as the sidebar is up. A key released while another app is in front never
+    /// reaches this monitor, so leaving the app counts as letting go.
+    private func watchCommandKey() async {
+        let monitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
+            commandHeld = event.modifierFlags.contains(.command)
+            return event
+        }
+        defer { if let monitor { NSEvent.removeMonitor(monitor) } }
+        for await _ in NotificationCenter.default.notifications(named: NSApplication.didResignActiveNotification) {
+            commandHeld = false
+        }
+    }
+
     /// The Workspaces one line each, in the drawer's runner-stable order, then a Set up row per machine
     /// with no workspace. One flat ForEach over `AgentListLogic.sidebarRows`, one view per row: an
     /// if/else or a second ForEach in here is the shape the outline list's row reload aborted on.
     private func workspaceRows(shortcutIndex: [String: Int]) -> some View {
         let agents = model.agents
+        // The runner is named only on a row whose name another workspace also has ("orbit" on two
+        // machines): there it is what tells them apart; anywhere else it repeated one machine's name
+        // down the whole list. The row's menu (Show Machine) still says where it runs.
+        let sharedNames = Set(Dictionary(grouping: agents?.orderedItems ?? [], by: \.name)
+            .filter { $0.value.count > 1 }.keys)
         return ForEach(AgentListLogic.sidebarRows(agents?.orderedItems ?? [], machines: agents?.machinesToSetUp ?? [])) { row in
             switch row {
             case .agent(let agent):
                 let configured = agents?.configuredProviders ?? []
                 WorkspaceNavigationRow(
                     agent: agent,
-                    runnerLabel: agents?.runnerLabel(agent.runnerId) ?? "",
+                    runnerLabel: sharedNames.contains(agent.name) ? agents?.runnerLabel(agent.runnerId) ?? "" : "",
                     // The system draws the selection, so the folder keeps one colour.
                     selected: false,
                     offline: agents?.runnerIsOffline(agent.runnerId) ?? false,
@@ -343,9 +370,10 @@ struct SectionSidebar: View {
         }
     }
 
-    /// The workspace's own session list, off any project's sessions page that covered it.
+    /// The workspace's own session list, off any project's sessions page or folder page that covered it.
     private func openWorkspace(_ id: String) {
         if model.selectedAgentID == id, model.projectSessionsColumn != nil { model.leaveProjectSessions() }
+        if model.selectedAgentID == id, model.folderColumn != nil { model.leaveFolder() }
         model.openAgent(id)
     }
 
@@ -443,6 +471,19 @@ struct AccountFooter: View {
         Divider()
         Button("Sign out", role: .destructive) { model.logout() }
     }
+}
+
+/// The source list's translucent sidebar material, for chrome pinned over the sidebar.
+private struct SidebarMaterial: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .sidebar
+        view.blendingMode = .behindWindow
+        view.state = .followsWindowActiveState
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }
 #endif
 

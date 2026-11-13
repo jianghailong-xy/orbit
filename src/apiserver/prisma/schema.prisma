@@ -5120,8 +5120,10 @@ model ProjectHandoffApproval {
   /// answer, and no crossing can name a deleted project, so nothing is loosened by removing it.
   fromProjectId String  @map("from_project_id") @db.Uuid
   fromProject   Project @relation("ProjectHandoffFrom", fields: [fromProjectId], references: [id], onDelete: Cascade)
-  toProjectId   String  @map("to_project_id") @db.Uuid
-  toProject     Project @relation("ProjectHandoffTo", fields: [toProjectId], references: [id], onDelete: Cascade)
+  /// Null only for a MOVE_TASK that takes the task out of every project (0610, a CHECK): the
+  /// account owner's confirmation then files it under none.
+  toProjectId   String?  @map("to_project_id") @db.Uuid
+  toProject     Project? @relation("ProjectHandoffTo", fields: [toProjectId], references: [id], onDelete: Cascade)
 
   /// FILE_TASK | MOVE_TASK | DEPEND_ON_TASK, frozen by a CHECK in 0155 rather than by a Prisma enum
   /// (cf. `ProjectBlocker.kind`): the values are `project-handoff.ts`'s closed set, and a second

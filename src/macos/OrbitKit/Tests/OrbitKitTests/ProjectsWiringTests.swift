@@ -270,14 +270,37 @@ final class ProjectsWiringTests: XCTestCase {
                           "the gear, then the account menu")
     }
 
+    /// The `#if os(macOS)` … `#endif` blocks at the top level of a file, nested `#if`s inside them
+    /// included.
+    private func macOSOnlyBlocks(_ text: String) -> [String] {
+        var blocks: [String] = []
+        var current: [Substring]? = nil
+        var depth = 0
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if current == nil {
+                if line == "#if os(macOS)" { current = [line]; depth = 1 }
+                continue
+            }
+            current!.append(line)
+            if trimmed.hasPrefix("#if") { depth += 1 }
+            if trimmed.hasPrefix("#endif") {
+                depth -= 1
+                if depth == 0 { blocks.append(current!.joined(separator: "\n")); current = nil }
+            }
+        }
+        return blocks
+    }
+
     func testTheIPadSidebarIsTheDrawer() throws {
         let main = code(try appSource("Views/MainView.swift"))
         let sidebar = try slice(main, from: "private var sidebar: some View {", to: "\n    }\n")
         XCTAssertTrue(sidebar.contains("#if os(iOS)\n        NavigationDrawer(close: {}, live: true, inSidebarColumn: true)"
                                        + "\n        #else\n        SectionSidebar("),
                       "the iPad seats the drawer; macOS keeps its source list")
-        let macOS = try slice(main, from: "#if os(macOS)", to: "#endif")
-        XCTAssertTrue(macOS.contains("struct SectionSidebar: View {") && macOS.contains("struct AccountFooter: View {"),
+        // Not the first block: MainView also imports AppKit under its own `#if os(macOS)`.
+        let macOS = macOSOnlyBlocks(main).first { $0.contains("struct SectionSidebar: View {") } ?? ""
+        XCTAssertTrue(macOS.contains("struct AccountFooter: View {"),
                       "the source list and its account row are macOS's alone")
 
         let shell = code(try appSource("Views/CompactShell.swift"))

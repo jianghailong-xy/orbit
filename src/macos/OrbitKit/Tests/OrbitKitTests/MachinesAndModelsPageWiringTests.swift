@@ -2,14 +2,14 @@ import Foundation
 import XCTest
 
 /// SwiftUI doesn't exist on Linux, so nothing here compiles the app shells. These hold the
-/// Infrastructure page and a machine's pages to the effect mocks they were built from
+/// Machines & models page and a machine's pages to the effect mocks they were built from
 /// (docs/mocks/infrastructure-page/03-ios.png, ios-detail.png) by reading the source they now *are*:
 /// the page's blocks in the mock's order, a row whose label is the label colour and which pushes by
 /// hand, Add Runner wired under the rows, the record's sections in the mocks' order, the engine and
 /// name pages one push away on whichever stack the record rides — and every word and rule taken from
-/// OrbitKit (`Infrastructure`, `RunnerAttention`, `RunnerPageCopy`, `RunnerPageFormat`), where it is
+/// OrbitKit (`MachinesAndModels`, `RunnerAttention`, `RunnerPageCopy`, `RunnerPageFormat`), where it is
 /// tested. Each check reads the slice of the file it is about, so a match somewhere else can't pass it.
-final class InfrastructurePageWiringTests: XCTestCase {
+final class MachinesAndModelsPageWiringTests: XCTestCase {
     private struct SourceMissing: Error, CustomStringConvertible {
         let path: String
         var description: String {
@@ -62,19 +62,19 @@ final class InfrastructurePageWiringTests: XCTestCase {
     }
 
     private static let runnersFile = "Views/SkillsRunnersView.swift"
-    private static let sectionsFile = "Views/InfrastructureSections.swift"
-    /// Every file the Infrastructure page and a machine's pages are drawn from.
+    private static let sectionsFile = "Views/MachinesAndModelsSections.swift"
+    /// Every file the Machines & models page and a machine's pages are drawn from.
     private static let pageFiles = [runnersFile, sectionsFile, "Views/RunnerPageParts.swift",
                                     "Views/RunnerEnginePage.swift", "Views/RunnerNamePage.swift",
                                     "Views/AddRunnerSheet.swift"]
 
     private func runners() throws -> String { try appSource(Self.runnersFile) }
 
-    /// The Infrastructure page: the section's list on every shell, and Settings' page on a phone.
+    /// The Machines & models page: the section's list on every shell, and Settings' page on a phone.
     private func lists() throws -> [(name: String, code: String)] {
         let text = try runners()
         return [
-            ("the Infrastructure page", code(try slice(text, from: "struct RunnersListView: View {",
+            ("the Machines & models page", code(try slice(text, from: "struct RunnersListView: View {",
                                                        to: "/// How a `RunnersModel` list shows its load outcome"))),
         ]
     }
@@ -87,11 +87,11 @@ final class InfrastructurePageWiringTests: XCTestCase {
     func testThePageHoldsTheMocksBlocksInOrder() throws {
         let page = try XCTUnwrap(try lists().first?.code)
         let body = try slice(page, from: "List(selection:", to: ".orbitRevealSurface()")
-        try assertInOrder(body, ["if lists.settled {", "if !attention.isEmpty {", "InfrastructureNeedsYouSection(",
-                                 "ForEach(runners.runners)", "RunnerSectionHeader(Infrastructure.machines,",
-                                 "Text(Infrastructure.machinesDetail)", "RunnerAddSection { addingRunner = true }",
-                                 "InfrastructurePoolsSection(memberPools: lists.memberPools, ownPools: lists.ownPools,",
-                                 "InfrastructureKeysSection(keys: lists.keys, balances: model.agents?.deepSeekBalances ?? [:],"],
+        try assertInOrder(body, ["if lists.settled {", "if !attention.isEmpty {", "MachinesAndModelsNeedsYouSection(",
+                                 "ForEach(runners.runners)", "RunnerSectionHeader(MachinesAndModels.machines,",
+                                 "Text(MachinesAndModels.machinesDetail)", "RunnerAddSection { addingRunner = true }",
+                                 "MachinesAndModelsPoolsSection(memberPools: lists.memberPools, ownPools: lists.ownPools,",
+                                 "MachinesAndModelsKeysSection(keys: lists.keys, balances: model.agents?.deepSeekBalances ?? [:],"],
                           "the page's blocks")
         XCTAssertTrue(page.contains(".navigationTitle(AppSection.runners.title)"))
         // The machines are read again while the page is up, so a row's Offline and its "N / M running"
@@ -109,11 +109,11 @@ final class InfrastructurePageWiringTests: XCTestCase {
     }
 
     /// A DeepSeek key's row ends with its account's balance and, where the page is a stack's (iOS), opens
-    /// the key's page — from Settings' stack and from the Infrastructure section's own — as the row of
+    /// the key's page — from Settings' stack and from the Machines & models section's own — as the row of
     /// Settings → Providers did before the two pages became one (936ebbd3c).
     func testADeepSeekKeysRowEndsWithItsBalanceAndOpensItsPage() throws {
         let sections = code(try appSource(Self.sectionsFile))
-        let keys = try slice(sections, from: "struct InfrastructureKeysSection: View {", to: "\n}\n")
+        let keys = try slice(sections, from: "struct MachinesAndModelsKeysSection: View {", to: "\n}\n")
         for piece in ["var balances: [String: ProviderBalanceReading] = [:]",
                       "if let id = Self.pageID(key, mine: keys) {",
                       // …as a Cursor key's opens its own, with its last check (board iOS 4 ①).
@@ -133,11 +133,11 @@ final class InfrastructurePageWiringTests: XCTestCase {
     /// (GET /providers/mine) among them — and waits for every list's answer.
     func testNeedsYouIsOrbitKitsRulesOverThePagesLists() throws {
         let sections = code(try appSource(Self.sectionsFile))
-        let read = try slice(sections, from: "struct InfrastructureLists {", to: "struct InfrastructureNeedsYouSection: View {")
+        let read = try slice(sections, from: "struct MachinesAndModelsLists {", to: "struct MachinesAndModelsNeedsYouSection: View {")
         for piece in ["keys = model.agents?.ownKeys ?? []", "SharedPools.ownPoolWithAccess(pool, access)",
                       "settled = states.allSatisfy { state in state.map { $0.hasLoaded || $0.lastLoadFailed } ?? false }",
                       "workspaces = model.runners?.agents ?? []",
-                      "Infrastructure.attention(runners: runners, workspaces: workspaces,",
+                      "MachinesAndModels.attention(runners: runners, workspaces: workspaces,",
                       "memberPools: memberPools.map(SharedPools.asProviderPool), ownPools: ownPools)"] {
             XCTAssertTrue(read.contains(piece), "the page's lists lost \(piece)")
         }
@@ -195,7 +195,7 @@ final class InfrastructurePageWiringTests: XCTestCase {
                       "if let slots = RunnerPageFormat.slots(runner, now: now) {",
                       "RunnerSlotBar(slots: slots)",
                       "Text(RunnerPageCopy.RUNNER_OFFLINE)",
-                      "Text(Infrastructure.machineLine(runner, now: now))",
+                      "Text(MachinesAndModels.machineLine(runner, now: now))",
                       "if let line = RunnerAttention.listAttentionLine(items) {",
                       "Image(systemName: \"exclamationmark.triangle.fill\")",
                       "RunnerInk.attention(RunnerPageFormat.listTone(items) ?? .warn)",

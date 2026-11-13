@@ -8,16 +8,18 @@ import type { ProviderKeyUsage } from '@orbit/shared';
 import { openDialog } from '../RunnerEngines.test-helpers';
 import { encodeId } from '../../lib/idCodec';
 import type { ProviderRow } from '../../lib/providerAdmin';
-import { SettingsVendorPage } from './SettingsProviderPages';
+import { SettingsKeysPage, SettingsProvidersHome } from './SettingsProviderPages';
 
 /**
- * A vendor's page in Settings' Providers group (owner's choice C1, docs/mocks/settings-redesign board-4),
+ * The API keys page in Settings' Providers group (owner's choice A, docs/mocks/settings-providers-compact
+ * board-1): every key on one page, a section per vendor, chips to show one vendor's alone — which is what
+ * the vendor's page was (owner's choice C1, docs/mocks/settings-redesign board-4),
  * what Infrastructure's card per vendor was (docs/mocks/infrastructure-focus) after the provider/engine
  * split (docs/mocks/provider-engine-decoupling web-1, ③ and ④): a row per key saying which engines it
  * runs on — the server's `engines` — the model a session on it starts on, the account pools it is in,
- * whether it is on and when it was last used, and a DeepSeek key its account balance; Add key in the
- * Keys heading; the account pools using these keys; the vendors not connected yet as a row of pills,
- * DeepSeek Harness among none of them; and a key's ⋯ → Delete asking first what uses it on each of
+ * whether it is on and when it was last used, and a DeepSeek key its account balance; Add in each
+ * vendor's heading; the account pools using these keys, and no row of vendors not connected yet (the
+ * sidebar's Connect a provider reaches those); and a key's ⋯ → Delete asking first what uses it on each of
  * those engines.
  */
 
@@ -157,7 +159,7 @@ async function settle() {
   }
 }
 
-async function mount(vendor: string) {
+async function mount(vendor?: string) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   host = document.createElement('div');
   document.body.appendChild(host);
@@ -165,10 +167,12 @@ async function mount(vendor: string) {
   act(() =>
     root!.render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={[`/settings/providers/${vendor}`]}>
+        <MemoryRouter initialEntries={[vendor ? `/settings/providers/${vendor}` : '/settings/providers']}>
           <Probe />
           <Routes>
-            <Route path="/settings/providers/:vendor" element={<SettingsVendorPage />} />
+            <Route path="/settings/providers" element={<SettingsProvidersHome />} />
+            <Route path="/settings/providers/new" element={<div>pick a vendor</div>} />
+            <Route path="/settings/providers/:vendor" element={<SettingsKeysPage />} />
             <Route path="*" element={<div>elsewhere</div>} />
           </Routes>
         </MemoryRouter>
@@ -198,7 +202,9 @@ const section = (title: string) =>
   [...document.body.querySelectorAll<HTMLElement>('.settings-section')].find((el) =>
     text(el.querySelector('.settings-section-title'))?.startsWith(title),
   ) ?? null;
-const keyRows = () => [...(section('Keys')?.querySelectorAll<HTMLElement>('.settings-row') ?? [])];
+const vendorSections = () => [...document.body.querySelectorAll<HTMLElement>('.sp-vendor-section')];
+const keyRows = () => vendorSections().flatMap((el) => [...el.querySelectorAll<HTMLElement>('.settings-row')]);
+const chips = () => [...document.body.querySelectorAll<HTMLAnchorElement>('.sp-chip')];
 const keyRow = (label: string) => keyRows().find((row) => text(row.querySelector('.vk-name'))?.startsWith(label))!;
 
 /** Opens the key's ⋯ and presses an item in it. */
@@ -215,27 +221,76 @@ async function pressMenuItem(row: HTMLElement, label: string) {
   await act(async () => item!.click());
 }
 
-describe('a vendor’s page in Settings', () => {
-  it('heads the page with the vendor and what its keys are, and lists its keys — a key from the retired Harness preset among DeepSeek’s', async () => {
-    await mount('deepseek');
-    expect(text(document.body.querySelector('.sp-vendor-title'))).toBe('DeepSeek');
-    expect(document.body.querySelector('.sp-vendor-head .provider-tile')).not.toBeNull();
+describe('the API keys page in Settings', () => {
+  it('lists every key, a section per vendor in the order of its first key, and a chip per vendor', async () => {
+    await mount();
+    expect(text(document.body.querySelector('.sp-vendor-title'))).toBe('API keys');
     expect(text(document.body.querySelector('.sp-vendor-sub'))).toBe(
-      'API keys on your account, usable from every machine and billed per token.',
+      'Keys on your account, usable from every machine and billed per token.',
     );
-    expect(text(section('Keys')?.querySelector('.settings-section-title'))).toBe('Keys 2');
+    expect(vendorSections().map((el) => words(el.querySelector('.settings-section-title')))).toEqual([
+      'DeepSeek 2 keys',
+      'Google Gemini 1 key',
+      'Moonshot (Kimi) 1 key',
+      'Z.AI (GLM) 1 key',
+      'Anthropic 1 key',
+    ]);
+    // Each beside its vendor's mark.
+    expect(vendorSections().every((el) => el.querySelector('.settings-section-title .provider-tile'))).toBe(true);
+    expect(keyRows()).toHaveLength(6);
+    expect(chips().map((chip) => [text(chip), chip.getAttribute('href'), chip.classList.contains('on')])).toEqual([
+      ['All 6', '/settings/providers', true],
+      ['DeepSeek 2', '/settings/providers/deepseek', false],
+      ['Google Gemini 1', '/settings/providers/gemini', false],
+      ['Moonshot (Kimi) 1', '/settings/providers/moonshot', false],
+      ['Z.AI (GLM) 1', '/settings/providers/glm', false],
+      ['Anthropic 1', '/settings/providers/anthropic', false],
+    ]);
+
+    // A chip shows that vendor's keys alone, at the vendor's address; All shows them all again.
+    await act(async () => chips()[1].click());
+    expect(path).toBe('/settings/providers/deepseek');
+    expect(vendorSections()).toHaveLength(1);
+    expect(chips().filter((chip) => chip.classList.contains('on')).map(text)).toEqual(['DeepSeek 2']);
+    await act(async () => chips()[0].click());
+    expect(path).toBe('/settings/providers');
+    expect(vendorSections()).toHaveLength(5);
+
+    // Add key in the page's heading picks the vendor first.
+    await act(async () => button('Add key', document.body.querySelector('.sp-vendor-head')!)!.click());
+    expect(path).toBe('/settings/providers/new');
+  });
+
+  it('draws no chips while every key is one vendor’s', async () => {
+    keys = [DEEPSEEK, DEEPSEEK_2];
+    await mount();
+    expect(vendorSections()).toHaveLength(1);
+    expect(chips()).toEqual([]);
+  });
+
+  it('is connecting a key while there is none', async () => {
+    keys = [];
+    await mount();
+    expect(path).toBe('/settings/providers/new');
+  });
+
+  it('shows a vendor’s keys alone at its address — a key from the retired Harness preset among DeepSeek’s', async () => {
+    await mount('deepseek');
+    expect(vendorSections().map((el) => words(el.querySelector('.settings-section-title')))).toEqual(['DeepSeek 2 keys']);
     expect(keyRows().map((row) => text(row.querySelector('.vk-name')))).toEqual(['DeepSeek', 'DeepSeek 2']);
     // The table's endpoint and model count are the key's own page's.
-    expect(text(section('Keys'))).not.toContain('https://');
+    expect(text(vendorSections()[0])).not.toContain('https://');
     // Each key's Edit opens its own page in Settings' right-hand column.
     await act(async () => button('Edit', keyRow('DeepSeek 2'))!.click());
     expect(path).toBe(`/settings/providers/keys/${DEEPSEEK_2.id}`);
   });
 
-  it('adds another of the vendor’s keys from the Keys heading', async () => {
-    await mount('anthropic');
-    expect(keyRows().map((row) => text(row.querySelector('.vk-name')))).toEqual(['Claude Max']);
-    const add = button('Add key', section('Keys')!.querySelector('.settings-section-action')!)!;
+  it('adds another of a vendor’s keys from its section’s heading', async () => {
+    await mount();
+    const anthropic = vendorSections()[4];
+    expect([...anthropic.querySelectorAll('.vk-name')].map(text)).toEqual(['Claude Max']);
+    const add = button('Add', anthropic.querySelector('.settings-section-action')!)!;
+    expect(add.getAttribute('aria-label')).toBe('Add Anthropic key');
     await act(async () => add.click());
     expect(path).toBe('/settings/providers/new/anthropic');
   });
@@ -252,7 +307,7 @@ describe('a vendor’s page in Settings', () => {
     });
     expect(text(keyRow('DeepSeek').querySelector('.dsb-row'))).toContain('Account balance ¥110.00');
     // Nothing on a key says which machines run Harness.
-    expect(text(section('Keys'))).not.toMatch(/Ready on|Not ready/);
+    expect(text(vendorSections()[0])).not.toMatch(/Ready on|Not ready/);
     expect(document.body.querySelector('[data-testid="dsh-runner-status"]')).toBeNull();
     unmount();
 
@@ -326,20 +381,10 @@ describe('a vendor’s page in Settings', () => {
     expect(section('Account pools using these keys')).toBeNull();
   });
 
-  it('offers each vendor not connected yet as a row of pills, by the vendor’s name, and none for DeepSeek Harness', async () => {
+  it('offers no row of vendors not connected yet', async () => {
     await mount('deepseek');
-    const pills = [...(section('Not connected yet')?.querySelectorAll<HTMLAnchorElement>('.pv-pill') ?? [])];
-    // Every vendor with a key has its own page to add another from — both DeepSeek keys count towards
-    // DeepSeek — so the row is the rest, and Custom.
-    expect(pills.map((pill) => [words(pill), pill.getAttribute('href')])).toEqual([
-      ['OpenAI', '/settings/providers/new/openai'],
-      ['MiniMax', '/settings/providers/new/minimax'],
-      ['Qwen', '/settings/providers/new/qwen'],
-      ['Custom', '/settings/providers/new/custom'],
-    ]);
-    expect(document.body.querySelector('a[href="/settings/providers/new/deepseek-harness"]')).toBeNull();
-    // Nor for Cursor: its keys run on Cursor CLI alone, which the web does not draw yet (webShowsEngine).
-    expect(document.body.querySelector('a[href="/settings/providers/new/cursor-api"]')).toBeNull();
+    expect(section('Not connected yet')).toBeNull();
+    expect(document.body.querySelector('a[href^="/settings/providers/new/"]:not([href="/settings/providers/new/deepseek"])')).toBeNull();
   });
 
   it('asks before deleting a key from its ⋯ what uses it on every engine it works with', async () => {
@@ -371,11 +416,11 @@ describe('a vendor’s page in Settings', () => {
     });
     await settle();
     expect(sent).toEqual([{ method: 'DELETE', path: `/providers/mine/${DEEPSEEK.id}` }]);
-    // DeepSeek has another key, so its page stays.
+    // DeepSeek has another key, so its chip stays chosen.
     expect(path).toBe('/settings/providers/deepseek');
   });
 
-  it('leaves the page once its last key is deleted', async () => {
+  it('goes back to every key once the chosen vendor’s last key is deleted', async () => {
     await mount('gemini');
     await pressMenuItem(keyRow('Gemini'), 'Delete');
     const dialog = await openDialog('Delete Gemini?');

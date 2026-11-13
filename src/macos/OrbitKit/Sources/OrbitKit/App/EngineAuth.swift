@@ -57,10 +57,10 @@ public enum EngineAuth {
         /// can't express (the runner refuses such a request outright — `loginFlowFor` in login.go),
         /// so the card names the command to run on that machine instead of a button that can't work.
         case runCommand(String)
-        /// A runner that cannot relay Google sign-in can use a Gemini API key in Infrastructure.
+        /// A runner that cannot relay Google sign-in can use a Gemini API key in Machines & models.
         case connectGemini
         /// Any other slug is a control-plane–configured provider, i.e. an API key to fix. These
-        /// clients have no key editor (their Infrastructure page only lists the keys), so the card
+        /// clients have no key editor (their Machines & models page only lists the keys), so the card
         /// says where the key lives rather than offering an action it can't perform.
         case apiKey(slug: String)
     }

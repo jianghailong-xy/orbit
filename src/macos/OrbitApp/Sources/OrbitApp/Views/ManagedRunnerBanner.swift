@@ -2,7 +2,7 @@ import OrbitKit
 import SwiftUI
 
 /// The managed runner's state (docs/managed-runner-design.md, "Server and three client interfaces"):
-/// above the composer of a workspace on the managed runner, and on Infrastructure for an account
+/// above the composer of a workspace on the managed runner, and on Machines & models for an account
 /// with no runner yet. The words are the shared display's (`ManagedRunnerLogic.display`, the same as
 /// the web's), and the actions only those the server allows: Retry, Set up, and the way to the
 /// runner's runtimes when what it lacks is one signed in.

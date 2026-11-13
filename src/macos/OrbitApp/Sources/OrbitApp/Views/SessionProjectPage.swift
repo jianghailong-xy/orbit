@@ -9,6 +9,10 @@ struct SessionProjectRowView: View {
     #endif
     let row: SessionProjectRow
     let onOpen: () -> Void
+    #if os(macOS)
+    /// The leading glyph's box, the session rows' (`StatusGlyphView`), so the two titles line up.
+    @ScaledMetric(relativeTo: .subheadline) private var glyphBox: CGFloat = 20
+    #endif
 
     private var regular: Bool {
         #if os(iOS)
@@ -19,6 +23,19 @@ struct SessionProjectRowView: View {
     }
 
     var body: some View {
+        #if os(macOS)
+        Button(action: onOpen) {
+            macRow
+                .contentShape(Rectangle())
+                .accessibilityElement(children: .combine)
+                .accessibilityValue(statusWords)
+        }
+        .buttonStyle(.plain)
+        // The session row's own cell metrics (`AgentSessionRow`): zeroed insets, its pin bar flush
+        // to the edge, and the separator under the title.
+        .listRowInsets(EdgeInsets())
+        .alignmentGuide(.listRowSeparatorLeading) { _ in 44 }
+        #else
         Button(action: onOpen) {
             Group {
                 if regular { regularIOSRow } else { compactRow }
@@ -28,7 +45,61 @@ struct SessionProjectRowView: View {
             .accessibilityValue(statusWords)
         }
         .buttonStyle(.plain)
+        #endif
     }
+
+    #if os(macOS)
+    /// The Mac's row, laid out as a session row beside it is (web's `SessionProjectListRow`): the
+    /// coordinator's pin bar, the Projects glyph where a session's status glyph goes — the spinner
+    /// while a member runs, otherwise the glyph with a dot for waiting on you or background jobs —
+    /// then the title and time over the progress and the line.
+    private var macRow: some View {
+        HStack(spacing: 0) {
+            Rectangle()
+                .fill(row.pinnedAt != nil ? Color.accentColor : .clear)
+                .frame(width: 3)
+            HStack(spacing: 8) {
+                projectGlyph
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 8) {
+                        Text(row.title).foregroundStyle(.primary).lineLimit(1).layoutPriority(1)
+                        Spacer(minLength: 8)
+                        if let timestamp = row.lastTurnAt ?? row.createdAt,
+                           let relative = RelativeTime.format(timestamp) {
+                            Text(relative).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1).fixedSize()
+                        }
+                    }
+                    secondLine
+                }
+            }
+            .padding(.leading, 13)
+            .padding(.trailing, 16)
+            .padding(.vertical, 10)
+        }
+    }
+
+    private var projectGlyph: some View {
+        Group {
+            if row.indicator == .running {
+                SpinnerGlyph(color: .secondary)
+            } else {
+                Image(systemName: AppSection.projects.systemImage)
+                    .font(.orbitGlyph)
+                    .foregroundStyle(.secondary)
+                    .overlay(alignment: .bottomTrailing) {
+                        if let indicator = row.indicator {
+                            Circle()
+                                .fill(indicator == .needsYou ? Color.orange : Color.accentColor)
+                                .frame(width: 6, height: 6)
+                                .offset(x: 3, y: 3)
+                        }
+                    }
+            }
+        }
+        .frame(width: glyphBox, height: glyphBox)
+        .help(statusWords)
+    }
+    #endif
 
     private var compactRow: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -273,8 +344,8 @@ struct SessionProjectPage: View {
 
     #if os(iOS)
     @State private var rowSwipe = RowSwipeState()
-    @State private var movingSession: Session?
     #endif
+    @State private var movingSession: Session?
     @State private var taggingSession: Session?
     @State private var sharingSession: Session?
     @State private var promotionReview: PromotionReviewTarget?
@@ -462,13 +533,11 @@ struct SessionProjectPage: View {
                            guests: .of(session, agents: app.agents))
             }
         }
-        #if os(iOS)
         .sheet(item: $movingSession) { session in
             if let agent = app.agents?.agent(session.agent?.id ?? session.agentId ?? address.agentID) {
                 SessionMoveSheet(session: session, workspace: agent, listed: sessions).environment(app)
             }
         }
-        #endif
         // Hosted here rather than by the card or the row, so a poll redrawing either cannot dismiss
         // what the owner is reading. The review is the coordinator conversation's own sheet.
         .sheet(item: $promotionReview) { target in
@@ -894,13 +963,9 @@ struct SessionProjectPage: View {
         }
     }
 
-    /// Move to a folder is the phone's and the iPad's (session folders are iOS's); the Mac's row has none.
+    /// Move: the Move panel for this row, on every platform.
     private func moveAction(_ session: Session) -> (() -> Void)? {
-        #if os(iOS)
-        return { movingSession = session }
-        #else
-        return nil
-        #endif
+        { movingSession = session }
     }
 }
 /// The merge into main as the project's sessions page draws it, under the progress card (owner

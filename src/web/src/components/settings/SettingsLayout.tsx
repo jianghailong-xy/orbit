@@ -49,10 +49,9 @@ import {
 import { settingsReturnPath } from '../../lib/settingsReturn';
 import { useToast } from '../../lib/toast';
 import { useMediaQuery } from '../../lib/useMediaQuery';
-import { PERSONAL_PAGES } from '../../pages/settings/settingsIndex';
+import { INTEGRATION_PAGES, PERSONAL_PAGES } from '../../pages/settings/settingsIndex';
 import { ControlPlaneProvider } from '../../lib/useControlPlane';
 import { ImpersonationBanner } from '../ImpersonationBanner';
-import { vendorName, vendorOf } from '../ProviderGallery';
 import type { Runner } from '../TasksSidePanel';
 import { around, searchSettings, type SettingsHit, type SettingsHitGroup } from './settingsSearch';
 import './Settings.css';
@@ -66,6 +65,10 @@ const PERSONAL_ICONS: Record<(typeof PERSONAL_PAGES)[number]['path'], ReactNode>
   '/settings/storage': <DatabaseOutlined />,
   '/settings/shared-links': <LinkOutlined />,
   '/settings/access-tokens': <KeyOutlined />,
+};
+
+/** Integrations' rows' icons, one per connected service. */
+const INTEGRATION_ICONS: Record<(typeof INTEGRATION_PAGES)[number]['path'], ReactNode> = {
   '/settings/integrations/feishu': <ApiOutlined />,
 };
 
@@ -108,7 +111,7 @@ const runnerName = (runner: Pick<Runner, 'name' | 'displayName'>): string =>
 
 /**
  * The Settings window (owner's choice A1): Settings takes over the whole window, the app's own sidebar
- * gone, with a nav of four groups on the left — Personal, Machines, Providers, Workspaces — and the
+ * gone, with a nav of five groups on the left — Personal, Integrations, Machines, Providers, Workspaces — and the
  * chosen page in a centred column on the right. "Back to Orbit" and Esc go back to the page Settings
  * was opened from; Esc clears a search first.
  *
@@ -212,6 +215,9 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
   const providers = useQuery({ queryKey: PROVIDERS_LIST_KEY, queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE) });
   const pools = useQuery(providerPoolsQuery());
   const nowMs = Date.now();
+  // The keys page is every key, or one vendor's (/settings/providers/:vendor); not a key's own pages.
+  const { pathname } = useLocation();
+  const keysPage = /^\/settings\/providers(\/(?!(new|keys|pools)(\/|$))[^/]+)?\/?$/.test(pathname);
 
   const stateOf = (runner: Runner): MachineState => {
     if (runnerIsOffline(runner, nowMs)) return 'offline';
@@ -224,12 +230,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
     return items.length > 0 ? 'attention' : 'online';
   };
 
-  // A row per vendor, in the order of each vendor's first key.
-  const vendors = new Map<string, number>();
-  for (const row of providers.data ?? []) {
-    const vendor = vendorOf(row.presetSlug);
-    vendors.set(vendor, (vendors.get(vendor) ?? 0) + 1);
-  }
+  const keyCount = providers.data?.length ?? 0;
   const poolCount = pools.data?.length ?? 0;
 
   const machineOf = (workspace: SettingsWorkspace): string | null => {
@@ -241,7 +242,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
   const addWorkspace = () => navigate(runners.length > 0 ? '/settings/workspaces/new' : '/runners/register');
 
   return (
-    <nav className="settings-nav" aria-label="Settings">
+    <nav className="settings-nav autohide-scrollbar" aria-label="Settings">
       <button type="button" className="settings-back" onClick={() => navigate(settingsReturnPath())}>
         <LeftOutlined />
         <span>Back to Orbit</span>
@@ -264,25 +265,31 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
           ))}
         </NavGroup>
 
+        <NavGroup title="Integrations">
+          {INTEGRATION_PAGES.map((page) => (
+            <NavRow key={page.path} to={page.path} icon={INTEGRATION_ICONS[page.path]} label={page.label} />
+          ))}
+        </NavGroup>
+
         <NavGroup title="Machines" add={{ label: 'Register a machine', onClick: () => navigate('/runners/register') }}>
           <MachineRows runners={runners} stateOf={stateOf} />
         </NavGroup>
 
         <NavGroup title="Providers" add={{ label: 'Connect a provider', onClick: () => navigate('/settings/providers/new') }}>
-          {vendors.size === 0 && poolCount === 0 ? (
+          {keyCount === 0 && poolCount === 0 ? (
             // With no key and no pool at all, the group is the one way to connect a provider.
             <NavRow to="/settings/providers/new" icon={<PlusOutlined />} label="Connect a provider" />
           ) : (
             <>
-              {[...vendors].map(([vendor, count]) => (
-                <NavRow
-                  key={vendor}
-                  to={`/settings/providers/${vendor}`}
-                  icon={<CloudOutlined />}
-                  label={vendorName(vendor)}
-                  trailing={<span className="settings-nav-meta">{count === 1 ? '1 key' : `${count} keys`}</span>}
-                />
-              ))}
+              {/* Two rows however many vendors are connected (choice A, docs/mocks/settings-providers-compact):
+                  the keys page holds them all, and stays lit on a vendor's own address. */}
+              <NavRow
+                to="/settings/providers"
+                icon={<CloudOutlined />}
+                label="API keys"
+                active={keysPage}
+                trailing={keyCount > 0 ? <span className="settings-nav-meta">{keyCount}</span> : undefined}
+              />
               <NavRow
                 to="/settings/providers/pools"
                 icon={<BlockOutlined />}
@@ -608,10 +615,27 @@ function NavGroup({
   );
 }
 
-function NavRow({ to, icon, label, trailing }: { to: string; icon: ReactNode; label: string; trailing?: ReactNode }) {
+function NavRow({
+  to,
+  icon,
+  label,
+  trailing,
+  active,
+}: {
+  to: string;
+  icon: ReactNode;
+  label: string;
+  trailing?: ReactNode;
+  /** Lit on more addresses than its own, where it is given. */
+  active?: boolean;
+}) {
   return (
     // Not a native drag: a row a pointer drags is the Machines group's reorder (MachineRows).
-    <NavLink to={to} draggable={false} className={({ isActive }) => `settings-nav-row${isActive ? ' active' : ''}`}>
+    <NavLink
+      to={to}
+      draggable={false}
+      className={({ isActive }) => `settings-nav-row${(active ?? isActive) ? ' active' : ''}`}
+    >
       <span className="settings-nav-icon">{icon}</span>
       <span className="settings-nav-label">{label}</span>
       {trailing}
