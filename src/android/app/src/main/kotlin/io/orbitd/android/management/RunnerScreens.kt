@@ -1316,7 +1316,8 @@ internal fun RunnerSignInCard(api: ManagementApi, runner: JsonObject, engine: St
                     onUseApiKey?.let { useKey ->
                         OutlinedButton(onClick = useKey) { Text(apiKeyLabel) }
                     }
-                } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                } else FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // The key button wraps under the sign-in where both don't fit on a line, rather than being squeezed beside it.
                     Button(onClick = { scope.launch { relay.begin(accountName, scope) } }, enabled = !relay.busy && named) {
                         Text(when {
                             relay.busy -> "Starting…"
