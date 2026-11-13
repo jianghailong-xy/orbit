@@ -111,13 +111,6 @@ Options:
 `,
 }
 
-var runnerCLICapabilities = []cliCapabilitySpec{
-	{Tool: "runner_list", Argv: []string{"orbit", "runner", "list"}, Usage: "orbit runner list [--json]", Arguments: []string{"--json"}},
-	{Tool: "runner_engine_install", Argv: []string{"orbit", "runner", "install"}, Usage: "orbit runner install --runner-id ID --engine ENGINE [--update] [--wait] [--json]", Arguments: []string{"--runner-id <id> (required)", engineArgument() + " (required)", "--update (every engine CLI on the runner, instead of installing --engine)", "--wait (until the runner reports the outcome)", "--json"}, Mutates: true},
-	{Tool: "runner_engine_install_status", Argv: []string{"orbit", "runner", "install-status"}, Usage: "orbit runner install-status --runner-id ID [--json]", Arguments: []string{"--runner-id <id> (required)", "--json"}},
-	{Tool: "runner_delete", Argv: []string{"orbit", "runner", "delete"}, Usage: "orbit runner delete --runner-id ID [--json]", Arguments: []string{"--runner-id <id> (required)", "--json"}, Mutates: true},
-}
-
 // runnerDeleteApprovalToolName keys the card a runner delete is asked on. The server matches the delete
 // against it by this name (apiserver runner-api/runner-delete-approval.ts), so both ends spell it alike.
 const runnerDeleteApprovalToolName = "orbit_runner_delete"
