@@ -148,6 +148,10 @@ func validateSchemaValue(schema map[string]interface{}, value interface{}, path 
 		})
 		return
 	}
+	// A null the type allows is a clear, whatever members the enum lists beside it.
+	if value == nil && contains(schemaTypes(schema["type"]), "null") {
+		return
+	}
 	if enum, ok := schema["enum"].([]interface{}); ok && len(enum) > 0 && !inEnum(value, enum) {
 		*out = append(*out, argumentViolation{
 			Path:    path,
