@@ -2971,8 +2971,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0618 adds a nullable email_outbox.session_id, its foreign key and index, two CHECKs and a wider unique index
       // only; no preserved rows, triggers or DONE fence change, and no row is written.
       '0618_email_outbox_session_invite',
-      // 0640 adds nullable or defaulted session settings columns and their CHECKs only; no preserved rows, triggers or DONE fence change.
-      '0640_session_settings'],
+      // 0700 adds nullable or defaulted session settings columns and their CHECKs only; no preserved rows, triggers or DONE fence change.
+      '0700_session_settings'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
