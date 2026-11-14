@@ -246,6 +246,7 @@ import {
   engineChoices,
   engineTitleFor,
   keyName,
+  localFixTarget,
   providerNameOn,
   type ChoiceSources,
   type ProviderChoice,
@@ -3927,6 +3928,8 @@ export function WorkspaceView({
   const antigravityKeyAvailable = providerWorkspace
     ? providerWorkspace.antigravityKeyAvailableByRunner?.[runner.id] === true
     : runner.antigravity?.envKeyAvailable === true;
+  // The model a provider row is judged for: a live session's stored pick, a draft's seed.
+  const sessionModelNow = selected ? selectedPick.model : model;
   const choiceSources = useMemo<ChoiceSources>(
     () => ({
       configured: configuredProviders,
@@ -3940,8 +3943,17 @@ export function WorkspaceView({
       dshRunner: runner,
       fleet,
       region: runner.region,
+      // A runner-scoped local provider runs on this machine or not at all, for the model this
+      // session (or draft) would run (sessionProviderChoices.localChoiceFor, shared
+      // localProviderReadiness).
+      localRunner: {
+        id: runner.id,
+        name: runner.displayName || runner.name,
+        capabilities: runner.capabilities,
+      },
+      sessionModel: sessionModelNow,
     }),
-    [configuredProviders, runner, accountPools, antigravityKeyAvailable, fleet],
+    [configuredProviders, runner, accountPools, antigravityKeyAvailable, fleet, sessionModelNow],
   );
   // The New Session hero's engines, each landing on the draft's pick when it is that engine's, else on
   // what this workspace last ran there. The current one is the pick's own engine on the pick's own
@@ -6883,6 +6895,16 @@ export function WorkspaceView({
     const intent = intentOverride ?? defaultSendIntent;
     const c = text.trim();
     if (send.isPending) return;
+    // A new session, or the resume of an ended one, cannot start on a local provider its runner
+    // cannot run as it stands. The server refuses it before scheduling; say the same sentence
+    // here, before the round trip (shared localProviderReadiness).
+    const localRefusal = !live && !replyTo
+      ? shownProviderChoice(shownProvider)?.local?.refusal
+      : undefined;
+    if (localRefusal) {
+      message.error(localRefusal.message);
+      return;
+    }
     const commandName = slashCommandName(c);
     if (commandName !== null) {
       if (isLocalSlashCommand(commandName)) {
@@ -8318,9 +8340,18 @@ export function WorkspaceView({
     // pool), to that page. The chip keeps showing the provider still in use.
     const picked = providerSwitchChoices.find((c) => c.slug === v);
     if (picked?.unavailable) {
+      // A local row names its own fix: its provider page, or the runner it is BOUND to — not the
+      // one this session happens to be on (ELSEWHERE).
+      const target = picked ? localFixTarget(picked) : undefined;
+      if (target?.kind === 'runner') {
+        navigate(`/settings/machines/${encodeId(target.id)}`);
+        return;
+      }
       navigate(
-        picked.fixHref ??
-          `/settings/machines/${encodeId(runner.id)}?engine=${picked.fixEngine ?? shownEngine}`,
+        target?.kind === 'provider'
+          ? target.href
+          : picked.fixHref ??
+              `/settings/machines/${encodeId(runner.id)}?engine=${picked.fixEngine ?? shownEngine}`,
       );
       return;
     }

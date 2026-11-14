@@ -63,13 +63,19 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
     /// Anthropic doesn't offer Claude (docs/claude-region-check-contract.md §8). Nothing on the page
     /// fixes that, so the row names no fix — the machine's Claude Code row (`fixEngine`) explains.
     public let regionBlocked: Bool
+    /// A runner-scoped local server (Ollama): what its runner last probed, why it cannot run the
+    /// session as it stands, and where that is fixed. Nil for every other credential.
+    public let local: LocalChoice?
+    /// A local provider's own page on the Web app, by slug, when its refusal is fixed there (turned
+    /// on, bound, addressed, pulled). Set on a blocked local row; nil otherwise.
+    public let fixProvider: String?
     public var id: String { slug }
 
     public init(slug: String, label: String, kind: Kind, brandKey: String?, modelLabel: String,
                 unavailable: String? = nil, fixEngine: String? = nil, poolSize: Int? = nil,
                 poolUnit: String? = nil, inPool: Bool = false, note: String? = nil,
                 accounts: [AccountChoice]? = nil, labelDetail: String? = nil, regionBlocked: Bool = false,
-                notice: String? = nil) {
+                notice: String? = nil, local: LocalChoice? = nil, fixProvider: String? = nil) {
         self.slug = slug
         self.label = label
         self.labelDetail = labelDetail
@@ -85,6 +91,8 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
         self.note = note
         self.accounts = accounts
         self.regionBlocked = regionBlocked
+        self.local = local
+        self.fixProvider = fixProvider
     }
 
     /// The engine's own credential on the runner — its sign-in, or OpenCode's own configuration —
@@ -115,6 +123,65 @@ public struct AccountChoice: Equatable, Sendable, Identifiable {
         self.quota = quota
         self.nearLimit = nearLimit
         self.unavailable = unavailable
+    }
+}
+
+/// A runner-scoped local server as a picker reads it (web `LocalProviderStatus` plus the rule that
+/// decides whether it can run the session as it stands). Its row says the status at a glance and the
+/// refusal when there is one; `fixProvider` / `remedy` say where that is cleared.
+public struct LocalChoice: Equatable, Sendable {
+    /// What the bound runner last probed.
+    public let status: LocalProviderStatus
+    /// The runner the row is bound to — the one a runner-page remedy opens, even when the session
+    /// is on another machine (ELSEWHERE). Nil only when the row no longer names one.
+    public let runnerID: String?
+    /// The model the session would run — its own, else the row's default, else the first named.
+    public let model: String?
+    /// Why the session cannot run here now, or nil when it can.
+    public let refusal: LocalProviderRefusal?
+    /// The name the model menu rows carry, resolved from the row's own list or the instance.
+    public let modelName: String?
+
+    public init(status: LocalProviderStatus, runnerID: String?, model: String?,
+                refusal: LocalProviderRefusal?, modelName: String?) {
+        self.status = status
+        self.runnerID = runnerID
+        self.model = model
+        self.refusal = refusal
+        self.modelName = modelName
+    }
+
+    public var state: LocalProviderState { LocalProviderState(rawValue: status.state) ?? .unknown }
+    /// "Ready", "Not answering", "Model missing".
+    public var stateLabel: String { state.label }
+    /// The version the instance reported, when it did.
+    public var version: String? { status.version }
+    /// How many models the instance serves, when the runner reported a catalogue.
+    public var modelCount: Int? { status.models?.count }
+    /// Where a refusal is fixed: the provider's page on the Web app, or its runner's page here.
+    public var remedy: LocalProviderRemedy? { refusal?.remedy }
+
+    /// What the row says beside "Ollama": "Ready · 0.40.16", "Not answering", "Model missing".
+    public var summary: String {
+        [stateLabel, version].compactMap { $0 }.joined(separator: " · ")
+    }
+}
+
+/// Where a blocked local row's fix lives, as the row itself names it. The three entry points
+/// (workspace hero, composer, task pins) read this one answer, so none of them can fall back to a
+/// different machine than the row is bound to.
+public enum ProviderFixTarget: Equatable, Sendable {
+    /// The provider's own page on the Web app, by slug.
+    case providerPage(slug: String)
+    /// The runner the row is bound to (`LocalChoice.runnerID`), never the session's own.
+    case runner(id: String)
+
+    /// What the action calls itself: "Manage" for the provider page, "Open runner" for a runner.
+    public var actionTitle: String {
+        switch self {
+        case .providerPage: return "Manage"
+        case .runner: return "Open runner"
+        }
     }
 }
 
@@ -186,13 +253,26 @@ public struct ChoiceSources: Sendable {
     /// verdict. Blocked, its Anthropic-bound credentials can't run Claude Code there; nil (a runner that
     /// doesn't check), nothing is gated.
     public var region: RunnerRegionView?
+    /// The runner the session is (or a draft would be) on — what a runner-scoped local provider is
+    /// checked against, since it runs on its bound runner or not at all.
+    public var runnerID: String?
+    /// That runner's name, for a reason that tells someone which machine to look at.
+    public var runnerName: String?
+    /// What that runner declared on its last heartbeat (`Runner.capabilities`): whether it can probe a
+    /// local Ollama and keep a run on it. Nil is a runner too old to say, or not loaded yet — never
+    /// read as healthy.
+    public var runnerCapabilities: [String]?
+    /// The model the session or draft would run, so a local provider's readiness is judged for it.
+    public var sessionModel: String?
 
     public init(configured: [ConfiguredProvider], catalog: RunnerModelCatalog? = nil,
                 runtimeDefaults: [String: String]? = nil, engines: [RunnerEngineHealth]? = nil,
                 pools: [ProviderPool] = [], planUsage: PlanUsage? = nil, now: Date = Date(),
                 antigravity: RunnerAntigravityState? = nil, antigravityKeyAvailable: Bool? = nil,
                 dshState: DshRuntime.RunnerState? = nil, cursorState: CursorRuntime.RunnerState? = nil,
-                showsCursor: Bool = false, region: RunnerRegionView? = nil) {
+                showsCursor: Bool = false, region: RunnerRegionView? = nil,
+                runnerID: String? = nil, runnerName: String? = nil,
+                runnerCapabilities: [String]? = nil, sessionModel: String? = nil) {
         self.configured = configured
         self.catalog = catalog
         self.runtimeDefaults = runtimeDefaults
@@ -206,6 +286,10 @@ public struct ChoiceSources: Sendable {
         self.cursorState = cursorState
         self.showsCursor = showsCursor
         self.region = region
+        self.runnerID = runnerID
+        self.runnerName = runnerName
+        self.runnerCapabilities = runnerCapabilities
+        self.sessionModel = sessionModel
     }
 }
 
@@ -501,19 +585,83 @@ public enum SessionProviderChoices {
             }
             .map { key -> ProviderChoice in
                 let region = regionBlocked(engine, sources: sources, credential: .key(presetSlug: key.presetSlug))
+                // A local server is judged by the rule every door applies: its bound runner, that
+                // runner's declarations and the model the session would run. A key brings no such
+                // gate, so `local` stays nil for it and the row reads exactly as before.
+                let local = localChoice(key, sources: sources)
+                let refusal = local?.refusal
                 return ProviderChoice(
                     slug: key.slug,
                     label: key.label,
                     kind: .key,
                     brandKey: key.presetSlug,
                     modelLabel: modelLabel(engine: engine, provider: key.slug, sources: sources),
-                    unavailable: region ? ClaudeRegionCopy.CLAUDE_REGION_NOT_SUPPORTED : carried,
-                    fixEngine: region || carried != nil ? engine : nil,
+                    unavailable: region ? ClaudeRegionCopy.CLAUDE_REGION_NOT_SUPPORTED : refusal?.message ?? carried,
+                    // A local refusal is cleared where the row says (its provider page or its runner),
+                    // never by signing in to the engine.
+                    fixEngine: region || (refusal == nil && carried != nil) ? engine : nil,
                     inPool: pooled.contains(key.slug),
-                    regionBlocked: region)
+                    regionBlocked: region,
+                    local: local,
+                    fixProvider: refusal?.remedy == .manageProvider ? key.slug : nil)
             }
 
         return own + pools + keys
+    }
+
+    /// A runner-scoped local server's status and readiness for the runner in view, or nil for any
+    /// other credential (`LocalProviders`). The status is read from the row's own probe and the
+    /// session runner's declarations; the refusal from the one rule every door applies, for the model
+    /// the session would run. A missing runner report refuses, as on the server.
+    public static func localChoice(_ row: ConfiguredProvider, sources: ChoiceSources) -> LocalChoice? {
+        guard row.isRunnerScoped else { return nil }
+        let target = LocalProviders.targetModel(row: row, sessionModel: sources.sessionModel)
+        let facts = LocalProviders.facts(from: row)
+        // A runner exists whenever the server served `runnerId`; its capabilities are a separate
+        // report. A missing report is "this runner has not said", never "no runner" — the same
+        // reading the Web picker makes from a runner object whose `capabilities` is absent.
+        let statusRunner: LocalProviderRunnerFacts?
+        if row.runnerId == nil {
+            statusRunner = nil
+        } else if sources.runnerID == row.runnerId {
+            statusRunner = LocalProviderRunnerFacts(capabilities: sources.runnerCapabilities,
+                                                    reported: sources.runnerCapabilities != nil)
+        } else {
+            // The session is elsewhere, or its runner is not known yet: the served capability is
+            // the bound runner's own answer, and the status is about that runner.
+            let supported = row.local?.capability == "SUPPORTED"
+            statusRunner = LocalProviderRunnerFacts(
+                capabilities: supported ? [LocalProviders.probeCapability] : [],
+                reported: row.local?.capability != nil)
+        }
+        let status = LocalProviders.status(facts, runner: statusRunner, now: sources.now)
+        // The readiness gate judges the runner the session would be on, not the status's reader.
+        let sessionRunner = sources.runnerID == nil ? nil
+            : LocalProviderRunnerFacts(capabilities: sources.runnerCapabilities,
+                                       reported: sources.runnerCapabilities != nil)
+        let refusal = LocalProviders.readiness(
+            facts,
+            target: LocalProviderTarget(runnerId: sources.runnerID, runner: sessionRunner, model: target),
+            now: sources.now)
+        let modelName = target.map { model in
+            row.models.first { $0.value == model }?.label
+                ?? row.local?.models?.first { $0.value == model }?.label
+                ?? model
+        }
+        return LocalChoice(status: status, runnerID: row.runnerId, model: target,
+                           refusal: refusal, modelName: modelName)
+    }
+
+    /// Where a blocked local row's fix lives, when the row itself names it: its provider page on the
+    /// Web app (Manage), or the runner it is bound to. `nil` for a row whose fix is an engine install
+    /// or sign-in — that one belongs to the engine page of the runner the session/assignee is on,
+    /// which only the caller knows.
+    public static func localFixTarget(_ choice: ProviderChoice) -> ProviderFixTarget? {
+        if let slug = choice.fixProvider { return .providerPage(slug: slug) }
+        guard let local = choice.local, local.remedy == .runnerPage, let runnerID = local.runnerID else {
+            return nil
+        }
+        return .runner(id: runnerID)
     }
 
     /// OpenCode's own configuration on the runner — whatever `opencode auth login` set up there.
@@ -747,10 +895,15 @@ public enum SessionProviderChoices {
         if !listed, let session = choices.first {
             groups.append(MenuGroup(id: "session", title: "This session's key", choices: [session]))
         }
+        // A local server is not an API key: it has no key, it lives on the runner, and its row says
+        // what that runner last probed. Grouped on its own so its status and Manage entry read as
+        // one thing (web's local-provider group).
+        let local = rest.filter { $0.kind == .key && $0.local != nil }
         let rows: [(String, String, [ProviderChoice])] = [
             ("machine", signedIn ? "Signed in on \(machine)" : "On \(machine)", own),
+            ("local", "Local models", local),
             ("pools", "Account pools", rest.filter { $0.kind == .pool }),
-            ("keys", "API keys", rest.filter { $0.kind == .key }),
+            ("keys", "API keys", rest.filter { $0.kind == .key && $0.local == nil }),
         ]
         groups += rows.filter { !$0.2.isEmpty }.map { MenuGroup(id: $0.0, title: $0.1, choices: $0.2) }
         return groups

@@ -175,7 +175,10 @@ final class WikiChatWiringTests: XCTestCase {
     /// them for — a missing observable object is a crash on screen, not a compile error.
     func testTheConversationIsTheSessionPagesTranscript() throws {
         let views = code(try source("Views/WikiChatViews.swift"))
-        XCTAssertTrue(views.contains("init(wikiChat console: ConsoleModel) {\n        self.console = console\n        self.hidesStickyQuestion = true"))
+        // The initializer lives beside the view it builds, so its defaulted state links (see the
+        // note in ConsoleView.swift); the panel still hands it to `TranscriptView(wikiChat:)`.
+        let consoleView = code(try source("Views/Console/ConsoleView.swift"))
+        XCTAssertTrue(consoleView.contains("init(wikiChat console: ConsoleModel) {\n        self.console = console\n        self.hidesStickyQuestion = true"))
         let conversation = try slice(views, from: "private struct WikiChatConversation: View {", to: "struct WikiChatComposer: View {")
         assertOrder(conversation, ["TranscriptView(wikiChat: console)", ".environment(registry.attachments)",
                                    ".environment(console.createdTasks)", ".environment(approvalReviewDrafts)",

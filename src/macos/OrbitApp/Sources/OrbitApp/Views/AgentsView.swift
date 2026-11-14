@@ -1413,7 +1413,31 @@ struct NewSessionView: View {
                         // longer run — and the session would only fail minutes later, at the runner.
                         // Say so here, and make the line the route to the fix (web parity).
                         if let blocker = currentProviderChoice.unavailable,
-                           currentProviderChoice.fixEngine != nil {
+                           case .providerPage(let slug)? = SessionProviderChoices.localFixTarget(currentProviderChoice) {
+                            // A local server's own page on the Web app: where it is turned on, bound,
+                            // addressed or given a model. The reason stands as the server wrote it.
+                            Button {
+                                Task { @MainActor in openURL(await draft.webProviderURL(slug)) }
+                            } label: {
+                                Text("\(blocker) · Manage")
+                                    .font(.callout).foregroundStyle(Color.accentColor).lineLimit(2)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .buttonStyle(.plain)
+                        } else if let blocker = currentProviderChoice.unavailable,
+                                  case .runner(let runnerID)? = SessionProviderChoices.localFixTarget(currentProviderChoice) {
+                            // A probe or runner-update refusal opens the runner the ROW is bound to,
+                            // not the one this workspace happens to run on (ELSEWHERE).
+                            Button {
+                                app.route(to: .runner(runnerID))
+                            } label: {
+                                Text("\(blocker) · Open runner")
+                                    .font(.callout).foregroundStyle(Color.accentColor).lineLimit(2)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .buttonStyle(.plain)
+                        } else if let blocker = currentProviderChoice.unavailable,
+                                  currentProviderChoice.fixEngine != nil {
                             Button {
                                 if let rid = agent.runnerId {
                                     let engine = currentProviderChoice.fixEngine ?? ""

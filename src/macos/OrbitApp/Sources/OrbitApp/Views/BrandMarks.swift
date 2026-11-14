@@ -83,7 +83,7 @@ struct VectorMark: Shape {
 /// `VectorMark` parses (relative commands, H/V, S/T shorthand and elliptical arcs are all resolved
 /// there, and each result was diffed against the browser rendering before being pasted in).
 enum AgentBrand {
-    case claude, codex, gemini, deepseek, kimi, glm, minimax, qwen, antigravity, cursor, generic
+    case claude, codex, gemini, deepseek, kimi, glm, minimax, qwen, antigravity, cursor, ollama, generic
 
     /// Resolve from a preset key or provider slug. Engine slugs map to the preset they run
     /// (`claude` → Anthropic, `codex` → OpenAI), mirroring web's `ENGINE_PRESET`; `antigravity` is
@@ -103,6 +103,9 @@ enum AgentBrand {
         case "antigravity":                return .antigravity
         // Cursor CLI, the engine, and a Cursor key (`cursor-api`) wear Cursor's cube (the owner's D3).
         case "cursor", "cursor-api":       return .cursor
+        // Ollama ships no official glyph in the web preset table either: its tile is the dark
+        // monogram "O" (PROVIDER_PRESETS `brand`), not the neutral grey.
+        case "ollama":                     return .ollama
         default:                           return .generic
         }
     }
@@ -120,13 +123,13 @@ enum AgentBrand {
         case .qwen:     return Self.qwenMark
         case .antigravity: return Self.antigravityMark
         case .cursor:   return Self.cursorMark
-        case .generic:  return nil
+        case .ollama, .generic: return nil
         }
     }
 
     /// Mark size as a fraction of the tile — web draws every glyph at 0.56 of the tile, and the
     /// marks share one 24×24 viewBox, so a single ratio keeps the set optically even.
-    var markScale: CGFloat { self == .generic ? 0 : 0.56 }
+    var markScale: CGFloat { self == .generic || self == .ollama ? 0 : 0.56 }
 
     /// The tile's gradient stops, straight from the web preset's `brand.from`/`brand.to`.
     var gradient: (from: Color, to: Color) {
@@ -141,6 +144,7 @@ enum AgentBrand {
         case .qwen: return (Color(red: 0.478, green: 0.447, blue: 1.000), Color(red: 0.310, green: 0.275, blue: 0.898))   // #7a72ff → #4f46e5
         case .antigravity: return (Color(red: 0.192, green: 0.525, blue: 1.000), Color(red: 0.000, green: 0.725, blue: 0.361))   // #3186ff → #00b95c
         case .cursor: return (Color(red: 0.169, green: 0.169, blue: 0.169), Color(red: 0.000, green: 0.000, blue: 0.000))   // #2b2b2b → #000000
+        case .ollama: return (Color(red: 0.247, green: 0.247, blue: 0.275), Color(red: 0.039, green: 0.039, blue: 0.039))   // #3f3f46 → #0a0a0a
         case .generic: return (Color(red: 0.604, green: 0.627, blue: 0.659), Color(red: 0.420, green: 0.443, blue: 0.471))   // #9aa0a8 → #6b7178
         }
     }

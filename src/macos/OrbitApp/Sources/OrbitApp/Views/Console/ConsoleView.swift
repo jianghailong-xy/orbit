@@ -2264,3 +2264,17 @@ private struct RecapVisit: Equatable {
     let sessionID: String
     let rests: Bool
 }
+
+// MARK: - the transcript, here
+
+extension TranscriptView {
+    /// The session page's transcript in a wiki chat's panel (docs/wiki-chat-design.md §9): the same
+    /// rows, cards and approvals, with the sticky question kept out of a navigation bar the panel
+    /// does not have. Declared here, beside the view, rather than in WikiChatViews.swift: an initializer
+    /// in another file leaves the compiler emitting this struct's private default-value symbols where
+    /// the link cannot find them (Xcode 27.0), and every defaulted `@State` becomes an undefined symbol.
+    init(wikiChat console: ConsoleModel) {
+        self.console = console
+        self.hidesStickyQuestion = true
+    }
+}

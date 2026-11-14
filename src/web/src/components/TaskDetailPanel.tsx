@@ -53,7 +53,7 @@ import {
   sessionEngineOf,
   type ConfiguredProvider,
 } from '../lib/workspaceDefaults';
-import { currentProviderChoice, engineProviders, engineTitleFor, type ChoiceSources } from '../lib/sessionProviderChoices';
+import { currentProviderChoice, engineProviders, engineTitleFor, localFixTarget, type ChoiceSources } from '../lib/sessionProviderChoices';
 import { BrandMark } from './NewSessionProviderHero';
 import { encodeId } from '../lib/idCodec';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
@@ -961,6 +961,16 @@ export function TaskDetailPanel({
       ? assigneeWorkspace.antigravityKeyAvailableByRunner?.[assigneeRunner?.id] === true
       : assigneeRunner?.antigravity?.envKeyAvailable === true,
     dshRunner: assigneeRunner,
+    // A runner-scoped local provider runs on the assignee's machine or not at all, for the task's
+    // own model (sessionProviderChoices.localChoiceFor, shared localProviderReadiness).
+    localRunner: assigneeRunner
+      ? {
+          id: assigneeRunner.id,
+          name: assigneeRunner.displayName || assigneeRunner.name,
+          capabilities: assigneeRunner.capabilities,
+        }
+      : null,
+    sessionModel: q.data?.model ?? null,
   };
   // Past the engine's default credential — its own sign-in on the runner, OpenCode's own configuration,
   // DeepSeek Harness's first DeepSeek key, which "Engine default" stands for — the account pools and
@@ -1106,7 +1116,17 @@ export function TaskDetailPanel({
     }
     const choice = pinCredentials.find((row) => row.slug === slug);
     if (choice?.unavailable) {
-      navigate(choice.fixHref ?? `/settings/machines/${encodeId(assigneeRunner?.id ?? '')}?engine=${choice.fixEngine ?? runEngine}`);
+      // A local row names its own fix: its provider page, or the runner it is BOUND to — not the
+      // assignee's machine (ELSEWHERE).
+      const target = localFixTarget(choice);
+      navigate(
+        target?.kind === 'runner'
+          ? `/settings/machines/${encodeId(target.id)}`
+          : target?.kind === 'provider'
+            ? target.href
+            : choice.fixHref ??
+                `/settings/machines/${encodeId(assigneeRunner?.id ?? '')}?engine=${choice.fixEngine ?? runEngine}`,
+      );
       return;
     }
     if (slug !== pinnedProvider) updateRunTarget.mutate({ engine: runEngine, provider: slug, model: null });
@@ -1412,11 +1432,16 @@ export function TaskDetailPanel({
   // rather than `status`, which lags behind a re-dispatch by however long this copy is old.
   const entry = taskRunEntry({ status: q.data?.status ?? '', sessions });
   // Blocked tasks can't run until prerequisites clear; mirror the backend's execute gate.
-  const executeDisabled = completionOwned || !canExecute || running || blocked;
+  // The credential this task would run on: its own pin, else the assignee's. A runner-scoped
+  // local provider the assignee's machine cannot run as it stands refuses the run here, before
+  // the press, with the sentence the Provider field carries (shared localProviderReadiness).
+  const pinnedLocalRefusal = pinCredentials
+    .find((c) => c.slug === runProvider)?.local?.refusal;
+  const executeDisabled = completionOwned || !canExecute || running || blocked || !!pinnedLocalRefusal;
   // The schedule the server holds, if any — read here as well as in the editor below, because
   // pressing Run now is how a reader loses one and the button is where they need to be told.
   const scheduled = scheduledStart(q.data?.runAt);
-  const executeHint = runNowHint({
+  const executeHint = pinnedLocalRefusal?.message ?? runNowHint({
     completionOwned,
     status: q.data?.status,
     verificationState: q.data?.verificationState,

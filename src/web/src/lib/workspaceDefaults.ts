@@ -10,7 +10,10 @@ import {
   keyDialect,
   openCodeKeyOf,
   runnerCatalogRow,
+  type LocalProviderStatus,
   type PlanUsageSnapshot,
+  type ProviderAuthMode,
+  type ProviderScope,
   type RunnerModelCatalog,
   type RuntimeDefaultModels,
 } from '@orbit/shared';
@@ -54,7 +57,25 @@ export interface ConfiguredProvider {
    *  key, can tell a Claude subscription token, which runs on Claude Code alone. Absent on a pool
    *  read as a provider, which runs on its own engine (`runtime`) and nowhere else. */
   engines?: string[];
+  /** Where the row can be dispatched from: `account` everywhere its owner runs sessions, or
+   *  `runner` on one machine only (a local Ollama). Absent from an older server, which reads as
+   *  account-scoped. */
+  scope?: ProviderScope;
+  /** How the engine authenticates: `bearer` with the stored key, or `none` for a local server. */
+  authMode?: ProviderAuthMode;
+  /** The runner a runner-scoped row is bound to — only while it is still the row owner's. */
+  runnerId?: string | null;
+  /** A runner-scoped row's probe, as its bound runner last reported it. Never served on any other
+   *  row (docs/ollama-local-provider-contract.md §3.2). */
+  local?: LocalProviderStatus;
+  /** Whether the row is switched on. Only the account's own list says; the picker lists enabled rows
+   *  alone, and absent reads as on. */
+  enabled?: boolean;
 }
+
+/** Whether a configured row is a local server bound to one runner (web `isRunnerScoped`). */
+export const isRunnerScoped = (row?: ConfiguredProvider | null): boolean =>
+  row?.scope === 'runner';
 
 /** The engines whose own sign-in on the runner is a credential: the provider slug is the engine's
  *  name, and only that engine runs it. */
@@ -258,6 +279,10 @@ export const contextWindowFor = (
   }
   for (const p of configured ?? []) {
     if (provider && p.slug !== provider) continue;
+    // A local server's window is what its runner measured on the instance, which beats the copy
+    // the row was saved with.
+    const live = p.local?.models?.find((m) => m.value === model && typeof m.contextWindow === 'number');
+    if (live?.contextWindow) return live.contextWindow;
     const found = p.models.find((m) => m.value === model && typeof m.contextWindow === 'number');
     if (found?.contextWindow) return found.contextWindow;
   }
@@ -283,6 +308,23 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
  *  the effective fallback as its sole row. A row on the retired `dsh` runtime has no table outside
  *  DeepSeek Harness. */
 const rowModelOptions = (row: ConfiguredProvider, modelCatalog?: RunnerModelCatalog | null): ModelOption[] => {
+  // A local server's model space is what its runner found on the instance, with the models the row
+  // names first (docs/ollama-local-provider-contract.md §3.2). Both empty is an empty list — a
+  // local provider never borrows Claude's models.
+  if (isRunnerScoped(row)) {
+    const options: ModelOption[] = [];
+    const seen = new Set<string>();
+    for (const m of row.models) {
+      if (!m.value || !m.label) continue;
+      seen.add(m.value);
+      options.push({ value: m.value, label: m.label });
+    }
+    for (const m of row.local?.models ?? []) {
+      if (!m.value || seen.has(m.value)) continue;
+      options.push({ value: m.value, label: m.label || m.value });
+    }
+    return options;
+  }
   if (row.modelsFromRuntime && row.runtime !== AgentProvider.DSH) {
     const live = catalogOptions(nativeEngine(row.runtime), modelCatalog);
     if (live) return live;
@@ -332,6 +374,12 @@ const rowDefaultModel = (
 ): string => {
   // A row on the retired `dsh` runtime names no model outside DeepSeek Harness; the runtime picks.
   if (row.runtime === AgentProvider.DSH) return '';
+  // A local server's default is its own declaration, then the first model it names — and '' when it
+  // names none. The built-in Claude default is not a model Ollama serves, so an empty list fails
+  // closed rather than quietly borrowing one.
+  if (isRunnerScoped(row)) {
+    return row.defaultModel || row.models.find((m) => m.value && m.label)?.value || '';
+  }
   const native = nativeEngine(row.runtime);
   if (row.modelsFromRuntime) {
     const live = runtimeDefaultModels?.[native] || catalogOptions(native, modelCatalog)?.[0]?.value;

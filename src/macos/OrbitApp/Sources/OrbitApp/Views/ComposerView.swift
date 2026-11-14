@@ -419,6 +419,29 @@ struct ComposerView: View {
                 .padding(.horizontal, 8).padding(.vertical, 4)
             }
 
+            if let local = console.localStartNotice {
+                // A local Ollama the runner cannot run as it stands: the reason the Provider row
+                // and the model rows carry, where the composer cannot miss it.
+                HStack(spacing: 6) {
+                    Image(systemName: "desktopcomputer").foregroundStyle(.secondary)
+                    Text(local).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(2)
+                    Spacer(minLength: 0)
+                    if let target = console.localStartFixTarget {
+                        Button(target.actionTitle) {
+                            switch target {
+                            case .providerPage(let slug):
+                                Task { @MainActor in openURL(await console.webProviderURL(slug)) }
+                            case .runner(let runnerID):
+                                app.route(to: .runner(runnerID))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .font(.orbitLabel.weight(.semibold))
+                    }
+                }
+                .padding(.horizontal, 8).padding(.vertical, 4)
+            }
+
             if let blocked = console.sendBlockedMessage {
                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.circle").foregroundStyle(.secondary)
@@ -1016,11 +1039,16 @@ struct ComposerView: View {
                             effort: resetEffort ? nextEffort.rawValue : nil)
                     }
                 } label: {
-                    menuItemLabel(m.name, selected: m.id == menuModelID)
+                    // A local server's model the instance no longer serves, or one without tools or
+                    // enough context, stays listed with the reason and cannot be picked — the server
+                    // would refuse the session before it ran.
+                    let blocked = console.localModelRefusal(m.id)
+                    menuItemLabel(blocked.map { "\(m.name) — \($0.message)" } ?? m.name,
+                                  selected: m.id == menuModelID)
                 }
                 // No model space until the provider identity resolves: the row shows the value it
                 // will run with, and cannot be switched yet.
-                .disabled(!console.providerCapabilitiesResolved)
+                .disabled(!console.providerCapabilitiesResolved || console.localModelRefusal(m.id) != nil)
             }
             Divider()
             // Cursor CLI's Auto takes no parameters: a line on what it does instead of an Effort row.
@@ -1295,8 +1323,10 @@ struct ComposerView: View {
         let elsewhere = here || blocked ? [] : console.accountChoices(for: choice.slug)
         let listsAccounts = (here && console.accountRowsOffered) || !elsewhere.isEmpty
         // An account pool the server says cannot run at all: no runner fixes that, so it is greyed out
-        // with its reason instead.
-        let fixable = blocked && choice.fixEngine != nil
+        // with its reason instead. A local server's refusal names the page that clears it: its own
+        // provider page on the Web app, or the runner it lives on.
+        let localFix = SessionProviderChoices.localFixTarget(choice)
+        let fixable = blocked && (choice.fixEngine != nil || localFix != nil)
         if listsAccounts {
             engineAccountItems(choice.slug, here: here, elsewhere: elsewhere)
         } else {
@@ -1304,11 +1334,23 @@ struct ComposerView: View {
                 // Picking a blocked row isn't a switch — it's a request for the sign-in (or install)
                 // that would make it one, so go to that engine's page on the runner rather than doing
                 // nothing.
-                if fixable {
-                    let engine = choice.fixEngine ?? ""
-                    if let url = console.webFixURL(engine: engine) { openURL(url) }
-                    else if let rid = console.runnerID { app.openRunnerEngine(rid, engine: engine) }
-                } else if !blocked {
+                if blocked {
+                    switch localFix {
+                    case .providerPage(let slug)?:
+                        Task { @MainActor in openURL(await console.webProviderURL(slug)) }
+                    case .runner(let runnerID)?:
+                        // The row's own runner — for ELSEWHERE that is a different machine than
+                        // this session's, which is the one the refusal is about.
+                        app.route(to: .runner(runnerID))
+                    case nil:
+                        if let engine = choice.fixEngine {
+                            if let url = console.webFixURL(engine: engine) { openURL(url) }
+                            else if let rid = console.runnerID { app.openRunnerEngine(rid, engine: engine) }
+                        } else if let rid = console.runnerID {
+                            app.openRunnerEngine(rid, engine: console.engine)
+                        }
+                    }
+                } else {
                     Task { await console.selectProvider(choice.slug) }
                 }
             } label: {
@@ -1323,7 +1365,20 @@ struct ComposerView: View {
     @ViewBuilder
     private func providerRowLabel(_ choice: ProviderChoice, blocked: Bool, fixable: Bool) -> some View {
         let selected = choice.slug == console.provider
-        if blocked {
+        if let local = choice.local {
+            // A local server says what its runner last probed, and — when it cannot run — why, with
+            // the word for where that is cleared (its provider page, or the runner's).
+            if blocked {
+                let fix = fixable
+                    ? (choice.fixProvider != nil ? ", manage →"
+                       : (choice.local?.remedy == .runnerPage ? ", open runner →" : " →"))
+                    : ""
+                menuItemLabel("\(SessionProviderChoices.providerName(on: console.engine, choice)) — "
+                              + "\(local.refusal?.message ?? local.stateLabel)\(fix)", selected: false)
+            } else {
+                menuItemLabel("\(choice.label) · \(local.summary)", selected: selected)
+            }
+        } else if blocked {
             // The runner's Claude region is a reason nothing here fixes: the row names no fix, and its
             // press still opens the machine's Claude Code page, which explains (web parity).
             let fix = fixable && !choice.regionBlocked ? SessionProviderChoices.fixSuffix(choice.fixEngine) : ""

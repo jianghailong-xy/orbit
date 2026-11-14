@@ -221,8 +221,12 @@ export function localProviderStatus(
 ): LocalProviderStatus {
   const capability: LocalProbeCapability =
     runner && runner.capabilitiesReportedAt != null && declaresLocalProbe(runner.capabilities) ? 'SUPPORTED' : 'UNKNOWN';
-  const probed = (LOCAL_PROBE_STATES as readonly string[]).includes(row.probeState ?? '')
-    ? (row.probeState as LocalProbeState)
+  // A client that keeps what the server served reads a derived state back in, STALE included (a
+  // picker's row is the served `local` block, not the stored columns). STALE therefore reads as one:
+  // it is still a probe answer, and the restart of a running server reports it again.
+  const probed: LocalProviderState | null = row.probeState === 'STALE'
+    || (LOCAL_PROBE_STATES as readonly string[]).includes(row.probeState ?? '')
+    ? (row.probeState as LocalProviderState)
     : null;
   const probedAtMs = row.probedAt == null ? NaN : new Date(row.probedAt).getTime();
   const stale = !Number.isFinite(probedAtMs) || now - probedAtMs > LOCAL_PROBE_STALE_MS;
@@ -232,7 +236,7 @@ export function localProviderStatus(
       ? 'NO_RUNNER'
       : capability === 'UNKNOWN' || !probed
         ? 'UNKNOWN'
-        : stale
+        : stale || probed === 'STALE'
           ? 'STALE'
           : probed;
   const probedAt = Number.isFinite(probedAtMs) ? new Date(probedAtMs).toISOString() : null;
@@ -413,6 +417,28 @@ export interface LocalProviderRefusal {
   message: string;
 }
 
+/** Where a picker sends someone to clear a refusal: the provider's own page on the web app, or the
+ *  runner it lives on. The same answer the native clients draw (OrbitKit `LocalProviderRefusalCode.remedy`). */
+export type LocalProviderRemedy = 'provider' | 'runner';
+
+export function localProviderRemedy(code: LocalProviderRefusalCode): LocalProviderRemedy {
+  switch (code) {
+    case 'LOCAL_PROVIDER_DISABLED':
+    case 'LOCAL_PROVIDER_NO_RUNNER':
+    case 'LOCAL_PROVIDER_MISCONFIGURED':
+    case 'LOCAL_PROVIDER_NO_MODELS':
+    case 'LOCAL_PROVIDER_MODEL_MISSING':
+    case 'LOCAL_PROVIDER_CAPABILITY_MISSING':
+      return 'provider';
+    case 'LOCAL_PROVIDER_ELSEWHERE':
+    case 'LOCAL_PROVIDER_RUNNER_OUTDATED':
+    case 'LOCAL_PROVIDER_UNPROBED':
+    case 'LOCAL_PROVIDER_STALE':
+    case 'LOCAL_PROVIDER_UNREACHABLE':
+      return 'runner';
+  }
+}
+
 export function isLocalProviderRefusalCode(code: unknown): code is LocalProviderRefusalCode {
   return (LOCAL_PROVIDER_REFUSAL_CODES as readonly unknown[]).includes(code);
 }
@@ -494,12 +520,17 @@ export function localProviderReadiness(
         "runner's log for why it stopped offering local providers",
     );
   }
-  const state = (LOCAL_PROBE_STATES as readonly string[]).includes(row.probeState ?? '') ? (row.probeState as LocalProbeState) : null;
+  // STALE is accepted on the way in as well: a picker that kept the served `local` block passes a
+  // derived state, and it must read back as the same answer rather than as "never probed".
+  const state: LocalProbeState | 'STALE' | null =
+    row.probeState === 'STALE' || (LOCAL_PROBE_STATES as readonly string[]).includes(row.probeState ?? '')
+      ? (row.probeState as LocalProbeState | 'STALE')
+      : null;
   const probedAtMs = row.probedAt == null ? NaN : new Date(row.probedAt).getTime();
   if (!state || !Number.isFinite(probedAtMs)) {
     return refuse('LOCAL_PROVIDER_UNPROBED', 'has not been checked by its runner yet; this session starts once it is');
   }
-  if (now - probedAtMs > LOCAL_PROBE_STALE_MS) {
+  if (state === 'STALE' || now - probedAtMs > LOCAL_PROBE_STALE_MS) {
     return refuse('LOCAL_PROVIDER_STALE', 'has not been checked recently; its runner may be offline. This session starts once it reports again');
   }
   if (state === 'UNREACHABLE') {

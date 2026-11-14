@@ -171,6 +171,10 @@ public enum AgentDefaults {
     /// shows the effective fallback as its sole row. A row on the retired `dsh` runtime has no table
     /// outside DeepSeek Harness. Mirrors web's `rowModelOptions`.
     private static func rowModels(_ row: ConfiguredProvider, catalog: RunnerModelCatalog?) -> [ModelOption] {
+        // A local server's model space is what its runner found on the instance, with the models the
+        // row names first (docs/ollama-local-provider-contract.md §3.2). An empty catalogue stays
+        // empty — a local provider never borrows Claude's models.
+        if row.isRunnerScoped { return localModelOptions(row) }
         if row.modelsFromRuntime == true, row.runtime != "dsh",
            let live = catalog?.models(for: nativeEngine(row.runtime)) {
             return live
@@ -178,6 +182,23 @@ public enum AgentDefaults {
         return row.models
             .filter { !$0.value.isEmpty && !$0.label.isEmpty }
             .map { ModelOption(id: $0.value, name: $0.label) }
+    }
+
+    /// A local server's models: the row's own list (its labels and declared effort levels), then the
+    /// instance's live catalogue — a model the runner discovered but the owner did not name is still
+    /// one the server lets a session run. Nothing is invented when both are empty.
+    public static func localModelOptions(_ row: ConfiguredProvider) -> [ModelOption] {
+        var options: [ModelOption] = []
+        var seen = Set<String>()
+        for model in row.models where !model.value.isEmpty && !model.label.isEmpty {
+            if seen.insert(model.value).inserted { options.append(ModelOption(id: model.value, name: model.label)) }
+        }
+        for model in row.local?.models ?? [] where !model.value.isEmpty {
+            if seen.insert(model.value).inserted {
+                options.append(ModelOption(id: model.value, name: model.label ?? model.value))
+            }
+        }
+        return options
     }
 
     /// The models a session on `engine` with `provider` can pick: the model space is the pair's
@@ -226,6 +247,13 @@ public enum AgentDefaults {
                                         runtimeDefaults: [String: String]?) -> String {
         // A row on the retired `dsh` runtime names no model outside DeepSeek Harness; the runtime picks.
         if row.runtime == "dsh" { return "" }
+        // A local server's default is its own declaration, then the first model it names — and ""
+        // when it names none. The built-in Claude default is not a model Ollama serves, so an empty
+        // list fails closed rather than quietly borrowing one.
+        if row.isRunnerScoped {
+            if let declared = row.defaultModel, !declared.isEmpty { return declared }
+            return row.models.first { !$0.value.isEmpty && !$0.label.isEmpty }?.value ?? ""
+        }
         let native = nativeEngine(row.runtime)
         if row.modelsFromRuntime == true {
             if let saved = runtimeDefaults?[native], !saved.isEmpty { return saved }
@@ -291,6 +319,10 @@ public enum AgentDefaults {
         // yet, and dispatch runs a model-less session on the reported default — so the caller falls
         // through to that default, which is what the pill must say.
         if model.isEmpty { return row == nil && engine == "antigravity" ? nil : model }
+        // A local server's own catalogue retires a model its owner removed from the instance.
+        if let row, row.isRunnerScoped, let live = row.local?.models, !live.isEmpty {
+            return LocalProviders.instanceModel(live, model: model) == nil ? nil : model
+        }
         // DeepSeek Harness and Cursor CLI list the runner's catalogue whichever key they spend.
         let catalogued = engine == "dsh" || engine == "cursor"
         if !catalogued, let row, row.modelsFromRuntime != true { return model }
@@ -421,8 +453,15 @@ public enum AgentDefaults {
     /// custom provider's model id renders its label, not the raw id.
     public static func friendlyName(_ id: String, catalog: RunnerModelCatalog?,
                                     configured: [ConfiguredProvider]?) -> String {
-        (configured ?? []).flatMap(\.models).first { $0.value == id }?.label
-            ?? friendlyName(id, catalog: catalog)
+        if let label = (configured ?? []).flatMap(\.models).first(where: { $0.value == id })?.label {
+            return label
+        }
+        // A model only the instance's catalogue names is still named by it.
+        if let label = (configured ?? []).flatMap({ $0.local?.models ?? [] })
+            .first(where: { $0.value == id })?.label {
+            return label
+        }
+        return friendlyName(id, catalog: catalog)
     }
 
     /// The name a picker shows for `id` when the session runs on `engine` with `provider`: the label
@@ -747,6 +786,12 @@ public enum AgentDefaults {
         if id.isEmpty { return nil }
         if let window = catalog?.contextWindow(for: id), window > 0 { return window }
         let rows = (configured ?? []).filter { provider == nil || $0.slug == provider }
+        // A local server's window is what its runner measured on the instance, which beats the copy
+        // the row was saved with.
+        if let window = rows.flatMap({ $0.local?.models ?? [] })
+            .first(where: { $0.value == id && ($0.contextWindow ?? 0) > 0 })?.contextWindow {
+            return window
+        }
         if let window = rows.flatMap(\.models)
             .first(where: { $0.value == id && ($0.contextWindow ?? 0) > 0 })?.contextWindow {
             return window

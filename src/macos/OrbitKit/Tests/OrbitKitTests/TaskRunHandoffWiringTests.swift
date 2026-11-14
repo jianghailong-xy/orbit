@@ -250,7 +250,9 @@ final class TaskRunHandoffWiringTests: XCTestCase {
         // same thing again (the owner's redesign, 2026-09-26). A press that cannot be taken says why;
         // one that can says only that it is the task's only start (TaskDetailWiringTests).
         XCTAssertFalse(detail.contains("Text(entry.hint)"))
-        XCTAssertTrue(detail.contains(": runDisabledHint(task)"))
+        // A local provider that cannot run the task's model states its own reason first.
+        XCTAssertTrue(detail.contains("localStartRefusal(task)?.message"))
+        XCTAssertTrue(detail.contains("?? runDisabledHint(task)"))
         XCTAssertTrue(detail.contains("Task { _ = await tasks.execute(task.id) }"))
         XCTAssertFalse(detail.contains("task.status == .failed ? \"Retry\" : \"Run\""))
 

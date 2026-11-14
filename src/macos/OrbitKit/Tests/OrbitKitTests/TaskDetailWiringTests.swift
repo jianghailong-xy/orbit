@@ -137,8 +137,11 @@ final class TaskDetailWiringTests: XCTestCase {
         let view = try source(Self.tasksView)
         let presses = try section(view, from: "private func actions(_ task: TaskItem) -> some View {",
                                   to: "private func isOpenRun")
-        XCTAssertTrue(presses.contains(
-            "let hint = canStart(task) ? TaskDetailLogic.runNowHint(task) : runDisabledHint(task) {"))
+        // A local server that cannot run the task says why before the ordinary "cannot start" line:
+        // the same refusal the provider field shows (phase 4B).
+        XCTAssertTrue(presses.contains("let hint = canStart(task)"))
+        XCTAssertTrue(presses.contains("TaskDetailLogic.runNowHint(task)"))
+        XCTAssertTrue(presses.contains(": localStartRefusal(task)?.message ?? runDisabledHint(task) {"))
         XCTAssertTrue(presses.contains("Text(hint).font(.orbitLabel).foregroundStyle(.secondary)"))
     }
 

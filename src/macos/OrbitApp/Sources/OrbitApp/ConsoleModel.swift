@@ -2055,7 +2055,23 @@ final class ConsoleModel {
         guard !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 || canSendAttachmentsAlone else { return false }
         if replyContext != nil { return true }   // a question reply always sends (deny+message)
+        // A new session, or the resume of an ended one, cannot start on a local server its runner
+        // cannot run — the row says why, and the send waits rather than failing at the control plane.
+        if !isLive, localStartRefusal != nil { return false }
         return availability != .blocked
+    }
+
+    /// Why the current local provider cannot run this session as it stands, in the server's own
+    /// words — the same sentence the Provider row carries. Nil when it can, and for every
+    /// non-local provider. On a live session a message still goes (the server holds the turn), so
+    /// the notice explains the wait rather than blocking it.
+    var localStartNotice: String? { localStartRefusal?.message }
+
+    /// Where the current local row's refusal is fixed, when it names one: the provider page on the
+    /// Web app, or the runner it is bound to (not this session's runner). Nil for every other provider.
+    var localStartFixTarget: ProviderFixTarget? {
+        guard let choice = engineProviders.first(where: { $0.slug == provider }) else { return nil }
+        return SessionProviderChoices.localFixTarget(choice)
     }
 
     /// Whether what's staged can go out with no text at all — web parity (`!!text.trim() ||
@@ -2466,7 +2482,11 @@ final class ConsoleModel {
                       engines: runnerEngines, pools: allPools, planUsage: runnerPlanUsage,
                       antigravity: runnerAntigravity, antigravityKeyAvailable: antigravityKeyAvailable,
                       dshState: dshRunnerState, cursorState: cursorRunnerState,
-                      showsCursor: fleetKnowsCursor || engine == CursorRuntime.engine, region: runnerRegion)
+                      showsCursor: fleetKnowsCursor || engine == CursorRuntime.engine, region: runnerRegion,
+                      // A runner-scoped provider runs on this session's machine or not at all, for the
+                      // model it would actually run (LocalProviders.readiness).
+                      runnerID: runnerID ?? draftAgent?.runnerId, runnerName: runnerName,
+                      runnerCapabilities: runnerCapabilities, sessionModel: modelID)
     }
 
     /// The credentials this session's engine runs on here (`SessionProviderChoices.providers`): its own
@@ -2478,6 +2498,52 @@ final class ConsoleModel {
 
     /// Whether the menu lists the provider this draft or session is on.
     var providerListed: Bool { engineProviders.contains { $0.slug == provider } }
+
+    /// The local provider this draft or session is on, as GET /providers serves it — nil for any
+    /// other credential.
+    var localProviderRow: ConfiguredProvider? {
+        configuredProviders.first { $0.slug == provider && $0.isRunnerScoped }
+    }
+
+    /// The local row's status and refusal for this session as it stands
+    /// (`SessionProviderChoices.localChoice`). Nil for a non-local provider.
+    var localProviderStatus: LocalChoice? { engineProviders.first { $0.slug == provider }?.local }
+
+    /// Why a new session — or the resume of an ended one — cannot start on this provider here, or nil
+    /// when it can. Nil for a non-local provider. Fails closed: a missing runner report or probe
+    /// refuses, exactly as the server's doors do.
+    var localStartRefusal: LocalProviderRefusal? { localProviderStatus?.refusal }
+
+    /// Why one model of the local row cannot be picked, or nil when it can. A provider-level refusal
+    /// (unreachable, stale, an outdated runner, a misconfigured endpoint) blocks every model; a
+    /// refusal that names the target model blocks only that model, so another the instance serves can
+    /// still be chosen and make the row ready.
+    func localModelRefusal(_ id: String) -> LocalProviderRefusal? {
+        guard let row = localProviderRow else { return nil }
+        if let refusal = localProviderStatus?.refusal {
+            switch refusal.code {
+            case .modelMissing, .capabilityMissing:
+                return LocalProviders.modelReadiness(row, model: id)
+            default:
+                return refusal
+            }
+        }
+        return LocalProviders.modelReadiness(row, model: id)
+    }
+
+    /// A local provider's own page in the Web app — where it is connected, turned on, bound to a
+    /// runner or given its models. These clients do not edit one yet, so the row's Manage entry opens
+    /// it there, falling back to the API-keys section of Machines & models when the id is not loaded.
+    func webProviderURL(_ slug: String) async -> URL {
+        let keys = try? await api.personalProviders()
+        if let id = keys?.first(where: { $0.slug == slug })?.providerID {
+            return api.baseURL.appendingPathComponent("providers/\(id)")
+        }
+        let page = api.baseURL.appendingPathComponent("machines-and-models")
+        var keysSection = URLComponents(url: page, resolvingAgainstBaseURL: false)
+        keysSection?.fragment = "keys"
+        return keysSection?.url ?? page
+    }
 
     /// Where this session could move without changing engine, for the composer's Provider menu: the
     /// credentials its engine runs on here. Offered on the three routes that actually carry a provider:

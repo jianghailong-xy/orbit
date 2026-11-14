@@ -1110,6 +1110,7 @@ struct TaskDetailPage: View {
 
 private struct TaskDetailContent: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openURL) private var openURL
     let tasks: TasksModel
     let taskID: String
     /// Shown over another page (see `TaskDetailPage.overPage`).
@@ -1677,7 +1678,9 @@ private struct TaskDetailContent: View {
                 // Why the press cannot be taken, or — when it can — that it is the task's only start; a
                 // live run's button already says where it goes.
                 if let trailing = row.trailing, !isOpenRun(trailing),
-                   let hint = canStart(task) ? TaskDetailLogic.runNowHint(task) : runDisabledHint(task) {
+                   let hint = canStart(task)
+                    ? TaskDetailLogic.runNowHint(task)
+                    : localStartRefusal(task)?.message ?? runDisabledHint(task) {
                     Text(hint).font(.orbitLabel).foregroundStyle(.secondary)
                 }
             }
@@ -1691,7 +1694,21 @@ private struct TaskDetailContent: View {
     }
 
     private func canStart(_ task: TaskItem) -> Bool {
-        TaskListLogic.canStart(task, assigneeHasRunner: assigneeHasRunner(task))
+        // A run on a local provider not ready on its machine would be held by the server; the
+        // detail says why rather than offering a start that cannot go.
+        guard localStartRefusal(task) == nil else { return false }
+        return TaskListLogic.canStart(task, assigneeHasRunner: assigneeHasRunner(task))
+    }
+
+    /// Why this task cannot start on the provider it would run — a local server whose runner cannot
+    /// run the task's model as it stands — or nil for every other provider.
+    private func localStartRefusal(_ task: TaskItem) -> LocalProviderRefusal? {
+        let pin = runPin(task)
+        let sources = pinSources(task)
+        let firstDeepSeekKey = SessionProviderChoices.providers(for: "dsh", sources: sources).first { $0.kind == .key }
+        let provider = pin.runProvider(firstDeepSeekKey: firstDeepSeekKey?.slug)
+        return SessionProviderChoices.providers(for: pin.runEngine, sources: sources)
+            .first { $0.slug == provider }?.local?.refusal
     }
 
     /// The owner's confirmation, for a task an OWNER_CONFIRMED criterion settles: a pointer to the
@@ -2031,6 +2048,7 @@ private struct TaskDetailContent: View {
                         if smartSelection { suggestedPicker(task) }
                         enginePicker(task)
                         providerPicker(task)
+                        blockedPinFixRow(task)
                         modelPicker(task)
                         listPicker(task)
                         Button { editingSchedule = true } label: {
@@ -2195,6 +2213,16 @@ private struct TaskDetailContent: View {
         assigneeAgent(task)?.runnerId.flatMap { model.runners?.runner($0) }
     }
 
+    /// A local provider's own page in the Web app, where its refusal is cleared. These clients do
+    /// not edit one; the row's Manage entry opens it there, the way a session's does.
+    private func webProviderURL(_ slug: String) -> URL? {
+        guard let base = model.baseURL else { return nil }
+        if let id = model.agents?.personalProviders.first(where: { $0.slug == slug })?.providerID {
+            return base.appendingPathComponent("providers/\(id)")
+        }
+        return base.appendingPathComponent("machines-and-models")
+    }
+
     /// What the pins judge the engine's credentials by: the account's keys and pools, and what the
     /// assignee's runner says about DeepSeek Harness and Antigravity — the two the server admits on the
     /// runner's own word. No engine health: this panel has none to judge (web parity).
@@ -2209,7 +2237,13 @@ private struct TaskDetailContent: View {
                              dshState: runner.map { DshRuntime.state(of: $0) },
                              cursorState: runner.map { CursorRuntime.state(of: $0) },
                              showsCursor: ProviderEngines.appleShowsEngine(CursorRuntime.engine,
-                                                                           runners: model.runners?.runners))
+                                                                           runners: model.runners?.runners),
+                             // A runner-scoped provider runs on the assignee's machine or not at
+                             // all, for the model the task would actually run.
+                             runnerID: runner?.id,
+                             runnerName: runner.map { RunnerPageFormat.displayName($0) },
+                             runnerCapabilities: runner?.capabilities,
+                             sessionModel: task.model)
     }
 
     /// The pins as the task holds them, with the account's runners in view: Cursor CLI is an Engine choice
@@ -2258,9 +2292,20 @@ private struct TaskDetailContent: View {
             get: { task.provider },
             set: { slug in
                 // A credential this machine can't run isn't a pin — it's a request for the install or the
-                // sign-in that would make it one, so go to that engine's page on the runner.
+                // sign-in that would make it one, so go to that engine's page on the runner. A local
+                // server's refusal is cleared on the provider's own page in the Web app.
                 if let slug, let row = rows.first(where: { $0.slug == slug }), row.unavailable != nil {
-                    if let rid = runner?.id, let engine = row.fixEngine { model.openRunnerEngine(rid, engine: engine) }
+                    switch SessionProviderChoices.localFixTarget(row) {
+                    case .providerPage(let manageable)?:
+                        if let url = webProviderURL(manageable) { openURL(url) }
+                    case .runner(let boundRunnerID)?:
+                        // The provider's own runner, not the task assignee's machine (ELSEWHERE).
+                        model.route(to: .runner(boundRunnerID))
+                    case nil:
+                        if let rid = runner?.id, let engine = row.fixEngine {
+                            model.openRunnerEngine(rid, engine: engine)
+                        }
+                    }
                     return
                 }
                 guard let request = pin.providerRequest(slug) else { return }
@@ -2276,7 +2321,7 @@ private struct TaskDetailContent: View {
             if !keys.isEmpty {
                 Section(pin.runEngine == "dsh" ? "Your DeepSeek keys" : "Your keys") {
                     ForEach(keys) { row in
-                        Text(row.unavailable.map { "\(row.label) — \($0) →" } ?? row.label).tag(Optional(row.slug))
+                        Text(providerPinLabel(row)).tag(Optional(row.slug))
                     }
                 }
             }
@@ -2292,12 +2337,99 @@ private struct TaskDetailContent: View {
         .disabled(tasks.isMutating(task.id))
     }
 
+    /// The credential this task would run on, when it cannot: the same refusal the Provider field
+    /// shows, with the row's own fix target. `nil` when the task can run.
+    private func blockedPin(_ task: TaskItem) -> ProviderChoice? {
+        let pin = runPin(task)
+        let sources = pinSources(task)
+        let firstDeepSeekKey = SessionProviderChoices.providers(for: "dsh", sources: sources).first { $0.kind == .key }
+        let provider = pin.runProvider(firstDeepSeekKey: firstDeepSeekKey?.slug)
+        return SessionProviderChoices.providers(for: pin.runEngine, sources: sources)
+            .first { $0.slug == provider && $0.unavailable != nil }
+    }
+
+    /// A pressable way to the fix even when the Provider field already shows the blocked value:
+    /// its sentence, and its own target (the provider page, or the runner the row is bound to).
+    @ViewBuilder
+    private func blockedPinFixRow(_ task: TaskItem) -> some View {
+        if let blocked = blockedPin(task), let target = SessionProviderChoices.localFixTarget(blocked) {
+            Button {
+                switch target {
+                case .providerPage(let slug):
+                    if let url = webProviderURL(slug) { openURL(url) }
+                case .runner(let boundRunnerID):
+                    model.route(to: .runner(boundRunnerID))
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Text(blocked.unavailable ?? "")
+                        .foregroundStyle(.secondary).lineLimit(2)
+                    Spacer(minLength: 8)
+                    Text(target.actionTitle).foregroundStyle(Color.accentColor)
+                }
+            }
+        } else if let blocked = blockedPin(task), blocked.fixEngine != nil {
+            // An engine install/sign-in refusal keeps its engine-page route; local rows never
+            // reach this branch because their fix target is known.
+            Button {
+                if let rid = runnerID(for: task), let engine = blocked.fixEngine {
+                    model.openRunnerEngine(rid, engine: engine)
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Text(blocked.unavailable ?? "")
+                        .foregroundStyle(.secondary).lineLimit(2)
+                    Spacer(minLength: 8)
+                    Text("Fix").foregroundStyle(Color.accentColor)
+                }
+            }
+        }
+    }
+
+    private func runnerID(for task: TaskItem) -> String? {
+        assigneeAgent(task)?.runnerId
+    }
+
+    /// A credential's row in the Provider field: a local server says what its runner last probed,
+    /// and — when it cannot run — why, and that its own page on the Web app clears it.
+    private func providerPinLabel(_ row: ProviderChoice) -> String {
+        guard let local = row.local else {
+            return row.unavailable.map { "\(row.label) — \($0) →" } ?? row.label
+        }
+        if let reason = local.refusal?.message {
+            let fix = row.fixProvider != nil ? " · manage →"
+                : (local.remedy == .runnerPage ? " · open runner →" : " →")
+            return "\(row.label) — \(reason)\(fix)"
+        }
+        return "\(row.label) · \(local.summary)"
+    }
+
+    /// Why one model of a local provider cannot be pinned for this task, or nil when it can.
+    private func localModelRefusal(_ task: TaskItem, model: String, provider: String,
+                                   sources: ChoiceSources) -> LocalProviderRefusal? {
+        guard let row = pinConfigured.first(where: { $0.slug == provider && $0.isRunnerScoped }) else {
+            return nil
+        }
+        let choice = SessionProviderChoices.providers(for: runPin(task).runEngine, sources: sources)
+            .first { $0.slug == provider }
+        if let refusal = choice?.local?.refusal {
+            switch refusal.code {
+            case .modelMissing, .capabilityMissing:
+                return LocalProviders.modelReadiness(row, model: model, now: sources.now)
+            default:
+                return refusal
+            }
+        }
+        return LocalProviders.modelReadiness(row, model: model, now: sources.now)
+    }
+
     private func modelPicker(_ task: TaskItem) -> some View {
         let pin = runPin(task)
         let sources = pinSources(task)
         let firstDeepSeekKey = SessionProviderChoices.providers(for: "dsh", sources: sources).first { $0.kind == .key }
+        let runProvider = pin.runProvider(firstDeepSeekKey: firstDeepSeekKey?.slug)
         let options = AgentDefaults.models(
-            engine: pin.runEngine, provider: pin.runProvider(firstDeepSeekKey: firstDeepSeekKey?.slug),
+            engine: pin.runEngine, provider: runProvider,
             catalog: model.agents?.modelCatalog(for: assigneeAgent(task)?.runnerId),
             configured: pinConfigured)
         // Unpinned on an assignee with smart selection on, each run's model is picked for it.
@@ -2305,11 +2437,22 @@ private struct TaskDetailContent: View {
             ? TaskDetailCopy.smartSelectionPlaceholder : "Provider default"
         return Picker(TaskDetailCopy.modelLabel, selection: Binding(
             get: { task.model },
-            set: { id in Task { await tasks.setModel(task.id, id) } }
+            set: { id in
+                // A model this local server no longer serves, or one without tools or enough
+                // context, is not a pin: the server would refuse the task's run.
+                if let id, localModelRefusal(task, model: id, provider: runProvider, sources: sources) != nil {
+                    return
+                }
+                Task { await tasks.setModel(task.id, id) }
+            }
         )) {
             Text(unpinned).tag(String?.none)
             ForEach(options) { option in
-                Text(option.name).tag(Optional(option.id))
+                // A local server's model carries the reason it cannot run beside its name, the way
+                // the composer's menu states it (web parity).
+                Text(localModelRefusal(task, model: option.id, provider: runProvider, sources: sources)
+                        .map { "\(option.name) — \($0.message)" } ?? option.name)
+                    .tag(Optional(option.id))
             }
             // A pinned id the catalogue doesn't name still has to read as itself, not vanish.
             if let pinned = task.model, !options.contains(where: { $0.id == pinned }) {

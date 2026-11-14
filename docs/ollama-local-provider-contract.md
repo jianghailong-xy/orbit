@@ -351,3 +351,44 @@ rather than re-run into the same answer. A later failure of any other kind puts 
 
 Tests: `src/shared/src/localProviderReadiness.spec.ts`, and `src/apiserver/src/providers/local-provider-dispatch.pg.spec.ts`,
 which runs every door against a fake Ollama on loopback.
+
+## 8. The clients (phase 4B)
+
+Task `34DuK9o19ElpYU5RxdkTg`. Connecting and editing a local provider stays on the Web app for the first
+release; every client reads one provider payload and applies one rule to it.
+
+**Reading a provider.** `scope`, `authMode` and `runnerId` ride on every provider read, and a runner-scoped
+row adds `local` (§3.2). OrbitKit decodes all four as optional fields, so a row from a server older than
+migration 0646 reads exactly as it did (`ConfiguredProvider.isRunnerScoped` false, no `local`), and a newer
+server's extra fields cost an older client nothing.
+
+**One rule, three languages.** OrbitKit's `LocalProviders` (`Models/LocalProvider.swift`) mirrors
+`src/shared/src/localProvider.ts` case for case: the same status derivation (DISABLED, NO_RUNNER, UNKNOWN,
+STALE, then the probe's own state), the same refusal codes, the same sentences and the same remedy — the
+provider's own page on the Web app, or its runner's page. A runner a row names but whose `capabilities` report
+has not arrived is UNKNOWN / `LOCAL_PROVIDER_RUNNER_OUTDATED`, never `LOCAL_PROVIDER_NO_RUNNER`: the runner
+exists, it simply has not said what it can do. `contracts/ollama-provider.fixtures.json` holds both
+implementations to the same 17 cases; `src/web/src/lib/localProvider.fixtures.test.ts` and OrbitKit's
+`LocalProviderFixtureTests` each read it and must agree on availability, the default model, the sentence and
+remedy, the context window, the effort list and the model options.
+
+**What the pickers say.** A runner-scoped row is listed under Claude Code with the Ollama preset's brand, its
+probe status (`Ready · 0.40.16`, `Not answering`, `Model missing`, …) and, when it cannot run, the refusal's
+sentence and where that is fixed: `Manage` opens its provider page on the Web app, and a probe or old-runner
+refusal opens the **runner the row is bound to** — `LocalChoice.runnerID` / `ProviderFixTarget`, never the
+session's or the assignee's machine, which for `LOCAL_PROVIDER_ELSEWHERE` is a different computer. The
+workspace hero, the composer and a task's Runs-with form read that one target (`localFixTarget`). It is never
+offered as a runnable choice when the session is on another runner,
+the runner no longer declares `ollama-probe/v1` and `ollama-run/v1`, the probe is missing, stale or
+unreachable, the target model is not on the instance, or it lacks tool calling or 65,536 tokens of context.
+The composer, an agent's hero and a task's Runs-with form all apply it; a new session, the resume of an ended
+one, and a task start do not send while it refuses.
+
+**Models and defaults.** A local row's model space is its own declared models followed by what its runner
+found on the instance (`AgentDefaults.localModelOptions`); its default is its declared default, else the first
+model it names, else nothing — never the built-in Claude default. An empty row and an empty instance therefore
+fail closed rather than borrowing a cloud model. The context window is the instance's measured one where it
+has it (it beats the copy saved on the row), and the effort list is the model's declared `reasoningLevels`.
+Two small Web-side corrections land with it: `workspaceDefaults.ts`'s `rowModelOptions`, `rowDefaultModel` and
+`contextWindowFor` read a runner-scoped row the same way, so the browser and the native clients name the same
+model and offer the same choices.

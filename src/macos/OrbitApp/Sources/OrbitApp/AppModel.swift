@@ -3245,16 +3245,6 @@ final class AppModel {
         nav.switchConsole(to: .console(sessionID: session.id, origin: .list))
     }
 
-    /// The project's session count, read by both the project sessions button and the page's
-    /// "Project · N sessions" (`SessionProjectSheet.sessionCount`). Nil until the page's read has
-    /// answered for this project.
-    func projectSessionCount(_ projectID: String) -> Int? {
-        SessionProjectSheet.sessionCount(
-            projectID: projectID,
-            page: projectSessionsAddress.map { ($0.projectID, projectSessions) },
-            answered: projectSessionsReadAt != nil)
-    }
-
     /// The sessions page a conversation's project sessions button reads and opens
     /// (`SessionProjectSheet.address`).
     func projectSheetAddress(_ projectID: String, session: Session?) -> SessionProjectAddress {
@@ -3262,6 +3252,17 @@ final class AppModel {
                                     agentID: session?.agent?.id ?? session?.agentId ?? selectedAgentID ?? "")
     }
     #endif
+
+    /// The project's session count, read by both the project sessions button and the page's
+    /// "Project · N sessions" (`SessionProjectSheet.sessionCount`). Nil until the page's read has
+    /// answered for this project. Not a phone-only read: the page draws its subtitle on every
+    /// platform, so the state it reads — and this question about it — is not behind `#if os(iOS)`.
+    func projectSessionCount(_ projectID: String) -> Int? {
+        SessionProjectSheet.sessionCount(
+            projectID: projectID,
+            page: projectSessionsAddress.map { ($0.projectID, projectSessions) },
+            answered: projectSessionsReadAt != nil)
+    }
 
     /// Load the owner's folder library: when a workspace's session list appears, and again when
     /// `folder.changed` says one was created, renamed or deleted, here or on another device.

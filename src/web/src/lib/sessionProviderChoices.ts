@@ -4,9 +4,17 @@ import {
   credentialIsAnthropicBound,
   ENGINE_CLI_NAMES,
   isAccountEngine,
+  localProviderReadiness,
+  localProviderRemedy,
+  localProviderStatus,
+  localTargetModel,
+  OLLAMA_PROBE_CAPABILITY,
   PROVIDER_PRESETS,
   withEnginePlanUsage,
   type AnthropicBoundCredential,
+  type LocalProviderRefusal,
+  type LocalProviderState,
+  type LocalProviderStatus,
   type ProviderBrand,
 } from '@orbit/shared';
 import type {
@@ -125,7 +133,45 @@ export interface ProviderChoice {
    *  Antigravity and Kimi — the engines whose CLI keeps a login per directory (Session.codexAccount,
    *  Session.claudeAccount, Session.antigravityAccount, Session.kimiAccount). */
   accounts?: AccountChoice[];
+  /** A runner-scoped local server (Ollama): what its runner last probed, why it cannot run the
+   *  session as it stands, and where that is fixed. Absent for every other credential. */
+  local?: LocalChoice;
 }
+
+/** What a picker says about a runner-scoped local server: its probe, the model it would run, and
+ *  the rule every server door applies. Mirrors OrbitKit's `LocalChoice`. */
+export interface LocalChoice {
+  status: LocalProviderStatus;
+  state: LocalProviderState;
+  /** "Ready", "Not answering", "Model missing". */
+  stateLabel: string;
+  /** The runner the row is bound to — the machine a runner remedy opens, even when the session is
+   *  elsewhere. Absent only when the row no longer names one. */
+  runnerId?: string;
+  /** The model the session would run — its own, else the row's default, else the first named. */
+  model?: string | null;
+  /** Why the session cannot run there now, in the server's own words; absent when it can. */
+  refusal?: LocalProviderRefusal;
+  /** Where a refusal is cleared: the provider's page on the web app, or its runner's page. */
+  remedy?: 'provider' | 'runner';
+  /** "Ready · 0.40.16", as a row says it beside the provider's name. */
+  summary: string;
+}
+
+const LOCAL_STATE_LABEL: Record<LocalProviderState, string> = {
+  READY: 'Ready',
+  UNREACHABLE: 'Not answering',
+  MALFORMED: 'Misconfigured',
+  REFUSED: 'Misconfigured',
+  CLOUD_ENABLED: 'Cloud enabled',
+  NO_MODELS: 'No models',
+  MODEL_MISSING: 'Model missing',
+  CAPABILITY_MISSING: "Model can't run Claude Code",
+  UNKNOWN: 'Not checked yet',
+  STALE: 'Status stale',
+  DISABLED: 'Turned off',
+  NO_RUNNER: 'No runner',
+};
 
 /** One of the runner's accounts of an engine, as a row under that engine in the picker. */
 export interface AccountChoice {
@@ -291,6 +337,98 @@ export interface ChoiceSources {
    *  verdict. Blocked, its Anthropic-bound credentials can't run Claude Code there; absent or null
    *  (a runner that doesn't check), nothing is gated. */
   region?: Pick<RunnerRegionView, 'verdict'> | null;
+  /** The runner the session is (or a draft would be) on — what a runner-scoped local provider is
+   *  checked against, since it runs on its bound runner or not at all. */
+  localRunner?: { id: string; name?: string | null; capabilities?: string[] | null } | null;
+  /** The model the session or draft would run, so a local provider is judged for it. */
+  sessionModel?: string | null;
+  /** The clock a probe's age is read against; defaults to now. */
+  now?: number;
+}
+
+/**
+ * A runner-scoped row as a picker reads it: the bound runner's probe and the rule every door applies
+ * (`localProviderReadiness`), for the model the session would run. `undefined` for any other row.
+ * Fails closed — a missing runner report or probe refuses, never reading as healthy.
+ */
+export function localChoiceFor(row: ConfiguredProvider, sources: ChoiceSources): LocalChoice | undefined {
+  if (row.scope !== 'runner') return undefined;
+  const now = sources.now ?? Date.now();
+  const facts = {
+    slug: row.slug,
+    // The served block is a derived state: DISABLED is the row's own reason even when a caller that
+    // lists disabled rows did not carry the `enabled` column.
+    enabled: (row.enabled ?? true) && row.local?.state !== 'DISABLED',
+    runnerId: row.runnerId ?? null,
+    probeState: row.local?.state ?? null,
+    probedAt: row.local?.probedAt ?? null,
+    probeVersion: row.local?.version ?? null,
+    probeLatencyMs: row.local?.latencyMs ?? null,
+    instanceModels: row.local?.models ?? null,
+  };
+  // A runner exists whenever the row names one; its capabilities are a separate report. A missing
+  // report is "this runner has not said", never "no runner" — the same reading OrbitKit's
+  // `localChoice` makes, so the two pickers answer alike.
+  const boundRunnerId = row.runnerId ?? null;
+  const onBoundRunner = boundRunnerId != null && sources.localRunner?.id === boundRunnerId;
+  const statusRunner = boundRunnerId == null
+    ? null
+    : onBoundRunner
+      ? {
+          capabilities: sources.localRunner?.capabilities ?? null,
+          capabilitiesReportedAt: sources.localRunner?.capabilities
+            ? new Date(now).toISOString()
+            : null,
+        }
+      : (() => {
+          const supported = row.local?.capability === 'SUPPORTED';
+          return {
+            capabilities: supported ? [OLLAMA_PROBE_CAPABILITY] : [],
+            capabilitiesReportedAt: row.local?.capability ? new Date(now).toISOString() : null,
+          };
+        })();
+  const status = localProviderStatus(facts, statusRunner, now);
+  const model = localTargetModel(row, sources.sessionModel ?? null);
+  // The gate judges the runner the session would be on, not the status's reader.
+  const sessionRunner = sources.localRunner
+    ? {
+        capabilities: sources.localRunner.capabilities ?? null,
+        capabilitiesReportedAt: sources.localRunner.capabilities
+          ? new Date(now).toISOString()
+          : null,
+      }
+    : null;
+  const refusal = localProviderReadiness(facts, {
+    runnerId: sources.localRunner?.id ?? null,
+    runner: sessionRunner,
+    model,
+  }, now) ?? undefined;
+  const state = status.state;
+  return {
+    status,
+    state,
+    stateLabel: LOCAL_STATE_LABEL[state],
+    ...(boundRunnerId ? { runnerId: boundRunnerId } : {}),
+    model,
+    ...(refusal ? { refusal, remedy: localProviderRemedy(refusal.code) } : {}),
+    summary: [LOCAL_STATE_LABEL[state], status.version].filter(Boolean).join(' · '),
+  };
+}
+
+/** Where a blocked local row's fix lives, as the row itself names it (OrbitKit's
+ *  `SessionProviderChoices.localFixTarget`). */
+export type ProviderFixTarget =
+  | { kind: 'provider'; href: string }
+  | { kind: 'runner'; id: string };
+
+export function localFixTarget(
+  choice: Pick<ProviderChoice, 'fixHref' | 'local'>,
+): ProviderFixTarget | undefined {
+  if (choice.fixHref) return { kind: 'provider', href: choice.fixHref };
+  if (choice.local?.remedy === 'runner' && choice.local.runnerId) {
+    return { kind: 'runner', id: choice.local.runnerId };
+  }
+  return undefined;
 }
 
 /** Why an Anthropic-bound credential can't run Claude Code on this runner, or nothing: the runner's
@@ -473,17 +611,37 @@ export function engineProviders(engine: AgentProvider, sources: ChoiceSources): 
         p.slug !== AgentProvider.OPENCODE &&
         providerEngines(p.slug, configured).includes(engine),
     )
-    .map((p) => ({
-      slug: p.slug,
-      label: p.label,
-      kind: 'key' as const,
-      ...brandForProvider(p.slug, p.label, p.presetSlug),
-      modelLabel: modelLabel(p.slug),
-      // A picker row knows a key's preset, not its endpoint (GET /providers leaves the URL out).
-      ...(regionBlocker(engine, sources, { kind: 'key', presetSlug: p.presetSlug ?? null }) ??
-        (carried ? { unavailable: carried, fixEngine: engine } : {})),
-      ...(pooled.has(p.slug) ? { inPool: true } : {}),
-    }));
+    .map((p) => {
+      // A local server is judged by the rule every door applies: its bound runner, that runner's
+      // declarations and the model the session would run. A key brings no such gate, so `local`
+      // stays absent and the row reads exactly as before.
+      const local = localChoiceFor(p, sources);
+      return {
+        slug: p.slug,
+        label: p.label,
+        kind: 'key' as const,
+        ...brandForProvider(p.slug, p.label, p.presetSlug),
+        modelLabel: modelLabel(p.slug),
+        ...(local
+          ? {
+              local,
+              ...(local.refusal
+                ? {
+                    unavailable: local.refusal.message,
+                    // A local refusal is cleared on the provider's own page (turned on, bound,
+                    // addressed, given a model) or its runner's page — never by signing in.
+                    ...(local.remedy === 'provider' ? { fixHref: '/settings/providers' } : {}),
+                  }
+                : carried
+                  ? { unavailable: carried, fixEngine: engine }
+                  : {})
+            }
+          : // A picker row knows a key's preset, not its endpoint (GET /providers leaves the URL out).
+            regionBlocker(engine, sources, { kind: 'key', presetSlug: p.presetSlug ?? null }) ??
+            (carried ? { unavailable: carried, fixEngine: engine } : {})),
+        ...(pooled.has(p.slug) ? { inPool: true } : {}),
+      };
+    });
 
   return [...own, ...poolChoices, ...keys];
 }

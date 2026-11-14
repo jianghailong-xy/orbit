@@ -204,4 +204,51 @@ describe('NewSessionProviderHero', () => {
     expect(markup('claude', { region: { verdict: 'allowed' } })).toBe(markup('claude'));
     expect(markup('claude')).not.toContain('Region not supported');
   });
+
+  // A local server bound to one machine, while this workspace runs on another: the reason names the
+  // bound machine and the link opens THAT machine, not the runner the hero was handed.
+  it('opens the runner a local provider is bound to, not the session’s own', () => {
+    const boundRunner = '019fc086-c7c7-7c92-8215-778ad8a6280b';
+    const ollama: ConfiguredProvider = {
+      slug: 'ollama',
+      label: 'Ollama',
+      runtime: 'claude',
+      models: [{ value: 'qwen3.8:27b', label: 'Qwen3.8 27B', contextWindow: 65536 }],
+      defaultModel: 'qwen3.8:27b',
+      presetSlug: 'ollama',
+      engines: ['claude'],
+      scope: 'runner',
+      authMode: 'none',
+      runnerId: boundRunner,
+      local: {
+        state: 'READY',
+        capability: 'SUPPORTED',
+        probedAt: '2026-11-14T00:00:30.000Z',
+        version: '0.40.16',
+        latencyMs: 12,
+        models: [{ value: 'qwen3.8:27b', label: 'Qwen3.8 27B', contextWindow: 65536, tools: true }],
+      },
+    };
+    const sources: ChoiceSources = {
+      configured: [ollama],
+      engineHealth: [{ engine: AgentProvider.CLAUDE, installed: true, auth: 'yes' }],
+      localRunner: { id: RUNNER_ID, capabilities: ['ollama-probe/v1', 'ollama-run/v1'] },
+      sessionModel: null,
+      now: Date.parse('2026-11-14T00:01:00.000Z'),
+    };
+    const engines = engineChoices(sources, [{ engine: AgentProvider.CLAUDE, provider: 'ollama' }]);
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <NewSessionProviderHero
+          current={currentEngineChoice(AgentProvider.CLAUDE, 'ollama', engines, sources)}
+          engines={engines}
+          onPick={() => {}}
+          runnerId={RUNNER_ID}
+        />
+      </MemoryRouter>,
+    );
+    expect(html).toContain('runs only on the runner it is bound to; start this session on that runner');
+    expect(html).toContain(`href="/settings/machines/${encodeId(boundRunner)}"`);
+    expect(html).not.toContain(`href="/settings/machines/${encodeId(RUNNER_ID)}?engine=claude"`);
+  });
 });

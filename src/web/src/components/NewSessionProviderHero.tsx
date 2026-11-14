@@ -4,7 +4,7 @@ import type { AgentProvider } from '@orbit/shared';
 import { CLAUDE_REGION_DETAILS } from '../lib/claudeRegionCopy';
 import { encodeId } from '../lib/idCodec';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
-import { providerNameOn, type EngineChoice } from '../lib/sessionProviderChoices';
+import { localFixTarget, providerNameOn, type EngineChoice, type ProviderChoice } from '../lib/sessionProviderChoices';
 import { Popover } from './ui/Popover';
 
 /** The brand mark. Same artwork and tile as /providers, sized up: at hero size it carries a soft
@@ -94,9 +94,17 @@ export function NewSessionProviderHero({
   // point at the row — where its Install and Sign in buttons are — instead of leaving the user to
   // find it among every runner they own. A problem that is not this machine's (an account pool none
   // of whose accounts can run, a DeepSeek key not connected yet) names its own page instead.
-  const fixLink = (choice: Pick<EngineChoice, 'slug' | 'fixEngine' | 'fixHref'>) =>
-    choice.fixHref ?? `/settings/machines/${encodeId(runnerId)}?engine=${choice.fixEngine ?? choice.slug}`;
-  const onRunner = (choice: Pick<EngineChoice, 'fixHref'>) => (choice.fixHref ? '' : ' on this runner');
+  const fixLink = (
+    choice: Pick<EngineChoice, 'slug' | 'fixEngine' | 'fixHref'>,
+    local?: ProviderChoice['local'],
+  ) => {
+    // A local row names the runner it is BOUND to, not the one this hero is for.
+    const target = local ? localFixTarget({ fixHref: choice.fixHref, local }) : undefined;
+    if (target?.kind === 'runner') return `/settings/machines/${encodeId(target.id)}`;
+    return choice.fixHref ?? `/settings/machines/${encodeId(runnerId)}?engine=${choice.fixEngine ?? choice.slug}`;
+  };
+  const onRunner = (choice: Pick<EngineChoice, 'fixHref'>, local?: ProviderChoice['local']) =>
+    (choice.fixHref || local?.remedy === 'runner' ? '' : ' on this runner');
   const modelLabel = currentModelLabel ?? current.provider?.modelLabel ?? '';
 
   // An engine none of whose credentials this runner can run can't start a session, so the row doesn't
@@ -107,9 +115,9 @@ export function NewSessionProviderHero({
     engine.unavailable || !engine.provider ? (
       <Link
         key={engine.slug}
-        to={fixLink(engine)}
+        to={fixLink(engine, engine.provider?.local)}
         className="np-row np-unavailable"
-        title={`${engine.label}: ${engine.unavailable}${onRunner(engine)}${engine.regionBlocked ? '' : ' — fix it on the Machines & models page'}`}
+        title={`${engine.label}: ${engine.unavailable}${onRunner(engine, engine.provider?.local)}${engine.regionBlocked ? '' : ' — fix it on the Machines & models page'}`}
         onClick={() => setOpen(false)}
       >
         <BrandMark choice={engine} size={20} />
@@ -169,9 +177,9 @@ export function NewSessionProviderHero({
       <b>{providerNameOn(current.slug, blocked)}</b>
       <span className="np-dot">·</span>
       {blocked.unavailable}
-      {onRunner(blocked)}
+      {onRunner(blocked, blocked.local)}
       <span className="np-dot">·</span>
-      <Link to={fixLink({ slug: current.slug, fixEngine: blocked.fixEngine, fixHref: blocked.fixHref })}>
+      <Link to={fixLink({ slug: current.slug, fixEngine: blocked.fixEngine, fixHref: blocked.fixHref }, blocked.local)}>
         {blocked.regionBlocked ? CLAUDE_REGION_DETAILS : 'Fix it'}
       </Link>
     </div>

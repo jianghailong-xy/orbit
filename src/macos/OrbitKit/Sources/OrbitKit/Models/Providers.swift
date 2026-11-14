@@ -73,7 +73,21 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
     /// `CursorKeyCheckState`) — and when. Both nil until a runner has checked it, and on every other key.
     public var keyCheckState: String? = nil
     public var keyCheckedAt: String? = nil
+    /// Where this row can be dispatched from: `account` everywhere its owner runs sessions, or
+    /// `runner` on one machine only (a local Ollama). Absent from an older server, which reads as
+    /// account-scoped, exactly as every row was before migration 0646.
+    public var scope: String? = nil
+    /// How the engine authenticates: `bearer` with the stored key, or `none` (a local server).
+    public var authMode: String? = nil
+    /// The runner a runner-scoped row runs on — only while it is still the row owner's; else null.
+    public var runnerId: String? = nil
+    /// A runner-scoped row's status: what its bound runner last probed. Present on such a row only.
+    public var local: LocalProviderStatus? = nil
     public var id: String { slug }
+
+    /// Whether this row is a local server bound to one runner (`scope: runner`, `authMode: none`).
+    /// A row from an older server has no scope and is an ordinary account key.
+    public var isRunnerScoped: Bool { scope == "runner" }
 
     private enum CodingKeys: String, CodingKey {
         case providerID = "id"
@@ -82,6 +96,7 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
         case baseUrl, hasApiKey
         case enabled
         case keyCheckState, keyCheckedAt
+        case scope, authMode, runnerId, local
     }
 
     public init(slug: String, label: String, runtime: String? = nil,
@@ -89,7 +104,8 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
                 presetSlug: String? = nil, modelsFromRuntime: Bool? = nil,
                 planUsage: PlanUsageSnapshot? = nil, runsOnOpenCode: Bool? = nil,
                 baseUrl: String? = nil, hasApiKey: Bool? = nil, enabled: Bool? = nil,
-                engines: [String]? = nil) {
+                engines: [String]? = nil, scope: String? = nil, authMode: String? = nil,
+                runnerId: String? = nil, local: LocalProviderStatus? = nil) {
         self.slug = slug
         self.label = label
         self.runtime = runtime
@@ -103,6 +119,10 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
         self.hasApiKey = hasApiKey
         self.enabled = enabled
         self.engines = engines
+        self.scope = scope
+        self.authMode = authMode
+        self.runnerId = runnerId
+        self.local = local
     }
 }
 

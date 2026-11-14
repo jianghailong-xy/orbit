@@ -1,0 +1,1839 @@
+{
+  "version": 1,
+  "doc": "Shared cases for a runner-scoped local provider (contracts/ollama-provider.fixtures.json). src/web/src/lib/localProvider.fixtures.test.ts and OrbitKit's LocalProviderFixtureTests read the same rows and must give the same answers: state, capability, default model, refusal (with its sentence and remedy), context window, efforts and model options.",
+  "cases": [
+    {
+      "name": "ready",
+      "now": "2026-11-14T00:01:00Z",
+      "row": {
+        "slug": "ollama",
+        "label": "Ollama",
+        "runtime": "claude",
+        "engines": [
+          "claude"
+        ],
+        "scope": "runner",
+        "authMode": "none",
+        "runnerId": "runner-a",
+        "enabled": true,
+        "probeState": "READY",
+        "probedAt": "2026-11-14T00:00:30Z",
+        "probeVersion": "0.40.16",
+        "probeLatencyMs": 12,
+        "instanceModels": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 65536,
+            "tools": true
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536,
+            "tools": true
+          }
+        ],
+        "defaultModel": "qwen3.8:27b",
+        "models": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 32768,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "xhigh"
+            ]
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536
+          }
+        ],
+        "local": {
+          "state": "READY",
+          "capability": "SUPPORTED",
+          "probedAt": "2026-11-14T00:00:30Z",
+          "version": "0.40.16",
+          "latencyMs": 12,
+          "models": [
+            {
+              "value": "qwen3.8:27b",
+              "label": "Qwen3.8 27B",
+              "contextWindow": 65536,
+              "tools": true
+            },
+            {
+              "value": "qwen3-coder:30b",
+              "label": "Qwen3 Coder 30B",
+              "contextWindow": 65536,
+              "tools": true
+            }
+          ]
+        },
+        "presetSlug": "ollama"
+      },
+      "runner": {
+        "capabilities": [
+          "ollama-probe/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "session": {
+        "runnerId": "runner-a",
+        "model": null
+      },
+      "sessionRunner": {
+        "capabilities": [
+          "ollama-probe/v1",
+          "ollama-run/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "expect": {
+        "state": "READY",
+        "capability": "SUPPORTED",
+        "targetModel": "qwen3.8:27b",
+        "refusal": null,
+        "remedy": null,
+        "contextWindow": 65536,
+        "efforts": [
+          "",
+          "low",
+          "medium",
+          "xhigh",
+          "ultra"
+        ],
+        "modelOptions": [
+          "qwen3.8:27b",
+          "qwen3-coder:30b"
+        ],
+        "canChoose": true
+      }
+    },
+    {
+      "name": "unreachable",
+      "now": "2026-11-14T00:01:00Z",
+      "row": {
+        "slug": "ollama",
+        "label": "Ollama",
+        "runtime": "claude",
+        "engines": [
+          "claude"
+        ],
+        "scope": "runner",
+        "authMode": "none",
+        "runnerId": "runner-a",
+        "enabled": true,
+        "probeState": "UNREACHABLE",
+        "probedAt": "2026-11-14T00:00:30Z",
+        "probeVersion": "0.40.16",
+        "probeLatencyMs": 12,
+        "instanceModels": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 65536,
+            "tools": true
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536,
+            "tools": true
+          }
+        ],
+        "defaultModel": "qwen3.8:27b",
+        "models": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 32768,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "xhigh"
+            ]
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536
+          }
+        ],
+        "local": {
+          "state": "UNREACHABLE",
+          "capability": "SUPPORTED",
+          "probedAt": "2026-11-14T00:00:30Z",
+          "version": "0.40.16",
+          "latencyMs": 12,
+          "models": [
+            {
+              "value": "qwen3.8:27b",
+              "label": "Qwen3.8 27B",
+              "contextWindow": 65536,
+              "tools": true
+            },
+            {
+              "value": "qwen3-coder:30b",
+              "label": "Qwen3 Coder 30B",
+              "contextWindow": 65536,
+              "tools": true
+            }
+          ]
+        },
+        "presetSlug": "ollama"
+      },
+      "runner": {
+        "capabilities": [
+          "ollama-probe/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "session": {
+        "runnerId": "runner-a",
+        "model": null
+      },
+      "sessionRunner": {
+        "capabilities": [
+          "ollama-probe/v1",
+          "ollama-run/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "expect": {
+        "state": "UNREACHABLE",
+        "capability": "SUPPORTED",
+        "targetModel": "qwen3.8:27b",
+        "refusal": {
+          "code": "LOCAL_PROVIDER_UNREACHABLE",
+          "message": "Local provider \"ollama\" is not answering on its runner (stopped, still loading, or busy); this session starts once it answers"
+        },
+        "remedy": "runner",
+        "contextWindow": 65536,
+        "efforts": [
+          "",
+          "low",
+          "medium",
+          "xhigh",
+          "ultra"
+        ],
+        "modelOptions": [
+          "qwen3.8:27b",
+          "qwen3-coder:30b"
+        ],
+        "canChoose": false
+      }
+    },
+    {
+      "name": "stale",
+      "now": "2026-11-14T00:01:00Z",
+      "row": {
+        "slug": "ollama",
+        "label": "Ollama",
+        "runtime": "claude",
+        "engines": [
+          "claude"
+        ],
+        "scope": "runner",
+        "authMode": "none",
+        "runnerId": "runner-a",
+        "enabled": true,
+        "probeState": "READY",
+        "probedAt": "2026-11-13T23:00:00Z",
+        "probeVersion": "0.40.16",
+        "probeLatencyMs": 12,
+        "instanceModels": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 65536,
+            "tools": true
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536,
+            "tools": true
+          }
+        ],
+        "defaultModel": "qwen3.8:27b",
+        "models": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 32768,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "xhigh"
+            ]
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536
+          }
+        ],
+        "local": {
+          "state": "READY",
+          "capability": "SUPPORTED",
+          "probedAt": "2026-11-13T23:00:00Z",
+          "version": "0.40.16",
+          "latencyMs": 12,
+          "models": [
+            {
+              "value": "qwen3.8:27b",
+              "label": "Qwen3.8 27B",
+              "contextWindow": 65536,
+              "tools": true
+            },
+            {
+              "value": "qwen3-coder:30b",
+              "label": "Qwen3 Coder 30B",
+              "contextWindow": 65536,
+              "tools": true
+            }
+          ]
+        },
+        "presetSlug": "ollama"
+      },
+      "runner": {
+        "capabilities": [
+          "ollama-probe/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "session": {
+        "runnerId": "runner-a",
+        "model": null
+      },
+      "sessionRunner": {
+        "capabilities": [
+          "ollama-probe/v1",
+          "ollama-run/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "expect": {
+        "state": "STALE",
+        "capability": "SUPPORTED",
+        "targetModel": "qwen3.8:27b",
+        "refusal": {
+          "code": "LOCAL_PROVIDER_STALE",
+          "message": "Local provider \"ollama\" has not been checked recently; its runner may be offline. This session starts once it reports again"
+        },
+        "remedy": "runner",
+        "contextWindow": 65536,
+        "efforts": [
+          "",
+          "low",
+          "medium",
+          "xhigh",
+          "ultra"
+        ],
+        "modelOptions": [
+          "qwen3.8:27b",
+          "qwen3-coder:30b"
+        ],
+        "canChoose": false
+      }
+    },
+    {
+      "name": "unprobed",
+      "now": "2026-11-14T00:01:00Z",
+      "row": {
+        "slug": "ollama",
+        "label": "Ollama",
+        "runtime": "claude",
+        "engines": [
+          "claude"
+        ],
+        "scope": "runner",
+        "authMode": "none",
+        "runnerId": "runner-a",
+        "enabled": true,
+        "probeState": null,
+        "probedAt": null,
+        "probeVersion": "0.40.16",
+        "probeLatencyMs": 12,
+        "instanceModels": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 65536,
+            "tools": true
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536,
+            "tools": true
+          }
+        ],
+        "defaultModel": "qwen3.8:27b",
+        "models": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 32768,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "xhigh"
+            ]
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536
+          }
+        ],
+        "local": {
+          "state": "UNKNOWN",
+          "capability": "SUPPORTED",
+          "probedAt": null,
+          "version": null,
+          "latencyMs": null,
+          "models": [
+            {
+              "value": "qwen3.8:27b",
+              "label": "Qwen3.8 27B",
+              "contextWindow": 65536,
+              "tools": true
+            },
+            {
+              "value": "qwen3-coder:30b",
+              "label": "Qwen3 Coder 30B",
+              "contextWindow": 65536,
+              "tools": true
+            }
+          ]
+        },
+        "presetSlug": "ollama"
+      },
+      "runner": {
+        "capabilities": [
+          "ollama-probe/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "session": {
+        "runnerId": "runner-a",
+        "model": null
+      },
+      "sessionRunner": {
+        "capabilities": [
+          "ollama-probe/v1",
+          "ollama-run/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "expect": {
+        "state": "UNKNOWN",
+        "capability": "SUPPORTED",
+        "targetModel": "qwen3.8:27b",
+        "refusal": {
+          "code": "LOCAL_PROVIDER_UNPROBED",
+          "message": "Local provider \"ollama\" has not been checked by its runner yet; this session starts once it is"
+        },
+        "remedy": "runner",
+        "contextWindow": 65536,
+        "efforts": [
+          "",
+          "low",
+          "medium",
+          "xhigh",
+          "ultra"
+        ],
+        "modelOptions": [
+          "qwen3.8:27b",
+          "qwen3-coder:30b"
+        ],
+        "canChoose": false
+      }
+    },
+    {
+      "name": "runner-outdated",
+      "now": "2026-11-14T00:01:00Z",
+      "row": {
+        "slug": "ollama",
+        "label": "Ollama",
+        "runtime": "claude",
+        "engines": [
+          "claude"
+        ],
+        "scope": "runner",
+        "authMode": "none",
+        "runnerId": "runner-a",
+        "enabled": true,
+        "probeState": "READY",
+        "probedAt": "2026-11-14T00:00:30Z",
+        "probeVersion": "0.40.16",
+        "probeLatencyMs": 12,
+        "instanceModels": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 65536,
+            "tools": true
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536,
+            "tools": true
+          }
+        ],
+        "defaultModel": "qwen3.8:27b",
+        "models": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 32768,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "xhigh"
+            ]
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536
+          }
+        ],
+        "local": {
+          "state": "READY",
+          "capability": "SUPPORTED",
+          "probedAt": "2026-11-14T00:00:30Z",
+          "version": "0.40.16",
+          "latencyMs": 12,
+          "models": [
+            {
+              "value": "qwen3.8:27b",
+              "label": "Qwen3.8 27B",
+              "contextWindow": 65536,
+              "tools": true
+            },
+            {
+              "value": "qwen3-coder:30b",
+              "label": "Qwen3 Coder 30B",
+              "contextWindow": 65536,
+              "tools": true
+            }
+          ]
+        },
+        "presetSlug": "ollama"
+      },
+      "runner": {
+        "capabilities": [
+          "ollama-probe/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "session": {
+        "runnerId": "runner-a",
+        "model": null
+      },
+      "sessionRunner": {
+        "capabilities": [
+          "ollama-probe/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "expect": {
+        "state": "READY",
+        "capability": "SUPPORTED",
+        "targetModel": "qwen3.8:27b",
+        "refusal": {
+          "code": "LOCAL_PROVIDER_RUNNER_OUTDATED",
+          "message": "Local provider \"ollama\" needs a runner that keeps its session on the local endpoint: update the runner it is bound to, or see that runner's log for why it stopped offering local providers"
+        },
+        "remedy": "runner",
+        "contextWindow": 65536,
+        "efforts": [
+          "",
+          "low",
+          "medium",
+          "xhigh",
+          "ultra"
+        ],
+        "modelOptions": [
+          "qwen3.8:27b",
+          "qwen3-coder:30b"
+        ],
+        "canChoose": false
+      }
+    },
+    {
+      "name": "old-runner",
+      "now": "2026-11-14T00:01:00Z",
+      "row": {
+        "slug": "ollama",
+        "label": "Ollama",
+        "runtime": "claude",
+        "engines": [
+          "claude"
+        ],
+        "scope": "runner",
+        "authMode": "none",
+        "runnerId": "runner-a",
+        "enabled": true,
+        "probeState": "READY",
+        "probedAt": "2026-11-14T00:00:30Z",
+        "probeVersion": "0.40.16",
+        "probeLatencyMs": 12,
+        "instanceModels": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 65536,
+            "tools": true
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536,
+            "tools": true
+          }
+        ],
+        "defaultModel": "qwen3.8:27b",
+        "models": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 32768,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "xhigh"
+            ]
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536
+          }
+        ],
+        "local": {
+          "state": "READY",
+          "capability": "SUPPORTED",
+          "probedAt": "2026-11-14T00:00:30Z",
+          "version": "0.40.16",
+          "latencyMs": 12,
+          "models": [
+            {
+              "value": "qwen3.8:27b",
+              "label": "Qwen3.8 27B",
+              "contextWindow": 65536,
+              "tools": true
+            },
+            {
+              "value": "qwen3-coder:30b",
+              "label": "Qwen3 Coder 30B",
+              "contextWindow": 65536,
+              "tools": true
+            }
+          ]
+        },
+        "presetSlug": "ollama"
+      },
+      "runner": {
+        "capabilities": [],
+        "capabilitiesReportedAt": null
+      },
+      "session": {
+        "runnerId": "runner-a",
+        "model": null
+      },
+      "sessionRunner": {
+        "capabilities": [],
+        "capabilitiesReportedAt": null
+      },
+      "expect": {
+        "state": "UNKNOWN",
+        "capability": "UNKNOWN",
+        "targetModel": "qwen3.8:27b",
+        "refusal": {
+          "code": "LOCAL_PROVIDER_RUNNER_OUTDATED",
+          "message": "Local provider \"ollama\" needs a runner that keeps its session on the local endpoint: update the runner it is bound to, or see that runner's log for why it stopped offering local providers"
+        },
+        "remedy": "runner",
+        "contextWindow": 65536,
+        "efforts": [
+          "",
+          "low",
+          "medium",
+          "xhigh",
+          "ultra"
+        ],
+        "modelOptions": [
+          "qwen3.8:27b",
+          "qwen3-coder:30b"
+        ],
+        "canChoose": false
+      }
+    },
+    {
+      "name": "elsewhere",
+      "now": "2026-11-14T00:01:00Z",
+      "row": {
+        "slug": "ollama",
+        "label": "Ollama",
+        "runtime": "claude",
+        "engines": [
+          "claude"
+        ],
+        "scope": "runner",
+        "authMode": "none",
+        "runnerId": "runner-a",
+        "enabled": true,
+        "probeState": "READY",
+        "probedAt": "2026-11-14T00:00:30Z",
+        "probeVersion": "0.40.16",
+        "probeLatencyMs": 12,
+        "instanceModels": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 65536,
+            "tools": true
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536,
+            "tools": true
+          }
+        ],
+        "defaultModel": "qwen3.8:27b",
+        "models": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 32768,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "xhigh"
+            ]
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536
+          }
+        ],
+        "local": {
+          "state": "READY",
+          "capability": "SUPPORTED",
+          "probedAt": "2026-11-14T00:00:30Z",
+          "version": "0.40.16",
+          "latencyMs": 12,
+          "models": [
+            {
+              "value": "qwen3.8:27b",
+              "label": "Qwen3.8 27B",
+              "contextWindow": 65536,
+              "tools": true
+            },
+            {
+              "value": "qwen3-coder:30b",
+              "label": "Qwen3 Coder 30B",
+              "contextWindow": 65536,
+              "tools": true
+            }
+          ]
+        },
+        "presetSlug": "ollama"
+      },
+      "runner": {
+        "capabilities": [
+          "ollama-probe/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "session": {
+        "runnerId": "runner-b",
+        "model": null
+      },
+      "sessionRunner": {
+        "capabilities": [
+          "ollama-probe/v1",
+          "ollama-run/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "expect": {
+        "state": "READY",
+        "capability": "SUPPORTED",
+        "targetModel": "qwen3.8:27b",
+        "refusal": {
+          "code": "LOCAL_PROVIDER_ELSEWHERE",
+          "message": "Local provider \"ollama\" runs only on the runner it is bound to; start this session on that runner"
+        },
+        "remedy": "runner",
+        "contextWindow": 65536,
+        "efforts": [
+          "",
+          "low",
+          "medium",
+          "xhigh",
+          "ultra"
+        ],
+        "modelOptions": [
+          "qwen3.8:27b",
+          "qwen3-coder:30b"
+        ],
+        "canChoose": false
+      }
+    },
+    {
+      "name": "model-removed",
+      "now": "2026-11-14T00:01:00Z",
+      "row": {
+        "slug": "ollama",
+        "label": "Ollama",
+        "runtime": "claude",
+        "engines": [
+          "claude"
+        ],
+        "scope": "runner",
+        "authMode": "none",
+        "runnerId": "runner-a",
+        "enabled": true,
+        "probeState": "READY",
+        "probedAt": "2026-11-14T00:00:30Z",
+        "probeVersion": "0.40.16",
+        "probeLatencyMs": 12,
+        "instanceModels": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 65536,
+            "tools": true
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536,
+            "tools": true
+          }
+        ],
+        "defaultModel": "qwen3.8:27b",
+        "models": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 32768,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "xhigh"
+            ]
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536
+          }
+        ],
+        "local": {
+          "state": "READY",
+          "capability": "SUPPORTED",
+          "probedAt": "2026-11-14T00:00:30Z",
+          "version": "0.40.16",
+          "latencyMs": 12,
+          "models": [
+            {
+              "value": "qwen3.8:27b",
+              "label": "Qwen3.8 27B",
+              "contextWindow": 65536,
+              "tools": true
+            },
+            {
+              "value": "qwen3-coder:30b",
+              "label": "Qwen3 Coder 30B",
+              "contextWindow": 65536,
+              "tools": true
+            }
+          ]
+        },
+        "presetSlug": "ollama"
+      },
+      "runner": {
+        "capabilities": [
+          "ollama-probe/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "session": {
+        "runnerId": "runner-a",
+        "model": "qwen3.5:4b"
+      },
+      "sessionRunner": {
+        "capabilities": [
+          "ollama-probe/v1",
+          "ollama-run/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "expect": {
+        "state": "READY",
+        "capability": "SUPPORTED",
+        "targetModel": "qwen3.5:4b",
+        "refusal": {
+          "code": "LOCAL_PROVIDER_MODEL_MISSING",
+          "message": "Local provider \"ollama\" does not serve model \"qwen3.5:4b\"; pull it on its runner or choose another"
+        },
+        "remedy": "provider",
+        "contextWindow": null,
+        "efforts": [
+          "",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ],
+        "modelOptions": [
+          "qwen3.8:27b",
+          "qwen3-coder:30b"
+        ],
+        "canChoose": false
+      }
+    },
+    {
+      "name": "no-tools",
+      "now": "2026-11-14T00:01:00Z",
+      "row": {
+        "slug": "ollama",
+        "label": "Ollama",
+        "runtime": "claude",
+        "engines": [
+          "claude"
+        ],
+        "scope": "runner",
+        "authMode": "none",
+        "runnerId": "runner-a",
+        "enabled": true,
+        "probeState": "READY",
+        "probedAt": "2026-11-14T00:00:30Z",
+        "probeVersion": "0.40.16",
+        "probeLatencyMs": 12,
+        "instanceModels": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 65536,
+            "tools": false
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536,
+            "tools": true
+          }
+        ],
+        "defaultModel": "qwen3.8:27b",
+        "models": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 32768,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "xhigh"
+            ]
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536
+          }
+        ],
+        "local": {
+          "state": "READY",
+          "capability": "SUPPORTED",
+          "probedAt": "2026-11-14T00:00:30Z",
+          "version": "0.40.16",
+          "latencyMs": 12,
+          "models": [
+            {
+              "value": "qwen3.8:27b",
+              "label": "Qwen3.8 27B",
+              "contextWindow": 65536,
+              "tools": false
+            },
+            {
+              "value": "qwen3-coder:30b",
+              "label": "Qwen3 Coder 30B",
+              "contextWindow": 65536,
+              "tools": true
+            }
+          ]
+        },
+        "presetSlug": "ollama"
+      },
+      "runner": {
+        "capabilities": [
+          "ollama-probe/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "session": {
+        "runnerId": "runner-a",
+        "model": null
+      },
+      "sessionRunner": {
+        "capabilities": [
+          "ollama-probe/v1",
+          "ollama-run/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "expect": {
+        "state": "READY",
+        "capability": "SUPPORTED",
+        "targetModel": "qwen3.8:27b",
+        "refusal": {
+          "code": "LOCAL_PROVIDER_CAPABILITY_MISSING",
+          "message": "Local provider \"ollama\" serves model \"qwen3.8:27b\" without tool calling; choose a model with tools"
+        },
+        "remedy": "provider",
+        "contextWindow": 65536,
+        "efforts": [
+          "",
+          "low",
+          "medium",
+          "xhigh",
+          "ultra"
+        ],
+        "modelOptions": [
+          "qwen3.8:27b",
+          "qwen3-coder:30b"
+        ],
+        "canChoose": false
+      }
+    },
+    {
+      "name": "small-context",
+      "now": "2026-11-14T00:01:00Z",
+      "row": {
+        "slug": "ollama",
+        "label": "Ollama",
+        "runtime": "claude",
+        "engines": [
+          "claude"
+        ],
+        "scope": "runner",
+        "authMode": "none",
+        "runnerId": "runner-a",
+        "enabled": true,
+        "probeState": "READY",
+        "probedAt": "2026-11-14T00:00:30Z",
+        "probeVersion": "0.40.16",
+        "probeLatencyMs": 12,
+        "instanceModels": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 32768,
+            "tools": true
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536,
+            "tools": true
+          }
+        ],
+        "defaultModel": "qwen3.8:27b",
+        "models": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 32768,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "xhigh"
+            ]
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536
+          }
+        ],
+        "local": {
+          "state": "READY",
+          "capability": "SUPPORTED",
+          "probedAt": "2026-11-14T00:00:30Z",
+          "version": "0.40.16",
+          "latencyMs": 12,
+          "models": [
+            {
+              "value": "qwen3.8:27b",
+              "label": "Qwen3.8 27B",
+              "contextWindow": 32768,
+              "tools": true
+            },
+            {
+              "value": "qwen3-coder:30b",
+              "label": "Qwen3 Coder 30B",
+              "contextWindow": 65536,
+              "tools": true
+            }
+          ]
+        },
+        "presetSlug": "ollama"
+      },
+      "runner": {
+        "capabilities": [
+          "ollama-probe/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "session": {
+        "runnerId": "runner-a",
+        "model": null
+      },
+      "sessionRunner": {
+        "capabilities": [
+          "ollama-probe/v1",
+          "ollama-run/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "expect": {
+        "state": "READY",
+        "capability": "SUPPORTED",
+        "targetModel": "qwen3.8:27b",
+        "refusal": {
+          "code": "LOCAL_PROVIDER_CAPABILITY_MISSING",
+          "message": "Local provider \"ollama\" serves model \"qwen3.8:27b\" with less than 65536 tokens of context; choose a larger model"
+        },
+        "remedy": "provider",
+        "contextWindow": 32768,
+        "efforts": [
+          "",
+          "low",
+          "medium",
+          "xhigh",
+          "ultra"
+        ],
+        "modelOptions": [
+          "qwen3.8:27b",
+          "qwen3-coder:30b"
+        ],
+        "canChoose": false
+      }
+    },
+    {
+      "name": "no-models",
+      "now": "2026-11-14T00:01:00Z",
+      "row": {
+        "slug": "ollama",
+        "label": "Ollama",
+        "runtime": "claude",
+        "engines": [
+          "claude"
+        ],
+        "scope": "runner",
+        "authMode": "none",
+        "runnerId": "runner-a",
+        "enabled": true,
+        "probeState": "NO_MODELS",
+        "probedAt": "2026-11-14T00:00:30Z",
+        "probeVersion": "0.40.16",
+        "probeLatencyMs": 12,
+        "instanceModels": [],
+        "defaultModel": "qwen3.8:27b",
+        "models": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 32768,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "xhigh"
+            ]
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536
+          }
+        ],
+        "local": {
+          "state": "NO_MODELS",
+          "capability": "SUPPORTED",
+          "probedAt": "2026-11-14T00:00:30Z",
+          "version": "0.40.16",
+          "latencyMs": 12,
+          "models": []
+        },
+        "presetSlug": "ollama"
+      },
+      "runner": {
+        "capabilities": [
+          "ollama-probe/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "session": {
+        "runnerId": "runner-a",
+        "model": null
+      },
+      "sessionRunner": {
+        "capabilities": [
+          "ollama-probe/v1",
+          "ollama-run/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "expect": {
+        "state": "NO_MODELS",
+        "capability": "SUPPORTED",
+        "targetModel": "qwen3.8:27b",
+        "refusal": {
+          "code": "LOCAL_PROVIDER_NO_MODELS",
+          "message": "Local provider \"ollama\" serves no local model; pull one on its runner"
+        },
+        "remedy": "provider",
+        "contextWindow": 32768,
+        "efforts": [
+          "",
+          "low",
+          "medium",
+          "xhigh",
+          "ultra"
+        ],
+        "modelOptions": [
+          "qwen3.8:27b",
+          "qwen3-coder:30b"
+        ],
+        "canChoose": false
+      }
+    },
+    {
+      "name": "malformed",
+      "now": "2026-11-14T00:01:00Z",
+      "row": {
+        "slug": "ollama",
+        "label": "Ollama",
+        "runtime": "claude",
+        "engines": [
+          "claude"
+        ],
+        "scope": "runner",
+        "authMode": "none",
+        "runnerId": "runner-a",
+        "enabled": true,
+        "probeState": "MALFORMED",
+        "probedAt": "2026-11-14T00:00:30Z",
+        "probeVersion": "0.40.16",
+        "probeLatencyMs": 12,
+        "instanceModels": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 65536,
+            "tools": true
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536,
+            "tools": true
+          }
+        ],
+        "defaultModel": "qwen3.8:27b",
+        "models": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 32768,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "xhigh"
+            ]
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536
+          }
+        ],
+        "local": {
+          "state": "MALFORMED",
+          "capability": "SUPPORTED",
+          "probedAt": "2026-11-14T00:00:30Z",
+          "version": "0.40.16",
+          "latencyMs": 12,
+          "models": [
+            {
+              "value": "qwen3.8:27b",
+              "label": "Qwen3.8 27B",
+              "contextWindow": 65536,
+              "tools": true
+            },
+            {
+              "value": "qwen3-coder:30b",
+              "label": "Qwen3 Coder 30B",
+              "contextWindow": 65536,
+              "tools": true
+            }
+          ]
+        },
+        "presetSlug": "ollama"
+      },
+      "runner": {
+        "capabilities": [
+          "ollama-probe/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "session": {
+        "runnerId": "runner-a",
+        "model": null
+      },
+      "sessionRunner": {
+        "capabilities": [
+          "ollama-probe/v1",
+          "ollama-run/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "expect": {
+        "state": "MALFORMED",
+        "capability": "SUPPORTED",
+        "targetModel": "qwen3.8:27b",
+        "refusal": {
+          "code": "LOCAL_PROVIDER_MISCONFIGURED",
+          "message": "Local provider \"ollama\" is not an endpoint its runner can use; check its address on that runner"
+        },
+        "remedy": "provider",
+        "contextWindow": 65536,
+        "efforts": [
+          "",
+          "low",
+          "medium",
+          "xhigh",
+          "ultra"
+        ],
+        "modelOptions": [
+          "qwen3.8:27b",
+          "qwen3-coder:30b"
+        ],
+        "canChoose": false
+      }
+    },
+    {
+      "name": "cloud-model",
+      "now": "2026-11-14T00:01:00Z",
+      "row": {
+        "slug": "ollama",
+        "label": "Ollama",
+        "runtime": "claude",
+        "engines": [
+          "claude"
+        ],
+        "scope": "runner",
+        "authMode": "none",
+        "runnerId": "runner-a",
+        "enabled": true,
+        "probeState": "READY",
+        "probedAt": "2026-11-14T00:00:30Z",
+        "probeVersion": "0.40.16",
+        "probeLatencyMs": 12,
+        "instanceModels": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 65536,
+            "tools": true
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536,
+            "tools": true
+          }
+        ],
+        "defaultModel": "qwen3.8:27b",
+        "models": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 32768,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "xhigh"
+            ]
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536
+          }
+        ],
+        "local": {
+          "state": "READY",
+          "capability": "SUPPORTED",
+          "probedAt": "2026-11-14T00:00:30Z",
+          "version": "0.40.16",
+          "latencyMs": 12,
+          "models": [
+            {
+              "value": "qwen3.8:27b",
+              "label": "Qwen3.8 27B",
+              "contextWindow": 65536,
+              "tools": true
+            },
+            {
+              "value": "qwen3-coder:30b",
+              "label": "Qwen3 Coder 30B",
+              "contextWindow": 65536,
+              "tools": true
+            }
+          ]
+        },
+        "presetSlug": "ollama"
+      },
+      "runner": {
+        "capabilities": [
+          "ollama-probe/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "session": {
+        "runnerId": "runner-a",
+        "model": "gpt-oss:20b-cloud"
+      },
+      "sessionRunner": {
+        "capabilities": [
+          "ollama-probe/v1",
+          "ollama-run/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "expect": {
+        "state": "READY",
+        "capability": "SUPPORTED",
+        "targetModel": "gpt-oss:20b-cloud",
+        "refusal": {
+          "code": "LOCAL_PROVIDER_MISCONFIGURED",
+          "message": "Local provider \"ollama\" would forward model \"gpt-oss:20b-cloud\" to Ollama's cloud; choose a local model"
+        },
+        "remedy": "provider",
+        "contextWindow": null,
+        "efforts": [
+          "",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ],
+        "modelOptions": [
+          "qwen3.8:27b",
+          "qwen3-coder:30b"
+        ],
+        "canChoose": false
+      }
+    },
+    {
+      "name": "disabled",
+      "now": "2026-11-14T00:01:00Z",
+      "row": {
+        "slug": "ollama",
+        "label": "Ollama",
+        "runtime": "claude",
+        "engines": [
+          "claude"
+        ],
+        "scope": "runner",
+        "authMode": "none",
+        "runnerId": "runner-a",
+        "enabled": false,
+        "probeState": "READY",
+        "probedAt": "2026-11-14T00:00:30Z",
+        "probeVersion": "0.40.16",
+        "probeLatencyMs": 12,
+        "instanceModels": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 65536,
+            "tools": true
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536,
+            "tools": true
+          }
+        ],
+        "defaultModel": "qwen3.8:27b",
+        "models": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 32768,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "xhigh"
+            ]
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536
+          }
+        ],
+        "local": {
+          "state": "DISABLED",
+          "capability": "SUPPORTED",
+          "probedAt": "2026-11-14T00:00:30Z",
+          "version": "0.40.16",
+          "latencyMs": 12,
+          "models": [
+            {
+              "value": "qwen3.8:27b",
+              "label": "Qwen3.8 27B",
+              "contextWindow": 65536,
+              "tools": true
+            },
+            {
+              "value": "qwen3-coder:30b",
+              "label": "Qwen3 Coder 30B",
+              "contextWindow": 65536,
+              "tools": true
+            }
+          ]
+        },
+        "presetSlug": "ollama"
+      },
+      "runner": {
+        "capabilities": [
+          "ollama-probe/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "session": {
+        "runnerId": "runner-a",
+        "model": null
+      },
+      "sessionRunner": {
+        "capabilities": [
+          "ollama-probe/v1",
+          "ollama-run/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "expect": {
+        "state": "DISABLED",
+        "capability": "SUPPORTED",
+        "targetModel": "qwen3.8:27b",
+        "refusal": {
+          "code": "LOCAL_PROVIDER_DISABLED",
+          "message": "Local provider \"ollama\" is disabled; enable it, or switch this session to another provider"
+        },
+        "remedy": "provider",
+        "contextWindow": 65536,
+        "efforts": [
+          "",
+          "low",
+          "medium",
+          "xhigh",
+          "ultra"
+        ],
+        "modelOptions": [
+          "qwen3.8:27b",
+          "qwen3-coder:30b"
+        ],
+        "canChoose": false
+      }
+    },
+    {
+      "name": "no-runner",
+      "now": "2026-11-14T00:01:00Z",
+      "row": {
+        "slug": "ollama",
+        "label": "Ollama",
+        "runtime": "claude",
+        "engines": [
+          "claude"
+        ],
+        "scope": "runner",
+        "authMode": "none",
+        "runnerId": null,
+        "enabled": true,
+        "probeState": "READY",
+        "probedAt": "2026-11-14T00:00:30Z",
+        "probeVersion": "0.40.16",
+        "probeLatencyMs": 12,
+        "instanceModels": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 65536,
+            "tools": true
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536,
+            "tools": true
+          }
+        ],
+        "defaultModel": "qwen3.8:27b",
+        "models": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 32768,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "xhigh"
+            ]
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536
+          }
+        ],
+        "local": null,
+        "presetSlug": "ollama"
+      },
+      "runner": null,
+      "session": {
+        "runnerId": null,
+        "model": null
+      },
+      "sessionRunner": {
+        "capabilities": [
+          "ollama-probe/v1",
+          "ollama-run/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "expect": {
+        "state": "NO_RUNNER",
+        "capability": "UNKNOWN",
+        "targetModel": "qwen3.8:27b",
+        "refusal": {
+          "code": "LOCAL_PROVIDER_NO_RUNNER",
+          "message": "Local provider \"ollama\" runs only on its own runner, and it has none; bind it to one of your runners"
+        },
+        "remedy": "provider",
+        "contextWindow": 32768,
+        "efforts": [
+          "",
+          "low",
+          "medium",
+          "xhigh",
+          "ultra"
+        ],
+        "modelOptions": [
+          "qwen3.8:27b",
+          "qwen3-coder:30b"
+        ],
+        "canChoose": false
+      }
+    },
+    {
+      "name": "row-first-model",
+      "now": "2026-11-14T00:01:00Z",
+      "row": {
+        "slug": "ollama",
+        "label": "Ollama",
+        "runtime": "claude",
+        "engines": [
+          "claude"
+        ],
+        "scope": "runner",
+        "authMode": "none",
+        "runnerId": "runner-a",
+        "enabled": true,
+        "probeState": "READY",
+        "probedAt": "2026-11-14T00:00:30Z",
+        "probeVersion": "0.40.16",
+        "probeLatencyMs": 12,
+        "instanceModels": [
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 65536,
+            "tools": true
+          },
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 65536,
+            "tools": true
+          }
+        ],
+        "defaultModel": "",
+        "models": [
+          {
+            "value": "qwen3-coder:30b",
+            "label": "Qwen3 Coder 30B",
+            "contextWindow": 32768
+          },
+          {
+            "value": "qwen3.8:27b",
+            "label": "Qwen3.8 27B",
+            "contextWindow": 65536
+          }
+        ],
+        "local": {
+          "state": "READY",
+          "capability": "SUPPORTED",
+          "probedAt": "2026-11-14T00:00:30Z",
+          "version": "0.40.16",
+          "latencyMs": 12,
+          "models": [
+            {
+              "value": "qwen3.8:27b",
+              "label": "Qwen3.8 27B",
+              "contextWindow": 65536,
+              "tools": true
+            },
+            {
+              "value": "qwen3-coder:30b",
+              "label": "Qwen3 Coder 30B",
+              "contextWindow": 65536,
+              "tools": true
+            }
+          ]
+        },
+        "presetSlug": "ollama"
+      },
+      "runner": {
+        "capabilities": [
+          "ollama-probe/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "session": {
+        "runnerId": "runner-a",
+        "model": null
+      },
+      "sessionRunner": {
+        "capabilities": [
+          "ollama-probe/v1",
+          "ollama-run/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "expect": {
+        "state": "READY",
+        "capability": "SUPPORTED",
+        "targetModel": "qwen3-coder:30b",
+        "refusal": null,
+        "remedy": null,
+        "contextWindow": 65536,
+        "efforts": [
+          "",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ],
+        "modelOptions": [
+          "qwen3-coder:30b",
+          "qwen3.8:27b"
+        ],
+        "canChoose": true
+      }
+    },
+    {
+      "name": "empty-catalogue",
+      "now": "2026-11-14T00:01:00Z",
+      "row": {
+        "slug": "ollama",
+        "label": "Ollama",
+        "runtime": "claude",
+        "engines": [
+          "claude"
+        ],
+        "scope": "runner",
+        "authMode": "none",
+        "runnerId": "runner-a",
+        "enabled": true,
+        "probeState": "READY",
+        "probedAt": "2026-11-14T00:00:30Z",
+        "probeVersion": "0.40.16",
+        "probeLatencyMs": 12,
+        "instanceModels": [],
+        "defaultModel": "",
+        "models": [],
+        "local": {
+          "state": "READY",
+          "capability": "SUPPORTED",
+          "probedAt": "2026-11-14T00:00:30Z",
+          "version": "0.40.16",
+          "latencyMs": 12,
+          "models": []
+        },
+        "presetSlug": "ollama"
+      },
+      "runner": {
+        "capabilities": [
+          "ollama-probe/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "session": {
+        "runnerId": "runner-a",
+        "model": null
+      },
+      "sessionRunner": {
+        "capabilities": [
+          "ollama-probe/v1",
+          "ollama-run/v1"
+        ],
+        "capabilitiesReportedAt": "2026-11-14T00:00:40Z"
+      },
+      "expect": {
+        "state": "READY",
+        "capability": "SUPPORTED",
+        "targetModel": null,
+        "refusal": {
+          "code": "LOCAL_PROVIDER_MODEL_MISSING",
+          "message": "Local provider \"ollama\" names no model; choose one of the models it serves"
+        },
+        "remedy": "provider",
+        "contextWindow": null,
+        "efforts": [
+          "",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ],
+        "modelOptions": [],
+        "canChoose": false
+      }
+    }
+  ]
+}
