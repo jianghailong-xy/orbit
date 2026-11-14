@@ -423,13 +423,13 @@ func (p *evalPlane) answerCard(w http.ResponseWriter, id string) (int, string) {
 // canonicalJSON is v as one stable byte string, for comparing a write with the card that covers it.
 func canonicalJSON(v interface{}) string {
 	b, _ := json.Marshal(v)
-	var any interface{}
-	_ = json.Unmarshal(b, &any)
-	out, _ := json.Marshal(any) // map keys sort on encode
+	var decoded interface{}
+	_ = json.Unmarshal(b, &decoded)
+	out, _ := json.Marshal(decoded) // map keys sort on encode
 	return string(out)
 }
 
-// withoutKey is body without the fields the card does not carry.
+// withoutKeys is body without the fields the card does not carry.
 func withoutKeys(body map[string]interface{}, keys ...string) map[string]interface{} {
 	out := map[string]interface{}{}
 	for k, v := range body {

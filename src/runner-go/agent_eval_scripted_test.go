@@ -21,8 +21,6 @@ type evalHands struct {
 	s      *evalSession
 	mcp    *evalMCPClient
 	nextID atomic.Int64
-	prompt string
-	spec   int
 }
 
 func (h *evalHands) id() string { return fmt.Sprintf("toolu_eval_%d", h.nextID.Add(1)) }
@@ -129,9 +127,9 @@ func evalEntityList(text string) []map[string]interface{} {
 			}
 		}
 	}
-	var any interface{}
-	if json.Unmarshal([]byte(text), &any) == nil {
-		switch v := any.(type) {
+	var decoded interface{}
+	if json.Unmarshal([]byte(text), &decoded) == nil {
+		switch v := decoded.(type) {
 		case []interface{}:
 			addAll(v)
 		case map[string]interface{}:
@@ -179,7 +177,6 @@ func (e *scriptedEngine) start(s *evalSession) error {
 }
 
 func (e *scriptedEngine) turn(s *evalSession, log *evalTurnLog) error {
-	e.hands.prompt, e.hands.spec = log.Prompt, log.Spec
 	agent := e.agents[log.Spec]
 	if log.FollowUp {
 		agent = e.follow[log.Spec]

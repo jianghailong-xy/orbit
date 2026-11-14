@@ -301,7 +301,10 @@ model: on 2026-11-14 Codex 0.167.2 showed only the first **250 characters** of a
 instructions, as that server's line in its list of deferred tools (`codex debug prompt-input` with a
 probe server), and a session whose MCP server did not start has none at all. Claude Code therefore
 reads the primer twice, about 3 KB, which is the price of a fallback that does not depend on the
-carrier it backs up. Nothing in either carrier is read from the checkout: a repository's `CLAUDE.md`
+carrier it backs up. Measured since v1.9.0 (`X1-mcp-missing-cli-fallback`, §12): on Codex the fallback holds,
+and with Orbit's MCP server down the agent files through the CLI on the same card; Claude Code 2.1.325 runs no turn
+at all without that server, because the session's `--permission-prompt-tool` is Orbit's `permission_prompt`, so on
+Claude a missing server is a failed turn the person sees, not a CLI fallback. Nothing in either carrier is read from the checkout: a repository's `CLAUDE.md`
 or `AGENTS.md` neither adds to the primer nor changes it.
 
 What the text is held to (`src/runner-go/agent_primer_test.go`):

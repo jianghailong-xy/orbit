@@ -378,9 +378,6 @@ func (r *evalRun) metrics() evalRunMetrics {
 		m.Usage.CachedInputTokens += t.Usage.CachedInputTokens
 		m.Usage.OutputTokens += t.Usage.OutputTokens
 		m.Usage.DurationMs += t.Usage.DurationMs
-		if m.Usage.FirstRequestTokens == 0 {
-			m.Usage.FirstRequestTokens = t.Usage.FirstRequestTokens
-		}
 	}
 	m.ToolCalls = stepsBefore
 	if strings.HasPrefix(r.Scenario.ID, "E2-private-plan") {

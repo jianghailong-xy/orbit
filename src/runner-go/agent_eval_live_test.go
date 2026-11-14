@@ -101,7 +101,6 @@ type claudeEvalEngine struct {
 	stderrMu               sync.Mutex
 	stderr                 []byte
 	compacted              atomic.Bool
-	firstUsage             int
 	sessionDir             string
 	// asyncAgents counts the engine's own background agents launched and not yet reported back. Each one's report
 	// arrives in a turn the engine starts by itself, as a session's self-driven turn does under the runner, and the

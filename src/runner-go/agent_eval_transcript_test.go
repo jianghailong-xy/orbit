@@ -111,11 +111,10 @@ type evalTurnLog struct {
 
 // evalUsage is the engine's own accounting of one turn, when it reports one.
 type evalUsage struct {
-	InputTokens        int `json:"inputTokens"`
-	CachedInputTokens  int `json:"cachedInputTokens"`
-	OutputTokens       int `json:"outputTokens"`
-	FirstRequestTokens int `json:"firstRequestTokens,omitempty"`
-	DurationMs         int `json:"durationMs"`
+	InputTokens       int `json:"inputTokens"`
+	CachedInputTokens int `json:"cachedInputTokens"`
+	OutputTokens      int `json:"outputTokens"`
+	DurationMs        int `json:"durationMs"`
 }
 
 func evalFindReceipt(text string) (evalReceiptLite, bool) {
