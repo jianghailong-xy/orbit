@@ -3279,14 +3279,6 @@ final class AppModel {
 
     // MARK: session folders (docs/session-folders-move-design.md §3–4)
 
-    #if os(iOS)
-    /// A member picked in the project sessions sheet over a phone's conversation (board 5): its
-    /// conversation takes the place of the one the sheet was opened over (`NavState.switchConsole`).
-    func openProjectMemberFromSheet(_ session: Session) {
-        sessionDetails.store(session)
-        nav.switchConsole(to: .console(sessionID: session.id, origin: .list))
-    }
-
     /// The project's session count, read by both the project sessions button and the page's
     /// "Project · N sessions" (`SessionProjectSheet.sessionCount`). Nil until the page's read has
     /// answered for this project.
@@ -3295,6 +3287,14 @@ final class AppModel {
             projectID: projectID,
             page: projectSessionsAddress.map { ($0.projectID, projectSessions) },
             answered: projectSessionsReadAt != nil)
+    }
+
+    #if os(iOS)
+    /// A member picked in the project sessions sheet over a phone's conversation (board 5): its
+    /// conversation takes the place of the one the sheet was opened over (`NavState.switchConsole`).
+    func openProjectMemberFromSheet(_ session: Session) {
+        sessionDetails.store(session)
+        nav.switchConsole(to: .console(sessionID: session.id, origin: .list))
     }
 
     /// The sessions page a conversation's project sessions button reads and opens
