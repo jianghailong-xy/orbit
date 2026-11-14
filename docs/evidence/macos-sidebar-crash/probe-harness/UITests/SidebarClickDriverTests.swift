@@ -101,15 +101,13 @@ final class SidebarClickDriverTests: XCTestCase {
         return false
     }
 
-    /// The sidebar's rows as elements: the outline list SwiftUI draws first, then the table's rows.
+    /// The sidebar's rows as elements: the outline rows SwiftUI's source list exposes first, then
+    /// any row descendant at all (a host that draws them as a plain table).
     private func sidebarRows(_ app: XCUIApplication) -> [XCUIElement] {
         let outline = app.outlineRows
         if outline.count > 0 { return (0..<outline.count).map { outline.element(boundBy: $0) } }
-        let table = app.tables.firstMatch
-        if table.exists {
-            let rows = table.rows
-            if rows.count > 0 { return (0..<rows.count).map { rows.element(boundBy: $0) } }
-        }
+        let rows = app.descendants(matching: .tableRow)
+        if rows.count > 0 { return (0..<rows.count).map { rows.element(boundBy: $0) } }
         return []
     }
 
