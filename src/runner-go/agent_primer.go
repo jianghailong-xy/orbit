@@ -31,11 +31,11 @@ package main
 // a change to a word is a new agentPrimerVersion, reviewed as a diff.
 
 // agentPrimerVersion is the version of the primer's text. Any change to it is a new version.
-const agentPrimerVersion = "1.1.0"
+const agentPrimerVersion = "1.2.0"
 
 // agentContractVersion is the Agent Contract version the primer was written from: the header of
 // docs/orbit-agent-contract.md and contractVersion in contracts/orbit-agent.contract.json.
-const agentContractVersion = "1.7.0"
+const agentContractVersion = "1.8.0"
 
 // agentPrimerLeadMaxChars is the most the first paragraph may take. It is read on its own: by a
 // client that shows only the beginning of a server's instructions, and by a model skimming them.

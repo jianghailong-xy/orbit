@@ -1947,6 +1947,13 @@ model Session {
   // next completion of that process is measured from (runner-api/running-totals.ts). Null until a
   // completion reporting running totals is booked (migration 0478).
   engineUsageTotals    Json?     @map("engine_usage_totals")
+  // The session's Agent Tools report (docs/orbit-agent-contract.md §2.7): what its engine was given
+  // from Orbit and took, in the engine's own words — the MCP connection's status and the engine's
+  // reason, the Orbit tools it lists by family and why one is short, the contract/catalogue/primer
+  // versions, the switches it was spawned with, how Orbit's instructions reached it, and the
+  // playbooks skill. The newest `agent_tools` system event the runner sent, kept by the event
+  // ingest; null until one arrives, and for engines that report no MCP connection (migration 0770).
+  agentTools           Json?     @map("agent_tools")
   // How full the context window is RIGHT NOW: the tokens the latest top-level assistant message
   // actually cost (fresh input + cache reads + cache writes + output), denormalized from the
   // turn_end event that already carries it for the clients' context gauge. A long-lived session

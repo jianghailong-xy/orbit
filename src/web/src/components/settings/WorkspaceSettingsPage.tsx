@@ -66,12 +66,15 @@ import {
   type WorktreeIsolationDialogKind,
 } from '../WorktreeIsolationDialog';
 import { SettingsCard, SettingsHeader, SettingsRow, SettingsSection } from './SettingsBlocks';
+import { AgentToolsDrawer } from '../AgentToolsDrawer';
 import './Settings.css';
 
 export interface SettingsWorkspace {
   id: string;
   name: string;
   appendSystemPrompt?: string | null;
+  /** Base instructions, in place of the engine's own prompt (agent_update's systemPrompt); rarely set. */
+  systemPrompt?: string | null;
   /** What this project last ran on, derived server-side: the engine and the provider of its last
    *  interactive session. `provider` is the deprecated alias of `lastProvider`. */
   lastEngine?: string | null;
@@ -266,7 +269,7 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
   });
   const history = useClaudeHistory(workspace?.runnerId ?? null, workspace?.workDir ?? '', !!workspace);
 
-  const [drawer, setDrawer] = useState<null | 'env' | 'instructions' | 'rules' | 'history'>(null);
+  const [drawer, setDrawer] = useState<null | 'env' | 'instructions' | 'rules' | 'history' | 'agent-tools'>(null);
   const [dirDraft, setDirDraft] = useState<string | null>(null);
 
   const patch = useMutation({
@@ -723,10 +726,15 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
             title="Instructions"
             description={
               instructions
-                ? `Added to this workspace’s system prompt on every run · ${instructions.length} characters`
-                : 'Added to this workspace’s system prompt on every run · none yet'
+                ? `Added to every run's runtime instructions · ${instructions.length} characters`
+                : "Added to every run's runtime instructions · none yet"
             }
             control={<Button onClick={() => setDrawer('instructions')}>Edit</Button>}
+          />
+          <SettingsRow
+            title="Agent tools"
+            description="What agents here are given: Orbit's tools, the instructions they read and in what order, and the playbooks."
+            control={<Button onClick={() => setDrawer('agent-tools')}>View</Button>}
           />
           <SettingsRow
             title="Always allowed"
@@ -795,6 +803,15 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
           save({ appendSystemPrompt });
           setDrawer(null);
         }}
+      />
+      <AgentToolsDrawer
+        mode="workspace"
+        open={drawer === 'agent-tools'}
+        onClose={() => setDrawer(null)}
+        workspaceName={workspace.name}
+        instructions={workspace.appendSystemPrompt ?? ''}
+        baseInstructions={!!workspace.systemPrompt?.trim()}
+        onEditInstructions={() => setDrawer('instructions')}
       />
       <Drawer open={drawer === 'rules'} onClose={() => setDrawer(null)} title="Always allowed" width={480}>
         <WorkspacePermissionRules workspaceId={id} />
@@ -983,7 +1000,7 @@ function InstructionsDrawer({
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         rows={12}
-        placeholder="Added to this workspace's system prompt on every run (optional)"
+        placeholder="Added to every run's runtime instructions (optional)"
       />
     </Drawer>
   );

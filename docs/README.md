@@ -31,6 +31,7 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 | Understand the system and trust boundaries | [Architecture overview](architecture.md) |
 | Build or change Orbit | [Development guide](development.md) and [contribution guide](../CONTRIBUTING.md) |
 | Automate tasks and sessions | [Runner CLI and automation](runner-cli.md) |
+| Learn how agents use Orbit — MCP first, your record vs their plan, which object, create vs start, the CLI, troubleshooting, examples to ask | [How agents use Orbit](agent-tools-guide.md) |
 | Look up every operation an agent can call, with its risk, approval and receipt | [Operation catalogue](operation-catalog.md) |
 | See what each permission mode does with Orbit's own calls on Claude Code and Codex | [Permission matrix](permission-matrix.md) |
 | Restore or validate a backup | [Postgres backup and restore](postgres-backup-restore.md) |

@@ -229,8 +229,8 @@ func registerAgentWriteFlags(fs *flag.FlagSet) *agentCLIWriteFlags {
 	f := &agentCLIWriteFlags{
 		name:               fs.String("name", "", "agent name"),
 		description:        fs.String("description", "", "agent description"),
-		systemPrompt:       fs.String("system-prompt", "", "replace the agent's system prompt"),
-		appendSystemPrompt: fs.String("append-system-prompt", "", "append to the agent's system prompt"),
+		systemPrompt:       fs.String("system-prompt", "", "the agent's base instructions, in place of the engine's own prompt"),
+		appendSystemPrompt: fs.String("append-system-prompt", "", "the agent's runtime instructions, added to every run"),
 		workDir:            fs.String("work-dir", "", "project directory on the runner"),
 		runnerID:           fs.String("runner-id", "", "runner to bind the agent to"),
 		enableWorktree:     fs.Bool("enable-worktree", false, "run each session in its own git worktree"),

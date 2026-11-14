@@ -1,5 +1,6 @@
 import { type MergeRecoveryAction, type ProjectSidebarTaskCounts } from '@orbit/shared';
 import {
+  ApiOutlined,
   AppstoreOutlined,
   ArrowDownOutlined,
   ArrowLeftOutlined,
@@ -42,6 +43,7 @@ import {
   UndoOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AgentToolsDrawer, agentToolsMenuStatus } from './AgentToolsDrawer';
 import {
   applyReferencePick,
   materializeReferences,
@@ -2462,6 +2464,7 @@ export function WorkspaceView({
     pressTimer.current = undefined;
   };
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
+  const [agentToolsOpen, setAgentToolsOpen] = useState(false); // the open session's Agent tools drawer
   // A row's Share action opens the share dialog for that row rather than for the open session.
   const [shareRow, setShareRow] = useState<any>(null);
   // The session the Move dialog is open for: a row's, or the open conversation's.
@@ -9938,6 +9941,28 @@ export function WorkspaceView({
                             afterMenu(headerMore.current, openSessionFind);
                           },
                         },
+                        // What the agent here can reach in Orbit and what it was told (AgentToolsDrawer), with the
+                        // connection's word on the row so it is seen without opening it.
+                        {
+                          key: 'agent-tools',
+                          icon: <ApiOutlined />,
+                          label: (() => {
+                            const status = agentToolsMenuStatus(
+                              detailForSelected?.agentTools,
+                              detailForSelected?.engine ?? selectedSession?.engine,
+                            );
+                            return (
+                              <span className="scope-menu-row">
+                                Agent tools
+                                <span className={`scope-menu-value agent-tools-menu-status is-${status.tone}`}>{status.word}</span>
+                              </span>
+                            );
+                          })(),
+                          onSelect: () => {
+                            setHeaderMenuOpen(false);
+                            setAgentToolsOpen(true);
+                          },
+                        },
                         ...(sessionTags.length > 0
                           ? [
                               {
@@ -10090,6 +10115,16 @@ export function WorkspaceView({
           )}
         </div>
 
+        {selected && !composing && (
+          <AgentToolsDrawer
+            mode="session"
+            open={agentToolsOpen}
+            onClose={() => setAgentToolsOpen(false)}
+            report={detailForSelected?.agentTools}
+            engine={detailForSelected?.engine ?? selectedSession?.engine}
+            permissionMode={effectivePermissionMode}
+          />
+        )}
         {selected && !selectedTrashed && !composing && (
           <ShareModal
             open={shareOpen}

@@ -199,7 +199,7 @@ export async function requireWorkspaceWriteApproval(
   }
   throw new ForbiddenException({
     code: WORKSPACE_WRITE_APPROVAL_REQUIRED,
-    message: 'writing a workspace\'s environment variables, working directory, system prompts, runner or '
+    message: 'writing a workspace\'s environment variables, working directory, instructions, runner or '
       + 'worktree setting needs the account owner\'s yes on a confirmation card in this conversation, and '
       + 'there is no unspent yes for exactly this write. Ask through agent_create or agent_update (orbit '
       + 'agent create, orbit agent update), which puts the card in front of them; nothing was written. A '

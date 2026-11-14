@@ -41,8 +41,8 @@ object WorkspaceWriteCards {
             // An empty string is a field being cleared, which a blank row on a card would not say.
             fun written(key: String, caption: String) = changes.text(key)?.let { add(WorkspaceWriteField(caption, it.ifEmpty { "Cleared" })) }
             written("workDir", "Working directory")
-            written("systemPrompt", "System prompt")
-            written("appendSystemPrompt", "Appended system prompt")
+            written("systemPrompt", "Base instructions")
+            written("appendSystemPrompt", "Runtime instructions")
             runner(changes.obj("runner"))?.let { add(WorkspaceWriteField("Runner", it)) }
             (changes["enableWorktree"] as? JsonPrimitive)?.booleanOrNull?.let {
                 add(WorkspaceWriteField("Worktree", if (it) "Each session gets its own git worktree" else "Sessions run in the shared folder"))

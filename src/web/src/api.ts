@@ -51,6 +51,7 @@ import { userFileUrl } from './lib/userFile';
 import { clearTranscriptStore, setTranscriptUser } from './lib/transcriptStore';
 import type { Me } from './lib/queries';
 import { compatibleUuid as uuid } from './lib/uuid';
+import type { AgentToolsReport } from './lib/agentTools';
 
 const TOKEN_KEY = 'orbit_token';
 const REFRESH_KEY = 'orbit_refresh';
@@ -1924,6 +1925,9 @@ export interface SessionDetail {
    *  which can move to another one the engine runs (docs/provider-engine-contract.md §6.1). */
   engine?: string | null;
   provider?: string | null;
+  /** The session's Agent Tools report (lib/agentTools): what its engine was given from Orbit and took, in the
+   *  engine's own words. Null until the runner sends one; optional, because an older server does not send it. */
+  agentTools?: AgentToolsReport | null;
   /** The routing decision this task run was planned with; null on any other session. */
   route?: TaskRunRoute | null;
   // The run's SOURCE, as the session row carries it (project-source-contract §6.1). `REFUSED` is a

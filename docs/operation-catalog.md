@@ -1,13 +1,13 @@
-# Orbit operation catalogue v1.6.0
+# Orbit operation catalogue v1.7.0
 
 > Generated from `src/runner-go/operation_catalog.go` — do not edit by hand.
-> Content hash: `99b0c0042748fef9767cb331bd9e9e0131fd8b554c495090aeb8194718c62042`.
+> Content hash: `949fc1b6cb953c23448e4820089109078ddbb96a11b68ad48c4a104bf0aef970`.
 
 Every operation an Orbit agent can call is declared once in the operation catalogue. This table is that catalogue rendered for a person: `orbit capabilities --json` and the MCP `tools/list` payload are its two machine surfaces, and the leaf `--help` texts are held to it by tests. `MCP` and `CLI` say how each surface reaches the operation — `always`, an `orchestration` grant, an engine `permission_prompt` bridge, `session`-only, `headless`-only, or a `watch_switch`/`wiki_switch` — and `absent` when that surface deliberately has no door. Gates that must hold together are joined with `+` (for example `orchestration+watch_switch`). `Idempotency` is `read` (safe to repeat), `caller_key` (retry with the same key), `server_key` (a redelivered turn deduplicates) or `none` (re-read before retrying). `Plan` is what a session in Plan mode gets: the call `runs`, is `refused` with what to do instead, or its `own_gate` decides; the per-engine matrix is docs/permission-matrix.md.
 
 ## Reading it a piece at a time
 
-`orbit capabilities --json` is the whole catalogue as one process is offered it, which is larger than any engine shows a model at once. An agent that wants one operation asks for less: `--summary` (one row per command, and the commands not offered here grouped under why), `--family NAME` (one family, each command with its absolute argv, approval, success evidence and a minimal example) or `--id ID` (one operation in full, both surfaces' examples included). The `guide` MCP tool and `orbit guide [TOPIC] --json` arrange the same rows by what a person asks for: without a topic they answer the objects and the intent routes, and with one its recipe. Guide 1.0.0 has these topics (a `?` marks an optional step):
+`orbit capabilities --json` is the whole catalogue as one process is offered it, which is larger than any engine shows a model at once. An agent that wants one operation asks for less: `--summary` (one row per command, and the commands not offered here grouped under why), `--family NAME` (one family, each command with its absolute argv, approval, success evidence and a minimal example) or `--id ID` (one operation in full, both surfaces' examples included). The `guide` MCP tool and `orbit guide [TOPIC] --json` arrange the same rows by what a person asks for: without a topic they answer the objects and the intent routes, and with one its recipe. Guide 1.1.0 has these topics (a `?` marks an optional step):
 
 | Topic | Routes | Steps | Intent |
 | --- | --- | --- | --- |

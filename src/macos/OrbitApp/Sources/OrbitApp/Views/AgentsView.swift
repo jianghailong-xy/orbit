@@ -2095,7 +2095,7 @@ struct AgentFormContent: View {
                 TextEditor(text: $instructions)
                     .frame(minHeight: 90)
                     .font(.body)
-                Text("Added to this agent's system prompt on every run (optional).")
+                Text("Added to every run's runtime instructions (optional).")
                     .font(.orbitLabel).foregroundStyle(.secondary)
             }
 

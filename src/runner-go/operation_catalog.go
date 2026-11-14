@@ -32,7 +32,7 @@ import (
 // of the canonical catalogue and is emitted with `orbit capabilities --json`, so a client can tell
 // which catalogue answered it.
 
-const operationCatalogVersion = "1.6.0"
+const operationCatalogVersion = "1.7.0"
 
 // operationObject is the Orbit object an operation acts on (docs/orbit-agent-contract.md §1.1),
 // plus the auxiliary resources (watch, wiki, file) and the two doors that are not writes at all
@@ -2696,6 +2696,14 @@ func buildOperationCatalog() []*operation {
 		}
 		// What agent_create and agent_update say about the owner's card. The server refuses these fields
 		// without one, so an agent reads it here rather than in a refusal.
+		// The two prompts an agent carries, in words true on every engine: the base instructions replace the
+		// engine's own prompt, and the runtime instructions are added to every run's (contract §2.7).
+		agentBaseInstructionsProp := map[string]interface{}{"type": "string", "description": "Base instructions: " +
+			"replace the engine's own prompt for this agent's sessions (Claude Code's system prompt, Codex's base " +
+			"instructions). Rarely wanted; the runtime instructions add to it instead."}
+		agentRuntimeInstructionsProp := map[string]interface{}{"type": "string", "description": "Runtime instructions " +
+			"added to every run of this agent, before Orbit's own: appended to Claude Code's system prompt, and " +
+			"developer context on Codex."}
 		agentCardNote := " `env`, `workDir`, `systemPrompt`, `appendSystemPrompt`, `runnerId` and `enableWorktree` decide what this agent's next session runs and where, so a call naming any of them first puts the write — the agent, each variable's name and value, what each field becomes — on a confirmation card in front of the account owner, in every permission mode, and BLOCKS until they answer: nothing is written if they decline. `name`, `description` and `defaultMergeTarget` alone need no card."
 
 		mergeTargetProp := map[string]interface{}{
@@ -2815,8 +2823,8 @@ func buildOperationCatalog() []*operation {
 				"inputSchema": obj(map[string]interface{}{
 					"name":               str,
 					"description":        str,
-					"systemPrompt":       str,
-					"appendSystemPrompt": str,
+					"systemPrompt":       agentBaseInstructionsProp,
+					"appendSystemPrompt": agentRuntimeInstructionsProp,
 					"workDir":            map[string]interface{}{"type": "string", "description": "Project directory on the runner the agent runs in."},
 					"runnerId":           map[string]interface{}{"type": "string", "description": "Runner to bind to; defaults to the current runner. Use runner_list to look up a runner's id."},
 					"enableWorktree":     map[string]interface{}{"type": "boolean", "description": "Run each of the agent's sessions in its own git worktree."},
@@ -2826,13 +2834,13 @@ func buildOperationCatalog() []*operation {
 			},
 			map[string]interface{}{
 				"name":        "agent_update",
-				"description": "Update an existing agent's fields (name, system prompt, workDir, etc.). An agent has no engine or provider to set — those are per session. Cannot change the orchestration permission (human-only, web UI)." + agentCardNote,
+				"description": "Update an existing agent's fields (name, runtime instructions, workDir, etc.). An agent has no engine or provider to set — those are per session. Cannot change the orchestration permission (human-only, web UI)." + agentCardNote,
 				"inputSchema": obj(map[string]interface{}{
 					"agentId":            map[string]interface{}{"type": "string", "description": "Agent id to update."},
 					"name":               str,
 					"description":        str,
-					"systemPrompt":       str,
-					"appendSystemPrompt": str,
+					"systemPrompt":       agentBaseInstructionsProp,
+					"appendSystemPrompt": agentRuntimeInstructionsProp,
 					"workDir":            str,
 					"runnerId":           map[string]interface{}{"type": "string", "description": "Runner to bind the agent to. Use runner_list to look up a runner's id."},
 					"enableWorktree":     map[string]interface{}{"type": "boolean"},

@@ -1,0 +1,374 @@
+/* Agent tools (components/AgentToolsDrawer.tsx), drawn as docs/mocks/agent-tools/01-board.png: the Settings
+   blocks' card and rows, a status card in the success/error tints, family chips with a dot, and the instruction
+   layers numbered with a role pill. */
+.agent-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.agent-tools-sub {
+  margin: -4px 0 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.agent-tools-sec-title {
+  margin: 0 0 7px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-1);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.agent-tools-sec-title small {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.agent-tools-card {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  padding: 0 14px;
+}
+.agent-tools-plain {
+  margin: 0;
+  padding: 10px 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-1);
+}
+.agent-tools-foot {
+  margin: 7px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+.agent-tools-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--brand);
+  cursor: pointer;
+}
+
+/* The status card. */
+.agent-tools-status {
+  border-radius: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+.agent-tools-status.is-ok {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+.agent-tools-status.is-bad {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+}
+.agent-tools-status-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.agent-tools-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--dot-idle);
+}
+.is-ok > .agent-tools-dot,
+.is-ok .agent-tools-status-top .agent-tools-dot {
+  background: var(--success-solid);
+}
+.is-bad > .agent-tools-dot,
+.is-bad .agent-tools-status-top .agent-tools-dot {
+  background: var(--error-solid);
+}
+.agent-tools-status-word {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-2);
+}
+.agent-tools-status.is-ok .agent-tools-status-word {
+  color: var(--success);
+}
+.agent-tools-status.is-bad .agent-tools-status-word {
+  color: var(--error);
+}
+.agent-tools-status-when {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.agent-tools-status-line {
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-1);
+}
+.agent-tools-status-why {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--fill-inset);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-1);
+}
+.agent-tools-quote {
+  display: block;
+  margin: 0 0 4px;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--error);
+}
+.agent-tools-versions {
+  margin-top: 7px;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+
+/* The families: two columns of chips, each a dot, a name and a count. */
+.agent-tools-families {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 16px;
+  padding: 6px 0;
+}
+.agent-tools-family {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 0;
+  font-size: 12.5px;
+  color: var(--text-1);
+  min-width: 0;
+}
+.agent-tools-family.is-quiet,
+.agent-tools-family.is-bad {
+  color: var(--text-3);
+}
+.agent-tools-family-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-tools-family-count {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.agent-tools-why {
+  border-top: 1px solid var(--border-subtle);
+  padding: 8px 0 9px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.agent-tools-card > .agent-tools-why:first-child {
+  border-top: 0;
+}
+.agent-tools-why p {
+  margin: 0;
+}
+.agent-tools-why p + p {
+  margin-top: 4px;
+}
+
+/* The instruction layers, numbered in reading order, each with its role. */
+.agent-tools-layers {
+  list-style: none;
+}
+.agent-tools-layer {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 9px 0;
+}
+.agent-tools-layer + .agent-tools-layer {
+  border-top: 1px solid var(--border-subtle);
+}
+.agent-tools-num {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: var(--fill-muted);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.agent-tools-layer-text {
+  flex: 1;
+  min-width: 0;
+}
+.agent-tools-layer-title {
+  font-size: 13.5px;
+  color: var(--text-1);
+}
+.agent-tools-layer-detail {
+  margin-top: 1px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.agent-tools-role {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  vertical-align: 1px;
+  background: var(--brand-tint);
+  color: var(--brand-strong);
+  white-space: nowrap;
+}
+.agent-tools-role.is-developer {
+  background: color-mix(in srgb, var(--route-shadow) 12%, transparent);
+  color: var(--route-shadow);
+}
+.agent-tools-role.is-user {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.agent-tools-role.is-on_demand,
+.agent-tools-role.is-tools {
+  background: var(--fill-muted);
+  color: var(--text-2);
+}
+
+/* The guide: folds, the troubleshooting rows, and the examples. */
+.agent-tools-fold + .agent-tools-fold {
+  border-top: 1px solid var(--border-subtle);
+}
+.agent-tools-fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  font-size: 13px;
+  color: var(--text-1);
+  cursor: pointer;
+  list-style: none;
+}
+.agent-tools-fold > summary::-webkit-details-marker {
+  display: none;
+}
+.agent-tools-fold > summary::before {
+  content: '▸';
+  width: 12px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.agent-tools-fold[open] > summary::before {
+  content: '▾';
+}
+.agent-tools-fold-hint {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.agent-tools-fold-body {
+  padding: 0 0 10px 20px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.agent-tools-fold-body p {
+  margin: 0 0 6px;
+}
+.agent-tools-fold-body ul {
+  margin: 0 0 6px;
+  padding-left: 16px;
+}
+.agent-tools-asks {
+  color: var(--text-3);
+}
+.agent-tools-troubles {
+  margin: 4px 0 6px;
+}
+.agent-tools-trouble + .agent-tools-trouble {
+  margin-top: 6px;
+}
+.agent-tools-trouble dt {
+  color: var(--text-1);
+  font-weight: 500;
+}
+.agent-tools-trouble dt code,
+.agent-tools-fold-body code {
+  margin-left: 6px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--fill-muted);
+  font-size: 11px;
+}
+.agent-tools-trouble dd {
+  margin: 1px 0 0;
+}
+.agent-tools-fold-body > .agent-tools-examples {
+  margin-top: 2px;
+}
+.agent-tools-example {
+  padding: 10px 0;
+}
+.agent-tools-example + .agent-tools-example {
+  border-top: 1px solid var(--border-subtle);
+}
+.agent-tools-ask {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-1);
+}
+.agent-tools-does {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.agent-tools-proof {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.agent-tools-engine {
+  margin-bottom: 8px;
+}
+
+/* The session menu's line: the word with its dot, on the row's right. */
+.agent-tools-menu-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.agent-tools-menu-status::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dot-idle);
+}
+.agent-tools-menu-status.is-ok {
+  color: var(--success);
+}
+.agent-tools-menu-status.is-ok::before {
+  background: var(--success-solid);
+}
+.agent-tools-menu-status.is-bad {
+  color: var(--error);
+}
+.agent-tools-menu-status.is-bad::before {
+  background: var(--error-solid);
+}

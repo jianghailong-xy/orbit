@@ -113,6 +113,14 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 	if path, err := writeClaudeSettings(scratchDir, orbitExe, a.FastMode); err == nil && path != "" {
 		args = append(args, "--settings", path)
 	}
+	// Orbit's playbooks skill, as a plugin in the session's own directory (agent_tools_guide.go): never the
+	// user's ~/.claude, and only for a CLI known to take the flag. A plugin that could not be written leaves
+	// the spawn as it was; nothing depends on the skill.
+	if claudeManagedPluginOn() {
+		if dir := writeClaudeManagedPlugin(scratchDir); dir != "" {
+			args = append(args, "--plugin-dir", dir)
+		}
+	}
 	// Uploaded attachments land in the session's uploads dir, which is OUTSIDE execDir so they
 	// stay out of git (see writeUpload). Add it as an explicit working dir so claude can read
 	// them without a per-read permission prompt; created up front so the flag points at an

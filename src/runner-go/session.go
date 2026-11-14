@@ -2970,6 +2970,8 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// The turn the latest `result` answered, which a prompt_suggestion arriving after it is filed
 	// against. Empty when that result failed or closed a turn the engine started on its own.
 	var lastAnsweredTurnID string
+	// What this process's engine says about Orbit's tools, sent when it changes (agent_tools_report.go).
+	var agentTools agentToolsReporter
 	targetFenceTripped := false
 scanLoop:
 	for sc.Scan() {
@@ -3017,6 +3019,11 @@ scanLoop:
 		if msg["type"] == "system" && msg["subtype"] == "init" {
 			version, _ := msg["claude_code_version"].(string)
 			rt.noteAnnouncedVersion(version)
+			// The same frame names the MCP servers it started and the tools and skills it has: the
+			// session's Agent Tools report, in the engine's own words. A subagent's init is not the session's.
+			if msg["parent_tool_use_id"] == nil {
+				agentTools.send(claudeAgentToolsReport(job, msg), emit)
+			}
 		}
 		// --replay-user-messages: the CLI echoes back each user turn it reads, which is the
 		// only signal that a message became part of the conversation rather than just bytes

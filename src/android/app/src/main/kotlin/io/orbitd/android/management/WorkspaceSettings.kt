@@ -140,7 +140,7 @@ fun WorkspaceSettings(api: ManagementApi, workspaceId: String?, revision: Long, 
         }
         FormSection("Instructions") {
             OutlinedTextField(instructions, { instructions = it }, Modifier.fillMaxWidth().heightIn(min = 90.dp).padding(vertical = 6.dp))
-            Text("Added to this agent's system prompt on every run (optional).", style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+            Text("Added to every run's runtime instructions (optional).", style = MaterialTheme.typography.labelMedium, color = Ink.muted)
         }
         FormSection("Working directory") {
             OutlinedTextField(workDir, { workDir = it }, Modifier.fillMaxWidth().padding(vertical = 6.dp), label = { Text("Path") },
