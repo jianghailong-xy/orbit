@@ -195,6 +195,23 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
   };
 
   const text = () => container.textContent ?? '';
+  const menuItems = () =>
+    Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).map((el) => el.textContent?.trim() ?? '');
+  /** Opens the ⋯ of `name`'s row (settings-buttons board 02) and waits for its items. */
+  const openMenu = async (name: string) => {
+    await click(labelled(`More for ${name}`)[0]);
+    await act(async () => {
+      await vi.waitFor(() => {
+        if (menuItems().length === 0) throw new Error(`no menu for ${name} yet`);
+      });
+    });
+  };
+  const pressMenu = async (name: string, label: string) => {
+    await openMenu(name);
+    await click(Array.from(document.querySelectorAll('[role="menuitem"]')).find((el) => el.textContent?.trim() === label));
+  };
+  /** Folds the Settings page's first pool card: the head is then all there is, gauge and all. */
+  const foldFirstCard = () => click(container.querySelector('.pool-sec .pool-card .re-toggle'));
   const row = () => {
     const found = container.querySelector<HTMLElement>('.pool-row-login');
     if (!found) throw new Error('no account row');
@@ -237,9 +254,9 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     await click(button('Add account'));
     await click(button('Continue', dialog()!));
   };
-  /** New account pool, in the Account pools heading: the page's one way to a new pool; resolves once its dialog is open. */
+  /** New pool, in the Account pools heading: the page's one way to a new pool; resolves once its dialog is open. */
   const newPool = async () => {
-    await click(button('New account pool'));
+    await click(button('New pool'));
     await openDialog('New account pool');
   };
 
@@ -303,10 +320,15 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     const head = card.querySelector<HTMLElement>('.re-head')!;
     expect(head.querySelector('.re-runner')?.textContent).toBe('My Codex');
     expect(head.querySelector('.re-summary')?.textContent).toBe('Just me · 1 of 1 account available');
-    // One account to start on: it is named, not "next".
+    // Open, the head leaves the one account's name and bar to its row right below it (settings-buttons
+    // board 02)…
+    expect(head.querySelector('.pool-gauge')).toBeNull();
+    // …and folded, it reads them itself. One account to start on: it is named, not "next".
+    await foldFirstCard();
     expect(head.querySelector('.pool-gauge-name')?.textContent).toBe('lin@example.com');
     // Its tightest window, by name: the weekly one at 41%, ahead of the 5-hour one at 23%.
     expect(head.querySelector('.pool-gauge-pct')?.textContent).toBe('Weekly 41%');
+    await foldFirstCard();
 
     expect(row().querySelector('.re-name')?.textContent).toBe('lin@example.com');
     // Led by whoever signed it in — Lin, the pool's owner (migration 0371).
@@ -317,9 +339,13 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
       `5h limit23%resets ${formatResetTime(IN_AN_HOUR)}`,
       `Weekly limit41%resets ${formatResetTime(IN_THREE_DAYS)}`,
     ]);
-    // Nothing to do to a working account from here but pause it (migration 0374): signing out is on
-    // the pool's own page.
-    expect([...row().querySelectorAll('.re-act button')].map((button) => button.textContent)).toEqual(['Pause…']);
+    // Nothing to do to a working account from here but pause it (migration 0374), from its ⋯: signing
+    // out is on the pool's own page.
+    expect([...row().querySelectorAll('.re-act button')].map((button) => button.getAttribute('aria-label'))).toEqual([
+      'More for lin@example.com',
+    ]);
+    await openMenu('lin@example.com');
+    expect(menuItems()).toEqual(['Pause…']);
   });
 
   it('says so when no quota has been read yet — the account runs all the same', async () => {
@@ -379,6 +405,8 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
       ),
     ];
     await mount('/settings/providers/pools');
+    // Folded: an open card of one account leaves the reading to the account's row.
+    await foldFirstCard();
     const gauge = container.querySelector<HTMLElement>('.pool-sec .pool-card .re-head .pool-gauge')!;
     expect(gauge.querySelector('.pool-gauge-name')?.textContent).toBe('lin@example.com');
     expect(gauge.querySelector('.pool-gauge-pct')?.textContent).toBe('Weekly 97%');
@@ -386,7 +414,8 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     expect(gauge.querySelector('.pool-gauge-pct')?.classList.contains('near-limit')).toBe(true);
     expect(gauge.querySelector('.runner-util')?.classList.contains('full')).toBe(true);
     expect(gauge.querySelector<HTMLElement>('.runner-util-fill')?.style.width).toBe('97%');
-    // The account's row still draws each of its windows.
+    // The account's row, open again, still draws each of its windows.
+    await foldFirstCard();
     expect(Array.from(row().querySelectorAll('.pool-login-window')).map((el) => el.textContent)).toEqual([
       `5h limit6%resets ${formatResetTime(IN_AN_HOUR)}`,
       `Weekly limit97%resets ${formatResetTime(IN_THREE_DAYS)}`,
@@ -413,6 +442,8 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
       ),
     ];
     await mount('/settings/providers/pools');
+    // Folded: an open card of one account leaves the reading to the account's row.
+    await foldFirstCard();
     const gauge = container.querySelector<HTMLElement>('.pool-sec .pool-card .re-head .pool-gauge')!;
     expect(gauge.querySelector('.pool-gauge-pct')?.textContent).toBe('5h 64%');
     expect(gauge.querySelector('.pool-gauge-pct')?.classList.contains('near-limit')).toBe(false);
@@ -457,11 +488,12 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
       'Its ChatGPT sign-in is deleted from the Orbit server with it.',
     );
 
-    // Signing it out is a quiet mark — grey until it is pointed at (index.css) — that asks first, and
-    // says what it costs. The pool's only account: nothing keeps running without it.
-    expect(labelled('Sign out lin@example.com')[0].classList.contains('pool-signout')).toBe(true);
-    await click(labelled('Sign out lin@example.com')[0]);
-    const confirm = document.body.querySelector<HTMLElement>('[role="dialog"]')!;
+    // Signing it out is the last item of its ⋯, under pausing (settings-buttons board 02), and asks
+    // first, saying what it costs. The pool's only account: nothing keeps running without it.
+    await openMenu('lin@example.com');
+    expect(menuItems()).toEqual(['Pause…', 'Sign out']);
+    await click(Array.from(document.querySelectorAll('[role="menuitem"]')).find((el) => el.textContent?.trim() === 'Sign out'));
+    const confirm = document.body.querySelector<HTMLElement>('[role="alertdialog"]')!;
     expect(nameOf(confirm)).toBe('Sign out lin@example.com?');
     expect(descriptionOf(confirm)).toBe(
       'Its sign-in is deleted from the Orbit server, and no session runs on this pool until you sign in again.',
@@ -678,10 +710,10 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     expect(text()).toContain(
       'Codex pool · Just me · 2 of 2 accounts available · each session starts on the account whose quota resets soonest, and stays on it until that one runs out.',
     );
-    // Both rows are there, each with its own windows and its own sign-out mark.
+    // Both rows are there, each with its own windows and its own ⋯ to sign it out from.
     expect(container.querySelectorAll('.pool-detail .pool-row-login')).toHaveLength(2);
-    expect(labelled('Sign out lin@example.com')).toHaveLength(1);
-    expect(labelled('Sign out hl.work@gmail.com')).toHaveLength(1);
+    expect(labelled('More for lin@example.com')).toHaveLength(1);
+    expect(labelled('More for hl.work@gmail.com')).toHaveLength(1);
     expect(container.querySelector('.pool-danger-note')?.textContent).toBe(
       'Its ChatGPT sign-ins are deleted from the Orbit server with it.',
     );
@@ -690,8 +722,8 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
   it('signs one account out by its own fingerprint, and says the pool keeps running on the other', async () => {
     pools = [codexPool(account(), hl())];
     await mount(PAGE);
-    await click(labelled('Sign out lin@example.com')[0]);
-    const confirm = document.body.querySelector<HTMLElement>('[role="dialog"]')!;
+    await pressMenu('lin@example.com', 'Sign out');
+    const confirm = document.body.querySelector<HTMLElement>('[role="alertdialog"]')!;
     expect(nameOf(confirm)).toBe('Sign out lin@example.com?');
     expect(descriptionOf(confirm)).toBe(
       'Its sign-in is deleted from the Orbit server, and no session runs on it until you sign in again — My Codex keeps running on its other account.',
@@ -706,8 +738,8 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     container.remove();
     pools = [codexPool(account(), hl(), account({ email: 'third@example.com', fingerprint: '…CC34' }))];
     await mount(PAGE);
-    await click(labelled('Sign out lin@example.com')[0]);
-    const again = document.body.querySelector<HTMLElement>('[role="dialog"]')!;
+    await pressMenu('lin@example.com', 'Sign out');
+    const again = document.body.querySelector<HTMLElement>('[role="alertdialog"]')!;
     expect(descriptionOf(again)).toBe(
       'Its sign-in is deleted from the Orbit server, and no session runs on it until you sign in again — My Codex keeps running on its other accounts.',
     );
@@ -739,7 +771,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     );
     await click(button('Done', dialog()!));
     await until(() => container.querySelectorAll('.pool-row-login').length === 2);
-    expect(labelled('Sign out hl.work@gmail.com')).toHaveLength(1);
+    expect(labelled('More for hl.work@gmail.com')).toHaveLength(1);
   });
 
   it('makes a "Just me" Codex pool one of these, and opens it straight to signing in', async () => {
