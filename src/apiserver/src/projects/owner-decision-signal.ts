@@ -121,7 +121,8 @@ export type OwnerDecisionKind =
   | 'START_REQUEST'
   | 'DONE_REQUEST'
   | 'RECORD_AS_DONE'
-  | 'OWNER_REQUEST';
+  | 'OWNER_REQUEST'
+  | 'CROSSING_REQUEST';
 
 export interface OwnerDecisionSignal {
   /** The conversation to open: the project's bound coordinator, or the waiting task's own session.
@@ -161,6 +162,7 @@ export async function readOwnerDecisionSignals(
     ...(await readOwnerItemSignals(tx, ownerId, sessionIds)),
     ...(await readRecordAsDoneSignals(tx, ownerId, sessionIds)),
     ...(await readOwnerRequestSignals(tx, ownerId, sessionIds)),
+    ...(await readCrossingRequestSignals(tx, ownerId, sessionIds)),
     ...confirmations.map((waiting) => ({
       sessionId: waiting.sessionId,
       projectId: waiting.projectId,
@@ -321,6 +323,55 @@ async function readOwnerRequestSignals(
     projectId: session.coordinatorForProject?.id ?? null,
     count: counts.get(session.id)!,
     kind: 'OWNER_REQUEST' as const,
+  }));
+}
+
+/**
+ * The cross-project requests still PENDING, on the conversation that draws each one as a decision
+ * card (`CrossingDecisionCard`): the target project's coordinator for work moving INTO a project,
+ * and the source project's coordinator for a task asked to be taken out of every project, which has
+ * no target to be drawn in. `crossingCardSessionId` is that one rule; the project pages leave a row
+ * with such a conversation off their list, so this is the only place the owner is sent to. Open
+ * conversations only, as everywhere here.
+ */
+async function readCrossingRequestSignals(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  sessionIds: readonly string[] | undefined,
+): Promise<OwnerDecisionSignal[]> {
+  const open = { completedAt: null, archivedAt: null, deletedAt: null };
+  const pending = await tx.projectHandoffApproval.findMany({
+    where: {
+      ownerId,
+      state: 'PENDING',
+      OR: [
+        { toProjectId: { not: null }, toProject: { coordinatorSession: open } },
+        { toProjectId: null, fromProject: { coordinatorSession: open } },
+      ],
+    },
+    select: {
+      toProjectId: true,
+      fromProjectId: true,
+      toProject: { select: { coordinatorSessionId: true } },
+      fromProject: { select: { coordinatorSessionId: true } },
+    },
+  });
+  const bySession = new Map<string, { projectId: string; count: number }>();
+  for (const row of pending) {
+    const sessionId = row.toProjectId
+      ? row.toProject?.coordinatorSessionId
+      : row.fromProject.coordinatorSessionId;
+    if (!sessionId || (sessionIds && !sessionIds.includes(sessionId))) continue;
+    const projectId = row.toProjectId ?? row.fromProjectId;
+    const entry = bySession.get(sessionId);
+    if (entry) entry.count += 1;
+    else bySession.set(sessionId, { projectId, count: 1 });
+  }
+  return [...bySession].map(([sessionId, { projectId, count }]) => ({
+    sessionId,
+    projectId,
+    count,
+    kind: 'CROSSING_REQUEST' as const,
   }));
 }
 
@@ -543,7 +594,9 @@ export type { SessionWaitingKind };
  *     recorded done within the project's escalation window: the row says "Record as done…", over the
  *     same "Is this project done?" card, filled in by Orbit rather than by a request.
  *   * `OWNER_REQUEST` — everything counted is an owner request this conversation filed, and the
- *     row says "Waiting on you", the words its card and the inbox use.
+ *     row says "Waiting on you", the words its card and the inbox use. A `CROSSING_REQUEST` (a
+ *     cross-project request whose decision card this conversation draws) says the same words, alone
+ *     or beside one, so it rides on this waiting kind and the clients need no word of their own.
  *
  * Null otherwise — a blocked tool call on the same row, which holds a turn open and is the more
  * urgent thing to say; a kind with no words of its own (`PROJECT_DECISION` really is a proposal
@@ -555,6 +608,11 @@ export function sessionWaitingKind(
   decisions: OwnerDecisionsOnSession | undefined,
 ): SessionWaitingKind | null {
   if (approvals > 0 || !decisions || decisions.count === 0) return null;
+  // An owner request and a cross-project request are both "Waiting on you" over a card in this
+  // conversation: one word for the row, whichever of the two (or both) it is counting.
+  if ([...decisions.kinds].every((kind) => kind === 'OWNER_REQUEST' || kind === 'CROSSING_REQUEST')) {
+    return 'OWNER_REQUEST';
+  }
   if (decisions.kinds.size !== 1) return null;
   const [only] = decisions.kinds;
   return only === 'OWNER_CONFIRMATION' || only === 'OWNER_ITEM' || only === 'START_REQUEST'
