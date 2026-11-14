@@ -407,7 +407,8 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
         let row = code(try slice(try appSource("Views/RunnerPageParts.swift"),
                                  from: "struct RunnerEngineRow: View {", to: "struct RunnerWorkspaceRow: View {"))
         for piece in ["ProviderMark(provider: health.engine, size: 28", "RunnerPageFormat.engineStatus(health, runner: runner)",
-                      "RunnerPageFormat.updateFailedLine(health, now: now)", "RunnerPageFormat.needsSignIn(health)",
+                      "RunnerPageFormat.updateFailedLine(health, now: now, dismissed: dismissed)",
+                      "RunnerPageFormat.needsSignIn(health)",
                       "RunnerPageFormat.engineWindows(runner, engine: health.engine)",
                       "RunnerPageFormat.engineNextAccount(runner, engine: health.engine)",
                       "Text(RunnerPageCopy.runnerEngineNext(account: next))",

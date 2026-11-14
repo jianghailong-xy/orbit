@@ -120,6 +120,7 @@ function fakePrisma(
     // …and no coordinator handoff (projects/coordinator-handoff.ts).
     coordinatorHandoff: { findFirst: async () => null },
     projectOpenItem: { findMany: async () => [] },
+    ownerRequest: { groupBy: async () => [] },
   } as unknown as PrismaService;
 }
 

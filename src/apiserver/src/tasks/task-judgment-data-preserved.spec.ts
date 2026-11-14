@@ -2975,14 +2975,20 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // function one of them calls; no preserved rows, no preserved table's triggers or DONE fence change, and no row
       // is written.
       '0641_open_list_epoch_session_waits',
+      // 0705 adds a nullable `runner.engine_update_dismissals` JSONB only, catalog-only; `runner` is none of the
+      // preserved relations, no trigger or DONE fence changes, and no row is written.
+      '0705_runner_engine_update_dismissals',
       // 0720 adds a nullable runner_presence.resources (JSONB) only; no preserved rows, triggers or DONE fence change,
       // and no row is written.
       '0720_runner_presence_resources',
       // 0740 adds two nullable session columns (merge_after_turn_at, merge_after_turn_target) only; no preserved
       // rows, triggers or DONE fence change, and no row is written.
       '0740_session_merge_after_turn',
-      // 0741 creates `coordinator_handoff` only; no existing table, trigger or DONE fence is touched.
-      '0741_coordinator_handoff'],
+      // 0760 adds a nullable `runner.attention_fixes` JSONB only, catalog-only; `runner` is none of the preserved
+      // relations, no trigger or DONE fence changes, and no row is written.
+      '0760_runner_attention_fixes',
+      // 0761 creates `coordinator_handoff` only; no existing table, trigger or DONE fence is touched.
+      '0761_coordinator_handoff'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -123,6 +123,20 @@ internal class RunnersModel(private val api: ManagementApi) {
     /** Each press answers null once it went through (then reads again), else why not. */
     suspend fun press(op: suspend () -> Unit): String? = try { op(); load(); null }
         catch (e: CancellationException) { throw e } catch (e: Exception) { personalFailure(e) }
+    /** Fix with an agent: one POST starts the session (no sheet, nothing to pick), then the runners are read again either way — the
+     * fixing entry appears, or a refusal (409: blocked, already running, no warning) changes what the card shows. Null once started,
+     * else why not in the server's words. */
+    var agentFixPressing by mutableStateOf(false); private set
+    suspend fun fixWithAgent(runnerId: String, kind: String, engine: String?, latest: String?): String? {
+        if (agentFixPressing) return null
+        agentFixPressing = true
+        try {
+            val failure = try { api.post(RunnerPage.agentFixPath(runnerId, kind), RunnerPage.agentFixBody(kind, engine, latest)); null }
+                catch (e: CancellationException) { throw e } catch (e: Exception) { personalFailure(e) }
+            load()
+            return failure
+        } finally { agentFixPressing = false }
+    }
     /** The runners whose Check again is on its way ([checkRegion]): their presses hold until the check they asked for is answered. */
     var regionChecking by mutableStateOf<Set<String>>(emptySet()); private set
     /** Check again (docs/claude-region-check-contract.md §7; OrbitKit RunnersModel.checkRegion): the runner checks its Claude region at
@@ -337,7 +351,7 @@ fun RunnerScreen(api: ManagementApi, runnerId: String?, record: String?, revisio
     when {
         runnerId == null -> MachinesAndModelsPage(api, revision, open)
         record == "name" -> RunnerNamePage(api, runnerId, revision, back)
-        record?.startsWith("engine:") == true -> RunnerEnginePage(api, runnerId, record.removePrefix("engine:"), revision)
+        record?.startsWith("engine:") == true -> RunnerEnginePage(api, runnerId, record.removePrefix("engine:"), revision, open)
         else -> RunnerDetail(api, runnerId, revision, open, back, openWorkspace)
     }
 }
@@ -386,6 +400,14 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
         scope.launch { show(model.press { api.patch("runners/$id", buildJsonObject { put("minFreeDiskMb", mb?.let(::JsonPrimitive) ?: JsonNull) }) }) }
     }
     fun updateEngines() = scope.launch { show(model.press { api.post("runners/$id/engine-update") }) }
+    // Dismiss until the engine's next release: the server records its current update.latest (runner.engineUpdateDismissals), which hides
+    // both the Needs Attention card and the row's warning until a newer release.
+    var dismissing by remember(id) { mutableStateOf(false) }
+    fun dismissUpdateWarning(engine: String) = scope.launch {
+        dismissing = true
+        model.press { api.post(RunnerPage.updateDismissPath(id, engine)) }?.let { notice.show("${RunnerCopy.UPDATE_DISMISS_FAILED} — $it") }
+        dismissing = false
+    }
     // Checks for its own release now rather than at its next 10-minute check, by the same rules: a turn in flight still holds it.
     fun updateRunner() = scope.launch { notice.show(model.press { api.post("runners/$id/self-update") } ?: RunnerCopy.UPDATE_RUNNER_REQUESTED) }
     fun copy(text: String) { copyText(context, "Orbit", text); notice.show("Copied") }
@@ -418,6 +440,15 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                     if (index > 0) HorizontalDivider()
                     AttentionRow(item, now) {
                         val action = item.action
+                        // Fix with an agent: after the card's own buttons, before its Dismiss link; the line under the row says who is at
+                        // work on it or why no agent can start.
+                        val fix = RunnerPage.agentFixOnCard(runner, item)
+                        val fixTag = "attention-fix:${item.kind}${action?.engine?.let { ":$it" }.orEmpty()}"
+                        val fixButton: @Composable () -> Unit = {
+                            fix?.let { AgentFixButton(it, fixTag, model.agentFixPressing) {
+                                scope.launch { show(model.fixWithAgent(id, item.kind, action?.engine, model.latestVersion)) }
+                            } }
+                        }
                         when (action?.kind) {
                             // Only where that engine can sign in here, as its Engines row offers it: an Antigravity that needs the runner
                             // updated says why on its row instead (RunnerPage.signInHint).
@@ -427,14 +458,28 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                             "repair" -> AttentionButton(RunnerCopy.REPAIR) { scope.launch { show(model.press { api.post("workspaces/${action.workspaceId}/repo-cleanup") }) } }
                             "setReserve" -> AttentionButton(RunnerCopy.SET_A_RESERVE) { choosingReserve = true }
                             "copyCommand" -> AttentionButton(RunnerCopy.COPY_COMMAND) { copy(action.command.orEmpty()) }
-                            "updateEngines" -> AttentionButton(RunnerCopy.UPDATE_ENGINES_NOW, enabled = !RunnerPage.engineUpdateInFlight(runner.obj("install"))) { updateEngines() }
+                            "updateEngines" -> {
+                                AttentionButton(RunnerCopy.UPDATE_ENGINES_NOW, enabled = !RunnerPage.engineUpdateInFlight(runner.obj("install"))) { updateEngines() }
+                                fixButton()
+                                // Until the next release: only a warning against a known latest has one to wait for.
+                                val engine = action.engine
+                                if (engine != null && RunnerPage.offersUpdateDismiss(runner, engine, now)) {
+                                    DismissWarningLink(RunnerCopy.dismissUntilNextRelease(RunnerPage.engineName(engine)), "attention-dismiss:$engine",
+                                        enabled = !dismissing) { dismissUpdateWarning(engine) }
+                                }
+                            }
                             "updateRunner" -> AttentionButton(RunnerCopy.UPDATE_RUNNER_NOW) { updateRunner() }
                             "checkRegion" -> AttentionButton(ClaudeRegionCopy.CLAUDE_REGION_CHECK_AGAIN_TITLE, enabled = id !in model.regionChecking) { checkRegion() }
+                        }
+                        if (fix != null) {
+                            if (action?.kind != "updateEngines") fixButton()
+                            AgentFixLine(fix, "$fixTag:line") { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LINK)) }
                         }
                     }
                 }
             }
-            RunnerCapacity(runner, workspaces, now, model, notice, api)
+            RunnerResourcesSection(api, runner, workspaces, now, online = !offline, resumed = resumed)
+            RunnerCapacity(runner, now, model, notice, api)
             // Cursor CLI's row on every machine once one of the account's knows it (RunnerPage.engines), and the footer says it is the one
             // CLI kept on a pinned build (iOS 2 ②).
             val engineRows = RunnerPage.engines(runner, model.runners)
@@ -450,7 +495,8 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                 if (runner["engines"] == null || runner["engines"] is JsonNull) Text("This runner hasn’t reported its engines yet.", Modifier.padding(vertical = 8.dp), color = Ink.muted)
                 engineRows.forEachIndexed { index, health ->
                     if (index > 0) HorizontalDivider()
-                    EngineRow(runner, health, offline, now, checking = id in model.regionChecking, checkAgain = ::checkRegion) {
+                    EngineRow(runner, health, offline, now, checking = id in model.regionChecking, checkAgain = ::checkRegion,
+                        dismissing = dismissing, dismiss = { dismissUpdateWarning(health.text("engine")) }) {
                         open(OrbitRoute(Destination.RUNNER, id, recordId = "engine:${health.text("engine")}"))
                     }
                 }
@@ -569,14 +615,45 @@ private fun AboutRows(vararg rows: Pair<String, String?>) = rows.filter { !it.se
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) { Text(label, Modifier.weight(1f)); SelectionContainer { Text(value!!, color = Ink.muted) } }
 }
 
+/** Fix with an agent's button, gone while an agent is at work on the warning ([AgentFixView.fixing]). */
+@Composable
+private fun AgentFixButton(view: AgentFixView, tag: String, pressing: Boolean, onClick: () -> Unit) {
+    if (view.fixing != null) return
+    Box(Modifier.testTag(tag)) { AttentionButton(RunnerCopy.FIX_WITH_AGENT, enabled = view.enabled && !pressing, onClick = onClick) }
+}
+
+/** Under Fix with an agent: "An agent is fixing this in <workspace> · Open session" while its session is open (board 2's blue dot), else
+ * the grey line — why no agent can start, or where one would. */
+@Composable
+private fun AgentFixLine(view: AgentFixView, tag: String, openSession: (String) -> Unit) {
+    val fixing = view.fixing
+    if (fixing != null) Row(Modifier.testTag(tag), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.padding(end = 6.dp).size(6.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
+        Text(RunnerCopy.agentFixing(fixing.workspaceName), Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
+        TextButton(onClick = { openSession(fixing.sessionId) }, modifier = Modifier.testTag("$tag:open"), contentPadding = PaddingValues(horizontal = 0.dp)) {
+            Text(RunnerCopy.OPEN_SESSION, style = MaterialTheme.typography.labelMedium)
+        }
+    }
+    else view.line?.let { Text(it, Modifier.testTag(tag), style = MaterialTheme.typography.labelMedium, color = Ink.muted) }
+}
+
+/** Dismiss an engine's update warning until its next release: a text link, beside the warning it hides (web's `re-link`). */
+@Composable
+private fun DismissWarningLink(label: String, tag: String, enabled: Boolean, onClick: () -> Unit) {
+    TextButton(onClick = onClick, enabled = enabled, modifier = Modifier.testTag(tag), contentPadding = PaddingValues(horizontal = 0.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
 @Composable
 private fun AttentionButton(label: String, enabled: Boolean = true, onClick: () -> Unit) {
     FilledTonalButton(onClick = onClick, enabled = enabled, modifier = Modifier.padding(top = 4.dp), shape = RoundedCornerShape(50)) { Text(label) }
 }
 
-/** Max Concurrent and Disk as meters (`3 of 16 running` over a bar; the limit changed from Edit, in a dialog), and Keep Free. */
+/** Max Concurrent as a meter (`3 of 16 running` over a bar; the limit changed from Edit, in a dialog), and Keep Free. The disk is a
+ * reading, shown under Resources (RunnerResourcesSection). */
 @Composable
-private fun RunnerCapacity(runner: JsonObject, workspaces: List<JsonObject>, now: Long, model: RunnersModel, notice: Notice, api: ManagementApi) {
+private fun RunnerCapacity(runner: JsonObject, now: Long, model: RunnersModel, notice: Notice, api: ManagementApi) {
     val id = runner.text("id")
     val serverMax = runner.int("maxConcurrent") ?: 1
     // Max Concurrent's dialog, and the number it holds while open.
@@ -627,13 +704,6 @@ private fun RunnerCapacity(runner: JsonObject, workspaces: List<JsonObject>, now
                 Gauge((active.toFloat() / max).coerceAtMost(1f), if (active >= max) Ink.amber else MaterialTheme.colorScheme.primary, height = 7.dp)
             }
         }
-        RunnerPage.runnerDisk(workspaces)?.let { disk ->
-            HorizontalDivider()
-            Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row { Text(RunnerCopy.DISK, Modifier.weight(1f)); Text(RunnerPage.diskUsedLine(disk), style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
-                Gauge(disk.usedPercent / 100f, if (RunnerPage.diskIsTight(disk, runner.int("minFreeDiskMb"))) Ink.amber else MaterialTheme.colorScheme.primary, height = 7.dp)
-            }
-        }
         HorizontalDivider()
         var expanded by remember { mutableStateOf(false) }
         val current = RunnerPage.keepFreeValue(runner.int("minFreeDiskMb"))
@@ -661,7 +731,7 @@ private fun RunnerCapacity(runner: JsonObject, workspaces: List<JsonObject>, now
  * Region not supported, reads no usage and names no next account, and offers Check Again in Sign In's place: a press of its own. */
 @Composable
 private fun EngineRow(runner: JsonObject, health: JsonObject, offline: Boolean, now: Long, checking: Boolean, checkAgain: () -> Unit,
-                      open: () -> Unit) {
+                      dismissing: Boolean, dismiss: () -> Unit, open: () -> Unit) {
     val engine = health.text("engine")
     val installed = health.bool("installed") == true
     val status = RunnerPage.engineStatus(health, runner)
@@ -687,7 +757,12 @@ private fun EngineRow(runner: JsonObject, health: JsonObject, offline: Boolean, 
                     if (tone == "muted") append(text) else withStyle(SpanStyle(color = Ink.tone(tone))) { append(text) }
                 }
             }, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-            RunnerPage.updateFailedLine(health, now)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.amber) }
+            RunnerPage.updateFailedLine(health, now, dismissed = RunnerPage.engineUpdateDismissedFor(runner, engine))?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.amber)
+                // Until the next release: only a warning against a known latest has one to wait for.
+                if (RunnerPage.offersUpdateDismiss(runner, engine, now)) DismissWarningLink(RunnerCopy.UPDATE_DISMISS, "engine-row:$engine:dismiss",
+                    enabled = !dismissing, onClick = dismiss)
+            }
             cursorHint?.let { Text(it, Modifier.testTag("cursor-state-hint"), style = MaterialTheme.typography.labelMedium, color = Ink.muted) }
             if (RunnerPage.claudeRegionBlocked(runner, engine)) Box(Modifier.testTag("engine-row:$engine:check-again")) {
                 AttentionButton(ClaudeRegionCopy.CLAUDE_REGION_CHECK_AGAIN_TITLE, enabled = !offline && !checking, onClick = checkAgain)
@@ -755,7 +830,7 @@ private fun RunnerNamePage(api: ManagementApi, id: String, revision: Long, back:
 
 /** RunnerEnginePage: one engine CLI on one runner, every account it is signed into, and their sign-ins. */
 @Composable
-private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, revision: Long) {
+private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, revision: Long, open: (OrbitRoute) -> Unit) {
     val model = remember(api) { RunnersModel(api) }
     val resumed = rememberResumed()
     val now = rememberNow(10_000)
@@ -796,6 +871,17 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
         restoring = false
     }
     fun install() = scope.launch { show(model.press { api.post("runners/$id/install", buildJsonObject { put("engine", engine) }) }) }
+    // Fix with an agent on a failed install: the session starts at once and the page stays; its line links to it.
+    fun fixInstall() = scope.launch { show(model.fixWithAgent(id, "installFailed", engine, null)) }
+    fun openSession(session: String) = open(OrbitRoute(Destination.SESSION, session, origin = Origin.LINK))
+    // Dismiss until the next release, as the machine page's card and row do.
+    val dismissed = RunnerPage.engineUpdateDismissedFor(runner, engine)
+    var dismissing by remember(id, engine) { mutableStateOf(false) }
+    fun dismissUpdateWarning() = scope.launch {
+        dismissing = true
+        model.press { api.post(RunnerPage.updateDismissPath(id, engine)) }?.let { notice.show("${RunnerCopy.UPDATE_DISMISS_FAILED} — $it") }
+        dismissing = false
+    }
     // A machine blocked for the Claude region keeps Claude Code's accounts as they are, each saying its sign-in alone, and offers Check
     // Again in Add Account's place (board 03): no Claude sign-in starts there.
     val regionBlocked = RunnerPage.claudeRegionBlocked(runner, engine)
@@ -810,7 +896,7 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                         val version = RunnerPage.engineVersion(health.str("version"))
                         append(version.orEmpty())
                         // Cursor CLI's build is the one Orbit pins, which its note says (`pinned · checked 6m ago`).
-                        RunnerPage.updateNoteOf(health.obj("update"), now, pinned = engine == ProviderEngines.CURSOR)?.let { (tone, text) ->
+                        RunnerPage.updateNoteOf(health.obj("update"), now, pinned = engine == ProviderEngines.CURSOR, dismissed = dismissed)?.let { (tone, text) ->
                             if (version != null) append(RunnerCopy.SEP)
                             if (tone == "warn") withStyle(SpanStyle(color = Ink.amber)) { append(text) } else append(text)
                         }
@@ -821,7 +907,10 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                         withStyle(SpanStyle(color = Ink.amber)) { append(ClaudeRegionCopy.CLAUDE_REGION_NOT_SUPPORTED) }
                     }
                 }, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-                health?.let { RunnerPage.updateFailedLine(it, now) }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.amber) }
+                health?.let { RunnerPage.updateFailedLine(it, now, dismissed = dismissed) }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.amber) }
+                // Until the next release: only a warning against a known latest has one to wait for.
+                if (RunnerPage.offersUpdateDismiss(runner, engine, now)) DismissWarningLink(RunnerCopy.UPDATE_DISMISS, "engine-page:dismiss",
+                    enabled = !dismissing) { dismissUpdateWarning() }
                 // DeepSeek Harness signs nothing in here: each session runs on the DeepSeek key it was started with (board 1 ⑥).
                 if (engine == ProviderEngines.DSH && health != null) RunnerPage.dshStatus(health, runner).let { (text, _) ->
                     Text(if (text == RunnerCopy.USES_API_KEYS) RunnerCopy.DSH_READY else text, Modifier.testTag("dsh-engine-status"),
@@ -876,9 +965,9 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
             // installs it (iOS 5e75edbde).
             else if (RunnerPage.isLoginEngine(engine)) EngineInstallSection(runner, engine,
                 MachinesAndModels.rowKind(MachinesAndModels.engineHealth(runner, engine), runner.obj("install"), engine),
-                MachinesAndModels.installable(runner, engine), offline, ::install)
+                MachinesAndModels.installable(runner, engine), offline, ::install, model.agentFixPressing, ::fixInstall, ::openSession)
             else if (engine == ProviderEngines.OPENCODE) EngineInstallSection(runner, engine, MachinesAndModels.rowKind(health, runner.obj("install"), engine),
-                MachinesAndModels.installsOpenCode(runner), offline, ::install)
+                MachinesAndModels.installsOpenCode(runner), offline, ::install, model.agentFixPressing, ::fixInstall, ::openSession)
             // Cursor CLI stays on the build Orbit pins, which a runner release moves: Update Engines Now has nothing to do for it.
             if (cursor != null) Text(if (offline) RunnerCopy.ENGINES_OFFLINE_FOOTER else CursorCopy.ENGINE_FOOTER,
                 Modifier.padding(horizontal = 16.dp, vertical = 12.dp).testTag("cursor-engine-footer"), style = MaterialTheme.typography.bodySmall,
@@ -928,7 +1017,7 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
  * engine it has, or for an Antigravity this runner can't run at all ([installable]). */
 @Composable
 private fun EngineInstallSection(runner: JsonObject, engine: String, kind: MachinesAndModels.RowKind, installable: Boolean, offline: Boolean,
-                                 install: () -> Unit) {
+                                 install: () -> Unit, fixPressing: Boolean, fix: () -> Unit, openSession: (String) -> Unit) {
     if (kind != MachinesAndModels.RowKind.INSTALLING && !installable) return
     val relay = runner.obj("install")
     FormSection {
@@ -938,6 +1027,13 @@ private fun EngineInstallSection(runner: JsonObject, engine: String, kind: Machi
         }
         relay?.takeIf { it.str("engine") == engine }?.str("message")?.takeIf { it.isNotEmpty() }?.let {
             Text(it, Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+        }
+        // A failed install: Fix with an agent after the machine's own words, with the line saying where the session starts or why not.
+        if (kind == MachinesAndModels.RowKind.INSTALL_FAILED) RunnerPage.agentFixOnInstall(runner, engine)?.let { view ->
+            Column(Modifier.padding(bottom = 8.dp)) {
+                AgentFixButton(view, "install-fix:$engine", fixPressing, fix)
+                AgentFixLine(view, "install-fix:$engine:line", openSession)
+            }
         }
     }
 }

@@ -23,7 +23,7 @@ export const HANDOFF_NOTE_TURN_TIMEOUT_MS = 10 * 60_000;
 /** A note turn still queued behind another this long after it was asked for has timed out too. */
 export const HANDOFF_NOTE_QUEUED_TIMEOUT_MS = 60 * 60_000;
 
-/** The states a handoff is live in: one row at most per outgoing coordinator (migration 0741). */
+/** The states a handoff is live in: one row at most per outgoing coordinator (migration 0761). */
 export const LIVE_HANDOFF_STATES = ['WRITING', 'HANDING_OVER', 'FAILED'] as const;
 
 /** The note turn of one attempt: a new attempt is a new key, so an earlier turn's end settles nothing. */

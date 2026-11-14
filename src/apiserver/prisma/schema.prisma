@@ -957,6 +957,15 @@ model Runner {
   /// `default`, taken back out by restoreDefault, and never by the runner. Empty is every Default
   /// listed and used, as before. NOT NULL DEFAULT '{}' in SQL, like every scalar list here.
   defaultRemoved String[]  @default([]) @map("default_removed")
+  /// The engine update warnings dismissed on this runner (migration 0705), each until the next release:
+  /// { "<engine>": "<latest>" }, the `update.latest` the failure was against when Dismiss was pressed.
+  /// Clients hide that engine's update warning while it equals the engine's current `update.latest`.
+  /// Written by RunnersService.dismissEngineUpdateWarning, never by the runner. NULL is nothing dismissed.
+  engineUpdateDismissals Json? @map("engine_update_dismissals")
+  /// The sessions Fix with an agent started here, one per warning (migration 0760):
+  /// { "<kind>[:<engine>]": { "sessionId": "<uuid>", "at": "<iso>" } }. A second start for a warning is
+  /// refused while its session is open. Written by RunnerAttentionFixService.fix, never by the runner.
+  attentionFixes Json? @map("attention_fixes")
 
   // Browser-driven install of one engine CLI, the same one-slot relay shape as the sign-in above
   // (a machine installs one CLI at a time; the request is redelivered until the runner reports).
@@ -7335,7 +7344,7 @@ model PoolGatewayToken {
 /// each claim, reclaim and provider-switch reload; earlier tokens of the same session and key stay good, their
 /// expiry pushed out with each claim. Deleting the session, the key or the person deletes its tokens; a key
 /// disabled or rotated revokes them (`revokedAt`).
-/// A coordinator handoff (migration 0741, docs/coordinator-handoff.md): the outgoing coordinator
+/// A coordinator handoff (migration 0761, docs/coordinator-handoff.md): the outgoing coordinator
 /// writes a note in a platform turn, then the replacement opens its successor with that note. One
 /// live row (WRITING, HANDING_OVER, FAILED) per outgoing coordinator; COMPLETED names the successor.
 model CoordinatorHandoff {

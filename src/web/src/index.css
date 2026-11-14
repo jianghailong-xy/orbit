@@ -2192,6 +2192,49 @@ button.toast--pill:focus-visible {
 }
 .rd-attention-action {
   margin-top: 9px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+/* Dismiss until next <Engine> release, beside Update Engines Now: a link, not a second button. */
+.rd-attention-action .re-link {
+  font-size: 12.5px;
+}
+/* Fix with an agent (components/AgentFix.tsx): the line under a card's or an Install failed panel's
+   buttons — where the agent is at work, why none can start, or where it would run. */
+.agent-fix-line {
+  margin-top: 7px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+.re-panel .agent-fix-line {
+  font-size: 11.5px;
+}
+.agent-fix-line.fixing {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 4px;
+  color: var(--text-2);
+}
+.agent-fix-row .agent-fix-line.fixing {
+  margin-top: 0;
+}
+.agent-fix-dot {
+  width: 7px;
+  height: 7px;
+  margin-right: 3px;
+  border-radius: 50%;
+  background: var(--accent, #2563eb);
+  flex: none;
+}
+.re-panel-hint.agent-fix-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
 }
 /* The Update card (board 4): a release this runner is behind, across both columns. Amber while it
    holds work back or restarts, plain while work goes on as usual. */
@@ -17501,6 +17544,11 @@ button.chat-jump-start:hover {
 .re-grp.folded .re-upd {
   display: block;
 }
+/* A dismissed warning keeps its drift on the version line, in grey (`13d behind 0.169.0 · warning
+   dismissed`): longer than the line was sized for, so it wraps rather than lose its end. */
+.re-meta:has(.re-upd.dismissed) {
+  white-space: normal;
+}
 /* "Next: …" over the window it names. */
 .re-quota-next {
   overflow-wrap: anywhere;
@@ -26411,6 +26459,23 @@ button.agent-progress-agent:hover {
 .wt-recovery { margin: 0 12px 12px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-subtle); font-size: 12px; overflow-wrap: anywhere; }
 .wt-recovery p { margin: 10px 0; color: var(--text-2); }
 .wt-recovery summary { cursor: pointer; margin: 10px 0; }
+/* What the last check found scrolls inside the panel: the panel stands in the band above the composer, and a long
+   push list must not push the composer off screen. The title, the repair row and the actions stay in view. */
+/* A recovery with a repair session folds into one row of the branch bar, in the strip's row language (.bg-tray-row):
+   where the repair stands, its next step, and the arrow that opens the panel under it (docs/mocks/merge-repair-strip-row). */
+.wt-repair-row { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 3px 6px 3px 10px; font-size: 12px; border-top: 1px solid var(--border-subtle); cursor: pointer; }
+.wt-repair-row:hover { background: var(--bg-hover); }
+.wt-repair-row-icon { flex: none; display: inline-flex; font-size: 14px; color: var(--text-3); }
+.wt-repair-row.is-running .wt-repair-row-icon, .wt-repair-row.is-checking .wt-repair-row-icon { color: var(--brand); }
+.wt-repair-row-head { flex: none; color: var(--text-1); font-weight: 500; white-space: nowrap; }
+.wt-repair-row-note { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); }
+.wt-repair-row.is-ready :is(.wt-repair-row-icon, .wt-repair-row-note) { color: var(--success); }
+.wt-repair-row:is(.is-conflict, .is-reply) :is(.wt-repair-row-icon, .wt-repair-row-note) { color: var(--warning); }
+.wt-repair-row.is-failed .wt-repair-row-icon { color: var(--error); }
+.wt-repair-row-step { flex: none; padding: 3px 10px; border-radius: 6px; cursor: pointer; font: inherit; }
+.wt-repair-row-step:not(.wt-merge-btn) { border: 1px solid var(--border); background: var(--bg-base); color: var(--text-1); }
+.wt-repair-row-step:disabled { opacity: .55; cursor: default; }
+.wt-recovery-snapshot { max-height: 28vh; overflow-y: auto; }
 .wt-recovery-histories { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .wt-recovery-histories > :only-child { grid-column: 1 / -1; }
 .wt-recovery-route code { font-size: 11px; }

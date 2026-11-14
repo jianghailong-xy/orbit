@@ -14,6 +14,12 @@ import type { ManagedRunnerHostRuntime } from './managed-runner-runtime';
  * slots, attachments, users, storage), read from the `managed_runner_capacity` rows the hosts' managers
  * keep. A host whose pool row does not exist yet (its channel never answered) ranks below every host
  * with one. Ties go to the earlier host in the profile.
+ *
+ * A host whose channel this process last found unreachable (`backend.unreachable`, set and cleared by
+ * its manager's own passes, and while set rechecked once per poll interval by the loop) is skipped too while any other non-draining host is not, however much room
+ * its stored row shows: that row is as old as the last answer. When every non-draining host is
+ * unreachable, the pick is among them by stored room, so the new account still gets a mapping, which
+ * starts once its host answers again.
  */
 
 /** A pool's figures, as stored. */
@@ -53,8 +59,8 @@ export function freeRoom(pool: PlacementPool, compute: ComputeAmounts, storage: 
 
 /**
  * The manager a new mapping is created under. One host (or none listed: Kubernetes, or a runtime built
- * by hand): that one, with nothing read. Several: the non-draining host with the most free room; null
- * when every host is draining.
+ * by hand): that one, with nothing read. Several: the non-draining, reachable host with the most free
+ * room (any non-draining one when none is reachable); null when every host is draining.
  */
 export async function placeNewMapping(
   prisma: Pick<PrismaService, 'managedRunnerCapacity'>,
@@ -64,11 +70,13 @@ export async function placeNewMapping(
   if (!hosts || hosts.length <= 1) return hosts?.[0]?.draining ? null : runtime.manager;
   const open = hosts.filter((host) => !host.draining);
   if (!open.length) return null;
+  const reachable = open.filter(({ manager }) => !manager.backend.unreachable);
+  const candidates = reachable.length ? reachable : open;
   const pools = await prisma.managedRunnerCapacity.findMany({
-    where: { OR: open.map(({ manager }) => ({ clusterKey: manager.backend.location.clusterKey, namespace: manager.backend.location.namespace })) },
+    where: { OR: candidates.map(({ manager }) => ({ clusterKey: manager.backend.location.clusterKey, namespace: manager.backend.location.namespace })) },
   });
   let best: { manager: ManagedRunnerManager; room: number } | null = null;
-  for (const { manager } of open) {
+  for (const { manager } of candidates) {
     const { clusterKey, namespace } = manager.backend.location;
     const pool = pools.find((row) => row.clusterKey === clusterKey && row.namespace === namespace);
     const room = pool ? freeRoom(pool, manager.backend.computeShare(), manager.backend.storageShare()) : -1;
