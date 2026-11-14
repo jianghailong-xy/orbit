@@ -335,9 +335,10 @@ struct SectionSidebar: View {
     /// if/else or a second ForEach in here is the shape the outline list's row reload aborted on.
     private func workspaceRows(shortcutIndex: [String: Int]) -> some View {
         let agents = model.agents
-        // The runner is named only on a row whose name another workspace also has ("orbit" on two
-        // machines): there it is what tells them apart; anywhere else it repeated one machine's name
-        // down the whole list. The row's menu (Show Machine) still says where it runs.
+        // The runner is named always on a row whose name another workspace also has ("orbit" on two
+        // machines): there it is what tells them apart. Anywhere else it repeated one machine's name
+        // down the whole list, so it shows only on the row the pointer is on (Mac; board
+        // docs/mocks/workspace-runner-label E1). The row's menu (Show Machine) still says where it runs.
         let sharedNames = Set(Dictionary(grouping: agents?.orderedItems ?? [], by: \.name)
             .filter { $0.value.count > 1 }.keys)
         return ForEach(AgentListLogic.sidebarRows(agents?.orderedItems ?? [], machines: agents?.machinesToSetUp ?? [])) { row in
@@ -346,14 +347,15 @@ struct SectionSidebar: View {
                 let configured = agents?.configuredProviders ?? []
                 WorkspaceNavigationRow(
                     agent: agent,
-                    runnerLabel: sharedNames.contains(agent.name) ? agents?.runnerLabel(agent.runnerId) ?? "" : "",
+                    runnerLabel: agents?.runnerLabel(agent.runnerId) ?? "",
                     // The system draws the selection, so the folder keeps one colour.
                     selected: false,
                     offline: agents?.runnerIsOffline(agent.runnerId) ?? false,
                     running: model.runningWorkspaceIDs.contains(agent.id),
                     jobs: model.jobWorkspaceIDs.contains(agent.id),
                     waiting: model.agentNeedsYou[agent.id] ?? 0,
-                    shortcut: shortcutIndex[agent.id]
+                    shortcut: shortcutIndex[agent.id],
+                    runnerOnHover: !sharedNames.contains(agent.name)
                 )
                 // What the two-line row used to say under the name: what its next session starts on, and where.
                 .help(SessionProviderChoices.engineVia(engine: agent.defaultEngine(configured: configured),

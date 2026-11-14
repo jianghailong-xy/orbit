@@ -238,6 +238,12 @@ const about = () =>
     value.querySelectorAll('small, button').forEach((el) => el.remove());
     return [text($('.settings-row-title', row)), text(value), note];
   });
+/** A Capacity row by its title. */
+const capacityRow = (title: string) => {
+  const found = $$('.machine-section-capacity .settings-row').find((row) => text($('.settings-row-title', row)) === title);
+  if (!found) throw new Error(`no Capacity row ${title}`);
+  return found;
+};
 /** Opens the header's ⋯ and reads what it holds. */
 async function openActions() {
   await click($('.machine-more'));
@@ -370,14 +376,32 @@ describe('a runner’s page, laid out as web.png', () => {
     expect(text($('.re-panel .rsi-btn', claude))).toBe('Sign in to Claude Code');
   });
 
-  it('saves Max Concurrent as it is typed — on blur, and on Enter — and Keep Free as it is picked', async () => {
+  it('reads Max Concurrent as a meter, changes it from Edit in a dialog, and Keep Free as it is picked', async () => {
     const { sent } = await mount(machine('real wikova'));
-    const input = $<HTMLInputElement>('.rd-max-concurrent input');
-    expect(input.value).toBe('12');
+    // Its use of the limit: `4 of 12 running` and a bar across the row, amber once every slot is taken.
+    const row = capacityRow('Max Concurrent');
+    expect(text($('.machine-meter-value', row))).toBe('4 of 12 running');
+    expect($('.machine-meter-bar', row).className).toBe('rd-disk-bar machine-meter-bar');
+    expect($<HTMLElement>('.machine-meter-bar > span', row).style.width).toBe('33%');
+    const value = $<HTMLButtonElement>('.machine-max-edit', row);
+    expect(text(value)).toBe('Edit');
+    expect(value.getAttribute('aria-label')).toBe('Edit Max Concurrent');
+    expect(document.querySelector('.rd-max-concurrent')).toBeNull();
 
-    await typeNumber(input, '8', 'blur');
+    // Cancel sends nothing.
+    await click(value);
+    expect($<HTMLInputElement>('.rd-max-concurrent input').value).toBe('12');
+    await typeNumber($<HTMLInputElement>('.rd-max-concurrent input'), '5', 'blur');
+    await click(button('Cancel'));
+    expect(sent).toEqual([]);
+    // Save sends what was typed.
+    await click($('.machine-max-edit'));
+    expect($<HTMLInputElement>('.rd-max-concurrent input').value).toBe('12');
+    await typeNumber($<HTMLInputElement>('.rd-max-concurrent input'), '8', 'blur');
+    await click(button('Save'));
     expect(sent).toEqual([{ method: 'PATCH', path: `/runners/${RUNNER_ID}`, body: { maxConcurrent: 8 } }]);
-    // There is no ceiling: a big machine keeps what is typed.
+    // There is no ceiling: a big machine keeps what is typed, and Enter saves too.
+    await click($('.machine-max-edit'));
     await typeNumber($<HTMLInputElement>('.rd-max-concurrent input'), '99', 'enter');
     expect(sent.at(-1)).toEqual({ method: 'PATCH', path: `/runners/${RUNNER_ID}`, body: { maxConcurrent: 99 } });
 
@@ -387,6 +411,13 @@ describe('a runner’s page, laid out as web.png', () => {
     await press(offered[2]);
     expect(sent.at(-1)).toEqual({ method: 'PATCH', path: `/runners/${RUNNER_ID}`, body: { minFreeDiskMb: 20480 } });
     expect(sent).toHaveLength(3);
+  });
+
+  it('fills Max Concurrent’s bar amber once every slot is taken', async () => {
+    await mount(machine('real wikova', { activeSessions: 12 }));
+    expect(text($('.machine-meter-value', capacityRow('Max Concurrent')))).toBe('12 of 12 running');
+    expect($('.machine-meter-bar', capacityRow('Max Concurrent')).className).toContain('warn');
+    expect($<HTMLElement>('.machine-meter-bar > span', capacityRow('Max Concurrent')).style.width).toBe('100%');
   });
 
   it('shows a floor set to something else as it is, and Off clears it', async () => {
@@ -553,6 +584,9 @@ describe('a runner’s page, laid out as web.png', () => {
     await mount(machine('real longdeMac-mini.local'));
     expect(text($('[data-testid="machine-status"]'))).toMatch(/^Offline · last seen /);
     expect($('[data-testid="machine-status"]').className).toContain('machine-pill--offline');
+    // Offline, its count of running sessions is stale, so Max Concurrent has just its limit and no bar.
+    expect(text($('.machine-meter-value', capacityRow('Max Concurrent')))).toBe('16');
+    expect(capacityRow('Max Concurrent').querySelector('.machine-meter-bar')).toBeNull();
     expect(cards().map(({ tone, title, action }) => [tone, title, action])).toEqual([
       ['idle', 'Offline for 14 days', null],
       ['warn', 'Can’t update itself', 'Copy Command'],

@@ -838,6 +838,19 @@ button.toast--pill:focus-visible {
   white-space: nowrap;
   color: var(--text-3);
 }
+/* With a pointer, the machine shows only on the row pointed at (board docs/mocks/workspace-runner-label,
+   E1): the list reads as names, the hovered row says where it runs, and there the machine stays whole
+   while the name gives way. A touch screen has no hover, so it keeps the machine on every row. */
+@media (hover: hover) and (min-width: 961px) {
+  .app-shell .app-nav:not(.collapsed) .tp-item:not(:hover):not(.menu-open) .tp-workspace-separator,
+  .app-shell .app-nav:not(.collapsed) .tp-item:not(:hover):not(.menu-open) .tp-workspace-runner {
+    display: none;
+  }
+  .app-shell .app-nav:not(.collapsed) .tp-workspace-runner {
+    flex: none;
+    max-width: 60%;
+  }
+}
 .tp-workspace-icon {
   position: relative;
 }
@@ -4856,11 +4869,17 @@ button.toast--pill:focus-visible {
     border-radius: 6px;
   }
 }
-/* A project entry is the one focusable session row; draw its ring inside, as folder rows do, so the
-   list's edge doesn't clip the browser's outer default ring. */
+/* A project entry is the one focusable session row. Keyboard focus takes the row's hover tint, not a
+   ring: the browser's outer ring is clipped by the list's edge, and an inner one is covered on the
+   right by the kebab's fade. */
 .session-project-row:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: -2px;
+  outline: none;
+  background: var(--bg-hover);
+  --session-menu-surface: var(--bg-hover);
+}
+.session-project-row.active:focus-visible {
+  background: var(--brand-tint-hover);
+  --session-menu-surface: var(--brand-tint-hover);
 }
 /* Trash rows are managed, not opened — no pointer affordance. */
 .session-row.no-open {
@@ -5863,9 +5882,11 @@ button.toast--pill:focus-visible {
   background: var(--bg-hover);
   --row-bg: var(--bg-hover);
 }
+/* Keyboard focus takes the hover tint, as a project row's does, not a ring. */
 .session-folder-row:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: -2px;
+  outline: none;
+  background: var(--bg-hover);
+  --row-bg: var(--bg-hover);
 }
 .session-folder-row.editing {
   height: auto;

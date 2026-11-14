@@ -797,9 +797,11 @@ class ManagementDeviceTest {
                 activate("1 / 4 running", "talkback-machines-and-models-row", report, problems); await("Max Concurrent")
                 report.appendLine("double tap the Controlled remote row (1 / 4 running) -> the runner page opened")
                 page("runner", report, problems)
-                activate("Increase Max Concurrent", "talkback-runner-capacity", report, problems)
+                activate("Edit Max Concurrent", "talkback-runner-capacity", report, problems)
+                activate("Increase Max Concurrent", "talkback-runner-capacity-dialog", report, problems)
+                activate("Save", "talkback-runner-capacity-save", report, problems)
                 compose.waitUntil(10_000) { calls.any { it == "PATCH /api/runners/$runnerId" } }
-                report.appendLine("double tap Increase Max Concurrent -> PATCH /api/runners/$runnerId sent")
+                report.appendLine("double tap Edit Max Concurrent, Increase Max Concurrent, Save -> PATCH /api/runners/$runnerId sent")
                 back(); back(); await("Appearance")
                 activate("Machines & models", "talkback-settings-machines-and-models-pools", report, problems); await("Team Codex")
                 report.appendLine("double tap Machines & models -> the Machines & models page opened again")
