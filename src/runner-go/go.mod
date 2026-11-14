@@ -1,11 +1,11 @@
 module orbit
 
-go 1.23
+go 1.26.0
 
 require (
 	github.com/charmbracelet/bubbletea v1.3.4
 	github.com/coder/websocket v1.8.15
-	golang.org/x/sys v0.30.0
+	golang.org/x/sys v0.50.0
 	google.golang.org/protobuf v1.36.12
 )
 
