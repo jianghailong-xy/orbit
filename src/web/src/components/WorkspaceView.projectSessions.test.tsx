@@ -155,6 +155,8 @@ let withCoordinatorItems: Array<Record<string, unknown>> = [];
 let openItemsCalls = 0;
 /** The project's integration line, with whatever is landing on it. */
 let integrationView: Record<string, unknown> | null = null;
+/** What the owner-request door serves: the requests sessions asked the owner. */
+let ownerRequests: Array<Record<string, unknown>> = [];
 
 function LocationProbe() {
   const l = useLocation();
@@ -263,6 +265,7 @@ beforeEach(() => {
   withCoordinatorItems = [];
   openItemsCalls = 0;
   integrationView = null;
+  ownerRequests = [];
   FakeEventSource.streams = [];
   vi.mocked(apiModule.pinSession).mockReset().mockResolvedValue({});
   vi.mocked(apiModule.unpinSession).mockReset().mockResolvedValue({});
@@ -309,6 +312,7 @@ beforeEach(() => {
     }
     if (path === `/projects/${PROJECT_ID}/integration`) return reply(integrationView ?? []);
     if (path === `/projects/${PROJECT_ID}/acceptance/confirmation`) return reply(null);
+    if (path.startsWith('/owner-requests?')) return reply({ requests: ownerRequests });
     if (path.startsWith('/sessions/search?')) return reply({
       q: '', contentSearched: false, total: rows.length,
       hits: rows.map((r) => ({ ...r, matchField: 'title', snippet: null })),
@@ -1155,6 +1159,116 @@ describe('the project column in a window too narrow for it', { timeout: 60_000 }
     await until(() => expect(column()).not.toBeNull());
     expect(button().getAttribute('aria-pressed')).toBe('true');
     expect(column()!.classList.contains('session-project-column-over')).toBe(false);
+  });
+});
+
+// Owner 2026-11-14 (docs/mocks/project-row-opens-waiting): a row whose second line says a member is
+// waiting on you opens that member, at the top of its waiting card; every other row opens the
+// coordinator as before.
+describe('a project row whose member is waiting on you', { timeout: 60_000 }, () => {
+  const waitingMember = {
+    ...TASK, status: 'AWAITING_INPUT', runState: 'AWAITING_INPUT', pendingApprovals: 1,
+    waitingKind: 'OWNER_CONFIRMATION', ownerItems: [{ since: '2026-10-03T09:00:00Z' }],
+  };
+  const waitingCoordinator = { ...COORDINATOR, pendingApprovals: 1, waitingKind: 'OWNER_CONFIRMATION' };
+  const request = {
+    id: 'req-github-app', kind: 'DECISION', state: 'PENDING', title: 'Which GitHub App should workspaces sign in with?',
+    why: 'P0 registers the App.', blocksTaskIds: [], ifUnanswered: null,
+    options: [{ label: 'Register a new App' }, { label: 'Reuse the CI App' }], recommendedOption: 0,
+    steps: null, secretSpec: null, secretGrant: null, verifyHint: null, expiresAt: null,
+    askedBySessionId: TASK.id, projectId: PROJECT_ID, resolvedAt: null, resolvedByUserId: null,
+    resolvedBySessionId: null, resolutionNote: null, answer: null, createdAt: '2026-10-03T09:00:00Z',
+  };
+  const column = (): HTMLElement | null => mounted().querySelector<HTMLElement>('aside.session-project-column');
+  const conversation = (): HTMLElement | null => mounted().querySelector<HTMLElement>('.workspace-scroll-wrap > .workspace-sessions');
+  const card = (): HTMLElement | null => conversation()?.querySelector<HTMLElement>('.owner-request-card') ?? null;
+  // Where things sit: the conversation's scroller at y=100, the waiting card far below the fold at
+  // y=900, so a reveal that brings the card's top to the scroller's top scrolls by 900 - 100 - 12.
+  const scrollTops = new WeakMap<Element, number>();
+  beforeEach(() => {
+    rows = [LOOSE, COORDINATOR, waitingMember];
+    ownerRequests = [request];
+    const events = [
+      { seq: 1, type: 'user', payload: { text: 'Register the GitHub App' }, turnId: 't1', ts: '2026-10-03T08:00:00Z' },
+      { seq: 2, type: 'assistant', payload: { text: 'Asking the owner.' }, turnId: 't1', ts: '2026-10-03T08:00:01Z' },
+    ];
+    vi.mocked(apiModule.getSessionEventPage).mockResolvedValue({ events, hasMore: false } as never);
+    Object.defineProperty(HTMLElement.prototype, 'scrollTop', {
+      configurable: true,
+      get() { return scrollTops.get(this) ?? 0; },
+      set(value: number) { scrollTops.set(this, value); },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
+      configurable: true,
+      value(this: HTMLElement) {
+        const top = this.classList.contains('owner-request-card') ? 900 - (scrollTops.get(conversation()!) ?? 0)
+          : this.classList.contains('workspace-sessions') ? 100 : 0;
+        return { top, bottom: top + 400, left: 0, right: 400, width: 400, height: 400, x: 0, y: top, toJSON: () => ({}) };
+      },
+    });
+  });
+  afterEach(() => {
+    delete (HTMLElement.prototype as { scrollTop?: unknown }).scrollTop;
+    delete (HTMLElement.prototype as { getBoundingClientRect?: unknown }).getBoundingClientRect;
+  });
+
+  describe.each([false, true])('at phone width %s', (phone) => {
+    beforeEach(() => { mobile = phone; });
+    const memberAddress = phone ? `/sessions/${TASK.id}` : `/sessions/${TASK.id}?project=${PROJECT_ID}`;
+    const coordinatorAddress = phone ? `/sessions/${COORDINATOR.id}` : `/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`;
+
+    it('opens the waiting member the second line names, at the top of its waiting card', async () => {
+      await mount();
+      expect(preview()?.textContent).toContain(TASK.title);
+      await click(projectRow(), 'the project row');
+      await until(() => expect(location).toBe(memberAddress));
+      await until(() => expect(card()).not.toBeNull());
+      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 12));
+      // The card's header and title are in view, with the gap above them clear of anything pinned.
+      expect(card()!.getBoundingClientRect().top).toBe(100 + 12);
+      expect(card()!.querySelector('.owner-request-waiting')?.textContent).toBe('Waiting on you');
+      expect(card()!.querySelector('.owner-request-title')?.textContent).toBe(request.title);
+      if (phone) {
+        expect(column()).toBeNull();
+        expect(mounted().querySelector('.workspace-split')?.classList.contains('show-conversation')).toBe(true);
+        await back();
+        await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+      } else {
+        // The column is open beside it: the coordinator at its top, the member the selected row.
+        await until(() => expect(column()).not.toBeNull());
+        const coordinatorRow = column()!.querySelector('.session-project-coordinator .session-row .session-title');
+        expect(coordinatorRow?.textContent).toBe(COORDINATOR.title);
+        expect([...column()!.querySelectorAll('.session-row.active .session-title')].map((el) => el.textContent)).toEqual([TASK.title]);
+        expect(projectRow().classList.contains('active')).toBe(true);
+      }
+    });
+
+    it('opens the coordinator when the coordinator itself is waiting, and moves nothing', async () => {
+      rows = [LOOSE, waitingCoordinator, waitingMember];
+      await mount();
+      await click(projectRow(), 'the project row');
+      await until(() => expect(location).toBe(coordinatorAddress));
+      await settle();
+      expect(conversation()!.scrollTop).toBe(0);
+    });
+
+    it('opens the coordinator when nobody is waiting', async () => {
+      rows = [LOOSE, COORDINATOR, TASK];
+      ownerRequests = [];
+      await mount();
+      await click(projectRow(), 'the project row');
+      await until(() => expect(location).toBe(coordinatorAddress));
+    });
+  });
+
+  it('opens the member any other way without moving to its card', async () => {
+    await mount();
+    await hoverProjectMenu();
+    await click(menuItem('Open Session'), 'Open Session for the waiting member');
+    await until(() => expect(location).toBe(`/sessions/${TASK.id}`));
+    await until(() => expect(card()).not.toBeNull());
+    await settle();
+    expect(conversation()!.scrollTop).toBe(0);
   });
 });
 
