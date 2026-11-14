@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 31 |
-| `user` | 430 |
+| `user` | 432 |
 | `admin` | 28 |
 | `runner` | 178 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **671** |
+| **Total** | **673** |
 
 ## Public routes
 
@@ -354,10 +354,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/sessions/:id/pin` | path `id` | `SessionsController.pin` |
 | `DELETE` | `/api/sessions/:id/purge` | path `id` | `SessionsController.purge` |
 | `POST` | `/api/sessions/:id/recap` | path `id` | `SessionsController.refreshRecap` |
+| `POST` | `/api/sessions/:id/restart` | path `id` | `SessionsController.restart` |
 | `POST` | `/api/sessions/:id/restore` | path `id` | `SessionsController.restore` |
 | `POST` | `/api/sessions/:id/resume` | body `Object`; path `id` | `SessionsController.resume` |
 | `GET` | `/api/sessions/:id/retry-message` | path `id` | `SessionsController.retryMessage` |
 | `POST` | `/api/sessions/:id/retry-message` | body `Object`; path `id` | `SessionsController.resendRetryMessage` |
+| `PATCH` | `/api/sessions/:id/settings` | body `Object`; path `id` | `SessionsController.updateSettings` |
 | `DELETE` | `/api/sessions/:id/share` | path `id` | `ShareLinksController.turnOffSessionLink` |
 | `GET` | `/api/sessions/:id/share` | path `id` | `ShareLinksController.sessionLink` |
 | `POST` | `/api/sessions/:id/share` | path `id` | `ShareLinksController.enableSessionLink` |
