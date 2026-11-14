@@ -3,7 +3,7 @@ import { ExclamationCircleFilled, FullscreenExitOutlined, FullscreenOutlined } f
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { RunnerRepoHealth, MergeRecoveryAction } from '@orbit/shared';
 import { MAIN_CHECKOUT_COPY } from '@orbit/shared';
-import { MergeOperationLine, MergeRecoveryPanel, mergeRecoveryChecking, mergeRecoveryFastForward } from './MergeRecoveryPanel';
+import { MergeOperationLine, MergeRepairStrip, mergeRecoveryChecking, mergeRecoveryFastForward } from './MergeRecoveryPanel';
 import { MainCheckoutBar } from './MainCheckout';
 import { useMainCheckoutHost } from '../lib/mainCheckout';
 import { refreshSessionDiff } from '../api';
@@ -334,7 +334,7 @@ export function SessionOutputs({
       </div>
       {recovery && recoveryOperating && <MergeOperationLine action={detail.mergeRecoveryAction}
         target={recovery.targetBranch} requestedAt={detail.mergeRequestedAt} runner={detail.assignedRunner} />}
-      {recovery && !recoveryOperating && !recoveryFastForward && <MergeRecoveryPanel recovery={recovery}
+      {recovery && !recoveryOperating && !recoveryFastForward && <MergeRepairStrip recovery={recovery}
         branch={detail.branch}
         message={detail.mergeError}
         supported={detail.mergeRecoverySupported === true}
