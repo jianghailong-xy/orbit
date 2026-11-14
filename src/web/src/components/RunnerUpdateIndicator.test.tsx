@@ -40,6 +40,7 @@ describe('the indicator’s words', () => {
       body: 'It installs once these turns finish. Nothing is lost — waiting work starts right after.',
       waits: '10 sessions and 19 messages of yours wait for it.',
       stopping: false,
+      restarting: false,
     });
   });
   it('says stopping for a runner that drains to stop, not to update (docs/mocks/runner-stopping)', () => {
@@ -55,6 +56,7 @@ describe('the indicator’s words', () => {
       body: 'It stops once these turns finish. Nothing is lost — waiting work starts once it is back.',
       waits: '1 message of yours waits for it.',
       stopping: true,
+      restarting: false,
     });
     const now = runnerUpdateIndicator(runner({ selfUpdate: { state: 'enabled' }, updateTurns: [], drainWaiting: { sessions: 1, messages: 0, stopping: true } }), 'HPC');
     expect([now?.pill, now?.short, now?.body]).toEqual(['HPC stopping', '', 'It is stopping now. Waiting work starts once it is back.']);
@@ -65,6 +67,24 @@ describe('the indicator’s words', () => {
     expect(runnerUpdateIndicator(runner({ selfUpdate: { ...DRAINING, turnsInFlight: 1 } }), 'HPC')?.pill).toBe('HPC updating · 1 turn left');
     expect(runnerUpdateIndicatorWaits({ sessions: 1, messages: 0 })).toBe('1 session of yours waits for it.');
     expect(runnerUpdateIndicatorWaits({ sessions: 0, messages: 3 })).toBe('3 messages of yours wait for it.');
+  });
+  it('says restarting once Update Now is taken, though the reader’s turns are still listed', () => {
+    // The runner's restarting report carries no turnsInFlight; the reader's five listed turns are interrupted, not left.
+    const RESTARTING: RunnerSelfUpdate = { state: 'enabled', phase: 'restarting', targetVersion: '0.1.257', interruptedTurns: 5 };
+    expect(runnerUpdateIndicator(runner({ selfUpdate: RESTARTING }), 'HPC')).toEqual({
+      pill: 'HPC restarting',
+      short: '',
+      title: 'HPC is restarting into 0.1.257',
+      body: 'It is restarting into the new version. 5 interrupted turns continue once it is back, and waiting work starts right after.',
+      waits: '10 sessions and 19 messages of yours wait for it.',
+      stopping: false,
+      restarting: true,
+    });
+    const one = runnerUpdateIndicator(runner({ selfUpdate: { ...RESTARTING, interruptedTurns: 1 } }), 'HPC');
+    expect(one?.body).toBe('It is restarting into the new version. 1 interrupted turn continues once it is back, and waiting work starts right after.');
+    const none = runnerUpdateIndicator(runner({ selfUpdate: { ...RESTARTING, interruptedTurns: undefined } }), 'HPC');
+    expect(none?.body).toBe('It is restarting into the new version. Waiting work starts right after.');
+    expect(runnerUpdateIndicator(runner({ selfUpdate: { ...RESTARTING, targetVersion: undefined } }), 'HPC')?.title).toBe('HPC is restarting');
   });
   it('is nothing unless the runner drains with the reader’s work waiting', () => {
     expect(runnerUpdateIndicator(runner({ drainWaiting: undefined }), 'HPC')).toBeNull();
@@ -135,6 +155,18 @@ describe('the pill left of the header’s ⋯', () => {
     await open();
     const pop = popover()!;
     expect(pop.querySelector('.orbit-popover-title')?.textContent).toBe('HPC is stopping');
+    const actions = pop.querySelector('.runner-update-popover-actions')!;
+    expect(actions.querySelectorAll('button')).toHaveLength(0);
+    expect(actions.querySelector('a')?.textContent).toBe('Open HPC');
+  });
+
+  it('lists no turns and offers neither Later nor Update Now… once the runner restarts for Update Now', async () => {
+    mount(runner({ selfUpdate: { state: 'enabled', phase: 'restarting', targetVersion: '0.1.257', interruptedTurns: 5 } }));
+    expect(pill()?.querySelector('.runner-update-pill-label')?.textContent).toBe('HPC restarting');
+    await open();
+    const pop = popover()!;
+    expect(pop.querySelector('.orbit-popover-title')?.textContent).toBe('HPC is restarting into 0.1.257');
+    expect(pop.querySelector('.runner-update-popover-turns')).toBeNull();
     const actions = pop.querySelector('.runner-update-popover-actions')!;
     expect(actions.querySelectorAll('button')).toHaveLength(0);
     expect(actions.querySelector('a')?.textContent).toBe('Open HPC');

@@ -27,7 +27,8 @@ export function RunnerUpdateIndicator({ runner, machine }: { runner: Runner; mac
   const indicator = runnerUpdateIndicator(runner, machine);
   if (!indicator) return null;
   // Read at render; the runners query refetches, so `running 47 min` stays near enough.
-  const turns = runnerUpdateNowTurns(runner, Date.now());
+  // A runner restarting runs none of them any more: Update Now interrupted them.
+  const turns = indicator.restarting ? [] : runnerUpdateNowTurns(runner, Date.now());
   const shown = turns.slice(0, RUNNER_UPDATE_INDICATOR_TURNS_SHOWN);
   const more = turns.length - shown.length;
   return (
@@ -62,7 +63,8 @@ export function RunnerUpdateIndicator({ runner, machine }: { runner: Runner; mac
         <p className="runner-update-popover-waits">{indicator.waits}</p>
         <div className="runner-update-popover-actions">
           {/* A runner that is stopping has no update to postpone or install now (docs/mocks/runner-stopping). */}
-          {!indicator.stopping && <RunnerUpdateLaterMenu runnerId={runner.id} />}
+          {/* Nor one that is restarting: the update is installing. */}
+          {!indicator.stopping && !indicator.restarting && <RunnerUpdateLaterMenu runnerId={runner.id} />}
           {!indicator.stopping && runnerTakesUpdateNow(runner) && (
             <RunnerUpdateNowPress pending={updateNow.pending} onClick={() => { setOpen(false); updateNow.open(pill); }} />
           )}

@@ -64,7 +64,7 @@ func assertCodexOrbitMCPContextForwarded(t *testing.T, args []string) {
 	// instance identity, without which its control plane refuses the credential `orbit mcp` uses, and
 	// ORBIT_SPAWN_DEPTH, without which a nested session's wait is as long as a root's, and the runner's mark, without
 	// which the Plan gate cannot tell a session process that lost its socket from a terminal).
-	want := `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_SPAWN_DEPTH","ORBIT_RUNNER_CHILD","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN","ORBIT_MANAGED_RUNNER_GENERATION","ORBIT_MANAGED_RUNNER_POD_UID"]`
+	want := `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_SPAWN_DEPTH","ORBIT_RUNNER_CHILD","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN","ORBIT_MANAGED_RUNNER_GENERATION","ORBIT_MANAGED_RUNNER_POD_UID","ORBIT_SUBAGENT_RUN_ID"]`
 	for i, arg := range args {
 		if arg == want {
 			if i == 0 || args[i-1] != "-c" {
