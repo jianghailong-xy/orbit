@@ -8,6 +8,7 @@ import {
   RightOutlined,
 } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { managedRowOf, useManagedRunner } from '../lib/managedRunner';
 import { ENGINE_CLI_NAMES, isEngine, type SessionMoveFolder, type SessionMoveTarget, type SessionMoveTargets } from '@orbit/shared';
 import {
   createSessionFolder,
@@ -84,6 +85,8 @@ export function SessionMoveModal({
 }) {
   // The confirmation stacks on this dialog (its holder renders inside it), as the replaced modal's did on top.
   const [confirm, confirmation] = useConfirm();
+  // The account's managed runner is named by its shared state (Asleep, Waking up…), never Offline.
+  const { managed } = useManagedRunner(open);
   const message = useToast();
   const qc = useQueryClient();
   const refreshSessionLists = useRefreshSessionLists();
@@ -332,9 +335,15 @@ export function SessionMoveModal({
                   {row.target.name}
                   <small>{row.detail}</small>
                 </span>
-                {row.enabled && !row.target.runnerOnline && (
-                  <span className="move-dialog-pill">{MOVE_COPY.runnerOffline}</span>
-                )}
+                {row.enabled && (() => {
+                  const managedRow = managedRowOf(managed, row.target.runnerId);
+                  if (managedRow) {
+                    return managedRow.kind === 'available' ? null : (
+                      <span className="move-dialog-pill" data-managed-kind={managedRow.kind}>{managedRow.label}</span>
+                    );
+                  }
+                  return row.target.runnerOnline ? null : <span className="move-dialog-pill">{MOVE_COPY.runnerOffline}</span>;
+                })()}
                 {row.enabled && <RightOutlined className="move-dialog-chev" />}
               </button>
             ))}

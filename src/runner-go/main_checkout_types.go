@@ -9,6 +9,10 @@ package main
 // snapshot a main checkout and run move/commit/push/rescue. Without it the clients show no buttons.
 const mainCheckoutGitCapabilityV1 = "main-checkout-git/v1"
 
+// mainCheckoutDiscardCapabilityV1 is declared by a runner that also does the discard action. Without
+// it the clients show no Discard button. Shared twin: MAIN_CHECKOUT_DISCARD_CAPABILITY.
+const mainCheckoutDiscardCapabilityV1 = "main-checkout-discard/v1"
+
 // mainCheckoutFileLimit is the most files a snapshot lists and counts; past it Truncated is set.
 const mainCheckoutFileLimit = 200
 
@@ -17,10 +21,11 @@ const mainCheckoutPatchMaxBytes = 256 * 1024
 
 // Action kinds.
 const (
-	mainCheckoutMove   = "move"
-	mainCheckoutCommit = "commit"
-	mainCheckoutPush   = "push"
-	mainCheckoutRescue = "rescue"
+	mainCheckoutMove    = "move"
+	mainCheckoutCommit  = "commit"
+	mainCheckoutPush    = "push"
+	mainCheckoutRescue  = "rescue"
+	mainCheckoutDiscard = "discard"
 )
 
 // Result statuses: done; partial (MOVE_SOURCE_CHANGED only: copied, not cleared); refused

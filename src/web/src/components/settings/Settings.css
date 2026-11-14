@@ -228,6 +228,45 @@
   background: var(--dot-idle);
 }
 
+/* The managed runner's machine row (ManagedRowState): the shared short label beside its dot or spinner. */
+.settings-managed-state {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  max-width: 55%;
+  min-width: 0;
+}
+.settings-managed-state .settings-dot {
+  margin-right: 0;
+}
+.settings-managed-state .settings-nav-meta {
+  max-width: none;
+}
+
+/* The managed runner's notice at the top of its machine page, under the head. */
+.machine-page > .machine-managed-notice {
+  margin: 12px 0 0;
+}
+
+/* A managed runner's Resources and Engines before it first reports: one quiet line each. */
+.machine-managed-waiting {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+/* /settings/machines/managed: the notice and the page's one sentence under it. */
+.managed-runner-setup .managed-runner-notice {
+  margin-top: 16px;
+  font-size: 13px;
+}
+.managed-runner-setup-note {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
 /* Search results (SettingsSearch), in place of the nav while there is a query. */
 .settings-search-hit {
   display: flex;

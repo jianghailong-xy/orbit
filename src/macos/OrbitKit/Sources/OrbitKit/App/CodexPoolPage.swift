@@ -54,8 +54,8 @@ public struct CodexPoolPage: Equatable, Sendable {
     // MARK: the head
 
     public static let title = "Codex pool"
-    /// Worn beside the pool's name once anybody but its owner can use it.
-    public static let sharedChip = "SHARED"
+    /// Worn beside the pool's name once anybody but its owner can use it — the web's quiet chip.
+    public static let sharedChip = "Shared"
     public static let justMe = "Just me"
     public static let addAccount = "Add account"
     public static let addKey = "Add a key"

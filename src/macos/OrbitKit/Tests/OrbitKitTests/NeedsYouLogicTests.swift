@@ -504,4 +504,41 @@ final class NeedsYouLogicTests: XCTestCase {
         XCTAssertEqual(garbled.ownerItems?.first?.kind, .promotionApproval)
         XCTAssertEqual(NeedsYouLogic.banner(waiting: [garbled])?.text, "Approve merge to main")
     }
+
+    // MARK: arriving (the owner, 2026-11-15, docs/mocks/needs-you-capsule/05-one-surface)
+
+    /// An approval that has just arrived is what the bar says, in the push's words, for six seconds:
+    /// the press opens the conversation it stops, and the count still covers everything waiting.
+    func testAnArrivalIsSaidForSixSecondsThenTheCountComesBack() throws {
+        let at = Date(timeIntervalSince1970: 1_800_000_000)
+        let old = session("old", approvals: 1, agentName: "orbit", title: "Owner answer replayed",
+                          lastTurnAt: "2026-11-12T10:00:00Z")
+        let new = session("new", approvals: 1, agentName: "orbit-develop", title: "Android 自动更新报错",
+                          lastTurnAt: "2026-11-15T10:00:00Z")
+        let arrival = NeedsYouArrival(sessionID: "new", line: "Needs your reply · task_create", at: at)
+
+        let said = try XCTUnwrap(NeedsYouLogic.arriving(arrival, waiting: [old, new], now: at.addingTimeInterval(5.9)))
+        XCTAssertTrue(said.arriving)
+        XCTAssertEqual(said.text, "Needs your reply · task_create")
+        XCTAssertEqual(said.detail, "Android 自动更新报错")
+        XCTAssertEqual(said.target.id, "new", "the press goes to the newcomer, not the oldest")
+        XCTAssertEqual(said.count, 2)
+        XCTAssertEqual(said.more, 0)
+        XCTAssertEqual(said.since.flatMap { RelativeTime.elapsed($0, now: at) }, "0s")
+
+        XCTAssertNil(NeedsYouLogic.arriving(arrival, waiting: [old, new], now: at.addingTimeInterval(6)))
+        XCTAssertFalse(try XCTUnwrap(NeedsYouLogic.banner(waiting: [old, new])).arriving)
+    }
+
+    /// Nothing to say for a conversation that is not waiting elsewhere: the push came before the
+    /// list did, it was answered already, or it is the one on screen.
+    func testAnArrivalNeedsItsConversationAmongThoseWaitingElsewhere() {
+        let at = Date(timeIntervalSince1970: 1_800_000_000)
+        let other = session("other", approvals: 1)
+        let arrival = NeedsYouArrival(sessionID: "new", line: "Needs your reply · Bash", at: at)
+        XCTAssertNil(NeedsYouLogic.arriving(arrival, waiting: [other], now: at))
+        let new = session("new", approvals: 1)
+        XCTAssertNil(NeedsYouLogic.arriving(arrival, waiting: [other, new], excluding: "new", now: at))
+        XCTAssertNil(NeedsYouLogic.arriving(nil, waiting: [other, new], now: at))
+    }
 }

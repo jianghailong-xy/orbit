@@ -9,6 +9,11 @@ import Foundation
    coordinates the project draws them as one card per batch, built like the criteria decision card
    (board `docs/mocks/handoff-in-chat/01-board.html`, ③–⑤; spec of task 34vT0PEhdlq1lILqsg2WG).
 
+   A move that names no target (`toProjectId == nil`) leaves this project instead of joining one.
+   It is answered in the SOURCE project's coordinator conversation, so that conversation batches it
+   too — apart from the batches moving work in, even from the same source and of the same kind. No
+   other project's conversation draws it.
+
    A batch is what one agent asked in one go: rows from the same source project, of the same kind,
    asked while the batch was still open. One press answers every row of it still pending — one
    decision POST each, each with its own crossing key — through the project page's door.
@@ -26,11 +31,15 @@ public struct CrossingBatch: Equatable, Sendable, Identifiable {
     public let kind: String
     /// The rows, oldest first. Never empty.
     public let rows: [ProjectCrossing]
+    /// A batch of moves that take their tasks out of the source project, answered in the source
+    /// project's coordinator conversation. False for work moving into the conversation's project.
+    public let out: Bool
 
-    public init(id: String, kind: String, rows: [ProjectCrossing]) {
+    public init(id: String, kind: String, rows: [ProjectCrossing], out: Bool = false) {
         self.id = id
         self.kind = kind
         self.rows = rows
+        self.out = out
     }
 
     /// Where the card is placed in the transcript: when the first row was asked.
@@ -71,22 +80,40 @@ public enum CrossingBatches {
         row.toProjectId == projectID || row.toProjectPublicId == projectID
     }
 
-    /// The batches of crossings into `projectID`, oldest first.
+    /// Whether `row` takes its task out of `projectID` — the source end of a `MOVE_TASK` that names
+    /// no target. Such a row is answered in the source project's coordinator conversation.
+    public static func leaves(_ row: ProjectCrossing, projectID: String) -> Bool {
+        row.isToNoProject && row.kind == ProjectCrossings.moveKind
+            && (row.fromProjectId == projectID || row.fromProjectPublicId == projectID)
+    }
+
+    /// The batches this project's coordinator conversation draws, oldest first: the crossings into
+    /// it and the moves out of it.
     ///
-    /// Rows are grouped by source project and kind; within a group, oldest first, a row joins the
-    /// batch before it while that batch is still open at the row's `requestedAt` — some member not
-    /// yet answered, or answered after the row was asked. Otherwise the row starts a new batch.
+    /// Rows are grouped by direction, source project and kind; within a group, oldest first, a row
+    /// joins the batch before it while that batch is still open at the row's `requestedAt` — some
+    /// member not yet answered, or answered after the row was asked. Otherwise the row starts a new
+    /// batch. The direction is part of the key, so a move out never joins a move in from the same
+    /// source.
     public static func batches(_ rows: [ProjectCrossing], projectID: String) -> [CrossingBatch] {
-        let into = rows.filter { targets($0, projectID: projectID) }
         var groups: [String: [ProjectCrossing]] = [:]
         var groupOrder: [String] = []
-        for row in into {
-            let key = "\(row.fromProjectId)\u{1F}\(row.kind)"
+        for row in rows {
+            let direction: String
+            if targets(row, projectID: projectID) {
+                direction = "in"
+            } else if leaves(row, projectID: projectID) {
+                direction = "out"
+            } else {
+                continue
+            }
+            let key = "\(direction)\u{1F}\(row.fromProjectId)\u{1F}\(row.kind)"
             if groups[key] == nil { groupOrder.append(key) }
             groups[key, default: []].append(row)
         }
-        var out: [CrossingBatch] = []
+        var batches: [CrossingBatch] = []
         for key in groupOrder {
+            let isOut = key.hasPrefix("out\u{1F}")
             let sorted = groups[key, default: []].enumerated()
                 .sorted { isEarlier($0.element.requestedAt, $1.element.requestedAt)
                     || ($0.element.requestedAt == $1.element.requestedAt && $0.offset < $1.offset) }
@@ -100,20 +127,21 @@ public enum CrossingBatches {
                 if current.isEmpty || open {
                     current.append(row)
                 } else {
-                    out.append(batch(current))
+                    batches.append(batch(current, out: isOut))
                     current = [row]
                 }
             }
-            if !current.isEmpty { out.append(batch(current)) }
+            if !current.isEmpty { batches.append(batch(current, out: isOut)) }
         }
-        return out.enumerated()
+        return batches.enumerated()
             .sorted { isEarlier($0.element.moment, $1.element.moment)
                 || ($0.element.moment == $1.element.moment && $0.offset < $1.offset) }
             .map(\.element)
     }
 
-    private static func batch(_ rows: [ProjectCrossing]) -> CrossingBatch {
-        CrossingBatch(id: idPrefix + ProjectCrossings.doorID(rows[0]), kind: rows[0].kind, rows: rows)
+    private static func batch(_ rows: [ProjectCrossing], out: Bool) -> CrossingBatch {
+        CrossingBatch(id: idPrefix + ProjectCrossings.doorID(rows[0]), kind: rows[0].kind, rows: rows,
+                      out: out)
     }
 
     /// `a` before `b`: by the instant when both parse, by the ISO string otherwise.
@@ -152,6 +180,7 @@ public enum CrossingBatches {
 
     public static func title(_ batch: CrossingBatch) -> String {
         let one = batch.rows.count == 1
+        if batch.out { return one ? takeOutTitle : takeOutManyTitle }
         switch batch.kind {
         case ProjectCrossings.moveKind: return one ? "Move this task here?" : "Move these tasks here?"
         case dependKind: return one ? "Allow this dependency?" : "Allow these dependencies?"
@@ -171,7 +200,8 @@ public enum CrossingBatches {
     public static func badge(_ batch: CrossingBatch) -> String {
         switch batch.verdict {
         case nil: return liveBadge(batch.kind)
-        case .approved?: return batch.kind == ProjectCrossings.moveKind ? "moved" : "approved"
+        case .approved?: return batch.out ? takenOutBadge
+            : (batch.kind == ProjectCrossings.moveKind ? "moved" : "approved")
         case .refused?: return "refused"
         case .mixed?: return "answered"
         }
@@ -190,9 +220,15 @@ public enum CrossingBatches {
         }
     }
 
-    /// `8 tasks from Runner v1 · for criteria 4–11`.
+    /// The head over a batch's rows: a move out names what it takes out.
+    public static func listHead(for batch: CrossingBatch) -> String {
+        batch.out ? takeOutListHead : listHead(batch.kind)
+    }
+
+    /// `8 tasks from Runner v1 · for criteria 4–11`; a move out says what it takes out and from where.
     public static func summary(_ batch: CrossingBatch) -> String {
         let n = batch.rows.count
+        if batch.out { return "\(n) \(noun(batch.kind, count: n)) to take out of \(batch.sourceTitle)" }
         let head = "\(n) \(noun(batch.kind, count: n)) from \(batch.sourceTitle)"
         guard let range = criteriaRange(batch.rows.compactMap { $0.requestedCriterion?.key }) else { return head }
         return "\(head) · \(range)"
@@ -224,10 +260,42 @@ public enum CrossingBatches {
     public static let fromLabel = "From"
     public static let toLabel = "To"
     public static let toThisProject = "this project"
+    /// The target end of a batch that takes its tasks out of its project.
+    public static let toNoProject = "No project"
     public static let approveLabel = "Approve"
     public static let refuseLabel = "Refuse"
     /// How many rows the review shows before `Show k more`.
     public static let shownRows = 3
+
+    // MARK: a move out of the project
+
+    public static let takeOutTitle = "Take this task out of the project?"
+    public static let takeOutManyTitle = "Take these tasks out of the project?"
+    public static let takeOutListHead = "Tasks to take out"
+    public static let takeOutApprove = "Take it out"
+    public static let takeOutManyApprove = "Take them out"
+    public static let takeOutRefuse = "Keep it here"
+    public static let takeOutManyRefuse = "Keep them here"
+    /// The badge an answered move out earns, in place of an into-move's `moved`.
+    public static let takenOutBadge = "taken out"
+    public static let takeOutConsequence =
+        "Confirming takes the task out of this project as soon as you answer, and nobody has to send the request again."
+    public static let takeOutManyConsequence =
+        "Confirming takes the tasks out of this project as soon as you answer, and nobody has to send the request again."
+
+    /// The approve button's words: a move out takes its task(s) out, a batch into the project keeps
+    /// `Approve`.
+    public static func approveLabel(for batch: CrossingBatch) -> String {
+        guard batch.out else { return approveLabel }
+        return batch.rows.count == 1 ? takeOutApprove : takeOutManyApprove
+    }
+
+    /// The refuse button's words: a move out keeps the task(s) here, a batch into the project keeps
+    /// `Refuse`.
+    public static func refuseLabel(for batch: CrossingBatch) -> String {
+        guard batch.out else { return refuseLabel }
+        return batch.rows.count == 1 ? takeOutRefuse : takeOutManyRefuse
+    }
 
     public static func showMore(_ hidden: Int) -> String {
         "Show \(hidden) more"
@@ -268,6 +336,7 @@ public enum CrossingBatches {
 
     /// What approving does.
     public static func consequence(_ batch: CrossingBatch) -> String {
+        if batch.out { return batch.rows.count == 1 ? takeOutConsequence : takeOutManyConsequence }
         guard batch.kind == ProjectCrossings.moveKind else { return ProjectCrossings.fileApproveConsequence }
         return batch.rows.count == 1 ? ProjectCrossings.moveApproveConsequence : moveManyApproveConsequence
     }

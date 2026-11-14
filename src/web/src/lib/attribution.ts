@@ -80,8 +80,20 @@ export interface ProjectCrossingRow {
   /** Null on a MOVE_TASK that takes the task out of its project, filed under none. */
   toProjectId: string | null;
   toProjectPublicId?: string | null;
-  fromProject?: { title: string; status: AttributionProjectStatus } | null;
-  toProject?: { title: string; status: AttributionProjectStatus } | null;
+  /** `coordinatorSessionId`: the source's live coordinator conversation, which draws a move out of
+   *  every project (`toProjectId` null) as a decision card. Absent from an older server. */
+  fromProject?: {
+    title: string;
+    status: AttributionProjectStatus;
+    coordinatorSessionId?: string | null;
+  } | null;
+  /** `coordinatorSessionId`: the target's live coordinator conversation, which draws this row as a
+   *  decision card. Null when it has none or it is in Trash; absent from an older server. */
+  toProject?: {
+    title: string;
+    status: AttributionProjectStatus;
+    coordinatorSessionId?: string | null;
+  } | null;
   kind: string;
   subjectTaskId: string | null;
   subjectTaskPublicId?: string;

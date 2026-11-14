@@ -144,6 +144,11 @@ export interface GatewayCaller {
   accountId: string | null;
   /** `session.pool_key_id`: the API key of the pool the session runs on, if any. */
   keyId: string | null;
+  /**
+   * A SubAgent's child (migration 0800): `accountId` and `keyId` are its token's, not its session's, and the
+   * session — its parent's — is owed no transcript line about them.
+   */
+  subagent?: boolean;
 }
 
 /** A key as the gateway uses one. The secret is decrypted only for the request, and never kept. */

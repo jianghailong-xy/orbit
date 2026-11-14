@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeId } from '../lib/idCodec';
 import type { WikiSpaceRow } from '../lib/wiki';
 import { WIKI_FROM_WORKSPACE_KEY, WIKI_LAST_SPACE_KEY } from '../lib/wikiSpace';
+import start from '../../../shared/src/wiki-start.fixture.json';
 import { TasksSidePanel } from './TasksSidePanel';
 
 /**
@@ -121,7 +122,8 @@ async function leave(): Promise<void> {
 }
 
 const group = () => container!.querySelector('.tp-group-wiki');
-const rows = () => [...container!.querySelectorAll<HTMLElement>('.tp-group-wiki .tp-item')];
+/** The wikis' rows: the group's last row, New wiki…, is no wiki. */
+const rows = () => [...container!.querySelectorAll<HTMLElement>('.tp-group-wiki .tp-item:not(.tp-wiki-new)')];
 const row = (name: string) => rows().find((item) => item.querySelector('.tp-label')?.textContent === name)!;
 const names = () => rows().map((item) => item.querySelector('.tp-label')?.textContent);
 const entry = () =>
@@ -361,5 +363,56 @@ describe('the collapsed rail, which has no group', () => {
     expect(railIcon().classList.contains('active')).toBe(false);
     await press(railIcon());
     expect(pathname).toBe('/wiki');
+  });
+});
+
+describe('New wiki… (docs/wiki-explicit-creation-design.md §3.4, board 46 part 4)', () => {
+  const WORKSPACES = [
+    { ...WORKSPACE, repoUrl: 'https://github.com/jianghailong-xy/orbit.git', runner: { id: 'runner', name: 'workstation' } },
+    {
+      ...WORKSPACE,
+      id: encodeId('0196a000-0000-7000-8000-0000000000a2'),
+      name: 'lfs',
+      position: 1,
+      repoUrl: 'https://github.com/jianghailong-xy/lfs-builder',
+      runner: { id: 'runner', name: 'workstation' },
+    },
+  ];
+  const newRow = () => container!.querySelector<HTMLElement>('.tp-group-wiki .tp-item.tp-wiki-new');
+
+  it('is the group’s last row, after the wikis, grey and with no count', async () => {
+    await visit('/projects');
+    const all = [...container!.querySelectorAll<HTMLElement>('.tp-group-wiki .tp-item')];
+    expect(all.at(-1)).toBe(newRow());
+    expect(newRow()!.querySelector('.tp-label')?.textContent).toBe(start.hasWiki.newWiki);
+    expect(newRow()!.querySelector('.tp-count')).toBeNull();
+    expect(newRow()!.getAttribute('role')).toBe('button');
+  });
+
+  it('folds with the group', async () => {
+    await visit('/projects');
+    await press(group()!.querySelector<HTMLElement>('.tp-group-head')!);
+    expect(newRow()).toBeNull();
+  });
+
+  it('opens the Create wiki form where the reader is, a repository with a wiki greyed and tagged', async () => {
+    serve(WIKIS, { workspaces: WORKSPACES });
+    await visit('/projects');
+    await press(newRow()!);
+    const dialog = document.querySelector('.wk-setup-dialog')!;
+    expect(dialog.querySelector('.orbit-overlay-title')?.textContent).toBe('Create wiki');
+    expect(pathname).toBe('/projects');
+    // The form opens on the one repository with no wiki, never on one that has one.
+    expect(document.getElementById('wk-setup-workspace')?.textContent).toBe('lfs · workstation');
+    await press(document.getElementById('wk-setup-workspace')!);
+    const labels = [...document.querySelectorAll('.orbit-select-group-label')].map((node) => node.textContent);
+    expect(labels).toEqual(['github.com/jianghailong-xy/lfs-builder', `github.com/jianghailong-xy/orbit${start.hasWiki.label}`]);
+  });
+
+  it('opens from the keyboard as well', async () => {
+    await visit('/projects');
+    await act(async () => newRow()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+    await settle();
+    expect(document.querySelector('.wk-setup-dialog')).toBeTruthy();
   });
 });

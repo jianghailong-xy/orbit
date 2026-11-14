@@ -85,6 +85,12 @@ public struct UpdateAgentRequest: Encodable, Sendable {
     public var enableWorktree: Bool?
     /// Smart model selection for this Agent's task runs (`Agent.modelRouting`).
     public var modelRouting: Bool?
+    /// What smart model selection and SubAgents rank by: `cost`, `balance` or `intelligence`.
+    public var modelRoutingOptimizeFor: String?
+    /// SubAgents for this Agent's sessions (docs/subagent-design.md §7).
+    public var subagentsEnabled: Bool?
+    /// How many of one session's SubAgents run at once, 1…16.
+    public var subagentsMaxRunning: Int?
 
     public init(name: String? = nil, description: String? = nil,
                 model: String? = nil,
@@ -95,7 +101,8 @@ public struct UpdateAgentRequest: Encodable, Sendable {
                 targetRunnerId: String? = nil, targetLabels: [String]? = nil,
                 runnerId: String? = nil, workDir: String? = nil, env: [String: String]? = nil,
                 enabled: Bool? = nil, autoInitGit: Bool? = nil, enableWorktree: Bool? = nil,
-                modelRouting: Bool? = nil) {
+                modelRouting: Bool? = nil, modelRoutingOptimizeFor: String? = nil,
+                subagentsEnabled: Bool? = nil, subagentsMaxRunning: Int? = nil) {
         self.name = name
         self.description = description
         self.model = model
@@ -116,6 +123,9 @@ public struct UpdateAgentRequest: Encodable, Sendable {
         self.autoInitGit = autoInitGit
         self.enableWorktree = enableWorktree
         self.modelRouting = modelRouting
+        self.modelRoutingOptimizeFor = modelRoutingOptimizeFor
+        self.subagentsEnabled = subagentsEnabled
+        self.subagentsMaxRunning = subagentsMaxRunning
     }
 }
 

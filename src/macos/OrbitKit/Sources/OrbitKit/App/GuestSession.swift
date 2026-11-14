@@ -158,3 +158,27 @@ public enum SharedWithMe {
         return sessions.contains { PublicID.storageKey($0.id) == key }
     }
 }
+
+/// One row of a guest conversation's transcript: the earlier-messages control, an item, or the
+/// bottom anchor the view scrolls to. One array, so the list holds one ForEach and no conditional
+/// row of its own.
+public enum GuestTranscriptListRow: Equatable, Sendable, Identifiable {
+    case loadOlder
+    case item(TranscriptItem)
+    case bottom(String)
+
+    public var id: String {
+        switch self {
+        case .loadOlder: "load-older"
+        case .item(let item): "item:\(item.id)"
+        case .bottom(let id): "bottom:\(id)"
+        }
+    }
+}
+
+public enum GuestTranscriptListLogic {
+    public static func rows(_ items: [TranscriptItem], hasMoreOlder: Bool,
+                            bottomID: String) -> [GuestTranscriptListRow] {
+        (hasMoreOlder ? [.loadOlder] : []) + items.map(GuestTranscriptListRow.item) + [.bottom(bottomID)]
+    }
+}
