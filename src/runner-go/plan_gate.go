@@ -34,22 +34,32 @@ const planGateRefusalFormat = "Not run: this session is in Plan mode, which read
 	"make it once the owner has approved the plan or switched this session out of Plan mode."
 
 // planGateUnreadableFormat is what a write returns when the session's mode could not be read: a write is never made
-// on a mode nobody could read.
-const planGateUnreadableFormat = "Not run: Orbit could not read this session's permission mode (%v), so it did " +
-	"not make this write. Nothing was written; try it again."
+// on a mode nobody could read, since that mode may be Plan.
+const planGateUnreadableFormat = "Not run: Orbit could not read this session's permission mode (%v), and it makes " +
+	"no write on a mode nobody could read. Nothing was written. Try it again; if it keeps failing, tell the owner: " +
+	"restarting this session, or its runner, gives the session its mode back."
+
+// errNoSessionSocket is what a session process the runner started reads when the socket the runner hands every one
+// of them (bgJobEnvPairs) is not in its environment: the runner's job service for the session did not start.
+var errNoSessionSocket = errors.New("this session's runner-hosted socket is not in this process's environment")
 
 // sessionPermissionMode reads the permission mode the session this process runs in is in now, from the runner that
-// hosts it. known is false where there is no such session to ask about: no ORBIT_SESSION_ID (a person's own
-// terminal, or `orbit mcp` started by hand), or no runner-hosted socket to ask (a background job's environment
-// carries the session but not the socket, and a runner whose job service did not start offers none). Then no gate
-// applies. An error is a socket that is there and did not answer.
+// hosts it. known is false only where there is no session process to hold to a mode: no ORBIT_SESSION_ID (a person's
+// own terminal, or `orbit mcp` started by hand), or a process the runner did not start (no ORBIT_RUNNER_CHILD), or a
+// runner-hosted background job, whose environment carries the session but never the socket (ORBIT_BG_JOB_ID; the
+// hosted owner wait is gated at its own door, startOwnerWait). A session process the runner started always has the
+// socket, so one without it is a mode that cannot be read, and so is a socket that does not answer: both are errors,
+// on which the gate refuses a write.
 func sessionPermissionMode() (mode string, known bool, err error) {
 	if strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID")) == "" {
 		return "", false, nil
 	}
 	socket, token := os.Getenv(envBgSocket), os.Getenv(envBgToken)
 	if socket == "" || token == "" {
-		return "", false, nil
+		if strings.TrimSpace(os.Getenv(envBgJobID)) != "" || strings.TrimSpace(os.Getenv(envRunnerChild)) == "" {
+			return "", false, nil
+		}
+		return "", true, errNoSessionSocket
 	}
 	raw, err := bgSocketCall(socket, token, planGateModeOp, nil)
 	if err != nil {

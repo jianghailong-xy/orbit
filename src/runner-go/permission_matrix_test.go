@@ -413,11 +413,14 @@ func renderPermissionMatrixMarkdown() string {
 			"they are writes and are refused, with the rest.",
 		"**Don't Ask asks nobody but Orbit's own cards.** A write that files its card still asks (a question is not a " +
 			"job), and a background job is refused. On Codex, Don't Ask runs every command unasked: Codex takes no allowlist.",
-		"**Where the gate reads the mode.** The runner hosting the session answers it over the session's socket " +
-			"(`bgJobService`, op `mode`); a write is refused when the socket does not answer, and there is no gate where there " +
-			"is no session or no socket to ask: a person's own terminal has neither, and a background job's environment " +
-			"carries the session but not the socket, so a job started before Plan can still write. Like the background-job " +
-			"gate, this protects against an agent acting ahead of the owner, not against a hostile process on the machine.",
+		"**Where the gate reads the mode, and when it cannot.** The runner hosting the session answers it over the " +
+			"session's socket (`bgJobService`, op `mode`). The gate fails closed: a write is refused, with the reason, when " +
+			"the socket does not answer and when a session process the runner started (`ORBIT_RUNNER_CHILD`) has no socket " +
+			"at all, because that mode may be Plan. There is no gate where there is no session process: a person's own " +
+			"terminal, and a runner-hosted background job, whose environment carries the session but never the socket, so a " +
+			"job started before Plan can still write (the hosted wait for the owner is gated at its own door). Like the " +
+			"background-job gate, this protects against an agent acting ahead of the owner, not against a hostile process on " +
+			"the machine.",
 	} {
 		b.WriteString("- " + note + "\n")
 	}

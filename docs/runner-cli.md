@@ -182,7 +182,8 @@ tell Codex that Orbit's reads need no consent at all. What a call may then do is
   `task_dependency_graph`), waits (`task_await`, watches), lines and questions for the owner (`notify`,
   `request_owner_action`) and previews (`orbit task create-batch --dry-run`, `orbit task-list propose-dag` without
   `--apply`) still run. The mode is the session's live one, read from the runner at each call: an owner's switch,
-  and Claude Code leaving Plan once a plan is approved, count from the next call.
+  and Claude Code leaving Plan once a plan is approved, count from the next call. A session that cannot read its
+  mode makes no Orbit write, in any mode, and says why: restarting the session or its runner gives it back.
 - **Outside Plan, a schedule and a dependency edge need no card**: `task_update` with `runAt`, and
   `task_dependency_add` / `task_dependency_remove`, start recorded work no sooner than `task_start` does, which needs
   no card once the work is recorded.

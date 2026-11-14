@@ -39,8 +39,9 @@ func TestCodexForwardsTheWholeSessionContextToOrbitMCP(t *testing.T) {
 			t.Errorf("the Codex spawn sets %s=%q, want %q", name, got[name], want)
 		}
 	}
-	// The rest of what `orbit mcp` needs comes from elsewhere in the spawn, and is on the list as well.
-	for _, name := range []string{"ORBIT_HOME", envBgSocket, envBgToken, envManagedRunnerGeneration, envManagedRunnerPodUID} {
+	// The rest of what `orbit mcp` needs comes from elsewhere in the spawn, and is on the list as well: the runner's
+	// mark among them, without which the Plan gate reads a session process with no socket as a terminal.
+	for _, name := range []string{"ORBIT_HOME", envBgSocket, envBgToken, envRunnerChild, envManagedRunnerGeneration, envManagedRunnerPodUID} {
 		if !allowlist[name] {
 			t.Errorf("codexOrbitMCPEnvVarsConfig does not pass %s to `orbit mcp`", name)
 		}

@@ -283,7 +283,8 @@ What makes the two engines agree, and what each still does its own way:
 - **Plan's write refusal is Orbit's own gate** (`plan_gate.go`), in `orbit mcp`, in Claude's permission
   prompt for Orbit's tools, in the hosted owner wait and in the in-session CLI, by the session's live mode
   read from the runner: an owner's switch and Claude Code leaving Plan once a plan is approved count from
-  the next call. What Plan runs is the catalogue's `Plan` column: every read, the waits (`task_await`,
+  the next call. It fails closed: a session process that cannot read its mode (the socket does not answer,
+  or the runner's job service for the session never started) makes no Orbit write, and says why. What Plan runs is the catalogue's `Plan` column: every read, the waits (`task_await`,
   `session_await`, watches, `schedule_wakeup`), the lines and questions for the owner (`notify`,
   `ask_owner`, `request_owner_action`, `withdraw_owner_request`) and previews; `bg_run` is the
   background-job gate's.

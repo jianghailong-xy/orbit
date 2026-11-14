@@ -230,15 +230,78 @@ func TestSessionPermissionModeIsTheRunnersLiveMode(t *testing.T) {
 		t.Fatalf("a socket that is not there read as %v, %v", known, err)
 	}
 
+	// A session process the runner started always has the socket (bgJobEnvPairs), so one without it cannot read its
+	// mode: an error, on which a write is refused. A process the runner did not start, and a runner-hosted job, whose
+	// environment never carries the socket, have no session process to hold to a mode.
 	t.Setenv(envBgSocket, "")
+	t.Setenv(envRunnerChild, "1")
+	if _, known, err := sessionPermissionMode(); !known || err != errNoSessionSocket {
+		t.Fatalf("a session process the runner started, with no socket: %v, %v; want the mode unreadable", known, err)
+	}
+	t.Setenv(envBgJobID, "bgj_somejob")
 	if _, known, err := sessionPermissionMode(); known || err != nil {
-		t.Fatalf("with no socket to ask: %v, %v; want no session to gate", known, err)
+		t.Fatalf("a runner-hosted job: %v, %v; want no session process to gate", known, err)
+	}
+	t.Setenv(envBgJobID, "")
+	t.Setenv(envRunnerChild, "")
+	if _, known, err := sessionPermissionMode(); known || err != nil {
+		t.Fatalf("a process the runner did not start, with no socket: %v, %v; want no session process to gate", known, err)
 	}
 	t.Setenv(envBgSocket, f.socket)
 	t.Setenv(envBgToken, "tok")
 	t.Setenv("ORBIT_SESSION_ID", "")
 	if _, known, err := sessionPermissionMode(); known || err != nil {
 		t.Fatalf("with no session: %v, %v; want no session to gate", known, err)
+	}
+}
+
+// The gate fails closed. A session process the runner started whose socket is missing — the runner's job service
+// for the session did not start — cannot read its mode, and that mode may be Plan, so its Orbit writes are refused
+// with the reason, through `orbit mcp` and the CLI alike, in whatever mode the session is really in, and reach no
+// control plane; its reads still run. A runner-hosted background job, whose environment carries the session but
+// never the socket, is the documented exception (docs/permission-matrix.md).
+func TestPlanGateFailsClosedWithoutTheSessionSocket(t *testing.T) {
+	plane := newPlanGateControlPlane(t)
+	home := t.TempDir()
+	if err := os.Chmod(home, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	config, _ := json.Marshal(RunnerConfig{ServerURL: plane.srv.URL, RunnerID: "r", RunnerToken: "tok"})
+	if err := os.WriteFile(filepath.Join(home, "config.json"), config, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ORBIT_HOME", home)
+	t.Setenv("ORBIT_SESSION_ID", "sess-gate")
+	t.Setenv(envRunnerChild, "1")
+	t.Setenv(envBgSocket, "")
+	t.Setenv(envBgToken, "")
+
+	s := &mcpServer{t: NewTransport(plane.srv.URL, "tok"), sessionID: "sess-gate", taskID: "task-1"}
+	res := s.callTool("task_update", map[string]interface{}{"taskId": "task-1", "title": "renamed"})
+	if res["isError"] != true || !strings.Contains(resultText(res), "could not read this session's permission mode") ||
+		!strings.Contains(resultText(res), errNoSessionSocket.Error()) || !strings.Contains(resultText(res), "Nothing was written") {
+		t.Fatalf("task_update with no socket = %v", res)
+	}
+	var out strings.Builder
+	err := runOrbitCLI([]string{"task", "comment", "task-1", "--body", "noted"}, strings.NewReader(""), &out, &out)
+	if err == nil || !strings.Contains(err.Error(), "could not read this session's permission mode") {
+		t.Fatalf("orbit task comment with no socket = %v (%s)", err, out.String())
+	}
+	if seen := plane.seen(); len(seen) != 0 {
+		t.Fatalf("a write on a mode nobody could read reached the control plane: %v", seen)
+	}
+	if res := s.callTool("task_get", map[string]interface{}{"taskId": "task-1"}); res["isError"] == true {
+		t.Fatalf("task_get with no socket = %v, want it run", res)
+	}
+
+	// A runner-hosted job: the same write goes through, as a job's always did.
+	t.Setenv(envBgJobID, "bgj_somejob")
+	before := len(plane.seen())
+	if res := s.callTool("task_update", map[string]interface{}{"taskId": "task-1", "title": "renamed"}); res["isError"] == true {
+		t.Fatalf("task_update from a runner-hosted job = %v", res)
+	}
+	if len(plane.seen()) == before {
+		t.Fatal("a runner-hosted job's write never reached the control plane")
 	}
 }
 
