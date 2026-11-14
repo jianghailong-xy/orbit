@@ -1,0 +1,108 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  .lede, .foot { max-width: 1400px; }
+  .row3 { display: flex; gap: 40px; align-items: flex-start; }
+  .ntitle { position: absolute; left: 80px; top: 62px; height: 44px; display: flex; align-items: center; font: 600 20px "Inter", "Noto Sans SC"; z-index: 12; color: var(--l1); }
+  .cap44 .more.x { display: inline-flex; align-items: center; gap: 2px; padding: 0 5px 0 5px; }
+  /* 浮起：胶囊自己带影子，下面的行照常可见 */
+  .cap44.fl { z-index: 16; }
+  .ph.dark .cap44.fl { box-shadow: inset 0 .75px 0 var(--glass-hi), 0 0 0 .5px var(--glass-edge), 0 10px 28px rgba(0,0,0,.75); }
+  /* 叠层边：多件时收起胶囊下面露出两层，像系统通知堆叠 */
+  .deck { position: absolute; height: 44px; border-radius: 22px; z-index: 15; background: var(--glass);
+          box-shadow: inset 0 0 0 .5px var(--glass-edge), 0 6px 16px rgba(0,0,0,.5); }
+  .deck.d1 { left: 28px; right: 28px; background: #232325; box-shadow: inset 0 0 0 .5px rgba(255,255,255,.12), 0 6px 16px rgba(0,0,0,.5); }
+  .deck.d2 { left: 42px; right: 42px; background: #19191B; box-shadow: inset 0 0 0 .5px rgba(255,255,255,.1); z-index: 14; }
+  .scrim { position: absolute; left: 0; right: 0; top: 0; bottom: 0; z-index: 14; background: rgba(0,0,0,.55); }
+  .ph.light .scrim { background: rgba(0,0,0,.18); }
+  .srow .s .bl { color: #0A84FF; }
+  .pinhd { position: absolute; left: 20px; right: 20px; font: 700 22px/28px "Inter"; color: var(--l2); z-index: 3; display: flex; justify-content: space-between; align-items: center; }
+  .arrow { position: absolute; z-index: 22; font: 700 13px/1.3 "Inter", "Noto Sans SC"; color: #ff453a; background: rgba(0,0,0,.72); padding: 3px 8px; border-radius: 8px; white-space: nowrap; }
+</style>
+<body>
+<h1>needs-you 胶囊 · 浮在列表上面</h1>
+<p class="lede">owner 11-15（两张 orbit-develop / HPC 暗色截图）：<b>这个通知条应该是浮在上面的，不是现在这样。</b>今天它在布局里占一条：收起时自带一段底（11-12 的软边，往下 20pt 才淡完），列表从它下面开始；展开时（11-13 选的 B）每件一枚，<b>把整个列表往下推</b>。下面把它改成浮层：胶囊和展开的那一串都画在列表<b>之上</b>，列表不再为它让路、也不跳。每件一枚胶囊的样子（11-13 的 B）保留，只把「推」改成「盖」。英文是上线文案，中文是说明；数据取自 11-15 截图。</p>
+
+<h2>收起时</h2>
+<div class="row3" id="folded"></div>
+
+<h2>展开时</h2>
+<div class="row3" id="unfolded"></div>
+
+<h2>规格</h2>
+<table class="tok" id="spec"></table>
+
+<p class="foot" id="foot"></p>
+<script>
+const ITEMS = [
+  { glyph: 'hand', title: 'orbit-develop needs you', sub: 'Android 自动更新报错', age: '3d' },
+  { glyph: 'hand', title: 'orbit needs you', sub: 'Task: Owner answer replayed to a new coordinator: saved…', age: '1d' },
+  { glyph: 'hand', title: 'orbit-develop needs you', sub: 'Task: GitHub workspaces P0: GitHub App config and install', age: '2h' },
+  { glyph: 'hand', title: 'orbit-op needs you', sub: 'Orbit 接入 Ollama（本地模型供应商）', age: '19m' },
+];
+const L = 'left:16px;right:16px';
+const listNav = `<div class="nav"><div class="gc l">${ic('ham', 21, 'var(--l1)', 2)}</div>
+<div class="gc" style="right:20px;width:92px;border-radius:22px;justify-content:space-around;padding:0 10px">${ic('filter', 21, 'var(--l1)', 2)}${ic('pen', 20, 'var(--l1)', 2)}</div></div><div class="ntitle">orbit-develop</div>`;
+const ROWS = [
+  { t: 'SubAgent: routed sub-agents in the parent transcript', s: '<span class="bl">Resolving a merge conflict · 4h</span>', tm: 'now' },
+  { t: '单机 Ceph 部署方案设计', s: 'Running · writing ceph-plan.md', tm: '2m' },
+  { t: 'Android 自动更新报错', s: '<span class="dt"></span><span>Waiting for approval</span>', tm: '3d' },
+  { t: 'Orbit 接入 Ollama（本地模型供应商）', s: '<span class="dt"></span><span>Waiting for approval</span>', tm: '19m' },
+  { t: 'GitHub workspaces P0: GitHub App config and install', s: '<span class="dt"></span><span>Waiting for approval</span>', tm: '2h' },
+  { t: 'Wiki 服务端执行与 System model', s: 'Completed · merged to main', tm: '1h' },
+  { t: 'Ship the 0.1.247 release', s: 'Completed · tagged v0.1.247', tm: '3h' },
+  { t: 'Landing lease reminder skips locked rows', s: 'Completed', tm: '5h' },
+  { t: 'Owner answer replayed to a new coordinator', s: '<span class="dt"></span><span>Waiting for approval</span>', tm: '1d' },
+];
+const rows = (top) => `<div class="pinhd" style="top:${top}px"><span>Pinned</span>${ic('chevd', 18, 'var(--l2)', 2.6)}</div>` + ROWS.map((r, i) =>
+  `<div class="srow${i < ROWS.length - 1 ? ' sep' : ''}" style="top:${top + 42 + i * 70}px"><div class="a"><b>${r.t}</b><span class="tm">${r.tm}</span></div><div class="s">${r.s}</div></div>`).join('');
+const moreX = (n) => `<span class="more x">+${n}${ic('chevd', 11, 'var(--l2)', 3)}</span>`;
+const deck = (top) => `<div class="deck d1" style="top:${top + 7}px"></div><div class="deck d2" style="top:${top + 13}px"></div>`;
+// 系统自己的软边：只在导航下面（状态栏 + 导航，淡到 ~118）
+const navEdge = (mode) => edge(mode, 70, 118);
+const shell = (mode, body, h = 640) => phone(mode, `${statusBar('11:04')}${listNav}${body}<div class="home"></div>`, { h, cls: 'crop' });
+const stack = (items, top = 116) => items.map((o, i) => {
+  let c = capA({ ...o, top: top + i * 50, style: L, cls: 'fl' });
+  if (i === 0) c = c.replace('</b>', `</b><span class="more x">${ic('chevu', 11, 'var(--l2)', 3)}</span>`);
+  return c;
+}).join('');
+const folded = (top = 116, { deckOn = true, pill = false } = {}) =>
+  (deckOn ? deck(top) : '') + capA({ glyph: 'hand', title: '4 sessions need you', sub: 'Android 自动更新报错', age: '3d', top, style: L, cls: 'fl' })
+    .replace('</b>', pill ? `</b>${moreX(3)}` : '</b>');
+const arrow = (txt, x, y) => `<div class="arrow" style="left:${x}px;top:${y}px">${txt}</div>`;
+
+// ── 收起时 ──
+// 今天：胶囊站在自己那一段底上（软边一直铺到胶囊下 20pt），列表从 176 开始；滚动时行在这段底里淡掉
+const todayFold = shell('dark', `${rows(110)}${edge('dark', 162, 184)}${capA({ glyph: 'hand', title: '4 sessions need you', sub: 'Android 自动更新报错', age: '3d', top: 116, style: L }).replace('</b>', `</b>${moreX(3)}`)}`);
+// 浮起 · 静止：列表顶部仍空出胶囊的高度，第一行不被盖
+const floatRest = shell('dark', `${rows(186)}${navEdge('dark')}${folded(116)}`);
+// 浮起 · 滚动中：行从胶囊后面、两侧、下方照常经过
+const floatScroll = shell('dark', `${rows(110)}${navEdge('dark')}${folded(116)}`);
+document.getElementById('folded').innerHTML = `
+<div class="col"><span class="tag now">今天 · 滚动中</span>${todayFold}<div class="cap"><h3>占一条</h3>胶囊是列表的顶部留白（<code>topInsetClearOfRefresh</code>），下面再铺一段软边：行滚上去，到胶囊下 20pt 的地方就淡没了，胶囊两侧和后面什么都看不见——看起来是「贴在导航下面的一层」，不是浮着的。</div></div>
+<div class="col"><span class="tag rec">浮起 · 静止</span>${floatRest}<div class="cap"><h3>静止时和今天位置一样</h3>列表顶部仍空出胶囊那一截，第一行（这里是 Pinned）不被盖；下拉刷新的转圈也照旧出在胶囊下面。区别：胶囊带一层影子；4 件时下面露出<b>两层叠边</b>（系统通知堆叠的样子），代替今天的 <code>+3 ⌄</code> 小胶囊——标题已经说了「4 sessions」。</div></div>
+<div class="col"><span class="tag rec">浮起 · 滚动中</span>${floatScroll}<div class="cap"><h3>行从它后面过去</h3>去掉胶囊自己那段底，只留系统在导航下面的软边。行滚上去时从胶囊后面、两侧边距里、正下方都看得见，胶囊像导航的玻璃按钮一样浮着。</div></div>`;
+
+// ── 展开时 ──
+const todayOpen = shell('dark', `${rows(118 + 150 + 50)}${edge('dark', 160 + 150, 182 + 150)}${stack(ITEMS).replace(/ fl/g, '')}`, 700);
+const floatOpen = shell('dark', `${rows(186)}${navEdge('dark')}<div class="scrim"></div>${stack(ITEMS)}`, 700);
+const consoleOpen = phone('dark', `${statusBar('11:04')}${navCircles()}${tx(118)}${edge('dark', 70, 118)}<div class="scrim"></div>${stack(ITEMS.slice(0, 3))}<div class="home"></div>`, { h: 700, cls: 'crop' });
+document.getElementById('unfolded').innerHTML = `
+<div class="col"><span class="tag now">今天（11-13 的 B）</span>${todayOpen}<div class="cap"><h3>推着列表往下</h3>每多一件，列表往下让 50pt；4 件就是 150pt，手指下的那一行跑掉了。收起时又跳回来。</div></div>
+<div class="col"><span class="tag rec">浮起 · 展开（推荐）</span>${floatOpen}<div class="cap"><h3>同样一串胶囊，盖在列表上</h3>每件一枚、第一枚带 ↑，和今天长得一模一样；不同的是它们画在列表之上，后面压一层遮罩（暗 55% / 亮 18%）。<ul><li>列表一像素都不动</li><li>点任一枚 → 直达那一件；点 ↑ / 遮罩 → 收起</li><li>遮罩不穿透：收起那一下不会误开下面的会话</li></ul></div></div>
+<div class="col"><span class="tag rec">会话页同样</span>${consoleOpen}<div class="cap"><h3>转录上也一样盖</h3>会话页的胶囊今天已经是浮的（iOS 26 的 <code>safeAreaBar</code>，转录从它下面过），但展开时同样往下推转录。改成同一个浮层：转录不动、压暗，点遮罩收起。</div></div>`;
+
+document.getElementById('spec').innerHTML = `
+<tr><td>位置</td><td>收起和展开都画在列表 / 转录<b>之上</b>（同一个 overlay，顶在导航下 10pt，左右边距照旧 20 / 16pt）。不再是布局里的一条。</td></tr>
+<tr><td>静止留位</td><td>列表顶部空出 <b>收起胶囊</b>的高度（44 + 6 + 叠边 13），这样第一行和下拉刷新都不被盖。展开不再加留位。</td></tr>
+<tr><td>底</td><td>去掉胶囊自己的那段底（列表的 <code>listSoftEdge</code>，11-12 的 B）；只剩系统在导航下的软边。胶囊加影子：暗 黑 75% 模糊 28 下移 10，亮 黑 10%。</td></tr>
+<tr><td>叠边</td><td><code>count ≥ 2</code> 时胶囊下露两层：各缩进 10 / 24pt、露 7 / 13pt，同一块玻璃调暗。代替 <code>+N ⌄</code> 小胶囊；标题本身已有数。<code>count = 1</code> 无叠边，按下直达。</td></tr>
+<tr><td>展开</td><td>叠边「弹开」成一串胶囊（spring 0.3s，每枚 44 + 间距 6），最多 5 枚，第 6 件起最后一枚带 <code>+N</code>——和今天一样。遮罩 暗 55% / 亮 18%，点遮罩、点 ↑ 或下滑收起。</td></tr>
+<tr><td>读屏</td><td>展开时遮罩是一个「Collapse」按钮；焦点落在第一枚。其余文案全部沿用，不加新词。</td></tr>`;
+
+document.getElementById('foot').innerHTML = `<b>实现要点</b>：<code>NeedsYouBannerView</code> 从 <code>topInsetClearOfRefresh</code> 的 bands 里拿出来，改成列表上的 <code>.overlay(alignment: .top)</code>；bands 里只留一个与收起胶囊等高的空白（刷新转圈的位置靠它）。会话页的 <code>needsYouTop</code> 同理：safeAreaBar 只留收起高度，展开的一串画进 overlay。遮罩和展开串都在 overlay 里，列表的 inset 不随展开变化。Android 的 <code>NeedsYouBar</code> 同样处理（Box 叠在 LazyColumn 上）。<br>
+<b>和 owner 早先决定的关系</b>：11-13 选 B「每件一枚，推着往下」——<b>样子保留，「推」改成「盖」</b>；11-12 列表软边 B——胶囊下那 20pt 淡出去掉，因为浮层下面本来就该看得见行。<br>
+<b>待你定</b>：① 浮层展开这样做（推荐）；② 多件时的提示用叠边（推荐）还是留 <code>+3 ⌄</code> 小胶囊；③ 静止时列表顶部留位（推荐），还是连留位也不要、第一行一开始就被胶囊盖住。`;
+</script>
+</body></html>

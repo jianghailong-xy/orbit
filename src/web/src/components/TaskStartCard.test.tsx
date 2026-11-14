@@ -137,11 +137,10 @@ describe('the turn that starts a task run', () => {
     expect(el!.querySelector('details.tsc-raw pre')?.textContent).toBe(BRIEF);
   });
 
-  it('names itself on the sticky bar the way every card that is nobody\'s message does', async () => {
+  it('marks a round Orbit opened, which the sticky bar hides over', async () => {
     await mount([started(CARD)]);
 
-    expect(card()!.getAttribute('data-sticky-label')).toBe('Task started');
-    expect(card()!.getAttribute('data-sticky-text')).toBe(CARD.title);
+    expect(card()!.hasAttribute('data-orbit-round'), 'Orbit opened this round: the sticky bar hides over it').toBe(true);
     expect(card()!.getAttribute('data-seq')).toBe('1');
   });
 
@@ -191,7 +190,8 @@ describe('the turn that starts a task run', () => {
   });
 
   it('carries the task\'s inputs and whatever delivery appended inside the card, not in a bubble beside it', async () => {
-    const note = '\n\n<background-jobs>\n- bgj_1 completed\n</background-jobs>';
+    // A block that names itself: the jobs inventory draws no entry (owner, 2026-11-14).
+    const note = `\n\n${'<list-conditions list="3Hq9fVbYmP2kQhZ8aNcW4x" title="FineWeb">\n  Quota held dispatch\n</list-conditions>'}`;
     await mount([started(CARD, {
       // The echo is the brief and then what delivery appended; the note says where the brief ends.
       text: BRIEF + note,

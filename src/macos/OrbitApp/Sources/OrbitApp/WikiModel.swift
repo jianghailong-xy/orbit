@@ -14,6 +14,9 @@ import OrbitKit
 final class WikiModel {
     /// Every space, by slug, each with the proposals waiting in it.
     private(set) var spaces: [WikiSpace] = []
+    /// New wiki… (docs/wiki-explicit-creation-design.md §3.4): the drawer's row and the head picker's item raise the
+    /// Create wiki form over whichever shell is showing (`WikiCreateHost`).
+    var creating = false
     private(set) var spacesState = ListLoadState()
     /// The server said the wiki is not switched on for this account (404 WIKI_DISABLED): an answer,
     /// not a failure — the drawer draws no Wiki row, and the section says why.
@@ -114,6 +117,12 @@ final class WikiModel {
         selectedSlug = UserDefaults.standard.string(forKey: Self.spaceKey)
     }
 
+    /// The store over a transport handed in (the observation tests): the app builds `api` above.
+    init(api: APIClient) {
+        self.api = api
+        selectedSlug = UserDefaults.standard.string(forKey: Self.spaceKey)
+    }
+
     /// The drawer's amber number — the iPad sidebar's, and the bar's Activity badge: what waits on the owner
     /// across every space, each space's proposals and what its plan waits for, as the web sidebar counts it.
     var waiting: Int { WikiSpaceLogic.waiting(spaces) }
@@ -207,22 +216,21 @@ final class WikiModel {
     // MARK: reads
 
     func loadSpaces() async {
-        spacesState.begin()
+        assignIfChanged(\.spacesState, spacesState.startingRead())
         // Trash beside the list, through a task handle, not `async let` (d22b276cc): whatever reads the wikis again
         // reads the ways to Trash again with them.
         let trashRead = Task { await loadTrash() }
         do {
-            let list = try await api.wikiSpaces()
-            if list != spaces { spaces = list }
-            disabled = false
-            spacesState.succeed()
+            assignIfChanged(\.spaces, try await api.wikiSpaces())
+            assignIfChanged(\.disabled, false)
+            assignIfChanged(\.spacesState, spacesState.afterSuccess())
             chooseSpace()
         } catch let error where WikiLogic.isDisabled(error) {
-            disabled = true
+            assignIfChanged(\.disabled, true)
             if !spaces.isEmpty { spaces = [] }
-            spacesState.succeed()
+            assignIfChanged(\.spacesState, spacesState.afterSuccess())
         } catch {
-            spacesState.fail()
+            assignIfChanged(\.spacesState, spacesState.afterFailure())
         }
         await trashRead.value
     }
@@ -247,10 +255,11 @@ final class WikiModel {
     func loadHome() async {
         if !spacesState.hasLoaded { await loadSpaces() }
         guard let space = articlesSpace() else {
-            if spacesState.lastLoadFailed { homeState.fail() } else { homeState.succeed() }
+            assignIfChanged(\.homeState,
+                            spacesState.lastLoadFailed ? homeState.afterFailure() : homeState.afterSuccess())
             return
         }
-        homeState.begin()
+        assignIfChanged(\.homeState, homeState.startingRead())
         // Side by side through task handles, not `async let`: iOS 27's concurrency runtime can abort
         // while tearing down several async-let results in one continuation (d22b276cc).
         let spacesRead = Task { await loadSpaces() }
@@ -280,17 +289,19 @@ final class WikiModel {
             let principles = try? await principlesRead.value
             // Another space was picked while this one was reading: its own read owns the page.
             if articlesSpaceID == space.id {
-                if docs != docsDirectory { docsDirectory = docs }
+                assignIfChanged(\.docsDirectory, docs)
                 if let articles {
-                    if articles != directory { directory = articles }
-                    directoryState.succeed()
+                    assignIfChanged(\.directory, articles)
+                    assignIfChanged(\.directoryState, directoryState.afterSuccess())
                 }
-                if let principles, principles != self.principles { self.principles = principles }
-                homeSpaceID = space.id
-                homeState.succeed()
+                if let principles { assignIfChanged(\.principles, principles) }
+                assignIfChanged(\.homeSpaceID, space.id)
+                assignIfChanged(\.homeState, homeState.afterSuccess())
             }
         } catch {
-            if articlesSpaceID == space.id { homeState.fail() }
+            if articlesSpaceID == space.id {
+                assignIfChanged(\.homeState, homeState.afterFailure())
+            }
         }
         // The head's numbers, read beside the content and never cut short by it.
         await spacesRead.value
@@ -300,11 +311,12 @@ final class WikiModel {
     /// decisions by kind, the timeline and its health, side by side — and then each run Recently changed
     /// folds, by its own read.
     func loadActivity() async {
-        activityState.begin()
+        assignIfChanged(\.activityState, activityState.startingRead())
         await loadSpaces()
         guard let space = currentSpace else {
-            activity = nil
-            if spacesState.lastLoadFailed { activityState.fail() } else { activityState.succeed() }
+            assignIfChanged(\.activity, nil)
+            assignIfChanged(\.activityState,
+                            spacesState.lastLoadFailed ? activityState.afterFailure() : activityState.afterSuccess())
             return
         }
         // Side by side through task handles, not `async let`: iOS 27's concurrency runtime can abort
@@ -344,11 +356,11 @@ final class WikiModel {
             let content = WikiHomeContent(space: base.space, spaces: base.spaces, entries: base.entries,
                                           decisions: base.decisionEntries, timeline: base.timeline, runs: runs,
                                           health: health)
-            if content != activity { activity = content }
-            activityState.succeed()
+            assignIfChanged(\.activity, content)
+            assignIfChanged(\.activityState, activityState.afterSuccess())
         } catch {
             guard currentSpace?.id == space.id else { return }
-            activityState.fail()
+            assignIfChanged(\.activityState, activityState.afterFailure())
         }
     }
 
@@ -407,13 +419,12 @@ final class WikiModel {
 
     /// Every space's queue, which is what the drawer's number and the banner count.
     func loadReview() async {
-        reviewState.begin()
+        assignIfChanged(\.reviewState, reviewState.startingRead())
         do {
-            let queue = try await api.wikiReview()
-            if queue != review { review = queue }
-            reviewState.succeed()
+            assignIfChanged(\.review, try await api.wikiReview())
+            assignIfChanged(\.reviewState, reviewState.afterSuccess())
         } catch {
-            reviewState.fail()
+            assignIfChanged(\.reviewState, reviewState.afterFailure())
         }
     }
 
@@ -424,15 +435,15 @@ final class WikiModel {
         let key = PublicID.storageKey(id)
         do {
             let detail = try await api.wikiEntry(id)
-            missing.remove(key)
-            failed.remove(key)
+            if missing.contains(key) { missing.remove(key) }
+            if failed.contains(key) { failed.remove(key) }
             if details[key] != detail { details[key] = detail }
         } catch let error where WikiLogic.isDisabled(error) {
-            disabled = true
+            assignIfChanged(\.disabled, true)
         } catch APIError.http(let status, _) where status == 404 {
-            missing.insert(key)
+            if !missing.contains(key) { missing.insert(key) }
         } catch {
-            failed.insert(key)
+            if !failed.contains(key) { failed.insert(key) }
         }
     }
 
@@ -473,14 +484,14 @@ final class WikiModel {
     func loadDirectory() async {
         if spaces.isEmpty { await loadSpaces() }
         guard let space = articlesSpace() else { return }
-        directoryState.begin()
+        assignIfChanged(\.directoryState, directoryState.startingRead())
         do {
             let read = try await api.wikiArticleDirectory(spaceID: space.id)
             guard articlesSpaceID == space.id else { return }
-            if read != directory { directory = read }
-            directoryState.succeed()
+            assignIfChanged(\.directory, read)
+            assignIfChanged(\.directoryState, directoryState.afterSuccess())
         } catch {
-            directoryState.fail()
+            assignIfChanged(\.directoryState, directoryState.afterFailure())
         }
     }
 
@@ -488,14 +499,14 @@ final class WikiModel {
     func loadArticleIndex() async {
         if spaces.isEmpty { await loadSpaces() }
         guard let space = articlesSpace() else { return }
-        articleIndexState.begin()
+        assignIfChanged(\.articleIndexState, articleIndexState.startingRead())
         do {
             let read = try await api.wikiArticleIndex(spaceID: space.id)
             guard articlesSpaceID == space.id else { return }
-            if read != articleIndex { articleIndex = read }
-            articleIndexState.succeed()
+            assignIfChanged(\.articleIndex, read)
+            assignIfChanged(\.articleIndexState, articleIndexState.afterSuccess())
         } catch {
-            articleIndexState.fail()
+            assignIfChanged(\.articleIndexState, articleIndexState.afterFailure())
         }
     }
 
@@ -508,13 +519,13 @@ final class WikiModel {
         do {
             let read = try await api.wikiArticle(spaceID: space.id, slug: address.topic, part: address.part)
             guard articlesSpaceID == space.id else { return }
-            missingArticles.remove(address)
-            failedArticles.remove(address)
+            if missingArticles.contains(address) { missingArticles.remove(address) }
+            if failedArticles.contains(address) { failedArticles.remove(address) }
             if articles[address] != read { articles[address] = read }
         } catch APIError.http(let status, _) where status == 404 {
-            missingArticles.insert(address)
+            if !missingArticles.contains(address) { missingArticles.insert(address) }
         } catch {
-            failedArticles.insert(address)
+            if !failedArticles.contains(address) { failedArticles.insert(address) }
         }
     }
 
@@ -584,13 +595,13 @@ final class WikiModel {
         do {
             let read = try await api.wikiDoc(spaceID: space.id, slug: slug)
             guard articlesSpaceID == space.id else { return }
-            missingDocs.remove(slug)
-            failedDocs.remove(slug)
+            if missingDocs.contains(slug) { missingDocs.remove(slug) }
+            if failedDocs.contains(slug) { failedDocs.remove(slug) }
             if docs[slug] != read { docs[slug] = read }
         } catch APIError.http(let status, _) where status == 404 {
-            missingDocs.insert(slug)
+            if !missingDocs.contains(slug) { missingDocs.insert(slug) }
         } catch {
-            failedDocs.insert(slug)
+            if !failedDocs.contains(slug) { failedDocs.insert(slug) }
         }
     }
 
@@ -616,23 +627,23 @@ final class WikiModel {
     func loadPlan() async {
         if spaces.isEmpty { await loadSpaces() }
         guard let space = articlesSpace() else { return }
-        planState.begin()
+        assignIfChanged(\.planState, planState.startingRead())
         // Beside the plan through a task handle, not `async let` (d22b276cc).
         let versionsRead = Task { try await api.wikiPlanVersions(spaceID: space.id) }
         defer { versionsRead.cancel() }
         do {
             let read = try await api.wikiPlan(spaceID: space.id)
             guard articlesSpaceID == space.id else { return }
-            planMissing = false
-            if read != plan { plan = read }
-            planState.succeed()
+            assignIfChanged(\.planMissing, false)
+            assignIfChanged(\.plan, read)
+            assignIfChanged(\.planState, planState.afterSuccess())
         } catch APIError.http(let status, _) where status == 404 {
             guard articlesSpaceID == space.id else { return }
-            planMissing = true
-            plan = nil
-            planState.succeed()
+            assignIfChanged(\.planMissing, true)
+            assignIfChanged(\.plan, nil)
+            assignIfChanged(\.planState, planState.afterSuccess())
         } catch {
-            planState.fail()
+            assignIfChanged(\.planState, planState.afterFailure())
         }
         if let versions = try? await versionsRead.value, articlesSpaceID == space.id, versions.versions != planVersions {
             planVersions = versions.versions
@@ -1013,10 +1024,10 @@ final class WikiModel {
         let key = PublicID.storageKey(id)
         do {
             let read = try await api.wikiChangeset(id)
-            missingRuns.remove(key)
+            if missingRuns.contains(key) { missingRuns.remove(key) }
             if runs[key] != read { runs[key] = read }
         } catch APIError.http(let status, _) where status == 404 {
-            missingRuns.insert(key)
+            if !missingRuns.contains(key) { missingRuns.insert(key) }
         } catch {
             // Keep what is on screen; the next nudge reads it again.
         }

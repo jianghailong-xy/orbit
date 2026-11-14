@@ -217,15 +217,17 @@ suite('(m)(q)(w) VERIFICATION and the core task triggers are intact; 0229 took t
     // named below too so the one subtraction since is accounted for as well. 32 since 0441 added
     // `project_rollup_candidate_task_insert`/`_update`, which append to `project_rollup_candidate`
     // only — named below as well. 35 since 0484 added the Open list's version counters
-    // `task_open_list_epoch_insert`/`_update`/`_delete`, which write `open_list_epoch` only.
-    assert.equal(taskTriggers.length, 35,
+    // `task_open_list_epoch_insert`/`_update`/`_delete`, which write `open_list_epoch` only. 36
+    // since 0615 added `task_fork_guard`, which refuses a rewrite of a forked task's start and writes
+    // nothing.
+    assert.equal(taskTriggers.length, 36,
       `task carries ${taskTriggers.length} triggers: ${taskTriggers.join(', ')}`);
     for (const added of ['task_progress_epoch_advance', 'task_list_task_count_insert',
       'task_list_task_count_delete', 'task_list_task_count_relist',
       'project_task_status_count_insert', 'project_task_status_count_delete',
       'project_task_status_count_move', 'project_rollup_candidate_task_insert',
       'project_rollup_candidate_task_update', 'task_open_list_epoch_insert',
-      'task_open_list_epoch_update', 'task_open_list_epoch_delete']) {
+      'task_open_list_epoch_update', 'task_open_list_epoch_delete', 'task_fork_guard']) {
       assert.ok(taskTriggers.includes(added), `the count no longer includes ${added}`);
     }
     assert.ok(!taskTriggers.includes('task_dispatch_authority_derive'),

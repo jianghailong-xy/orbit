@@ -164,6 +164,9 @@ type deliveryOptions struct {
 	// started is handed the run before the session starts, for a seam that has to read what the run
 	// has recorded so far (holdWrittenReport).
 	started func(*deliverySession)
+	// numbered, when set, numbers every event the run emits as the supervisor does (session.go's eventBuf), so a test
+	// can read the seqs the session's events took.
+	numbered *sessionEventBuffer
 }
 
 func runDeliverySessionWith(t *testing.T, script []fakeStep, turns []scriptedTurn, until func(*deliverySession) bool, opts deliveryOptions) *deliverySession {
@@ -264,6 +267,9 @@ func runDeliverySessionWith(t *testing.T, script []fakeStep, turns []scriptedTur
 	}
 	emitFor := func(turnID, eventType string, payload map[string]interface{}) {
 		run.record(turnID, eventType, payload)
+		if opts.numbered != nil {
+			opts.numbered.add(turnID, eventType, payload, nil)
+		}
 	}
 	emit := func(eventType string, payload map[string]interface{}) {
 		turnMu.Lock()
@@ -284,6 +290,8 @@ func runDeliverySessionWith(t *testing.T, script []fakeStep, turns []scriptedTur
 		opts.claim(job)
 	}
 	run.job = job
+	// As the supervisor does (session.go): a main checkout notice is written through the session's emitter.
+	defer registerMainCheckoutNotices(job.SessionID, emitFor)()
 	done := make(chan struct{})
 	go func() {
 		defer close(done)

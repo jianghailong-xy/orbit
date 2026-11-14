@@ -40,7 +40,7 @@ export function escapeHtml(value: string): string {
 }
 
 /** The host a reader recognises the deployment by: the origin without its scheme. */
-function hostOf(origin: string): string {
+export function hostOf(origin: string): string {
   try {
     return new URL(origin).host;
   } catch {

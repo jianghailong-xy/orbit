@@ -41,6 +41,26 @@ public final class APIClient: @unchecked Sendable {
         return "\(kind)/\(version ?? "unknown")"
     }()
 
+    /// `X-Orbit-Device: iphone` or `ipad` from the iOS app, nil from the Mac. The server records it
+    /// with the turns this device sends (apiserver sessions/turn-sender-client.ts), so `orbit` in a
+    /// terminal can say "· from iPad" rather than "· from iPhone". Read from the hardware model
+    /// (`hw.machine`, or the simulated one), which needs no main actor as `UIDevice` does.
+    static let deviceHeader: String? = {
+        #if os(iOS)
+        var model = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] ?? ""
+        if model.isEmpty {
+            var size = 0
+            sysctlbyname("hw.machine", nil, &size, nil, 0)
+            var bytes = [UInt8](repeating: 0, count: size)
+            sysctlbyname("hw.machine", &bytes, &size, nil, 0)
+            model = String(decoding: bytes.prefix { $0 != 0 }, as: UTF8.self)
+        }
+        return model.hasPrefix("iPad") ? "ipad" : "iphone"
+        #else
+        return nil
+        #endif
+    }()
+
     public let baseURL: URL
     private let tokenStore: TokenStore
     private let session: URLSession
@@ -259,6 +279,25 @@ public final class APIClient: @unchecked Sendable {
 
     public func session(_ id: String) async throws -> Session { try await get("sessions/\(id)") }
 
+    // MARK: a session's Settings panel (docs/mocks/session-settings)
+
+    /// The same `GET /sessions/:id`, read for what the Settings panel shows beyond the session row:
+    /// `settings`, `usage`, `engineVersion`, the working directory and the assigned runner.
+    public func sessionSettingsDetail(_ id: String) async throws -> SessionSettingsDetail {
+        try await get("sessions/\(id)")
+    }
+
+    /// `PATCH /sessions/:id/settings`: only the fields set are sent; answers the settings as they now stand.
+    public func patchSessionSettings(_ id: String, _ body: SessionSettingsPatch) async throws -> SessionSettingsValues {
+        try await patch("sessions/\(id)/settings", body: body)
+    }
+
+    /// `POST /sessions/:id/restart`: reload the live engine with the session's env once the turn in
+    /// flight (if any) ends. Refused 409 `ENGINE_NOT_RUNNING` once the engine has ended.
+    public func restartSession(_ id: String) async throws -> SessionRestartResponse {
+        try await post("sessions/\(id)/restart", body: Optional<Empty>.none)
+    }
+
     /// One session request as it stands now — the state a request card shows (`SessionRequestView`).
     public func sessionRequest(_ id: String) async throws -> SessionRequestView {
         try await get("session-requests/\(id)")
@@ -339,6 +378,12 @@ public final class APIClient: @unchecked Sendable {
     /// `getBackgroundShells` merged with the live-derived overlay in BackgroundShellsTray.
     public func backgroundShells(sessionID: String) async throws -> [BgShellDTO] {
         try await get("sessions/\(sessionID)/background")
+    }
+
+    /// The session's SubAgent runs, oldest first (GET /sessions/:id/subagents): what each `delegate`
+    /// call's block shows beside it — tier, model, Why, time and cost (docs/subagent-design.md §6.4).
+    public func sessionSubagents(sessionID: String) async throws -> [SubagentRunView] {
+        try await get("sessions/\(sessionID)/subagents")
     }
 
     /// The tasks this session's agent created, as its "Tasks created here" card draws them
@@ -558,6 +603,78 @@ public final class APIClient: @unchecked Sendable {
         return result.count
     }
 
+    // MARK: People who can reply — a session's guests (docs/session-guests-design.md §3, §7)
+
+    /// The people the owner invited to reply in this session. Web parity: `getSessionGuests`.
+    public func sessionGuests(_ sessionID: String) async throws -> [SessionGuestPerson] {
+        let list: SessionGuestList = try await get("sessions/\(sessionID)/guests")
+        return list.guests
+    }
+
+    /// Invite an Orbit account by the email it signs in with; answers the people as they now stand.
+    /// Web parity: `inviteSessionGuest`.
+    public func inviteSessionGuest(_ sessionID: String, email: String) async throws -> [SessionGuestPerson] {
+        let list: SessionGuestList = try await post("sessions/\(sessionID)/guests",
+                                                    body: InviteSessionGuestRequest(email: email))
+        return list.guests
+    }
+
+    /// Take a guest out at once; answers the people who are left. Web parity: `removeSessionGuest`.
+    public func removeSessionGuest(_ sessionID: String, userID: String) async throws -> [SessionGuestPerson] {
+        let list: SessionGuestList = try await delete("sessions/\(sessionID)/guests/\(userID)")
+        return list.guests
+    }
+
+    // MARK: The guest's door — Shared with me and the guest view (docs/session-guests-design.md §4, §7)
+
+    /// Shared with me: every session the signed-in account was invited to reply in, newest invitation
+    /// first. Web parity: `listGuestSessions`.
+    public func guestSessions() async throws -> [GuestSessionSummary] {
+        let list: GuestSessionList = try await get("guest-sessions")
+        return list.sessions
+    }
+
+    /// The guest view's root: the head and the newest `limit` events. A 404 is "not shared with you"
+    /// — removed, left, Trash and deleted all read the same. Web parity: `getGuestSession`.
+    public func guestSession(_ sessionID: String, limit: Int) async throws -> GuestSession {
+        try await get("guest-sessions/\(sessionID)", query: [
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)),
+        ])
+    }
+
+    /// The page of the guest's transcript just older than `before`. Web parity: `getGuestEventPage`.
+    public func guestEventsBefore(_ sessionID: String, before: Int, limit: Int) async throws -> GuestEventPage {
+        try await get("guest-sessions/\(sessionID)/events", query: [
+            URLQueryItem(name: "before", value: String(before)),
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)),
+        ])
+    }
+
+    /// What the conversation added since `after`, and how it stands now: one read follows both.
+    /// Web parity: `getGuestEventsAfter`.
+    public func guestEventsAfter(_ sessionID: String, after: Int, limit: Int) async throws -> GuestSessionNow {
+        try await get("guest-sessions/\(sessionID)/events", query: [
+            URLQueryItem(name: "after", value: String(after)),
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)),
+        ])
+    }
+
+    /// One event whole, for a card that came back `truncated`. Web parity: `getGuestEventFull`.
+    public func guestEventFull(_ sessionID: String, seq: Int) async throws -> RunEvent {
+        try await get("guest-sessions/\(sessionID)/events/\(seq)")
+    }
+
+    /// A guest's message — text only, a turn of the owner's session, which restarts it when it has
+    /// ended. Web parity: `sendGuestTurn`.
+    @discardableResult
+    public func sendGuestTurn(_ sessionID: String, clientTurnId: String, content: String) async throws -> GuestTurnAccepted {
+        try await post("guest-sessions/\(sessionID)/turns",
+                       body: GuestTurnRequest(clientTurnId: clientTurnId, content: content))
+    }
+
     // MARK: personal access tokens — listed and revoked here, issued only on the web
     // (docs/personal-access-token-design.md §6.5, §9)
 
@@ -574,6 +691,35 @@ public final class APIClient: @unchecked Sendable {
     @discardableResult
     public func revokeAccessToken(_ id: String) async throws -> RevokedAccessToken {
         try await delete("access-tokens/\(id)")
+    }
+
+    // MARK: terminals — the approve card and Settings → Terminals (docs/terminal-session-design.md)
+
+    /// The terminal sign-ins waiting for this owner. Web parity: `terminalRequestsQuery`.
+    public func terminalRequests() async throws -> [TerminalRequest] {
+        let list: TerminalRequestList = try await get("terminals/requests")
+        return list.requests
+    }
+
+    /// Approve: the terminal's next poll collects a credential bound to this account and that machine, for 30 days.
+    public func approveTerminalRequest(_ id: String) async throws {
+        _ = try await postRaw("terminals/requests/\(id)/approve", body: Optional<Empty>.none)
+    }
+
+    /// Deny: the terminal is told so, and nothing is minted.
+    public func denyTerminalRequest(_ id: String) async throws {
+        _ = try await postRaw("terminals/requests/\(id)/deny", body: Optional<Empty>.none)
+    }
+
+    /// The live terminals, newest first. Web parity: `terminalsQuery`.
+    public func terminals() async throws -> [Terminal] {
+        let list: TerminalList = try await get("terminals")
+        return list.terminals
+    }
+
+    /// Revoke one terminal at once: its next request is 401.
+    public func revokeTerminal(_ id: String) async throws {
+        try await deleteRaw("terminals/\(id)")
     }
 
     // MARK: approvals
@@ -604,6 +750,14 @@ public final class APIClient: @unchecked Sendable {
     public func decideEvidence(taskID: String,
                                _ req: EvidenceDecisionRequest) async throws -> EvidenceDecisionResult {
         try await post("tasks/\(taskID)/evidence/decision", body: req)
+    }
+
+    /// Restart the task from the owner's pending row that offers it (`EvidenceRestart`). A Run press:
+    /// `triggerId` is drawn at the gesture (`PublicID.newToken`) and names it.
+    public func restartTaskFromEvidence(taskID: String, evidenceRevision: String,
+                                        triggerId: String) async throws -> EvidenceRestartResult {
+        try await post(EvidenceRestart.path(taskID: taskID, evidenceRevision: evidenceRevision),
+                       body: EvidenceRestartRequest(triggerId: triggerId))
     }
 
     /// What one version of a task's evidence cites, a page at a time, for the card that shows it
@@ -763,6 +917,45 @@ public final class APIClient: @unchecked Sendable {
                        body: ProjectDoneDeclineBody(note: note))
     }
 
+    // MARK: the done card's follow-ups (`ProjectDoneFollowUps.swift`)
+
+    /// Move to a follow-up… (`POST /projects/:id/criteria/:criterionKey/move`): one unmet criterion
+    /// and its open serving tasks, to an open project or a new one. The owner's alone.
+    public func moveCriterion(projectID: String, criterionKey: String,
+                              _ body: MoveCriterionBody) async throws -> MoveCriterionResult {
+        try await post("projects/\(projectID)/criteria/\(criterionKey)/move", body: body)
+    }
+
+    /// The owner's Confirm sheet on a criterion met by confirmation.
+    public func confirmCriterion(projectID: String, criterionID: String,
+                                 _ body: ConfirmCriterionBody) async throws {
+        try await postRaw("projects/\(projectID)/criteria/\(criterionID)/confirmations", body: body)
+    }
+
+    /// Withdraw a standing confirmation: the criterion goes back to waiting for one.
+    public func withdrawCriterionConfirmation(projectID: String, criterionID: String) async throws {
+        try await postRaw("projects/\(projectID)/criteria/\(criterionID)/confirmations/withdraw",
+                          body: Optional<Empty>.none)
+    }
+
+    /// Run an Agent check of a criterion against its verification method.
+    public func startCriterionCheck(projectID: String, criterionID: String) async throws {
+        try await postRaw("projects/\(projectID)/criteria/\(criterionID)/checks",
+                          body: Empty())
+    }
+
+    /// The owner's non-code mark (How it runs' Delivers row), written by the owner's PATCH.
+    public func setProjectNonCode(_ projectID: String, nonCode: Bool) async throws {
+        _ = try await send(makeRequest("projects/\(projectID)", method: "PATCH",
+                                       body: ProjectNonCodeBody(nonCode: nonCode)))
+    }
+
+    /// "Met by: …" — the set restated with one criterion's mode changed. A change of mode is a
+    /// criteria change, so the server may hold it for a decision; the answer then says so.
+    public func setCriteriaModes(_ projectID: String, _ body: CriteriaModeBody) async throws -> CriteriaModeAnswer {
+        try await patch("projects/\(projectID)", body: body)
+    }
+
     // MARK: owner requests — what a session asked the account owner to do
 
     /// `state` is `open`, `done`, `declined` or `all`; newest first.
@@ -781,6 +974,12 @@ public final class APIClient: @unchecked Sendable {
 
     public func declineOwnerRequest(_ id: String, reason: String) async throws -> OwnerRequest {
         try await post("owner-requests/\(id)/decline", body: OwnerRequestDeclineBody(reason: reason))
+    }
+
+    /// A WIKI_CREATE card's Create wiki (docs/wiki-explicit-creation-design.md §3.6): the owner's door that makes the
+    /// wiki with maintenance on and its plan's first draft asked for, and settles the card DONE.
+    public func createWikiFromOwnerRequest(_ id: String) async throws -> OwnerRequest {
+        try await postEmpty("owner-requests/\(id)/create-wiki")
     }
 
     /// A SECRET request's key, in the body and nowhere else; the answer never carries it back.
@@ -1233,6 +1432,9 @@ public final class APIClient: @unchecked Sendable {
     /// `GET /tasks/:id/attribution`: where this work counts, where it was noticed, which crossing
     /// touches it and what blocks it — the detail page's Attribution block.
     public func taskAttribution(_ id: String) async throws -> TaskAttribution { try await get("tasks/\(id)/attribution") }
+    /// `GET /tasks/:id/evidence`: every version of the task's completion evidence, oldest first,
+    /// each with its decision once it has one.
+    public func taskEvidence(_ id: String) async throws -> [TaskEvidenceRevision] { try await get("tasks/\(id)/evidence") }
     /// `GET /tasks/:id/dependency-graph`, asked the way the browser's panel asks it: both directions,
     /// up to 500 tasks, unary chains paired.
     public func taskDependencyGraph(_ id: String) async throws -> TaskDependencyGraph {
@@ -1519,6 +1721,14 @@ public final class APIClient: @unchecked Sendable {
     /// (no key/baseUrl). Merged into the composer and agent Runtime picker alongside built-ins.
     public func providers() async throws -> [ConfiguredProvider] { try await get("providers") }
     public func personalProviders() async throws -> [ConfiguredProvider] { try await get("providers/mine") }
+    /// Every provider with its models' SubAgent tiers and prices (GET /providers/subagent-tiers): the
+    /// Providers page's Model tiers table and the SubAgents settings' provider list.
+    public func subagentTiers() async throws -> SubagentTiersResponse { try await get("providers/subagent-tiers") }
+    /// Set or clear (nil) the owner's tier for one model of their own key.
+    public func setModelTier(providerID: String, model: String, tier: String?) async throws {
+        _ = try await send(makeRequest("providers/mine/\(providerID)/model-tier", method: "PATCH",
+                                       body: ProviderModelTierUpdate(model: model, tier: tier)))
+    }
 
     /// The whole DeepSeek account's balance behind one of the account's own DeepSeek keys (GET
     /// /api/providers/mine/:id/balance), read by the server with the stored key, which never comes here.
@@ -1619,6 +1829,10 @@ public final class APIClient: @unchecked Sendable {
 
     public func runners() async throws -> [Runner] { try await get("runners") }
     public func runner(_ id: String) async throws -> Runner { try await get("runners/\(id)") }
+    /// A machine's CPU, memory and disk now and over the last hour (`MachineResources`).
+    public func runnerResources(_ id: String) async throws -> RunnerResourcesAnswer {
+        try await get("runners/\(id)/resources")
+    }
 
     // MARK: directory probe relay (docs/first-workspace-contract.md §2)
 
@@ -1766,6 +1980,23 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("runners/\(id)/self-update")
     }
 
+    /// Update Now: the runner interrupts the owner's turns in flight, installs the waiting release and
+    /// restarts; each interrupted turn continues once it is back. Refused for a runner offline, too old
+    /// to honour it (no `self-update-now/v1`), or with nothing waiting.
+    @discardableResult
+    public func updateRunnerNow(_ id: String) async throws -> RunnerSelfUpdateNowResponse {
+        try await post("runners/\(id)/self-update/now", body: RunnerUpdateNow.request)
+    }
+
+    /// Later: the runner ends its drain for the waiting release now and puts it off until `until`,
+    /// capped at 09:00 tomorrow in `timeZone`. Refused for a runner offline, too old to honour it, or
+    /// with nothing waiting.
+    @discardableResult
+    public func postponeRunnerSelfUpdate(_ id: String, until: Date,
+                                         timeZone: TimeZone = .current) async throws -> RunnerSelfUpdatePostponeResponse {
+        try await post("runners/\(id)/self-update/postpone", body: RunnerUpdateLater.request(until: until, timeZone: timeZone))
+    }
+
     /// Check again (docs/claude-region-check-contract.md §7): the runner checks its Claude region at
     /// once, and the answer lands in `Runner.region` like any other check's. Refused while the runner
     /// is offline, and for one that does not check.
@@ -1811,6 +2042,21 @@ public final class APIClient: @unchecked Sendable {
     /// removal is, so it works with the runner offline.
     public func restoreRunnerDefault(_ id: String, engine: LoginEngine) async throws {
         try await postRaw("runners/\(id)/accounts/\(engine.rawValue)/default/restore", body: Optional<Empty>.none)
+    }
+
+    /// Dismiss this runner's update warning for `engine` until its next release: the server records the
+    /// engine's current `update.latest` (`Runner.engineUpdateDismissals`), and the warning stays quiet
+    /// while that is still the latest.
+    public func dismissEngineUpdateWarning(_ id: String, engine: String) async throws {
+        try await postRaw("runners/\(id)/engines/\(engine)/update-warning/dismiss", body: Optional<Empty>.none)
+    }
+
+    /// Fix with an agent: start a session on this runner's most recently used workspace about one warning.
+    /// A 409 (`AGENT_FIX_BLOCKED`, `AGENT_FIX_RUNNING`, `AGENT_FIX_NO_WARNING`) throws with the server's
+    /// `message` in its body, which `failureReason` reads out.
+    public func fixRunnerAttention(_ id: String, kind: RunnerAttentionFixKind,
+                                   body: RunnerAttentionFixRequest) async throws -> RunnerAttentionFixResult {
+        try await post("runners/\(id)/attention/\(kind.rawValue)/fix", body: body)
     }
 
     public func pauseRunnerAccount(_ id: String, engine: LoginEngine, account: String,
@@ -1859,6 +2105,26 @@ public final class APIClient: @unchecked Sendable {
     /// Ask the runner that owns this workspace to rescue and clean its shared checkout.
     public func repoCleanup(workspaceId: String) async throws -> Agent {
         try await postEmpty("workspaces/\(workspaceId)/repo-cleanup")
+    }
+
+    // MARK: main checkout Git (docs/main-checkout-git-contract.md §10.4)
+
+    /// The main checkout as its runner sees it now, with the patches of `diff` (repeated `diff=` per file,
+    /// at most 20).
+    public func mainCheckout(workspaceId: String, diff: [String] = []) async throws -> MainCheckoutRead {
+        try await get("workspaces/\(workspaceId)/main-checkout",
+                      query: diff.prefix(20).map { URLQueryItem(name: "diff", value: $0) })
+    }
+
+    /// Move, commit, push or rescue. Pending until the runner answers; the outcome is a line in the
+    /// session named by `initiatedFromSessionId`.
+    public func mainCheckoutAction(workspaceId: String, _ post: MainCheckoutActionPost) async throws -> MainCheckoutActionAnswer {
+        try await self.post("workspaces/\(workspaceId)/main-checkout/actions", body: post)
+    }
+
+    /// Cancel an action its runner hasn't been handed yet (the waiting line's Cancel).
+    public func cancelMainCheckoutAction(workspaceId: String, requestId: String) async throws -> MainCheckoutActionAnswer {
+        try await postEmpty("workspaces/\(workspaceId)/main-checkout/actions/\(requestId)/cancel")
     }
 
     // MARK: turns / lifecycle (Phase 2)
@@ -2109,6 +2375,7 @@ public final class APIClient: @unchecked Sendable {
         req.httpMethod = method
         if let timeout { req.timeoutInterval = timeout }
         req.setValue(Self.clientHeader, forHTTPHeaderField: "X-Orbit-Client")
+        if let device = Self.deviceHeader { req.setValue(device, forHTTPHeaderField: "X-Orbit-Device") }
         if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         if let body {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")

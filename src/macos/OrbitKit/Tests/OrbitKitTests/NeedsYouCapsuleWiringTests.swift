@@ -92,6 +92,31 @@ final class NeedsYouCapsuleWiringTests: XCTestCase {
         XCTAssertTrue(view.contains("Text(\"+\\(more)\")"))
     }
 
+    /// Several waiting (the owner, 2026-11-13, option B of 03-expand.html; floating since 11-15,
+    /// 04-floating.html): folded, a deck under the capsule says the press unfolds; unfolded, one
+    /// capsule per conversation in `entries`' order, each opening its own, the first standing where
+    /// the folded one stood with the ↑ that folds them, the rest hanging over the page on a scrim —
+    /// the bar keeps the deck's room either way, so the page under it never moves.
+    func testSeveralWaitingUnfoldIntoOneCapsuleEach() throws {
+        let view = try banner
+        XCTAssertTrue(view.contains("model.needsYouEntries(excluding: excluding)"))
+        XCTAssertTrue(view.contains("let several = banner.count > 1 && !banner.arriving"))
+        XCTAssertTrue(view.contains("if several { setUnfolded(true) } else { open(banner) }"))
+        XCTAssertFalse(view.contains("Image(systemName: \"chevron.down\").imageScale(.small)"), "the ⌄ pill is the deck now")
+        XCTAssertTrue(view.contains("chrome(deck: banner.count > 1) {"))
+        XCTAssertTrue(view.contains("bar(entries[0], more: 0, fold: { setUnfolded(false) })"))
+        let stack = try slice(view, from: ".overlay(alignment: .top) {\n                            VStack(spacing: 6) {",
+                              to: "} scrim: {")
+        XCTAssertTrue(stack.contains(".padding(.top, 44 + 6)"), "hung under the first, over the page")
+        XCTAssertTrue(view.contains("chrome(deck: true) {"), "unfolded keeps the folded bar's height")
+        XCTAssertTrue(view.contains(".onTapGesture { setUnfolded(false) }"), "the scrim folds them")
+        XCTAssertTrue(view.contains(".padding(.bottom, deck ? Self.deckReach : 0)"))
+        XCTAssertTrue(view.contains("Image(systemName: \"chevron.up\")"))
+        XCTAssertTrue(view.contains("entries.prefix(NeedsYouLogic.unfoldedLimit)"), "at most five")
+        let model = code(try source("AppModel.swift"))
+        XCTAssertTrue(model.contains("NeedsYouLogic.entries(waiting: needsYouSessions, excluding: focused)"))
+    }
+
     /// Where the press goes elsewhere the capsule carries no chevron — the whole of it is the press;
     /// in the conversation on screen the chevron stays, pointing the way the card lies.
     func testOnlyTheInConversationBarPoints() throws {
@@ -102,13 +127,38 @@ final class NeedsYouCapsuleWiringTests: XCTestCase {
 
     /// On iOS 26 a conversation's bar is a safe-area BAR, so the transcript's scroll-edge effect
     /// runs on under the capsule as it does under the composer band; the capsule then stands on
-    /// nothing. Everywhere else — the session list, an older system — it stands on the page's colour.
+    /// nothing. Over the session list and over a page it stands on nothing either (04-floating),
+    /// lifted by a shadow; only an older system's conversation stands it on the page's colour.
     func testItFloatsOverTheTranscriptOnIOS26() throws {
         let console = code(try source("Views/Console/ConsoleView.swift"))
         let top = try slice(console, from: "func needsYouTop<Bar: View>(", to: "\n    }\n")
         XCTAssertTrue(top.contains("safeAreaBar(edge: .top, spacing: 0) { content.environment(\\.floatsOverTranscript, true) }"))
         XCTAssertTrue(top.contains("safeAreaInset(edge: .top, spacing: 0, content: bar)"))
         XCTAssertTrue(console.contains(".needsYouTop {\n            if hSize == .compact {"))
-        XCTAssertTrue(try banner.contains(".background(floats ? Color.clear : Color(uiColor: .systemBackground))"))
+        let view = try banner
+        XCTAssertTrue(view.contains(".background { surface }"))
+        XCTAssertTrue(view.contains("if floats || overList {\n            Color.clear"))
+        XCTAssertFalse(view.contains("listSoftEdge"), "no band of its own under it")
+        XCTAssertTrue(view.contains(".shadow(color: .black.opacity(scheme == .dark ? 0.75 : 0.10), radius: 14, y: 10)"))
+    }
+
+    /// An approval that has just arrived is said by this bar (the owner, 2026-11-15,
+    /// 05-one-surface.html): its line, ringed amber, and a press that goes to it — and pages with
+    /// no bar of their own get this same view over them from the shell.
+    func testAnArrivalIsSaidHereAndPagesWithoutABarCarryIt() throws {
+        let view = try banner
+        XCTAssertTrue(view.contains("deck: banner.count > 1, arriving: banner.arriving) {"))
+        XCTAssertTrue(view.contains("Capsule().strokeBorder(Color.orange.opacity(0.75), lineWidth: 1.5)"))
+        let host = try slice(view, from: "private struct NeedsYouOverPage: ViewModifier {", to: "\n}\n")
+        XCTAssertTrue(host.contains("model.pageHasNoNeedsYouBar(wide: wide)"))
+        XCTAssertTrue(host.contains("NeedsYouBannerView(excluding: nil, overList: true)"))
+        XCTAssertTrue(host.contains(".sensoryFeedback(.warning, trigger: model.needsYouArrival)"))
+        XCTAssertTrue(code(try source("Views/CompactShell.swift")).contains(
+            "CompactSections(openDrawer: openDrawer)\n                    .needsYouOverPage(wide: false)"))
+        XCTAssertTrue(code(try source("Views/MainView.swift")).contains(".needsYouOverPage(wide: true)"))
+        let model = code(try source("AppModel.swift"))
+        let rule = try slice(model, from: "func pageHasNoNeedsYouBar(wide: Bool) -> Bool {", to: "\n    }")
+        XCTAssertTrue(rule.contains("return !(nav.sectionAtRoot || nav.focusedConsoleSessionID != nil)"),
+                      "a phone's Sessions list and conversation carry their own")
     }
 }

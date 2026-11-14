@@ -63,8 +63,9 @@ test('SR47 错误码双向闭合', () => {
 const NON_CODE_TOKENS = new Set([
   // 状态机（§6）
   'UNBOUND', 'SELECTED', 'PINNED', 'REFUSED',
-  // selector 种类（§4），以及 wiki 聊天那一种（SR54，v1.3）
+  // selector 种类（§4），wiki 聊天那一种（SR54，v1.3），以及 fork 那一种（SR55，v1.4）
   'VERIFICATION_SUBJECT', 'PINNED_REVISION', 'TASK_KNOWN_GOOD', 'DEPENDENCY_CLOSURE', 'PROJECT_UPSTREAM', 'CHAT_UPSTREAM',
+  'SESSION_FORK',
   // ref 权威（§2）与开放问题里的第三个取值（§15）
   'REMOTE', 'RUNNER_LOCAL', 'SERVER_MIRROR',
   // 既有表的既有取值。`COMPLETION_ACK_STALE` 是 SR51 点名的那一个：它是 `project_blocker.kind` 的
@@ -73,6 +74,7 @@ const NON_CODE_TOKENS = new Set([
   // fixAction 封闭集合（§10.1 第六列）
   'BIND_CODEBASE', 'FIX_WORKSPACE_REPO', 'RETRY_OR_FIX_CREDENTIALS', 'FIX_REF', 'RESTORE_COMMIT',
   'SYNC_INTEGRATION_LINE', 'ENABLE_ISOLATION', 'UPGRADE_RUNNER', 'START_NEW_RUN', 'FIX_CODEBASE_CONFIG',
+  'ASSIGN_ON_FORK_RUNNER', 'FORK_OUTSIDE_PROJECT',
   // SQL 关键字
   'NOT NULL',
 ]);
@@ -114,10 +116,11 @@ test('SR21 准入闸是全序，每级恰好一个码', () => {
 });
 
 test('SR19/SR20 优先级表五序齐全，且每一对可同真谓词都被定序', () => {
-  const ranks = [...DOC.matchAll(/^\| \*\*(P\d'?)\*\* \|/gm)].map((m) => m[1]);
-  assert.deepEqual(ranks, ['P0', "P0'", 'P1', 'P2', 'P3', 'P4', 'P5'], '优先级表必须是 P0..P5');
-  const pairs = [...DOC.matchAll(/^\| \*\*(D\d)\*\* (P\d) ∩ (P\d) \|/gm)];
-  assert.deepEqual(pairs.map((p) => p[1]), ['D1', 'D2', 'D3', 'D4', 'D5', 'D6'].slice(0, pairs.length));
+  // PF（SR55，v1.4）排在 P0 与 P0' 之间：fork 是声明过的起点，P0' 是没有起点。
+  const ranks = [...DOC.matchAll(/^\| \*\*(P\d'?|PF)\*\* \|/gm)].map((m) => m[1]);
+  assert.deepEqual(ranks, ['P0', 'PF', "P0'", 'P1', 'P2', 'P3', 'P4', 'P5'], '优先级表必须是 P0、PF、P0\'..P5');
+  const pairs = [...DOC.matchAll(/^\| \*\*(D\d)\*\* (P\d|PF) ∩ (P\d'?|P\d–P\d|其余) \|/gm)];
+  assert.deepEqual(pairs.map((p) => p[1]), ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8']);
   // 表里声明"能同时为真"的每一对，都必须给出定序结论（"X 胜"）。
   const disamb = DOC.split('\n### 4.2')[1].split('\n## 5.')[0];
   for (const row of disamb.split('\n').filter((l) => /^\| \*\*D\d\*\*/.test(l))) {

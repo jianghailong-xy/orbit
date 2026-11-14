@@ -5,9 +5,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsage, RunnerEngineAccount } from '@orbit/shared';
-import { encodeId } from '../lib/idCodec';
 import { formatResetTime } from '../lib/providerPools';
-import { RunnerEngines } from './RunnerEngines';
+import { EngineRows } from './RunnerEngines.test-rows';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -15,7 +14,7 @@ import type { Runner } from './TasksSidePanel';
  * providers-account-fold. A group starts folded, and its head then says what the rows it hides would:
  * whether one of them needs signing in again, else the account a new session starts on, its state and
  * its window nearest the limit. Opening it lists the rows as they always were, and the page remembers
- * which groups were opened, as it does its cards.
+ * which groups were opened.
  */
 
 vi.mock('../api', () => ({ api: vi.fn() }));
@@ -105,10 +104,8 @@ function unmount() {
   root = host = null;
 }
 
-/** The section over these runners, at `path`; their cards open unless `cards` is false. What is open
- *  of their accounts is whatever the page remembers. */
-function mount(runners: Runner[], { path = '/providers', cards = true } = {}) {
-  if (cards) localStorage.setItem('orbit:providers-expanded-runners', JSON.stringify(runners.map((r) => r.id)));
+/** These runners' engine rows, at `path`. What is open of their accounts is whatever the page remembers. */
+function mount(runners: Runner[], { path = '/providers' } = {}) {
   apiMock.mockImplementation(async (url: string, options?: { method?: string }) => {
     if (url === '/runners') return runners;
     if (url.endsWith('/login') && (options?.method ?? 'GET') === 'GET') {
@@ -125,7 +122,7 @@ function mount(runners: Runner[], { path = '/providers', cards = true } = {}) {
     root!.render(
       <MemoryRouter initialEntries={[path]}>
         <QueryClientProvider client={qc}>
-          <RunnerEngines />
+          <EngineRows />
         </QueryClientProvider>
       </MemoryRouter>,
     ),
@@ -207,11 +204,6 @@ describe('several accounts of one engine on a runner', () => {
     expect(head().querySelector('.re-window .re-quota-head')?.textContent).toBe('5-hour limit100%');
   });
 
-  it('open where a link to that engine on that runner arrives, and stay open', () => {
-    mount([runner()], { path: `/providers?runner=${encodeId(RUNNER_ID)}&engine=claude`, cards: false });
-    expect(accountNames()).toEqual([WIKOVA.name, RD.name, ORBIT.name]);
-    expect(opened()).toEqual([`${RUNNER_ID}/claude`]);
-  });
 
   it('open to take an account being added, so that it lands where it can be seen', async () => {
     mount([runner()]);
@@ -252,21 +244,5 @@ describe('several accounts of one engine on a runner', () => {
     await click(head());
     getSelection()!.removeAllRanges();
     expect(accountNames()).toEqual([WIKOVA.name, RD.name, ORBIT.name]);
-  });
-});
-
-describe("a runner's card", () => {
-  const card = () => host!.querySelector<HTMLElement>('.re-runner-card')!;
-  const folded = () => card().classList.contains('collapsed');
-
-  it('folds from anywhere on its head — its engines’ chips too — and leaves Manage a link', async () => {
-    mount([runner()], { cards: false });
-    expect(folded()).toBe(true);
-    await click(card().querySelector<HTMLElement>('.mc-chip')!);
-    expect(folded()).toBe(false);
-    await click(card().querySelector<HTMLElement>('.re-head')!);
-    expect(folded()).toBe(true);
-    await click(card().querySelector<HTMLElement>('.re-manage')!);
-    expect(folded()).toBe(true);
   });
 });

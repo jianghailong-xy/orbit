@@ -362,6 +362,15 @@ func (j *ClaimedSession) notePermissionMode(mode string) {
 	j.liveMode.mu.Unlock()
 }
 
+// permissionModeForPlanGate is this session's mode as Orbit's Plan gate reads it (plan_gate.go): a service wired
+// with no mode cannot say, which the gate treats as a mode it could not read.
+func (s *bgJobService) permissionModeForPlanGate() (string, bool, error) {
+	if s.mode == nil {
+		return "", true, errors.New("this session's permission mode is not known to the runner")
+	}
+	return s.mode(), true, nil
+}
+
 // current reads what notePermissionMode last published.
 func (m *sessionLiveMode) current() string {
 	m.mu.RLock()
@@ -385,12 +394,17 @@ func claudeNoteEngineMode(job *ClaimedSession, msg map[string]interface{}) {
 // rather than asked for: it is `orbit mcp` serving a single call that puts a card in front of the owner and
 // blocks until it is answered (handOffOwnerWait), under this session's own identity. The caller names the call
 // and nothing that runs, so a client that reaches this door can only cause a card, which it could raise anyway
-// through the tool itself. Not a run: Plan and Don't Ask refuse a job, not a question put to a person.
+// through the tool itself. Not a run: Don't Ask refuses a job, not a question put to a person. Plan refuses the
+// write the question is about, though (plan_gate.go), and says so here as the tool does: the job's `orbit mcp`
+// has no socket to read the mode from, so this is the last place it can be read before the card is filed.
 func (s *bgJobService) startOwnerWait(args map[string]interface{}) bgSocketResponse {
 	name := getString(args, "tool")
 	arguments, _ := args["arguments"].(map[string]interface{})
 	if !waitsForTheOwner(name, arguments) {
 		return bgSocketResponse{Error: fmt.Sprintf("%s is not a call that waits for the owner", name)}
+	}
+	if refusal := mcpPlanRefusal(name, arguments, s.permissionModeForPlanGate); refusal != "" {
+		return bgSocketResponse{Error: refusal}
 	}
 	exe := orbitCLIExecutable()
 	if exe == "" {

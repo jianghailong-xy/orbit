@@ -17,14 +17,11 @@ struct FollowingListView: View {
             TimelineView(.periodic(from: .now, by: 30)) { context in
                 // The selection is Following's stack projection — it reads the record on top and
                 // writes through `replaceTop` — and only in the shell that has a detail column to
-                // select into. The compact rows carry their own destination instead.
+                // select into. The compact rows carry their own destination instead. The sections
+                // are the one row array; each row draws its section and the watches in it.
                 List(selection: rowNavigation == .selection ? $model.selectedWatchID : nil) {
                     ForEach(WatchProjection.sections(store.watches, now: context.date)) { section in
-                        Section(section.group.title) {
-                            ForEach(section.watches) { watch in
-                                row(watch, now: context.date)
-                            }
-                        }
+                        FollowingSection(section: section, now: context.date, rowNavigation: rowNavigation)
                     }
                 }
                 .orbitRevealSurface()
@@ -37,22 +34,31 @@ struct FollowingListView: View {
         }
     }
 
-    /// One row, wrapped for the container it is in. The row view itself is the same either way; what
-    /// changes is who moves the screen — the three-column `List`'s selection, or the row's own
-    /// destination value on the compact stack. The highlight and the pushed record are the same read
-    /// of the section's stack, so neither shape draws a row it cannot open.
-    @ViewBuilder private func row(_ watch: Watch, now: Date) -> some View {
-        let row = FollowingRow(watch: watch, now: now)
+}
+
+/// One section of the Following list, its watches as rows. A child view so the list's ForEach draws
+/// one section per row and no second ForEach sits under it.
+private struct FollowingSection: View {
+    let section: WatchSection
+    let now: Date
+    let rowNavigation: SessionRowNavigation
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Section(section.group.title) {
+            ForEach(section.watches) { watch in
+                row(watch)
+            }
+        }
+    }
+
+    @ViewBuilder private func row(_ watch: Watch) -> some View {
         switch rowNavigation {
         case .selection:
-            row.tag(watch.id)
+            FollowingRow(watch: watch, now: now).tag(watch.id)
         case .push:
-            // A `Button`, not a `NavigationLink(value:)`: the link's disclosure indicator has no
-            // usable hiding place on iOS 17/18 (see `AppModel.push`). `.foregroundStyle(.primary)`:
-            // a button's label otherwise inherits the accent tint, and the rows are unchanged by
-            // design (only the wrapper is new).
             Button { model.push(.watchDetail(watchID: watch.id)) } label: {
-                row.foregroundStyle(.primary)
+                FollowingRow(watch: watch, now: now).foregroundStyle(.primary)
             }
         }
     }

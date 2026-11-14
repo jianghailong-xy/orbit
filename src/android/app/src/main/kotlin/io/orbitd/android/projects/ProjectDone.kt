@@ -105,26 +105,41 @@ object ProjectDone {
     fun showAll(count: Int) = "$showAll $count"
 
     // The counts, in words.
-    private val reasonOrder = listOf("IN_FLIGHT", "ON_PROJECT_BRANCH", "NO_RECEIPT", "NOTHING_TO_LAND", "CODELESS")
+    private val reasonOrder = listOf("IN_FLIGHT", "ON_PROJECT_BRANCH", "NO_RECEIPT", "NO_BRANCH", "NOTHING_TO_LAND", "CODELESS")
     /** A reason as a tally says it (`REASON_LABELS`). */
     fun reasonLabel(reason: String) = when (reason) {
         "IN_FLIGHT" -> "in flight"; "ON_PROJECT_BRANCH" -> "on the project branch"; "NOTHING_TO_LAND" -> nothingToLand
-        "NO_RECEIPT" -> "merged outside Orbit"; "CODELESS" -> "no code to land"; else -> reason
+        "NO_RECEIPT" -> "merged outside Orbit"; "NO_BRANCH" -> DoneCopy.LANDING_RAN_WITHOUT_BRANCH.lowercase()
+        "CODELESS" -> DoneCopy.LANDING_NO_CODE_TO_LAND.lowercase(); else -> reason
     }
     private fun reasonParts(counted: (String) -> Int) = reasonOrder.mapNotNull { reason -> counted(reason).takeIf { it > 0 }?.let { "$it ${reasonLabel(reason)}" } }
-    /** CODELESS says the same thing to a reader as a zero-commit task: there is nothing to land. */
+    /** CODELESS says the same thing to a reader as a zero-commit task: there is nothing to land. NO_BRANCH is not counted: work
+     * that ran without a branch may have changed code, and Orbit cannot see whether it reached main. */
     private fun nothingToLandCount(counts: JsonObject) = counts.obj("byReason").let { (it?.number("NOTHING_TO_LAND") ?: 0) + (it?.number("CODELESS") ?: 0) }
-    /** `projectDoneCardTally`: the request card's three counts — its head already says how many criteria there are. */
-    fun cardTally(counts: JsonObject?, main: String = RunSettings.defaultMainBranch) =
-        counts?.let { "${it.n("met")} met · ${it.n("onMain")} ${landedOn(main)} · ${nothingToLandCount(it)} $nothingToLand" }.orEmpty()
+    /** `projectDoneCardTally`: the request card's counts — its head already says how many criteria there are. Ran without a branch
+     * and nothing to land only when there are some; a non-code project reads no landing: "3 of 4 met", and the criteria that wait
+     * for a confirmation. */
+    fun cardTally(counts: JsonObject?, main: String = RunSettings.defaultMainBranch, nonCode: Boolean = false, waitingConfirmation: Int = 0): String {
+        counts ?: return ""
+        val wait = listOfNotNull(waitingConfirmation.takeIf { it > 0 }?.let { DoneCopy.DONE_CARD_WAIT_CONFIRMATION.replace("{n}", "$it") })
+        if (nonCode) return (listOf(DoneCopy.DONE_CARD_TALLY_OF.replace("{met}", "${counts.n("met")}").replace("{n}", "${counts.n("criteria")}")) + wait).joinToString(" · ")
+        val noBranch = counts.obj("byReason")?.number("NO_BRANCH") ?: 0
+        val nothing = nothingToLandCount(counts)
+        return (listOf("${counts.n("met")} met", "${counts.n("onMain")} ${landedOn(main)}") +
+            listOfNotNull(noBranch.takeIf { it > 0 }?.let { "$it ${reasonLabel("NO_BRANCH")}" }, nothing.takeIf { it > 0 }?.let { "$it $nothingToLand" }) + wait)
+            .joinToString(" · ")
+    }
     /** `projectDoneReceiptTally`: how many were met, then the same three, then what was accepted. */
-    fun receiptTally(counts: JsonObject?, acceptedGaps: Int, main: String = RunSettings.defaultMainBranch) = if (counts == null) "$acceptedGaps $gapsAccepted"
+    fun receiptTally(counts: JsonObject?, acceptedGaps: Int, main: String = RunSettings.defaultMainBranch, nonCode: Boolean = false) = if (counts == null) "$acceptedGaps $gapsAccepted"
+        else if (nonCode) "${counts.n("criteria")} criteria met · $acceptedGaps $gapsAccepted"
         else "${counts.n("criteria")} criteria met · ${counts.n("onMain")} ${landedOn(main)} · ${nothingToLandCount(counts)} $nothingToLand · $acceptedGaps $gapsAccepted"
     /** `projectWhyNotDoneTally`: the criteria, then where each one stands, in parts that add up to them — a met criterion where its
      * work is, an unmet one as not met and never by its landing lane: "8 criteria · 2 on main · 6 not met". */
     fun whyNotDoneTally(doc: JsonObject): String {
         val criteria = doc.obj("derivedDone")?.objects("criteria") ?: return ""
         val met = criteria.filter { it.flag("satisfied") }
+        if (DoneFollowUps.nonCode(doc)) return (listOf("${criteria.size} criteria", "${met.size} met") +
+            listOfNotNull((criteria.size - met.size).takeIf { it > 0 }?.let { "$it $notMet" })).joinToString(" · ")
         val parts = listOf("${criteria.size} criteria", "${met.count { it.text("landingReason") == null }} ${on(mainBranch(doc))}") +
             reasonParts { reason -> met.count { it.text("landingReason") == reason } }
         return (parts + listOfNotNull((criteria.size - met.size).takeIf { it > 0 }?.let { "$it $notMet" })).joinToString(" · ")
@@ -136,20 +151,21 @@ object ProjectDone {
         "ON_PROJECT_BRANCH" -> onProjectBranch
         "NO_RECEIPT" -> mergedOutsideOrbit
         "NOTHING_TO_LAND" -> nothingToLand
-        "CODELESS" -> "No code to land"
+        "NO_BRANCH" -> DoneCopy.LANDING_RAN_WITHOUT_BRANCH
+        "CODELESS" -> DoneCopy.LANDING_NO_CODE_TO_LAND
         else -> "Landed on $main"
     }
 
     /** One criterion of the projection beside the words the document states it in. */
-    data class Criterion(val key: String, val ordinal: Int?, val text: String, val satisfied: Boolean, val landingReason: String?)
+    data class Criterion(val key: String, val ordinal: Int?, val text: String, val satisfied: Boolean, val landingReason: String?,
+        val derived: JsonObject = JsonObject(emptyMap()), val item: JsonObject? = null)
     fun criteria(doc: JsonObject): List<Criterion> = doc.obj("derivedDone")?.objects("criteria").orEmpty().map { c ->
         val id = c.text("definitionId").orEmpty()
         val item = criterion(doc, id)
-        Criterion(item?.text("key") ?: item?.text("id") ?: id, item?.number("ordinal"), item?.text("text") ?: id, c.flag("satisfied"), c.text("landingReason"))
+        Criterion(item?.text("key") ?: item?.text("id") ?: id, item?.number("ordinal"), item?.text("text") ?: id, c.flag("satisfied"), c.text("landingReason"), c, item)
     }
     /** The criterion a gap or an answer names — by its id or by its key. */
     fun criterion(doc: JsonObject, key: String) = doc.objects("acceptanceCriteriaItems").firstOrNull { it.text("id") == key || it.text("key") == key }
-    fun criterionState(c: Criterion, main: String = RunSettings.defaultMainBranch) = "${if (c.satisfied) "met" else "not met"} · ${landingReasonLabel(c.landingReason, main)}"
 
     /** `syntheticGaps`: the gaps a card nobody asked for carries — every criterion not met, or not on main for a reason that is a gap
      * (nothing to land and no code to land are outcomes, not gaps). */
@@ -167,11 +183,14 @@ object ProjectDone {
     /** The gaps the card shows: the request's, or the ones Orbit fills in when nobody asked. */
     fun gaps(doc: JsonObject, request: JsonObject?): List<JsonObject> = request?.objects("gaps") ?: syntheticGaps(doc)
 
-    fun findingLine(finding: JsonObject, main: String): String {
+    /** `doneFindingLine`: an unmet criterion names what holds it (its open tasks, none, or the confirmation it waits for —
+     * [confirmation]); an unlanded one reads the finding's own reason. */
+    fun findingLine(finding: JsonObject, main: String, confirmation: Boolean = false): String {
+        val ordinal = "${finding.obj("criterion")?.number("ordinal")}"
         val (template, n) = when (finding.text("code")) {
             "DONE_NO_CRITERIA" -> return checkNoCriteria
-            "DONE_CRITERION_UNSATISFIED" -> checkUnmet to finding.obj("criterion")?.number("ordinal")
-            "DONE_CRITERION_UNLANDED" -> checkUnlanded to finding.obj("criterion")?.number("ordinal")
+            "DONE_CRITERION_UNSATISFIED" -> return DoneFollowUps.unmetLine(finding, ordinal, confirmation)
+            "DONE_CRITERION_UNLANDED" -> return DoneFollowUps.unlandedLine(finding, ordinal, main)
             "DONE_TASKS_IN_FLIGHT" -> (if (finding.objects("tasks").size == 1) checkTask else checkTasks) to finding.objects("tasks").size
             "DONE_OWNER_ITEMS_OPEN" -> checkOwnerItems to finding.objects("items").size
             "DONE_INTEGRATION_IN_FLIGHT" -> checkLandings to finding.objects("jobs").size
@@ -221,7 +240,11 @@ object ProjectDone {
     fun meta(projectTitle: String, asked: Boolean, waiting: String?) =
         if (!asked) "$projectTitle · $noRequestMeta" else (listOf(projectTitle, askedByCoordinator) + listOfNotNull(waiting)).joinToString(" · ")
     /** What the record press says: anyway while some criterion is not met. */
-    fun recordLabel(counts: JsonObject?) = if (counts != null && counts.n("met") < counts.n("criteria")) recordAsDoneAnyway else recordAsDone
+    /** The press on a card: "anyway" while some criterion is not met, or — on a card nobody asked for — while the check found
+     * something or has not answered; with every criterion met and nothing found it is plainly Record as done (board 02 ⑤ H). */
+    fun recordLabel(counts: JsonObject?, asked: Boolean, doneCheck: JsonObject?) =
+        if ((counts != null && counts.n("met") < counts.n("criteria")) || (!asked && (counts == null || doneCheck == null || doneCheck.objects("findings").isNotEmpty())))
+            recordAsDoneAnyway else recordAsDone
     /** What the coordinator checked for a gap, and where the evidence is. */
     fun checkedLine(gap: JsonObject): String? {
         val checked = gap.text("coordinatorChecked") ?: return null
@@ -267,7 +290,7 @@ object ProjectDone {
         if (!ownerRecorded(doc, record)) return "$thisProjectIsDone · $recordedByOrbit"
         return receipt + (dateTime(doneAt(doc, record), zone)?.let { " · $it" } ?: "")
     }
-    fun receiptTally(doc: JsonObject, record: JsonObject?) = receiptTally(counts(doc), accepted(doc, record).size, mainBranch(doc))
+    fun receiptTally(doc: JsonObject, record: JsonObject?) = receiptTally(counts(doc), accepted(doc, record).size, mainBranch(doc), DoneFollowUps.nonCode(doc))
 
     /** `doneProvenance`: who recorded it. */
     fun provenance(doneBy: String?, acceptedGaps: Int) = if (doneBy == "OWNER") "$recordedByYou · $acceptedGaps $gapsAccepted" else recordedByOrbit

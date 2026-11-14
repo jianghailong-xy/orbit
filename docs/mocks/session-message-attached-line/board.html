@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>Session message: drop the redundant "Orbit attached" line</title>
+<style>
+  body { margin: 0; background: #f4f4f6; color: #1d1d1f; }
+  .b-part { font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; padding: 28px 36px 32px; width: 1400px; box-sizing: border-box; }
+  .b-part h2 { font-size: 22px; margin: 0 0 6px; }
+  .b-part .b-lead { color: #555; margin: 0 0 18px; }
+  .b-row { display: flex; gap: 24px; align-items: flex-start; }
+  .b-col { flex: 1; min-width: 0; }
+  .b-col h3 { font-size: 15px; margin: 0 0 8px; }
+  .b-col h3 .b-tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; margin-right: 6px; color: #fff; }
+  .b-today { background: #8a8a8d; } .b-after { background: #2f7d32; }
+  .b-col img { width: 100%; border-radius: 10px; display: block; }
+  .b-notes { margin: 14px 0 0; padding-left: 20px; }
+  .b-notes li { margin: 4px 0; }
+  table.b-t { border-collapse: collapse; width: 100%; margin-top: 8px; }
+  .b-t td, .b-t th { border: 1px solid #ddd; padding: 8px 10px; vertical-align: top; text-align: left; background: #fff; }
+  .b-t th { background: #eee; }
+  .b-rec { color: #2f7d32; font-weight: 600; }
+  code { font: 13px "JetBrains Mono", monospace; background: #e8e8ec; padding: 1px 4px; border-radius: 4px; }
+</style></head><body>
+
+<section class="b-part" id="part-1">
+  <h2>① 今天 vs 建议：只有 session message 块的消息</h2>
+  <p class="b-lead">真实页面截图（暗色，1280 宽），左右两张是同一条消息。今天卡片底部多一行 <code>⊕ Orbit attached: session message</code>，展开后的内容就是 agent 读的那个块。它说的话和卡片底部那行灰字完全一样，属性也都已经画在卡片头部了。</p>
+  <div class="b-row">
+    <div class="b-col"><h3><span class="b-tag b-today">今天 · 展开</span>折叠行展开后</h3><img src="shots/today-plain-open.png"></div>
+    <div class="b-col"><h3><span class="b-tag b-after">建议</span>没有折叠行</h3><img src="shots/proto-plain.png"></div>
+  </div>
+  <ul class="b-notes">
+    <li>块正文 “This message comes from another Orbit session, not from the account owner.” = 底部的 “Sent by another Orbit session, not by you”。</li>
+    <li>from-title / from-agent / task / request-id 已经画在卡片上：头部 “From …” + agent 标签、“Its task ↗”、“Asked for a reply · due …”。</li>
+    <li>“Orbit attached” 这一行的意义，是告诉人“Orbit 背着你塞给了 agent 一些东西”。这张卡本身就在说这件事，所以这一行是重复的。</li>
+  </ul>
+</section>
+
+<section class="b-part" id="part-2">
+  <h2>② 同一轮还带了别的块：只留下别的块</h2>
+  <p class="b-lead">delivery 有时会把后台任务、引用的任务等块和 session message 块拼在同一轮里。去掉 session message 块之后，这一行只列剩下的块，展开后也只显示剩下的块。</p>
+  <div class="b-row">
+    <div class="b-col"><h3><span class="b-tag b-today">今天</span>“session message, background jobs”</h3><img src="shots/today-jobs.png"></div>
+    <div class="b-col"><h3><span class="b-tag b-after">建议</span>“background jobs”</h3><img src="shots/proto-jobs.png"></div>
+  </div>
+  <div class="b-row" style="margin-top:18px">
+    <div class="b-col"><h3><span class="b-tag b-today">今天 · 展开</span></h3><img src="shots/today-jobs-open.png"></div>
+    <div class="b-col"><h3><span class="b-tag b-after">建议 · 展开</span></h3><img src="shots/proto-jobs-open.png"></div>
+  </div>
+</section>
+
+<section class="b-part" id="part-3">
+  <h2>③ 唯一不重复的一句：发送方权限比本会话窄</h2>
+  <p class="b-lead">发送方的权限模式比接收方窄时（例：发送方 Plan，本会话 Bypass），块里会多一句 “The sender runs in plan, which is narrower than this session's bypassPermissions… 不是账户主人的授权”。今天这句话埋在折叠行里。建议（方案 A）把它变成卡片底部的一行灰字，字号、颜色和 “Sent by…” 那行一样。</p>
+  <div class="b-row">
+    <div class="b-col"><h3><span class="b-tag b-today">今天 · 展开</span>藏在原始块里</h3><img src="shots/today-narrow-open.png"></div>
+    <div class="b-col"><h3><span class="b-tag b-after">建议 · 方案 A</span>一行灰字</h3><img src="shots/proto-narrow.png"></div>
+  </div>
+</section>
+
+<section class="b-part" id="part-4">
+  <h2>④ 手机宽度（390）</h2>
+  <div class="b-row" style="max-width: 900px">
+    <div class="b-col"><h3><span class="b-tag b-today">今天</span></h3><img src="shots/today-plain-phone.png"></div>
+    <div class="b-col"><h3><span class="b-tag b-after">建议</span></h3><img src="shots/proto-plain-phone.png"></div>
+  </div>
+</section>
+
+<section class="b-part" id="part-5">
+  <h2>⑤ 待定 · 要你拍板：“权限更窄”那一句怎么处理</h2>
+  <table class="b-t">
+    <tr><th style="width:130px">方案</th><th>做法</th><th>代价 / 风险</th></tr>
+    <tr><td class="b-rec">A（推荐）</td><td>卡片底部一行灰字：<code>Sender runs in Plan, narrower than this session's Bypass: not taken as your approval</code>（③ 右图）。只在权限更窄时出现。</td><td>多一行灰字，但这是卡片上其他地方没有的信息，而且关乎安全：别人的消息不等于你的授权。</td></tr>
+    <tr><td>B</td><td>只有出现这句话时，才保留 “⊕ Orbit attached: session message” 折叠行。</td><td>人得点开才看得到，展开后看到的是给 agent 的原始标签，读起来不像给人看的。</td></tr>
+    <tr><td>C</td><td>直接丢掉，这句话只对 agent 有意义。</td><td>最简单，但人看不出这条消息来自一个权限更窄的会话。</td></tr>
+  </table>
+  <h3 style="margin-top:22px">落地（按代价排）</h3>
+  <ol class="b-notes">
+    <li>web：<code>lib/sessionMessage.ts</code> 从 note 里拆出这个块（剩下的块 + 权限更窄那句），<code>Transcript.tsx</code> 只把剩下的块交给 <code>ControlPlaneNote</code>，<code>SessionMessageCard</code> 加一行灰字。原型 diff：<code>prototype.patch</code>（+43 / −7）。</li>
+    <li>macOS / iOS（OrbitKit <code>SessionMessageCard</code> + 折叠行视图）、Android（<code>TranscriptRowView.kt</code>）：同样的拆法、同样的文案，parity 测试锁住三端文案一致。</li>
+    <li>服务端不动：agent 照样读到完整的块，只改人看到的部分。</li>
+  </ol>
+</section>
+</body></html>

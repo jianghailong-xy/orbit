@@ -10,10 +10,20 @@ const pageRules = {
     requiredText: [
       "Self-hosted mission control for coding agents.",
       "Run coding agents on your own machines.",
+      "Built for",
+      "The problem",
+      "Durable work",
+      "Local execution",
+      "Supervised parallelism",
       "Work that outlives a chat",
       "Parallel agents without checkout collisions",
       "Access to private infrastructure",
-      "90-second demo",
+      "Product demo · four steps",
+      "1 · Task graph",
+      "2 · Runner",
+      "3 · Approval",
+      "4 · Result",
+      "90-second recording script",
       "Quick Start",
       "Architecture &amp; security boundary",
       "FAQ",
@@ -23,6 +33,7 @@ const pageRules = {
       "not a hosted service",
     ],
     canonical: "https://jianghailong-xy.github.io/orbit/",
+    index: true,
   },
   "zh/index.html": {
     lang: "zh-CN",
@@ -30,9 +41,19 @@ const pageRules = {
     requiredText: [
       "面向编码代理的自托管任务控制台。",
       "在自己的机器上运行编码代理",
+      "适用对象",
+      "要解决的问题",
+      "持久的工作",
+      "本地执行",
+      "受监督的并行",
       "让工作超越一次聊天",
       "并行代理，避免 checkout 冲突",
       "访问私有基础设施",
+      "产品演示 · 四步",
+      "1 · 任务图",
+      "2 · Runner",
+      "3 · 审批",
+      "4 · 结果",
       "90 秒演示",
       "快速开始",
       "架构与安全边界",
@@ -43,6 +64,7 @@ const pageRules = {
       "不是托管服务",
     ],
     canonical: "https://jianghailong-xy.github.io/orbit/zh/",
+    index: true,
   },
   "404.html": {
     lang: "en",
@@ -60,6 +82,24 @@ const errors = [];
 const warnings = [];
 const idsByFile = new Map();
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
+const socialImage = "https://jianghailong-xy.github.io/orbit/assets/social/og-image.png";
+const requiredMeta = [
+  ["property", "og:image", socialImage],
+  ["property", "og:image:type", "image/png"],
+  ["property", "og:image:width", "1200"],
+  ["property", "og:image:height", "630"],
+  ["name", "twitter:card", "summary_large_image"],
+  ["name", "twitter:image", socialImage],
+];
+const nonEmptyMeta = ["og:title", "og:description", "og:image:alt", "twitter:title", "twitter:description", "twitter:image:alt"];
+const publicLinkTargets = {
+  docs: "https://github.com/jianghailong-xy/orbit/blob/main/docs/README.md",
+  github: "https://github.com/jianghailong-xy/orbit",
+  releases: "https://github.com/jianghailong-xy/orbit/releases",
+  support: "https://github.com/jianghailong-xy/orbit/blob/main/SUPPORT.md",
+  security: "https://github.com/jianghailong-xy/orbit/blob/main/SECURITY.md",
+};
+const demoSteps = ["task-graph", "runner", "approval", "result"];
 
 function localTarget(file, relative) {
   let target = path.resolve(path.dirname(path.join(root, file)), relative);
@@ -102,7 +142,32 @@ for (const file of htmlFiles) {
     if (!source.includes(text)) errors.push(`${file}: required copy is missing: ${text}`);
   }
   for (const image of source.matchAll(/<img\b[^>]*>/gi)) {
-    if (!/\balt=["'][^"']*["']/i.test(image[0])) errors.push(`${file}: image is missing accessible alt text`);
+    const alt = image[0].match(/\balt=["']([^"']*)["']/i)?.[1];
+    if (!alt || !alt.trim()) errors.push(`${file}: image is missing accessible alt text`);
+    if (!/\bwidth=["']\d+["']/i.test(image[0]) || !/\bheight=["']\d+["']/i.test(image[0])) {
+      errors.push(`${file}: image is missing intrinsic width/height: ${image[0]}`);
+    }
+  }
+  for (const [attribute, property, value] of requiredMeta) {
+    if (!source.includes(`<meta ${attribute}="${property}" content="${value}">`)) {
+      errors.push(`${file}: social metadata ${property} is missing or incorrect`);
+    }
+  }
+  for (const property of nonEmptyMeta) {
+    const match = source.match(new RegExp(`<meta (?:property|name)="${property}" content="([^"]*)"`));
+    if (!match || !match[1].trim()) errors.push(`${file}: social metadata ${property} is missing or empty`);
+  }
+  if (rule.index) {
+    for (const [key, target] of Object.entries(publicLinkTargets)) {
+      const tag = source.match(new RegExp(`<a\\b[^>]*data-public-link="${key}"[^>]*>`))?.[0];
+      const href = tag?.match(/\bhref="([^"]+)"/)?.[1]?.split("?", 1)[0];
+      if (!href) errors.push(`${file}: public link ${key} is missing`);
+      else if (href !== target) errors.push(`${file}: public link ${key} points at ${href}, expected ${target}`);
+    }
+    const steps = [...source.matchAll(/data-demo-step="([^"]+)"/g)].map((match) => match[1]);
+    if (steps.join(",") !== demoSteps.join(",")) {
+      errors.push(`${file}: demo steps are ${steps.join(",") || "missing"}, expected ${demoSteps.join(",")}`);
+    }
   }
 
   const refs = [...source.matchAll(/(?:href|src)\s*=\s*["']([^"']+)["']/gi)].map((match) => match[1]);

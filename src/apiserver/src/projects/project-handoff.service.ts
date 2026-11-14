@@ -101,7 +101,8 @@ export interface HandoffRow {
   id: string;
   ownerId: string;
   fromProjectId: string;
-  toProjectId: string;
+  /** null only for a MOVE_TASK that takes the task out of every project (0610). */
+  toProjectId: string | null;
   kind: string;
   subjectTaskId: string | null;
   payloadDigest: string;
@@ -127,8 +128,14 @@ export interface HandoffRow {
  * there, and which of the source project's criteria it stops serving.
  */
 export interface HandoffListRow extends HandoffRow {
-  fromProject: { title: string; status: string };
-  toProject: { title: string; status: string };
+  /** `coordinatorSessionId` as on `toProject`, for the source end: it draws a move out of every
+   *  project (`toProject` null) as a decision card, since that move has no target to be drawn in. */
+  fromProject: { title: string; status: string; coordinatorSessionId: string | null };
+  /** null for a move out of every project. `coordinatorSessionId` is the conversation that draws
+   *  this row as a decision card, null when the target has none or its coordinator is in Trash:
+   *  a row with one is answered there, and the project pages leave it out
+   *  (docs/mocks/crossings-page-only-uncovered). */
+  toProject: { title: string; status: string; coordinatorSessionId: string | null } | null;
   /** The task a MOVE_TASK moves, or a DEPEND_ON_TASK waits on, as it reads now. Null for a filing,
    *  and for a subject that has since been deleted. */
   subjectTask: { id: string; title: string } | null;
@@ -152,7 +159,7 @@ export interface HandoffListRow extends HandoffRow {
 export interface HandoffAuthority {
   ownerId: string;
   fromProjectId: string;
-  toProjectId: string;
+  toProjectId: string | null;
   kind: HandoffKind;
   subjectTaskId: string | null;
   payloadDigest: string;
@@ -164,7 +171,8 @@ export interface HandoffAuthority {
 /** What a crossing IS, before it is looked up or filed. */
 export interface HandoffDeclaration {
   fromProjectId: string;
-  toProjectId: string;
+  /** null only for a MOVE_TASK out of every project: the confirmation files the task under none. */
+  toProjectId: string | null;
   kind: HandoffKind;
   subjectTaskId: string | null;
   /**
@@ -232,16 +240,65 @@ export interface HandoffMoveApplier {
   ): Promise<void>;
 }
 
+/** What `crossingCardSessionId` reads of a crossing. */
+export const CARD_SESSION_SELECT = {
+  toProjectId: true,
+  toProject: { select: { coordinatorSessionId: true, coordinatorSession: { select: { deletedAt: true } } } },
+  fromProject: { select: { coordinatorSessionId: true, coordinatorSession: { select: { deletedAt: true } } } },
+} as const;
+
+type CardEnd = { coordinatorSessionId: string | null; coordinatorSession: { deletedAt: Date | null } | null };
+
+/**
+ * The conversation that draws a crossing as a decision card (`CrossingDecisionCard`): the target
+ * project's coordinator, or — for a task asked to be taken out of every project, which has no
+ * target — the source project's. Null when that project has no coordinator or it is in Trash, the
+ * same rule `list` applies to the `coordinatorSessionId` the project pages read.
+ */
+export function crossingCardSessionId(row: {
+  toProjectId: string | null;
+  toProject: CardEnd | null;
+  fromProject: CardEnd;
+}): string | null {
+  const end = row.toProjectId ? row.toProject : row.fromProject;
+  if (!end || end.coordinatorSession?.deletedAt) return null;
+  return end.coordinatorSessionId;
+}
+
 @Injectable()
 export class ProjectHandoffService {
   private readonly log = new Logger(ProjectHandoffService.name);
   private moveApplier?: HandoffMoveApplier;
+
+  private changeListener?: (change: { id: string; ownerId: string; filed: boolean }) => void;
 
   constructor(private readonly prisma: PrismaService) {}
 
   /** Called by the `TasksService` that shares this instance; see `HandoffMoveApplier`. */
   bindMoveApplier(applier: HandoffMoveApplier): void {
     this.moveApplier = applier;
+  }
+
+  /**
+   * Told of every question this service files (`filed`, after its transaction commits) and every
+   * answer it records: the `TasksService` over this instance binds itself here to push a new
+   * question to the owner and to redraw the conversation that shows its card. Bound rather than injected for the reason the move applier
+   * is: this module imports nothing it does not have to.
+   */
+  bindChangeListener(listener: (change: { id: string; ownerId: string; filed: boolean }) => void): void {
+    this.changeListener = listener;
+  }
+
+  /**
+   * The open conversation that draws this crossing as a decision card, or null when none does
+   * (see `crossingCardSessionId`).
+   */
+  async cardSessionOf(ownerId: string, handoffId: string): Promise<string | null> {
+    const row = await this.prisma.projectHandoffApproval.findFirst({
+      where: { id: handoffId, ownerId },
+      select: CARD_SESSION_SELECT,
+    });
+    return row ? crossingCardSessionId(row) : null;
   }
 
   /** The canonical authority tuple of a declaration, as everything below spells it. */
@@ -379,7 +436,7 @@ export class ProjectHandoffService {
   async pendingMove(
     db: HandoffReadClient,
     ownerId: string,
-    move: { fromProjectId: string; toProjectId: string; subjectTaskId: string },
+    move: { fromProjectId: string; toProjectId: string | null; subjectTaskId: string },
     now: Date,
   ): Promise<HandoffAnswer | null> {
     const row = (await db.projectHandoffApproval.findFirst({
@@ -495,7 +552,7 @@ export class ProjectHandoffService {
     now: Date,
   ): Promise<HandoffAnswer> {
     const authority = this.authorityOf(ownerId, declaration);
-    return withTransactionRetry(this.prisma, async (tx) => {
+    const answer = await withTransactionRetry(this.prisma, async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "user" WHERE "id" = ${ownerId}::uuid FOR KEY SHARE`;
       // FOR SHARE, not FOR KEY SHARE. What is derived from this row is `task_id` — which project
       // a worker session is acting for — and that is not a key column, so an ordinary
@@ -589,7 +646,7 @@ export class ProjectHandoffService {
           "requested_criterion_definition_id"
         ) VALUES (
           ${randomUUID()}::uuid, ${ownerId}::uuid, ${declaration.fromProjectId}::uuid,
-          ${declaration.toProjectId}::uuid, ${declaration.kind},
+          ${declaration.toProjectId ?? null}::uuid, ${declaration.kind},
           ${declaration.subjectTaskId}::uuid,
           ${authority.payloadDigest}, ${authority.crossingKey}, ${state}, ${declaration.title},
           ${declaration.reason ?? null}, ${declaration.requestedBySessionId}::uuid, ${now},
@@ -612,6 +669,10 @@ export class ProjectHandoffService {
       }
       return { ...filed, filed: inserted === 1 };
     }, loggedRetry(this.log, 'projectHandoff.declare'));
+    // A question somebody has to answer, filed by this call: tell them, once. One already standing
+    // was told when it was filed, and one a policy answered asks nobody.
+    if (answer.filed && answer.row.state === 'PENDING') this.changeListener?.({ id: answer.row.id, ownerId: answer.row.ownerId, filed: true });
+    return answer;
   }
 
   /**
@@ -774,7 +835,7 @@ export class ProjectHandoffService {
     // `TasksService.resolveCriterionDeclarations` applies to any declaration, asked again here
     // because this row is what the answer will be about.
     if (declaration.requestedCriterionDefinitionId) {
-      const criterion = isMove
+      const criterion = isMove && declaration.toProjectId
         ? await tx.projectAcceptanceCriterionDefinition.findFirst({
             where: {
               id: declaration.requestedCriterionDefinitionId,
@@ -807,11 +868,14 @@ export class ProjectHandoffService {
     declaration: HandoffDeclaration,
   ): Promise<HandoffAcceptanceDecision> {
     const ends = await tx.project.findMany({
-      where: { id: { in: [declaration.fromProjectId, declaration.toProjectId] }, ownerId },
+      where: { id: { in: orderedIds([declaration.fromProjectId, declaration.toProjectId]) }, ownerId },
       select: { id: true, status: true },
     });
     const from = ends.find((row) => row.id === declaration.fromProjectId);
-    const to = ends.find((row) => row.id === declaration.toProjectId);
+    // A move out of every project lands nowhere, and nowhere is always open to take it.
+    const to = declaration.toProjectId === null
+      ? { status: 'OPEN' }
+      : ends.find((row) => row.id === declaration.toProjectId);
     if (!from || !to) throw new ForbiddenException('project not found');
     // A move's subject is under this transaction's FOR SHARE, so what it serves cannot change
     // before the insert.
@@ -871,14 +935,60 @@ export class ProjectHandoffService {
       // the row: `title` is the plan's own title, bound into the digest the approval authorises.
       select: {
         ...HANDOFF_SELECT,
-        fromProject: { select: { title: true, status: true } },
-        toProject: { select: { title: true, status: true } },
+        fromProject: {
+          select: {
+            title: true,
+            status: true,
+            coordinatorSessionId: true,
+            coordinatorSession: { select: { deletedAt: true } },
+          },
+        },
+        toProject: {
+          select: {
+            title: true,
+            status: true,
+            coordinatorSessionId: true,
+            coordinatorSession: { select: { deletedAt: true } },
+          },
+        },
       },
       orderBy: { requestedAt: 'desc' },
       take: Math.min(Math.max(options.limit ?? 100, 1), 200),
     })) as unknown as Array<Omit<HandoffListRow,
-      'subjectTask' | 'requestedBySession' | 'requestedCriterion' | 'withdrawnCriterion'>>;
-    return this.withRequestDetail(ownerId, rows);
+      'subjectTask' | 'requestedBySession' | 'requestedCriterion' | 'withdrawnCriterion' | 'toProject'
+      | 'fromProject'> & {
+      fromProject: {
+        title: string;
+        status: string;
+        coordinatorSessionId: string | null;
+        coordinatorSession: { deletedAt: Date | null } | null;
+      };
+      toProject: {
+        title: string;
+        status: string;
+        coordinatorSessionId: string | null;
+        coordinatorSession: { deletedAt: Date | null } | null;
+      } | null;
+    }>;
+    // A coordinator in Trash draws no card (the web skips a trashed conversation's cards), so the
+    // row counts as having no conversation to be answered in.
+    return this.withRequestDetail(ownerId, rows.map(({ fromProject, toProject, ...row }) => ({
+      ...row,
+      fromProject: {
+        title: fromProject.title,
+        status: fromProject.status,
+        coordinatorSessionId: fromProject.coordinatorSession?.deletedAt
+          ? null
+          : fromProject.coordinatorSessionId,
+      },
+      toProject: toProject && {
+        title: toProject.title,
+        status: toProject.status,
+        coordinatorSessionId: toProject.coordinatorSession?.deletedAt
+          ? null
+          : toProject.coordinatorSessionId,
+      },
+    })));
   }
 
   /**
@@ -978,6 +1088,20 @@ export class ProjectHandoffService {
    * answered through, recorded with the move.
    */
   async decide(
+    ownerId: string,
+    userId: string,
+    id: string,
+    decision: 'APPROVE' | 'DENY',
+    now: Date,
+    credential?: AuthCredential,
+  ): Promise<HandoffAnswer> {
+    const answer = await this.decideOnce(ownerId, userId, id, decision, now, credential);
+    // The conversation that drew the card redraws its row: the question it was waiting on is gone.
+    this.changeListener?.({ id: answer.row.id, ownerId, filed: false });
+    return answer;
+  }
+
+  private async decideOnce(
     ownerId: string,
     userId: string,
     id: string,
@@ -1118,7 +1242,7 @@ export class ProjectHandoffService {
        WHERE "id" = ${row.id}::uuid
          AND "owner_id" = ${authority.ownerId}::uuid
          AND "from_project_id" = ${authority.fromProjectId}::uuid
-         AND "to_project_id" = ${authority.toProjectId}::uuid
+         AND "to_project_id" IS NOT DISTINCT FROM ${authority.toProjectId}::uuid
          AND "kind" = ${authority.kind}
          AND "subject_task_id" IS NOT DISTINCT FROM ${authority.subjectTaskId}::uuid
          AND "payload_digest" = ${authority.payloadDigest}
@@ -1172,7 +1296,7 @@ export class ProjectHandoffService {
        WHERE "id" = ${handoffId}::uuid
          AND "owner_id" = ${authority.ownerId}::uuid
          AND "from_project_id" = ${authority.fromProjectId}::uuid
-         AND "to_project_id" = ${authority.toProjectId}::uuid
+         AND "to_project_id" IS NOT DISTINCT FROM ${authority.toProjectId}::uuid
          AND "kind" = ${authority.kind}
          AND "subject_task_id" IS NOT DISTINCT FROM ${authority.subjectTaskId}::uuid
          AND "payload_digest" = ${authority.payloadDigest}
@@ -1229,7 +1353,7 @@ export class ProjectHandoffService {
     this.assertAuthority(row, authority);
     const ends = await tx.project.findMany({
       where: {
-        id: { in: [authority.fromProjectId, authority.toProjectId] },
+        id: { in: orderedIds([authority.fromProjectId, authority.toProjectId]) },
         ownerId: authority.ownerId,
       },
       select: { id: true, status: true },

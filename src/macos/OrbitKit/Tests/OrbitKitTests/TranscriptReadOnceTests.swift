@@ -133,11 +133,11 @@ final class TranscriptReadOnceTests: XCTestCase {
         if let anchor {
             for item in items {
                 if item.id == anchor { break }
-                if case .user(let b) = item, namesAQuestion(b) { found = b.id }
+                if case .user(let b) = item, namesAQuestion(b) { found = StickySummary.isOrbits(b) ? nil : b.id }
             }
         } else {
             for item in items.reversed() {
-                if case .user(let b) = item, namesAQuestion(b) { found = b.id; break }
+                if case .user(let b) = item, namesAQuestion(b) { found = StickySummary.isOrbits(b) ? nil : b.id; break }
             }
         }
         return found
@@ -183,5 +183,33 @@ final class TranscriptReadOnceTests: XCTestCase {
         XCTAssertEqual(questions.above("a2"), "u3", "a queued turn has not been asked")
         XCTAssertEqual(questions.above("trimmed"), "u3", "an anchor no longer held: every question")
         XCTAssertEqual(questions.last, "u3")
+    }
+
+    /// The owner, 2026-11-14: "↑ Evidence to review" over a coordinator's reply — a machine's message
+    /// never appears on the bar. A round Orbit opened ends the question's reach and leaves the bar empty.
+    func testARoundOrbitOpenedLeavesTheBarEmpty() {
+        var review = user("o1", "From Orbit · revision 1 to decide")
+        review.evidenceReview = EvidenceReviewCard(taskId: "t1", title: "Android CI", revision: "1", runSessionId: "s1")
+        var started = user("o2", "brief")
+        started.taskStart = TaskStart(taskId: "t2", title: "A06c")
+        let items: [TranscriptItem] = [
+            .user(user("u1", "deploy it")),
+            .assistant(AssistantBubble(id: "a1", text: "ok", streamingText: "", seq: 1, turnId: nil)),
+            .user(review),
+            .assistant(AssistantBubble(id: "a2", text: "reading it", streamingText: "", seq: 2, turnId: nil)),
+            .user(user("u2", "and the logs")),
+            .assistant(AssistantBubble(id: "a3", text: "here", streamingText: "", seq: 3, turnId: nil)),
+            .user(started),
+            .assistant(AssistantBubble(id: "a4", text: "working", streamingText: "", seq: 4, turnId: nil)),
+        ]
+        XCTAssertTrue(StickySummary.isOrbits(review))
+        XCTAssertFalse(StickySummary.isOrbits(user("u1", "deploy it")))
+        let questions = StickyQuestions(items, isQuestion: namesAQuestion)
+        XCTAssertEqual(questions.above("o1"), "u1")
+        XCTAssertNil(questions.above("a2"), "evidence to review is no question of the reader's")
+        XCTAssertEqual(questions.above("a3"), "u2")
+        XCTAssertNil(questions.above("a4"), "nor is a task's opening brief")
+        XCTAssertNil(questions.last)
+        for anchor in items.map(\.id) { XCTAssertEqual(questions.above(anchor), walk(items, anchor: anchor)) }
     }
 }

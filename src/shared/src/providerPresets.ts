@@ -5,8 +5,8 @@
 // providers that were configured months ago. Shared so the apiserver (the resolver) and the web
 // form (the gallery) can never disagree; the native clients read the resolved rows off the API.
 //
-// Endpoints and model ids verified against vendor docs 2026-07. `brand`/`keyUrl` are for the web
-// gallery only — they're here so adding a vendor stays a single-file edit.
+// Endpoints and model ids verified against vendor docs 2026-07; `outputPricePerMTok` read from
+// models.dev 2026-11-11, which a refresh replaces. `brand`/`keyUrl` are for the web gallery only — they're here so adding a vendor stays a single-file edit.
 //
 // The model lists below are a floor, not the whole truth: a vendor the runtime CLI speaks to
 // natively takes its list from that CLI (modelsFromRuntime), and every third-party vendor refreshes
@@ -16,6 +16,13 @@ export interface ProviderPresetModel {
   value: string;
   label: string;
   contextWindow?: number;
+  /**
+   * The SubAgent router's tier for this model (docs/subagent-design.md §4.2). Orbit's own judgement,
+   * kept with the list: models.dev has no such field. A model without one is not routed onto.
+   */
+  tier?: 'S' | 'M' | 'L' | 'XL';
+  /** USD per million output tokens, from models.dev (`cost.output`): what Cost and the tie-breaks order keys by. */
+  outputPricePerMTok?: number;
 }
 
 /**
@@ -80,6 +87,13 @@ export interface ProviderPreset {
    * nothing about, so without this their list only changes when somebody edits this file.
    */
   catalog?: ProviderCatalogSource;
+  /**
+   * Where this vendor's prices come from when its model list does not (modelsFromRuntime): its
+   * models.dev provider id, and the USD per million output tokens of its current models as read there,
+   * which a refresh replaces. The SubAgent router orders a key on its native engine by these
+   * (docs/subagent-design.md §4.2); nothing else reads them.
+   */
+  prices?: { source: string; floor: Readonly<Record<string, number>> };
   /** Caveat shown under the Base URL (e.g. regional endpoint variants). */
   note?: string;
   /** Logo tile shown in the provider gallery and rows. */
@@ -107,6 +121,14 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     ],
     defaultModel: 'claude-opus-5',
     modelsFromRuntime: true,
+    // models.dev, read 2026-11-11.
+    prices: {
+      source: 'anthropic',
+      floor: {
+        'claude-fable-5-2': 40, 'claude-opus-5-5': 20, 'claude-sonnet-5-5': 10, 'claude-haiku-5-5': 0.5,
+        'claude-opus-5': 25, 'claude-sonnet-5': 10, 'claude-haiku-4-5-20251001': 5,
+      },
+    },
     brand: { mono: 'A', from: '#d97757', to: '#c15f3c' },
     keyUrl: 'https://console.anthropic.com/settings/keys',
   },
@@ -120,12 +142,19 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     baseUrl: 'https://api.openai.com/v1',
     // Without this the generic hint reads "OpenAI (Codex)'s OpenAI-compatible endpoint."
     note: "OpenAI's own API — the endpoint the Codex CLI talks to by default.",
+    // The windows are OpenAI's (400k each). Codex reads its own; Claude Code on this key, through Orbit's gateway,
+    // is told them as CLAUDE_CODE_MAX_CONTEXT_TOKENS, or it would assume 200k (design §4.5).
     models: [
-      { value: 'gpt-5.1', label: 'GPT-5.1' },
-      { value: 'gpt-5.1-mini', label: 'GPT-5.1 mini' },
+      { value: 'gpt-5.1', label: 'GPT-5.1', contextWindow: 400_000 },
+      { value: 'gpt-5.1-mini', label: 'GPT-5.1 mini', contextWindow: 400_000 },
     ],
     defaultModel: 'gpt-5.1',
     modelsFromRuntime: true,
+    // models.dev, read 2026-11-11.
+    prices: {
+      source: 'openai',
+      floor: { 'gpt-5.6': 20, 'gpt-5.6-sol': 20, 'gpt-5.6-terra': 12, 'gpt-5.6-luna': 1.2, 'gpt-5.5': 30, 'gpt-5.1': 10 },
+    },
     brand: { mono: 'O', from: '#4b5158', to: '#1f2226' },
     keyUrl: 'https://platform.openai.com/api-keys',
   },
@@ -160,8 +189,8 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     label: 'DeepSeek',
     baseUrl: 'https://api.deepseek.com/anthropic',
     models: [
-      { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro', contextWindow: 1_000_000 },
-      { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', contextWindow: 1_000_000 },
+      { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro', contextWindow: 1_000_000, tier: 'L', outputPricePerMTok: 1.98 },
+      { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', contextWindow: 1_000_000, tier: 'M', outputPricePerMTok: 0.6 },
     ],
     defaultModel: 'deepseek-v4-pro',
     catalog: { source: 'deepseek', match: /^deepseek-/ },
@@ -193,9 +222,9 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     runtime: 'kimi',
     baseUrl: 'https://api.moonshot.ai/v1',
     models: [
-      { value: 'kimi-k2.7-code', label: 'Kimi K2.7 Code', contextWindow: 256_000 },
-      { value: 'kimi-k2.7-code-highspeed', label: 'Kimi K2.7 Code Highspeed', contextWindow: 256_000 },
-      { value: 'kimi-k2.6', label: 'Kimi K2.6', contextWindow: 256_000 },
+      { value: 'kimi-k2.7-code', label: 'Kimi K2.7 Code', contextWindow: 256_000, tier: 'L', outputPricePerMTok: 4 },
+      { value: 'kimi-k2.7-code-highspeed', label: 'Kimi K2.7 Code Highspeed', contextWindow: 256_000, tier: 'L', outputPricePerMTok: 8 },
+      { value: 'kimi-k2.6', label: 'Kimi K2.6', contextWindow: 256_000, tier: 'M', outputPricePerMTok: 4 },
     ],
     defaultModel: 'kimi-k2.7-code',
     catalog: { source: 'moonshotai', match: /^kimi-/ },
@@ -224,8 +253,8 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     label: 'Z.AI (GLM)',
     baseUrl: 'https://api.z.ai/api/anthropic',
     models: [
-      { value: 'glm-5.2', label: 'GLM-5.2' },
-      { value: 'glm-4.7', label: 'GLM-4.7' },
+      { value: 'glm-5.2', label: 'GLM-5.2', tier: 'L', outputPricePerMTok: 4.4 },
+      { value: 'glm-4.7', label: 'GLM-4.7', tier: 'M', outputPricePerMTok: 2.2 },
     ],
     defaultModel: 'glm-5.2',
     // Z.AI ships as `zai` there; `zhipuai` is the CN sibling platform, on a different endpoint.
@@ -238,9 +267,9 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     label: 'MiniMax',
     baseUrl: 'https://api.minimax.io/anthropic',
     models: [
-      { value: 'MiniMax-M3', label: 'MiniMax-M3', contextWindow: 1_000_000 },
-      { value: 'MiniMax-M2.7', label: 'MiniMax-M2.7', contextWindow: 204_800 },
-      { value: 'MiniMax-M2.7-highspeed', label: 'MiniMax-M2.7 Highspeed', contextWindow: 204_800 },
+      { value: 'MiniMax-M3', label: 'MiniMax-M3', contextWindow: 1_000_000, tier: 'L', outputPricePerMTok: 1.2 },
+      { value: 'MiniMax-M2.7', label: 'MiniMax-M2.7', contextWindow: 204_800, tier: 'M', outputPricePerMTok: 1.2 },
+      { value: 'MiniMax-M2.7-highspeed', label: 'MiniMax-M2.7 Highspeed', contextWindow: 204_800, tier: 'M', outputPricePerMTok: 2.4 },
     ],
     defaultModel: 'MiniMax-M2.7',
     catalog: { source: 'minimax', match: /^MiniMax-/ },
@@ -252,9 +281,9 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     label: 'Qwen (Model Studio)',
     baseUrl: 'https://dashscope.aliyuncs.com/apps/anthropic',
     models: [
-      { value: 'qwen3.7-max', label: 'Qwen3.7 Max' },
-      { value: 'qwen3.7-plus', label: 'Qwen3.7 Plus' },
-      { value: 'qwen3.6-flash', label: 'Qwen3.6 Flash' },
+      { value: 'qwen3.7-max', label: 'Qwen3.7 Max', tier: 'L', outputPricePerMTok: 7.5 },
+      { value: 'qwen3.7-plus', label: 'Qwen3.7 Plus', tier: 'M', outputPricePerMTok: 1.6 },
+      { value: 'qwen3.6-flash', label: 'Qwen3.6 Flash', tier: 'S', outputPricePerMTok: 1.5 },
     ],
     defaultModel: 'qwen3.7-max',
     catalog: { source: 'alibaba', match: /^qwen\d/ },

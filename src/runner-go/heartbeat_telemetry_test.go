@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -511,5 +513,60 @@ func TestHeartbeatTelemetryDeadlineAndShutdownJoin(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("telemetry worker did not join after shutdown cancellation")
+	}
+}
+
+// The 0.1.253 bump (task 34vJmfV0DZk5cySoXlB3r, 2026-11-10): a heartbeat publishes the scan the
+// previous heartbeat started, and the session stayed active from its agent turn into its
+// acceptance shell turn, so its permit generation never moved. A scan taken before the agent's
+// commit was sent after that turn's completion had reported the commit, and the control plane,
+// which writes a snapshot over the session's columns as it comes, put the branch tip back to the
+// one before the commit. A sample scanned before a report of its own session is not sent after it.
+func TestHeartbeatTelemetryDropsASampleScannedBeforeTheTurnReport(t *testing.T) {
+	wt := sessionWorktree(t, "sStaleScan")
+	pool := newSessionPool(1)
+	registerPoolSession(t, pool, wt.Session, true)
+	_, targets := pool.heartbeatSnapshot()
+	targets[0].isolationStatus = isoWorktree
+	targets[0].worktree = wt
+	telemetry := newHeartbeatTelemetryProbe(time.Hour, nil)
+
+	// The scan the heartbeat after the commit will send, taken before it.
+	telemetry.state = collectHeartbeatSessionStates(context.Background(), targets)
+	started := mustGit(t, wt.RepoDir, "rev-parse", "refs/heads/"+wt.Branch)
+	if len(telemetry.state) != 1 || telemetry.state[0].state.BranchSha != started {
+		t.Fatalf("CONTROL: the scan did not read the tip %s: %#v", started, telemetry.state)
+	}
+
+	// The turn commits, and its completion reports the new tip.
+	mustGit(t, wt.Path, "add", "-A")
+	mustGit(t, wt.Path, "commit", "-q", "-m", "the turn's commit")
+	committed := mustGit(t, wt.RepoDir, "rev-parse", "refs/heads/"+wt.Branch)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":true,"status":"RUNNING"}`))
+	}))
+	defer server.Close()
+	if _, err := NewTransport(server.URL, "tok").turnComplete(context.Background(), wt.Session, TurnCompleteRequest{
+		TurnID: "turn-1", Status: stSucceeded, BranchSha: committed,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, targets = pool.heartbeatSnapshot()
+	for _, state := range telemetry.snapshotFor(targets) {
+		if state.SessionID == wt.Session {
+			t.Fatalf("the heartbeat after the turn-complete sends the scan from before it: branchSha %s, the turn reported %s",
+				state.BranchSha, committed)
+		}
+	}
+
+	// A scan begun after the report is sent, with the tip the turn committed.
+	_, targets = pool.heartbeatSnapshot()
+	targets[0].isolationStatus = isoWorktree
+	targets[0].worktree = wt
+	telemetry.state = collectHeartbeatSessionStates(context.Background(), targets)
+	got := telemetry.snapshotFor(targets)
+	if len(got) != 1 || got[0].BranchSha != committed {
+		t.Fatalf("the scan after the report = %#v, want one sample at %s", got, committed)
 	}
 }

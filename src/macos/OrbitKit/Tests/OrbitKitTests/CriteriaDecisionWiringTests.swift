@@ -222,7 +222,7 @@ final class CriteriaDecisionWiringTests: XCTestCase {
         XCTAssertTrue(confirmation.contains("dimmed: AcceptanceConfirmations.isDimmed(standing)"),
                       "and so is a confirmation already given at another end")
         let review = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/ApprovalReview.swift")
-        XCTAssertTrue(review.contains(".approvalChrome(tone, dimmed: dimmed)"),
+        XCTAssertTrue(review.contains(".approvalChrome(tone, dimmed: dimmed, emphasized: emphasized)"),
                       "the shared preview passes the card's standing to the same chrome")
         XCTAssertFalse((weakening + confirmation).contains("0.72"),
                        "the chrome applies the opacity; a second one inside a card would multiply")

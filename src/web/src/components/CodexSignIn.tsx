@@ -240,8 +240,10 @@ export function CodexSignInModal({
       </>
     );
 
+  // A press on the page behind does not close it: the sign-in happens in another tab, and a stray click on
+  // the way back would throw away the code. Cancel and ✕ still do.
   return (
-    <Dialog open width={500} className="pool-dialog" title="Sign in with ChatGPT" footer={footer} onClose={close}>
+    <Dialog open width={500} className="pool-dialog" title="Sign in with ChatGPT" footer={footer} onClose={close} closeOnOutsideClick={false}>
       {/* Adding one more to a pool that already runs on an account of its own: the notice says what the
           pool runs on now, that everyone in the pool — once it is shared — runs on this account too, and
           what the pool does without it. */}

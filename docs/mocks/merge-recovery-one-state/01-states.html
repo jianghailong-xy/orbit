@@ -1,0 +1,179 @@
+<!-- DESIGN MOCK (2026-11-14). Web session page, merge slot under the transcript (SessionOutputs → wt-bar +
+     MergeRecoveryPanel). Left: today's card, rebuilt from the owner's screenshot. Right: one state, one sentence,
+     one primary action. Commits, branches, runners and times are demo data.
+     Render:
+       ~/.cache/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell \
+         --no-sandbox --hide-scrollbars --force-device-scale-factor=1.5 --window-size=1480,1520 \
+         --screenshot=docs/mocks/merge-recovery-one-state/01-states.png \
+         file://$PWD/docs/mocks/merge-recovery-one-state/01-states.html -->
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>合并卡：一个状态、一句话、一个主动作 — Web 效果图</title>
+<style>
+  :root { --brand:#3E69F6; --brand-bg:#EEF2FF; --border:#e3e3e8; --bg:#fff; --bg-subtle:#f7f8fa; --t1:#16161a; --t2:#6b6b75;
+          --green:#1f9d55; --red:#d93838; --amber:#b86e00; --amber-bg:#fff6e5; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:36px 36px 48px; width:1480px; background:#ececef; color:var(--t1);
+         font:14px/1.5 -apple-system,"Inter","Nimbus Sans","Noto Sans CJK SC",sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:24px; margin:0 0 6px; } .lede { color:#55555e; margin:0 0 22px; max-width:1300px; }
+  .cols { display:grid; grid-template-columns:600px 1fr; gap:36px; align-items:start; }
+  .colh { font-weight:700; font-size:15px; margin:0 0 10px; display:flex; gap:8px; align-items:center; }
+  .tag { font:600 11.5px/1 sans-serif; padding:4px 7px; border-radius:5px; }
+  .tag.old { background:#fde2e2; color:#a12a2a; } .tag.new { background:#dcf3e5; color:#17683b; }
+  .st { margin-bottom:22px; } .st > h3 { margin:0 0 8px; font-size:14px; display:flex; gap:8px; align-items:baseline; }
+  .st > h3 small { font-weight:400; color:var(--t2); font-size:12.5px; }
+  .note { font-size:12.5px; color:#55555e; margin:8px 2px 0; line-height:1.6; } .note b { color:var(--t1); }
+  code, .mono { font-family:"DejaVu Sans Mono",ui-monospace,monospace; font-size:12px; }
+
+  /* the session's merge slot */
+  .bar { background:var(--bg); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  .row { display:flex; align-items:center; gap:10px; padding:9px 12px; }
+  .br { border:1px solid var(--border); border-radius:6px; padding:3px 8px; font-size:12.5px; color:var(--t2); white-space:nowrap; }
+  .br b { color:var(--t1); font-weight:500; }
+  .stat { font-size:12.5px; color:var(--t2); white-space:nowrap; } .add { color:var(--green); } .del { color:var(--red); }
+  .sp { flex:1; }
+  .btn { font:inherit; font-size:13px; padding:5px 12px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--t1); white-space:nowrap; }
+  .btn.pri { background:var(--brand); border-color:var(--brand); color:#fff; font-weight:600; }
+  .btn.dis { opacity:.5; } .btn.pri.dis { background:#b9c8fb; border-color:#b9c8fb; }
+  .btn.ghost { border-color:transparent; color:var(--t2); padding-left:6px; padding-right:6px; }
+  .spin { display:inline-block; width:11px; height:11px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; vertical-align:-1px; margin-right:5px; }
+
+  .card { margin:0 12px 12px; padding:12px 14px; border:1px solid var(--border); border-radius:8px; background:var(--bg-subtle); font-size:13px; }
+  .card p { margin:7px 0; color:var(--t2); } .card strong.h { font-size:13.5px; color:var(--t1); }
+  .card summary { margin:7px 0; cursor:pointer; }
+  .acts { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; align-items:center; }
+
+  /* new: the one-line status */
+  .line { display:flex; align-items:center; gap:10px; margin:0 12px 12px; padding:9px 12px; border-radius:8px; font-size:13px; }
+  .line .what { font-weight:600; } .line .sub { color:var(--t2); }
+  .line.run { background:var(--brand-bg); color:#2546b8; }
+  .line.wait { background:#f3f3f6; } .line.warn { background:var(--amber-bg); color:var(--amber); }
+  .line.ok { background:#e9f7ef; color:#17683b; }
+  .commit { padding:6px 0; border-top:1px solid var(--border); } .commit:first-of-type { border-top:0; }
+  .commit b { display:block; font-weight:500; color:var(--t1); } .commit small { color:var(--t2); }
+  .chip { font-size:11px; font-weight:600; padding:1px 6px; border-radius:4px; background:#e8e8ee; color:var(--t2); }
+  .chip.local { background:var(--amber-bg); color:var(--amber); }
+  .x { position:relative; } .x::after { content:attr(data-n); position:absolute; top:-9px; right:-9px; width:19px; height:19px; border-radius:50%;
+       background:#d93838; color:#fff; font:700 11.5px/19px sans-serif; text-align:center; }
+  ol.issues { margin:10px 0 0; padding-left:20px; font-size:12.5px; color:#55555e; line-height:1.65; } ol.issues b { color:var(--t1); }
+</style>
+
+<h1>Session 合并卡：一个状态、一句话、一个主动作</h1>
+<p class="lede">左边是现在的卡，按截图还原。右边是改版：简单的情况不再弹面板；“进行中”只用一行说清在做什么、从几点开始、在等谁；只有真正需要人拿主意时才展开面板，细节全部收进 Details。界面文案都是英文，图上的注释是中文。</p>
+
+<div class="cols">
+<!-- ============ BEFORE ============ -->
+<div>
+  <div class="colh"><span class="tag old">现在</span> fast-forward、1 个 commit，但会话正在跑一轮</div>
+  <div class="bar">
+    <div class="row">
+      <span class="br">⎇ orbit/<b>session-coordinator-workspace-…</b></span>
+      <span class="stat"><span class="add">+50</span> <span class="del">−12</span> · 8 files · committed</span>
+      <span class="sp"></span>
+      <span class="btn pri dis x" data-n="1">Working…</span>
+    </div>
+    <div class="card">
+      <strong class="h">Review synchronization into main</strong>
+      <p>Checked 50m ago</p>
+      <p><code>orbit/session-coordinator-…-a47787</code> → <code>main</code> · Local main matches origin/main</p>
+      <details open><summary>Pushes to origin/main (1 commit)</summary>
+        <div class="commit"><b>fix(native): a coordinator row in the session list keeps the workspace selected</b>
+          <small>This session · coordinator · 6h ago · 99f1e9dc</small></div>
+        <p>Fast-forward push: nothing already on origin/main is rewritten.</p>
+      </details>
+      <details><summary>Complete candidate diff against origin/main</summary></details>
+      <p class="x" data-n="4" style="display:inline-block">Git preview only; no merge check is configured.</p>
+      <p>If the repository requires linear history or a PR, prepare a PR candidate instead.</p>
+      <details><summary>Saved repair branch and location</summary></details>
+      <div class="acts">
+        <span class="btn dis x" data-n="2">Checking…</span>
+        <span class="btn pri dis x" data-n="3">Sync main and merge</span>
+        <span class="btn">Prepare PR candidate</span>
+      </div>
+    </div>
+  </div>
+  <ol class="issues">
+    <li><b>顶栏的 “Working…”</b>：服务端有一个 pending 任务，但卡上看不出它在做什么、什么时候开始的、有没有卡住。<b>“Checked 50m ago”</b> 让人以为它卡了 50 分钟。</li>
+    <li><b>“Checking…” 是假的</b>：<code>busy</code> 把三件事合成了一个，包括“会话这一轮在跑”。只要会话在跑，检查按钮就显示 Checking…，其实什么都没在检查。</li>
+    <li><b>两个主按钮</b>（顶栏一个、卡里一个）同时灰着，都没说为什么。</li>
+    <li>一次 fast-forward 推 1 个 commit，却摆出了 candidate diff、merge check 配置、linear history、repair branch 路径这么一整份“审查”。</li>
+  </ol>
+</div>
+
+<!-- ============ AFTER ============ -->
+<div>
+  <div class="colh"><span class="tag new">改版</span> 五种状态，每种只有一个主动作</div>
+
+  <div class="st"><h3>① 可直接合并 <small>fast-forward，本地 main 跟 origin 一致，没有别人的 commit</small></h3>
+    <div class="bar"><div class="row">
+      <span class="br">⎇ orbit/<b>session-coordinator-workspace-…</b></span>
+      <span class="stat"><span class="add">+50</span> <span class="del">−12</span> · 8 files · 1 commit</span>
+      <span class="sp"></span>
+      <span class="btn pri">Merge into main</span>
+    </div></div>
+    <p class="note">截图里就是这种情况：<b>不弹恢复面板</b>，跟普通合并一样只有一个按钮。点下去，服务端先重新 preview 再 apply，跟上次 preview 一致就直接完成，不让人再“审”一遍。</p>
+  </div>
+
+  <div class="st"><h3>② 会话正在跑一轮 <small>以前这里显示假的 “Checking…”</small></h3>
+    <div class="bar"><div class="row">
+      <span class="br">⎇ orbit/<b>session-coordinator-workspace-…</b></span>
+      <span class="stat"><span class="add">+50</span> <span class="del">−12</span> · 8 files · 1 commit</span>
+      <span class="sp"></span>
+      <span class="btn pri">Merge when this turn ends</span>
+    </div></div>
+    <p class="note">按钮不灰，直接告诉你在等什么，点了就排队。点之后变成下面 ③ 那一行，状态写 <b>“Queued — merges when this turn ends”</b>，旁边带 Cancel。<br>如果服务端暂时做不了排队，退一步：按钮灰掉，tooltip 写 “Waiting for this session’s turn to end”。</p>
+  </div>
+
+  <div class="st"><h3>③ 进行中 <small>代替 Working… 和 Checking… 那几个转圈</small></h3>
+    <div class="bar"><div class="row">
+      <span class="br">⎇ orbit/<b>session-coordinator-workspace-…</b></span>
+      <span class="stat"><span class="add">+50</span> <span class="del">−12</span> · 8 files · 1 commit</span>
+      <span class="sp"></span>
+    </div>
+    <div class="line run"><span class="spin"></span><span class="what">Merging into main</span><span class="sub">· pushing 1 commit · started 40s ago on mac-mini</span><span class="sp"></span><span class="btn ghost">Cancel</span></div>
+    </div>
+    <div class="bar" style="margin-top:10px"><div class="row">
+      <span class="br">⎇ orbit/<b>session-coordinator-workspace-…</b></span>
+      <span class="stat"><span class="add">+50</span> <span class="del">−12</span> · 8 files · 1 commit</span>
+      <span class="sp"></span>
+    </div>
+    <div class="line warn"><span class="what">Still merging after 12m</span><span class="sub" style="color:inherit;opacity:.85">· mac-mini hasn’t reported since 11:42</span><span class="sp"></span><span class="btn">Cancel</span><span class="btn pri">Retry</span></div>
+    </div>
+    <p class="note">进行中的时候，顶栏和卡里<b>都不放动作按钮</b>，只有这一行：在做什么、从什么时候开始、在哪台 runner 上。超过阈值（比如 5 分钟）变成琥珀色，并给出 Cancel / Retry。这一条要配合后端给 pending 加超时和开始时间。</p>
+  </div>
+
+  <div class="st"><h3>④ 需要你决定 <small>本地 main 和 origin 分叉，或本地 main 带着别人的 commit</small></h3>
+    <div class="bar"><div class="row">
+      <span class="br">⎇ orbit/<b>session-coordinator-workspace-…</b></span>
+      <span class="stat"><span class="add">+50</span> <span class="del">−12</span> · 8 files · 1 commit</span>
+      <span class="sp"></span>
+    </div>
+    <div class="card">
+      <strong class="h">Local main has 2 commits that aren’t on origin</strong>
+      <p>Merging pushes them along with this session’s commit.</p>
+      <div class="commit"><b>wip: try the new sidebar width</b><small><span class="chip local">Local-only</span> · hailong · yesterday · 3c1a77e0</small></div>
+      <div class="commit"><b>chore: bump eslint</b><small><span class="chip local">Local-only</span> · hailong · yesterday · 81d02f4b</small></div>
+      <div class="commit"><b>fix(native): a coordinator row in the session list keeps the workspace selected</b><small><span class="chip">This session</span> · coordinator · 6h ago · 99f1e9dc</small></div>
+      <details><summary>Details</summary></details>
+      <div class="acts">
+        <span class="btn pri">Push all 3 and merge</span>
+        <span class="btn">Open a PR instead</span>
+        <span class="sp"></span><span style="color:var(--t2);font-size:12px">Checked just now</span>
+      </div>
+    </div></div>
+    <p class="note">标题直接写<b>要你决定的那件事</b>，不再用 “Review synchronization”。按钮把后果写清楚（“Push all 3”）。完整 diff、merge check、linear history、repair branch 路径都收进 <b>Details</b>，默认折叠。“Checked …” 降成右下角的小字，超过几分钟服务端自己重新检查。</p>
+  </div>
+
+  <div class="st"><h3>⑤ 有冲突 <small>沿用现在的修复会话流程，只是让它成为唯一的主动作</small></h3>
+    <div class="bar"><div class="row">
+      <span class="br">⎇ orbit/<b>session-coordinator-workspace-…</b></span>
+      <span class="stat"><span class="add">+50</span> <span class="del">−12</span> · 8 files · 1 commit</span>
+      <span class="sp"></span>
+    </div>
+    <div class="card">
+      <strong class="h">2 files conflict with origin/main</strong>
+      <p><code>src/web/src/components/SessionOutputs.tsx</code><br><code>src/web/src/index.css</code></p>
+      <div class="acts"><span class="btn pri">Resolve in a repair session</span><span class="btn">Open a PR instead</span></div>
+    </div></div>
+  </div>
+</div>
+</div>

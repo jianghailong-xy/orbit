@@ -160,6 +160,10 @@ internal object ProjectShell {
     @Volatile var crossings: String? = null
     /** Launch's task rows (`projects/:id/tasks/page`), as a JSON array; null answers as before, with none. */
     @Volatile var tasks: String? = null
+    /** The coordinator's transcript (`sessions/COORD/events/page`), as a JSON array of events; null answers with none, as before. */
+    @Volatile var coordEvents: String? = null
+    /** A crossing decision's answer by its door id and body, when a test answers each row itself; null answers as [decide] does. */
+    @Volatile var onDecision: ((String, String) -> ApiResponse)? = null
 
     fun reset() {
         calls.clear(); started = true; startRequest = false; quietStatus = 200
@@ -175,7 +179,7 @@ internal object ProjectShell {
         // An earlier test's held request is dropped, never answered: answered now, it would write into this test's server state.
         trashed = emptySet(); holdDelete = null; holdMembers = null; attention = null
         quietAttention = null; coordinatorWorking = false
-        configRevision = null; automatic = true; maxConcurrentTasks = 2; crossings = null; tasks = null
+        configRevision = null; automatic = true; maxConcurrentTasks = 2; crossings = null; tasks = null; coordEvents = null; onDecision = null
         lineIdle = false
         while (accountEvents.tryReceive().isSuccess) Unit
     }
@@ -352,6 +356,7 @@ internal object ProjectShell {
                 trashed = trashed + path.removePrefix("sessions/")
                 ok("{}")
             }
+            path == "sessions/$COORD/events/page" && coordEvents != null -> ok("""{"events":$coordEvents,"hasMore":false}""")
             path.startsWith("sessions/") && path.endsWith("/page") -> ok("""{"events":[],"hasMore":false,"lastSeq":0,"latestSeq":0}""")
             path == "projects/$LAUNCH/sessions/complete" && method == "POST" ->
                 if (!done) ApiResponse(409, """{"code":"PROJECT_STILL_OPEN","message":"The project is still open."}""".encodeToByteArray())
@@ -367,7 +372,8 @@ internal object ProjectShell {
             }
             path == "projects/$LAUNCH/handoffs" && crossings != null -> ok(crossings!!)
             path == "projects/$LAUNCH/tasks/page" && tasks != null -> ok("""{"items":$tasks,"nextCursor":null}""")
-            method == "POST" && crossings != null && path.startsWith("projects/$LAUNCH/handoffs/") && path.endsWith("/decision") -> decide(api.path[3])
+            method == "POST" && crossings != null && path.startsWith("projects/$LAUNCH/handoffs/") && path.endsWith("/decision") ->
+                onDecision?.invoke(api.path[3], api.body?.decodeToString().orEmpty()) ?: decide(api.path[3])
             path == "projects/$LAUNCH/integration" -> ok(integration)
             path == "projects/$LAUNCH/coordinator/status" -> ok(coordinatorStatus)
             path == "projects/$LAUNCH/open-items" -> ok(openItems)

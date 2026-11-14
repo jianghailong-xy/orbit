@@ -109,7 +109,8 @@ class FakeEventSource {
 let where = '';
 /** Where the router is, so the menu's way to the task can be followed. */
 function Where() {
-  where = useLocation().pathname;
+  const location = useLocation();
+  where = location.pathname + location.search;
   return null;
 }
 
@@ -169,10 +170,8 @@ describe('the model chip on a task run smart selection picked', { timeout: 60_00
         <QueryClientProvider client={nextClient}>
           <MemoryRouter initialEntries={[`/sessions/${SESSION}`]}>
             <Where />
-            {/* As the app routes them: the console holds a session, and the task page is apart. */}
             <Routes>
               <Route path="/sessions/:id" element={<WorkspaceView runner={RUNNER} />} />
-              <Route path="/tasks/:id" element={<div className="task-page-probe" />} />
             </Routes>
           </MemoryRouter>
         </QueryClientProvider>,
@@ -282,9 +281,10 @@ describe('the model chip on a task run smart selection picked', { timeout: 60_00
 
     await click(row('Open task ›'), 'Open task');
     await act(async () => {
-      await vi.waitFor(() => expect(where).toBe(`/tasks/${TASK}`), { timeout: 20_000, interval: 20 });
+      // The task opens over this conversation (lib/taskInPlace, owner 2026-11-12), not on a page apart.
+      await vi.waitFor(() => expect(where).toBe(`/sessions/${SESSION}?task=${TASK}`), { timeout: 20_000, interval: 20 });
     });
-    expect(document.querySelector('.task-page-probe')).not.toBeNull();
+    expect(chip()).not.toBeNull();
   });
 
   it('leaves a session opened by hand exactly as it was', async () => {

@@ -135,20 +135,6 @@ final class ReferencedTaskTests: XCTestCase {
         XCTAssertEqual(parsed?.rest, unreadable)
     }
 
-    // MARK: the line that names the note folded
-
-    func testSaysTheStateOfALoneTaskOutrightAndCountsSeveral() {
-        let summary = { (note: String) in
-            ReferencedTaskNote.summary(ReferencedTaskText.parse(note)?.tasks ?? [])
-        }
-
-        XCTAssertEqual(summary(ReferencedTaskFixtures.oneTask), "FAILED")
-        XCTAssertEqual(summary(ReferencedTaskFixtures.neverRan), "OPEN")
-        XCTAssertEqual(summary(ReferencedTaskFixtures.eightTasks), "7 DONE, 1 OPEN")
-        XCTAssertEqual(summary(ReferencedTaskFixtures.twoTasks), "1 DONE, 1 OPEN")
-        XCTAssertEqual(summary(ReferencedTaskFixtures.inEnglish), "1 DONE, 1 OPEN")
-    }
-
     // MARK: what a card says
 
     func testACardSaysTheOutcomeTheIdsAndHowManyRuns() {

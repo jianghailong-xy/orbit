@@ -99,14 +99,15 @@ describe('the task detail page’s acceptance block', () => {
     expect(html).not.toContain(ACCEPTANCE_PAIR_EMPTY);
   });
 
-  it('says what is missing when a task has neither, and still says what filling them in would do', () => {
+  it('says the criteria are missing when a task has neither, and draws no unset pair at rest', () => {
     const html = renderAcceptance({});
 
     expect(html).toContain(ACCEPTANCE_EMPTY);
-    expect(html).toContain(ACCEPTANCE_PAIR_EMPTY);
-    // The hint is not decoration on a filled-in pair: a reader looking at an unset acceptance is
-    // exactly the one deciding whether to set it.
-    expect(html).toContain(ACCEPTANCE_AUTOMATIC_HINT);
+    // An unset pair said "a person decides", which a task judged by evidence contradicted from its
+    // header. At rest it is not drawn; Edit opens it.
+    expect(html).not.toContain(ACCEPTANCE_PAIR_EMPTY);
+    expect(html).not.toContain('Automatic judgement');
+    expect(html).not.toContain(ACCEPTANCE_AUTOMATIC_HINT);
     // Nothing is held: a command or a code from nowhere would read as a judgement already made.
     expect(html).not.toContain('done when it exits');
   });
@@ -216,7 +217,7 @@ describe('the task detail page’s acceptance block', () => {
       acceptanceExpectedExitCode: null,
     });
     expect(cleared).toContain(ACCEPTANCE_EMPTY);
-    expect(cleared).toContain(ACCEPTANCE_PAIR_EMPTY);
+    expect(cleared).not.toContain('Automatic judgement');
   });
 
   it('refuses half a pair, and re-sends the whole pair when only one half is edited', () => {
@@ -280,7 +281,7 @@ describe('the task detail page’s acceptance block', () => {
       </QueryClientProvider>,
     );
 
-    expect(html).toContain('tdp-section-title">Acceptance');
+    expect(html).toContain('tdp-section-title">Done means');
     expect(html).toContain('<strong>suite</strong>');
     expect(html).toContain('npm test -w @orbit/web');
     expect(html).toContain(ACCEPTANCE_AUTOMATIC_HINT);

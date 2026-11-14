@@ -437,7 +437,7 @@ test('0307 · the wiki write path', { skip, concurrency: 1, timeout: 300_000 }, 
     assert.equal(await h.prisma.wikiSpaceWorkspace.count({ where: { ownerId: owner.id } }), 2);
   });
 
-  await t.test('a workspace bound to no space is told how to bind one', async () => {
+  await t.test('a workspace bound to no space is told it has no wiki', async () => {
     const owner = await account(h, 'unbound');
     const machine = await runner(h, owner.id);
     const ws = await workspace(h, owner.id, {});
@@ -448,7 +448,7 @@ test('0307 · the wiki write path', { skip, concurrency: 1, timeout: 300_000 }, 
     });
     expectStatus(answer, 409, 'an unbound workspace is refused');
     assert.equal(answer.body.code, 'WIKI_SPACE_UNBOUND');
-    assert.match(answer.body.message, /binds it in Wiki settings|repository URL/u);
+    assert.match(answer.body.message, /^No wiki for this repository yet, so nothing was recorded\./u);
     assert.equal(await h.prisma.wikiSpace.count({ where: { ownerId: owner.id } }), 0, 'and no space is invented');
 
     const made = await space(h, owner);

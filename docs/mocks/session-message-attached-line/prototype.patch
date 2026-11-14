@@ -1,0 +1,109 @@
+diff --git a/src/web/src/components/SessionMessageCard.tsx b/src/web/src/components/SessionMessageCard.tsx
+index fee4b64..1f12eb8 100644
+--- a/src/web/src/components/SessionMessageCard.tsx
++++ b/src/web/src/components/SessionMessageCard.tsx
+@@ -43,6 +43,7 @@ export function SessionMessageCard({
+   undelivered,
+   attached,
+   queued,
++  narrower,
+ }: {
+   card: Card;
+   /** The sending agent's words, as the recipient was handed them. */
+@@ -55,6 +56,8 @@ export function SessionMessageCard({
+   /** The queue's own line, while the message still waits to be delivered (WorkspaceView's queued
+    *  tail): the card it will be once a runner takes it, with how it stands and Cancel at its foot. */
+   queued?: ReactNode;
++  /** The sender runs in a narrower mode than this session (lib/sessionMessage). */
++  narrower?: string | null;
+ }) {
+   // An export is read on paper, where nothing can be unfolded: it gets the whole message.
+   const exporting = useContext(ExportCtx) != null;
+@@ -122,6 +125,7 @@ export function SessionMessageCard({
+             </>
+           )}
+         </div>
++        {narrower && <div className="smc-narrower">{narrower}</div>}
+         {card.requestId && (exporting
+           ? <div className="smc-request"><span className="smc-request-asks">{SESSION_REQUEST_ASKS}</span></div>
+           : <SessionRequestStatus requestId={card.requestId} />)}
+diff --git a/src/web/src/components/Transcript.tsx b/src/web/src/components/Transcript.tsx
+index f7a8867..8418cdb 100644
+--- a/src/web/src/components/Transcript.tsx
++++ b/src/web/src/components/Transcript.tsx
+@@ -116,7 +116,7 @@ import type { TaskStartCard as TaskStart } from '@orbit/shared';
+ import { TaskStartCard } from './TaskStartCard';
+ import { parseProjectStarted } from '../lib/projectStarted';
+ import { ProjectStartedCard } from './ProjectStartedCard';
+-import { parseSessionMessage } from '../lib/sessionMessage';
++import { parseSessionMessage, splitSessionMessageNote } from '../lib/sessionMessage';
+ import { externalSenderLabel, parseExternalSender } from '../lib/externalSender';
+ import {
+   parseConfirmationAnswers,
+@@ -2146,14 +2146,16 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
+       // beside the echo (lib/sessionMessage), so it is asked first — before anything is read out of
+       // the words themselves, which are the sending agent's to choose. No payload, the old reading.
+       if (node.sessionMessage) {
++        const split = splitSessionMessageNote(node.note);
+         return (
+           <SessionMessageCard
++            narrower={split.narrower}
+             card={node.sessionMessage}
+             text={node.text}
+             seq={seq}
+             ts={node.ts}
+             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+-            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
++            attached={split.rest && <ControlPlaneNote kind={describeNote(split.rest)} text={split.rest} />}
+             queued={queued}
+           />
+         );
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index 1f44325..cbe239f 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -23682,6 +23682,11 @@ div.landing-jobs-open {
+   color: var(--brand);
+   text-decoration: none;
+ }
++.smc-narrower {
++  margin-top: 4px;
++  color: var(--text-3);
++  font-size: 11px;
++}
+ .smc-undelivered {
+   margin-top: 4px;
+   color: var(--warning);
+diff --git a/src/web/src/lib/sessionMessage.ts b/src/web/src/lib/sessionMessage.ts
+index 3ae735e..2a02617 100644
+--- a/src/web/src/lib/sessionMessage.ts
++++ b/src/web/src/lib/sessionMessage.ts
+@@ -47,3 +47,28 @@ export function sessionMessageTitle(card: SessionMessageCard): string {
+ export function sessionMessageSticky(card: SessionMessageCard, text: string): { label: string; text: string } {
+   return { label: `${SESSION_MESSAGE_FROM} ${sessionMessageTitle(card)}`, text };
+ }
++
++const SESSION_MESSAGE_BLOCK = /<orbit-session-message\b([^>]*)>([\s\S]*?)<\/orbit-session-message>/;
++const NARROWER = /The sender runs in (\S+), which is narrower than this session's (\S+)\./;
++const MODE_LABEL: Record<string, string> = {
++  default: 'Default', plan: 'Plan', acceptEdits: 'Accept Edits', auto: 'Auto', dontAsk: "Don't Ask", bypassPermissions: 'Bypass',
++};
++
++/**
++ * A session message's recorded note with its own block taken out: the card already says everything
++ * that block tells the agent (who sent it, its task, the request), so only what else delivery
++ * appended is left to fold. What the card does not otherwise say — that the sender runs narrower
++ * than this session — comes back as `narrower`, a line for the card's foot.
++ */
++export function splitSessionMessageNote(note: string | null | undefined): { rest: string; narrower: string | null } {
++  if (!note) return { rest: '', narrower: null };
++  const m = SESSION_MESSAGE_BLOCK.exec(note);
++  if (!m) return { rest: note, narrower: null };
++  const n = NARROWER.exec(m[2]);
++  const label = (mode: string) => MODE_LABEL[mode] ?? mode;
++  return {
++    rest: note.replace(m[0], '').trim(),
++    narrower: n ? `${SESSION_MESSAGE_NARROWER_PREFIX} ${label(n[1])}, narrower than this session's ${label(n[2])}: not taken as your approval` : null,
++  };
++}
++export const SESSION_MESSAGE_NARROWER_PREFIX = 'Sender runs in';

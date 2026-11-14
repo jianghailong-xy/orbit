@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Orbit 来回折叠 · 哪些回复要留在外面</title>
+<style>
+  body { margin: 0; background: #eceef2; font-family: Inter, 'Noto Sans SC', sans-serif; color: #1d2330; }
+  .board { width: 2240px; padding: 48px; box-sizing: border-box; background: #eceef2; }
+  h1 { font-size: 34px; margin: 0 0 8px; }
+  .sub { font-size: 17px; color: #5b6475; margin-bottom: 28px; line-height: 1.6; }
+  .b-row { display: flex; gap: 24px; align-items: flex-start; margin-bottom: 32px; }
+  .b-frame { background: #fff; border-radius: 14px; padding: 18px 18px 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .b-frame h2 { font-size: 19px; margin: 0 0 4px; }
+  .b-frame .b-cap { font-size: 14px; color: #5b6475; margin: 0 0 12px; line-height: 1.55; max-width: 620px; }
+  .b-frame img { display: block; border: 1px solid #e3e6eb; border-radius: 8px; }
+  .b-tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-right: 6px; vertical-align: 2px; }
+  .t-now { background: #fde8e8; color: #b42318; } .t-a { background: #e3f0ff; color: #1757c2; } .t-b { background: #eef0f3; color: #4a5263; }
+  .b-sect { font-size: 24px; font-weight: 700; margin: 8px 0 14px; }
+  .b-panel { background: #fff; border-radius: 14px; padding: 22px 26px; box-shadow: 0 1px 3px rgba(0,0,0,.08); font-size: 15px; line-height: 1.65; }
+  .b-panel h2 { font-size: 20px; margin: 0 0 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid #e8eaee; }
+  th { color: #5b6475; font-weight: 600; background: #f6f7f9; }
+  code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; background: #f1f3f6; padding: 1px 5px; border-radius: 4px; }
+  .b-q { background: #fff8e6; border: 1px solid #f3d27a; border-radius: 10px; padding: 14px 18px; margin-top: 14px; }
+  .b-q b { color: #8a5a00; }
+  ul, ol { margin: 6px 0; padding-left: 22px; }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>Orbit 来回折叠 · 哪些回复要留在外面</h1>
+  <div class="sub">
+    问题（11-12 截图）：普通会话里你让 agent 查一件事，它起了 5 个后台作业，每个作业结束都开一轮。现在的规则只看<b>这一轮是谁开的</b>：Orbit 开的轮次只要已回复、没报错、没调 <code>ask_owner</code>、不是最后一轮，就折进 <code>⋯ 5 Orbit updates handled</code>。<b>回复写了什么完全不看</b>，所以第 5 轮那份带标题、表格、最后还问你“要不要推到 20261110？”的结论也被折掉了。<br>
+    折叠是 11-11 按协调会话的数据设计的（555 轮里 Orbit 开的 260 轮，watch 回复中位数 155 字，基本是“不用做什么”），当时选了“所有会话都折”。<br>
+    截图全部来自真实 Web 控制台（vite + 假 API），每个方案是同一份原型代码的一个开关（<code>prototype.patch</code>）。对话是示例文字，结构照截图：1 个提问 → 5 轮后台作业 → 最后一轮清理作业（不折）。
+  </div>
+
+  <div class="b-sect">普通会话（截图里的情况）</div>
+  <div class="b-row">
+    <div class="b-frame">
+      <h2><span class="b-tag t-now">今天</span>5 轮全折，结论看不到</h2>
+      <p class="b-cap">你的问题之后只剩一行 <code>5 Orbit updates handled · 5 background jobs</code>，得点开、再点开第 5 行才看到结论和那个问题。</p>
+      <img src="shots/p-today.png" width="620">
+    </div>
+    <div class="b-frame">
+      <h2><span class="b-tag t-a">① 推荐</span>普通会话不折后台作业</h2>
+      <p class="b-cap">非协调会话里，后台作业是 agent 在替你的问题干活，它的每一轮都照常展开（和折叠上线前一样）。协调会话不变。判据：会话没有协调的项目（<code>session.projectId</code> 为空）。</p>
+      <img src="shots/p-job.png" width="620">
+    </div>
+    <div class="b-frame">
+      <h2><span class="b-tag t-a">② 推荐</span>问句结尾就展开　<span class="b-tag t-b">③ / ④ 这里结果相同</span></h2>
+      <p class="b-cap">② 回复最后一行以 <code>？</code>/<code>?</code> 结尾 → 在问你，不折。<br>③ 回复超过 600 字或含标题/表格 → 不折。<br>④ 每串折叠的最后一轮展开。<br>这段对话里三者都只把第 5 轮放出来，前 4 轮的过程留在折叠里。</p>
+      <img src="shots/p-question.png" width="620">
+    </div>
+  </div>
+
+  <div class="b-sect">协调会话（11-11 折叠的原场景）：各方案的影响</div>
+  <div class="b-row">
+    <div class="b-frame">
+      <h2><span class="b-tag t-now">今天</span>= ① = ② = ③</h2>
+      <p class="b-cap">协调会话里 ① 不生效；这段样本（照 Runner link v1 协调会话改写）里没有以问句结尾、也没有超过 600 字的回复，所以 ② ③ 一轮都没放出来。</p>
+      <img src="shots/c-today.png" width="620">
+    </div>
+    <div class="b-frame">
+      <h2><span class="b-tag t-b">④</span>每串最后一轮展开：多出一整段</h2>
+      <p class="b-cap">“B5 证据确认”那一轮被放出来了，但它只是一串例行处理里碰巧最后一个。每段你没说话的时间都会多出这样一段，越过越长，回到了折叠要解决的问题。</p>
+      <img src="shots/c-last.png" width="620">
+    </div>
+    <div class="b-panel" style="width: 760px;">
+      <h2>四个方案对比</h2>
+      <table>
+        <tr><th></th><th>普通会话</th><th>协调会话</th><th>风险</th></tr>
+        <tr><td><b>① 普通会话不折后台作业</b></td><td>截图问题全解决：每一步过程和结论都在</td><td>不变</td><td>普通会话里 watch / 会话回信仍会折</td></tr>
+        <tr><td><b>② 问句结尾就展开</b></td><td>结论那轮展开，过程仍折</td><td>极少触发</td><td>问句在中间（“要不要…？另外…”）会漏</td></tr>
+        <tr><td><b>③ 长回复不折</b></td><td>结论那轮展开</td><td>偶尔触发（长的证据判定）</td><td>600 字阈值是估的，两边都可能误判</td></tr>
+        <tr><td><b>④ 每串最后一轮展开</b></td><td>结论那轮展开</td><td>每串都多一段例行回复</td><td>把噪音带回协调会话</td></tr>
+      </table>
+      <div class="b-q">
+        <b>待定 · 要你拍板</b><br>
+        推荐 <b>① + ②</b>：① 解决普通会话（截图这种），② 兜住任何会话里“回复在问你”的轮次。③ ④ 不做。<br>
+        三端（Web、macOS/iOS、Android）一起改，各端都有同一份规则（<code>orbitTurnOf</code> / <code>foldOrbitExchanges</code> 的移植）。
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

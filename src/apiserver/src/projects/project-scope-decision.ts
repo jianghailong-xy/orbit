@@ -52,7 +52,8 @@ export interface HandoffApproval {
   state: HandoffApprovalState;
   /** null when the crossing files NEW work rather than moving an existing task. */
   fromProjectId: string | null;
-  toProjectId: string;
+  /** null only for a move that takes the task out of every project. */
+  toProjectId: string | null;
   taskId: string | null;
 }
 
@@ -205,7 +206,12 @@ export function decideProjectScopeWrite(request: ScopeWriteRequest): ScopeWriteO
   // R4. Work that names no goal. The refusal is the point: an agent that may silently file
   // unattributable work under its own project is how the wrong project ends up owning it, and an
   // agent that may file it under NO project is how the work stops being counted by any acceptance.
-  if (to === null) return refuse('R4_NO_TARGET_PROJECT');
+  // What it may do is ASK (account owner, 2026-11-13): a declared move of an existing task out of
+  // its project goes on like any move — R6 holds it to the project it leaves, since no session
+  // holds "no project", and only the account owner's confirmation (R10–R14) takes the task out.
+  const asksToUnfile = request.operation === 'HANDOFF_TASK'
+    && request.taskId !== null && request.currentProjectId !== null;
+  if (to === null && !asksToUnfile) return refuse('R4_NO_TARGET_PROJECT');
   // R5. No scope at all, and it never claimed one (a claim would have been answered by R3).
   if (!scope) return refuse('R5_NO_SCOPE');
   // R6. Not a crossing, and not at home either: a plain write into somebody else's project. This is

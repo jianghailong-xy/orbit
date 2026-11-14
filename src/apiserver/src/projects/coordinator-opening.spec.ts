@@ -49,6 +49,16 @@ test('every form of the coordinator role files new work as tasks, and prices ope
   }
 });
 
+// A task whose criteria need another task's output it does not depend on can never prove them when
+// it is delivered, and the gap that leaves gets accepted (docs/evidence-always-has-an-addressee-design.md
+// §6). Every form says so where it tells the coordinator how to split the work.
+test('every form of the coordinator role keeps a task’s criteria inside what its dependencies make provable', () => {
+  for (const form of EVERY_FORM) {
+    assert.match(form, /a task’s acceptance criteria may only require what its own work and its dependencies make provable when it is delivered/);
+    assert.match(form, /Cross-task parity \(copy or behaviour matching across clients, say\) belongs to a check task that depends on all of them\./);
+  }
+});
+
 // `task_start` is refused until the owner starts the project, and a coordinator that learns it
 // only from the refusal has already told the owner its tasks are running. The owner's card appears
 // only once the coordinator asks, so every form also says how to ask — and when.

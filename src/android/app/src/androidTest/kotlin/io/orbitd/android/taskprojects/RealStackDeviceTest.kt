@@ -236,21 +236,21 @@ class RealStackDeviceTest {
         compose.waitUntil(30_000) { taskRecord(id).text("acceptanceCriteria") == "The stack keeps this sentence ($stamp)." }
         record("acceptanceCriteria", taskRecord(id).text("acceptanceCriteria"))
         // A scheduled start, then cancelled.
-        tap("task-start-at", "task-detail"); awaitTag("task-schedule-sheet"); tap("task-save-schedule"); awaitGone("task-schedule-sheet")
+        tap("task-runs-with", "task-detail"); awaitTag("task-runs-with-sheet"); tap("task-start-at"); awaitTag("task-schedule-sheet"); tap("task-save-schedule"); awaitGone("task-schedule-sheet")
         compose.waitUntil(30_000) { taskRecord(id).text("runAt") != null }
         record("runAt after Save", taskRecord(id).text("runAt"))
-        tap("task-start-at", "task-detail"); awaitTag("task-schedule-sheet"); tap("task-cancel-schedule"); awaitGone("task-schedule-sheet")
+        tap("task-runs-with", "task-detail"); awaitTag("task-runs-with-sheet"); tap("task-start-at"); awaitTag("task-schedule-sheet"); tap("task-cancel-schedule"); awaitGone("task-schedule-sheet")
         compose.waitUntil(30_000) { taskRecord(id).text("runAt") == null }
         record("runAt after Cancel", taskRecord(id)["runAt"])
         // A prerequisite, picked from the server's own candidates.
-        tap("task-add-prerequisite", "task-detail"); awaitTag("task-dependency-picker")
+        tap("task-menu", "task-detail"); tap("task-add-prerequisite"); awaitTag("task-dependency-picker")
         compose.onNodeWithTag("task-dependency-search").performTextInput(task("prereq").text("title")!!)
         awaitTag("candidate:$prerequisite"); tap("candidate:$prerequisite")
         compose.waitUntil(30_000) { taskRecord(id).objects("dependsOn").any { it.obj("dependsOnTask")?.text("id") == prerequisite } }
         record("dependsOn", taskRecord(id).objects("dependsOn").map { it.obj("dependsOnTask")?.text("title") })
-        awaitScrollTo("task-detail", hasTestTag("task-dependencies-section")); capture("stack-task-prerequisite")
+        awaitScrollTo("task-detail", hasTestTag("task-dependencies-section")); tap("task-plan-toggle", "task-detail"); capture("stack-task-prerequisite")
         // Follow: a watch on this task.
-        tap("task-follow", "task-detail"); awaitTag("task-follow-sheet"); capture("stack-task-follow")
+        tap("task-menu", "task-detail"); tap("task-follow"); awaitTag("task-follow-sheet"); capture("stack-task-follow")
         tap("task-follow-confirm"); awaitGone("task-follow-sheet")
         compose.waitUntil(30_000) { get("/watches").toString().contains(id) }
         record("GET /watches mentions the task", true)

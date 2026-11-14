@@ -78,6 +78,14 @@ export function welcomeQueued(row: EmailSettings | null): boolean {
   return row !== null && row.enabled && row.resendApiKeyEnc !== '' && row.fromAddress !== '' && row.welcomeEnabled;
 }
 
+/**
+ * Whether a session invitation row is written PENDING rather than SKIPPED: the switch, a saved key and a From.
+ * Not the welcome toggle, which is the welcome email's alone.
+ */
+export function inviteQueued(row: EmailSettings | null): boolean {
+  return row !== null && row.enabled && row.resendApiKeyEnc !== '' && row.fromAddress !== '';
+}
+
 function keyUnreadable(stored: string): boolean {
   if (stored === '') return false;
   try {

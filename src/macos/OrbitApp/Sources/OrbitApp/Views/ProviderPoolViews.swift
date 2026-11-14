@@ -2,12 +2,12 @@
 import SwiftUI
 import OrbitKit
 
-// The pool pages Infrastructure's Account pools open, drawn from what they are handed: a pool, and the
+// The pool pages Machines & models' Account pools open, drawn from what they are handed: a pool, and the
 // presses its page makes. Nothing here reads `AppModel` — SettingsSheet's pages do, and hand these views
 // the answers — so each page can also be drawn from fixtures alone. The words, and what the pages make of
 // a pool's numbers, are OrbitKit's (`ProvidersOverview`, `CodexPoolPage`, `WhoCanUseIt`, `SharedPoolPage`,
 // `AddPoolKey`, `ProviderPools`), where they are tested. A pool's row on the page itself is
-// InfrastructureSections.swift's, which the Mac draws too.
+// MachinesAndModelsSections.swift's, which the Mac draws too.
 
 // MARK: - A Codex pool
 
@@ -134,7 +134,7 @@ struct CodexPoolPageView: View {
 
     // MARK: blocks
 
-    /// What the pool is — Codex's mark, "Codex pool", SHARED once anybody but its owner can use it — whose
+    /// What the pool is — Codex's mark, "Codex pool", Shared once anybody but its owner can use it — whose
     /// it is and how many of its accounts or keys can run, and the press that puts one in, where the reader
     /// has one.
     private var head: some View {
@@ -2062,7 +2062,7 @@ private struct WideButton: View {
     }
 }
 
-/// One of the account's own Cursor keys, from Infrastructure's API keys (board iOS 4 ③④⑤): the one engine
+/// One of the account's own Cursor keys, from Machines & models' API keys (board iOS 4 ③④⑤): the one engine
 /// it runs on, what Cursor answered the last time one of the owner's runners checked it — with Check
 /// Again — and the key itself. Keys are added and changed on the web.
 struct CursorKeyPageView: View {

@@ -327,6 +327,7 @@ func TestCreditFallsWhenTheIngestQueueIsDeepAndComesBack(t *testing.T) {
 		c.link.Reduced = creditLevel{Events: 3, Bytes: 8 << 20}
 		c.link.HighWater = creditLevel{Events: 4, Bytes: 512 << 20}
 		c.link.LowWater = creditLevel{Events: 2, Bytes: 256 << 20}
+		c.link.CreditHold = 0
 	})
 	a, _ := h.connectLink(runnerA, processA)
 	b, _ := h.connectLink(runnerB, processB)
@@ -345,14 +346,23 @@ func TestCreditFallsWhenTheIngestQueueIsDeepAndComesBack(t *testing.T) {
 		t.Fatalf("Welcome's credit while reduced: %v", w.GetCredit())
 	}
 	close(release)
-	// The credit is given back before the batch is acknowledged: both are control frames, written in that order.
-	for _, tc := range []*testConn{a, b} {
-		if c := tc.await("credit", 5*time.Second, nil).GetCredit(); c.GetMaxUnackedEvents() != 100 {
-			t.Fatalf("restored credit %v", c)
+	// The batch is acknowledged, and the credit given back to every connection by the walk that tells them
+	// (creditBook.spread), which may come before or after the acknowledgement.
+	var acked, restored bool
+	for !acked || !restored {
+		f := a.await("", 5*time.Second, func(f *linkpb.Frame) bool { return true })
+		switch {
+		case f.GetEventAck() != nil:
+			if f.GetEventAck().GetDurableSeq() != 5 {
+				t.Fatalf("ack %v", f)
+			}
+			acked = true
+		case f.GetCredit() != nil:
+			restored = f.GetCredit().GetMaxUnackedEvents() == 100
 		}
 	}
-	if ack := a.eventAck(5 * time.Second); ack.GetDurableSeq() != 5 {
-		t.Fatalf("ack %v", ack)
+	if c := b.await("credit", 5*time.Second, nil).GetCredit(); c.GetMaxUnackedEvents() != 100 {
+		t.Fatalf("restored credit %v", c)
 	}
 	if h.g.metrics.creditChanges.get("reduced") != 1 || h.g.metrics.creditChanges.get("restored") != 1 {
 		t.Fatal("changes not counted")

@@ -101,9 +101,10 @@ describe('a DeepSeek key’s pages', { timeout: 30_000 }, () => {
           <MemoryRouter initialEntries={[at]}>
             <Probe />
             <Routes>
-              <Route path="/infrastructure" element={<div>infrastructure</div>} />
-              <Route path="/providers/new/:slug" element={<ProviderConnectPage />} />
-              <Route path="/providers/:id" element={<ProviderConnectPage />} />
+              <Route path="/settings/providers" element={<div>providers</div>} />
+              <Route path="/settings/providers/:vendor" element={<div>vendor</div>} />
+              <Route path="/settings/providers/new/:slug" element={<ProviderConnectPage />} />
+              <Route path="/settings/providers/keys/:id" element={<ProviderConnectPage />} />
             </Routes>
           </MemoryRouter>
         </QueryClientProvider>,
@@ -191,13 +192,13 @@ describe('a DeepSeek key’s pages', { timeout: 30_000 }, () => {
   });
 
   it('lands the retired DeepSeek Harness address on Connect DeepSeek', async () => {
-    await mount('/providers/new/deepseek-harness');
-    expect(path).toBe('/providers/new/deepseek');
+    await mount('/settings/providers/new/deepseek-harness');
+    expect(path).toBe('/settings/providers/new/deepseek');
     expect(container.querySelector('h1')?.textContent).toBe('Connect DeepSeek');
   });
 
   it('says on Connect DeepSeek the protocol, the engines the key works with and who gets it — never a single engine', async () => {
-    await mount('/providers/new/deepseek');
+    await mount('/settings/providers/new/deepseek');
     expect(text(container.querySelector('.provider-idbar'))).toBe('DeepSeekAnthropic-compatible · 2 models included');
     expect(text(container.querySelector('.provider-works-head'))).toBe(
       'Works with— pick the engine when you start a session; this key is one of its providers',
@@ -226,7 +227,7 @@ describe('a DeepSeek key’s pages', { timeout: 30_000 }, () => {
   });
 
   it('tests a new DeepSeek key on its protocol before connecting it as a DeepSeek key', async () => {
-    await mount('/providers/new/deepseek');
+    await mount('/settings/providers/new/deepseek');
     await type(container.querySelector<HTMLInputElement>('input[type="password"]'), 'sk-deepseek-test');
     await click(button('Connect'));
     expect(sent[0]).toEqual({
@@ -239,19 +240,24 @@ describe('a DeepSeek key’s pages', { timeout: 30_000 }, () => {
       path: PROVIDERS_BASE,
       body: { label: 'DeepSeek', runtime: 'claude', presetSlug: 'deepseek', followsPreset: true },
     });
+    // Connected, it lands on its vendor's page in Settings.
+    expect(path).toBe('/settings/providers/deepseek');
   });
 
   it('names a second DeepSeek key, counting one made from the retired Harness preset as a DeepSeek key', async () => {
     rows = [{ ...harnessRow, label: 'DeepSeek' }];
-    await mount('/providers/new/deepseek');
+    await mount('/settings/providers/new/deepseek');
     expect(container.querySelector<HTMLInputElement>('.provider-step input')?.value).toBe('DeepSeek 2');
     expect(text()).toContain('You already have one DeepSeek key — the name is what tells them apart when picking a model.');
   });
 
   it('edits a key from the retired Harness preset as a DeepSeek key, and tests a new key for it the same way', async () => {
     rows = [harnessRow];
-    await mount('/providers/p-harness');
+    await mount('/settings/providers/keys/p-harness');
     expect(container.querySelector('h1')?.textContent).toBe('Edit Work key');
+    // Its way back is its vendor's page: a Harness key is DeepSeek's.
+    const back = container.querySelector<HTMLAnchorElement>('a.provider-back');
+    expect([back?.textContent, back?.getAttribute('href')]).toEqual(['‹ DeepSeek', '/settings/providers/deepseek']);
     expect(text(container.querySelector('.provider-idbar'))).toContain('Anthropic-compatible');
     await type(container.querySelector<HTMLInputElement>('input[type="password"]'), 'sk-new-key');
     await click(button('Save'));
@@ -267,7 +273,7 @@ describe('a DeepSeek key’s pages', { timeout: 30_000 }, () => {
   it('says on the key’s page what uses it on each engine it works with, and what turning it off stops', async () => {
     rows = [deepseekRow];
     usage = IN_USE;
-    await mount('/providers/p-deepseek');
+    await mount('/settings/providers/keys/p-deepseek');
     expect(text(container.querySelector('.provider-works-head'))).toBe(
       'Works with— pick it in the Provider menu of a session on any of these',
     );
@@ -284,7 +290,7 @@ describe('a DeepSeek key’s pages', { timeout: 30_000 }, () => {
   it('asks before turning off a key something uses, and turns it off once confirmed', async () => {
     rows = [deepseekRow];
     usage = IN_USE;
-    await mount('/providers/p-deepseek');
+    await mount('/settings/providers/keys/p-deepseek');
     await click(container.querySelector('[role="switch"][aria-label="Enabled"]'));
     await click(button('Save'));
     expect(sent).toEqual([]);
@@ -303,7 +309,7 @@ describe('a DeepSeek key’s pages', { timeout: 30_000 }, () => {
 
   it('turns off a key nothing uses without asking', async () => {
     rows = [deepseekRow];
-    await mount('/providers/p-deepseek');
+    await mount('/settings/providers/keys/p-deepseek');
     await click(container.querySelector('[role="switch"][aria-label="Enabled"]'));
     await click(button('Save'));
     expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
@@ -311,25 +317,25 @@ describe('a DeepSeek key’s pages', { timeout: 30_000 }, () => {
     expect(sent[0]).toMatchObject({ method: 'PATCH', body: { enabled: false } });
   });
 
-  it('deletes the key from its page once asked, and goes back to Machines & models', async () => {
+  it('deletes the key from its page once asked, and goes back to Providers', async () => {
     rows = [deepseekRow];
     usage = IN_USE;
-    await mount('/providers/p-deepseek');
+    await mount('/settings/providers/keys/p-deepseek');
     await click(button('Delete key', container));
     const dialog = await openDialog('Delete DeepSeek?');
     expect(text(dialog.querySelector('.key-impact'))).toContain('They keep their engine and can’t run until you switch them to another key.');
     await click(button('Delete key', dialog));
     expect(sent).toEqual([{ method: 'DELETE', path: `${PROVIDERS_BASE}/p-deepseek`, body: undefined }]);
-    expect(path).toBe('/infrastructure#keys');
+    expect(path).toBe('/settings/providers');
   });
 
   it('shows a refused save in the server’s words above the buttons', async () => {
     rows = [deepseekRow];
     refusal =
       'provider "DeepSeek" is in use on Claude Code, DeepSeek Harness by 3 open sessions and 1 task pins; its endpoint can\'t change while they use it';
-    await mount('/providers/p-deepseek');
+    await mount('/settings/providers/keys/p-deepseek');
     await click(button('Save'));
     expect(text(container.querySelector('.provider-save-error'))).toBe(`Couldn't save the provider. ${refusal}`);
-    expect(path).toBe('/providers/p-deepseek');
+    expect(path).toBe('/settings/providers/keys/p-deepseek');
   });
 });

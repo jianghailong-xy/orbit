@@ -315,7 +315,9 @@ test('a recap too long for a notification is cut', async () => {
   assert.ok(body.endsWith('…'));
 });
 
-test('approval push initially requires a canonical Open, non-ending RUNNING session', async () => {
+// RUNNING, or with a SubAgent in flight: a running SubAgent asks after its parent's turn ended (docs/subagent-design.md
+// §5.3), and needsYouSessions then decides whether the card is one.
+test('approval push initially requires a canonical Open, non-ending RUNNING session, or one with a SubAgent running', async () => {
   const calls: any[] = [];
   const prisma = {
     session: {
@@ -331,7 +333,7 @@ test('approval push initially requires a canonical Open, non-ending RUNNING sess
 
   assert.deepEqual(calls[0].where, {
     id: 's-completed',
-    status: RunStatus.RUNNING,
+    OR: [{ status: RunStatus.RUNNING }, { runningSubagents: { isEmpty: false } }],
     completedAt: null,
     archivedAt: null,
     deletedAt: null,
@@ -996,6 +998,66 @@ test('the shared Android fixture carries what notifyLoopMissed sends, key for ke
   }
 });
 
+// A terminal asking to be approved (docs/terminal-session-design.md): the owner's devices ring with the machine and the
+// code, collapsed per request. The shared Android fixture's `terminal-login` sample is this send, so Android's
+// PushMessage parses exactly what is sent (PushAuthorityTest) and fcm-transport.spec converts it to the data it holds.
+function terminalLoginHarness(status = 'PENDING') {
+  const { service, sent } = wakeupMissedHarness();
+  (service as any).prisma.terminalLogin = {
+    findUnique: async () => ({
+      ownerId: 'owner-1', runnerId: '019a0000-0000-7000-8000-00000000000c', machineName: 'dev-laptop', userCode: '7KQ-4MZ', status,
+    }),
+  };
+  return { service, sent };
+}
+
+test('a terminal asking to be approved rings with its machine and code, and the shared Android fixture is that send', async () => {
+  const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/android-push.fixture.json'), 'utf8'));
+  const { service, sent } = terminalLoginHarness();
+  await service.notifyTerminalLogin('019a0000-0000-7000-8000-00000000000b');
+  assert.equal(sent.length, 1);
+  const { payload, collapseId } = sent[0];
+  assert.deepEqual(payload.aps.alert, { title: 'Approve a terminal?', body: 'Terminal on dev-laptop · code 7KQ-4MZ' });
+  assert.deepEqual([payload.kind, payload.terminalLoginID, payload.runnerID],
+    ['terminal-login', '019a0000-0000-7000-8000-00000000000b', '019a0000-0000-7000-8000-00000000000c']);
+  assert.equal(payload.aps.badge, undefined);
+  assert.equal(collapseId, 'terminal-login-019a0000-0000-7000-8000-00000000000b');
+  const sample = fixture.samples.find((candidate: { name: string }) => candidate.name === 'terminal-login');
+  assert.ok(sample, 'the shared Android fixture has no terminal-login sample');
+  assert.equal(JSON.stringify(payload), JSON.stringify(sample.source));
+  assert.deepEqual([sample.pushType, sample.collapseId], ['alert', collapseId]);
+});
+
+test('a terminal request already decided rings nothing', async () => {
+  const { service, sent } = terminalLoginHarness('APPROVED');
+  await service.notifyTerminalLogin('019a0000-0000-7000-8000-00000000000b');
+  assert.equal(sent.length, 0);
+});
+
+// The orphan sweep's push to an owner with no coordinator to tell (docs/evidence-always-has-an-addressee-design.md §4):
+// the shared Android fixture's `project-orphan` sample is this send, so Android's parser is held to what the server sends.
+test('the orphan push names its project, collapses on its one notice, and is the shared Android fixture key for key', async () => {
+  const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/android-push.fixture.json'), 'utf8'));
+  const { service, sent } = wakeupMissedHarness();
+  await service.notifyProjectOrphan({
+    ownerId: 'owner-1',
+    projectId: '019a0000-0000-7000-8000-000000000004',
+    noticeId: '019a0000-0000-5000-8000-00000000000b',
+    title: 'Session translation: nobody has this',
+    body: 'Task “task D” has a running session. Nobody can move it now.',
+  });
+  assert.equal(sent.length, 1);
+  const { payload, collapseId } = sent[0];
+  assert.deepEqual([payload.kind, payload.projectID, payload.aps['thread-id']],
+    ['project-orphan', '019a0000-0000-7000-8000-000000000004', '019a0000-0000-7000-8000-000000000004']);
+  assert.equal(payload.aps.badge, undefined);
+  assert.equal(collapseId, 'project-orphan-019a0000-0000-5000-8000-00000000000b');
+  const sample = fixture.samples.find((candidate: { name: string }) => candidate.name === 'project-orphan');
+  assert.ok(sample, 'the shared Android fixture has no project-orphan sample');
+  assert.equal(JSON.stringify(payload), JSON.stringify(sample.source));
+  assert.deepEqual([sample.pushType, sample.collapseId], ['alert', collapseId]);
+});
+
 test('a wakeup-missed push that fails is logged, never thrown at the worker', async () => {
   const { service, sent } = wakeupMissedHarness(async () => {
     throw new Error('APNs went away');
@@ -1086,3 +1148,124 @@ for (const unavailable of ['missing', 'ended', 'paused', 'fused', 'refused']) {
     assert.match(JSON.parse(harness.sent[0]).aps.alert.body, /^Not reviewed by the coordinator · /);
   });
 }
+
+// ── the session's own notification switches (Settings → Notifications) ────
+//
+// notifyTurnFinished / notifyNeedsYou: null inherits, 'on' or 'off' overrides; notificationsMuted silences every push of
+// the session, on every transport.
+
+test('a finished push follows the session: inherit reads the account, on and off override it, muted silences it', async () => {
+  const cases: Array<[string | null, boolean, boolean | undefined, number]> = [
+    // [notifyTurnFinished, muted, account notifySessionFinished, pushes]
+    [null, false, undefined, 1],
+    [null, false, false, 0],
+    ['on', false, false, 1],
+    ['on', false, undefined, 1],
+    ['off', false, undefined, 0],
+    ['off', false, true, 0],
+    [null, true, undefined, 0],
+    ['on', true, true, 0],
+  ];
+  for (const [notifyTurnFinished, notificationsMuted, notifySessionFinished, pushes] of cases) {
+    const preferences = notifySessionFinished === undefined ? {} : { notifySessionFinished };
+    const { service, sent, lookups } = settleHarness(settledSession({ notifyTurnFinished, notificationsMuted, owner: { preferences } }));
+    await service.notifySessionSettled('s-1');
+    assert.equal(sent.length, pushes, JSON.stringify({ notifyTurnFinished, notificationsMuted, notifySessionFinished }));
+    assert.equal(lookups[0].select.notifyTurnFinished, true);
+    assert.equal(lookups[0].select.notificationsMuted, true);
+  }
+});
+
+test('a muted or off finished push sends no Feishu card either', async () => {
+  for (const over of [{ notificationsMuted: true }, { notifyTurnFinished: 'off' }]) {
+    const { service } = settleHarness(settledSession(over));
+    let channels = 0;
+    (service as any).channels = async () => { channels += 1; return { tokens: [], feishu: { ownerId: 'owner-1' } }; };
+    await service.notifySessionSettled('s-1');
+    assert.equal(channels, 0, 'decided before any transport is looked up');
+  }
+});
+
+/** An approval push harness whose session row carries the given switches; claims and deliveries are counted. */
+function approvalSwitchHarness(row: Record<string, unknown>, opts: { claim?: boolean } = {}) {
+  const bodies: string[] = [];
+  const cards: unknown[] = [];
+  const joined: unknown[] = [];
+  const claims: string[] = [];
+  const lookups: any[] = [];
+  const feishu = {
+    approvalCard: (...args: unknown[]) => ({ args }),
+    post: async (_target: unknown, card: unknown) => { cards.push(card); return true; },
+    joinApprovalStretch: async (...args: unknown[]) => { joined.push(args); return true; },
+  };
+  const prisma = {
+    session: { findFirst: async (args: any) => { lookups.push(args); return { title: 'Session', ownerId: 'owner-1', ...row }; } },
+  };
+  const service = new PushService(prisma as any, enabledConfig(), feishu as any);
+  (service as any).needsYouSessions = async () => ['s-1'];
+  (service as any).channels = async () => ({ tokens: [{ token: 'device', environment: 'sandbox' }], feishu: { ownerId: 'owner-1' } });
+  (service as any).claimApprovalAlert = async (_s: string, approvalId: string) => { claims.push(approvalId); return opts.claim ?? true; };
+  (service as any).deliver = async (_t: unknown, body: string) => { bodies.push(body); };
+  return { service, bodies, cards, joined, claims, lookups };
+}
+
+test('an approval or question push follows the session: inherit and on ring, off and muted do not', async () => {
+  const cases: Array<[Record<string, unknown>, boolean]> = [
+    [{ notifyNeedsYou: null, notificationsMuted: false }, true],
+    [{ notifyNeedsYou: 'on', notificationsMuted: false }, true],
+    [{ notifyNeedsYou: 'off', notificationsMuted: false }, false],
+    [{ notifyNeedsYou: null, notificationsMuted: true }, false],
+    [{ notifyNeedsYou: 'on', notificationsMuted: true }, false],
+  ];
+  for (const [row, rings] of cases) {
+    for (const tool of ['Bash', 'AskUserQuestion']) {
+      for (const coordinatorFallback of [false, true]) {
+        const h = approvalSwitchHarness(row);
+        await h.service.notifyApprovalRequest('s-1', 'a-1', tool, coordinatorFallback);
+        const label = JSON.stringify({ row, tool, coordinatorFallback });
+        assert.equal(h.bodies.length, rings ? 1 : 0, label);
+        assert.equal(h.cards.length, rings ? 1 : 0, `Feishu: ${label}`);
+        assert.equal(h.lookups[0].select.notifyNeedsYou, true);
+        assert.equal(h.lookups[0].select.notificationsMuted, true);
+        // A silenced alert takes no edge, so it leaves alerted_approval_at where it was.
+        if (!rings) assert.deepEqual(h.claims, [], `no claim: ${label}`);
+      }
+    }
+  }
+});
+
+test('a silenced approval does not join a Feishu stretch, and does not block the next one once unmuted', async () => {
+  const muted = approvalSwitchHarness({ notificationsMuted: true }, { claim: false });
+  await muted.service.notifyApprovalRequest('s-1', 'a-1', 'Bash');
+  assert.deepEqual(muted.joined, []);
+  assert.deepEqual(muted.claims, []);
+
+  // The row the claim reads was not moved while muted, so the next stretch's opener claims and rings.
+  const unmuted = approvalSwitchHarness({ notificationsMuted: false });
+  await unmuted.service.notifyApprovalRequest('s-1', 'a-2', 'Bash');
+  assert.deepEqual(unmuted.claims, ['a-2']);
+  assert.equal(unmuted.bodies.length, 1);
+});
+
+test('an agent message to a muted session is refused before it takes the once-a-minute turn', async () => {
+  const muted = agentNotifyHarness({ session: { title: 'Fix the login bug', agentNotifiedAt: null, notificationsMuted: true } });
+  muted.rang.beforeClaim = () => { assert.fail('a muted session must not spend its turn'); };
+  assert.deepEqual(await muted.service.notifyAgentMessage(agentInput), {
+    delivered: false, reason: 'notifications are muted for this session',
+  });
+  assert.equal(muted.sent.length, 0);
+  assert.equal(muted.rang.sessions.has('s-1'), false, 'agentNotifiedAt left unset');
+
+  // Not muted rings as today, and an unmuted session is not held by the refused call.
+  const on = agentNotifyHarness({ session: { title: 'Fix the login bug', agentNotifiedAt: null, notificationsMuted: false } });
+  assert.equal((await on.service.notifyAgentMessage(agentInput)).delivered, true);
+  assert.equal(on.sent.length, 1);
+});
+
+test('the turn-finished and needs-you switches do not touch agent messages', async () => {
+  const { service, sent } = agentNotifyHarness({
+    session: { title: 'Fix the login bug', agentNotifiedAt: null, notificationsMuted: false, notifyTurnFinished: 'off', notifyNeedsYou: 'off' },
+  });
+  assert.equal((await service.notifyAgentMessage(agentInput)).delivered, true);
+  assert.equal(sent.length, 1);
+});

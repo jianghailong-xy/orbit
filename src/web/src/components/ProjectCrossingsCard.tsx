@@ -48,6 +48,10 @@ export const MOVE_TASK_WITHDRAWN_CRITERION_LABEL = 'Source criterion it serves n
 export const MOVE_TASK_WITHDRAWN_CRITERION_NOTE = 'Confirming the move withdraws this declaration.';
 export const MOVE_TASK_CRITERION_GONE = 'The target project no longer states this criterion.';
 export const MOVE_TASK_APPROVE_CONSEQUENCE = 'Confirming is the move: the task joins the target project as soon as you answer, and nobody has to send the request again.';
+/** A MOVE_TASK with no target takes the task out of its project, filed under none: the "to" end
+ *  reads this literal, and confirming it joins no project. */
+export const NO_PROJECT = 'no project';
+export const MOVE_TASK_OUT_APPROVE_CONSEQUENCE = "Confirming takes the task out of this project; no project's acceptance counts it any more.";
 export const MOVE_TASK_DENY_CONSEQUENCE = 'Refusing is final for this request, and the task stays where it is. If you change your mind, move the task yourself.';
 
 /** What each state means for a MOVE_TASK, where `CROSSING_STATE_MEANING` speaks for a filing: the
@@ -68,15 +72,18 @@ export function crossingConfirmPrompt(
 ): { verb: string; from: string; to: string; subject: string; consequence: string } {
   const verb = decision === 'APPROVE' ? 'Approve' : 'Refuse';
   const from = row.fromProject?.title ?? (row.fromProjectPublicId ?? row.fromProjectId);
-  const to = row.toProject?.title ?? (row.toProjectPublicId ?? row.toProjectId);
+  const to = row.toProjectId == null
+    ? NO_PROJECT
+    : row.toProject?.title ?? (row.toProjectPublicId ?? row.toProjectId);
   if (row.kind === 'MOVE_TASK') {
+    const approve = row.toProjectId == null ? MOVE_TASK_OUT_APPROVE_CONSEQUENCE : MOVE_TASK_APPROVE_CONSEQUENCE;
     return {
       verb,
       from,
       to,
       // The task as it reads now; the row's own title is the one it had when the move was asked.
       subject: row.subjectTask?.title ?? row.title,
-      consequence: decision === 'APPROVE' ? MOVE_TASK_APPROVE_CONSEQUENCE : MOVE_TASK_DENY_CONSEQUENCE,
+      consequence: decision === 'APPROVE' ? approve : MOVE_TASK_DENY_CONSEQUENCE,
     };
   }
   return {
@@ -281,11 +288,15 @@ export function CrossingRow({
           status={row.fromProject?.status}
         />
         <Text muted> → </Text>
-        <ProjectEnd
-          title={row.toProject?.title}
-          id={row.toProjectPublicId ?? row.toProjectId}
-          status={row.toProject?.status}
-        />
+        {row.toProjectId == null ? (
+          <Text strong>{NO_PROJECT}</Text>
+        ) : (
+          <ProjectEnd
+            title={row.toProject?.title}
+            id={row.toProjectPublicId ?? row.toProjectId}
+            status={row.toProject?.status}
+          />
+        )}
       </div>
       <Text muted>
         {labelFor(move ? MOVE_TASK_STATE_MEANING : CROSSING_STATE_MEANING, row.state)}
@@ -347,6 +358,17 @@ export function CrossingRow({
 }
 
 /** The write. `acknowledgedCrossingKey` is what makes the second press a fence and not a habit. */
+/**
+ * Whether a coordinator conversation answers this row as a decision card (CrossingDecisionCard),
+ * which takes it off both ends' project pages (docs/mocks/crossings-page-only-uncovered). A row the
+ * server does not say this about — an older server — stays: a duplicate beats an unanswerable one.
+ */
+export function answeredInConversation(row: ProjectCrossingRow): boolean {
+  // A move out of every project has no target: the source's coordinator draws it instead.
+  if (row.toProjectId == null) return row.fromProject?.coordinatorSessionId != null;
+  return row.toProject?.coordinatorSessionId != null;
+}
+
 export function decideCrossing(
   projectId: string,
   row: ProjectCrossingRow,
@@ -375,8 +397,9 @@ export function ProjectCrossingsCard({ projectId }: { projectId: string }) {
     },
   });
 
-  const rows = orderCrossings(crossings.data ?? []);
+  const rows = orderCrossings((crossings.data ?? []).filter((row) => !answeredInConversation(row)));
   const pending = rows.filter((row) => isAnswerable(row.state)).length;
+  if (crossings.isSuccess && rows.length === 0) return null;
 
   return (
     <Card
@@ -397,8 +420,6 @@ export function ProjectCrossingsCard({ projectId }: { projectId: string }) {
           title="Crossings could not be loaded"
           description={crossings.error instanceof Error ? crossings.error.message : undefined}
         />
-      ) : rows.length === 0 ? (
-        <Text muted>Nothing has been asked about work crossing into or out of this project.</Text>
       ) : (
         <ul style={{ margin: 0, padding: 0 }}>
           {rows.map((row) => (

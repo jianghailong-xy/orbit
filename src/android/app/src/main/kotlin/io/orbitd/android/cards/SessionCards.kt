@@ -250,7 +250,7 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                 requester.bringIntoView(); CardFocus.spend(session.id)
             }
             Box(Modifier.bringIntoViewRequester(requester)) {
-                CoordinatorDoneCard(app, cards.handle, session.id, coordinated, detail, session.snapshot?.standing.orEmpty(), session.fresh)
+                CoordinatorDoneCard(app, cards.handle, session.id, coordinated, detail, session.snapshot?.standing.orEmpty(), session.fresh, open)
             }
         } }
         // A11-9: each merge the project made is one line, opening its receipt (iOS `PromotionReceiptLine`).

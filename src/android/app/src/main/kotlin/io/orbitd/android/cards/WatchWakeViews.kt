@@ -111,7 +111,7 @@ internal fun WatchWakeLine(wake: JsonObject, ts: String?, open: (String) -> Unit
             color = LocalOrbitColors.current.needsYou)
         onWithdraw?.let {
             Row(Modifier.padding(start = 20.dp).testTag("watch-wake:queue"), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(WatchWakeQueue.status, style = MaterialTheme.typography.labelSmall, color = secondary)
+                QueuedWord(WatchWakeQueue.status, secondary)
                 TextButton(onClick = { confirming = true }, Modifier.testTag("watch-wake:withdraw")) {
                     Text(WatchWakeQueue.withdraw, style = MaterialTheme.typography.labelSmall)
                 }

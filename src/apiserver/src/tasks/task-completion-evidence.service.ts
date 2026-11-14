@@ -17,7 +17,9 @@ import {
 import {
   EVIDENCE_DECISIONS,
   EvidenceDecisionValue,
+  assertConfirmGapsFollowedUp,
   assertCriterionUnmoved,
+  assertGapFollowUpsValid,
   assertCurrentEvidenceRevision,
   assertDecidingSessionInTaskProject,
   assertDecisionMayReachRuns,
@@ -31,6 +33,11 @@ import {
 } from './task-completion-criterion';
 import { readPendingEvidenceJudgments } from './pending-evidence-judgments';
 import {
+  RESTART_TASK_ACTION,
+  unansweredUndecidableRevision,
+  undecidableAddressees,
+} from './undecidable-evidence';
+import {
   EvidenceCitation,
   EvidenceCriterionMatch,
   bindCitedFiles,
@@ -39,7 +46,9 @@ import {
   evidenceCriterionMatch,
   parseEvidenceEnvelope,
   resolveEvidenceCitations,
+  statesAStandard,
   storedEvidenceEnvelope,
+  taskStandard,
 } from './task-evidence-envelope';
 import { TasksService } from './tasks.service';
 import { EvidenceReviewService } from './evidence-review.service';
@@ -268,6 +277,9 @@ function decisionResponse(row: DecisionRow): TaskEvidenceDecisionDto {
  * immutable. After their commits both re-project the status of the task's project, because a
  * revision and its decision are inputs to it (`reprojectProjectStatus`).
  */
+/** A Restart press on a row that no longer offers it. */
+export const EVIDENCE_RESTART_NOT_OFFERED_CODE = 'EVIDENCE_RESTART_NOT_OFFERED';
+
 @Injectable()
 export class TaskCompletionEvidenceService {
   private readonly logger = new Logger(TaskCompletionEvidenceService.name);
@@ -328,6 +340,19 @@ export class TaskCompletionEvidenceService {
          FOR UPDATE
       `);
       if (!task) throw new NotFoundException('task not found');
+      // Known at submit time, so refused to the caller here, before anything is written: evidence
+      // for a task that states no standard would sit undecidable with nobody able to move it.
+      // A verifier is settled by its verdict on the task it checks, not by a judgment of its
+      // evidence against a standard of its own, so it is not held to stating one.
+      if (task.verifiesTaskId === null && !statesAStandard(task)) {
+        throw new ConflictException({
+          code: 'TASK_STATES_NO_STANDARD',
+          message: 'this task states no standard to judge evidence against: it declares no criterionKey and its '
+            + 'acceptanceCriteria are empty. Write the task\'s acceptanceCriteria (task_update) or declare a '
+            + 'criterionKey, then submit again.',
+          requiredAction: 'WRITE_ACCEPTANCE_CRITERIA_OR_DECLARE_CRITERION_KEY',
+        });
+      }
 
       // Source Session status never gates the fact: RUNNING, AWAITING_INPUT and terminal source
       // Sessions submit the same evidence. Task.status is read only to decide whether the evidence
@@ -347,10 +372,24 @@ export class TaskCompletionEvidenceService {
       // the same receipt a first one gets. Both read only rows already inside this transaction's
       // scope, and both refuse by throwing, so nothing below runs for a refused envelope.
       const citations = await resolveEvidenceCitations(tx, { ownerId, taskId }, envelope, images);
-      const criterionMatch = await evidenceCriterionMatch(tx, task, envelope.criterion);
+      // Known at submit time too: a follow-up a gap names has to be a task of this project now.
+      await assertGapFollowUpsValid(tx, { ownerId, taskId, projectId: task.projectId }, envelope.gapClauses);
+      // The server binds the standard this revision is judged against: the one the task is held to
+      // now, read under the Task mutex. Whatever `criterion` the submitter sent is dropped, never
+      // checked (docs/evidence-always-has-an-addressee-design.md §2.2, D1). The decision door holds
+      // this snapshot against the live standard, so it stays decidable until that is reworded.
+      const standard = await taskStandard(tx, task, taskId);
+      const unquoted: JsonObject = { ...normalizedEvidence };
+      delete unquoted.criterion;
+      const standardEvidence: JsonObject = standard
+        ? { ...unquoted, criterion: normalizeCompletionEvidence(standard) as JsonObject }
+        : unquoted;
+      // Reported so the submitter reads the standard its evidence is held to; true here by
+      // construction, it turns false only when that standard is reworded after this submission.
+      const criterionMatch = standard ? await evidenceCriterionMatch(tx, task, standard) : null;
       const receipt: EvidenceReceipt = { citations, criterionMatch };
       // In here because a cited file's sha256 is read with its citation, and is digested with the rest.
-      const boundEvidence = bindCitedFiles(normalizedEvidence, citations);
+      const boundEvidence = bindCitedFiles(standardEvidence, citations);
       const evidenceDigest = completionDigest(boundEvidence);
 
       if (idempotencyKey) {
@@ -833,6 +872,11 @@ export class TaskCompletionEvidenceService {
         // was derived then, under this same lock, so nothing is re-derived here.
         return { decision: decisionResponse(existing), completed: false, projectId: task.projectId };
       }
+      // A gap that names a clause of the standard is accepted only with a follow-up that proves it.
+      // After the replay above, so a CONFIRM recorded before this rule is still answered as it was.
+      if (input.decision === 'CONFIRM') {
+        await assertConfirmGapsFollowedUp(tx, { ownerId, taskId, projectId: task.projectId }, latest.evidence);
+      }
 
       // The derivation, and the only thing this door writes outside its own row. It asks the
       // task's OWN declared criterion: evidence submitted against an EXECUTABLE or VERIFICATION
@@ -1021,6 +1065,44 @@ export class TaskCompletionEvidenceService {
     return readPendingEvidenceJudgments(this.prisma, ownerId, session);
   }
 
+  /**
+   * Restart the task, pressed on the owner's pending row that offers it (`ownerAction:
+   * RESTART_TASK`): the task's latest revision is unanswered and undecidable, it has no live run,
+   * and no Automatic coordinator was told to act on it. Asked again here, at the press, by the same
+   * predicates the read placed the row with, so a press that is no longer the owner's to make is
+   * refused 409 with nothing started. Then it is the owner's own Run (`TasksService.execute`), so a
+   * repeat of one press (`triggerId`) is the same run, and every rule that press already has holds.
+   */
+  async restartFromEvidence(ownerId: string, taskId: string, revision: string, triggerId?: string) {
+    if (!this.tasks) throw new Error('restartFromEvidence needs the tasks service');
+    const task = await this.prisma.task.findFirst({ where: { id: taskId, ownerId }, select: { id: true } });
+    if (!task) throw new NotFoundException('task not found');
+    const found = await unansweredUndecidableRevision(this.prisma, ownerId, taskId);
+    const notOffered = (why: string, extra: Record<string, unknown> = {}) => new ConflictException({
+      code: EVIDENCE_RESTART_NOT_OFFERED_CODE,
+      requiredAction: 'READ_THE_PENDING_EVIDENCE_AGAIN',
+      taskId,
+      evidenceRevision: revision,
+      ...extra,
+      message: `${why}; nothing was started`,
+    });
+    if (!found) {
+      throw notOffered('this task has no unanswered evidence revision that cannot be decided, so there is nothing to restart it for');
+    }
+    const latest = found.latest.revision.toString();
+    if (latest !== revision) {
+      throw notOffered(`this task's latest evidence revision is ${latest}, not ${revision}`, { currentRevision: latest });
+    }
+    const placed = (await undecidableAddressees(this.prisma, ownerId, [found.task])).get(taskId)!;
+    if (placed.addressee !== 'OWNER') {
+      throw notOffered(placed.addressee === 'RUN'
+        ? 'a run of this task is live and has been told to submit the revision again'
+        : 'this project\'s coordinator has been told to act on this revision', { addressee: placed.addressee });
+    }
+    const started = await this.tasks.execute(ownerId, taskId, undefined, triggerId);
+    return { taskId, evidenceRevision: revision, action: RESTART_TASK_ACTION, started };
+  }
+
   async list(ownerId: string, taskId: string) {
     const task = await this.prisma.task.findFirst({ where: { id: taskId, ownerId }, select: { id: true } });
     if (!task) throw new NotFoundException('task not found');
@@ -1031,8 +1113,8 @@ export class TaskCompletionEvidenceService {
     });
     const revisions: TaskCompletionEvidenceDto[] = [];
     for (const row of rows) {
-      const checks = storedEvidenceEnvelope(row.evidence)?.checks ?? [];
-      revisions.push(response(row, checks.some((check) => check.kind === 'FILE')
+      const checks = storedEvidenceEnvelope(row.evidence)?.checks;
+      revisions.push(response(row, checks
         ? { citations: await describeEvidenceCitations(this.prisma, { ownerId, taskId }, checks), criterionMatch: null }
         : undefined));
     }

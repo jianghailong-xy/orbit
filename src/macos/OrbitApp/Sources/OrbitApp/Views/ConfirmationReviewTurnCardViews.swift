@@ -77,6 +77,7 @@ struct ReviewRequestedCardView: View {
                 tone.opacity(0.30),
                 style: StrokeStyle(lineWidth: 1, dash: queued ? [4, 3] : []))
         )
+        .orbitCardWidth()
     }
 }
 
@@ -152,6 +153,7 @@ struct SentBackByReviewerCardView: View {
                 tone.opacity(0.30),
                 style: StrokeStyle(lineWidth: 1, dash: queued ? [4, 3] : []))
         )
+        .orbitCardWidth()
     }
 }
 
@@ -243,6 +245,7 @@ struct YouConfirmedCardView: View {
                 tone.opacity(0.30),
                 style: StrokeStyle(lineWidth: 1, dash: queued ? [4, 3] : []))
         )
+        .orbitCardWidth()
     }
 }
 
@@ -252,7 +255,7 @@ struct ReviewTurnQueuedFoot: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Text("Queued").font(.orbitMeta).foregroundStyle(.secondary)
+            QueuedWord()
             Button("Cancel") { cancel() }
                 .buttonStyle(.plain)
                 .font(.orbitMeta)

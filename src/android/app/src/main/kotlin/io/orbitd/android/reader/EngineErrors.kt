@@ -33,11 +33,31 @@ internal object EngineErrors {
         // Codex's rate-limit retry budget: "exceeded retry limit, last status: 429 Too Many Requests".
         "exceeded retry limit, last status: 429 too many requests")
 
+    /** Wording of a failure in the *connection* to the API rather than a credential it rejected: Cloudflare's
+     * block page at the edge, and a socket the request died on. Claude Code wraps both in "Failed to authenticate",
+     * so without this the failure reads as a sign-in failure. Every marker of a group must appear; the connection
+     * clears on its own, so the text is retried. */
+    internal val edgeBlockMarkers = listOf("attention required", "cloudflare")
+    internal val connectionDroppedMarkers = listOf("econnreset")
+
+    internal val connectionFailureMarkers = listOf(edgeBlockMarkers, connectionDroppedMarkers)
+
+    /** Mirrors `isConnectionFailureText` in @orbit/shared and the runner's `isConnectionFailure`. Anchored at
+     * the start, like the other classifications: a reply that merely quotes one is an ordinary reply. */
+    fun isConnectionFailureText(text: String?): Boolean {
+        if (text == null) return false
+        val opening = text.trimStart().lowercase()
+        if (!opening.startsWith("failed to authenticate") && !opening.startsWith("api error")) return false
+        return connectionFailureMarkers.any { markers -> markers.all { opening.contains(it) } }
+    }
+
     /** The provider briefly unable to answer, rather than anything about the message. Default is NOT retryable. */
     fun isRetryableApiErrorText(text: String?): Boolean {
         if (text == null) return false
         val opening = text.trimStart().lowercase()
         if (retryableEngineErrorPrefixes.any { opening.startsWith(it) }) return true
+        // A failure of the connection is the one 403 a re-send does fix; a credential 403 below is not.
+        if (isConnectionFailureText(text)) return true
         if (!isApiErrorText(text)) return false
         val lower = text.lowercase()
         // The status, when there is one, is authoritative: a 400 that mentions "timeout" is still a 400.

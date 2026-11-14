@@ -18,6 +18,58 @@ checked on 2026-10-19 in an isolated Docker host
 host's disk was measured on 2026-10-20 in an isolated Docker host on one spinning disk
 ([evidence](evidence/managed-runner-docker-volume-sync/2026-10-20/README.md)).
 
+## On a channel host
+
+Where the runners live on another machine ([Managed runners on another host](self-hosting.md#managed-runners-on-another-host)),
+the commands below that touch Docker run on that channel host, as root, from the checkout its kit was installed from;
+the ones that read the database or the apiserver run on the server. What changes:
+
+| Here | On a channel host |
+| --- | --- |
+| The deployment's checkout | The kit's checkout on the channel host |
+| `data/managed-runners`: the token, `channel.json`, `state/`, `firewall/` | `data/channel-host` (or `ORBIT_CHANNEL_HOST_DIR`); `profile.json` and a copy of each host's token stay on the server, in its `data/managed-runners` |
+| `docker compose … docker-channel`, `docker compose … managed-runner-firewall` | `docker compose -f deploy/managed-runner/remote-host/compose.yml --env-file data/channel-host/compose.env …`, the same service names (below, `ch`) |
+| `docker ps`, `docker volume …`, `docker inspect`, `scripts/managed-runner/volume-backup.sh`, `fuser`, `iptables`, the firewall's `probe`, a fencing receipt | The channel host |
+| The `psql` queries, `docker compose logs apiserver`, recreating the apiserver, `profile.json` | The server |
+| The channel's API (`curl --unix-socket …`) | The server: the channel answers only the addresses its `allowPeers` names, so not the channel host itself |
+
+```bash
+ch() { docker compose -f deploy/managed-runner/remote-host/compose.yml --env-file data/channel-host/compose.env "$@"; }
+deploy/managed-runner/remote-host/remote-host.sh status   # instance, listener, image, services, firewall, runners, volumes
+ch logs --tail 50 docker-channel
+ch ps managed-runner-firewall
+ch run --rm --no-deps managed-runner-firewall check
+```
+
+From the server, the channel's view and each host's image (the apiserver container has the profile, the tokens and the
+route):
+
+```bash
+docker compose exec -T apiserver node - < deploy/managed-runner/docker-channel/info.js        # one line per host: its image
+printf 'header = "Authorization: Bearer %s"\n' "$(cat data/managed-runners/<instance>.token)" |
+  curl -s --config - http://10.66.0.3:7300/v1/resources                                       # from the server host itself
+```
+
+The procedures carry over with those substitutions:
+
+- **Back up, check, restore a volume:** `volume-backup.sh` on the channel host, and the backup copied off it with
+  `data/channel-host`. Disabling the account and the query that shows it `SLEEPING` are the server's.
+- **Delete a volume:** `allowVolumeRemoval` in `data/channel-host/channel.json`, then
+  `ch run --rm docker-channel check-config --config /var/lib/orbit-managed-runners/channel.json` and
+  `ch up -d --force-recreate docker-channel` on the channel host; the `DELETE` from the server, as above.
+- **The channel is down:** `ch logs` and `ch up -d docker-channel` on the channel host. Only that host's runners wait
+  (`CHANNEL_UNREACHABLE`).
+- **Rotate the token:** a new `data/channel-host/token` (mode 0600) and `ch up -d --force-recreate docker-channel` on
+  the channel host, the same token as `<instance>.token` on the server, then `docker compose up -d --force-recreate
+  apiserver` there.
+- **A fencing receipt:** `data/channel-host/state/fencing/<runner uuid>.json` on the channel host.
+- **The firewall:** every command of [The managed runners' firewall](#the-managed-runners-firewall) with `ch` for
+  `docker compose` and `data/channel-host/firewall` for `data/managed-runners/firewall`. Nothing of Orbit listens on
+  the gateway's port 2086 at the channel host's address on the runners' network, the one port the rules leave a runner
+  there; keep it that way. A channel host always runs its firewall: the kit has no way to turn it off.
+- **Settings:** the `channel.json` and `firewall/config.json` rows of [Where each setting lives](#where-each-setting-lives)
+  are the channel host's, applied with `ch`; the `profile.json` rows are the server's.
+
 ## What there is to keep
 
 | What | Where | Kept by |
@@ -678,6 +730,35 @@ Every line says `"ok": true`. A refused connection reads `EHOSTUNREACH` ("No rou
 the firewall not in force. On the host, `iptables -S ORBIT-MR-INPUT`, `iptables -S ORBIT-MR-FORWARD`, and the first
 rule of `iptables -S INPUT` and `iptables -S DOCKER-USER` show the same rules.
 
+### On a host that also runs Kubernetes
+
+k3s (or any kube-proxy, kube-router or flannel) on the same host puts its jumps above Docker's in `FORWARD`, and its
+`KUBE-SERVICES` in nat `PREROUTING` would DNAT a runner's connection to a ClusterIP into the cluster. The firewall finds
+Kubernetes' chains and then also starts `FORWARD`, nat `PREROUTING` and raw `PREROUTING` with a rule for the runners'
+bridge, and adds a routing rule that refuses what the raw rule marks
+([Beside Kubernetes](../deploy/managed-runner/firewall/README.md#beside-kubernetes-k3s)): a runner reaches no ClusterIP,
+pod, NodePort or node address, also in the seconds after kube-router moves its jumps above the firewall's. Nothing is
+configured for it. Check it as above, and also:
+
+```bash
+iptables -S FORWARD | sed -n 2p              # -A FORWARD -i br-… -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD
+iptables -t nat -S PREROUTING | sed -n 2p    # -A PREROUTING -i br-… … -j ORBIT-MR-PREROUTING, before KUBE-SERVICES
+iptables -t raw -S PREROUTING | sed -n 2p    # -A PREROUTING -i br-… … -j ORBIT-MR-RAW
+ip rule | sed -n 2p                          # 1:  from all fwmark 0x100000/0x100000 iif br-… prohibit
+jq .kubernetes data/managed-runners/firewall/status.json   # ["IPv4", ...]
+```
+
+kube-router puts its jumps back on top when k3s starts or restarts and on its syncs, and the service puts the
+firewall's first again within 10 seconds; its log then says `IPv4: FORWARD does not start with the jump for br-…:
+KUBE-ROUTER-FORWARD come(s) before it ...: writing the rules`. That line after each is expected. If `check` keeps
+reporting it, something else on the host is fighting for the first place: find it in `iptables -S FORWARD`. A routing
+rule of another program before priority 1 is reported too, and keeps the firewall from saying it is in force. k3s must
+use the iptables backend Docker uses (it picks the one that holds rules, so it does when Docker was there first).
+
+The firewall writes `kubernetes-seen` in `data/managed-runners/firewall` the first time it finds Kubernetes, and from
+then on puts these rules on as it starts, before k3s does after a host restart. Once k3s is gone from the host for good,
+`rm data/managed-runners/firewall/kubernetes-seen` and restart the service to go back to the rules of a host without it.
+
 ### Let runners reach an internal model endpoint
 
 A model endpoint (or any service) on this host or on the private network behind it is refused until it is allowed.
@@ -739,6 +820,15 @@ host without the image, by hand (or restart the host once the service is gone):
 for t in iptables ip6tables; do
   $t -S | grep -E -- '-j ORBIT-MR-(INPUT|FORWARD)$' | sed 's/^-A /-D /' | while read -r rule; do $t $rule; done
   for chain in ORBIT-MR-INPUT ORBIT-MR-FORWARD; do $t -F "$chain" 2>/dev/null; $t -X "$chain" 2>/dev/null; done
+  # Only on a host that runs Kubernetes too: the nat and raw guards, and the routing rule.
+  for table in nat:ORBIT-MR-PREROUTING raw:ORBIT-MR-RAW; do
+    $t -t "${table%%:*}" -S | grep -E -- "-j ${table#*:}\$" | sed 's/^-A /-D /' | while read -r rule; do $t -t "${table%%:*}" $rule; done
+    $t -t "${table%%:*}" -F "${table#*:}" 2>/dev/null; $t -t "${table%%:*}" -X "${table#*:}" 2>/dev/null
+  done
+done
+for f in 4 6; do
+  ip -$f rule | sed -n 's/^1:\s*from all fwmark 0x100000\/0x100000 iif \(\S*\) prohibit.*/\1/p' |
+    while read -r bridge; do ip -$f rule del priority 1 iif "$bridge" fwmark 0x100000/0x100000 prohibit; done
 done
 ```
 

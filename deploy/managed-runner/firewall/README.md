@@ -36,6 +36,43 @@ nothing the host's own firewall closes is opened. They live in two chains of thi
 `FORWARD` and never flushes. Each write is one `iptables-restore --noflush` transaction of the backend Docker uses, nft
 or legacy, so a reader finds the old rules or the new ones, never part of either.
 
+### Beside Kubernetes (k3s)
+
+On a host that also runs Kubernetes' networking (a `KUBE-*` or `FLANNEL-*` chain: kube-proxy, kube-router's network
+policy, flannel, as single-node k3s has), `DOCKER-USER` is no longer the first word on a runner's packet. kube-router
+and kube-proxy put their jumps (`KUBE-ROUTER-FORWARD`, `KUBE-PROXY-FIREWALL`, `KUBE-FORWARD`, `KUBE-SERVICES`, ...) above
+it in `FORWARD`, and kube-proxy's `KUBE-SERVICES` in nat `PREROUTING` DNATs a connection to a ClusterIP on every
+interface and marks it, so that `KUBE-FORWARD` accepts it into the cluster before `DOCKER-USER` is reached. There the
+rules add, still matching the runners' bridge only:
+
+| | |
+| --- | --- |
+| `FORWARD` | A first rule `-i <bridge> -j ORBIT-MR-FORWARD`, the same chain `DOCKER-USER` jumps to (which keeps its jump). |
+| nat `PREROUTING` | A first rule `-i <bridge> -j ORBIT-MR-PREROUTING`. That chain lets the gateway's published port and the `allow`/`dnsServers` destinations go on (`RETURN`) to Docker's DNAT, and `ACCEPT`s everything else, which ends nat `PREROUTING` for that packet: `KUBE-SERVICES` never DNATs or marks it, so a ClusterIP stays a 10/8 address that `ORBIT-MR-FORWARD` rejects. Over IPv6 the chain is one `ACCEPT`. |
+| raw `PREROUTING` | A first rule `-i <bridge> -j ORBIT-MR-RAW`. That chain lets the same destinations go on (`RETURN`) and marks every packet to a refused range (`MARK --set-xmark 0x100000/0x100000`; over IPv6, every packet). |
+| Routing | `ip rule`: `priority 1 iif <bridge> fwmark 0x100000/0x100000 prohibit`, right after the local table's rule. A marked packet bound through the host is refused by routing, before any filter chain sees it, with ICMP "administratively prohibited": the runner gets `EHOSTUNREACH`, as from the filter's reject (the kernel sends a host only a few such answers at once, then about one a second, so in a burst of refused connections the later ones time out instead). |
+
+Why the last two. kube-router puts its jumps back first in `FORWARD` and `INPUT` as k3s starts and on its syncs (pod
+and policy changes, and every few minutes), and its per-pod chains (`KUBE-POD-FW-*`, default allow) accept a packet to a
+pod before `ORBIT-MR-FORWARD` sees it: until this program's next check, a runner would reach pods. Kubernetes writes
+neither raw `PREROUTING` nor routing rules, and the mark is set before nat `PREROUTING`, so a ClusterIP that
+`KUBE-SERVICES` might DNAT to a pod is refused too, whatever order the filter and nat chains are in. Packets to the
+host's own addresses are routed locally first; there kube-router's `INPUT` chain accepts only what its pods send, so the
+filter rules still refuse them, also while kube-router's jump is above this program's (measured in the lab).
+
+The rules count as in force only while each jump is the first rule of its hook (`INPUT`, `FORWARD`, nat and raw
+`PREROUTING`) and the routing rule is there with only the local table's rule before it. The next check finds what came
+first, logs it ("FORWARD does not start with the jump for br-…: KUBE-ROUTER-FORWARD come(s) before it ...: writing the
+rules") and puts it first again in the same pass, within `intervalSeconds`; it reports `failing` only if it cannot.
+`status.json` says `"kubernetes": ["IPv4", ...]` while it keeps the rules this way.
+
+The first time the service finds Kubernetes it writes `kubernetes-seen` beside its configuration. From then on it puts
+these rules on as soon as it starts, before Kubernetes' own: after a host restart the service may start before k3s.
+A host without Kubernetes gets exactly the rules above: nothing in nat or raw, no routing rule. Once Kubernetes is gone,
+delete `kubernetes-seen` and restart the service, and its next check takes the extra rules off again. Kubernetes must use
+the same iptables backend as Docker (k3s picks the one that already has rules in it): rules in the other backend are not
+ordered by these.
+
 `dnsServers` is not the host's resolvers. With the host's own resolv.conf, Docker's embedded resolver forwards a
 runner's queries from the host's namespace, which these rules do not see (`# ExtServers: [host(...)]` in a container's
 resolv.conf). Only servers it forwards to from the container's own namespace need a rule: those Docker's `dns` setting
@@ -44,7 +81,7 @@ resolv.conf). Only servers it forwards to from the container's own namespace nee
 ## The service
 
 `serve` writes the rules, checks them every `intervalSeconds` (10) and writes again what changed: a firewalld reload, a
-flush by hand, a jump that lost its first place. Docker's own restarts leave them: it never flushes `DOCKER-USER` or
+flush by hand, a jump that lost its first place (to Kubernetes, among others). Docker's own restarts leave them: it never flushes `DOCKER-USER` or
 touches `INPUT`. After a host restart there are none until the service, which Docker restarts with the stack
 (`restart: unless-stopped`), writes them again.
 
@@ -84,11 +121,11 @@ The service runs `serve`. The others, run as `docker compose run --rm --no-deps 
 | Command | |
 | --- | --- |
 | `check` | Whether the rules are in force, and what is not (exit 0 or 1). |
-| `show` | This program's jumps and chains as they stand, both families. |
+| `show` | This program's jumps (with their place in their hook) and chains as they stand, the nat guard's too, both families. |
 | `apply` | Write the rules once and check them. |
 | `status` | What the status file says (exit 0 while it says enforced). |
 | `preflight` | Whether the host can carry the rules: Docker's chains in one backend, and every match and target tried in a scratch chain no packet reaches, then removed. |
-| `remove` | Every jump and chain of this program, in both backends and families, whatever bridge it names. Stop the service first, or it writes them again. |
+| `remove` | Every jump and chain of this program, the nat guard's included, in both backends and families, whatever bridge it names. Stop the service first, or it writes them again. |
 | `docker-dns`, `probe` | Run on the managed runners' network instead (`--network orbit-managed-runners`, no privilege): the DNS servers Docker forwards to from there, and connections that must be reached (`--reach`) or refused by a firewall (`--blocked`). The install uses both. |
 
 ## What it cannot do
@@ -105,4 +142,6 @@ The service runs `serve`. The others, run as `docker compose run --rm --no-deps 
 Its tests are `scripts/managed-runner/firewall_test.py` (in the managed-runner Python suite, against an in-memory
 iptables), the channel's gate in `docker_channel_test.py`, and the install's in `new_deployment_test.py`; what the rules
 do to packets was measured on an isolated Docker host
-([docs/evidence/managed-runner-docker-firewall/2026-10-19](../../../docs/evidence/managed-runner-docker-firewall/2026-10-19/README.md)).
+([docs/evidence/managed-runner-docker-firewall/2026-10-19](../../../docs/evidence/managed-runner-docker-firewall/2026-10-19/README.md)),
+and beside k3s on one
+([docs/evidence/managed-runner-firewall-k3s/2026-11-13](../../../docs/evidence/managed-runner-firewall-k3s/2026-11-13/README.md)).

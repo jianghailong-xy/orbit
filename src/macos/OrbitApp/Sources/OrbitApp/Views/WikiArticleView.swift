@@ -40,9 +40,12 @@ struct WikiContentsSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                WikiContentsRows(groups: groups, at: at, docGroups: docGroups, planPending: planPending, pick: choose)
+                ForEach(WikiContentsListLogic.sheetRows) { _ in
+                    WikiContentsRows(groups: groups, at: at, docGroups: docGroups, planPending: planPending, pick: choose)
+                }
             }
             .listStyle(.plain)
+            .softTopEdgeEffect()
             .navigationTitle(WikiArticleCopy.contents)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -243,6 +246,7 @@ struct WikiArticlePage: View {
             }
         }
         .listStyle(.plain)
+        .softTopEdgeEffect()
         .navigationTitle("")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -671,23 +675,11 @@ struct WikiBrowsePage: View {
                 }
             }
             ForEach(categories) { category in
-                Section {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(category.title)
-                            .font(.orbitSubtext.weight(.bold))
-                        Text(WikiArticleCopy.categorySummary(topics: category.topics, articles: category.articles,
-                                                             entries: category.entries))
-                            .font(.orbitLabel)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    .padding(.top, 12)
-                    .listRowSeparator(.hidden)
-                    ForEach(category.rows) { row in topic(row) }
-                }
+                browseSection(category)
             }
         }
         .listStyle(.plain)
+        .softTopEdgeEffect()
         .navigationTitle("")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -697,6 +689,25 @@ struct WikiBrowsePage: View {
                 Button(action: actions.openContents) { Image(systemName: "list.bullet") }
                     .accessibilityLabel(WikiArticleCopy.contents)
             }
+        }
+    }
+
+    /// One category's topics under its heading. The category is the row the page's ForEach draws, so
+    /// that closure holds no second ForEach of its own.
+    private func browseSection(_ category: WikiArticleLogic.BrowseCategory) -> some View {
+        Section {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(category.title)
+                    .font(.orbitSubtext.weight(.bold))
+                Text(WikiArticleCopy.categorySummary(topics: category.topics, articles: category.articles,
+                                                     entries: category.entries))
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .padding(.top, 12)
+            .listRowSeparator(.hidden)
+            ForEach(category.rows) { row in topic(row) }
         }
     }
 
@@ -798,35 +809,11 @@ struct WikiIndexPage: View {
                 }
             }
             ForEach(groups) { group in
-                Section {
-                    // The letter as the section's first row, on the grouped band's grey — a plain
-                    // list's pinned header has no backing on iOS 26.
-                    Text(group.letter)
-                        .font(.orbitSubtext.weight(.semibold))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .listRowBackground(Color.secondary.opacity(0.10))
-                    ForEach(group.items, id: \.rowID) { item in
-                        Button { actions.openArticle(item.topic.slug, item.part) } label: {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(item.title ?? "")
-                                    .font(.orbitProse.weight(item.part == 0 ? .semibold : .regular))
-                                    .foregroundStyle(Color.primary)
-                                    .lineLimit(1)
-                                Text(WikiArticleLogic.indexMeta(item))
-                                    .font(.orbitListSubtitle)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .modifier(WikiSectionIndexLabel(letter: group.letter))
+                indexSection(group)
             }
         }
         .listStyle(.plain)
+        .softTopEdgeEffect()
         .modifier(WikiSectionIndexShown())
         .navigationTitle("")
         #if os(iOS)
@@ -838,6 +825,37 @@ struct WikiIndexPage: View {
                     .accessibilityLabel(WikiArticleCopy.contents)
             }
         }
+    }
+
+    /// One letter's articles. The group is the row the page's ForEach draws, so that closure holds no
+    /// second ForEach of its own.
+    private func indexSection(_ group: WikiArticleLogic.IndexGroup) -> some View {
+        Section {
+            // The letter as the section's first row, on the grouped band's grey — a plain
+            // list's pinned header has no backing on iOS 26.
+            Text(group.letter)
+                .font(.orbitSubtext.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .listRowBackground(Color.secondary.opacity(0.10))
+            ForEach(group.items, id: \.rowID) { item in
+                Button { actions.openArticle(item.topic.slug, item.part) } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(item.title ?? "")
+                            .font(.orbitProse.weight(item.part == 0 ? .semibold : .regular))
+                            .foregroundStyle(Color.primary)
+                            .lineLimit(1)
+                        Text(WikiArticleLogic.indexMeta(item))
+                            .font(.orbitListSubtitle)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .modifier(WikiSectionIndexLabel(letter: group.letter))
     }
 }
 

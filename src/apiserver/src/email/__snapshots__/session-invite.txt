@@ -1,0 +1,7 @@
+Fix the flaky login test
+
+Alex Rivera invited you to a conversation on Orbit. You can read it and send messages; they go to Alex Rivera’s agent and run on Alex Rivera’s machine.
+
+Open conversation: https://orbit.example.com/sessions/343dlzsYWKo5z8l2M8tsB
+
+Sign in as maya@example.com to open it.

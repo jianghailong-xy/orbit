@@ -11,6 +11,8 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isPopup
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performClick
@@ -41,4 +43,14 @@ internal fun ComposeTestRule.startNewSession(timeoutMs: Long = 30_000) {
     val button = hasContentDescription("Start a new session", substring = true)
     waitUntil(timeoutMs) { onAllNodes(button).fetchSemanticsNodes().isNotEmpty() }
     onNode(button).performClick()
+}
+
+/** A project's sessions page off its row in the list. The row's tap opens the coordinator's conversation (owner 2026-11-11,
+ * docs/mocks/project-sessions-column board 5); its menu's Sessions still opens the page, which is what a test of the page's own
+ * content wants. */
+internal fun ComposeTestRule.openProjectSessionsPage(projectId: String) {
+    onNodeWithTag("project-row:$projectId").openRowMenu()
+    val sessions = hasText("Sessions") and hasAnyAncestor(isDialog())
+    waitUntil(60_000) { onAllNodes(sessions).fetchSemanticsNodes().isNotEmpty() }
+    onNode(sessions).performClick()
 }

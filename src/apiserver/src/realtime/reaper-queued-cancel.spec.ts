@@ -18,6 +18,8 @@ function sweepWithCancelledSession(status: RunStatus, taskId: string | null) {
   let expected: unknown;
   const taskChanges: string[] = [];
   const tx = {
+    // No Agent check is waiting on these runs (projects/criterion-check-ended.ts).
+    projectCriterionConfirmation: { findMany: async () => [] },
     session: {
       updateMany: async ({
         where,

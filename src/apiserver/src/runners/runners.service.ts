@@ -11,18 +11,28 @@ import {
 import type {
   ClaudeRegionCheckRequest,
   DirProbeAnswer,
+  RunnerResourcesAnswer,
   InstallEngine,
   LoginEngine,
+  ReportedEngine,
   RunnerAccountRemoveState,
   RunnerEngineAccount,
   RunnerInstallState,
   RunnerLoginState,
   SlashCommandInfo,
+  RunnerUpdateTurn,
 } from '@orbit/shared';
-import { CLAUDE_REGION_UNSUPPORTED, CLAUDE_REGION_V1, LOGIN_FAILURE_REASONS } from '@orbit/shared';
+import { CLAUDE_REGION_UNSUPPORTED, CLAUDE_REGION_V1, LOGIN_FAILURE_REASONS, SELF_UPDATE_NOW_V1, SELF_UPDATE_POSTPONE_V1 } from '@orbit/shared';
+import type {
+  RunnerSelfUpdateNowRequest,
+  RunnerSelfUpdateNowResponse,
+  RunnerSelfUpdatePostponeRequest,
+  RunnerSelfUpdatePostponeResponse,
+} from '@orbit/shared';
 import { RunStatus } from '@prisma/client';
 import { generateToken, sha256 } from '../common/crypto.util';
-import { namedRunnerEngines, sanitizeRunnerEngines, usedPlanUsage, usedRunnerEngines } from '../common/runner-engines';
+import { agentFixesOf } from './attention-fix';
+import { namedRunnerEngines, sanitizeEngineUpdateDismissals, sanitizeRunnerEngines, usedPlanUsage, usedRunnerEngines } from '../common/runner-engines';
 import {
   antigravityGoogleLoginRefusal,
   antigravitySignInUnderWay,
@@ -30,6 +40,8 @@ import {
 } from '../common/antigravity-readiness';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
+import { drainWaitingOf } from '../common/runner-drain-waiting';
+import { postponeUntil } from './self-update-postpone';
 import { ACTIVE_TURN_STATUSES } from '../common/session-scheduling';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
@@ -53,6 +65,7 @@ import { ACCOUNT_ID_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunn
 import { accountPauseUntil } from '../common/account-pause';
 import { refuseManagedRunnerDeletion, refuseManagedRunnerRotation } from '../managed-runners/managed-runner-delete';
 import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from './runner-presence';
+import { runnerResourcesAnswerOf } from './runner-resources';
 import { DIR_PROBE_MAX_PATH, dirProbeAnswerOf } from './dir-probe';
 import { isInternalAddress } from '../shared/public-surface.guard';
 import { blockedRunnerRegion, claudeRegionSignInRefusal, regionMachineName, runnerRegionView } from './runner-region';
@@ -66,6 +79,13 @@ const FINISHED_SESSION_STATUSES = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunSta
 // cannot brute-force another user's pending enrollment code online.
 const DEVICE_LOOKUP_WINDOW_MS = 5 * 60_000;
 const DEVICE_LOOKUP_MAX = 20;
+/** The phases whose Update card offers Update Now…, whose confirm names the turns it interrupts. */
+const UPDATE_TURNS_PHASES = new Set<string>(['available', 'draining', 'postponed']);
+
+/** The activity row a Later writes (RunnersService.postponeSelfUpdate): who put which runner's update off, until when. */
+export const RUNNER_SELF_UPDATE_POSTPONED_ACTIVITY = 'runner.self_update.postponed';
+/** The activity row an Update Now writes (RunnersService.updateSelfNow): who had which runner interrupt which turns. */
+export const RUNNER_SELF_UPDATE_NOW_ACTIVITY = 'runner.self_update.now';
 
 @Injectable()
 export class RunnersService {
@@ -96,8 +116,9 @@ export class RunnersService {
     this.deviceLookups.set(userId, recent);
   }
 
-  async listRunners(ownerId: string) {
-    return this.runnerViews({ ownerId });
+  /** `onlyRunner`: that one runner, the list a TERMINAL credential reads (`terminalRunnerOf`). */
+  async listRunners(ownerId: string, onlyRunner?: string) {
+    return this.runnerViews(onlyRunner ? { ownerId, id: onlyRunner } : { ownerId });
   }
 
   /** One of this owner's runners, in exactly the shape the list gives each of them. */
@@ -166,6 +187,10 @@ export class RunnersService {
         accountNames: true,
         accountPauses: true,
         defaultRemoved: true,
+        // The engine update warnings dismissed here, each until the next release (migration 0705).
+        engineUpdateDismissals: true,
+        // The sessions Fix with an agent started here, one per warning (migration 0760).
+        attentionFixes: true,
         installStatus: true,
         installEngine: true,
         installCommand: true,
@@ -204,6 +229,11 @@ export class RunnersService {
     // Each account says how many sessions are at work on it, so that a client's "starts on" is the server's.
     const atWork = await activeSessionsOn(this.prisma, runners, new Date(now));
     const used = runners.map((runner) => engineHealthWithActiveSessions(usedRunnerEngines(runner), atWork.get(runner.id)));
+    const updateTurns = await this.updateTurnsOf(where.ownerId, runners);
+    const drainWaiting = await drainWaitingOf(this.prisma, where.ownerId, runners);
+    // Fix with an agent: where a press would start its session on each runner, or why it can't, and the
+    // agents already at work there (attention-fix.ts, the same answer the fix endpoint acts on).
+    const agentFixes = await agentFixesOf(this.prisma, where.ownerId, runners, now);
     return runners.map(({
       availableCommands,
       availableSkills,
@@ -212,6 +242,8 @@ export class RunnersService {
       accountNames,
       accountPauses,
       defaultRemoved,
+      engineUpdateDismissals,
+      attentionFixes,
       installStatus,
       installEngine,
       installCommand,
@@ -237,6 +269,9 @@ export class RunnersService {
       // The effective verdict, never the stored one; null without the capability or a decided check.
       region: runnerRegionView({ region, capabilities: r.capabilities }, new Date(now)),
       engines: used[index],
+      // { engine: latest } — each engine's update warning stays hidden while this equals its update.latest.
+      engineUpdateDismissals: sanitizeEngineUpdateDismissals(engineUpdateDismissals),
+      agentFix: agentFixes.get(r.id) ?? null,
       antigravity: antigravityState({ capabilities: r.capabilities, engines: used[index] }),
       install: installStateOf({
         installStatus,
@@ -253,10 +288,47 @@ export class RunnersService {
       }),
       online: runnerIsOnline({ status: r.status, lastHeartbeatAt: r.lastHeartbeatAt, presence }, now),
       activeSessions: activeByRunner.get(r.id) ?? 0,
+      // Only on a runner draining for its self-update: the viewer's turns the drain waits for.
+      ...(updateTurns.has(r.id) ? { updateTurns: updateTurns.get(r.id) } : {}),
+      // Only while it drains and something of the viewer's waits on it: the banner and attention item (D3).
+      ...(drainWaiting.has(r.id) ? { drainWaiting: drainWaiting.get(r.id) } : {}),
       // Surface the `/` autocomplete catalog under clean names (mirrors the heartbeat DTO).
       commands: (availableCommands ?? []) as unknown as SlashCommandInfo[],
       skills: (availableSkills ?? []) as unknown as SlashCommandInfo[],
     }));
+  }
+
+  /**
+   * The turns each draining runner's Update card names (docs/runner-update-drain-design.md §3.5,
+   * board 4), and the turns Update Now's confirm says it interrupts (board 3 ⑧): the viewer's RUNNING
+   * sessions on it, longest-running first, with when the current run was claimed. Only runners whose
+   * heartbeat says draining, or whose report has a release waiting (available, draining, postponed),
+   * are asked about, so a runner that is not updating costs nothing. Another owner's turns are not named here, as in
+   * queuedRunnerUpdate; the card's count (turnsInFlight) still covers them.
+   */
+  private async updateTurnsOf(
+    ownerId: string,
+    runners: Array<{ id: string; selfUpdate: unknown; heartbeatDraining: boolean | null }>,
+  ): Promise<Map<string, RunnerUpdateTurn[]>> {
+    const draining = runners
+      .filter((r) => r.heartbeatDraining === true || UPDATE_TURNS_PHASES.has(sanitizeRunnerSelfUpdate(r.selfUpdate)?.phase ?? ''))
+      .map((r) => r.id);
+    const turns = new Map<string, RunnerUpdateTurn[]>(draining.map((id) => [id, []]));
+    if (draining.length === 0) return turns;
+    const rows = await this.prisma.session.findMany({
+      where: { assignedRunnerId: { in: draining }, ownerId, status: RunStatus.RUNNING, deletedAt: null },
+      select: { id: true, title: true, assignedRunnerId: true, runClaimedAt: true, lastTurnAt: true },
+      orderBy: [{ runClaimedAt: { sort: 'asc', nulls: 'last' } }, { id: 'asc' }],
+    });
+    for (const row of rows) {
+      const startedAt = row.runClaimedAt ?? row.lastTurnAt;
+      turns.get(row.assignedRunnerId!)?.push({
+        id: row.id,
+        title: row.title || null,
+        startedAt: startedAt ? startedAt.toISOString() : null,
+      });
+    }
+    return turns;
   }
 
   /**
@@ -829,6 +901,32 @@ export class RunnersService {
   }
 
   /**
+   * Dismiss this runner's update warning for `engine` until its next release: the engine's current
+   * `update.latest`, as the runner last reported it, goes into its key of
+   * `runner.engine_update_dismissals` in one statement. Clients hide the warning while that equals
+   * the engine's `update.latest`, so a newer release brings it back by itself. Orbit's own record:
+   * the runner need not be online and is not woken, and Orbit keeps retrying the update on it.
+   * Refused when no release is known to dismiss against.
+   */
+  async dismissEngineUpdateWarning(
+    ownerId: string,
+    id: string,
+    engine: ReportedEngine,
+  ): Promise<{ engine: ReportedEngine; latest: string }> {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId }, select: { engines: true } });
+    if (!runner) throw new NotFoundException('runner not found');
+    const latest = sanitizeRunnerEngines(runner.engines)?.find((entry) => entry.engine === engine)?.update?.latest;
+    if (!latest) throw new BadRequestException('This engine reports no newer release to dismiss its warning until');
+    const written = await this.prisma.$executeRaw`
+      UPDATE "runner"
+         SET "engine_update_dismissals" =
+               COALESCE("engine_update_dismissals", '{}'::jsonb) || jsonb_build_object(${engine}::text, ${latest}::text)
+       WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid`;
+    if (written === 0) throw new NotFoundException('runner not found');
+    return { engine, latest };
+  }
+
+  /**
    * Rename one account a runner reports — Default included, which the machine itself never names.
    *
    * Only a label, and Orbit's own: kept in `runner.account_names` and laid over the report wherever
@@ -1045,6 +1143,115 @@ export class RunnersService {
   }
 
   /**
+   * Update Now (docs/runner-update-drain-design.md §4, D4): install the release this runner waits
+   * for now, interrupting the turns in flight. The runner stops them through its graceful stop, so
+   * each session stays resumable, installs, restarts and reclaims them; the control plane then hands
+   * each one its interrupted turn again as the update's continuation (dequeueTurn). Like Update
+   * Runner Now, the request is one timestamp the next heartbeat hands over (`selfUpdateNow`) and
+   * clears, and the runner's report — phase `restarting` with `interruptedTurns` — is the answer.
+   *
+   * The owner's alone, and only with `interruptTurns: true`: the owner's explicit word is what lets
+   * it interrupt a turn, which an automatic update never does. Each request is recorded as a
+   * `runner.self_update.now` activity, naming the owner's turns it interrupts, before it is stored. A
+   * runner that does not declare self-update-now/v1 would drop it unread, and is refused with Update
+   * Runner Now's "too old" sentence; one with no release waiting has nothing to install.
+   */
+  async updateSelfNow(
+    ownerId: string,
+    id: string,
+    body: RunnerSelfUpdateNowRequest | undefined,
+  ): Promise<RunnerSelfUpdateNowResponse> {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
+    if (!runner) throw new NotFoundException('runner not found');
+    if (body?.interruptTurns !== true) {
+      throw new BadRequestException('interruptTurns must be true: Update Now interrupts the turns in flight');
+    }
+    if (runner.status === 'OFFLINE') {
+      throw new BadRequestException('Runner is offline — it can only update while connected');
+    }
+    if (!runner.capabilities.includes(SELF_UPDATE_NOW_V1)) {
+      throw new BadRequestException('Runner is too old to update on request — it reports no self-update state');
+    }
+    const report = sanitizeRunnerSelfUpdate(runner.selfUpdate);
+    const phase = report?.phase;
+    if (phase !== 'available' && phase !== 'draining' && phase !== 'postponed') {
+      throw new BadRequestException('No update is waiting on this runner — there is nothing to install');
+    }
+    const turns = (await this.updateTurnsOf(ownerId, [{ id, selfUpdate: runner.selfUpdate, heartbeatDraining: true }])).get(id) ?? [];
+    const requestedAt = new Date();
+    await this.prisma.activity.create({
+      data: {
+        actorId: ownerId,
+        type: RUNNER_SELF_UPDATE_NOW_ACTIVITY,
+        payload: {
+          runnerId: id,
+          interruptTurns: true,
+          phase,
+          targetVersion: report?.targetVersion ?? null,
+          sessionIds: turns.map((turn) => turn.id),
+        },
+        credentialKind: 'LOGIN',
+      },
+    });
+    await this.prisma.runner.update({ where: { id }, data: { selfUpdateNowRequestedAt: requestedAt } });
+    this.realtime?.notifyRunnerWake(id);
+    return { requestedAt: requestedAt.toISOString(), turns: turns.length };
+  }
+
+  /**
+   * Later (docs/runner-update-drain-design.md §4): put the release this runner waits to install off
+   * until `until`. The runner ends its drain at once and takes work again, and at `until` waits for
+   * idle again under a fresh one-hour limit. Like Update Runner Now, the request is one timestamp the
+   * next heartbeat hands over (`postponeSelfUpdateUntil`) and clears, and the runner's report —
+   * phase `postponed` with `postponedUntil` — is the answer.
+   *
+   * `until` is capped at 09:00 tomorrow in the owner's zone (D2), which the client names. Owner only;
+   * each request is recorded as a `runner.self_update.postponed` activity before it is stored. A
+   * runner that does not declare self-update-postpone/v1 would drop it unread, and is refused with
+   * Update Runner Now's "too old" sentence; one with no release waiting has nothing to postpone.
+   */
+  async postponeSelfUpdate(
+    ownerId: string,
+    id: string,
+    body: RunnerSelfUpdatePostponeRequest | undefined,
+  ): Promise<RunnerSelfUpdatePostponeResponse> {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
+    if (!runner) throw new NotFoundException('runner not found');
+    if (runner.status === 'OFFLINE') {
+      throw new BadRequestException('Runner is offline — it can only postpone its update while connected');
+    }
+    if (!runner.capabilities.includes(SELF_UPDATE_POSTPONE_V1)) {
+      throw new BadRequestException('Runner is too old to update on request — it reports no self-update state');
+    }
+    const report = sanitizeRunnerSelfUpdate(runner.selfUpdate);
+    const phase = report?.phase;
+    if (phase !== 'available' && phase !== 'draining' && phase !== 'postponed') {
+      throw new BadRequestException('No update is waiting on this runner — there is nothing to postpone');
+    }
+    const now = new Date();
+    const { until, capped } = postponeUntil(now, body);
+    await this.prisma.activity.create({
+      data: {
+        actorId: ownerId,
+        type: RUNNER_SELF_UPDATE_POSTPONED_ACTIVITY,
+        payload: {
+          runnerId: id,
+          until: until.toISOString(),
+          asked: typeof body?.until === 'string' ? body.until : null,
+          timeZone: typeof body?.timeZone === 'string' ? body.timeZone : null,
+          capped,
+          phase,
+          targetVersion: report?.targetVersion ?? null,
+        },
+        credentialKind: 'LOGIN',
+      },
+    });
+    await this.prisma.runner.update({ where: { id }, data: { selfUpdatePostponeUntil: until } });
+    this.realtime?.notifyRunnerWake(id);
+    return { until: until.toISOString() };
+  }
+
+  /**
    * Check again (docs/claude-region-check-contract.md §7): have this runner check where its Claude connection to
    * Anthropic comes out now, rather than at its next check, up to five minutes away.
    *
@@ -1181,6 +1388,16 @@ export class RunnersService {
     });
     if (!runner) throw new NotFoundException('runner not found');
     return dirProbeAnswerOf(runner, path);
+  }
+
+  /** The machine's resources as its presence row keeps them (runner-resources.ts). */
+  async getResources(ownerId: string, id: string): Promise<RunnerResourcesAnswer> {
+    const runner = await this.prisma.runner.findFirst({
+      where: { id, ownerId },
+      select: { presence: { select: { resources: true } } },
+    });
+    if (!runner) throw new NotFoundException('runner not found');
+    return runnerResourcesAnswerOf(runner.presence?.resources);
   }
 
   /** Current install-relay state, for the row to poll. */

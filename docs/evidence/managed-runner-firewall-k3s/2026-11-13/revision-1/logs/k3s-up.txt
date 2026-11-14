@@ -1,0 +1,9 @@
+NAME    STATUS   ROLES           AGE   VERSION        INTERNAL-IP    EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION                 CONTAINER-RUNTIME
+mrk3s   Ready    control-plane   23s   v1.37.2+k3s1   172.31.92.20   <none>        Alpine Linux v3.24   6.12.107+deb13-amd64 (amd64)   containerd://2.3.7-k3s1
+NAMESPACE     NAME                                      READY   STATUS              RESTARTS   AGE   IP          NODE    NOMINATED NODE   READINESS GATES
+kube-system   coredns-577d995dff-dpxk8                  1/1     Running             0          17s   10.42.0.3   mrk3s   <none>           <none>
+kube-system   helm-install-gateway-api-crd-7dprh        0/1     ContainerCreating   0          17s   <none>      mrk3s   <none>           <none>
+kube-system   local-path-provisioner-56c6584955-mplgd   1/1     Running             0          17s   10.42.0.2   mrk3s   <none>           <none>
+NAMESPACE     NAME         TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)                  AGE
+default       kubernetes   ClusterIP   10.43.0.1    <none>        443/TCP                  25s
+kube-system   kube-dns     ClusterIP   10.43.0.10   <none>        53/UDP,53/TCP,9153/TCP   19s

@@ -12,9 +12,9 @@ import type { Me, SignInMethods } from '../lib/queries';
  * Profile → Sign-in methods (docs/google-sign-in-design.md §5.3, §5.4, §8.1): whether the account has
  * a password, and its Google account — Connect Google (a verifier kept in this tab, its challenge sent
  * with POST /auth/google/link, the browser sent to Google), the return to /settings/profile with a
- * ticket confirmed with that verifier, and Disconnect. An account without a password is not offered
- * Change password, nor a Disconnect that would lock it out. With Google sign-in off, an ordinary
- * account's profile is as it was.
+ * ticket confirmed with that verifier, and Disconnect. An account with a password is offered Change on
+ * its Password row; one without is not, nor a Disconnect that would lock it out. With Google sign-in
+ * off, an ordinary account still has the card, with the Password row alone.
  *
  * The real page under a router at the address Google sends the browser back to, over a stand-in for
  * the server's `/api` that records every request; `location` is a stand-in that records where the
@@ -29,7 +29,7 @@ const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(
 vi.mock('../lib/toast', () => ({ useToast: () => toast }));
 const { api } = await import('../api');
 const { ProfilePage } = await import('./ProfilePage');
-const { CONNECT_GOOGLE, DISCONNECT_GOOGLE, GOOGLE_OFF, GOOGLE_ONLY_WAY_IN, SIGN_IN_METHODS_TITLE } = await import(
+const { CHANGE_PASSWORD_BUTTON, CONNECT_GOOGLE, DISCONNECT_GOOGLE, GOOGLE_OFF, GOOGLE_ONLY_WAY_IN, SIGN_IN_METHODS_TITLE } = await import(
   '../components/SignInMethodsCard'
 );
 const { GOOGLE_LINK_VERIFIER_KEY } = await import('../lib/googleLink');
@@ -259,15 +259,18 @@ describe('Profile · Sign-in methods', () => {
 
     expect(cardTitles()).toEqual(['Basic information', SIGN_IN_METHODS_TITLE]);
     expect(row('password')?.textContent).toContain('Not set');
+    expect(row('password')?.querySelectorAll('button')).toHaveLength(0);
     expect(row('password')?.textContent).toContain('you sign in with Google');
     expect(buttonIn(row('google'), DISCONNECT_GOOGLE)?.disabled).toBe(true);
     expect(row('google')?.textContent).toContain(GOOGLE_ONLY_WAY_IN);
   });
 
-  it('with a password, Change password is where it was', async () => {
+  it('with a password, the Password row offers Change and the page has no password form of its own', async () => {
     server = { me: account({ password: true, google: null }), google: true };
     await open();
-    expect(cardTitles()).toEqual(['Basic information', SIGN_IN_METHODS_TITLE, 'Change password']);
+    expect(cardTitles()).toEqual(['Basic information', SIGN_IN_METHODS_TITLE]);
+    expect(buttonIn(row('password'), CHANGE_PASSWORD_BUTTON)).toBeTruthy();
+    expect(container.querySelectorAll('input[type="password"]')).toHaveLength(0);
   });
 
   it('until the server says whether Google sign-in is on, a linked account is shown its link, offered nothing, and not told it is off', async () => {
@@ -275,14 +278,15 @@ describe('Profile · Sign-in methods', () => {
     await open();
     expect(row('google')?.textContent).toContain(`Connected as ${GOOGLE_EMAIL}`);
     expect(row('google')?.textContent).not.toContain(GOOGLE_OFF);
-    expect(card()?.querySelectorAll('button')).toHaveLength(0);
+    expect(row('google')?.querySelectorAll('button')).toHaveLength(0);
   });
 
-  it('Google sign-in off: an ordinary account sees the profile as it was; a linked one sees its link and no button', async () => {
+  it('Google sign-in off: an ordinary account sees the Password row alone, Change on it; a linked one sees its link and no Google button', async () => {
     server = { me: account({ password: true, google: null }), google: false };
     await open();
-    expect(card()).toBeUndefined();
-    expect(cardTitles()).toEqual(['Basic information', 'Change password']);
+    expect(cardTitles()).toEqual(['Basic information', SIGN_IN_METHODS_TITLE]);
+    expect(row('google')).toBeNull();
+    expect(buttonIn(row('password'), CHANGE_PASSWORD_BUTTON)).toBeTruthy();
     const first = root;
     root = null;
     await act(async () => first?.unmount());
@@ -291,6 +295,6 @@ describe('Profile · Sign-in methods', () => {
     await open();
     expect(row('google')?.textContent).toContain(`Connected as ${GOOGLE_EMAIL}`);
     expect(row('google')?.textContent).toContain(GOOGLE_OFF);
-    expect(card()?.querySelectorAll('button')).toHaveLength(0);
+    expect(row('google')?.querySelectorAll('button')).toHaveLength(0);
   });
 });

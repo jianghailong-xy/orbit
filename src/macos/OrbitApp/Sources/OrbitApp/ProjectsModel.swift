@@ -30,6 +30,11 @@ final class ProjectsModel {
         api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
     }
 
+    /// The store over a transport handed in (the observation tests): the app builds `api` above.
+    init(api: APIClient) {
+        self.api = api
+    }
+
     /// By either spelling of its id: a link may name the UUID while the list spells it base62.
     func project(_ id: String) -> ProjectSummary? {
         let key = PublicID.storageKey(id)
@@ -46,16 +51,15 @@ final class ProjectsModel {
     }
 
     func load() async {
-        loadState.begin()
+        assignIfChanged(\.loadState, loadState.startingRead())
         async let sidebarRead = api.sidebarProjects()
         do {
-            let list = try await api.projects()
-            if list != projects { projects = list }
-            loadState.succeed()
+            assignIfChanged(\.projects, try await api.projects())
+            assignIfChanged(\.loadState, loadState.afterSuccess())
         } catch {
-            loadState.fail()
+            assignIfChanged(\.loadState, loadState.afterFailure())
         }
-        if let list = try? await sidebarRead, list != sidebarProjects { sidebarProjects = list }
+        if let list = try? await sidebarRead { assignIfChanged(\.sidebarProjects, list) }
     }
 
     /// Called by the app's existing polling task, which stops on sign-out.
@@ -398,6 +402,80 @@ final class ProjectDetailModel {
         await runWrite(ProjectDone.notDeclined) {
             _ = try await self.api.declineDoneRequest(projectID: self.projectID, itemID: itemID, note: note)
         }
+    }
+
+    // MARK: the done card's follow-ups
+
+    /// Move to a follow-up… from the done card over the page. Nil when it moved; otherwise the
+    /// door's own words, which the sheet says under its press.
+    func moveCriterion(_ criterionKey: String, _ body: MoveCriterionBody) async -> String? {
+        await followUpWrite {
+            _ = try await self.api.moveCriterion(projectID: self.projectID, criterionKey: criterionKey, body)
+        }
+    }
+
+    /// The owner's Confirm sheet.
+    func confirmCriterion(_ criterionID: String, _ body: ConfirmCriterionBody) async -> String? {
+        await followUpWrite {
+            try await self.api.confirmCriterion(projectID: self.projectID, criterionID: criterionID, body)
+        }
+    }
+
+    /// The Confirm sheet's one screenshot, uploaded when it is picked: Confirm sends its id.
+    func uploadConfirmationShot(_ data: Data, filename: String, mimeType: String) async throws -> String {
+        try await api.uploadAttachment(sessionID: nil, filename: filename, mimeType: mimeType, data: data)
+    }
+
+    /// Withdraw, on a criterion's standing confirmation.
+    func withdrawConfirmation(_ criterionID: String) async -> String? {
+        await followUpWrite {
+            try await self.api.withdrawCriterionConfirmation(projectID: self.projectID, criterionID: criterionID)
+        }
+    }
+
+    /// Run an Agent check of a criterion.
+    func startCriterionCheck(_ criterionID: String) async -> String? {
+        await followUpWrite {
+            try await self.api.startCriterionCheck(projectID: self.projectID, criterionID: criterionID)
+        }
+    }
+
+    /// "Met by: …": the set restated with one criterion's mode changed. The server's notice when it
+    /// held the change for a decision, or the door's refusal.
+    func setCriterionMode(_ criterionID: String, _ mode: CriterionSatisfiedBy) async -> (notice: String?, error: String?) {
+        guard let criteria = document?.acceptanceCriteriaItems else { return (nil, nil) }
+        var notice: String?
+        let error = await followUpWrite {
+            let answer = try await self.api.setCriteriaModes(
+                self.projectID, CriteriaModeBody(criteria: criteria, criterionID: criterionID, mode: mode))
+            notice = answer.acceptanceCriteriaHold?.notice
+        }
+        return (notice, error)
+    }
+
+    /// How it runs' Delivers: the owner's non-code mark.
+    func setNonCode(_ nonCode: Bool) async -> String? {
+        await runWrite(ProjectDone.runMarkNotSaved) {
+            try await self.api.setProjectNonCode(self.projectID, nonCode: nonCode)
+        }
+    }
+
+    /// A follow-up's write: the page and the done card's check read again either way, and a
+    /// refusal in the door's own words.
+    private func followUpWrite(_ body: @escaping () async throws -> Void) async -> String? {
+        guard !busy else { return nil }
+        busy = true
+        defer { busy = false }
+        var refused: String?
+        do {
+            try await body()
+            onChanged()
+        } catch {
+            refused = APIClient.failureReason(error)
+        }
+        await load()
+        if doneCheck != nil || doneCheckError != nil { await loadDoneCard() }
+        return refused
     }
 
     /// Remove the project. Only an empty one can go; the server's refusal says how many tasks it

@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BadRequestException, RequestMethod } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { RunnerTasksController } from './runner-tasks.controller';
 
@@ -165,6 +165,7 @@ test('createTasks batches through TasksService with the acting workspace as crea
       calls.push({ method: 'createMany', args });
       return created;
     },
+    assertSessionTaskWriteApproved: async () => {},
   } as never;
   const controller = new RunnerTasksController(tasks, {} as never, {} as never);
   const dto = {
@@ -223,6 +224,7 @@ test('runner task create permits explicit criteria and translates unambiguous N-
       writes.push(dto);
       return { id: 'task-1' };
     },
+    assertSessionTaskWriteApproved: async () => {},
   } as never;
   const controller = new RunnerTasksController(tasks, {} as never, {} as never);
   const declarations = [
@@ -262,6 +264,81 @@ test('runner task create permits explicit criteria and translates unambiguous N-
       (write as { completionCriterion: string }).completionCriterion),
     legacy.map(({ expected }) => expected),
   );
+});
+
+test('the three consequential writes are carded at the door, before anything is written', async () => {
+  // The rule lives in the control plane, by caller (`tasks/task-write-approval.ts`): a request
+  // that names a session carries the card it must be covered by, and the gate runs before the
+  // write. A dry run writes nothing and asks nobody.
+  const order: string[] = [];
+  let carded: unknown;
+  const tasks = {
+    resolveAgentCreator: async () => undefined,
+    assertSessionTaskWriteApproved: async (_owner: string, _runner: string, sessionId: string | undefined, write: unknown) => {
+      assert.equal(sessionId, 'session-1');
+      carded = write;
+      order.push('card');
+    },
+    create: async (_owner: string, dto: unknown) => {
+      assert.deepEqual(carded, { toolName: 'orbit_task_create', create: dto }, 'the card covers the write');
+      order.push('create');
+      return { id: 'task-1' };
+    },
+    createMany: async () => {
+      order.push('createMany');
+      return [];
+    },
+    previewPlan: async () => {
+      order.push('preview');
+      return {};
+    },
+    applyDag: async () => {
+      assert.equal((carded as { toolName?: string }).toolName, 'orbit_dag_change');
+      order.push('apply');
+      return { added: 1 };
+    },
+  } as never;
+  const controller = new RunnerTasksController(tasks, {} as never, {} as never);
+  const create = { title: 'A', completionCriterion: 'EVIDENCE_JUDGMENT' } as never;
+  const batch: Record<string, unknown> = { tasks: [create] };
+
+  await controller.createTask(RUNNER, undefined, undefined, 'session-1', create);
+  await controller.createTasks(RUNNER, undefined, undefined, 'session-1', batch as never);
+  await controller.createTasks(RUNNER, undefined, undefined, 'session-1', { ...batch, dryRun: true } as never);
+  await controller.applyDag(RUNNER, '019fe1dd-3f39-7610-8e5d-507e36a4ea9b', {
+    ops: [{ op: 'add', taskId: 'a', dependsOnTaskId: 'b' }],
+  } as never, 'session-1');
+
+  assert.deepEqual(order, ['card', 'create', 'card', 'createMany', 'preview', 'card', 'apply']);
+});
+
+// The machine credential has no card-free form of these writes: a request that names no session is
+// handed to the gate like any other, and the gate's refusal reaches the caller before the service.
+test('a machine-credential write with no session never reaches the service', async () => {
+  let writes = 0;
+  const tasks = {
+    resolveAgentCreator: async () => undefined,
+    assertSessionTaskWriteApproved: async () => {
+      throw new ForbiddenException({ code: 'TASK_WRITE_NEEDS_OWNER_CARD' });
+    },
+    create: async () => { writes += 1; return {}; },
+    createMany: async () => { writes += 1; return []; },
+    applyDag: async () => { writes += 1; return {}; },
+  } as never;
+  const controller = new RunnerTasksController(tasks, {} as never, {} as never);
+
+  for (const invoke of [
+    () => controller.createTask(RUNNER, undefined, undefined, undefined,
+      { title: 'x', completionCriterion: 'EVIDENCE_JUDGMENT' } as never),
+    () => controller.createTasks(RUNNER, undefined, undefined, undefined,
+      { tasks: [{ title: 'x', completionCriterion: 'EVIDENCE_JUDGMENT' }] } as never),
+    () => controller.applyDag(RUNNER, '019fe1dd-3f39-7610-8e5d-507e36a4ea9b', {
+      ops: [{ op: 'add', taskId: 'a', dependsOnTaskId: 'b' }],
+    } as never, undefined),
+  ]) {
+    await assert.rejects(invoke, (error: unknown) => error instanceof ForbiddenException);
+  }
+  assert.equal(writes, 0, 'no write reached the service');
 });
 
 test('runner batch create and both dry-run paths refuse every implicit EVIDENCE_JUDGMENT before service', async () => {

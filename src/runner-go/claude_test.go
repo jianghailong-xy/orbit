@@ -83,17 +83,24 @@ func TestIsResumeCarrierResult(t *testing.T) {
 
 // Both rescues key on a text prefix and must stay disjoint: an API error is retryable and
 // renders as a bare error, an auth error needs a human to sign in and renders as guidance.
+// A failure of the connection carries the auth prefix but is neither: it is excluded from the
+// auth error and named on its own (isConnectionFailure).
 func TestIsAPIErrorAndIsAuthError(t *testing.T) {
 	cases := []struct {
-		text      string
-		api, auth bool
+		text                  string
+		api, auth, connection bool
 	}{
-		{"API Error: 500", true, false},
-		{"  API Error: overloaded", true, false},
-		{"Failed to authenticate: OAuth session expired and could not be refreshed", false, true},
-		{"  Failed to authenticate: invalid API key", false, true},
-		{"all good", false, false},
-		{"", false, false},
+		{"API Error: 500", true, false, false},
+		{"  API Error: overloaded", true, false, false},
+		{"Failed to authenticate: OAuth session expired and could not be refreshed", false, true, false},
+		{"  Failed to authenticate: invalid API key", false, true, false},
+		// Verbatim from FAILED sessions on 2026-11-13; every account was signed in.
+		{"Failed to authenticate. API Error: 403 Attention Required! | Cloudflare", false, false, true},
+		{"Failed to authenticate. API Error: 403 ECONNRESET: The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()", false, false, true},
+		// Anchored at the start: a reply quoting one is an ordinary reply.
+		{"The run died on \"Failed to authenticate. API Error: 403 Attention Required! | Cloudflare\" — retrying.", false, false, false},
+		{"all good", false, false, false},
+		{"", false, false, false},
 	}
 	for _, c := range cases {
 		if got := isAPIError(c.text); got != c.api {
@@ -101,6 +108,9 @@ func TestIsAPIErrorAndIsAuthError(t *testing.T) {
 		}
 		if got := isAuthError(c.text); got != c.auth {
 			t.Errorf("isAuthError(%q) = %v, want %v", c.text, got, c.auth)
+		}
+		if got := isConnectionFailure(c.text); got != c.connection {
+			t.Errorf("isConnectionFailure(%q) = %v, want %v", c.text, got, c.connection)
 		}
 	}
 }

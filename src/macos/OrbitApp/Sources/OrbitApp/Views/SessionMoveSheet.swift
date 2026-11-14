@@ -1,7 +1,6 @@
 import SwiftUI
 import OrbitKit
 
-#if os(iOS)
 /// The Move panel (docs/session-folders-move-design.md §4): where a session row's Move — swiped, or
 /// Move… from its long-press menu — files the session. A native sheet in the style of the workspace
 /// switcher (`AgentSwitchSheet`): Move over the session's title, Done, and the folders of the
@@ -73,10 +72,12 @@ struct SessionMoveSheet: View {
             }
             .task { await loadTargets() }
             .navigationTitle(SessionMoveCopy.title)
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .principal) { title }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .confirmationAction) {
                     Button(SessionMoveCopy.done) { dismiss() }
                 }
             }
@@ -95,7 +96,12 @@ struct SessionMoveSheet: View {
                 Text(failure ?? "")
             }
         }
+        #if os(iOS)
         .presentationDetents([.medium, .large])
+        #else
+        // A Mac sheet is as big as its content asks; a List asks for nothing.
+        .frame(minWidth: 440, idealWidth: 480, minHeight: 460, idealHeight: 520)
+        #endif
     }
 
     private var options: [SessionMoveFolderOption] {
@@ -155,11 +161,7 @@ struct SessionMoveSheet: View {
             if !targets.targets.isEmpty {
                 Section {
                     ForEach(SessionWorkspaceMoveLogic.rows(targets, providerName: providerName)) { row in
-                        if row.isEnabled {
-                            NavigationLink(value: row.target) { targetRow(row) }
-                        } else {
-                            targetRow(row)
-                        }
+                        workspaceTargetRow(row)
                     }
                 } header: {
                     Text(SessionMoveCopy.anotherWorkspaceGroup)
@@ -183,6 +185,16 @@ struct SessionMoveSheet: View {
             } header: {
                 Text(SessionMoveCopy.anotherWorkspaceGroup)
             }
+        }
+    }
+
+    /// One workspace row: a link when the session may go there, the greyed row itself when not.
+    /// The workspace is the row the list's ForEach draws, so that closure holds no branch.
+    @ViewBuilder private func workspaceTargetRow(_ row: SessionMoveTargetRow) -> some View {
+        if row.isEnabled {
+            NavigationLink(value: row.target) { targetRow(row) }
+        } else {
+            targetRow(row)
         }
     }
 
@@ -254,4 +266,3 @@ struct SessionMoveSheet: View {
         Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })
     }
 }
-#endif

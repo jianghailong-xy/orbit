@@ -23,7 +23,7 @@ import { WikiProposeDto } from '../wiki/dto';
 import { WikiChatDrafts } from '../wiki/wiki-chat-drafts';
 import { registerWikiNote, wikiImportPrincipal, WikiNoteDto, WikiSessionNoteDto, writeSessionNote } from '../wiki/wiki-import';
 import { createWikiImportJob, readWikiImportJob, wikiImportExecutor, WikiImportJobDto } from '../wiki/wiki-import-jobs';
-import { flagParam, listParam, WikiRetrieval } from '../wiki/wiki-retrieval';
+import { flagParam, listParam, unavailableSearch, WikiRetrieval } from '../wiki/wiki-retrieval';
 import { WikiRolloutGuard } from '../wiki/wiki-rollout';
 import { enqueueWikiVerifyJob } from '../wiki/wiki-verify-jobs';
 import { answerFor, WikiService, WikiRefusalError, type WikiPrincipal } from '../wiki/wiki.service';
@@ -103,7 +103,11 @@ export class RunnerWikiController {
       );
     }
     await this.assertNotExcluded(sessionId);
-    const spaceId = await this.wiki.resolveSpaceForCall(runner.ownerId, sessionId, null);
+    // No wiki is nothing found, not a refusal (design docs/wiki-explicit-creation-design.md §3.3): every session is asked
+    // to search before it edits a file. No exposure is recorded: there is no space to record one in.
+    const found = await this.wiki.locateSpaceForCall(runner.ownerId, sessionId, null);
+    if (!('spaceId' in found)) return unavailableSearch(q, found.unavailable);
+    const spaceId = found.spaceId;
     const answer = await this.retrieval.search({
       ownerId: runner.ownerId,
       sessionId,
@@ -393,9 +397,13 @@ export class RunnerWikiController {
       );
     }
     await this.assertNotExcluded(sessionId);
-    // Resolving the space FIRST is the read boundary: a session whose workspace is bound to no space
-    // is told how to bind it rather than shown another codebase's entries.
-    const spaceId = await this.wiki.resolveSpaceForCall(runner.ownerId, sessionId, null);
+    // Resolving the space FIRST is the read boundary: a session whose workspace is in no wiki is answered that there is
+    // none (404, design §3.3) rather than shown another codebase's entries.
+    const found = await this.wiki.locateSpaceForCall(runner.ownerId, sessionId, null);
+    if (!('spaceId' in found)) {
+      throw new WikiRefusalError({ code: 'WIKI_SPACE_UNBOUND', message: 'This workspace has no wiki.' }, HttpStatus.NOT_FOUND);
+    }
+    const spaceId = found.spaceId;
     const entry = await this.wiki.getEntry(
       runner.ownerId,
       id,

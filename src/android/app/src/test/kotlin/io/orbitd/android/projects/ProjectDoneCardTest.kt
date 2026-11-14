@@ -159,9 +159,10 @@ class ProjectDoneCardTest {
         compose.onNodeWithTag("done-record").performScrollTo().assertTextEquals(ProjectDone.recordAsDone).assertIsEnabled()
         compose.onNodeWithTag("done-not-yet").assertTextEquals(ProjectDone.notYet)
         assertFalse("no conversation asks why it is not done any more", texts().any { it.contains("Why is this project not done?") })
-        // Done when's criteria, one press away.
-        compose.onNodeWithTag("done-criteria").assertTextEquals(ProjectDone.showAll(2)).performClick()
-        shows("met · Landed on main"); shows("met · nothing to land")
+        // Done when's criteria, open at once up to a dozen (web `DONE_WHEN_OPEN_UP_TO`), each row's state on its own.
+        compose.onAllNodesWithTag("done-criteria").assertCountEquals(0)
+        compose.onNodeWithTag("done-row:1-state", useUnmergedTree = true).assertTextEquals("met · Landed on main")
+        compose.onNodeWithTag("done-row:2-state", useUnmergedTree = true).assertTextEquals("met · nothing to land")
         compose.onNodeWithTag("done-record").performScrollTo().performClick()
         compose.waitForIdle(); assertEquals(1, recorded)
     }
@@ -185,12 +186,16 @@ class ProjectDoneCardTest {
     @Test fun aCardNobodyAskedForListsTheDoneCheckAndOffersNoNotYet() {
         val unmet = j(doc.toString().replace(""""satisfied":true,"landingReason":"NOTHING_TO_LAND"""", """"satisfied":false,"landingReason":"NOTHING_TO_LAND"""")
             .replace(""""met":2""", """"met":1"""))
-        card(unmet, null, doneCheck = j("""{"findings":[{"severity":"REFUSE","message":"Criterion 2 is not met"},{"severity":"WARN","message":"Criterion 2 is not on main"}]}"""))
+        card(unmet, null, doneCheck = j("""{"findings":[{"severity":"REFUSE","code":"DONE_CRITERION_UNSATISFIED","message":"m",
+            "criterion":{"key":"c2","ordinal":2,"text":"The live check was completed"},"tasks":[]},
+            {"severity":"WARN","code":"DONE_CRITERION_UNLANDED","message":"m","criterion":{"key":"c1","ordinal":1,"text":"The release is on main"},"tasks":[]}]}"""))
         compose.onNodeWithTag("done-meta").assertTextEquals("Project closeout · record as done anyway")
-        shows("Orbit can’t prove 2 things")
-        shows("Criterion 2 is not met")
-        shows("Criterion 2 is not on main")
-        shows(ProjectDone.findingsAccepted)
+        // What stands in the way first, and apart from it what Orbit can't prove about where work landed (decided board ③ B–D).
+        shows("1 thing stands in the way")
+        shows("Criterion 2 is not met — no task serves it")
+        shows("Orbit can’t prove 1 thing")
+        shows("Criterion 1 is not on main")
+        shows("If you record it done anyway, Orbit keeps criterion 2 as the gap you accepted.")
         compose.onNodeWithTag("done-record").performScrollTo().assertTextEquals(ProjectDone.recordAsDoneAnyway)
         compose.onAllNodesWithTag("done-not-yet").assertCountEquals(0)
         card(unmet, null, sealRead = false)
@@ -200,15 +205,16 @@ class ProjectDoneCardTest {
     @Test @Config(qualifiers = "w411dp-h891dp") @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun doneCheckProposalScreenshot() {
         val check = j("""{"findings":[
-            {"code":"DONE_TASKS_IN_FLIGHT","message":"long server diagnostic","tasks":[{},{}]},
-            {"code":"DONE_CRITERION_UNSATISFIED","message":"long server diagnostic","criterion":{"ordinal":5}},
-            {"code":"DONE_CRITERION_UNLANDED","message":"long server diagnostic","criterion":{"ordinal":6}}]}""")
+            {"severity":"REFUSE","code":"DONE_TASKS_IN_FLIGHT","message":"long server diagnostic","tasks":[{},{}]},
+            {"severity":"REFUSE","code":"DONE_CRITERION_UNSATISFIED","message":"long server diagnostic","criterion":{"ordinal":5},"tasks":[{"taskId":"t5","title":"Ship it"}]},
+            {"severity":"WARN","code":"DONE_CRITERION_UNLANDED","message":"long server diagnostic","criterion":{"ordinal":6}}]}""")
         val proposal = j("""{"title":"Session Recap","status":"OPEN","derivedDone":{"criteria":[],
             "counts":{"criteria":6,"met":4,"landed":3,"onMain":3,"byReason":{"IN_FLIGHT":2}}}}""")
         card(proposal, null, doneCheck = check, running = 2)
-        shows("Orbit can’t prove 3 things")
+        shows("2 things stand in the way")
         shows("2 tasks are still running")
-        shows("Criterion 5 is not met")
+        shows("Criterion 5 is not met — 1 task is still open")
+        shows("Orbit can’t prove 1 thing")
         shows("Criterion 6 is not on main")
         val view = compose.activity.window.decorView
         val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)

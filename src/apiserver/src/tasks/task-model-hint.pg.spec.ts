@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { CreatorType } from '@prisma/client';
+import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { sha256 } from '../common/crypto.util';
@@ -79,10 +80,28 @@ test('task model suggestions survive create, batch, update, clearing and approva
   await sql.query(`INSERT INTO "user"("id","email","name","password_hash") VALUES ($1,$2,'model hints','h')`, [owner, `${owner}@model-hint.invalid`]);
   await sql.query(`INSERT INTO "runner"("id","name","owner_id","token_hash","status","last_heartbeat_at","capabilities")
     VALUES ($1,'model hints',$2,$3,'ONLINE',now(),'{}'::text[])`, [runnerId, owner, sha256(token)]);
+  // The runner door is carded by caller (`task-write-approval.ts`): every create in this file names
+  // the acting session and carries its answered card. What is under test is where the suggestion is
+  // stored, and that is the same write either way.
+  const sessionId = randomUUID();
+  await prisma.session.create({
+    data: {
+      id: sessionId, title: 'model hints', prompt: 'model hints', ownerId: owner, creatorId: owner,
+      assignedRunnerId: runnerId, status: 'AWAITING_INPUT', startedAt: new Date(),
+      runtimeSessionId: `runtime-${sessionId}`, provider: 'claude',
+    },
+  });
+  const actingSession = uuidToBase62(sessionId);
+  async function cardFor(toolName: 'orbit_task_create' | 'orbit_task_batch', input: Record<string, unknown>) {
+    await prisma.approval.create({
+      data: { sessionId, toolName, input: input as never, status: 'ALLOWED', decidedById: owner, decidedAt: new Date() },
+    });
+  }
 
   async function send(method: string, route: string, body?: Record<string, unknown>) {
     const response = await fetch(`${base}/api/runner/${route}`, {
-      method, headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      method,
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'x-orbit-session-id': actingSession },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const text = await response.text();
@@ -108,7 +127,9 @@ test('task model suggestions survive create, batch, update, clearing and approva
       {}, { modelHint: null, modelHintReason: null },
     ]) {
       const title = `single ${randomUUID()}`;
-      const reply = await send('POST', 'tasks', { title, ...EXECUTABLE, provider: 'codex', model: 'pinned-model', ...fields });
+      const body = { title, ...EXECUTABLE, provider: 'codex', model: 'pinned-model', ...fields };
+      await cardFor('orbit_task_create', body);
+      const reply = await send('POST', 'tasks', body);
       assert.equal(reply.status, 201, reply.text);
       const want = { modelHint: null, modelHintReason: null, ...fields };
       assert.deepEqual(suggestion(reply.body), want);
@@ -125,7 +146,9 @@ test('task model suggestions survive create, batch, update, clearing and approva
       { title: `batch omitted ${randomUUID()}`, ...EXECUTABLE },
       { title: `batch null ${randomUUID()}`, ...EXECUTABLE, modelHint: null, modelHintReason: null },
     ];
-    const reply = await send('POST', 'tasks/batch-create', { tasks: items });
+    const batchBody = { tasks: items };
+    await cardFor('orbit_task_batch', batchBody);
+    const reply = await send('POST', 'tasks/batch-create', batchBody);
     assert.equal(reply.status, 201, reply.text);
     const listed = await send('GET', 'tasks?limit=100');
     assert.equal(listed.status, 200, listed.text);

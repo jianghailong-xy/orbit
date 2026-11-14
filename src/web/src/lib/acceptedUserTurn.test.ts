@@ -300,7 +300,25 @@ describe('accepted active-snapshot reconciliation', () => {
     ).toEqual([local]);
   });
 
-  it('preserves an initial opening prompt because active snapshots deliberately omit it', () => {
+  it('the opening this tab drew gives way to the same opening the snapshot lists: one copy', () => {
+    const local = accepted({ key: 'initial:session-a', turnId: undefined, text: 'start the session' });
+    const listed = recovered({ key: 'turn-open', turnId: 'turn-open', text: 'start the session', opening: true });
+
+    expect(
+      reconcileAcceptedUserTurnSnapshot([listed], [local], 'session-a', new Set([local.key])),
+    ).toEqual([listed]);
+  });
+
+  it('a listed row that is not the opening leaves the tab’s opening where it is', () => {
+    const local = accepted({ key: 'initial:session-a', turnId: undefined, text: 'start the session' });
+    const next = recovered({ key: 'turn-next', turnId: 'turn-next', text: 'and then deploy' });
+
+    expect(
+      reconcileAcceptedUserTurnSnapshot([next], [local], 'session-a', new Set([local.key])),
+    ).toEqual([next, local]);
+  });
+
+  it('preserves an initial opening prompt a server that does not list the opening leaves out', () => {
     const opening = accepted({
       key: 'initial:session-a',
       turnId: undefined,

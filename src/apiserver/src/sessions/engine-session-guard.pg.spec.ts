@@ -27,6 +27,7 @@ import { ReaperService } from '../realtime/reaper.service';
 import { IntegrationJobRelay } from '../runner-api/integration-job-relay';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { RunnerFilesController } from '../runner-api/runner-files.controller';
+import { RunnerSubagentsController } from '../runner-api/runner-subagents.controller';
 import { RunnerSessionsController } from '../runner-api/runner-sessions.controller';
 import { AttachmentsService } from '../attachments/attachments.service';
 import { FilesService } from '../files/files.service';
@@ -35,6 +36,7 @@ import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { SessionTagsService } from '../session-tags/session-tags.service';
 import { ShareLinksService } from '../share-links/share-links.service';
+import { SessionGuestsService } from '../session-guests/session-guests.service';
 import { WatchesService } from '../watches/watches.service';
 import { WatchEvaluatorService } from '../watches/watch-evaluator.service';
 import { ProvidersService } from '../providers/providers.service';
@@ -95,6 +97,7 @@ interface Stack {
   sessions: SessionsService;
   tags: SessionTagsService;
   shares: ShareLinksService;
+  guests: SessionGuestsService;
   attachments: AttachmentsService;
   watches: WatchesService;
   receipts: MergeReceiptService;
@@ -102,6 +105,7 @@ interface Stack {
   api: RunnerApiController;
   runnerSessions: RunnerSessionsController;
   runnerFiles: RunnerFilesController;
+  runnerSubagents: RunnerSubagentsController;
   queue: QueueService;
   reaper: ReaperService;
   providers: ProvidersService;
@@ -144,6 +148,7 @@ async function connect(): Promise<Stack> {
     sessions,
     tags: new SessionTagsService(prisma, realtime),
     shares: new ShareLinksService(prisma),
+    guests: new SessionGuestsService(prisma, sessions),
     attachments: new AttachmentsService(prisma),
     watches: new WatchesService(prisma, {
       rollout: { mode: 'on', canaryOwners: new Set<string>(), problems: [] },
@@ -153,6 +158,7 @@ async function connect(): Promise<Stack> {
     api,
     runnerSessions: new RunnerSessionsController(sessions, orchestration, receipts, attempts),
     runnerFiles: new RunnerFilesController(prisma, new FilesService(prisma)),
+    runnerSubagents: new RunnerSubagentsController(prisma, queue, null as never),
     queue,
     reaper: new ReaperService(prisma, realtime),
     providers: new ProvidersService(prisma, realtime, undefined as never),
@@ -283,6 +289,8 @@ const USER_DRIVERS: Readonly<Record<string, Drive>> = {
     s.sessions.resume(w.ownerId, id, { clientTurnId: randomUUID(), content: 'hi' }),
   'PATCH /sessions/:id/config': (s, w, id) => s.sessions.updateConfig(w.ownerId, id, { effort: 'low' }),
   'PATCH /sessions/:id/account': (s, w, id) => s.sessions.switchAccount(w.ownerId, id, 'automatic'),
+  'PATCH /sessions/:id/settings': (s, w, id) => s.sessions.updateSettings(w.ownerId, id, { muted: true }),
+  'POST /sessions/:id/restart': (s, w, id) => s.sessions.restart(w.ownerId, id),
   'POST /sessions/:id/interrupt': (s, w, id) => s.sessions.interrupt(w.ownerId, id),
   'POST /sessions/:id/end': (s, w, id) => s.sessions.end(w.ownerId, id),
   'POST /sessions/:id/merge': (s, w, id) => s.sessions.mergeToMain(w.ownerId, id),
@@ -307,6 +315,8 @@ const USER_DRIVERS: Readonly<Record<string, Drive>> = {
   'POST /sessions/:id/share': (s, w, id) => s.shares.put(w.ownerId, 'SESSION', id, {}),
   'PUT /sessions/:id/share': (s, w, id) => s.shares.put(w.ownerId, 'SESSION', id, {}),
   'DELETE /sessions/:id/share': (s, w, id) => s.shares.turnOff(w.ownerId, 'SESSION', id),
+  'POST /sessions/:id/guests': (s, w, id) => s.guests.invite(w.ownerId, id, 'nobody@engine-session-guard.invalid'),
+  'DELETE /sessions/:id/guests/:userId': (s, w, id) => s.guests.remove(w.ownerId, id, randomUUID()),
 };
 
 /** The runner door's per-route drivers, keyed exactly as the route census keys them. */
@@ -346,6 +356,10 @@ const RUNNER_DRIVERS: Readonly<Record<string, Drive>> = {
     s.api.scheduledWakeup({ id: w.runnerId, ownerId: w.ownerId } as never, id, { delaySeconds: 120, reason: 'x' } as never),
   'POST /runner/sessions/:id/naming': (s, w, id) =>
     s.api.sessionNaming({ id: w.runnerId, ownerId: w.ownerId } as never, id, { replaces: 'x', title: 'y' } as never),
+  'POST /runner/sessions/:id/subagents': (s, w, id) =>
+    s.runnerSubagents.createSubagentRun({ id: w.runnerId, ownerId: w.ownerId } as never, id, {
+      toolUseId: 'toolu_guard', type: 'general', definitionSource: 'builtin',
+    } as never),
   'POST /runner/sessions/:id/cursor-key-check': (s, w, id) =>
     s.providers.recordCursorKeyCheck(w.runnerId, id, { state: 'INVALID', keyFingerprint: '0123456789abcdef' }, w.ownerId),
   'POST /runner/sessions/:id/turns/:turnId/suggestion': (s, w, id) =>
@@ -472,6 +486,15 @@ test('the body and query field cases refuse a LANDING session too', { skip }, as
           stack.api.heartbeat({ id: w.runnerId, ownerId: w.ownerId, version: null } as never, {
             expiredCommitErrors: [{ sessionId: landing, operationId: randomUUID() }],
           } as never),
+        // Answered per row: the landing's row carries the single route's refusal, raised here as it would be there.
+        'POST /runner/sessions/takeover-leases body sessions[].sessionId': async () => {
+          const answer = await stack.api.takeoverLeasesBatch({ id: w.runnerId, ownerId: w.ownerId } as never, {
+            leaseOwner: randomUUID(), sessions: [{ sessionId: landing }],
+          });
+          const refused = answer.results[0]?.error;
+          if (refused) throw new ConflictException({ code: refused.code, message: refused.message });
+          return answer;
+        },
       };
       try {
         await expectPlatformDriven(drive[key](), `${key} (${field.guard})`);

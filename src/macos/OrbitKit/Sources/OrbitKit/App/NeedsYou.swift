@@ -34,15 +34,20 @@ public struct NeedsYouBanner: Equatable, Sendable {
     /// conversation is where it is drawn, and this is which one it is. Nil when the oldest thing
     /// waiting is an ordinary blocked tool call, which is the bar as it always was.
     public let ownerItem: SessionOwnerItem?
+    /// The bar is saying an approval that has just arrived (`NeedsYouLogic.arriving`), for its first
+    /// seconds: it carries the push's own words and an amber ring, where the app used to put up an
+    /// amber card of its own (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/05-one-surface`).
+    public let arriving: Bool
 
     public init(count: Int, target: Session, text: String, detail: String? = nil, since: String? = nil,
-                ownerItem: SessionOwnerItem? = nil) {
+                ownerItem: SessionOwnerItem? = nil, arriving: Bool = false) {
         self.count = count
         self.target = target
         self.text = text
         self.detail = detail
         self.since = since
         self.ownerItem = ownerItem
+        self.arriving = arriving
     }
 
     /// The mark the bar draws for what it names: the owner item's kind, or the raised hand of a
@@ -76,6 +81,22 @@ public enum NeedsYouGlyph: Equatable, Sendable {
         case .fusePaused: self = .pause
         case .unknown: self = .hand
         }
+    }
+}
+
+/// An approval that has just reached this device while the app is open: the session it stops, the
+/// push's own line ("Needs your reply · Bash") and when it came. The needs-you bar says it for its
+/// first `NeedsYouLogic.arrivalSeconds`, then goes back to what it says about everything waiting.
+public struct NeedsYouArrival: Equatable, Sendable {
+    /// In the lists' spelling, so it is found among `waiting`.
+    public let sessionID: String
+    public let line: String
+    public let at: Date
+
+    public init(sessionID: String, line: String, at: Date) {
+        self.sessionID = sessionID
+        self.line = line
+        self.at = at
     }
 }
 
@@ -251,6 +272,60 @@ public enum NeedsYouLogic {
                               text: text(count: elsewhere.count, target: target),
                               detail: detail(count: elsewhere.count, target: target),
                               since: target.lastTurnAt ?? target.updatedAt ?? target.createdAt)
+    }
+
+    /// How long the bar says an approval that has just arrived before it goes back to the count —
+    /// as long as the amber card it replaced stayed open before folding to a pill.
+    public static let arrivalSeconds: TimeInterval = 6
+
+    /// The bar while an approval has just arrived: the push's line, the conversation it stops, and
+    /// the count of everything waiting, so a press goes straight to the newcomer and the deck under
+    /// the capsule still says how many there are. Nil once it is older than `arrivalSeconds`, and
+    /// while its conversation is not (or no longer) among those waiting elsewhere: the push can land
+    /// a moment before the list does, and an approval answered by then has nothing left to say.
+    public static func arriving(_ arrival: NeedsYouArrival?, waiting: [Session], excluding focused: String? = nil,
+                                now: Date) -> NeedsYouBanner? {
+        guard let arrival, now.timeIntervalSince(arrival.at) < arrivalSeconds else { return nil }
+        let elsewhere = waiting.filter { $0.id != focused }
+        guard let target = elsewhere.first(where: { $0.id == arrival.sessionID }) else { return nil }
+        return NeedsYouBanner(count: elsewhere.count, target: target, text: arrival.line,
+                              detail: named(target.title), since: ISO8601DateFormatter().string(from: arrival.at),
+                              arriving: true)
+    }
+
+    /// At most this many capsules unfolded (the owner, 2026-11-13); the last says "+N" for the rest.
+    public static let unfoldedLimit = 5
+
+    /// The bar unfolded: one line per waiting conversation, in the order the folded bar picks its
+    /// target by, so the first is always the one the folded bar names (the owner, 2026-11-13, option
+    /// B of `docs/mocks/needs-you-capsule/03-expand.html`). The conversations waiting on an owner
+    /// item come first, oldest item first, each named by its own oldest item; then the blocked tool
+    /// calls, longest-waiting first. Each line is a bar for one conversation (`count` 1, no "+N").
+    public static func entries(waiting: [Session], excluding focused: String? = nil) -> [NeedsYouBanner] {
+        let elsewhere = waiting.filter { $0.id != focused }
+        var owned: [(banner: NeedsYouBanner, at: Date, index: Int)] = []
+        var plain: [(session: Session, index: Int)] = []
+        for (index, session) in elsewhere.enumerated() {
+            if let item = oldestOwnerItem([session])?.item {
+                owned.append((NeedsYouBanner(count: 1, target: session, text: ownerItemWord(item),
+                                             detail: named(session.projectTitle), since: item.since,
+                                             ownerItem: item),
+                              RelativeTime.parse(item.since) ?? Date.distantFuture, index))
+            } else {
+                plain.append((session, index))
+            }
+        }
+        // Ties keep the snapshot's order, as the folded bar's first-found minimum does.
+        let items = owned.sorted { ($0.at, $0.index) < ($1.at, $1.index) }.map(\.banner)
+        let sessions = plain.sorted {
+            (RecentsLogic.recency($0.session), $0.index) < (RecentsLogic.recency($1.session), $1.index)
+        }.map { entry in
+            let s = entry.session
+            return NeedsYouBanner(count: 1, target: s, text: text(count: 1, target: s),
+                                  detail: detail(count: 1, target: s),
+                                  since: s.lastTurnAt ?? s.updatedAt ?? s.createdAt)
+        }
+        return items + sessions
     }
 
     /// The owner item that has waited longest across these conversations, with the one it is on.

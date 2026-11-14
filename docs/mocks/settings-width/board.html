@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Settings: nav scrollbar and content width</title>
+<style>
+  :root {
+    --bg-base:#fff; --bg-raised:#fff; --bg-sunken:#f7f8fa; --bg-hover:#f5f6f7;
+    --border:#dee0e3; --border-subtle:#eceef1; --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e;
+    --brand:#3370ff; --brand-tint:#eaf1ff; --brand-border:#bcd3ff;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#eef0f3; font-family:-apple-system, BlinkMacSystemFont, Inter, 'PingFang SC', 'Noto Sans SC', sans-serif; color:var(--text-1); }
+  .board { width:1140px; padding:36px 40px 48px; background:#eef0f3; }
+  h1 { font-size:24px; margin:0 0 6px; }
+  .lede { font-size:14px; color:var(--text-2); margin:0 0 28px; line-height:1.6; }
+  .frame-title { font-size:16px; font-weight:600; margin:28px 0 4px; display:flex; gap:10px; align-items:baseline; }
+  .frame-title .tag { font-size:12px; font-weight:500; padding:2px 8px; border-radius:10px; background:#fff; color:var(--text-2); border:1px solid var(--border); }
+  .frame-title .tag.rec { background:#e8f7ee; color:#1f8a4c; border-color:#bfe6cd; }
+  .frame-sub { font-size:13px; color:var(--text-2); margin:0 0 10px; line-height:1.55; }
+
+  /* The window, drawn at the owner's real size (2056×1170 css px) and shown at half. */
+  .win-wrap { width:1028px; height:585px; position:relative; border-radius:10px; overflow:hidden; box-shadow:0 2px 14px rgba(0,0,0,.12); background:#fff; }
+  .win { width:2056px; height:1170px; transform:scale(.5); transform-origin:0 0; display:flex; background:var(--bg-base); position:absolute; left:0; top:0; }
+
+  .nav { flex:0 0 272px; height:100%; overflow:hidden; padding:18px 12px 24px; border-right:1px solid var(--border-subtle); position:relative; }
+  .nav .thumb { position:absolute; right:1px; top:4px; width:8px; height:1040px; border-radius:4px; background:var(--border); }
+  .nav .thumb.hover { background:#c9cdd4; }
+  .back { font-size:13px; color:var(--text-2); padding:4px 8px; display:flex; gap:8px; align-items:center; }
+  .stitle { margin:10px 8px 12px; font-size:15px; font-weight:600; }
+  .search { height:34px; border:1px solid var(--border-subtle); background:var(--bg-sunken); border-radius:8px; display:flex; align-items:center; gap:8px; padding:0 8px; color:var(--text-3); font-size:13px; margin-bottom:18px; }
+  .grp + .grp { margin-top:14px; }
+  .gh { font-size:13px; font-weight:600; color:var(--text-2); padding:6px 8px; display:flex; justify-content:space-between; }
+  .row { height:36px; display:flex; align-items:center; gap:10px; padding:0 8px; border-radius:6px; font-size:14px; }
+  .row.active { background:var(--brand-tint); color:var(--brand); }
+  .row .ic { width:16px; height:14px; border:1.4px solid var(--text-2); border-radius:3px; flex:none; }
+  .row.active .ic { border-color:var(--brand); }
+  .row .lbl { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row .meta { font-size:12px; color:var(--text-3); }
+  .dot { width:7px; height:7px; border-radius:50%; }
+  .dot.g { background:#34a853; } .dot.o { background:#f5871f; }
+
+  .main { flex:1; min-width:0; overflow:hidden; position:relative; }
+  .col { margin:0 auto; padding:40px 24px 64px; }
+  .h { font-size:22px; font-weight:600; margin:0; }
+  .hd { font-size:13px; color:var(--text-2); margin:6px 0 28px; }
+  .sh { font-size:15px; font-weight:600; margin:0 0 10px; }
+  .card { border:1px solid var(--border); border-radius:12px; padding:0 16px; }
+  .sec + .sec { margin-top:28px; }
+  .sr { display:flex; align-items:center; gap:24px; padding:14px 0; }
+  .sr + .sr { border-top:1px solid var(--border-subtle); }
+  .sr .t { flex:1; min-width:0; }
+  .sr .n { font-size:14px; font-weight:500; }
+  .sr .d { font-size:13px; color:var(--text-2); margin-top:4px; line-height:1.5; }
+  .sel { width:194px; height:32px; border:1px solid var(--border); border-radius:6px; display:flex; align-items:center; justify-content:space-between; padding:0 10px; font-size:13px; flex:none; }
+  .tg { width:44px; height:24px; border-radius:12px; background:#c9cdd4; position:relative; flex:none; }
+  .tg::after { content:''; position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%; background:#fff; }
+  .tg.on { background:var(--brand); } .tg.on::after { left:23px; }
+
+  /* Measurements, drawn in window px */
+  .meas { position:absolute; height:0; border-top:2px dashed #e5484d; }
+  .meas span { position:absolute; left:50%; transform:translate(-50%,-130%); background:#e5484d; color:#fff; font-size:22px; font-weight:600; padding:3px 10px; border-radius:6px; white-space:nowrap; }
+  .mark { position:absolute; width:44px; height:44px; border-radius:50%; background:#e5484d; color:#fff; font-size:24px; font-weight:700; display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 4px #fff; z-index:5; }
+  .ring { position:absolute; border:3px solid #e5484d; border-radius:10px; z-index:4; }
+
+  .callout { position:absolute; background:#fff8e6; border:1px solid #f3d9a4; border-radius:8px; padding:10px 14px; font-size:22px; line-height:1.45; color:#7a5200; z-index:6; }
+
+  .notes { margin-top:30px; display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  .panel { background:#fff; border-radius:10px; padding:16px 18px; font-size:13px; line-height:1.65; }
+  .panel h3 { margin:0 0 8px; font-size:14px; }
+  .panel table { width:100%; border-collapse:collapse; }
+  .panel td, .panel th { text-align:left; padding:5px 6px; border-top:1px solid var(--border-subtle); vertical-align:top; }
+  .panel th { color:var(--text-2); font-weight:500; border-top:0; }
+  code { font-family:'JetBrains Mono', Menlo, monospace; font-size:12px; background:#f2f3f5; padding:1px 4px; border-radius:4px; }
+  .todo { background:#fff4f4; border:1px solid #f5c6c7; }
+  .inset { display:flex; gap:18px; margin-top:12px; }
+  .inset .cap { font-size:12px; color:var(--text-2); margin-top:6px; text-align:center; }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>Settings：左侧滚动条 / 右侧内容太窄</h1>
+  <p class="lede">按你截图的窗口尺寸绘制（2056×1170 css px，下图缩放 50%）。问题两处：① 左侧导航常驻一条灰色滚动条；② 右侧内容列最宽只有 660px，在 1784px 宽的内容区里只占三分之一，两边各空出 560px。</p>
+
+  <div class="frame-title">① 现在</div>
+  <p class="frame-sub">nav 的滚动条一直显示；内容列 <code>max-width: 660px</code> 居中，描述文字被 <code>max-width: 440px</code> 压成两行。</p>
+  <div class="win-wrap"><div class="win" id="today"></div></div>
+
+  <div class="frame-title">② 方案 A：滚动条自动隐藏 + 内容列加宽到 880px <span class="tag rec">推荐</span></div>
+  <p class="frame-sub">nav 套用应用里已有的 <code>.autohide-scrollbar</code>（会话列表、任务面板用的同一个）：静止时不显示，滚动或鼠标放在上面时才出现，占位不变所以不会抖动。内容列 660 → 880px，描述 440 → 600px，单行能放下大多数说明；仍然居中。</p>
+  <div class="win-wrap"><div class="win" id="planA"></div></div>
+  <div class="inset">
+    <div><div class="win-wrap" style="width:300px;height:340px"><div class="win" id="scrolling" style="transform:scale(.5)"></div></div><div class="cap">滚动 nav 时：滑块出现，停 1 秒后淡出</div></div>
+  </div>
+
+  <div class="frame-title">③ 方案 B：内容列随窗口变宽，最多 1080px <span class="tag">备选</span></div>
+  <p class="frame-sub">内容列 = 内容区宽度减左右各 64px，上限 1080px（和 Shared links / Access tokens 的宽表页同宽）。大屏更满，但开关离标题很远，视线要横跨一千多像素。</p>
+  <div class="win-wrap"><div class="win" id="planB"></div></div>
+
+  <div class="notes">
+    <div class="panel">
+      <h3>改动规则（方案 A）</h3>
+      <table>
+        <tr><th>位置</th><th>现在</th><th>改后</th></tr>
+        <tr><td>nav 滚动条</td><td>常驻</td><td>静止隐藏，滚动 / 悬停显示；8px 槽位保留</td></tr>
+        <tr><td>内容列 <code>.settings-column</code></td><td>660px</td><td>880px</td></tr>
+        <tr><td>行描述 <code>.settings-row-description</code></td><td>440px</td><td>600px</td></tr>
+        <tr><td>宽表页（Shared links 等）</td><td>1080px</td><td>不变</td></tr>
+        <tr><td>窄屏 &lt; 760px</td><td>nav 与页面分屏</td><td>不变</td></tr>
+        <tr><td>深色模式</td><td colspan="2">只用主题变量，自动跟随</td></tr>
+      </table>
+    </div>
+    <div class="panel">
+      <h3>会改的文件</h3>
+      <p style="margin:0 0 6px"><code>src/web/src/components/settings/SettingsLayout.tsx</code> — nav 加 <code>autohide-scrollbar</code> class</p>
+      <p style="margin:0 0 6px"><code>src/web/src/components/settings/Settings.css</code> — 两个 max-width</p>
+      <p style="margin:0 0 12px">各设置页的行、卡片都是流式宽度，不需要逐页改；Machines / Providers 页面会一起变宽。</p>
+      <div class="panel todo" style="padding:10px 12px">
+        <b>待你定</b><br>
+        1. 选 A（固定 880px）还是 B（随窗口变宽，最多 1080px）？<br>
+        2. 880 这个宽度是否合适，要不要更宽（如 960）？
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const NAV = `
+  <div class="back">‹&nbsp; Back to Orbit</div>
+  <div class="stitle">Settings</div>
+  <div class="search">⌕ Search settings</div>
+  <div class="grp"><div class="gh">Personal</div>
+    <div class="row active"><i class="ic"></i><span class="lbl">General</span></div>
+    ${['Notifications','Appearance','Profile','Storage','Shared links','Access tokens'].map(n=>`<div class="row"><i class="ic"></i><span class="lbl">${n}</span></div>`).join('')}
+  </div>
+  <div class="grp"><div class="gh">Integrations</div><div class="row"><i class="ic"></i><span class="lbl">Feishu</span></div></div>
+  <div class="grp"><div class="gh">Machines <span>+</span></div>
+    ${[['HPC','o'],['wikova','o'],['workstation','g'],['longdeMac-mini.local','g'],['orbit@austin','o']].map(([n,s])=>`<div class="row"><i class="ic"></i><span class="lbl">${n}</span><i class="dot ${s}"></i></div>`).join('')}
+  </div>
+  <div class="grp"><div class="gh">Providers <span>+</span></div>
+    ${[['Moonshot (Kimi)','1 key'],['DeepSeek','1 key'],['Anthropic','2 keys'],['Custom','1 key'],['Google Gemini','1 key'],['Account pools','1']].map(([n,m])=>`<div class="row"><i class="ic"></i><span class="lbl">${n}</span><span class="meta">${m}</span></div>`).join('')}
+  </div>
+  <div class="grp"><div class="gh">Workspaces <span>+</span></div>
+    ${[['orbit-prod','wikova'],['wikova-data','workstation'],['lfs','workstation'],['orbit','HPC'],['scratch','HPC']].map(([n,m])=>`<div class="row"><i class="ic"></i><span class="lbl">${n}</span><span class="meta">${m}</span></div>`).join('')}
+  </div>`;
+
+const R = (n, d, ctl) => `<div class="sr"><div class="t"><div class="n">${n}</div><div class="d">${d}</div></div>${ctl}</div>`;
+const PAGE = `
+  <h2 class="h">General</h2>
+  <p class="hd">How new sessions start, account-wide.</p>
+  <div class="sec"><div class="sh">New sessions</div><div class="card">
+    ${R('Default permission mode','The mode a new session starts in, unless the composer picks another.','<div class="sel">Auto <span>⌄</span></div>')}
+    ${R('Smart model selection','Coordinators suggest a tier for each task; Agents you turn this on for run on that tier.','<div class="tg"></div>')}
+    ${R('Suggested replies',"When a Claude turn ends, the empty message box offers what you'd probably type next.",'<div class="tg on"></div>')}
+    ${R('Session recaps','Session lists show a one-line summary of each conversation instead of its raw last reply.','<div class="tg on"></div>')}
+  </div></div>
+  <div class="sec"><div class="sh">Orchestration</div><div class="card">
+    ${R('Let sessions orchestrate','Sessions in every workspace can spawn and manage other sessions via the orbit MCP tools.','<div class="tg on"></div>')}
+  </div></div>`;
+
+function draw(id, { col, desc, thumb, extra = '' }) {
+  const el = document.getElementById(id);
+  el.innerHTML = `<div class="nav">${NAV}${thumb ? `<i class="thumb ${thumb}"></i>` : ''}</div>
+    <div class="main"><div class="col" style="max-width:${col}">${PAGE}</div>${extra}</div>`;
+  el.querySelectorAll('.d').forEach(d => d.style.maxWidth = desc + 'px');
+}
+
+// main area = 2056 - 272 = 1784 wide
+const meas = (w, y, label) => { const x = (1784 - w) / 2; return `<div class="meas" style="left:${x}px;width:${w}px;top:${y}px"><span>${label}</span></div>`; };
+
+draw('today', { col: '660px', desc: 440, thumb: 'on',
+  extra: meas(612, 760, '内容 612px（列 660）') + meas(562, 860, '空 562px').replace(`left:${(1784-562)/2}px`, 'left:0px') +
+    `<div class="mark" style="left:1500px;top:200px">②</div>` });
+document.querySelector('#today .nav').insertAdjacentHTML('beforeend',
+  `<div class="ring" style="right:-4px;top:0;width:18px;height:1060px"></div><div class="mark" style="left:206px;top:520px">①</div>`);
+
+draw('planA', { col: '880px', desc: 600, thumb: '',
+  extra: meas(832, 760, '内容 832px（列 880）') });
+
+draw('scrolling', { col: '880px', desc: 600, thumb: 'hover' });
+
+draw('planB', { col: 'min(1080px, calc(100% - 128px))', desc: 640, thumb: '',
+  extra: meas(1032, 760, '内容 1032px（列 1080，上限）') });
+</script>
+</body>
+</html>

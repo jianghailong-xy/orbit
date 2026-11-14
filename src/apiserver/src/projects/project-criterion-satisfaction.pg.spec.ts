@@ -212,6 +212,37 @@ const PUBLIC_PROJECT = 'src/apiserver/src/share-links/public-project.ts';
 const DONE_REQUEST = 'src/apiserver/src/projects/project-done-request.ts';
 /** The coordinator's door, and the only one that turns `doneReadiness`'s REFUSE into a refusal. */
 const DONE_REQUEST_DOOR = 'src/apiserver/src/projects/project-open-item.service.ts';
+/**
+ * The fifth reader that is not a test: the done card's "Move to a follow-up…" (owner decision
+ * 2026-11-11, project 34vfv0OR79IojfYntb8SA).
+ *
+ * WHAT IT DOES WITH THE ANSWER. `readCriterionMoveFacts` reads the one criterion's `satisfied`, and
+ * `planCriterionMove` refuses to move a criterion that is met (`CRITERION_MOVE_CRITERION_MET`):
+ * moving it would take finished work out of the project that finished it, and the card offers the
+ * move only for an unmet one.
+ *
+ * WHY IT IS NOT A GATE ON THE PROJECT. What it refuses is the move — a reshaping of which project
+ * states a criterion — and nothing else. It writes no `project.status`, calls no `doneReadiness`,
+ * and keeps nobody from recording either project done: met or unmet, the owner's "Record as done"
+ * and `recordProjectDone` read nothing from this file. The answer it turns into a refusal points
+ * the other way from the one this census guards against: an UNMET criterion is exactly the one it
+ * lets through, so the move is a way out of a criterion that holds a project up, never a new hold.
+ */
+const CRITERION_MOVE = 'src/apiserver/src/projects/criterion-move.ts';
+/**
+ * Three unit specs of the same project (0545's confirmation mode and the move), each calling the
+ * derivation to read the answer back rather than re-implementing it — tests, writing nothing on the
+ * strength of it:
+ *   - `criterion-move.spec.ts` asks it for A's criteria after a move, to build A's done-check and
+ *     derived-done reading the way `readDoneState` and the projection do;
+ *   - `criterion-check-ended.spec.ts` asks it that a check whose run ended without a report reads
+ *     CHECK_FAILED and unmet, not "Checking…";
+ *   - `project-criterion-confirmation.spec.ts` asks it that a CONFIRMATION criterion is met exactly
+ *     while a confirmation of its current revision stands, and a TASKS one as before.
+ */
+const CRITERION_MOVE_SPEC = 'src/apiserver/src/projects/criterion-move.spec.ts';
+const CHECK_ENDED_SPEC = 'src/apiserver/src/projects/criterion-check-ended.spec.ts';
+const CONFIRMATION_SPEC = 'src/apiserver/src/projects/project-criterion-confirmation.spec.ts';
 
 /** Every source file that could wire this derivation into something. */
 function sourceFiles(dir: string): string[] {
@@ -662,14 +693,17 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
     assert.deepEqual(
       mentions,
       [MODULE, SPEC, REDECLARATION_SPEC, PENDING_JUDGMENTS_SPEC, CRITERION_READY_SPEC,
-        SERVICE, SERVICE_SPEC, DONE_PROJECTION, PUBLIC_PROJECT, DONE_REQUEST].sort(),
+        SERVICE, SERVICE_SPEC, DONE_PROJECTION, PUBLIC_PROJECT, DONE_REQUEST, CRITERION_MOVE,
+        CRITERION_MOVE_SPEC, CHECK_ENDED_SPEC, CONFIRMATION_SPEC].sort(),
       'the readers of the derivation — the module itself, and every file that imports it — are '
-        + 'exactly these, each named above with what it does with the answer: four tests of it, '
+        + 'exactly these, each named above with what it does with the answer: seven tests of it, '
         + 'two read endpoints that serve it (the owner’s project, and a shared project’s public '
         + 'page), the first one’s own test, one projection that folds it into `project.status` '
-        + '(since the owner’s 2026-09-08 re-deliberation of 0229), and the check a coordinator’s '
+        + '(since the owner’s 2026-09-08 re-deliberation of 0229), the check a coordinator’s '
         + 'done request has to pass (since the owner’s 2026-10-01 decision on how a project is '
-        + 'closed). That check is the one gate among them, and what it refuses is the '
+        + 'closed), and the done card’s move of an unmet criterion to a follow-up (since the '
+        + 'owner’s 2026-11-11 decision), which refuses only to move a met one. The done request’s '
+        + 'check is the one gate on a project among them, and what it refuses is the '
         + 'coordinator’s request: nothing keeps the owner from recording a project done over a '
         + 'criterion that is not met. A file arriving here is a consumer somebody has to come and '
         + 'write down');

@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Settings · Providers, compact nav</title>
+<style>
+:root{--bg:#fff;--bg-subtle:#f7f8fa;--bg-hover:#eef0f3;--bg-hover-strong:#e6e8ec;--border:#e5e7eb;--t1:#1f2328;--t2:#59636e;--t3:#8b949e;--accent:#3b82f6;--green:#3fa04a;--orange:#f0883e}
+*{box-sizing:border-box}
+body{margin:0;padding:40px;background:#eceef1;font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;color:var(--t1);width:1520px}
+h1.board{font-size:22px;margin:0 0 4px}
+.lede{color:var(--t2);margin:0 0 28px;font-size:14px;max-width:1000px}
+.row{display:flex;gap:28px;align-items:flex-start;margin-bottom:40px}
+.col{display:flex;flex-direction:column;gap:10px}
+.cap{font-weight:600;font-size:14px}.cap small{font-weight:400;color:var(--t2);font-size:12.5px;display:block;margin-top:2px;max-width:300px}
+.tag{display:inline-block;font-size:11px;font-weight:600;padding:1px 7px;border-radius:9px;margin-left:6px;vertical-align:1px}
+.tag.rec{background:#dcfce7;color:#166534}.tag.old{background:#f3f4f6;color:#6b7280}
+.win{background:var(--bg);border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08),0 8px 24px rgba(0,0,0,.06);overflow:hidden;display:flex}
+/* nav */
+.nav{width:272px;background:var(--bg-subtle);border-right:1px solid var(--border);padding:18px 12px 20px;flex:0 0 272px}
+.back{color:var(--t2);padding:4px 8px;font-size:13px}.back:before{content:"‹  "}
+.title{font-size:17px;font-weight:600;margin:10px 8px 12px}
+.search{background:var(--bg-hover);border-radius:8px;height:30px;padding:0 10px;color:var(--t3);display:flex;align-items:center;gap:8px;margin:0 0 6px}
+.grp{margin-top:14px}
+.hd{display:flex;justify-content:space-between;height:26px;align-items:center;padding:0 8px;font-size:12px;color:var(--t3)}
+.hd b{font-weight:400;font-size:15px;color:var(--t3)}
+.r{display:flex;align-items:center;gap:10px;height:30px;padding:0 8px;border-radius:6px}
+.r.on{background:var(--bg-hover-strong);font-weight:500}
+.r .i{width:16px;text-align:center;color:var(--t2);font-size:12px}
+.r .l{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.r .m{font-size:12px;color:var(--t3);white-space:nowrap}
+.dot{width:7px;height:7px;border-radius:50%}
+.dim{opacity:.45}
+.hl{outline:2px dashed #f59e0b;outline-offset:3px;border-radius:8px}
+.logos{display:flex;gap:2px;margin-right:2px}
+.logos i{width:14px;height:14px;border-radius:4px;font-style:normal;font-size:8.5px;font-weight:700;color:#fff;display:inline-flex;align-items:center;justify-content:center;border:1.5px solid var(--bg-subtle);margin-left:-5px}
+.logos i:first-child{margin-left:0}
+/* page */
+.page{flex:1;padding:30px 44px 40px;min-width:0}
+.ph{display:flex;align-items:center;gap:12px}
+.ph h2{font-size:20px;margin:0;flex:1}
+.sub{color:var(--t2);margin:6px 0 20px}
+.btn{border:1px solid var(--border);background:#fff;border-radius:6px;padding:3px 10px;font-size:12.5px;white-space:nowrap}
+.btn.p{background:var(--t1);color:#fff;border-color:var(--t1)}
+.tabs{display:flex;gap:2px;background:var(--bg-hover);padding:2px;border-radius:8px;width:max-content;margin:0 0 18px}
+.tabs span{padding:4px 14px;border-radius:6px;font-size:12.5px;color:var(--t2)}
+.tabs span.on{background:#fff;color:var(--t1);font-weight:500;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.filters{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 14px}
+.chip{border:1px solid var(--border);border-radius:14px;padding:2px 10px;font-size:12px;color:var(--t2);display:inline-flex;gap:6px;align-items:center}
+.chip.on{background:var(--t1);color:#fff;border-color:var(--t1)}
+.chip em{font-style:normal;color:var(--t3)}.chip.on em{color:#cbd5e1}
+.sec{font-size:12px;color:var(--t3);margin:22px 0 8px;font-weight:500;display:flex;justify-content:space-between;align-items:center}
+.card{border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.vh{display:flex;align-items:center;gap:10px;padding:9px 14px;background:var(--bg-subtle);border-bottom:1px solid var(--border);font-weight:600;font-size:12.5px}
+.vh .n{color:var(--t3);font-weight:400}
+.vh .sp{flex:1}
+.vh a{color:var(--t2);font-weight:400;font-size:12px}
+.tile{width:20px;height:20px;border-radius:5px;color:#fff;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.k{display:flex;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid var(--border)}
+.card>.k:last-child{border-bottom:0}
+.k .tx{flex:1;min-width:0}
+.k .nm{font-weight:500}
+.k .ds{color:var(--t2);font-size:12px}
+.k .ds .s{color:var(--t3);margin:0 4px}
+.k .mo{color:var(--t3);font-size:15px;padding:0 4px}
+.pills{display:flex;gap:8px;flex-wrap:wrap}
+.pill{border:1px dashed var(--border);border-radius:16px;padding:4px 12px 4px 6px;display:inline-flex;gap:7px;align-items:center;color:var(--t2);font-size:12.5px}
+.pill .tile{width:16px;height:16px;font-size:9px;border-radius:4px}
+.note{background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:8px;padding:10px 12px;font-size:12.5px;max-width:300px}
+.c-kimi{background:#111827}.c-ds{background:#4d6bfe}.c-an{background:#c96442}.c-cu{background:#6b7280}.c-ge{background:#1a73e8}.c-oa{background:#10a37f}.c-cur{background:#000}.c-z{background:#7c3aed}
+</style></head><body>
+
+<h1 class="board">Settings · Providers without a row per vendor</h1>
+<p class="lede">Today every connected vendor takes a nav row, so the Providers group grows with each key and pushes Workspaces down. The proposal: the nav holds a fixed two rows, <b>API keys</b> and <b>Account pools</b>, and the vendors move into the page, grouped there.</p>
+
+<div class="row">
+  <!-- TODAY -->
+  <div class="col">
+    <div class="cap">Today <span class="tag old">current</span><small>A row per vendor: 5 vendors are 6 rows, and it keeps growing.</small></div>
+    <div class="win"><div class="nav">
+      <div class="grp"><div class="hd">Machines <b>+</b></div>
+        <div class="r"><span class="i">▤</span><span class="l">HPC</span><span class="dot" style="background:var(--green)"></span></div>
+        <div class="r"><span class="i">▤</span><span class="l">wikova</span><span class="dot" style="background:var(--orange)"></span></div>
+        <div class="r"><span class="i">▤</span><span class="l">workstation</span><span class="dot" style="background:var(--green)"></span></div>
+      </div>
+      <div class="grp hl"><div class="hd">Providers <b>+</b></div>
+        <div class="r on"><span class="i">☁</span><span class="l">Moonshot (Kimi)</span><span class="m">1 key</span></div>
+        <div class="r"><span class="i">☁</span><span class="l">DeepSeek</span><span class="m">1 key</span></div>
+        <div class="r"><span class="i">☁</span><span class="l">Anthropic</span><span class="m">2 keys</span></div>
+        <div class="r"><span class="i">☁</span><span class="l">Custom</span><span class="m">1 key</span></div>
+        <div class="r"><span class="i">☁</span><span class="l">Google Gemini</span><span class="m">1 key</span></div>
+        <div class="r"><span class="i">⧉</span><span class="l">Account pools</span><span class="m">1</span></div>
+      </div>
+      <div class="grp"><div class="hd">Workspaces <b>+</b></div>
+        <div class="r"><span class="i">▢</span><span class="l">wikova-data</span><span class="m">workstation</span></div>
+        <div class="r"><span class="i">▢</span><span class="l">orbit-develop</span><span class="m">HPC</span></div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- A -->
+  <div class="col">
+    <div class="cap">A · Two fixed rows <span class="tag rec">recommended</span><small>API keys (all vendors, one page) and Account pools. Always 2 rows, however many keys.</small></div>
+    <div class="win"><div class="nav">
+      <div class="grp"><div class="hd">Machines <b>+</b></div>
+        <div class="r"><span class="i">▤</span><span class="l">HPC</span><span class="dot" style="background:var(--green)"></span></div>
+        <div class="r"><span class="i">▤</span><span class="l">wikova</span><span class="dot" style="background:var(--orange)"></span></div>
+        <div class="r"><span class="i">▤</span><span class="l">workstation</span><span class="dot" style="background:var(--green)"></span></div>
+      </div>
+      <div class="grp hl"><div class="hd">Providers <b>+</b></div>
+        <div class="r on"><span class="i">⚿</span><span class="l">API keys</span><span class="m">6</span></div>
+        <div class="r"><span class="i">⧉</span><span class="l">Account pools</span><span class="m">1</span></div>
+      </div>
+      <div class="grp"><div class="hd">Workspaces <b>+</b></div>
+        <div class="r"><span class="i">▢</span><span class="l">wikova-data</span><span class="m">workstation</span></div>
+        <div class="r"><span class="i">▢</span><span class="l">orbit-develop</span><span class="m">HPC</span></div>
+        <div class="r"><span class="i">▢</span><span class="l">orbit-prod</span><span class="m">wikova</span></div>
+        <div class="r"><span class="i">▢</span><span class="l">lfs</span><span class="m">workstation</span></div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- B -->
+  <div class="col">
+    <div class="cap">B · One row <small>A single “Providers” row; keys and pools are two tabs on its page. Lightest nav, but pools sit one click deeper.</small></div>
+    <div class="win"><div class="nav">
+      <div class="grp"><div class="hd">Machines <b>+</b></div>
+        <div class="r"><span class="i">▤</span><span class="l">HPC</span><span class="dot" style="background:var(--green)"></span></div>
+        <div class="r"><span class="i">▤</span><span class="l">wikova</span><span class="dot" style="background:var(--orange)"></span></div>
+        <div class="r"><span class="i">▤</span><span class="l">workstation</span><span class="dot" style="background:var(--green)"></span></div>
+      </div>
+      <div class="grp hl"><div class="hd">Providers <b>+</b></div>
+        <div class="r on"><span class="i">☁</span><span class="l">Providers</span>
+          <span class="logos"><i class="c-kimi">K</i><i class="c-ds">D</i><i class="c-an">A</i><i class="c-ge">G</i></span><span class="m">6 keys</span></div>
+      </div>
+      <div class="grp"><div class="hd">Workspaces <b>+</b></div>
+        <div class="r"><span class="i">▢</span><span class="l">wikova-data</span><span class="m">workstation</span></div>
+        <div class="r"><span class="i">▢</span><span class="l">orbit-develop</span><span class="m">HPC</span></div>
+        <div class="r"><span class="i">▢</span><span class="l">orbit-prod</span><span class="m">wikova</span></div>
+        <div class="r"><span class="i">▢</span><span class="l">lfs</span><span class="m">workstation</span></div>
+        <div class="r"><span class="i">▢</span><span class="l">orbit</span><span class="m">orbit@austin</span></div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="col" style="padding-top:44px">
+    <div class="note"><b>What stays the same</b><br>Add key, Edit, ⋯ Delete, the pool links and “Not connected yet” all keep working as today; only where they live changes. Settings search still finds a key by name or vendor and opens this page at that row.</div>
+    <div class="note"><b>Old links</b><br><code>/settings/providers/anthropic</code> opens the API keys page scrolled to the Anthropic group, so nothing that links there breaks.</div>
+  </div>
+</div>
+
+<!-- A full window -->
+<div class="cap" style="margin-bottom:10px">A · the API keys page <small style="max-width:none">Every key on one page, grouped by vendor. The filter chips show only once there are 3 or more vendors.</small></div>
+<div class="win" style="width:1180px">
+  <div class="nav">
+    <div class="back">Back to Orbit</div>
+    <div class="title">Settings</div>
+    <div class="search">⌕ Search settings</div>
+    <div class="grp"><div class="hd">Personal</div>
+      <div class="r"><span class="i">⚙</span><span class="l">General</span></div>
+      <div class="r"><span class="i">♪</span><span class="l">Notifications</span></div>
+      <div class="r"><span class="i">☼</span><span class="l">Appearance</span></div>
+      <div class="r"><span class="i">◯</span><span class="l">Profile</span></div>
+      <div class="r"><span class="i">▤</span><span class="l">Storage</span></div>
+      <div class="r"><span class="i">∞</span><span class="l">Shared links</span></div>
+      <div class="r"><span class="i">⚷</span><span class="l">Access tokens</span></div>
+      <div class="r"><span class="i">✈</span><span class="l">Feishu</span></div>
+    </div>
+    <div class="grp"><div class="hd">Machines <b>+</b></div>
+      <div class="r"><span class="i">▤</span><span class="l">HPC</span><span class="dot" style="background:var(--green)"></span></div>
+      <div class="r"><span class="i">▤</span><span class="l">wikova</span><span class="dot" style="background:var(--orange)"></span></div>
+      <div class="r"><span class="i">▤</span><span class="l">workstation</span><span class="dot" style="background:var(--green)"></span></div>
+      <div class="r"><span class="i">▤</span><span class="l">longdeMac-mini.local</span><span class="dot" style="background:var(--green)"></span></div>
+      <div class="r"><span class="i">▤</span><span class="l">orbit@austin</span><span class="dot" style="background:var(--orange)"></span></div>
+    </div>
+    <div class="grp"><div class="hd">Providers <b>+</b></div>
+      <div class="r on"><span class="i">⚿</span><span class="l">API keys</span><span class="m">6</span></div>
+      <div class="r"><span class="i">⧉</span><span class="l">Account pools</span><span class="m">1</span></div>
+    </div>
+    <div class="grp"><div class="hd">Workspaces <b>+</b></div>
+      <div class="r"><span class="i">▢</span><span class="l">wikova-data</span><span class="m">workstation</span></div>
+      <div class="r"><span class="i">▢</span><span class="l">orbit-develop</span><span class="m">HPC</span></div>
+      <div class="r"><span class="i">▢</span><span class="l">orbit-prod</span><span class="m">wikova</span></div>
+      <div class="r"><span class="i">▢</span><span class="l">lfs</span><span class="m">workstation</span></div>
+      <div class="r"><span class="i">▢</span><span class="l">orbit</span><span class="m">orbit@austin</span></div>
+      <div class="r"><span class="i"></span><span class="l" style="color:var(--t2)">Show all 14</span></div>
+    </div>
+  </div>
+  <div class="page">
+    <div class="ph"><h2>API keys</h2><span class="btn p">+ Add key</span></div>
+    <p class="sub">Keys on your account, usable from every machine and billed per token.</p>
+    <div class="filters">
+      <span class="chip on">All <em>6</em></span>
+      <span class="chip">Anthropic <em>2</em></span>
+      <span class="chip">DeepSeek <em>1</em></span>
+      <span class="chip">Moonshot (Kimi) <em>1</em></span>
+      <span class="chip">Google Gemini <em>1</em></span>
+      <span class="chip">Custom <em>1</em></span>
+    </div>
+
+    <div class="card">
+      <div class="vh"><span class="tile c-an">A</span>Anthropic <span class="n">2 keys</span><span class="sp"></span><a>+ Add</a></div>
+      <div class="k"><div class="tx"><div class="nm">Claude team</div><div class="ds">Claude Code<span class="s">·</span>Starts on claude-opus-5-5<span class="s">·</span>in pool “Claude pool”<span class="s">·</span>last used 4 min ago</div></div><span class="btn">Edit</span><span class="mo">⋯</span></div>
+      <div class="k"><div class="tx"><div class="nm">Claude personal</div><div class="ds">Claude Code<span class="s">·</span>in pool “Claude pool”<span class="s">·</span>last used 2 days ago</div></div><span class="btn">Edit</span><span class="mo">⋯</span></div>
+
+      <div class="vh" style="border-top:1px solid var(--border)"><span class="tile c-ds">D</span>DeepSeek <span class="n">1 key</span><span class="sp"></span><a>+ Add</a></div>
+      <div class="k"><div class="tx"><div class="nm">DeepSeek</div><div class="ds">DeepSeek harness · Claude Code<span class="s">·</span>last used 1 hour ago<br>Balance ¥182.40</div></div><span class="btn">Edit</span><span class="mo">⋯</span></div>
+
+      <div class="vh" style="border-top:1px solid var(--border)"><span class="tile c-kimi">K</span>Moonshot (Kimi) <span class="n">1 key</span><span class="sp"></span><a>+ Add</a></div>
+      <div class="k"><div class="tx"><div class="nm">Kimi</div><div class="ds">Kimi CLI · Claude Code<span class="s">·</span>last used yesterday</div></div><span class="btn">Edit</span><span class="mo">⋯</span></div>
+
+      <div class="vh" style="border-top:1px solid var(--border)"><span class="tile c-ge">G</span>Google Gemini <span class="n">1 key</span><span class="sp"></span><a>+ Add</a></div>
+      <div class="k"><div class="tx"><div class="nm">Gemini</div><div class="ds">Gemini CLI<span class="s">·</span>never used</div></div><span class="btn">Edit</span><span class="mo">⋯</span></div>
+
+      <div class="vh" style="border-top:1px solid var(--border)"><span class="tile c-cu">C</span>Custom <span class="n">1 key</span><span class="sp"></span><a>+ Add</a></div>
+      <div class="k"><div class="tx"><div class="nm">OpenRouter</div><div class="ds">Claude Code<span class="s">·</span>last used 3 weeks ago</div></div><span class="btn">Edit</span><span class="mo">⋯</span></div>
+    </div>
+
+    <div class="sec">Not connected yet</div>
+    <div class="pills">
+      <span class="pill"><span class="tile c-oa">O</span>OpenAI</span>
+      <span class="pill"><span class="tile c-cur">C</span>Cursor</span>
+      <span class="pill"><span class="tile c-z">Z</span>Zhipu GLM</span>
+      <span class="pill">＋ Other…</span>
+    </div>
+  </div>
+</div>
+
+</body></html>

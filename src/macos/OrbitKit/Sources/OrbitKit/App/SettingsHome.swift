@@ -6,16 +6,17 @@ import CoreGraphics   // CGSize/CGRect's Swift members on Apple platforms; Found
 /// A page Settings opens from its list, each one a frame of Settings' own stack
 /// (`NavNode.settingsPage`).
 public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
-    case infrastructure, sessions, notifications, sharedLinks, accessTokens, changePassword, admin
+    case machinesAndModels, sessions, notifications, sharedLinks, accessTokens, terminals, changePassword, admin
 
     /// The page's navigation title — the same words as the row that opens it.
     public var title: String {
         switch self {
-        case .infrastructure: return SettingsHome.title(.infrastructure)
+        case .machinesAndModels: return SettingsHome.title(.machinesAndModels)
         case .sessions:       return SettingsHome.title(.sessions)
         case .notifications:  return SettingsHome.title(.notifications)
         case .sharedLinks:    return SettingsHome.title(.sharedLinks)
         case .accessTokens:   return SettingsHome.title(.accessTokens)
+        case .terminals:      return SettingsHome.title(.terminals)
         case .changePassword: return SettingsHome.title(.changePassword)
         case .admin:          return SettingsHome.title(.admin)
         }
@@ -40,9 +41,9 @@ public enum SettingsHome {
     }
 
     public enum Row: String, CaseIterable, Sendable {
-        case infrastructure
+        case machinesAndModels
         case sessions, notifications, appearance
-        case email, instance, sharedLinks, accessTokens, changePassword, admin
+        case email, instance, sharedLinks, accessTokens, terminals, changePassword, admin
     }
 
     /// A group's header. Machines & models has none: its one row says that name, and a header over it
@@ -58,17 +59,17 @@ public enum SettingsHome {
     /// The rows a group shows, in order. Admin is role-gated, like its section everywhere else.
     public static func rows(_ group: Group, isAdmin: Bool) -> [Row] {
         switch group {
-        case .machines:    return [.infrastructure]
+        case .machines:    return [.machinesAndModels]
         case .preferences: return [.sessions, .notifications, .appearance]
         case .account:
-            let rows: [Row] = [.email, .instance, .sharedLinks, .accessTokens, .changePassword]
+            let rows: [Row] = [.email, .instance, .sharedLinks, .accessTokens, .terminals, .changePassword]
             return isAdmin ? rows + [.admin] : rows
         }
     }
 
     public static func title(_ row: Row) -> String {
         switch row {
-        case .infrastructure:    return AppSection.runners.title
+        case .machinesAndModels:    return AppSection.runners.title
         case .sessions:          return "Sessions"
         case .notifications:     return "Notifications"
         case .appearance:        return "Appearance"
@@ -76,15 +77,16 @@ public enum SettingsHome {
         case .instance:          return "Instance"
         case .sharedLinks:       return "Shared links"
         case .accessTokens:      return AccessTokensList.title
+        case .terminals:         return Terminals.title
         case .changePassword:    return "Change password"
         case .admin:             return AppSection.admin.title
         }
     }
 
-    /// SF Symbol for the row's leading glyph. Infrastructure and Admin keep the glyph their sections have.
+    /// SF Symbol for the row's leading glyph. Machines & models and Admin keep the glyph their sections have.
     public static func systemImage(_ row: Row) -> String {
         switch row {
-        case .infrastructure:    return AppSection.runners.systemImage
+        case .machinesAndModels:    return AppSection.runners.systemImage
         case .sessions:          return "bubble.left.and.bubble.right"
         case .notifications:     return "bell"
         case .appearance:        return "circle.lefthalf.filled"
@@ -92,6 +94,7 @@ public enum SettingsHome {
         case .instance:          return "globe"
         case .sharedLinks:       return "link"
         case .accessTokens:      return "key.horizontal"
+        case .terminals:         return "terminal"
         case .changePassword:    return "lock.rotation"
         case .admin:             return AppSection.admin.systemImage
         }
@@ -101,11 +104,12 @@ public enum SettingsHome {
     /// row itself, and the two lines that only say something.
     public static func page(_ row: Row) -> SettingsPage? {
         switch row {
-        case .infrastructure: return .infrastructure
+        case .machinesAndModels: return .machinesAndModels
         case .sessions:       return .sessions
         case .notifications:  return .notifications
         case .sharedLinks:    return .sharedLinks
         case .accessTokens:   return .accessTokens
+        case .terminals:      return .terminals
         case .changePassword: return .changePassword
         case .admin:          return .admin
         case .appearance, .email, .instance:
@@ -113,16 +117,16 @@ public enum SettingsHome {
         }
     }
 
-    /// The line under a group: the Infrastructure page's own, under the one row that opens it.
+    /// The line under a group: the Machines & models page's own, under the one row that opens it.
     public static func footer(_ group: Group) -> String? {
-        group == .machines ? Infrastructure.subtitle : nil
+        group == .machines ? MachinesAndModels.subtitle : nil
     }
 
     // MARK: - What a row says
 
-    /// "1 needs you" — how many lines the Infrastructure page's Needs you holds; with none, how many of
+    /// "1 needs you" — how many lines the Machines & models page's Needs you holds; with none, how many of
     /// the account's machines can take work right now.
-    public static func infrastructureValue(needsYou: Int, runners: [Runner]) -> String {
+    public static func machinesAndModelsValue(needsYou: Int, runners: [Runner]) -> String {
         if needsYou > 0 { return needsYou == 1 ? "1 needs you" : "\(needsYou) need you" }
         return runnersValue(runners)
     }
@@ -318,7 +322,7 @@ public enum SettingsCopy {
     /// The account's one switch, where a form has room to label and explain it (macOS). On iOS' Sessions
     /// page the row is the switch, under the row's own name, and the hint is its footer.
     public static let letSessionsOrchestrate = "Let sessions orchestrate"
-    public static let letSessionsOrchestrateHint = "Sessions in every workspace can spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused."
+    public static let letSessionsOrchestrateHint = "Sessions in every workspace can start and manage other sessions, and manage your agents and runners, through the orbit MCP tools and CLI: create, change and delete agents, install engines on runners and delete them. Off → those tools are hidden and refused."
 
     // MARK: Smart model selection (the web page's Session defaults card)
 

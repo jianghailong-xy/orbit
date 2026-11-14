@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>iOS 其余页面的顶部软边</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #eef0f3; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: #1c1c1e; }
+  .b-part { padding: 28px 32px 32px; width: 1100px; }
+  .b-part h1 { font-size: 26px; margin-bottom: 4px; }
+  .b-part h2 { font-size: 21px; margin: 0 0 6px; }
+  .b-sub { color: #6b6b70; margin-bottom: 18px; }
+  .b-row { display: flex; gap: 40px; align-items: flex-start; }
+  .b-col { width: 480px; }
+  .b-cap { font-weight: 600; font-size: 17px; margin: 0 0 8px; }
+  .b-cap small { font-weight: 400; color: #6b6b70; font-size: 14px; margin-left: 6px; }
+  .b-tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 10px; margin-left: 6px; vertical-align: 2px; }
+  .b-tag.now { background: #e5e5ea; color: #48484a; }
+  .b-tag.rec { background: #d6f0dc; color: #1a7f37; }
+  .b-notes { margin-top: 10px; font-size: 14px; color: #3a3a3c; }
+  .b-notes li { margin: 0 0 4px 18px; }
+  table.b-t { border-collapse: collapse; font-size: 14px; }
+  table.b-t td, table.b-t th { border: 1px solid #d1d1d6; padding: 6px 10px; text-align: left; vertical-align: top; background: #fff; }
+  table.b-t th { background: #f2f2f7; }
+  code { font-family: "JetBrains Mono", monospace; font-size: 12.5px; background: #e9e9ee; padding: 0 4px; border-radius: 4px; }
+
+  .ph { width: 440px; height: 400px; overflow: hidden; position: relative; background: #000; color: #fff;
+        box-shadow: 0 0 0 1px #c7c7cc, 0 8px 24px rgba(0,0,0,.12); border-radius: 44px 44px 0 0; }
+  .ph.sheet { background: #000; }
+  .sheetbg { position: absolute; inset: 0; background: #1c1c1e; border-radius: 0; }
+  .ph.sheet .sheetbg { top: 62px; border-radius: 22px 22px 0 0; }
+  .ph.sheet::before { content: ""; position: absolute; left: 16px; right: 16px; top: 50px; height: 30px; border-radius: 22px 22px 0 0; background: #2c2c2e; }
+  .grab { position: absolute; z-index: 7; left: 202px; top: 68px; width: 36px; height: 5px; border-radius: 3px; background: #5a5a5e; }
+  .body { position: absolute; left: 0; right: 0; overflow: hidden; }
+  .list { position: absolute; left: 0; right: 0; }
+  .sec { padding: 12px 20px 6px; font-size: 17px; font-weight: 600; color: #8e8e93; }
+  .row { margin-left: 20px; padding: 12px 20px 12px 0; border-bottom: .5px solid #38383a; }
+  .row .t { display: flex; font-size: 17px; white-space: nowrap; }
+  .row .t span:first-child { flex: 1; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; }
+  .row .t span:last-child { color: #8e8e93; font-size: 14px; }
+  .row .s { color: #8e8e93; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar { display: inline-block; width: 44px; height: 6px; border-radius: 3px; background: #3a3a3c; vertical-align: 2px; margin-right: 6px; position: relative; overflow: hidden; }
+  .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: #30d158; }
+  .chk { color: #0a84ff; font-weight: 700; }
+
+  .hard { position: absolute; z-index: 4; left: 0; right: 0; top: 0; background: rgba(28,28,30,.88); backdrop-filter: blur(18px); border-bottom: .5px solid rgba(255,255,255,.2); }
+  .soft { position: absolute; z-index: 4; left: 0; right: 0; top: 0; pointer-events: none; }
+  .soft > div { position: absolute; inset: 0; }
+  .soft .b1 { backdrop-filter: blur(2px); -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 60%, transparent 100%); }
+  .soft .b2 { backdrop-filter: blur(8px); -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 45%, transparent 80%); }
+  .soft .b3 { backdrop-filter: blur(16px); -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 40%, transparent 65%); }
+  .soft .w { background: linear-gradient(to bottom, var(--c) 0, var(--c85) 55%, var(--c40) 82%, transparent 100%); }
+  .pin { position: absolute; z-index: 5; left: 0; right: 0; padding: 4px 20px; font-size: 17px; font-weight: 600; color: #8e8e93; }
+
+  .sb { position: absolute; z-index: 7; left: 0; right: 0; top: 0; height: 50px; font-weight: 600; font-size: 17px; }
+  .sb .tm { position: absolute; left: 52px; top: 14px; }
+  .sb .rt { position: absolute; right: 36px; top: 16px; font-size: 14px; }
+  .disc { position: absolute; z-index: 6; top: 62px; width: 44px; height: 44px; border-radius: 50%; background: rgba(60,60,64,.8);
+          border: .5px solid rgba(255,255,255,.12); display: flex; align-items: center; justify-content: center; font-size: 19px; }
+  .navt { position: absolute; z-index: 6; left: 90px; right: 90px; text-align: center; font-size: 17px; font-weight: 600; }
+  .search { position: absolute; z-index: 6; left: 20px; right: 20px; height: 38px; border-radius: 19px; background: #2c2c2e; color: #8e8e93;
+            padding: 0 14px; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+  .done { position: absolute; z-index: 6; right: 20px; height: 38px; padding: 0 16px; border-radius: 19px; background: rgba(60,60,64,.8); font-weight: 600; display: flex; align-items: center; }
+
+  .mk { position: absolute; z-index: 9; width: 22px; height: 22px; border-radius: 50%; background: #ff3b30; color: #fff;
+        font-size: 13px; font-weight: 700; text-align: center; line-height: 22px; box-shadow: 0 0 0 2px #fff; }
+  .ring { position: absolute; z-index: 8; border: 2px dashed #ff453a; border-radius: 10px; }
+  .sep { height: 1px; background: #d1d1d6; margin: 26px 0; }
+</style>
+</head>
+<body>
+<section class="b-part" id="part-1">
+  <h1>iOS 其余页面的顶部软边（第 1–3 项）</h1>
+  <p class="b-sub">440 pt 宽、深色，列表已上滚。左边“今天”是按代码推的样子（这几页和改之前的会话列表、项目页同结构：分组标题会吸顶，iOS 26 多半选了硬边），真机可能略有出入；右边是改后，和已定的会话列表、项目页同一种软边。</p>
+
+  <h2>1 · Projects 页</h2>
+  <div class="b-row">
+    <div class="b-col"><p class="b-cap">今天<span class="b-tag now">推测</span></p><div class="ph" id="a1"></div>
+      <ul class="b-notes"><li><b>1</b> 磨砂条连同搜索框和吸顶的 “Running” 盖到约 176 pt，下沿一根发丝线，项目行被切开。</li></ul></div>
+    <div class="b-col"><p class="b-cap">改后<span class="b-tag rec">推荐</span></p><div class="ph" id="a2"></div>
+      <ul class="b-notes"><li><b>1</b> 无线、无色块：搜索框和 “Running” 浮在软边上，项目行淡出到它们后面。</li></ul></div>
+  </div>
+  <div class="sep"></div>
+
+  <h2>2 · Wiki（以 Contents 目录为例，文章、文档、动态同理）</h2>
+  <div class="b-row">
+    <div class="b-col"><p class="b-cap">今天<span class="b-tag now">推测</span></p><div class="ph sheet" id="b1"></div>
+      <ul class="b-notes"><li><b>1</b> 弹出页的标题栏下同样一条磨砂 + 发丝线，吸顶的分组标题 “Pitfalls” 被包在条里。</li></ul></div>
+    <div class="b-col"><p class="b-cap">改后<span class="b-tag rec">推荐</span></p><div class="ph sheet" id="b2"></div>
+      <ul class="b-notes"><li><b>1</b> 分组标题浮在软边上，条目淡出。文章页、文档页、动态页是全屏页，样子同 Projects 页。</li></ul></div>
+  </div>
+  <div class="sep"></div>
+
+  <h2>3 · 弹出的选择页（以 Main branch 为例；选任务列表、worktree 列表、本会话创建的任务同理）</h2>
+  <div class="b-row">
+    <div class="b-col"><p class="b-cap">今天<span class="b-tag now">推测</span></p><div class="ph sheet" id="c1"></div>
+      <ul class="b-notes"><li><b>1</b> 分支一多往上滚，就是同样的磨砂条 + 线。</li></ul></div>
+    <div class="b-col"><p class="b-cap">改后<span class="b-tag rec">推荐</span></p><div class="ph sheet" id="c2"></div>
+      <ul class="b-notes"><li><b>1</b> 同一种软边；“Done” 和标题不动。</li></ul></div>
+  </div>
+
+  <h2 style="margin-top:26px">待定 · 要你拍板</h2>
+  <table class="b-t">
+    <tr><th></th><th>方案 A（推荐）</th><th>方案 B</th></tr>
+    <tr><td>范围</td><td>1–3 全改：iOS 上凡是在标题栏下滚动的页面都明确要软边，只有会话页例外（11-11）；再加一个测试列出所有这类列表，新页面漏加会报错</td><td>只改 1、2 两个全屏页，弹出的选择页（3）保持今天</td></tr>
+  </table>
+  <p class="b-sub" style="margin-top:10px">落地：每个列表加一行 <code>.softTopEdgeEffect()</code>（beta.236 那个，由系统画）；文件 ProjectsView、WikiArticleView、WikiDocView、WikiScreens、WikiActivityView、WikiContentsColumn、MainBranchPicker、TaskListParts、WorktreeBar、CreatedTasksPage。标题、按钮、字重都不动。</p>
+</section>
+<script>
+const C = { page: ['#000', 'rgba(0,0,0,.85)', 'rgba(0,0,0,.4)'], sheet: ['#1c1c1e', 'rgba(28,28,30,.85)', 'rgba(28,28,30,.4)'] };
+const softHTML = (h, c) => `<div class="soft" style="height:${h}px;--c:${c[0]};--c85:${c[1]};--c40:${c[2]}"><div class="b1"></div><div class="b2"></div><div class="b3"></div><div class="w"></div></div>`;
+const row = (t, s, m) => `<div class="row"><div class="t"><span>${t}</span><span>${m || ''}</span></div>${s ? `<div class="s">${s}</div>` : ''}</div>`;
+const prog = (n, d, w) => `<span class="bar"><i style="width:${w}%"></i></span>${n}/${d}`;
+
+function projects(id, soft, marks) {
+  const rows = [
+    ['Session guests', prog(6, 9, 66) + ' · Landing', '2m'],
+    ['Evidence always has an addressee', prog(8, 10, 80) + ' · Landing', '5m'],
+    ['Main checkout on the runner', prog(17, 19, 90) + ' · Review', '12m'],
+    ['Runner update drain', prog(6, 10, 60) + ' · Waiting', '1h'],
+    ['Fork a task from a session', prog(1, 5, 20) + ' · Resolve', '2h'],
+  ];
+  document.getElementById(id).innerHTML = `
+    <div class="list" style="top:96px">${rows.map(r => row(r[0], r[1], r[2])).join('')}</div>
+    ${soft ? softHTML(200, C.page) : '<div class="hard" style="height:176px"></div>'}
+    <div class="sb"><span class="tm">12:10</span><span class="rt">▂▄▆█ ◠ 80</span></div>
+    <div class="disc" style="left:20px">☰</div><div class="navt" style="top:72px">Projects</div><div class="disc" style="left:376px">⋯</div>
+    <div class="search" style="top:114px">⌕ Search projects</div>
+    <div class="pin" style="top:150px">Running</div>
+    ${marks}`;
+}
+function contents(id, soft, marks) {
+  const rows = [['Leading bar item needs .fixedSize()', 'Pitfall · verified'], ['Title bar rendered as two stacked layers', 'Pitfall · verified'],
+    ['Wiring tests pass on Linux but do not compile iOS', 'Pitfall · unreviewed'], ['Mid-rebase worktree lists detached', 'Pitfall · verified'], ['Shared fixture vs Go writer', 'Recipe · verified']];
+  document.getElementById(id).innerHTML = `<div class="sheetbg"></div><div class="grab"></div>
+    <div class="body" style="top:62px;bottom:0"><div class="list" style="top:38px">${rows.map(r => row(r[0], r[1])).join('')}</div>
+    ${soft ? softHTML(122, C.sheet) : '<div class="hard" style="height:100px;background:rgba(36,36,38,.92)"></div>'}
+    <div class="navt" style="top:24px">Contents</div><div class="done" style="top:16px">Done</div>
+    <div class="pin" style="top:${soft ? 66 : 66}px">Pitfalls <span style="font-weight:400">· 14</span></div></div>
+    <div class="sb"><span class="tm">12:10</span><span class="rt">▂▄▆█ ◠ 80</span></div>
+    ${marks}`;
+}
+function branches(id, soft, marks) {
+  const rows = [['release/0.1.2', ''], ['main', '', '<span class="chk">✓</span>'], ['orbit/project-34w9J4yc', ''], ['orbit/project-34w72tJo', ''], ['orbit/project-34wByk8i', '']];
+  document.getElementById(id).innerHTML = `<div class="sheetbg"></div><div class="grab"></div>
+    <div class="body" style="top:62px;bottom:0"><div class="list" style="top:40px">${rows.map(r => row(r[0], r[1], r[2])).join('')}
+      <div class="sec" style="font-weight:400;font-size:13.5px">Tasks start from it, and the project’s work ends up on it.</div></div>
+    ${soft ? softHTML(122, C.sheet) : '<div class="hard" style="height:100px;background:rgba(36,36,38,.92)"></div>'}
+    <div class="navt" style="top:24px">Main branch</div><div class="done" style="top:16px">Done</div>
+    <div class="pin" style="top:66px">Branches in orbit-develop</div></div>
+    <div class="sb"><span class="tm">12:10</span><span class="rt">▂▄▆█ ◠ 80</span></div>
+    ${marks}`;
+}
+projects('a1', false, '<div class="ring" style="left:6px;top:166px;width:428px;height:24px"></div><div class="mk" style="left:404px;top:182px">1</div>');
+projects('a2', true, '<div class="ring" style="left:6px;top:110px;width:428px;height:96px"></div><div class="mk" style="left:404px;top:196px">1</div>');
+contents('b1', false, '<div class="ring" style="left:6px;top:152px;width:428px;height:24px"></div><div class="mk" style="left:404px;top:168px">1</div>');
+contents('b2', true, '<div class="ring" style="left:6px;top:122px;width:428px;height:66px"></div><div class="mk" style="left:404px;top:178px">1</div>');
+branches('c1', false, '<div class="ring" style="left:6px;top:152px;width:428px;height:24px"></div><div class="mk" style="left:404px;top:168px">1</div>');
+branches('c2', true, '<div class="ring" style="left:6px;top:122px;width:428px;height:66px"></div><div class="mk" style="left:404px;top:178px">1</div>');
+</script>
+</body>
+</html>

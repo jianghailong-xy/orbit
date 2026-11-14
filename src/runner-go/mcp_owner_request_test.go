@@ -27,8 +27,57 @@ func TestRequestOwnerActionIsOfferedWithoutOrchestration(t *testing.T) {
 		}
 	}
 	kind, _ := props["kind"].(map[string]interface{})
-	if got := kind["enum"]; !reflect.DeepEqual(got, []string{"DECISION", "SECRET", "MANUAL_STEP", "CONFIRM"}) {
+	if got := kind["enum"]; !reflect.DeepEqual(got, []string{"DECISION", "SECRET", "MANUAL_STEP", "CONFIRM", "WIKI_CREATE"}) {
 		t.Fatalf("request_owner_action kinds = %#v", got)
+	}
+	// A WIKI_CREATE carries no title (Orbit writes it), so title cannot be required by the schema.
+	var schema map[string]interface{}
+	for _, tool := range tools {
+		if tool["name"] == "request_owner_action" {
+			schema, _ = tool["inputSchema"].(map[string]interface{})
+		}
+	}
+	if got := schema["required"]; !reflect.DeepEqual(got, []string{"kind", "why"}) {
+		t.Fatalf("request_owner_action requires %#v", got)
+	}
+	title, _ := props["title"].(map[string]interface{})
+	if desc, _ := title["description"].(string); !strings.Contains(desc, "every kind but WIKI_CREATE") {
+		t.Fatalf("title's description does not say WIKI_CREATE leaves it out: %q", desc)
+	}
+}
+
+// WIKI_CREATE is described with its rules (design §3.6): when it applies, that a search never files
+// it, and that Orbit fills in the title and repository.
+func TestRequestOwnerActionDescribesWikiCreate(t *testing.T) {
+	desc := mcpToolDescription(toolDescriptors(false, false), "request_owner_action")
+	for _, want := range []string{
+		"WIKI_CREATE to ask the owner to create a wiki",
+		"only from a workspace whose repository has no wiki",
+		"only when the owner asked for one or this session has something worth a wiki",
+		"Never file WIKI_CREATE because a wiki_search found no wiki",
+		"Orbit fills in the title and the repository, so give only why and ifUnanswered",
+	} {
+		if !strings.Contains(desc, want) {
+			t.Fatalf("request_owner_action's description does not say %q: %q", want, desc)
+		}
+	}
+}
+
+// A WIKI_CREATE filed with only why and ifUnanswered reaches the server as exactly that: no title.
+func TestRequestOwnerActionFilesWikiCreateWithoutTitle(t *testing.T) {
+	var body map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(`{"id":"34ODbP5CnvulADhPzwXNA","state":"PENDING"}`))
+	}))
+	defer srv.Close()
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "343dlzsYWKo5z8l2M8tsB"}
+	args := map[string]interface{}{"kind": "WIKI_CREATE", "why": "The owner asked for a wiki here.", "ifUnanswered": "no wiki"}
+	if res := mcp.callTool("request_owner_action", args); res["isError"] == true {
+		t.Fatalf("request_owner_action refused a WIKI_CREATE: %#v", res["content"])
+	}
+	if want := (map[string]interface{}{"kind": "WIKI_CREATE", "why": "The owner asked for a wiki here.", "ifUnanswered": "no wiki"}); !reflect.DeepEqual(body, want) {
+		t.Fatalf("request_owner_action sent %#v, want %#v", body, want)
 	}
 }
 

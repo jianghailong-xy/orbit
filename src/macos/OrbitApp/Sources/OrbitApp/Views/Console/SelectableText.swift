@@ -145,6 +145,7 @@ struct SelectableText: UIViewRepresentable {
         context.coordinator.attachments = attachments
         context.coordinator.app = app
         context.coordinator.opensOverConsole = context.environment.opensPagesOverConsole
+        context.coordinator.opensOverPage = context.environment.opensTasksOverPage
         context.coordinator.sessionID = sessionPreview?.sessionID
         let key = renderKey
         guard context.coordinator.key != key else { return }   // nothing changed — keep any live selection
@@ -339,6 +340,8 @@ extension SelectableText {
         var app: AppModel?
         /// A phone's conversation: what a link in it opens is pushed over it (`opensPagesOverConsole`).
         var opensOverConsole = false
+        /// A wide shell's page: a task a link names opens over it (`opensTasksOverPage`).
+        var opensOverPage = false
         /// The session whose runner answers for a file named by path; nil outside a console, where
         /// such a link is drawn as prose and never reaches this handler.
         var sessionID: String?
@@ -350,7 +353,8 @@ extension SelectableText {
             if let route = ReferenceLink.route(url) {
                 return UIAction(title: "Open") { [weak self] _ in
                     guard let self else { return }
-                    self.app?.openFromConversation(route, overConsole: self.opensOverConsole)
+                    self.app?.openFromConversation(route, overConsole: self.opensOverConsole,
+                                                   overPage: self.opensOverPage)
                 }
             }
             // Everything else this app can open — a project reference, whose page is not a `Route`,
@@ -359,7 +363,8 @@ extension SelectableText {
             if app?.orbitRef(for: url) != nil {
                 return UIAction(title: "Open") { [weak self] _ in
                     guard let self else { return }
-                    _ = self.app?.openOrbitLink(url, overConsole: self.opensOverConsole)
+                    _ = self.app?.openOrbitLink(url, overConsole: self.opensOverConsole,
+                                                overPage: self.opensOverPage)
                 }
             }
             if let id = AttachmentLink.attachmentID(url) {

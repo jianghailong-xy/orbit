@@ -113,7 +113,8 @@ class PushNotifications(private val context: Context) {
         seen.clear(); history.delete()
     }
     fun channel(message: PushMessage) = when {
-        message.payload.isReminder || message.payload.kind == "confirmation-problems" || message.payload.isOwnerRequest -> needsYou
+        message.payload.isReminder || message.payload.kind == "confirmation-problems" || message.payload.isOwnerRequest ||
+            message.payload.isTerminalLogin -> needsYou
         message.payload.sessionId != null -> SESSIONS
         else -> UPDATES
     }

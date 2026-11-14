@@ -143,6 +143,8 @@ public enum AppIntent: Equatable, Sendable {
     case openOwnerRequest(requestID: String)
     /// An owner request's "Later": put off for `OwnerRequests.laterSeconds`, on this device only.
     case snoozeOwnerRequest(requestID: String)
+    /// A terminal asking to be approved (push kind `terminal-login`): the "Waiting on you" inbox, where its card is.
+    case openTerminalRequests
 }
 
 public enum Notifications {
@@ -171,6 +173,7 @@ public enum Notifications {
         case .decision:   return "Answer"
         case .manualStep: return "Mark done"
         case .confirm:    return "Review"
+        case .wikiCreate: return "Review"
         }
     }
 
@@ -202,8 +205,16 @@ public enum Notifications {
     /// `userInfo` key naming the project an owner-item alert is about (apiserver
     /// `PushService.notifyOwnerItem`).
     public static let keyProject = "projectID"
+    /// `userInfo` key naming the runner a machine alert is about (apiserver `PushService.notifyRunnerDrainWaiting`).
+    public static let keyRunner = "runnerID"
+    /// A runner draining for its update with the owner's work waiting on it (D3): a tap opens its page,
+    /// where Later and Update Now are.
+    public static let runnerUpdatingKind = "runner-updating"
     /// The owner-item alert kind of a merge into main waiting on the owner (`OWNER_ITEM_PUSH_KINDS`).
     static let approveMergeKind = "approve-merge-to-main"
+    /// An agent asking to take a task out of its project. A tap opens the conversation that draws
+    /// the decision card when the payload names one, and the project otherwise.
+    public static let crossingRequestKind = "crossing-request"
 
     public static func content(for event: NotificationEvent) -> NotificationContent {
         switch event {
@@ -248,12 +259,22 @@ public enum Notifications {
         if userInfo[keyKind] == "project-done", let project = userInfo[keyProject] {
             return .openProject(projectID: project)
         }
+        // A crossing request opens the conversation that draws its card; a source with no
+        // coordinator conversation leaves only the project itself to open.
+        if userInfo[keyKind] == crossingRequestKind {
+            if let sid = userInfo[keySession] { return .open(.session(sid)) }
+            return userInfo[keyProject].map { .openProject(projectID: $0) }
+        }
+        if userInfo[keyKind] == "terminal-login" { return .openTerminalRequests }
         // An owner request's actions open its card or put it off; its plain tap opens the session below.
         if let request = userInfo[keyOwnerRequest] {
             if actionId == actionOwnerRequestOpen { return .openOwnerRequest(requestID: request) }
             if actionId == actionOwnerRequestLater { return .snoozeOwnerRequest(requestID: request) }
         }
         guard let sid = userInfo[keySession] else {
+            if userInfo[keyKind] == runnerUpdatingKind, let runner = userInfo[keyRunner] {
+                return .open(.runner(PublicID.toPublic(runner)))
+            }
             // A watch's alert names no session and carries no actions: tapping it opens the watch.
             return userInfo[keyWatch].map { .open(.watch($0)) }
         }

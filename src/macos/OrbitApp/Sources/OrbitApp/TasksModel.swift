@@ -749,6 +749,7 @@ final class TasksModel {
             attribution = nil
             attributionFailed = false
             dependencyGraph = nil
+            evidence = []
         }
         detailLoading = true
         detailMissing = false
@@ -782,6 +783,7 @@ final class TasksModel {
         attribution = nil
         attributionFailed = false
         dependencyGraph = nil
+        evidence = []
     }
 
     // MARK: the detail page's other reads
@@ -808,6 +810,16 @@ final class TasksModel {
             guard selectedDetailID == id else { return }
             attributionFailed = attribution == nil
         }
+    }
+
+    /// The task's completion evidence, oldest first (`GET /tasks/:id/evidence`) — what the page's
+    /// Delivered card and its Activity read. Empty until read, and kept as it was when a read fails.
+    private(set) var evidence: [TaskEvidenceRevision] = []
+
+    func loadEvidence(_ id: String) async {
+        guard selectedDetailID == id else { return }
+        guard let rows = try? await api.taskEvidence(id), selectedDetailID == id else { return }
+        evidence = rows
     }
 
     func loadDependencyGraph(_ id: String) async {

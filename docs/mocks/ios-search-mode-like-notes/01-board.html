@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>iOS 会话列表 — 搜索模式照 Notes 走</title>
+<style>
+  :root {
+    --label: #000; --label-2: rgba(60,60,67,.6); --label-3: rgba(60,60,67,.3);
+    --sep: rgba(60,60,67,.18); --mark: #ff3b30; --blue: #0a84ff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 40px 40px 56px; background: #ececef; color: #16161a;
+         font: 15px/1.55 -apple-system, "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+  .b-part { padding: 8px 4px 28px; }
+  h1 { font-size: 26px; letter-spacing: -.02em; margin: 0 0 8px; }
+  h2 { font-size: 20px; margin: 0 0 10px; }
+  .lede { color: #55555e; max-width: 1180px; margin: 0 0 26px; }
+  code { font: 12.5px "SF Mono", monospace; background: #e2e2e8; border-radius: 4px; padding: 1px 5px; }
+  .b-row { display: flex; gap: 30px; align-items: flex-start; flex-wrap: wrap; }
+  figure { margin: 0; width: 393px; }
+  figcaption { margin-top: 14px; font-size: 13.5px; line-height: 1.6; color: #55555e; }
+  figcaption b.h { color: #16161a; display: block; font-size: 15px; margin-bottom: 4px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 9px; margin-bottom: 8px; }
+  .tag.now { background: #ffd9d4; color: #8f1d13; }
+  .tag.after { background: #d6e4ff; color: #14428f; }
+  .num { display: inline-flex; width: 20px; height: 20px; border-radius: 50%; background: var(--mark); color: #fff;
+         font-size: 12px; font-weight: 700; align-items: center; justify-content: center; margin-right: 4px; vertical-align: 1px; }
+
+  /* phone */
+  .phone { width: 393px; height: 852px; background: #fff; overflow: hidden; border-radius: 46px; position: relative;
+           box-shadow: 0 18px 44px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.08); color: var(--label); }
+  .status { height: 54px; display: flex; align-items: center; justify-content: space-between; padding: 6px 30px 0 44px;
+            font-size: 17px; font-weight: 600; position: relative; z-index: 3; background: #fff; }
+  .status .r { font-size: 14px; font-weight: 600; letter-spacing: .02em; }
+  .nav { height: 50px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; background: #fff; position: relative; z-index: 3; }
+  .disc { width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,.7);
+          box-shadow: 0 1px 4px rgba(0,0,0,.10), inset 0 0 0 .5px rgba(0,0,0,.06); display: flex; align-items: center; justify-content: center; }
+  .ws { font-size: 17px; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+  .ico { width: 20px; height: 20px; stroke: #111; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .list { position: absolute; left: 0; right: 0; top: 104px; bottom: 0; overflow: hidden; }
+  .grp { padding: 18px 20px 6px; font-size: 15px; font-weight: 600; color: var(--label-2); }
+  .srow { padding: 11px 20px 11px; border-bottom: .5px solid var(--sep); margin-left: 0; }
+  .srow .top { display: flex; align-items: baseline; gap: 10px; }
+  .srow .ttl { flex: 1; min-width: 0; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -.01em; }
+  .srow .rel { font-size: 13px; color: var(--label-2); flex: none; }
+  .srow .sub { font-size: 14.5px; color: var(--label-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .srow .sub em { font-style: normal; color: var(--blue); font-weight: 600; }
+  .srow .meta { font-size: 13px; color: var(--label-2); margin-top: 1px; }
+  .hit { color: var(--blue); font-weight: 600; }
+
+  /* bottom search */
+  .sbar { position: absolute; left: 14px; right: 14px; display: flex; gap: 10px; align-items: center; z-index: 5; }
+  .sfield { flex: 1; height: 50px; border-radius: 25px; display: flex; align-items: center; gap: 9px; padding: 0 16px;
+            background: rgba(255,255,255,.82); backdrop-filter: blur(14px);
+            box-shadow: 0 6px 22px rgba(0,0,0,.13), inset 0 0 0 .5px rgba(0,0,0,.10); font-size: 17px; color: rgba(60,60,67,.55); }
+  .sfield .q { color: #000; }
+  .sfield .caret { width: 2px; height: 22px; background: var(--blue); margin-left: -6px; }
+  .sfield .clr { margin-left: auto; width: 18px; height: 18px; border-radius: 50%; background: rgba(60,60,67,.3); display: flex; align-items: center; justify-content: center; }
+  .sfield .clr svg { width: 9px; height: 9px; stroke: #fff; stroke-width: 3; }
+  .xbtn { width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,.85); backdrop-filter: blur(14px);
+          box-shadow: 0 6px 22px rgba(0,0,0,.13), inset 0 0 0 .5px rgba(0,0,0,.10); display: flex; align-items: center; justify-content: center; flex: none; }
+  .xbtn svg { width: 20px; height: 20px; stroke: #111; stroke-width: 2.2; fill: none; stroke-linecap: round; }
+  .fade { position: absolute; left: 0; right: 0; bottom: 0; height: 120px; z-index: 4;
+          background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,.9)); }
+
+  /* keyboard */
+  .kb { position: absolute; left: 0; right: 0; bottom: 0; height: 336px; z-index: 4; background: #d5d7dd;
+        border-radius: 30px 30px 0 0; padding: 12px 4px 0; }
+  .kb .kr { display: flex; justify-content: center; gap: 6px; margin-bottom: 11px; }
+  .kb .k { width: 33px; height: 44px; background: #fff; border-radius: 8px; box-shadow: 0 1px 0 rgba(0,0,0,.25);
+           display: flex; align-items: center; justify-content: center; font-size: 22px; }
+  .kb .k.w { width: 48px; font-size: 15px; background: #abb0ba; }
+  .kb .k.sp { width: 180px; }
+  .kb .k.go { width: 92px; background: #abb0ba; font-size: 15px; }
+  .dim { position: absolute; inset: 104px 0 0 0; background: rgba(0,0,0,.0); }
+
+  /* marks */
+  .mk { position: absolute; border: 2px dashed var(--mark); border-radius: 14px; z-index: 9; pointer-events: none; }
+  .mk .n { position: absolute; top: -12px; left: -12px; width: 24px; height: 24px; border-radius: 50%; background: var(--mark);
+           color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .note { position: absolute; z-index: 9; background: #fff; border-radius: 8px; padding: 4px 9px; font-size: 12.5px; font-weight: 600;
+          color: #8f1d13; box-shadow: 0 0 0 1.5px rgba(255,59,48,.6), 0 3px 10px rgba(0,0,0,.12); }
+
+  /* decisions */
+  .dec { background: #fff; border-radius: 16px; padding: 20px 24px; max-width: 1240px; margin-bottom: 18px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .dec h3 { margin: 0 0 12px; font-size: 17px; }
+  .opts { display: flex; gap: 18px; }
+  .opt { flex: 1; border: 1.5px solid #e1e1e8; border-radius: 12px; padding: 14px 16px; font-size: 14px; color: #3c3c44; }
+  .opt.rec { border-color: #2f6fe0; background: #f4f8ff; }
+  .opt b { display: block; font-size: 15px; color: #16161a; margin-bottom: 4px; }
+  .rec-tag { font-size: 12px; color: #fff; background: #2f6fe0; border-radius: 999px; padding: 1px 8px; margin-left: 6px; font-weight: 600; }
+  ol.land { max-width: 1180px; margin: 0; padding-left: 22px; font-size: 14.5px; color: #3c3c44; }
+  ol.land li { margin-bottom: 6px; }
+</style>
+
+<section class="b-part" id="part-1">
+<h1>iOS 会话列表 — 搜索模式照 Notes 走</h1>
+<p class="lede">
+  <b>规则：搜索模式只在点 X 时退出。</b>在搜索模式里滑动或点空白处，只收起键盘；搜索框留在底部、保持展开，X 也还在。这和 Notes 一样。
+  Apple 的规范把 Mail 和 Notes 列为"底部搜索"的范例：点开后搜索框"变成键盘上方的搜索框"。
+  目前（本分支 <code>3d920986c</code>）的做法是不让空搜索框失去焦点，结果键盘一直挡住半屏，也就是 ①。
+  ②–⑤ 是照 Notes 改后的样子。所有 iPhone 画面都按 393pt 宽画。
+</p>
+<div class="b-row" id="phones"></div>
+</section>
+
+<section class="b-part" id="part-2">
+<h2>待定 · 要你拍板</h2>
+<div class="dec">
+  <h3>1. 空搜索时，列表区显示什么</h3>
+  <div class="opts">
+    <div class="opt rec"><b>A 保持原列表<span class="rec-tag">推荐</span></b>
+      点开搜索时列表不动，开始输入才换成搜索结果，也就是 ② ③ 的画法。原列表本来就按最近活动排序，点开搜索时画面不跳。</div>
+    <div class="opt"><b>B 换成 Notes 式的搜索页</b>
+      点开就换成一页"最近会话"，跨所有工作区，和 ⌘K 面板空搜索时一样。更像 Notes，但一点开整屏就换了内容，而且大多数会话本来就在原列表里。</div>
+  </div>
+</div>
+<div class="dec">
+  <h3>2. 怎么实现</h3>
+  <div class="opts">
+    <div class="opt rec"><b>A 用系统搜索框，失焦后把搜索态挂回去<span class="rec-tag">推荐先试</span></b>
+      继续用系统的底部搜索框。系统因"空搜索框失去焦点"而退出时，我们把搜索态重新挂回去，但不弹键盘；点 X 的那一次则放行。
+      改动小，样式和 VoiceOver 都由系统负责。风险是 X 和失焦这两种退出可能分不清，或者挂回去时闪一下，所以要先在模拟器上跑 UI 测试确认。</div>
+    <div class="opt"><b>B 自己画底部搜索框和 X</b>
+      开发者论坛上给出的绕法：不用系统的搜索控件，换成自己的搜索框和关闭按钮，行为完全由我们决定。
+      代价是玻璃样式、滑动时隐藏、键盘避让、VoiceOver 都得自己做，iOS 以后改样式也要跟着改。A 不可靠时再走这条。</div>
+  </div>
+</div>
+<h2 style="margin-top:22px">落地（按代价排）</h2>
+<ol class="land">
+  <li>撤掉本分支"空搜索框不让失去焦点"那两处改动（<code>Platform.swift</code> 的点击放行、<code>keepsEmptySearchOnScroll</code>）。切换工作区不清空搜索词这一条保留。</li>
+  <li>按实现 A 改：用 <code>searchable(text:isPresented:)</code> 自己记住搜索态，失焦退出时挂回去，点 X 时放行。</li>
+  <li>在模拟器上跑一轮 UI 测试，照着 ②–⑤ 截图：滑动、点空白、进会话再返回、切换工作区、点 X。如果 A 分不清 X，就改走 B。</li>
+</ol>
+</section>
+
+<script>
+const ico = {
+  menu: '<svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
+  edit: '<svg class="ico" viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16z"/></svg>',
+  mag: '<svg class="ico" viewBox="0 0 24 24" style="width:19px;height:19px;stroke:rgba(60,60,67,.6);stroke-width:2.2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>',
+  x: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  chev: '<svg class="ico" viewBox="0 0 24 24" style="width:14px;height:14px;stroke-width:2.6"><path d="M6 9l6 6 6-6"/></svg>',
+};
+const rows = [
+  ['Today', null],
+  ['Release 0.1.252: deploy production', 'Deployed 0.1.252 via runner job', '1h'],
+  ['Wiki page creation flow', 'The space is created on the first wiki call…', '1h'],
+  ['Session close state check', 'Fixed promotions/current only reading the newest row', '3h'],
+  ['WireGuard LAN feasibility', 'Mapped channel/DockerBackend/profile interfaces…', '6h'],
+  ['Yesterday', null],
+  ['Project done-state check', 'Why the card read "not on main" when marked done', '20h'],
+  ['Wiki refresh investigation', 'Maintenance now fetches the remote default branch', '1d'],
+  ['Verify wiki auto-update', 'Maintenance paused quietly; infra failures not counted', '1d'],
+  ['2–7 days ago', null],
+  ['Card display rules', 'Automatic only authorizes integration → main', '1d'],
+  ['Deploy main for the sandbox', 'Deployed 0.1.250 at 997f8a966', '2d'],
+  ['Runner max-concurrency default', 'Defaults to the CPU core count, no 64 ceiling', '3d'],
+];
+const hits = [
+  ['Release 0.1.252: <span class="hit">deploy</span> production', 'orbit · Done · in title', null, '2d'],
+  ['Deploy main for the sandbox', 'orbit · Done · in last reply', '…<em>deploy</em>ed 0.1.250 at 997f8a966 via runner job…', '2d'],
+  ['Web Orbit freezes after idle', 'orbit · Idle · in last reply', '…<em>deploy</em> done: main@0222dc49b is live…', '1h'],
+  ['Compose upgrade dry run', 'orbit-prod · Done · in message', '…before the <em>deploy</em>, pull the base images…', '4d'],
+  ['Managed runners on Docker hosts', 'orbit-prod · Running · in first message', '…<em>deploy</em> a runner to 10.66.0.3 …', '5d'],
+  ['Release 0.1.248', 'orbit · Done · in message', '…staged <em>deploy</em> at 40%…', '6d'],
+];
+function listHTML(offset = 0) {
+  return `<div class="list" style="top:${104 - offset}px">` + rows.map(r => r[1] === null
+    ? `<div class="grp">${r[0]}</div>`
+    : `<div class="srow"><div class="top"><span class="ttl">${r[0]}</span><span class="rel">${r[2]} ago</span></div><div class="sub">${r[1]}</div></div>`).join('') + '</div>';
+}
+function hitsHTML() {
+  return '<div class="list">' + hits.map(h =>
+    `<div class="srow"><div class="top"><span class="ttl">${h[0]}</span><span class="rel">${h[3]} ago</span></div><div class="meta">${h[1]}</div>${h[2] ? `<div class="sub">${h[2]}</div>` : ''}</div>`).join('') + '</div>';
+}
+const chrome = `<div class="status"><span>2:34</span><span class="r">5G ▮▮</span></div>
+  <div class="nav"><span class="disc">${ico.menu}</span><span class="ws">orbit ${ico.chev}</span><span class="disc">${ico.edit}</span></div>`;
+function kb() {
+  const r = s => `<div class="kr">${[...s].map(c => `<span class="k">${c}</span>`).join('')}</div>`;
+  return `<div class="kb">${r('qwertyuiop')}${r('asdfghjkl')}<div class="kr"><span class="k w">⇧</span>${[...'zxcvbnm'].map(c=>`<span class="k">${c}</span>`).join('')}<span class="k w">⌫</span></div>
+    <div class="kr"><span class="k w">123</span><span class="k w">☺</span><span class="k sp"></span><span class="k go">search</span></div></div>`;
+}
+function sbar({ bottom, text = '', focused = false, x = true }) {
+  const body = text ? `<span class="q">${text}</span>${focused ? '<span class="caret" style="margin-left:0"></span>' : ''}<span class="clr">${ico.x}</span>`
+                    : (focused ? '<span class="caret"></span>' : '') + 'Search sessions';
+  return `<div class="sbar" style="bottom:${bottom}px"><div class="sfield">${ico.mag}${body}</div>${x ? `<span class="xbtn">${ico.x}</span>` : ''}</div>`;
+}
+const mk = (n, l, t, w, h) => `<div class="mk" style="left:${l}px;top:${t}px;width:${w}px;height:${h}px"><span class="n">${n}</span></div>`;
+const note = (txt, l, t) => `<div class="note" style="left:${l}px;top:${t}px">${txt}</div>`;
+
+const frames = [
+  { tag: 'now', label: '今天（本分支）',
+    html: chrome + listHTML(0) + kb() + sbar({ bottom: 346, focused: true }) + mk(1, 8, 432, 377, 82) + note('滑动时键盘不收起，列表被挡住一半', 70, 400),
+    cap: `<b class="h"><span class="num">1</span>搜索模式保住了，键盘也收不起来</b>
+      本分支的改法是不让空搜索框失去焦点。滑动列表时键盘不走，下半屏一直被挡住，要点 X 才能收起。这正是你第二张截图的样子。` },
+  { tag: 'after', label: '改后 ② 点开搜索',
+    html: chrome + listHTML(0) + kb() + sbar({ bottom: 346, focused: true }) + mk(2, 330, 438, 62, 62),
+    cap: `<b class="h"><span class="num">2</span>点开：搜索框升到键盘上方，旁边出现 X</b>
+      和今天一样，这一步是系统自己的动画。列表先不动（见待定 1-A）。X 是唯一的退出方式。` },
+  { tag: 'after', label: '改后 ③ 滑动 / 点空白',
+    html: chrome + listHTML(150) + '<div class="fade"></div>' + sbar({ bottom: 34 }) + mk(3, 8, 760, 377, 70) + note('键盘收起，仍在搜索模式', 120, 730),
+    cap: `<b class="h"><span class="num">3</span>滑动或点空白：只收起键盘</b>
+      搜索框回到底部，<b>保持展开、X 还在</b>，再点一下搜索框就能接着输入。Notes 就是这样。
+      今天这里会直接退出搜索，搜索框缩回原样。` },
+  { tag: 'after', label: '改后 ④ 有搜索词时',
+    html: chrome + hitsHTML() + '<div class="fade"></div>' + sbar({ bottom: 34, text: 'deploy' }) + mk(4, 8, 760, 377, 70),
+    cap: `<b class="h"><span class="num">4</span>输入后滑动看结果</b>
+      结果跨所有工作区，标出匹配位置（现有样式不变）。键盘收起，搜索词和 X 都在。
+      点进一个结果再返回，或者在抽屉里切换工作区，回来时还是这个画面（搜索词不再被清空）。` },
+  { tag: 'after', label: '改后 ⑤ 点 X',
+    html: chrome + listHTML(0) + '<div class="fade"></div>' + sbar({ bottom: 34, x: false }) + mk(5, 8, 760, 377, 70),
+    cap: `<b class="h"><span class="num">5</span>点 X：退出搜索模式</b>
+      清空搜索词，列表回到原样，底部恢复成普通搜索框。往下滑时，搜索框照旧让开（现有规则不变）。` },
+];
+document.getElementById('phones').innerHTML = frames.map(f => `<figure><span class="tag ${f.tag}">${f.label}</span>
+  <div class="phone">${f.html}</div><figcaption>${f.cap}</figcaption></figure>`).join('');
+</script>

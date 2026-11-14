@@ -400,6 +400,53 @@ final class NeedsYouLogicTests: XCTestCase {
         XCTAssertEqual(banner?.more, 1, "the blocked tool call is the one behind it")
     }
 
+    // MARK: the bar unfolded (owner 2026-11-13, 03-expand option B)
+
+    /// One line per waiting conversation: owner items first, oldest item first, then the blocked
+    /// tool calls by how long they have waited — so the first line is the one the folded bar names.
+    func testEntriesListEveryConversationInTheBarsOwnOrder() {
+        let blockedNew = session("s-new", approvals: 1, agentID: "dev", agentName: "orbit-prod",
+                                 title: "Rebuild the report", lastTurnAt: "2026-09-13T11:00:00Z")
+        let blockedOld = session("s-old", approvals: 1, agentID: "dev", agentName: "orbit-prod",
+                                 title: "Ship the release", lastTurnAt: "2026-09-13T07:00:00Z")
+        let newer = coordinator("c1", project: "Newer project",
+                                items: [ownerItem(.coordinatorQuestion, since: "2026-09-13T12:00:00Z", id: "new")])
+        let older = coordinator("c2", project: "Older project",
+                                items: [ownerItem(.promotionApproval, since: "2026-09-13T08:00:00Z", id: "old")])
+        let waiting = [blockedNew, newer, blockedOld, older]
+        let entries = NeedsYouLogic.entries(waiting: waiting)
+        XCTAssertEqual(entries.map(\.target.id), ["c2", "c1", "s-old", "s-new"])
+        XCTAssertEqual(entries.map(\.text), ["Approve merge to main", "Question from coordinator",
+                                             "orbit-prod needs you", "orbit-prod needs you"])
+        XCTAssertEqual(entries.map(\.detail), ["Older project", "Newer project",
+                                               "Ship the release", "Rebuild the report"])
+        XCTAssertEqual(entries.map(\.ownerItem?.itemId), ["old", "new", nil, nil])
+        XCTAssertEqual(entries.map(\.more), [0, 0, 0, 0], "each line is one conversation")
+        let banner = NeedsYouLogic.banner(waiting: waiting)
+        XCTAssertEqual(entries.first?.target.id, banner?.target.id, "the folded bar names the first line")
+        XCTAssertEqual(entries.first?.ownerItem?.itemId, banner?.ownerItem?.itemId)
+    }
+
+    /// Several blocked tool calls fold to "3 sessions need you"; unfolded, each names itself.
+    func testEntriesNameEachBlockedSession() {
+        let a = session("a", approvals: 1, agentID: "a", agentName: "A", title: "First",
+                        lastTurnAt: "2026-08-14T09:00:00.000Z")
+        let b = session("b", approvals: 1, agentID: "b", agentName: "B", title: "Second",
+                        lastTurnAt: "2026-08-14T08:00:00.000Z")
+        let entries = NeedsYouLogic.entries(waiting: [a, b])
+        XCTAssertEqual(entries.map(\.text), ["B needs you", "A needs you"])
+        XCTAssertEqual(entries.map(\.since), ["2026-08-14T08:00:00.000Z", "2026-08-14T09:00:00.000Z"])
+        XCTAssertEqual(NeedsYouLogic.banner(waiting: [a, b])?.target.id, entries.first?.target.id)
+    }
+
+    /// The conversation on screen is left out, as it is from the folded bar's count.
+    func testEntriesExcludeTheFocusedSession() {
+        let a = session("a", approvals: 1, agentID: "a", agentName: "A")
+        let b = session("b", approvals: 1, agentID: "b", agentName: "B")
+        XCTAssertEqual(NeedsYouLogic.entries(waiting: [a, b], excluding: "a").map(\.target.id), ["b"])
+        XCTAssertTrue(NeedsYouLogic.entries(waiting: []).isEmpty)
+    }
+
     /// A kind a later control plane invents is counted (the server counted it) but not named: the
     /// bar falls through to the wording it has always had rather than saying half a sentence.
     func testAnUnknownKindDoesNotNameTheBar() {
@@ -456,5 +503,42 @@ final class NeedsYouLogicTests: XCTestCase {
             json.replacingOccurrences(of: #""mainBranch":"master""#, with: #""mainBranch":7"#).utf8))
         XCTAssertEqual(garbled.ownerItems?.first?.kind, .promotionApproval)
         XCTAssertEqual(NeedsYouLogic.banner(waiting: [garbled])?.text, "Approve merge to main")
+    }
+
+    // MARK: arriving (the owner, 2026-11-15, docs/mocks/needs-you-capsule/05-one-surface)
+
+    /// An approval that has just arrived is what the bar says, in the push's words, for six seconds:
+    /// the press opens the conversation it stops, and the count still covers everything waiting.
+    func testAnArrivalIsSaidForSixSecondsThenTheCountComesBack() throws {
+        let at = Date(timeIntervalSince1970: 1_800_000_000)
+        let old = session("old", approvals: 1, agentName: "orbit", title: "Owner answer replayed",
+                          lastTurnAt: "2026-11-12T10:00:00Z")
+        let new = session("new", approvals: 1, agentName: "orbit-develop", title: "Android 自动更新报错",
+                          lastTurnAt: "2026-11-15T10:00:00Z")
+        let arrival = NeedsYouArrival(sessionID: "new", line: "Needs your reply · task_create", at: at)
+
+        let said = try XCTUnwrap(NeedsYouLogic.arriving(arrival, waiting: [old, new], now: at.addingTimeInterval(5.9)))
+        XCTAssertTrue(said.arriving)
+        XCTAssertEqual(said.text, "Needs your reply · task_create")
+        XCTAssertEqual(said.detail, "Android 自动更新报错")
+        XCTAssertEqual(said.target.id, "new", "the press goes to the newcomer, not the oldest")
+        XCTAssertEqual(said.count, 2)
+        XCTAssertEqual(said.more, 0)
+        XCTAssertEqual(said.since.flatMap { RelativeTime.elapsed($0, now: at) }, "0s")
+
+        XCTAssertNil(NeedsYouLogic.arriving(arrival, waiting: [old, new], now: at.addingTimeInterval(6)))
+        XCTAssertFalse(try XCTUnwrap(NeedsYouLogic.banner(waiting: [old, new])).arriving)
+    }
+
+    /// Nothing to say for a conversation that is not waiting elsewhere: the push came before the
+    /// list did, it was answered already, or it is the one on screen.
+    func testAnArrivalNeedsItsConversationAmongThoseWaitingElsewhere() {
+        let at = Date(timeIntervalSince1970: 1_800_000_000)
+        let other = session("other", approvals: 1)
+        let arrival = NeedsYouArrival(sessionID: "new", line: "Needs your reply · Bash", at: at)
+        XCTAssertNil(NeedsYouLogic.arriving(arrival, waiting: [other], now: at))
+        let new = session("new", approvals: 1)
+        XCTAssertNil(NeedsYouLogic.arriving(arrival, waiting: [other, new], excluding: "new", now: at))
+        XCTAssertNil(NeedsYouLogic.arriving(nil, waiting: [other, new], now: at))
     }
 }

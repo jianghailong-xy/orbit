@@ -98,7 +98,7 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 	go func() {
 		select {
 		case <-shutdownCtx.Done():
-			timer := time.NewTimer(shutdownDrainTimeout)
+			timer := time.NewTimer(stopDrainBudget(shutdownCtx, shutdownDrainTimeout))
 			defer timer.Stop()
 			select {
 			case <-timer.C:
@@ -296,6 +296,8 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 			stopInbox()
 			logln("OpenCode drain timeout for", job.SessionID+"; cancelling active turn")
 			if activeCancel != nil {
+				// Marked, as the Claude drain marks its own (watchShutdownDrain).
+				emit(evInterrupt, stopInterruptPayload(shutdownCtx))
 				activeCancel(errOpenCodeShutdownTimeout)
 			}
 		case result := <-activeDone:
@@ -517,6 +519,9 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 			return cancelledOpenCodeTurn(ctx, result.RuntimeSessionID)
 		}
 		return failedOpenCodeSpawn("process", err, emit)
+	}
+	if spawned := subagentSpawnedHook(ctx); spawned != nil {
+		spawned(cmd)
 	}
 
 	var stderrWG sync.WaitGroup
@@ -916,6 +921,14 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 			envOrchestrationToken:       job.OrchestrationToken,
 			envMCPPermissionPrompt:      "0",
 			envRunnerChild:              "1",
+		}
+		// A SubAgent's `orbit mcp` neither offers nor serves delegate (subagentChildJob).
+		if runID := strings.TrimSpace(job.Agent.Env[envSubagentRunID]); runID != "" {
+			environment[envSubagentRunID] = runID
+		}
+		// A SubAgent's `orbit mcp` neither offers nor serves delegate (subagentChildJob).
+		if runID := strings.TrimSpace(job.Agent.Env[envSubagentRunID]); runID != "" {
+			environment[envSubagentRunID] = runID
 		}
 		// Where `orbit mcp` reaches the runner to start a background job the runner
 		// owns. Written here as well as into the OpenCode process env, because this

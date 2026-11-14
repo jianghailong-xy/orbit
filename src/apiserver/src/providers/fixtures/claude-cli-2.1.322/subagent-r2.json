@@ -1,0 +1,717 @@
+{
+ "cli": "claude 2.1.322",
+ "recordedAt": "2026-11-11",
+ "scenario": "Recorder answers an Agent tool_use; the subagent request and the main follow-ups.",
+ "recipe": "scripts/claude-gateway-recorder/drive.sh subagent-r2",
+ "requests": [
+  {
+   "role": "other",
+   "method": "HEAD",
+   "path": "/api/hello"
+  },
+  {
+   "role": "main",
+   "method": "POST",
+   "path": "/v1/messages?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,mid-conversation-tool-changes-2026-07-01,thinking-token-count-2026-05-13,advanced-tool-use-2025-11-20,effort-2025-11-24,thinking-display-updates-2026-08-18",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-timeout": "600",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": [
+       {
+        "type": "text",
+        "text": "<system-reminder>\nAs you answer the user's questions, you ca<omitted: 511 chars of CLI prompt text>"
+       },
+       {
+        "type": "text",
+        "text": "<system-reminder>\nAttribution for git commits and pull reque<omitted: 516 chars of CLI prompt text>"
+       },
+       {
+        "type": "text",
+        "text": "Ask a subagent to say hi."
+       }
+      ]
+     },
+     {
+      "role": "system",
+      "content": [
+       {
+        "type": "text",
+        "text": "# Environment\nYou have been invoked in the following environ<omitted: 8967 chars of CLI prompt text>",
+        "cache_control": {
+         "type": "ephemeral"
+        }
+       }
+      ]
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "x-anthropic-billing-header: cc_version=2.1.322.000; cc_entrypoint=sdk-cli;"
+     },
+     {
+      "type": "text",
+      "text": "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     },
+     {
+      "type": "text",
+      "text": "<omitted: 5541 chars of CLI prompt text>",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": "$basic.tools",
+    "metadata": {
+     "user_id": "{\"device_id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"account_uuid\":\"\",\"session_id\":\"00000000-0000-4000-8000-000000000000\"}"
+    },
+    "max_tokens": 32000,
+    "thinking": {
+     "type": "adaptive",
+     "display": "updates"
+    },
+    "context_management": {
+     "edits": [
+      {
+       "type": "clear_thinking_20251015",
+       "keep": "all"
+      }
+     ]
+    },
+    "output_config": {
+     "effort": "high"
+    },
+    "stream": true
+   }
+  },
+  {
+   "role": "subagent",
+   "method": "POST",
+   "path": "/v1/messages?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,mid-conversation-tool-changes-2026-07-01,thinking-token-count-2026-05-13,advanced-tool-use-2025-11-20,effort-2025-11-24,thinking-display-updates-2026-08-18",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-timeout": "600",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": [
+       {
+        "type": "text",
+        "text": "<system-reminder>\nAs you answer the user's questions, you ca<omitted: 511 chars of CLI prompt text>"
+       },
+       {
+        "type": "text",
+        "text": "<system-reminder>\nAttribution for git commits and pull reque<omitted: 516 chars of CLI prompt text>"
+       },
+       {
+        "type": "text",
+        "text": "Reply with the word subagent-hi and nothing else."
+       }
+      ]
+     },
+     {
+      "role": "system",
+      "content": [
+       {
+        "type": "text",
+        "text": "The following deferred tools are now available via ToolSearc<omitted: 7287 chars of CLI prompt text>",
+        "cache_control": {
+         "type": "ephemeral"
+        }
+       }
+      ]
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "x-anthropic-billing-header: cc_version=2.1.322.000; cc_entrypoint=sdk-cli; cc_is_subagent=true;"
+     },
+     {
+      "type": "text",
+      "text": "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     },
+     {
+      "type": "text",
+      "text": "<omitted: 2669 chars of CLI prompt text>",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": [
+     {
+      "name": "Agent",
+      "description": "<omitted: 3227 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "description": {
+         "description": "A short (3-5 word) description of the task",
+         "type": "string"
+        },
+        "prompt": {
+         "description": "The task for the agent to perform",
+         "type": "string"
+        },
+        "subagent_type": {
+         "description": "The type of specialized agent to use for this task",
+         "type": "string"
+        },
+        "model": {
+         "description": "<omitted: 358 chars of CLI prompt text>",
+         "type": "string",
+         "enum": [
+          "sonnet",
+          "opus",
+          "haiku",
+          "fable"
+         ]
+        },
+        "effort": {
+         "description": "<omitted: 341 chars of CLI prompt text>",
+         "type": "string",
+         "enum": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+         ]
+        },
+        "run_in_background": {
+         "description": "<omitted: 286 chars of CLI prompt text>",
+         "type": "boolean"
+        },
+        "isolation": {
+         "description": "<omitted: 221 chars of CLI prompt text>",
+         "type": "string",
+         "enum": [
+          "worktree",
+          "remote"
+         ]
+        }
+       },
+       "required": [
+        "description",
+        "prompt"
+       ],
+       "additionalProperties": false
+      }
+     },
+     {
+      "name": "Bash",
+      "description": "<omitted: 1935 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "command": {
+         "description": "The command to execute",
+         "type": "string"
+        },
+        "timeout": {
+         "description": "Optional timeout in milliseconds (max 600000 for a foreground command)",
+         "type": "number"
+        },
+        "description": {
+         "description": "<omitted: 926 chars of CLI prompt text>",
+         "type": "string"
+        },
+        "run_in_background": {
+         "description": "<omitted: 182 chars of CLI prompt text>",
+         "type": "boolean"
+        },
+        "dangerouslyDisableSandbox": {
+         "description": "<omitted: 90 chars of CLI prompt text>",
+         "type": "boolean"
+        }
+       },
+       "required": [
+        "command"
+       ],
+       "additionalProperties": false
+      }
+     },
+     {
+      "name": "Edit",
+      "description": "<omitted: 360 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "file_path": {
+         "description": "The absolute path to the file to modify",
+         "type": "string"
+        },
+        "old_string": {
+         "description": "The text to replace",
+         "type": "string"
+        },
+        "new_string": {
+         "description": "The text to replace it with (must be different from old_string)",
+         "type": "string"
+        },
+        "replace_all": {
+         "description": "Replace all occurrences of old_string (default false)",
+         "default": false,
+         "type": "boolean"
+        }
+       },
+       "required": [
+        "file_path",
+        "old_string",
+        "new_string"
+       ],
+       "additionalProperties": false
+      }
+     },
+     {
+      "name": "Read",
+      "description": "<omitted: 790 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "file_path": {
+         "description": "The absolute path to the file to read",
+         "type": "string"
+        },
+        "offset": {
+         "description": "<omitted: 92 chars of CLI prompt text>",
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 9007199254740991
+        },
+        "limit": {
+         "description": "<omitted: 83 chars of CLI prompt text>",
+         "type": "integer",
+         "exclusiveMinimum": 0,
+         "maximum": 9007199254740991
+        },
+        "pages": {
+         "description": "<omitted: 113 chars of CLI prompt text>",
+         "type": "string"
+        },
+        "allow_large": {
+         "description": "<omitted: 281 chars of CLI prompt text>",
+         "type": "boolean"
+        }
+       },
+       "required": [
+        "file_path"
+       ],
+       "additionalProperties": false
+      }
+     },
+     {
+      "name": "Skill",
+      "description": "<omitted: 1417 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "skill": {
+         "description": "The name of a skill from the available-skills list. Do not guess names.",
+         "type": "string"
+        },
+        "args": {
+         "description": "Optional arguments for the skill",
+         "type": "string"
+        }
+       },
+       "required": [
+        "skill"
+       ],
+       "additionalProperties": false
+      }
+     },
+     {
+      "name": "ToolSearch",
+      "description": "<omitted: 953 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "query": {
+         "description": "<omitted: 99 chars of CLI prompt text>",
+         "type": "string"
+        },
+        "max_results": {
+         "description": "Maximum number of results to return (default: 5)",
+         "default": 5,
+         "type": "number"
+        }
+       },
+       "required": [
+        "query",
+        "max_results"
+       ],
+       "additionalProperties": false
+      }
+     },
+     {
+      "name": "DeferredToolPlaceholder",
+      "description": "<omitted: 83 chars of CLI prompt text>",
+      "input_schema": {
+       "type": "object",
+       "properties": {}
+      },
+      "defer_loading": true
+     },
+     {
+      "name": "Write",
+      "description": "<omitted: 240 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "file_path": {
+         "description": "The absolute path to the file to write (must be absolute, not relative)",
+         "type": "string"
+        },
+        "content": {
+         "description": "The content to write to the file",
+         "type": "string"
+        }
+       },
+       "required": [
+        "file_path",
+        "content"
+       ],
+       "additionalProperties": false
+      }
+     }
+    ],
+    "metadata": {
+     "user_id": "{\"device_id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"account_uuid\":\"\",\"session_id\":\"00000000-0000-4000-8000-000000000000\"}"
+    },
+    "max_tokens": 32000,
+    "thinking": {
+     "type": "adaptive",
+     "display": "updates"
+    },
+    "context_management": {
+     "edits": [
+      {
+       "type": "clear_thinking_20251015",
+       "keep": "all"
+      }
+     ]
+    },
+    "output_config": {
+     "effort": "high"
+    },
+    "stream": true
+   }
+  },
+  {
+   "role": "main",
+   "method": "POST",
+   "path": "/v1/messages?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,mid-conversation-tool-changes-2026-07-01,thinking-token-count-2026-05-13,advanced-tool-use-2025-11-20,effort-2025-11-24,thinking-display-updates-2026-08-18",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-timeout": "600",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": [
+       {
+        "type": "text",
+        "text": "<system-reminder>\nAs you answer the user's questions, you ca<omitted: 511 chars of CLI prompt text>"
+       },
+       {
+        "type": "text",
+        "text": "<system-reminder>\nAttribution for git commits and pull reque<omitted: 516 chars of CLI prompt text>"
+       },
+       {
+        "type": "text",
+        "text": "Ask a subagent to say hi."
+       }
+      ]
+     },
+     {
+      "role": "system",
+      "content": "# Environment\nYou have been invoked in the following environ<omitted: 8967 chars of CLI prompt text>"
+     },
+     {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "tool_use",
+        "id": "toolu_sub1",
+        "name": "Agent",
+        "input": {
+         "description": "Say hi",
+         "prompt": "Reply with the word subagent-hi and nothing else.",
+         "subagent_type": "general-purpose"
+        }
+       }
+      ]
+     },
+     {
+      "role": "user",
+      "content": [
+       {
+        "tool_use_id": "toolu_sub1",
+        "type": "tool_result",
+        "content": [
+         {
+          "type": "text",
+          "text": "Async agent launched successfully. (This tool result is inte<omitted: 987 chars of CLI prompt text>"
+         }
+        ],
+        "cache_control": {
+         "type": "ephemeral"
+        }
+       }
+      ]
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "x-anthropic-billing-header: cc_version=2.1.322.000; cc_entrypoint=sdk-cli;"
+     },
+     {
+      "type": "text",
+      "text": "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     },
+     {
+      "type": "text",
+      "text": "<omitted: 5541 chars of CLI prompt text>",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": "$basic.tools",
+    "metadata": {
+     "user_id": "{\"device_id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"account_uuid\":\"\",\"session_id\":\"00000000-0000-4000-8000-000000000000\"}"
+    },
+    "max_tokens": 32000,
+    "thinking": {
+     "type": "adaptive",
+     "display": "updates"
+    },
+    "context_management": {
+     "edits": [
+      {
+       "type": "clear_thinking_20251015",
+       "keep": "all"
+      }
+     ]
+    },
+    "output_config": {
+     "effort": "high"
+    },
+    "stream": true
+   }
+  },
+  {
+   "role": "main",
+   "method": "POST",
+   "path": "/v1/messages?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,mid-conversation-tool-changes-2026-07-01,thinking-token-count-2026-05-13,advanced-tool-use-2025-11-20,effort-2025-11-24,thinking-display-updates-2026-08-18",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-timeout": "600",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": [
+       {
+        "type": "text",
+        "text": "<system-reminder>\nAs you answer the user's questions, you ca<omitted: 511 chars of CLI prompt text>"
+       },
+       {
+        "type": "text",
+        "text": "<system-reminder>\nAttribution for git commits and pull reque<omitted: 516 chars of CLI prompt text>"
+       },
+       {
+        "type": "text",
+        "text": "Ask a subagent to say hi."
+       }
+      ]
+     },
+     {
+      "role": "system",
+      "content": "# Environment\nYou have been invoked in the following environ<omitted: 8967 chars of CLI prompt text>"
+     },
+     {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "tool_use",
+        "id": "toolu_sub1",
+        "name": "Agent",
+        "input": {
+         "description": "Say hi",
+         "prompt": "Reply with the word subagent-hi and nothing else.",
+         "subagent_type": "general-purpose"
+        }
+       }
+      ]
+     },
+     {
+      "role": "user",
+      "content": [
+       {
+        "tool_use_id": "toolu_sub1",
+        "type": "tool_result",
+        "content": [
+         {
+          "type": "text",
+          "text": "Async agent launched successfully. (This tool result is inte<omitted: 987 chars of CLI prompt text>"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "text",
+        "text": "The subagent answered."
+       }
+      ]
+     },
+     {
+      "role": "user",
+      "content": [
+       {
+        "type": "text",
+        "text": "<system-reminder>\n[SYSTEM NOTIFICATION - NOT USER INPUT]\nThi<omitted: 1137 chars of CLI prompt text>",
+        "cache_control": {
+         "type": "ephemeral"
+        }
+       }
+      ]
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "x-anthropic-billing-header: cc_version=2.1.322.000; cc_entrypoint=sdk-cli;"
+     },
+     {
+      "type": "text",
+      "text": "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     },
+     {
+      "type": "text",
+      "text": "<omitted: 5541 chars of CLI prompt text>",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": "$basic.tools",
+    "metadata": {
+     "user_id": "{\"device_id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"account_uuid\":\"\",\"session_id\":\"00000000-0000-4000-8000-000000000000\"}"
+    },
+    "max_tokens": 32000,
+    "thinking": {
+     "type": "adaptive",
+     "display": "updates"
+    },
+    "context_management": {
+     "edits": [
+      {
+       "type": "clear_thinking_20251015",
+       "keep": "all"
+      }
+     ]
+    },
+    "output_config": {
+     "effort": "high"
+    },
+    "stream": true
+   }
+  }
+ ],
+ "outcome": [
+  {
+   "is_error": false,
+   "terminal_reason": "completed",
+   "api_error_status": null,
+   "result": "The subagent answered.",
+   "num_turns": 2
+  },
+  {
+   "is_error": false,
+   "terminal_reason": "completed",
+   "api_error_status": null,
+   "result": "The subagent answered.",
+   "num_turns": 1
+  }
+ ]
+}

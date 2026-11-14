@@ -40,6 +40,7 @@ import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
 import { WorkspacesController } from '../workspaces/workspaces.controller';
 import { WorkspacesService } from '../workspaces/workspaces.service';
+import { MainCheckoutService } from '../workspaces/main-checkout.service';
 import { SessionAttemptService } from './session-attempt.service';
 import { TaskCheckpointService } from './task-checkpoint.service';
 
@@ -153,6 +154,8 @@ async function openDoor(stack: Stack): Promise<{ base: string; close: () => Prom
     providers: [
       { provide: ProjectsService, useValue: stack.projects },
       { provide: WorkspacesService, useValue: stack.workspaces },
+      // The main checkout's routes ride along on the workspace door; nothing here calls them.
+      { provide: MainCheckoutService, useValue: {} },
       { provide: ProjectAcceptanceService, useValue: {} },
       { provide: ProjectHandoffService, useValue: {} },
       { provide: SessionAttemptService, useValue: {} },
@@ -504,11 +507,15 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
   skip, concurrency: 1, timeout: 300_000,
 }, async (t) => {
   const stack = await connect();
-  const door = await openDoor(stack);
+  // Registered before the door opens: a door that fails to start (a provider Nest cannot resolve)
+  // must not leave the pool and the client open, or the process never exits and the spec hangs.
+  let opened: Awaited<ReturnType<typeof openDoor>> | undefined;
   t.after(async () => {
-    await door.close();
+    await opened?.close();
     await disconnect(stack);
   });
+  const door = await openDoor(stack);
+  opened = door;
 
   await t.test('explicit integration settings read back', async () => {
     const f = await project(stack, 'explicit');

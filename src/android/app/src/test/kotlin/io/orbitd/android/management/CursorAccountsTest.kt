@@ -134,8 +134,8 @@ class CursorAccountsTest {
         assertEquals("Unsupported version" to "warn", RunnerPage.engineStatus(cursor(wrong), wrong))
         val missing = single("""{"engine":"cursor","installed":false,"installationError":"CURSOR_NOT_INSTALLED: not installed"}""", "")
         assertEquals(RunnerCopy.NOT_INSTALLED to "muted", RunnerPage.engineStatus(cursor(missing), missing))
-        assertEquals("Install Cursor CLI", Infrastructure.install("cursor"))
-        assertTrue(Infrastructure.installable(missing, "cursor"))
+        assertEquals("Install Cursor CLI", MachinesAndModels.install("cursor"))
+        assertTrue(MachinesAndModels.installable(missing, "cursor"))
         assertEquals("Reinstall Cursor CLI", CursorCopy.REINSTALL)
         val out = single("""{"engine":"cursor","installed":true,"version":"2026.10.14-941492e","auth":"no"}""")
         assertEquals(RunnerCopy.SIGNED_OUT to "warn", RunnerPage.engineStatus(cursor(out), out))
@@ -164,11 +164,11 @@ class CursorAccountsTest {
         assertFalse(EngineAccounts.automaticOffered("cursor", "5c2e91a0", null, 2))
     }
 
-    // Infrastructure
+    // Machines & models
 
     @Test fun cursorCliIsCountedWhereverItsRowCanSignItIn() {
         // Counted wherever its row can get it signed in: on hpc, beside the three engines it doesn't have.
-        assertEquals("1 of 4 signed in", Infrastructure.summary(hpc(), now))
+        assertEquals("1 of 4 signed in", MachinesAndModels.summary(hpc(), now))
     }
 
     // A Cursor key's page (iOS 4)

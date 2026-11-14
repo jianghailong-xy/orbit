@@ -86,8 +86,11 @@ func (l *linkState) onEvents(eb *linkpb.EventBatch) {
 		l.mu.Unlock()
 		return
 	}
-	// The connection's share of the queue moves with the number of connections that send. It is told so with its next
-	// batch, ahead of that batch's EventAck.
+	// The connection's share of the queue moves with the number of connections that send, and the credit with the
+	// queue's depth. A connection is told so with its next batch, ahead of that batch's EventAck, if the walk that tells
+	// every connection (creditBook.spread) has not reached it yet. The batch itself was sent within the credit the runner
+	// had been told, which it is held to: MaxQueued bounds what that lets in.
+	told := l.credit
 	if level := book.current(); level != l.credit {
 		l.setCreditLocked(level)
 	}
@@ -102,7 +105,7 @@ func (l *linkState) onEvents(eb *linkpb.EventBatch) {
 	case q.next > 0 && first > q.next:
 		refusal = failure("EVENT_SEQ_GAP", "the batch starts after a seq this connection has not stored; send again from durable_seq + 1", true, 0)
 		m.eventBatches.inc("gap")
-	case !l.unacked.plus(amount).within(l.credit):
+	case !l.unacked.plus(amount).within(l.credit) && !l.unacked.plus(amount).within(told):
 		refusal = failure("CREDIT_EXCEEDED", "more events would be in flight than this connection's credit; send again once some are acknowledged", true, time.Second)
 		m.eventBatches.inc("credit_exceeded")
 	default:
@@ -384,6 +387,12 @@ type creditBook struct {
 	line, called list.List
 	waiting      map[*linkState]map[string]*waiter
 	held         creditLevel
+	// pastHigh is when the queue was last past its high-water mark: the credit comes back no sooner than
+	// CreditHold after it (give), and restore is the timer that brings it back then.
+	pastHigh time.Time
+	restore  *time.Timer
+	// walking says a walk is telling every connection the credit (spread); again, that the credit changed during it.
+	walking, again bool
 }
 
 // waiter is a session in line for room in the ingest queue.
@@ -504,8 +513,11 @@ func (b *creditBook) admit(l *linkState, session string, a creditLevel, idle boo
 		if idle {
 			b.activeLocked(1)
 		}
-		if !b.reduced && !b.queued.within(b.tune.HighWater) {
-			b.reduced, reduced = true, true
+		if !b.queued.within(b.tune.HighWater) {
+			b.pastHigh = now
+			if !b.reduced {
+				b.reduced, reduced = true, true
+			}
 		}
 	}
 	return admitted, reduced
@@ -522,14 +534,38 @@ func (b *creditBook) give(a creditLevel, idle bool) {
 	now := time.Now()
 	b.expireLocked(now)
 	b.callLocked(now)
-	changed := b.reduced && b.queued.Events < b.tune.LowWater.Events && b.queued.Bytes < b.tune.LowWater.Bytes
-	if changed {
-		b.reduced = false
-	}
+	changed := b.restoreLocked(now)
 	b.mu.Unlock()
 	if changed {
 		b.announce(false)
 	}
+}
+
+// restoreLocked gives the credit back when the queue is below its low-water mark and has not been past its high-water
+// mark for CreditHold. Within the hold it sets a timer for its end, as nothing else may come to give it back then. The
+// hold keeps a queue that passes its high-water mark again and again, as it did at each of a 400,000-connection
+// gateway's GC marks every 11 s or so, from changing every connection's credit twice each time (task
+// 34paLvEDFObkoBxYLAJSN: 84 reductions in 15 minutes). It says whether the credit came back.
+func (b *creditBook) restoreLocked(now time.Time) bool {
+	if !b.reduced || b.queued.Events >= b.tune.LowWater.Events || b.queued.Bytes >= b.tune.LowWater.Bytes {
+		return false
+	}
+	if wait := b.pastHigh.Add(b.tune.CreditHold).Sub(now); wait > 0 {
+		if b.restore == nil {
+			b.restore = time.AfterFunc(wait, func() {
+				b.mu.Lock()
+				b.restore = nil
+				changed := b.restoreLocked(time.Now())
+				b.mu.Unlock()
+				if changed {
+					b.announce(false)
+				}
+			})
+		}
+		return false
+	}
+	b.reduced = false
+	return true
 }
 
 // callLocked holds room for the sessions in line, oldest first, while what the queue has left fits what each asked.
@@ -592,17 +628,54 @@ func (b *creditBook) announce(reduced bool) {
 		m.creditChanges.inc("restored")
 		b.g.log.Info("the ingest queue has drained: credit restored", "events", level.Events, "bytes", level.Bytes)
 	}
-	for _, c := range b.g.reg.snapshot() {
-		if c.link == nil {
-			continue
-		}
-		c.link.mu.Lock()
-		// A connection with no credit yet has not started: Welcome may still be to come, and start tells it this change.
-		if c.link.credit != (creditLevel{}) && c.link.credit != level {
-			c.link.setCreditLocked(level)
-		}
-		c.link.mu.Unlock()
+	b.spread()
+}
+
+// spread tells every connection the credit in a walk, CreditSpreadBatch connections at a time every
+// CreditSpreadEvery, rather than in one pass: at 400,000 connections one pass wrote 400,000 frames at once, twice at
+// each GC mark. Each step tells its connections the credit as it stands then, so a change during the walk reaches the
+// rest of them at once; the walk then goes round again for the ones it had passed. A connection that sends meanwhile is
+// told with that batch (onEvents), and one that connects is told in its Welcome.
+func (b *creditBook) spread() {
+	b.mu.Lock()
+	if b.walking {
+		b.again = true
+		b.mu.Unlock()
+		return
 	}
+	b.walking = true
+	b.mu.Unlock()
+	go func() {
+		for {
+			conns := b.g.reg.snapshot()
+			for i := 0; i < len(conns); i += b.tune.CreditSpreadBatch {
+				if i > 0 {
+					time.Sleep(b.tune.CreditSpreadEvery)
+				}
+				level := b.current()
+				for _, c := range conns[i:min(i+b.tune.CreditSpreadBatch, len(conns))] {
+					if c.link == nil {
+						continue
+					}
+					c.link.mu.Lock()
+					// A connection with no credit yet has not started: Welcome may still be to come, and start tells it
+					// this change.
+					if !c.link.closed && c.link.credit != (creditLevel{}) && c.link.credit != level {
+						c.link.setCreditLocked(level)
+					}
+					c.link.mu.Unlock()
+				}
+			}
+			b.mu.Lock()
+			if !b.again {
+				b.walking = false
+				b.mu.Unlock()
+				return
+			}
+			b.again = false
+			b.mu.Unlock()
+		}
+	}()
 }
 
 func boolGauge(v bool) float64 {

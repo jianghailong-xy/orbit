@@ -106,6 +106,10 @@ object CardRequests {
             CardVerb.REOPEN_TASK -> request(listOf("tasks", card.objectId), buildJsonObject {
                 put("status", "OPEN"); put("supersededByTaskId", JsonNull); put("terminalReason", JsonNull)
             }, HttpMethod.PATCH)
+            // Restart the task (§3, D2 = A): the Run press's own name rides along, so a resend is the same press.
+            CardVerb.RESTART_TASK -> request(listOf("tasks", card.objectId, "evidence", required("evidenceRevision"), "restart"), buildJsonObject {
+                put("triggerId", requireNotNull(input.triggerId).also { require(it.isNotBlank()) })
+            })
             CardVerb.CONFIRM_MERGE -> request(projectPath("promotions", card.objectId, "confirm"), buildJsonObject { put("sourceSha", required("sourceSha")) })
             CardVerb.DECLINE_MERGE -> request(projectPath("promotions", card.objectId, "decline"))
             CardVerb.CANCEL_MERGE -> {

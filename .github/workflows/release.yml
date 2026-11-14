@@ -1,21 +1,37 @@
 # Release workflow for all three Orbit clients — one `vX.Y.Z` tag ships them from a single push:
-#   • dmg             → macOS:   signed + notarized + stapled DMG, the GitHub Release, and the Sparkle appcast.
-#   • testflight      → iOS:     signed .ipa archived and uploaded to TestFlight.
+#   • identity        → refuses a tag whose version is not the root package.json version or that has no
+#                       human-written release-notes/<version>.md; every build job waits for it.
+#   • dmg             → macOS: signed + notarized + stapled DMG, its Sparkle payload and the appcast.
+#                       Builds on a tag push and on workflow_dispatch; publishes nothing itself.
+#   • testflight      → iOS: signed .ipa archived and uploaded to TestFlight.
 #   • android-build   → Android: signed release APK, built and verified with the android-internal environment.
-#   • android-publish → Android: attaches the APK, its .sha256 and android-update.json (what installed apps
-#                       read to update themselves) to the Release dmg created. Runs only when dmg and
-#                       android-build both succeeded; after fixing dmg, "Re-run failed jobs" publishes it.
+#   • supply-chain    → downloads every build, builds the runner binaries and both service images from the
+#                       tag, writes SHA256SUMS, a CycloneDX SBOM, an in-toto/SLSA provenance statement and the
+#                       release manifest, re-verifies them, and attests the bundle. Publishing waits for it:
+#                       an artifact that disagrees with the version, its checksum, the SBOM or the provenance
+#                       stops the release here.
+#   • publish         → creates the GitHub Release (body = release-notes/<version>.md) with the DMG, Sparkle
+#                       payload, runner reference binaries, checksums, SBOM, provenance and manifest, and
+#                       publishes the Sparkle appcast to GitHub Pages. The only job that creates a Release.
+#   • android-publish → attaches the APK, its .sha256 and android-update.json (what installed apps
+#                       read to update themselves) to the Release publish created.
 #
 # Trigger: pushing a `v*` tag runs ALL of them. `workflow_dispatch` builds macOS and/or iOS only, with a
 # `platform` choice (both / macos / ios) so a single Apple client can be rebuilt without a tag (a dispatch
-# with no tag uses each build's default version); Android runs on tag pushes alone. The build/test CI
-# gates live in client.yml and android.yml.
+# with no tag uses each build's default version); it publishes nothing. Android runs on tag pushes alone.
+# The build/test CI gates live in client.yml and android.yml.
 #
-# The tag drives the version. macOS uses it verbatim (vX.Y.Z → stable channel; vX.Y.Z-beta.N →
-# Sparkle beta channel). iOS strips any -beta.N to a numeric marketing version
+# The tag drives the version. The tag is `v` + the root package.json version (identity checks it), macOS uses
+# it verbatim (vX.Y.Z → stable channel; vX.Y.Z-beta.N → Sparkle beta channel), the GitHub Release body is the
+# human-written release-notes/<version>.md. iOS strips any -beta.N to a numeric marketing version
 # (CFBundleShortVersionString must be numeric); its build number is the commit count. Android uses the
 # tag without v as versionName and the same commit count as versionCode, which must exceed every
 # published Android versionCode; a second tag on an already published commit skips Android quietly.
+#
+# Supply-chain trust root: the checksums, SBOM and provenance are generated and verified by
+# scripts/supply-chain.mjs and documented in docs/supply-chain.md. `actions/attest-build-provenance`
+# additionally signs a GitHub artifact attestation for every bundle file, which anyone can verify with
+# `gh attestation verify`. Every action below is pinned to a full commit SHA.
 #
 # Required repo secrets (Settings → Secrets and variables → Actions):
 #   macOS: DEVID_CERT_P12_BASE64, DEVID_CERT_PASSWORD, KEYCHAIN_PASSWORD, APPLE_ID, APPLE_TEAM_ID,
@@ -44,24 +60,45 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege by default: only `publish` and `android-publish` write, and only `supply-chain` may
+# mint an attestation.
+permissions:
+  contents: read
+
 jobs:
+  # ---- The one version ---------------------------------------------------------------------------
+  # The tag must name the root package.json version and carry human-written notes for that version;
+  # nothing is built or published otherwise (docs/release-process.md, "One version of record").
+  identity:
+    name: Release identity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0       # the commit count every artifact's build number uses
+          persist-credentials: false
+      - name: Check the tag, package version and release notes name one release
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        run: node scripts/release-identity.mjs check-tag "$GITHUB_REF_NAME"
+
   # ---- macOS: signed + notarized DMG ----------------------------------------------------------
   dmg:
     name: macOS · signed + notarized DMG
+    needs: [identity]
     # A tag push builds both; a manual run honours the platform choice.
     if: (github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'both' || inputs.platform == 'macos'))
     runs-on: macos-15
-    permissions:
-      contents: write          # create the GitHub Release + push the gh-pages appcast
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0       # full history so build-dmg.sh's commit-count CFBundleVersion is monotonic
+          persist-credentials: false
 
       # The app relies on newer-Swift MainActor-isolation inference (SwiftUI View + @Observable),
       # so pin the latest stable Xcode to match the toolchain it compiles under locally.
       - name: Select latest Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: latest-stable
       - name: Toolchain
@@ -114,24 +151,14 @@ jobs:
           ./src/macos/scripts/build-dmg.sh
 
       - name: Upload DMG
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: Orbit-dmg
           path: src/macos/build/Orbit-v*
           if-no-files-found: error
 
-      # ---- Release publishing (tag pushes only) ------------------------------------------------
-      - name: Create GitHub Release
-        if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          ver="${GITHUB_REF_NAME#v}"
-          prerelease=""; case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease";; esac
-          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes $prerelease \
-            "src/macos/build/Orbit-v$ver-arm64.dmg" \
-            "src/macos/build/Orbit-v$ver-arm64.zip"
-
+      # The appcast is generated here, where the Sparkle key and the zip are, and published by the
+      # `publish` job only after the supply chain has verified the artifacts.
       - name: Generate Sparkle appcast
         if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
         env:
@@ -154,27 +181,27 @@ jobs:
             --maximum-versions 10
           cp "$work/appcast.xml" "$work/out/appcast.xml"
 
-      - name: Publish appcast to GitHub Pages
+      - name: Upload the Sparkle appcast
         if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
-        uses: peaceiris/actions-gh-pages@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          github_token: ${{ github.token }}
-          publish_branch: gh-pages
-          publish_dir: ${{ runner.temp }}/updates/out
-          # Keep the public entrance deployed by pages.yml alongside Sparkle's feed.
-          keep_files: true
+          name: sparkle-appcast
+          path: ${{ runner.temp }}/updates/out/appcast.xml
+          if-no-files-found: error
 
   # ---- iOS: TestFlight --------------------------------------------------------------------------
   testflight:
     name: iOS · TestFlight
+    needs: [identity]
     if: (github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'both' || inputs.platform == 'ios'))
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0        # full history → commit-count build number is monotonic
+          persist-credentials: false
       - name: Select latest Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: latest-stable
       - name: Install XcodeGen
@@ -286,6 +313,7 @@ jobs:
   # this job uses; nothing here runs Apple tooling or holds a write token.
   android-build:
     name: Android · signed release APK
+    needs: [identity]
     if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -366,11 +394,179 @@ jobs:
           overwrite: true
           retention-days: 30
 
+  # ---- Supply chain: checksums, SBOM, provenance ------------------------------------------------
+  # Reads every build artifact, builds the runner binaries and both service images from the tag, and
+  # writes the four documents that tie the release to its source. `verify` re-reads them; a mismatch
+  # fails this job, and `publish` waits for it. Runs even when the Android build failed (its assets are
+  # then simply absent, and android-publish will not attach any), but never when the DMG failed.
+  supply-chain:
+    name: Supply chain · checksums, SBOM, provenance
+    needs: [dmg, android-build]
+    if: always() && github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v') && needs.dmg.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write          # actions/attest-build-provenance signs with GitHub's OIDC identity
+      attestations: write      # the signed attestation is stored on the repository
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.x'
+          cache-dependency-path: src/runner-go/go.sum
+
+      - name: Download the macOS build
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: Orbit-dmg
+          path: ${{ runner.temp }}/artifacts/dmg
+      - name: Download the Sparkle appcast
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: sparkle-appcast
+          path: ${{ runner.temp }}/artifacts/appcast
+      - name: Download the Android build
+        if: needs.android-build.outputs.skip == 'false'
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: android-release-${{ github.run_id }}
+          path: ${{ runner.temp }}/artifacts/android
+      - name: Stage every artifact under one name
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/supply-chain"
+          mkdir -p "$work/artifacts"
+          cp "$RUNNER_TEMP"/artifacts/dmg/*.dmg "$RUNNER_TEMP"/artifacts/dmg/*.zip "$work/artifacts/"
+          cp "$RUNNER_TEMP"/artifacts/appcast/appcast.xml "$work/artifacts/"
+          if [ -f "$RUNNER_TEMP/artifacts/android/app-release.apk" ]; then
+            cp "$RUNNER_TEMP/artifacts/android/app-release.apk" "$work/artifacts/orbit-android-${GITHUB_REF_NAME#v}.apk"
+            cp "$RUNNER_TEMP/artifacts/android/identity.json" "$work/artifacts/android-identity.json"
+          fi
+          ls -l "$work/artifacts"
+      # The runner release is built from the tag with the same script a deployment runs. A deployment
+      # serves its own build (with its own origin baked in) at /dl; this reference build is what the
+      # release's sums, SBOM and provenance describe.
+      - name: Build the runner binaries
+        env:
+          ORBIT_SOURCE_SHA: ${{ github.sha }}
+        run: bash scripts/build-binaries.sh "$RUNNER_TEMP/supply-chain/artifacts"
+      # Build both service images from this tag and record what was built. A deployment rebuilds them
+      # from the same source; the recorded config and layer digests are this build's, not a promise
+      # that Docker builds are bit-reproducible.
+      - name: Build the service images
+        run: |
+          set -euo pipefail
+          for spec in 'orbit-apiserver src/apiserver/Dockerfile' 'orbit-web src/web/Dockerfile'; do
+            set -- $spec
+            name="$1"; dockerfile="$2"
+            for attempt in 1 2 3; do
+              if docker build -f "$dockerfile" -t "$name:release" . ; then built=1; break; fi
+              echo "::warning::$name image build attempt $attempt failed; retrying in 20s"
+              sleep 20
+            done
+            [ "${built:-0}" = 1 ] || exit 1
+            node scripts/supply-chain.mjs image-inspect --name "$name" --image "$name:release" \
+              --dockerfile "$dockerfile" --out "$RUNNER_TEMP/supply-chain/images/$name.json"
+          done
+      - name: Generate the bundle
+        run: |
+          set -euo pipefail
+          # A bundle that silently loses a surface is not a release; the Android one is required
+          # only when this run built it (a second tag on a published commit skips Android).
+          require=(--require-surface macos --require-surface sparkle-appcast --require-surface runner)
+          if [ -f "$RUNNER_TEMP/artifacts/android/app-release.apk" ]; then
+            require+=(--require-surface android --require-surface android-identity)
+          fi
+          node scripts/supply-chain.mjs generate \
+            --version "${GITHUB_REF_NAME#v}" --tag "$GITHUB_REF_NAME" --source-sha "$GITHUB_SHA" \
+            --repository "$GITHUB_REPOSITORY" --artifacts "$RUNNER_TEMP/supply-chain/artifacts" \
+            --out "$RUNNER_TEMP/supply-chain/bundle" --tree . \
+            --build-number "$(git rev-list --count HEAD)" \
+            --lockfile "$PWD/package-lock.json" \
+            --workflow ".github/workflows/release.yml" \
+            --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --started-on "$(git show -s --format=%cI "$GITHUB_SHA")" \
+            --finished-on "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            "${require[@]}" \
+            --image "$RUNNER_TEMP/supply-chain/images/orbit-apiserver.json" \
+            --image "$RUNNER_TEMP/supply-chain/images/orbit-web.json"
+      # The gate: a version, checksum, SBOM or provenance mismatch stops here, and publish waits.
+      - name: Verify the bundle
+        run: |
+          node scripts/supply-chain.mjs verify --dir "$RUNNER_TEMP/supply-chain/bundle" \
+            --tag "$GITHUB_REF_NAME" --source-sha "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY" \
+            --tree . --require-ci
+      - name: Attest the bundle
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        with:
+          subject-path: ${{ runner.temp }}/supply-chain/bundle/*
+      - name: Keep the verified bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: supply-chain-${{ github.run_id }}
+          path: ${{ runner.temp }}/supply-chain/bundle
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 30
+
+  # ---- Publish: the one job that creates the GitHub Release --------------------------------------
+  # Holds the write token but never the signing environment or its secrets. The APK is attached by
+  # android-publish after this job (its update manifest is written there); everything else here.
+  publish:
+    name: Publish the GitHub Release
+    needs: [supply-chain]
+    if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: supply-chain-${{ github.run_id }}
+          path: ${{ runner.temp }}/supply-chain
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/supply-chain"
+          ver="${GITHUB_REF_NAME#v}"
+          prerelease=""; case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease";; esac
+          # The APK and its .sha256 are attached by android-publish, together with the update
+          # manifest installed apps read; uploading them here would make that job collide.
+          mapfile -t assets < <(find "$dir" -maxdepth 1 -type f ! -name 'orbit-android-*.apk' | sort)
+          # The body is the release's own human-written notes; the identity job refused the tag without them.
+          gh release create "$GITHUB_REF_NAME" --title "Orbit $ver" \
+            --notes-file "release-notes/$ver.md" $prerelease "${assets[@]}"
+      - name: Stage the appcast for Pages
+        run: |
+          mkdir -p "$RUNNER_TEMP/appcast"
+          cp "$RUNNER_TEMP/supply-chain/appcast.xml" "$RUNNER_TEMP/appcast/appcast.xml"
+      - name: Publish appcast to GitHub Pages
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
+        with:
+          github_token: ${{ github.token }}
+          publish_branch: gh-pages
+          publish_dir: ${{ runner.temp }}/appcast
+          # Keep the public entrance deployed by pages.yml alongside Sparkle's feed.
+          keep_files: true
+
   # Holds the write token but never the signing environment or its secrets. It does not create the
   # Release or change its pre-release/latest state, and never replaces an asset already there.
   android-publish:
     name: Android · attach to the GitHub Release
-    needs: [dmg, android-build]
+    needs: [publish, android-build]
     if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v') && needs.android-build.outputs.skip == 'false'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -390,12 +586,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # The annotated tag's message is the update's notes; github-release.py has a default sentence.
-          git fetch --no-tags --force origin "+refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
-          : > "$RUNNER_TEMP/notes.txt"
-          if [ "$(git cat-file -t "refs/tags/$GITHUB_REF_NAME")" = tag ]; then
-            git tag -l --format='%(contents:subject)%0a%0a%(contents:body)' "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.txt"
-          fi
+          # The update carries the release's own human-written notes; the identity job refused the tag without them.
+          cp "release-notes/${GITHUB_REF_NAME#v}.md" "$RUNNER_TEMP/notes.txt"
           python3 src/android/scripts/github-release.py manifest --tag "$GITHUB_REF_NAME" --repository "$GITHUB_REPOSITORY" \
             --identity "$RUNNER_TEMP/android-release/identity.json" --apk "$RUNNER_TEMP/android-release/app-release.apk" \
             --notes-file "$RUNNER_TEMP/notes.txt" --output "$RUNNER_TEMP/publish" --github-output "$GITHUB_OUTPUT"

@@ -4,6 +4,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.orbitd.android.openProjectSessionsPage
 import io.orbitd.android.navigation.ObjectId
 import java.time.Instant
 import okhttp3.mockwebserver.MockResponse
@@ -131,7 +132,7 @@ class ProjectIncrementsDeviceTest : IncrementDeviceTest() {
     private fun openSessionsPage() {
         signIn()
         awaitTag("project-row:$launch")
-        compose.onNodeWithTag("project-row:$launch").performClick()
+        compose.openProjectSessionsPage(launch)
         await("the project's sessions page") { exists(hasTestTag("project-sessions-list")) }
     }
 

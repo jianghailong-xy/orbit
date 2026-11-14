@@ -266,7 +266,13 @@ func TestWikiConnHealthFindsASilentConnectionAndSendsAgainOnANewOne(t *testing.T
 // the same, and so does the other call's when its own, longer timeout comes.
 func TestWikiConnHealthSendsATimedOutCallAgainOnANewConnection(t *testing.T) {
 	// The health check as it ships, which cannot find the connection out within this test.
-	short, long := 500*time.Millisecond, 3*time.Second
+	//
+	// short is 2s, not 500ms: each send of the short call that is answered includes what a new connection
+	// costs — a TLS handshake, the goroutines on both ends waiting to be run — and on a starved machine that
+	// took longer than 500ms, so the call's first send timed out before the connection went silent, or its
+	// retry on the new connection timed out too. long stays well above the short call's two sends and the
+	// retry's wait between them, which is all the call before its timeout has to fit.
+	short, long := 2*time.Second, 8*time.Second
 	lines := withRealClockWikiRetry(t, 100*time.Millisecond, time.Second, 10*time.Second)
 	door := newSilentDoor(t, func(conn, call int) bool { return conn == 1 && call >= 2 })
 	tr := door.transport()

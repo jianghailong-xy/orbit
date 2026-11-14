@@ -84,6 +84,11 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     public let supersedes: [TaskRef]?
     /// What replaced this task, oldest first: the last one is the live attempt.
     public let successorChain: [TaskRef]?
+    /// SR18's sentence for a task forked from a session (docs/task-fork-from-session-design.md
+    /// §2.3), finished by the server — "Forked from session «title» at abc1234 (includes
+    /// uncommitted changes)" — and drawn as it is. Detail payload only; nil on a task that was not
+    /// forked, and from an older server.
+    public let forkSource: String?
 
     // Computed list-view flags (absent on the detail payload).
     public let running: Bool?
@@ -110,6 +115,8 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     /// task in no project, and from a server that predates the read.
     public let integration: TaskIntegrationView?
     public let assignee: TaskAssignee?
+    /// Where a run of this task last said it was (`task_progress_report`). Detail payload only.
+    public let progress: TaskProgressView?
     public let comments: [TaskComment]?
     public let sessions: [SessionRef]?
     public let creatorSession: SessionRef?
@@ -132,11 +139,11 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
         case completionPolicy, verifiesTaskId, verificationState, verifier
         case acceptanceCriteria, acceptanceCommand, acceptanceExpectedExitCode, runAt, attachments
         case labels, project
-        case supersededByTaskIdAbsentReason, supersedes, successorChain
+        case supersededByTaskIdAbsentReason, supersedes, successorChain, forkSource
         case running, queued, runningSince, awaitingOwnerConfirmation, confirmationUnderReview, blocked
         case dependencyState, runnable
         case integration
-        case assignee, comments, sessions, creatorSession, dependsOn, dependedOnBy
+        case assignee, progress, comments, sessions, creatorSession, dependsOn, dependedOnBy
         case counts = "_count"
     }
 }
@@ -280,6 +287,8 @@ public struct SessionRef: Codable, Equatable, Sendable, Identifiable {
     /// says what it used. Nil before it was claimed, and on `creatorSession`.
     public let model: String?
     public let effort: String?
+    /// What the run has cost so far, in US dollars. Nil from a server that does not send it.
+    public let costUsd: Double?
     /// The routing decision this run was planned with (§7.5); nil on any other session.
     public let route: TaskRunRoute?
 

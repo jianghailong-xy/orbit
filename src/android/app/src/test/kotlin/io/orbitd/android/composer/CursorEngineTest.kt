@@ -2,7 +2,7 @@ package io.orbitd.android.composer
 
 import io.orbitd.android.composer.ProviderEngines.Credential
 import io.orbitd.android.core.net.ApiError
-import io.orbitd.android.management.Infrastructure
+import io.orbitd.android.management.MachinesAndModels
 import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.management.WorkspaceEffort
 import kotlinx.serialization.json.*
@@ -82,8 +82,8 @@ class CursorEngineTest {
         assertEquals(listOf("claude", "antigravity"), rows(without))
         // An engine this build doesn't know yet is still drawn, after the rest.
         assertEquals(listOf("claude", "antigravity", "next-cli"), rows(older(claude, """{"engine":"next-cli","installed":true}""")))
-        assertEquals(emptyList<Infrastructure.Attention>(), Infrastructure.attention(listOf(without), emptyList(), emptyList(), emptyList(), now))
-        assertEquals("1 of 3 signed in", Infrastructure.summary(without, now))
+        assertEquals(emptyList<MachinesAndModels.Attention>(), MachinesAndModels.attention(listOf(without), emptyList(), emptyList(), emptyList(), now))
+        assertEquals("1 of 3 signed in", MachinesAndModels.summary(without, now))
     }
 
     /** Once one does, every list offers it: last among the engines, on a machine that predates it too — whose row says it needs an
@@ -98,11 +98,11 @@ class CursorEngineTest {
         // A machine that predates it has a row too, with the fleet in view: nothing reported, so it says to update the runner.
         assertEquals(listOf("claude", "antigravity", "cursor"), rows(older(claude), listOf(older(claude), withCursor)))
         assertEquals("Update runner" to "warn", RunnerPage.engineStatus(RunnerPage.engines(older(claude), listOf(withCursor)).last(), older(claude)))
-        // Signed out under a workspace that runs on it: the runner page raises it — Infrastructure's Needs you does not, as the web's
+        // Signed out under a workspace that runs on it: the runner page raises it — Machines & models' Needs you does not, as the web's
         // machine card draws it nothing.
         val items = RunnerPage.attention(withCursor, listOf(onCursor), now, latestVersion = null)
         assertEquals(listOf("Cursor CLI signed out"), items.filter { it.kind == "engineSignedOut" }.map { it.short })
-        assertEquals(emptyList<Infrastructure.Attention>(), Infrastructure.attention(listOf(withCursor), emptyList(), emptyList(), emptyList(), now))
+        assertEquals(emptyList<MachinesAndModels.Attention>(), MachinesAndModels.attention(listOf(withCursor), emptyList(), emptyList(), emptyList(), now))
         // Cursor CLI's update note is the pinned build's: a fortnight behind the release it doesn't follow is still worth a person.
         assertTrue(items.any { it.kind == "engineNotUpdating" && it.short == "Cursor CLI update failed" })
     }

@@ -16,7 +16,18 @@ import { encodeId } from '../lib/idCodec';
 import { TASK_RUN_HELD_TITLE, TASK_RUN_PIN_TITLE } from '../lib/taskRunHandoff';
 import type { TaskRunConflictToast } from './TaskRunHandoffNotice';
 import type { WriteToast } from './TaskScheduleEditor';
-import { PROJECT_CANCELLED_NOTE, TaskDetailPanel, runNowHint, runNowMutationOptions } from './TaskDetailPanel';
+import {
+  PROJECT_CANCELLED_NOTE,
+  TaskDetailPanel,
+  costLabel,
+  elapsedLabel,
+  evidenceCheckText,
+  evidenceMeta,
+  evidenceOutcome,
+  planSentence,
+  runNowHint,
+  runNowMutationOptions,
+} from './TaskDetailPanel';
 
 // A static (effect-free) render never invokes a queryFn, so the cache is seeded instead. Partial,
 // because the module also exports the attachment resolver Transcript reads at load time.
@@ -416,24 +427,17 @@ describe('the task panel’s delete', () => {
   const deleteButton = (html: string) =>
     /<button[^>]*aria-label="Delete task"[^>]*>/.exec(html)?.[0] ?? null;
 
-  it('sits in the header, so a task can be deleted without hovering its row', () => {
-    // The row's trash only appears on hover, which a touch screen never produces.
-    expect(deleteButton(renderPanel(task()))).not.toBeNull();
+  it('is in ⋯ rather than in the header, which keeps one press for what the task needs next', () => {
+    // ⋯ → Delete task… is reachable without hovering the row (TaskDetailPanel.share.test.tsx).
+    expect(deleteButton(renderPanel(task()))).toBeNull();
   });
 
-  it('sits beside the actions row rather than in it, so the phone rule keeps it by the title', () => {
+  it('leaves ⋯ and Close beside the actions row rather than in it, so the phone rule keeps them by the title', () => {
     // Below 600px index.css lifts exactly `.tdp-head > .orbit-button-icon-only` — the panel's own two
-    // window buttons — out of the pressing row and leaves them on the title's line. Put either of
-    // them back inside `.tdp-head-actions` and that rule stops matching it and the phone header
-    // quietly goes back to four presses on one line.
+    // window buttons — out of the pressing row and leaves them on the title's line.
     expect(renderPanel(task())).toMatch(
-      /<div class="tdp-head-actions">[\s\S]*?<\/div><button[^>]*aria-label="Delete task"[\s\S]*?<button[^>]*aria-label="Close"/,
+      /<div class="tdp-head-actions">[\s\S]*?<\/div><button[^>]*aria-label="More actions"[\s\S]*?<button[^>]*aria-label="Close"/,
     );
-  });
-
-  it('shows the delete in progress', () => {
-    expect(deleteButton(renderPanel(task()))).not.toMatch(/aria-busy="true"/);
-    expect(deleteButton(renderPanel(task(), true))).toMatch(/aria-busy="true"/);
   });
 });
 
@@ -576,15 +580,16 @@ describe('the task panel’s header action', () => {
     });
   });
 
-  it('mounts the Start at editor on the server’s own schedule and project', () => {
+  it('says the server’s own schedule in Runs with, and keeps the Start at editor behind Edit', () => {
     const out = inTimeZone(SHANGHAI, () =>
       renderPanel(task({ runAt: '2026-09-01T01:00:00.000Z', projectId: PROJECT_ID })),
     );
-    expect(out).toContain('>Start at</label>');
-    expect(out).toMatch(/<input[^>]*type="datetime-local"[^>]*value="2026-09-01T09:00"/);
-    // ...and says, in the panel itself, what Run now would cost — the tooltip below is a hover
-    // away, and this sentence is where a reader comparing the two buttons is looking.
-    expect(out).toContain('Run now starts immediately and clears this scheduled start.');
+    // At rest the envelope is one line, and the schedule is in it.
+    expect(out).toContain('Starts Sep 1, 9:00');
+    // The editor itself opens with Runs with → Edit; the source pins what it is handed.
+    expect(out).not.toContain('>Start at</label>');
+    expect(readFileSync(fileURLToPath(new URL('./TaskDetailPanel.tsx', import.meta.url)), 'utf8'))
+      .toContain('<TaskScheduleEditor taskId={taskId} runAt={q.data?.runAt} projectId={q.data?.projectId} />');
   });
 });
 
@@ -1078,5 +1083,156 @@ describe('the project a task is filed under', () => {
     const html = renderPanel({ id: TASK_ID, title: 'Mine', status: 'OPEN', project: null });
 
     expect(html).not.toContain('tdp-project-line');
+  });
+});
+
+/**
+ * The page led by the run (docs/mocks/task-detail-agent-first): one status, what the agent is doing,
+ * what it delivered and on what grounds, the plan in a sentence, the envelope in a line, and one
+ * timeline.
+ */
+describe('the task page led by the run', () => {
+  const STARTED = '2026-11-12T09:42:00.000Z';
+  const running = (over: Record<string, unknown> = {}) =>
+    task({
+      sessions: [{ id: LIVE_RUN, status: 'RUNNING', createdAt: STARTED, costUsd: 0.84, model: 'claude-opus-5-5', workspace: { name: 'Builder' } }],
+      ...over,
+    });
+  const titles = (html: string) =>
+    [...html.matchAll(/class="tdp-section-title">([^<]+)</g)].map((m) => m[1]);
+
+  it('reads Running in the header while a run of an open task is going, not Open beside it', () => {
+    const html = renderPanel(running());
+    const badge = /<div class="tdp-meta"><span class="tdp-badge tone-([a-z]+)">([^<]+)</.exec(html);
+    expect(badge?.[1]).toBe('blue');
+    expect(badge?.[2]).toMatch(/^Running/);
+    // The run's cost, in the status line.
+    expect(html).toContain('· $0.84');
+  });
+
+  it('says what the agent is doing now, with the position it last reported', () => {
+    const html = renderPanel(running({
+      progress: { revision: 3, phase: 'One manager per host', current: 3, total: 5, message: 'Editing manager.service.ts', lastProgressAt: STARTED },
+    }));
+    expect(titles(html)[0]).toBe('Now');
+    expect(html).toContain('Builder is working');
+    expect(html).toContain('Step 3 of 5');
+    expect(html).toContain('One manager per host');
+    expect(html).toContain('Editing manager.service.ts');
+    expect(html).toContain('aria-valuenow="60"');
+    expect(html).toContain('$0.84 so far');
+  });
+
+  it('draws no Now and no progress when nothing is running, and none from a revision-0 progress', () => {
+    const html = renderPanel(task({ progress: { revision: 0, phase: null, current: null, total: null, message: null } }));
+    expect(titles(html)).not.toContain('Now');
+    expect(html).not.toContain('tdp-now');
+  });
+
+  it('shows the newest evidence and its decision as what was Delivered on a done task', () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnMount: false, retryOnMount: false } } });
+    qc.setQueryData(['task', TASK_ID, 'evidence'], [
+      { revision: '1', submittedAt: STARTED, evidence: { claim: 'Old claim', checks: [], gaps: [] }, decision: { decision: 'SEND_BACK', note: 'Show the tests', decidedAt: STARTED, decidedByType: 'AGENT' } },
+      {
+        revision: '2',
+        submittedAt: STARTED,
+        evidence: {
+          claim: 'The channel refuses peers outside allowPeers.',
+          checks: [{ kind: 'TOOL_CALL', ref: 'toolu_1', command: 'python3 -m unittest', succeeded: true }, { kind: 'COMMIT', ref: '7c41e9a0123456' }],
+          gaps: [],
+        },
+        decision: { decision: 'CONFIRM', note: null, decidedAt: STARTED, decidedByType: 'AGENT' },
+      },
+    ]);
+    const html = renderPanel(task({ status: 'DONE' }), false, qc);
+    expect(titles(html)[0]).toBe('Delivered');
+    expect(html).toContain('>Accepted<');
+    expect(html).toContain('The channel refuses peers outside allowPeers.');
+    expect(html).toContain('python3 -m unittest');
+    expect(html).toContain('Commit 7c41e9a01');
+    expect(html).not.toContain('Old claim');
+    // Both versions and both decisions are on the timeline.
+    expect(html).toContain('Evidence r1 sent back');
+    expect(html).toContain('Evidence r2 accepted');
+  });
+
+  it('puts the contract before the brief, the plan in a sentence, then the envelope and the timeline', () => {
+    const html = renderPanel(task({
+      description: 'Do the thing.',
+      dependedOnBy: [{ task: { id: 'b', title: 'Channel-host kit', status: 'OPEN' } }],
+    }));
+    expect(titles(html)).toEqual(['Done means', 'In the plan', 'Runs with', 'Activity']);
+    expect(html).toContain('Brief for the agent');
+    expect(html).toContain('Nothing blocks this task. “Channel-host kit” waits on it.');
+    // The graph is on demand.
+    expect(html).toContain('Show graph');
+    expect(html).not.toContain('Add a prerequisite…');
+    // The envelope is one line of chips until Edit.
+    expect(html).toContain('tdp-envelope-chip-label">Agent</span>Builder');
+    expect(html).not.toContain('class="tdp-field-label">Engine');
+  });
+
+  it('writes to the run while one is going, and comments otherwise', () => {
+    expect(renderPanel(running())).toContain('placeholder="Message Builder while it works');
+    expect(renderPanel(running())).toContain('>To the run<');
+    expect(renderPanel(task())).toContain('placeholder="Add a comment…');
+    expect(renderPanel(task())).not.toContain('>To the run<');
+  });
+
+  it('keeps the timeline oldest first: filed, then runs and comments as they happened', () => {
+    const html = renderPanel(task({
+      createdAt: '2026-11-12T09:35:00.000Z',
+      sessions: [{ id: LIVE_RUN, status: 'SUCCEEDED', createdAt: '2026-11-12T09:42:00.000Z', workspace: { name: 'Builder' } }],
+      comments: [{ id: 'c1', body: 'Looks right', authorName: 'Owner', createdAt: '2026-11-12T10:00:00.000Z' }],
+    }));
+    const filed = html.indexOf('<strong>Filed</strong>');
+    const run = html.indexOf('tdp-session-title');
+    const comment = html.indexOf('Looks right');
+    expect(filed).toBeGreaterThan(-1);
+    expect(filed).toBeLessThan(run);
+    expect(run).toBeLessThan(comment);
+  });
+});
+
+describe('the task page’s words', () => {
+  it('says how long and how much', () => {
+    const now = Date.parse('2026-11-12T10:54:00.000Z');
+    expect(elapsedLabel('2026-11-12T10:53:30.000Z', now)).toBe('<1m');
+    expect(elapsedLabel('2026-11-12T10:47:00.000Z', now)).toBe('7m');
+    expect(elapsedLabel('2026-11-12T09:42:00.000Z', now)).toBe('1h 12m');
+    expect(elapsedLabel('2026-11-12T08:54:00.000Z', now)).toBe('2h');
+    expect(elapsedLabel(null, now)).toBeNull();
+    expect(costLabel(0)).toBeNull();
+    expect(costLabel(0.004)).toBe('<$0.01');
+    expect(costLabel(3.125)).toBe('$3.13');
+  });
+
+  it('says the plan: whether anything blocks it, and what waits on it', () => {
+    const done = { dependsOnTask: { status: 'DONE' } };
+    expect(planSentence({ dependsOn: [], dependedOnBy: [], blocked: false })).toBe('Nothing blocks this task.');
+    expect(planSentence({ dependsOn: [done], dependedOnBy: [], blocked: false })).toBe('Its prerequisite is done.');
+    expect(planSentence({ dependsOn: [done, done], dependedOnBy: [], blocked: false })).toBe('All 2 prerequisites are done.');
+    // Blocked: the notice above it already says so; only what waits on it is added.
+    expect(planSentence({
+      dependsOn: [{ dependsOnTask: { status: 'OPEN' } }],
+      dependedOnBy: [
+        { task: { title: 'A', status: 'OPEN' } },
+        { task: { title: 'B', status: 'OPEN' } },
+        { task: { title: 'C', status: 'DONE' } },
+      ],
+      blocked: true,
+    })).toBe('“A” and 1 more wait on it.');
+  });
+
+  it('says what the evidence is and who decided it', () => {
+    const when = () => 'Nov 12, 10:31 AM';
+    const base = { revision: '2', submittedAt: '2026-11-12T10:20:00.000Z' };
+    expect(evidenceOutcome(base)).toEqual({ label: 'Awaiting a decision', tone: 'muted' });
+    expect(evidenceMeta(base, when)).toBe('Evidence r2 · submitted Nov 12, 10:31 AM');
+    const decided = { ...base, decision: { decision: 'CONFIRM', decidedAt: '2026-11-12T10:31:00.000Z', decidedByType: 'USER' } };
+    expect(evidenceOutcome(decided)).toEqual({ label: 'Accepted', tone: 'green' });
+    expect(evidenceMeta(decided, when)).toBe('Evidence r2 · accepted by you · Nov 12, 10:31 AM');
+    expect(evidenceCheckText({ kind: 'TOOL_CALL', ref: 'toolu_1' })).toBe('Tool call toolu_1');
+    expect(evidenceCheckText({ kind: 'FILE', ref: 'report.json' })).toBe('File report.json');
   });
 });

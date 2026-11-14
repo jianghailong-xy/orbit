@@ -161,6 +161,7 @@ export class LinkPreviewsService {
           error: row.error,
           retryAt: row.retryAt,
           engineTurnActive: row.engineTurnActive,
+          activity: row.activity,
           pendingApprovals: row.pendingApprovals,
           waitingKind: row.waitingKind,
           runningBgCount: row.runningBgCount,
