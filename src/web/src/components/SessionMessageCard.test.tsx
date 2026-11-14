@@ -119,10 +119,10 @@ describe('another session’s message', () => {
   });
 
   it('folds only what else delivery appended beside the block', async () => {
-    const jobs = '<background-jobs>\n  Ended while you were away:\n</background-jobs>';
-    await mount([sent(CARD, { controlPlaneNote: `${NOTE}\n\n${jobs}`, text: `${SENT}${NOTE}\n\n${jobs}` })]);
+    const board = '<list-conditions list="3Hq9fVbYmP2kQhZ8aNcW4x" title="FineWeb">\n  Quota held dispatch\n</list-conditions>';
+    await mount([sent(CARD, { controlPlaneNote: `${NOTE}\n\n${board}`, text: `${SENT}${NOTE}\n\n${board}` })]);
     const el = card()!;
-    expect(el.querySelector('.chat-injected-head')?.textContent).toBe('⊕ Orbit attached: background jobs');
+    expect(el.querySelector('.chat-injected-head')?.textContent).toBe('⊕ Orbit attached: list conditions');
     await act(async () => (el.querySelector('.chat-injected-head') as HTMLButtonElement).click());
     expect(el.querySelector('.chat-injected-panel')?.textContent).not.toContain('orbit-session-message');
   });
