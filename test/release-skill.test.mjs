@@ -32,6 +32,19 @@ test('both release skills state the package-version rule and none resolves next 
   }
 });
 
+test('both release skills confirm the exact tag and its full SHA before tagging, and ask before undoing', () => {
+  for (const p of SKILLS) {
+    // Where a sentence wraps is layout; the words are the rule.
+    const text = readFileSync(join(ROOT, p), 'utf8').replace(/\s+/g, ' ');
+    assert.match(text, /node scripts\/release-identity\.mjs check-tag vX\.Y\.Z/, `${p} does not run the identity gate by hand`);
+    assert.match(text, /the exact (resolved )?tag and the full commit SHA it will point at \(`git rev-parse HEAD`\)/,
+      `${p} does not state the exact tag and the full SHA it will point at`);
+    assert.match(text, /explicit (user )?confirmation of both before tagging/, `${p} tags without explicit confirmation`);
+    assert.match(text, /[Aa]sk before re-running/, `${p} re-runs a publishing job without asking`);
+    assert.match(text, /ask for confirmation before deleting/, `${p} deletes a pushed tag without asking`);
+  }
+});
+
 function git(cwd, ...args) {
   const r = spawnSync('git', args, { cwd, encoding: 'utf8' });
   assert.equal(r.status, 0, `git ${args.join(' ')}: ${r.stderr}`);

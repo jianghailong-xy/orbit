@@ -51,7 +51,7 @@ Interpret tags as follows:
 
    Require `main` and a result of `0`. If a fix exists only on another branch, merge it into `main`; never tag the feature branch.
 
-4. State the exact resolved tag and get explicit user confirmation before tagging. Creating and pushing the tag is an external, release-triggering action.
+4. Run the identity gate by hand (`node scripts/release-identity.mjs check-tag vX.Y.Z`), then state the exact resolved tag and the full commit SHA it will point at (`git rev-parse HEAD`) and get explicit user confirmation of both before tagging. Creating and pushing the tag is an external, release-triggering action.
 
 5. Tag it with the version `package.json` already carries:
 

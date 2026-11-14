@@ -62,7 +62,12 @@ with the package, so the two cannot drift.
    git fetch origin && git rev-list --count HEAD..origin/main   # → 0 (nothing on origin/main you're missing)
    ```
 
-3. **Tag it** (resolves the repo root itself). It runs the same identity gate as CI, refuses a dirty
+3. **Confirm the exact tag and commit.** Run the identity gate by hand
+   (`node scripts/release-identity.mjs check-tag vX.Y.Z`), then state the exact tag and the full commit SHA
+   it will point at (`git rev-parse HEAD`) and get explicit confirmation of both before tagging: creating
+   and pushing the tag is an external, release-triggering action.
+
+4. **Tag it** (resolves the repo root itself). It runs the same identity gate as CI, refuses a dirty
    tree, a tag that disagrees with `package.json`, missing or placeholder notes, and an already-used tag
    (local or remote), then creates an annotated tag and pushes it:
 
@@ -70,7 +75,7 @@ with the package, so the two cannot drift.
    .claude/skills/release/release.sh 0.2.0-beta.3    # the version package.json already carries
    ```
 
-4. **Watch the build and report the result.** All five jobs run in the one `release.yml` run:
+5. **Watch the build and report the result.** All five jobs run in the one `release.yml` run:
 
    ```bash
    gh run watch "$(gh run list --workflow release.yml -L 1 --json databaseId -q '.[0].databaseId')"
@@ -86,8 +91,8 @@ with the package, so the two cannot drift.
      `android-build` says so and both Android jobs end without publishing; that is not a failure.
    - **Re-publishing Android:** if `dmg` failed, Android is not attached. Fix the cause, then use
      **Re-run failed jobs** on that run (`gh run rerun <run-id> --failed`): the DMG is built again and
-     the APK `android-build` already made is attached after it. An `android-build` that refused the
-     version (the commit count must grow) needs a new commit and a new tag.
+     the APK `android-build` already made is attached after it. Ask before re-running: it publishes. An
+     `android-build` that refused the version (the commit count must grow) needs a new commit and a new tag.
 
 ## Notes
 
@@ -107,7 +112,8 @@ with the package, so the two cannot drift.
   - Android `android-build`: the `android-internal` environment (v* tags only) — secrets
     `ANDROID_KEYSTORE_BASE64`, `ANDROID_STORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`,
     variables `ANDROID_APPLICATION_ID`, `ANDROID_CERT_SHA256` (see `src/android/docs/release.md`).
-- To undo a tag pushed by mistake (one run holds all the jobs):
+- To undo a tag pushed by mistake (one run holds all the jobs), ask for confirmation before deleting the
+  tag or cancelling its run: both are destructive external actions.
 
   ```bash
   git push origin :refs/tags/vX.Y.Z   # delete remote tag
