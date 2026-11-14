@@ -191,7 +191,7 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(project.contains("$0.projectMembership?.role == .coordinator"), "over the coordinator's workspace")
         XCTAssertTrue(project.contains("nav.path = [.sessionProject(address, asDestination: true)]"),
                       "a phone's whole stack, the project's own page")
-        XCTAssertTrue(project.contains("nav.enterProjectSessions(address)"), "the iPad's list column only")
+        XCTAssertTrue(project.contains("nav.enterProjectSessions(address, asDestination: true)"), "the iPad's list column only")
     }
 
     /// The left edge opens the drawer exactly on a destination's own page — a section's root, a

@@ -21,6 +21,20 @@ final class SessionProjectNavigationTests: XCTestCase {
         XCTAssertTrue(nav.sectionAtRoot)
     }
 
+    /// A session list's coordinator row opens the page over the workspace, which stays the sidebar's
+    /// selection; only the sidebar's project row makes the project the selected row (owner, 2026-11-14).
+    func testOnlyTheSidebarRowMakesTheProjectTheDestination() {
+        var nav = NavState(section: .agents)
+
+        nav.enterProjectSessions(project)
+        XCTAssertEqual(nav.projectSessionsColumn, project)
+        XCTAssertNil(nav.projectSessionsColumnDestination)
+
+        nav.enterProjectSessions(project, asDestination: true)
+        XCTAssertEqual(nav.path, [.sessionProject(project, asDestination: true)])
+        XCTAssertEqual(nav.projectSessionsColumnDestination, project)
+    }
+
     func testEnteringFromAFolderReturnsToThatFolderOnBack() {
         var nav = NavState(section: .agents)
         nav.enterFolder(folder)

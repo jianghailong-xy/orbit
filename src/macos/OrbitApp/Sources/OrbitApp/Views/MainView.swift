@@ -164,9 +164,10 @@ struct SectionSidebar: View {
     @State private var applied: SidebarSelection?
 
     /// The project the session column is showing, in the project list's own spelling of the id (the
-    /// spelling the row's tag uses), or nil when no project's sessions page is in the column.
+    /// spelling the row's tag uses), or nil when no project's sessions page is in the column. A page a
+    /// session list's coordinator row opened leaves the workspace selected (owner, 2026-11-14).
     private var selectedProjectID: String? {
-        guard model.selectedSection == .agents, let address = model.projectSessionsColumn else { return nil }
+        guard model.selectedSection == .agents, let address = model.projectSessionsColumnDestination else { return nil }
         let key = PublicID.storageKey(address.projectID)
         return model.projects?.projects.first { PublicID.storageKey($0.id) == key }?.id ?? address.projectID
     }
