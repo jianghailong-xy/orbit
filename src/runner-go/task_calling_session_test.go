@@ -132,7 +132,8 @@ func TestCLITaskWritesNameTheCallingSession(t *testing.T) {
 
 // The DAG batch names its session where it writes, and inside a session it asks first — the card,
 // the poll and the apply are three requests, and only the apply carries the attribution header
-// (dag_approval.go). A process in no session is the owner at their terminal and applies directly.
+// (dag_approval.go). A process in no session sends the apply alone, which the server then refuses on
+// the machine credential (TASK_WRITE_NEEDS_OWNER_CARD).
 func TestCLIDagApplyNamesTheCallingSessionAfterTheCard(t *testing.T) {
 	t.Setenv("ORBIT_SESSION_ID", "caller-session")
 	srv, seen := recordNamedSessionDag(t)

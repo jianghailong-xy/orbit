@@ -24,7 +24,7 @@ func TestWithOrbitCLIInstructions(t *testing.T) {
 		"Use `--json` output",
 		" mcp` directly",
 		"durable record",
-		"returned its id",
+		"No returned id, no claim.",
 		"Most newly discovered work is one task",
 		"4 or more steps that depend on one another",
 		"you may propose recording it as an Orbit Project",
@@ -168,7 +168,7 @@ func TestOrbitProjectInstructionsDifferInsideRecordedWork(t *testing.T) {
 	if open == inside {
 		t.Fatal("a session inside recorded work receives the same project paragraph as a free conversation")
 	}
-	for _, shared := range []string{"durable record", "returned its id", "orbit-session:<id>", "capabilities --json", "mcp__orbit__*"} {
+	for _, shared := range []string{"durable record", "No returned id, no claim.", "orbit-session:<id>", "capabilities --json", "mcp__orbit__*"} {
 		if !strings.Contains(open, shared) || !strings.Contains(inside, shared) {
 			t.Errorf("both forms must keep %q", shared)
 		}

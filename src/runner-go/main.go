@@ -256,16 +256,8 @@ Options:
                            quiet, and name the socket on stderr. For watching a broker
                            you started by hand.
 `,
-	"mcp": `orbit mcp — run the Task/TaskList MCP server (stdio)
-
-Usage:
-  orbit mcp
-
-Speaks the Model Context Protocol over stdin/stdout so a Claude Code session can
-manage Orbit Tasks. The runner injects this server into each session via --mcp-config;
-it is not meant to be run by hand. It reads the runner credential from config.json and
-the session context (ORBIT_SESSION_ID / ORBIT_AGENT_ID / ORBIT_TASK_ID) from the env.
-`,
+	// "mcp" is not here: its help is built from the runtime and operation tables when it is asked
+	// for (mcpHelp), so that it says what the server is today.
 }
 
 // Command families that print their own per-action help, so `orbit <family> <action> --help` has
@@ -291,6 +283,9 @@ func ownsLeafHelp(cmd string) bool { return leafHelpFamilies[cmd] }
 
 // helpFor returns the help text for a subcommand, or the global usage as a fallback.
 func helpFor(cmd string) string {
+	if cmd == "mcp" {
+		return mcpHelp()
+	}
 	if h, ok := cmdHelp[cmd]; ok {
 		return h
 	}
@@ -450,6 +445,11 @@ func runOrbitCLI(args []string, in io.Reader, out, errW io.Writer) error {
 	case "engine-update":
 		cmdEngineUpdate()
 	case "mcp":
+		// `orbit mcp help` is a person asking, not an engine: the server would sit reading stdin.
+		if len(args) > 1 && args[1] == "help" {
+			_, err := fmt.Fprint(out, helpFor("mcp"))
+			return err
+		}
 		cmdMcp()
 	case "hook":
 		cmdHook(args[1:])

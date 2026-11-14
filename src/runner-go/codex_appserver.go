@@ -1515,6 +1515,41 @@ func splitUTF8ByBytes(value string, maxBytes int) []string {
 	return parts
 }
 
+// codexContextValueMaxBytes is the most one application-context value carries. Codex caps each
+// value at 1,000 tokens; a UTF-8 byte budget is conservative because a token cannot encode less
+// than one byte, so a value this size is never cut short.
+const codexContextValueMaxBytes = 900
+
+// codexContextParagraphs packs text's paragraphs into values of at most maxBytes, in order: as many
+// whole paragraphs as fit in each, so every value reads on its own, and a paragraph longer than one
+// value split at rune boundaries rather than cut.
+func codexContextParagraphs(text string, maxBytes int) []string {
+	var values []string
+	current := ""
+	for _, paragraph := range strings.Split(strings.TrimSpace(text), "\n\n") {
+		if paragraph = strings.TrimSpace(paragraph); paragraph == "" {
+			continue
+		}
+		if current != "" && len(current)+len("\n\n")+len(paragraph) <= maxBytes {
+			current += "\n\n" + paragraph
+			continue
+		}
+		if current != "" {
+			values = append(values, current)
+			current = ""
+		}
+		if len(paragraph) <= maxBytes {
+			current = paragraph
+			continue
+		}
+		values = append(values, splitUTF8ByBytes(paragraph, maxBytes)...)
+	}
+	if current != "" {
+		values = append(values, current)
+	}
+	return values
+}
+
 func codexAgentAdditionalContext(
 	agent AgentExecConfig,
 	executable string,
@@ -1528,15 +1563,15 @@ func codexAgentAdditionalContext(
 		"kind":  "application",
 		"value": codexImageDeliveryInstructions,
 	}
-	if instruction := orbitCLIInstructions(executable, insideRecordedWork, watches); instruction != "" {
-		context[prefix+"cli"] = map[string]interface{}{
+	// Orbit's instructions, the agent primer first, as whole paragraphs: one value of their length
+	// would pass the 1,000-token cap, and Codex would keep only part of it.
+	for i, part := range codexContextParagraphs(orbitCLIInstructions(executable, insideRecordedWork, watches), codexContextValueMaxBytes) {
+		context[fmt.Sprintf("%scli_%08d", prefix, i)] = map[string]interface{}{
 			"kind":  "application",
-			"value": instruction,
+			"value": part,
 		}
 	}
-	// Codex caps each application-context value at 1,000 tokens. A UTF-8 byte
-	// budget is conservative because a token cannot encode less than one byte.
-	for i, part := range splitUTF8ByBytes(agent.AppendSystemPrompt, 900) {
+	for i, part := range splitUTF8ByBytes(agent.AppendSystemPrompt, codexContextValueMaxBytes) {
 		context[fmt.Sprintf("%sagent_append_%08d", prefix, i)] = map[string]interface{}{
 			"kind":  "application",
 			"value": part,

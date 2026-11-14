@@ -1,8 +1,9 @@
 # Orbit Agent Contract v1
 
-> **Status:** frozen at v1.2.0, 2026-11-13 (v1.0.0 review record in §11; the 1.1.0 and 1.2.0 changes
-> are in §10). v1.1.0 adds the operation catalogue and changes no routing rule; v1.2.0 closes the
-> card-free task-write door on the runner's machine credential. This file is the authority for how an
+> **Status:** frozen at v1.3.0, 2026-11-14 (v1.0.0 review record in §11; the 1.1.0, 1.2.0 and 1.3.0
+> changes are in §10). v1.1.0 adds the operation catalogue and changes no routing rule; v1.2.0 closes the
+> card-free task-write door on the runner's machine credential; v1.3.0 publishes §0 as the always-on
+> agent primer (§2.6) and changes no rule. This file is the authority for how an
 > in-session Claude or Codex agent uses Orbit: which object an intent belongs to, whether it travels
 > over MCP or the CLI, what a person must approve, how failures and retries are handled, and what
 > counts as a success receipt. The implementation tasks P0-02 … P2-01 work from this file. If the code
@@ -203,6 +204,54 @@ deliberate and is stated in §4.5.
   mandatory test executes every advertised `argv` and `helpArgv` through the CLI's own router. There
   is still no graded discovery — the document remains one ~300 KB blob in the fullest context
   (§8.2), which is why P1-01 exists.
+
+### 2.6 The always-on primer
+
+§0 is also the first thing every agent Orbit runs reads, as one short text: the **agent primer**
+(`src/runner-go/agent_primer.go`; primer `1.0.0`, written from contract `1.3.0`). Its first line names
+both versions. It says the ten rules in eight paragraphs, names tools by their MCP names, and carries
+no engine's spelling of them and no path, so the same words are true in every client. The same text
+travels by two kinds of carrier:
+
+| Carrier | Engine | When it is there |
+| --- | --- | --- |
+| MCP `initialize` → `instructions` | every engine, through `orbit mcp` | whenever the engine starts the server; Claude Code 2.1.325 shows the whole of it under "MCP Server Instructions" and attaches it again after a compaction (measured 2026-11-14: after a manual `/compact` it still quoted the primer's first line) |
+| `--append-system-prompt` | Claude Code | every spawn, `--resume` included; a compaction does not touch the system prompt |
+| application context (`additionalContext`), whole paragraphs in values of at most 900 bytes | Codex ≥ 0.135 | every turn, under keys whose generation advances after a compaction, so Codex adds them again |
+| one developer message (`thread/inject_items`) | Codex 0.125–0.134 | at thread start, and again before the first turn after a compaction |
+| the turn's own input, in `<orbit_application_context>` | Codex < 0.125 | every turn |
+| the prompt, in `<orbit-agent-instructions>` | Kimi Code; Cursor CLI | Kimi: every prompt; Cursor: the conversation's first |
+| global rules (`GEMINI.md` in the runner's own Gemini directory); appended system prompt; instructions file | Antigravity; DeepSeek Harness; OpenCode | every process the runner starts |
+
+The engine-side carriers open with the primer and go on with what only the runner knows: how this
+engine spells Orbit's tools, the CLI's absolute path, which files a reply can hand over, where
+evidence goes, the project paragraph for the session's shape, progress, waits and the wiki. They are
+sent whether or not the MCP instructions arrived, because the runner cannot see which reached the
+model: on 2026-11-14 Codex 0.167.2 showed only the first **250 characters** of a server's
+instructions, as that server's line in its list of deferred tools (`codex debug prompt-input` with a
+probe server), and a session whose MCP server did not start has none at all. Claude Code therefore
+reads the primer twice, about 3 KB, which is the price of a fallback that does not depend on the
+carrier it backs up. Nothing in either carrier is read from the checkout: a repository's `CLAUDE.md`
+or `AGENTS.md` neither adds to the primer nor changes it.
+
+What the text is held to (`src/runner-go/agent_primer_test.go`):
+
+- **The first paragraph stands alone, in at most 512 characters**: what is a record and what is
+  scratch, which create answers which intent, MCP before the CLI, create versus start
+  (`autoRunWhenReady` defaults to true), and that only a returned id is a success. A client may show
+  no more than that, and Codex shows less, so it opens with what Orbit is for.
+- **Budgets**: the primer at most 3,200 bytes; Orbit's own instructions to an engine (the primer and
+  the paragraphs after it, without the agent's own prompt) at most 6,400 bytes; no paragraph longer
+  than one Codex context value (900 bytes, under Codex's 1,000-token cap whatever the tokenizer);
+  ASCII.
+- **Versioned and snapshotted**: the exact text of the primer and of the four shapes of the engine
+  instructions are snapshots (`src/runner-go/testdata/agent-primer/`), and the primer's hash is
+  recorded per version, so a changed word is a new primer version and a reviewed diff.
+- **Every §0 rule is said**: a rule added to §0 fails the test until the primer says it too.
+
+`orbit mcp help` (also `orbit mcp --help`, `orbit help mcp`) names the runtimes the runner starts the
+server on and the objects its tools act on, read from the runner's runtime table and from the
+operation catalogue, and the primer version `initialize` answers with.
 
 ---
 
@@ -605,10 +654,10 @@ clause is contradicted today), **NOT MEASURED** (no black-box run; the verdict i
 | --- | --- | --- |
 | MCP tools, orchestration on | **98** | **97** |
 | MCP tools, orchestration off | **76** | **75** |
-| `initialize` + `tools/list` stdout, on / off (the initialize response is 144 B) | 254,114 / 222,152 B | 253,859 / 221,897 B |
+| `initialize` + `tools/list` stdout, on / off (the initialize response is 144 B; since v1.3.0 it carries the primer and is 3,203 B, measured 2026-11-14) | 254,114 / 222,152 B | 253,859 / 221,897 B |
 | Tool-description text, on / off | 91,054 / 76,203 chars (max 5,197; median 753) | 90,980 / 76,129 chars |
 | Input-schema text, on / off | 153,956 / 137,704 chars (max 22,255) | 153,825 / 137,573 chars |
-| `initialize` result keys | `capabilities`, `protocolVersion`, `serverInfo` — **no `instructions`** | same |
+| `initialize` result keys | `capabilities`, `protocolVersion`, `serverInfo` — **no `instructions`** (since v1.3.0 also `instructions`, the agent primer, §2.6) | same |
 
 The `tools/list` response alone is 253,968 / 222,006 B (Claude, on / off); the rest is the initialize
 response. The one-tool difference is `permission_prompt`: Claude routes engine permission prompts through it,
@@ -669,20 +718,20 @@ Other measured facts:
 | Case | Verdict | Evidence | What does not hold (feeds which task) |
 | --- | --- | --- | --- |
 | S1 record task | **PARTIAL** | Tool exists and the card is filed (`task_create` handler; card `acceptsStartAfterCreate`); create receipt is the entity JSON; a declined card is the `APPROVAL_DECLINED` document on both surfaces (v1.1.0, G4 closed). | Unknown fields ignored (G1); receipt is text-only (G3). P0-04. |
-| S2 private plan | **PARTIAL** | The injected primer states the durable-vs-private rule (`agent_instructions.go`, tested by `agent_instructions_test.go`); no structural enforcement; the runner adds no plan-mode gate to Orbit calls (P1-02). | No test that a private plan is not presented as a record; whether an engine's own plan mode refuses an Orbit write is not measured. P1-02, P2-01. |
-| S3 create without start | **PARTIAL** | `task_create` supports the full separation (`startNow`/`runAt`/`autoRunWhenReady`/card override; `mcp.go` `askBeforeTaskCreate`, `task_start_now.go`). | `autoRunWhenReady` defaults to true (`schema.prisma:5602`; the tool property says so), and the create card's top-level description does not lead with it, so "file it for later" can start work unless the agent sets false (G11). P0-05. |
+| S2 private plan | **PARTIAL** | The primer states the durable-vs-private rule first, in the MCP `initialize` instructions and in every engine's injected instructions (since v1.3.0, §2.6; `agent_primer.go`, `agent_primer_test.go`); no structural enforcement; the runner adds no plan-mode gate to Orbit calls (P1-02). | No test that a private plan is not presented as a record; whether an engine's own plan mode refuses an Orbit write is not measured. P1-02, P2-01. |
+| S3 create without start | **PARTIAL** | `task_create` supports the full separation (`startNow`/`runAt`/`autoRunWhenReady`/card override; `mcp.go` `askBeforeTaskCreate`, `task_start_now.go`). | `autoRunWhenReady` defaults to true (`schema.prisma:5602`), so "file it for later" can start work unless the agent sets false. Since v1.3.0 the primer's first paragraph and the `task_create` / `task_create_batch` descriptions (MCP and CLI) lead with it (G11 closed); the default itself is unchanged, and whether an agent now passes false is not black-box measured (P2-01). |
 | S4 batch plan | **PARTIAL** (capability passes; real-write receipt unmeasured) | Measured dry-run receipt; atomic items with `ref`/`dependsOnRefs`/`parentRef`; one card. Since v1.1.0 the server refuses a session batch no answered card covers (`TASK_WRITE_NEEDS_OWNER_CARD`), so the CLI cannot write one unasked. | No per-item id receipt observed for a real write (not measured). P0-04. |
 | S5 read-only inspection | **PASS** | `project_get` returned the project (5,219 chars) over a read-only MCP call; `task_list --project-id` exists. | No project list surface (§8.2); project id must be learned elsewhere (P0-02/P1-01); in Codex plan mode even the read is refused (G9, P1-02). |
 | S6 immediate delegation | **PASS** | `task_start` returns the session id; `startNow` covers create+start; `session_create` is orchestration-gated (tool descriptions + code); a declined card is one document on both surfaces (v1.1.0). | Start receipt split across document and prose/stderr (G3). P0-04. |
-| S7 no orchestration | **PARTIAL** | Measured: 22 tools disappear; `orchestrationOffMsg` names the switch; CLI hides the commands. | No injected instruction tells an agent what to do when the family is absent; it only says "when your tool list has them". P0-05/P1-02. |
-| S8 compaction recovery | **PARTIAL** (code-inspected; not black-box measured) | Codex: three instruction modes with an explicit refresh after `thread/compacted` (`codex_appserver.go`); Claude: `--append-system-prompt` persists per process and MCP tools are re-sent per request; no MCP `initialize.instructions`. | No black-box compaction test for either engine; the project scope is not surfaced by any tool default, so a compacted agent must re-read it. P0-05, P2-01. |
+| S7 no orchestration | **PASS** (code-inspected since v1.3.0) | Measured: 22 tools disappear; `orchestrationOffMsg` names the switch; CLI hides the commands. Since v1.3.0 the primer says what to do when the family is absent: do not try `orbit session`, record the work as a task, name the switch, never claim a delegation (§2.6). | The agent's behaviour with the family absent is not black-box measured (P2-01). |
+| S8 compaction recovery | **PARTIAL** (code-inspected; not black-box measured) | Codex: three instruction modes with an explicit refresh after `thread/compacted` (`codex_appserver.go`); Claude: `--append-system-prompt` persists per process and MCP tools are re-sent per request. Since v1.3.0 the primer is also the MCP `initialize` instructions, which Claude Code attaches again after a compaction, and every Codex mode is tested to carry it after a compaction and a resume (`agent_primer_test.go`, §2.6). | No black-box compaction test for either engine; the project scope is not surfaced by any tool default, so a compacted agent must re-read it. P0-05, P2-01. |
 
 ### 8.4 Gaps this baseline confirms
 
 | # | Gap | Owner |
 | --- | --- | --- |
 | G1 | Unknown MCP fields and wrong types are silently ignored; CLI JSON payloads are not strict either. | P0-04 |
-| G2 | No MCP `initialize.instructions`; the agent primer exists only as an engine-injected prompt. | P0-05 |
+| G2 | ~~No MCP `initialize.instructions`; the agent primer exists only as an engine-injected prompt.~~ **Closed by P0-05 (v1.3.0):** `initialize` answers with the versioned agent primer, and every engine's injected instructions open with the same text (§2.6). | P0-05 (closed) |
 | G3 | Write receipts are unversioned text blocks; a start outcome is split across document and prose/stderr; no `structuredContent`. | P0-04 |
 | G4 | ~~A declined card is a non-error MCP result and a non-zero CLI error — the same refusal, two shapes.~~ **Closed by P0-03 (v1.1.0):** both surfaces return the same `APPROVAL_DECLINED` document; the transport difference stays, the outcome does not differ. | P0-03 (closed); P0-04 owns the remaining receipt format |
 | G5 | Task creates take no caller idempotency key; a retry in a later turn can duplicate work. | P0-04 |
@@ -691,7 +740,7 @@ Other measured facts:
 | G8 | **Satisfied by P0-02.** `src/runner-go/operation_catalog.go` is the single versioned catalogue: one row per operation with object, intent, input schema, availability, mutates, approval, destructive, idempotency, retry, success evidence and next step. MCP `tools/list`, `orbit capabilities` (with `catalogVersion` and `catalogHash`) and the public catalogue document are projected from it, every deliberate one-surface absence carries its reason in the row, and a mandatory test executes every advertised `argv`/`helpArgv`. | P0-02 |
 | G9 | Permission-mode behaviour for Orbit calls is not uniform: the runner adds no gate of its own; Codex `plan` refuses every MCP call (reads included), Codex `default`/`acceptEdits` cards every MCP call, and Claude's own plan policy is unmeasured. | P1-02 |
 | G10 | No black-box evaluation exists for the eight scenarios on either engine. | P2-01 |
-| G11 | `autoRunWhenReady` defaults to true and the create tool's top-level description does not lead with it: "file it for later" can start work once the project starts unless the agent passes false. | P0-05 |
+| G11 | ~~`autoRunWhenReady` defaults to true and the create tool's top-level description does not lead with it: "file it for later" can start work once the project starts unless the agent passes false.~~ **Closed by P0-05 (v1.3.0):** the primer's first paragraph and the create tools' descriptions on both surfaces lead with the default and with `autoRunWhenReady: false`; the default stays true. | P0-05 (closed) |
 
 ---
 
@@ -715,6 +764,7 @@ Other measured facts:
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.3.0 | 2026-11-14 | P0-05. §0 is published as the always-on agent primer (`agent_primer.go`, primer 1.0.0, new §2.6): MCP `initialize` answers with it as versioned `instructions`, and every engine's injected instructions open with the same text (Claude `--append-system-prompt`; Codex application context, now sent as whole paragraphs in values of at most 900 bytes, its developer message or its turn input; Kimi, Cursor, Antigravity, DeepSeek Harness, OpenCode). The first paragraph stands alone in at most 512 characters, the primer is at most 3,200 bytes and the engine-side text at most 6,400, each snapshotted, and nothing is read from the checkout. The primer says what to do when the orchestration family is absent (S7), and it and the create tools' descriptions lead with `autoRunWhenReady` defaulting to true (G11). `orbit mcp help` names the runtimes and objects from the runner's own tables. The propose-dag CLI copy no longer says a session-less `--apply` applies directly: since 1.2.0 it is refused. No routing rule changes. §2.6 added; §8.2, §8.3 (S2, S3, S7, S8) and §8.4 (G2, G11 closed) updated. |
 | 1.2.0 | 2026-11-13 | P0-03. The approval row is enforced by the control plane, by caller: a session's `task_create`, `task_create_batch` (including one that starts work at once) and `task-list propose-dag --apply` each require an ALLOWED card covering that exact write, refused otherwise as `TASK_WRITE_NEEDS_OWNER_CARD`. The in-session CLI's DAG restructure now asks on the same card as the MCP tool (it previously applied with no approval); the injected primer no longer says the two surfaces are interchangeable, and says instead that they take the same approval. A declined card is one document, `APPROVAL_DECLINED` (G4 closed). §0 rule 8, §2.4, §6.1–2, §8.3, §8.4 updated. Revision 2 closes the machine-credential door itself: there is no card-free task write on it. `POST /runner/tasks`, `/runner/tasks/batch-create` and `/runner/task-lists/:id/dag-apply` now require a usable acting session (this runner's, this account's, not ended) as well as the answered card covering the exact write; a request naming no session, a forged id or an ended one is refused `TASK_WRITE_NEEDS_OWNER_CARD` with `USE_A_PERSONAL_ACCESS_TOKEN`, because `x-orbit-session-id` is attribution and an agent can unset it. The card-free door is a person's own credential on the user routes, stated as deliberate in the new §4.5. §2.2, §2.4, §4.4 updated; the CLI copy no longer offers a headless machine-credential create. |
 | 1.1.0 | 2026-11-13 | P0-02: the operation catalogue. `orbit capabilities` gains per-operation `object`, `intent`, `risk`, `approval`, `destructive`, `idempotency`, `retry`, `successEvidence`, `nextStep`, `returns` and `availability`, and the document gains `catalogVersion`/`catalogHash` (all additive; `schemaVersion` stays 2). MCP `tools/list` and the CLI capabilities are both projections of the catalogue, every deliberate surface gap is declared with a reason, and every advertised `argv`/`helpArgv` is executed by a mandatory test. G8 is satisfied; G6 is recorded as deliberately absent. |
 | 1.0.0 | 2026-11-13 | First frozen version: object model, routing, surfaces, create/start, permissions, errors, receipts, eight scenarios, baseline. |

@@ -282,12 +282,32 @@ func TestCodexAppServerTurnParams(t *testing.T) {
 	if !ok {
 		t.Fatalf("additionalContext = %#v", got["additionalContext"])
 	}
-	orbit, ok := additional["orbit_00000000_cli"].(map[string]interface{})
-	if !ok || orbit["kind"] != "application" {
-		t.Fatalf("orbit CLI context = %#v", additional["orbit_00000000_cli"])
+	// Orbit's instructions arrive as whole paragraphs in values Codex never cuts, and read back in key
+	// order they are the instructions themselves.
+	var cliKeys []string
+	for key := range additional {
+		if strings.HasPrefix(key, "orbit_00000000_cli_") {
+			cliKeys = append(cliKeys, key)
+		}
 	}
-	if orbit["value"] != orbitCLIInstructions(exe, false, true) {
-		t.Fatalf("orbit_cli value = %q, want %q", orbit["value"], orbitCLIInstructions(exe, false, true))
+	sort.Strings(cliKeys)
+	var cliParts []string
+	for _, key := range cliKeys {
+		orbit, ok := additional[key].(map[string]interface{})
+		if !ok || orbit["kind"] != "application" {
+			t.Fatalf("orbit CLI context %s = %#v", key, additional[key])
+		}
+		value := orbit["value"].(string)
+		if len(value) > codexContextValueMaxBytes {
+			t.Fatalf("orbit CLI context %s is %d bytes, over Codex's per-value budget %d", key, len(value), codexContextValueMaxBytes)
+		}
+		cliParts = append(cliParts, value)
+	}
+	if len(cliParts) < 2 || strings.Join(cliParts, "\n\n") != orbitCLIInstructions(exe, false, true) {
+		t.Fatalf("orbit CLI context in %d values = %q, want %q", len(cliParts), strings.Join(cliParts, "\n\n"), orbitCLIInstructions(exe, false, true))
+	}
+	if !strings.HasPrefix(cliParts[0], agentPrimerLead) {
+		t.Fatalf("the first orbit CLI value does not open with the agent primer: %q", cliParts[0])
 	}
 	owner, ok := additional["orbit_00000000_agent_append_00000000"].(map[string]interface{})
 	if !ok || owner["kind"] != "application" || owner["value"] != "Owner instructions." {

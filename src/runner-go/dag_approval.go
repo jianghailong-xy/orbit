@@ -15,8 +15,9 @@ import (
 // applied on `--apply` because "at a terminal the human is already the one deciding" — true of a
 // person typing, false of an agent that reaches the same binary through its shell, which is the
 // caller that exists. This file is the shared path: both doors preview, both raise the same card,
-// both apply only on the same answer. A process with no session is the owner at their own terminal
-// and keeps the direct shape, exactly as the creates do (task-write-approval.ts, server side).
+// both apply only on the same answer. A process with no session sends the apply with no card, and
+// the server refuses it (TASK_WRITE_NEEDS_OWNER_CARD, task-write-approval.ts): the machine
+// credential has no card-free form of this write, exactly as the creates have none.
 
 // dagChangeWithApproval previews a restructure, puts it in front of the owner and, once allowed,
 // applies it. `ops` and `note` are what the caller asked for; the preview is the server's answer,
@@ -27,7 +28,7 @@ import (
 // — the door, the preview, applying after a yes — is an `err`, because those are not answers.
 //
 // No session means no card (`declined` is always nil): there is no conversation to put a question
-// in, and the write is the owner's own, as every headless path is.
+// in, so the apply goes to the server as it is, which refuses it on the machine credential.
 func dagChangeWithApproval(
 	t *Transport, sessionID, listID string, ops []interface{}, note string,
 ) (applied json.RawMessage, declined *ApprovalDecisionResponse, err error) {

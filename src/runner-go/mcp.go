@@ -209,10 +209,13 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		if len(req.Params) > 0 && json.Unmarshal(req.Params, &p) == nil && p.ProtocolVersion != "" {
 			pv = p.ProtocolVersion
 		}
+		// The agent primer, versioned in its first line, is the one set of instructions every engine's
+		// MCP client is handed; each engine's own instructions carry it too (agent_primer.go).
 		return s.ok(req.ID, map[string]interface{}{
 			"protocolVersion": pv,
 			"capabilities":    map[string]interface{}{"tools": map[string]interface{}{}},
 			"serverInfo":      map[string]interface{}{"name": "orbit", "version": version},
+			"instructions":    agentPrimer,
 		}), true
 	case "notifications/initialized", "notifications/cancelled":
 		return rpcResponse{}, false // notifications get no response
