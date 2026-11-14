@@ -973,7 +973,7 @@ const JUMP_TO_START_PAGES = 30;
 // between — the normal state while a reply streams — must not flash the button.
 const STRANDED_AFTER_MS = 400;
 // What the sticky bar calls a turn the person typed — the only turn it ever names. A turn the control
-// plane opened (a card carrying `data-sticky-label`) is nobody's question: the owner ruled on
+// plane opened (a card carrying `data-orbit-round`) is nobody's question: the owner ruled on
 // 2026-11-14 that machine messages never appear on the bar, so over one the bar is hidden.
 const STICKY_LABEL = 'Your question';
 
@@ -4444,19 +4444,19 @@ export function WorkspaceView({
     );
     // A turn the control plane queued is scanned too — it is where the answer under it starts, so the
     // question above it no longer heads what is on screen — but nobody typed it, so the bar is hidden
-    // over it rather than naming a machine's message (`data-sticky-label` marks its card). Its queued
+    // over it rather than naming a machine's message (`data-orbit-round` marks its card). Its queued
     // twin in the tail is skipped like any queued turn: it hasn't been asked yet. A watch's wake, a
     // background job's news or a wakeup coming due is not one: it is a line inside the answer the
     // agent is still giving (WatchWakeCard, BackgroundWakeCard), so the bar keeps the question.
     const bubbles = Array.from(
-      el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued), [data-sticky-label]:not(.is-queued)'),
+      el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued), [data-orbit-round]:not(.is-queued)'),
     ).filter((b) => !b.closest('.chat-subagent')); // ignore prompts nested in a sub-workspace transcript
     let cur: HTMLElement | null = null;
     for (const b of bubbles) {
       if (b.getBoundingClientRect().bottom <= topY + 1) cur = b;
       else break;
     }
-    if (cur?.hasAttribute('data-sticky-label')) {
+    if (cur?.hasAttribute('data-orbit-round')) {
       setStuck(null);
     } else if (cur) {
       // Only the bubble's rendered markdown — the bubble also holds attachment thumbnails whose
