@@ -2996,7 +2996,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0730 adds one nullable column to session, work_subdir (the folder below its workspace's directory a no-worktree
       // session runs in, sessions/work-subdir.ts); no preserved rows, triggers or DONE fence change, and no row is
       // written.
-      '0730_session_work_subdir'],
+      '0730_session_work_subdir',
+      // 0740 adds two nullable session columns (merge_after_turn_at, merge_after_turn_target) only; no preserved
+      // rows, triggers or DONE fence change, and no row is written.
+      '0740_session_merge_after_turn'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

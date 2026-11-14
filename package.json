@@ -1,6 +1,6 @@
 {
   "name": "orbit",
-  "version": "0.1.258",
+  "version": "0.1.259",
   "private": true,
   "description": "Orbit — AI Agent task scheduling platform (control plane + distributed coding-agent runners)",
   "license": "MIT",
