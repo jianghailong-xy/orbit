@@ -13,6 +13,7 @@ import type {
   DirProbeAnswer,
   InstallEngine,
   LoginEngine,
+  ReportedEngine,
   RunnerAccountRemoveState,
   RunnerEngineAccount,
   RunnerInstallState,
@@ -29,7 +30,7 @@ import type {
 } from '@orbit/shared';
 import { RunStatus } from '@prisma/client';
 import { generateToken, sha256 } from '../common/crypto.util';
-import { namedRunnerEngines, sanitizeRunnerEngines, usedPlanUsage, usedRunnerEngines } from '../common/runner-engines';
+import { namedRunnerEngines, sanitizeEngineUpdateDismissals, sanitizeRunnerEngines, usedPlanUsage, usedRunnerEngines } from '../common/runner-engines';
 import {
   antigravityGoogleLoginRefusal,
   antigravitySignInUnderWay,
@@ -182,6 +183,8 @@ export class RunnersService {
         accountNames: true,
         accountPauses: true,
         defaultRemoved: true,
+        // The engine update warnings dismissed here, each until the next release (migration 0705).
+        engineUpdateDismissals: true,
         installStatus: true,
         installEngine: true,
         installCommand: true,
@@ -230,6 +233,7 @@ export class RunnersService {
       accountNames,
       accountPauses,
       defaultRemoved,
+      engineUpdateDismissals,
       installStatus,
       installEngine,
       installCommand,
@@ -255,6 +259,8 @@ export class RunnersService {
       // The effective verdict, never the stored one; null without the capability or a decided check.
       region: runnerRegionView({ region, capabilities: r.capabilities }, new Date(now)),
       engines: used[index],
+      // { engine: latest } — each engine's update warning stays hidden while this equals its update.latest.
+      engineUpdateDismissals: sanitizeEngineUpdateDismissals(engineUpdateDismissals),
       antigravity: antigravityState({ capabilities: r.capabilities, engines: used[index] }),
       install: installStateOf({
         installStatus,
@@ -881,6 +887,32 @@ export class RunnersService {
        WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid`;
     if (written === 0) throw new NotFoundException('runner not found');
     return { ok: true };
+  }
+
+  /**
+   * Dismiss this runner's update warning for `engine` until its next release: the engine's current
+   * `update.latest`, as the runner last reported it, goes into its key of
+   * `runner.engine_update_dismissals` in one statement. Clients hide the warning while that equals
+   * the engine's `update.latest`, so a newer release brings it back by itself. Orbit's own record:
+   * the runner need not be online and is not woken, and Orbit keeps retrying the update on it.
+   * Refused when no release is known to dismiss against.
+   */
+  async dismissEngineUpdateWarning(
+    ownerId: string,
+    id: string,
+    engine: ReportedEngine,
+  ): Promise<{ engine: ReportedEngine; latest: string }> {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId }, select: { engines: true } });
+    if (!runner) throw new NotFoundException('runner not found');
+    const latest = sanitizeRunnerEngines(runner.engines)?.find((entry) => entry.engine === engine)?.update?.latest;
+    if (!latest) throw new BadRequestException('This engine reports no newer release to dismiss its warning until');
+    const written = await this.prisma.$executeRaw`
+      UPDATE "runner"
+         SET "engine_update_dismissals" =
+               COALESCE("engine_update_dismissals", '{}'::jsonb) || jsonb_build_object(${engine}::text, ${latest}::text)
+       WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid`;
+    if (written === 0) throw new NotFoundException('runner not found');
+    return { engine, latest };
   }
 
   /**

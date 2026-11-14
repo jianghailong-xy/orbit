@@ -2974,7 +2974,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0641 adds statement triggers on session_scheduled_wakeup and watch that bump the Open list's epoch, and the
       // function one of them calls; no preserved rows, no preserved table's triggers or DONE fence change, and no row
       // is written.
-      '0641_open_list_epoch_session_waits'],
+      '0641_open_list_epoch_session_waits',
+      // 0705 adds a nullable `runner.engine_update_dismissals` JSONB only, catalog-only; `runner` is none of the
+      // preserved relations, no trigger or DONE fence changes, and no row is written.
+      '0705_runner_engine_update_dismissals'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

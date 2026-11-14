@@ -2179,6 +2179,14 @@ button.toast--pill:focus-visible {
 }
 .rd-attention-action {
   margin-top: 9px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+/* Dismiss until next <Engine> release, beside Update Engines Now: a link, not a second button. */
+.rd-attention-action .re-link {
+  font-size: 12.5px;
 }
 /* The Update card (board 4): a release this runner is behind, across both columns. Amber while it
    holds work back or restarts, plain while work goes on as usual. */
