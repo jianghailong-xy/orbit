@@ -1849,6 +1849,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// The root this machine reports as where it keeps checkouts. A fact of the account this
 	// process runs as, so it is resolved once rather than on every beat.
 	machineReposRoot := reposRoot()
+	// The CPU reading is a difference between two beats: this one primes it, so the first beat has one.
+	machineResources(nil, "")
 
 	// Before the heartbeat, which is what claims work: a result an earlier process of this image ran
 	// and could not deliver is offered to the control plane first, so a job this machine is holding a
@@ -1935,6 +1937,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				report := sleeper.report(managedWorkload())
 				workload = &report
 			}
+			probes := agentDirs.snapshot()
+			resources := machineResources(probes, machineReposRoot)
 			resp, supervisors, err := sendHeartbeatCycle(pool, telemetry, HeartbeatRequest{
 				Status: "ONLINE", Version: version,
 				LeaseOwner: t.leaseOwner, Draining: draining,
@@ -1943,7 +1947,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				ModelCatalog:         modelCatalog,
 				RuntimeDefaultModels: runtimeDefaultModels,
 				Engines:              withCodexAccountFingerprints(engineHealth.snapshotNow(), codexUsage),
-				AgentDirProbes:       agentDirs.snapshot(),
+				AgentDirProbes:       probes,
+				Resources:            &resources,
 				Repos:                repoHealth.snapshotNow(),
 				RunsAsRoot:           &runsAsRoot,
 				ReposRoot:            machineReposRoot,
