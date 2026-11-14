@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -446,4 +448,26 @@ it('a conflict counts its files in the title, and resolving them is the one prim
   await act(async () => root!.unmount()); root = null; container?.remove();
   const sync = await mount({ ...conflicted, phase: 'TARGET_SYNC', conflicts: [AGENTS] });
   expect(sync.element.querySelector('strong')?.textContent).toBe('Local develop and origin/develop conflict in 1 file');
+});
+
+it('keeps a long push list inside the panel, with its title, repair row and actions out of the scroll', async () => {
+  // The owner's 2026-11-14 screenshot: ten commits to push, a repair session running, and the composer below the window.
+  const pushCommits = Array.from({ length: 10 }, (_, i) =>
+    ({ sha: `${i}`.repeat(40), subject: `Commit ${i}`, author: 'coordinator', date: '2026-11-14' }));
+  const h = await mount({ ...reviewed, code: 'PREVIEW_CHANGED', pushCommits },
+    false, true, { id: 'r1', status: 'RUNNING', title: 'Resolve the conflict' } as MergeRepairSession);
+  const css = ['src/index.css', 'src/web/src/index.css'].map((p) => resolve(process.cwd(), p)).find(existsSync)!;
+  const style = document.createElement('style');
+  style.textContent = readFileSync(css, 'utf8');
+  document.head.appendChild(style);
+  try {
+    const snapshot = h.element.querySelector('.wt-recovery-snapshot')!;
+    expect(snapshot.querySelectorAll('.wt-recovery-push > div')).toHaveLength(10);
+    expect(parseFloat(getComputedStyle(snapshot).maxHeight)).toBeCloseTo(0.28 * window.innerHeight);
+    expect(getComputedStyle(snapshot).overflowY).toBe('auto');
+    for (const kept of ['.wt-recovery > strong', '.wt-recovery-repair-status', '.wt-recovery-actions']) {
+      expect(h.element.querySelector(kept), kept).not.toBeNull();
+      expect(snapshot.contains(h.element.querySelector(kept)), kept).toBe(false);
+    }
+  } finally { style.remove(); }
 });
