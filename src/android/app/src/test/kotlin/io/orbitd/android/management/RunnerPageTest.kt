@@ -155,6 +155,14 @@ class RunnerPageTest {
         assertEquals("Resets Tue, Sep 29 at 3:00 AM. ${quota.detail}", RunnerPage.attentionDetail(quota, 0L, ZoneId.of("UTC")))
     }
 
+    /** Max Concurrent's use: the slots taken of it — none while offline, when the count is stale. */
+    @Test fun runningIsTheSlotsTakenWhileOnline() {
+        fun runner(online: Boolean) = buildJsonObject { put("online", online); put("maxConcurrent", 12); put("activeSessions", 4) }
+        assertEquals(4 to 12, RunnerPage.slots(runner(true), System.currentTimeMillis()))
+        assertEquals("4 of 12 running", RunnerCopy.runningOf(4, 12))
+        assertEquals(null, RunnerPage.slots(runner(false), System.currentTimeMillis()))
+    }
+
     /** OrbitKit testAMachineWithNoCodingCLISignedInNamesItsCLIsAndSignsInTheFirst (rule 10 of docs/mocks/first-workspace-in-conversation/04):
      * one item, naming every CLI installed there by its own name, in the engines' order, and signing in the first. When it is raised is
      * the case file's, above. */
