@@ -173,9 +173,9 @@ final class TerminalsTests: XCTestCase {
         XCTAssertFalse(ControlEventRoute.terminals.readsOpenList)
     }
 
-    /// The server's push for a terminal asking (`PushService.notifyTerminalLogin`) names no session: its tap opens the
-    /// inbox the card is in.
-    func testTheTerminalLoginPushOpensTheInbox() {
+    /// The server's push for a terminal asking (`PushService.notifyTerminalLogin`) names no session: its tap opens where
+    /// the card is (the machine page's Needs you section, docs/mocks/waiting-on-you-removal/02 ④).
+    func testTheTerminalLoginPushOpensTheTerminalRequests() {
         XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
                                             userInfo: ["kind": "terminal-login", "terminalLoginID": "34req1", "runnerID": "r1"]),
                        .openTerminalRequests)
@@ -188,17 +188,15 @@ final class TerminalsTests: XCTestCase {
         XCTAssertEqual(SettingsPage.terminals.title, "Terminals")
     }
 
-    /// OrbitApp does not build on Linux, so where the app draws and reads these is checked in its source: the card heads
-    /// the inbox's Open tab and counts with the requests; Settings has the row, its page with Revoke, and its read; the
-    /// event re-reads both.
+    /// OrbitApp does not build on Linux, so where the app draws and reads these is checked in its source: the card and
+    /// the requests' read and doors (drawn on the machine page by the macOS + iOS task, board waiting-on-you-removal 02);
+    /// Settings has the row, its page with Revoke, and its read; the event re-reads both.
     func testTheAppDrawsTheCardAndThePage() throws {
         let views = try webSource("src/macos/OrbitApp/Sources/OrbitApp/Views/OwnerRequestViews.swift")
-        XCTAssertTrue(views.contains("ForEach(model.terminalRequests) { request in"))
-        XCTAssertTrue(views.contains("TerminalApproveCard(model: model, request: request)"))
-        XCTAssertTrue(views.contains("entries.isEmpty && model.terminalRequests.isEmpty"))
+        XCTAssertTrue(views.contains("struct TerminalApproveCard: View {"))
         XCTAssertTrue(views.contains("try await model.decideTerminal(request, approve: approve)"))
         let requests = try webSource("src/macos/OrbitApp/Sources/OrbitApp/OwnerRequestsModel.swift")
-        XCTAssertTrue(requests.contains("OwnerRequests.waitingCount(open, questions: questions, snoozes: snoozes) + terminalRequests.count"))
+        XCTAssertTrue(requests.contains("private(set) var terminalRequests: [TerminalRequest] = []"))
         XCTAssertTrue(requests.contains("await loadTerminalRequests()"))
         let settings = try webSource("src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsSheet.swift")
         XCTAssertTrue(settings.contains("case .terminals:      TerminalsSettingsPage()"))

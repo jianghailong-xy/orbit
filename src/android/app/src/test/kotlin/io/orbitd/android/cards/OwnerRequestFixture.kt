@@ -23,10 +23,6 @@ internal class OwnerRequestFixture {
     val held = ConcurrentHashMap<String, JsonObject>()
     /** The secret door's refusal, when a test wants one. */
     @Volatile var refuseSecret: String? = null
-    /** The terminals asking to be approved (`GET /terminals/requests`), which Approve and Deny take off the list; [terminalsMissing] is a
-     * server that predates terminals (404). */
-    val terminalRequests = CopyOnWriteArrayList<JsonObject>()
-    @Volatile var terminalsMissing = false
 
     private val server = MockWebServer().apply {
         dispatcher = object : Dispatcher() {
@@ -39,13 +35,6 @@ internal class OwnerRequestFixture {
                 return when {
                     path == "/api/auth/login" -> json(200, """{"accessToken":"or-access","refreshToken":"or-refresh","user":{"id":"u","email":"u@example.test","name":"U"}}""")
                     path == "/api/account-secrets" -> json(200, """{"secrets":[]}""")
-                    path == "/api/terminals/requests" -> if (terminalsMissing) json(404, """{"message":"Cannot GET /api/terminals/requests"}""")
-                        else json(200, buildJsonObject { put("requests", JsonArray(terminalRequests.toList())) }.toString())
-                    parts.take(2) == listOf("terminals", "requests") && request.method == "POST" -> {
-                        val row = terminalRequests.firstOrNull { it.s("id") == parts[2] } ?: return json(404, """{"message":"terminal sign-in not found"}""")
-                        terminalRequests.remove(row)
-                        json(200, buildJsonObject { put("id", parts[2]); put("status", if (parts[3] == "approve") "APPROVED" else "DENIED") }.toString())
-                    }
                     parts.first() == "tasks" -> json(200, """{"id":"${parts[1]}","title":"Ship the login page"}""")
                     path == "/api/owner-requests" -> {
                         val state = request.requestUrl!!.queryParameter("state")
@@ -146,15 +135,6 @@ internal class OwnerRequestFixture {
                 addJsonObject { put("label", "Hong Kong") }
             }
             put("recommendedOption", 0)
-        }
-
-        const val TERMINAL_REQUEST = "01a0d6a9-d763-70e1-b4cf-8793e971b5f1"
-
-        /** A terminal on dev-laptop asking to be approved, three minutes ago, with the code it shows. */
-        fun terminalRequest(id: String = TERMINAL_REQUEST, machine: String = "dev-laptop", code: String = "7KQ-4MZ", minutesAgo: Long = 3) = buildJsonObject {
-            put("id", id); put("userCode", code); put("machineName", machine); put("runnerId", RUNNER)
-            put("createdAt", Instant.now().minusSeconds(minutesAgo * 60).toString())
-            put("expiresAt", Instant.now().plusSeconds(600 - minutesAgo * 60).toString())
         }
 
         fun confirm() = request(CONFIRM_ID, "CONFIRM", "Confirm the DNS change", "The new records point the app at the new load balancer.", 45) {}

@@ -330,7 +330,37 @@
   }
 }
 
-/* Terminals asking to be approved (TerminalApproveCard): whole cards over the Open list. */
-.owner-inbox-terminals {
-  margin-bottom: 8px;
+/* Terminals asking to be approved (TerminalApproveCard), on their machine's page (TerminalRequests.tsx): one card
+   per request, oldest first. Opened from the Needs you row, the oldest card's outline is lit for a moment. */
+.machine-terminal-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.machine-terminal-cards .owner-request-card {
+  margin: 0;
+}
+.owner-request-card.is-lit {
+  animation: terminal-request-lit 2s ease-out;
+}
+@keyframes terminal-request-lit {
+  0%,
+  60% {
+    border-color: var(--warning-solid);
+    box-shadow: 0 0 0 3px var(--warning-bg);
+  }
+  100% {
+    box-shadow: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .owner-request-card.is-lit {
+    animation: none;
+    border-color: var(--warning-solid);
+  }
+}
+/* The session list's Needs you row (TerminalsNeedsYouRow): the Landings row's circle, in the needs-you amber. */
+.session-project-landing-mark.terminal-needs-you-mark {
+  background: var(--warning-bg);
+  color: var(--warning-solid);
 }

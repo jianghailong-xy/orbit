@@ -349,7 +349,7 @@ private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: 
 fun RunnerScreen(api: ManagementApi, runnerId: String?, record: String?, revision: Long, open: (OrbitRoute) -> Unit,
                  back: () -> Unit, openWorkspace: (String) -> Unit) {
     when {
-        runnerId == null -> MachinesAndModelsPage(api, revision, open)
+        runnerId == null -> MachinesAndModelsPage(api, revision, open, record)
         record == "name" -> RunnerNamePage(api, runnerId, revision, back)
         record?.startsWith("engine:") == true -> RunnerEnginePage(api, runnerId, record.removePrefix("engine:"), revision, open)
         else -> RunnerDetail(api, runnerId, revision, open, back, openWorkspace)
@@ -379,6 +379,8 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
         // A machine checks in every 30s: read it again while its page is up.
         while (true) { delay(15_000); model.load(); model.loadSessionCounts() }
     }
+    val terminalStore = remember(api) { TerminalRequestStore.of(api) }
+    val terminals = rememberLiveTerminalRequests(terminalStore)
     val runner = model.runner(id)
     if (runner == null) {
         if (model.loaded) RunnerGone("Runner") else Text(if (model.failed) model.error.orEmpty() else "Loading…", Modifier.padding(24.dp), color = Ink.muted)
@@ -416,6 +418,10 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
             RunnerHead(runner, now)
+            // This machine's terminals asking to be approved, under its head (docs/mocks/waiting-on-you-removal/02 ①).
+            TerminalRequestStore.on(terminals, id).takeIf { it.isNotEmpty() }?.let {
+                FormSection(MachinesAndModels.NEEDS_YOU) { TerminalRequestCards(it, terminalStore, null, notice::show) }
+            }
             if (model.failed) model.error?.let { Text("⚠ $it", Modifier.padding(top = 8.dp), color = Ink.amber, style = MaterialTheme.typography.labelMedium) }
             RunnerPage.updateCard(runner, now)?.let { card ->
                 // Update Now… interrupts the turns in flight on a runner that takes it (available, draining, postponed); an older one's

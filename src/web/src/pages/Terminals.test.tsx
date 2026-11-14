@@ -2,9 +2,9 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { WaitingOnYouPage } from './WaitingOnYouPage';
+import { TerminalRequestsSection, TerminalsNeedsYouRow } from '../components/TerminalRequests';
 import { TerminalsPage } from './TerminalsPage';
 import { resetSnoozesForTest } from '../lib/ownerRequests';
 import { fullDate, untilLine } from '../lib/accessTokens';
@@ -12,8 +12,9 @@ import { ago } from '../lib/watches';
 import type { Terminal, TerminalRequest } from '../lib/terminals';
 
 /**
- * The approve-terminal card (docs/terminal-session-design.md, board 2 marker 7) where the owner's other cards are —
- * the Waiting on you inbox and its count — and Settings → Terminals with Revoke.
+ * The approve-terminal card (docs/terminal-session-design.md, board 2 marker 7) on its machine's page, the session
+ * list's Needs you row that opens it (docs/mocks/waiting-on-you-removal/02-terminal-approvals.html), and Settings →
+ * Terminals with Revoke.
  */
 
 vi.mock('../api', () => ({ api: vi.fn() }));
@@ -66,7 +67,6 @@ beforeEach(() => {
       return { id } as never;
     }
     if (path === '/projects/sidebar') return [] as never;
-    if (path.startsWith('/owner-requests')) return { requests: [] } as never;
     throw new Error(`unexpected ${method} ${path}`);
   });
 });
@@ -84,13 +84,25 @@ const flush = async () => {
   for (let i = 0; i < 6; i += 1) await act(async () => { await new Promise((done) => setTimeout(done, 0)); });
 };
 
-async function render(element: JSX.Element) {
+/** Where the app is: the path and hash a press navigated to. */
+function Where() {
+  const location = useLocation();
+  return <output data-testid="where">{location.pathname + location.hash}</output>;
+}
+
+async function render(element: JSX.Element, at = '/') {
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host);
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await act(async () => {
-    root!.render(<QueryClientProvider client={qc}><MemoryRouter>{element}</MemoryRouter></QueryClientProvider>);
+    root!.render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={[at]}>
+          <Routes><Route path="*" element={<>{element}<Where /></>} /></Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
   });
   await flush();
 }
@@ -104,41 +116,125 @@ async function click(element: Element | null | undefined) {
   await flush();
 }
 
-describe('the approve-terminal card', () => {
-  it('is in the Open inbox for a pending request, in the owner card frame, and counted', async () => {
-    await render(<WaitingOnYouPage />);
-    const card = host.querySelector<HTMLElement>('.owner-request-card[data-kind="TERMINAL"]');
-    expect(card).not.toBeNull();
-    expect(card!.querySelector('.owner-request-waiting')?.textContent).toBe('Waiting on you');
-    expect(card!.querySelector('.owner-request-title')?.textContent).toBe('Approve a terminal?');
-    expect([...card!.querySelectorAll('.owner-request-why p')].map((p) => p.textContent)).toEqual([
+const where = () => host.querySelector('[data-testid="where"]')?.textContent;
+const titles = () => [...host.querySelectorAll('.owner-request-card[data-kind="TERMINAL"] .owner-request-why p:first-child')]
+  .map((p) => p.textContent);
+
+describe('the machine page\'s Terminals to approve', () => {
+  it('draws the card unchanged under its own heading, for this machine only', async () => {
+    requests = [REQUEST, { ...REQUEST, id: 'req9', machineName: 'build-box', runnerId: 'run2', userCode: 'ZZZ-111' }];
+    await render(<TerminalRequestsSection runnerId="run1" />);
+    const section = host.querySelector<HTMLElement>('#terminal-requests');
+    expect(section?.querySelector('.settings-section-title')?.textContent).toBe('Terminals to approve');
+    expect(section?.querySelector('.machine-section-note')?.textContent).toBe('A request lasts 10 minutes');
+    const cards = section!.querySelectorAll<HTMLElement>('.owner-request-card[data-kind="TERMINAL"]');
+    expect(cards).toHaveLength(1);
+    const card = cards[0];
+    expect(card.querySelector('.owner-request-waiting')?.textContent).toBe('Waiting on you');
+    expect(card.querySelector('.owner-request-title')?.textContent).toBe('Approve a terminal?');
+    expect([...card.querySelectorAll('.owner-request-why p')].map((p) => p.textContent)).toEqual([
       'Terminal on dev-laptop · code 7KQ-4MZ',
       'It can start sessions in your workspaces on this machine and answer their approval cards for 30 days. You can revoke it in Settings → Terminals.',
     ]);
-    expect([...card!.querySelectorAll('.card-actions button')].map((b) => b.textContent)).toEqual(['Deny', 'Approve']);
-    expect(host.querySelector('.owner-inbox-count')?.textContent).toBe('1');
-    expect(host.querySelector('.owner-inbox-empty')).toBeNull();
+    expect([...card.querySelectorAll('.card-actions button')].map((b) => b.textContent)).toEqual(['Deny', 'Approve']);
   });
 
-  it('Approve posts the decision and the card leaves once the requests are read again', async () => {
-    await render(<WaitingOnYouPage />);
+  it('draws nothing at all when no request waits on this machine', async () => {
+    requests = [{ ...REQUEST, runnerId: 'run2' }];
+    await render(<TerminalRequestsSection runnerId="run1" />);
+    expect(host.querySelector('#terminal-requests')).toBeNull();
+    expect(host.textContent).not.toContain('Terminals to approve');
+  });
+
+  it('lists several oldest first', async () => {
+    requests = [{ ...REQUEST, id: 'req2', userCode: 'R2T-9PX', createdAt: at(-30_000) }, REQUEST];
+    await render(<TerminalRequestsSection runnerId="run1" />);
+    expect(titles()).toEqual(['Terminal on dev-laptop · code 7KQ-4MZ', 'Terminal on dev-laptop · code R2T-9PX']);
+  });
+
+  it('Approve posts the decision, says so, and the section folds once the requests are read again', async () => {
+    await render(<TerminalRequestsSection runnerId="run1" />);
     await click(button(host, 'Approve'));
     expect(apiMock).toHaveBeenCalledWith('/terminals/requests/req1/approve', { method: 'POST' });
-    await vi.waitFor(() => expect(host.querySelector('[data-kind="TERMINAL"]')).toBeNull());
-    expect(host.querySelector('.owner-inbox-empty')?.textContent).toBe('Nothing is waiting on you.');
+    expect(toast.success).toHaveBeenCalledWith('Terminal approved');
+    await vi.waitFor(() => expect(host.querySelector('#terminal-requests')).toBeNull());
   });
 
-  it('Deny posts the other decision', async () => {
-    await render(<WaitingOnYouPage />);
+  it('Deny posts the other decision and says so', async () => {
+    await render(<TerminalRequestsSection runnerId="run1" />);
     await click(button(host, 'Deny'));
     expect(apiMock).toHaveBeenCalledWith('/terminals/requests/req1/deny', { method: 'POST' });
+    expect(toast.success).toHaveBeenCalledWith('Terminal denied');
     await vi.waitFor(() => expect(host.querySelector('[data-kind="TERMINAL"]')).toBeNull());
   });
 
-  it('draws nothing when no request is pending', async () => {
-    requests = [];
-    await render(<WaitingOnYouPage />);
-    expect(host.querySelector('[data-kind="TERMINAL"]')).toBeNull();
+  it('a refusal keeps the card and says what the server said', async () => {
+    apiMock.mockImplementation(async (path: string, options?: { method?: string }) => {
+      if ((options?.method ?? 'GET') === 'POST') {
+        throw new Error('terminal sign-in not found or expired — run `orbit` in the terminal again');
+      }
+      if (path === '/terminals/requests') return { requests } as never;
+      throw new Error(`unexpected ${path}`);
+    });
+    await render(<TerminalRequestsSection runnerId="run1" />);
+    await click(button(host, 'Approve'));
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(host.querySelector('[data-kind="TERMINAL"]')?.textContent).toContain('That was not recorded');
+    expect(host.querySelector('[data-kind="TERMINAL"]')?.textContent).toContain('run `orbit` in the terminal again');
+  });
+
+  it('folds a card at its deadline without another read', async () => {
+    requests = [{ ...REQUEST, expiresAt: at(150) }];
+    await render(<TerminalRequestsSection runnerId="run1" />);
+    expect(host.querySelector('[data-kind="TERMINAL"]')).not.toBeNull();
+    const reads = apiMock.mock.calls.length;
+    await vi.waitFor(() => expect(host.querySelector('#terminal-requests')).toBeNull(), { timeout: 2000 });
+    expect(apiMock.mock.calls.length).toBe(reads);
+  });
+
+  it('opened on #terminal-requests, it lights the oldest card', async () => {
+    requests = [REQUEST, { ...REQUEST, id: 'req2', createdAt: at(-10_000) }];
+    await render(<TerminalRequestsSection runnerId="run1" />, '/settings/machines/run1#terminal-requests');
+    const cards = [...host.querySelectorAll('[data-kind="TERMINAL"]')];
+    expect(cards.map((card) => card.classList.contains('is-lit'))).toEqual([true, false]);
+  });
+
+  it('opened plainly, nothing is lit', async () => {
+    await render(<TerminalRequestsSection runnerId="run1" />, '/settings/machines/run1');
+    expect(host.querySelector('.is-lit')).toBeNull();
+  });
+});
+
+describe('the session list\'s Needs you row', () => {
+  const row = () => host.querySelector<HTMLElement>('.terminal-needs-you');
+
+  it('says one terminal, its machine and code, and opens its machine page on the section', async () => {
+    await render(<TerminalsNeedsYouRow />);
+    expect(row()?.querySelector('.session-section-head')?.textContent).toBe('Needs you');
+    expect(row()?.querySelector('.session-project-merge-row-title')?.textContent).toBe('Approve a terminal');
+    expect(row()?.querySelector('.session-project-merge-row-detail')?.textContent).toBe('dev-laptop · code 7KQ-4MZ');
+    await click(row()?.querySelector('button'));
+    expect(where()).toBe('/settings/machines/run1#terminal-requests');
+  });
+
+  it('counts several on one machine, and names several machines', async () => {
+    requests = [REQUEST, { ...REQUEST, id: 'req2', createdAt: at(-10_000) }];
+    await render(<TerminalsNeedsYouRow />);
+    expect(row()?.querySelector('.session-project-merge-row-title')?.textContent).toBe('Approve 2 terminals');
+    expect(row()?.querySelector('.session-project-merge-row-detail')?.textContent).toBe('dev-laptop · 2 waiting');
+    act(() => root?.unmount());
+    host.remove();
+    requests = [{ ...REQUEST, id: 'req3', machineName: 'build-box', runnerId: 'run2', createdAt: at(-5 * MINUTE) }, REQUEST];
+    await render(<TerminalsNeedsYouRow />);
+    expect(row()?.querySelector('.session-project-merge-row-detail')?.textContent).toBe('build-box, dev-laptop');
+    await click(row()?.querySelector('button'));
+    expect(where()).toBe('/settings/machines/run2#terminal-requests');
+  });
+
+  it('is not drawn when nothing waits, or what waited has expired', async () => {
+    requests = [{ ...REQUEST, expiresAt: at(-1) }];
+    await render(<TerminalsNeedsYouRow />);
+    expect(row()).toBeNull();
   });
 });
 

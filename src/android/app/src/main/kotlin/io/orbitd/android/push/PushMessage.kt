@@ -44,7 +44,7 @@ data class PushPayload(
     val link: String? get() = when {
         // A project done, and a pending item of a project nobody has (the orphan sweep, owner with no coordinator): its project.
         kind == "project-done" || kind == "project-orphan" -> projectId?.let { "orbit://project/$it" }
-        // A terminal asking to be approved: the Waiting on you inbox, whose Open tab heads with its card (iOS `.openTerminalRequests`).
+        // A terminal asking to be approved: Machines & models' Needs you section, its card lit (OrbitLinks).
         kind == TERMINAL_LOGIN -> terminalLoginId?.let { "orbit://terminal-login/$it" }
         kind == "watch-matched" -> watchId?.let { "orbit://watch/$it" }
         // About a machine: its sign-in lapsed, its Claude connection to Anthropic is in a region Anthropic does not offer Claude in,

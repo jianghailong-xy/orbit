@@ -26,6 +26,9 @@ import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.obj
 import io.orbitd.android.core.cards.text
 import io.orbitd.android.directory.TrashingSessions
+import io.orbitd.android.management.TerminalNeedsYou
+import io.orbitd.android.management.TerminalRequestStore
+import io.orbitd.android.management.rememberLiveTerminalRequests
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.OrbitRoute
 import io.orbitd.android.navigation.Origin
@@ -60,8 +63,13 @@ internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, se
     }.collectAsState(emptyList())
     // A session on its way to Trash is waiting on nobody (A05-9), as it is in none of the lists.
     val trashing by app.trashing.ids.collectAsState()
-    val banner = if (below != null) null else remember(openRows, sessionId, trashing) {
-        NeedsYouLogic.banner(TrashingSessions.without(openRows, trashing) { it.text("id") }, sessionId)
+    // Terminals asking to be approved lead: a request lives ten minutes (board waiting-on-you-removal 02 ③).
+    val terminals = TerminalNeedsYou.banner(rememberLiveTerminalRequests(remember(app, handle) {
+        TerminalRequestStore.of(app.session, handle, app.processScope)
+    }))
+    val banner = if (below != null) null else remember(openRows, sessionId, trashing, terminals) {
+        val sessions = NeedsYouLogic.banner(TrashingSessions.without(openRows, trashing) { it.text("id") }, sessionId)
+        terminals?.copy(count = 1 + (sessions?.count ?: 0)) ?: sessions
     }
     val shift = remember(list) { BarShift() }
     var unfolded by remember { mutableStateOf(false) }
@@ -84,6 +92,8 @@ internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, se
     // One of the five owner items opens the card it names; anything else the session. Folds the bar again on the way out.
     fun go(entry: NeedsYouBanner) {
         unfolded = false
+        // Terminals: Settings › Machines & models, on its Needs you section, the oldest card lit.
+        entry.terminalRequest?.let { open(TerminalNeedsYou.route(it)); return }
         val target = entry.target.text("id") ?: return
         val workspace = entry.target.obj("agent")?.text("id") ?: entry.target.text("agentId") ?: entry.target.text("workspaceId")
         // A merge into main waiting on the reader is answered on its project's sessions page, where its card is (iOS 6b4bef713).
@@ -97,15 +107,15 @@ internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, se
     }
     // Several waiting, unfolded (the owner, 2026-11-13, option B of `docs/mocks/needs-you-capsule/03-expand.html`): one capsule
     // per conversation, the first the one the folded bar names, pushing the page down. The first carries the ↑ that folds them.
-    val entries = if (unfolded && waiting.count > 1) remember(openRows, sessionId, trashing) {
-        NeedsYouLogic.entries(TrashingSessions.without(openRows, trashing) { it.text("id") }, sessionId)
+    val entries = if (unfolded && waiting.count > 1) remember(openRows, sessionId, trashing, terminals) {
+        listOfNotNull(terminals) + NeedsYouLogic.entries(TrashingSessions.without(openRows, trashing) { it.text("id") }, sessionId)
     } else emptyList()
     if (entries.size > 1) {
         // At most five; the last says "+N" for the ones behind it, as the folded bar does.
         val shown = entries.take(NeedsYouLogic.unfoldedLimit)
         Column(measured) {
             shown.forEachIndexed { index, entry ->
-                NeedsYouBar(entry.text, null, if (entry.ownerItem == null) NeedsYouLogic.sessionHint else NeedsYouLogic.itemHint,
+                NeedsYouBar(entry.text, null, hint(entry),
                     detail = entry.detail, since = entry.since, glyph = entry.glyph,
                     more = if (index == shown.lastIndex) entries.size - shown.size else 0,
                     onFold = if (index == 0) ({ unfolded = false }) else null) { go(entry) }
@@ -114,13 +124,16 @@ internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, se
         return
     }
     val several = waiting.count > 1
-    NeedsYouBar(waiting.text, null, when {
-        several -> NeedsYouLogic.unfoldHint(waiting.count)
-        waiting.ownerItem == null -> NeedsYouLogic.sessionHint
-        else -> NeedsYouLogic.itemHint
-    }, measured, detail = waiting.detail, since = waiting.since, more = waiting.more, glyph = waiting.glyph, unfolds = several) {
+    NeedsYouBar(waiting.text, null, if (several) NeedsYouLogic.unfoldHint(waiting.count) else hint(waiting), measured, detail = waiting.detail, since = waiting.since, more = waiting.more, glyph = waiting.glyph, unfolds = several) {
         if (several) unfolded = true else go(waiting)
     }
+}
+
+/** What a press on one line does, for TalkBack. */
+private fun hint(entry: NeedsYouBanner) = when {
+    entry.terminalRequest != null -> TerminalNeedsYou.hint
+    entry.ownerItem == null -> NeedsYouLogic.sessionHint
+    else -> NeedsYouLogic.itemHint
 }
 
 /**
@@ -214,4 +227,5 @@ private val NeedsYouGlyph.drawable: Int get() = when (this) {
     NeedsYouGlyph.WARNING -> R.drawable.ic_warning
     NeedsYouGlyph.PAUSE -> R.drawable.ic_pause
     NeedsYouGlyph.HAND -> R.drawable.ic_permission
+    NeedsYouGlyph.TERMINAL -> R.drawable.ic_terminal
 }

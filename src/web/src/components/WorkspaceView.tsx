@@ -376,6 +376,7 @@ import { SessionRecapCard, readHiddenRecap, recapHideKey, rememberHiddenRecap } 
 import { LandingJobsSheet } from './LandingJobsSheet';
 import { LandingLink } from './LandingLink';
 import { SessionProjectLandings } from './SessionProjectLandings';
+import { TerminalsNeedsYouRow } from './TerminalRequests';
 import { ProjectLandingsWindow } from './ProjectLandingsWindow';
 import { ProjectLandingCard } from './ProjectLandingCard';
 import { ProjectStartDialog } from './StartProjectCard';
@@ -9717,6 +9718,8 @@ export function WorkspaceView({
           ref={listRef}
           onScroll={onSessionListScroll}
         >
+          {/* A terminal asking to be approved: one Needs you row over the list, to its machine's page (board 02 ③). */}
+          {!listProjectId && <TerminalsNeedsYouRow />}
           {listProjectId && projectPageTop(listProjectId)}
           {listProjectId
             ? projectPageEmpty

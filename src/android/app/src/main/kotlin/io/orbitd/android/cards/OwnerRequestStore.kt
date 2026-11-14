@@ -8,8 +8,6 @@ import io.orbitd.android.core.cards.AccountSecret
 import io.orbitd.android.core.cards.OwnerRequest
 import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.core.cards.OwnerRequestsApi
-import io.orbitd.android.core.cards.TerminalRequest
-import io.orbitd.android.core.cards.TerminalsApi
 import io.orbitd.android.core.cards.text
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
@@ -30,16 +28,13 @@ import kotlinx.serialization.json.JsonObject
  * per signed-in handle; another account's requests are never drawn.
  */
 class OwnerRequestStore internal constructor(private val auth: AuthSession, val handle: SessionHandle, private val scope: CoroutineScope,
-    private val api: OwnerRequestsApi = OwnerRequestsApi(auth, handle), private val terminals: TerminalsApi = TerminalsApi(auth, handle)) {
+    private val api: OwnerRequestsApi = OwnerRequestsApi(auth, handle)) {
 
     data class State(
         val lists: Map<String, List<OwnerRequest>> = emptyMap(),
         val savedSecrets: List<AccountSecret> = emptyList(),
         /** The tasks a request holds up, by id, as their titles were read. */
         val taskTitles: Map<String, String> = emptyMap(),
-        /** Terminals asking to be approved (docs/terminal-session-design.md), oldest first. Each waits ten minutes at most; their
-         * cards are drawn on the machine pages (docs/mocks/waiting-on-you-removal/02-terminal-approvals.html). */
-        val terminalRequests: List<TerminalRequest> = emptyList(),
     ) {
         fun list(filter: String) = lists[filter].orEmpty()
         val open get() = list(OPEN)
@@ -73,23 +68,6 @@ class OwnerRequestStore internal constructor(private val auth: AuthSession, val 
             catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { /* No saved secrets to offer. */ }
         }
     }
-
-    /** The terminals waiting for a decision. A server that predates terminals answers none; a failed read keeps what was drawn. */
-    fun loadTerminalRequests() {
-        scope.launch {
-            try { terminals.requests().let { requests -> if (live()) mutable.update { it.copy(terminalRequests = requests) } } }
-            catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { /* The next read tries again. */ }
-        }
-    }
-
-    /** Approve or Deny a terminal: null when it was recorded — its card leaves at once — else what to say. The list is read again
-     * either way. */
-    suspend fun decideTerminal(request: TerminalRequest, approve: Boolean): String? = try {
-        if (approve) terminals.approve(request.id) else terminals.deny(request.id)
-        mutable.update { state -> state.copy(terminalRequests = state.terminalRequests.filterNot { it.id == request.id }) }
-        null
-    } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { message(error) }
-    finally { loadTerminalRequests() }
 
     private suspend fun titles(ids: List<String>) {
         ids.distinct().filterNot { it in mutable.value.taskTitles }.forEach { id ->

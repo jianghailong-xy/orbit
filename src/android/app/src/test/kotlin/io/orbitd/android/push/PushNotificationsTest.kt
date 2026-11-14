@@ -73,9 +73,9 @@ class PushNotificationsTest {
         assertNull(restored.bindAccount("account-A").bindAccount(null).pending)
     }
 
-    /** The server's terminal-login send (the shared fixture's sample): it rings on the needs-you channel, and its tap opens the Waiting
-     * on you inbox whose Open tab heads with the approve card. */
-    @Test fun aTerminalAskingToBeApprovedRingsAsNeedsYouAndOpensTheInbox() {
+    /** The server's terminal-login send (the shared fixture's sample): it rings on the needs-you channel, and its tap opens Settings ›
+     * Machines & models, whose Needs you section holds the approve card (docs/mocks/waiting-on-you-removal/02 ④). */
+    @Test fun aTerminalAskingToBeApprovedRingsAsNeedsYouAndOpensMachinesAndModels() {
         val root = generateSequence(java.io.File(System.getProperty("user.dir"))) { it.parentFile }
             .first { java.io.File(it, "src/shared/src/android-push.fixture.json").isFile }
         val data = Wire.json.parseToJsonElement(java.io.File(root, "src/shared/src/android-push.fixture.json").readText())
@@ -86,7 +86,9 @@ class PushNotificationsTest {
         val notification = manager.activeNotifications.single().notification
         assertEquals(PushNotifications.NEEDS_YOU, notification.channelId)
         val route = OrbitLinks.parse(shadowOf(notification.contentIntent).savedIntent.dataString!!)!!
-        assertEquals(Destination.WAITING_ON_YOU, route.destination)
+        assertEquals(Destination.RUNNER, route.destination)
+        assertNull("Machines & models, not one machine", route.id)
+        assertTrue(route.recordId!!.startsWith("terminal:"))
     }
 
     @Test fun replacementDedupSurvivesProcessRecreationButNewApprovalEdgeCanAlertAfterClear() {

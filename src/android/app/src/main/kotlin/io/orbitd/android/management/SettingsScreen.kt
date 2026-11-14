@@ -159,6 +159,7 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
     // Read with the machines: a machine with no coding CLI signed in needs you unless a workspace there runs on a key.
     var workspaces by remember(api) { mutableStateOf<List<JsonObject>>(emptyList()) }
     val machinesAndModels = remember(api) { MachinesAndModelsModel(api) }
+    val terminalRequests = rememberLiveTerminalRequests(remember(api) { TerminalRequestStore.of(api) })
     var sharedLinks by remember(api) { mutableStateOf<String?>(null) }
     var accessTokens by remember(api) { mutableStateOf<String?>(null) }
     var terminals by remember(api) { mutableStateOf<String?>(null) }
@@ -228,7 +229,8 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
         // First, as on iOS: the one row that says what needs you (docs/mocks/ios-settings-order). No header: the one row says the
         // group's name (iOS SettingsHome.header, docs/mocks/machines-and-models ⑥-2).
         SettingsGroup(null, footer = MachinesAndModels.SUBTITLE) {
-            val needsYou = runners?.let { machinesAndModels.attention(it, workspaces, System.currentTimeMillis()).size } ?: 0
+            // Terminals asking to be approved count with them (docs/mocks/waiting-on-you-removal/02 ①).
+            val needsYou = runners?.let { machinesAndModels.attention(it, workspaces, System.currentTimeMillis()).size + terminalRequests.size } ?: 0
             // What needs a person is said in amber, as the mock's row says it.
             SettingsLink(MachinesAndModels.TITLE, R.drawable.ic_runner, runners?.let { MachinesAndModels.settingsValue(needsYou, it) },
                 valueColor = if (needsYou > 0) Ink.amber else null) { page("machines-and-models") }

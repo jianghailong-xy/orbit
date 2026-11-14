@@ -1,4 +1,5 @@
 import { AgentFixButton, AgentFixLine } from '../AgentFix';
+import { TerminalRequestsSection } from '../TerminalRequests';
 import { agentFixView, attentionFixTarget } from '../../lib/agentFix';
 import {
   BranchesOutlined,
@@ -709,6 +710,9 @@ export function MachineSettingsPage() {
         </div>
         {metaline.length > 0 && <div className="machine-metaline">{metaline.join(RUNNER_LINE_SEPARATOR)}</div>}
       </header>
+
+      {/* Terminals on this machine asking to be approved, under the title (docs/mocks/waiting-on-you-removal/02 ①). */}
+      <TerminalRequestsSection runnerId={runner.id} />
 
       {/* The Update card (board 4): a release this runner is behind, in the phase it reports. */}
       {updateCard && (

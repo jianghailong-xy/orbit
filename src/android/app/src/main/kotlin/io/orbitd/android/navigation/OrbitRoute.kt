@@ -198,8 +198,14 @@ object OrbitLinks {
             kind = references[scheme.removePrefix("orbit-")]
             id = if (kind == Destination.SESSION) uri.schemeSpecificPart.substringBefore('?') else uri.schemeSpecificPart
         } else if (scheme == "orbit") {
-            kind = deepLinks[uri.host?.lowercase()]
             val parts = uri.path.orEmpty().trim('/').split('/')
+            // `orbit://terminal-login/<id>`, a terminal asking to be approved: Settings › Machines & models, on its Needs you section,
+            // that request's card lit (docs/mocks/waiting-on-you-removal/02 ④). One answered or expired opens the page all the same.
+            if (uri.host.equals("terminal-login", ignoreCase = true)) {
+                val request = parts.singleOrNull()?.takeIf { it.isNotEmpty() }?.let(ObjectId::canonical) ?: return null
+                return OrbitRoute(Destination.RUNNER, recordId = "terminal:$request", origin = origin)
+            }
+            kind = deepLinks[uri.host?.lowercase()]
             if (parts.size == 1) id = parts.first()
         } else if (scheme in setOf("https", "http") && server != null && uri.userInfo == null) {
             val base = URI(server)

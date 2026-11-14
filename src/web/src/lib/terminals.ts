@@ -80,3 +80,44 @@ export const terminalsQuery = () =>
     queryFn: () => api<{ terminals: Terminal[] }>('/terminals'),
     retry: false,
   });
+
+/* ── Where a waiting terminal is drawn (docs/mocks/waiting-on-you-removal/02-terminal-approvals.html) ──────────────
+   The card lives on its machine's page, under the title; the session list's Needs you row points at it. */
+
+/** The machine page's section of approve cards, and its note. */
+export const TERMINALS_TO_APPROVE = 'Terminals to approve';
+export const TERMINAL_REQUEST_LASTS = 'A request lasts 10 minutes';
+/** The anchor the Needs you row and its link land on. */
+export const TERMINAL_REQUESTS_ANCHOR = 'terminal-requests';
+/** What a press says once the server recorded it (board ② choice 3). */
+export const TERMINAL_APPROVED = 'Terminal approved';
+export const TERMINAL_DENIED = 'Terminal denied';
+/** The session list's section over the row. */
+export const TERMINALS_NEEDS_YOU = 'Needs you';
+
+/**
+ * The requests still answerable at `now`, oldest first: the server's own rule (`expiresAt > now`), so a card
+ * folds at its deadline rather than at the next read (board ② choice 4). The server's 404 stays the fallback.
+ */
+export const liveTerminalRequests = (requests: readonly TerminalRequest[], now: number): TerminalRequest[] =>
+  requests
+    .filter((request) => Date.parse(request.expiresAt) > now)
+    .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt) || a.id.localeCompare(b.id));
+
+/** "Approve a terminal", or "Approve 2 terminals" (board ③ choice 5). */
+export const approveTerminalsTitle = (count: number): string =>
+  count === 1 ? 'Approve a terminal' : `Approve ${count} terminals`;
+
+/**
+ * The Needs you row's second line: one request names its machine and code ("dev-laptop · code 7KQ-4MZ"); several
+ * on one machine count ("dev-laptop · 2 waiting"); several machines are named, oldest first ("dev-laptop, build-box").
+ */
+export function terminalsNeedsYouDetail(requests: readonly TerminalRequest[]): string {
+  if (requests.length === 1) return `${requests[0].machineName} · code ${requests[0].userCode}`;
+  const machines = [...new Set(requests.map((request) => request.machineName))];
+  return machines.length === 1 ? `${machines[0]} · ${requests.length} waiting` : machines.join(', ');
+}
+
+/** Where the row and its link land: the oldest request's machine page, on the section. */
+export const terminalRequestsPath = (runnerId: string): string =>
+  `/settings/machines/${runnerId}#${TERMINAL_REQUESTS_ANCHOR}`;

@@ -200,6 +200,9 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         val revision = if (live.first === signedIn.handle) live.second else 0L
         // `terminals.changed`: the approve cards' requests and Settings → Terminals are read again, and nothing else (iOS `AppModel`).
         val terminalsChanged = rememberTerminalsChanged(app, signedIn.handle)
+        LaunchedEffect(terminalsChanged) {
+            if (terminalsChanged > 0) TerminalRequestStore.of(app.session, signedIn.handle, app.processScope).load()
+        }
         // The sessions parked on a watch that will resume them, as Following last read them: a project row's line says so (A05-6).
         val watches by remember(signedIn.handle) { WatchStore.of(app.session, signedIn.handle, app.processScope).state }.collectAsState()
         val holder = rememberSaveableStateHolder()
