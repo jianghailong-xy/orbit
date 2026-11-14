@@ -44,6 +44,7 @@ final class SidebarClickDriverTests: XCTestCase {
         // rebuilds the rail underneath the clicks — the same rows a user's pointer would find.
         var clicked = 0
         var skipped = 0
+        var selectedPresses = 0
         var step = 0
         let deadline = Date().addingTimeInterval(900)
         while clicked < clicks {
@@ -57,6 +58,7 @@ final class SidebarClickDriverTests: XCTestCase {
             }
             if pressNextRow(app, step: step) {
                 clicked += 1
+                if lastSelectedRows > 0 { selectedPresses += 1 }
             } else {
                 skipped += 1
             }
@@ -66,14 +68,23 @@ final class SidebarClickDriverTests: XCTestCase {
         }
 
         let alive = appIsAlive(app)
-        note("driver done: clicked=\(clicked) skipped=\(skipped) alive=\(alive) state=\(app.state.rawValue)")
-        print("DRIVER_DONE clicked=\(clicked) skipped=\(skipped) alive=\(alive) state=\(app.state.rawValue)")
+        note("driver done: clicked=\(clicked) skipped=\(skipped) selected_presses=\(selectedPresses)"
+             + " alive=\(alive) state=\(app.state.rawValue)")
+        print("DRIVER_DONE clicked=\(clicked) skipped=\(skipped) selected_presses=\(selectedPresses)"
+              + " alive=\(alive) state=\(app.state.rawValue)")
         shot(app, "sidebar-after-clicks")
         XCTAssertTrue(alive, "app left the foreground during the run")
         XCTAssertEqual(clicked, clicks, "fewer than \(clicks) clicks landed on real rows")
+        // A press that never selects anything is a press that did not reach the rail: the gate must
+        // be able to say its clicks were clicks, not empty points in the window.
+        XCTAssertGreaterThan(selectedPresses, 0, "no press selected a sidebar row — the gate pressed nothing")
     }
 
     // MARK: clicking a row
+
+    /// How many rows the last press saw selected (AX `isSelected`). Zero on a press that did not
+    /// reach the sidebar — the run reports it, and the test requires at least one non-zero press.
+    private var lastSelectedRows = 0
 
     /// One press on the sidebar, cycling the rows by index so every row — the Wiki included, and
     /// whatever the churn is drawing at this instant — gets clicked. The named rows are the
@@ -97,23 +108,24 @@ final class SidebarClickDriverTests: XCTestCase {
         let rows = sidebarRows(app)
         if !rows.isEmpty {
             let index = step % rows.count
-            // A point click at the row's own centre, not `element.click()`: the row may leave the
-            // list between the snapshot and the press, and a point click hits whatever is there.
-            let frame = rows[index].frame
-            let appFrame = app.frame
-            if frame.width > 1 && frame.height > 1 {
-                let offset = CGVector(dx: frame.midX - appFrame.minX, dy: frame.midY - appFrame.minY)
-                app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0)).withOffset(offset).click()
-                print("CLICK \(step + 1) row=\(index)/\(rows.count) at \(Date().timeIntervalSince1970)")
-                return true
-            }
+            let row = rows[index]
+            // The row's own element click: a coordinate click at the row's centre did NOT select
+            // the row on the CI Mac (the run's request log shows the Tasks page was never opened,
+            // only its sidebar count polled), so this is the press a reader's pointer makes.
+            row.click()
+            lastSelectedRows = selectedRows(app)
+            print("CLICK \(step + 1) row=\(index)/\(rows.count) selected=\(lastSelectedRows)"
+                  + " at \(Date().timeIntervalSince1970)")
+            return true
         }
         for offset in 0..<targetLabels.count {
             let label = targetLabels[(step + offset) % targetLabels.count]
             guard let element = findRow(app, label) else { continue }
             if !element.exists || !element.isHittable { continue }
             element.click()
-            print("CLICK \(step + 1) -> \(label) at \(Date().timeIntervalSince1970)")
+            lastSelectedRows = selectedRows(app)
+            print("CLICK \(step + 1) -> \(label) selected=\(lastSelectedRows)"
+                  + " at \(Date().timeIntervalSince1970)")
             return true
         }
         print("SKIP step \(step): no target hittable")
@@ -128,6 +140,11 @@ final class SidebarClickDriverTests: XCTestCase {
         let outline = app.outlineRows.allElementsBoundByIndex
         if !outline.isEmpty { return outline }
         return app.descendants(matching: .tableRow).allElementsBoundByIndex
+    }
+
+    /// The rows the sidebar reports as selected right now.
+    private func selectedRows(_ app: XCUIApplication) -> Int {
+        app.outlineRows.allElementsBoundByIndex.filter { $0.isSelected }.count
     }
 
     // MARK: signing in
