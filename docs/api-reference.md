@@ -42,13 +42,13 @@ controllers and their decorators, so it lists what the server mounts, not what a
 
 | Caller | Routes |
 | --- | --- |
-| `public` | 31 |
-| `user` | 430 |
-| `admin` | 28 |
+| `public` | 32 |
+| `user` | 435 |
+| `admin` | 30 |
 | `runner` | 178 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **671** |
+| **Total** | **679** |
 
 ## Public routes
 
@@ -70,6 +70,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `ALL` | `/api/gw/codex` | — | `PoolGatewayController.forward` |
 | `ALL` | `/api/gw/codex/{*path}` | — | `PoolGatewayController.forward` |
 | `GET` | `/api/health` | — | `HealthController.read` |
+| `GET` | `/api/integrations/github/callback` | query `code`, `error`, `setup_action`, `state` | `GithubCallbackController.callback` |
 | `POST` | `/api/runner/device/poll` | body `Object` | `RunnerApiController.devicePoll` |
 | `POST` | `/api/runner/device/start` | body `Object` | `RunnerApiController.deviceStart` |
 | `POST` | `/api/runner/register` | body `Object` | `RunnerApiController.register` |
@@ -146,6 +147,11 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/integrations/feishu/connect-codes` | — | `FeishuController.connectCode` |
 | `DELETE` | `/api/integrations/feishu/owner` | — | `FeishuController.disconnectOwner` |
 | `POST` | `/api/integrations/feishu/test` | — | `FeishuController.sendTest` |
+| `DELETE` | `/api/integrations/github` | — | `GithubController.disconnect` |
+| `GET` | `/api/integrations/github` | — | `GithubController.read` |
+| `GET` | `/api/integrations/github/repos` | query `cursor`, `q` | `GithubController.repositories` |
+| `GET` | `/api/integrations/github/repos/:id/branches` | path `id`; query `q` | `GithubController.branches` |
+| `GET` | `/api/integrations/github/start` | query `return` | `GithubController.start` |
 | `POST` | `/api/link-previews` | body `LinkPreviewsDto` | `LinkPreviewsController.read` |
 | `GET` | `/api/managed-runner` | — | `ManagedRunnerController.status` |
 | `POST` | `/api/managed-runner/delete` | body `ManagedRunnerWriteDto` | `ManagedRunnerController.delete` |
@@ -532,6 +538,8 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/admin/email/test` | — | `AdminEmailController.test` |
 | `GET` | `/api/admin/integrations/feishu` | — | `FeishuAdminController.settings` |
 | `PUT` | `/api/admin/integrations/feishu` | body `SetFeishuAdminDto` | `FeishuAdminController.setAllowed` |
+| `GET` | `/api/admin/integrations/github` | — | `GithubAdminController.settings` |
+| `PUT` | `/api/admin/integrations/github` | body `UpdateGithubAppDto` | `GithubAdminController.update` |
 | `POST` | `/api/admin/managed-runners/:id/volume-switch` | body `ManagedRunnerVolumeSwitchDto`; path `id` | `ManagedRunnerAdminController.switchVolume` |
 | `GET` | `/api/admin/providers` | — | `AdminProvidersController.list` |
 | `POST` | `/api/admin/providers` | body `CreateModelProviderDto` | `AdminProvidersController.create` |
