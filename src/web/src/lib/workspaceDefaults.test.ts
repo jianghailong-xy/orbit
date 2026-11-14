@@ -29,9 +29,27 @@ import {
   sessionPick,
   supportsAuto,
   type ConfiguredProvider,
+  claudeModelName,
 } from './workspaceDefaults';
 
 const { CLAUDE, CODEX, KIMI, ANTIGRAVITY, OPENCODE, DSH } = AgentProvider;
+
+// A signed-out Mac mini's runner reported no Claude list, and the composer named the session's model
+// `claude-opus-5-5`: with no catalogue row to label it, a Claude id reads as Claude Code names it.
+describe('claudeModelName', () => {
+  it('names a Claude api id the way Claude Code does', () => {
+    expect(claudeModelName('claude-opus-5-5')).toBe('Opus 5.5');
+    expect(claudeModelName('claude-opus-5')).toBe('Opus 5');
+    expect(claudeModelName('claude-haiku-4-5')).toBe('Haiku 4.5');
+    expect(claudeModelName('claude-fable-5-2')).toBe('Fable 5.2');
+  });
+
+  it('leaves anything else as it is', () => {
+    for (const id of ['opus', 'opus[1m]', 'claude-sonnet-4-5-20250929', 'deepseek-flash', '']) {
+      expect(claudeModelName(id)).toBe(id);
+    }
+  });
+});
 
 describe('remembered new-session models', () => {
   const catalog: RunnerModelCatalog = { codex: [
