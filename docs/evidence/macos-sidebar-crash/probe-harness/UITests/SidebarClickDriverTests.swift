@@ -82,9 +82,14 @@ final class SidebarClickDriverTests: XCTestCase {
         let rows = sidebarRows(app)
         if !rows.isEmpty {
             let index = step % rows.count
-            let row = rows[index]
-            if row.exists && row.isHittable {
-                row.click()
+            // A point click at the row's own centre, not `element.click()`: the row can leave the
+            // list between the query and the press (that is the churn this gate runs against), and
+            // a vanished element makes XCTest record a failure instead of a click.
+            let frame = rows[index].frame
+            let appFrame = app.frame
+            if frame.width > 1 && frame.height > 1 {
+                let offset = CGVector(dx: frame.midX - appFrame.minX, dy: frame.midY - appFrame.minY)
+                app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0)).withOffset(offset).click()
                 print("CLICK \(step + 1) row=\(index)/\(rows.count) at \(Date().timeIntervalSince1970)")
                 return true
             }
