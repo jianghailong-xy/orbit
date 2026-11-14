@@ -1,5 +1,5 @@
 import { RUN_QUESTION_PREFIX } from './run-question';
-import { isDerivedUuid } from '../projects/project-dispatch-identity';
+import { derivedUuid, isDerivedUuid } from '../projects/project-dispatch-identity';
 import { OPEN_ITEM_TURN_PREFIX, OWNER_ANSWER_TURN_PREFIX } from '../projects/project-open-item';
 import { PROJECT_STARTED_TURN_PREFIX } from '../projects/project-started';
 import { BACKGROUND_WAKE_TURN_PREFIX } from '../runner-api/background-job-wake';
@@ -65,6 +65,16 @@ export function isOrbitAuthoredTurn(clientTurnId: string | null | undefined): bo
  */
 export function openingTurnKey(sessionId: string): string {
   return `initial-${sessionId}`;
+}
+
+/**
+ * The id the opening turn is written with, whoever writes it (`SessionsService.insertTurnLocked`, the
+ * claim's `QueueService.buildSession`): known from the session alone, so the active view can list the
+ * opening under the id its echo will carry before any runner has laid the turn down, and a client that
+ * drew it then sees the echo take that same row over rather than a second one appear.
+ */
+export function openingTurnId(sessionId: string): string {
+  return derivedUuid(`conversation-turn:opening:${sessionId}`);
 }
 
 /**

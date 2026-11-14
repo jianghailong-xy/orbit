@@ -538,7 +538,7 @@ interface Engine { sessionId: string; leaseOwner: string; generation: string }
 
 /**
  * What the runner's claim and the engine's activation leave behind — the Session RUNNING on this
- * runner, its opening there as the claim leaves it (`initial-<id>`, the prompt), one lease
+ * runner, its opening seeded as the claim seeds it (`initial-<id>`, the prompt), one lease
  * generation active — from a runner that declares the sparse coordinator context, so the
  * instructions are re-sent only when the context key moves.
  */
@@ -549,11 +549,7 @@ async function startEngine(services: Services, target: Fixture, sessionId: strin
     assignedRunnerId: target.runnerId, status: RunStatus.RUNNING, inboxLeaseOwner: engine.leaseOwner,
   });
   assert.equal(session.provider, 'claude', 'a claude engine: the runtime the declared capability is for');
-  // `create` lays the opening down; the claim seeds it only where it is missing (QueueService.buildSession).
-  const seeded = await db.conversationTurn.findUnique({
-    where: { sessionId_clientTurnId: { sessionId, clientTurnId: `initial-${sessionId}` } }, select: { id: true },
-  });
-  if (!seeded) await queueTurn(db, sessionId, session.prompt, `initial-${sessionId}`);
+  await queueTurn(db, sessionId, session.prompt, `initial-${sessionId}`);
   await api.activateLeases({ id: target.runnerId }, sessionId, {
     leaseOwner: engine.leaseOwner, leaseGeneration: engine.generation,
   } as never);

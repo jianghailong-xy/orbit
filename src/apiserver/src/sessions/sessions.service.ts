@@ -34,7 +34,7 @@ import { readSessionActivities, sessionActivitySql } from './task-work-carrier';
 import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
-import { isOrbitAuthoredTurn, isOrbitAuthoredTurnOf, openingTurnKey } from './orbit-authored-turn';
+import { isOrbitAuthoredTurn, isOrbitAuthoredTurnOf, openingTurnId, openingTurnKey } from './orbit-authored-turn';
 import { importForkSessionId } from './import-fork';
 import { assertMayMoveRuns, assertSessionMayReach, type SessionAct } from './session-reach';
 import {
@@ -1614,6 +1614,7 @@ export class SessionsService {
       ? this.createInNewWorkspace(ownerId, newWorkspace, insertSession, {
           attachmentIds,
           shell: dto.shell === true,
+          attachmentsAlone,
         })
       : wikiChat
         ? this.writeChat(dto.workspaceId!, dto.prompt, wikiChat, attachmentIds, insertSession)
@@ -1633,7 +1634,7 @@ export class SessionsService {
       throw e;
     });
     // Scope the compose-page uploads to this session now that it exists. They stay
-    // turn-less until the opening turn is seeded below (which links them to it),
+    // turn-less until the runner seeds the first turn (queue.service links them to it),
     // and cascade-delete with the session. A session that made its workspace did this, and the
     // two seeds below, inside that transaction (createInNewWorkspace); a wiki chat linked them to
     // its first turn inside its own (writeChat).
@@ -1657,15 +1658,12 @@ export class SessionsService {
         clientTurnId: SessionsService.initialTurnClientId(session.id),
       });
     }
-    // Every other opening is seeded now too, rather than left to the claim: the opening turn is what a
-    // client draws the first message from while no runner has taken it (the active view lists it as
-    // the accepted head), so a session nobody has claimed yet still shows what it was asked. The claim
-    // finds it laid down and seeds nothing (queue.buildSession).
-    //
-    // Opened with attachments alone: the claim reads an empty prompt as an imported transcript's and
-    // lays no turn down, so without this the files would never reach the engine. Opened by somebody
-    // outside Orbit: the opening turn says who, so it is laid down with them on it.
-    if (!newWorkspace && !wikiChat && !dto.shell) await this.seedOpeningTurn(session, opts?.externalSender);
+    // Opened with attachments alone: seed its first turn now too. The claim reads an empty prompt
+    // as an imported transcript's and lays no turn down, so without this the files would never
+    // reach the engine.
+    if (attachmentsAlone && !newWorkspace) await this.seedOpeningTurn(session);
+    // Opened by somebody outside Orbit: the opening turn says who, so it is laid down now with them on it.
+    else if (opts?.externalSender && !newWorkspace && !dto.shell) await this.seedOpeningTurn(session, opts.externalSender);
     this.queue.notifySessionQueued(session.assignedRunnerId);
     // A task run, a delegation or a message opening a session on a sleeping managed runner wakes it.
     await this.wakeManagedRunner(session.assignedRunnerId, 'session');
@@ -1806,8 +1804,8 @@ export class SessionsService {
    *
    * The name is the folder's, with " 2", " 3", … when the account already has a live workspace of that name, picked
    * under a per-account advisory lock so two requests at the same moment never take the same one. The first message is
-   * what `create` writes after the INSERT on every other path: the uploads the session adopts and the opening turn, a
-   * shell turn for a shell-first opening and the prompt otherwise.
+   * what `create` writes after the INSERT on every other path: the uploads the session adopts and, for a shell-first or
+   * attachments-only opening, the opening turn. An ordinary prompt becomes turn 1 at the claim, as for every session.
    *
    * After the commit the runner is marked changed: its next heartbeat lists the new directory (`agentDirs`). One log
    * line says how it ended, either way: nothing else on this path does.
@@ -1816,7 +1814,7 @@ export class SessionsService {
     ownerId: string,
     target: NewWorkspaceTarget,
     insertSession: (tx: Prisma.TransactionClient, workspaceId: string) => PromiseLike<S>,
-    opening: { attachmentIds: readonly string[]; shell: boolean },
+    opening: { attachmentIds: readonly string[]; shell: boolean; attachmentsAlone: boolean },
   ): Promise<S> {
     const lockKey = parseInt(createHash('sha256').update(ownerId).digest('hex').slice(0, 8), 16) & 0x7fffffff;
     const made = await withTransactionRetry(this.prisma, async (tx) => {
@@ -1851,8 +1849,7 @@ export class SessionsService {
           clientTurnId: SessionsService.initialTurnClientId(created.id),
         });
       }
-      // The opening laid down with the session, as `create` lays every other one down.
-      else await this.ensurePromptSeeded(tx, created);
+      if (opening.attachmentsAlone) await this.ensurePromptSeeded(tx, created);
       return { created, workspace };
     }, loggedRetry(this.logger, 'sessions.createInNewWorkspace')).catch((error: unknown) => {
       // The error's code or class, not its message, which can quote the values it was writing.
@@ -6131,7 +6128,11 @@ export class SessionsService {
       select: { seq: true },
     });
     return tx.conversationTurn.create({
-      data: { sessionId, seq: (last?.seq ?? 0) + 1, status: 'PENDING', ...data },
+      data: {
+        // The opening's id is fixed by the session (`openingTurnId`), as the claim writes it.
+        ...(data.clientTurnId === openingTurnKey(sessionId) ? { id: openingTurnId(sessionId) } : {}),
+        sessionId, seq: (last?.seq ?? 0) + 1, status: 'PENDING', ...data,
+      },
     });
   }
 
@@ -7086,10 +7087,14 @@ export class SessionsService {
       // What the cards are read against (turn-cards.ts): whose rows they may name, and the task a
       // run's brief was built from. And whether it is a wiki chat, whose opening turn is its prompt.
       // And whether the platform wrote that prompt (0493), which makes the opening Orbit's.
-      select: { id: true, ownerId: true, taskId: true, runSource: true, wikiChatSpaceId: true, promptByOrbit: true },
+      // And, for the active view, whether its opening is still only the prompt on the row (below).
+      select: {
+        id: true, ownerId: true, taskId: true, runSource: true, wikiChatSpaceId: true, promptByOrbit: true,
+        status: true, numTurns: true, importedAt: true, prompt: true, createdAt: true,
+      },
     });
     if (!session) throw new NotFoundException('session not found');
-    const turns = await this.prisma.conversationTurn.findMany({
+    const listedTurns = await this.prisma.conversationTurn.findMany({
       // One snapshot, including rows that are needed only to identify the executable head.
       where: {
         sessionId: id,
@@ -7122,8 +7127,11 @@ export class SessionsService {
         attachments: { select: { id: true, mimeType: true } },
       },
     });
-    const headExecutableId = turns.find((t) => t.kind === 'message' || t.kind === 'shell')?.id;
     const initialClientTurnId = SessionsService.initialTurnClientId(id);
+    const turns = view === 'active'
+      ? [...(await this.unseededOpening(session, listedTurns)), ...listedTurns]
+      : listedTurns;
+    const headExecutableId = turns.find((t) => t.kind === 'message' || t.kind === 'shell')?.id;
     const wakeContent = await this.queuedWakeContent(id, turns);
     const classified = turns
       // A background job's wake turn carries nobody's words (runner-api/background-job-wake.ts) and
@@ -7261,6 +7269,61 @@ export class SessionsService {
     // unrelated UUID would reorder the executable head behind its queued successor in a recovered
     // snapshot.
     return [...activeTurns].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  /**
+   * The opening of a session no runner has claimed yet, as the turn the claim will lay down
+   * (QueueService.buildSession): its prompt, under the opening's key and the id that turn will have
+   * (`openingTurnId`), with the uploads the session holds for it. Until the claim, the opening is only
+   * the prompt on the row, so without this a session nobody has taken opens with no message at all;
+   * listed under the id its echo will carry, the client's placeholder is the row the echo takes over.
+   *
+   * Only where the claim will seed one: not an imported transcript, an empty prompt or a wiki chat, and
+   * only before the session has run a turn. Nothing once the turn exists, whatever its state: the
+   * listing then has the real row, or the transcript has it.
+   */
+  private async unseededOpening(
+    session: {
+      id: string; status: RunStatus; numTurns: number; importedAt: Date | null; prompt: string;
+      wikiChatSpaceId: string | null; createdAt: Date;
+    },
+    listed: ReadonlyArray<{ clientTurnId: string | null }>,
+  ) {
+    const key = SessionsService.initialTurnClientId(session.id);
+    if (
+      (session.status !== RunStatus.PENDING && session.status !== RunStatus.RUNNING)
+      || session.numTurns !== 0 || session.importedAt || !session.prompt || session.wikiChatSpaceId
+      || listed.some((turn) => turn.clientTurnId === key)
+    ) {
+      return [];
+    }
+    const seeded = await this.prisma.conversationTurn.findUnique({
+      where: { sessionId_clientTurnId: { sessionId: session.id, clientTurnId: key } },
+      select: { id: true },
+    });
+    if (seeded) return [];
+    const attachments = await this.prisma.attachment.findMany({
+      where: { sessionId: session.id, turnId: null },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, mimeType: true },
+    });
+    return [{
+      id: openingTurnId(session.id),
+      seq: 0,
+      clientTurnId: key,
+      kind: 'message',
+      targetTurnId: null,
+      deliveryStatus: null,
+      deliveryFailureCode: null,
+      deliveryFailureReason: null,
+      status: 'PENDING' as const,
+      content: session.prompt,
+      createdAt: session.createdAt,
+      senderSessionId: null,
+      externalSenderSource: null,
+      externalSenderName: null,
+      attachments,
+    }];
   }
 
   /** What each of the session's still-queued wake turns has to say, by turn id.
