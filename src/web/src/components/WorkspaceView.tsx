@@ -48,6 +48,7 @@ import {
   referenceToken,
   type ReferenceMap,
 } from '../lib/composerRefs';
+import { WAITING_ON_YOU } from '../lib/ownerRequests';
 import {
   NEAR_BOTTOM,
   READER_INPUT_GRACE_MS,
@@ -1211,6 +1212,8 @@ const waitingLabel = (s: any): string => {
   if (s.waitingKind === 'START_REQUEST') return READY_TO_START;
   if (s.waitingKind === 'DONE_REQUEST') return PROJECT_DONE_COPY.readyToClose;
   if (s.waitingKind === 'RECORD_AS_DONE') return PROJECT_DONE_COPY.recordAsDoneRow;
+  // An owner request this session filed (a step, a decision, a key, a confirmation): its card's words.
+  if (s.waitingKind === 'OWNER_REQUEST') return WAITING_ON_YOU;
   return 'Waiting for approval';
 };
 

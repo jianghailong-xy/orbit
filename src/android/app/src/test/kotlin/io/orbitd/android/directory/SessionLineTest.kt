@@ -123,6 +123,7 @@ class SessionLineTest {
         assertEquals("Ready to start", line(session("AWAITING_INPUT", pendingApprovals = 1, waitingKind = "START_REQUEST")).text)
         assertEquals("Ready to close", line(session("AWAITING_INPUT", pendingApprovals = 1, waitingKind = "DONE_REQUEST")).text)
         assertEquals("Record as done…", line(session("AWAITING_INPUT", pendingApprovals = 1, waitingKind = "RECORD_AS_DONE")).text)
+        assertEquals("Waiting on you", line(session("AWAITING_INPUT", pendingApprovals = 1, waitingKind = "OWNER_REQUEST")).text)
         assertEquals("Waiting for approval", line(session("AWAITING_INPUT", pendingApprovals = 1, waitingKind = "UNKNOWN_KIND")).text)
         // An owner item: the oldest known kind's word; an unknown kind or an unreadable instant never wins.
         val items = """[{"itemId":"a","kind":"ESCALATED","title":"x","since":"2026-10-04T09:30:00Z"},
