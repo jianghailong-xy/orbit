@@ -149,7 +149,7 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
   'SessionsService.mergeToMain': {
     file: 'sessions/sessions.service.ts',
     snippet:
-      'requestedBy?: MergeRequester;\n    } = {},\n  ) {\n    await this.assertEngineSession(ownerId, id);',
+      'selfRequest?: boolean;\n    } = {},\n  ) {\n    await this.assertEngineSession(ownerId, id);',
     note: 'POST /merge and the runner merge door',
   },
   'SessionsService.startMergeRepair': {
