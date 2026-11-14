@@ -837,7 +837,7 @@ struct TranscriptView: View {
     @State private var atBottom = true
     /// The waiting card a project row's tap opened this conversation at (`console.cardRequest`), held
     /// for a moment while the rows above it are measured.
-    @State private var cardHold: CardHold?
+    @State private var cardHold: TranscriptCardHold?
     // Whether more than `TailPinning.nearBottom` of content sits below the viewport right now, for any
     // reason. `atBottom` can't say: it un-pins on a scroll UP alone, so a pinned transcript whose tail
     // left the view some other way — a row that grew under it (a card opened, an image or link card
@@ -1165,7 +1165,7 @@ struct TranscriptView: View {
             #if os(iOS)
             transcriptScroll.halt()
             #endif
-            let hold = CardHold(rowID: request.rowID, sessionID: console.sessionID,
+            let hold = TranscriptCardHold(rowID: request.rowID, sessionID: console.sessionID,
                                 until: Date().addingTimeInterval(2.5))
             cardHold = hold
             DispatchQueue.main.async {
@@ -1873,7 +1873,9 @@ struct SessionStatusCardView: View {
 
 /// A transcript scroll waiting for the next update to make it (`TranscriptView.heldScroll`).
 /// A waiting card the transcript keeps its top on until `until` (`TranscriptView.cardHold`).
-private struct CardHold: Equatable {
+/// Internal, not private: Swift 6.2.4 crashed in IRGen on the private type held in `@State`
+/// ("Global is external, but doesn't have external or weak linkage", the iOS gate on ac6416097).
+struct TranscriptCardHold: Equatable {
     let rowID: String
     let sessionID: String
     let until: Date
