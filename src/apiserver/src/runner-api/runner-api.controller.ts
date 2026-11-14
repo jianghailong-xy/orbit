@@ -984,17 +984,24 @@ interface RepairCheckAfter {
   parentSessionId: string | null;
   /** This session's own recovery: a repair turn's check has been waiting for this session's turn to end. */
   owesCheck: boolean;
+  /** A merge this session asked for of itself during its turn (SessionsService.mergeAfterOwnTurn): queued
+   *  when the turn that ended succeeded, dropped when it did not; null when none was asked for. */
+  merge: 'QUEUE' | 'DROP' | null;
 }
 // Read off the session row the settle locked. Only a repair session (startMergeRepair's server-owned
 // source) triggers one — an ordinary child of the same parent, a task's run or anything else does not —
 // and only for a turn that ended, which a finalize says only of a session it found running one.
 function repairCheckAfter(
-  session: { source: string; parentSessionId: string | null; mergeRepairTurnEndedAt: Date | null },
+  session: {
+    source: string; parentSessionId: string | null; mergeRepairTurnEndedAt: Date | null; mergeAfterTurnAt: Date | null;
+  },
   turnEnded = true,
+  turnSucceeded = true,
 ): RepairCheckAfter {
   return {
     parentSessionId: turnEnded && session.source === 'merge-repair' ? session.parentSessionId : null,
     owesCheck: session.mergeRepairTurnEndedAt != null,
+    merge: session.mergeAfterTurnAt == null ? null : turnSucceeded ? 'QUEUE' : 'DROP',
   };
 }
 // Tool-permission approvals: `orbit mcp`'s permission tool, which holds no link, blocks on this
@@ -6639,6 +6646,8 @@ export class RunnerApiController {
           source: true,
           parentSessionId: true,
           mergeRepairTurnEndedAt: true,
+          // And whether this session asked to merge itself during the turn that just ended.
+          mergeAfterTurnAt: true,
         },
       });
       // Read the row being completed before changing it. A reserved shell turn is the one path
@@ -7815,7 +7824,7 @@ export class RunnerApiController {
         requestsClosed: [...stoppedRequestsClosed, ...requestsClosed],
         reviewToDeliver,
         reviewsAbandoned,
-        repairCheck: repairCheckAfter(current),
+        repairCheck: repairCheckAfter(current, true, dto.status === RunStatus.SUCCEEDED),
         droppedWakeups,
         checksSettled,
       };
@@ -8098,6 +8107,16 @@ export class RunnerApiController {
    * queued is logged — the owner's Check again is still there.
    */
   private async checkRecoveryAfterTurn(sessionId: string, check: RepairCheckAfter, endedAt: Date): Promise<void> {
+    // First the merge this session asked for of itself during the turn: it is what the session wanted
+    // done, and a recovery check queued ahead of it would leave it nothing to queue.
+    if (check.merge) {
+      try {
+        await this.sessions?.mergeAfterOwnTurn(sessionId, check.merge === 'QUEUE');
+      } catch (error) {
+        this.logger.warn(`the merge ${sessionId} asked for during its turn was not queued: `
+          + `${error instanceof Error ? error.message : error}`);
+      }
+    }
     const checks: Array<[string, Date | null]> = [];
     if (check.parentSessionId) checks.push([check.parentSessionId, endedAt]);
     if (check.owesCheck) checks.push([sessionId, null]);
@@ -9674,7 +9693,8 @@ export class RunnerApiController {
         currentWorkTerminalized,
         // A session the runner finalizes while it runs a turn ends that turn here — completed, failed or
         // stopped — rather than at a turn-complete; one already parked has had its turn's end settled.
-        repairCheck: repairCheckAfter(current, current.status === RunStatus.RUNNING),
+        repairCheck: repairCheckAfter(current, current.status === RunStatus.RUNNING,
+          effectiveStatus === RunStatus.SUCCEEDED),
         droppedWakeups,
         checksSettled,
       };

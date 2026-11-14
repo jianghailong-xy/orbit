@@ -2978,8 +2978,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0720 adds a nullable runner_presence.resources (JSONB) only; no preserved rows, triggers or DONE fence change,
       // and no row is written.
       '0720_runner_presence_resources',
-      // 0721 creates `coordinator_handoff` only; no existing table, trigger or DONE fence is touched.
-      '0721_coordinator_handoff'],
+      // 0740 adds two nullable session columns (merge_after_turn_at, merge_after_turn_target) only; no preserved
+      // rows, triggers or DONE fence change, and no row is written.
+      '0740_session_merge_after_turn',
+      // 0741 creates `coordinator_handoff` only; no existing table, trigger or DONE fence is touched.
+      '0741_coordinator_handoff'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

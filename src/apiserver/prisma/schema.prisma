@@ -2121,6 +2121,12 @@ model Session {
   /// this session runs a turn of its own — when a merge is refused — the check waits here until that
   /// turn ends. Null when no check is owed (migration 0431).
   mergeRepairTurnEndedAt DateTime? @map("merge_repair_turn_ended_at")
+  /// A merge this session asked for of itself during its own turn (SessionsService.mergeToMain), which
+  /// could not be queued while that turn ran: when it was asked, and the target it named (null → the
+  /// default). Taken up when the turn ends (SessionsService.mergeAfterOwnTurn) and cleared by any merge
+  /// that queues. Null when none is owed (migration 0740).
+  mergeAfterTurnAt     DateTime? @map("merge_after_turn_at")
+  mergeAfterTurnTarget String?   @map("merge_after_turn_target")
   mergeRequestedAt     DateTime? @map("merge_requested_at")
   /// Who pressed Merge for the operation queued (0454, contract §10.6 O-R3): `USER` for a request carrying
   /// the account owner's credential, `AGENT` for one made from a session, NULL for one the server queued
@@ -7329,7 +7335,7 @@ model PoolGatewayToken {
 /// each claim, reclaim and provider-switch reload; earlier tokens of the same session and key stay good, their
 /// expiry pushed out with each claim. Deleting the session, the key or the person deletes its tokens; a key
 /// disabled or rotated revokes them (`revokedAt`).
-/// A coordinator handoff (migration 0721, docs/coordinator-handoff.md): the outgoing coordinator
+/// A coordinator handoff (migration 0741, docs/coordinator-handoff.md): the outgoing coordinator
 /// writes a note in a platform turn, then the replacement opens its successor with that note. One
 /// live row (WRITING, HANDING_OVER, FAILED) per outgoing coordinator; COMPLETED names the successor.
 model CoordinatorHandoff {
