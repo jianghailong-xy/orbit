@@ -144,7 +144,8 @@ public enum AppIntent: Equatable, Sendable {
     case openOwnerRequest(requestID: String)
     /// An owner request's "Later": put off for `OwnerRequests.laterSeconds`, on this device only.
     case snoozeOwnerRequest(requestID: String)
-    /// A terminal asking to be approved (push kind `terminal-login`): the "Waiting on you" inbox, where its card is.
+    /// A terminal asking to be approved (push kind `terminal-login`): where its card is — the machine page's
+    /// Needs you section (docs/mocks/waiting-on-you-removal/02 ④).
     case openTerminalRequests
 }
 

@@ -355,32 +355,11 @@ struct AgentSwitchSheet: View {
 
     var body: some View {
         NavigationStack {
-            List(agents) { agent in
-                Button {
-                    // Dismiss first, then switch: the switch rebuilds the presenting NewSessionView
-                    // (its `.id(agent.id)` changes), so tearing the sheet down ourselves first avoids
-                    // dismissing through a view that's already gone.
-                    dismiss()
-                    if agent.id != currentID { onSelect(agent.id) }
-                } label: {
-                    HStack(spacing: 12) {
-                        ProviderMark(provider: agent.defaultProvider, size: 38)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(agent.name).foregroundStyle(.primary).lineLimit(1)
-                            Text(SessionProviderChoices.engineVia(
-                                engine: agent.defaultEngine(configured: configuredProviders),
-                                provider: agent.defaultProvider, configured: configuredProviders))
-                                .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
-                        }
-                        Spacer(minLength: 8)
-                        if agent.id == currentID {
-                            Image(systemName: "checkmark")
-                                .font(.body.weight(.semibold)).foregroundStyle(Color.accentColor)
-                        }
-                    }
-                    .contentShape(Rectangle())
+            List {
+                ForEach(agents) { agent in
+                    AgentSwitchRow(agent: agent, currentID: currentID,
+                                   configuredProviders: configuredProviders, onSelect: onSelect)
                 }
-                .buttonStyle(.plain)
             }
             .navigationTitle("Switch agent")
             #if os(iOS)
@@ -395,5 +374,43 @@ struct AgentSwitchSheet: View {
         #if os(iOS)
         .presentationDetents([.medium, .large])
         #endif
+    }
+}
+
+/// One agent in the switch sheet: its name, what a session in it starts on, and a checkmark when it
+/// is the one composing now.
+private struct AgentSwitchRow: View {
+    let agent: Agent
+    let currentID: String
+    let configuredProviders: [ConfiguredProvider]
+    let onSelect: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        Button {
+            // Dismiss first, then switch: the switch rebuilds the presenting NewSessionView
+            // (its `.id(agent.id)` changes), so tearing the sheet down ourselves first avoids
+            // dismissing through a view that's already gone.
+            dismiss()
+            if agent.id != currentID { onSelect(agent.id) }
+        } label: {
+            HStack(spacing: 12) {
+                ProviderMark(provider: agent.defaultProvider, size: 38)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(agent.name).foregroundStyle(.primary).lineLimit(1)
+                    Text(SessionProviderChoices.engineVia(
+                        engine: agent.defaultEngine(configured: configuredProviders),
+                        provider: agent.defaultProvider, configured: configuredProviders))
+                        .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                if agent.id == currentID {
+                    Image(systemName: "checkmark")
+                        .font(.body.weight(.semibold)).foregroundStyle(Color.accentColor)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }

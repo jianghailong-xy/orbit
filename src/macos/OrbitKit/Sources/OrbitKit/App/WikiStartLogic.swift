@@ -371,3 +371,25 @@ public enum WikiStartLogic {
         return WikiSpaceCreate(title: repositoryTitle(repository), repoUrl: repoUrl, maintenance: maintenance)
     }
 }
+
+/// One row of the Wiki's first-start page: its title, the setup card, and — while Trash holds a
+/// wiki — the way into Trash. The page's List draws one row per case through one ForEach.
+public enum WikiFirstStartListRow: Equatable, Sendable, Identifiable {
+    case title
+    case start
+    case trash
+
+    public var id: String {
+        switch self {
+        case .title: "title"
+        case .start: "start"
+        case .trash: "trash"
+        }
+    }
+}
+
+public enum WikiFirstStartListLogic {
+    public static func rows(trashed: Int) -> [WikiFirstStartListRow] {
+        trashed > 0 ? [.title, .start, .trash] : [.title, .start]
+    }
+}
