@@ -91,7 +91,11 @@ verified. `release.sh bump` opens the file, and the tag is refused while a secti
    tag exists, `bash scripts/supply-chain-dry-run.sh` dry-runs the supply chain with representative local
    artifacts and checks that the same gate release.yml runs accepts the bundle and refuses tampering.
 2. Run the required checks for the candidate: JavaScript build/tests, PostgreSQL specs, Go runner tests, Swift
-   core tests, container image build/boot, and the client workflow when native artifacts change.
+   core tests, container image build/boot, dependency review, and the client workflow when native artifacts
+   change. On a candidate branch, `gh workflow run ci.yml --ref <branch>` runs all six of `main`'s required
+   checks on the branch head commit. `Dependency review` comes from that dispatch's own job, which compares the
+   head with `main` as it stands when the job runs; on a pull request the check comes from
+   `dependency-review.yml` instead.
 3. Verify a clean-machine Compose install and record the OS, Docker/runtime versions, tag/SHA, and sanitized
    evidence. Review backups, migrations, security notes, and rollback impact.
 4. Re-read the notes against the diff: the problem solved, upgrade/migration impact, security fixes, known

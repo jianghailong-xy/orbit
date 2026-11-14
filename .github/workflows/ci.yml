@@ -62,6 +62,8 @@ jobs:
         run: npm run test:release-identity
       - name: Test the release supply chain (checksums, SBOM, provenance)
         run: npm run test:supply-chain
+      - name: Test that only a dispatch reports Dependency review from this workflow
+        run: npm run test:ci-dependency-review
       - name: Generate Prisma Client
         run: npm run prisma:generate
       - name: Build workspaces
@@ -112,6 +114,44 @@ jobs:
           node-version: 26
       - name: Audit dependencies
         run: npm audit --audit-level=high
+
+  # `main`'s branch protection requires a check named `Dependency review`. Its own workflow,
+  # dependency-review.yml, runs on pull requests only, and its check lands on GitHub's synthetic
+  # refs/pull/N/merge commit, so a branch verified by dispatching this workflow had no way to carry
+  # that check on its own head. This job is that check, on a dispatch and nothing else: the same
+  # pinned action with the same settings, comparing this run's commit (`github.sha`) with main as it
+  # stands when the job runs, both passed explicitly because a dispatch has no pull request to read
+  # them from.
+  #
+  # Its name depends on the event, and that is the point. A job skipped by its `if:` still reports a
+  # check under its name, and a skipped check passes branch protection. Named `Dependency review` on
+  # a pull request or a push to main, the skipped job would be a second check of that name beside
+  # the pull request's real one, and its skip would read as that check's pass. So it is called
+  # `Dependency review` only where it runs. test/ci-dependency-review.test.mjs holds both rules.
+  dependency-review:
+    name: ${{ github.event_name == 'workflow_dispatch' && 'Dependency review' || 'Dependency review (workflow_dispatch only)' }}
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Resolve the base (main now) and the head (this run's commit)
+        id: base
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)"
+          [ -n "$sha" ] || { echo "could not resolve main"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "base: main at $sha"
+          echo "head: $GITHUB_SHA"
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          base-ref: ${{ steps.base.outputs.sha }}
+          head-ref: ${{ github.sha }}
+          fail-on-severity: high
+          retry-on-snapshot-warnings: true
+          retry-on-snapshot-warnings-timeout: 120
 
   # Every `*.pg.spec` in the apiserver, against a real PostgreSQL, with a skip counted red.
   #
