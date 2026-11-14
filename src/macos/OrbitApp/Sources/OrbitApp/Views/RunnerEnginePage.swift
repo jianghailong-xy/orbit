@@ -73,6 +73,8 @@ private struct RunnerEngineContent: View {
     @State private var renaming: RunnerPageFormat.AccountLine?
     @State private var renameDraft = ""
     @State private var notice: String?
+    /// A Fix with an agent press is on its way: its button holds until the list read after it.
+    @State private var fixPressing = false
 
     private static let adding = "+"
     /// What a runner account's pause applies to, as the Pause Account sheet says it.
@@ -188,6 +190,13 @@ private struct RunnerEngineContent: View {
                         .font(.orbitLabel)
                         .foregroundStyle(Color.secondary)
                 }
+                // Install failed: an agent can be sent to fix it, under the failure; Retry stays as it is.
+                if let fix = RunnerAgentFixLogic.installFailedState(runner, engine: engine) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        RunnerAgentFixButton(state: fix, pressing: fixPressing) { fixInstall() }
+                        RunnerAgentFixLine(state: fix) { openSession($0) }
+                    }
+                }
             } footer: {
                 // Cursor CLI's page has no Update Engines Now to carry its footer.
                 if engine == CursorRuntime.engine { Text(cursorFooter(offline: offline)) }
@@ -247,10 +256,17 @@ private struct RunnerEngineContent: View {
                             .foregroundStyle(Color.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    if let health, let failed = RunnerPageFormat.updateFailedLine(health, now: now) {
+                    if let health, let failed = RunnerPageFormat.updateFailedLine(
+                        health, now: now, dismissed: runner.engineUpdateDismissals?[engine]) {
                         Text(failed)
                             .font(.orbitListSubtitle)
                             .foregroundStyle(RunnerInk.amber)
+                    }
+                    // Until the next release: only a warning against a known latest has one to wait for.
+                    if let health, RunnerPageFormat.offersUpdateWarningDismiss(runner, health: health, now: now) {
+                        Button(RunnerPageCopy.RUNNER_ENGINE_UPDATE_DISMISS) { dismissUpdateWarning() }
+                            .linkButtonStyle()
+                            .font(.orbitLabel)
                     }
                 }
                 Spacer(minLength: 0)
@@ -682,7 +698,8 @@ private struct RunnerEngineContent: View {
         var line = AttributedString(version ?? "")
         // Cursor CLI's build is the one Orbit pins, which its note says.
         if let note = RunnerAttention.updateNoteOf(health.update, nowMs: RunnerPageFormat.nowMs(now),
-                                                   pinned: engine == CursorRuntime.engine) {
+                                                   pinned: engine == CursorRuntime.engine,
+                                                   dismissed: runner.engineUpdateDismissals?[engine]) {
             if version != nil { line += AttributedString(RunnerPageCopy.RUNNER_LINE_SEPARATOR) }
             var words = AttributedString(note.text)
             if note.tone == .warn { words[Colour.self] = RunnerInk.amber }
@@ -843,6 +860,34 @@ private struct RunnerEngineContent: View {
         Task {
             if let failure = await runners.updateEngines(id) { show(failure) }
         }
+    }
+
+    private func dismissUpdateWarning() {
+        let id = runner.id
+        let slug = engine
+        Task {
+            if let failure = await runners.dismissEngineUpdateWarning(id, engine: slug) { show(failure) }
+        }
+    }
+
+    /// Fix with an agent on the failed install: one press, no sheet; the list read after it turns the
+    /// button into the fixing line, and the page stays. A refusal is the server's own sentence.
+    private func fixInstall() {
+        let id = runner.id
+        let target = RunnerAgentFixTarget(kind: .installFailed, engine: engine)
+        fixPressing = true
+        Task {
+            if let failure = await runners.fixAttention(id, target: target) {
+                show("\(RunnerPageCopy.AGENT_FIX_FAILED) — \(failure)")
+            }
+            fixPressing = false
+        }
+    }
+
+    /// The session fixing it: its conversation, after the Settings sheet comes down.
+    private func openSession(_ id: String) {
+        model.settingsPresented = false
+        model.route(to: .session(id))
     }
 
     private func install() {

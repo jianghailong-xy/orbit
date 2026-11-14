@@ -31,6 +31,8 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 | Understand the system and trust boundaries | [Architecture overview](architecture.md) |
 | Build or change Orbit | [Development guide](development.md) and [contribution guide](../CONTRIBUTING.md) |
 | Automate tasks and sessions | [Runner CLI and automation](runner-cli.md) |
+| Look up every operation an agent can call, with its risk, approval and receipt | [Operation catalogue](operation-catalog.md) |
+| See what each permission mode does with Orbit's own calls on Claude Code and Codex | [Permission matrix](permission-matrix.md) |
 | Restore or validate a backup | [Postgres backup and restore](postgres-backup-restore.md) |
 | Back up, restore or recover managed runners on Docker | [Managed runners on Docker: operations](managed-runner-docker-operations.md) |
 | Deploy, back up, restore, roll back or fail over managed runners on Kubernetes (test environments) | [Managed runners on Kubernetes: operations](managed-runner-kubernetes-operations.md) |
@@ -98,6 +100,10 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 - [Watch contract](watch-contract.md) — the frozen domain and product semantics for persistent cross-Session
   and cross-Task watching: the versioned typed predicate, the Watch/Match/Delivery state machines, why
   `AWAITING_INPUT` is not task completion, and why realtime events are not the fact source.
+- [Orbit Agent Contract v1](orbit-agent-contract.md) — the frozen contract for how an in-session Claude or
+  Codex agent uses Orbit: the five objects and their routing, MCP-first and the CLI boundary,
+  create-vs-start, permissions and approvals, errors and retries, success receipts, the eight black-box
+  scenarios, and the measured baseline with its confirmed gaps.
 - [Session search](session-search-design.md) — server-side multilingual search.
 - [Rate-limit retry](quota-limit-retry-design.md) — usage-limit detection and automatic retry.
 - [Cross-platform badge sync](cross-platform-badge-sync.md) — attention state across clients.

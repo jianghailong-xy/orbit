@@ -322,16 +322,17 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
     // MARK: a runner's page (ios-detail.png)
 
     /// The questions in the order they come: head → Needs Attention (only when there is something)
-    /// → Capacity → Engines → Workspaces → About → Rotate Token… → Remove Runner.
+    /// → Resources → Capacity → Engines → Workspaces → About → Rotate Token… → Remove Runner.
     func testTheSectionsComeInTheMocksOrder() throws {
         let page = try detail()
         let body = try slice(page, from: "Form {", to: ".formStyle(.grouped)")
         try assertInOrder(body, ["head(now: now)", "if !items.isEmpty {", "attentionSection(items, now: now)",
-                                 "capacitySection(workspaces, now: now)", "enginesSection(offline: offline, now: now)",
+                                 "resourcesSection(workspaces, now: now)", "capacitySection(now: now)", "enginesSection(offline: offline, now: now)",
                                  "workspacesSection(workspaces)", "aboutSection(now: now)", "rotateSection",
                                  "removeSection"], "the page's sections")
         let sections = try slice(page, from: "private func head(now: Date) -> some View {", to: "private func statusLine(")
         try assertInOrder(sections, ["RunnerSectionHeader(RunnerPageCopy.RUNNER_NEEDS_ATTENTION)",
+                                     "RunnerResourcesHeader(note: section.note, dot: section.dot)",
                                      "RunnerSectionHeader(RunnerPageCopy.RUNNER_CAPACITY)",
                                      "RunnerSectionHeader(RunnerPageCopy.RUNNER_ENGINES,",
                                      "RunnerSectionHeader(RunnerPageCopy.RUNNER_WORKSPACES,",
@@ -357,7 +358,7 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
     func testNeedsAttentionIsTheRulesAndEachItemCarriesItsAction() throws {
         let page = try detail()
         XCTAssertTrue(page.contains("RunnerAttention.runnerAttention(runner: runner, workspaces: workspaces,"))
-        let actions = try slice(page, from: "private func attentionButton(", to: "private func diskRow(")
+        let actions = try slice(page, from: "private func attentionButton(", to: "private func engineRow(")
         for action in ["case .signIn:", "case .repair:", "case .setReserve:", "case .copyCommand:", "case .updateEngines:"] {
             XCTAssertTrue(actions.contains(action), "no press for \(action)")
         }
@@ -376,7 +377,6 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
         for piece in ["Stepper(value: $maxDraft, in: 1...64)", ".sheet(isPresented: $editingMax) { maxConcurrentSheet }",
                       "RunnerPageCopy.runnerRunningOf(active: $0.active, max: $0.max)",
                       "Button(RunnerPageCopy.RUNNER_EDIT) {",
-                      "if let disk = RunnerAttention.runnerDisk(workspaces) {",
                       "Picker(RunnerPageCopy.RUNNER_KEEP_FREE, selection: $keepFree)",
                       "RunnerPageFormat.keepFreeChoices(runner.minFreeDiskMb)", ".pickerStyle(.menu)",
                       "Text(RunnerPageCopy.RUNNER_CAPACITY_FOOTER)",
@@ -384,11 +384,31 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
                       "RunnerGauge(fraction: slots.fraction, tint: slots.full ? RunnerInk.full : Color.accentColor, height: 7)"] {
             XCTAssertTrue(capacity.contains(piece), "Capacity lost \(piece)")
         }
+        XCTAssertFalse(capacity.contains("RUNNER_DISK"), "Disk left Capacity for Resources")
         let text = code(try runners())
         XCTAssertTrue(text.contains("saveMaxConcurrent(maxDraft)"), "the sheet's Save sends the limit")
         XCTAssertTrue(text.contains("await runners.setMaxConcurrent(id, value)"))
         XCTAssertTrue(text.contains("await runners.setKeepFree(id, value)"))
         XCTAssertTrue(code(try appSource("RunnersModel.swift")).contains("UpdateRunnerRequest(minFreeDiskMb: floor)"))
+    }
+
+    /// Resources (docs/mocks/runner-resource-monitor): MachineResources' tiles, the workspaces' disk for
+    /// a runner that reads none, a line per tile, read again every heartbeat only while online.
+    func testResourcesIsTheMachinesReadingPolledWhileOnline() throws {
+        let page = try detail()
+        let resources = try slice(page, from: "private func resourcesSection(", to: "private func capacitySection(")
+        for piece in ["MachineResources.section(runner: runner, answer: answer,",
+                      "workspaceDisk: RunnerAttention.runnerDisk(workspaces), now: now)",
+                      "MachineResources.line(answer?.samples ?? [], kind: tile.kind, endMs: section.endMs)",
+                      "if hSize == .compact {", "HStack(alignment: .top, spacing: 16) {"] {
+            XCTAssertTrue(resources.contains(piece), "Resources lost \(piece)")
+        }
+        for piece in ["guard MachineResources.reports(runner) else { return }",
+                      "await runners.loadResources(runner.id)", "guard !offline else { return }",
+                      "await ViewPoll.run(model, every: MachineResources.pollSeconds,"] {
+            XCTAssertTrue(page.contains(piece), "Resources' poll lost \(piece)")
+        }
+        XCTAssertTrue(code(try appSource("RunnersModel.swift")).contains("try? await api.runnerResources(id)"))
     }
 
     /// ④ Each engine the machine has installed opens its page; Update Engines Now and Refresh Model
@@ -407,7 +427,8 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
         let row = code(try slice(try appSource("Views/RunnerPageParts.swift"),
                                  from: "struct RunnerEngineRow: View {", to: "struct RunnerWorkspaceRow: View {"))
         for piece in ["ProviderMark(provider: health.engine, size: 28", "RunnerPageFormat.engineStatus(health, runner: runner)",
-                      "RunnerPageFormat.updateFailedLine(health, now: now)", "RunnerPageFormat.needsSignIn(health)",
+                      "RunnerPageFormat.updateFailedLine(health, now: now, dismissed: dismissed)",
+                      "RunnerPageFormat.needsSignIn(health)",
                       "RunnerPageFormat.engineWindows(runner, engine: health.engine)",
                       "RunnerPageFormat.engineNextAccount(runner, engine: health.engine)",
                       "Text(RunnerPageCopy.runnerEngineNext(account: next))",

@@ -2079,6 +2079,68 @@ export interface RunnerEngineAccount {
  * but "is this machine still being kept current" — which the runner answers by asking each
  * engine's release feed what is published and comparing it against the binary on disk.
  */
+/** The engine update warnings dismissed on a runner, by engine: the `update.latest` each was
+ *  dismissed against (POST /runners/:id/engines/:engine/update-warning/dismiss). Every client hides
+ *  that engine's update warning while this equals the engine's current `update.latest`; a newer
+ *  release brings it back. Stored on the runner, so it holds for everyone on the account. */
+export type RunnerEngineUpdateDismissals = Partial<Record<ReportedEngine, string>>;
+
+/**
+ * Fix with an agent (POST /runners/:id/attention/:kind/fix): the machine-side warnings a press hands to
+ * an agent on that machine. `engineNotUpdating` and `installFailed` name an engine; `cannotSelfUpdate`
+ * (the runner can't update itself, or its updates are turned off) is the runner's own.
+ */
+export type RunnerAttentionFixKind = 'engineNotUpdating' | 'cannotSelfUpdate' | 'installFailed';
+
+/** Why no agent can start on a machine: it is offline, no workspace runs on it, or the engine its
+ *  most recently used workspace runs on is signed out there. */
+export type RunnerAgentFixBlockedCode = 'offline' | 'noWorkspace' | 'engineSignedOut';
+
+/** An agent already at work on one warning: the session a press started, while it is open. */
+export interface RunnerAgentFixing {
+  kind: RunnerAttentionFixKind;
+  /** The engine for `engineNotUpdating` and `installFailed`; null for `cannotSelfUpdate`. */
+  engine: ReportedEngine | null;
+  sessionId: string;
+  workspaceId: string;
+  workspaceName: string;
+}
+
+/**
+ * Where a press of Fix with an agent on this runner starts its session, or why it can't, as GET /runners
+ * reports it on each runner (`agentFix`). The same answer the fix endpoint acts on, so every client
+ * disables the button with the line the endpoint would refuse with.
+ */
+export interface RunnerAgentFix {
+  /** The workspace on this machine used most recently; null when none runs here. */
+  workspaceId: string | null;
+  workspaceName: string | null;
+  /** The engine that workspace's next session starts on, and its name ("Claude Code"). */
+  engine: string | null;
+  engineName: string | null;
+  /** Null when a press can start a session. `message` is the line a client shows in place of it. */
+  blocked: { code: RunnerAgentFixBlockedCode; message: string } | null;
+  /** The warnings an agent is fixing now, each with its open session. */
+  fixing: RunnerAgentFixing[];
+}
+
+/** POST /runners/:id/attention/:kind/fix body. */
+export interface RunnerAttentionFixRequest {
+  /** Required for `engineNotUpdating` and `installFailed`. */
+  engine?: ReportedEngine;
+  /** `cannotSelfUpdate` only: the newest runner release the client knows of (it reads dl/version.json),
+   *  quoted in the agent's first message. */
+  latest?: string;
+}
+
+/** What the fix endpoint answers with: the session it started. */
+export interface RunnerAttentionFixResult {
+  sessionId: string;
+  workspaceId: string;
+  workspaceName: string;
+  title: string;
+}
+
 export interface RunnerEngineUpdate {
   /** `updated` — a newer version actually landed on this machine.
    *  `checked` — Orbit asked and there was nothing to fetch.

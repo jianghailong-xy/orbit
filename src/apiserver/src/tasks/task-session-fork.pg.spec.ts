@@ -148,20 +148,33 @@ test('SR55: a task forked from its creating session', { skip, concurrency: 1, ti
     return w;
   }
 
+  /**
+   * The answered card the runner files before a create on that session. The runner door is carded
+   * by caller (`task-write-approval.ts`): a create names the acting session and carries the card
+   * that covers exactly it, and this fixture is the forking session's own yes.
+   */
+  async function cardFor(w: World, toolName: 'orbit_task_create' | 'orbit_task_batch', body: Record<string, unknown>) {
+    await prisma.approval.create({
+      data: { sessionId: w.forkingSessionId, toolName, input: body as never, status: 'ALLOWED', decidedById: w.ownerId, decidedAt: new Date() },
+    });
+  }
+
   /** The runner door, as `orbit mcp` on runner `runnerId` in the forking session calls it. */
-  function createForked(w: World, overrides: Record<string, unknown> = {}, runnerId = w.runnerA) {
+  async function createForked(w: World, overrides: Record<string, unknown> = {}, runnerId = w.runnerA) {
+    const body = {
+      title: 'Finish the claim refactor',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
+      assigneeId: w.workspaceA,
+      fork: { sessionId: w.forkingSessionId, sha: SNAPSHOT, baseHead: HEAD, includesUncommitted: true },
+      ...overrides,
+    };
+    await cardFor(w, 'orbit_task_create', body);
     return runnerDoor.createTask(
       { id: runnerId, ownerId: w.ownerId } as never,
       w.workspaceA,
       undefined,
       w.forkingSessionId,
-      {
-        title: 'Finish the claim refactor',
-        completionCriterion: 'EVIDENCE_JUDGMENT',
-        assigneeId: w.workspaceA,
-        fork: { sessionId: w.forkingSessionId, sha: SNAPSHOT, baseHead: HEAD, includesUncommitted: true },
-        ...overrides,
-      } as never,
+      body as never,
     );
   }
 
@@ -383,15 +396,19 @@ test('SR55: a task forked from its creating session', { skip, concurrency: 1, ti
     assert.equal(await prisma.session.count({ where: { taskId: task.id } }), 0, 'no run was created');
 
     // The batch door names the item.
-    const batch = await refusal(() => runnerDoor.createTasks(
-      { id: w.runnerA, ownerId: w.ownerId } as never, w.workspaceA, undefined, w.forkingSessionId,
-      { tasks: [
+    const batchBody = {
+      tasks: [
         { title: 'fine', completionCriterion: 'EVIDENCE_JUDGMENT', assigneeId: w.workspaceA },
         {
           title: 'elsewhere', completionCriterion: 'EVIDENCE_JUDGMENT', assigneeId: w.workspaceB,
           fork: { sessionId: w.forkingSessionId, sha: SNAPSHOT, baseHead: HEAD, includesUncommitted: true },
         },
-      ] } as never,
+      ],
+    };
+    await cardFor(w, 'orbit_task_batch', batchBody);
+    const batch = await refusal(() => runnerDoor.createTasks(
+      { id: w.runnerA, ownerId: w.ownerId } as never, w.workspaceA, undefined, w.forkingSessionId,
+      batchBody as never,
     ));
     assert.equal(batch?.status, 409);
     assert.equal(batch?.body?.code, 'FORK_SOURCE_NOT_REACHABLE');

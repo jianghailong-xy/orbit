@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import type { RunnerSelfUpdateNowRequest, RunnerSelfUpdatePostponeRequest } from '@orbit/shared';
-import { isLoginEngine } from '../common/runner-engines';
+import { isLoginEngine, isReportedEngine } from '../common/runner-engines';
 import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { visitorAddress } from '../shared/public-surface.guard';
@@ -257,6 +257,20 @@ export class RunnersController {
   @Post(':id/engine-update')
   startEngineUpdate(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.runners.startEngineUpdate(user.userId, id);
+  }
+
+  // Dismiss this machine's update warning for one engine until that engine's next release: records
+  // the engine's current update.latest on the runner, so it hides for everyone on the account. Orbit's
+  // own record, so the runner need not be online; owner-scoped in the service like the controls above.
+  @PatForbidden('RUNNER_CONTROL')
+  @Post(':id/engines/:engine/update-warning/dismiss')
+  dismissEngineUpdateWarning(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('engine') engine: string,
+  ) {
+    if (!isReportedEngine(engine)) throw new BadRequestException('Unknown engine');
+    return this.runners.dismissEngineUpdateWarning(user.userId, id, engine);
   }
 
   // Re-read this machine's runtime model lists now, rather than waiting for the runner's own

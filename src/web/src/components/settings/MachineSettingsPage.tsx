@@ -1,3 +1,5 @@
+import { AgentFixButton, AgentFixLine } from '../AgentFix';
+import { agentFixView, attentionFixTarget } from '../../lib/agentFix';
 import {
   BranchesOutlined,
   CloudDownloadOutlined,
@@ -26,7 +28,14 @@ import { machineDraftPath } from '../../lib/machineSetup';
 import { machineEmpty, START_A_SESSION } from '../../lib/machineSetupCopy';
 import { publishedRunnerVersionQuery, workspaceSessionCountsQuery } from '../../lib/queries';
 import { AbandonedCheckouts } from '../AbandonedCheckouts';
-import { MachineEngines, accountsGroup, ownSignInPanel, tildePath, useOpenAccounts } from '../RunnerEngines';
+import {
+  MachineEngines,
+  accountsGroup,
+  ownSignInPanel,
+  tildePath,
+  useDismissEngineUpdateWarning,
+  useOpenAccounts,
+} from '../RunnerEngines';
 import { useRunnerTokenRotation } from '../RunnerTokenRotation';
 import type { Runner } from '../TasksSidePanel';
 import { Badge } from '../ui/Badge';
@@ -92,6 +101,7 @@ import {
   runnerVersionInstallsWhenQuiet,
   RUNNER_VERSION_LATEST,
   RUNNER_VERSION_NOT_ROLLED_OUT,
+  attentionDismissUntilNextRelease,
   attentionQuotaResets,
   runnerOfflineLastSeen,
   runnerRunningOf,
@@ -106,7 +116,7 @@ import { RunnerUpdateNowButton } from '../RunnerUpdateNow';
 import { runnerTakesUpdateNow } from '../../lib/runnerUpdateNow';
 import { useClaudeRegionCheckAgain } from '../../lib/claudeRegion';
 import { CLAUDE_REGION_CHECK_AGAIN } from '../../lib/claudeRegionCopy';
-import { ago } from '../../lib/runnerEngines';
+import { ago, ENGINE_CLI_NAME } from '../../lib/runnerEngines';
 import { useToast } from '../../lib/toast';
 import { MachineResources } from './MachineResources';
 import { SettingsCard, SettingsRow, SettingsSection } from './SettingsBlocks';
@@ -319,6 +329,8 @@ export function MachineSettingsPage() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['runners'] }),
     onError: (e: Error) => message.error("Couldn't start the engine update", e.message),
   });
+  // Dismiss until next <Engine> release: hides this card and that engine's row panel until a newer release.
+  const dismissUpdateWarning = useDismissEngineUpdateWarning(runnerId ?? '');
   const dismissEngineUpdate = useMutation({
     mutationFn: () => api(`/runners/${runnerId}/install`, { method: 'DELETE' }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['runners'] }),
@@ -487,8 +499,16 @@ export function MachineSettingsPage() {
       onConfirm: () => deleteMut.mutateAsync(),
     });
 
+  /** What a card offers, with Fix with an agent where its fix is work on this machine — after the card's own
+   *  button, and before Update Engines Now's Dismiss link. */
+  const attentionAction = (item: AttentionItem, fixButton: ReactNode): ReactNode => {
+    if (item.action?.kind === 'updateEngines') return cardAction(item, fixButton);
+    const own = cardAction(item, null);
+    return own || fixButton ? <>{own}{fixButton}</> : null;
+  };
+
   /** The one thing a card offers, where it has one. */
-  const attentionAction = (item: AttentionItem): ReactNode => {
+  const cardAction = (item: AttentionItem, fixButton: ReactNode): ReactNode => {
     const action = item.action;
     switch (action?.kind) {
       case 'signIn': {
@@ -543,12 +563,28 @@ export function MachineSettingsPage() {
           </Button>
         ) : null;
       }
-      case 'updateEngines':
+      case 'updateEngines': {
+        const engine = action.engine;
         return (
-          <Button size="small" disabled={engineUpdate.isPending} onClick={() => engineUpdate.mutate()}>
-            {RUNNER_UPDATE_ENGINES_NOW}
-          </Button>
+          <>
+            <Button size="small" disabled={engineUpdate.isPending} onClick={() => engineUpdate.mutate()}>
+              {RUNNER_UPDATE_ENGINES_NOW}
+            </Button>
+            {fixButton}
+            {/* Until the next release: only a warning against a known latest has one to wait for. */}
+            {engine && item.params.latest && (
+              <button
+                className="re-link"
+                type="button"
+                disabled={dismissUpdateWarning.isPending}
+                onClick={() => dismissUpdateWarning.mutate(engine)}
+              >
+                {attentionDismissUntilNextRelease(ENGINE_CLI_NAME[engine])}
+              </button>
+            )}
+          </>
         );
+      }
       case 'updateRunner':
         return (
           <Button size="small" disabled={runnerUpdate.isPending} onClick={() => runnerUpdate.mutate()}>
@@ -739,16 +775,26 @@ export function MachineSettingsPage() {
           the one thing that fixes it. */}
       {attention.length > 0 && (
         <section className="rd-attention machine-attention" aria-label={RUNNER_NEEDS_ATTENTION}>
-          {attention.map((item, index) => (
-            <div key={`${item.kind}:${index}`} className={`rd-attention-card ${item.tone}`}>
-              <span className="rd-attention-icon">{ATTENTION_ICON[item.kind]}</span>
-              <div className="rd-attention-main">
-                <div className="rd-attention-title">{item.title}</div>
-                <div className="rd-attention-detail">{attentionDetail(item)}</div>
-                {item.action && <div className="rd-attention-action">{attentionAction(item)}</div>}
+          {attention.map((item, index) => {
+            // Fix with an agent, on the cards whose fix is work on this machine (lib/agentFix.ts).
+            const fixTarget = attentionFixTarget(item);
+            const fixView = fixTarget ? agentFixView(runner.agentFix, fixTarget, 'card') : null;
+            const fixButton = fixTarget && fixView
+              ? <AgentFixButton view={fixView} target={fixTarget} runnerId={runner.id} />
+              : null;
+            const action = attentionAction(item, fixButton);
+            return (
+              <div key={`${item.kind}:${index}`} className={`rd-attention-card ${item.tone}`}>
+                <span className="rd-attention-icon">{ATTENTION_ICON[item.kind]}</span>
+                <div className="rd-attention-main">
+                  <div className="rd-attention-title">{item.title}</div>
+                  <div className="rd-attention-detail">{attentionDetail(item)}</div>
+                  {action && <div className="rd-attention-action">{action}</div>}
+                  <AgentFixLine view={fixView} />
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </section>
       )}
 

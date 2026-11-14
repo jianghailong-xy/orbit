@@ -254,7 +254,7 @@ test('(d) the deleted files are gone and their capability was not moved elsewher
 
 // (l) --------------------------------------------------------------------------------------------
 test('(l) task_judge is gone from every door; the declaration flags stay', () => {
-  const mcp = read('src/runner-go/mcp.go');
+  const mcp = read('src/runner-go/mcp.go') + '\n' + read('src/runner-go/operation_catalog.go');
   const cli = read('src/runner-go/task_cli.go');
   const transport = read('src/runner-go/transport.go');
   for (const [name, source] of [['mcp.go', mcp], ['task_cli.go', cli],

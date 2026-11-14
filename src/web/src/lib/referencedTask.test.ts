@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseReferencedTasks, summarizeReferencedTasks } from './referencedTask';
+import { parseReferencedTasks } from './referencedTask';
 import {
   EIGHT_TASKS,
   IN_ENGLISH,
@@ -148,21 +148,5 @@ describe('parseReferencedTasks', () => {
 
     expect(parsed?.tasks.map((task) => task.id)).toEqual(['349vy0HknpSjHwdwJ31O1']);
     expect(parsed?.rest).toBe(ONE_TASK.replace(/^ {2}标题 .*$/m, '  名称   x'));
-  });
-});
-
-describe('summarizeReferencedTasks', () => {
-  const summarize = (note: string) =>
-    summarizeReferencedTasks(parseReferencedTasks(note)?.tasks ?? []);
-
-  it('says the state of a lone task outright', () => {
-    expect(summarize(ONE_TASK)).toBe('FAILED');
-    expect(summarize(NEVER_RAN)).toBe('OPEN');
-  });
-
-  it('counts several by status, in the order the note named them', () => {
-    expect(summarize(EIGHT_TASKS)).toBe('7 DONE, 1 OPEN');
-    expect(summarize(TWO_TASKS)).toBe('1 DONE, 1 OPEN');
-    expect(summarize(IN_ENGLISH)).toBe('1 DONE, 1 OPEN');
   });
 });

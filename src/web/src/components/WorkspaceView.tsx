@@ -452,7 +452,7 @@ import { Menu, type MenuItem } from './ui/Menu';
 import { Popover } from './ui/Popover';
 import { RunnerUpdateIndicator } from './RunnerUpdateIndicator';
 import { RunnerUpdateLaterMenu } from './RunnerUpdateLater';
-import { RunnerUpdateNowButton } from './RunnerUpdateNow';
+import { RunnerUpdateNowButton, RunnerUpdateNowPress, useRunnerUpdateNow } from './RunnerUpdateNow';
 import { runnerTakesUpdateNow } from '../lib/runnerUpdateNow';
 import { Select } from './ui/Select';
 import { Spinner } from './ui/Spinner';
@@ -2003,23 +2003,32 @@ export function RunnerUpdatingTag({
   gate,
   machine,
   actions,
+  updateNow,
 }: {
   gate: QueuedGate;
   machine?: string | null;
+  /** Later ▾. */
   actions?: ReactNode;
+  /** The runner, when it takes Update Now…: the press closes the popover and its confirmation opens outside it. */
+  updateNow?: Runner;
 }) {
   const now = useMinuteNow();
+  const [open, setOpen] = useState(false);
+  const reason = useRef<HTMLButtonElement>(null);
+  const updateRunnerNow = useRunnerUpdateNow(updateNow, machine ?? '');
   const waited = runnerUpdatingWaited(gate, now);
   return (
     <span className="chat-runner-updating">
       Queued
       <span className="chat-meta-sep">·</span>
       <Popover
+        open={open}
+        onOpenChange={setOpen}
         title={runnerUpdatingTitle(gate)}
         side="bottom"
         align="end"
         trigger={
-          <button type="button" className="chat-runner-updating-reason">
+          <button ref={reason} type="button" className="chat-runner-updating-reason">
             {runnerUpdatingTag(gate)}
           </button>
         }
@@ -2034,9 +2043,17 @@ export function RunnerUpdatingTag({
               </>
             )}
           </p>
-          {actions}
+          {(actions || updateNow) && (
+            <div className="runner-update-actions">
+              {actions}
+              {updateNow && (
+                <RunnerUpdateNowPress pending={updateRunnerNow.pending} onClick={() => { setOpen(false); updateRunnerNow.open(reason); }} />
+              )}
+            </div>
+          )}
         </div>
       </Popover>
+      {updateRunnerNow.confirmation}
     </span>
   );
 }
@@ -4513,7 +4530,8 @@ export function WorkspaceView({
           <RunnerUpdatingTag
             gate={runnerUpdatingGate}
             machine={machineName(runner)}
-            actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} />{runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={machineName(runner)} />}</div>}
+            actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <RunnerUpdateLaterMenu runnerId={runner.id} />}
+            updateNow={!isRunnerStopping(runnerUpdatingGate) && runnerTakesUpdateNow(runner) ? runner : undefined}
           />
         ),
       };
