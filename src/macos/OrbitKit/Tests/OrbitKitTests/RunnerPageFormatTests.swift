@@ -551,21 +551,44 @@ final class RunnerPageFormatTests: XCTestCase {
     }
 
     func testUpdateEnginesNowSaysWhereItGot() {
+        typealias Line = RunnerPageFormat.UpdateRelayLine
         let queued = RunnerInstallState(status: "pending", engine: nil, command: nil, message: nil, mode: "update")
-        XCTAssertEqual(RunnerPageFormat.updateRelayLine(queued),
-                       "Queued — the runner picks this up on its next check-in.")
+        XCTAssertEqual(RunnerPageFormat.updateRelayLines(queued),
+                       [Line("Queued — the runner picks this up on its next check-in.")])
         XCTAssertTrue(RunnerPageFormat.engineUpdateInFlight(queued))
         let running = RunnerInstallState(status: "installing", engine: nil, command: nil, message: nil, mode: "update")
-        XCTAssertEqual(RunnerPageFormat.updateRelayLine(running), "Updating this machine’s engine CLIs…")
+        XCTAssertEqual(RunnerPageFormat.updateRelayLines(running), [Line("Updating this machine’s engine CLIs…")])
         let done = RunnerInstallState(status: "done", engine: nil, command: nil,
-                                      message: "claude 2.1.284 → 2.1.290", mode: "update")
-        XCTAssertEqual(RunnerPageFormat.updateRelayLine(done), "claude 2.1.284 → 2.1.290")
+                                      message: "Claude Code updated 2.1.284 → 2.1.290\nCodex — 5 sessions running, it'll update once they finish",
+                                      mode: "update")
+        XCTAssertEqual(RunnerPageFormat.updateRelayLines(done), [Line("Nothing here needs your attention.")])
         XCTAssertFalse(RunnerPageFormat.engineUpdateInFlight(done))
         let quiet = RunnerInstallState(status: "done", engine: nil, command: nil, message: nil, mode: "update")
-        XCTAssertEqual(RunnerPageFormat.updateRelayLine(quiet), "Nothing to update.")
+        XCTAssertEqual(RunnerPageFormat.updateRelayLines(quiet), [Line("Nothing to update.")])
         let install = RunnerInstallState(status: "pending", engine: "kimi", command: nil, message: nil, mode: "install")
-        XCTAssertNil(RunnerPageFormat.updateRelayLine(install), "an install is not an update")
+        XCTAssertEqual(RunnerPageFormat.updateRelayLines(install), [], "an install is not an update")
         XCTAssertFalse(RunnerPageFormat.engineUpdateInFlight(install))
+    }
+
+    /// Only the engines that need someone, and the failed ones red — the web report's rule.
+    func testUpdateEnginesNowListsOnlyWhatNeedsSomeone() {
+        typealias Line = RunnerPageFormat.UpdateRelayLine
+        let failed = RunnerInstallState(status: "failed", engine: nil, command: "orbit engine-update", message: [
+            "Claude Code — already up to date (2.1.323)",
+            "Codex — 5 sessions running, it'll update once they finish",
+            "Kimi Code — updater finished, but its version couldn't be read",
+            "OpenCode — update timed out after 5m0s",
+            "Antigravity — installed but does not run: signal: killed",
+            "Gemini — owned by another user, left alone",
+            "Cursor CLI — update failed: npm error code EACCES",
+            "DeepSeek Harness — fixed supported version 0.2.0-rc.2",
+        ].joined(separator: "\n"), mode: "update")
+        XCTAssertEqual(RunnerPageFormat.updateRelayLines(failed), [
+            Line("OpenCode — update timed out after 5m0s", failed: true),
+            Line("Antigravity — installed but does not run: signal: killed", failed: true),
+            Line("Gemini — owned by another user, left alone"),
+            Line("Cursor CLI — update failed: npm error code EACCES", failed: true),
+        ])
     }
 
     // MARK: Workspaces

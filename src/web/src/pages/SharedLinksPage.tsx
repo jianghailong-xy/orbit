@@ -1,17 +1,20 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CopyOutlined, WarningOutlined } from '@ant-design/icons';
+import { CopyOutlined, EllipsisOutlined, RightOutlined } from '@ant-design/icons';
 import { useSearchParams } from 'react-router-dom';
 import { putShareLink, turnOffShareLinks, type ShareLink, type ShareLinkState } from '../api';
 import { SettingsHeader } from '../components/settings';
 import { canShareKind, ShareModal } from '../components/ShareModal';
 import { taskStatusLabel } from '../components/TaskStatusPill';
 import { Button } from '../components/ui/Button';
+import { Menu, type MenuItem } from '../components/ui/Menu';
 import { Popconfirm } from '../components/ui/Popconfirm';
 import { Spinner } from '../components/ui/Spinner';
+import { Tooltip } from '../components/ui/Tooltip';
 import { copyText } from '../lib/clipboard';
+import { foldFromAnywhere } from '../lib/foldHead';
 import { shareLinksQuery } from '../lib/queries';
-import { includeChips, publicLinkUrl, shortDate, staleSessionLinks } from '../lib/shareLinks';
+import { includeChips, publicLinkUrl, shortDate } from '../lib/shareLinks';
 import { sessionLifecycleLabel, sessionLifecycleStateOf } from '../lib/sessionState';
 import { wikiSpacePath } from '../lib/wiki';
 import { useToast } from '../lib/toast';
@@ -37,7 +40,12 @@ const TABS: readonly { key: Tab; state: ShareLinkState; label: string; empty: st
 
 const isTab = (value: string | null): value is Tab => TABS.some((tab) => tab.key === value);
 
-const KIND_WORD: Record<ShareLink['kind'], string> = { SESSION: 'Session', TASK: 'Task', PROJECT: 'Project', WIKI: 'Wiki' };
+const KIND_WORD: Record<ShareLink['kind'], string> = {
+  SESSION: 'Session',
+  TASK: 'Task',
+  PROJECT: 'Project',
+  WIKI: 'Wiki',
+};
 const KIND_LETTER: Record<ShareLink['kind'], string> = { SESSION: 'S', TASK: 'T', PROJECT: 'P', WIKI: 'W' };
 /** A project's status in the words the projects pages use (ProjectsPage STATUS_LABEL). */
 const PROJECT_WORD: Record<string, string> = { OPEN: 'Open', DONE: 'Completed', CANCELLED: 'Cancelled' };
@@ -72,9 +80,9 @@ function endedWhy(link: ShareLink): string {
  * Settings → Shared links: every public link this account has made, filed by where it stands —
  * Active (anyone with it can open it), Paused (its session is in Trash; restoring the session turns
  * it back on) and Ended (turned off or expired, for good). The page Following is, for links: a title,
- * a line on what it lists, counted tabs, one card per link. Links for sessions completed more than
- * 30 days ago are named above the list with a way to turn them all off, since nobody is watching
- * those. docs/share-links-design.md §3, §8; docs/mocks/share-links/06-manage-and-entry.
+ * a line on what it lists, counted tabs, one card per link. A link stays as the owner set it: the page
+ * names no link as stale, since finishing a session doesn't undo sharing it (expiry is chosen when
+ * sharing). docs/share-links-design.md §3, §8; docs/mocks/share-links/06-manage-and-entry.
  */
 export function SharedLinksPage() {
   const [params, setParams] = useSearchParams();
@@ -88,7 +96,6 @@ export function SharedLinksPage() {
   const current = TABS.find((t) => t.key === tab)!;
   const byState = (state: ShareLinkState) => links.filter((link) => link.state === state);
   const shown = byState(current.state);
-  const stale = staleSessionLinks(links, now);
   // A root with a link that has not ended: ending one of its older links again, or sharing it
   // again, would be about a different link than the row's.
   const openRoots = new Set(links.filter((link) => link.state !== 'ENDED').map((link) => link.root.id));
@@ -144,32 +151,6 @@ export function SharedLinksPage() {
           </button>
         ))}
       </div>
-      {tab === 'active' && stale.length > 0 && (
-        <div className="shared-links-banner" role="status">
-          <WarningOutlined className="shared-links-banner-icon" />
-          <span className="shared-links-banner-text">
-            <b>
-              {stale.length === 1
-                ? '1 link is for a session completed more than 30 days ago.'
-                : `${stale.length} links are for sessions completed more than 30 days ago.`}
-            </b>{' '}
-            {stale.length === 1 ? 'It still opens for anyone who has it.' : 'They still open for anyone who has them.'}
-          </span>
-          <Popconfirm
-            title={stale.length === 1 ? TURN_OFF_TITLE : `Turn off these ${stale.length} links?`}
-            description={stale.length === 1 ? TURN_OFF_DETAIL : 'Anyone who has them loses access right away.'}
-            confirmText="Turn off"
-            danger
-            cancelText="Cancel"
-            onConfirm={() => turnOff.mutate(stale.map((link) => link.id))}
-            trigger={
-              <Button size="small" loading={turnOff.isPending}>
-                {stale.length === 1 ? 'Turn off this link' : `Turn off these ${stale.length}`}
-              </Button>
-            }
-          />
-        </div>
-      )}
       <div role="tabpanel" className="following-panel">
         {linksQ.isPending ? (
           <div className="following-empty">
@@ -194,78 +175,93 @@ export function SharedLinksPage() {
               <span>Views</span>
               <span />
             </div>
-            {shown.map((link) => (
-              <div key={link.id} className="shared-link-row" data-state={link.state} data-kind={link.kind}>
-                <span className={`shared-link-kind kind-${link.kind.toLowerCase()}`} aria-hidden>
-                  {KIND_LETTER[link.kind]}
-                </span>
-                <div className="shared-link-item">
-                  <div className="shared-link-title">{link.root.title}</div>
-                  <div className="shared-link-where">
-                    {link.state === 'PAUSED' ? (
-                      <>
-                        <span className="shared-link-paused">Paused · in Trash</span> — restoring the session
-                        turns this link back on
-                      </>
-                    ) : link.state === 'ENDED' ? (
-                      `${KIND_WORD[link.kind]} · ${endedWhy(link)}`
-                    ) : (
-                      rootWhere(link)
+            {shown.map((link) => {
+              // An active link opens its Share dialog from a press anywhere on its row, but not from one on
+              // its own controls (copy, ⋯) nor one that ended a drag across the words. Board 13.
+              const opens = link.state === 'ACTIVE' && canShareKind(link.kind);
+              return (
+                <div
+                  key={link.id}
+                  className={`shared-link-row${opens ? ' is-pressable' : ''}`}
+                  data-state={link.state}
+                  data-kind={link.kind}
+                  onClick={
+                    opens ? foldFromAnywhere(() => setSettingsFor(link), 'button, a, input, [role="menu"]') : undefined
+                  }
+                >
+                  <span className={`shared-link-kind kind-${link.kind.toLowerCase()}`} aria-hidden>
+                    {KIND_LETTER[link.kind]}
+                  </span>
+                  <div className="shared-link-item">
+                    <div className="shared-link-title">{link.root.title}</div>
+                    <div className="shared-link-where">
+                      {link.state === 'PAUSED' ? (
+                        <>
+                          <span className="shared-link-paused">Paused · in Trash</span> — restoring the session turns
+                          this link back on
+                        </>
+                      ) : link.state === 'ENDED' ? (
+                        `${KIND_WORD[link.kind]} · ${endedWhy(link)}`
+                      ) : (
+                        rootWhere(link)
+                      )}
+                    </div>
+                  </div>
+                  <div className="shared-link-includes">
+                    {includeChips(link).map((chip) => (
+                      <span key={chip.label} className={`shared-link-chip${chip.warn ? ' is-warn' : ''}`}>
+                        {chip.label}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="shared-link-updates">
+                    {link.expiresAt && link.state !== 'ENDED' ? `Live · until ${shortDate(link.expiresAt)}` : 'Live'}
+                  </div>
+                  <div className="shared-link-views">
+                    {link.viewCount > 0
+                      ? `${link.viewCount}${link.lastViewedAt ? ` · ${ago(link.lastViewedAt, now)}` : ''}`
+                      : '—'}
+                    <div className="shared-link-since">since {shortDate(link.createdAt)}</div>
+                  </div>
+                  <div className="shared-link-actions">
+                    {link.state === 'ACTIVE' && (
+                      <Tooltip content="Copy link">
+                        <Button
+                          size="small"
+                          variant="text"
+                          icon={<CopyOutlined />}
+                          aria-label="Copy link"
+                          onClick={() => copy(link)}
+                        />
+                      </Tooltip>
                     )}
+                    {link.state === 'ENDED' && link.stateReason === 'EXPIRED' && !openRoots.has(link.root.id) && (
+                      <Button size="small" loading={shareAgain.isPending} onClick={() => shareAgain.mutate(link)}>
+                        Share again
+                      </Button>
+                    )}
+                    {link.state !== 'ENDED' && (
+                      <LinkMenu
+                        link={link}
+                        items={[
+                          ...(link.state === 'ACTIVE'
+                            ? [
+                                { key: 'copy', label: 'Copy link', onSelect: () => copy(link) },
+                                ...(opens
+                                  ? [{ key: 'settings', label: 'Settings…', onSelect: () => setSettingsFor(link) }]
+                                  : []),
+                                { type: 'separator' as const, key: 'sep' },
+                              ]
+                            : []),
+                        ]}
+                        onTurnOff={() => turnOff.mutate([link.id])}
+                      />
+                    )}
+                    <RightOutlined className={`shared-link-chev${opens ? '' : ' is-ghost'}`} aria-hidden />
                   </div>
                 </div>
-                <div className="shared-link-includes">
-                  {includeChips(link).map((chip) => (
-                    <span key={chip.label} className={`shared-link-chip${chip.warn ? ' is-warn' : ''}`}>
-                      {chip.label}
-                    </span>
-                  ))}
-                </div>
-                <div className="shared-link-updates">
-                  {link.expiresAt && link.state !== 'ENDED' ? `Live · until ${shortDate(link.expiresAt)}` : 'Live'}
-                </div>
-                <div className="shared-link-views">
-                  {link.viewCount > 0
-                    ? `${link.viewCount}${link.lastViewedAt ? ` · ${ago(link.lastViewedAt, now)}` : ''}`
-                    : '—'}
-                  <div className="shared-link-since">since {shortDate(link.createdAt)}</div>
-                </div>
-                <div className="shared-link-actions">
-                  {link.state === 'ACTIVE' && (
-                    <>
-                      <Button size="small" icon={<CopyOutlined />} onClick={() => copy(link)}>
-                        Copy
-                      </Button>
-                      {canShareKind(link.kind) && (
-                        <Button size="small" onClick={() => setSettingsFor(link)}>
-                          Settings
-                        </Button>
-                      )}
-                    </>
-                  )}
-                  {link.state !== 'ENDED' && (
-                    <Popconfirm
-                      title={TURN_OFF_TITLE}
-                      description={TURN_OFF_DETAIL}
-                      confirmText="Turn off"
-                      danger
-                      cancelText="Cancel"
-                      onConfirm={() => turnOff.mutate([link.id])}
-                      trigger={
-                        <Button size="small" variant="text" danger>
-                          Turn off
-                        </Button>
-                      }
-                    />
-                  )}
-                  {link.state === 'ENDED' && link.stateReason === 'EXPIRED' && !openRoots.has(link.root.id) && (
-                    <Button size="small" loading={shareAgain.isPending} onClick={() => shareAgain.mutate(link)}>
-                      Share again
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -279,5 +275,35 @@ export function SharedLinksPage() {
         />
       )}
     </div>
+  );
+}
+
+/** A link's ⋯, borderless (the settings-buttons rule): `items`, then Turn off… last and in red, which
+ *  asks the contract's question (§8) beside the ⋯ before it ends the link. Named after the link, where a
+ *  screen reader lists every ⋯ on the page. */
+function LinkMenu({ link, items, onTurnOff }: { link: ShareLink; items: MenuItem[]; onTurnOff: () => void }) {
+  const anchor = useRef<HTMLSpanElement>(null);
+  const [asking, setAsking] = useState(false);
+  return (
+    <span ref={anchor} className="shared-link-more">
+      <Menu
+        align="end"
+        items={[...items, { key: 'turn-off', label: 'Turn off…', danger: true, onSelect: () => setAsking(true) }]}
+        trigger={
+          <Button size="small" variant="text" icon={<EllipsisOutlined />} aria-label={`More for ${link.root.title}`} />
+        }
+      />
+      <Popconfirm
+        anchor={anchor}
+        open={asking}
+        onOpenChange={setAsking}
+        title={TURN_OFF_TITLE}
+        description={TURN_OFF_DETAIL}
+        confirmText="Turn off"
+        danger
+        cancelText="Cancel"
+        onConfirm={onTurnOff}
+      />
+    </span>
   );
 }

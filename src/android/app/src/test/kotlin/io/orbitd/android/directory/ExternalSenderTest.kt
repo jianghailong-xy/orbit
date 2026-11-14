@@ -54,6 +54,16 @@ class ExternalSenderTest {
         assertNull(ExternalSender.parse(buildJsonObject { put("source", "ORBIT_GUEST"); put("name", 7) }))
     }
 
+    /** The guest view's own messages (core `GuestTranscript.ownMessages`) are headed `You`, where another guest's say `From <name>`. */
+    @Test fun theReadersOwnMessageIsHeadedYou() {
+        val mine = buildJsonObject { put("source", "ORBIT_READER") }
+        assertEquals(ExternalMessageFrom(null, "ORBIT_READER"), ExternalSender.parse(mine))
+        assertEquals("You", ExternalSender.label(ExternalSender.parse(mine)!!))
+        val rewritten = io.orbitd.android.core.guests.GuestTranscript.ownMessages(listOf(io.orbitd.android.core.realtime.RunEvent("user", 1,
+            buildJsonObject { put("text", "hi"); put("externalSender", guest("Bo")) })), "Bo").single()
+        assertEquals("You", ExternalSender.label(ExternalSender.parse(rewritten.fields["externalSender"])!!))
+    }
+
     @Test fun theGuestsLabelIsFromAndTheirName() {
         assertEquals("From Alice Chen", ExternalSender.label(ExternalMessageFrom("Alice Chen", "ORBIT_GUEST")))
     }

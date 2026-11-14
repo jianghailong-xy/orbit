@@ -207,6 +207,24 @@ export function machinePagePollMs(runners: Runner[] | undefined, runnerId: strin
   return inFlight ? 4_000 : 15_000;
 }
 
+/** Whether one line of an engine-update report is a failure: the runner's own rule for failing the
+ *  whole run (`updateRunFailed`, src/runner-go/engineinstall.go), read per line. */
+function engineUpdateLineFailed(line: string): boolean {
+  return line.includes('update failed') || line.includes('timed out') || line.includes('does not run');
+}
+
+/** The lines of an update run that need the person reading it: the failures, and an install Orbit
+ *  is not allowed to replace (only its owner can update it). Everything else — current, updated,
+ *  pinned, waiting for sessions to finish, retried on the next pass — sorts itself out, and listing
+ *  it buried the one line that mattered. Phrases are the runner's, src/runner-go/engineupdate.go. */
+function engineUpdateReportLines(message: string | null | undefined): string[] {
+  if (!message) return ['Nothing to update.'];
+  const lines = message
+    .split('\n')
+    .filter((line) => engineUpdateLineFailed(line) || line.includes('owned by another user'));
+  return lines.length > 0 ? lines : ['Nothing here needs your attention.'];
+}
+
 export function MachineSettingsPage() {
   const runnerId = routeId(useParams().id);
   const navigate = useNavigate();
@@ -732,14 +750,22 @@ export function MachineSettingsPage() {
         {/* The run's report. Unlike an install it is not retired by the next probe: the summary —
             what moved, what was skipped and why — exists nowhere else once it's gone. */}
         {updating && relay?.status && (
-          <div className={`rd-engine-relay${relay.status === 'failed' ? ' bad' : ''}`}>
-            <div className="rd-engine-relay-row">
-              {relay.status === 'pending'
-                ? 'Queued — the runner picks this up on its next check-in.'
-                : relay.status === 'installing'
-                  ? 'Updating this machine’s engine CLIs…'
-                  : relay.message || 'Nothing to update.'}
-            </div>
+          <div className="rd-engine-relay">
+            {relay.status === 'pending' || relay.status === 'installing' ? (
+              <div className="rd-engine-relay-row">
+                {relay.status === 'pending'
+                  ? 'Queued — the runner picks this up on its next check-in.'
+                  : 'Updating this machine’s engine CLIs…'}
+              </div>
+            ) : (
+              // Only the engines that need someone, and the failed ones in red: a whole red card
+              // made six engines that were fine read as broken beside the one that wasn't.
+              engineUpdateReportLines(relay.message).map((line, index) => (
+                <div key={index} className={`rd-engine-relay-row${engineUpdateLineFailed(line) ? ' bad' : ''}`}>
+                  {line}
+                </div>
+              ))
+            )}
             {relay.status !== 'pending' && relay.command && (
               <div className="rd-engine-relay-hint">
                 Orbit ran <code className="re-cmd">{relay.command}</code>

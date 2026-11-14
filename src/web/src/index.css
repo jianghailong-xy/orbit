@@ -2480,16 +2480,13 @@ button.toast--pill:focus-visible {
   background: var(--bg-subtle);
   border: 1px solid var(--border-subtle);
 }
-.rd-engine-relay.bad {
-  background: var(--error-bg);
-  border-color: var(--error-border);
-}
 .rd-engine-relay-row {
   font-size: 12.5px;
   color: var(--text-2);
   white-space: pre-wrap;
 }
-.rd-engine-relay.bad .rd-engine-relay-row {
+/* Only the engines that failed: the card stays neutral, so the lines that were fine read as fine. */
+.rd-engine-relay-row.bad {
   color: var(--error);
   font-weight: 500;
 }
@@ -21830,28 +21827,6 @@ div.landing-jobs-open {
 .shared-links-page {
   max-width: 1080px;
 }
-.shared-links-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 0 12px;
-  padding: 9px 12px;
-  border: 1px solid var(--warning-border);
-  border-radius: 8px;
-  background: var(--warning-bg);
-  color: var(--text-1);
-  font-size: 13px;
-}
-.shared-links-banner-icon {
-  color: var(--warning);
-}
-.shared-links-banner-text {
-  flex: 1;
-  min-width: 0;
-}
-.shared-links-banner-text b {
-  font-weight: 600;
-}
 .shared-links-list {
   display: flex;
   flex-direction: column;
@@ -21859,7 +21834,7 @@ div.landing-jobs-open {
 }
 .shared-link-row {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) 180px 110px 110px 236px;
+  grid-template-columns: 26px minmax(0, 1fr) 180px 110px 110px auto;
   gap: 12px;
   align-items: center;
   padding: 10px 12px;
@@ -21941,10 +21916,29 @@ div.landing-jobs-open {
 .shared-link-since {
   color: var(--text-3);
 }
+.shared-link-row.is-pressable {
+  cursor: pointer;
+}
+.shared-link-row.is-pressable:hover {
+  background: var(--bg-hover);
+}
 .shared-link-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 2px;
+  min-width: 92px;
+}
+.shared-link-actions .orbit-button-text {
+  color: var(--text-3);
+}
+.shared-link-chev {
+  width: 16px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.shared-link-chev.is-ghost {
+  visibility: hidden;
 }
 @media (max-width: 900px) {
   .shared-link-row {
@@ -24856,6 +24850,16 @@ button.project-open-item-action:disabled {
 .wk-space-tag { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 13px;
                 background: var(--fill-muted); font-size: 12.5px; color: var(--text-2); white-space: nowrap;
                 max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+/* The space's name is the Wiki's title, on every head that has a space (board docs/mocks/wiki-rail-name B): the heading's
+   type, no box, and with more than one space a picker drawn as the Tasks title's scope picker (.tasks-scope-trigger). */
+.wk-name-title { display: flex; align-items: center; min-width: 0; }
+.wk-name-title .wk-select, .wk-name-title .wk-space-tag { height: auto; max-width: 100%; margin-left: -6px; padding: 0 6px; gap: 6px;
+                                                         border: 0; border-radius: 6px; background: transparent; font: inherit; color: inherit; }
+.wk-name-title .wk-space-tag { display: block; }
+.wk-name-title .wk-select .v { max-width: 190px; }
+.wk-name-title .wk-select:hover { background: var(--bg-hover); }
+.wk-name-title .wk-select:focus-within { box-shadow: 0 0 0 2px var(--brand-tint); }
+.wk-name-title .wk-select .ic.caret { position: static; font-size: 12px; color: var(--text-3); }
 .wk-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 /* The space's public link, as the head's buttons are sized (mock share-links 08 ②). */
 .wk-actions > .session-shared-pill { height: 32px; padding: 0 12px; font-size: 13px; }
@@ -25376,6 +25380,9 @@ button.project-open-item-action:disabled {
   .wk-page, .rv-page { max-width: none; }
   .wk-drawer { width: 100%; }
   .wk-select .v, .wk-space-tag { max-width: 120px; }
+  .wk-title-row .wk-name-title .wk-select .v { max-width: none; overflow: hidden; text-overflow: ellipsis; }
+  .wk-title-row .wk-name-title .wk-select { min-width: 0; }
+  .wk-title-row .wk-name-title .wk-space-tag { max-width: 100%; }
   .wk-dkv, .wk-pkv { grid-template-columns: minmax(0, 1fr); }
   .wk-pkv > .k { padding-top: 6px; }
   .rv-head { flex-direction: column; align-items: flex-start; }
@@ -25589,9 +25596,7 @@ button.project-open-item-action:disabled {
                                                                   height: 100%; z-index: 5; cursor: col-resize; }
   .wk-page--railed > .wk-layout > .wk-dir-col > .wk-dir-resizer:hover { background: rgba(51, 112, 255, 0.12); }
   .wk-rail-top { flex: none; padding: 0 16px 10px 0; }
-  .wk-rail-head { display: flex; align-items: center; gap: 12px; height: 32px; }
-  .wk-rail-head .wk-select .v, .wk-rail-head .wk-space-tag { max-width: 150px; }
-  .wk-rail-top > .wk-search { margin-top: 14px; }
+  .wk-rail-head { height: 32px; }
   .wk-page--railed > .wk-layout > .wk-dir-col > .wk-toc { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
                                                          padding: 0 10px 12px 0; }
   .wk-rail-foot { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 16px 12px 0;
@@ -26401,6 +26406,10 @@ button.agent-progress-agent:hover {
 .wt-recovery-link { padding: 0; border: 0; background: none; color: var(--brand); font: inherit; cursor: pointer; }
 .wt-recovery-link:disabled { opacity: .55; cursor: default; }
 .wt-recovery-snapshot.is-stale { opacity: .45; }
+/* The merge slot while a merge operation is pending: what Orbit is doing, since when, on which runner. Amber once overdue. */
+.wt-merge-op { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 12px 12px; padding: 8px 12px; border-radius: 8px; font-size: 12px; color: var(--brand); background: color-mix(in srgb, var(--brand) 8%, var(--bg-raised)); }
+.wt-merge-op span { color: var(--text-2); }
+.wt-merge-op.is-overdue { color: var(--warning); background: color-mix(in srgb, var(--warning) 10%, var(--bg-raised)); }
 .wt-recovery-files { margin: 10px 0; }
 .wt-recovery-files ul { display: grid; gap: 4px; margin: 6px 0 0; padding: 0; list-style: none; }
 .wt-recovery-files code { font-size: 11px; }

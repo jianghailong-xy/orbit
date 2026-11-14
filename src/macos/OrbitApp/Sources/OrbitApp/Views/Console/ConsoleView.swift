@@ -1454,10 +1454,8 @@ struct TranscriptView: View {
     // `anchor: .top` lands the bubble just under either (the band is a safe-area inset, so the
     // scroll region starts below it).
     private func stickyQuestion(_ bubble: UserBubble, proxy: ScrollViewProxy) -> some View {
-        // What this turn was and what it said. An exception item's delivery — or another card the
-        // control plane draws — is still the turn the bar points back at, but it is not the person's
-        // question: it gets its card's own title and line (`StickySummary`), so the bar can't say
-        // "your question" above a card reading otherwise. A wake is no such turn (`isAnchor`).
+        // What this turn was and what it said. Only the person's question reaches here: over a round
+        // Orbit opened the bar is hidden (`StickySummary.isOrbits`), and a wake is no turn (`isAnchor`).
         let summary = StickySummary.of(text: bubble.text, note: bubble.note, itemCard: bubble.itemCard,
                                        taskStart: bubble.taskStart,
                                        startedCard: bubble.startedCard,

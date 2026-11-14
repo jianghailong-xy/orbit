@@ -55,18 +55,3 @@ export function includeChips(link: Pick<ShareLink, 'kind' | 'include'>): { label
     ...(on('conversations', false) ? [{ label: 'Conversations', warn: true as const }] : []),
   ];
 }
-
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-
-/**
- * The open links whose session was completed more than 30 days ago: still opening for anyone who
- * has them, for a conversation nobody is working in any more. What the list's banner offers to
- * turn off in one go.
- */
-export function staleSessionLinks(links: readonly ShareLink[], now: number): ShareLink[] {
-  return links.filter((link) => {
-    if (link.state !== 'ACTIVE' || link.kind !== 'SESSION' || !link.root.completedAt) return false;
-    const at = Date.parse(link.root.completedAt);
-    return Number.isFinite(at) && now - at > THIRTY_DAYS_MS;
-  });
-}
