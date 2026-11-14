@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   CheckCircleFilled,
   CloseCircleFilled,
@@ -13,7 +13,6 @@ import type { RunEvent } from './Transcript';
 import { Pre } from './Transcript';
 import type { BgShell, BgShellStatus } from '../lib/backgroundShells';
 import { deriveBackgroundShells, mergeBackgroundShells } from '../lib/backgroundShells';
-import { useToast } from '../lib/toast';
 import { progressTrayLine, type TaskProgress } from '@orbit/shared';
 import { EMPTY_LIVE_TASK_PROGRESS, type LiveTaskProgress } from '../lib/liveTaskProgress';
 import { TaskProgressBlock } from './TaskProgressBlock';
@@ -26,7 +25,8 @@ import { TaskProgressBlock } from './TaskProgressBlock';
  * Derived from the session's event stream (see deriveBackgroundShells): the launch + the
  * workspace's Read polls, plus the runner's live output tail (background_output) and the reliable
  * completion signal (background_task, from Claude's <task-notification>) that drives the
- * terminal icon + this toast.
+ * terminal icon. Nothing toasts when a process ends: the row's icon, on this same screen, already
+ * says how it ended, and neither a finish nor a failure needs the reader to act.
  *
  * `serverShells` is the apiserver's authoritative, complete list (GET /sessions/:id/background,
  * derived over ALL persisted events). The loaded event window only holds the most recent launches
@@ -45,7 +45,6 @@ export function BackgroundShellsTray({
   /** The live progress frames of the background agents and workflows, by launching call. */
   liveProgress?: LiveTaskProgress;
 }) {
-  const message = useToast();
   const shells = useMemo(
     () =>
       mergeBackgroundShells(serverShells ?? [], deriveBackgroundShells(events, { sessionLive: !!live })),
@@ -53,24 +52,6 @@ export function BackgroundShellsTray({
   );
   const [open, setOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-
-  // Toast the moment a process leaves 'running' for a terminal state (driven by the reliable
-  // background_task completion signal — see classifyShellStatus). Skips 'unknown' (the session
-  // just ended without a notification — not a real completion worth a toast).
-  const lastStatus = useRef<Map<string, BgShellStatus>>(new Map());
-  useEffect(() => {
-    const seen = lastStatus.current;
-    for (const s of shells) {
-      const was = seen.get(s.shellId);
-      if (was === 'running' && s.status !== 'running' && s.status !== 'unknown') {
-        const label = s.description || s.shellId;
-        if (s.status === 'failed') message.error(`Background process failed: ${label}`);
-        else if (s.status === 'killed') message.info(`Background process stopped: ${label}`);
-        else message.success(`Background process finished: ${label}`);
-      }
-      seen.set(s.shellId, s.status);
-    }
-  }, [shells, message]);
 
   if (shells.length === 0) return null;
   const running = shells.filter((s) => s.status === 'running').length;

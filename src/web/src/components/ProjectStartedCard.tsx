@@ -102,13 +102,12 @@ export function ProjectStartedCard({
   const projectHref = projectPublic ? `/projects/${encodeURIComponent(projectPublic)}` : null;
   return (
     <div className="psc-wrap">
-      {/* The sticky bar at the top of the transcript names this turn off these two attributes, as
-          it does an exception item's card: it is nobody's message, so it has no text of its own. */}
+      {/* `data-orbit-round`: Orbit opened this round, so the sticky bar at the top of the transcript
+          hides over it rather than naming a message nobody typed (WorkspaceView). */}
       <div
         className={`psc${queued ? ' is-queued' : ''}`}
         data-seq={seq}
-        data-sticky-label={label}
-        data-sticky-text={card.projectTitle}
+        data-orbit-round
       >
         <div className="psc-head">
           <span className="psc-mark"><PlayCircleFilled /></span>

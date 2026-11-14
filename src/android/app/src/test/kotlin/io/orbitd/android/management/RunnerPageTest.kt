@@ -155,6 +155,14 @@ class RunnerPageTest {
         assertEquals("Resets Tue, Sep 29 at 3:00 AM. ${quota.detail}", RunnerPage.attentionDetail(quota, 0L, ZoneId.of("UTC")))
     }
 
+    /** Max Concurrent's use: the slots taken of it — none while offline, when the count is stale. */
+    @Test fun runningIsTheSlotsTakenWhileOnline() {
+        fun runner(online: Boolean) = buildJsonObject { put("online", online); put("maxConcurrent", 12); put("activeSessions", 4) }
+        assertEquals(4 to 12, RunnerPage.slots(runner(true), System.currentTimeMillis()))
+        assertEquals("4 of 12 running", RunnerCopy.runningOf(4, 12))
+        assertEquals(null, RunnerPage.slots(runner(false), System.currentTimeMillis()))
+    }
+
     /** OrbitKit testAMachineWithNoCodingCLISignedInNamesItsCLIsAndSignsInTheFirst (rule 10 of docs/mocks/first-workspace-in-conversation/04):
      * one item, naming every CLI installed there by its own name, in the engines' order, and signing in the first. When it is raised is
      * the case file's, above. */
@@ -259,7 +267,33 @@ class RunnerPageTest {
         val single = buildJsonObject { put("engine", "kimi"); put("installed", true); put("auth", "yes") }
         assertNull(RunnerPage.accountLines(single).single().signInAccount)
         assertTrue(RunnerPage.engineUpdateInFlight(buildJsonObject { put("mode", "update"); put("status", "installing") }))
-        assertEquals("Nothing to update.", RunnerPage.updateRelayLine(buildJsonObject { put("mode", "update"); put("status", "done") }))
+        assertEquals(listOf(RunnerPage.UpdateRelayLine("Nothing to update.")),
+            RunnerPage.updateRelayLines(buildJsonObject { put("mode", "update"); put("status", "done") }))
+    }
+
+    @Test fun updateEnginesNowListsOnlyWhatNeedsSomeoneAsIosDoes() {
+        fun run(vararg lines: String) = buildJsonObject {
+            put("mode", "update"); put("status", "failed"); put("message", lines.joinToString("\n"))
+        }
+        assertEquals(listOf(RunnerPage.UpdateRelayLine("Nothing here needs your attention.")), RunnerPage.updateRelayLines(run(
+            "Claude Code updated 2.1.284 → 2.1.290",
+            "Codex — 5 sessions running, it'll update once they finish",
+            "Kimi Code — updater finished, but its version couldn't be read",
+        )))
+        assertEquals(listOf(
+            RunnerPage.UpdateRelayLine("OpenCode — update timed out after 5m0s", failed = true),
+            RunnerPage.UpdateRelayLine("Antigravity — installed but does not run: signal: killed", failed = true),
+            RunnerPage.UpdateRelayLine("Gemini — owned by another user, left alone"),
+            RunnerPage.UpdateRelayLine("Cursor CLI — update failed: npm error code EACCES", failed = true),
+        ), RunnerPage.updateRelayLines(run(
+            "Claude Code — already up to date (2.1.323)",
+            "OpenCode — update timed out after 5m0s",
+            "Antigravity — installed but does not run: signal: killed",
+            "Gemini — owned by another user, left alone",
+            "Cursor CLI — update failed: npm error code EACCES",
+            "DeepSeek Harness — fixed supported version 0.2.0-rc.2",
+        )))
+        assertTrue(RunnerPage.updateRelayLines(buildJsonObject { put("mode", "install"); put("status", "pending") }).isEmpty())
     }
 
     @Test fun usageRowsLabelWindowsAsIosDoes() {

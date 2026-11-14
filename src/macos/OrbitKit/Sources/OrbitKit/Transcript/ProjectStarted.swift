@@ -184,12 +184,6 @@ public enum ProjectStartedCard {
         return line
     }
 
-    /// What the bar pinned to the top of a console says about this turn — the card's own words,
-    /// as the web's `data-sticky-label` / `data-sticky-text` say them.
-    public static func sticky(_ card: ProjectStarted) -> (label: String, text: String) {
-        (label(card.by), card.projectTitle)
-    }
-
     /// A waiting task, as the app's own `orbit-task:` door; nil for an id that names no task.
     public static func taskLink(_ task: ProjectStartedTask) -> URL? { link(task.id, scheme: "orbit-task") }
 

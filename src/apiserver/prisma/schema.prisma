@@ -1056,6 +1056,10 @@ model RunnerPresence {
   /// gateway opened a new connection for it, or when a link beat came after it missed one. Null until either has
   /// (migration 0450). What the reaper reads a mass disconnection off once the runner is back.
   lostAt        DateTime? @map("lost_at")
+  /// The machine's CPU, memory and disk as its beats report them, and its last hour of them (migration 0720):
+  /// {at, latest, samples: [[ms, cpu %, memory %, disk %], …]}. Null until the runner reports one; a beat without
+  /// one leaves it as it is (runners/runner-presence.ts).
+  resources     Json?     @map("resources")
 
   @@map("runner_presence")
 }
@@ -7325,7 +7329,7 @@ model PoolGatewayToken {
 /// each claim, reclaim and provider-switch reload; earlier tokens of the same session and key stay good, their
 /// expiry pushed out with each claim. Deleting the session, the key or the person deletes its tokens; a key
 /// disabled or rotated revokes them (`revokedAt`).
-/// A coordinator handoff (migration 0642, docs/coordinator-handoff.md): the outgoing coordinator
+/// A coordinator handoff (migration 0721, docs/coordinator-handoff.md): the outgoing coordinator
 /// writes a note in a platform turn, then the replacement opens its successor with that note. One
 /// live row (WRITING, HANDING_OVER, FAILED) per outgoing coordinator; COMPLETED names the successor.
 model CoordinatorHandoff {

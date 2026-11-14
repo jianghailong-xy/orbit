@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Wiki rail: name only</title>
+<style>
+  body { margin: 0; padding: 32px; background: #eef0f3; font: 14px/1.55 Inter, "Noto Sans SC", sans-serif; color: #1f2329; }
+  .b-part { width: 1480px; padding: 28px 32px 32px; margin: 0 0 28px; background: #fff; border-radius: 14px; box-sizing: border-box; }
+  h1 { margin: 0 0 6px; font-size: 22px; }
+  h2 { margin: 0 0 6px; font-size: 18px; }
+  .b-lead { margin: 0 0 20px; color: #4e5969; }
+  .b-row { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; }
+  .b-fig { margin: 0; }
+  .b-fig img { display: block; border: 1px solid #dfe3e8; border-radius: 8px; }
+  .b-fig figcaption { margin-top: 8px; font-size: 13px; color: #4e5969; max-width: 420px; }
+  .b-fig figcaption b { color: #1f2329; }
+  .b-tag { display: inline-block; padding: 1px 8px; margin-right: 6px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+  .b-tag.rec { background: #e8f3ff; color: #1664ff; }
+  .b-tag.now { background: #f2f3f5; color: #4e5969; }
+  .b-arrow { align-self: center; font-size: 28px; color: #86909c; }
+  .b-notes { margin: 18px 0 0; padding-left: 20px; color: #4e5969; }
+  .b-notes li { margin: 4px 0; }
+  .b-small img { width: 300px; }
+  .b-win img { width: 690px; }
+</style>
+</head>
+<body>
+
+<section class="b-part">
+  <h1>Wiki 左栏顶部：只留 wiki 名字</h1>
+  <p class="b-lead">真实页面截图：今天 main 的生产构建 + 仓库 ui-migration 固件，3 个 wiki（cbai / orbit / wikova）。改动是截图时在页面上画的，产品代码没改。</p>
+  <div class="b-row">
+    <figure class="b-fig b-small"><img src="shots/today.png" alt=""><figcaption><span class="b-tag now">今天</span>“Wiki” 标题 + 名字选择框 + 搜索框</figcaption></figure>
+    <div class="b-arrow">→</div>
+    <figure class="b-fig b-small"><img src="shots/b.png" alt=""><figcaption><span class="b-tag rec">建议 B</span>只有名字，用标题字号（20px / 600）；右边小箭头，点开切换 wiki</figcaption></figure>
+  </div>
+  <ul class="b-notes">
+    <li>去掉 “Wiki” 字样：左侧主导航已经点亮 Wiki，页面里不再重复。</li>
+    <li>去掉搜索框：⌘K 是全局搜索面板，任何页面按下都能搜 wiki，功能不丢，只是不再有可点的入口行。</li>
+    <li>目录（Home / Browse / …）整体上移约 46px。</li>
+  </ul>
+</section>
+
+<section class="b-part">
+  <h2>要你选 ①：名字长什么样</h2>
+  <p class="b-lead">两种都只剩名字，区别是名字是否还像一个“选择框”。</p>
+  <div class="b-row">
+    <figure class="b-fig b-small"><img src="shots/a.png" alt=""><figcaption><b>A　保留今天的选择框</b><br>最小改动：只删掉标题和搜索。但左上角只剩一个带边框的小控件，看着不像标题，顶部显得空。</figcaption></figure>
+    <figure class="b-fig b-small"><img src="shots/b.png" alt=""><figcaption><span class="b-tag rec">建议</span><b>B　名字就是标题</b><br>名字顶替 “Wiki” 的位置和字号，无边框，悬停出底色，点击弹出 wiki 列表。和 Tasks 页标题（All tasks ⌄ 切换范围）是同一种做法，控制台里已有先例。</figcaption></figure>
+  </div>
+</section>
+
+<section class="b-part">
+  <h2>B 的几种状态</h2>
+  <div class="b-row">
+    <figure class="b-fig b-small"><img src="shots/b-hover.png" alt=""><figcaption>悬停：浅灰底，提示可点</figcaption></figure>
+    <figure class="b-fig b-small"><img src="shots/b-one.png" alt=""><figcaption>只有一个 wiki：纯文字标题，没有箭头（今天这里是灰色胶囊标签）</figcaption></figure>
+    <figure class="b-fig b-small"><img src="shots/today-dark.png" alt=""><figcaption>暗色 · 今天</figcaption></figure>
+    <figure class="b-fig b-small"><img src="shots/b-dark.png" alt=""><figcaption>暗色 · B</figcaption></figure>
+  </div>
+</section>
+
+<section class="b-part">
+  <h2>整窗（1440×900）</h2>
+  <div class="b-row">
+    <figure class="b-fig b-win"><img src="shots/today-window.png" alt=""><figcaption><span class="b-tag now">今天</span></figcaption></figure>
+    <figure class="b-fig b-win"><img src="shots/b-window.png" alt=""><figcaption><span class="b-tag rec">建议 B</span></figcaption></figure>
+  </div>
+  <ul class="b-notes">
+    <li>范围：桌面宽屏的左栏。手机 / 窄窗口顶部那一行（Wiki 标题 + 搜索）这次不动，除非你也要改。</li>
+    <li>macOS / iOS / Android 客户端的 Wiki 顶部是否同步改，等网页定下来再跟。</li>
+  </ul>
+</section>
+
+</body>
+</html>

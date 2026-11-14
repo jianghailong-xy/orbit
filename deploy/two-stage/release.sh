@@ -9,11 +9,17 @@
 # Both copies of /upgrade's script start this once they hold the upgrade lock and have checked and pulled the checkout,
 # whenever ORBIT_REGISTRY is set; run it through them.
 #
-#   release.sh [--build-only | --deploy <commit> | --plan <commit>] [--no-cache] [--pull-base] [--prune]
+#   release.sh [--build-only | --deploy <commit> | --plan <commit>] [--no-cache] [--pull-base] [--prune] [--stop-then-start]
 #
 # --plan prints what deploying the commit would change on the target, from its .env and files as they are, and leaves
 # the target as it found it: the files it puts in place to render the release are put back, no image is pulled, and
 # nothing is written to .env or brought up.
+#
+# The deploy replaces the apiserver and web without a gap: the release's container starts beside the running one, and
+# the web gateway is handed over to it before the running one stops (deploy/two-stage/deploy-stage.sh). The running
+# release's code runs meanwhile against the database as the new one's migrations leave it, so a release whose migration
+# that code cannot run against is deployed with --stop-then-start: each running one stops before its replacement starts,
+# as every release did before, and the web gateway answers 502 until the new one is healthy.
 #
 #   ORBIT_REGISTRY      the registry both hosts' Docker pull from and this one pushes to, host[:port] (required)
 #   ORBIT_DEPLOY_HOST   the ssh destination of the host that runs the deployment, such as root@10.66.0.4 (required to deploy)
@@ -25,6 +31,7 @@ COMMIT=""
 NO_CACHE=0
 PULL_BASE=0
 PRUNE=0
+STOP_THEN_START=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --build-only) MODE=build ;;
@@ -37,6 +44,7 @@ while [ $# -gt 0 ]; do
     --no-cache) NO_CACHE=1 ;;
     --pull-base) PULL_BASE=1 ;;
     --prune) PRUNE=1 ;;
+    --stop-then-start) STOP_THEN_START=1 ;;
     *) echo "error: unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
@@ -229,7 +237,8 @@ deploy_stage() {
   on_target "cat > $DIR/.upgrade/deploy-stage.sh" <deploy/two-stage/deploy-stage.sh
   on_target "ORBIT_DEPLOY_DIR=$DIR ORBIT_RELEASE_COMMIT=$COMMIT ORBIT_REGISTRY=$REGISTRY ORBIT_LINK_GATEWAY_TAG=$LINK_TAG \
 ORBIT_NGINX_IMAGE=$ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE=$ORBIT_NATS_IMAGE \
-ORBIT_DEPLOY_PULL_BASE=$PULL_BASE ORBIT_DEPLOY_PRUNE=$PRUNE ORBIT_DEPLOY_PLAN=$plan bash $DIR/.upgrade/deploy-stage.sh" || status=$?
+ORBIT_DEPLOY_PULL_BASE=$PULL_BASE ORBIT_DEPLOY_PRUNE=$PRUNE ORBIT_DEPLOY_PLAN=$plan ORBIT_DEPLOY_STOP_THEN_START=$STOP_THEN_START \
+bash $DIR/.upgrade/deploy-stage.sh" || status=$?
   if [ "$status" -eq 255 ]; then
     echo "error: the connection to $HOST was lost (ssh exit 255). If the deploy stage had started, it goes on there and" >&2
     echo "       finishes on its own; its log is $HOST:$DIR/.upgrade/deploy.log." >&2

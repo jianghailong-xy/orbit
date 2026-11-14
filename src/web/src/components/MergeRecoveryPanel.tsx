@@ -90,7 +90,7 @@ function landedDay(iso: string): string {
 }
 
 export function MergeRecoveryPanel({ recovery: r, branch, message, busy, supported, checking = false, onAction, onRepair,
-  repairSession, repairStarting, onOpenRepair, waitingForTurn = false }: {
+  repairSession, repairStarting, onOpenRepair, waitingForTurn = false, failed = false }: {
   recovery: MergeRecovery;
   /** The session's branch — where the pushed work comes from. */
   branch?: string | null;
@@ -106,6 +106,8 @@ export function MergeRecoveryPanel({ recovery: r, branch, message, busy, support
   onOpenRepair?: () => void;
   /** The session is running a turn: every write waits for it to end, and the panel says so. */
   waitingForTurn?: boolean;
+  /** The last operation on this recovery failed and `message` says why. A ready check would otherwise show nothing of it. */
+  failed?: boolean;
 }) {
   const ready = mergeRecoveryReady(r);
   const pendingLocal = r.code === 'LOCAL_SYNC_PENDING';
@@ -142,12 +144,16 @@ export function MergeRecoveryPanel({ recovery: r, branch, message, busy, support
     : { kind: 'finished', head: 'Repair session finished', note: checkedAgo && `Checked ${checkedAgo}` };
   // Beside the time once the loop has settled. While the repair runs, a check could only say it isn't done yet.
   const checkLink = loop === 'settled' && canAct && !pendingLocal;
-  const more = (!!message && !ready && !landed) || (r.patch !== undefined && !!r.candidateSha) || !!r.check || ready || !!r.repairBranch;
+  const more = (!!message && (!ready || failed) && !landed) || (r.patch !== undefined && !!r.candidateSha) || !!r.check || ready || !!r.repairBranch;
   const title = pendingLocal ? `Merged into origin/${r.targetBranch}; local sync pending`
     : landed ? `Already on origin/${t}`
+    : ready && failed && message ? `The merge into ${t} didn’t go through`
     : ready ? (localOnly ? `Local ${t} has ${localOnly} ${localOnly === 1 ? 'commit' : 'commits'} that ${localOnly === 1 ? 'isn’t' : 'aren’t'} on origin`
       : r.addsMergeCommit ? `origin/${t} moved — merging joins both histories` : `Ready to merge into ${t}`)
-    : r.code === 'CONFLICT' ? (r.phase === 'TARGET_SYNC' ? `${r.targetBranch} synchronization has conflicts` : 'Your changes conflict with the synchronized target')
+    : r.code === 'CONFLICT' ? (!conflicts
+        ? (r.phase === 'TARGET_SYNC' ? `${r.targetBranch} synchronization has conflicts` : 'Your changes conflict with the synchronized target')
+      : r.phase === 'TARGET_SYNC' ? `Local ${t} and origin/${t} conflict in ${conflicts} ${conflicts === 1 ? 'file' : 'files'}`
+      : `${conflicts} ${conflicts === 1 ? 'file conflicts' : 'files conflict'} with origin/${t}`)
     : unfinished ? 'The repair isn’t finished'
     : r.code === 'PREVIEW_CHANGED' ? 'Branches changed — check again'
     : r.code === 'FETCH_FAILED' ? 'Could not check the remote'
@@ -155,6 +161,7 @@ export function MergeRecoveryPanel({ recovery: r, branch, message, busy, support
     : `${r.targetBranch} needs synchronization`;
   return <section className="wt-recovery" aria-label="Target branch recovery">
     <strong>{title}</strong>
+    {ready && failed && message && <p className="wt-recovery-failure">{message.split('\n')[0]}</p>}
     {loop === 'checking'
       ? <p className="wt-recovery-checked"><LoadingOutlined spin aria-hidden="true" /> Checking the repair…</p>
       : (checkedAgo || checkLink) && <p className="wt-recovery-checked">
@@ -214,7 +221,7 @@ export function MergeRecoveryPanel({ recovery: r, branch, message, busy, support
       {pendingLocal && <p>The remote contains the reviewed candidate. Save the blocking local edits before syncing; this action only updates this machine.</p>}
       {/* Everything below the decision: the full diff, the configured check, the policy note and where the repair lives. */}
       {more && <details className="wt-recovery-more"><summary>Details</summary>
-        {message && !ready && !landed && <pre>{message}</pre>}
+        {message && (!ready || failed) && !landed && <pre>{message}</pre>}
         {r.patch !== undefined && r.candidateSha && <details className="wt-recovery-diff"><summary>Complete candidate diff against origin/{r.targetBranch}</summary><pre>{r.patch || 'No content changes.'}</pre></details>}
         {r.check && <p>{r.check.status === 'unconfigured' ? 'Git preview only; no merge check is configured.' : r.check.status === 'passed' ? 'Configured merge check passed.' : 'Configured merge check failed.'}</p>}
         {r.check?.output && <details><summary>Check output</summary><pre>{r.check.output}</pre></details>}
@@ -246,7 +253,8 @@ export function MergeRecoveryPanel({ recovery: r, branch, message, busy, support
               {!unfinished && <button type="button" disabled={busy} onClick={() => onRepair(true)}>Prepare PR candidate</button>}
             </>
             : <>
-              {r.code !== 'READY' && <button type="button" disabled={busy || repairRunning} onClick={() => onRepair(false)}>{repairStarting ? 'Opening repair session…' : 'Resolve in repair session'}</button>}
+              {r.code !== 'READY' && <button type="button" className={r.code === 'CONFLICT' ? 'wt-merge-btn' : undefined}
+                disabled={busy || repairRunning} onClick={() => onRepair(false)}>{repairStarting ? 'Opening repair session…' : 'Resolve in repair session'}</button>}
               <button type="button" disabled={busy || repairRunning} onClick={() => onRepair(true)}>Prepare PR candidate</button>
             </>)}
         </>}

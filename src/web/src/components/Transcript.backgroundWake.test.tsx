@@ -138,7 +138,7 @@ describe('a wake turn in the transcript', () => {
     expect(line().getAttribute('data-seq')).toBe('7');
     expect(line().className).toContain('is-ok');
     // No anchor for the sticky bar: it keeps naming the question the answer around this belongs to.
-    expect(container.querySelector('[data-sticky-label]'), 'the line is no sticky anchor').toBeNull();
+    expect(container.querySelector('[data-orbit-round]'), 'the line is no sticky anchor').toBeNull();
 
     // The line: what happened, which job, how it came out, and when.
     expect(row().querySelector('.bgwake-title')?.textContent).toBe('Background job finished');

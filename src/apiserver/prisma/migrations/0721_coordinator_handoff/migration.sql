@@ -1,4 +1,4 @@
--- 0642 — a coordinator handoff: the outgoing coordinator writes a note, its successor opens with it.
+-- 0721 — a coordinator handoff: the outgoing coordinator writes a note, its successor opens with it.
 --
 -- "Start a new coordinator" (board 02, docs/coordinator-handoff.md) used to be one press: the
 -- replacement in ProjectsService.coordinator(…, 'replace') completed the conversation and opened the
@@ -18,7 +18,7 @@
 --   * One live row (WRITING, HANDING_OVER or FAILED) per outgoing coordinator, by the partial unique
 --     index below: two presses of Hand over meet one row.
 --
--- 0642: renumbered from 0614 (2026-11-14) — main had shipped 0615–0618 and 0641, so this sits above them. Re-runnable.
+-- 0721: renumbered from 0614, then 0642 (2026-11-14) — main had shipped 0615–0618, 0641 and 0720, so this sits above them. Re-runnable.
 -- `down.sql` beside this file reverses it.
 
 CREATE TABLE IF NOT EXISTS "coordinator_handoff" (
