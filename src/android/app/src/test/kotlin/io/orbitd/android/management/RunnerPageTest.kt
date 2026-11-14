@@ -432,4 +432,70 @@ class RunnerPageTest {
         assertEquals("Dismiss until next Codex release", RunnerCopy.dismissUntilNextRelease(RunnerPage.engineName("codex")))
         assertEquals("runners/r1/engines/codex/update-warning/dismiss", RunnerPage.updateDismissPath("r1", "codex"))
     }
+
+    // Fix with an agent (agent-fix contract; RunnerAgentFix in src/shared/src/dto.ts)
+
+    private fun fixRunner(blocked: String? = null, fixing: String = "") = Json.parseToJsonElement("""{"id":"r1","agentFix":{
+        "workspaceId":"w1","workspaceName":"orbit-dev","engine":"claude","engineName":"Claude Code",
+        "blocked":${blocked?.let { """{"code":"$it","message":"Why: $it."}""" } ?: "null"},"fixing":[$fixing]}}""").jsonObject
+    private fun fixingEntry(kind: String, engine: String?) =
+        """{"kind":"$kind","engine":${engine?.let { "\"$it\"" } ?: "null"},"sessionId":"s1","workspaceId":"w1","workspaceName":"orbit-dev"}"""
+    private fun item(kind: String, engine: String? = null) = AttentionItem(kind, "warn", kind, kind, "", engine?.let { AttentionAction("updateEngines", engine = it) })
+
+    @Test fun agentFixDecodesFromTheRunnerAndAnOlderServerSendsNone() {
+        val fix = RunnerPage.agentFixOf(fixRunner("engineSignedOut", fixingEntry("engineNotUpdating", "codex") + "," + fixingEntry("cannotSelfUpdate", null)))!!
+        assertEquals(AgentFix("w1", "orbit-dev", "claude", "Claude Code", "engineSignedOut", "Why: engineSignedOut.", listOf(
+            AgentFixing("engineNotUpdating", "codex", "s1", "w1", "orbit-dev"), AgentFixing("cannotSelfUpdate", null, "s1", "w1", "orbit-dev"))), fix)
+        assertNull(RunnerPage.agentFixOf(buildJsonObject { put("id", "r1") }))
+        assertNull(RunnerPage.agentFixOf(buildJsonObject { put("id", "r1"); put("agentFix", JsonNull) }))
+        val none = Json.parseToJsonElement("""{"agentFix":{"workspaceId":null,"workspaceName":null,"engine":null,"engineName":null,
+            "blocked":{"code":"noWorkspace","message":"No workspace runs on this machine yet."},"fixing":[]}}""").jsonObject
+        assertEquals(AgentFix(null, null, null, null, "noWorkspace", "No workspace runs on this machine yet.", emptyList()), RunnerPage.agentFixOf(none))
+    }
+
+    @Test fun onlyAnEngineThatWontUpdateAndARunnerThatCantUpdateItselfGetTheButton() {
+        val runner = fixRunner()
+        assertEquals(AgentFixView(null, true, null), RunnerPage.agentFixOnCard(runner, item("engineNotUpdating", "codex")))
+        assertEquals(AgentFixView(null, true, null), RunnerPage.agentFixOnCard(runner, AttentionItem("cannotSelfUpdate", "warn", "", "", "")))
+        for (kind in listOf("offline", "signedOut", "noCliSignedIn", "quota", "disk", "checkout", "claudeRegion")) {
+            assertNull(kind, RunnerPage.agentFixOnCard(runner, item(kind)))
+        }
+        assertNull("no agentFix, no button", RunnerPage.agentFixOnCard(buildJsonObject { put("id", "r1") }, item("engineNotUpdating", "codex")))
+        assertNull("offline draws nothing at all", RunnerPage.agentFixOnCard(fixRunner("offline"), item("engineNotUpdating", "codex")))
+        assertEquals(AgentFixView(null, false, "Why: noWorkspace."), RunnerPage.agentFixOnCard(fixRunner("noWorkspace"), item("engineNotUpdating", "codex")))
+        assertEquals("the card adds no sign-in hint", AgentFixView(null, false, "Why: engineSignedOut."),
+            RunnerPage.agentFixOnCard(fixRunner("engineSignedOut"), AttentionItem("cannotSelfUpdate", "warn", "", "", "")))
+    }
+
+    @Test fun aFixingEntryOfTheSameKindAndEngineTakesTheButtonsPlace() {
+        val codex = fixRunner(fixing = fixingEntry("engineNotUpdating", "codex"))
+        val entry = AgentFixing("engineNotUpdating", "codex", "s1", "w1", "orbit-dev")
+        assertEquals(AgentFixView(entry, false, null), RunnerPage.agentFixOnCard(codex, item("engineNotUpdating", "codex")))
+        assertEquals("another engine's card still offers it", AgentFixView(null, true, null), RunnerPage.agentFixOnCard(codex, item("engineNotUpdating", "claude")))
+        assertEquals("another kind's too", AgentFixView(null, true, null), RunnerPage.agentFixOnCard(codex, AttentionItem("cannotSelfUpdate", "warn", "", "", "")))
+        assertEquals(AgentFixView(null, true, RunnerCopy.agentFixStarts("orbit-dev", "Claude Code")), RunnerPage.agentFixOnInstall(codex, "codex"))
+        val self = fixRunner(fixing = fixingEntry("cannotSelfUpdate", null))
+        assertEquals(AgentFixing("cannotSelfUpdate", null, "s1", "w1", "orbit-dev"),
+            RunnerPage.agentFixOnCard(self, AttentionItem("cannotSelfUpdate", "warn", "", "", ""))?.fixing)
+        val installing = fixRunner("engineSignedOut", fixingEntry("installFailed", "codex"))
+        assertEquals("fixing outranks a later block", AgentFixing("installFailed", "codex", "s1", "w1", "orbit-dev"), RunnerPage.agentFixOnInstall(installing, "codex")?.fixing)
+        assertEquals("An agent is fixing this in orbit-dev · ", RunnerCopy.agentFixing("orbit-dev"))
+    }
+
+    @Test fun theInstallFailedLineSaysWhereTheSessionStartsOrWhyNot() {
+        assertEquals(AgentFixView(null, true, "Starts a session in orbit-dev on this machine, with Claude Code."), RunnerPage.agentFixOnInstall(fixRunner(), "codex"))
+        assertEquals(AgentFixView(null, false, "Why: engineSignedOut. Sign in to Claude Code above to use this."),
+            RunnerPage.agentFixOnInstall(fixRunner("engineSignedOut"), "codex"))
+        assertEquals(AgentFixView(null, false, "Why: noWorkspace."), RunnerPage.agentFixOnInstall(fixRunner("noWorkspace"), "codex"))
+        assertEquals("offline is said here, the button off", AgentFixView(null, false, "Why: offline."), RunnerPage.agentFixOnInstall(fixRunner("offline"), "codex"))
+        assertNull(RunnerPage.agentFixOnInstall(buildJsonObject { put("id", "r1") }, "codex"))
+    }
+
+    @Test fun thePressPostsTheKindWithItsEngineOrTheLatestRelease() {
+        assertEquals("runners/r1/attention/installFailed/fix", RunnerPage.agentFixPath("r1", "installFailed"))
+        assertEquals(buildJsonObject { put("engine", "codex") }, RunnerPage.agentFixBody("engineNotUpdating", "codex", "0.1.250"))
+        assertEquals(buildJsonObject { put("engine", "codex") }, RunnerPage.agentFixBody("installFailed", "codex", null))
+        assertEquals(buildJsonObject { put("latest", "0.1.250") }, RunnerPage.agentFixBody("cannotSelfUpdate", null, "0.1.250"))
+        assertEquals(buildJsonObject { }, RunnerPage.agentFixBody("cannotSelfUpdate", null, null))
+    }
 }
