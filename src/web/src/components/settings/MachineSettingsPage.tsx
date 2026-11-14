@@ -43,7 +43,6 @@ import { REPO_CLEANUP_QUEUED, repoCleanupConfirm } from '../../lib/repoCleanup';
 import {
   KEEP_FREE_TIERS,
   compareRunnerVersions,
-  formatDiskGb,
   keepFreeLabel,
   latestRunnerVersion,
   runnerAttention,
@@ -65,7 +64,6 @@ import {
   RUNNER_CAPACITY,
   RUNNER_CAPACITY_FOOTER,
   RUNNER_COPY_COMMAND,
-  RUNNER_DISK,
   RUNNER_ENGINES,
   RUNNER_ENGINES_FOOTER,
   RUNNER_ENGINES_OFFLINE_FOOTER,
@@ -93,7 +91,6 @@ import {
   RUNNER_VERSION_LATEST,
   RUNNER_VERSION_NOT_ROLLED_OUT,
   attentionQuotaResets,
-  runnerDiskUsed,
   runnerOfflineLastSeen,
   runnerRunningOf,
   runnerUpdatedFromTo,
@@ -109,6 +106,7 @@ import { useClaudeRegionCheckAgain } from '../../lib/claudeRegion';
 import { CLAUDE_REGION_CHECK_AGAIN } from '../../lib/claudeRegionCopy';
 import { ago } from '../../lib/runnerEngines';
 import { useToast } from '../../lib/toast';
+import { MachineResources } from './MachineResources';
 import { SettingsCard, SettingsRow, SettingsSection } from './SettingsBlocks';
 import './Settings.css';
 
@@ -162,8 +160,6 @@ const fmtReset = (iso: string): string =>
     hour: 'numeric',
     minute: '2-digit',
   });
-
-const MIB = 1024 * 1024;
 
 /** Each Needs Attention card's mark, by what it is about. */
 const ATTENTION_ICON: Record<AttentionKind, ReactNode> = {
@@ -383,10 +379,10 @@ export function MachineSettingsPage() {
   const nowMs = Date.now();
   const attention = runnerAttention({ runner, workspaces, nowMs, latestVersion });
 
-  // Capacity's readings: the tightest disk its workspaces sit on, and the floor it keeps free.
+  // The tightest disk its workspaces sit on (Resources' Disk, for a runner that reads none itself), and the floor
+  // it keeps free.
   const disk = runnerDisk(workspaces);
   const reserveMb = runner.minFreeDiskMb != null && runner.minFreeDiskMb > 0 ? runner.minFreeDiskMb : null;
-  const diskWarn = !!disk && (disk.usedPercent >= 90 || (reserveMb !== null && disk.freeBytes < reserveMb * MIB));
   // Keep Free's picks, as minFreeDiskMb with 0 standing for Off (a Select value can't be null). A
   // floor set to something other than a tier is shown as it is, in order, rather than as "Off".
   const keepFreeOptions = [
@@ -740,6 +736,16 @@ export function MachineSettingsPage() {
         </section>
       )}
 
+      {/* The machine's CPU, memory and disk, and their last hour (MachineResources.tsx). */}
+      <MachineResources
+        runnerId={runner.id}
+        online={!!runner.online}
+        capabilities={runner.capabilities}
+        workspaceDisk={disk}
+        reserveMb={reserveMb}
+        nowMs={nowMs}
+      />
+
       {/* A row per engine, each with what can be done there now — Sign in, Sign out, Install, Update —
           and its accounts under it: the rows of this machine's card in Infrastructure. */}
       <SettingsSection
@@ -820,19 +826,6 @@ export function MachineSettingsPage() {
                     onPressEnter={commitMaxConcurrent}
                   />
                 </span>
-              }
-            />
-            <SettingsRow
-              title={RUNNER_DISK}
-              description={
-                disk ? runnerDiskUsed(formatDiskGb(disk.totalBytes - disk.freeBytes), formatDiskGb(disk.totalBytes)) : '—'
-              }
-              control={
-                disk ? (
-                  <div className={`rd-disk-bar machine-disk-bar${diskWarn ? ' warn' : ''}`}>
-                    <span style={{ width: `${disk.usedPercent}%` }} />
-                  </div>
-                ) : undefined
               }
             />
             <SettingsRow

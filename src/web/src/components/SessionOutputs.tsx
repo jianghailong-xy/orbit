@@ -260,7 +260,7 @@ export function SessionOutputs({
   const canRecover = !!recovery && detail.mergeRecoverySupported === true && !!onRecoverMerge;
   const recoveryOperating = !!recovery && detail.mergeStatus === 'pending' &&
     !(detail.mergeRepairSession && detail.mergeRecoveryAction === 'preview');
-  // A failed attempt keeps the panel, which carries what went wrong.
+  // A failed attempt keeps the panel, which says what went wrong (`failed`).
   const recoveryFastForward = canRecover && !failed && mergeRecoveryFastForward(recovery!);
 
   return (
@@ -345,7 +345,8 @@ export function SessionOutputs({
         repairSession={detail.mergeRepairSession}
         repairStarting={repairStarting}
         onOpenRepair={onOpenRepair}
-        waitingForTurn={!!turnActive} />}
+        waitingForTurn={!!turnActive}
+        failed={detail.mergeStatus === 'error' || detail.mergeStatus === 'conflict'} />}
       {failed && (!detail.mergeRecovery || detail.commitStatus === 'error') && (
         <div className="wt-merge wt-bar-fail">
           {detail.commitStatus === 'error' ? (

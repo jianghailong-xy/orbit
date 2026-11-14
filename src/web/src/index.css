@@ -17994,7 +17994,7 @@ button.chat-jump-start:hover {
   color: var(--text-3);
 }
 /* A status as a dot before plain words (AccountPauseStatus dot): on rows whose buttons sit beside it. */
-.status-dot {
+.account-status-dot {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -18004,7 +18004,7 @@ button.chat-jump-start:hover {
   color: var(--text-1);
   white-space: nowrap;
 }
-.status-dot::before {
+.account-status-dot::before {
   content: '';
   flex: none;
   width: 7px;
@@ -18012,25 +18012,25 @@ button.chat-jump-start:hover {
   border-radius: 50%;
   background: var(--dot-idle);
 }
-.status-dot-success::before,
-.status-dot-green::before {
+.account-status-dot-success::before,
+.account-status-dot-green::before {
   background: var(--success-solid);
 }
-.status-dot-warning::before,
-.status-dot-orange::before,
-.status-dot-gold::before {
+.account-status-dot-warning::before,
+.account-status-dot-orange::before,
+.account-status-dot-gold::before {
   background: var(--warning-solid);
 }
-.status-dot-error::before,
-.status-dot-red::before {
+.account-status-dot-error::before,
+.account-status-dot-red::before {
   background: var(--error-solid);
 }
-.status-dot-info::before,
-.status-dot-blue::before {
+.account-status-dot-info::before,
+.account-status-dot-blue::before {
   background: var(--brand);
 }
-.status-dot-error,
-.status-dot-red {
+.account-status-dot-error,
+.account-status-dot-red {
   color: var(--error);
 }
 .pool-people {
@@ -24860,6 +24860,17 @@ button.project-open-item-action:disabled {
 .wk-name-title .wk-select:hover { background: var(--bg-hover); }
 .wk-name-title .wk-select:focus-within { box-shadow: 0 0 0 2px var(--brand-tint); }
 .wk-name-title .wk-select .ic.caret { position: static; font-size: 12px; color: var(--text-3); }
+/* The space menu the name opens (board docs/mocks/wiki-space-menu): a row a space, its name over its repository and
+   documents, the sidebar's amber count at its end; the current one lit and ticked, Manage spaces at the foot. */
+.orbit-menu.wk-space-menu { min-width: 260px; max-width: min(420px, calc(100vw - 24px)); max-height: 70vh; overflow-y: auto; }
+.wk-space-menu .orbit-menu-item { align-items: flex-start; padding-top: 7px; padding-bottom: 7px; }
+.wk-space-menu .orbit-menu-icon { padding-top: 3px; }
+.wk-space-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.wk-space-row-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.wk-space-row-text .n { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.wk-space-row-text .s { font-size: 12px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; }
+.wk-space-row .tp-count.needs-you { flex: none; }
+.wk-name-title .wk-select { cursor: pointer; }
 .wk-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 /* The space's public link, as the head's buttons are sized (mock share-links 08 ②). */
 .wk-actions > .session-shared-pill { height: 32px; padding: 0 12px; font-size: 13px; }
@@ -26406,6 +26417,7 @@ button.agent-progress-agent:hover {
 .wt-recovery-link { padding: 0; border: 0; background: none; color: var(--brand); font: inherit; cursor: pointer; }
 .wt-recovery-link:disabled { opacity: .55; cursor: default; }
 .wt-recovery-snapshot.is-stale { opacity: .45; }
+.wt-recovery .wt-recovery-failure { color: var(--error); }
 /* The merge slot while a merge operation is pending: what Orbit is doing, since when, on which runner. Amber once overdue. */
 .wt-merge-op { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 12px 12px; padding: 8px 12px; border-radius: 8px; font-size: 12px; color: var(--brand); background: color-mix(in srgb, var(--brand) 8%, var(--bg-raised)); }
 .wt-merge-op span { color: var(--text-2); }

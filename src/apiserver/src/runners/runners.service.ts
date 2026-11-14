@@ -11,6 +11,7 @@ import {
 import type {
   ClaudeRegionCheckRequest,
   DirProbeAnswer,
+  RunnerResourcesAnswer,
   InstallEngine,
   LoginEngine,
   RunnerAccountRemoveState,
@@ -62,6 +63,7 @@ import { ACCOUNT_ID_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunn
 import { accountPauseUntil } from '../common/account-pause';
 import { refuseManagedRunnerDeletion, refuseManagedRunnerRotation } from '../managed-runners/managed-runner-delete';
 import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from './runner-presence';
+import { runnerResourcesAnswerOf } from './runner-resources';
 import { DIR_PROBE_MAX_PATH, dirProbeAnswerOf } from './dir-probe';
 import { isInternalAddress } from '../shared/public-surface.guard';
 import { blockedRunnerRegion, claudeRegionSignInRefusal, regionMachineName, runnerRegionView } from './runner-region';
@@ -1345,6 +1347,16 @@ export class RunnersService {
     });
     if (!runner) throw new NotFoundException('runner not found');
     return dirProbeAnswerOf(runner, path);
+  }
+
+  /** The machine's resources as its presence row keeps them (runner-resources.ts). */
+  async getResources(ownerId: string, id: string): Promise<RunnerResourcesAnswer> {
+    const runner = await this.prisma.runner.findFirst({
+      where: { id, ownerId },
+      select: { presence: { select: { resources: true } } },
+    });
+    if (!runner) throw new NotFoundException('runner not found');
+    return runnerResourcesAnswerOf(runner.presence?.resources);
   }
 
   /** Current install-relay state, for the row to poll. */

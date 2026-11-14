@@ -189,6 +189,7 @@ import {
   sessionEngineOf,
   sessionPick,
   supportsAuto,
+  claudeModelName,
 } from '../lib/workspaceDefaults';
 import {
   LOCAL_SLASH_ITEMS,
@@ -7297,7 +7298,11 @@ export function WorkspaceView({
         {
           value: shownModelName,
           label:
-            !shownProviderCapabilitiesResolved && !selected ? 'Runtime default' : shownModelName,
+            !shownProviderCapabilitiesResolved && !selected
+              ? 'Runtime default'
+              : shownEngine === AgentProvider.CLAUDE
+                ? claudeModelName(shownModelName)
+                : shownModelName,
         },
         ...catalogModelOptions,
       ];
