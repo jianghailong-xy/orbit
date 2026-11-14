@@ -1,0 +1,75 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="board.css"></head><body>
+<h2 class="cap">Wiki 桌面：目录和搜索并成一整条竖栏</h2>
+<p class="cap">手绘稿：配色取自 <code>src/web/src/index.css</code> 的浅色 token，类名用真实的（<code>.wk-search</code>、<code>.wk-toc-item</code>、<code>.wk-status-row</code>、<code>.wk-select</code>）。窗口 1600 宽，右侧停靠 wiki 聊天面板，和你截图的状态一样。界面上的字照抄现在的英文 copy，正文是页面原有的中文内容。</p>
+
+<h2 class="cap">① 现状</h2>
+<p class="cap">搜索框和状态行横跨整个主区，目录到第三行才开始；页头、搜索、状态三行把文章往下推了约 190 px。目录 sticky，但搜索会随页面滚走。</p>
+<div class="frame" id="before"></div>
+
+<h2 class="cap">② 改后（建议）</h2>
+<p class="cap">左栏从窗口顶到底是一整条：<b>Wiki · space</b> → 搜索 → 目录。整栏 sticky，读长文时搜索一直在。右边是主区：第一行只放页头按钮（Activity、Settings、Shared），然后是状态行和文章。iPad / macOS 的中栏页头本来就写 <code>Wiki</code> 和 space（design §12.3.5），web 桌面这样改以后和它们一致。</p>
+<div class="frame" id="after"></div>
+
+<div class="notes">
+<h3>要你定的三件事</h3>
+<ol>
+<li><b>栏宽</b>：现在的目录栏是 224 px。<span class="rec">建议 248 px</span>，这样 “Search the wiki” 和 ⌘K 不挤，space 名也有地方放。备选：维持 224。</li>
+<li><b>状态行放哪</b>：<span class="rec">建议放在主区顶上、按钮下面（图 ②）</span>，它讲的是整个 space。主区这时约 780 px 宽，像截图里这样告警多的时候会折成两行（图 ②），平常一行写得下。备选：缩成竖排放在左栏底部，但 “Maintenance failed · System model unreachable” 这样的告警在栏底很容易看不到。</li>
+<li><b>竖栏怎么滚</b>：<span class="rec">建议栏头（Wiki · space + 搜索）钉在顶部，下面的目录单独滚动</span>。备选：整条栏一起滚，搜索会被滚走。</li>
+</ol>
+<h3>不变的部分</h3>
+<ul>
+<li>手机（≤960 px）不变：页头 → 状态 → 搜索 → 内容，目录还是 Contents 抽屉。</li>
+<li>聊天面板停靠、窗口在 1200–1439 之间时，目录照旧收进 Contents 抽屉；这时没有左栏，页头和搜索回到主区上方，也就是今天的样子。</li>
+<li>首页和 Activity 用同一条左栏，主区第一行是按钮，下面是 <code>35 documents · 5 written</code>。</li>
+</ul>
+</div>
+<script>
+const toc = () => {
+  const top = [['⌂','Home'],['▦','Browse by category'],['↓','A–Z index'],['☰','Plan']].map(([i,t])=>`<div class="wk-toc-item"><span class="ic">${i}</span>${t}</div>`).join('');
+  const cats = [['产品概览与架构',[['1.1','产品定位与核心能力',1],['1.2','系统架构与数据流'],['1.3','自部署与首次运行']]],
+    ['任务与项目',[['2.1','任务生命周期与依赖'],['2.2','项目启动与协调'],['2.3','完成判据与验收'],['2.4','项目集成线与落地']]],
+    ['会话与交互',[['3.1','Session 运行与恢复'],['3.2','实时流与推送'],['3.3','Session 搜索与消息路由']]],
+    ['Runner 与运行时',[['4.1','Runner 注册与排障'],['4.2','引擎接入与 provider 管理'],['4.3','Runner CLI 与自动化']]],
+    ['Watch 与后台作业',[['5.1','Watch 语义与谓词'],['5.2','Watch 运维与灰度']]]];
+  const subs = ['开篇：Orbit 解决的问题','核心能力全景','三个 Launch Scenario','Task Graph 与 Session 的分工','Worktree 隔离与信任边界','支持的 Runtime 与账号模型','当前边界与"还不做什么"'];
+  return `<div class="wk-toc">${top}<div class="wk-toc-sep"></div>` + cats.map(([c,rows])=>`<div class="wk-toc-cat">${c}</div>`+rows.map(([n,t,a])=>
+    `<div class="wk-toc-item${a?' active':''}"><span class="no">${n}</span>${t}</div>`+(a?subs.map((s,i)=>`<div class="wk-toc-item sub${i==0?' active':''}"><span class="no">${i+1}</span>${s}</div>`).join(''):'')).join('')).join('')+'</div>';
+};
+const actions = `<div style="display:flex;gap:8px;align-items:center"><span class="btn">◷ Activity<span class="badge">2</span></span><span class="btn">⚙ Settings</span><span class="pill">◍ Shared · Live</span></div>`;
+const head = `<span class="page-title">Wiki</span><span class="wk-select">orbit <span class="caret">▾</span></span>`;
+const search = (w) => `<div class="wk-search"${w?` style="width:${w}px"`:''}><span>⌕</span><span class="grow">Search the wiki</span><span class="wk-kbd">⌘K</span></div>`;
+const status = `<div class="wk-status-row"><span><b>19,671</b> entries</span><span class="sep">·</span><span class="warn"><b class="warn">2</b> to review</span><span class="sep">·</span><span class="err"><span class="dot" style="background:var(--error)"></span>Maintenance failed</span><span class="sep">·</span><span>last success 1d ago</span><span class="sep">·</span><span>930 to catch up</span><span class="sep">·</span><span class="warn"><span class="dot" style="background:var(--warning-solid)"></span>System model unreachable</span><span class="sep">·</span><span class="link">View run</span></div>`;
+const article = `<div class="crumb">Wiki<span>›</span>产品概览与架构</div><div class="t-title">产品定位与核心能力</div>
+<div class="chips"><span class="b">产品概览与架构</span><span>7 sections</span><span>19 footnotes</span><span>1 session quote</span><span>18 code &amp; doc quotes</span></div>
+<div class="meta">◷ Updated Nov 2 at 8b1915d · written by Wiki maintenance from plan v44 · 45 sentences · <span class="warn">2 not verified</span></div>
+<div class="qbox"><b style="color:var(--text-3);font-weight:400;margin-right:40px">Question</b><b>我是谁，Orbit 能帮我做什么，哪些事它现在还做不了</b><br><span style="margin-right:22px">Written for</span>· 产品新用户与决策者：读完能确认 Orbit 解决的问题、适用场景与当前能力边界<br><span style="margin-right:62px"></span>&nbsp;&nbsp;&nbsp;· 开发者：读完能理解 task graph、session、worktree 隔离与支持的 runtime</div>
+<h3 class="sec"><span>1</span>开篇：Orbit 解决的问题</h3>
+<div class="prose">Orbit 是一个为私有、多运行时 agent 工作设计的控制平面，解决编码任务超出单个上下文窗口、多 agent 并行产生 worktree 冲突以及 agent 需访问私有基础设施的问题。它通过持久化 task graph 存储计划、依赖与审批历史，使工作在上下文耗尽或用户缺席后依然可续接。agent 运行于用户自有机器，直接访问内部 CLI 和集群凭证，且登录信息不离开这些环境。</div>`;
+const chat = `<div class="chat"><div class="h"><span>中文会话标题与标签 ▾</span><span style="color:var(--text-3)">＋ → ✕</span></div><div class="gl">Worked for 3m 3s</div>${'<div class="ln"></div>'.repeat(3)}<div class="ln" style="width:70%"></div><div class="gl">Ran 2 shell commands, read 1 file, edited 1 file</div>${'<div class="ln"></div>'.repeat(9)}<div class="ln" style="width:55%"></div><div class="comp">Ask about this page, or say what should change</div></div>`;
+const at = (x,y,html,extra='') => `<div style="position:absolute;left:${x}px;top:${y}px;${extra}">${html}</div>`;
+const mark = (x,y,w,h,n) => `<div class="mark" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px"><i>${n}</i></div>`;
+
+// before: page padding 32; title row y 24; search y 74 (width to panel-left? spans 1040 area); status y 118; layout y 176
+document.getElementById('before').innerHTML =
+  at(32,22,`<div style="display:flex;align-items:center;gap:12px;width:1536px">${head}<div style="margin-left:auto">${actions}</div></div>`)
+ + at(32,74,search(1028)) + at(32,118,`<div style="width:1028px">${status}</div>`)
+ + at(24,176,toc(),'width:224px;height:724px;overflow:hidden')
+ + at(312,176,article,'width:748px')
+ + chat
+ + mark(22,64,1048,96,'1');
+
+// after: rail x 24..272 (248) with right border; main x 304.. to 1106 (panel at 1130)
+document.getElementById('after').innerHTML =
+  `<div style="position:absolute;left:0;top:0;bottom:0;width:296px;border-right:1px solid var(--border-subtle);background:var(--bg-subtle)"></div>`
+ + at(32,22,`<div style="display:flex;align-items:center;gap:12px">${head}</div>`)
+ + at(32,72,search(248))
+ + at(24,120,toc(),'width:264px;height:768px;overflow:hidden')
+ + at(328,22,`<div style="display:flex;justify-content:flex-end;width:1240px">${actions}</div>`)
+ + at(328,74,`<div style="width:778px">${status}</div>`)
+ + at(328,158,article,'width:760px')
+ + chat
+ + mark(16,12,272,100,'1') + mark(320,64,794,78,'2') + mark(16,116,272,776,'3');
+</script>
+<div style="height:0"></div>
+</body></html>

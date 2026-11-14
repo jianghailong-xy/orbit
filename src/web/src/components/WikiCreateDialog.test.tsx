@@ -140,7 +140,7 @@ async function render(path: string, element?: JSX.Element): Promise<void> {
 const words = (node: Element | null | undefined): string => node?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
 const where = (): string => words(container.querySelector('[data-where]'));
 const dialog = (): Element | null => document.querySelector('.wk-setup-dialog');
-const picker = (): HTMLSelectElement => container.querySelector<HTMLSelectElement>('.wk-select select')!;
+const picker = (): HTMLElement => container.querySelector<HTMLElement>('button.wk-select')!;
 const button = (label: string, scope: ParentNode): HTMLElement =>
   [...scope.querySelectorAll('button')].find((node) => words(node) === label) as HTMLElement;
 const press = async (node: Element): Promise<void> => {
@@ -161,24 +161,24 @@ const groups = (): Array<{ label: string; options: Array<{ label: string; disabl
 const SHOP = 'github-com-acme-shop-cli';
 
 describe('the wiki head picker', () => {
-  it('ends in New wiki… under a divider, after every wiki', async () => {
+  it('ends in New wiki… under a divider, after every wiki and before Manage spaces', async () => {
     await render(`/wiki/${SHOP}`);
-    const children = [...picker().children];
-    expect(children.map((node) => node.tagName)).toEqual(['OPTION', 'OPTION', 'HR', 'OPTION']);
-    expect(words(children.at(-1))).toBe(start.hasWiki.newWiki);
+    await press(picker());
+    const children = [...document.querySelectorAll('[role="menu"].wk-space-menu > *')];
+    expect(children.map((node) => (node.classList.contains('orbit-menu-separator') ? 'HR' : node.getAttribute('role')))).toEqual([
+      'menuitem', 'menuitem', 'HR', 'menuitem', 'menuitem',
+    ]);
+    expect(words(children.at(-2))).toBe(start.hasWiki.newWiki);
   });
 
   it('opens the Create wiki form from New wiki…, and the head stays on its wiki', async () => {
     await render(`/wiki/${SHOP}`);
-    const item = [...picker().options].find((option) => option.text === start.hasWiki.newWiki)!;
-    await act(async () => {
-      picker().value = item.value;
-      picker().dispatchEvent(new Event('change', { bubbles: true }));
-    });
-    await settle();
+    const name = words(picker());
+    await press(picker());
+    await press([...document.querySelectorAll('[role="menu"].wk-space-menu [role="menuitem"]')].find((row) => words(row) === start.hasWiki.newWiki)!);
     expect(words(dialog()?.querySelector('.orbit-overlay-title'))).toBe('Create wiki');
     expect(where()).toBe(`/wiki/${SHOP}`);
-    expect(picker().value).toBe(SHOP);
+    expect(words(picker())).toBe(name);
     await press(button('Cancel', dialog()!));
     expect(dialog()).toBeNull();
   });

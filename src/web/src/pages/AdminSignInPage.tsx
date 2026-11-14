@@ -1,14 +1,13 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useId, useState, type FormEvent } from 'react';
 import { api } from '../api';
-import { AdminNav } from '../components/AdminNav';
+import { SettingsCard, SettingsHeader, SettingsRow, SettingsSection } from '../components/settings';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { Radio, RadioGroup } from '../components/ui/Radio';
+import { Select } from '../components/ui/Select';
 import { Spinner } from '../components/ui/Spinner';
 import { Switch } from '../components/ui/Switch';
-import '../components/ui/Card.css';
 import { copyText } from '../lib/clipboard';
 import { authMethodsQuery } from '../lib/googleLink';
 import { useToast } from '../lib/toast';
@@ -84,17 +83,15 @@ export function AdminSignInPage() {
 
   if (saved.isPending) {
     return (
-      <div className="admin-page">
-        <AdminNav />
+      <div className="settings-page">
         <Spinner />
       </div>
     );
   }
   if (saved.isError) {
     return (
-      <div className="admin-page">
-        <AdminNav />
-        <h1 className="page-title">Sign-in</h1>
+      <div className="settings-page">
+        <SettingsHeader title="Sign-in" />
         <p className="admin-signin-error" role="alert">
           Couldn’t load the sign-in settings: {saved.error.message}
         </p>
@@ -126,128 +123,117 @@ export function AdminSignInPage() {
   };
 
   return (
-    <div className="admin-page">
-      <AdminNav />
-      <h1 className="page-title">Sign-in</h1>
-      <form className="orbit-card admin-signin" onSubmit={submit} aria-labelledby={ids.title}>
-        <div className="orbit-card-head">
-          <h2 className="orbit-card-title" id={ids.title}>
-            {SIGN_IN_SETTINGS_TITLE}
-          </h2>
-          <Badge tone={on ? 'success' : 'default'}>{on ? 'On' : 'Off'}</Badge>
+    <form className="settings-page admin-form" onSubmit={submit} aria-labelledby={ids.title}>
+      <SettingsHeader
+        title="Sign-in"
+        description="How people sign in to this server. A password always works; Google is optional."
+      />
+      {settings.secretUnreadable && (
+        <div className="admin-signin-warning" role="alert">
+          {SECRET_UNREADABLE_WARNING}
         </div>
-        <div className="orbit-card-body admin-signin-fields">
-          {settings.secretUnreadable && (
-            <div className="admin-signin-warning" role="alert">
-              {SECRET_UNREADABLE_WARNING}
-            </div>
-          )}
-
-          <div className="admin-signin-row">
-            <div>
-              <div className="admin-signin-label" id={ids.enabled}>
-                Allow signing in with Google
-              </div>
-              <div className="admin-signin-hint">The login page offers Continue with Google, on the web and in the apps.</div>
-            </div>
-            <Switch
-              aria-labelledby={ids.enabled}
-              checked={enabled}
-              onCheckedChange={(value) => setDraft((d) => ({ ...d, enabled: value }))}
-            />
-          </div>
-          {incomplete && <div className="admin-signin-note">{INCOMPLETE_WARNING}</div>}
-
-          <div className="admin-signin-field">
-            <label className="admin-signin-label" htmlFor={ids.clientId}>
-              Client ID
-            </label>
-            <Input
-              id={ids.clientId}
-              value={clientId}
-              placeholder="1234567890-abc.apps.googleusercontent.com"
-              autoComplete="off"
-              spellCheck={false}
-              onChange={(e) => setDraft((d) => ({ ...d, clientId: e.target.value }))}
-            />
-          </div>
-
-          <div className="admin-signin-field">
-            <label className="admin-signin-label" htmlFor={ids.secret}>
-              Client secret
-            </label>
-            <Input
-              id={ids.secret}
-              type="password"
-              value={secret}
-              placeholder={
-                settings.secretUnreadable
-                  ? 'Not readable — paste the client secret again'
-                  : settings.hasSecret
-                    ? 'Saved — enter a new one to replace it'
-                    : 'Paste the client secret'
-              }
-              autoComplete="new-password"
-              spellCheck={false}
-              onChange={(e) => setSecret(e.target.value)}
-            />
-            <div className="admin-signin-hint">
-              {settings.secretUnreadable
+      )}
+      <SettingsSection
+        title={<span id={ids.title}>{SIGN_IN_SETTINGS_TITLE}</span>}
+        action={<Badge tone={on ? 'success' : 'default'}>{on ? 'On' : 'Off'}</Badge>}
+      >
+        <SettingsCard>
+          <SettingsRow
+            title={<span id={ids.enabled}>Allow signing in with Google</span>}
+            description="The login page offers Continue with Google, on the web and in the apps."
+            control={
+              <Switch
+                aria-labelledby={ids.enabled}
+                checked={enabled}
+                onCheckedChange={(value) => setDraft((d) => ({ ...d, enabled: value }))}
+              />
+            }
+          />
+          <SettingsRow
+            title={<label htmlFor={ids.clientId}>Client ID</label>}
+            description="From the OAuth client in the Google Cloud console."
+            control={
+              <Input
+                id={ids.clientId}
+                className="admin-row-input"
+                value={clientId}
+                placeholder="1234567890-abc.apps.googleusercontent.com"
+                autoComplete="off"
+                spellCheck={false}
+                onChange={(e) => setDraft((d) => ({ ...d, clientId: e.target.value }))}
+              />
+            }
+          />
+          <SettingsRow
+            title={<label htmlFor={ids.secret}>Client secret</label>}
+            description={
+              settings.secretUnreadable
                 ? 'The saved secret cannot be decrypted. Paste the client secret again to replace it.'
                 : settings.hasSecret
                   ? 'A secret is saved. It is never shown again; leave this empty to keep it.'
-                  : 'No secret is saved yet. Once saved, it is never shown again.'}
-            </div>
-          </div>
-
-          <div className="admin-signin-field">
-            <div className="admin-signin-label" id={ids.policy}>
-              Who can sign in with Google
-            </div>
-            <RadioGroup<SignupPolicy>
-              aria-labelledby={ids.policy}
-              className="admin-signin-policy"
-              value={signupPolicy}
-              onValueChange={(value) => setDraft((d) => ({ ...d, signupPolicy: value }))}
-            >
-              <Radio value="EXISTING_ACCOUNTS">
-                <span className="admin-signin-choice">Existing accounts only</span>
-                <span className="admin-signin-hint">
-                  People who already have an account here. Add someone by creating their account in Users.
-                </span>
-              </Radio>
-              <Radio value="OPEN">
-                <span className="admin-signin-choice">Anyone with a Google account</span>
-                <span className="admin-signin-hint">Open sign-up.</span>
-              </Radio>
-            </RadioGroup>
-            {signupPolicy === 'OPEN' && (
-              <div className="admin-signin-warning" role="note">
-                {OPEN_SIGNUP_WARNING}
-              </div>
-            )}
-          </div>
-
-          <div className="admin-signin-field">
-            <div className="admin-signin-label">Authorized redirect URI</div>
-            <div className="admin-signin-redirect">
-              <code>{settings.redirectUri}</code>
+                  : 'No secret is saved yet. Once saved, it is never shown again.'
+            }
+            control={
+              <Input
+                id={ids.secret}
+                className="admin-row-input"
+                type="password"
+                value={secret}
+                placeholder={
+                  settings.secretUnreadable
+                    ? 'Not readable — paste the client secret again'
+                    : settings.hasSecret
+                      ? 'Saved — enter a new one to replace it'
+                      : 'Paste the client secret'
+                }
+                autoComplete="new-password"
+                spellCheck={false}
+                onChange={(e) => setSecret(e.target.value)}
+              />
+            }
+          />
+          <SettingsRow
+            title={<span id={ids.policy}>Who can sign in with Google</span>}
+            description={
+              signupPolicy === 'OPEN'
+                ? 'Open sign-up: any Google account opens a member account here.'
+                : 'People who already have an account. Add someone in Users.'
+            }
+            control={
+              <Select<SignupPolicy>
+                aria-labelledby={ids.policy}
+                style={{ width: 240 }}
+                value={signupPolicy}
+                options={[
+                  { value: 'EXISTING_ACCOUNTS', label: 'Existing accounts only' },
+                  { value: 'OPEN', label: 'Anyone with a Google account' },
+                ]}
+                onValueChange={(value) => value && setDraft((d) => ({ ...d, signupPolicy: value }))}
+              />
+            }
+          />
+          <SettingsRow
+            title="Authorized redirect URI"
+            description={<code className="admin-row-code">{settings.redirectUri}</code>}
+            control={
               <Button size="small" onClick={() => void copy(settings.redirectUri)}>
                 Copy
               </Button>
-            </div>
-            <div className="admin-signin-hint">
-              Register it, exactly as written, as an authorized redirect URI of this OAuth client in the Google Cloud console.
-            </div>
+            }
+          />
+        </SettingsCard>
+        {signupPolicy === 'OPEN' && (
+          <div className="admin-signin-warning admin-form-note" role="note">
+            {OPEN_SIGNUP_WARNING}
           </div>
-
-          <div className="admin-signin-actions">
-            <Button variant="primary" type="submit" disabled={!changed} loading={save.isPending}>
-              Save
-            </Button>
-          </div>
-        </div>
-      </form>
-    </div>
+        )}
+        {incomplete && <div className="admin-signin-note">{INCOMPLETE_WARNING}</div>}
+      </SettingsSection>
+      <div className="admin-form-actions">
+        <Button variant="primary" type="submit" disabled={!changed} loading={save.isPending}>
+          Save
+        </Button>
+      </div>
+    </form>
   );
 }

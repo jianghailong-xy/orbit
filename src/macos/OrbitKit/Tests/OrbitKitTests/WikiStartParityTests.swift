@@ -765,7 +765,7 @@ final class WikiStartParityTests: XCTestCase {
         assertSays(card, "if (!plan.data) return null;", in: Self.card)
         assertSays(card, "if (to === 'setUp') return setSettingUp(true);", in: Self.card)
         assertSays(card, "if (to === 'plan') return navigate(wikiPlanPath(space.slug));", in: Self.card)
-        assertSays(card, "if (to === 'runners') return navigate('/infrastructure');", in: Self.card)
+        assertSays(card, "if (to === 'runners') return navigate(machinesHref);", in: Self.card)
         assertSays(card, "const answer = await draft.mutateAsync(undefined);", in: Self.card)
         assertSays(card, "message.success(answer.created ? WIKI_PLAN_REDRAFT_ASKED : WIKI_PLAN_REDRAFT_ALREADY);", in: Self.card)
         assertSays(card, "message.error(\"\(WikiCopy.planDraftFailed)\"", in: Self.card)
@@ -876,7 +876,8 @@ final class WikiStartParityTests: XCTestCase {
         assertOrder(sidebar, ["className=\"tp-item tp-wiki-new\"", "onClick={() => setCreatingWiki(true)}", "<PlusOutlined aria-hidden=\"true\" />",
                               "<span className=\"tp-label\">{WIKI_NEW}</span>"], "the web's row")
         let page = try web("src/web/src/pages/WikiPage.tsx")
-        assertOrder(page, ["<hr />", "<option value={NEW_WIKI_VALUE}>{WIKI_NEW}</option>"], "the web's picker")
+        assertOrder(page, ["{ type: 'separator', key: 'rule' },", "{ key: 'new', label: WIKI_NEW, icon: <PlusOutlined />, onSelect: () => setCreating(true) },"],
+                    "the web's picker")
 
         let drawer = try native("Views/CompactShell.swift")
         assertSays(drawer, "if model.wiki?.shown == true, model.wiki?.spaces.isEmpty == false { newWikiRow }", in: "CompactShell.swift")
@@ -884,7 +885,8 @@ final class WikiStartParityTests: XCTestCase {
         assertOrder(row, ["model.wiki?.creating = true", "Image(systemName: \"plus\")", "Text(WikiStartCopy.newWiki)", ".foregroundStyle(.secondary)"],
                     "the drawer's row")
         let sidebarNative = try native("Views/MainView.swift")
-        assertSays(sidebarNative, "if section == .wiki, model.wiki?.shown == true, model.wiki?.spaces.isEmpty == false {", in: "MainView.swift")
+        assertSays(sidebarNative, "newWiki: model.wiki?.shown == true && model.wiki?.spaces.isEmpty == false)", in: "MainView.swift")
+        assertSays(sidebarNative, "if row.newWiki { newWikiRow } else { sectionRow(row) }", in: "MainView.swift")
         let macRow = try slice(sidebarNative, from: "private var newWikiRow: some View {", to: ".accessibilityIdentifier(\"sidebar-new-wiki\")")
         assertOrder(macRow, ["model.wiki?.creating = true", "Label(WikiStartCopy.newWiki, systemImage: \"plus\")", ".foregroundStyle(.secondary)"],
                     "the sidebar's row")

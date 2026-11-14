@@ -132,8 +132,8 @@ extension Color {
     /// The editor/text-field surface: macOS's `.textBackgroundColor`, and on iOS a tone that is
     /// deliberately NOT `.systemBackground`.
     ///
-    /// macOS paints `orbitSurface` behind the panes, so a `.textBackgroundColor` field already
-    /// separates from its backdrop. iOS does not — `orbitPaneBackground()` is a no-op there — so the
+    /// macOS paints `orbitSurface` behind the panes — white in light mode, as the web's content is —
+    /// so there the field is set off by its hairline and shadow, as the web composer is. iOS does not — `orbitPaneBackground()` is a no-op there — so the
     /// backdrop behind the composer IS `.systemBackground`, and a field filled with it is the exact
     /// colour of what it sits on. That was survivable only while a `.bar` band was painted behind the
     /// composer; with the band gone (web parity — `.workspace-composer` has no background) the field
@@ -153,17 +153,18 @@ extension Color {
         #endif
     }
 
-    /// The unified content backdrop for the middle + detail panes: a soft off-white (light) / soft
-    /// near-black (dark), deliberately *not* the flat system `windowBackgroundColor` (a colder grey).
-    /// The sidebar keeps its native translucency, so this calm solid tone behind the content lets
-    /// the frosted sidebar read by contrast — the restrained "ChatGPT" look (vibrant rail + soft
-    /// content) rather than a whole-window desktop blur.
+    /// The unified content backdrop for the middle + detail panes: white (light) / soft near-black
+    /// (dark) — the web's `--bg-base` (#ffffff / #202023) — deliberately *not* the flat system
+    /// `windowBackgroundColor` (a colder grey). The sidebar keeps its native translucency, so this
+    /// solid tone behind the content lets the frosted sidebar read by contrast. Light used to be a
+    /// warm off-white (#F6F6F4); between the white window toolbar, the session's white status bar
+    /// and the white composer it read as a grey band that had not been painted over.
     static var orbitSurface: Color {
-        Color(light: Color(red: 0.965, green: 0.965, blue: 0.957),
+        Color(light: .white,
               dark:  Color(red: 0.12,  green: 0.12,  blue: 0.13))
     }
 
-    /// The transcript's floating scroll-to-latest puck. Light: plain white, lifted off the near-white
+    /// The transcript's floating scroll-to-latest puck. Light: plain white, lifted off the white
     /// transcript by its shadow alone. Dark: deliberately *not* the transcript's own near-black — an
     /// opaque black disc on a black backdrop, edged by a black shadow, is invisible — but a raised grey
     /// that reads as a disc unaided. Lighter than both dark backdrops it sits on (iOS's black system
@@ -342,13 +343,10 @@ private struct KeyboardDismissInstaller: UIViewRepresentable {
                                shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
 
         // Ignore taps that land inside a text input, so tapping the composer field to move the cursor
-        // keeps focus instead of dismissing-then-refocusing (a keyboard flicker). And leave an empty
-        // search field focused: iOS ends search mode once an empty field loses focus, and search mode
-        // ends only at the field's own close button (`keepsEmptySearchOnScroll` holds off scrolls).
+        // keeps focus instead of dismissing-then-refocusing (a keyboard flicker).
         func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-            if let search = g.view?.firstResponder as? UISearchTextField, search.text?.isEmpty ?? true {
-                return false
-            }
+            // Every tap: the session search spots a press of its X with this (`BottomSearchMode`).
+            SearchCloseTap.record(touch)
             var view = touch.view
             while let current = view {
                 if current is UITextField || current is UITextView { return false }
@@ -356,17 +354,6 @@ private struct KeyboardDismissInstaller: UIViewRepresentable {
             }
             return true
         }
-    }
-}
-
-private extension UIView {
-    /// The first responder in this view's subtree — the focused text input, if any.
-    var firstResponder: UIView? {
-        if isFirstResponder { return self }
-        for subview in subviews {
-            if let found = subview.firstResponder { return found }
-        }
-        return nil
     }
 }
 #endif

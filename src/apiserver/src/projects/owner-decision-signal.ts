@@ -120,7 +120,8 @@ export type OwnerDecisionKind =
   | 'OWNER_ITEM'
   | 'START_REQUEST'
   | 'DONE_REQUEST'
-  | 'RECORD_AS_DONE';
+  | 'RECORD_AS_DONE'
+  | 'OWNER_REQUEST';
 
 export interface OwnerDecisionSignal {
   /** The conversation to open: the project's bound coordinator, or the waiting task's own session.
@@ -159,6 +160,7 @@ export async function readOwnerDecisionSignals(
     ...(await readDispatchedEvidenceSignals(tx, ownerId, sessionIds)),
     ...(await readOwnerItemSignals(tx, ownerId, sessionIds)),
     ...(await readRecordAsDoneSignals(tx, ownerId, sessionIds)),
+    ...(await readOwnerRequestSignals(tx, ownerId, sessionIds)),
     ...confirmations.map((waiting) => ({
       sessionId: waiting.sessionId,
       projectId: waiting.projectId,
@@ -279,6 +281,47 @@ async function readProjectDecisionSignals(
     }
   }
   return signals;
+}
+
+/**
+ * The owner requests still PENDING (`request_owner_action`: a decision, a secret, a manual step or
+ * a confirmation), on the conversation that filed each one — where its card is drawn. Any session
+ * can file one, not only a coordinator. Open conversations only, as everywhere here, and a request
+ * past its deadline is not counted: it is EXPIRED whether or not the sweep has written it yet.
+ */
+async function readOwnerRequestSignals(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  sessionIds: readonly string[] | undefined,
+): Promise<OwnerDecisionSignal[]> {
+  const pending = await tx.ownerRequest.groupBy({
+    by: ['askedBySessionId'],
+    where: {
+      ownerId,
+      state: 'PENDING',
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      ...(sessionIds ? { askedBySessionId: { in: [...sessionIds] } } : {}),
+    },
+    _count: { _all: true },
+  });
+  if (pending.length === 0) return [];
+  const open = await tx.session.findMany({
+    where: {
+      ownerId,
+      id: { in: pending.map((row) => row.askedBySessionId) },
+      completedAt: null,
+      archivedAt: null,
+      deletedAt: null,
+    },
+    select: { id: true, coordinatorForProject: { select: { id: true } } },
+  });
+  const counts = new Map(pending.map((row) => [row.askedBySessionId, row._count._all]));
+  return open.map((session) => ({
+    sessionId: session.id,
+    projectId: session.coordinatorForProject?.id ?? null,
+    count: counts.get(session.id)!,
+    kind: 'OWNER_REQUEST' as const,
+  }));
 }
 
 /**
@@ -499,6 +542,8 @@ export type { SessionWaitingKind };
  *   * `RECORD_AS_DONE` — a project that looks finished, whose coordinator did not ask to have it
  *     recorded done within the project's escalation window: the row says "Record as done…", over the
  *     same "Is this project done?" card, filled in by Orbit rather than by a request.
+ *   * `OWNER_REQUEST` — everything counted is an owner request this conversation filed, and the
+ *     row says "Waiting on you", the words its card and the inbox use.
  *
  * Null otherwise — a blocked tool call on the same row, which holds a turn open and is the more
  * urgent thing to say; a kind with no words of its own (`PROJECT_DECISION` really is a proposal
@@ -513,7 +558,7 @@ export function sessionWaitingKind(
   if (decisions.kinds.size !== 1) return null;
   const [only] = decisions.kinds;
   return only === 'OWNER_CONFIRMATION' || only === 'OWNER_ITEM' || only === 'START_REQUEST'
-    || only === 'DONE_REQUEST' || only === 'RECORD_AS_DONE'
+    || only === 'DONE_REQUEST' || only === 'RECORD_AS_DONE' || only === 'OWNER_REQUEST'
     ? only
     : null;
 }

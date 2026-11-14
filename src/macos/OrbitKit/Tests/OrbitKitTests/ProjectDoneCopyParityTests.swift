@@ -164,6 +164,10 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         ("RUN_LANDING_OFF_HINT", ProjectDone.runLandingOffHint),
         ("RUN_TO_NOT_CODE", ProjectDone.runToNotCode),
         ("RUN_TO_CODE", ProjectDone.runToCode),
+        ("RUN_TO_NOT_CODE_TITLE", ProjectDone.runToNotCodeTitle),
+        ("RUN_TO_NOT_CODE_ACTION", ProjectDone.runToNotCodeAction),
+        ("RUN_TO_CODE_TITLE", ProjectDone.runToCodeTitle),
+        ("RUN_TO_CODE_ACTION", ProjectDone.runToCodeAction),
         ("NON_CODE_REASON", ProjectDone.nonCodeReasonTemplate),
         ("MOVED_OUT_CRITERION", ProjectDone.movedOutCriterion),
         ("MOVED_OUT_UNNUMBERED", ProjectDone.movedOutUnnumbered),
@@ -752,6 +756,11 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         }
         XCTAssertEqual(SessionHeader.waitingWord(for: session(.doneRequest)), ProjectDone.readyToClose)
         XCTAssertEqual(SessionHeader.waitingWord(for: session(.recordAsDone)), ProjectDone.recordAsDoneRow)
+        // An owner request the session filed: the web row's word, and its card's.
+        XCTAssertTrue(workspace.contains("if (s.waitingKind === 'OWNER_REQUEST') return WAITING_ON_YOU;"),
+                      "the web session row no longer says Waiting on you for an owner request")
+        XCTAssertEqual(SessionLine.make(for: session(.ownerRequest), live: true),
+                       SessionLine(text: "Waiting on you", tone: .approval))
         XCTAssertEqual(SessionLine.make(for: session(.doneRequest), live: true),
                        SessionLine(text: "Ready to close", tone: .approval))
 

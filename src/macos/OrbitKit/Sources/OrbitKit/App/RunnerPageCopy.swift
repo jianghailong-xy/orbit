@@ -22,7 +22,34 @@ public enum RunnerPageCopy {
     public static let RUNNER_WORKSPACES = "Workspaces"
     public static let RUNNER_ABOUT = "About This Runner"
 
+    // MARK: Resources
+
+    public static let RUNNER_RESOURCES = "Resources"
+    public static let RUNNER_RESOURCES_CPU = "CPU"
+    public static let RUNNER_RESOURCES_MEMORY = "Memory"
+    public static let RUNNER_RESOURCES_LIVE = "Live · every 30 s · last hour"
+    public static let RUNNER_RESOURCES_OFFLINE = "Offline"
+    public static let RUNNER_RESOURCES_DISK_ONLY = "Disk is read from your workspaces"
+    public static let RUNNER_RESOURCES_UPDATE = "Update runner"
+    public static let RUNNER_RESOURCES_NO_READING = "No reading yet"
+    public static let RUNNER_RESOURCES_MEMORY_FULL = "Nearly full — new sessions may be slow to start."
+
+    /// The header of an offline machine's Resources: when its last reading came, as `ago` says it (`14m ago`).
+    public static func runnerResourcesLastReading(ago: String) -> String { "Offline · last reading \(ago)" }
+    /// A runner too old to report CPU or memory; `what` is the tile's own name (`CPU`, `memory`).
+    public static func runnerResourcesPredates(what: String) -> String { "This runner predates \(what) readings." }
+
+    public static let RUNNER_CPU_ONE_CORE = "1 core"
+
+    public static func runnerCpuCores(count: String) -> String { "\(count) cores" }
+    /// The one-minute load average, already formatted (`3.0`).
+    public static func runnerCpuLoad(load: String) -> String { "load \(load)" }
+    public static func runnerDiskFree(free: String) -> String { "\(free) GB free" }
+
     public static let RUNNER_MAX_CONCURRENT = "Max Concurrent"
+    public static let RUNNER_MAX_CONCURRENT_HINT =
+        "How many sessions this machine runs at once. A change applies to the next session it picks up — no restart."
+    public static let RUNNER_EDIT = "Edit"
     public static let RUNNER_DISK = "Disk"
     public static let RUNNER_KEEP_FREE = "Keep Free"
     public static let RUNNER_KEEP_FREE_OFF = "Off"
@@ -99,6 +126,10 @@ public enum RunnerPageCopy {
     public static let RUNNER_ABOUT_LAST_UPDATE = "Last Update"
     public static let RUNNER_VERSION_LATEST = "Latest"
     public static let RUNNER_VERSION_INSTALLS_WHEN_IDLE = "installs when no turn is running"
+    /// The same, from a runner that reports its quiet window (`selfUpdate.quietWindowSeconds`, in whole minutes here).
+    public static func runnerVersionInstallsWhenQuiet(minutes: Int) -> String {
+        "installs when the runner has been idle for \(minutes) min"
+    }
     public static let RUNNER_VERSION_NOT_ROLLED_OUT = "not rolled out to it yet"
     public static let RUNNER_RUNS_AS_ROOT = "root"
     public static let RUNNER_RUNS_AS_REGULAR_USER = "regular user"
@@ -117,6 +148,11 @@ public enum RunnerPageCopy {
     public static let RUNNER_UPDATE_AVAILABLE_BODY =
         "It installs when no turn is running. If turns keep running for an hour, it stops taking new "
         + "work so they can finish."
+    /// The Available card's body for a runner that reports its quiet window; unit is RUNNER_UNIT_MINUTE(S).
+    public static func runnerUpdateAvailableBodyQuiet(minutes: Int, unit: String) -> String {
+        "It installs once the runner has been idle for \(minutes) \(unit). If it stays busy for an hour, "
+            + "it stops taking new work so its turns can finish."
+    }
     public static func runnerUpdateDrainingTitle(version: String) -> String { "Updating to \(version)" }
     public static func runnerUpdateDrainingBody(version: String, since: String) -> String {
         "\(version) has been waiting since \(since). After an hour it stopped taking new work so the turns "
@@ -139,9 +175,67 @@ public enum RunnerPageCopy {
     public static let RUNNER_UPDATE_UNTITLED_TURN = "Untitled session"
     public static func runnerUpdateRestartingTitle(version: String) -> String { "Restarting into \(version)…" }
     public static let RUNNER_UPDATE_RESTARTING_BODY = "Usually under a minute."
+    /// Restarting for the owner's Update Now, which interrupted one turn — or several.
+    public static let RUNNER_UPDATE_RESTARTING_BODY_ONE = "1 interrupted turn continues once it is back. Usually under a minute."
+    public static func runnerUpdateRestartingBodyMany(turns: Int) -> String {
+        "\(turns) interrupted turns continue once it is back. Usually under a minute."
+    }
+
+    // The Updated card (board 4): shown for a day after the update, then About's Last Update says it.
+    public static func runnerUpdateUpdatedTitle(version: String) -> String { "Updated to \(version)" }
+    /// How long the restart took: `34 s`, `1 min 12 s`, `2 min` (chosen by `runnerUpdateTook`).
+    public static func runnerUpdateTookSeconds(seconds: Int) -> String { "\(seconds) s" }
+    public static func runnerUpdateTookMinutesSeconds(minutes: Int, seconds: Int) -> String { "\(minutes) min \(seconds) s" }
+    public static func runnerUpdateTookMinutes(minutes: Int) -> String { "\(minutes) min" }
+    /// The Updated card's body: `Took 34 s.`, then what became of the turns Update Now interrupted.
+    public static func runnerUpdateUpdatedTook(took: String) -> String { "Took \(took)." }
+    public static let RUNNER_UPDATE_RESUMED_ONE = "1 interrupted turn resumed."
+    public static func runnerUpdateResumedMany(turns: Int) -> String { "\(turns) interrupted turns resumed." }
+
+    // Update Now… (board 3 ⑧ on the web; board 5's confirmation on iOS): install the waiting release
+    // now, interrupting the turns in flight, which continue once the runner is back.
+    public static func runnerUpdateNowTitle(runner: String) -> String { "Update \(runner) now?" }
+    /// The confirmation's first paragraph, by how many turns it interrupts: none, one, several.
+    public static func runnerUpdateNowBodyNone(version: String) -> String {
+        "No turn is running. It installs \(version) and restarts — usually under a minute."
+    }
+    public static func runnerUpdateNowBodyOne(version: String) -> String {
+        "It stops this turn, installs \(version) and restarts — usually under a minute. It then continues where it stopped, with a note that the update interrupted it."
+    }
+    public static func runnerUpdateNowBodyMany(version: String) -> String {
+        "It stops these turns, installs \(version) and restarts — usually under a minute. Each one then continues where it stopped, with a note that the update interrupted it."
+    }
+    /// Below the turns. A self-update re-execs the runner, which hands background jobs on; services stop.
+    public static let RUNNER_UPDATE_NOW_JOBS_NOTE =
+        "Background jobs in those sessions keep running; services they started are stopped. Waiting work starts once it is back."
+    /// The red button: `Interrupt 1 Turn and Update`, `Interrupt 2 Turns and Update`; with nothing running, RUNNER_UPDATE_NOW_CONFIRM.
+    public static let RUNNER_UPDATE_NOW_CONFIRM_ONE = "Interrupt 1 Turn and Update"
+    public static func runnerUpdateNowConfirmMany(turns: Int) -> String { "Interrupt \(turns) Turns and Update" }
+    public static let RUNNER_UPDATE_NOW_FAILED = "Couldn’t update the runner"
+    /// The toast once the server took it.
+    public static func runnerUpdateNowToast(version: String) -> String { "Restarting into \(version)…" }
+
+    // The transcript (D4): the interrupt the update made, naming the release where the runner did.
+    public static func runnerUpdateInterruptedTo(version: String) -> String { "⊘ interrupted — the runner updated to \(version)" }
+    public static let RUNNER_UPDATE_INTERRUPTED = "⊘ interrupted — the runner updated"
     public static func runnerUpdatePostponedTitle(version: String, until: String) -> String {
         "\(version) postponed until \(until)"
     }
+    public static let RUNNER_UPDATE_LATER = "Later"
+    public static let RUNNER_UPDATE_CHANGE = "Change"
+    public static let RUNNER_UPDATE_LATER_HOUR = "Postpone 1 hour"
+    public static let RUNNER_UPDATE_LATER_TONIGHT = "Postpone until tonight"
+    public static let RUNNER_UPDATE_LATER_TOMORROW = "Postpone until tomorrow"
+    public static func runnerUpdateLaterUntil(clock: String) -> String { "until \(clock)" }
+    public static func runnerUpdatePostponedToast(clock: String) -> String {
+        "Update postponed until \(clock) — the runner takes work again."
+    }
+    public static let RUNNER_UPDATE_POSTPONE_FAILED = "Couldn’t postpone the update"
+    public static let RUNNER_UPDATE_NOW = "Update Now…"
+    public static func runnerUpdateNowConfirmTitle(version: String) -> String { "Update to \(version) now?" }
+    public static let RUNNER_UPDATE_NOW_CONFIRM_BODY =
+        "The postponement ends. It installs as soon as no turn is running; if turns keep running for an hour, it stops taking new work so they can finish."
+    public static let RUNNER_UPDATE_NOW_CONFIRM = "Update Now"
     public static func runnerUpdatePostponedBody(until: String) -> String {
         "Taking work as usual. At \(until) it waits for the turns in flight again, for up to an hour."
     }
@@ -340,4 +434,23 @@ public enum RunnerPageCopy {
     public static func attentionEngineUpdateDetail(note: String) -> String {
         "\(note). Orbit retries every 30 min — Update Engines Now tries again right away."
     }
+    /// Fix with an agent: one press starts a session on that machine (`RunnerAgentFixLogic`).
+    public static let AGENT_FIX_BUTTON = "Fix with an agent"
+    /// In place of the button while that session is open; the link after it opens it.
+    public static func agentFixFixing(workspace: String) -> String { "An agent is fixing this in \(workspace) · " }
+    public static let AGENT_FIX_OPEN_SESSION = "Open session"
+    /// Under the button on an Install failed panel: where the session would run.
+    public static func agentFixStartsIn(workspace: String, engine: String) -> String {
+        "Starts a session in \(workspace) on this machine, with \(engine)."
+    }
+    /// After a signed-out reason on an Install failed panel, whose engine's Sign In is above it.
+    public static func agentFixSignInAbove(engine: String) -> String { " Sign in to \(engine) above to use this." }
+    /// The head of what a press that didn't start a session says, before the server's own sentence.
+    public static let AGENT_FIX_FAILED = "Couldn’t start the agent"
+    /// The Needs Attention card's second action, beside Update Engines Now; `engine` is the CLI's own name.
+    public static func attentionDismissUntilNextRelease(engine: String) -> String {
+        "Dismiss until next \(engine) release"
+    }
+    /// The engine page's warning: the same dismissal, after its failed-update line.
+    public static let RUNNER_ENGINE_UPDATE_DISMISS = "Dismiss"
 }

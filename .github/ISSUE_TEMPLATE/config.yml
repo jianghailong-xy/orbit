@@ -6,9 +6,15 @@ contact_links:
   - name: Public roadmap
     url: https://github.com/jianghailong-xy/orbit/blob/main/ROADMAP.md
     about: See what is now, next, and later before opening a duplicate proposal.
+  - name: Public changelog
+    url: https://github.com/jianghailong-xy/orbit/blob/main/CHANGELOG.md
+    about: Read notable changes across releases before opening a duplicate request.
   - name: Questions and ideas (Discussions)
     url: https://github.com/jianghailong-xy/orbit/discussions
     about: Ask usage questions, explore ideas, share a deployment, or give release feedback.
+  - name: Release feedback (Discussions)
+    url: https://github.com/jianghailong-xy/orbit/discussions/159
+    about: Tell maintainers how an upgrade went, or what the release notes should say differently.
   - name: Good first issues
     url: https://github.com/jianghailong-xy/orbit/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22
     about: Pick a scoped task with acceptance checks before opening a new request.

@@ -75,7 +75,7 @@ func TestTheUpdatePhaseMovesFromAvailableToDrainingAtTheLimitToRestarting(t *tes
 	b := registerPoolSession(t, p, "b", true)
 	check := updateWhenNoTurnInFlight(func(context.Context, string) (string, bool) {
 		return "0.1.254", true
-	}, p, noOperations, selfUpdateCheckInterval, selfUpdateDeferralLimit)
+	}, p, noOperations, selfUpdateCheckInterval, selfUpdateDeferralLimit, 0)
 
 	if _, ok := check(context.Background(), ""); ok {
 		t.Fatal("updated with two turns in flight")

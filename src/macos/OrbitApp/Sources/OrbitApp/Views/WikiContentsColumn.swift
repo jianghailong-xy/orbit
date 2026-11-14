@@ -4,7 +4,7 @@ import OrbitKit
 // The Wiki's middle column on the three-column shells — the iPad's and the Mac's (design §12.3, mock 32): the
 // directory as a column, the very rows a phone's Contents sheet lists (`WikiContentsRows`) — Home, Browse by
 // category, the A–Z index and the Plan, then the confirmed plan's categories and documents, or before a plan
-// every category's topic articles — under `Wiki` and the space. A row puts its page in the detail pane beside
+// every category's topic articles — under the space's name. A row puts its page in the detail pane beside
 // it, the home at the stack's root, and the row of the page on show is lit (`NavState.wikiContentsAt`): none
 // while Activity, Review or the settings are, which open in the detail pane from the home's bar.
 
@@ -26,6 +26,7 @@ struct WikiContentsColumn: View {
                                  pick: select)
             }
             .listStyle(.plain)
+            .softTopEdgeEffect()
             .navigationTitle("")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -40,14 +41,11 @@ struct WikiContentsColumn: View {
         }
     }
 
-    /// `Wiki` and the space it is about, as the phone's home heads its page: a label with one space, a picker
-    /// among several (design §12.3.4). Another space starts at its home.
+    /// The space's name as the column's title, as the phone's home heads its page: plain with one space, a picker
+    /// among several (design §12.3.4, board docs/mocks/wiki-rail-name B). Another space starts at its home.
     private func head(_ space: WikiSpace, _ wiki: WikiModel) -> some View {
         HStack(spacing: 10) {
-            Text(WikiCopy.title)
-                .font(.headline)
-                .accessibilityAddTraits(.isHeader)
-            WikiSpacePicker(space: space, spaces: wiki.spaces,
+            WikiSpacePicker(space: space, spaces: wiki.spaces, title: .title3.weight(.semibold),
                             pick: { slug in
                                 model.nav.popToRoot()
                                 wiki.selectedSlug = slug

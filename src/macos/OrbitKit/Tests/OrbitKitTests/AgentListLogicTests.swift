@@ -150,6 +150,41 @@ final class AgentListLogicTests: XCTestCase {
         XCTAssertEqual(AgentListLogic.sidebarRows([], machines: []), [.placeholder])
     }
 
+    /// The work rows the Mac rail opens with: the Wiki's visibility is the server's answer carried as
+    /// data, and each row carries the drawer's amber count (0 when nothing waits).
+    func testSidebarSectionsCarryTheWikisVisibilityAndWaitingCountsAsData() {
+        let shown = AgentListLogic.sidebarSections(AppSection.workSections, wiki: true,
+                                                   projectsWaiting: 3, wikiWaiting: 2)
+        XCTAssertEqual(shown.map(\.id), ["section:projects", "section:tasks", "section:wiki"])
+        XCTAssertEqual(shown.map(\.waiting), [3, 0, 2])
+        let hidden = AgentListLogic.sidebarSections(AppSection.workSections, wiki: false,
+                                                    projectsWaiting: 0, wikiWaiting: 0)
+        XCTAssertEqual(hidden.map(\.id), ["section:projects", "section:tasks"])
+        // New wiki… is a row of its own under the Wiki row once there is a wiki, and never without the Wiki row.
+        let withNew = AgentListLogic.sidebarSections(AppSection.workSections, wiki: true,
+                                                     projectsWaiting: 0, wikiWaiting: 0, newWiki: true)
+        XCTAssertEqual(withNew.map(\.id), ["section:projects", "section:tasks", "section:wiki", "new-wiki"])
+        XCTAssertEqual(withNew.map(\.newWiki), [false, false, false, true])
+        XCTAssertEqual(AgentListLogic.sidebarSections(AppSection.workSections, wiki: false,
+                                                      projectsWaiting: 0, wikiWaiting: 0, newWiki: true).map(\.id),
+                       ["section:projects", "section:tasks"])
+    }
+
+    /// An open project row: its title and the drawer's one trailing mark, duplicate ids dropped.
+    func testSidebarProjectsCarryTheDrawersMarkPerRow() {
+        let idle = ProjectSummary(id: "p1", title: "Quiet")
+        let running = ProjectSummary(id: "p2", title: "Busy", buckets: ProjectBuckets(running: 2))
+        let rows = AgentListLogic.sidebarProjects([idle, running, idle], coordinators: [:])
+        XCTAssertEqual(rows.map(\.id), ["p1", "p2"])
+        XCTAssertEqual(rows.map(\.title), ["Quiet", "Busy"])
+        XCTAssertEqual(rows.map(\.mark), [.idle, .running])
+        // A coordinator working is the same running mark the drawer draws.
+        let coordinated = ProjectSummary(id: "p3", title: "Coord")
+        let pulse = [PublicID.storageKey("p3"): ProjectCoordinatorPulse(working: true, lastTurnAt: nil)]
+        XCTAssertEqual(AgentListLogic.sidebarProjects([coordinated], coordinators: pulse).map(\.mark),
+                       [.running])
+    }
+
     func testSidebarRowIDsAreUniqueAndKeepTheFirstRow() {
         let a = agent(#"{"id":"1","name":"a","runnerId":"r1"}"#)
         let m = MachineToSetUp(id: "m", name: "m")

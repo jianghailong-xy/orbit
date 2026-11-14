@@ -1,3 +1,6 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it } from 'vitest';
@@ -7,6 +10,7 @@ import {
   DECISION_ASK_HEADING,
   DECISION_CONFIRM_ACTION,
   DECISION_RECEIPT_OPEN,
+  DECISION_RECEIPT_NOTE,
   DECISION_RECEIPT_REASON,
   DECISION_SEND_BACK_ACTION,
   EVIDENCE_DECISION_AGENT_RECORDED_HEADING,
@@ -123,12 +127,42 @@ describe('the receipt a decision leaves', () => {
     expect(receipt(decided())).not.toContain(EVIDENCE_DECISION_AGENT_RECORDED_HEADING);
   });
 
-  it('carries the reason a send-back gave, and a confirm has none', () => {
+  it('folds the reason a send-back gave until it is opened, and a confirm has none', async () => {
     const note = '把 pg spec 跑一遍，并给出改前先红的原始输出';
-    const sentBack = receipt(decided({ decision: 'SEND_BACK', note }));
+    const reason = `${DECISION_RECEIPT_REASON}：${note}`;
 
-    expect(sentBack).toContain(`${DECISION_RECEIPT_REASON}：${note}`);
+    expect(receipt(decided({ decision: 'SEND_BACK', note }))).not.toContain(reason);
+
+    const host = document.createElement('div');
+    document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => root.render(
+      <QueryClientProvider client={newClient()}>
+        <EvidenceDecisionReceipt decided={decided({ decision: 'SEND_BACK', note })} />
+      </QueryClientProvider>,
+    ));
+    await act(async () => host.querySelector<HTMLButtonElement>('.decision-ask-toggle')!.click());
+    expect(host.textContent).toContain(reason);
+    await act(async () => root.unmount());
+    host.remove();
+
     expect(receipt(decided())).not.toContain(DECISION_RECEIPT_REASON);
+  });
+
+  it("labels a confirm's note as a note, not as a reason it was sent back", async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => root.render(
+      <QueryClientProvider client={newClient()}>
+        <EvidenceDecisionReceipt decided={decided({ note: 'all criteria hold' })} />
+      </QueryClientProvider>,
+    ));
+    await act(async () => host.querySelector<HTMLButtonElement>('.decision-ask-toggle')!.click());
+    expect(host.textContent).toContain(`${DECISION_RECEIPT_NOTE}：all criteria hold`);
+    expect(host.textContent).not.toContain(DECISION_RECEIPT_REASON);
+    await act(async () => root.unmount());
+    host.remove();
   });
 
   it('reads which answer, which version, and when', () => {

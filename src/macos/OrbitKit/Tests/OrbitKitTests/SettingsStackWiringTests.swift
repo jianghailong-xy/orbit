@@ -110,7 +110,7 @@ final class SettingsStackWiringTests: XCTestCase {
                                   from: "struct SettingsView: View {", to: "Section(\"Preferences\")"))
         assertOrder(form, ["Section(\"Account\")", "model.selectedSection = .runners",
                            "if inSettingsWindow { NSApp.keyWindow?.close() }",
-                           "SettingsHome.title(.infrastructure)", "Text(Infrastructure.subtitle)"])
+                           "SettingsHome.title(.machinesAndModels)", "Text(MachinesAndModels.subtitle)"])
         XCTAssertTrue(code(try appSource("OrbitApp.swift")).contains("SettingsView(inSettingsWindow: true)"),
                       "the Settings window says it is one")
         let main = code(try appSource("Views/MainView.swift"))
@@ -141,7 +141,7 @@ final class SettingsStackWiringTests: XCTestCase {
     }
 
     /// The sheet moves a `NavigationStack` whose path IS Settings' stack in `NavState`, and registers
-    /// every frame that stack carries on its root — the `SettingsPage`s; what Infrastructure pushes, a
+    /// every frame that stack carries on its root — the `SettingsPage`s; what Machines & models pushes, a
     /// machine's record and the two pages it pushes (an engine's, its name's) and a pool's page; and an
     /// account's record under Admin.
     func testTheSheetsStackIsSettingsOwnStack() throws {
@@ -174,8 +174,8 @@ final class SettingsStackWiringTests: XCTestCase {
         }
         XCTAssertTrue(pages.contains("AdminUsersView(rowNavigation: .push)"),
                       "Admin is the same list its section shows, pushing onto the stack on screen")
-        XCTAssertTrue(pages.contains("case .infrastructure: RunnersListView(rowNavigation: .push)"),
-                      "and Infrastructure is the page its section shows, the same way")
+        XCTAssertTrue(pages.contains("case .machinesAndModels: RunnersListView(rowNavigation: .push)"),
+                      "and Machines & models is the page its section shows, the same way")
         XCTAssertFalse(pages.contains("ProvidersSettingsPage"), "no Providers page of its own any more")
     }
 
@@ -191,19 +191,19 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertTrue(list.contains("if let footer = SettingsHome.footer(group) {"),
                       "Machines & models says what its one row is for")
         let rows = try slice(list, from: "@ViewBuilder private func row(_ row: SettingsHome.Row) -> some View {",
-                             to: "private var infrastructureValue:")
+                             to: "private var machinesAndModelsValue:")
         for row in SettingsHome.Row.allCases {
             XCTAssertTrue(rows.contains(".\(row.rawValue)"), "the list has no drawing for .\(row.rawValue)")
         }
         // A form row that opens a page is a link, and draws the platform's arrow — the settings
         // shape, where every row that goes somewhere says so.
-        XCTAssertTrue(rows.contains("NavigationLink(value: NavNode.settingsPage(.infrastructure))"))
+        XCTAssertTrue(rows.contains("NavigationLink(value: NavNode.settingsPage(.machinesAndModels))"))
         XCTAssertTrue(rows.contains("NavigationLink(value: NavNode.settingsPage(page))"))
-        // Infrastructure's value is its page's Needs you, counted the page's own way, in amber while it
+        // Machines & models' value is its page's Needs you, counted the page's own way, in amber while it
         // holds anything — over lists the list reads for it, pools and their people included.
         XCTAssertTrue(rows.contains(".foregroundStyle(value.needsYou ? RunnerInk.amber : Color.secondary)"))
-        XCTAssertTrue(list.contains("let needsYou = InfrastructureLists(model).attention.count"))
-        XCTAssertTrue(list.contains("SettingsHome.infrastructureValue(needsYou: needsYou, runners: runners.runners)"))
+        XCTAssertTrue(list.contains("let needsYou = MachinesAndModelsLists(model).attention.count"))
+        XCTAssertTrue(list.contains("SettingsHome.machinesAndModelsValue(needsYou: needsYou, runners: runners.runners)"))
         for read in [".task { await model.runners?.load() }", ".task { await model.agents?.reloadPools() }",
                      ".task { await model.sharedPools?.load() }", "await model.sharedPools?.loadAccess(id)"] {
             XCTAssertTrue(list.contains(read), "the list reads \(read)")
@@ -213,7 +213,7 @@ final class SettingsStackWiringTests: XCTestCase {
         for control in ["$permMode", "$orchestration", "$modelRouting", "$promptSuggestions", "$recaps"] {
             XCTAssertFalse(list.contains(control), "the list still draws \(control)")
         }
-        XCTAssertTrue(rows.contains("case .sessions, .notifications, .sharedLinks, .accessTokens, .changePassword, .admin:"))
+        XCTAssertTrue(rows.contains("case .sessions, .notifications, .sharedLinks, .accessTokens, .terminals, .changePassword, .admin:"))
         // Signing out asks first, in the shape the width calls for — `ConfirmationStyle` asks a phone
         // for an alert and a tablet for the anchored panel, and every confirmation in the app goes
         // through it rather than naming one of the two itself.
@@ -356,12 +356,12 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertTrue(form.contains("accountMessage = await model.saveName(name)"))
     }
 
-    /// Settings' Infrastructure page is the Infrastructure section's own page, whose rows carry their
+    /// Settings' Machines & models page is the Machines & models section's own page, whose rows carry their
     /// destinations and push them by hand through `AppModel.push` — which lands on Settings' stack while
     /// the sheet is up. One page and one frame type, two stacks: the stack on screen is what decides
     /// where a push lands. The same goes for the pages a machine's record pushes, its engine's and its
     /// name's, and for a pool's page.
-    func testSettingsInfrastructureIsTheSectionsOwnPage() throws {
+    func testSettingsMachinesAndModelsIsTheSectionsOwnPage() throws {
         let runners = try appSource("Views/SkillsRunnersView.swift")
         XCTAssertFalse(runners.contains("struct RunnersSettingsList"), "no second runners list beside it")
         let list = code(try slice(runners, from: "struct RunnersListView: View {",

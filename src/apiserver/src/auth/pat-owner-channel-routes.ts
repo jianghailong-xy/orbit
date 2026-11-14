@@ -20,7 +20,13 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'DELETE /account-secrets/:id',
   'POST /tasks/:taskId/owner-confirmation',
   'POST /tasks/:taskId/evidence/decision',
+  'POST /tasks/:taskId/evidence/:revision/restart',
   'POST /sessions/:id/approvals/:approvalId/decision',
+  // Session guests (docs/session-guests-design.md §3): who may drive the agent on the owner's machine, with the
+  // owner's accounts, is the owner's to decide and to see.
+  'GET /sessions/:id/guests',
+  'POST /sessions/:id/guests',
+  'DELETE /sessions/:id/guests/:userId',
   'POST /projects/:id/acceptance/confirmation',
   'POST /projects/:id/acceptance/criteria-decisions/:intentId',
   'POST /projects/:projectId/promotions/:promotionId/confirm',
@@ -107,4 +113,10 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /integrations/feishu/chats/confirm',
   'PATCH /integrations/feishu/chats/:id',
   'DELETE /integrations/feishu/chats/:id',
+  // A terminal asking to be approved (docs/terminal-session-design.md, "The terminal credential"): approving mints a
+  // credential that answers this machine's approval cards for 30 days, so the card, its Approve and its Deny are the
+  // owner's own, signed in to the app — never a token's, a runner's or another terminal's.
+  'GET /terminals/requests',
+  'POST /terminals/requests/:id/approve',
+  'POST /terminals/requests/:id/deny',
 ];

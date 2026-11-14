@@ -209,14 +209,14 @@ class TasksProjectsDeviceTest {
         http("/__control", """{"task":{"id":"$taskId","runAt":"2030-01-01T00:00:00.000Z"}}""")
         open("orbit-task:$taskId"); awaitIn("task-detail", "A11 task checklist"); capture("task-detail")
         // A prerequisite, picked from the server's own candidates.
-        tap("task-add-prerequisite", "task-detail"); awaitTag("task-dependency-picker")
+        tap("task-menu", "task-detail"); tap("task-add-prerequisite"); awaitTag("task-dependency-picker")
         compose.onNodeWithTag("task-dependency-search").performTextInput("A11 prerequisite")
         awaitTag("candidate:$prerequisiteId"); tap("candidate:$prerequisiteId")
         compose.waitUntil(20_000) { http("/__stats").obj("tasks")?.obj(taskId)?.objects("dependsOn")?.size == 1 }
         assertTrue(journal().any { it.text("path") == "/api/tasks/$taskId/dependencies" && it.obj("body")?.text("dependsOnTaskId") == prerequisiteId })
-        scrollTo("task-detail", hasTestTag("task-dependencies-section")); awaitText("A11 prerequisite"); capture("task-dependencies")
+        scrollTo("task-detail", hasTestTag("task-dependencies-section")); tap("task-plan-toggle", "task-detail"); awaitText("A11 prerequisite"); capture("task-dependencies")
         // The scheduled start, cancelled.
-        tap("task-start-at", "task-detail"); awaitTag("task-schedule-sheet"); capture("task-edit-schedule"); tap("task-cancel-schedule")
+        tap("task-runs-with", "task-detail"); awaitTag("task-runs-with-sheet"); tap("task-start-at"); awaitTag("task-schedule-sheet"); capture("task-edit-schedule"); tap("task-cancel-schedule")
         compose.waitUntil(20_000) { http("/__stats").obj("tasks")?.obj(taskId)?.get("runAt") == JsonNull }
         // The acceptance, edited.
         tap("task-edit-acceptance", "task-detail"); awaitTag("task-acceptance-sheet")
@@ -931,7 +931,7 @@ class TasksProjectsDeviceTest {
             "reasons":["Touches the dispatch path across two modules"]}}""".replace("\n", ""))
         open("orbit-session:$sessionId"); awaitTag("composer-input")
         compose.waitUntil(20_000) { compose.onAllNodesWithTag("composer-model-smart", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag("composer-model").assertContentDescriptionEquals("Model claude-opus-5-5, effort High, picked by smart selection")
+        compose.onNodeWithTag("composer-model").assertContentDescriptionEquals("Model Opus 5.5, effort High, picked by smart selection")
         capture("a11c-composer-chip")
         tap("composer-model"); awaitText("✦ Picked by smart selection · tier L")
         compose.onNodeWithText("Touches the dispatch path across two modules").assertExists()
@@ -947,7 +947,7 @@ class TasksProjectsDeviceTest {
         scenario.recreate(); awaitTag("composer-input")
         compose.waitUntil(20_000) { journal().drop(reads).any { it.text("path") == "/api/users/me" } }
         // The recreated reader reads its session again: the chip is the bare "Model" until then.
-        compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag("composer-model") and hasContentDescription("Model claude-opus-5-5, effort High")).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag("composer-model") and hasContentDescription("Model Opus 5.5, effort High")).fetchSemanticsNodes().isNotEmpty() }
         compose.onAllNodesWithTag("composer-model-smart", useUnmergedTree = true).assertCountEquals(0)
         capture("a11c-composer-chip-switch-off")
     }

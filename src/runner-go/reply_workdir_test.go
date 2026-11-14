@@ -222,7 +222,7 @@ func TestRepliesFromTheSessionsOwnDirectoriesStillTravel(t *testing.T) {
 		assertReplyStaysHome(t, replyOwnSession, execDir, "see [x]("+filepath.Join(orbit, "worktrees", replyOtherSession, "notes.txt")+")")
 	})
 	// A run taking over the branch of a run before it still works in a checkout named for itself, pinned or not. While the
-	// other checkout still holds the branch it runs in the workspace, or not at all, and never in that checkout.
+	// other checkout still holds the branch it does not run at all: never in that checkout, and never in the workspace.
 	t.Run("a rerun on the branch of the run before it", func(t *testing.T) {
 		const earlier = "11111111-2222-4333-8444-000000000003"
 		home, orbit := replyWorkDirHome(t)
@@ -237,12 +237,9 @@ func TestRepliesFromTheSessionsOwnDirectoriesStillTravel(t *testing.T) {
 		mustGit(t, first.WT.Path, "-c", "user.name=t", "-c", "user.email=t@example.test", "commit", "-qm", "work")
 		pin := strings.TrimSpace(mustGit(t, first.WT.Path, "rev-parse", "HEAD"))
 
-		held := setupWorktree(&ClaimedSession{SessionID: replyOwnSession, Branch: "orbit/task"}, repo)
-		if held != repo {
-			t.Fatalf("with the branch held by another checkout: execDir = %q, want the workspace", held)
+		if held := setupWorktree(&ClaimedSession{SessionID: replyOwnSession, Branch: "orbit/task"}, repo); held != "" {
+			t.Fatalf("with the branch held by another checkout: execDir = %q, want it refused", held)
 		}
-		assertReplyTravels(t, replyOwnSession, held, "see [top](top.txt)", "at the top of the repository")
-		assertReplyStaysHome(t, replyOwnSession, held, "see [w]("+filepath.Join(first.WT.Path, "work.txt")+")")
 		pinned := &ClaimedSession{SessionID: replyOwnSession, Branch: "orbit/task",
 			Source: &SessionSource{State: sourceStatePinned, BaseSha: pin}}
 		if dir := setupWorktree(pinned, repo); dir != "" {

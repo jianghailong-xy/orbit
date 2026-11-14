@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { openProjectsQuery, ownerRequestsQuery } from './queries';
+import { terminalRequestsQuery } from './terminals';
 import type { SidebarProject } from './projectAttention';
 import { formatSpan, sameResourceId } from './watches';
 
@@ -261,9 +262,11 @@ export function useSnoozes(): Readonly<Record<string, number>> {
 export function useWaitingOnYouCount(): number {
   const requests = useQuery(ownerRequestsQuery('open'));
   const projects = useQuery(openProjectsQuery());
+  const terminals = useQuery(terminalRequestsQuery());
   const held = useSnoozes();
   return useMemo(
-    () => waitingCount(requests.data?.requests ?? [], projects.data ?? [], held, Date.now()),
-    [requests.data, projects.data, held],
+    () => waitingCount(requests.data?.requests ?? [], projects.data ?? [], held, Date.now())
+      + (terminals.data?.requests?.length ?? 0),
+    [requests.data, projects.data, terminals.data, held],
   );
 }

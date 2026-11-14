@@ -224,6 +224,10 @@ final class WikiWiringTests: XCTestCase {
                     "a row's page, into the detail pane")
         let open = try slice(column, from: "private func open(_ node: NavNode) {", to: "\n    }")
         assertOrder(open, ["model.nav.popToRoot()", "model.push(node)"], "in place of whatever was there")
+        let head = try slice(column, from: "private func head(", to: "private func select(")
+        XCTAssertTrue(head.contains("WikiSpacePicker(space: space, spaces: wiki.spaces, title: .title3.weight(.semibold),"),
+                      "the column's title is the space's name (board docs/mocks/wiki-rail-name B)")
+        XCTAssertFalse(head.contains("WikiCopy.title"), "the column says Wiki again")
         assertOrder(column, ["WikiSpacePicker(space: space, spaces: wiki.spaces,", "model.nav.popToRoot()",
                              "wiki.selectedSlug = slug", "manage: { open(.wikiSettings) }"], "the column's space")
         // The sheet and the column draw the same rows.
@@ -260,10 +264,12 @@ final class WikiWiringTests: XCTestCase {
             XCTAssertFalse(page.contains(gone), "the home draws \(gone) again: that is Activity's")
         }
         let header = try slice(page, from: "private var header: some View {", to: "private func band(_ band: WikiLogic.HomeBand) -> some View {")
-        assertOrder(header, ["Text(WikiCopy.title)", ".font(.largeTitle.bold())",
-                             "WikiSpacePicker(space: space, spaces: spaces, pick: actions.pickSpace, manage: actions.openSettings,",
+        // The space's name is the head (board docs/mocks/wiki-rail-name B); the bar takes it once the head scrolls away.
+        assertOrder(header, ["WikiSpacePicker(space: space, spaces: spaces, title: .largeTitle.bold(), pick: actions.pickSpace, manage: actions.openSettings,",
                              "create: actions.createWiki)"],
                     "the header")
+        XCTAssertFalse(header.contains("WikiCopy.title"), "the head says Wiki again")
+        XCTAssertTrue(page.contains(".navigationTitle(besideContents || headerOnScreen ? \"\" : spaceName)"))
         XCTAssertTrue(page.contains("TextField(WikiCopy.searchPlaceholder, text: $query)"))
         XCTAssertTrue(page.contains(".redacted(reason: .placeholder)"), "grey bars while the first read is out")
         // The documents: a category a section, in the plan page's own rows, the rest folded.
@@ -342,12 +348,21 @@ final class WikiWiringTests: XCTestCase {
         let picker = code(try slice(try source("Views/WikiView.swift"),
                                     from: "struct WikiSpacePicker: View {", to: "private extension View {"))
         XCTAssertTrue(picker.contains("let names = WikiSpaceLogic.names(spaces)"), "the repository's name, not the slug")
-        let alone = try slice(picker, from: "if spaces.count < 2 {", to: "} else {")
-        XCTAssertTrue(alone.contains("Text(name)"))
-        XCTAssertFalse(alone.contains("Menu"), "one space is a label, not a control")
-        XCTAssertFalse(alone.contains("chevron"))
-        let menu = try slice(picker, from: "} else {", to: "} label: {")
-        assertOrder(menu, ["Menu {", "Toggle(isOn: Binding(get: { row.id == space.id },",
+        // Both looks — the head's title (board docs/mocks/wiki-rail-name B) and the capsule — say one space as its name alone.
+        for look in ["private func titled(", "private func capsule("] {
+            let drawn = try slice(picker, from: look, to: "\n    }\n")
+            let alone = try slice(drawn, from: "if spaces.count < 2 {", to: "} else {")
+            XCTAssertTrue(alone.contains("Text(name)"), look)
+            XCTAssertFalse(alone.contains("Menu"), "one space is a label, not a control: \(look)")
+            XCTAssertFalse(alone.contains("chevron"), look)
+            XCTAssertTrue(drawn.contains("Menu {\n                menuRows(names)\n            } label: {"), "several: the space menu, \(look)")
+        }
+        let title = try slice(picker, from: "private func titled(", to: "private func menuRows(")
+        XCTAssertTrue(title.contains(".font(font)") && title.contains("Image(systemName: \"chevron.down\")"),
+                      "the name in the head's type, a small chevron after it")
+        XCTAssertFalse(title.contains("Capsule()"), "the title is no capsule")
+        let menu = try slice(picker, from: "private func menuRows(", to: "private func capsule(")
+        assertOrder(menu, ["Toggle(isOn: Binding(get: { row.id == space.id },",
                            "pick(row.slug)", "Text(row.name)",
                            "if wikiMenuIconsDrawAmber, let symbol = row.waitingSymbol { wikiAmberSymbol(symbol) }",
                            "Text(row.subtitle(sayWaiting: !wikiMenuIconsDrawAmber))",
@@ -499,7 +514,11 @@ final class WikiWiringTests: XCTestCase {
     func testTheMacSidebarDrawsNoWikiRowWithoutTheWiki() throws {
         let main = code(try source("Views/MainView.swift"))
         let sidebar = try slice(main, from: "struct SectionSidebar: View {", to: "struct AccountFooter: View {")
-        XCTAssertTrue(sidebar.contains("if section != .wiki || model.wiki?.shown == true {"))
+        // The answer is DATA in the one snapshot now (`SidebarSectionRow`), not an `if` around the
+        // List's row builder — the shape beta.242 crashed in.
+        XCTAssertTrue(sidebar.contains("AgentListLogic.sidebarSections("))
+        XCTAssertTrue(sidebar.contains("wiki: model.wiki?.shown == true"))
+        XCTAssertTrue(sidebar.contains("ForEach(sections) { row in"))
         XCTAssertTrue(sidebar.contains(".task { await model.wiki?.loadSpaces() }"))
     }
 

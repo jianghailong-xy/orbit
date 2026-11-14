@@ -27,7 +27,7 @@ export function parseSessionMessage(payload: unknown): SessionMessageCard | null
   };
 }
 
-/** The word in front of the sending session's title, on the card's head and on the sticky bar. */
+/** The word in front of the sending session's title, on the card's head. */
 export const SESSION_MESSAGE_FROM = 'From';
 /** What a session with no title is called where its title would be. */
 export const SESSION_MESSAGE_UNTITLED = 'Untitled session';
@@ -39,14 +39,6 @@ export const SESSION_MESSAGE_UNDELIVERED = 'The session has not confirmed it rec
 /** The sending session as the card names it: its title, or what an untitled one is called. */
 export function sessionMessageTitle(card: SessionMessageCard): string {
   return card.fromTitle.trim() || SESSION_MESSAGE_UNTITLED;
-}
-
-/**
- * What the sticky bar names this turn by: who sent it, and what it said. Not "Your question" — the
- * bar saying that above a card reading "not by you" would be the screen contradicting itself.
- */
-export function sessionMessageSticky(card: SessionMessageCard, text: string): { label: string; text: string } {
-  return { label: `${SESSION_MESSAGE_FROM} ${sessionMessageTitle(card)}`, text };
 }
 
 /** The block delivery appends after another session's message (apiserver `sessionMessageBlock`). */

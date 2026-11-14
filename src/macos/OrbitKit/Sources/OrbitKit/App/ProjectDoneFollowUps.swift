@@ -225,6 +225,12 @@ public extension ProjectDone {
     static let runLandingOffHint = "Off for a non-code project: Tasks land on, Delivery, Main branch and Merge check don’t apply. Switch Delivers to Code to bring them back."
     static let runToNotCode = "The done card stops reading where work landed. Work already on {branch} stays there."
     static let runToCode = "The done card will check where work landed again. Work that ran without a branch will show as “Ran without a branch”."
+    /// The confirmation over a Delivers switch, asked before it is written (board 01 ③ D): its title
+    /// and its press, with `runToNotCode` / `runToCode` as its message.
+    static let runToNotCodeTitle = "Mark as not code?"
+    static let runToNotCodeAction = "Mark as not code"
+    static let runToCodeTitle = "Treat this project as code?"
+    static let runToCodeAction = "Mark as code"
     /// The two alerts iOS asks before a press of Delivers writes (board 01 ③): this client's own
     /// titles over the browser's `RUN_TO_NOT_CODE` / `RUN_TO_CODE` — the browser has Save instead.
     static let runMarkNotCodeTitle = "Mark as not code?"

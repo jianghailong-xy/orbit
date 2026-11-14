@@ -33,7 +33,7 @@ public enum ProviderEngines {
     /// `androidShowsEngine`). Every engine but Cursor CLI always; Cursor CLI once one of those runners
     /// knows it (`CursorRuntime.runnerKnows`: it declares `provider:cursor` or reports the engine), which
     /// is the order its rollout keeps: the runners and what they declare first, then the entrances
-    /// (project P9). Until then the new-session hero's engines, a task's Engine field, Infrastructure's
+    /// (project P9). Until then the new-session hero's engines, a task's Engine field, Machines & models'
     /// engine cards and a machine's Engines rows leave it out, and the apps read as they did before it.
     public static func appleShowsEngine(_ engine: String, runners: [Runner]?) -> Bool {
         engine != "cursor" || (runners ?? []).contains(where: CursorRuntime.runnerKnows)

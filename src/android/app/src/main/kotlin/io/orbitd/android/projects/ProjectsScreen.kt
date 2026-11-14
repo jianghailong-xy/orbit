@@ -1324,7 +1324,8 @@ private fun CrossingRow(row: JsonObject, confirming: Boolean?, busy: Boolean, lo
             }
             end(row.obj("fromProject"), ProjectCrossings.fromId(row))
             withStyle(SpanStyle(color = secondary)) { append(ProjectCrossings.arrow) }
-            end(row.obj("toProject"), ProjectCrossings.toId(row))
+            if (ProjectCrossings.hasNoTarget(row)) withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(ProjectCrossings.noProject) }
+            else end(row.obj("toProject"), ProjectCrossings.toId(row))
         }, style = MaterialTheme.typography.labelMedium)
         Text(ProjectCrossings.meaning(row), Modifier.testTag("crossing:$id:meaning"), style = MaterialTheme.typography.labelMedium, color = secondary)
         if (ProjectCrossings.isMove(row)) {

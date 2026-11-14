@@ -1,4 +1,12 @@
-import type { MergeRecovery, MergeRecoveryAction } from '@orbit/shared';
+import type {
+  GuestSessionSummary,
+  MainCheckoutActionAnswer,
+  MainCheckoutActionPost,
+  MainCheckoutView,
+  MergeRecovery,
+  MergeRecoveryAction,
+  SessionGuestPerson,
+} from '@orbit/shared';
 import type {
   BgShell,
   ConfirmationAnswersCard,
@@ -690,6 +698,10 @@ export const fetchAttachmentObjectUrl = async (id: string): Promise<string> => {
 export const setAttachmentPinned = (id: string, pinned: boolean): Promise<EvidenceFilePinAnswer> =>
   api<EvidenceFilePinAnswer>(`/attachments/${encodeURIComponent(id)}/pin`, { method: pinned ? 'PUT' : 'DELETE' });
 
+/** Delete a file everywhere this account keeps it, from Settings → Storage. 409 while evidence or a session holds it. */
+export const deleteAttachmentEverywhere = (id: string): Promise<void> =>
+  api<void>(`/attachments/${encodeURIComponent(id)}/everywhere`, { method: 'DELETE' });
+
 export const fetchSessionArtifactObjectUrl = async (sessionId: string, artifactPath: string): Promise<string> => {
   const res = await authedFetch(
     `/api/sessions/${encodeURIComponent(sessionId)}/artifacts?path=${encodeURIComponent(artifactPath)}`,
@@ -814,6 +826,9 @@ export interface ActiveSessionTurn extends TurnCards {
   /** The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
    *  delivery — so nobody typed its words. Absent on every turn somebody sent. */
   authoredByOrbit?: true;
+  /** The session's opening prompt, listed until the runner echoes it: the same message a tab that
+   *  created the session drew itself (`initial:<session>`). */
+  opening?: true;
 }
 
 /** Opt into active PENDING/IN_FLIGHT turns not represented by the transcript yet — restores
@@ -1422,6 +1437,8 @@ export interface SharedSession {
   sessionState?: string;
   runStatus?: string;
   status: string;
+  /** What the session is doing beyond its status (SessionActivity); absent from an older server. */
+  activity?: string | null;
   createdAt: string;
   /** The transcript's newest page, not all of it. */
   events: SharedEvent[];
@@ -1675,16 +1692,15 @@ export const getSharedWikiDoc = (token: string, slug: string): Promise<SharedWik
   sharedGet<SharedWikiDocPage>(token, `/docs/${encodeURIComponent(slug)}`);
 
 /** A page of a shared transcript: the `limit` events just older than `before` (or the newest
- *  when it is absent). Clipped like the rest unless `whole`, which the Download HTML walk asks
- *  for — a saved file has no way to fetch a card's full payload when it is opened. */
+ *  when it is absent), clipped like the rest. */
 export const getSharedEventPage = (
   token: string,
-  opts: { before?: number; limit: number; whole?: boolean; sessionId?: string },
+  opts: { before?: number; limit: number; sessionId?: string },
 ): Promise<{ events: SharedEvent[]; hasMore: boolean }> => {
   const qs = new URLSearchParams();
   if (opts.before != null) qs.set('before', String(opts.before));
   qs.set('limit', String(opts.limit));
-  if (!opts.whole) qs.set('maxPayload', String(MAX_EVENT_PAYLOAD));
+  qs.set('maxPayload', String(MAX_EVENT_PAYLOAD));
   return sharedGet(token, `${sharedConversation(opts.sessionId)}/events?${qs.toString()}`);
 };
 
@@ -1704,6 +1720,43 @@ export const getSharedEventsAfter = (
 export const getSharedEventFull = (token: string, seq: number, sessionId?: string): Promise<SharedEvent> =>
   sharedGet<SharedEvent>(token, `${sharedConversation(sessionId)}/events/${seq}`);
 
+// ── Session guests (docs/session-guests-design.md §3–§7) ──
+
+/** The people who can reply in one of the owner's sessions. */
+export const getSessionGuests = (sessionId: string) =>
+  api<{ guests: SessionGuestPerson[] }>(`/sessions/${sessionId}/guests`);
+/** Invite the account that signs in with `email`: answers the list as it stands after, or 404
+ *  `No Orbit account uses this email.` */
+export const inviteSessionGuest = (sessionId: string, email: string) =>
+  api<{ guests: SessionGuestPerson[] }>(`/sessions/${sessionId}/guests`, { method: 'POST', body: { email } });
+export const removeSessionGuest = (sessionId: string, userId: string) =>
+  api<{ guests: SessionGuestPerson[] }>(`/sessions/${sessionId}/guests/${userId}`, { method: 'DELETE' });
+
+/** Shared with me: the sessions the caller is a guest of. */
+export const listGuestSessions = () => api<{ sessions: GuestSessionSummary[] }>('/guest-sessions');
+
+/** What the guest door adds to the public page's reads: who shared it, and whether its agent waits on them. */
+export interface GuestSession extends SharedSession {
+  ownerName: string;
+  waitingOnOwner?: boolean;
+}
+export type GuestSessionNow = SharedSessionNow & { waitingOnOwner?: boolean };
+
+const guestPath = (id: string) => `/guest-sessions/${encodeURIComponent(id)}`;
+/** The guest page's root: the header and the newest `limit` events, as a session link's page reads them. */
+export const getGuestSession = (id: string, limit: number) =>
+  api<GuestSession>(`${guestPath(id)}?limit=${limit}&maxPayload=${MAX_EVENT_PAYLOAD}`);
+export const getGuestEventPage = (id: string, opts: { before: number; limit: number }) =>
+  api<{ events: SharedEvent[]; hasMore: boolean }>(
+    `${guestPath(id)}/events?before=${opts.before}&limit=${opts.limit}&maxPayload=${MAX_EVENT_PAYLOAD}`,
+  );
+export const getGuestEventsAfter = (id: string, opts: { after: number; limit: number }) =>
+  api<GuestSessionNow>(`${guestPath(id)}/events?after=${opts.after}&limit=${opts.limit}&maxPayload=${MAX_EVENT_PAYLOAD}`);
+export const getGuestEventFull = (id: string, seq: number) => api<SharedEvent>(`${guestPath(id)}/events/${seq}`);
+/** A guest's message: text only, a turn of the owner's session (resumed when it has ended). */
+export const sendGuestTurn = (id: string, body: { clientTurnId: string; content: string }) =>
+  api<{ turnId: string; revived: boolean }>(`${guestPath(id)}/turns`, { method: 'POST', body });
+
 /** The public attachment route: no bearer, so a browser can be sent straight to it. */
 export const sharedAttachmentUrl = (token: string, id: string): string =>
   `/api/shared/${encodeURIComponent(token)}/attachments/${encodeURIComponent(id)}`;
@@ -1721,23 +1774,6 @@ export const fetchSharedArtifactObjectUrl = async (token: string, artifactPath: 
   );
   if (!res.ok) throw new Error(`artifact ${artifactPath}: ${res.status}`);
   return userFileUrl(await res.blob());
-};
-
-/** Base64 data URL for an inline image in a shared transcript, via the public attachment
- *  route (no bearer). The shared-page HTML download embeds the bytes inline so the saved
- *  file works offline. Mirrors fetchAttachmentDataUrl, but for a logged-out viewer. */
-export const fetchSharedAttachmentDataUrl = async (token: string, id: string): Promise<string> => {
-  const res = await fetch(
-    `/api/shared/${encodeURIComponent(token)}/attachments/${encodeURIComponent(id)}`,
-  );
-  if (!res.ok) throw new Error(`attachment ${id}: ${res.status}`);
-  const blob = await res.blob();
-  return await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error ?? new Error('read failed'));
-    reader.readAsDataURL(blob);
-  });
 };
 
 /** One file a worktree-isolated session changed (git diff baseSha..branch); additions/
@@ -1898,6 +1934,10 @@ export interface SessionDetail {
   sourceRef?: string | null;
   sourceRefusalCode?: string | null;
   sourceRefusalDetail?: Record<string, unknown> | null;
+  /** The SOURCE line of the task this session runs when that task was forked from a session
+   *  (docs/task-fork-from-session-design.md §2.3), as the server words it; null otherwise.
+   *  Optional, because an older server does not send it. */
+  forkSource?: string | null;
   /** On an account pool: the member its last claim dispatched on (null before the first). */
   poolMemberProviderId?: string | null;
   /** On a shared pool: the key its last claim chose (null before the first, or when none could run). */
@@ -1975,6 +2015,10 @@ export interface SessionDetail {
   /** Non-null while a check a repair turn left owed waits for this session's own turn to end; the server then runs it. */
   mergeRepairTurnEndedAt?: string | null;
   mergeRecoverySupported?: boolean;
+  /** When the merge operation now pending was requested. */
+  mergeRequestedAt?: string | null;
+  /** The runner this session runs on, as far as the merge slot names it. */
+  assignedRunner?: { name?: string | null; displayName?: string | null; lastHeartbeatAt?: string | null } | null;
   mergedAt?: string | null;
   // The server-resolved merge target: an explicit choice, a project integration line, or the
   // workspace/runner default. Shown on the merged ✓ chip and used by Retry merge.
@@ -2144,5 +2188,23 @@ export const setWorkspaceWorktree = (workspaceId: string, enableWorktree: boolea
 export const cleanUpWorkspaceRepo = (workspaceId: string) =>
   api<{ repoCleanup?: { status: string; branch?: string | null; message?: string | null } | null }>(
     `/workspaces/${workspaceId}/repo-cleanup`,
+    { method: 'POST' },
+  );
+
+/** The main checkout as the workspace's runner sees it now, with the patches of `diffPaths`
+ *  (docs/main-checkout-git-contract.md §10.4). */
+export const getMainCheckout = (workspaceId: string, diffPaths: readonly string[] = [], signal?: AbortSignal) => {
+  const q = diffPaths.map((p) => `diff=${encodeURIComponent(p)}`).join('&');
+  return api<MainCheckoutView>(`/workspaces/${workspaceId}/main-checkout${q ? `?${q}` : ''}`, { signal });
+};
+
+/** Move, commit, push or rescue the main checkout. Repeating a requestId answers with the first request's state. */
+export const postMainCheckoutAction = (workspaceId: string, body: MainCheckoutActionPost) =>
+  api<MainCheckoutActionAnswer>(`/workspaces/${workspaceId}/main-checkout/actions`, { method: 'POST', body });
+
+/** Cancel an action its runner has not been handed yet. */
+export const cancelMainCheckoutAction = (workspaceId: string, requestId: string) =>
+  api<MainCheckoutActionAnswer>(
+    `/workspaces/${workspaceId}/main-checkout/actions/${encodeURIComponent(requestId)}/cancel`,
     { method: 'POST' },
   );

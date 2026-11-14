@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 )
@@ -113,6 +114,12 @@ func init() {
 		dirProbeCapabilityV1,
 		createWorkDirCapabilityV1,
 		claudeRegionCapabilityV1,
+		mainCheckoutGitCapabilityV1,
+		selfUpdatePostponeCapabilityV1,
+		selfUpdateNowCapabilityV1,
+		taskForkCapabilityV1,
+		codelessCheckoutCapabilityV1,
+		machineResourcesCapabilityV1,
 	}, cursorAccountCapabilities()...), declaredSteerCapabilities()...), ",")
 	// Where 0600 means something (secret_file_unix.go); a Windows runner is never handed a secret.
 	if secretFilesSupported {
@@ -235,6 +242,12 @@ type Transport struct {
 	// transport, by startLink; nil everywhere else, where every call goes over HTTPS: `orbit mcp`, the CLI
 	// verbs and the approval hook, which name themselves (runnerCallerHeader), and the release check.
 	link *linkMode
+	// noTakeoverBatch is set once the control plane has answered the batch takeover 404 or 405: it
+	// predates it, and every takeover from then on is one request per session, as before it.
+	noTakeoverBatch atomic.Bool
+	// observer hears about every request and card of the tool call it was set for (transport_observe.go).
+	observerMu sync.Mutex
+	observer   func(transportEvent)
 }
 
 // eventStreams is the sessions' event streams of the daemon's transport (link_events.go). Nil on any
@@ -347,12 +360,16 @@ func (t *Transport) doHeaders(ctx context.Context, method, path string, body, ou
 // (wiki_conn.go). On the daemon's transport a daemon route's call goes over the runner link
 // instead (linkMode.doVia); every other call is doHTTP's.
 func (t *Transport) doVia(ctx context.Context, client *http.Client, method, path string, body, out interface{}, timeout time.Duration, headers map[string]string) error {
+	var err error
 	if t.link != nil {
-		return t.link.doVia(ctx, method, path, body, out, timeout, headers, func(ctx context.Context) error {
+		err = t.link.doVia(ctx, method, path, body, out, timeout, headers, func(ctx context.Context) error {
 			return t.doHTTP(ctx, client, method, path, body, out, timeout, headers)
 		})
+	} else {
+		err = t.doHTTP(ctx, client, method, path, body, out, timeout, headers)
 	}
-	return t.doHTTP(ctx, client, method, path, body, out, timeout, headers)
+	t.observe(transportEvent{Kind: transportEventRequest, Method: method, Path: path, Err: err})
+	return err
 }
 
 // doHTTP is one call over HTTPS, as every call went before the runner link.
@@ -475,14 +492,21 @@ var fetchCallTimeout = 35 * time.Second
 // claimSession is the session the control plane hands this runner, nil for none. It is asked once a hint says a session
 // waits (link_hints.go), and nil is the hint not coming as well. ids is the claim loop's request id over the link
 // (linkRequestIDs): a claim that got no answer goes again under it, as soon as the loop asks again.
-func (t *Transport) claimSession(ctx context.Context, ids *linkRequestIDs) (*ClaimedSession, error) {
+//
+// scope, when given, names the only sessions the claim may take (drainClaimScope); only a control
+// plane that says it honours it (HeartbeatResponse.DrainScopedClaims) is sent one.
+func (t *Transport) claimSession(ctx context.Context, ids *linkRequestIDs, scope ...string) (*ClaimedSession, error) {
 	if t.link != nil {
 		if due, err := t.link.gates.takeClaim(ctx, linkHintWait); !due {
 			return nil, err
 		}
 	}
 	var r ClaimedSession
-	err := t.do(ids.with(ctx), "GET", "/runner/sessions/claim", nil, &r, fetchCallTimeout)
+	path := "/runner/sessions/claim"
+	if len(scope) > 0 {
+		path = linkWithQuery(path, "drainScope", strings.Join(scope, ","))
+	}
+	err := t.do(ids.with(ctx), "GET", path, nil, &r, fetchCallTimeout)
 	ids.settle(err)
 	if ids.kept() {
 		t.link.gates.markClaim() // the question the claim asked is still open, which no hint may say
@@ -546,6 +570,8 @@ func (t *Transport) finalizeRun(ctx context.Context, sessionID string, b RunFina
 	b.LeaseOwner = t.leaseOwner
 	b = scrubRunFinalize(b, sessionID)
 	path := "/runner/sessions/" + sessionID + "/finalize"
+	// The finalize carries the run's last worktree state: no sample scanned before it is newer.
+	worktreeReports.reported(sessionID)
 	if err := t.do(ctx, "POST", path, b, &r, 35*time.Second); err != nil {
 		return true, err
 	}
@@ -682,6 +708,131 @@ func retryTakeoverTurnLeases(ctx context.Context, takeover func(context.Context)
 	return retryIdempotentWhile(ctx, takeover, isRetryableTransportError)
 }
 
+// takeoverBatchMax is the most sessions one batch takeover names: the control plane's
+// BATCH_TAKEOVER_TURN_LEASES_MAX.
+const takeoverBatchMax = 500
+
+// errTakeoverBatchUnsupported is a batch takeover refused for want of the route: a control plane older
+// than it. Nothing was taken over; the caller takes the same sessions over one request at a time.
+var errTakeoverBatchUnsupported = errors.New("the control plane has no batch takeover")
+
+// takeoverRow is one session's answer to a batch takeover: the status the single takeover answers
+// with, or the refusal it would have answered with, as the *transportHTTPError that call returns.
+type takeoverRow struct {
+	status string
+	err    error
+}
+
+// takeoverBatchSize is how many sessions a reclaim phase takes over per request: takeoverBatchMax, or
+// one once the control plane has said it has no batch takeover.
+func (t *Transport) takeoverBatchSize() int {
+	if t.noTakeoverBatch.Load() {
+		return 1
+	}
+	return takeoverBatchMax
+}
+
+// takeoverTurnLeasesBatch is takeoverTurnLeases for every one of jobs in one request
+// (POST /runner/sessions/takeover-leases), each against its own snapshot owner. It answers a row
+// per job, in the jobs' order, or errTakeoverBatchUnsupported when the route is not there.
+func (t *Transport) takeoverTurnLeasesBatch(ctx context.Context, jobs []*ClaimedSession) ([]takeoverRow, error) {
+	type row struct {
+		SessionID          string  `json:"sessionId"`
+		ExpectedLeaseOwner *string `json:"expectedLeaseOwner"`
+	}
+	rows := make([]row, len(jobs))
+	for i, job := range jobs {
+		rows[i] = row{SessionID: job.SessionID}
+		if job.LeaseOwner != "" {
+			owner := job.LeaseOwner
+			rows[i].ExpectedLeaseOwner = &owner
+		}
+	}
+	var response struct {
+		Results []struct {
+			SessionID string `json:"sessionId"`
+			Status    string `json:"status"`
+			Error     *struct {
+				StatusCode int    `json:"statusCode"`
+				Message    string `json:"message"`
+				Code       string `json:"code"`
+			} `json:"error"`
+		} `json:"results"`
+	}
+	err := t.do(ctx, "POST", "/runner/sessions/takeover-leases",
+		map[string]interface{}{"leaseOwner": t.leaseOwner, "sessions": rows}, &response, 30*time.Second)
+	if isTransportHTTPStatus(err, http.StatusNotFound) || isTransportHTTPStatus(err, http.StatusMethodNotAllowed) {
+		t.noTakeoverBatch.Store(true)
+		return nil, errTakeoverBatchUnsupported
+	}
+	if err != nil {
+		return nil, err
+	}
+	// An answer this build cannot line up with what it asked is taken as no batch takeover at all: the
+	// sessions are taken over one at a time, which is safe whatever the batch did, since a session
+	// already taken over by this process answers its own takeover with its status.
+	if len(response.Results) != len(jobs) {
+		logln(fmt.Sprintf("reclaim: batch takeover answered %d rows for %d sessions; taking them over one at a time", len(response.Results), len(jobs)))
+		t.noTakeoverBatch.Store(true)
+		return nil, errTakeoverBatchUnsupported
+	}
+	out := make([]takeoverRow, len(jobs))
+	for i, r := range response.Results {
+		if !strings.EqualFold(r.SessionID, jobs[i].SessionID) {
+			logln(fmt.Sprintf("reclaim: batch takeover answered row %d for %s, not %s; taking them over one at a time", i, r.SessionID, jobs[i].SessionID))
+			t.noTakeoverBatch.Store(true)
+			return nil, errTakeoverBatchUnsupported
+		}
+		if r.Error != nil {
+			body, _ := json.Marshal(map[string]interface{}{"statusCode": r.Error.StatusCode, "message": r.Error.Message, "code": r.Error.Code})
+			out[i].err = &transportHTTPError{
+				method: "POST", path: "/runner/sessions/" + jobs[i].SessionID + "/takeover-leases",
+				statusCode: r.Error.StatusCode, body: string(body),
+			}
+			continue
+		}
+		out[i].status = r.Status
+	}
+	return out, nil
+}
+
+// takeoverClaimedSessions is takeoverClaimedSession for many sessions in one request, retried whole as
+// that one is. A row taken over has its job's lease owner moved to this process; a refused row keeps
+// its own. errTakeoverBatchUnsupported says to take the same sessions over one at a time instead.
+func takeoverClaimedSessions(ctx context.Context, t *Transport, jobs []*ClaimedSession) ([]takeoverRow, error) {
+	if t.noTakeoverBatch.Load() {
+		return nil, errTakeoverBatchUnsupported
+	}
+	var rows []takeoverRow
+	err := retryIdempotentWhile(ctx, func(attemptCtx context.Context) error {
+		var err error
+		rows, err = t.takeoverTurnLeasesBatch(attemptCtx, jobs)
+		return err
+	}, func(err error) bool {
+		return !errors.Is(err, errTakeoverBatchUnsupported) && isRetryableTransportError(err)
+	})
+	if err != nil {
+		return nil, err
+	}
+	for i, row := range rows {
+		if row.err == nil {
+			jobs[i].LeaseOwner = t.leaseOwner
+		}
+	}
+	return rows, nil
+}
+
+// takeoverChunk takes jobs over in one batch request, or — against a control plane without the batch
+// takeover, which a reclaim phase then asks for one job at a time — with the single takeover, its
+// refusal as the job's row. Any other failure of the request is returned as the reclaim's.
+func takeoverChunk(ctx context.Context, t *Transport, jobs []*ClaimedSession) ([]takeoverRow, error) {
+	if len(jobs) == 1 && t.noTakeoverBatch.Load() {
+		status, err := takeoverClaimedSession(ctx, t, jobs[0])
+		return []takeoverRow{{status: status, err: err}}, nil
+	}
+	return takeoverClaimedSessions(ctx, t, jobs)
+}
+
 // takeoverClaimedSession always confirms even a matching snapshot owner with the server.
 // A claim/reclaim response can be stale by the time this process handles it, so a local
 // equality check cannot substitute for the Session row lock in takeover-leases.
@@ -703,6 +854,9 @@ func (t *Transport) turnComplete(ctx context.Context, sessionID string, b TurnCo
 	b.LeaseOwner = t.leaseOwner
 	// Every path a completion is sent by, a kept one an earlier process journaled included (secret_wire.go).
 	b = scrubTurnComplete(b, sessionID)
+	// What this completion reports of the worktree is newer than any heartbeat sample scanned before
+	// now (worktreeReportClock). Recorded before the send: one still in flight already outranks them.
+	worktreeReports.reported(sessionID)
 	err := retryIdempotentWhile(ctx, func(attemptCtx context.Context) error {
 		r = TurnCompleteResponse{}
 		return t.do(attemptCtx, "POST", "/runner/sessions/"+sessionID+"/turn-complete", b, &r, 35*time.Second)
@@ -929,6 +1083,16 @@ func (t *Transport) repoCleanupResult(b RepoCleanupResultRequest) error {
 	return t.do(nil, "POST", "/runner/repo-cleanup-result", b, nil, 15*time.Second)
 }
 
+// mainCheckoutSnapshot answers a heartbeat-delivered main checkout read (contract §10.2).
+func (t *Transport) mainCheckoutSnapshot(id string, b MainCheckoutSnapshotAnswer) error {
+	return t.do(nil, "POST", "/runner/main-checkout/"+url.PathEscape(id)+"/snapshot", b, nil, 15*time.Second)
+}
+
+// mainCheckoutResult reports how a heartbeat-delivered main checkout action went (contract §10.2).
+func (t *Transport) mainCheckoutResult(id string, b MainCheckoutActionResult) error {
+	return t.do(nil, "POST", "/runner/main-checkout/"+url.PathEscape(id)+"/result", b, nil, 15*time.Second)
+}
+
 // commitResult reports the outcome of a heartbeat-delivered CommitCommand back to the server.
 func (t *Transport) commitResult(sessionID string, b CommitResultRequest) error {
 	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/commit-result", b, nil, 15*time.Second)
@@ -969,6 +1133,7 @@ func (t *Transport) diffResult(sessionID string, b DiffResultRequest) error {
 }
 
 func (t *Transport) diffResultContext(ctx context.Context, sessionID string, b DiffResultRequest) error {
+	worktreeReports.reported(sessionID)
 	return t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/diff", b, nil, 35*time.Second)
 }
 
@@ -1098,6 +1263,7 @@ func (t *Transport) createApproval(ctx context.Context, sessionID string, body i
 	if err := t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/approvals", body, &r, 20*time.Second); err != nil {
 		return "", err
 	}
+	t.observe(transportEvent{Kind: transportEventApprovalFiled, ApprovalID: r.ID, ToolName: approvalToolName(body)})
 	return r.ID, nil
 }
 
@@ -2077,16 +2243,55 @@ func (t *Transport) removeTaskDependency(id, dependsOnTaskID string) (json.RawMe
 }
 
 func (t *Transport) createTask(agentID, sessionID string, body interface{}) (json.RawMessage, error) {
-	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/tasks", body, &out, taskOpTimeout, taskCreateHeaders(agentID, sessionID))
-	return out, err
+	return resendKeyedCreate(body, func() (json.RawMessage, error) {
+		var out json.RawMessage
+		err := t.doHeaders(nil, "POST", "/runner/tasks", body, &out, taskOpTimeout, taskCreateHeaders(agentID, sessionID))
+		return out, err
+	})
 }
 
 // createTasksBatch writes several tasks in one atomic call; body is {"tasks":[...]}.
 func (t *Transport) createTasksBatch(agentID, sessionID string, body interface{}) (json.RawMessage, error) {
-	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/tasks/batch-create", body, &out, taskOpTimeout, taskCreateHeaders(agentID, sessionID))
+	return resendKeyedCreate(body, func() (json.RawMessage, error) {
+		var out json.RawMessage
+		err := t.doHeaders(nil, "POST", "/runner/tasks/batch-create", body, &out, taskOpTimeout, taskCreateHeaders(agentID, sessionID))
+		return out, err
+	})
+}
+
+// resendKeyedCreate sends a create and, when — and only when — the body carries the caller's
+// idempotencyKey, sends it again under that same key while the answer is lost: a dropped connection,
+// a timeout, a body cut off after the status line. The key is what makes that safe (the server answers
+// the second delivery with what the first one wrote), so a create without one is sent exactly once and
+// a lost answer is handed back for the caller to re-read before it decides (docs/orbit-agent-contract.md
+// §5.2). A refusal the server answered is the result and is never resent. Bounded like startTask's.
+func resendKeyedCreate(body interface{}, send func() (json.RawMessage, error)) (json.RawMessage, error) {
+	out, err := send()
+	if !bodyCarriesIdempotencyKey(body) {
+		return out, err
+	}
+	delay := runRequestResendDelay
+	for attempt := 1; attempt < runRequestResendAttempts && err != nil && createAnswerWasLost(err); attempt++ {
+		time.Sleep(delay)
+		delay *= 2
+		out, err = send()
+	}
 	return out, err
+}
+
+func bodyCarriesIdempotencyKey(body interface{}) bool {
+	m, ok := body.(map[string]interface{})
+	if !ok {
+		return false
+	}
+	key, _ := m["idempotencyKey"].(string)
+	return strings.TrimSpace(key) != ""
+}
+
+// createAnswerWasLost says whether a create's attempt ended without the server's answer.
+func createAnswerWasLost(err error) bool {
+	var answered *transportHTTPError
+	return !errors.As(err, &answered)
 }
 
 // pinTasksBatch re-pins many tasks in one request — the door for "change the model of every task
@@ -2433,12 +2638,17 @@ func (t *Transport) dagPreview(id string, body map[string]interface{}) (json.Raw
 
 // dagApply commits that batch, after a human allowed it. The server re-validates rather than
 // trusting the preview: approval happens at human speed and the graph may have moved.
-func (t *Transport) dagApply(id string, body map[string]interface{}) (json.RawMessage, error) {
+//
+// The session is passed rather than re-read from the environment: the caller already holds the
+// identity it acts for (`orbit mcp` knows its session, the CLI resolves it once), and the server
+// reads this header as WHO is writing — the rule that a restructure from a session needs the
+// answered card hangs off it, so it must not depend on a second read that can disagree.
+func (t *Transport) dagApply(id string, body map[string]interface{}, sessionID string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/task-lists/"+url.PathEscape(id)+"/dag-apply", body, &out, taskOpTimeout, callingSessionHeader())
+	err := t.doHeaders(nil, "POST", "/runner/task-lists/"+url.PathEscape(id)+"/dag-apply", body, &out, taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }
 

@@ -45,7 +45,162 @@ func platformKey() string {
 	}
 }
 
+// isNewer reports whether the published release `remote` is newer than `local`, by the same SemVer
+// precedence the control plane uses (contracts/release-versions.json, runner-release.ts).
 func isNewer(remote, local string) bool {
+	return compareReleaseVersions(remote, local) > 0
+}
+
+// releaseVersion is a published runner release version: numeric parts, an optional SemVer prerelease
+// ("0.1.257-beta.1"), and build metadata, which is read and ignored.
+type releaseVersion struct {
+	core []int64
+	pre  []string
+}
+
+func releaseIdentifier(id string) bool {
+	if id == "" {
+		return false
+	}
+	for _, r := range id {
+		if !(r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+func releaseIdentifiers(raw string) bool {
+	for _, id := range strings.Split(raw, ".") {
+		if !releaseIdentifier(id) {
+			return false
+		}
+	}
+	return true
+}
+
+// parseReleaseVersion reads a release version, or reports false for a string no release manifest may name.
+func parseReleaseVersion(v string) (releaseVersion, bool) {
+	if i := strings.IndexByte(v, '+'); i >= 0 {
+		if !releaseIdentifiers(v[i+1:]) {
+			return releaseVersion{}, false
+		}
+		v = v[:i]
+	}
+	var pre []string
+	if i := strings.IndexByte(v, '-'); i >= 0 {
+		if !releaseIdentifiers(v[i+1:]) {
+			return releaseVersion{}, false
+		}
+		pre = strings.Split(v[i+1:], ".")
+		v = v[:i]
+	}
+	if v == "" {
+		return releaseVersion{}, false
+	}
+	parts := strings.Split(v, ".")
+	core := make([]int64, len(parts))
+	for i, part := range parts {
+		if part == "" {
+			return releaseVersion{}, false
+		}
+		for _, r := range part {
+			if r < '0' || r > '9' {
+				return releaseVersion{}, false
+			}
+		}
+		n, err := strconv.ParseInt(part, 10, 64)
+		if err != nil {
+			return releaseVersion{}, false
+		}
+		core[i] = n
+	}
+	return releaseVersion{core: core, pre: pre}, true
+}
+
+func releaseIdentifierNumber(id string) (int64, bool) {
+	for _, r := range id {
+		if r < '0' || r > '9' {
+			return 0, false
+		}
+	}
+	n, err := strconv.ParseInt(id, 10, 64)
+	return n, err == nil
+}
+
+func compareReleaseIdentifier(a, b string) int {
+	an, aNum := releaseIdentifierNumber(a)
+	bn, bNum := releaseIdentifierNumber(b)
+	switch {
+	case aNum && bNum:
+		if an != bn {
+			if an > bn {
+				return 1
+			}
+			return -1
+		}
+		return 0
+	case aNum:
+		return -1 // numeric identifiers sort below alphanumeric ones
+	case bNum:
+		return 1
+	case a == b:
+		return 0
+	case a > b:
+		return 1
+	default:
+		return -1
+	}
+}
+
+// compareReleaseVersions orders published releases by SemVer precedence. A string that is not a release
+// version falls back to the legacy dot-by-dot numeric comparison this function replaced.
+func compareReleaseVersions(a, b string) int {
+	x, okx := parseReleaseVersion(a)
+	y, oky := parseReleaseVersion(b)
+	if !okx || !oky {
+		return compareLegacyVersions(a, b)
+	}
+	for i := 0; i < len(x.core) || i < len(y.core); i++ {
+		var p, q int64
+		if i < len(x.core) {
+			p = x.core[i]
+		}
+		if i < len(y.core) {
+			q = y.core[i]
+		}
+		if p != q {
+			if p > q {
+				return 1
+			}
+			return -1
+		}
+	}
+	switch {
+	case len(x.pre) == 0 && len(y.pre) == 0:
+		return 0
+	case len(x.pre) == 0:
+		return 1 // a release outranks its prereleases
+	case len(y.pre) == 0:
+		return -1
+	}
+	for i := 0; i < len(x.pre) && i < len(y.pre); i++ {
+		if c := compareReleaseIdentifier(x.pre[i], y.pre[i]); c != 0 {
+			return c
+		}
+	}
+	switch {
+	case len(x.pre) > len(y.pre):
+		return 1
+	case len(x.pre) < len(y.pre):
+		return -1
+	}
+	return 0
+}
+
+// compareLegacyVersions is the ordering used before the SemVer parser: each dot-separated component read
+// as an integer, anything after a non-digit reading as 0. It only answers for strings no release names.
+func compareLegacyVersions(remote, local string) int {
 	r := splitVer(remote)
 	l := splitVer(local)
 	for i := 0; i < len(r) || i < len(l); i++ {
@@ -57,10 +212,13 @@ func isNewer(remote, local string) bool {
 			b = l[i]
 		}
 		if a != b {
-			return a > b
+			if a > b {
+				return 1
+			}
+			return -1
 		}
 	}
-	return false
+	return 0
 }
 
 // elevateUpgrade re-runs `orbit upgrade` under sudo (which prompts for the
@@ -278,11 +436,18 @@ const (
 	selfUpdatePhasePostponed = "postponed"
 )
 
+// selfUpdatePostponeCapabilityV1 declares that this runner honours the owner's Later
+// (HeartbeatResponse.PostponeSelfUpdateUntil): @orbit/shared's SELF_UPDATE_POSTPONE_V1. The control
+// plane refuses a postpone for a runner that does not declare it, which would drop it unread.
+const selfUpdatePostponeCapabilityV1 = "self-update-postpone/v1"
+
 // selfUpdatePhase is the part of the report about a waiting release; the zero value is none.
 type selfUpdatePhase struct {
 	phase, targetVersion                          string
 	availableSince, drainingSince, postponedUntil time.Time
 	turnsInFlight, turnsAtDrain                   int
+	// Restarting for the owner's Update Now: the turns it interrupted.
+	interruptedTurns int
 }
 
 // selfUpdateStatus is where this runner's updates of itself stand, for the heartbeat: set by the
@@ -348,6 +513,10 @@ func selfUpdateReport() *SelfUpdateReport {
 		DrainingSince:  rfc3339OrEmpty(phase.drainingSince),
 		PostponedUntil: rfc3339OrEmpty(phase.postponedUntil),
 		TurnsInFlight:  phase.turnsInFlight, TurnsAtDrain: phase.turnsAtDrain,
+		InterruptedTurns:           phase.interruptedTurns,
+		LastUpdateSeconds:          last.restartSeconds(),
+		LastUpdateInterruptedTurns: last.InterruptedTurns,
+		QuietWindowSeconds:         int(selfUpdateQuietWindow / time.Second),
 	}
 }
 
@@ -364,6 +533,34 @@ type selfUpdateRecord struct {
 	At   string `json:"lastUpdatedAt"`
 	From string `json:"lastUpdatedFrom"`
 	To   string `json:"lastUpdatedTo"`
+	// The restart, for the Updated card: when the stop for it began, how many turns an Update Now
+	// interrupted for it, and when the image it restarted into started (markSelfUpdateBack). Absent in
+	// a record an older runner wrote.
+	StoppedAt        string `json:"stoppedAt,omitempty"`
+	InterruptedTurns int    `json:"interruptedTurns,omitempty"`
+	BackAt           string `json:"backAt,omitempty"`
+}
+
+// restartSeconds is how long the restart took, from the stop to the new image starting; 0 when the
+// record does not say.
+func (r selfUpdateRecord) restartSeconds() int {
+	stopped, err1 := time.Parse(time.RFC3339, r.StoppedAt)
+	back, err2 := time.Parse(time.RFC3339, r.BackAt)
+	if err1 != nil || err2 != nil || back.Before(stopped) {
+		return 0
+	}
+	return max(1, int(back.Sub(stopped).Round(time.Second)/time.Second))
+}
+
+// markSelfUpdateBack is the first thing the image an update restarted into says about it: it is
+// back, now. Only once per update — a later start of the same image is not the restart.
+func markSelfUpdateBack(now time.Time) {
+	rec := lastSelfUpdate()
+	if rec.StoppedAt == "" || rec.BackAt != "" || rec.To != version {
+		return
+	}
+	rec.BackAt = now.UTC().Format(time.RFC3339)
+	writeSelfUpdateRecord(rec)
 }
 
 func selfUpdateRecordPath() string { return filepath.Join(machineHome(), "self-update.json") }
@@ -381,7 +578,16 @@ func lastSelfUpdate() selfUpdateRecord {
 // recordSelfUpdate files an installed update. Best-effort, like engineUpdateLog: losing it costs the
 // "last updated" line, never the update.
 func recordSelfUpdate(from, to string, at time.Time) {
-	b, err := json.Marshal(selfUpdateRecord{At: at.UTC().Format(time.RFC3339), From: from, To: to})
+	rec := selfUpdateRecord{At: at.UTC().Format(time.RFC3339), From: from, To: to}
+	if stopped := updateNowRestart.startedAt.Load(); stopped != nil {
+		rec.StoppedAt = stopped.UTC().Format(time.RFC3339)
+		rec.InterruptedTurns = int(updateNowRestart.interrupted.Load())
+	}
+	writeSelfUpdateRecord(rec)
+}
+
+func writeSelfUpdateRecord(rec selfUpdateRecord) {
+	b, err := json.Marshal(rec)
 	if err != nil {
 		return
 	}

@@ -251,6 +251,25 @@ final class RunnerSelfUpdateTests: XCTestCase {
                        "0.1.190 · 0.1.197 installs when no turn is running")
     }
 
+    func testAboutOffersUpdateRunnerNowOnlyWhileAReleaseIsWaiting() throws {
+        let behind = try runner(try caseInput("selfUpdate enabled and behind"))
+        XCTAssertTrue(RunnerPageFormat.isBehindLatest(behind, latest: "0.1.197"))
+        XCTAssertTrue(RunnerPageFormat.isBehindLatest(behind, latest: "0.1.1000"),
+                      "segment by segment, as 0.1.99 < 0.1.100")
+        // On the latest release, or ahead of it, a check would find nothing: no row to press.
+        XCTAssertFalse(RunnerPageFormat.isBehindLatest(behind, latest: "0.1.190"))
+        XCTAssertFalse(RunnerPageFormat.isBehindLatest(behind, latest: "0.1.189"))
+        // An unknown release, from either side, is nothing to compare: no row either.
+        XCTAssertFalse(RunnerPageFormat.isBehindLatest(behind, latest: nil))
+        XCTAssertFalse(RunnerPageFormat.isBehindLatest(behind, latest: "  "))
+        let unversioned = try JSONDecoder().decode(Runner.self, from: Data(#"{"id":"r1","name":"lab"}"#.utf8))
+        XCTAssertFalse(RunnerPageFormat.isBehindLatest(unversioned, latest: "0.1.197"))
+        // The Version row calls the same release latest, so the two never disagree.
+        XCTAssertEqual(RunnerPageFormat.versionValue(behind, latest: "0.1.190"), "0.1.190 · Latest")
+        XCTAssertEqual(RunnerPageFormat.versionValue(behind, latest: "0.1.197"),
+                       "0.1.190 · 0.1.197 installs when no turn is running")
+    }
+
     func testLastUpdateSaysWhenInTheReadersZoneAndBetweenWhichVersions() throws {
         let shanghai = try XCTUnwrap(TimeZone(identifier: "Asia/Shanghai"))
         XCTAssertEqual(RunnerPageFormat.lastUpdate(try runner(try caseInput("selfUpdate enabled and behind")),
@@ -298,14 +317,15 @@ final class RunnerSelfUpdateTests: XCTestCase {
 
     func testTheRunnerPagePressesUpdateRunnerNowAndShowsTheLastUpdate() throws {
         let page = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/SkillsRunnersView.swift")
-        let actions = try slice(page, from: "private func attentionButton(", to: "private func diskRow(")
+        let actions = try slice(page, from: "private func attentionButton(", to: "private func engineRow(")
         XCTAssertTrue(actions.contains("case .updateRunner:\n            Button(RunnerPageCopy.RUNNER_UPDATE_RUNNER_NOW) { updateRunner() }"),
                       "a failed update's card presses Update Runner Now")
         let about = try slice(page, from: "private func aboutSection(", to: "private var rotateSection: some View {")
         var from = about.startIndex
         for piece in ["aboutRow(RunnerPageCopy.RUNNER_ABOUT_VERSION,",
                       "aboutRow(RunnerPageCopy.RUNNER_ABOUT_LAST_UPDATE, RunnerPageFormat.lastUpdate(runner))",
-                      "if RunnerAttention.runnerCanUpdateNow(runner, nowMs: RunnerPageFormat.nowMs(now)) {",
+                      "if RunnerPageFormat.isBehindLatest(runner, latest: runners.latestVersion),",
+                      "RunnerAttention.runnerCanUpdateNow(runner, nowMs: RunnerPageFormat.nowMs(now)) {",
                       "Button(RunnerPageCopy.RUNNER_UPDATE_RUNNER_NOW) { updateRunner() }",
                       "aboutRow(RunnerPageCopy.RUNNER_ABOUT_RUNS_AS,"] {
             let found = try XCTUnwrap(about.range(of: piece, range: from..<about.endIndex),

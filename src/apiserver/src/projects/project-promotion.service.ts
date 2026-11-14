@@ -314,13 +314,16 @@ export class ProjectPromotionService {
       select: {
         id: true,
         mergeReceipts: {
-          where: { result: { in: ['MERGED', 'ALREADY_MERGED'] }, targetBranch: input.upstreamBranch },
-          take: 1,
-          select: { id: true },
+          where: {
+            result: { in: ['MERGED', 'ALREADY_MERGED'] },
+            targetBranch: { in: [input.integrationBranch, input.upstreamBranch] },
+          },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          select: { targetBranch: true, sourceSha: true, detail: true },
         },
       },
     });
-    return tasks.filter((task) => task.mergeReceipts.length === 0).map((task) => task.id);
+    return tasks.filter((task) => !onTheUpstream(task.mergeReceipts, input)).map((task) => task.id);
   }
 
   // ── the owner's doors (M-F3) ──────────────────────────────────────────────────────────────────
@@ -418,9 +421,24 @@ export class ProjectPromotionService {
     return this.view(after);
   }
 
-  /** The candidate this project's card is drawn from, or null when there is nothing on offer (§3.6). */
+  /**
+   * The candidate this project's card is drawn from, or null when there is nothing on offer (§3.6).
+   *
+   * A LIVE candidate first, even when a newer one has already ended. A main-line project makes one
+   * candidate per finished task (M-F2), so two can stand at once — and the newest row can be a merge
+   * that happened while an older candidate still asks. Reading only the newest row took that older
+   * one's card off every surface while its item stayed open, so the owner had a row saying "Approve
+   * merge" and nothing to press (2026-11-12, project 34uyniLRpsIAr0qQyv2Jf). Only when nothing is
+   * live does the newest ended row answer, which is the record the project page still draws.
+   */
   async readCurrent(userId: string, projectId: string): Promise<ProjectPromotionView | null> {
     await this.assertOwnProject(userId, projectId);
+    const live = await this.prisma.projectPromotion.findFirst({
+      where: { projectId, ownerId: userId, state: { in: [...LIVE_PROMOTION_STATES] } },
+      orderBy: { createdAt: 'desc' },
+      select: PROMOTION_COLUMNS,
+    });
+    if (live) return this.view(live);
     const row = await this.prisma.projectPromotion.findFirst({
       where: { projectId, ownerId: userId },
       orderBy: { createdAt: 'desc' },
@@ -1291,6 +1309,49 @@ export async function retireCandidatesLandedByReceipt(
 }
 
 /**
+ * M-T14: the assignee closed by hand the last failure item about a BLOCKED task-branch candidate, so
+ * the candidate ends with it — SUPERSEDED, through M-T13's own edge.
+ *
+ * WHAT WAS WRONG (2026-11-13, project 01a1c3c9, branch orbit/task-ai-c49d3a)
+ * -------------------------------------------------------------------------
+ * The coordinator cherry-picked a MAIN-line task's commit onto the upstream by hand and wrote no
+ * receipt. The owner later confirmed the card; the landing replayed the old commit onto a tip that
+ * had moved, conflicted, and blocked the candidate. The coordinator closed the conflict item ("the
+ * work is already on the branch as f72343c"), as the item's own message tells it to — and the card
+ * kept saying "Can't merge into feature/v1.1.1 yet" about work already there. A cherry-pick is a
+ * different commit, so no check can see it landed, and nothing else ends a BLOCKED candidate.
+ *
+ * THE RULE
+ * --------
+ * A BLOCKED candidate's question is "who deals with this failure". Once its assignee has closed every
+ * failure item about it by hand, nobody is left to answer it: the work is on the upstream some other
+ * way, or a fix task carries it as a candidate of its own. Only `TASK_BRANCH` candidates: a project
+ * branch still holds work nothing else will offer. Answers whether it retired the candidate.
+ */
+export async function retireCandidateAfterHandledItem(
+  prisma: PrismaService,
+  input: { projectId: string; promotionId: string },
+): Promise<boolean> {
+  return withTransactionRetry(prisma, async (tx) => {
+    const row = await tx.projectPromotion.findFirst({
+      where: {
+        id: input.promotionId,
+        projectId: input.projectId,
+        sourceKind: 'TASK_BRANCH' satisfies PromotionSourceKind,
+        state: 'BLOCKED' satisfies PromotionState,
+      },
+      select: { id: true, projectId: true, state: true, checkJobId: true, openItemId: true },
+    });
+    if (!row) return false;
+    const stillOpen = await tx.projectOpenItem.count({
+      where: { projectId: row.projectId, promotionId: row.id, state: 'OPEN', kind: { in: [...INTEGRATION_ITEM_KINDS] } },
+    });
+    if (stillOpen > 0) return false;
+    return retireCandidate(tx, row, new Date(), []);
+  }, loggedRetry(logger, 'projectPromotion.retireAfterHandledItem'));
+}
+
+/**
  * M-T13's edge for one candidate a recorded merge answered: SUPERSEDED by a compare-and-set on the
  * state it was read in, its check stopped as J-T8 asks — unless it is one this transaction is writing
  * the answer of — and the owner's card and the failures about it closed `PROMOTION_MOVED_ON`. False
@@ -2030,6 +2091,30 @@ export async function requeuePromotionCheck(
     generation: queued.generation,
     landingSessionId: landing?.sessionId ?? null,
   };
+}
+
+/**
+ * Whether a task on the project line is on the upstream already, by its receipts (newest first):
+ * `tasksOnTheLine`'s exclusion. A receipt a landing or a promotion wrote says so. One an
+ * observation wrote (`landing-observation-result.ts`, `detail.observed`) says only that the commit
+ * the task's identity was frozen as is on the upstream, and that identity can be wrong: the 0.1.253
+ * bump (task 34vJmfV0DZk5cySoXlB3r, 2026-11-10) was frozen at a stale tip already on main, its own
+ * commit landed on the project line only, and an observed receipt about the stale commit kept it
+ * out of every promotion. So an observed receipt counts only when it names the commit the task's
+ * newest project-line receipt landed; one about another commit leaves the task on the line, where
+ * a promotion that finds it on the upstream after all answers ALREADY_LANDED.
+ */
+function onTheUpstream(
+  receipts: ReadonlyArray<{ targetBranch: string; sourceSha: string; detail: Prisma.JsonValue }>,
+  branches: { integrationBranch: string; upstreamBranch: string },
+): boolean {
+  const onLine = receipts.find((receipt) => receipt.targetBranch === branches.integrationBranch);
+  return receipts.some((receipt) => receipt.targetBranch === branches.upstreamBranch
+    && (!observedReceipt(receipt.detail) || receipt.sourceSha === onLine?.sourceSha));
+}
+
+function observedReceipt(detail: Prisma.JsonValue): boolean {
+  return !!detail && typeof detail === 'object' && !Array.isArray(detail) && detail.observed === true;
 }
 
 /**

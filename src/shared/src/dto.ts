@@ -1,4 +1,5 @@
 import type { OwnerConfirmationNotReviewedReason } from './owner-confirmation-review';
+import type { MainCheckoutRunnerRequest } from './mainCheckoutGit';
 // The wire contract shared by the control plane, the Go runner, the web app and the native
 // clients.
 //
@@ -802,6 +803,9 @@ export interface RunnerHeartbeatRequest {
    *  field; absent from an older one — or one rolled back to an older release — which the control
    *  plane stores as NULL, "not reported", rather than keeping what a newer binary last said. */
   selfUpdate?: RunnerSelfUpdate;
+  /** The machine's CPU, memory and disk now (RunnerResources). Sent on every beat by a runner that declares
+   *  MACHINE_RESOURCES_CAPABILITY; absent from an older one. */
+  resources?: RunnerResources;
   /** What a managed runner's instance is doing (managedRunner.ts, MANAGED_RUNNER_SLEEP_CAPABILITY).
    *  Sent only by a managed instance that declares that capability; the control plane stores it only
    *  from the instance the manager authorized. Absent: nothing about this runner may be put to sleep. */
@@ -861,6 +865,17 @@ export interface RunnerSelfUpdate {
   /** While draining: the turns still in flight, and how many there were when the drain began. */
   turnsInFlight?: number;
   turnsAtDrain?: number;
+  /** While restarting for the owner's Update Now: how many turns it interrupted, which continue once
+   *  it is back. Absent for an update that waited for idle. */
+  interruptedTurns?: number;
+  /** The last update's restart: seconds from the stop to the new image starting, and how many turns
+   *  an Update Now interrupted for it. Absent when the runner did not measure them (an older one). */
+  lastUpdateSeconds?: number;
+  lastUpdateInterruptedTurns?: number;
+  /** How long, in seconds, the runner must have been quiet (no turn ended, nothing claimed) before an
+   *  automatic update installs. Sent with every report by runners that wait for one; absent from older
+   *  runners, which install at the first check with no turn in flight, and keep that wording. */
+  quietWindowSeconds?: number;
 }
 
 /** One of the viewer's turns a runner draining for its self-update waits for: the runner page's
@@ -872,9 +887,26 @@ export interface RunnerUpdateTurn {
   startedAt: string | null;
 }
 
+/** What of the viewer's waits on a runner draining for its self-update (D3): sessions on it that have not
+ *  started, and messages not yet delivered to its sessions — queued behind a running turn, or a follow-up
+ *  the runner holds for the update. Present on GET /runners only
+ *  while the runner drains and something of the viewer's waits; the web's banner, the native
+ *  attention item and the drain's one push all say these counts. */
+export interface RunnerDrainWaiting {
+  sessions: number;
+  messages: number;
+  /** The runner drains because its process is stopping (a stop signal: a service restart or stop, a
+   *  reboot), not for a release: its update phase is neither `draining` nor `restarting`. The clients
+   *  then say "is stopping" and offer neither Later nor Update Now. Absent from an older server. */
+  stopping?: boolean;
+}
+
 /** Why a queued session waits on its runner's self-update (queuedReason 'runner_updating'): the
  *  release, the owner's turns the drain waits for, and when the wait began. */
 export interface QueuedRunnerUpdate {
+  /** The runner is stopping, not updating (RunnerDrainWaiting.stopping): "Runner stopping", no actions.
+   *  Absent from an older server. */
+  stopping?: boolean;
   targetVersion: string | null;
   since: string | null;
   turns: Array<{ id: string; title: string | null }>;
@@ -1031,6 +1063,44 @@ export const DIR_PROBE_CAPABILITY = 'dir-probe/v1';
  *  (ClaimedSession.createWorkDir, docs/first-workspace-contract.md §4). POST /sessions makes a
  *  workspace in a new folder only on a runner that declares it. */
 export const CREATE_WORKDIR_CAPABILITY = 'create-workdir/v1';
+
+/** A runner that reports its machine's CPU, memory and disk on every heartbeat (RunnerHeartbeatRequest.resources).
+ *  The machine page tells "update the runner" (not declared) from "no reading yet" (declared, nothing kept) by it. */
+export const MACHINE_RESOURCES_CAPABILITY = 'machine-resources/v1';
+
+/** One reading of a machine (RunnerHeartbeatRequest.resources; the runner's MachineResources). A figure the
+ *  platform has no answer for is absent — the page shows a dash, never a zero. Bytes are whole numbers. */
+export interface RunnerResources {
+  /** The whole machine's CPU in use since the runner's previous reading, 0–100. */
+  cpuPercent?: number;
+  cpuCores?: number;
+  /** The one-minute load average. */
+  load1?: number;
+  memTotalBytes?: number;
+  /** What the system can hand out without swapping; dropped page cache counts as available. */
+  memAvailableBytes?: number;
+  /** The fullest filesystem among the agents' working directories, else the one holding the repos root. */
+  diskTotalBytes?: number;
+  diskFreeBytes?: number;
+}
+
+/** One point of a machine's last hour: percentages in use, null where that reading had no figure. */
+export interface RunnerResourceSample {
+  at: string;
+  cpu: number | null;
+  mem: number | null;
+  disk: number | null;
+}
+
+/** GET /api/runners/:id/resources: the machine's latest reading and its last hour, kept beside its presence
+ *  (runner_presence.resources, migration 0720). `at` and `latest` are null when nothing is kept — a runner that
+ *  has not beaten since the control plane's database last started, or one that does not report. */
+export interface RunnerResourcesAnswer {
+  at: string | null;
+  latest: RunnerResources | null;
+  /** Oldest first, one per heartbeat, none older than an hour before `at`. */
+  samples: RunnerResourceSample[];
+}
 
 /** Control plane → runner: what is at one path on this machine (docs/first-workspace-contract.md §2).
  *
@@ -1238,6 +1308,9 @@ export interface RunnerHeartbeatResponse {
   /** A checkout repair the user started after seeing it reported wedged. Absent on older control
    *  planes, and whenever no repair is in flight for this runner. */
   repoCleanupRequest?: RepoCleanupCommand;
+  /** Main checkout reads and actions for a runner that declared `main-checkout-git/v1`
+   *  (docs/main-checkout-git-contract.md §10). Each is handed out once. Absent otherwise. */
+  mainCheckoutRequests?: MainCheckoutRunnerRequest[];
   /** Re-read the runtime CLIs' model lists now, instead of waiting for the runner's own periodic
    *  pass. Set once per user request and cleared as it is handed over, so a runner that misses it
    *  (offline, older build) costs nothing more than the wait it was already in. */
@@ -1247,6 +1320,20 @@ export interface RunnerHeartbeatResponse {
    *  runner then reports as `waitingForIdle`. Set once per request and cleared as it is handed
    *  over, like `refreshModelCatalog`. */
   checkSelfUpdate?: boolean;
+  /** This server takes a session claim scoped to named sessions (`GET /runner/sessions/claim?drainScope=`),
+   *  which a runner draining for an update sends for the sessions whose engine is running a turn on it.
+   *  Absent from an older server, to which such a runner sends no claim while it drains. */
+  drainScopedClaims?: boolean;
+  /** The owner's Later (ISO time): stop draining for the waiting release now and put it off until
+   *  then, when it waits for idle again under a fresh deferral limit. Set once per request and
+   *  cleared as it is handed over, like `checkSelfUpdate`; only a runner that declares
+   *  SELF_UPDATE_POSTPONE_V1 is asked. */
+  postponeSelfUpdateUntil?: string;
+  /** The owner's Update Now (POST /runners/:id/self-update/now): install the waiting release now,
+   *  interrupting the turns in flight through the graceful stop so their sessions resume after the
+   *  restart. Set once per request and cleared as it is handed over, like `checkSelfUpdate`; only a
+   *  runner that declares SELF_UPDATE_NOW_V1 is asked. */
+  selfUpdateNow?: boolean;
   /** This machine's free-space floor in MB (Runner.minFreeDiskMb), the same number the auto-run
    *  disk gate reads. Sent so the runner can apply it to work only it can see — reclaiming the
    *  session checkouts on its own disk — without keeping a second copy of the setting.
@@ -1323,6 +1410,65 @@ export interface RunnerHeartbeatResponse {
   secretGrants?: Array<{ id: string; expiresAt: string }>;
   /** Grants of this runner being removed: remove the copy if held, then confirm with /removed either way. */
   secretGrantsRemoving?: string[];
+  /**
+   * The snapshots this runner's open forked tasks start from (docs/task-fork-from-session-design.md §2.6): the runner
+   * deletes each keep-alive ref `refs/orbit/fork/*` whose snapshot is not listed. Sent only to a runner that declared
+   * `task-fork/v1`, and only by a beat that reconciles in full. Only a PRESENT list states anything: absent deletes
+   * nothing, `[]` means no open forked task.
+   */
+  forkSnapshotsOpen?: string[];
+}
+
+/** Declared by a runner that deletes the fork keep-alive refs `forkSnapshotsOpen` no longer names. runner-go asserts
+ *  the same string. */
+export const TASK_FORK_V1 = 'task-fork/v1';
+
+/** Declared by a runner that runs a codeless task in a detached checkout and makes its branch only at finalize, when
+ *  the run changed something (`ClaimedSession.codelessCheckout`, docs/task-fork-from-session-design.md §3 B2). An
+ *  older runner is handed the branch up front instead. runner-go asserts the same string. */
+export const CODELESS_CHECKOUT_V1 = 'codeless-checkout/v1';
+
+/** Declared by a runner that honours the owner's Later (`postponeSelfUpdateUntil`,
+ *  docs/runner-update-drain-design.md §4). A runner without it is refused a postpone as too old.
+ *  runner-go asserts the same string. */
+export const SELF_UPDATE_POSTPONE_V1 = 'self-update-postpone/v1';
+
+/** Declared by a runner that honours the owner's Update Now (`selfUpdateNow`,
+ *  docs/runner-update-drain-design.md §4): it interrupts the turns in flight, installs and restarts.
+ *  A runner without it is refused Update Now as too old. runner-go asserts the same string. */
+export const SELF_UPDATE_NOW_V1 = 'self-update-now/v1';
+
+/** The body of POST /runners/:id/self-update/now: the owner's explicit "interrupt these turns". */
+export interface RunnerSelfUpdateNowRequest {
+  interruptTurns: true;
+}
+
+/** Its answer: when it was asked, and how many of the owner's turns were running then. */
+export interface RunnerSelfUpdateNowResponse {
+  requestedAt: string;
+  turns: number;
+}
+
+/** The interrupt event's reason for a turn the owner's Update Now stopped (beside `runner_restart`). */
+export const RUNNER_UPDATE_INTERRUPT_REASON = 'runner_update';
+
+/** The interrupt event's reason for a turn a runner stop cut once its drain ran out (runner-go selfupdate_now.go). */
+export const RUNNER_RESTART_INTERRUPT_REASON = 'runner_restart';
+
+/** The first sentence of the turn Orbit sends a session whose turn Update Now interrupted (D4). The
+ *  clients draw a user turn that opens with it as one Orbit line, not as the owner's bubble. */
+export const RUNNER_UPDATE_RESUME_NOTE = 'The runner update interrupted this turn; continue.';
+
+/** The body of POST /runners/:id/self-update/postpone. `timeZone` is the owner's IANA zone, which
+ *  `until` is capped in: at most 09:00 tomorrow there (D2). */
+export interface RunnerSelfUpdatePostponeRequest {
+  until: string;
+  timeZone?: string;
+}
+
+/** Its answer: the time the runner is asked to wait until, after the cap. */
+export interface RunnerSelfUpdatePostponeResponse {
+  until: string;
 }
 
 // ── Claude region check (docs/claude-region-check-contract.md) ──
@@ -1933,6 +2079,68 @@ export interface RunnerEngineAccount {
  * but "is this machine still being kept current" — which the runner answers by asking each
  * engine's release feed what is published and comparing it against the binary on disk.
  */
+/** The engine update warnings dismissed on a runner, by engine: the `update.latest` each was
+ *  dismissed against (POST /runners/:id/engines/:engine/update-warning/dismiss). Every client hides
+ *  that engine's update warning while this equals the engine's current `update.latest`; a newer
+ *  release brings it back. Stored on the runner, so it holds for everyone on the account. */
+export type RunnerEngineUpdateDismissals = Partial<Record<ReportedEngine, string>>;
+
+/**
+ * Fix with an agent (POST /runners/:id/attention/:kind/fix): the machine-side warnings a press hands to
+ * an agent on that machine. `engineNotUpdating` and `installFailed` name an engine; `cannotSelfUpdate`
+ * (the runner can't update itself, or its updates are turned off) is the runner's own.
+ */
+export type RunnerAttentionFixKind = 'engineNotUpdating' | 'cannotSelfUpdate' | 'installFailed';
+
+/** Why no agent can start on a machine: it is offline, no workspace runs on it, or the engine its
+ *  most recently used workspace runs on is signed out there. */
+export type RunnerAgentFixBlockedCode = 'offline' | 'noWorkspace' | 'engineSignedOut';
+
+/** An agent already at work on one warning: the session a press started, while it is open. */
+export interface RunnerAgentFixing {
+  kind: RunnerAttentionFixKind;
+  /** The engine for `engineNotUpdating` and `installFailed`; null for `cannotSelfUpdate`. */
+  engine: ReportedEngine | null;
+  sessionId: string;
+  workspaceId: string;
+  workspaceName: string;
+}
+
+/**
+ * Where a press of Fix with an agent on this runner starts its session, or why it can't, as GET /runners
+ * reports it on each runner (`agentFix`). The same answer the fix endpoint acts on, so every client
+ * disables the button with the line the endpoint would refuse with.
+ */
+export interface RunnerAgentFix {
+  /** The workspace on this machine used most recently; null when none runs here. */
+  workspaceId: string | null;
+  workspaceName: string | null;
+  /** The engine that workspace's next session starts on, and its name ("Claude Code"). */
+  engine: string | null;
+  engineName: string | null;
+  /** Null when a press can start a session. `message` is the line a client shows in place of it. */
+  blocked: { code: RunnerAgentFixBlockedCode; message: string } | null;
+  /** The warnings an agent is fixing now, each with its open session. */
+  fixing: RunnerAgentFixing[];
+}
+
+/** POST /runners/:id/attention/:kind/fix body. */
+export interface RunnerAttentionFixRequest {
+  /** Required for `engineNotUpdating` and `installFailed`. */
+  engine?: ReportedEngine;
+  /** `cannotSelfUpdate` only: the newest runner release the client knows of (it reads dl/version.json),
+   *  quoted in the agent's first message. */
+  latest?: string;
+}
+
+/** What the fix endpoint answers with: the session it started. */
+export interface RunnerAttentionFixResult {
+  sessionId: string;
+  workspaceId: string;
+  workspaceName: string;
+  title: string;
+}
+
 export interface RunnerEngineUpdate {
   /** `updated` — a newer version actually landed on this machine.
    *  `checked` — Orbit asked and there was nothing to fetch.
@@ -2154,6 +2362,13 @@ export interface ClaimedSession {
    *  and workDir is a git repo, the runner runs claude in a per-session `git worktree` on
    *  this branch instead of the shared workDir. Generated server-side at session creation. */
   branch?: string;
+  /** A codeless task's run with no branch yet (docs/task-fork-from-session-design.md §3 B2), sent only to a runner
+   *  that declares `codeless-checkout/v1` and only when `branch` is absent: run in a checkout of its own, detached
+   *  at the run's base (`git worktree add --detach`). At finalize, nothing changed → the checkout is removed and no
+   *  branch is made; changes → `codelessBranch` is created there, committed to, and reported as the branch. */
+  codelessCheckout?: boolean;
+  /** The branch a `codelessCheckout` run makes at finalize if it changed anything. */
+  codelessBranch?: string;
   /** Agent opt-in: if workDir isn't a git repo, the runner `git init`s it (default
    *  .gitignore + baseline commit) so the session can still be worktree-isolated. */
   autoInitGit?: boolean;
@@ -2162,6 +2377,10 @@ export interface ClaimedSession {
    *  (`mkdir -p`, 0755) before the engine starts when it is missing — only when the resolved path lies
    *  inside its own resolved reposRoot. Absent otherwise, never false. */
   createWorkDir?: boolean;
+  /** The folder below workDir a session with no worktree runs in (POST /sessions `workSubdir`): relative,
+   *  `/`-separated, normalized, no `..`. The runner starts the engine in workDir/workSubdir and refuses to
+   *  start when that folder, symlinks followed, is missing or lies outside workDir. Absent: workDir itself. */
+  workSubdir?: string;
   /** The branch this session's work merges INTO (its recorded mergeTarget, else its agent's
    *  defaultMergeTarget) — the same branch the status bar's Merge button names. The runner
    *  judges "already merged" against it, so work landed in e.g. `develop` isn't reported
@@ -2419,7 +2638,10 @@ export type ConversationTurnKind =
   | 'shell'
   | 'diff'
   | 'steer'
-  | 'withdraw';
+  | 'withdraw'
+  /** A main checkout result line (docs/main-checkout-git-contract.md §10.3): the runner writes `content` (a
+   *  MainCheckoutResultNotice) as a system event. Never shown to the agent; answered as it is handed out. */
+  | 'notice';
 
 /** What a routing-v1 sender wants a message to do. Omission retains the installed N-1
  * server-side auto-steer/queue protocol; new clients always send one explicit value. */
@@ -2587,6 +2809,30 @@ export interface TakeoverTurnLeasesResponse {
   status: RunStatus;
 }
 
+/** The most sessions one batch takeover may name. */
+export const BATCH_TAKEOVER_TURN_LEASES_MAX = 500;
+
+/** Runner process → control plane: the takeover above for many sessions in one request, as a
+ *  restarted runner makes for the sessions a reclaim handed back. Each row is judged exactly as
+ *  the single route judges it, and one row's refusal does not refuse the others. */
+export interface BatchTakeoverTurnLeasesRequest {
+  leaseOwner: string;
+  sessions: Array<{ sessionId: string; expectedLeaseOwner?: string | null }>;
+}
+
+/** One row's answer, in request order: the status the single route answers with, or the
+ *  status code and reason it refuses with (403 not this runner's, 409 a conflict). */
+export interface BatchTakeoverTurnLeasesResult {
+  sessionId: string;
+  status?: RunStatus;
+  error?: { statusCode: number; message: string; code?: string };
+}
+
+export interface BatchTakeoverTurnLeasesResponse {
+  ok: true;
+  results: BatchTakeoverTurnLeasesResult[];
+}
+
 /** One open interactive session a restarted runner must retain. Only RUNNING is
  *  re-attached as an active turn; queued/idle sessions are registered cold so their
  *  worktree survives and a later claim can resume them without spawning eagerly. */
@@ -2614,10 +2860,16 @@ export interface ReclaimSession {
   /** Git branch for this session's worktree, cf. ClaimedSession.branch. On reclaim the
    *  runner re-attaches to (or re-creates from this branch) the same worktree. */
   branch?: string;
+  /** cf. ClaimedSession.codelessCheckout: the codeless run's detached checkout is re-attached. */
+  codelessCheckout?: boolean;
+  /** cf. ClaimedSession.codelessBranch. */
+  codelessBranch?: string;
   /** Agent opt-in to auto-`git init` a non-git workDir, cf. ClaimedSession.autoInitGit. */
   autoInitGit?: boolean;
   /** Make a missing workDir inside reposRoot first, cf. ClaimedSession.createWorkDir. */
   createWorkDir?: boolean;
+  /** The folder below workDir it runs in, cf. ClaimedSession.workSubdir. */
+  workSubdir?: string;
   /** Branch this session merges into, cf. ClaimedSession.mergeTarget. */
   mergeTarget?: string;
   /** DB id of the session's agent (ORBIT_AGENT_ID), cf. ClaimedSession.agentId. */

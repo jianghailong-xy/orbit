@@ -5,13 +5,18 @@ import OrbitKit
 // docs/mocks/runner-update-drain draws it on a phone: the queued page — why, the turns it waits for
 // and how long — while the conversation is empty, and otherwise `Queued · runner updating` on the
 // foot row of the reader's last message. The words are `RunnerUpdating`'s, which are the web's
-// (`runnerSlots.ts`). Later and Update Now… come with the tasks that make them do something.
+// (`runnerSlots.ts`). Both offer Later (`RunnerUpdateLaterControl`) and, for a runner that declares
+// `self-update-now/v1`, Update Now… (`RunnerUpdateNowControl`) for the session's runner (board 5).
+// A runner that is stopping rather than updating (docs/mocks/runner-stopping) says "stopping" and
+// offers neither: it has no release to postpone or install.
 
 /// What the foot-row tag needs: which bubble carries it, the session it explains and its runner.
 struct RunnerUpdatingFoot: Equatable {
     let bubbleID: String
     let session: Session
     let machine: String?
+    /// The runner Later postpones; nil until the console has read it, which draws no Later.
+    var runnerID: String? = nil
 }
 
 private struct RunnerUpdatingFootKey: EnvironmentKey {
@@ -31,6 +36,7 @@ extension EnvironmentValues {
 struct RunnerUpdatingQueuedView: View {
     let session: Session
     let machine: String?
+    var runnerID: String? = nil
     var onOpenSession: (String) -> Void = { _ in }
     /// The turns' links, which the page opens in place rather than handing to the system.
     private static let turnScheme = "orbit-turn:"
@@ -38,7 +44,7 @@ struct RunnerUpdatingQueuedView: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             VStack(spacing: 10) {
-                Text(RunnerUpdating.RUNNER_UPDATING_TITLE)
+                Text(RunnerUpdating.title(session))
                     .font(.headline)
                 Text(description)
                     .font(.callout)
@@ -53,6 +59,12 @@ struct RunnerUpdatingQueuedView: View {
                     })
                 if let waited = RunnerUpdating.waited(session, now: context.date) {
                     Text(waited).font(.footnote).foregroundStyle(.tertiary)
+                }
+                if let runnerID, !RunnerUpdating.stopping(session) {
+                    RunnerUpdateLaterControl(runnerID: runnerID, version: session.queuedRunnerUpdate?.targetVersion,
+                                             machine: machine)
+                        .padding(.top, 8)
+                    RunnerUpdateNowControl(runnerID: runnerID, machine: machine)
                 }
             }
             .padding(.horizontal, 32)
@@ -90,7 +102,7 @@ struct RunnerUpdatingTagView: View {
             Text(RunnerUpdating.queuedWord)
             Text("·")
             Button { open = true } label: {
-                Text(RunnerUpdating.RUNNER_UPDATING_TAG)
+                Text(RunnerUpdating.tag(foot.session))
                     .underline(pattern: .dot)
             }
             .buttonStyle(.plain)
@@ -104,11 +116,18 @@ struct RunnerUpdatingTagView: View {
     private var pop: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             VStack(alignment: .leading, spacing: 6) {
-                Text(RunnerUpdating.RUNNER_UPDATING_TITLE).font(.headline)
+                Text(RunnerUpdating.title(foot.session)).font(.headline)
                 Text(RunnerUpdating.messageText(foot.session, machine: foot.machine))
                     .font(.callout)
                 if let waited = RunnerUpdating.waited(foot.session, now: context.date) {
                     Text("\(waited).").font(.callout).foregroundStyle(.secondary)
+                }
+                if let runnerID = foot.runnerID, !RunnerUpdating.stopping(foot.session) {
+                    RunnerUpdateLaterControl(runnerID: runnerID,
+                                             version: foot.session.queuedRunnerUpdate?.targetVersion,
+                                             machine: foot.machine)
+                        .padding(.top, 4)
+                    RunnerUpdateNowControl(runnerID: runnerID, machine: foot.machine)
                 }
             }
             .fixedSize(horizontal: false, vertical: true)

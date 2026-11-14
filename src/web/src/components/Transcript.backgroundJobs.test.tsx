@@ -13,7 +13,13 @@ import { EN_RUNNING_AND_ENDED, ZH_KILLED } from '../lib/backgroundJobs.fixtures'
  * context appended to their message rather than a turn of its own (Transcript.controlPlaneNote
  * covers that). This is about what the fold opens to: the block's `｜`-separated lines ran four
  * lines wide, and its last two sentences are written to the agent, not to the reader.
+ *
+ * The inventory alone draws no line (owner, 2026-11-14): it is Orbit's routine. Its rows are still
+ * what the fold opens to when a named block rides along, so each note here is mounted beside a
+ * list's condition board.
  */
+
+const CONDITIONS = '<list-conditions list="3Hq9fVbYmP2kQhZ8aNcW4x" title="FineWeb">\n  Quota held dispatch\n</list-conditions>';
 
 let container: HTMLDivElement;
 let root: Root;
@@ -30,8 +36,8 @@ afterEach(() => {
   container.remove();
 });
 
-async function mountNote(block: string) {
-  const appended = `\n\n${block}`;
+async function mountNote(block: string, alongside = CONDITIONS) {
+  const appended = alongside ? `\n\n${block}\n\n${alongside}` : `\n\n${block}`;
   const event: RunEvent = {
     seq: 7,
     type: 'user',
@@ -49,6 +55,7 @@ async function mountNote(block: string) {
   const toggle = [...container.querySelectorAll('button')].find((b) =>
     b.textContent?.startsWith('⊕ Orbit attached:'),
   );
+  if (!alongside) return null;
   if (!toggle) throw new Error(`no folded entry was rendered:\n${container.innerHTML}`);
   await act(async () => {
     toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -98,18 +105,17 @@ describe('a background-jobs note, opened', () => {
     expect(raw?.querySelector('pre')?.textContent).toBe(EN_RUNNING_AND_ENDED);
   });
 
-  it('names its count in the line’s name, open and folded again alike, where its words only turn ⊖ back to ⊕', async () => {
+  it('draws no line for the inventory alone', async () => {
+    await mountNote(EN_RUNNING_AND_ENDED, '');
+
+    expect(container.textContent).not.toContain('Orbit attached');
+    expect(rows()).toHaveLength(0);
+  });
+
+  it('keeps the inventory out of the line’s name when a named block rides along', async () => {
     const toggle = await mountNote(EN_RUNNING_AND_ENDED);
 
-    expect(toggle.getAttribute('aria-label')).toBe('⊕ Orbit attached: background jobs · 1 running, 1 ended');
-    expect(toggle.textContent).toBe('⊖ Orbit attached: background jobs');
-
-    await act(async () => {
-      toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(rows()).toHaveLength(0);
-    expect(toggle.getAttribute('aria-label')).toBe('⊕ Orbit attached: background jobs · 1 running, 1 ended');
-    expect(toggle.textContent).toBe('⊕ Orbit attached: background jobs');
+    expect(toggle!.getAttribute('aria-label')).toBe('⊕ Orbit attached: list conditions');
+    expect(toggle!.textContent).toBe('⊖ Orbit attached: list conditions');
   });
 });

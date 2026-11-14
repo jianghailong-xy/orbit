@@ -115,6 +115,7 @@ struct ProjectDoneCard: View {
     private var content: some View {
         Text(ProjectDone.meta(projectTitle: subject.title, asked: request != nil, waiting: waiting))
             .font(.orbitLabel).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
         if let request {
             DoneSectionHead(title: ProjectDone.coordinatorCall)
@@ -135,6 +136,7 @@ struct ProjectDoneCard: View {
             Text(ProjectDone.orbitCheckedLine(counts: counts, confirmedAt: confirmedAt,
                                               openItems: openItems, running: running))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .font(.orbitLabel)
@@ -144,11 +146,16 @@ struct ProjectDoneCard: View {
                                  moving = MoveCriterionSubject(subject: subject, finding: finding)
                              })
         } else if request != nil {
+            // Wraps rather than truncates: in the transcript's list a Text that may shrink is cut
+            // to one line, and the row comes out short enough to leave the card's buttons below
+            // the list's end, out of the scroll's reach.
             Text(ProjectDone.recordingExplanation).font(.orbitProse)
+                .fixedSize(horizontal: false, vertical: true)
         }
         if let error {
             Text("\(ProjectDone.notRecorded) — \(error)")
                 .font(.orbitLabel).foregroundStyle(Color.red)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         if notYetOpen {
@@ -180,6 +187,7 @@ struct ProjectDoneCard: View {
                         onAside: { criteriaOpen = !open })
         Text(ProjectDone.cardTally(subject))
             .font(.orbitLabel).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
         if open, !criteria.isEmpty {
             DonePanel {
@@ -313,6 +321,7 @@ struct ProjectDoneGapList: View {
         if gaps.isEmpty {
             Text(ProjectDone.noGaps)
                 .font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             let shown = expanded ? gaps : Array(gaps.prefix(3))
@@ -375,12 +384,15 @@ struct ProjectDoneReceiptCard: View {
                            tone: .green, badge: ProjectDone.provenance)
             Text(ProjectDone.receiptMeta(subject, record: record))
                 .font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(ProjectDone.receiptLine(subject, record: record))
                 .font(.orbitProse.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(ProjectDone.receiptTally(subject, record: record))
                 .font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if !accepted.isEmpty {
                 Button {

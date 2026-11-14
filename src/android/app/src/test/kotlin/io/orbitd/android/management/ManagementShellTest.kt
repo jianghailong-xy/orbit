@@ -81,22 +81,30 @@ class ManagementShellTest {
         assertEquals(listOf("PATCH runners/${fixture.RUNNER}"), fixture.writes("runners/${fixture.RUNNER}"))
     }
 
-    @Test fun maxConcurrentIsSavedOnceThePressesSettle() {
+    @Test fun maxConcurrentIsChangedInItsDialog() {
         signIn()
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
         compose.onNode(hasText("Settings") and hasClickAction()).performScrollTo().performClick()
-        compose.onNode(hasText(Infrastructure.TITLE) and hasClickAction()).performScrollTo().performClick()
+        compose.onNode(hasText(MachinesAndModels.TITLE) and hasClickAction()).performScrollTo().performClick()
         compose.waitUntil(60_000) { compose.onAllNodes(hasText("Old alias") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText("Old alias") and hasClickAction()).performScrollTo().performClick()
         await("About")
-        compose.onNodeWithContentDescription("Increase Max Concurrent").performScrollTo().performClick()
+        // A meter: `0 of 2 running`; Edit opens the dialog that changes the limit.
+        compose.onNodeWithText("0 of 2 running").performScrollTo()
+        val change = hasContentDescription("Edit Max Concurrent")
+        // Cancel sends nothing.
+        compose.onNode(change).performClick()
         compose.onNodeWithContentDescription("Increase Max Concurrent").performClick()
+        compose.onNode(hasText("Cancel") and hasClickAction()).performClick()
+        compose.waitForIdle()
+        assertTrue(fixture.writes("runners/${fixture.RUNNER}").isEmpty())
+        // Two presses and Save: one write.
+        compose.onNode(change).performClick()
+        compose.onNodeWithContentDescription("Increase Max Concurrent").performClick()
+        compose.onNodeWithContentDescription("Increase Max Concurrent").performClick()
+        compose.onNode(hasText("Save") and hasClickAction()).performClick()
         compose.waitUntil(60_000) { fixture.runnerCapacity == 4 }
         assertEquals("Two presses, one write", 1, fixture.writes("runners/${fixture.RUNNER}").size)
-        // A press followed at once by leaving the page is still sent.
-        compose.onNodeWithContentDescription("Increase Max Concurrent").performClick()
-        back()
-        compose.waitUntil(60_000) { fixture.runnerCapacity == 5 }
     }
 
     @Test fun updateRunnerNowIsOfferedOnlyWhereTheRunnersUpdaterCanActAndAsksItToCheck() {
@@ -151,7 +159,7 @@ class ManagementShellTest {
     private fun runnerPage() {
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
         compose.onNode(hasText("Settings") and hasClickAction()).performScrollTo().performClick()
-        compose.onNode(hasText(Infrastructure.TITLE) and hasClickAction()).performScrollTo().performClick()
+        compose.onNode(hasText(MachinesAndModels.TITLE) and hasClickAction()).performScrollTo().performClick()
         compose.waitUntil(60_000) { compose.onAllNodes(hasText("Old alias") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText("Old alias") and hasClickAction()).performScrollTo().performClick()
         await("About")

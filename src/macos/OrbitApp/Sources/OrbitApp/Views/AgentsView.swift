@@ -48,7 +48,10 @@ struct WorkspaceFolderIcon: View {
 /// The shared first-level Workspace row used by iPhone, iPad and Mac navigation. Runner is
 /// descriptive metadata, never a disclosure parent; the trailing slot carries at most one live
 /// state, with user attention taking precedence over background work. On the Mac a row with no
-/// state shows its faint ⌘1…⌘9 shortcut there instead (`shortcut`, 0-based; nil on iOS).
+/// state shows its faint ⌘1…⌘9 shortcut there while ⌘ is held (`shortcut`, 0-based; nil otherwise).
+/// An empty `runnerLabel` leaves the runner off the row. With `runnerOnHover` it shows only while
+/// the pointer is on the row, and whole, the name giving way (the Mac's sidebar, board
+/// docs/mocks/workspace-runner-label E1); off the Mac nothing hovers, so such a row never names it.
 struct WorkspaceNavigationRow: View {
     let agent: Agent
     let runnerLabel: String
@@ -60,6 +63,8 @@ struct WorkspaceNavigationRow: View {
     var jobs: Bool = false
     let waiting: Int
     var shortcut: Int? = nil
+    var runnerOnHover: Bool = false
+    @State private var hovering = false
 
     var body: some View {
         let status = WorkspaceNavigationStatusLogic.resolve(
@@ -69,9 +74,12 @@ struct WorkspaceNavigationRow: View {
             HStack(spacing: 0) {
                 workspaceName
                 disabledBadge
-                Text(" · \(runnerLabel)")
-                    .lineLimit(1)
-                    .foregroundStyle(.secondary)
+                if !runnerLabel.isEmpty && (!runnerOnHover || hovering) {
+                    Text(" · \(runnerLabel)")
+                        .lineLimit(1)
+                        .foregroundStyle(.secondary)
+                        .layoutPriority(runnerOnHover ? 3 : 0)
+                }
             }
             Spacer(minLength: 6)
             if case .needsYou(let count) = status {
@@ -93,6 +101,10 @@ struct WorkspaceNavigationRow: View {
                     .foregroundStyle(.tertiary)
             }
         }
+        #if os(macOS)
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        #endif
     }
 
     private var workspaceName: some View {
@@ -189,7 +201,18 @@ struct AgentContentColumn: View {
                 }
             }
             #else
-            workspaceList
+            // A project's sessions page takes the column, as on the iPad: the sidebar's project row
+            // opens it (docs/mocks/macos-sidebar, owner 2026-11-12), the detail beside it following
+            // the member picked.
+            if let address = app.projectSessionsColumn, rowNavigation == .selection {
+                SessionProjectPage(address: address, rowNavigation: rowNavigation)
+            } else if let address = app.folderColumn {
+                // A folder's page takes the column as on the iPad, with its own back button; the
+                // Mac has no search field over it (⌘K searches), so it is given none.
+                SessionFolderPage(address: address, rowNavigation: rowNavigation)
+            } else {
+                workspaceList
+            }
             #endif
         }
         #if os(iOS)
@@ -342,8 +365,10 @@ struct AgentPanes: View {
     @State private var searching = false
     /// Which row's circle swipe actions are out (iOS 26 — see `RowSwipeState`).
     @State private var rowSwipe = RowSwipeState()
+    #endif
     /// The row whose Share was tapped — drives the share panel, owned by the list for the same
-    /// reason as `taggingSession`.
+    /// reason as `taggingSession`. Share is iOS's row action (`sessionRowActions`), so on the Mac it is
+    /// never set and has no panel.
     @State private var sharingSession: Session?
     /// The row whose Move was tapped — drives the Move panel, list-owned like the two above.
     @State private var movingSession: Session?
@@ -352,31 +377,30 @@ struct AgentPanes: View {
     @State private var renamingFolder: SessionFolder?
     /// The folder whose Delete Folder… was tapped, held the same way.
     @State private var deletingFolder: SessionFolderDeletion?
-    /// New Folder… in the ≡ menu (§3.4) and the prompt it opens: its draft, whether it is waiting on
-    /// the server, and why the last one failed (a name the workspace already has, in words).
+    /// New Folder… (§3.4) — in the ≡ menu on iOS, the window toolbar on the Mac — and the prompt it
+    /// opens: its draft, and why the last one failed (a name the workspace already has, in words).
     @State private var namingFolder = false
     @State private var newFolderDraft = ""
     @State private var newFolderFailure: String?
-    /// Whether the Pinned section is folded to its header (iOS list only). Stored rather than view
+    /// Whether the Pinned section is folded to its header. Stored rather than view
     /// state: this pane is rebuilt per workspace (`.id(a.id)`), so @State would unfold it on every
     /// switch, and on every launch.
     @AppStorage("sessionList.pinnedCollapsed") private var pinnedCollapsed = false
     /// The last grouping drawn and its inputs (see `body`).
     @State private var listingMemo = SessionListingMemo<SessionListGrouping>()
-    #endif
     // Set true when the composer hands ↑/↓ back on Escape, so the session list can be arrow-navigated
     // without a click; the binding also tracks click-to-focus.
     @FocusState private var listFocused: Bool
 
     var body: some View {
-        // Option B: the column is just the session list. The scope switcher and New-session action
-        // live in the window toolbar (below) — like Finder/Mail hosting view controls in the toolbar
-        // rather than stacking chrome bands above the list.
+        // The column is the session list with its Open / Completed / Trash scope over it (macOS: a
+        // top inset; regular iPad: the same picker in its refresh-safe top inset). The scope used to
+        // ride the window toolbar's centre on the Mac, where it sat over the detail pane and read as
+        // a control of the conversation rather than of this list. New session stays in the toolbar.
         //
         // The selection is for the three-column shape only: it is what fills the detail pane beside
         // this column. Compact's rows push their own pages onto the section's `NavigationStack`, so
         // there the List has nothing to select (and in a plain stack wouldn't respond to a tap).
-        #if os(iOS)
         // The grouping runs only when what it is computed from changed (`SessionListingMemo`): the
         // body re-runs on a selection, a pop back to the list or a focus request, none of which
         // moves a row. The list's closures, which SwiftUI also runs on its own as rows scroll in,
@@ -386,16 +410,13 @@ struct AgentPanes: View {
         let timeSections = grouping.timeSections
         let projectRows = grouping.projectRows
         let projectMarks = grouping.projectListing.marks
-        #endif
         List(selection: listSelection) {
-            #if os(iOS)
-            // ChatGPT-style recency sections (Pinned / Today / Yesterday / 2–7 days ago / …) — a
-            // deliberate divergence from web's flat list, grouping the tall iOS session column by
-            // last activity. Bucketing is the pure, tested `SessionTimeGrouping`. macOS keeps the flat
-            // list (its 3-pane window reads fine without sections).
+            // Recency sections (Pinned / Today / Yesterday / 2–7 days ago / …), as web's list draws
+            // them, on every platform. Bucketing is the pure, tested `SessionTimeGrouping`.
             // Optional "By Tag" grouping (one Section per tag + Untagged) or the default recency
             // sections; the tag filter chip narrows either. Both are the pure, tested OrbitKit
             // groupers over the same console-sorted, tag-filtered list (`shownSessions`).
+            #if os(iOS)
             if isSearching {
                 searchResults
             } else if groupByTag {
@@ -407,73 +428,12 @@ struct AgentPanes: View {
                     }
                 }
             } else {
-                // The workspace's folders, at the very top of the list (docs/session-folders-move-design.md
-                // §3.3): the sessions filed in one are drawn behind its row and not in the time
-                // sections below. Trash, a tag filter and Group by Tag all leave this empty — see
-                // `folderListing` — so the list goes on flat there, and macOS never draws folders
-                // at all (§1).
-                ForEach(Array(folderListing.folders.enumerated()), id: \.element.id) { index, row in
-                    // The list draws a hairline at the top of its first row; with folder rows at the
-                    // very top, that row is one of theirs (see the note on the first "Today" row
-                    // below, whose trick this repeats).
-                    if index == 0 {
-                        folderRow(row).listRowSeparator(.hidden, edges: .top)
-                    } else {
-                        folderRow(row)
-                    }
-                }
-                // The leading "Today" keeps no title. A list that opens on today — which is nearly
-                // always — would be saying something its rows already say (each carries its own time
-                // on the right), and the 28pt of header it costs is half a row back. `Pinned`, when
-                // it leads, and every later bucket keep theirs: those are the ones that answer
-                // "where am I" once the list has scrolled. (Bucketing itself is untouched — see
-                // `SessionTimeGrouping`; this is only whether a given section draws its title. The
-                // decision is the one the mock put second, `docs/mocks/ios-session-list-first-header.html`
-                // — the reporter picked the first: never draw it, rather than only once it pins.)
-                ForEach(Array(timeSections.enumerated()), id: \.element.id) { index, section in
-                    if index == 0, section.title == "Today" {
-                        // The list draws a hairline at the top of its first row — the title used to
-                        // sit over it. With the title gone it reads as a stray rule above the first
-                        // session, so that one row drops its top separator (measured on an iOS 26.2
-                        // simulator: hiding the *section* separator, or giving the Section an empty
-                        // header, both leave the line; only this removes it).
-                        ForEach(section.sessions) { session in
-                            // Only the list's own first row drops the hairline above it: with
-                            // folder rows on top, the first "Today" row is not that row.
-                            if session.id == section.sessions.first?.id, folderListing.folders.isEmpty {
-                                listRow(session, projects: projectRows, marks: projectMarks)
-                                    .listRowSeparator(.hidden, edges: .top)
-                            } else {
-                                listRow(session, projects: projectRows, marks: projectMarks)
-                            }
-                        }
-                    } else if section.title == "Pinned" {
-                        // Pinned folds to its header, as Notes' Pinned does: the rows leave the
-                        // list, the header stays to bring them back. The rows are dropped here
-                        // rather than through `Section(isExpanded:)`, whose disclosure only draws in
-                        // the sidebar list style.
-                        Section {
-                            if !pinnedCollapsed {
-                                ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
-                            }
-                        } header: {
-                            sectionHeaderBand { pinnedSectionHeader(section.title) }
-                        }
-                    } else {
-                        Section {
-                            ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
-                        } header: {
-                            sectionHeaderBand { Text(section.title).textCase(nil) }
-                        }
-                    }
-                }
+                groupedSections(folderListing: folderListing, timeSections: timeSections,
+                                projectRows: projectRows, projectMarks: projectMarks)
             }
             #else
-            ForEach(agents.agentSessions) { s in
-                AgentSessionRow(session: s, deleted: view == .trash,
-                                showsPin: view == .open).tag(s.id)
-                    .sessionRowActions(s, scope: view, onTag: { taggingSession = s })
-            }
+            groupedSections(folderListing: folderListing, timeSections: timeSections,
+                            projectRows: projectRows, projectMarks: projectMarks)
             #endif
         }
         .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
@@ -486,7 +446,6 @@ struct AgentPanes: View {
         // The phone's search field, in the bottom toolbar, gets out of the way while the list is read
         // downward (see the column's `sessionListSearch`).
         .revealsBottomSearchOnScroll(query: searchQuery, enabled: listPresentation.searchesFromBottom)
-        .keepsEmptySearchOnScroll(query: searchQuery)
         #endif
         .focused($listFocused)
         .onChange(of: app.sessionListFocusRequest) { _, _ in listFocused = true }
@@ -503,9 +462,17 @@ struct AgentPanes: View {
                 }
                 #endif
             } else if agents.agentSessions.isEmpty {
-                ContentUnavailableView(
-                    agents.sessionsLoading ? "Loading…" : "No \(view.title.lowercased()) sessions",
-                    systemImage: "bubble.left.and.bubble.right")
+                #if os(iOS)
+                // No list saved yet (a fresh install, a new account): grey rows where the sessions
+                // will be, while the title's line says "Loading sessions…" (board 02 ④).
+                if agents.sessionsLoading && view == .open {
+                    SessionListPlaceholder()
+                } else {
+                    emptyList
+                }
+                #else
+                emptyList
+                #endif
             }
         }
         #if os(iOS)
@@ -567,14 +534,23 @@ struct AgentPanes: View {
         // seen (docs/list-freshness-design.md §4 R6).
         .task(id: "\(agent.id)|\(view.rawValue)") {
             await agents.loadSessions(agentID: agent.id, view: view, reset: true)
-            #if os(iOS)
             await app.projects?.load()
-            #endif
             guard view != .open else { return }
             await ViewPoll.run(app, every: 4, hints: { app.lifecycleHints }) {
                 await agents.loadSessions(agentID: agent.id, view: view)
             }
         }
+        #if os(macOS)
+        // The scope over the list it filters, centred and content-width; the pane's own surface
+        // shows behind it, so it adds no band of chrome.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            scopePicker
+                .fixedSize()
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+        }
+        #endif
         .toolbar {
             #if os(iOS)
             // iPhone keeps scope in this compact menu. Regular iPad exposes scope in the persistent
@@ -616,17 +592,16 @@ struct AgentPanes: View {
             // fallback branch is the same item with nothing to hide.
             if #available(iOS 26.0, *) {
                 ToolbarItem(placement: .topBarLeading) {
-                    WorkspaceTitle(name: agent.name)
+                    listTitle
                 }
                 .sharedBackgroundVisibility(.hidden)
             } else {
                 ToolbarItem(placement: .topBarLeading) {
-                    WorkspaceTitle(name: agent.name)
+                    listTitle
                 }
             }
             #else
-            // macOS: the wide window toolbar keeps the platform-idiomatic layout — New Session
-            // (leading), a compact centered segmented scope switcher (principal), and a settings gear.
+            // macOS: New Session (leading) and a settings gear; the scope is over the list (above).
             ToolbarItem(placement: .navigation) {
                 Button {
                     app.startComposingSession()
@@ -635,13 +610,14 @@ struct AgentPanes: View {
                 }
                 .help("Start a new session with \(agent.name)")
             }
-            ToolbarItem(placement: .principal) {
-                Picker("View", selection: $view) {
-                    ForEach(SessionView.pickerCases) { Text($0.title).tag($0) }
+            // New Folder…, as the iPhone's ≡ menu offers it: not in Trash, where no folder row is
+            // drawn — the new folder would appear nowhere on screen.
+            ToolbarItem(placement: .primaryAction) {
+                Button { namingFolder = true } label: {
+                    Label(SessionFolderCopy.newFolder, systemImage: "folder.badge.plus")
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
+                .help("New folder in \(agent.name)")
+                .disabled(view == .trash)
             }
             ToolbarItem(placement: .primaryAction) {
                 Button { showSettings = true } label: {
@@ -659,14 +635,19 @@ struct AgentPanes: View {
         .sheet(item: $taggingSession) { s in
             SessionTagSheet(session: s).environment(app)
         }
+        // Rename… / Delete Folder…, raised by a folder row's context menu — the same two asks, in
+        // the same words, that a folder page's ⋯ raises (§3.4).
+        .sessionFolderManagement(renaming: $renamingFolder, deleting: $deletingFolder)
         #if os(iOS)
         // The share panel for the row whose Share was tapped: the session page's own (ConsoleView's),
         // list-owned like the tag picker above. iOS only, as the rows' Share is.
         .sheet(item: $sharingSession) { s in
             if let baseURL = app.baseURL {
-                ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore)
+                ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore,
+                           guests: .of(s, agents: app.agents))
             }
         }
+        #endif
         // The Move panel for the row whose Move was tapped: the folders of this workspace, counted
         // over the list the row is in (docs/session-folders-move-design.md §4).
         .sheet(item: $movingSession) { s in
@@ -674,10 +655,7 @@ struct AgentPanes: View {
                 SessionMoveSheet(session: s, workspace: workspace, listed: agents.allSessions).environment(app)
             }
         }
-        // Rename… / Delete Folder…, raised by a folder row's long-press menu — the same two asks, in
-        // the same words, that a folder page's ⋯ raises (§3.4).
-        .sessionFolderManagement(renaming: $renamingFolder, deleting: $deletingFolder)
-        // New Folder… in the ≡ menu: the system's prompt names it, it lands at the top of this list,
+        // New Folder… (the ≡ menu, or the Mac's toolbar): the system's prompt names it, it lands at the top of this list,
         // and a name the workspace already has is refused in so many words (as the Move panel's is).
         .alert(SessionMoveCopy.newFolderTitle, isPresented: $namingFolder) {
             TextField(SessionMoveCopy.folderNamePlaceholder, text: $newFolderDraft)
@@ -692,15 +670,108 @@ struct AgentPanes: View {
         } message: {
             Text(newFolderFailure ?? "")
         }
-        #endif
         // Load the owner's tag library when the pane appears so the picker + chips are populated,
-        // and on iOS the folder library the Move panel offers.
+        // and the folder library the list's folder rows and the Move panel are drawn from.
         .task {
             await app.loadSessionTags()
-            #if os(iOS)
             await app.loadSessionFolders()
-            #endif
         }
+    }
+
+    /// The list's folder rows and recency sections — what the workspace's list draws when it is
+    /// neither searching nor grouped by tag, on every platform (web's list draws the same).
+    @ViewBuilder private func groupedSections(folderListing: SessionFolderListing, timeSections: [SessionTimeSection],
+                                              projectRows: [String: SessionProjectRow],
+                                              projectMarks: [String: SessionProjectMark]) -> some View {
+        // The workspace's folders, at the very top of the list (docs/session-folders-move-design.md
+        // §3.3): the sessions filed in one are drawn behind its row and not in the time
+        // sections below. Trash, a tag filter and Group by Tag all leave this empty — see
+        // `folderListing` — so the list goes on flat there.
+        ForEach(Array(folderListing.folders.enumerated()), id: \.element.id) { index, row in
+            // The list draws a hairline at the top of its first row; with folder rows at the
+            // very top, that row is one of theirs (see the note on the first "Today" row
+            // below, whose trick this repeats).
+            if index == 0 {
+                folderRow(row).listRowSeparator(.hidden, edges: .top)
+            } else {
+                folderRow(row)
+            }
+        }
+        // The leading "Today" keeps no title. A list that opens on today — which is nearly
+        // always — would be saying something its rows already say (each carries its own time
+        // on the right), and the 28pt of header it costs is half a row back. `Pinned`, when
+        // it leads, and every later bucket keep theirs: those are the ones that answer
+        // "where am I" once the list has scrolled. (Bucketing itself is untouched — see
+        // `SessionTimeGrouping`; this is only whether a given section draws its title. The
+        // decision is the one the mock put second, `docs/mocks/ios-session-list-first-header.html`
+        // — the reporter picked the first: never draw it, rather than only once it pins.)
+        ForEach(Array(timeSections.enumerated()), id: \.element.id) { index, section in
+            if index == 0, section.title == "Today" {
+                // The list draws a hairline at the top of its first row — the title used to
+                // sit over it. With the title gone it reads as a stray rule above the first
+                // session, so that one row drops its top separator (measured on an iOS 26.2
+                // simulator: hiding the *section* separator, or giving the Section an empty
+                // header, both leave the line; only this removes it).
+                ForEach(section.sessions) { session in
+                    // Only the list's own first row drops the hairline above it: with
+                    // folder rows on top, the first "Today" row is not that row.
+                    if session.id == section.sessions.first?.id, folderListing.folders.isEmpty {
+                        listRow(session, projects: projectRows, marks: projectMarks)
+                            .listRowSeparator(.hidden, edges: .top)
+                    } else {
+                        listRow(session, projects: projectRows, marks: projectMarks)
+                    }
+                }
+            } else if section.title == "Pinned" {
+                // Pinned folds to its header, as Notes' Pinned does: the rows leave the
+                // list, the header stays to bring them back. The rows are dropped here
+                // rather than through `Section(isExpanded:)`, whose disclosure only draws in
+                // the sidebar list style.
+                Section {
+                    if !pinnedCollapsed {
+                        ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
+                    }
+                } header: {
+                    sectionHeaderBand { pinnedSectionHeader(section.title) }
+                }
+            } else {
+                Section {
+                    ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
+                } header: {
+                    sectionHeaderBand { Text(section.title).textCase(nil) }
+                }
+            }
+        }
+    }
+
+    private var emptyList: some View {
+        ContentUnavailableView(
+            agents.sessionsLoading ? "Loading…" : "No \(view.title.lowercased()) sessions",
+            systemImage: "bubble.left.and.bubble.right")
+    }
+
+    #if os(iOS)
+    /// The workspace name over the list, with the Open list's freshness line under it while the rows
+    /// may still be the previous run's (docs/mocks/ios-launch-updating). Completed / Trash read for
+    /// themselves, so they draw the name alone.
+    private var listTitle: some View {
+        WorkspaceTitle(name: agent.name,
+                       status: view == .open ? app.openListStatus : nil,
+                       empty: agents.agentSessions.isEmpty,
+                       retry: { app.retryOpenList() })
+    }
+    #endif
+
+    /// Open / Completed / Trash, over the list on the Mac and on regular iPad. This is deliberately
+    /// content-width, not fixed-width, so it continues to fit the middle column at larger Dynamic
+    /// Type sizes.
+    private var scopePicker: some View {
+        Picker("Session scope", selection: $view) {
+            ForEach(SessionView.pickerCases) { Text($0.title).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .accessibilityLabel("Session scope")
     }
 
     /// What the List's selection is bound to: the projection onto the section's stack in the
@@ -715,17 +786,6 @@ struct AgentPanes: View {
     /// width opts into the iPhone treatment, matching the app root's shell switch.
     private var listPresentation: SessionListPresentation {
         SessionListPresentation.resolve(isCompactWidth: horizontalSizeClass == .compact)
-    }
-
-    /// Open / Completed / Trash stay visible on regular iPad. This is deliberately content-width,
-    /// not fixed-width, so it continues to fit the middle column at larger Dynamic Type sizes.
-    private var scopePicker: some View {
-        Picker("Session scope", selection: $view) {
-            ForEach(SessionView.pickerCases) { Text($0.title).tag($0) }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .accessibilityLabel("Session scope")
     }
 
     /// One options menu serves both iOS shells. Compact includes lifecycle scope exactly as before;
@@ -809,7 +869,6 @@ struct AgentPanes: View {
         return SessionFilter.withTag(agents.agentSessions, tagID: f)
     }
 
-    #if os(iOS)
     /// What the list's grouping is computed from, read off the models each pass — which is also
     /// what re-runs the body when one of them changes (see `SessionListingMemo`).
     private var listInputs: SessionListInputs {
@@ -896,7 +955,16 @@ struct AgentPanes: View {
             case .project: app.openProjectSessions(address)
             }
         }
-        return SessionProjectRowView(row: row, onOpen: { app.openProjectSessions(address) })
+        // A phone opens the coordinator's conversation, not the project's sessions page, which is
+        // the button in that conversation's navigation bar (owner 2026-11-11, board 5). The iPad's
+        // column keeps the page.
+        let onTap = {
+            switch rowNavigation == .push ? SessionProjectSheet.rowTap(row) : .sessions {
+            case .coordinator(let coordinator): app.openProjectMember(coordinator, push: true)
+            case .sessions: app.openProjectSessions(address)
+            }
+        }
+        return SessionProjectRowView(row: row, onOpen: onTap)
         .sessionProjectRowActions(row, view: view, onOpen: onOpen, onSessions: { app.openProjectSessions(address) }, onProject: {
             app.openProject(row.projectId)
         }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })
@@ -927,7 +995,6 @@ struct AgentPanes: View {
             }
         }
     }
-    #endif
 
     /// True while the list is showing search results in place of its sections. Always false on
     /// macOS, whose window searches from the ⌘K palette instead.
@@ -984,6 +1051,7 @@ struct AgentPanes: View {
         contentSearched = res.contentSearched
         hitsQuery = res.q
     }
+    #endif
 
     /// One row, wrapped for the container it is in. The row view itself is the same either way; what
     /// changes is who moves the screen — the three-column shell's `List` selection, or the row's own
@@ -1002,7 +1070,7 @@ struct AgentPanes: View {
     /// `mark`: the project of a member whose project has no row in this workspace (owner 2026-11-07,
     /// option A) — drawn on the row, and the long press's Sessions opens that project's sessions.
     @ViewBuilder private func sessionRow(_ s: Session, mark: SessionProjectMark? = nil) -> some View {
-        let row = AgentSessionRow(session: s, deleted: view == .trash, showsPin: view == .open, projectMark: mark)
+        let row = AgentSessionRow(session: s, deleted: view == .trash, projectMark: mark)
         let onSessions: (() -> Void)? = mark.map { mark in
             { app.openProjectSessions(SessionProjectAddress(projectID: mark.projectId, agentID: agent.id, view: view)) }
         }
@@ -1030,7 +1098,7 @@ struct AgentPanes: View {
         }
     }
 
-    /// New Folder… in the ≡ menu: make the folder in this workspace and keep it, so its row draws at
+    /// New Folder…: make the folder in this workspace and keep it, so its row draws at
     /// the top of this very list. A refusal (a name the workspace already has is a 409) leaves its
     /// reason up as an alert, with the draft kept for another try.
     private func createFolderFromMenu() {
@@ -1045,7 +1113,6 @@ struct AgentPanes: View {
     private var newFolderFailed: Binding<Bool> {
         Binding(get: { newFolderFailure != nil }, set: { if !$0 { newFolderFailure = nil } })
     }
-    #endif
 
     @ViewBuilder private func tagSectionHeader(_ tag: SessionTag?) -> some View {
         if let tag {
@@ -1058,7 +1125,6 @@ struct AgentPanes: View {
         }
     }
 
-    #if os(iOS)
     /// The Pinned section's header: its title, and at the trailing edge a chevron that points down
     /// while the rows show and right once they are folded away (one glyph turned, never two
     /// swapped — as the cards' chevrons). The whole band is the button, not just the chevron.
@@ -1098,7 +1164,10 @@ struct AgentPanes: View {
     /// The fill is `systemBackground`, what the list itself draws in each appearance — the same fill
     /// the rows and their chips sit on (see `TagChipColor`). A row sliding under a pinned header now
     /// disappears behind it instead of reading through it.
-    private func sectionHeaderBand<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+    ///
+    /// The Mac's list draws its own section headers' backing, so there the band is the title alone.
+    @ViewBuilder private func sectionHeaderBand<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        #if os(iOS)
         content()
             .frame(maxWidth: .infinity, alignment: .leading)
             .background {
@@ -1106,8 +1175,10 @@ struct AgentPanes: View {
                     .padding(.top, -33)
                     .padding(.bottom, -9)
             }
+        #else
+        content()
+        #endif
     }
-    #endif
 }
 
 /// The agent edit form, presented as a sheet from the content column's toolbar gear (it used to be
@@ -1176,7 +1247,12 @@ struct AgentConsoleDetail: View {
     }
 
     var body: some View {
-        if let runnerID = app.machineDraftRunnerID {
+        if let guestID = app.guestSessionID {
+            // A session somebody shared with this account: its guest view (Shared with me, or a
+            // session id the owner's read found nothing of yours at).
+            GuestSessionView(sessionID: guestID)
+                .id(guestID)
+        } else if let runnerID = app.machineDraftRunnerID {
             // A machine's own new session page, whose Set up row put it here (board rule 1).
             MachineDraftPage(runnerID: runnerID)
                 .id(runnerID)
@@ -1625,12 +1701,9 @@ struct AgentSessionRow: View {
     /// True when the Trash tab is showing this row; the preview goes static because nothing in
     /// Trash is directly resumable. The status glyph remains the run's actual outcome.
     var deleted: Bool = false
-    /// True in Open, where pinning applies. Completed/Trash rows never show the bar.
-    var showsPin: Bool = false
     /// The project this row belongs to where the list has no row for that project (owner 2026-11-07,
     /// option A): its progress leads the second line, as it leads a project row's.
     var projectMark: SessionProjectMark? = nil
-    private var isPinned: Bool { showsPin && session.pinnedAt != nil }
     @Environment(AppModel.self) private var app
     /// The live watches that will resume this session: what a parked row says it's doing instead.
     private var watching: WatchSessionSummary? { app.watches?.summary(for: session.id) }
@@ -1658,15 +1731,6 @@ struct AgentSessionRow: View {
         }
         #else
         HStack(spacing: 0) {
-            // A pinned session is marked at rest by a full-height leading accent bar, flush to the
-            // row's leading edge — the native port of web's `.session-row.pinned` inset bar
-            // (deliberately not a floating pushpin). It sits *outside* the content padding, with the
-            // cell's `listRowInsets` zeroed below, so it bleeds to the top/bottom/leading edges like
-            // web instead of floating short and inset. A clear bar of the same width keeps unpinned
-            // rows aligned.
-            Rectangle()
-                .fill(isPinned ? Color.accentColor : .clear)
-                .frame(width: 3)
             HStack(spacing: 8) {
                 StatusGlyphView(glyph: .make(for: session, watching: watching, machine: machine))
                 VStack(alignment: .leading, spacing: 2) {
@@ -1684,15 +1748,15 @@ struct AgentSessionRow: View {
                         .background(.orange, in: Capsule()).foregroundStyle(.white)
                 }
             }
-            // Re-add the standard cell insets the zeroed `listRowInsets` removed: 3 (bar) + 13 = the
-            // usual 16pt leading so the glyph stays put; 16 trailing; 10 vertical for a comfortable row.
-            .padding(.leading, 13)
+            // Re-add the standard cell insets the zeroed `listRowInsets` removed: the usual 16pt
+            // leading so the glyph stays put; 16 trailing; 10 vertical for a comfortable row.
+            .padding(.leading, 16)
             .padding(.trailing, 16)
             .padding(.vertical, 10)
         }
         .listRowInsets(EdgeInsets())
         // Keep the separator aligned under the title now that the cell insets are zeroed, rather than
-        // letting it run full-bleed: bar(3) + leading pad(13) + glyph(20) + spacing(8) = 44.
+        // letting it run full-bleed: leading pad(16) + glyph(20) + spacing(8) = 44.
         .alignmentGuide(.listRowSeparatorLeading) { _ in 44 }
         #endif
     }
@@ -2022,6 +2086,9 @@ struct AgentFormContent: View {
                 }
 
                 Toggle("Enabled", isOn: $enabled)
+                // Takes effect at once (board 04), apart from Done: it asks first when the main checkout
+                // holds what new sessions would no longer see.
+                WorktreeIsolationSwitch(workspace: agent)
             }
 
             Section("Instructions") {
@@ -2149,3 +2216,32 @@ struct AgentFormContent: View {
         Task { await agents.save(agent.id, req) }
     }
 }
+
+#if os(iOS)
+/// Grey rows standing in for a session list that has never been read on this phone (board 02 ④ of
+/// docs/mocks/ios-launch-updating), in place of a blank page with a centred "Loading…".
+private struct SessionListPlaceholder: View {
+    private static let widths: [(CGFloat, CGFloat)] = [
+        (0.72, 0.46), (0.60, 0.52), (0.80, 0.38), (0.55, 0.60), (0.68, 0.42), (0.76, 0.50),
+    ]
+
+    var body: some View {
+        GeometryReader { geo in
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Self.widths.indices, id: \.self) { i in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Capsule().frame(width: geo.size.width * Self.widths[i].0, height: 12)
+                        Capsule().frame(width: geo.size.width * Self.widths[i].1, height: 10)
+                    }
+                    .padding(.vertical, 14)
+                    Divider()
+                }
+            }
+            .foregroundStyle(.quaternary)
+            .padding(.horizontal, 16)
+        }
+        .accessibilityHidden(true)
+        .allowsHitTesting(false)
+    }
+}
+#endif

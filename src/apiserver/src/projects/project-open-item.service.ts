@@ -119,7 +119,7 @@ import {
   isApprovalId,
   notAnApprovalId,
 } from './project-integration-skip-check';
-import { requeuePromotionCheck } from './project-promotion.service';
+import { requeuePromotionCheck, retireCandidateAfterHandledItem } from './project-promotion.service';
 import {
   INTEGRATION_OBSERVE_COORDINATOR_ONLY,
   INTEGRATION_OBSERVE_REASON_REQUIRED,
@@ -255,7 +255,8 @@ const HAND_CLOSABLE_RESOLUTIONS: Readonly<Record<string, 'HANDLED' | 'WITHDRAWN'
  * How many already-answered questions one binding reconsiders (§5.2 R11).
  *
  * A cap on the READ, not on the guarantee: an answer is redelivered while the work it unblocks is
- * still open, or to the one generation that replaced its asker, and both of those are self-limiting.
+ * still open, or to the one generation that replaced an asker it never reached, and both of those are
+ * self-limiting.
  * This only keeps a project with years of answered questions from re-reading all of them every time
  * a coordinator is bound.
  */
@@ -1863,6 +1864,14 @@ export class ProjectOpenItemService {
       // press is told to read again rather than reporting a close it did not make.
       throw notOpen();
     }
+    // M-T14: the last failure item about a BLOCKED task-branch candidate was closed by hand, so the
+    // card about it ends too. Its own transaction, after the close committed; it re-reads the
+    // candidate and the items still open about it.
+    if (item.promotionId && (INTEGRATION_ITEM_KINDS as readonly string[]).includes(item.kind)) {
+      await retireCandidateAfterHandledItem(this.prisma, { projectId, promotionId: item.promotionId })
+        .catch((error) => this.logger.warn(
+          `retiring candidate ${item.promotionId} after item ${itemId} closed failed: ${(error as Error)?.message ?? error}`));
+    }
     // §2.9 LS3 rule 4: the segment's last OPEN integration item was closed by hand (a fix task was
     // filed for it), and the segment neither landed nor has an attempt still moving — so it settles
     // HANDLED. Its own transaction, after the close committed; the rule re-checks all of that under
@@ -2729,6 +2738,7 @@ export class ProjectOpenItemService {
         resolvedAt: true,
         payload: true,
         answer: true,
+        askedBySessionId: true,
         project: { select: { coordinatorSessionId: true } },
       },
     });
@@ -2737,10 +2747,16 @@ export class ProjectOpenItemService {
     const sessionId = item.project.coordinatorSessionId;
     if (!sessionId) return null;
     const clientTurnId = ownerAnswerTurnId(item.id, sessionId);
+    const question = item.payload as unknown as CoordinatorQuestion;
+    // §5.2 R11: told to a conversation that did not ask, it says who did and whether it still blocks.
+    const redelivered = item.askedBySessionId && item.askedBySessionId !== sessionId
+      ? { stillBlocks: await this.blocksUnsettledWork(item.ownerId, question.blocksTaskIds) }
+      : undefined;
     const content = ownerAnswerMessage(
-      item.payload as unknown as CoordinatorQuestion,
+      question,
       item.answer as unknown as OwnerAnswer,
       item.resolvedAt,
+      redelivered,
     );
     try {
       const turn = await this.sessions.createTurn(item.ownerId, sessionId, {
@@ -2845,10 +2861,13 @@ export class ProjectOpenItemService {
   /**
    * §5.2 R11: a conversation has just become this project's coordinator. Tell it the answers it
    * still needs — the ones to questions that block work nobody has settled, and the ones asked by the
-   * conversation it just replaced, which would otherwise have been answered to nobody.
+   * conversation it just replaced that it never received, which would otherwise have been answered to
+   * nobody.
    *
    * Not every answer this project ever got: an answer is context for work still in front of the new
-   * coordinator, and replaying a year of settled questions is noise, not a guarantee.
+   * coordinator, and replaying a year of settled questions is noise, not a guarantee. An answer the
+   * replaced conversation already read was acted on there; each one replayed is a whole-context turn
+   * the new coordinator spends saying so (33 of them on one rotation, 2026-11-12).
    */
   private async deliverAnsweredQuestions(
     projectId: string,
@@ -2868,12 +2887,22 @@ export class ProjectOpenItemService {
         resolution: 'ANSWERED',
         deliveries: { none: { sessionId, purpose: 'ANSWER' } },
       },
-      select: { id: true, payload: true, askedBySessionId: true },
+      select: {
+        id: true,
+        payload: true,
+        askedBySessionId: true,
+        // Whether the replaced conversation was told it; read only when there is one.
+        deliveries: {
+          where: { sessionId: replacedSessionId ?? sessionId, purpose: 'ANSWER' },
+          select: { itemId: true },
+        },
+      },
       orderBy: [{ resolvedAt: 'desc' }, { id: 'desc' }],
       take: ANSWERS_RECONSIDERED_PER_BINDING,
     });
     for (const item of answered.reverse()) {
-      const replaced = !!replacedSessionId && item.askedBySessionId === replacedSessionId;
+      const replaced = !!replacedSessionId && item.askedBySessionId === replacedSessionId
+        && item.deliveries.length === 0;
       const question = item.payload as unknown as CoordinatorQuestion;
       if (!replaced && !(await this.blocksUnsettledWork(project.ownerId, question.blocksTaskIds))) continue;
       await this.deliverAnswer(item.id);

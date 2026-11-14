@@ -19,6 +19,9 @@
  *   (g) the owner's done or decline through the controller records the client kind of its
  *       X-Orbit-Client header (`ios/1.0` reads back `ios`, from the answer, by id and in the list);
  *       an unknown client, a bare kind with no version, or none, stores null, and a withdrawn or expired request reads null.
+ *   (h) a PENDING request lights the session that filed it on the session list (`OWNER_REQUEST`, one
+ *       per request) and nothing else; filing and each ending ask for that row to be re-drawn; an
+ *       ended request, or one past its deadline, lights nothing.
  *
  * WIKI_CREATE (docs/wiki-explicit-creation-design.md §3.6, §5), its own test below:
  *   (w1) filing from a workspace with no repository, or with a title, is refused and writes nothing;
@@ -67,6 +70,7 @@ import {
   canTransition,
   type OwnerRequestState,
 } from './owner-request';
+import { readOwnerDecisionsBySession, sessionWaitingKind } from '../projects/owner-decision-signal';
 import { OwnerRequestsController } from './owner-requests.controller';
 import { WikiRefusalError, WikiService } from '../wiki/wiki.service';
 import { wikiSpaceSettings } from '@orbit/shared';
@@ -409,7 +413,7 @@ test('owner requests: WIKI_CREATE asks the owner for a wiki, and only the owner 
   const realtime = new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService;
   const wiki = new WikiService(prisma, realtime, {} as unknown as PushService);
   const secrets = new OwnerSecretsService(prisma);
-  const service = new OwnerRequestsService(prisma, secrets, push, undefined, wiki);
+  const service = new OwnerRequestsService(prisma, secrets, push, undefined, undefined, wiki);
   const owner = new OwnerRequestsController(service, secrets);
   const door = new RunnerOwnerRequestsController(prisma, service);
 
@@ -574,6 +578,57 @@ test('owner requests: WIKI_CREATE asks the owner for a wiki, and only the owner 
 });
 
 /** An account with a runner, a project coordinated by one session, and a worker session beside it. */
+test('owner requests: a pending request lights the session that filed it', {
+  skip, concurrency: 1, timeout: 120_000,
+}, async (t) => {
+  const url = URL!;
+  assertCoordinatorPgUrlIsIsolated(url);
+  const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+  await sql.connect();
+  await verifyCoordinatorPgIdentity(sql);
+  const db = prismaClientFor(url);
+  t.after(async () => {
+    await db.$disconnect().catch(() => undefined);
+    await sql.end().catch(() => undefined);
+  });
+
+  const prisma = db as unknown as PrismaService;
+  const redrawn: string[] = [];
+  const realtime = { publishSessionUpdated: (id: string) => { redrawn.push(id); } } as unknown as RealtimeService;
+  const service = new OwnerRequestsService(prisma, new OwnerSecretsService(prisma), undefined, undefined, realtime);
+  const a = await account(db, 'needs-you');
+  const lit = async () => {
+    const folded = await readOwnerDecisionsBySession(db, a.ownerId);
+    return [...folded].map(([sessionId, d]) => ({ sessionId, count: d.count, kind: sessionWaitingKind(0, d) }));
+  };
+
+  // The paired negative: nothing filed, nothing lit.
+  assert.deepEqual(await lit(), []);
+
+  const steps = { kind: 'MANUAL_STEP' as const, title: 'Sign in on the workstation', why: 'a device login', steps: [{ text: 'run it' }] };
+  const first = await service.file(a.ownerId, a.workerSessionId, steps);
+  assert.deepEqual(redrawn, [a.workerSessionId]);
+  assert.deepEqual(await lit(), [{ sessionId: a.workerSessionId, count: 1, kind: 'OWNER_REQUEST' }]);
+
+  const second = await service.file(a.ownerId, a.workerSessionId, { ...steps, title: 'And another' });
+  assert.deepEqual(await lit(), [{ sessionId: a.workerSessionId, count: 2, kind: 'OWNER_REQUEST' }]);
+
+  redrawn.length = 0;
+  await service.complete(a.ownerId, first.id, {});
+  assert.deepEqual(redrawn, [a.workerSessionId]);
+  assert.deepEqual(await lit(), [{ sessionId: a.workerSessionId, count: 1, kind: 'OWNER_REQUEST' }]);
+
+  // Past its deadline it is EXPIRED whether or not the sweep has written it: dark at once.
+  await db.ownerRequest.update({ where: { id: second.id }, data: { expiresAt: new Date(Date.now() - 1_000) } });
+  assert.deepEqual(await lit(), []);
+
+  // A request in a conversation the owner filed away lights nothing.
+  await service.file(a.ownerId, a.coordinatorSessionId, { ...steps, title: 'On the coordinator' });
+  assert.deepEqual(await lit(), [{ sessionId: a.coordinatorSessionId, count: 1, kind: 'OWNER_REQUEST' }]);
+  await db.session.update({ where: { id: a.coordinatorSessionId }, data: { completedAt: new Date() } });
+  assert.deepEqual(await lit(), []);
+});
+
 async function account(db: PrismaClient, label: string): Promise<Account> {
   const ownerId = randomUUID();
   const workspaceId = randomUUID();

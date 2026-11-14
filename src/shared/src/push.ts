@@ -59,4 +59,6 @@ export interface AndroidPushPayload {
   watchID?: string;
   generation?: number;
   wikiSpaceID?: string;
+  /** `kind: 'terminal-login'`: the terminal sign-in waiting for the owner's Approve (docs/terminal-session-design.md). */
+  terminalLoginID?: string;
 }

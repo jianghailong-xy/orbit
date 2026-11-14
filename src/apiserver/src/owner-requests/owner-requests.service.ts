@@ -13,6 +13,7 @@ import { Prisma } from '@prisma/client';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { WatchDeliveryService } from '../watches/watch-delivery.service';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { WikiRefusalError, WikiService, normalizeRepoUrl } from '../wiki/wiki.service';
@@ -129,6 +130,8 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
      * finds it without this. Optional for the same reason as `push`.
      */
     @Optional() private readonly delivery?: WatchDeliveryService,
+    /** Tells the asking session's list row its needs-you count moved. Optional for the same reason as `push`. */
+    @Optional() private readonly realtime?: RealtimeService,
     /** What the owner's Create wiki on a WIKI_CREATE card makes the wiki through (`createWiki`). */
     @Optional() private readonly wiki?: WikiService,
   ) {}
@@ -223,6 +226,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     if (created) {
       // Told after the row is committed, and never awaited: the request is the fact, the banner a reader of it.
       void this.push?.notifyOwnerRequest(created.id);
+      this.realtime?.publishSessionUpdated(created.askedBySessionId);
       return { ...created, created: true };
     }
     // A WIKI_CREATE meeting the card already waiting for its repository answers that card, and the owner is not told again.
@@ -438,7 +442,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
    */
   async settleMadeWikis(ownerId: string | null): Promise<string[]> {
     const settled = await withTransactionRetry(this.prisma, async (tx) => {
-      const rows = await tx.$queryRaw<Array<{ id: string }>>`
+      const rows = await tx.$queryRaw<Array<{ id: string; askedBySessionId: string }>>`
         UPDATE "owner_request" AS r
            SET "state" = 'DONE', "resolved_at" = now(), "updated_at" = now(),
                "answer" = jsonb_build_object('spaceId', s."id", 'name', s."title")
@@ -446,13 +450,15 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
          WHERE r."kind" = 'WIKI_CREATE' AND r."state" = 'PENDING'
            AND (${ownerId}::uuid IS NULL OR r."owner_id" = ${ownerId}::uuid)
            AND s."owner_id" = r."owner_id" AND s."repo_url_norm" = r."repo_url_norm" AND s."deleted_at" IS NULL
-        RETURNING r."id"`;
-      const ids = rows.map((row) => row.id);
-      await enqueueResolutions(tx, ids);
-      return ids;
+        RETURNING r."id", r."asked_by_session_id" AS "askedBySessionId"`;
+      await enqueueResolutions(tx, rows.map((row) => row.id));
+      return rows;
     }, loggedRetry(this.logger, 'ownerRequests.settleMadeWikis'));
     if (settled.length > 0) this.delivery?.kick();
-    return settled;
+    for (const sessionId of new Set(settled.map((row) => row.askedBySessionId))) {
+      this.realtime?.publishSessionUpdated(sessionId);
+    }
+    return settled.map((row) => row.id);
   }
 
   /** The owner refuses the request. The reason is what the asking session reads. */
@@ -494,15 +500,18 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       const rows = await tx.ownerRequest.updateManyAndReturn({
         where: { state: 'PENDING', expiresAt: { lte: now } },
         data: { state: 'EXPIRED', resolvedAt: now },
-        select: { id: true },
+        select: { id: true, askedBySessionId: true },
       });
       const ids = rows.map((row) => row.id);
       await enqueueResolutions(tx, ids);
       await endUndeliveredGrants(tx, ids, 'EXPIRED');
-      return ids;
+      return rows;
     }, loggedRetry(this.logger, 'ownerRequests.expireDue'));
     if (expired.length > 0) this.delivery?.kick();
-    return expired;
+    for (const sessionId of new Set(expired.map((row) => row.askedBySessionId))) {
+      this.realtime?.publishSessionUpdated(sessionId);
+    }
+    return expired.map((row) => row.id);
   }
 
   /**
@@ -530,7 +539,10 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     }, loggedRetry(this.logger, 'ownerRequests.settle'));
     if (settled.count === 1) this.delivery?.kick();
     const request = await this.get(ownerId, id);
-    if (settled.count === 1) return request;
+    if (settled.count === 1) {
+      this.realtime?.publishSessionUpdated(request.askedBySessionId);
+      return request;
+    }
     if (request.state === 'PENDING') {
       throw new ConflictException({
         code: OWNER_REQUEST_EXPIRED,

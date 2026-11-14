@@ -27,6 +27,16 @@ internal object RunnerCopy {
     fun updateAvailableTitle(version: String) = "$version is available"
     const val UPDATE_AVAILABLE_BODY = "It installs when no turn is running. If turns keep running for an hour, it stops taking new " +
         "work so they can finish."
+    /** The Available card's body for a runner that reports its quiet window (`selfUpdate.quietWindowSeconds`), in whole
+     * [minutes]; [unit] is "minute" or "minutes". OrbitKit RunnerPageCopy.runnerUpdateAvailableBodyQuiet. */
+    fun updateAvailableBodyQuiet(minutes: Int, unit: String) =
+        "It installs once the runner has been idle for $minutes $unit. If it stays busy for an hour, it stops taking new work so its turns can finish."
+    /** About's version note for a runner that reports its quiet window. OrbitKit RunnerPageCopy.runnerVersionInstallsWhenQuiet. */
+    fun versionInstallsWhenQuiet(minutes: Int) = "installs when the runner has been idle for $minutes min"
+    /** A quiet window in whole minutes, at least one. */
+    fun quietMinutes(seconds: Int): Int = maxOf(1, Math.round(seconds / 60.0).toInt())
+    /** The Available card's body for a runner with a quiet window of [seconds]. */
+    fun availableBodyQuiet(seconds: Int): String = quietMinutes(seconds).let { updateAvailableBodyQuiet(it, if (it == 1) "minute" else "minutes") }
     fun updateDrainingTitle(version: String) = "Updating to $version"
     fun updateDrainingBody(version: String, since: String) = "$version has been waiting since $since. After an hour it stopped taking " +
         "new work so the turns in flight can finish; then it installs and restarts."
@@ -37,6 +47,24 @@ internal object RunnerCopy {
     const val UPDATE_UNTITLED_TURN = "Untitled session"
     fun updateRestartingTitle(version: String) = "Restarting into $version…"
     const val UPDATE_RESTARTING_BODY = "Usually under a minute."
+    /** Restarting for the owner's Update Now: `2 interrupted turns continue once it is back. Usually under a minute.` */
+    fun updateRestartingBodyInterrupted(turns: Int) =
+        (if (turns == 1) "1 interrupted turn continues once it is back. " else "$turns interrupted turns continue once it is back. ") + UPDATE_RESTARTING_BODY
+    // The Updated card (board 4): shown for a day after the update, then About's Last Update says it.
+    const val UPDATE_TAG_UPDATED_HOURS = 24
+    fun updateUpdatedTitle(version: String) = "Updated to $version"
+    /** `34 s`, `1 min 12 s`, `2 min`. */
+    fun updateTook(seconds: Int): String = when {
+        seconds < 60 -> "$seconds s"
+        seconds % 60 == 0 -> "${seconds / 60} min"
+        else -> "${seconds / 60} min ${seconds % 60} s"
+    }
+    /** `Took 34 s. 2 interrupted turns resumed.`; either half alone when the runner measured only that. */
+    fun updateUpdatedBody(took: String?, interruptedTurns: Int): String = listOfNotNull(took?.let { "Took $it." }, when {
+        interruptedTurns == 1 -> "1 interrupted turn resumed."
+        interruptedTurns > 1 -> "$interruptedTurns interrupted turns resumed."
+        else -> null
+    }).joinToString(" ")
     fun updatePostponedTitle(version: String, until: String) = "$version postponed until $until"
     fun updatePostponedBody(until: String) = "Taking work as usual. At $until it waits for the turns in flight again, for up to an hour."
     fun versionUpdatingTo(version: String) = "updating to $version"
@@ -54,12 +82,30 @@ internal object RunnerCopy {
     const val WORKSPACES = "Workspaces"
     const val ABOUT = "About This Runner"
     const val MAX_CONCURRENT = "Max Concurrent"
+    const val MAX_CONCURRENT_HINT = "How many sessions this machine runs at once. A change applies to the next session it picks up — no restart."
+    const val EDIT = "Edit"
     const val DISK = "Disk"
     const val KEEP_FREE = "Keep Free"
     const val CAPACITY_FOOTER = "Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, task " +
         "runs stop being sent here and finished worktrees are cleaned up sooner."
     fun gb(amount: String) = "$amount GB"
     fun diskUsed(used: String, total: String) = "$used of $total GB used"
+    // Resources (web runnerCopy.ts "MARK: Resources", docs/mocks/runner-resource-monitor)
+    const val RESOURCES = "Resources"
+    const val RESOURCES_CPU = "CPU"
+    const val RESOURCES_MEMORY = "Memory"
+    const val RESOURCES_LIVE = "Live · every 30 s · last hour"
+    const val RESOURCES_OFFLINE = "Offline"
+    const val RESOURCES_DISK_ONLY = "Disk is read from your workspaces"
+    const val RESOURCES_UPDATE = "Update runner"
+    const val RESOURCES_NO_READING = "No reading yet"
+    const val RESOURCES_MEMORY_FULL = "Nearly full — new sessions may be slow to start."
+    fun resourcesLastReading(ago: String) = "Offline · last reading $ago"
+    fun resourcesPredates(what: String) = "This runner predates $what readings."
+    const val CPU_ONE_CORE = "1 core"
+    fun cpuCores(count: String) = "$count cores"
+    fun cpuLoad(load: String) = "load $load"
+    fun diskFree(free: String) = "$free GB free"
     const val SIGNED_IN = "Signed in"
     const val SIGNED_OUT = "Signed out"
     const val NOT_INSTALLED = "Not installed"
@@ -81,6 +127,23 @@ internal object RunnerCopy {
     fun enginesReported(whenText: String) = "Reported $whenText"
     fun accountsSignedIn(count: Int) = "$count accounts signed in"
     fun updateFailed(version: String, whenText: String) = "Update to $version failed $whenText"
+    /** The Needs Attention card's second action, beside Update Engines Now; [engine] is the CLI's own name (web
+     * attentionDismissUntilNextRelease). */
+    fun dismissUntilNextRelease(engine: String) = "Dismiss until next $engine release"
+    /** The engine row's warning: the same dismissal (web RUNNER_ENGINE_UPDATE_DISMISS). */
+    const val UPDATE_DISMISS = "Dismiss"
+    /** What the version line adds after the drift once its warning is dismissed (web ENGINE_UPDATE_WARNING_DISMISSED). */
+    const val UPDATE_WARNING_DISMISSED = " · warning dismissed"
+    const val UPDATE_DISMISS_FAILED = "Couldn’t dismiss the warning"
+    /** Fix with an agent (docs: agent-fix contract): one press starts a session on this machine, no sheet. */
+    const val FIX_WITH_AGENT = "Fix with an agent"
+    /** The line in the button's place while the session a press started is open; "Open session" follows it as a link. */
+    fun agentFixing(workspace: String) = "An agent is fixing this in $workspace · "
+    const val OPEN_SESSION = "Open session"
+    /** Under the Install failed panel's button, while a press can start a session. */
+    fun agentFixStarts(workspace: String, engine: String) = "Starts a session in $workspace on this machine, with $engine."
+    /** Appended to a signed-out reason on the Install failed panel, whose engine rows sit above it. */
+    fun agentFixSignIn(engine: String) = " Sign in to $engine above to use this."
     const val WORKTREES = "Worktrees"
     fun workspaceRunning(count: Int) = "$count running"
     const val ABOUT_NAME = "Name"
@@ -408,6 +471,19 @@ internal data class AttentionAction(val kind: String, val engine: String? = null
 internal data class AttentionItem(val kind: String, val tone: String, val short: String, val title: String, val detail: String,
     val action: AttentionAction? = null, val resetsAt: String? = null, val names: List<String> = emptyList())
 
+/** A runner's `agentFix` (GET /runners, RunnerAgentFix in src/shared/src/dto.ts): where a press of Fix with an agent starts its session —
+ * the machine's most recently used workspace, on that workspace's engine — or why it can't ([blockedCode] offline, noWorkspace,
+ * engineSignedOut, with the server's own [blockedMessage]), and the warnings an agent is fixing now. */
+internal data class AgentFix(val workspaceId: String?, val workspaceName: String?, val engine: String?, val engineName: String?,
+    val blockedCode: String?, val blockedMessage: String?, val fixing: List<AgentFixing>)
+
+/** An open session a press started, on one warning: [engine] for engineNotUpdating and installFailed, null for cannotSelfUpdate. */
+internal data class AgentFixing(val kind: String, val engine: String?, val sessionId: String, val workspaceId: String, val workspaceName: String)
+
+/** What one warning draws for Fix with an agent: the session at work on it ([fixing], in the button's place), or the button — disabled
+ * while [enabled] is false — with the grey [line] under it, if any. */
+internal data class AgentFixView(val fixing: AgentFixing?, val enabled: Boolean, val line: String?)
+
 internal data class RunnerDisk(val freeBytes: Long, val totalBytes: Long, val usedPercent: Int)
 
 /** One quota window. [remaining]: an Antigravity bucket, whose percent says what is left, as agy says it; `utilization`
@@ -565,7 +641,86 @@ internal object RunnerPage {
     /** What an engine row says about being kept current; warn means only a person can say why. [pinned]: an engine Orbit keeps on one
      * build rather than the newest (Cursor CLI, whose version a runner release moves) — its routine note says so, since "checked" alone
      * would read as "and it is the latest" (web `updateNoteOf`'s `pinned`). */
-    fun updateNoteOf(update: JsonObject?, nowMs: Long, pinned: Boolean = false): Pair<String, String>? {
+    fun updateNoteOf(update: JsonObject?, nowMs: Long, pinned: Boolean = false, dismissed: String? = null): Pair<String, String>? {
+        val note = undismissedUpdateNoteOf(update, nowMs, pinned)
+        // Dismissed until the next release (engineUpdateDismissedFor): while the release it was dismissed against is still the latest, the
+        // warning goes quiet — no card, no warning, out of Needs Attention — but the drift stays on the version line. A newer latest no
+        // longer matches, and warns again.
+        if (note?.first == "warn" && !dismissed.isNullOrEmpty() && update?.str("latest") == dismissed) {
+            return "quiet" to "${note.second}${RunnerCopy.UPDATE_WARNING_DISMISSED}"
+        }
+        return note
+    }
+
+    /** The release this [engine]'s update warning was dismissed against on this [runner] (runner.engineUpdateDismissals, POST
+     * runners/:id/engines/:engine/update-warning/dismiss), or null — an older server sends none. */
+    fun engineUpdateDismissedFor(runner: JsonObject, engine: String?): String? =
+        engine?.let { runner.obj("engineUpdateDismissals")?.str(it) }?.takeIf { it.isNotEmpty() }
+
+    /** Whether this engine's update warning offers Dismiss until its next release: a warning against a known latest, on a runner online. */
+    fun offersUpdateDismiss(runner: JsonObject, engine: String, nowMs: Long): Boolean {
+        val health = engineHealth(runner, engine)?.takeIf { it.bool("installed") == true } ?: return false
+        if (isOffline(runner, nowMs)) return false
+        val update = health.obj("update") ?: return false
+        if (update.str("latest").isNullOrEmpty()) return false
+        return updateNoteOf(update, nowMs, dismissed = engineUpdateDismissedFor(runner, engine))?.first == "warn"
+    }
+
+    /** POST, no body: the server records the engine's current update.latest as dismissed and answers `{engine, latest}`. */
+    fun updateDismissPath(runner: String, engine: String) = "runners/$runner/engines/$engine/update-warning/dismiss"
+
+    // Fix with an agent
+
+    /** The runner's agentFix, or null — an older server sends none, and then no warning draws the button. */
+    fun agentFixOf(runner: JsonObject): AgentFix? {
+        val fix = runner.obj("agentFix") ?: return null
+        val blocked = fix.obj("blocked")
+        return AgentFix(fix.str("workspaceId"), fix.str("workspaceName"), fix.str("engine"), fix.str("engineName"),
+            blocked?.str("code"), blocked?.str("message"),
+            fix.list("fixing").mapNotNull { entry ->
+                AgentFixing(entry.str("kind") ?: return@mapNotNull null, entry.str("engine"), entry.str("sessionId") ?: return@mapNotNull null,
+                    entry.str("workspaceId").orEmpty(), entry.str("workspaceName").orEmpty())
+            })
+    }
+
+    /** The open session at work on this warning: the same kind and, but for cannotSelfUpdate, the same engine. */
+    fun agentFixing(fix: AgentFix, kind: String, engine: String?): AgentFixing? =
+        fix.fixing.firstOrNull { it.kind == kind && (kind == "cannotSelfUpdate" || it.engine == engine) }
+
+    /** A Needs Attention card's Fix with an agent: only an engine that won't update and a runner that can't update itself — work on the
+     * machine — and nothing at all while it is offline. Blocked otherwise, the button stays, disabled, over the server's reason. */
+    fun agentFixOnCard(runner: JsonObject, item: AttentionItem): AgentFixView? {
+        if (item.kind != "engineNotUpdating" && item.kind != "cannotSelfUpdate") return null
+        val fix = agentFixOf(runner) ?: return null
+        if (fix.blockedCode == "offline") return null
+        val engine = if (item.kind == "engineNotUpdating") item.action?.engine ?: return null else null
+        agentFixing(fix, item.kind, engine)?.let { return AgentFixView(it, enabled = false, line = null) }
+        return AgentFixView(null, enabled = fix.blockedCode == null, line = fix.blockedMessage?.takeIf { fix.blockedCode != null })
+    }
+
+    /** An engine's Install failed panel: the button with a line saying where the session starts, or, blocked — offline too — why not; a
+     * signed-out engine's reason adds that its sign-in is on the rows above. */
+    fun agentFixOnInstall(runner: JsonObject, engine: String): AgentFixView? {
+        val fix = agentFixOf(runner) ?: return null
+        agentFixing(fix, "installFailed", engine)?.let { return AgentFixView(it, enabled = false, line = null) }
+        if (fix.blockedCode != null) {
+            val signIn = if (fix.blockedCode == "engineSignedOut") RunnerCopy.agentFixSignIn(fix.engineName ?: engineName(fix.engine.orEmpty())) else ""
+            return AgentFixView(null, enabled = false, line = (fix.blockedMessage.orEmpty() + signIn).ifEmpty { null })
+        }
+        val starts = fix.workspaceName?.let { RunnerCopy.agentFixStarts(it, fix.engineName ?: engineName(fix.engine.orEmpty())) }
+        return AgentFixView(null, enabled = true, line = starts)
+    }
+
+    /** POST runners/:id/attention/:kind/fix answers the session it started: {sessionId, workspaceId, workspaceName, title}. */
+    fun agentFixPath(runner: String, kind: String) = "runners/$runner/attention/$kind/fix"
+
+    /** Its body: the engine for engineNotUpdating and installFailed; for cannotSelfUpdate the newest runner release this client knows. */
+    fun agentFixBody(kind: String, engine: String?, latest: String?) = buildJsonObject {
+        if (kind == "cannotSelfUpdate") latest?.takeIf { it.isNotEmpty() }?.let { put("latest", it) }
+        else engine?.let { put("engine", it) }
+    }
+
+    private fun undismissedUpdateNoteOf(update: JsonObject?, nowMs: Long, pinned: Boolean): Pair<String, String>? {
         update ?: return null
         if (update.str("status") == "skipped") return "quiet" to "not auto-updated"
         val latest = update.str("latest")?.takeIf { it.isNotEmpty() }
@@ -639,7 +794,7 @@ internal object RunnerPage {
      * on a key or a pool instead — then nothing can run on it, with a workspace or without one (OrbitKit RunnerAttention.noCliSignedIn,
      * the web's noCliSignedIn). Null when one is signed in or its sign-in is unknown, when none is installed, and when a workspace runs
      * on a key: that machine runs without any sign-in, so a signed-out login is news only to the workspaces on it. Settings counts the
-     * machine by the same answer (Infrastructure.attention).
+     * machine by the same answer (MachinesAndModels.attention).
      */
     fun noCliSignedIn(runner: JsonObject, workspaces: List<JsonObject>): List<String>? {
         // A signed-out Claude Code on a machine blocked for the Claude region is no CLI to sign in: Orbit won't start a Claude sign-in
@@ -825,7 +980,8 @@ internal object RunnerPage {
 
     private fun engineUpdateItems(runner: JsonObject, nowMs: Long) = (engineOrder + ProviderEngines.CURSOR).mapNotNull { engine ->
         val health = engineHealth(runner, engine)?.takeIf { it.bool("installed") == true } ?: return@mapNotNull null
-        val note = updateNoteOf(health.obj("update"), nowMs)?.takeIf { it.first == "warn" } ?: return@mapNotNull null
+        val note = updateNoteOf(health.obj("update"), nowMs, dismissed = engineUpdateDismissedFor(runner, engine))?.takeIf { it.first == "warn" }
+            ?: return@mapNotNull null
         val summary = "${engineName(engine)} update failed"
         AttentionItem("engineNotUpdating", "warn", summary, summary,
             "${note.second.replaceFirstChar { it.uppercase() }}. Orbit retries every 30 min — Update Engines Now tries again right away.",
@@ -1031,11 +1187,12 @@ internal object RunnerPage {
         !(health.text("engine") == ProviderEngines.CURSOR && runner != null && CursorRuntime.state(runner).blocksRow) &&
         (health.str("auth") == "no" || health.list("accounts").any { it.str("auth") == "no" && !runsOnEnvKey(health, it.text("id"), it.str("auth")) })
 
-    fun updateFailedLine(health: JsonObject, nowMs: Long, zone: ZoneId = ZoneId.systemDefault()): String? {
+    /** [dismissed]: the release this engine's warning was dismissed against (engineUpdateDismissedFor) — while it is the latest, no line. */
+    fun updateFailedLine(health: JsonObject, nowMs: Long, zone: ZoneId = ZoneId.systemDefault(), dismissed: String? = null): String? {
         if (health.bool("installed") != true) return null
         val update = health.obj("update")?.takeIf { it.str("status") == "failed" } ?: return null
         val latest = update.str("latest")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        if (updateNoteOf(update, nowMs)?.first != "warn") return null
+        if (updateNoteOf(update, nowMs, dismissed = dismissed)?.first != "warn") return null
         val whenText = update.str("at")?.let { day(it, nowMs, zone) } ?: return null
         return RunnerCopy.updateFailed(latest, whenText)
     }
@@ -1215,15 +1372,34 @@ internal object RunnerPage {
 
     fun engineUpdateInFlight(install: JsonObject?) = install?.str("mode") == "update" && install.str("status") in setOf("pending", "installing")
 
-    fun updateRelayLine(install: JsonObject?): String? {
-        if (install?.str("mode") != "update") return null
+    /** One line of what the last Update Engines Now said, and whether it is a failure (drawn red). */
+    data class UpdateRelayLine(val text: String, val failed: Boolean = false)
+
+    /**
+     * Where the last Update Engines Now got to (iOS `updateRelayLines`). A finished run lists only the engines that need
+     * someone: the failures, and an install Orbit may not replace. Current, updated, pinned, waiting for sessions or retried
+     * on the next pass sort themselves out, and listing them buried the line that mattered.
+     */
+    fun updateRelayLines(install: JsonObject?): List<UpdateRelayLine> {
+        if (install?.str("mode") != "update") return emptyList()
         return when (install.str("status")) {
-            "pending" -> "Queued — the runner picks this up on its next check-in."
-            "installing" -> "Updating this machine’s engine CLIs…"
-            "done", "failed" -> install.str("message")?.trim()?.takeIf { it.isNotEmpty() } ?: "Nothing to update."
-            else -> null
+            "pending" -> listOf(UpdateRelayLine("Queued — the runner picks this up on its next check-in."))
+            "installing" -> listOf(UpdateRelayLine("Updating this machine’s engine CLIs…"))
+            "done", "failed" -> {
+                val message = install.str("message")?.trim().orEmpty()
+                if (message.isEmpty()) return listOf(UpdateRelayLine("Nothing to update."))
+                message.split("\n")
+                    .filter { updateLineFailed(it) || it.contains("owned by another user") }
+                    .map { UpdateRelayLine(it, failed = updateLineFailed(it)) }
+                    .ifEmpty { listOf(UpdateRelayLine("Nothing here needs your attention.")) }
+            }
+            else -> emptyList()
         }
     }
+
+    /** The runner's own rule for a failed run (`updateRunFailed`, src/runner-go/engineinstall.go), read per line. */
+    private fun updateLineFailed(line: String) =
+        line.contains("update failed") || line.contains("timed out") || line.contains("does not run")
 
     // workspaces
     /** A path as a terminal spells it, with the machine's home directory as `~`. */
@@ -1256,7 +1432,8 @@ internal object RunnerPage {
         if (target != null && report.str("phase") in setOf("draining", "restarting")) return version + RunnerCopy.SEP + RunnerCopy.versionUpdatingTo(target)
         val note = when (runner.obj("selfUpdate")?.str("state")) {
             null -> if (runner.bool("runsAsRoot") == true) "installs when no turn is running" else null
-            "enabled", "waitingForIdle" -> "installs when no turn is running"
+            "enabled", "waitingForIdle" -> runner.obj("selfUpdate")?.int("quietWindowSeconds")?.takeIf { it > 0 }
+                ?.let { RunnerCopy.versionInstallsWhenQuiet(RunnerCopy.quietMinutes(it)) } ?: "installs when no turn is running"
             "heldByRollout" -> "not rolled out to it yet"
             else -> null
         } ?: return version
@@ -1276,10 +1453,12 @@ internal object RunnerPage {
      * name, or a phase this client doesn't know — those keep the page's wording from before. */
     fun updateCard(runner: JsonObject, nowMs: Long, zone: ZoneId = ZoneId.systemDefault()): UpdateCard? {
         val report = runner.obj("selfUpdate") ?: return null
-        val phase = report.str("phase") ?: return null
+        val phase = report.str("phase") ?: return updatedCard(report, nowMs, zone)
         val version = report.str("targetVersion") ?: return null
         return when (phase) {
-            "available" -> UpdateCard(phase, false, RunnerCopy.updateAvailableTitle(version), RunnerCopy.UPDATE_TAG_AVAILABLE, RunnerCopy.UPDATE_AVAILABLE_BODY)
+            // A runner that reports its quiet window waits for it; one that doesn't keeps the old wording.
+            "available" -> UpdateCard(phase, false, RunnerCopy.updateAvailableTitle(version), RunnerCopy.UPDATE_TAG_AVAILABLE,
+                report.int("quietWindowSeconds")?.takeIf { it > 0 }?.let { RunnerCopy.availableBodyQuiet(it) } ?: RunnerCopy.UPDATE_AVAILABLE_BODY)
             "draining" -> {
                 val left = report.int("turnsInFlight") ?: 0
                 val of = report.int("turnsAtDrain")?.let { maxOf(it, left) }
@@ -1291,18 +1470,35 @@ internal object RunnerPage {
                     since?.let { RunnerCopy.updateDrainingBody(version, it) } ?: RunnerCopy.UPDATE_DRAINING_BODY_NO_SINCE,
                     progressLabel = waited?.let { count + RunnerCopy.SEP + it } ?: count,
                     progress = if (of != null && of > 0) (of - left).toFloat() / of else 0f,
-                    turns = runner.list("updateTurns").mapNotNull { turn ->
-                        val turnId = turn.str("id") ?: return@mapNotNull null
-                        UpdateTurn(turnId, turn.str("title")?.trim()?.takeIf { it.isNotEmpty() } ?: RunnerCopy.UPDATE_UNTITLED_TURN,
-                            isoMs(turn.str("startedAt"))?.let { RunnerCopy.updateTurnRunning(updateWaited(maxOf(0L, (nowMs - it) / 60_000).toInt())) })
-                    })
+                    turns = updateTurns(runner, nowMs))
             }
-            "restarting" -> UpdateCard(phase, true, RunnerCopy.updateRestartingTitle(version), RunnerCopy.UPDATE_TAG_RESTARTING, RunnerCopy.UPDATE_RESTARTING_BODY)
+            // After the owner's Update Now, the turns it interrupted continue once it is back.
+            "restarting" -> UpdateCard(phase, true, RunnerCopy.updateRestartingTitle(version), RunnerCopy.UPDATE_TAG_RESTARTING,
+                report.int("interruptedTurns")?.takeIf { it > 0 }?.let(RunnerCopy::updateRestartingBodyInterrupted) ?: RunnerCopy.UPDATE_RESTARTING_BODY)
             "postponed" -> report.str("postponedUntil")?.let { updateClock(it, zone) }?.let { until ->
                 UpdateCard(phase, false, RunnerCopy.updatePostponedTitle(version, until), RunnerCopy.UPDATE_TAG_POSTPONED, RunnerCopy.updatePostponedBody(until))
             }
             else -> null
         }
+    }
+
+    /** The owner's running turns on this runner (its `updateTurns`, longest first): the draining card's rows and Update Now's list. */
+    fun updateTurns(runner: JsonObject, nowMs: Long): List<UpdateTurn> = runner.list("updateTurns").mapNotNull { turn ->
+        val turnId = turn.str("id") ?: return@mapNotNull null
+        UpdateTurn(turnId, turn.str("title")?.trim()?.takeIf { it.isNotEmpty() } ?: RunnerCopy.UPDATE_UNTITLED_TURN,
+            isoMs(turn.str("startedAt"))?.let { RunnerCopy.updateTurnRunning(updateWaited(maxOf(0L, (nowMs - it) / 60_000).toInt())) })
+    }
+
+    /** The Updated card (board 4): the last update, for a day after it was installed — how long the restart took and how many turns
+     * an Update Now interrupted for it, as far as the runner measured them. None with no update recorded, or an older one. */
+    private fun updatedCard(report: JsonObject, nowMs: Long, zone: ZoneId): UpdateCard? {
+        val to = report.str("lastUpdatedTo") ?: return null
+        val atIso = report.str("lastUpdatedAt") ?: return null
+        val at = isoMs(atIso) ?: return null
+        if (nowMs - at > RunnerCopy.UPDATE_TAG_UPDATED_HOURS * 3_600_000L || at - nowMs > 60_000) return null
+        return UpdateCard("updated", false, RunnerCopy.updateUpdatedTitle(to), updateClock(atIso, zone) ?: return null,
+            RunnerCopy.updateUpdatedBody(report.int("lastUpdateSeconds")?.takeIf { it > 0 }?.let(RunnerCopy::updateTook),
+                report.int("lastUpdateInterruptedTurns") ?: 0))
     }
 
     /** How long it has waited: `38 min`, `1 h 52 min`, `2 h`. */

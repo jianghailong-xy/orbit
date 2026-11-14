@@ -194,6 +194,18 @@ struct UserTurnRow: View {
                 SessionReplyCardsView(replies: replies, ts: b.ts, attached: replyRest(b),
                                       undelivered: undelivered, onCancelQueued: cancel)
             }
+        } else if let line = RunnerUpdateNow.resumeLine(b.text) {
+            // The turn Orbit sent to continue a turn the owner's Update Now cut (D4): nobody typed it,
+            // so it is one grey Orbit line, not the owner's bubble (web parity: `.runner-update-resume`).
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: "smallcircle.filled.circle").font(.orbitMeta).foregroundStyle(.secondary)
+                Text(line)
+                    .font(.orbitSubtext)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .help(b.text)
+            }
+            .accessibilityIdentifier("runner-update-resume")
         } else if let wake = WatchWakeText.parse(b.text) {
             // A turn a watch queued is the watch's to show, not a message the user typed: it opens
             // with a raw UUID and carries the whole payload the agent read (web parity: NodeView).
@@ -228,8 +240,9 @@ struct UserTurnRow: View {
                 }
             }
         } else if let sender = b.externalSender {
-            // Somebody outside Orbit — a connected Feishu group's member — sent it (`externalSender`,
-            // `ExternalSender.parse`): still their words in a bubble, headed `From Feishu · <name>` so it
+            // Somebody other than the owner — a connected Feishu group's member, or a guest the owner
+            // invited — sent it (`externalSender`, `ExternalSender.parse`): still their words in a bubble,
+            // headed `From Feishu · <name>` or `From <name>` so it
             // does not read as the owner's own (web parity: `UserBubble`'s `.chat-user-from`).
             UserBubbleView(bubble: b, sender: sender, onCancelQueued: cancel, steer: steer, onPutBack: putBack)
         } else {
@@ -240,7 +253,8 @@ struct UserTurnRow: View {
     /// What the wake card did NOT take, as the entry folded inside it — so a mixed note still shows
     /// its other blocks instead of repeating the wake beneath the card.
     private func attachedRest(_ wake: BackgroundWake) -> (kind: String, text: String)? {
-        wake.rest.isEmpty ? nil : (kind: describeNote(wake.rest), text: wake.rest)
+        let kind = wake.rest.isEmpty ? "" : describeNote(wake.rest)
+        return kind.isEmpty ? nil : (kind: kind, text: wake.rest)
     }
 
     /// The block a platform turn was handed with: the note delivery recorded, else its own words
@@ -253,7 +267,8 @@ struct UserTurnRow: View {
     /// What the reply cards did NOT take from a turn's note, as the entry folded inside them.
     private func replyRest(_ bubble: UserBubble) -> (kind: String, text: String)? {
         let rest = SessionReply.withoutReplyBlocks(bubble.note)
-        return rest.isEmpty ? nil : (kind: describeNote(rest), text: rest)
+        let kind = rest.isEmpty ? "" : describeNote(rest)
+        return kind.isEmpty ? nil : (kind: kind, text: rest)
     }
 
     /// The same bubble with the note taken off it: all of it is the card's now, so leaving it here

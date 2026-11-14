@@ -37,6 +37,8 @@ object ManagementFixture {
     /** GET access-tokens' tokens, newest first; DELETE access-tokens/:id revokes one (REVOKED, by its USER). */
     @Volatile var accessTokens: List<JsonObject> = emptyList()
     @Volatile var accessTokensFail = false
+    /** GET terminals' live terminals, newest first; DELETE terminals/:id revokes one, which leaves the list. */
+    @Volatile var terminals: List<JsonObject> = emptyList()
     /** GET providers (the pickers' catalogue, no ids) and GET providers/mine (the account's own, with ids, endpoints and hasApiKey). */
     @Volatile var providerCatalog = "[]"
     @Volatile var providersMine = "[]"
@@ -45,6 +47,8 @@ object ManagementFixture {
     val balanceGates = java.util.concurrent.ConcurrentHashMap<String, CompletableDeferred<Unit>>()
     /** GET tasks/:id for [TASK]. */
     @Volatile var task = "{}"
+    /** GET tasks/:id/evidence for [TASK]: its evidence versions, oldest first. */
+    @Volatile var evidence = "[]"
     @Volatile var workspaceName = "Alpha"
     @Volatile var runnerAlias = "Old alias"
     @Volatile var runnerCapacity = 2
@@ -89,6 +93,15 @@ object ManagementFixture {
     @Volatile var defaultRemoveRefusal: String? = null
     @Volatile var restoreFails = false
     @Volatile var onAccountWrite: (String) -> Unit = {}
+    /** POST runners/:id/engines/:engine/update-warning/dismiss runs this with the engine, then answers `{engine, latest}` with [dismissLatest],
+     * as the server records the engine's current update.latest — so GET runners can serve the dismissal from then on. */
+    @Volatile var onEngineDismiss: (String) -> Unit = {}
+    @Volatile var dismissLatest = "0.169.0"
+    /** POST runners/:id/attention/:kind/fix, as "<kind> <body>" in order: each runs [onAgentFix] with the kind — as the server's next GET
+     * runners carries the fixing entry — and answers the session it started, or, given [agentFixRefusal], refuses 409 in those words. */
+    val agentFixBodies = CopyOnWriteArrayList<String>()
+    @Volatile var onAgentFix: (String) -> Unit = {}
+    @Volatile var agentFixRefusal: String? = null
     /** POST runners/:id/install's bodies, in order; each answers the relay as pending for its engine. */
     val installBodies = CopyOnWriteArrayList<JsonObject>()
     /** Check again (POST runners/:id/region-check, docs/claude-region-check-contract.md §7): answered with when it was asked, after
@@ -117,11 +130,12 @@ object ManagementFixture {
         secondRunner = false; runnerOnline = true; runnerTwoOnline = true; runnerOrder = listOf(RUNNER, RUNNER_TWO); removedRunners = emptySet(); selfUpdate = null
         runnerEngines = "[]"; runnerExtra = ""; runnerTwoExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
         codeSent = """{"status":"done"}"""; onCode = {}; loginBodies.clear(); pauseBodies.clear(); installBodies.clear(); onRegionCheck = {}
-        defaultRemoveRefusal = null; restoreFails = false; onAccountWrite = {}
+        defaultRemoveRefusal = null; restoreFails = false; onAccountWrite = {}; onEngineDismiss = {}; dismissLatest = "0.169.0"
+        agentFixBodies.clear(); onAgentFix = {}; agentFixRefusal = null
         deviceStatus = "PENDING"; deviceConflict = false; deviceLastSeen = null; deviceGate = null
         drop = CompletableDeferred(); opened = 0
-        queries.clear(); modelRouting = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; providerCatalog = "[]"; providersMine = "[]"
-        balances.clear(); balanceGates.clear(); task = "{}"
+        queries.clear(); modelRouting = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; terminals = emptyList(); providerCatalog = "[]"; providersMine = "[]"
+        balances.clear(); balanceGates.clear(); task = "{}"; evidence = "[]"
         keyCheckAnswer = """{"ok":true,"keyCheck":"VALID","message":"Cursor accepted this key.","recorded":true,"keyCheckState":"VALID","keyCheckedAt":null}"""
         onKeyCheck = {}
     }
@@ -212,10 +226,12 @@ object ManagementFixture {
                 body()["recaps"]?.let { recaps = it.jsonPrimitive.boolean }
                 ok(user())
             }
+            "terminals" -> ok("""{"terminals":${JsonArray(terminals)}}""")
             "access-tokens" -> if (accessTokensFail) fail(503, "token list failed") else ok("""{"tokens":${JsonArray(accessTokens)}}""")
             "providers" -> ok(providerCatalog)
             "providers/mine" -> ok(providersMine)
             "tasks/$TASK" -> ok(task)
+            "tasks/$TASK/evidence" -> ok(evidence)
             "users/me/avatar" -> fail(404, "no avatar")
             "workspaces" -> ok("[${workspace()}]")
             "workspaces/$WORKSPACE" -> { if (api.method == HttpMethod.PATCH) workspaceName = body()["name"]!!.jsonPrimitive.content; ok(workspace()) }
@@ -254,12 +270,26 @@ object ManagementFixture {
             "providers/shared-pools" -> ok("[]")
             "providers/shared-pools/$POOL" -> if (accessFails) fail(503, "pool read failed") else ok(access())
             else -> when {
+                path.startsWith("runners/$RUNNER/attention/") && path.endsWith("/fix") && api.method == HttpMethod.POST -> path.split('/')[3].let { kind ->
+                    agentFixBodies += "$kind ${api.body!!.decodeToString()}"
+                    agentFixRefusal?.let { fail(409, it) } ?: run {
+                        onAgentFix(kind)
+                        ok("""{"sessionId":"$SESSION","workspaceId":"$WORKSPACE","workspaceName":"orbit-dev","title":"Fix: $kind"}""")
+                    }
+                }
+                path.startsWith("runners/$RUNNER/engines/") && path.endsWith("/update-warning/dismiss") && api.method == HttpMethod.POST ->
+                    path.split('/')[3].let { engine -> onEngineDismiss(engine); ok("""{"engine":"$engine","latest":"$dismissLatest"}""") }
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/pause") -> { pauseBodies += "$path ${api.body!!.decodeToString()}"; ok("{}") }
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/default/restore") ->
                     if (restoreFails) fail(404, "runner not found") else { onAccountWrite(path); ok("""{"ok":true}""") }
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/default") && api.method == HttpMethod.DELETE ->
                     defaultRemoveRefusal?.let { fail(400, it) }
                         ?: run { onAccountWrite(path); ok("""{"engine":"${path.split('/')[3]}","account":"default","status":"done","message":null}""") }
+                path.startsWith("terminals/") && api.method == HttpMethod.DELETE -> {
+                    val id = path.removePrefix("terminals/")
+                    terminals = terminals.filterNot { it["id"]?.jsonPrimitive?.content == id }
+                    ok("""{"id":"$id","revokedAt":"$now"}""")
+                }
                 path.startsWith("access-tokens/") && api.method == HttpMethod.DELETE -> {
                     val id = path.removePrefix("access-tokens/")
                     accessTokens = accessTokens.map { if (it["id"]?.jsonPrimitive?.content == id) JsonObject(it + mapOf("state" to JsonPrimitive("REVOKED"),

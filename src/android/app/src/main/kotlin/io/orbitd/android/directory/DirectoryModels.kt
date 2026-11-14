@@ -53,10 +53,14 @@ data class DirectorySession(
      *  Null for anybody else's words, and from an older server. Kept as the JSON it came as, so a shape this build cannot read is no
      *  mark rather than a list that fails to decode. */
     val lastUserFromOrbit: JsonElement? = null,
-    /** Who sent [lastUserText] when somebody outside Orbit did — a connected Feishu group's member (docs/feishu-bot-design.md §8.2):
-     *  the row says `From Feishu · <name>` instead of "You" ([SessionLine.externalLine], read by [ExternalSender.parse]). Null for anybody
+    /** Who sent [lastUserText] when somebody other than the owner did — a connected Feishu group's member (docs/feishu-bot-design.md
+     *  §8.2) or a guest the owner invited (docs/session-guests-design.md §3): the row says `From Feishu · <name>` or `From <name>` instead
+     *  of "You" ([SessionLine.externalLine], read by [ExternalSender.parse]). Null for anybody
      *  else, and from an older server. Kept as the JSON it came as, so a source this build does not know is no sender. */
     val lastUserFromExternal: JsonElement? = null,
+    /** The session's permission mode (`default`, `auto`, `bypassPermissions`…), which Share's People who can reply says a guest's
+     *  message runs in. Null from an older server. */
+    val permissionMode: String? = null,
     /** The rolling recap the server wrote about this session and when it wrote it (0418), clipped like the previews beside it; the
      *  line the list prefers to [lastAssistantText]. Both null on a session no pass has recapped yet, and from a server that writes
      *  no recaps (`ORBIT_RECAP_ENABLED=0`) — exactly what the row falls back from. The account's Session recaps switch can also hold
@@ -67,6 +71,9 @@ data class DirectorySession(
     val runStatus: String? = null, val endReason: String? = null, val error: String? = null, val retryAt: String? = null,
     val completedAt: String? = null, val deletedAt: String? = null, val lastToolUse: String? = null,
     val runningBgCount: Int? = null, val runningSubagentCount: Int? = null, val engineTurnActive: Boolean? = null,
+    /** What a parked session is still doing (`TURN`, `BACKGROUND_JOB`, `WAITING`), as the server decides it; null when none and
+     *  from an older server. See [resumesOnItsOwn]. */
+    val activity: String? = null,
     val waitingKind: String? = null, val ownerItems: JsonArray? = null,
     /** The project this session belongs to in any role; null for an ordinary conversation and from an older server. */
     val projectMembership: SessionProjectMembership? = null,

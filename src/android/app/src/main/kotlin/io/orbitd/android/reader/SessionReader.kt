@@ -42,6 +42,7 @@ import io.orbitd.android.realtime.restoredFields
 import io.orbitd.android.R
 import io.orbitd.android.composer.CreatedWorkspaceLine
 import io.orbitd.android.composer.CreatedWorkspaceLineView
+import io.orbitd.android.composer.DraftTarget
 import io.orbitd.android.composer.MachineSetupCopy
 import io.orbitd.android.composer.ProviderChoices
 import io.orbitd.android.composer.SessionComposer
@@ -88,6 +89,11 @@ import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.*
 import io.orbitd.android.directory.*
 import io.orbitd.android.management.LocalSessionRecaps
+import io.orbitd.android.management.RunnerUpdateLater
+import io.orbitd.android.management.RunnerUpdateLaterButton
+import io.orbitd.android.management.RunnerPage
+import io.orbitd.android.management.RunnerUpdateNow
+import io.orbitd.android.management.RunnerUpdateNowButton
 import io.orbitd.android.tasks.resolvedRunState
 import io.orbitd.android.toast.OrbitToasts
 import io.orbitd.android.toast.ToastTone
@@ -101,7 +107,7 @@ import kotlinx.serialization.json.*
 
 @Composable
 fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, api: DirectoryApi,
-    data: DirectoryData, open: (OrbitRoute) -> Unit, leave: () -> Unit = {}) {
+    data: DirectoryData, open: (OrbitRoute) -> Unit, leave: () -> Unit = {}, swap: (OrbitRoute) -> Unit = open) {
     // This page shows a conversation, and the store streams the one it shows: selecting it is the reader's own act, so a
     // landing session — which SessionDestination never sends here — is never subscribed to (§2.9 LS6). A reader leaving
     // clears the selection; a reader replacing another (a link to a second session) sets its own after the old one's.
@@ -163,6 +169,15 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         openRunner = { runner, engine -> latestOpen(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) },
         openSession = { latestOpen(OrbitRoute(Destination.SESSION, it)) },
         openDraft = { latestOpen(OrbitRoute(Destination.DRAFT, workspaceId = it)) }) }
+    // The main checkout of the session's workspace (docs/main-checkout-git-contract.md): its card, bar, review sheet and lines.
+    val mainCheckout = remember(handle, route.id) { MainCheckoutModel(api.mainCheckoutTransport(), route.id!!, app.processScope).also { mc ->
+        mc.prefill = { composer.putBack(it) }
+        mc.openDraft = { workspace, prompt ->
+            val target = DraftTarget(workspace)
+            app.composer(handle, target.key, target).putBackWhenLoaded(prompt)
+            latestOpen(OrbitRoute(Destination.DRAFT, workspaceId = workspace))
+        }
+    } }
     val list = rememberLazyListState()
     var follow by rememberSaveable { mutableStateOf(route.recordId == null) }
     var placed by remember(model) { mutableStateOf(false) }
@@ -181,7 +196,36 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         it.effectiveLifecycleState != "TRASH" && it.effectiveRunState == RunState.QUEUED && !it.regionHeld && RunnerUpdating.isRunnerUpdating(it.queuedGate)
     }?.queuedGate
     val runnerUpdatingMachine = listRow?.let { data.machineName(it.workspace) }
+    // Later… for the runner the update holds this session on (its workspace's runner), and Update Now… when that runner takes it: the
+    // runner's row as GET /runners lists it says so, with the owner's turns in flight (`updateTurns`) the confirmation names. A runner
+    // that is stopping, not updating, has nothing to postpone or install: neither (board runner-stopping ①).
+    val runnerUpdatingRunner = listRow?.let { row -> data.workspaces.firstOrNull { ObjectId.same(it.id, row.workspace) }?.runnerId }
+    val runnerUpdatingRow = runnerUpdatingRunner?.let { runnerId -> data.runnerRows.firstOrNull { ObjectId.same(it.text("id"), runnerId) } }
+    val runnerUpdatingLater: (@Composable () -> Unit)? = runnerUpdatingRunner?.takeIf { !RunnerUpdating.isRunnerStopping(runnerUpdatingGate) }?.let { runnerId -> {
+        RunnerUpdateLaterButton(runnerUpdatingGate?.queuedRunnerUpdate?.targetVersion, runnerUpdatingMachine, { until ->
+            runCatching { api.mutate(RunnerUpdateLater.path(runnerId), body = RunnerUpdateLater.body(until)) }
+                .fold({ app.realtime.refreshDirectory(); null }, { it.message ?: RunnerUpdateLater.POSTPONE_FAILED })
+        })
+        runnerUpdatingRow?.takeIf(RunnerUpdateNow::offered)?.let { runner ->
+            val version = RunnerUpdateNow.version(runner)
+            RunnerUpdateNowButton(RunnerPage.displayName(runner), version, { RunnerPage.updateTurns(runner, System.currentTimeMillis()) }, {
+                runCatching { api.mutate(RunnerUpdateNow.path(runnerId), body = RunnerUpdateNow.request()) }
+                    .fold({ app.realtime.refreshDirectory(); OrbitToasts.show(RunnerUpdateNow.toast(version), tone = ToastTone.INFO); null },
+                        { it.message ?: RunnerUpdateNow.FAILED })
+            })
+        }
+    } }
     val actions = remember(api) { SessionActions(api, app) { app.realtime.refreshDirectory(); app.realtime.refreshSession() } }
+    // The project this conversation is the coordinator or a member of (owner 2026-11-11, docs/mocks/project-sessions-column board 5):
+    // its bar carries the button that opens the project's sessions in a sheet. Read off the detail, or the list's row before that.
+    val projectId = listed?.projectMembership?.projectId ?: remember(data.sessions, route.id) {
+        data.sessions.values.firstNotNullOfOrNull { rows -> rows.firstOrNull { ObjectId.same(it.id, route.id) }?.projectMembership?.projectId }
+    }
+    // The button's number is the sheet's head's: the project's Open and Completed sessions as the page reads them, read as the
+    // conversation opens, then what the sheet itself last counted. No number until the first read answers.
+    val readCount by rememberProjectSessionCount(app, api, projectId)
+    var sheetCount by remember(projectId) { mutableStateOf<Int?>(null) }
+    var projectSheet by remember(handle, route.id) { mutableStateOf(false) }
     val link = remember(handle, route.id) { "${handle.account.server.trimEnd('/')}/sessions/${ObjectId.toPublic(route.id!!)}" }
     val currentRows by rememberUpdatedState(shownRows)
     val nested = remember { object : NestedScrollConnection {
@@ -334,6 +378,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     LaunchedEffect(snapshotDetail) { snapshotDetail?.let(worktree::offer) }
     val worktreeState by worktree.state.collectAsState()
     LaunchedEffect(worktreeState.detail, snapshotDetail) { console.detail = worktreeState.detail ?: snapshotDetail }
+    val sessionDetail = worktreeState.detail ?: snapshotDetail
+    val workspaceOfSession = (sessionDetail?.get("workspace") as? JsonObject)?.string("id") ?: sessionDetail?.string("workspaceId")
+    LaunchedEffect(workspaceOfSession) { mainCheckout.bind(workspaceOfSession) }
     // What a Retry re-sends when it is the reader's: the newest message of a person the window holds.
     LaunchedEffect(rows) { console.lastUser = rows.lastOrNull { it.event.type == "user" && it.event.personWords().isNotBlank() }?.event }
     // An Antigravity failure said here is read against the runner and the providers, once, when it first appears.
@@ -417,8 +464,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
     LaunchedEffect(targetNames) { wakeNames = targetNames }
     val exchangeTree = rememberExchangeTree(app, handle, state.session?.snapshot?.detail)
-    CompositionLocalProvider(LocalReaderResources provides resources, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
-        LocalSessionConsole provides console, LocalWatchTargetNames provides targetNames, LocalAnsweredQuestions provides answeredQuestions,
+    // The main checkout's result lines, which a card above them reads to know it was handled.
+    val mainCheckoutResults = remember(state.window.events) {
+        state.window.events.filter { it.type == "system" }.mapNotNull { e -> MainCheckout.resultNotice(e.fields)?.let { e.seq to it } }
+    }
+    CompositionLocalProvider(LocalMainCheckoutResults provides mainCheckoutResults, LocalReaderResources provides resources, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
+        LocalSessionConsole provides console, LocalMainCheckout provides mainCheckout, LocalWatchTargetNames provides targetNames, LocalAnsweredQuestions provides answeredQuestions,
         LocalExchangeTree provides exchangeTree) {
         SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -448,9 +499,15 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         PageBar.Bind(route, title = null, folds = foldsChrome, center = {
             if (offTail) question.value?.let { QuestionCapsule(it) { row -> model.show(row.event.seq) } }
         }, actions = {
+            if (projectId != null) ProjectSessionsButton(sheetCount ?: readCount) { projectSheet = true }
             SessionMenu(listed.takeUnless { state.denied }, state.session?.snapshot?.detail, link, state.session?.fresh == true && data.fresh,
                 actions, open, { action = it }, { details = true }, leave)
         })
+        if (projectSheet && projectId != null) ProjectSessionsSheet(app, handle, projectId, route.workspaceId, data, api, open,
+            close = { projectSheet = false }, onCount = { sheetCount = it }) { next ->
+            projectSheet = false
+            if (!ObjectId.same(next.id, route.id)) swap(next)
+        }
         Column(Modifier.fillMaxSize()) {
             val session = state.session
             val detail = session?.snapshot?.detail
@@ -554,7 +611,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                             if (head == null && held == null) TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1), target = targetSeq)
                             else Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1), target = targetSeq)
-                                held?.let { RunnerUpdatingFoot(it, runnerUpdatingMachine) }
+                                held?.let { RunnerUpdatingFoot(it, runnerUpdatingMachine, later = runnerUpdatingLater) }
                                 head?.let { TurnHeadLine(it, ticking = sessionLive && row.event.seq == newestHead) }
                             }
                         }
@@ -571,8 +628,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     if (runnerUpdatingPage != null) item(key = "runner-updating") {
                         val openTurn: (String) -> Unit = { open(OrbitRoute(Destination.SESSION, it)) }
                         if (displayedRows.isEmpty()) Box(Modifier.fillParentMaxHeight(0.8f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            RunnerUpdatingQueued(runnerUpdatingPage, runnerUpdatingMachine, openTurn)
-                        } else RunnerUpdatingQueued(runnerUpdatingPage, runnerUpdatingMachine, openTurn)
+                            RunnerUpdatingQueued(runnerUpdatingPage, runnerUpdatingMachine, openTurn, later = runnerUpdatingLater)
+                        } else RunnerUpdatingQueued(runnerUpdatingPage, runnerUpdatingMachine, openTurn, later = runnerUpdatingLater)
                     }
                     else if (displayedWindow.seeded && displayedRows.isEmpty() && (live == null || accepted.isEmpty())) item(key = "empty") { Text("No messages yet") }
                     if (live != null) {
@@ -659,8 +716,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SessionWatches(app, handle, route.id!!, open = open) }
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SessionTasksCard(app, handle, route.id!!, cards, openLink) }
                 // The composer's send in flight holds Merge as a queued turn does (A06-14, iOS `console.sending`).
-                Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { Box(Modifier.padding(horizontal = 16.dp)) {
+                Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { Column(Modifier.padding(horizontal = 16.dp)) {
+                    // The main checkout's standing state, in Worktree and Shared sessions alike (board 01⑤, 02④).
+                    if (workspaceOfSession != null) MainCheckoutBar(mainCheckout, workspaceOfSession, isolated = sessionDetail?.string("isolationStatus") == "worktree")
                     WorktreeBar(worktree, sending = composerState.waiting || composerState.busy, open = openLink) } }
+                MainCheckoutSheets(mainCheckout, isolated = sessionDetail?.string("isolationStatus") == "worktree", sessionBranch = sessionDetail?.string("branch"),
+                    sessionTitle = sessionDetail?.string("title"))
                 // The landing this conversation's work fed, at the session's own bottom (owner 2026-10-19, board v4 06 e).
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SourceLandingChip(queuedDetail ?: detail) {
                     open(OrbitRoute(Destination.SESSION, it)) } }

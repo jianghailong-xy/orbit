@@ -39,14 +39,23 @@ import io.orbitd.android.cards.TranscriptCardView
 import io.orbitd.android.cards.isOrbitTurnCard
 import io.orbitd.android.cards.DetailFold
 import io.orbitd.android.directory.ExternalSender
+import io.orbitd.android.management.RunnerUpdateNow
 import io.orbitd.android.text.*
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 
+/** Where a row reads an event whole when it came back `truncated`: the owner's reader ([SessionReaderModel]), or the guest door
+ * (GuestSessionPage). */
+internal fun interface FullEvents { suspend fun full(seq: Long): RunEvent }
+
+/** The heading of a `user` row that names no other sender: the reader's own words, `You` — and in the guest view, where the
+ * conversation is the owner's, the owner's name (GuestSessionPage); the guest's own are attributed to the reader there. */
+internal val LocalOwnerHeading = staticCompositionLocalOf { ExternalSender.you }
+
 @Composable
-internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, live: Transcript?, open: (String) -> Unit, highlighted: Boolean = false,
+internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Transcript?, open: (String) -> Unit, highlighted: Boolean = false,
     detailOnly: Boolean = false, target: Long? = null) {
     // The turns Orbit opened, folded with their answers (ExchangeFold): [target] opens the way down to a record a link landed on.
     if (row.exchanges.isNotEmpty()) {
@@ -115,23 +124,32 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
     LaunchedEffect(row.key, questions.isNotEmpty()) { if (questions.isNotEmpty() && (event.truncated || row.result?.truncated == true)) loadFull(reveal = false) }
     val title = when (event.type) {
         "user" -> if (cards.isNotEmpty()) "Orbit" else (event.fields["sessionMessage"] as? JsonObject)?.let { "From ${it.string("fromTitle") ?: "another Orbit session"}" }
-            // Somebody outside Orbit — a connected Feishu group's member (`externalSender`, docs/feishu-bot-design.md §8.2): their
-            // words, headed `From Feishu · <name>` so they do not read as the owner's own (web `.chat-user-from`, OrbitKit `UserBubbleView`).
-            ?: ExternalSender.parse(event.fields["externalSender"])?.let(ExternalSender::label) ?: "You"
+            // Somebody other than the owner — a connected Feishu group's member (`externalSender`, docs/feishu-bot-design.md §8.2), or
+            // a guest the owner invited (docs/session-guests-design.md §3): their words, headed `From Feishu · <name>` or `From <name>`
+            // so they do not read as the owner's own (web `.chat-user-from`, OrbitKit `UserBubbleView`).
+            ?: ExternalSender.parse(event.fields["externalSender"])?.let(ExternalSender::label) ?: LocalOwnerHeading.current
         "assistant" -> "Assistant"
         "thinking" -> "Thinking"
         "tool_use" -> if (questions.isNotEmpty()) "Question" else shown.fields.string("name") ?: shown.fields.string("toolName") ?: "Tool"
         "tool_result" -> "Tool output"
         // Nobody pressed Stop on a turn the runner tore down while restarting (runner-go's watchShutdownDrain): say what did.
-        "interrupt" -> if (event.fields.string("reason") == "runner_restart") "Interrupted — the runner restarted" else "Interrupted"
+        "interrupt" -> when (event.fields.string("reason")) {
+            "runner_restart" -> "Interrupted — the runner restarted"
+            // The owner's Update Now stopped it to install a release (docs/runner-update-drain-design.md D4).
+            RunnerUpdateNow.INTERRUPT_REASON -> RunnerUpdateNow.interruptedTitle(event.fields.string("targetVersion"))
+            else -> "Interrupted"
+        }
         "error", "auth_error" -> "Error"
-        "notice", "diagnostic" -> "Notice"
+        "notice", "diagnostic", "auth_settled" -> "Notice"
         "auto_retry" -> EngineErrors.autoRetryTitle(shown.fields.string("variant") == "quota", shown.body())
         "background_task" -> "Background work"
         else -> event.type.replace('_', ' ').replaceFirstChar(Char::uppercase)
     }
+    // The turn Orbit sent to continue a turn the owner's Update Now cut: Orbit's words, written for the agent, so one grey Orbit line
+    // rather than a message in the reader's name (web `runner-update-resume`).
+    val updateResume = event.type == "user" && RunnerUpdateNow.isResume(shown.fields.string("text"))
     val bg = when { highlighted -> MaterialTheme.colorScheme.secondaryContainer
-        event.type == "user" && answerLine == null && bubble == null -> MaterialTheme.colorScheme.surfaceVariant
+        event.type == "user" && answerLine == null && bubble == null && !updateResume -> MaterialTheme.colorScheme.surfaceVariant
         else -> MaterialTheme.colorScheme.surface }
     // The runtime's calls whose work outlives them: a sub-agent (Agent; Task before 2.x) and a Workflow.
     val taskKind = (shown.fields.string("name") ?: shown.fields.string("toolName")).takeIf { event.type == "tool_use" && it in setOf("Agent", "Task", "Workflow") }
@@ -144,6 +162,13 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
     val dshRepair = if (event.type == "error") DshRuntime.repair(shown.body().trim())?.takeIf { console?.executesDsh == true } else null
     Column(Modifier.fillMaxWidth().background(bg).padding(10.dp).testTag(row.key), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (answerLine != null) { cards.forEach { TranscriptCardView(it, open, shown) }; return@Column }
+        if (updateResume) {
+            Text(RunnerUpdateNow.RESUME_NOTE, Modifier.testTag("runner-update-resume"), style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // What delivery appended — the background jobs that ended while the runner was away — rides under it.
+            shown.fields.string("controlPlaneNote")?.takeIf { it.isNotBlank() }?.let { AttachedNoteEntry(it.trim()) }
+            return@Column
+        }
         if (dshRepair != null && console != null) { DshRepairCard(dshRepair, console); return@Column }
         if (repair != null && console != null) { AntigravityRepairCard(repair, console); return@Column }
         if (event.type == "auto_retry" && console != null) {
@@ -151,6 +176,9 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                 shown.fields["afterUserMsg"] == JsonPrimitive(true)), console)
             return@Column
         }
+        // The main checkout's card (board 01) and an action's outcome line (board 03).
+        if (event.type == MainCheckout.ROW_CARD) { MainCheckout.changedNotice(shown.fields)?.let { MainCheckoutCard(it, row.key, event.seq, event.ts) }; return@Column }
+        if (event.type == MainCheckout.ROW_RESULT) { MainCheckout.resultNotice(shown.fields)?.let { MainCheckoutResultRow(it) }; return@Column }
         // A thinking row is its own one line (A06-11); a question card's line folds and opens it, as its record does.
         if (!detailOnly && event.type != "thinking" && bubble == null) Row(Modifier.fillMaxWidth().then(if (questions.isEmpty()) Modifier else Modifier
             .clickable(onClickLabel = if (questionShown) "Hide options" else "Show options", role = Role.Button) { questionOpen = !questionShown }
@@ -206,6 +234,15 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                     fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 else if (taskRunning) progress?.let(TaskProgressCopy::trayLine)?.let { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             }
+            // The owner's "Chat about this" reply to one of Orbit's own cards: their message, drawn as their turns are, under the
+            // call rather than left inside its output (web `OwnerChatBubble`, OrbitKit `OwnerChatReply`).
+            if (!detailOnly) ownerChatWords(row)?.let { words ->
+                Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(10.dp).testTag("owner-chat-reply"),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("You", style = MaterialTheme.typography.labelMedium)
+                    MarkdownText(words, open = open)
+                }
+            }
             if (expanded || detailOnly) {
                 // A workflow opens to its progress, its script folded under it; a sub-agent's totals close its transcript.
                 if (taskKind == "Workflow" && progress != null) TaskProgressView(progress, row) { card ->
@@ -234,7 +271,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                     if (nested.size > 4) TextButton(onClick = { childrenOpen = true }) { Text("Open subagent transcript") }
                 }
             } else liveOutput?.let { Text(it.takeLast(240), maxLines = 3, style = MaterialTheme.typography.bodySmall) }
-        } else if (event.type in setOf("error", "notice", "diagnostic", "auto_retry")) {
+        } else if (event.type in setOf("error", "notice", "diagnostic", "auto_retry", "auth_settled")) {
             EngineLine(shown)
             if (shown.truncated) TextButton(enabled = !loading, onClick = { loadFull() }) { Text(if (error) "Couldn't load full message · Retry" else "Read full message") }
         } else if (event.type == "thinking") {
@@ -338,7 +375,10 @@ private fun EngineLine(event: RunEvent) {
     when (event.type) {
         "error" -> ToolFailureSummary.parse(text)?.let { ToolFailureCard(text, it) }
             ?: GlyphLine("⚠", text, MaterialTheme.colorScheme.error, MaterialTheme.typography.bodyLarge)
-        "notice" -> GlyphLine("⚠", text, LocalOrbitColors.current.needsYou, MaterialTheme.typography.labelLarge)
+        // An account switch the conversation has moved past is history, muted with the sign-in failure it came with.
+        "notice" -> GlyphLine("⚠", text, if (event.fields["settled"] == JsonPrimitive(true)) MaterialTheme.colorScheme.onSurfaceVariant
+            else LocalOrbitColors.current.needsYou, MaterialTheme.typography.labelLarge)
+        "auth_settled" -> SettledAuthLine(text, event.fields["resolved"] == JsonPrimitive(true))
         "diagnostic" -> DiagnosticLine(event.fields.string("label").orEmpty(), EngineStderr.logText(text),
             (event.fields["repeats"] as? JsonPrimitive)?.intOrNull ?: 1)
         // The self-healing failure's sentence; the card around it (countdown, Retry) is the auto-retry card's.
@@ -372,6 +412,24 @@ private fun GlyphLine(glyph: String, text: String, color: Color, style: TextStyl
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(glyph, color = color, style = style, modifier = Modifier.clearAndSetSemantics { })
         SelectionContainer { Text(text, color = color, style = style) }
+    }
+}
+
+/** A sign-in failure the conversation moved past (web `.chat-authfix-settled`, iOS `AuthErrorCardView.settledRow`): one muted line,
+ * a check once the agent worked again, and the runtime's words a tap away. */
+@Composable
+private fun SettledAuthLine(message: String, resolved: Boolean) {
+    var expanded by rememberSaveable(message) { mutableStateOf(false) }
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val style = MaterialTheme.typography.labelLarge
+    Column(Modifier.fillMaxWidth().testTag("auth-settled"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.fillMaxWidth().clickable(onClickLabel = if (expanded) "Hide message" else "Show message", role = Role.Button) { expanded = !expanded },
+            horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(if (resolved) "✓" else "⚠", Modifier.clearAndSetSemantics { }, color = if (resolved) LocalOrbitColors.current.success else muted, style = style)
+            Text(if (resolved) "Sign-in failed — resolved" else "Sign-in failed", Modifier.weight(1f), color = muted, style = style)
+            Text(if (expanded) "⌄" else "›", Modifier.clearAndSetSemantics { }, color = muted, style = style)
+        }
+        if (expanded) SelectionContainer { Text(message, color = muted, style = MaterialTheme.typography.bodySmall) }
     }
 }
 

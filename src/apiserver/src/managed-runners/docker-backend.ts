@@ -26,7 +26,7 @@ import {
 } from './managed-runner-backend';
 import { quantityUnits, type CapacityBudget, type ComputeAmounts, type StorageAmounts } from './managed-runner-capacity';
 import { readDockerFencingReceipt, type ManagedRunnerPredecessor, type ObservedStopProof } from './managed-runner-fencing';
-import type { DockerRunnerProfile } from './managed-runner-profile';
+import { DOCKER_IMAGE_FROM_CHANNEL, type DockerRunnerProfile } from './managed-runner-profile';
 import { managedPodName, managedPvcName, managedSecretName } from './managed-runner-resources';
 import { isByteCount, type VolumeFigures } from './managed-runner-storage';
 
@@ -63,6 +63,11 @@ const TERMS: ManagedRunnerBackendTerms = {
   instance: 'container',
   stopReport: "Docker's report",
 };
+
+/** How long an image adopted from the channel (`runner.image: "channel"`) is used before /v1/info is asked again. */
+export const ADOPTED_IMAGE_TTL_MS = 60_000;
+
+const IMAGE_ID = /^sha256:[0-9a-f]{64}$/;
 
 /** What a derived budget leaves to everything else on the host, unless the profile says otherwise. */
 export const DOCKER_DEFAULT_RESERVE = { cpu: 0.25, memory: 0.25, disk: 0.1 } as const;
@@ -176,12 +181,41 @@ export class DockerBackend implements ManagedRunnerBackend {
   readonly name = 'docker';
   readonly terms = TERMS;
   readonly location: { readonly clusterKey: string; readonly namespace: string };
+  /** The image the channel reported, on a profile that adopts it (D2), and when it was read. */
+  private adopted?: { image: string; at: number };
+  private channelUnreachable = false;
+  /** When `recheckReachability` last asked the channel. */
+  private rechecked?: number;
+  private readonly channel: DockerChannel;
 
   constructor(
-    private readonly channel: DockerChannel,
+    channel: DockerChannel,
     private readonly profile: DockerRunnerProfile,
+    private readonly now: () => number = Date.now,
   ) {
     this.location = { clusterKey: profile.clusterKey, namespace: profile.docker.instanceId };
+    this.channel = observedChannel(channel, (unreachable) => (this.channelUnreachable = unreachable));
+  }
+
+  /**
+   * The last channel call reached nothing (no connection made: `DockerChannelUnreachable` with
+   * `connected` false, what `failure` calls unreachable); cleared by any answer, a refusal included.
+   * A call that connected but lost its answer changes nothing. In process memory only.
+   */
+  get unreachable(): boolean {
+    return this.channelUnreachable;
+  }
+
+  /**
+   * While marked unreachable: one /v1/info, at most once per poll interval, whose answer (any answer)
+   * clears the mark. Nothing while reachable. Its failure is the mark itself, so it is not passed on.
+   */
+  async recheckReachability(): Promise<void> {
+    if (!this.channelUnreachable) return;
+    const now = this.now();
+    if (this.rechecked !== undefined && now - this.rechecked < this.profile.lifecycle.pollIntervalSeconds * 1000) return;
+    this.rechecked = now;
+    await this.channel.info().catch(() => undefined);
   }
 
   names(runnerId: string) {
@@ -190,14 +224,39 @@ export class DockerBackend implements ManagedRunnerBackend {
 
   /** Derived from the host the channel reports, after checking the channel serves this deployment and image. */
   async capacityBudget(): Promise<CapacityBudget> {
+    const info = await this.checkedInfo();
+    return dockerCapacityBudget(info.host, this.profile, info.limits?.maxContainers);
+  }
+
+  /**
+   * The channel's /v1/info, once it is known to serve this deployment: its instance always, and its image
+   * the profile's — or, on a profile that adopts the channel's image (`runner.image: "channel"`), any image
+   * ID, which is then the one every new container is made from.
+   */
+  private async checkedInfo() {
     const info = await this.channel.info();
-    if (info.instanceId !== this.profile.docker.instanceId || info.image !== this.profile.runner.image) {
+    const adopt = this.profile.runner.image === DOCKER_IMAGE_FROM_CHANNEL;
+    const imageOk = adopt ? typeof info.image === 'string' && IMAGE_ID.test(info.image) : info.image === this.profile.runner.image;
+    if (info.instanceId !== this.profile.docker.instanceId || !imageOk) {
+      const named = adopt ? 'an image ID of its own' : this.profile.runner.image;
       throw new ManagedRunnerConflict(
         'DOCKER_CHANNEL_MISMATCH',
-        `the channel serves instance ${info.instanceId} with image ${info.image}; this profile names ${this.profile.docker.instanceId} with ${this.profile.runner.image}`,
+        `the channel serves instance ${info.instanceId} with image ${info.image}; this profile names ${this.profile.docker.instanceId} with ${named}`,
       );
     }
-    return dockerCapacityBudget(info.host, this.profile, info.limits?.maxContainers);
+    if (adopt) this.adopted = { image: info.image, at: this.now() };
+    return info;
+  }
+
+  /**
+   * The image new containers are made from: the profile's, or the channel's on a profile that adopts it —
+   * read afresh when `fresh` (before anything is created from it) or when the last reading is older than
+   * ADOPTED_IMAGE_TTL_MS.
+   */
+  private async image(fresh = false): Promise<string> {
+    if (this.profile.runner.image !== DOCKER_IMAGE_FROM_CHANNEL) return this.profile.runner.image;
+    if (fresh || !this.adopted || this.now() - this.adopted.at > ADOPTED_IMAGE_TTL_MS) await this.checkedInfo();
+    return this.adopted!.image;
   }
 
   computeShare(): ComputeAmounts {
@@ -287,7 +346,7 @@ export class DockerBackend implements ManagedRunnerBackend {
 
   async readInstance(mapping: ManagedRunner): Promise<DockerInstance | null> {
     const view = await this.channel.readContainer(managedPodName(mapping.runnerId));
-    return view ? instanceOf(view, this.profile.runner.image) : null;
+    return view ? instanceOf(view, await this.image()) : null;
   }
 
   /**
@@ -296,7 +355,7 @@ export class DockerBackend implements ManagedRunnerBackend {
    * refused for anything else, nothing is created.
    */
   async requireInstanceGuard(mapping: ManagedRunner): Promise<void> {
-    const probe = { ...this.containerRequest(mapping), name: `${managedPodName(mapping.runnerId)}-guard-probe` };
+    const probe = { ...this.containerRequest(mapping, await this.image(true)), name: `${managedPodName(mapping.runnerId)}-guard-probe` };
     const answer = await this.channel.dryRunContainer(probe);
     if (answer.status === 409 && answer.code === 'SINGLE_CONTAINER_GUARD') return;
     if (answer.status >= 500 || answer.status === 429) throw new DockerChannelError(answer.status, answer.code ?? `HTTP_${answer.status}`, answer.message ?? 'the guard probe failed');
@@ -311,9 +370,10 @@ export class DockerBackend implements ManagedRunnerBackend {
    */
   async createInstance(mapping: ManagedRunner): Promise<DockerInstance> {
     const name = managedPodName(mapping.runnerId);
+    const image = await this.image(true);
     try {
-      const view = await this.orReadBack(() => this.channel.createContainer(this.containerRequest(mapping)), () => this.channel.readContainer(name));
-      return instanceOf(view, this.profile.runner.image);
+      const view = await this.orReadBack(() => this.channel.createContainer(this.containerRequest(mapping, image)), () => this.channel.readContainer(name));
+      return instanceOf(view, image);
     } catch (error) {
       if (error instanceof DockerChannelError && error.code === 'VOLUME_IN_USE') throw new ManagedVolumeHeld(error.message);
       if (error instanceof DockerChannelError && error.code === 'CONTAINER_LIMIT') throw new ManagedInstanceLimit(error.message);
@@ -387,11 +447,11 @@ export class DockerBackend implements ManagedRunnerBackend {
   // ── helpers ────────────────────────────────────────────────────────────────────────────────
 
   /** What the mapping's container is made from: identities and the profile's amounts. */
-  private containerRequest(mapping: ManagedRunner): ChannelContainerRequest {
+  private containerRequest(mapping: ManagedRunner, image: string): ChannelContainerRequest {
     const share = this.computeShare();
     return {
       name: managedPodName(mapping.runnerId),
-      image: this.profile.runner.image,
+      image,
       ownerId: mapping.ownerId,
       runnerId: mapping.runnerId,
       generation: mapping.generation,
@@ -415,4 +475,31 @@ export class DockerBackend implements ManagedRunnerBackend {
       throw error;
     }
   }
+}
+
+/**
+ * The channel, every call of it reporting what it learned of the host: `true` when it reached nothing,
+ * `false` when the channel answered (a refusal is an answer), and nothing when it connected but lost the answer.
+ */
+function observedChannel(channel: DockerChannel, mark: (unreachable: boolean) => void): DockerChannel {
+  return new Proxy(channel, {
+    get(target, key, receiver) {
+      const value: unknown = Reflect.get(target, key, receiver);
+      if (typeof value !== 'function') return value;
+      return async (...args: unknown[]) => {
+        try {
+          const answer: unknown = await value.apply(target, args);
+          mark(false);
+          return answer;
+        } catch (error) {
+          if (error instanceof DockerChannelUnreachable) {
+            if (!error.connected) mark(true);
+          } else if (error instanceof DockerChannelError) {
+            mark(false);
+          }
+          throw error;
+        }
+      };
+    },
+  });
 }
