@@ -53,6 +53,9 @@ const SCENES = {
   'b-dark': { act: asTitle, theme: 'dark' },
   'today-window': { clip: 'viewport' },
   'b-window': { act: asTitle, clip: 'viewport' },
+  // A phone: the head row. Shot on a build, no drawing over it (today's main, or the change).
+  phone: { vp: { width: 390, height: 844, isMobile: true }, clip: 'viewport', ready: '.wk-title-row' },
+  'phone-one': { vp: { width: 390, height: 844, isMobile: true }, clip: 'viewport', ready: '.wk-title-row', wikis: [ORBIT] },
 };
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.json': 'application/json' };
@@ -69,7 +72,8 @@ const base = `http://127.0.0.1:${server.address().port}`;
 async function shoot(browser, name) {
   const scene = SCENES[name];
   const theme = scene.theme ?? 'light';
-  const context = await browser.newContext({ viewport: VP, deviceScaleFactor: 2, colorScheme: theme, locale: 'en-US', timezoneId: 'Asia/Shanghai', reducedMotion: 'reduce', serviceWorkers: 'block' });
+  const { isMobile, ...viewport } = scene.vp ?? VP;
+  const context = await browser.newContext({ viewport, isMobile: !!isMobile, hasTouch: !!isMobile, deviceScaleFactor: 2, colorScheme: theme, locale: 'en-US', timezoneId: 'Asia/Shanghai', reducedMotion: 'reduce', serviceWorkers: 'block' });
   const page = await context.newPage();
   page.setDefaultTimeout(30_000);
   const errors = [];
@@ -83,7 +87,8 @@ async function shoot(browser, name) {
   });
   await page.goto(`${base}/wiki/orbit`);
   await page.waitForFunction(() => !document.getElementById('boot'));
-  await page.waitForFunction(() => document.querySelector('.wk-rail-head .wk-select, .wk-rail-head .wk-space-tag') && document.querySelector('.wk-dir-col .wk-toc-item'));
+  if (scene.ready) await page.locator(scene.ready).first().waitFor();
+  else await page.waitForFunction(() => document.querySelector('.wk-rail-head .wk-select, .wk-rail-head .wk-space-tag') && document.querySelector('.wk-dir-col .wk-toc-item'));
   if (scene.act) await scene.act(page);
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(400);

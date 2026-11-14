@@ -353,8 +353,14 @@ function WikiFrame({
       style={{ '--wk-dir-w': `${directoryWidth}px` } as CSSProperties}
     >
       <div className="wk-title-row">
-        <h1 className="page-title">{WIKI_TITLE}</h1>
-        {space && <WikiHeadSpace space={space} spaces={rows} />}
+        {/* With a space, its name is the title (board docs/mocks/wiki-rail-name B); without one, the Wiki's. */}
+        {space ? (
+          <h1 className="page-title wk-name-title">
+            <WikiHeadSpace space={space} spaces={rows} />
+          </h1>
+        ) : (
+          <h1 className="page-title">{WIKI_TITLE}</h1>
+        )}
         <div className="wk-actions">
           {space && at && <WikiContentsButton />}
           {space && <WikiActivityButton spaceSlug={space.slug} waiting={wikiWaiting(rows)} on={activity} />}
@@ -373,7 +379,7 @@ function WikiFrame({
             {/* The space's name alone, in the heading's type (board docs/mocks/wiki-rail-name B): the app's sidebar
                 already lights Wiki, and ⌘K opens the search from any page. */}
             <div className="wk-rail-top">
-              <h1 className="page-title wk-rail-head">
+              <h1 className="page-title wk-name-title wk-rail-head">
                 <WikiHeadSpace space={space} spaces={rows} />
               </h1>
             </div>
