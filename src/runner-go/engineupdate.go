@@ -590,7 +590,7 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 	facts := engineUpdateFacts{installed: before, latest: latest}
 	if latest != "" && sameVersion(before, latest) {
 		logln("engine-update:", spec.name, "already current ("+before+" at "+binPath+")")
-		return recordEngineUpdate(spec.bin, updateChecked, "", facts), spec.name + " — already up to date (" + before + ")"
+		return recordEngineUpdate(spec.bin, updateChecked, "", facts), upToDatePhrase(spec.name, before)
 	}
 	// `claude update` sends the login stored here to Anthropic (claudeLoginBlocked): not while Claude's connection
 	// is in a region Anthropic does not offer Claude in. The pass after that changes updates.
@@ -683,7 +683,10 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 	if after != "" && after != before {
 		logln("engine-update:", spec.name, "updated", before, "->", after)
 		rec := recordEngineUpdate(spec.bin, updateUpdated, "", facts)
-		return rec, spec.name + " updated " + before + " → " + after
+		if from := shownVersion(before); from != "" {
+			return rec, spec.name + " updated " + from + " → " + shownVersion(after)
+		}
+		return rec, spec.name + " updated to " + shownVersion(after)
 	}
 	// Answered before, silent after: the updater exited 0 and left an engine that no longer
 	// starts. Live on 2026-10-05 18:36Z: `codex update` rewrote the npm package to 0.160.1
@@ -702,7 +705,22 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 	// reports success forever while the binary the runner execs never moves.
 	logln("engine-update:", spec.name, "already up to date ("+before+" at "+binPath+")")
 	rec := recordEngineUpdate(spec.bin, updateChecked, "", facts)
-	return rec, spec.name + " — already up to date (" + before + ")"
+	return rec, upToDatePhrase(spec.name, before)
+}
+
+// shownVersion is a CLI's version the way the update report prints it: the number alone, since
+// the prose around it repeats the engine's name ("2.1.323 (Claude Code)" read as
+// "Claude Code — already up to date (2.1.323 (Claude Code))"). A line with no number stays whole.
+func shownVersion(v string) string { return firstNonEmpty(versionNumber(v), v) }
+
+// upToDatePhrase is the report's line for an updater that moved nothing. Without a version — the
+// probe didn't answer, which a loaded machine does (see engineVersionTimeout) — it says so, rather
+// than printing "already up to date ()" about a version nobody read.
+func upToDatePhrase(name, version string) string {
+	if v := shownVersion(version); v != "" {
+		return name + " — already up to date (" + v + ")"
+	}
+	return name + " — updater finished, but its version couldn't be read"
 }
 
 // engineBinaryUpdatable reports whether this runner could actually replace the binary it is
