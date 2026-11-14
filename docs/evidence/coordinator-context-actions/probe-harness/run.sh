@@ -37,7 +37,7 @@ if [ -d "$MAC_APP" ]; then
     sleep 5
     # The window is put at (60, 60) and is 620×560 plus its title bar; a popover above or a sheet
     # below it stays inside this region.
-    screencapture -x -R20,20,720,700 "$OUT/mac/$shot.png" || STATUS=1
+    screencapture -x -R20,20,1060,700 "$OUT/mac/$shot.png" || STATUS=1
     kill $PID 2>/dev/null; wait $PID 2>/dev/null
     echo "mac $shot: $(stat -f%z "$OUT/mac/$shot.png" 2>/dev/null) bytes"
   done
