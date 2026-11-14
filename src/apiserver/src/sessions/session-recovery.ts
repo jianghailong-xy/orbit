@@ -34,6 +34,7 @@ export type SessionRecoveryCode =
   | 'WORKSPACE_NAME_AMBIGUOUS'
   | 'WORKSPACE_NAME_NOT_FOUND'
   | 'ENGINE_SIGNED_OUT'
+  | 'MANAGED_RUNNER_FAILED'
   | `SESSION_${SessionResumeBlockedReason}`
   | 'SESSION_ENDED'
   | 'SESSION_NEXT_TURN_STARTING';
@@ -60,6 +61,8 @@ export const SESSION_RECOVERY_RULES: Record<SessionRecoveryCode, Rule> = {
   WORKSPACE_NAME_AMBIGUOUS: { status: HttpStatus.BAD_REQUEST, actor: 'CALLER', retryPolicy: 'NEVER', actionCode: 'FIX_REQUEST' },
   WORKSPACE_NAME_NOT_FOUND: { status: HttpStatus.BAD_REQUEST, actor: 'CALLER', retryPolicy: 'NEVER', actionCode: 'FIX_REQUEST' },
   ENGINE_SIGNED_OUT: { status: HttpStatus.CONFLICT, actor: 'USER', retryPolicy: 'AFTER_STATE_CHANGE', actionCode: 'AWAIT_USER_FIX' },
+  // The workspace's managed runner is FAILED, FENCING or being deleted: it does not come back by itself.
+  MANAGED_RUNNER_FAILED: { status: HttpStatus.CONFLICT, actor: 'USER', retryPolicy: 'AFTER_STATE_CHANGE', actionCode: 'AWAIT_USER_FIX' },
   SESSION_TRASHED: { status: HttpStatus.CONFLICT, actor: 'USER', retryPolicy: 'AFTER_STATE_CHANGE', actionCode: 'AWAIT_USER_FIX' },
   SESSION_ENDING: { status: HttpStatus.CONFLICT, actor: 'SYSTEM', retryPolicy: 'AFTER_STATE_CHANGE', actionCode: 'POLL_STATE', retryAfterSeconds: 5 },
   SESSION_NOT_TERMINAL: { status: HttpStatus.CONFLICT, actor: 'SYSTEM', retryPolicy: 'AFTER_STATE_CHANGE', actionCode: 'POLL_STATE', retryAfterSeconds: 5 },
@@ -186,4 +189,73 @@ export function nextTurnStartingRefusal(sessionId: string): HttpException {
     resources: [{ type: 'SESSION', id: sessionId }],
     extra: { sessionId },
   });
+}
+
+/** What the managed-runner demand hook answered about a runner (managed-runner-demand.ts demandAnswer). */
+export interface ManagedRunnerSnapshot {
+  state?: string;
+  reason?: { code: string; message: string; retryable: boolean } | null;
+  retryAfter?: Date | null;
+}
+
+/**
+ * The workspace's managed runner will not come back by itself (FAILED, FENCING, deleting): the
+ * production state behind "the workspace failed to come up". A person — the owner from the machine's
+ * page, or an operator — has to act; the caller cannot. `about` is what would have run there: the
+ * session being resumed, or the workspace a spawn named.
+ */
+export function managedRunnerFailedRefusal(
+  runnerId: string,
+  about: RecoveryResourceRef,
+  managed: ManagedRunnerSnapshot,
+): HttpException {
+  const state = managed.state ?? 'FAILED';
+  const reason = managed.reason ?? null;
+  return sessionRefusal(
+    'MANAGED_RUNNER_FAILED',
+    `this workspace's managed runner is ${state}${reason ? ` (${reason.code}: ${reason.message})` : ''} ` +
+      'and will not come back by itself; it has to be repaired from its machine page before work can run there',
+    {
+      resources: [about, { type: 'RUNNER', id: runnerId }],
+      extra: {
+        runnerId,
+        ...(about.type === 'SESSION' ? { sessionId: about.id } : { workspaceId: about.id }),
+        managementState: state,
+        managedReason: reason,
+      },
+    },
+  );
+}
+
+/**
+ * A spawn accepted onto a managed runner that is still coming up (REQUESTED, WAITING_CAPACITY,
+ * PROVISIONING, STARTING): the child exists and waits for its machine. Not a refusal; said beside the
+ * answer so it does not read as "running". The platform brings the runner up; the caller polls the child.
+ */
+export function managedRunnerStartingNote(
+  childSessionId: string,
+  runnerId: string,
+  managed: ManagedRunnerSnapshot,
+  nowMs: number = Date.now(),
+): {
+  runnerState: { code: 'MANAGED_RUNNER_STARTING'; owner: 'SYSTEM'; runnerId: string; managementState: string; retryAfterSeconds: number };
+  next: { actionCode: 'POLL_STATE'; afterSeconds: number; resources: RecoveryResourceRef[] };
+} {
+  const until = managed.retryAfter ? Math.ceil((managed.retryAfter.getTime() - nowMs) / 1000) : 0;
+  // A runner coming up takes a manager pass and a boot: 30 s is the floor a read is worth waiting.
+  const afterSeconds = Math.max(30, until);
+  return {
+    runnerState: {
+      code: 'MANAGED_RUNNER_STARTING',
+      owner: 'SYSTEM',
+      runnerId,
+      managementState: managed.state ?? 'REQUESTED',
+      retryAfterSeconds: afterSeconds,
+    },
+    next: {
+      actionCode: 'POLL_STATE',
+      afterSeconds,
+      resources: [{ type: 'SESSION', id: childSessionId }, { type: 'RUNNER', id: runnerId }],
+    },
+  };
 }

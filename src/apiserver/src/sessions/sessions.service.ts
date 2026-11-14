@@ -299,7 +299,8 @@ import {
   signedOutEngineRefusal,
 } from './engine-signin-preflight';
 import {
-  mergePendingNext, nextTurnStartingRefusal, resumeBlockedRefusal, sessionRecoveryBody, sessionRefusal,
+  managedRunnerFailedRefusal, managedRunnerStartingNote, mergePendingNext, nextTurnStartingRefusal,
+  resumeBlockedRefusal, sessionRecoveryBody, sessionRefusal,
 } from './session-recovery';
 import { claudeRegionCreateRefusal, isClaudeRegionError, regionCredentialOf } from '../runners/runner-region';
 import { assertManagedFirstSessionRuntime } from '../managed-runners/managed-runner-supply';
@@ -2460,6 +2461,9 @@ export class SessionsService {
     /** Only when the account default was wider than the parent: the mode the child got instead, and why. */
     permissionMode?: string;
     permissionModeNote?: string;
+    /** Only when the target workspace's managed runner is still coming up: the child waits for it. */
+    runnerState?: ReturnType<typeof managedRunnerStartingNote>['runnerState'];
+    next?: ReturnType<typeof managedRunnerStartingNote>['next'];
   }> {
     if (!dto.prompt) throw new BadRequestException('prompt is required');
     assertKnownPermissionMode(dto.permissionMode);
@@ -2568,6 +2572,17 @@ export class SessionsService {
     const workspaceId =
       wantId ?? (wantName ? await this.resolveWorkspaceByName(ownerId, wantName) : undefined);
     // Before anything is written, so a refused request leaves the parent as it found it.
+    // The machine the named workspace runs on, when it is a managed runner (docs/managed-runner-design.md):
+    // one that is FAILED, fencing or being deleted never comes back by itself, so a child queued there
+    // would wait for ever. Refused before anything is written, and named as a person's to repair. One
+    // still coming up is fine — the child waits for it — and the answer says so below.
+    const targetRunnerId = workspaceId
+      ? (await this.prisma.workspace.findFirst({ where: { id: workspaceId, ownerId }, select: { runnerId: true } }))?.runnerId ?? null
+      : null;
+    const targetManaged = targetRunnerId ? await this.wakeManagedRunner(targetRunnerId, 'session') : NOT_MANAGED;
+    if (targetRunnerId && targetManaged.managed && !targetManaged.comingBack) {
+      throw managedRunnerFailedRefusal(targetRunnerId, { type: 'WORKSPACE', id: workspaceId! }, targetManaged);
+    }
     const narrowedTo = await this.assertChildModeOrNarrow(ownerId, parent, dto, workspaceId);
     // A root joins its own tree the first time it spawns; before that it belongs to no tree
     // and must not be counted against one. Nothing else writes this column on the parent, so
@@ -2624,6 +2639,11 @@ export class SessionsService {
       agentName: targetWorkspace?.name ?? null,
       engine: created.engine,
       provider: created.provider,
+      // Accepted onto a managed runner still coming up: the child waits for its machine. Said, so the
+      // answer does not read as "running", with the read that shows when it starts (session-recovery.ts).
+      ...(targetRunnerId && targetManaged.managed && targetManaged.state !== 'READY'
+        ? managedRunnerStartingNote(created.id, targetRunnerId, targetManaged)
+        : {}),
       ...(narrowedTo
         ? {
             permissionMode: narrowedTo,
@@ -9447,8 +9467,15 @@ export class SessionsService {
     // for capacity is asked to wake, and comes back by itself — so its revive is queued, the way a
     // message to a parked session waits for its runner, instead of refused as offline.
     const askedManagedRunner = initialCapabilities.resumeBlockedReason === 'RUNNER_OFFLINE';
-    const managedComingBack = askedManagedRunner
-      && (await this.wakeManagedRunner(session.assignedRunnerId, 'resume')).comingBack;
+    const managedAnswer = askedManagedRunner
+      ? await this.wakeManagedRunner(session.assignedRunnerId, 'resume')
+      : NOT_MANAGED;
+    const managedComingBack = managedAnswer.comingBack;
+    // A managed runner that is FAILED, fencing or being deleted is not "offline, wait for it": it does
+    // not come back by itself, so the refusal names it as a person's to repair (session-recovery.ts).
+    if (askedManagedRunner && managedAnswer.managed && !managedAnswer.comingBack && session.assignedRunnerId) {
+      throw managedRunnerFailedRefusal(session.assignedRunnerId, { type: 'SESSION', id }, managedAnswer);
+    }
 
     // Re-check capability and revive under the same Session row lock used by complete/delete.
     // This closes the race where Trash could win after the fast read but before the turn insert.

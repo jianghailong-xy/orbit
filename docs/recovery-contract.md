@@ -423,6 +423,7 @@ the blockers in `resources`. A resume refusal also keeps the session-state reaso
 | `WORKSPACE_NAME_AMBIGUOUS` | 400 | CALLER | NEVER | `FIX_REQUEST` | | the matching workspaces | spawn |
 | `WORKSPACE_NAME_NOT_FOUND` | 400 | CALLER | NEVER | `FIX_REQUEST` | | | spawn |
 | `ENGINE_SIGNED_OUT` | 409 | USER | AFTER_STATE_CHANGE | `AWAIT_USER_FIX` | | runner | create |
+| `MANAGED_RUNNER_FAILED` | 409 | USER | AFTER_STATE_CHANGE | `AWAIT_USER_FIX` | | named workspace or session, runner | spawn (before any child), resume |
 | `SESSION_TRASHED` | 409 | USER | AFTER_STATE_CHANGE | `AWAIT_USER_FIX` | | session | resume, send, interrupt with a message |
 | `SESSION_ENDING` | 409 | SYSTEM | AFTER_STATE_CHANGE | `POLL_STATE` | 5 s | session | resume |
 | `SESSION_NOT_TERMINAL` | 409 | SYSTEM | AFTER_STATE_CHANGE | `POLL_STATE` | 5 s | session | resume |
@@ -439,8 +440,8 @@ The rules behind the table:
   says when the window admits another spawn, but its action is `STOP_LOOP`.
 - **The depth limit stops the descent.** Policy `NEVER` and `RETURN_TO_PARENT`: the same spawn is
   never offered again, and nothing below this depth is started.
-- **A person's boundary stays a person's.** Trash, the orchestration switch and an engine sign-in
-  have actor `USER` and `AWAIT_USER_FIX`. They are the only codes with actor `USER`, and they render
+- **A person's boundary stays a person's.** Trash, the orchestration switch, an engine sign-in and a
+  failed managed runner have actor `USER` and `AWAIT_USER_FIX`. They are the only codes with actor `USER`, and they render
   as `ask_user`, never as a call.
 - **Only the next-turn race is resent as is**, after its 2 s wait.
 
@@ -454,7 +455,7 @@ See §7's table. The rendered `next.disposition`, per code:
 
 | Code | `next.type` | `next.disposition` |
 | --- | --- | --- |
-| `ORCHESTRATION_DISABLED`, `ENGINE_SIGNED_OUT`, `SESSION_TRASHED` | `ask_user` | `MANUAL` |
+| `ORCHESTRATION_DISABLED`, `ENGINE_SIGNED_OUT`, `MANAGED_RUNNER_FAILED`, `SESSION_TRASHED` | `ask_user` | `MANUAL` |
 | `CALLER_SESSION_NOT_LIVE`, `SPAWN_DEPTH_LIMIT`, `SPAWN_TREE_RATE_LIMIT` | `stop` | `STOP` |
 | `SPAWN_TREE_OUTSTANDING_LIMIT`, `SESSION_ENDING`, `SESSION_NOT_TERMINAL`, `SESSION_RUNNER_OFFLINE` | `wait` | `WAIT` |
 | `WORKSPACE_NAME_*`, `SESSION_NOT_STARTED`, `SESSION_MISSING_CONTEXT`, `SESSION_NO_RUNNER`, `SESSION_ENDED` | `manual` | `MANUAL` |
@@ -484,5 +485,21 @@ guard, authorizer, pipes, interceptors and filters). `sessions/session-recovery.
 table to the shared vectors. `recovery_session_test.go` covers each vector's rendered step and
 disposition, and `merge_pending_test.go` covers the merge `next`.
 
-Not covered: the workspace `cloneState` (`PENDING | CLONING | READY | FAILED`,
-`docs/github-workspace-design.md`) is designed but not built, so there is no refusal to code yet.
+### 9.4 A workspace whose machine is coming up or has failed
+
+The designed workspace `cloneState` (`PENDING | CLONING | READY | FAILED`,
+`docs/github-workspace-design.md`) has not been built. Production does have the equivalent states, on
+the managed runner a workspace runs on (`ManagedRunner.managementState`,
+`docs/managed-runner-design.md`). The managed-runner demand hook reads them (`demandAnswer`):
+
+- **Coming up** (`REQUESTED`, `WAITING_CAPACITY`, `PROVISIONING`, `STARTING`; `DRAINING` and
+  `SLEEPING` wake too): the platform brings it up by itself. A spawn into that workspace is accepted,
+  and the child waits for the machine. Unless the runner is `READY`, the answer adds
+  `runnerState: {code: "MANAGED_RUNNER_STARTING", owner: "SYSTEM", runnerId, managementState,
+  retryAfterSeconds}` and `next: {actionCode: "POLL_STATE", afterSeconds, resources: [child session,
+  runner]}`. `afterSeconds` is the manager's `nextAttemptAt`, and never less than 30.
+- **Failed** (`FAILED`, `FENCING`, deletion): it does not come back by itself. A spawn is refused with
+  `MANAGED_RUNNER_FAILED` before any child is written. A resume, which used to be refused as
+  `SESSION_RUNNER_OFFLINE` ("the system recovers it"), is refused with `MANAGED_RUNNER_FAILED`. Both
+  carry `managementState` and the manager's `managedReason`. The owner repairs the runner from its
+  machine page, or an operator does.

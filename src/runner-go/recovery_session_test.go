@@ -20,6 +20,7 @@ func TestRecoverySessionCodesRenderToTheirDisposition(t *testing.T) {
 		"WORKSPACE_NAME_AMBIGUOUS":     {recoveryNextManual, recoveryDispositionManual, ""},
 		"WORKSPACE_NAME_NOT_FOUND":     {recoveryNextManual, recoveryDispositionManual, ""},
 		"ENGINE_SIGNED_OUT":            {recoveryNextAskUser, recoveryDispositionManual, ""},
+		"MANAGED_RUNNER_FAILED":        {recoveryNextAskUser, recoveryDispositionManual, ""},
 		"SESSION_TRASHED":              {recoveryNextAskUser, recoveryDispositionManual, ""},
 		"SESSION_ENDING":               {recoveryNextWait, recoveryDispositionWait, ""},
 		"SESSION_NOT_TERMINAL":         {recoveryNextWait, recoveryDispositionWait, ""},

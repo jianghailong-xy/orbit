@@ -1719,6 +1719,42 @@
         ]
       },
       "legacyText": "  refused: SESSION_NEXT_TURN_STARTING\n  what:    the next turn is already starting\n  owner:   SYSTEM\n  do:      RETRY\n"
+    },
+    {
+      "name": "session recovery: MANAGED_RUNNER_FAILED",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"MANAGED_RUNNER_FAILED\",\"message\":\"this workspace's managed runner is FAILED (PVC_MISSING: the data volume is gone) and will not come back by itself; it has to be repaired from its machine page before work can run there\",\"owner\":\"USER\",\"requiredAction\":\"AWAIT_USER_FIX\",\"retryable\":false,\"runnerId\":\"RUNNER_FIXTURE_1\",\"sessionId\":\"SESSION_FIXTURE_1\",\"managementState\":\"FAILED\",\"managedReason\":{\"code\":\"PVC_MISSING\",\"message\":\"the data volume is gone\",\"retryable\":false},\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"retryAfterSeconds\":null,\"actionCode\":\"AWAIT_USER_FIX\",\"actor\":\"USER\",\"userConfirmation\":\"NOT_REQUIRED\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"},{\"type\":\"RUNNER\",\"id\":\"RUNNER_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "MANAGED_RUNNER_FAILED",
+        "message": "this workspace's managed runner is FAILED (PVC_MISSING: the data volume is gone) and will not come back by itself; it has to be repaired from its machine page before work can run there",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "USER",
+        "owner": "USER",
+        "actionCode": "AWAIT_USER_FIX",
+        "requiredAction": "AWAIT_USER_FIX",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          },
+          {
+            "type": "RUNNER",
+            "id": "RUNNER_FIXTURE_1"
+          }
+        ]
+      },
+      "legacyText": "  refused: MANAGED_RUNNER_FAILED\n  what:    this workspace's managed runner is FAILED (PVC_MISSING: the data volume is gone) and will not come back by itself; it has to be repaired from its machine page before work can run there\n  owner:   USER\n  do:      AWAIT_USER_FIX\n"
     }
   ]
 }

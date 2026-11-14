@@ -5,7 +5,9 @@ import { test } from 'node:test';
 
 import { RECOVERY_ACTION_SEMANTICS, parseRecovery } from '@orbit/shared';
 
-import { SESSION_RECOVERY_RULES, type SessionRecoveryCode, mergePendingNext, sessionRecoveryBody } from './session-recovery';
+import {
+  SESSION_RECOVERY_RULES, type SessionRecoveryCode, managedRunnerStartingNote, mergePendingNext, sessionRecoveryBody,
+} from './session-recovery';
 
 /**
  * The server half of docs/recovery-contract.md §9: SESSION_RECOVERY_RULES is the table, the shared
@@ -55,15 +57,15 @@ test('backpressure never advises a resend: not retryable, no automatic-retry act
   assert.equal(depth.retryAfterSeconds, undefined);
 });
 
-test('a person\'s boundary is named as one: Trash, orchestration and sign-in are AWAIT_USER_FIX, actor USER', () => {
-  for (const code of ['SESSION_TRASHED', 'ORCHESTRATION_DISABLED', 'ENGINE_SIGNED_OUT'] as const) {
+test('a person\'s boundary is named as one: Trash, orchestration, sign-in and a failed machine are AWAIT_USER_FIX, actor USER', () => {
+  for (const code of ['SESSION_TRASHED', 'ORCHESTRATION_DISABLED', 'ENGINE_SIGNED_OUT', 'MANAGED_RUNNER_FAILED'] as const) {
     assert.equal(SESSION_RECOVERY_RULES[code].actor, 'USER', code);
     assert.equal(SESSION_RECOVERY_RULES[code].actionCode, 'AWAIT_USER_FIX', code);
     assert.notEqual(SESSION_RECOVERY_RULES[code].retryPolicy, 'SAFE', code);
   }
   // And the only USER-actor codes are those: nothing else is handed to a person.
   assert.deepEqual(CODES.filter((c) => SESSION_RECOVERY_RULES[c].actor === 'USER').sort(),
-    ['ENGINE_SIGNED_OUT', 'ORCHESTRATION_DISABLED', 'SESSION_TRASHED']);
+    ['ENGINE_SIGNED_OUT', 'MANAGED_RUNNER_FAILED', 'ORCHESTRATION_DISABLED', 'SESSION_TRASHED']);
 });
 
 test('only the next-turn race is retryable, and only after its wait', () => {
@@ -74,4 +76,16 @@ test('only the next-turn race is retryable, and only after its wait', () => {
 test('a pending merge points at a read of its session, not at another merge', () => {
   assert.deepEqual(mergePendingNext('s-1'), { actionCode: 'POLL_STATE', afterSeconds: 30, resources: [{ type: 'SESSION', id: 's-1' }] });
   assert.equal(RECOVERY_ACTION_SEMANTICS.POLL_STATE.mayWrite, false);
+});
+
+test('a machine still coming up is a poll of the child, owned by the platform, never shorter than 30 s', () => {
+  const now = Date.parse('2026-11-15T00:00:00Z');
+  const soon = managedRunnerStartingNote('child', 'runner', { state: 'STARTING', retryAfter: new Date(now + 5_000) }, now);
+  assert.equal(soon.next.afterSeconds, 30);
+  assert.equal(soon.runnerState.owner, 'SYSTEM');
+  assert.equal(soon.next.actionCode, 'POLL_STATE');
+  assert.deepEqual(soon.next.resources, [{ type: 'SESSION', id: 'child' }, { type: 'RUNNER', id: 'runner' }]);
+  const later = managedRunnerStartingNote('child', 'runner', { state: 'WAITING_CAPACITY', retryAfter: new Date(now + 120_000) }, now);
+  assert.equal(later.next.afterSeconds, 120);
+  assert.equal(later.runnerState.managementState, 'WAITING_CAPACITY');
 });

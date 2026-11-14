@@ -48,6 +48,9 @@ const TARGET = randomUUID();
 const TOKEN = `runner-token-${randomUUID()}`;
 const BLOCKERS = [randomUUID(), randomUUID()];
 const WORKSPACES = [randomUUID(), randomUUID()];
+/** A workspace whose machine is a managed runner, and that runner. */
+const MANAGED_WORKSPACE = randomUUID();
+const MANAGED_RUNNER = randomUUID();
 
 /** What the stub database answers; each case sets what it needs. */
 const world = {
@@ -58,12 +61,14 @@ const world = {
   startedThisHour: 0,
   oldestInWindow: new Date(),
   workspaces: [] as string[],
+  /** What the managed-runner demand hook answers (managed-runner-demand.ts demandAnswer). */
+  managed: { managed: false, comingBack: false } as Record<string, unknown>,
 };
 
 function reset(): void {
   Object.assign(world, {
     callerLive: true, orchestrationOn: true, parentDepth: 1, outstanding: 0, startedThisHour: 0,
-    oldestInWindow: new Date(), workspaces: [],
+    oldestInWindow: new Date(), workspaces: [], managed: { managed: false, comingBack: false },
   });
 }
 
@@ -73,11 +78,23 @@ const prisma: Record<string, unknown> = {
   runner: { findFirst: async () => ({ ...RUNNER, owner: { disabledAt: null } }) },
   managedRunner: { findUnique: async () => null },
   session: {
-    findFirst: async ({ where, select }: { where: Record<string, unknown>; select?: Record<string, unknown> }) => {
+    findFirst: async ({ where, select, include }: { where: Record<string, unknown>; select?: Record<string, unknown>; include?: unknown }) => {
       // The authorizer's live-caller read.
       if (where.assignedRunnerId) return world.callerLive ? { id: where.id, owner: { preferences: prefs() } } : null;
       // The engine-row guard in front of a merge.
       if (select?.sessionKind) return { sessionKind: null };
+      // resume()'s read of the session it revives: an ended run whose machine is the managed runner,
+      // offline (no heartbeat for a day).
+      if (include && where.id === TARGET) {
+        return {
+          id: TARGET, ownerId: RUNNER.ownerId, sessionKind: null, status: 'SUCCEEDED', endReason: null,
+          wikiChatSpaceId: null, taskId: null, startsTaskWork: false, provider: 'claude', engine: null,
+          numTurns: 1, runtimeSessionId: randomUUID(), startedAt: new Date(Date.now() - 86_400_000),
+          cancelRequestedAt: null, deletedAt: null, completedAt: null, archivedAt: null,
+          assignedRunnerId: MANAGED_RUNNER,
+          assignedRunner: { id: MANAGED_RUNNER, status: 'OFFLINE', lastHeartbeatAt: new Date(Date.now() - 86_400_000) },
+        };
+      }
       // The oldest spawn in the rate window.
       if (select?.createdAt) return { createdAt: world.oldestInWindow };
       // The parent of a spawn.
@@ -93,7 +110,9 @@ const prisma: Record<string, unknown> = {
   },
   workspace: {
     findMany: async () => world.workspaces.map((id) => ({ id })),
-    findFirst: async () => null,
+    // The machine a named workspace runs on: only MANAGED_WORKSPACE names one here.
+    findFirst: async ({ where }: { where: { id?: string } }) =>
+      where.id === MANAGED_WORKSPACE ? { runnerId: MANAGED_RUNNER, name: 'managed' } : null,
   },
   user: { findUnique: async () => null },
   $transaction: async (work: (tx: unknown) => Promise<unknown>) => work(prisma),
@@ -105,6 +124,8 @@ const lent = sessions as unknown as Record<string, unknown>;
 lent.assertMayReach = async () => undefined;
 // A merge queues under its row lock (queueMerge, tested by session-merge-fence.spec.ts); here it is queued.
 lent.queueMerge = async () => ({ outcome: 'workspace', operationId: 'op-wire', queuedOn: null });
+// The managed-runner demand hook (MANAGED_RUNNER_DEMAND): what the manager last recorded for a runner.
+lent.managedDemand = { requested: async () => world.managed };
 /** What the resume/send/interrupt/create doors are handed to throw, per case. */
 let thrown: () => Error = () => new Error('unset');
 lent.resume = async () => { throw thrown(); };
@@ -410,3 +431,89 @@ test('the Merge button keeps its byte-for-byte { ok: true }', async () => {
   assert.deepEqual(await sessions.mergeToMain(RUNNER.ownerId, TARGET), { ok: true });
 });
 
+// ── The workspace's machine: a managed runner that failed, or one still coming up ──────────────────
+// The production state behind "the workspace is CLONING / FAILED": the managed runner a workspace runs
+// on (docs/managed-runner-design.md). These run the real spawn and resume code; only the database and
+// the manager's recorded state are stubbed.
+
+const FAILED_RUNNER = {
+  managed: true, comingBack: false, state: 'FAILED',
+  reason: { code: 'PVC_MISSING', message: 'the data volume is gone', retryable: false }, retryAfter: null,
+};
+
+test('spawn into a workspace whose managed runner FAILED: refused before a child exists; a person repairs it', async () => {
+  reset();
+  world.managed = FAILED_RUNNER;
+  let created = 0;
+  lent.create = async () => { created++; throw new Error('a child was created'); };
+  try {
+    const answer = await spawn({ workspaceId: MANAGED_WORKSPACE });
+    const env = assertRefusal(answer, {
+      status: 409, code: 'MANAGED_RUNNER_FAILED', owner: 'USER', retryable: false, retryAfterSeconds: null,
+      resources: [{ type: 'WORKSPACE', id: MANAGED_WORKSPACE }, { type: 'RUNNER', id: MANAGED_RUNNER }],
+      actionCode: 'AWAIT_USER_FIX', class: 'USER_FIX', policy: 'AFTER_STATE_CHANGE',
+    });
+    assert.equal(answer.body.managementState, 'FAILED');
+    assert.deepEqual(answer.body.managedReason, FAILED_RUNNER.reason);
+    assert.equal(answer.body.workspaceId, wire(MANAGED_WORKSPACE));
+    assert.equal(created, 0, 'nothing is queued onto a machine that will not come back');
+    assertNoAutomaticResend(env);
+  } finally {
+    delete lent.create;
+  }
+});
+
+test('spawn into a workspace whose managed runner is still coming up: accepted, and the answer says it waits', async () => {
+  reset();
+  const retryAfter = new Date(Date.now() + 90_000);
+  world.managed = { managed: true, comingBack: true, state: 'PROVISIONING', reason: null, retryAfter };
+  const child = randomUUID();
+  lent.assertChildModeOrNarrow = async () => undefined;
+  lent.resolveDefaultEffort = async () => undefined;
+  lent.create = async () => ({
+    id: child, status: 'PENDING', runStatus: 'PENDING', sessionState: 'PENDING', runState: 'PENDING',
+    lifecycleState: 'OPEN', filingState: 'OPEN', title: 'child', workspaceId: MANAGED_WORKSPACE, engine: 'claude', provider: 'claude',
+  });
+  try {
+    const answer = await spawn({ workspaceId: MANAGED_WORKSPACE });
+    assert.equal(answer.status, 201, answer.text);
+    assert.equal(answer.body.id, wire(child));
+    const after = answer.body.runnerState.retryAfterSeconds as number;
+    assert.ok(after >= 85 && after <= 90, String(after));
+    assert.deepEqual(answer.body.runnerState, {
+      code: 'MANAGED_RUNNER_STARTING', owner: 'SYSTEM', runnerId: wire(MANAGED_RUNNER), managementState: 'PROVISIONING',
+      retryAfterSeconds: after,
+      // The public-id interceptor's companion of every `runnerId` on a success answer.
+      runnerPublicId: wire(MANAGED_RUNNER),
+    });
+    assert.deepEqual(answer.body.next, {
+      actionCode: 'POLL_STATE', afterSeconds: after,
+      resources: [wireResource({ type: 'SESSION', id: child }), wireResource({ type: 'RUNNER', id: MANAGED_RUNNER })],
+    });
+    assert.equal(CLASS_OF_ACTION[answer.body.next.actionCode], 'POLL');
+  } finally {
+    delete lent.assertChildModeOrNarrow;
+    delete lent.resolveDefaultEffort;
+    delete lent.create;
+  }
+});
+
+test('session_send with resumeIfEnded onto a FAILED managed runner: the real resume names a person, not "wait for it"', async () => {
+  reset();
+  world.managed = { ...FAILED_RUNNER, state: 'FENCING', reason: null };
+  // The real SessionsService.resume, not the double the other resume cases are handed.
+  delete lent.resume;
+  try {
+    const answer = await call('POST', `sessions/${TARGET}/turns`, { message: 'continue', resumeIfEnded: true });
+    const env = assertRefusal(answer, {
+      status: 409, code: 'MANAGED_RUNNER_FAILED', owner: 'USER', retryable: false, retryAfterSeconds: null,
+      resources: [{ type: 'SESSION', id: TARGET }, { type: 'RUNNER', id: MANAGED_RUNNER }],
+      actionCode: 'AWAIT_USER_FIX', class: 'USER_FIX', policy: 'AFTER_STATE_CHANGE',
+    });
+    assert.equal(answer.body.managementState, 'FENCING');
+    assert.equal(answer.body.sessionId, wire(TARGET));
+    assertNoAutomaticResend(env);
+  } finally {
+    lent.resume = async () => { throw thrown(); };
+  }
+});
