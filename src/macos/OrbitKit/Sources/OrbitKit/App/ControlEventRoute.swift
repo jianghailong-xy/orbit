@@ -46,6 +46,8 @@ public enum ControlEventRoute: Equatable, Sendable {
     case folders
     /// `wiki.changed`: what the Wiki has loaded, and the wiki chat.
     case wiki
+    /// `terminals.changed`: the approve card's requests and Settings → Terminals.
+    case terminals
     /// Nothing to read: the reserved `notification` channel, and any type this client does not know.
     case nothing
 
@@ -69,6 +71,7 @@ public enum ControlEventRoute: Equatable, Sendable {
         case .watchChanged: return .watches
         case .folderChanged: return .folders
         case .wikiChanged: return .wiki
+        case .terminalsChanged: return .terminals
         case .notification, .unknown: return .nothing
         }
     }

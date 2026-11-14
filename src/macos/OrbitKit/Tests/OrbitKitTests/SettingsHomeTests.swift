@@ -23,7 +23,7 @@ final class SettingsHomeTests: XCTestCase {
         // The five session settings are one row's page now (`SessionSettings`), first in Preferences.
         XCTAssertEqual(SettingsHome.rows(.preferences, isAdmin: false), [.sessions, .notifications, .appearance])
         XCTAssertEqual(SettingsHome.rows(.account, isAdmin: false),
-                       [.email, .instance, .sharedLinks, .accessTokens, .changePassword])
+                       [.email, .instance, .sharedLinks, .accessTokens, .terminals, .changePassword])
     }
 
     /// Admin is role-gated here as everywhere else, and comes last in Account.
@@ -318,6 +318,16 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(SharedLinksList.whereLine(link(.ended, kind: .project, reason: "EXPIRED",
                                                       expiresAt: "2026-09-20T10:00:00.000Z")),
                        "Project · Expired Sep 20")
+    }
+
+    /// Board 13: only an active link's row opens its Share panel, and its ⋯ is named after it.
+    func testOnlyAnActiveLinksRowOpensAndItsMoreNamesIt() {
+        XCTAssertTrue(SharedLinksList.opens(link(.active)))
+        XCTAssertFalse(SharedLinksList.opens(link(.paused)), "a session in the Trash has no panel to change")
+        XCTAssertFalse(SharedLinksList.opens(link(.ended)))
+        XCTAssertEqual(SharedLinksList.moreLabel(link(.active)), "More for Root")
+        XCTAssertEqual(SharedLinksList.moreLabel(link(.active, kind: .wiki, root: ShareRootSummary(id: "w"))), "More for Wiki")
+        XCTAssertEqual([SharedLinksList.settings, SharedLinksList.turnOffMenu], ["Settings…", "Turn off…"])
     }
 
     func testTurningOffSaysHowManyWent() {

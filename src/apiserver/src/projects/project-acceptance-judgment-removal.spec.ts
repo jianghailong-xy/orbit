@@ -371,7 +371,8 @@ test('(f) the judgment inbox, the review page and their routes are gone from the
 
 // (g) the MCP and CLI doors --------------------------------------------------------------------
 test('(g) the three judgment capabilities are gone and the criteria ingress is not', () => {
-  const mcp = readFileSync(path.join(REPO, 'src/runner-go/mcp.go'), 'utf8');
+  const mcp = readFileSync(path.join(REPO, 'src/runner-go/mcp.go'), 'utf8')
+    + readFileSync(path.join(REPO, 'src/runner-go/operation_catalog.go'), 'utf8');
   const cli = readFileSync(path.join(REPO, 'src/runner-go/project_cli.go'), 'utf8');
   for (const source of [mcp, cli]) {
     for (const tool of ['project_acceptance_run', 'project_acceptance_verdict',

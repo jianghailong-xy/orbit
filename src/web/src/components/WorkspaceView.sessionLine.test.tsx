@@ -157,6 +157,10 @@ describe('sessionLine', () => {
       text: 'Record as done…',
       tone: 'approval',
     });
+    expect(sessionLine({ ...parked, waitingKind: 'OWNER_REQUEST' }, true)).toEqual({
+      text: 'Waiting on you',
+      tone: 'approval',
+    });
   });
 
   it('surfaces live state before any reply preview', () => {

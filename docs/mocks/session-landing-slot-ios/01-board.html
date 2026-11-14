@@ -1,0 +1,247 @@
+<!-- DESIGN MOCK (2026-11-14). iOS session page, the band above the composer: WorktreeBar (branch + stat + merge
+     control) and SourceLandingChip ("Landing · queued ›"), plus the composer's Completed notice.
+     Left: today, rebuilt from the owner's screenshot. Right: one card, one state, one next step.
+     Project, branch, counts and runner are demo data.
+     Render (fonts in /mnt/data/tmp/mockfonts):
+       ~/.cache/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell \
+         --no-sandbox --hide-scrollbars --allow-file-access-from-files --force-device-scale-factor=2 \
+         --window-size=1500,1760 --screenshot=docs/mocks/session-landing-slot-ios/01-board.png \
+         file://$PWD/docs/mocks/session-landing-slot-ios/01-board.html -->
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>iOS 会话底部：合并与 Landing 只说一件事</title>
+<style>
+  @font-face { font-family:"MockInter"; src:url("file:///mnt/data/tmp/mockfonts/Inter.ttf"); font-weight:100 900; }
+  @font-face { font-family:"MockSC"; src:url("file:///mnt/data/tmp/mockfonts/NotoSansSC.ttf"); font-weight:100 900; }
+  :root { --brand:#3E69F6; --brand-bg:#EAF0FF; --t1:#111114; --t2:#8a8a90; --t3:#b4b4ba; --sep:#e4e4e8;
+          --card:#f6f6f8; --green:#23a15a; --red:#e0453a; --amber:#b86e00; --amber-bg:#FFF4E0; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:36px 40px 48px; width:1500px; background:#ececef; color:var(--t1);
+         font:14px/1.5 -apple-system,"MockInter","MockSC",sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:25px; margin:0 0 6px; } .lede { color:#55555e; margin:0 0 24px; max-width:1380px; }
+  .grid { display:grid; grid-template-columns:repeat(3, 440px); gap:26px 30px; }
+  .fh { font-weight:700; font-size:15px; margin:0 0 8px; display:flex; gap:8px; align-items:center; }
+  .fh small { font-weight:400; color:#6b6b75; font-size:12.5px; }
+  .tag { font:600 11.5px/1 sans-serif; padding:4px 7px; border-radius:5px; }
+  .tag.old { background:#fde2e2; color:#a12a2a; } .tag.new { background:#dcf3e5; color:#17683b; }
+  .note { font-size:12.5px; color:#55555e; margin:8px 2px 0; line-height:1.6; } .note b { color:var(--t1); }
+
+  /* ---- phone (430pt wide, the owner's phone) ---- */
+  .ph { width:430px; background:#fff; border-radius:22px; overflow:hidden; box-shadow:0 1px 0 #d5d5da, 0 6px 24px rgba(0,0,0,.06);
+        padding:10px 14px 14px; font-size:15px; position:relative; }
+  .ph .tail { color:var(--t1); font-size:15px; margin:0 4px 12px; }
+  .p-card { background:#fff; border:1px solid var(--sep); border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,.04); margin-bottom:8px; }
+  .p-row { display:flex; align-items:center; gap:8px; padding:7px 10px; min-height:36px; }
+  .p-sp { flex:1; min-width:0; }
+  .p-bg { font-weight:600; } .p-bg small { color:var(--t2); font-weight:400; margin-left:6px; }
+  .p-chev { color:var(--t3); font-size:17px; }
+  .p-br { display:inline-flex; align-items:center; gap:4px; border:1px solid #dedee3; background:#f4f4f6; border-radius:6px;
+          padding:1px 6px; font:12.5px/1.5 "MockInter",monospace; color:var(--t1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+  .p-br i { font-style:normal; color:var(--t2); }
+  .p-stat { font:12.5px/1.5 "MockInter",monospace; color:var(--t2); white-space:nowrap; flex:none; }
+  .p-stat .a { color:var(--green); } .p-stat .d { color:var(--red); }
+  .p-split { display:inline-flex; align-items:center; border:1px solid rgba(62,105,246,.3); background:rgba(62,105,246,.12);
+             border-radius:999px; color:var(--brand); font-weight:600; font-size:14px; white-space:nowrap; flex:none; }
+  .p-split span { padding:3px 10px; } .p-split em { font-style:normal; border-left:1px solid rgba(62,105,246,.3); padding:3px 9px; }
+  .p-chip { font-size:13px; font-weight:600; color:var(--green); white-space:nowrap; flex:none; }
+  .p-pill { display:inline-flex; align-items:center; gap:5px; font-weight:600; font-size:14px; color:var(--brand);
+            background:var(--brand-bg); border-radius:999px; padding:5px 12px; margin:0 0 8px 2px; }
+  .p-line { display:flex; align-items:center; gap:8px; margin:0 8px 8px; padding:8px 10px; border-radius:8px; font-size:13.5px; }
+  .p-line .w { font-weight:600; white-space:nowrap; } .p-line .s { color:var(--t2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+  .p-line .go { margin-left:auto; font-weight:600; white-space:nowrap; flex:none; }
+  .p-line.wait { background:#f3f3f6; } .p-line.wait .go { color:var(--brand); }
+  .p-line.run { background:var(--brand-bg); color:#2546b8; }
+  .p-line.warn { background:var(--amber-bg); color:var(--amber); } .p-line.warn .s { color:#b98a3e; }
+  .ico { width:15px; height:15px; flex:none; }
+  .p-done { display:flex; gap:7px; align-items:flex-start; color:var(--t2); font-size:14px; margin:4px 8px 10px; line-height:1.4; }
+  .p-comp { border:1px solid var(--sep); border-radius:22px; padding:12px 14px 10px; box-shadow:0 2px 8px rgba(0,0,0,.05); }
+  .p-comp .ph-t { color:var(--t3); font-size:17px; margin-bottom:14px; }
+  .p-comp .bar { display:flex; align-items:center; gap:10px; color:var(--t2); font-size:15px; }
+  .p-comp .bar b { color:var(--t1); font-weight:600; }
+  .p-send { width:30px; height:30px; border-radius:50%; background:#c9c9ce; color:#fff; display:grid; place-items:center; font-weight:700; margin-left:auto; }
+
+  .x { position:relative; } .x::after { content:attr(data-n); position:absolute; top:-10px; right:-10px; width:19px; height:19px; border-radius:50%;
+       background:#d93838; color:#fff; font:700 11.5px/19px sans-serif; text-align:center; z-index:2; }
+  .xl::after { left:-10px; right:auto; }
+  ol.issues { margin:10px 0 0; padding-left:20px; font-size:12.5px; color:#55555e; line-height:1.65; } ol.issues b { color:var(--t1); }
+
+  .sheet { background:#fff; border-radius:12px; padding:18px 22px; margin-top:28px; }
+  .sheet h2 { font-size:16px; margin:0 0 10px; }
+  table { border-collapse:collapse; width:100%; font-size:12.5px; } td, th { border-top:1px solid #eee; padding:6px 8px; text-align:left; vertical-align:top; }
+  th { color:#6b6b75; font-weight:600; background:#fafafb; } code { font:12px "DejaVu Sans Mono",monospace; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:28px; }
+  .q { background:#fff7e6; border:1px solid #f1d9a8; border-radius:10px; padding:12px 16px; margin-top:20px; font-size:13px; }
+  .q b { color:#7a4a00; }
+</style>
+
+<!-- small inline icons -->
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.6V8l2.3 1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="spin" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-opacity=".25" stroke-width="2"/><path d="M8 2a6 6 0 0 1 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="warn" viewBox="0 0 16 16"><path d="M8 1.8 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6.2v3.6M8 11.6v.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="check" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="m5.2 8.2 2 2 3.8-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="term" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="m4.3 6 2 1.6-2 1.6" fill="none" stroke="currentColor" stroke-width="1.3"/></symbol>
+</svg>
+
+<h1>iOS 会话底部：合并和 Landing 只说一件事</h1>
+<p class="lede">左上是现在，按截图还原。其余五格是改版：分支和 diff 那一行永远读得出来；工作交给平台 landing 之后，同一张卡的第二行说 landing 在哪一步，<b>不再出现 Merge 按钮</b>，也不再在卡外另起一个胶囊。卡外只剩 Completed 一句。思路和 web 已上线的 <code>merge-recovery-one-state</code> 一致：一个状态、一句话、一个下一步。界面文案是英文，注释是中文。项目名 “Wiki chat”、数字都是演示数据。</p>
+
+<div class="grid">
+<!-- ================= TODAY ================= -->
+<div>
+  <div class="fh"><span class="tag old">现在</span> 已经在排队 landing，还在推 Merge</div>
+  <div class="ph" style="overflow:visible">
+    <div class="tail">the project line.</div>
+    <div class="p-card"><div class="p-row"><svg class="ico" style="color:#8a8a90"><use href="#term"/></svg><span class="p-bg">Background processes<small>8 total</small></span><span class="p-sp"></span><span class="p-chev">›</span></div></div>
+    <div class="p-card x xl" data-n="3" style="margin-left:-12px;margin-right:-26px">
+      <div class="p-row">
+        <span class="x" data-n="2" style="flex:none"><span class="p-br" style="width:38px;justify-content:center"><i>⎇</i></span></span>
+        <span class="p-stat"><span class="a">+…</span></span>
+        <span class="p-sp"></span>
+        <span class="p-split x" data-n="1"><span>Merge to project/34w8EM90DtUS7gRXGfGb</span><em>⌄</em></span>
+      </div>
+    </div>
+    <div class="p-pill x" data-n="4"><svg class="ico"><use href="#spin"/></svg>Landing · queued ›</div>
+    <div class="p-done x" data-n="5"><svg class="ico" style="width:18px;height:18px;margin-top:1px"><use href="#check"/></svg><span>Completed · Sending a message will resume this session in Open.</span></div>
+    <div class="p-comp"><div class="ph-t">Message…</div><div class="bar">＋ <span>Auto</span><span class="p-sp"></span><b>Opus 5.5</b> Default<span class="p-send">↑</span></div></div>
+  </div>
+  <ol class="issues">
+    <li><b>Merge 按钮和 “Landing · queued” 同时出现</b>：工作已经交给平台排队了，还给一个高亮的主按钮，看起来像没合并。<code>WorktreeMergeControl</code> 不读 <code>sourceLanding</code>。</li>
+    <li><b>目标名把这一行挤爆</b>：<code>project/&lt;id&gt;</code> 是内部分支名，按钮 layoutPriority 最高，把分支名挤成只剩图标、diff 统计挤成 “+…”。</li>
+    <li><b>卡片越界</b>：左边比上面的卡往外多约 16pt，右边被屏幕截掉。</li>
+    <li><b>胶囊另起一行</b>，和合并说的是同一件事；<b>queued 却配了转圈图标</b>，看着像在跑。</li>
+    <li><b>“in Open”</b>：Open 是状态列的名字，读起来像动词。</li>
+  </ol>
+</div>
+
+<!-- ================= QUEUED ================= -->
+<div>
+  <div class="fh"><span class="tag new">改版</span> ① 排队中 <small>state QUEUED</small></div>
+  <div class="ph">
+    <div class="tail">the project line.</div>
+    <div class="p-card"><div class="p-row"><svg class="ico" style="color:#8a8a90"><use href="#term"/></svg><span class="p-bg">Background processes<small>8 total</small></span><span class="p-sp"></span><span class="p-chev">›</span></div></div>
+    <div class="p-card">
+      <div class="p-row">
+        <span class="p-br"><i>⎇</i>orbit/task-landing-…-38bc0e</span>
+        <span class="p-stat"><span class="a">+120</span> <span class="d">−8</span> · 6 files</span>
+      </div>
+      <div class="p-line wait"><svg class="ico" style="color:#8a8a90"><use href="#clock"/></svg><span class="w">Queued to land</span><span class="s">· into Wiki chat</span><span class="go">Open ›</span></div>
+    </div>
+    <div class="p-done"><svg class="ico" style="width:18px;height:18px;margin-top:1px"><use href="#check"/></svg><span>Completed · Send a message to reopen this session.</span></div>
+    <div class="p-comp"><div class="ph-t">Message…</div><div class="bar">＋ <span>Auto</span><span class="p-sp"></span><b>Opus 5.5</b> Default<span class="p-send">↑</span></div></div>
+  </div>
+  <p class="note"><b>没有 Merge 按钮</b>：平台接手了，人不用再按。排队用<b>静态时钟</b>、灰底，不转圈。第二行整行可点，进 landing 会话（就是现在胶囊去的地方）。目标写<b>项目名</b>，不写 <code>project/&lt;id&gt;</code>。diff 统计不再被截断：它优先占位，分支名从中间省略。</p>
+</div>
+
+<!-- ================= RUNNING ================= -->
+<div>
+  <div class="fh"><span class="tag new">改版</span> ② 进行中 <small>state RUNNING，按 phase 说步骤</small></div>
+  <div class="ph">
+    <div class="tail">the project line.</div>
+    <div class="p-card"><div class="p-row"><svg class="ico" style="color:#8a8a90"><use href="#term"/></svg><span class="p-bg">Background processes<small>8 total</small></span><span class="p-sp"></span><span class="p-chev">›</span></div></div>
+    <div class="p-card">
+      <div class="p-row">
+        <span class="p-br"><i>⎇</i>orbit/task-landing-…-38bc0e</span>
+        <span class="p-stat"><span class="a">+120</span> <span class="d">−8</span> · 6 files</span>
+      </div>
+      <div class="p-line run"><svg class="ico"><use href="#spin"/></svg><span class="w">Landing · running checks</span><span class="s" style="color:#6d84cf">· into Wiki chat</span><span class="go">Open ›</span></div>
+    </div>
+    <div class="p-done"><svg class="ico" style="width:18px;height:18px;margin-top:1px"><use href="#check"/></svg><span>Completed · Send a message to reopen this session.</span></div>
+    <div class="p-comp"><div class="ph-t">Message…</div><div class="bar">＋ <span>Auto</span><span class="p-sp"></span><b>Opus 5.5</b> Default<span class="p-send">↑</span></div></div>
+  </div>
+  <p class="note">只有真的在跑才<b>转圈 + 蓝底</b>。步骤词沿用现在的 <code>integrationPhaseWords</code>（checking / rebasing …），不新增文案。</p>
+</div>
+
+<!-- ================= STOPPED ================= -->
+<div>
+  <div class="fh"><span class="tag new">改版</span> ③ 停住了 <small>CHECK_FAILED / CONFLICT / ERROR</small></div>
+  <div class="ph">
+    <div class="tail">the project line.</div>
+    <div class="p-card"><div class="p-row"><svg class="ico" style="color:#8a8a90"><use href="#term"/></svg><span class="p-bg">Background processes<small>8 total</small></span><span class="p-sp"></span><span class="p-chev">›</span></div></div>
+    <div class="p-card">
+      <div class="p-row">
+        <span class="p-br"><i>⎇</i>orbit/task-landing-…-38bc0e</span>
+        <span class="p-stat"><span class="a">+120</span> <span class="d">−8</span> · 6 files</span>
+      </div>
+      <div class="p-line warn"><svg class="ico"><use href="#warn"/></svg><span class="w">Landing stopped · checks failed</span><span class="go" style="color:var(--amber)">Open ›</span></div>
+    </div>
+    <div class="p-done"><svg class="ico" style="width:18px;height:18px;margin-top:1px"><use href="#check"/></svg><span>Completed · Send a message to reopen this session.</span></div>
+    <div class="p-comp"><div class="ph-t">Message…</div><div class="bar">＋ <span>Auto</span><span class="p-sp"></span><b>Opus 5.5</b> Default<span class="p-send">↑</span></div></div>
+  </div>
+  <p class="note"><b>琥珀色</b>，一句话说停在哪。处理（重试、看失败原因）都在 landing 会话里，这里只给 <b>Open ›</b> 一个入口，<b>不回退成 Merge 按钮</b>，免得出现第二条合并路径。</p>
+</div>
+
+<!-- ================= LANDED ================= -->
+<div>
+  <div class="fh"><span class="tag new">改版</span> ④ 已落地 <small>LANDED / ALREADY_LANDED</small></div>
+  <div class="ph">
+    <div class="tail">the project line.</div>
+    <div class="p-card"><div class="p-row"><svg class="ico" style="color:#8a8a90"><use href="#term"/></svg><span class="p-bg">Background processes<small>8 total</small></span><span class="p-sp"></span><span class="p-chev">›</span></div></div>
+    <div class="p-card">
+      <div class="p-row">
+        <span class="p-br"><i>⎇</i>orbit/task-…-38bc0e</span>
+        <span class="p-stat"><span class="a">+120</span> <span class="d">−8</span> · 6 files</span>
+        <span class="p-sp"></span>
+        <span class="p-chip">✓ In Wiki chat ›</span>
+      </div>
+    </div>
+    <div class="p-done"><svg class="ico" style="width:18px;height:18px;margin-top:1px"><use href="#check"/></svg><span>Completed · Send a message to reopen this session.</span></div>
+    <div class="p-comp"><div class="ph-t">Message…</div><div class="bar">＋ <span>Auto</span><span class="p-sp"></span><b>Opus 5.5</b> Default<span class="p-send">↑</span></div></div>
+  </div>
+  <p class="note">落地后不再占第二行，收成第一行右边的<b>绿色 ✓ chip</b>，和现在手动合并后的 “✓ Merged” 同一个位置、同一种样式；点它仍进 landing 会话。</p>
+</div>
+
+<!-- ================= NO LANDING ================= -->
+<div>
+  <div class="fh"><span class="tag new">改版</span> ⑤ 没交给平台 <small>无 sourceLanding，手动合并</small></div>
+  <div class="ph">
+    <div class="tail">the project line.</div>
+    <div class="p-card"><div class="p-row"><svg class="ico" style="color:#8a8a90"><use href="#term"/></svg><span class="p-bg">Background processes<small>8 total</small></span><span class="p-sp"></span><span class="p-chev">›</span></div></div>
+    <div class="p-card">
+      <div class="p-row">
+        <span class="p-br" style="flex:none"><i>⎇</i>…-38bc0e</span>
+        <span class="p-stat"><span class="a">+120</span> <span class="d">−8</span> · 6 files</span>
+        <span class="p-sp"></span>
+        <span class="p-split"><span>Merge to Wiki chat</span><em>⌄</em></span>
+      </div>
+    </div>
+    <div class="p-done"><svg class="ico" style="width:18px;height:18px;margin-top:1px"><use href="#check"/></svg><span>Completed · Send a message to reopen this session.</span></div>
+    <div class="p-comp"><div class="ph-t">Message…</div><div class="bar">＋ <span>Auto</span><span class="p-sp"></span><b>Opus 5.5</b> Default<span class="p-send">↑</span></div></div>
+  </div>
+  <p class="note">Merge 按钮只在<b>没有 landing</b> 时出现。目标是项目分支时写<b>项目名</b>（<code>projectMembership.projectTitle</code>）；下拉菜单里仍列完整分支名。普通分支（main 等）照旧。</p>
+</div>
+</div>
+
+<div class="sheet">
+<div class="two">
+<div>
+  <h2>规则</h2>
+  <table>
+    <tr><th>sourceLanding</th><th>卡第一行右侧</th><th>卡第二行</th></tr>
+    <tr><td>无</td><td>Merge to &lt;项目名 / 分支&gt; ⌄（现有逻辑）</td><td>—（合并失败、recovery 照旧）</td></tr>
+    <tr><td>QUEUED</td><td>无</td><td>⏱ 灰 · Queued to land · into &lt;项目名&gt; · Open ›</td></tr>
+    <tr><td>RUNNING</td><td>无</td><td>◌ 蓝 · Landing · &lt;phase&gt; · Open ›</td></tr>
+    <tr><td>CHECK_FAILED / CONFLICT / ERROR</td><td>无</td><td>⚠ 琥珀 · Landing stopped · &lt;原因&gt; · Open ›</td></tr>
+    <tr><td>LANDED / ALREADY_LANDED / MERGED</td><td>✓ In &lt;项目名 / main&gt; ›</td><td>—</td></tr>
+    <tr><td>NOTHING_TO_LAND / HANDLED / DECLINED …</td><td>灰字 chip，文案沿用现在</td><td>—</td></tr>
+  </table>
+  <p class="note">版面：diff 统计 <code>layoutPriority</code> 高于分支名，分支名从中间省略；卡片宽度跟上面的 Background processes 对齐，不再越界。卡外的 Landing 胶囊（<code>SourceLandingChip</code>）去掉。</p>
+</div>
+<div>
+  <h2>会改的文件</h2>
+  <table>
+    <tr><th>文件</th><th>改什么</th></tr>
+    <tr><td><code>OrbitApp/…/WorktreeBar.swift</code></td><td><code>WorktreeMergeControl</code> 遇到 sourceLanding 让位；<code>pill()</code> 加 landing 第二行（同 <code>MergeRecoveryRow</code> 的位置）；统计优先、分支名中间省略；目标名用项目名</td></tr>
+    <tr><td><code>OrbitApp/…/LandingEntryLink.swift</code></td><td><code>SourceLandingChip</code> 移除（内容并入上面一行）</td></tr>
+    <tr><td><code>OrbitKit/…/SessionProjectLandings.swift</code></td><td><code>sourceLabel</code> 区分 queued（静态）与 run（转圈），加 “into &lt;项目名&gt;”；测试同步</td></tr>
+    <tr><td><code>OrbitApp/…/ComposerView.swift:415</code></td><td>“Completed · Send a message to reopen this session.”</td></tr>
+  </table>
+  <p class="note">web（<code>WorkspaceView.tsx</code>）和 Android（<code>SessionReader.kt</code>）也渲染 sourceLanding，是否有同样的重复要再核对；确认后按这张图跟进。</p>
+</div>
+</div>
+<div class="q">
+  <b>待你定</b><br>
+  A. 排队行要不要说“前面还有几个 · 排了多久”（如 “2 ahead · 4m”）？现在 <code>sourceLanding</code> 没有入队时间和位置，要加服务端字段。<b>建议：先不加</b>，Open › 进 landing 会话能看到。<br>
+  B. landing 停住（③）时，要不要在这里也给一个手动 Merge 作为后路？<b>建议：不给</b>，只走 landing 会话，避免两条合并路径。<br>
+  C. 合并目标写项目名（“Merge to Wiki chat”）还是统一写 “Merge to project line”？<b>建议：项目名</b>。
+</div>
+</div>

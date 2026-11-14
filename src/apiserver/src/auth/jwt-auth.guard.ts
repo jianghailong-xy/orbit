@@ -23,6 +23,7 @@ import {
   patForbiddenBody,
 } from './pat-scope.decorator';
 import { PAT_PREFIX, type PatGrant, PatService } from './pat.service';
+import { TERMINAL_PREFIX, TerminalCredentials, terminalRouteOf, terminalRouteRefusal } from './terminal-credentials';
 
 /** How deep a request is searched for the ids it names. Past it, what it names is unknown and refused. */
 const MAX_ID_DEPTH = 32;
@@ -44,6 +45,8 @@ export class JwtAuthGuard implements CanActivate {
     // Provided alongside PatService. Without it an administrator's token for viewing another account is
     // answered 401, as any token signed with a key this guard does not hold is.
     @Optional() private readonly impersonation?: Impersonation,
+    // Provided alongside PatService. Without it every TERMINAL credential is answered 401, as an unknown one is.
+    @Optional() private readonly terminals?: TerminalCredentials,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -102,6 +105,25 @@ export class JwtAuthGuard implements CanActivate {
         noteRefusal(req, error);
         throw error;
       }
+      return true;
+    }
+
+    if (token.startsWith(TERMINAL_PREFIX)) {
+      // A terminal credential (docs/terminal-session-design.md): never from a URL, as a personal access token is not.
+      if (fromQuery) throw new UnauthorizedException('invalid token');
+      const grant = await this.terminals?.verify(token);
+      if (!grant) throw new UnauthorizedException('invalid token');
+      const user: AuthUser = {
+        userId: grant.userId,
+        email: grant.email,
+        credential: { kind: 'TERMINAL', terminalId: grant.terminalId, runnerId: grant.runnerId, machineName: grant.machineName },
+      };
+      req.user = user;
+      // Deny by default: only the routes that declare @TerminalRoute admit it, each judged against the credential's
+      // runner, and it never reaches the login's authorization below.
+      const kind = terminalRouteOf(this.reflector, context.getHandler());
+      if (!kind) throw terminalRouteRefusal();
+      await this.terminals!.confine(req, kind, grant);
       return true;
     }
 

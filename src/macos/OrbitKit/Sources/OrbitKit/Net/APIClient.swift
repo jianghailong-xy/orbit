@@ -41,6 +41,26 @@ public final class APIClient: @unchecked Sendable {
         return "\(kind)/\(version ?? "unknown")"
     }()
 
+    /// `X-Orbit-Device: iphone` or `ipad` from the iOS app, nil from the Mac. The server records it
+    /// with the turns this device sends (apiserver sessions/turn-sender-client.ts), so `orbit` in a
+    /// terminal can say "· from iPad" rather than "· from iPhone". Read from the hardware model
+    /// (`hw.machine`, or the simulated one), which needs no main actor as `UIDevice` does.
+    static let deviceHeader: String? = {
+        #if os(iOS)
+        var model = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] ?? ""
+        if model.isEmpty {
+            var size = 0
+            sysctlbyname("hw.machine", nil, &size, nil, 0)
+            var bytes = [UInt8](repeating: 0, count: size)
+            sysctlbyname("hw.machine", &bytes, &size, nil, 0)
+            model = String(decoding: bytes.prefix { $0 != 0 }, as: UTF8.self)
+        }
+        return model.hasPrefix("iPad") ? "ipad" : "iphone"
+        #else
+        return nil
+        #endif
+    }()
+
     public let baseURL: URL
     private let tokenStore: TokenStore
     private let session: URLSession
@@ -580,6 +600,56 @@ public final class APIClient: @unchecked Sendable {
         return list.guests
     }
 
+    // MARK: The guest's door — Shared with me and the guest view (docs/session-guests-design.md §4, §7)
+
+    /// Shared with me: every session the signed-in account was invited to reply in, newest invitation
+    /// first. Web parity: `listGuestSessions`.
+    public func guestSessions() async throws -> [GuestSessionSummary] {
+        let list: GuestSessionList = try await get("guest-sessions")
+        return list.sessions
+    }
+
+    /// The guest view's root: the head and the newest `limit` events. A 404 is "not shared with you"
+    /// — removed, left, Trash and deleted all read the same. Web parity: `getGuestSession`.
+    public func guestSession(_ sessionID: String, limit: Int) async throws -> GuestSession {
+        try await get("guest-sessions/\(sessionID)", query: [
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)),
+        ])
+    }
+
+    /// The page of the guest's transcript just older than `before`. Web parity: `getGuestEventPage`.
+    public func guestEventsBefore(_ sessionID: String, before: Int, limit: Int) async throws -> GuestEventPage {
+        try await get("guest-sessions/\(sessionID)/events", query: [
+            URLQueryItem(name: "before", value: String(before)),
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)),
+        ])
+    }
+
+    /// What the conversation added since `after`, and how it stands now: one read follows both.
+    /// Web parity: `getGuestEventsAfter`.
+    public func guestEventsAfter(_ sessionID: String, after: Int, limit: Int) async throws -> GuestSessionNow {
+        try await get("guest-sessions/\(sessionID)/events", query: [
+            URLQueryItem(name: "after", value: String(after)),
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)),
+        ])
+    }
+
+    /// One event whole, for a card that came back `truncated`. Web parity: `getGuestEventFull`.
+    public func guestEventFull(_ sessionID: String, seq: Int) async throws -> RunEvent {
+        try await get("guest-sessions/\(sessionID)/events/\(seq)")
+    }
+
+    /// A guest's message — text only, a turn of the owner's session, which restarts it when it has
+    /// ended. Web parity: `sendGuestTurn`.
+    @discardableResult
+    public func sendGuestTurn(_ sessionID: String, clientTurnId: String, content: String) async throws -> GuestTurnAccepted {
+        try await post("guest-sessions/\(sessionID)/turns",
+                       body: GuestTurnRequest(clientTurnId: clientTurnId, content: content))
+    }
+
     // MARK: personal access tokens — listed and revoked here, issued only on the web
     // (docs/personal-access-token-design.md §6.5, §9)
 
@@ -596,6 +666,35 @@ public final class APIClient: @unchecked Sendable {
     @discardableResult
     public func revokeAccessToken(_ id: String) async throws -> RevokedAccessToken {
         try await delete("access-tokens/\(id)")
+    }
+
+    // MARK: terminals — the approve card and Settings → Terminals (docs/terminal-session-design.md)
+
+    /// The terminal sign-ins waiting for this owner. Web parity: `terminalRequestsQuery`.
+    public func terminalRequests() async throws -> [TerminalRequest] {
+        let list: TerminalRequestList = try await get("terminals/requests")
+        return list.requests
+    }
+
+    /// Approve: the terminal's next poll collects a credential bound to this account and that machine, for 30 days.
+    public func approveTerminalRequest(_ id: String) async throws {
+        _ = try await postRaw("terminals/requests/\(id)/approve", body: Optional<Empty>.none)
+    }
+
+    /// Deny: the terminal is told so, and nothing is minted.
+    public func denyTerminalRequest(_ id: String) async throws {
+        _ = try await postRaw("terminals/requests/\(id)/deny", body: Optional<Empty>.none)
+    }
+
+    /// The live terminals, newest first. Web parity: `terminalsQuery`.
+    public func terminals() async throws -> [Terminal] {
+        let list: TerminalList = try await get("terminals")
+        return list.terminals
+    }
+
+    /// Revoke one terminal at once: its next request is 401.
+    public func revokeTerminal(_ id: String) async throws {
+        try await deleteRaw("terminals/\(id)")
     }
 
     // MARK: approvals
@@ -1691,6 +1790,10 @@ public final class APIClient: @unchecked Sendable {
 
     public func runners() async throws -> [Runner] { try await get("runners") }
     public func runner(_ id: String) async throws -> Runner { try await get("runners/\(id)") }
+    /// A machine's CPU, memory and disk now and over the last hour (`MachineResources`).
+    public func runnerResources(_ id: String) async throws -> RunnerResourcesAnswer {
+        try await get("runners/\(id)/resources")
+    }
 
     // MARK: directory probe relay (docs/first-workspace-contract.md §2)
 
@@ -1900,6 +2003,21 @@ public final class APIClient: @unchecked Sendable {
     /// removal is, so it works with the runner offline.
     public func restoreRunnerDefault(_ id: String, engine: LoginEngine) async throws {
         try await postRaw("runners/\(id)/accounts/\(engine.rawValue)/default/restore", body: Optional<Empty>.none)
+    }
+
+    /// Dismiss this runner's update warning for `engine` until its next release: the server records the
+    /// engine's current `update.latest` (`Runner.engineUpdateDismissals`), and the warning stays quiet
+    /// while that is still the latest.
+    public func dismissEngineUpdateWarning(_ id: String, engine: String) async throws {
+        try await postRaw("runners/\(id)/engines/\(engine)/update-warning/dismiss", body: Optional<Empty>.none)
+    }
+
+    /// Fix with an agent: start a session on this runner's most recently used workspace about one warning.
+    /// A 409 (`AGENT_FIX_BLOCKED`, `AGENT_FIX_RUNNING`, `AGENT_FIX_NO_WARNING`) throws with the server's
+    /// `message` in its body, which `failureReason` reads out.
+    public func fixRunnerAttention(_ id: String, kind: RunnerAttentionFixKind,
+                                   body: RunnerAttentionFixRequest) async throws -> RunnerAttentionFixResult {
+        try await post("runners/\(id)/attention/\(kind.rawValue)/fix", body: body)
     }
 
     public func pauseRunnerAccount(_ id: String, engine: LoginEngine, account: String,
@@ -2218,6 +2336,7 @@ public final class APIClient: @unchecked Sendable {
         req.httpMethod = method
         if let timeout { req.timeoutInterval = timeout }
         req.setValue(Self.clientHeader, forHTTPHeaderField: "X-Orbit-Client")
+        if let device = Self.deviceHeader { req.setValue(device, forHTTPHeaderField: "X-Orbit-Device") }
         if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         if let body {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")

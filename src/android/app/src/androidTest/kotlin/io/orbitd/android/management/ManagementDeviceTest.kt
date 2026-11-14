@@ -156,7 +156,9 @@ class ManagementDeviceTest {
                 click(hasText("Shared links") and hasClickAction())
                 await("Fixture shared session")
                 capture("shared-links")
-                click(hasText("Turn off") and hasClickAction())
+                // Turn off… is last in the row's ⋯ (docs/mocks/share-links/13-row-buttons).
+                click(hasContentDescription("More for Fixture shared session") and hasClickAction())
+                click(hasText("Turn off…") and hasClickAction(), scroll = false)
                 compose.onNode(hasText("Turn off") and hasAnyAncestor(isDialog())).performClick()
                 compose.waitUntil(10_000) { !sharingActive }
                 await("Nothing is shared right now. Share a session from its ⋯ menu.")
@@ -795,9 +797,11 @@ class ManagementDeviceTest {
                 activate("1 / 4 running", "talkback-machines-and-models-row", report, problems); await("Max Concurrent")
                 report.appendLine("double tap the Controlled remote row (1 / 4 running) -> the runner page opened")
                 page("runner", report, problems)
-                activate("Increase Max Concurrent", "talkback-runner-capacity", report, problems)
+                activate("Edit Max Concurrent", "talkback-runner-capacity", report, problems)
+                activate("Increase Max Concurrent", "talkback-runner-capacity-dialog", report, problems)
+                activate("Save", "talkback-runner-capacity-save", report, problems)
                 compose.waitUntil(10_000) { calls.any { it == "PATCH /api/runners/$runnerId" } }
-                report.appendLine("double tap Increase Max Concurrent -> PATCH /api/runners/$runnerId sent")
+                report.appendLine("double tap Edit Max Concurrent, Increase Max Concurrent, Save -> PATCH /api/runners/$runnerId sent")
                 back(); back(); await("Appearance")
                 activate("Machines & models", "talkback-settings-machines-and-models-pools", report, problems); await("Team Codex")
                 report.appendLine("double tap Machines & models -> the Machines & models page opened again")
@@ -809,8 +813,10 @@ class ManagementDeviceTest {
                 activate("Shared links", "talkback-settings-shared-links", report, problems); await("Fixture shared session")
                 report.appendLine("double tap Shared links -> the shared links page opened")
                 page("shared-links", report, problems)
-                activate("Turn off", "talkback-shared-links-turn-off", report, problems); await("Turn off this link")
-                report.appendLine("double tap Turn off -> the confirmation opened")
+                activate("More for Fixture shared session", "talkback-shared-links-more", report, problems); await("Turn off…")
+                report.appendLine("double tap the link's ⋯ -> its menu opened")
+                activate("Turn off…", "talkback-shared-links-turn-off", report, problems); await("Turn off this link")
+                report.appendLine("double tap Turn off… -> the confirmation opened")
                 compose.onNode(hasText("Cancel") and hasClickAction() and hasAnyAncestor(isDialog())).performSemanticsAction(SemanticsActions.OnClick)
                 // The key goes to the window in front: let the dialog go first.
                 compose.waitUntil(5_000) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }

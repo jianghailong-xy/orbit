@@ -154,9 +154,6 @@ public struct CoordinatorDelivery: Sendable, Equatable, Codable {
 /// What the line says, in the web's own words (`lib/coordinatorDelivery.ts`, `CoordinatorDeliveryLine.tsx`),
 /// which `CoordinatorDeliveryCopyParityTests` holds this end to entry by entry.
 public enum CoordinatorDeliveryCard {
-    /// What the sticky bar calls the turn once it has been scrolled past — `↑ From Orbit` — since the
-    /// reply under the line answers it (web `COORDINATOR_DELIVERY_STICKY_LABEL`).
-    public static let stickyLabel = "From Orbit"
     /// The link at the foot of the opened line, to the task the fact names (web `COORDINATOR_DELIVERY_ITS_TASK`).
     public static let itsTask = "Its task ↗"
     /// The heading over the words the session was handed, once the line is opened: the owner's answer's.
@@ -251,12 +248,6 @@ public enum CoordinatorDeliveryCard {
     /// accessibility label.
     public static func line(_ card: CoordinatorDelivery, now: Date = Date()) -> String {
         "\(sentence(card)) · \(sent(card, now: now))"
-    }
-
-    /// What the sticky bar says once the line is scrolled past: `From Orbit`, then the sentence — the
-    /// pair the browser stamps on the line's root (`data-sticky-label` / `data-sticky-text`).
-    public static func sticky(_ card: CoordinatorDelivery) -> (label: String, text: String) {
-        (stickyLabel, sentence(card))
     }
 
     /// The task the fact names, as the app's own `orbit-task:` door — nil when it names none, or when

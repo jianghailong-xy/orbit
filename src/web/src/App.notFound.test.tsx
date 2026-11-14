@@ -37,7 +37,7 @@ const DEAD_SHARE = 'k3Qx9vR2mT7wLpN8sYdF0aBcE1gHjKuZ';
 /** Every address of the app, as a signed-out visitor might have kept one. */
 const APP_ADDRESSES = [
   '/tasks', `/tasks/${ID}`, `/lists/${ID}`,
-  '/settings', '/settings/profile', '/settings/account', '/settings/shared-links', '/settings/access-tokens',
+  '/settings', '/settings/profile', '/settings/account', '/settings/shared-links', '/settings/access-tokens', '/settings/terminals',
   '/admin', '/admin/sign-in', '/admin/providers',
   '/infrastructure', '/providers', '/providers/new', '/providers/new/deepseek', `/providers/${ID}`, `/providers/pools/${ID}`,
   '/following',

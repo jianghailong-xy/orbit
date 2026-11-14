@@ -11,6 +11,8 @@ public enum SidebarSelection: Hashable, Sendable {
     case machine(String)
     /// An open project in the Projects group: its sessions page in the session column.
     case project(String)
+    /// A session someone shared with this account, in the Shared with me group: its guest view.
+    case guestSession(String)
 }
 
 /// What a stored selection asks the navigation model to do. Kept as its own value so the view can run
@@ -20,6 +22,7 @@ public enum SidebarTarget: Equatable, Sendable {
     case agent(String)
     case machine(String)
     case project(String)
+    case guestSession(String)
     /// Nothing is selected (a cleared selection): nothing to do.
     case none
 }
@@ -29,7 +32,9 @@ public enum SidebarLogic {
     /// open project's sessions column, which wins over the Workspace, which wins over the plain
     /// section — the same precedence the old computed binding had.
     public static func selection(section: AppSection, agentID: String?,
-                                 machineDraftRunnerID: String?, projectID: String?) -> SidebarSelection {
+                                 machineDraftRunnerID: String?, projectID: String?,
+                                 guestSessionID: String? = nil) -> SidebarSelection {
+        if section == .agents, let guestSessionID { return .guestSession(guestSessionID) }
         if let runnerID = machineDraftRunnerID { return .machine(runnerID) }
         if section == .agents, let projectID { return .project(projectID) }
         if section == .agents, let id = agentID { return .agent(id) }
@@ -43,6 +48,7 @@ public enum SidebarLogic {
         case .agent(let id)?: return .agent(id)
         case .machine(let runnerID)?: return .machine(runnerID)
         case .project(let id)?: return .project(id)
+        case .guestSession(let id)?: return .guestSession(id)
         case nil: return .none
         }
     }

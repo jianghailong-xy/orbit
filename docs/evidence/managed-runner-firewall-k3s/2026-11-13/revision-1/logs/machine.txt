@@ -1,0 +1,4 @@
+mrk3s: Docker 29.8.2, overlayfs, 24 CPUs, 16102998016 bytes
+2: eth0    inet 172.31.92.20/24 brd 172.31.92.255 scope global eth0\       valid_lft forever preferred_lft forever
+iptables v1.8.13 (nf_tables)
+b7ee5596c feat(managed-runners): the runners' firewall coexists with k3s (kube-proxy, kube-router, flannel)

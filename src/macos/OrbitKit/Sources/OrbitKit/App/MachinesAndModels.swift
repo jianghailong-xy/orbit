@@ -215,7 +215,9 @@ public enum MachinesAndModels {
         let shown = reported.filter { health in engines.contains { $0.rawValue == health.engine } }
         let nowMs = RunnerPageFormat.nowMs(now)
         let stale = shown.filter {
-            $0.installed == true && RunnerAttention.updateNoteOf($0.update, nowMs: nowMs)?.tone == .warn
+            $0.installed == true
+                && RunnerAttention.updateNoteOf($0.update, nowMs: nowMs,
+                                                dismissed: runner.engineUpdateDismissals?[$0.engine])?.tone == .warn
         }.count
         if stale > 0 && runner.online == true {
             return stale == 1 ? "1 engine not updating" : "\(stale) engines not updating"

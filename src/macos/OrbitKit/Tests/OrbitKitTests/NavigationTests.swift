@@ -97,9 +97,10 @@ final class NavigationTests: XCTestCase {
         XCTAssertEqual(nav.path, [.taskDetail(taskID: "t1")], "and so does Tasks")
     }
 
-    /// The drawer row a screen belongs to. The Agents stack is the workspace's until a project's
-    /// sessions page is on it — then it is the project's, with whatever was pushed over that page —
-    /// and every other section's stack is the section's own, at any depth.
+    /// The drawer row a screen belongs to. The Agents stack is the workspace's until the drawer's
+    /// project row puts a project's sessions page on it — then it is the project's, with whatever was
+    /// pushed over that page — and every other section's stack is the section's own, at any depth.
+    /// A sessions page a session list's coordinator row opened leaves the workspace's row selected.
     func testTheDrawerDestinationIsReadOffTheStack() {
         let address = SessionProjectAddress(projectID: "p1", agentID: "a1", view: .open)
         let folder = SessionFolderAddress(folderID: "f1", agentID: "a1", view: .open)
@@ -114,6 +115,10 @@ final class NavigationTests: XCTestCase {
 
         nav.popToRoot()
         nav.enterProjectSessions(address)
+        XCTAssertEqual(nav.drawerDestination(agentID: "a1"), .workspace(agentID: "a1"),
+                       "a session list's coordinator row leaves the workspace's row selected")
+
+        nav.enterProjectSessions(address, asDestination: true)
         XCTAssertEqual(nav.drawerDestination(agentID: "a1"), .project(projectID: "p1"))
         XCTAssertNotEqual(nav.drawerDestination(agentID: "a1"), .workspace(agentID: "a1"),
                           "the workspace row is not the selected one on a project's page")

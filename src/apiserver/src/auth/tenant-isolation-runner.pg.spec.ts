@@ -718,6 +718,32 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     assert.ok(![401, 403, 404].includes(reply.status), `answered ${reply.status}: ${reply.text.slice(0, 600)}`);
     assert.notEqual(answerOf(reply), answerOf(nothing), `answered as an id that names nothing: ${reply.text.slice(0, 600)}`);
   };
+  /**
+   * The three writes the control plane cards by caller (`tasks/task-write-approval.ts`): on the
+   * machine credential they require the acting session and its answered card, so a request that
+   * names no session is refused by POLICY before the route reads any id — for the owner and for a
+   * stranger alike. Their tenancy is still held here: (1) proves B's request writes nothing of A's
+   * and is answered exactly as B's own request naming nothing, and this branch proves the owner's
+   * uncarded request is that same policy refusal rather than an id-dependent answer. The owner's
+   * legitimate path — its session plus its answered card — is
+   * `tasks/task-write-approval.pg.spec.ts`'s.
+   */
+  const CARDED_WRITES = new Set([
+    'POST /runner/tasks',
+    'POST /runner/tasks/batch-create',
+    'POST /runner/task-lists/:id/dag-apply',
+  ]);
+  const answeredByThePolicy = (route: string, reply: Reply, nothing: Reply) => {
+    assert.equal(reply.status, 403, `${route} answered ${reply.status}: ${reply.text.slice(0, 600)}`);
+    assert.equal(reply.json?.code, 'TASK_WRITE_NEEDS_OWNER_CARD', `${route}: ${reply.text.slice(0, 600)}`);
+    // The same code for an id that names nothing: the refusal turns on the caller's credential, not
+    // on whether the id exists, so no id-dependent answer leaks through it.
+    assert.deepEqual(
+      [nothing.status, nothing.json?.code],
+      [reply.status, reply.json?.code],
+      `${route} was answered differently for an id that names nothing`,
+    );
+  };
   const depth = (route: string) => route.split('/').length;
   const ordered = [...cases].sort(([x], [y]) => {
     const dx = methodOf(x) === 'DELETE' ? 1 : 0;
@@ -729,17 +755,28 @@ test('tenant isolation: past the runner gate and through the share links, anothe
       const controls: Array<[string, Holder, RunnerTenant]> = [['A on its own', holderA, a]];
       if (kase.nested) controls.push(['B on its own', holderB, b]);
       for (const [what, who, own] of controls) {
-        await t.test(`${route} as ${as}: ${what} is answered by the route`, async () => {
+        await t.test(`${route} as ${as}: ${what} is ${
+          CARDED_WRITES.has(route) ? 'refused by the write policy, as an id that names nothing is' : 'answered by the route'
+        }`, async () => {
           const nothing = await send(who, as, route, kase.request(nobody(), own));
-          answeredByTheRoute(await send(who, as, route, kase.request(own, own)), nothing);
+          const reply = await send(who, as, route, kase.request(own, own));
+          if (CARDED_WRITES.has(route)) answeredByThePolicy(route, reply, nothing);
+          else answeredByTheRoute(reply, nothing);
         });
       }
     }
   }
   for (const [key, kase] of fieldCases) {
     for (const as of kase.as) {
-      await t.test(`${key} as ${as}: B's own request with its own in it is answered by the route`, async () => {
+      await t.test(`${key} as ${as}: B's own request with its own in it is ${
+        CARDED_WRITES.has(routeOfField(key)) ? 'refused by the write policy' : 'answered by the route'
+      }`, async () => {
         const reply = await send(holderB, as, routeOfField(key), kase.request(b, b));
+        if (CARDED_WRITES.has(routeOfField(key))) {
+          const nothing = await send(holderB, as, routeOfField(key), kase.request(nobody(), b));
+          answeredByThePolicy(routeOfField(key), reply, nothing);
+          return;
+        }
         assert.ok(![401, 403, 404].includes(reply.status), `answered ${reply.status}: ${reply.text.slice(0, 600)}`);
       });
     }
