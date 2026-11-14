@@ -300,7 +300,7 @@ struct UserBubbleView: View {
                     // Held for its translation: the line under the meta says where it is (1A / 4A).
                     EmptyView()
                 } else if bubble.pending {
-                    Text(bubble.queued ? "Queued" : "Sending…").font(.orbitMeta).foregroundStyle(.secondary)
+                    if bubble.queued { QueuedWord() } else { Text("Sending…").font(.orbitMeta).foregroundStyle(.secondary) }
                     // A queued message can be withdrawn until the runner leases it (web parity). Offered
                     // only once the server `turnId` is known — the DELETE keys on it — which lands a tick
                     // after send. `contentShape` widens the small hit target for touch.

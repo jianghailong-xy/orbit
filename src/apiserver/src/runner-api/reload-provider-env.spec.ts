@@ -20,7 +20,12 @@ type Dequeue = (
 ) => Promise<{ kind: string; env?: Record<string, string> } | null>;
 
 /** One `reload` turn waiting on the inbox, with the session it belongs to. */
-function harness(reloadContent: string, session: Record<string, unknown>, provider?: unknown) {
+function harness(
+  reloadContent: string,
+  session: Record<string, unknown>,
+  provider?: unknown,
+  stamps: Array<{ where: unknown; data: unknown }> = [],
+) {
   const tx = {
     $queryRaw: async (...args: unknown[]) => {
       const sql = renderRawQuery(args).text;
@@ -52,6 +57,10 @@ function harness(reloadContent: string, session: Record<string, unknown>, provid
         assignedRunner: null,
         ...session,
       }),
+      updateMany: async (args: { where: unknown; data: unknown }) => {
+        stamps.push(args);
+        return { count: 1 };
+      },
     },
     // An admin, for whom a shared row resolves as any row of theirs does (usableProviderScope).
     user: { findUnique: async () => ({ role: 'ADMIN' }) },
@@ -123,4 +132,46 @@ test('an unreadable reload payload never fails the poll', async () => {
   const dequeue = harness('not json', { provider: 'claude', providerBuiltin: true });
 
   assert.equal((await dequeue(SESSION_ID, RUNNER_ID, GENERATION))?.env, undefined);
+});
+
+test('a Settings restart is delivered with the session env laid over the workspace env, and stamps envAppliedAt', async () => {
+  const envChangedAt = new Date('2026-11-13T08:00:00Z');
+  const stamps: Array<{ where: unknown; data: unknown }> = [];
+  const dequeue = harness(
+    JSON.stringify({ env: true }),
+    {
+      provider: 'claude',
+      providerBuiltin: true,
+      engine: 'claude',
+      env: { FOO: 'session', ONLY_SESSION: '1' },
+      envChangedAt,
+      workspace: { env: { FOO: 'workspace', ONLY_WORKSPACE: '1' } },
+    },
+    undefined,
+    stamps,
+  );
+
+  const turn = await dequeue(SESSION_ID, RUNNER_ID, GENERATION);
+
+  assert.equal(turn?.kind, 'reload');
+  assert.equal(turn?.env?.FOO, 'session');
+  assert.equal(turn?.env?.ONLY_SESSION, '1');
+  assert.equal(turn?.env?.ONLY_WORKSPACE, '1');
+  // Only while the env is still the one this reload carries: a PATCH since then stays owed.
+  assert.equal(stamps.length, 1);
+  assert.deepEqual(stamps[0].where, { id: SESSION_ID, envChangedAt });
+  assert.ok((stamps[0].data as { envAppliedAt?: unknown }).envAppliedAt instanceof Date);
+});
+
+test('a model-only reload stamps nothing: the engine keeps the env it has', async () => {
+  const stamps: Array<{ where: unknown; data: unknown }> = [];
+  const dequeue = harness(
+    JSON.stringify({ model: 'claude-haiku-4-5' }),
+    { provider: 'claude', providerBuiltin: true, env: { FOO: 'session' } },
+    undefined,
+    stamps,
+  );
+
+  assert.equal((await dequeue(SESSION_ID, RUNNER_ID, GENERATION))?.env, undefined);
+  assert.equal(stamps.length, 0);
 });

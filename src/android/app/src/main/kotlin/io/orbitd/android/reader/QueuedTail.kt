@@ -45,6 +45,9 @@ internal data class QueuedTurn(val turnId: String?, val steer: Boolean, val even
      * the composer holds instead of the tail (docs/mocks/steer-tray; web `inPendingTray`, OrbitKit `PendingTray.holds`). */
     val inTray: Boolean get() = readersOwn && delivery == null && translation?.held != true
     val cancelable: Boolean get() = turnId != null && !steer && delivery == null
+    /** Still waiting for a turn of its own — not a steer, nor one whose delivery settled: what a runner's update holds, so its queue line
+     * says so (docs/mocks/queued-card-runner-updating ②⑤; web `queuedTurnWaitsItsTurn`, OrbitKit `RunnerUpdating.holdsQueued`). */
+    val heldByUpdate: Boolean get() = !steer && delivery == null
     val key: String get() = "queued:" + (turnId?.let { ObjectId.canonical(it) ?: it } ?: event.fields.text("text").hashCode().toString())
 }
 

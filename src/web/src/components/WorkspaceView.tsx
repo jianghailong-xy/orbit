@@ -29,6 +29,7 @@ import {
   MessageOutlined,
   MinusCircleOutlined,
   MoreOutlined,
+  SettingOutlined,
   PaperClipOutlined,
   PauseCircleOutlined,
   PictureOutlined,
@@ -350,6 +351,12 @@ import {
 } from './CriteriaDecisionCard';
 import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows } from './CoordinatorQuestionCard';
 import { useSessionOwnerRequestInserts } from './OwnerRequestCard';
+import {
+  OWNER_REQUEST_CHAT_PLACEHOLDER,
+  OWNER_REQUEST_CHAT_PREFIX,
+  ownerRequestChatContext,
+  type OwnerRequest,
+} from '../lib/ownerRequests';
 import { useCrossingDecisionCards } from './CrossingDecisionCard';
 import { AnsweredQuestionsCtx } from './OwnerAnswerLine';
 import { answeredItemKey, answersHandedOver } from '../lib/ownerAnswer';
@@ -447,6 +454,7 @@ import { UNDER_REVIEW, underReviewLine } from './OwnerConfirmationReview';
 import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
+import { SessionSettingsDrawer } from './SessionSettingsDrawer';
 import type { Runner } from './TasksSidePanel';
 import { accountsOf } from './AccountSelect';
 import { PlanUsageIndicator } from './PlanUsageIndicator';
@@ -2181,22 +2189,26 @@ export function QueuedTurnMeta({
   deliveryCode,
   deliveryReason,
   wake,
+  translationHeld,
   held,
   onCancel,
   onPutBack,
 }: {
   placement: Extract<SessionTurnPlacement, 'steer' | 'queued'>;
   /** Held for its translation (Settings › Translation): the bubble's own foot says how it stands. */
-  held?: boolean;
+  translationHeld?: boolean;
   delivery?: 'failed' | 'unconfirmed';
   deliveryCode?: string;
   deliveryReason?: string;
   /** The turn is a wake a watch queued (lib/watches `parseWatchWake`), not a message anyone typed. */
   wake?: boolean;
+  /** What holds a turn waiting for its own turn, said in place of its label: `Queued · runner updating`
+   *  (RunnerUpdatingTag) while its runner's update holds the session (board queued-card-runner-updating ②). */
+  held?: ReactNode;
   onCancel: () => void;
   onPutBack?: () => void;
 }) {
-  if (held) return null;
+  if (translationHeld) return null;
   const label = delivery === 'failed'
     ? 'Not delivered'
     : delivery === 'unconfirmed'
@@ -2207,15 +2219,29 @@ export function QueuedTurnMeta({
   const why = delivery != null ? deliveryFailureExplanation(deliveryCode, deliveryReason) : undefined;
   return (
     <span className="chat-queued-meta" title={deliveryReason}>
-      <span className={`chat-queued-tag${delivery != null ? ' chat-queued-tag-failed' : ''}`}>
-        {label}
-      </span>
+      {held && queuedTurnWaitsItsTurn({ placement, delivery }) ? held : (
+        <span className={`chat-queued-tag${delivery != null ? ' chat-queued-tag-failed' : ''}`}>
+          {label}
+        </span>
+      )}
       {why && <span className="chat-queued-why">{why}</span>}
       {delivery == null
         ? placement === 'queued' && <a onClick={onCancel}>{wake ? 'Withdraw wake' : 'Cancel'}</a>
         : onPutBack && <a onClick={onPutBack}>Put back in the composer</a>}
     </span>
   );
+}
+
+/** A queued-tail turn still waiting for its own turn — what a runner's update holds, and whose line
+ *  says so (QueuedTurnMeta `held`). A steer and a settled delivery are not. */
+export function queuedTurnWaitsItsTurn(turn: { placement: string; delivery?: string }): boolean {
+  return turn.placement === 'queued' && turn.delivery == null;
+}
+
+/** The seq of the reader's last message in the transcript, or null where there is none. */
+export function lastUserEventSeq(events: ReadonlyArray<{ type: string; seq: number }>): number | null {
+  for (let i = events.length - 1; i >= 0; i--) if (events[i].type === 'user') return events[i].seq;
+  return null;
 }
 
 // Remembers the session the user last had open per workspace (workspace id → session id). Switching
@@ -2474,6 +2500,8 @@ export function WorkspaceView({
     pressTimer.current = undefined;
   };
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
+  const [settingsOpen, setSettingsOpen] = useState(false); // the open session's Settings… drawer
+  useEffect(() => setSettingsOpen(false), [selectedId]); // it belongs to the session it was opened on
   // A row's Share action opens the share dialog for that row rather than for the open session.
   const [shareRow, setShareRow] = useState<any>(null);
   // The session the Move dialog is open for: a row's, or the open conversation's.
@@ -2542,7 +2570,10 @@ export function WorkspaceView({
       // this one (`evidenceDecidingSession`) — a dispatched task's card drawn in its run.
       | { kind: 'evidenceDecision'; taskId: string; evidenceRevision: string; decidingSessionId: string | null }
       | { kind: 'planChange'; projectId: string; criteriaDigest: string }
-      | { kind: 'coordinatorChat'; projectId: string; about: ChatAbout };
+      | { kind: 'coordinatorChat'; projectId: string; about: ChatAbout }
+      // A request this session filed for the owner (`OwnerRequestCard`), talked about rather than
+      // answered: an ordinary turn with the request named in front, through no door.
+      | { kind: 'ownerRequest'; requestId: string };
     /** What the reply bar says it is about to answer, whole — built by whoever armed it. */
     banner: string;
     /** What the empty composer asks for while this is armed. */
@@ -4560,24 +4591,6 @@ export function WorkspaceView({
   // delivery settled undelivered, which is part of the conversation's record.
   // The message a runner update holds: the last one the reader sent, whose foot row says why
   // (board 2 ⑤). None while the session is not held by an update.
-  let queuedFoot: { seq: number; tag: ReactNode } | null = null;
-  if (runnerUpdatingGate) {
-    for (let i = transcriptEvents.length - 1; i >= 0; i--) {
-      if (transcriptEvents[i].type !== 'user') continue;
-      queuedFoot = {
-        seq: transcriptEvents[i].seq,
-        tag: (
-          <RunnerUpdatingTag
-            gate={runnerUpdatingGate}
-            machine={machineName(runner)}
-            actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <RunnerUpdateLaterMenu runnerId={runner.id} />}
-            updateNow={!isRunnerStopping(runnerUpdatingGate) && runnerTakesUpdateNow(runner) ? runner : undefined}
-          />
-        ),
-      };
-      break;
-    }
-  }
   const queuedTailEvents = useMemo(
     () =>
       visibleQueuedTurns
@@ -4585,6 +4598,21 @@ export function WorkspaceView({
         .map((turn) => ({ turn, event: queuedTurnEvent(turn) })),
     [visibleQueuedTurns],
   );
+  // The tag says it on each turn of the queued tail the update holds — what is actually waiting
+  // (board queued-card-runner-updating ②⑤) — and falls back to that last message only where the
+  // tail holds none.
+  const runnerUpdatingHeldTag = runnerUpdatingGate ? (
+    <RunnerUpdatingTag
+      gate={runnerUpdatingGate}
+      machine={machineName(runner)}
+      actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <RunnerUpdateLaterMenu runnerId={runner.id} />}
+      updateNow={!isRunnerStopping(runnerUpdatingGate) && runnerTakesUpdateNow(runner) ? runner : undefined}
+    />
+  ) : null;
+  const tailHeld = !!runnerUpdatingHeldTag && queuedTailEvents.some(({ turn }) => queuedTurnWaitsItsTurn(turn));
+  const footSeq = runnerUpdatingHeldTag && !tailHeld ? lastUserEventSeq(transcriptEvents) : null;
+  const queuedFoot: { seq: number; tag: ReactNode } | null =
+    footSeq !== null ? { seq: footSeq, tag: runnerUpdatingHeldTag } : null;
   // What stands in for an empty transcript — exactly one of these, so the loading skeleton can't
   // stack on top of the centered "waiting for a slot" pane. See lib/transcriptPaint.
   const placeholder = transcriptPlaceholder({
@@ -5296,8 +5324,23 @@ export function WorkspaceView({
     [coordinatedProjectId, openItems.data, transcriptEvents, handedOver],
   );
 
-  // What this session has asked the owner to do, where it asked.
-  const ownerRequestCards = useSessionOwnerRequestInserts(selectedTrashed ? null : selectedId, transcriptEvents);
+  // What this session has asked the owner to do, where it asked. Its Chat about this arms the
+  // composer: the next send is an ordinary turn to this session with the request named in front of
+  // it, and the card stays, its own buttons still the ways out.
+  const startOwnerRequestChat = useCallback((request: OwnerRequest): void => {
+    setReplyTo({
+      target: { kind: 'ownerRequest', requestId: request.id },
+      banner: OWNER_REQUEST_CHAT_PREFIX + request.title,
+      placeholder: OWNER_REQUEST_CHAT_PLACEHOLDER,
+      context: ownerRequestChatContext(request),
+    });
+    setTimeout(() => taRef.current?.focus(), 0);
+  }, []);
+  const ownerRequestCards = useSessionOwnerRequestInserts(
+    selectedTrashed ? null : selectedId,
+    transcriptEvents,
+    startOwnerRequestChat,
+  );
 
   // Cross-project requests into the project this conversation coordinates, one decision card per
   // batch, drawn where the batch was first asked (board docs/mocks/handoff-in-chat). The batches
@@ -5522,7 +5565,13 @@ export function WorkspaceView({
     // that can go out from under the reader mid-sentence. It stays armed until it is sent or the
     // chip is dismissed. A chat about an item or a blocked merge is the same: a sentence about one
     // that has since moved is still one the coordinator can act on (the native ends keep theirs too).
-    if (replyTo.target.kind === 'planChange' || replyTo.target.kind === 'coordinatorChat') return;
+    // A request talked about is the same: the session that filed it can still read a sentence about
+    // it after it was answered on another device.
+    if (
+      replyTo.target.kind === 'planChange'
+      || replyTo.target.kind === 'coordinatorChat'
+      || replyTo.target.kind === 'ownerRequest'
+    ) return;
     // An evidence version: the row leaving the pending read is what says it was answered elsewhere
     // or displaced by a newer revision — the two refusals the door gives. Read off the same queue
     // the card is drawn from, and only once that read has come back, for the reason below. A
@@ -7032,8 +7081,9 @@ export function WorkspaceView({
       // Talking about a plan before it is started reaches no door either: it is an ordinary turn at
       // an idle agent, with the facts the card is drawn from carried in front of the message
       // because nothing in the session holds them. The card that armed it is untouched: its own
-      // primary action is still the other way out.
-      if (replyTo.target.kind === 'planChange') {
+      // primary action is still the other way out. A request talked about is the same turn, with
+      // the request named in front instead of a plan.
+      if (replyTo.target.kind === 'planChange' || replyTo.target.kind === 'ownerRequest') {
         if (!c) return;
         pinToBottom();
         const carried = replyTo.context;
@@ -10042,6 +10092,15 @@ export function WorkspaceView({
                                 label: MOVE_COPY.action,
                                 onSelect: () => openMove(selectedSession ?? selected),
                               },
+                              {
+                                key: 'settings',
+                                icon: <SettingOutlined />,
+                                label: 'Settings…',
+                                onSelect: () => {
+                                  setHeaderMenuOpen(false);
+                                  setSettingsOpen(true);
+                                },
+                              },
                               { key: 'divider-3', type: 'separator' as const },
                             ]
                           : selectedLifecycleState === 'OPEN'
@@ -10074,6 +10133,15 @@ export function WorkspaceView({
                                   icon: <FolderOutlined />,
                                   label: MOVE_COPY.action,
                                   onSelect: () => openMove(selectedSession ?? selected),
+                                },
+                                {
+                                  key: 'settings',
+                                  icon: <SettingOutlined />,
+                                  label: 'Settings…',
+                                  onSelect: () => {
+                                    setHeaderMenuOpen(false);
+                                    setSettingsOpen(true);
+                                  },
                                 },
                                 { key: 'divider-4', type: 'separator' as const },
                               ]
@@ -10141,6 +10209,25 @@ export function WorkspaceView({
             kind="SESSION"
             rootId={selected.id}
             guests={guestContextOf(selected, machineName(runner))}
+          />
+        )}
+        {selected && !selectedTrashed && !composing && (
+          <SessionSettingsDrawer
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            sessionId={selected.id}
+            sessionTags={(selected.tags ?? []) as SessionTagRef[]}
+            tagLibrary={sessionTags}
+            onToggleTag={toggleTag}
+            tagsSaving={setTagsMut.isPending}
+            engineName={selectedSession?.engine ? engineTitle.name : null}
+            runnerName={runner ? machineName(runner) : null}
+            accountLabel={
+              // An engine's own sign-in by the account it is on, as the composer's Provider row names it.
+              shownProviderRow?.kind === 'login'
+                ? `${engineTitle.name} · ${shownAccountLabel ?? shownProviderRow.label}`
+                : shownProviderValue
+            }
           />
         )}
         {shareRow && (
@@ -10503,6 +10590,7 @@ export function WorkspaceView({
                 !neverStarted &&
                 // The foot row of the waiting message says it instead (board 2 ⑤).
                 !queuedFoot &&
+                !tailHeld &&
                 transcriptEvents.length > 0 && (
                 dshQueueRepair ? <DshRepairCard repair={dshQueueRepair} help={authErrorHelp} /> : antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-note chat-slot-wait">
                   <span>{queuedTitle(selectedSession ?? selected)}</span>
@@ -10571,7 +10659,8 @@ export function WorkspaceView({
                         deliveryCode={q.deliveryCode}
                         deliveryReason={q.deliveryReason}
                         wake={wake}
-                        held={heldForTranslation(q.translation)}
+                        translationHeld={heldForTranslation(q.translation)}
+                        held={runnerUpdatingHeldTag}
                         onCancel={() => (wake ? withdrawWake(q.turnId) : cancelQueued(q.turnId))}
                         onPutBack={
                           restoreUndelivered && returnsToComposer(q) ? () => takeBackUndelivered(q) : undefined

@@ -167,6 +167,15 @@ final class OwnerRequestsTests: XCTestCase {
         XCTAssertEqual(OwnerRequests.removedText(secret()), "When the task ends, or after 7 days")
     }
 
+    /// The web's `ownerRequestChatContext` and composer copy, word for word.
+    func testChatAboutThisNamesTheRequestAndSaysItIsStillOpen() {
+        XCTAssertEqual(OwnerRequests.chatPrefix, "About your request: ")
+        XCTAssertEqual(OwnerRequests.chatPlaceholder, "Ask about this request…")
+        XCTAssertEqual(OwnerRequests.chatContext(steps()),
+                       "The owner pressed Chat about this on your request “Reboot the GPU node after driver install” "
+                           + "(owner request s2). It is still open: not marked done and not declined. Their message:")
+    }
+
     func testSecretCardWordingIsTheDesignsNotTheMockups() {
         let env = OwnerRequests.secretNotice(secret().secretSpec!, runner: "HPC")
         XCTAssertEqual(env, "Goes straight to HPC. Orbit keeps it out of this conversation and away from the agent; only commands the agent runs with it can use it. Use a key you can revoke.")

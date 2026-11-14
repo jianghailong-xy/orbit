@@ -37,6 +37,13 @@ class OwnerRequestsTest {
         assertFalse("saving needs a name", OwnerRequests.ready(secret, "sk", true, " ", null, null, ""))
     }
 
+    /** The web's `ownerRequestChatContext`, word for word. */
+    @Test fun chatAboutThisNamesTheRequestAndSaysItIsStillOpen() {
+        assertEquals("Chat about this", OwnerRequests.chatAction)
+        assertEquals("The owner pressed Chat about this on your request “Stripe key” (owner request 34sYUuoSpnReXXn6j28WR). " +
+            "It is still open: not marked done and not declined. Their message:", OwnerRequests.chatContext(secret))
+    }
+
     @Test fun theResolvedLineSaysHowWhoAndWhen() {
         val done = secret.copy(state = "DONE", resolvedAt = "2026-11-10T07:59:00Z", resolvedByUserId = "u", resolvedClient = "android")
         assertEquals("Delivered to mini as STRIPE_API_KEY", OwnerRequests.outcomeLine(done, "mini"))

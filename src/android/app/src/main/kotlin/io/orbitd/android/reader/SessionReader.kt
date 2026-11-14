@@ -53,6 +53,7 @@ import io.orbitd.android.cards.CardReceiptSheet
 import io.orbitd.android.cards.CardReviewSheet
 import io.orbitd.android.cards.EvidenceFilesSheet
 import io.orbitd.android.cards.LocalAnsweredQuestions
+import io.orbitd.android.cards.LocalQueuedHeld
 import io.orbitd.android.cards.LocalSteerDeliveries
 import io.orbitd.android.cards.NeedsYouLogic
 import io.orbitd.android.cards.SessionCardsReads
@@ -187,7 +188,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     var placed by remember(model) { mutableStateOf(false) }
     var dragging by remember { mutableStateOf(false) }
     var positioning by remember { mutableStateOf(false) }
-    var details by rememberSaveable { mutableStateOf(false) }
+    var settings by rememberSaveable { mutableStateOf(false) }
     var action by remember { mutableStateOf<DirectoryDialog?>(null) }
     // A05-3: the session's ⋯ in the bar, where its Share button was (iOS d2858a5e8).
     val listed = remember(state.session?.snapshot?.detail) {
@@ -238,7 +239,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             return Offset.Zero
         }
     } }
-    LaunchedEffect(model, state.denied) { if (state.denied) { action = null; details = false; placed = false } }
+    LaunchedEffect(model, state.denied) { if (state.denied) { action = null; settings = false; placed = false } }
     LaunchedEffect(state.ready, state.window.seeded, state.targetTick) {
         if (!state.ready || !state.window.seeded || state.denied) return@LaunchedEffect
         positioning = true
@@ -507,7 +508,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         }, actions = {
             if (projectId != null) ProjectSessionsButton(sheetCount ?: readCount) { projectSheet = true }
             SessionMenu(listed.takeUnless { state.denied }, state.session?.snapshot?.detail, link, state.session?.fresh == true && data.fresh,
-                actions, open, { action = it }, { details = true }, leave)
+                actions, open, { action = it }, { settings = true }, leave)
         })
         if (projectSheet && projectId != null) ProjectSessionsSheet(app, handle, projectId, route.workspaceId, data, api, open,
             close = { projectSheet = false }, onCount = { sheetCount = it }) { next ->
@@ -557,7 +558,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 val displayedLoading = state.loading
                 // The message a runner update holds: the last one the reader sent, whose foot row says why (board 2 ⑤). None while the
                 // session is not held by an update, and none off the live tail.
-                val heldSeq = if (runnerUpdatingGate == null || live == null) null
+                // A turn on the queued tail the update holds says so on its own line instead (docs/mocks/queued-card-runner-updating ②).
+                val tailHeld = runnerUpdatingGate != null && live != null && queued.any { it.heldByUpdate }
+                val heldSeq = if (runnerUpdatingGate == null || live == null || tailHeld) null
                     else displayedRows.lastOrNull { it.event.type == "user" && it.steps.isEmpty() && it.exchanges.isEmpty() }?.event?.seq
                 val targetSeq = state.targetSeq
                 LazyColumn(Modifier.weight(1f).fillMaxWidth().fadesIntoComposerBand().onSizeChanged {
@@ -573,7 +576,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     item(key = "older") {
                         if (displayedWindow.hasOlder) TextButton(enabled = !displayedLoading, onClick = { follow = false; model.older() }) { Text(if (displayedLoading) "Loading messages…" else "Load earlier messages") }
                         else if (ownerPlaced[-1] != null || crossingPlaced[-1] != null) Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            ownerPlaced[-1]?.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink) } }
+                            ownerPlaced[-1]?.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, discussCard) } }
                             crossingPlaced[-1]?.forEach { key(it.id) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } }
                         }
                     }
@@ -624,13 +627,13 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         if (asked == null && crossings == null) drawRow()
                         else Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             drawRow()
-                            asked?.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink) } }
+                            asked?.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, discussCard) } }
                             crossings?.forEach { key(it.id) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } }
                         }
                     }
                     // Held by its runner's update with no message of the reader's to put the foot row under: the queued page's
                     // explanation, centred on an empty conversation (web `RunnerUpdatingQueued`).
-                    val runnerUpdatingPage = runnerUpdatingGate?.takeIf { displayedWindow.seeded && live != null && heldSeq == null && accepted.isEmpty() }
+                    val runnerUpdatingPage = runnerUpdatingGate?.takeIf { displayedWindow.seeded && live != null && heldSeq == null && !tailHeld && accepted.isEmpty() }
                     if (runnerUpdatingPage != null) item(key = "runner-updating") {
                         val openTurn: (String) -> Unit = { open(OrbitRoute(Destination.SESSION, it)) }
                         if (displayedRows.isEmpty()) Box(Modifier.fillParentMaxHeight(0.8f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -663,11 +666,16 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     }
                     // A08-4: what is still waiting in the queue, as the turns it will be — after the decisions, before the tail.
                     if (live != null) items(queued, key = { it.key }) { turn ->
-                        QueuedTurnRow(turn, openLink, cancelEnabled = state.session?.fresh == true && !composerState.busy,
-                            putBack = if (turn.delivery != null && composerState.loaded) ({
-                                composer.putBack(turn.event.fields.string("text").orEmpty(), discard = turn.turnId)
-                            }) else null) { turnId ->
-                            composer.control("turns/$turnId", HttpMethod.DELETE)
+                        val held: (@Composable () -> Unit)? = runnerUpdatingGate?.takeIf { turn.heldByUpdate }?.let { gate ->
+                            { RunnerUpdatingFoot(gate, runnerUpdatingMachine, later = runnerUpdatingLater) }
+                        }
+                        CompositionLocalProvider(LocalQueuedHeld provides held) {
+                            QueuedTurnRow(turn, openLink, cancelEnabled = state.session?.fresh == true && !composerState.busy,
+                                putBack = if (turn.delivery != null && composerState.loaded) ({
+                                    composer.putBack(turn.event.fields.string("text").orEmpty(), discard = turn.turnId)
+                                }) else null) { turnId ->
+                                composer.control("turns/$turnId", HttpMethod.DELETE)
+                            }
                         }
                     }
                     // A06-12: the room the fade lies over, so a list at its tail has nothing in it — and the 1 dp anchor it always was.
@@ -745,7 +753,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         if (!state.denied) CrossingReviewSheet(crossingStore, coordinated)
         if (!state.denied) CardReceiptSheet(cards, openLanding = { open(OrbitRoute(Destination.SESSION, it)) })
         if (!state.denied) EvidenceFilesSheet(cards)
-        if (details && !state.denied) SessionDetails(state.session, api, openLink) { details = false }
+        if (settings && !state.denied) SessionSettingsPage(state.session, api, handle.account.server, data.tags,
+            state.session?.fresh == true && data.fresh, openLink, { app.realtime.refreshDirectory(); app.realtime.refreshSession() }) { settings = false }
         action?.let { dialog -> DirectoryActionDialog(dialog, api, data.copy(fresh = data.fresh && state.session?.fresh == true), { action = it }) {
             app.realtime.refreshDirectory(); app.realtime.refreshSession()
             // Deleted for good from its own page: the page goes with it, as iOS's console does.

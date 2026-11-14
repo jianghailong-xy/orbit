@@ -55,6 +55,8 @@ export interface Tenant {
   /** An event of the session's transcript: its id, which a page around it names, and its seq. */
   eventId: string;
   eventSeq: number;
+  /** An `assistant` reply's seq: what POST …/events/:seq/translation/retry translates again. */
+  replyEventSeq: number;
   sessionRequestId: string;
   folderId: string;
   tagId: string;
@@ -620,6 +622,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'DELETE /sessions/:id/guests/:userId': { request: (of) => ({ params: { id: of.sessionId, userId: of.spare.guestUserId } }) },
   'PATCH /sessions/:id/config': { request: (of) => ({ params: { id: of.sessionId }, body: { effort: 'low' } }) },
   'PATCH /sessions/:id/account': { request: (of) => ({ params: { id: of.sessionId }, body: { account: 'automatic' } }) },
+  'PATCH /sessions/:id/settings': { request: (of) => ({ params: { id: of.sessionId }, body: { muted: true } }) },
+  'POST /sessions/:id/restart': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/interrupt': { request: (of) => ({ params: { id: of.sessionId }, body: {} }) },
   'POST /sessions/:id/end': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/merge': { request: (of) => ({ params: { id: of.sessionId }, body: {} }) },
@@ -659,7 +663,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /sessions/:id/events/page': { request: (of) => ({ params: { id: of.sessionId } }) },
   'GET /sessions/:id/events/search': { request: (of) => ({ params: { id: of.sessionId }, query: { q: 'census' } }) },
   'GET /sessions/:id/events/:seq/full': { request: (of) => ({ params: { id: of.sessionId, seq: of.eventSeq } }) },
-  'POST /sessions/:id/events/:seq/translation/retry': { request: (of) => ({ params: { id: of.sessionId, seq: of.eventSeq } }) },
+  'POST /sessions/:id/events/:seq/translation/retry': { request: (of) => ({ params: { id: of.sessionId, seq: of.replyEventSeq } }) },
   'GET /sessions/:id/created-tasks': { request: (of) => ({ params: { id: of.sessionId } }) },
   'GET /sessions/:id/share': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/share': { request: (of) => ({ params: { id: of.sessionId } }) },
