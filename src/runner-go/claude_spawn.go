@@ -92,7 +92,7 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 		// Route tool-permission prompts (incl. plan-mode ExitPlanMode) to the orbit MCP
 		// server's permission_prompt tool, which blocks on a human allow/deny in the UI.
 		// The orbit server is always injected above, so this target always exists.
-		args = append(args, "--permission-prompt-tool", "mcp__orbit__permission_prompt")
+		args = append(args, "--permission-prompt-tool", claudeToolName("permission_prompt"))
 	}
 	if firstSpawn {
 		args = append(args, "--session-id", job.SessionUUID)
@@ -171,7 +171,7 @@ func writeClaudeSettings(scratchDir, orbitExe string, fastMode bool) (string, er
 				{"matcher": "BashOutput|KillShell|TaskOutput|TaskStop", "hooks": guard},
 				{"matcher": "ScheduleWakeup|CronCreate", "hooks": guard},
 				// The other two doors a poll of Orbit's own work comes through (bgGuardOrbitPollReason).
-				{"matcher": "Monitor|mcp__orbit__bg_run", "hooks": guard},
+				{"matcher": "Monitor|" + claudeToolName("bg_run"), "hooks": guard},
 				// A SubAgent's questions and plans (subagentAsksNobodyReason); no verdict in any other session.
 				{"matcher": "AskUserQuestion|ExitPlanMode", "hooks": guard},
 			},

@@ -1755,6 +1755,10 @@ public final class APIClient: @unchecked Sendable {
 
     public func runners() async throws -> [Runner] { try await get("runners") }
     public func runner(_ id: String) async throws -> Runner { try await get("runners/\(id)") }
+    /// A machine's CPU, memory and disk now and over the last hour (`MachineResources`).
+    public func runnerResources(_ id: String) async throws -> RunnerResourcesAnswer {
+        try await get("runners/\(id)/resources")
+    }
 
     // MARK: directory probe relay (docs/first-workspace-contract.md §2)
 

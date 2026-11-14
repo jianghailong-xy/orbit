@@ -471,14 +471,17 @@ private struct RunnerSubpageBack: ViewModifier {
 }
 
 /// A runner's page (ios-detail.png), in the order the questions come: what it needs from me (Needs
-/// Attention), how much it gets (Capacity), what it runs (Engines), where (Workspaces), what it is
-/// (About This Runner) — and the two ways to be done with it, each on a card of its own that asks
+/// Attention), how busy the machine is (Resources), how much it gets (Capacity), what it runs
+/// (Engines), where (Workspaces), what it is (About This Runner) — and the two ways to be done with it, each on a card of its own that asks
 /// first. iOS and macOS draw the same grouped form.
 struct RunnerDetailContent: View {
     let runners: RunnersModel
     let runner: Runner
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var hSize
+    #endif
 
     /// Max Concurrent's sheet, and the limit its stepper holds while open — saved on Save.
     @State private var editingMax = false
@@ -512,7 +515,8 @@ struct RunnerDetailContent: View {
             if !items.isEmpty {
                 attentionSection(items, now: now)
             }
-            capacitySection(workspaces, now: now)
+            resourcesSection(workspaces, now: now)
+            capacitySection(now: now)
             enginesSection(offline: offline, now: now)
             workspacesSection(workspaces)
             aboutSection(now: now)
@@ -544,6 +548,17 @@ struct RunnerDetailContent: View {
             await ViewPoll.run(model, every: 15, inFlight: { 15 }) {
                 await runners.load()
                 await runners.loadSessionCounts()
+            }
+        }
+        // Resources asks again every heartbeat while the machine is online, once when it is not, and
+        // never for a runner that reads none (MachineResources).
+        .task(id: "\(runner.id)|\(offline)|\(MachineResources.reports(runner))") {
+            guard MachineResources.reports(runner) else { return }
+            await runners.loadResources(runner.id)
+            guard !offline else { return }
+            await ViewPoll.run(model, every: MachineResources.pollSeconds,
+                               inFlight: { MachineResources.pollSeconds }) {
+                await runners.loadResources(runner.id)
             }
         }
         .refreshable {
@@ -684,11 +699,47 @@ struct RunnerDetailContent: View {
         }
     }
 
-    /// How much it is given: slots, saved when the stepper lets go; the disk it fills; and the reserve
-    /// under which task runs stop being sent here.
-    @ViewBuilder private func capacitySection(_ workspaces: [Agent], now: Date) -> some View {
+    /// The machine's CPU, memory and disk, each with its last hour (docs/mocks/runner-resource-monitor):
+    /// three tiles side by side, stacked as rows on a phone.
+    @ViewBuilder private func resourcesSection(_ workspaces: [Agent], now: Date) -> some View {
+        let answer = runners.resources[runner.id]
+        let section = MachineResources.section(runner: runner, answer: answer,
+                                               workspaceDisk: RunnerAttention.runnerDisk(workspaces), now: now)
+        let draw = { (tile: MachineResources.Tile) in
+            RunnerResourceTile(tile: tile, line: section.showsLines
+                ? MachineResources.line(answer?.samples ?? [], kind: tile.kind, endMs: section.endMs) : nil)
+        }
         Section {
-            // A meter, as Disk is: the name, `3 of 16 running` and Edit on a line, a bar of the slots
+            #if os(iOS)
+            if hSize == .compact {
+                ForEach(section.tiles) { draw($0).padding(.vertical, 6) }
+            } else {
+                resourceTilesInARow(section, draw)
+            }
+            #else
+            resourceTilesInARow(section, draw)
+            #endif
+        } header: {
+            RunnerResourcesHeader(note: section.note, dot: section.dot)
+        }
+    }
+
+    private func resourceTilesInARow(_ section: MachineResources.Section,
+                                     _ draw: @escaping (MachineResources.Tile) -> RunnerResourceTile) -> some View {
+        HStack(alignment: .top, spacing: 16) {
+            ForEach(section.tiles) { tile in
+                if tile.kind != section.tiles.first?.kind { Divider() }
+                draw(tile)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    /// How much it is given: slots, saved when the stepper lets go; and the reserve under which task
+    /// runs stop being sent here.
+    @ViewBuilder private func capacitySection(now: Date) -> some View {
+        Section {
+            // A meter: the name, `3 of 16 running` and Edit on a line, a bar of the slots
             // taken across the row under them (online only), amber once all are. Edit opens the sheet
             // that changes the limit.
             let slots = RunnerPageFormat.slots(runner, now: now)
@@ -714,9 +765,6 @@ struct RunnerDetailContent: View {
             }
             .padding(.vertical, slots == nil ? 0 : 4)
             .sheet(isPresented: $editingMax) { maxConcurrentSheet }
-            if let disk = RunnerAttention.runnerDisk(workspaces) {
-                diskRow(disk)
-            }
             Picker(RunnerPageCopy.RUNNER_KEEP_FREE, selection: $keepFree) {
                 ForEach(RunnerPageFormat.keepFreeChoices(runner.minFreeDiskMb), id: \.label) { tier in
                     Text(tier.label).tag(tier.mb)
@@ -1010,23 +1058,6 @@ struct RunnerDetailContent: View {
             Button(ClaudeRegionCopy.CLAUDE_REGION_CHECK_AGAIN_TITLE) { checkRegion() }
                 .disabled(runners.regionChecking.contains(runner.id))
         }
-    }
-
-    private func diskRow(_ disk: RunnerDisk) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(RunnerPageCopy.RUNNER_DISK)
-                Spacer(minLength: 8)
-                Text(RunnerPageFormat.diskUsedLine(disk))
-                    .font(.orbitListSubtitle)
-                    .foregroundStyle(Color.secondary)
-            }
-            RunnerGauge(fraction: Double(disk.usedPercent) / 100,
-                        tint: RunnerPageFormat.diskIsTight(disk, minFreeDiskMb: runner.minFreeDiskMb)
-                            ? RunnerInk.full : Color.accentColor,
-                        height: 7)
-        }
-        .padding(.vertical, 4)
     }
 
     /// An engine the machine has opens its page, as does one it lacks whose page installs it; any other is
