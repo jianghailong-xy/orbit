@@ -397,6 +397,13 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
       },
     }),
   },
+  'POST /runner/sessions/:id/subagents': {
+    as: RUNNER,
+    request: (of) => ({
+      params: { id: of.runner.machineSessionId },
+      body: { toolUseId: 'toolu_census_delegate', type: 'general', definitionSource: 'builtin' },
+    }),
+  },
   // The machine's own alert about a job of the session's (its agents' is POST /runner/notify, below): another account's
   // runner is refused it as for an id that names nothing, while the owner's is answered by the push channel.
   'POST /runner/sessions/:id/notify': {
@@ -729,6 +736,31 @@ export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     'read by (id, the runner\'s owner) and nothing else, so another account\'s id answers 404 (owner-requests/owner-requests.service.ts:193); owner-requests.pg.spec.ts (f) sends it',
   'POST /runner/owner-requests/:id/withdraw':
     'the calling session must be one this runner hosts for its owner (runner-api/runner-owner-requests.controller.ts:66), the request is read by (id, that owner) (owner-requests/owner-requests.service.ts:193), and only the session that filed it may withdraw it (owner-requests/owner-requests.service.ts:233)',
+  'PATCH /runner/sessions/:id/subagents/:runId':
+    'the session must be one of the runner\'s owner that this runner hosts, else 404 as for an id that names nothing '
+    + '(runner-api/runner-subagents.controller.ts:137), and the run is matched by (id, that session) only, on an end '
+    + '(runner-api/runner-subagents.controller.ts:398) and on a RUNNING report owing a wake (recordWakeOwed, '
+    + 'runner-api/runner-subagents.controller.ts:114); subagent-run.pg.spec.ts sends another account\'s session and run',
+  'POST /runner/sessions/:id/subagents/:runId/fallback':
+    'the session must be one of the runner\'s owner that this runner hosts, else 404 as for an id that names nothing '
+    + '(runner-api/runner-subagents.controller.ts:137), and the run is matched by (id, that session) only '
+    + '(runner-api/runner-subagents.controller.ts:303); subagent-fallback.pg.spec.ts sends another account\'s session and run',
+  'POST /runner/subagent-runs/:runId/claim':
+    'the run is read by id and refused 404 unless it is a remote run of the runner\'s own account, 403 '
+    + 'SUBAGENT_RUN_NOT_TARGET unless this runner is its target_runner_id (runner-api/subagent-remote.ts:403); '
+    + 'subagent-remote.pg.spec.ts sends another runner of the account',
+  'POST /runner/subagent-runs/:runId/events':
+    'the same check as the claim (runner-api/subagent-remote.ts:403) before anything is written; subagent-remote.pg.spec.ts '
+    + 'sends the parent\'s runner, another runner of the account and another account\'s runner, and finds no event stored',
+  'PATCH /runner/subagent-runs/:runId':
+    'the same check as the claim (runner-api/subagent-remote.ts:403), then the end is written by (id, the run\'s own session); '
+    + 'subagent-remote.pg.spec.ts sends another runner of the account',
+  'GET /runner/sessions/:id/subagents/:runId/events':
+    'the session must be one of the runner\'s owner that this runner hosts, else 404 (runner-api/runner-subagents.controller.ts:153), and the '
+    + 'run is matched by (id, that session) only (runner-api/runner-subagents.controller.ts readRelayedSubagentEvents)',
+  'POST /runner/sessions/:id/subagents/:runId/stop':
+    'the session must be one of the runner\'s owner that this runner hosts, else 404 (runner-api/runner-subagents.controller.ts:153), and the '
+    + 'run is matched by (id, that session) only (runner-api/runner-subagents.controller.ts stopRemoteSubagentRun)',
   'POST /runner/tasks/:taskId/owner-confirmation':
     'refused 403 to every caller — the owner\'s own machine included — before the task or anything else is read: only '
     + 'the account owner confirms, through the app (task-owner-confirmation.service.ts:205 → '
@@ -1458,6 +1490,13 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/sessions/:id/approvals body backgroundJobId':
     'the id the machine gave one of its own processes, stored on the approval of the session the path names '
     + '(runner-api.controller.ts:3900)',
+  'POST /runner/sessions/:id/approvals body subagentRunId':
+    'a SubAgent run, looked up only among the runs of the session the path names, whose ownership the door checked '
+    + 'first; any other id, another account\'s run included, is 404 (runner-api.controller.ts:5509); '
+    + 'sessions/subagent-approvals.pg.spec.ts sends another session\'s run and another account\'s',
+  'POST /runner/sessions/:id/subagents body toolUseId':
+    'the engine\'s id for the delegate call, a key only within the session the path names '
+    + '(runner-api/runner-subagents.controller.ts:110)',
   'POST /runner/sessions/:id/background-wake body wakeId':
     'the machine\'s key for one wake of one of its jobs, made into a turn key of the session the path names '
     + '(runner-api.controller.ts:4094)',
@@ -1543,6 +1582,12 @@ export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly str
     reading: 'the whole request, for how it arrived: X-Orbit-Request-Host, X-Orbit-Request-Proto, X-Forwarded-For and '
       + 'X-Real-IP, none of them an id. They choose only the link address the answer names, for this runner\'s own token '
       + '(runner-api/runner-link-token.controller.ts:61, sameOriginLinkUrl in runner-link-token.ts)',
+  },
+  'POST /runner/subagent-runs/:runId/events body events[].payload.*': {
+    reads: [],
+    reading: 'a remote SubAgent child\'s own engine event, stored rewritten for its parent\'s stream: its tool ids '
+      + '(id, toolUseId, parentToolUseId) are the engine\'s keys, prefixed with the run id and nested under the run\'s own '
+      + 'delegate call, never looked up (runner-api/subagent-remote.ts:364)',
   },
   'POST /runner/wiki/repo-ops/:id/result body result.*': {
     reads: [],

@@ -2201,6 +2201,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // The account owner's yes to a MOVE_TASK is applied here (`applyMoveApproval`), so the one
     // instance that answers it has to be able to reach this one.
     this.handoffs.bindMoveApplier(this);
+    // A question filed for the account owner: one push, and the conversation that draws its card
+    // redraws its row ("Waiting on you"); an answer redraws it again. After the commit, and never
+    // in the way of the write.
+    this.handoffs.bindChangeListener(({ id, ownerId, filed }) => {
+      if (filed) void this.push?.notifyCrossingRequest(id);
+      void this.handoffs.cardSessionOf(ownerId, id)
+        .then((sessionId) => { if (sessionId) this.realtime.publishSessionUpdated(sessionId); })
+        .catch(() => undefined);
+    });
     this.completionInputs = completionInputs;
     this.pauseProjector = pauseProjector;
     this.openItems = openItems;
