@@ -4,7 +4,9 @@ import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.net.*
 import io.orbitd.android.core.realtime.EventTransport
 import io.orbitd.android.core.realtime.SseFrame
+import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.navigation.ObjectId
+import kotlinx.serialization.json.JsonObject
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
@@ -51,7 +53,7 @@ internal object NavShell {
     @Volatile var failWorkspaces: Int? = null
 
     fun reset() {
-        calls.clear(); refuse = null; mergeAnswer = "merged"; mergeStatus = null
+        calls.clear(); muted = false; refuse = null; mergeAnswer = "merged"; mergeStatus = null
         lifecycle = mapOf(SESSION to "OPEN", PLAIN to "OPEN"); running = emptySet(); ended = emptySet()
         // An earlier test's held request is dropped, never answered: answered now, it would write into this test's server state
         // and post its toast here.
@@ -83,8 +85,15 @@ internal object NavShell {
         return """{"id":"$id","title":"$title","status":"${if (run == "ENDED") "CANCELLED" else run}",
             "runState":"$run","lifecycleState":"$state",
             "agent":{"id":"$ALPHA","name":"Alpha"},"agentId":"$ALPHA","createdAt":"2026-10-08T08:00:00Z","lastTurnAt":"2026-10-09T01:00:00Z",
-            "capabilities":{"canComplete":${state == "OPEN"},"canRestore":${state != "OPEN"}},"tags":[],"pendingApprovals":0$linked}"""
+            "capabilities":{"canComplete":${state == "OPEN"},"canRestore":${state != "OPEN"}},"tags":[],"pendingApprovals":0$linked,
+            "engine":"claude","engineVersion":"2.4.1","settings":${settings()},
+            "usage":{"inputTokens":190000,"outputTokens":108000,"cacheReadTokens":1520000,"cacheCreationTokens":0,"costUsd":4.37,"numTurns":23}}"""
     }
+    /** The session's Settings (`settings` on its detail, and what PATCH /sessions/:id/settings answers): a variable of its own,
+     * one from the workspace, and a restart they wait for. */
+    @Volatile var muted = false
+    private fun settings() = """{"env":{"DEBUG":"orbit:*"},"workspaceEnv":{"GOCACHE":"/mnt/data/gocache"},"notifyTurnFinished":"inherit",
+        "notifyNeedsYou":"on","muted":$muted,"envPendingRestart":true}"""
     private fun view(name: String) = "[" + (listOf(SESSION, PLAIN).filter { (lifecycle[it] ?: "OPEN") == name.uppercase() }
         .map { session(it) } + extra[name].orEmpty()).joinToString(",") + "]"
 
@@ -125,6 +134,12 @@ internal object NavShell {
             }
             id != null && api.path.size == 2 && method == "GET" -> ok(session(id))
             id != null && api.path.size == 2 && method == "PATCH" -> ok(session(id))
+            id != null && api.path.last() == "settings" && method == "PATCH" -> {
+                (Wire.json.parseToJsonElement(api.body!!.decodeToString()) as JsonObject)["muted"]?.let { muted = it.toString() == "true" }
+                ok(settings())
+            }
+            id != null && api.path.last() == "restart" -> ApiResponse(202, """{"queued":true,"afterTurn":false}""".encodeToByteArray())
+            id != null && api.path.last() == "share" && method == "GET" -> ok("""{"link":null,"counts":null}""")
             id != null && api.path.last() == "complete" -> { lifecycle = lifecycle + (id to "COMPLETED"); ok("{}") }
             id != null && api.path.last() == "restore" -> { lifecycle = lifecycle + (id to "OPEN"); ok("{}") }
             id != null && api.path.size == 2 && method == "DELETE" -> { lifecycle = lifecycle + (id to "TRASH"); ok("{}") }

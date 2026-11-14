@@ -111,9 +111,8 @@ class NavigationIncrementDeviceTest {
                 compose.onNode(hasText("Review navigation") and hasClickAction()).performClick()
                 await { exists(hasContentDescription("Session actions") and isEnabled()) }
                 compose.onNodeWithContentDescription("Session actions").performClick(); settle()
-                // Session details heads the group that opens what the session is part of since A06-18 (the session's name under the
-                // bar opened them until that row went with iOS's title).
-                assertEquals(listOf("Share…", "Copy Link", "Rename…", "Pin", "Move…", "Tags…", "Session details", "Open Task", "Complete Session",
+                // Settings follows Tags… (docs/mocks/session-settings ⑤); it took in Session details, which is gone.
+                assertEquals(listOf("Share…", "Copy Link", "Rename…", "Pin", "Move…", "Tags…", "Settings", "Open Task", "Complete Session",
                     "Move to Trash"), menuItems())
                 compose.onNode(hasText("Complete Session") and hasText("Stops the current run") and hasAnyAncestor(isPopup())).assertExists()
                 capture("10-session-menu")
@@ -151,7 +150,7 @@ class NavigationIncrementDeviceTest {
                 await { exists(hasContentDescription("Session actions") and isEnabled()) }
                 awaitWritable()
                 compose.onNodeWithContentDescription("Session actions").performClick(); settle()
-                assertEquals(listOf("Session details", "Move to Open", "Delete Permanently"), menuItems())
+                assertEquals(listOf("Settings", "Move to Open", "Delete Permanently"), menuItems())
                 capture("14-trash-menu")
                 awaitWritable()
                 press(hasText("Delete Permanently") and hasAnyAncestor(isPopup()))

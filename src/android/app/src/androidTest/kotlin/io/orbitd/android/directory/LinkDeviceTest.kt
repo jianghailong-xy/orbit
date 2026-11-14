@@ -18,6 +18,8 @@ import io.orbitd.android.core.realtime.FailureReason
 import io.orbitd.android.navigation.ObjectId
 import java.io.File
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.mockwebserver.*
 import org.junit.Assert.*
 import org.junit.Rule
@@ -71,18 +73,14 @@ class LinkDeviceTest {
                     return MockResponse().setHeader("Content-Type", "application/json").setBody(body)
                 }
             }
-            /** The session page [id] is up, named [title]: since A06-18 its bar names no session, so the name is read where the page
-             * keeps it now, in Session details under its ⋯ — opened and closed again. */
+            /** The session page [id] is up, named [title]: since A06-18 its bar names no session, so the name is read off the
+             * session the page holds. */
             fun awaitSessionPage(id: String, title: String) {
                 compose.waitUntil(10_000) {
                     app.realtime.state.value.session?.id == id &&
+                        app.realtime.state.value.session?.snapshot?.detail?.get("title")?.jsonPrimitive?.contentOrNull == title &&
                         compose.onAllNodes(hasContentDescription("Session actions") and isEnabled()).fetchSemanticsNodes().isNotEmpty()
                 }
-                compose.onNodeWithContentDescription("Session actions").performClick()
-                compose.onNode(hasText("Session details") and hasAnyAncestor(isPopup()) and hasClickAction()).performClick()
-                compose.waitUntil(10_000) { compose.onAllNodes(hasText(title) and hasAnyAncestor(hasTestTag("session-details"))).fetchSemanticsNodes().isNotEmpty() }
-                compose.onNodeWithText("Close session details").performClick()
-                compose.waitUntil(5_000) { compose.onAllNodesWithTag("session-details").fetchSemanticsNodes().isEmpty() }
             }
             val launchIntent = intent("orbit-$coldKind:34TcwNgAIo6tGUiIKjqnQ")
             ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->

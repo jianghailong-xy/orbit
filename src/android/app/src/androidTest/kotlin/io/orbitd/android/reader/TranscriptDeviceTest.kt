@@ -435,23 +435,26 @@ class TranscriptDeviceTest {
         compose.onNodeWithText("Close subagent transcript").assertIsDisplayed()
         capture("subagent")
         compose.onNodeWithText("Close subagent transcript").performClick()
-        // Session details are the ⋯ menu's since A06-18 (the session's name under the bar opened them).
+        // What Session details showed is Settings → Info → Worktree and background jobs (docs/mocks/session-settings).
         compose.onNodeWithContentDescription("Session actions").performClick()
-        compose.onNode(hasText("Session details") and hasAnyAncestor(isPopup()) and hasClickAction()).performClick()
+        compose.onNode(hasText("Settings") and hasAnyAncestor(isPopup()) and hasClickAction()).performClick()
+        compose.onNodeWithTag("session-settings").performScrollToNode(hasText("Worktree and background jobs"))
+        compose.onNodeWithText("Worktree and background jobs").performClick()
         compose.onNodeWithText("View changed files and diff").performClick()
         awaitText("reader.kt")
         capture("diff")
         compose.onNodeWithText("Close diff").performClick()
-        compose.onNodeWithTag("session-details").performScrollToNode(hasText("BUILD SUCCESSFUL", substring = true))
+        compose.onNodeWithTag("session-work").performScrollToNode(hasText("BUILD SUCCESSFUL", substring = true))
         compose.onNodeWithText("BUILD SUCCESSFUL", substring = true).assertIsDisplayed()
         // An agent is named by its kind and opens to its progress rather than output (iOS's background rows, A06c).
-        compose.onNodeWithTag("session-details").performScrollToNode(hasText("Review documentation"))
+        compose.onNodeWithTag("session-work").performScrollToNode(hasText("Review documentation"))
         compose.onNodeWithText("Agent").assertIsDisplayed()
-        compose.onNodeWithTag("session-details").performScrollToNode(hasText("Show progress"))
+        compose.onNodeWithTag("session-work").performScrollToNode(hasText("Show progress"))
         compose.onNodeWithText("Show progress").performClick()
-        compose.onNodeWithTag("session-details").performScrollToNode(hasText("No progress reported yet."))
+        compose.onNodeWithTag("session-work").performScrollToNode(hasText("No progress reported yet."))
         capture("background-work")
-        compose.onNodeWithText("Close session details").performClick()
+        compose.onNodeWithContentDescription("Back to settings").performClick()
+        compose.onNodeWithContentDescription("Close settings").performClick()
     }
 
     @Test fun longMarkdownTableAndCode() = journey("rich-long") {
