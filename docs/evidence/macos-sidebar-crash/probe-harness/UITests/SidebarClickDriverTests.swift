@@ -79,12 +79,26 @@ final class SidebarClickDriverTests: XCTestCase {
     /// whatever the churn is drawing at this instant — gets clicked. The named rows are the
     /// fallback when the host does not expose the list's rows as elements.
     private func pressNextRow(_ app: XCUIApplication, step: Int) -> Bool {
+        var pressed = false
+        // A row can leave the list while its accessibility snapshot is being taken — that churn is
+        // exactly what this gate runs against, and XCTest records a failed snapshot as a failure,
+        // which would fail a healthy run on a race of the harness's own making. A snapshot race is
+        // therefore an expected failure here; a CRASH is not, and the two checks that carry it stay
+        // outside this block: the loop's `appIsAlive` and run.sh's new-Orbit*.ips test.
+        let options = XCTExpectedFailure.Options()
+        options.isStrict = false
+        XCTExpectFailure("an accessibility snapshot taken while the sidebar reloads", options: options) {
+            pressed = pressOnce(app, step: step)
+        }
+        return pressed
+    }
+
+    private func pressOnce(_ app: XCUIApplication, step: Int) -> Bool {
         let rows = sidebarRows(app)
         if !rows.isEmpty {
             let index = step % rows.count
-            // A point click at the row's own centre, not `element.click()`: the row can leave the
-            // list between the query and the press (that is the churn this gate runs against), and
-            // a vanished element makes XCTest record a failure instead of a click.
+            // A point click at the row's own centre, not `element.click()`: the row may leave the
+            // list between the snapshot and the press, and a point click hits whatever is there.
             let frame = rows[index].frame
             let appFrame = app.frame
             if frame.width > 1 && frame.height > 1 {
@@ -106,14 +120,14 @@ final class SidebarClickDriverTests: XCTestCase {
         return false
     }
 
-    /// The sidebar's rows as elements: the outline rows SwiftUI's source list exposes first, then
-    /// any row descendant at all (a host that draws them as a plain table).
+    /// The sidebar's rows as one snapshot: the outline rows SwiftUI's source list exposes first,
+    /// then any row descendant at all (a host that draws them as a plain table). One snapshot, not
+    /// one query per index — a per-index lookup after a count is how the last run asked for a row
+    /// that had just left, which XCTest reports as "No matches found".
     private func sidebarRows(_ app: XCUIApplication) -> [XCUIElement] {
-        let outline = app.outlineRows
-        if outline.count > 0 { return (0..<outline.count).map { outline.element(boundBy: $0) } }
-        let rows = app.descendants(matching: .tableRow)
-        if rows.count > 0 { return (0..<rows.count).map { rows.element(boundBy: $0) } }
-        return []
+        let outline = app.outlineRows.allElementsBoundByIndex
+        if !outline.isEmpty { return outline }
+        return app.descendants(matching: .tableRow).allElementsBoundByIndex
     }
 
     // MARK: signing in
