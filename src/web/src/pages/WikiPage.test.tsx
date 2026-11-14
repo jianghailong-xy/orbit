@@ -297,7 +297,7 @@ describe('the Wiki home', () => {
   it('draws the design’s bands in the design’s order: the line under the head, the search, Principles, the documents, Browse · A–Z', () => {
     const html = paint('home', '/wiki/orbit', { docs: DOCS });
     const order = [
-      '<h1 class="page-title">Wiki</h1>',
+      '<h1 class="page-title wk-name-title">',
       'class="wk-home-state"',
       'class="wk-search"',
       'class="wk-dir-col autohide-scrollbar"',
@@ -511,6 +511,28 @@ describe('the Wiki head', () => {
     expect(html).not.toContain('New entry');
     expect(wikiWaiting(THREE_SPACES)).toBe(7);
     expect(html).toContain('class="tp-rail-badge needs-you" title="7 waiting on you" aria-label="7 waiting on you">7</span>');
+  });
+
+  it('heads the directory column and the head row with the space’s name alone: no Wiki title, no search line in the column (board wiki-rail-name B)', () => {
+    for (const spaces of [undefined, THREE_SPACES]) {
+      const html = paint('home', '/wiki/orbit', spaces ? { spaces } : {});
+      const rail = html.slice(html.indexOf('class="wk-rail-top"'), html.indexOf('class="wk-toc'));
+      expect(rail).toMatch(/^class="wk-rail-top"><h1 class="page-title wk-name-title wk-rail-head"><span class="(wk-space-tag|wk-select)"/);
+      expect(rail).not.toContain('>Wiki<');
+      expect(rail).not.toContain('wk-search');
+      // The search line above the column stays, for a phone and a docked chat that folds the column away.
+      expect(html.indexOf('class="wk-search"')).toBeLessThan(html.indexOf('class="wk-dir-col'));
+      // The head row a phone draws is headed by the name too, with no Wiki title beside it.
+      const head = html.slice(html.indexOf('class="wk-title-row"'), html.indexOf('class="wk-actions"'));
+      expect(head).toMatch(/^class="wk-title-row"><h1 class="page-title wk-name-title"><span class="(wk-space-tag|wk-select)"/);
+      expect(head).not.toContain('>Wiki<');
+    }
+  });
+
+  it('keeps Wiki as the title where there is no space to name', () => {
+    const html = paint('home', '/wiki/orbit', { spaces: [] });
+    expect(html).toContain('<h1 class="page-title">Wiki</h1>');
+    expect(html).not.toContain('wk-name-title');
   });
 
   it('draws no badge at zero', () => {

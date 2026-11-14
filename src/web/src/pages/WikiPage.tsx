@@ -302,8 +302,8 @@ function RunRoute({ space, runParam }: { space: SpaceRow; runParam: string }) {
 /**
  * The chrome every Wiki view wears: the title row (the space, Contents, Activity, Settings, Share — no New entry since
  * board 45: an entry of the owner's own is said in the chat, whose card writes it as theirs)
- * and the search line. On a desktop beside the directory they are the directory's column instead: the title and the
- * space, the search, Activity among the rows and Settings and Share at its foot (board docs/mocks/wiki-rail ③). It is the project page's own title row and toolbar, which is
+ * and the search line. On a desktop beside the directory they are the directory's column instead: the space's name
+ * as its title (board docs/mocks/wiki-rail-name), Activity among the rows and Settings and Share at its foot (board docs/mocks/wiki-rail ③). It is the project page's own title row and toolbar, which is
  * what the design's mock links and draws — the counts are the page's counts, not a new row of numbers.
  *
  * ONLY ACTIVITY HAS THE STATUS ROW (design §12.3.1, board docs/mocks/wiki-rail ③): the line under the home's head says
@@ -334,8 +334,8 @@ function WikiFrame({
   const activity = at?.view === 'activity';
   const home = at?.view === 'home';
   const [directoryWidth, startDirectoryResize] = useWikiDirectoryWidth();
-  // A desktop draws the head, the search and the directory as one column (board docs/mocks/wiki-rail ③); the head
-  // row and the search line above stay for a phone and for a docked chat that folds the column away.
+  // A desktop draws the space's name and the directory as one column (boards docs/mocks/wiki-rail ③, wiki-rail-name); the
+  // head row and the search line above stay for a phone and for a docked chat that folds the column away.
   const search = (
     <div className="wk-search" role="search">
       {/* The palette's own search: ⌘K answers entries in its Wiki group, so this line opens it. */}
@@ -353,8 +353,14 @@ function WikiFrame({
       style={{ '--wk-dir-w': `${directoryWidth}px` } as CSSProperties}
     >
       <div className="wk-title-row">
-        <h1 className="page-title">{WIKI_TITLE}</h1>
-        {space && <WikiHeadSpace space={space} spaces={rows} />}
+        {/* With a space, its name is the title (board docs/mocks/wiki-rail-name B); without one, the Wiki's. */}
+        {space ? (
+          <h1 className="page-title wk-name-title">
+            <WikiHeadSpace space={space} spaces={rows} />
+          </h1>
+        ) : (
+          <h1 className="page-title">{WIKI_TITLE}</h1>
+        )}
         <div className="wk-actions">
           {space && at && <WikiContentsButton />}
           {space && <WikiActivityButton spaceSlug={space.slug} waiting={wikiWaiting(rows)} on={activity} />}
@@ -370,12 +376,12 @@ function WikiFrame({
       {space && at ? (
         <div className={`wk-layout${home ? ' home' : ''}`}>
           <div className="wk-dir-col autohide-scrollbar">
+            {/* The space's name alone, in the heading's type (board docs/mocks/wiki-rail-name B): the app's sidebar
+                already lights Wiki, and ⌘K opens the search from any page. */}
             <div className="wk-rail-top">
-              <div className="wk-rail-head">
-                <h1 className="page-title">{WIKI_TITLE}</h1>
+              <h1 className="page-title wk-name-title wk-rail-head">
                 <WikiHeadSpace space={space} spaces={rows} />
-              </div>
-              {search}
+              </h1>
             </div>
             <WikiDirectory
               spaceId={space.id}

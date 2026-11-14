@@ -77,6 +77,17 @@ internal object StickySummary {
         return event.personWords().isNotBlank()
     }
 
+    /** The turns that are lines inside an answer rather than Orbit opening a round of its own (`isAnchor`). */
+    private val linesInAnAnswer = setOf("watch", "wake", "ownerAnswer")
+
+    /**
+     * Whether Orbit, not a person, opened this turn: one of the control plane's cards stands in for the bubble (OrbitKit
+     * `StickySummary.isOrbits`). It still heads the round under it, so the question above no longer names what is on screen — but
+     * the bar never names a machine's message either (the owner, 2026-11-14), so over it the bar is hidden ([StickyQuestions]).
+     */
+    fun isOrbits(cards: List<InteractionCard>): Boolean =
+        cards.any { it.key.split(":").getOrNull(2) !in linesInAnAnswer }
+
     /** The label and line for one turn, in the transcript's order: another session, an item, a fact told to this session, a task's run, a
      * project's start, the person. */
     fun of(event: RunEvent, cards: List<InteractionCard> = transcriptCards(event)): Pair<String, String> {
@@ -123,7 +134,11 @@ internal class StickyQuestions(rows: List<TranscriptRow>) {
         rows.forEachIndexed { index, row ->
             position.putIfAbsent(row.key, index)
             list += last
-            if (row.event.type == "user" && StickySummary.isAnchor(row.event)) last = row
+            if (row.event.type == "user") {
+                // A round Orbit opened ends the question's reach without taking the bar (`isOrbits`).
+                val cards = transcriptCards(row.event)
+                if (StickySummary.isAnchor(row.event, cards)) last = row.takeUnless { StickySummary.isOrbits(cards) }
+            }
         }
         list += last
         above = list
