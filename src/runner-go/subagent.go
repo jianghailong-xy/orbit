@@ -594,6 +594,16 @@ type subagentCreateResponse struct {
 	} `json:"remote,omitempty"`
 }
 
+// remoteSubagentModel is the model a remote run runs on, as the server's decision names it: the target workspace's
+// own default, which the target's claim is built from (§10.2). A remote run has no exec here to read it from.
+func remoteSubagentModel(decision json.RawMessage) string {
+	var d struct {
+		Model string `json:"model"`
+	}
+	_ = json.Unmarshal(decision, &d)
+	return d.Model
+}
+
 // subagentRecord is what the runner keeps on disk of a finished run so resume finds its conversation after a
 // restart of this process.
 type subagentRecord struct {
@@ -734,6 +744,7 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 			id: created.RunID, toolUseID: toolUseID, description: getString(args, "description"), background: background,
 			kind: def.Name, done: make(chan struct{}), startedAt: time.Now(), status: subagentStatusRunning, cancel: cancel,
 			workspace: firstNonEmpty(created.Remote.WorkspaceName, created.Remote.WorkspaceID),
+			model:     remoteSubagentModel(created.Decision),
 		}
 		s.subagents.add(run)
 		s.bg.subagentsLive.Add(1)
@@ -1417,6 +1428,7 @@ func subagentChildJob(parent *ClaimedSession, exec AgentExecConfig, def subagent
 	if def.Readonly {
 		// The server already narrows a read-only run to plan mode (§5.3); kept here so the child never reads wider.
 		child.Agent.PermissionMode = "plan"
+		child.readonlySubagent = true
 		if provider == providerClaude {
 			child.Agent.DisallowedTools = appendUnique(child.Agent.DisallowedTools, subagentReadonlyDisallowed...)
 		}
