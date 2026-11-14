@@ -41,11 +41,19 @@ public enum SessionProjectSheet {
 
     /// The row a conversation opened from such a row lands on: the top of the card waiting on you,
     /// not the transcript's end, so a card taller than the screen shows its header and title. The
-    /// first in the transcript's order — its open delivered cards, oldest in the conversation first
-    /// (`ConsoleModel.openBelowRows`), are drawn above the pending approvals at its tail
-    /// (`TranscriptRows.build`). Nil while neither has been read.
-    public static func waitingCardRowID(openCards: [BelowRow], pendingApprovals: [PendingApproval]) -> String? {
-        openCards.first?.rowID ?? pendingApprovals.first.map { TranscriptRow.approval($0).id }
+    /// first such row the transcript DRAWS (`TranscriptRows.build`): a pending approval, or a
+    /// delivered card that is still open (`ConsoleModel.openBelowRows`). Nil until one is drawn — a
+    /// card read before the page it belongs in has nowhere to be placed yet, and a scroll aimed at a
+    /// row nothing draws is a scroll nobody makes.
+    public static func waitingCardRowID(rows: [TranscriptRow], openCards: [BelowRow]) -> String? {
+        let open = Set(openCards.map(\.rowID))
+        return rows.first { row in
+            switch row {
+            case .approval: return true
+            case .decisionCard(let card): return open.contains(card.id)
+            default: return false
+            }
+        }?.id
     }
 
     /// The project whose button a conversation's navigation bar carries: the one it is a member of,

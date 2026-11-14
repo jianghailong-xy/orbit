@@ -1123,8 +1123,15 @@ struct TranscriptView: View {
             #if os(iOS)
             transcriptScroll.halt()
             #endif
+            let sessionID = console.sessionID
             DispatchQueue.main.async {
                 atBottom = false
+                holdScroll(to: request.rowID, anchor: .top, animated: false)
+            }
+            // Once more after the rows above have taken their measured heights: a self-sizing List
+            // places a row by estimates first, and the card's top drifts by their difference.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                guard console.sessionID == sessionID, !atBottom else { return }
                 holdScroll(to: request.rowID, anchor: .top, animated: false)
             }
         }

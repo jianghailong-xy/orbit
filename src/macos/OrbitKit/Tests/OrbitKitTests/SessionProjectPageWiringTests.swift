@@ -196,8 +196,10 @@ final class SessionProjectPageWiringTests: XCTestCase {
 
         let console = code(try appSource("ConsoleModel.swift"))
         let follow = try slice(console, from: "private func followPendingWaitingCard() {", to: "\n    }")
-        XCTAssertTrue(follow.contains("SessionProjectSheet.waitingCardRowID(openCards: openBelowRows,"))
-        XCTAssertTrue(follow.contains("pendingApprovals: reducer.state.pendingApprovals)"))
+        XCTAssertTrue(follow.contains("let rows = TranscriptRows.build(state: state, statusCards: localStatusCards,"),
+                      "the rows the transcript draws, so the request waits until the card is one of them")
+        XCTAssertTrue(follow.contains("decisionCards: decisionCards)"))
+        XCTAssertTrue(follow.contains("SessionProjectSheet.waitingCardRowID(rows: rows, openCards: openBelowRows)"))
         XCTAssertTrue(follow.contains("cardRequest = ScrollRequest(rowID: rowID, tick: scrollTick)"))
         let publish = try slice(console, from: "private func publishStateNow() {", to: "\n    }")
         XCTAssertTrue(publish.contains("followPendingWaitingCard()"), "an approval read lands on its card")

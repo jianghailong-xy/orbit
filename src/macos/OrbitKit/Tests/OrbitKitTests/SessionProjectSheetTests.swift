@@ -144,16 +144,28 @@ final class SessionProjectSheetTests: XCTestCase {
 
     // MARK: where the waiting member's conversation opens
 
-    func testTheConversationOpensAtTheFirstOpenCardAboveThePendingApprovals() {
+    func testTheConversationOpensAtTheFirstDrawnRowThatIsWaiting() {
         let approval = PendingApproval(id: "a1", kind: .question, toolName: "AskUserQuestion", input: nil)
-        XCTAssertEqual(SessionProjectSheet.waitingCardRowID(
-            openCards: [BelowRow(rowID: "card-older", isQuestion: true), BelowRow(rowID: "card-newer", isQuestion: false)],
-            pendingApprovals: [approval]), "card-older")
-        XCTAssertEqual(SessionProjectSheet.waitingCardRowID(openCards: [], pendingApprovals: [approval]),
-                       TranscriptRow.approval(approval).id)
-        XCTAssertEqual(TranscriptRow.approval(approval).id, "approval-a1", "the row the transcript draws it as")
-        XCTAssertNil(SessionProjectSheet.waitingCardRowID(openCards: [], pendingApprovals: []),
-                     "nothing read yet: the request waits for the read")
+        let older = DeliveredDecisionCard(kind: .ownerRequest(requestID: "r-older"))
+        let newer = DeliveredDecisionCard(kind: .ownerRequest(requestID: "r-newer"))
+        let answered = DeliveredDecisionCard(kind: .ownerRequest(requestID: "r-answered"))
+        let open = [BelowRow(rowID: older.id, isQuestion: false), BelowRow(rowID: newer.id, isQuestion: false)]
+        let rows: [TranscriptRow] = [.decisionCard(answered), .decisionCard(older), .decisionCard(newer),
+                                     .approval(approval), .bottom]
+        XCTAssertEqual(SessionProjectSheet.waitingCardRowID(rows: rows, openCards: open), older.id,
+                       "the first open card, not a card that is no longer asking")
+        XCTAssertEqual(SessionProjectSheet.waitingCardRowID(rows: [.decisionCard(answered), .approval(approval), .bottom],
+                                                            openCards: open),
+                       "approval-a1", "a pending approval, as the transcript draws it")
+    }
+
+    /// A card read before the page it belongs in is not drawn yet (`TranscriptRows.build` drops one it
+    /// cannot place): the request waits for the row rather than aiming at nothing.
+    func testNothingIsAimedAtUntilTheWaitingCardIsDrawn() {
+        let card = DeliveredDecisionCard(kind: .ownerRequest(requestID: "r1"))
+        XCTAssertNil(SessionProjectSheet.waitingCardRowID(rows: [.bottom],
+                                                          openCards: [BelowRow(rowID: card.id, isQuestion: false)]))
+        XCTAssertNil(SessionProjectSheet.waitingCardRowID(rows: [], openCards: []))
     }
 
     func testARowWhoseCoordinatorIsNotHeldOpensTheSessionsPage() {

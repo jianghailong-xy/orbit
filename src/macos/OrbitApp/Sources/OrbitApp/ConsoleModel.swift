@@ -5708,8 +5708,9 @@ final class ConsoleModel {
     private func followPendingWaitingCard() {
         guard let until = pendingWaitingCardUntil else { return }
         guard Date() < until else { pendingWaitingCardUntil = nil; return }
-        guard let rowID = SessionProjectSheet.waitingCardRowID(openCards: openBelowRows,
-                                                               pendingApprovals: reducer.state.pendingApprovals)
+        let rows = TranscriptRows.build(state: state, statusCards: localStatusCards, canPageOlder: false,
+                                        showWorkingIndicator: false, decisionCards: decisionCards)
+        guard let rowID = SessionProjectSheet.waitingCardRowID(rows: rows, openCards: openBelowRows)
         else { return }
         pendingWaitingCardUntil = nil
         scrollTick += 1
