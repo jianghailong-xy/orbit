@@ -293,7 +293,10 @@ func TestHandleServerRequestDeclinesUnrenderableElicitation(t *testing.T) {
 }
 
 // Codex asks for MCP consent even under "never", the policy the non-asking modes run on. Those
-// modes have to answer it themselves: an unattended task run has no human to wait for.
+// modes have to answer it themselves: an unattended task run has no human to wait for. The request
+// names no tool, as one in a wording Orbit cannot read does (codexMCPConsentTool), so this is the
+// mode's own answer and not the one Orbit gives each of its tools by name
+// (TestCodexAutomaticApprovalAnswersEveryOrbitToolByName).
 func TestCodexAutomaticApprovalAnswersMCPConsentInSilentModes(t *testing.T) {
 	mcpTool := codexApprovalRequest{mcpTool: true, server: codexOrbitMCPServer}
 	for _, mode := range []string{"dontAsk", "bypassPermissions", ""} {
@@ -311,9 +314,9 @@ func TestCodexAutomaticApprovalAnswersMCPConsentInSilentModes(t *testing.T) {
 	}
 }
 
-// Codex raises consent for every MCP tool call whatever the policy, so under Auto — "the model
-// decides when to ask" — Orbit's own control-plane tools would each cost a card the mode never
-// promised. Auto answers for Orbit's server only; another server's tools still reach the user.
+// Under Auto — "the model decides when to ask" — a consent of Orbit's own server is answered even
+// when its tool could not be read; another server's tools still reach the user, and so does an
+// unreadable Orbit consent in the modes whose point is being consulted.
 func TestCodexAutomaticApprovalAnswersOrbitMCPConsentUnderAuto(t *testing.T) {
 	orbit := codexApprovalRequest{mcpTool: true, server: codexOrbitMCPServer}
 	if allowed, decided := codexAutomaticApproval("auto", orbit); !decided || !allowed {
@@ -330,6 +333,38 @@ func TestCodexAutomaticApprovalAnswersOrbitMCPConsentUnderAuto(t *testing.T) {
 	}
 	if _, decided := codexAutomaticApproval("default", orbit); decided {
 		t.Error("default/orbit mcpTool must still reach the user")
+	}
+}
+
+// Orbit's own tools, recognized by name in the operation catalogue, need no consent card in any mode:
+// every session may call them without one (ALWAYS_ALLOWED_TOOLS), as Claude Code's mcp__orbit__* allow
+// rule already says, and what a call may then do is the gates' behind it to say — a write that needs the
+// owner files its own card, and Plan's refusal of a write is Orbit's Plan gate's (plan_gate_test.go). A
+// read, an ordinary write and a destructive one alike, so the bridge does not have to judge which is
+// which; the name has to be the catalogue's, so a third-party tool of the same name, or an Orbit name the
+// catalogue does not declare, is answered the way the mode answers any other.
+func TestCodexAutomaticApprovalAnswersEveryOrbitToolByName(t *testing.T) {
+	modes := []string{"default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions", ""}
+	for _, mode := range modes {
+		for _, tool := range []string{"task_list", "task_update", "task_delete", "task_create", "bg_run"} {
+			request := codexApprovalRequest{mcpTool: true, server: codexOrbitMCPServer, tool: tool}
+			if allowed, decided := codexAutomaticApproval(mode, request); !decided || !allowed {
+				t.Errorf("%q/orbit %s = (%v, %v), want allowed without a card", mode, tool, allowed, decided)
+			}
+		}
+	}
+	for _, request := range []codexApprovalRequest{
+		{mcpTool: true, server: "acme", tool: "task_list"},
+		{mcpTool: true, server: codexOrbitMCPServer, tool: "not_a_catalogue_tool"},
+	} {
+		if allowed, decided := codexAutomaticApproval("plan", request); !decided || allowed {
+			t.Errorf("plan/%s = (%v, %v), want declined", request.toolName(), allowed, decided)
+		}
+		for _, mode := range []string{"default", "acceptEdits"} {
+			if _, decided := codexAutomaticApproval(mode, request); decided {
+				t.Errorf("%s/%s must reach the user", mode, request.toolName())
+			}
+		}
 	}
 }
 

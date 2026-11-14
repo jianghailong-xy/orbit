@@ -17,12 +17,29 @@
 const LEAD =
   'Not done yet, and not a no: the owner pressed "Chat about this" on the card to talk it over before deciding. Their message:\n\n';
 const TAIL = '\n\nReply to it as you would to any message from them.';
+const CHAT_OUTCOME = /"outcome"\s*:\s*"chat"/;
 
 /** The owner's words when `result` is a chat reply to a card, otherwise null. */
 export function ownerChatWords(result: string): string | null {
-  if (!result.startsWith(LEAD)) return null;
-  const end = result.lastIndexOf(TAIL);
+  const reply = chatReceiptText(result) ?? result;
+  if (!reply.startsWith(LEAD)) return null;
+  const end = reply.lastIndexOf(TAIL);
   if (end < LEAD.length) return null;
-  const words = result.slice(LEAD.length, end).trim();
+  const words = reply.slice(LEAD.length, end).trim();
   return words || null;
+}
+
+/**
+ * The reply inside a chat's receipt (outcome "chat"), which is what an engine records in place of the
+ * result's text: Claude Code and Codex pass a result's structuredContent on when it has one, and the
+ * receipt carries the reply as its `text` (src/runner-go/tool_receipt.go).
+ */
+function chatReceiptText(result: string): string | null {
+  if (!result.startsWith('{') || !CHAT_OUTCOME.test(result)) return null;
+  try {
+    const receipt = JSON.parse(result) as { outcome?: unknown; text?: unknown } | null;
+    return receipt?.outcome === 'chat' && typeof receipt.text === 'string' ? receipt.text : null;
+  } catch {
+    return null;
+  }
 }

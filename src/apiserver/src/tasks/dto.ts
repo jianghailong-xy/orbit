@@ -417,6 +417,13 @@ export class CreateTaskDto {
   title!: string;
 
   @IsOptional() @IsString() description?: string;
+  // The caller's name for THIS create (docs/orbit-agent-contract.md §5.2, gap G5): sending the same
+  // key again — after a timeout, a dropped answer, or in a later turn — answers with the task the
+  // first send wrote instead of writing a second one, and the same key with a different title or
+  // description is refused 409. Scoped to the calling session (to the account for a person's own
+  // create), so two conversations never share a key. Without it a create is deduplicated only when
+  // the turn that made it is redelivered. On a batch it belongs to the batch, not to an item.
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(200) idempotencyKey?: string;
   // Existing owner-owned attachments to copy as task inputs, preserving their original scope.
   @IsOptional() @IsArray() @IsPublicId({ each: true }) attachmentIds?: string[];
   // The workspace assigned to execute the task. Must be owned by the caller.
@@ -655,6 +662,14 @@ export class CreateTasksBatchDto {
    * they submit rather than after.
    */
   @IsOptional() @IsBoolean() dryRun?: boolean;
+
+  /**
+   * The caller's name for this batch, as `idempotencyKey` is for a single create: the same key sent
+   * again answers with the rows the first send wrote, item for item, instead of writing the plan a
+   * second time. Each item is keyed by the batch's key and its position, so the same key with a
+   * changed item is refused 409. An item may not carry a key of its own.
+   */
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(200) idempotencyKey?: string;
 }
 
 export class DagOpDto {
