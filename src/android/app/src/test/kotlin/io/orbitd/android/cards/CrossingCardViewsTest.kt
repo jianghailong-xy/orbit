@@ -131,7 +131,8 @@ class CrossingCardViewsTest {
         assertEquals("From Runner v1: control plane", textOf("$batchId:review:from"))
         compose.onNodeWithText("To this project", useUnmergedTree = true).assertExists()
         compose.onNodeWithText("Tasks to move", useUnmergedTree = true).assertExists()
-        compose.onNodeWithText("Target criterion requested: 4", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("Target criterion requested: Criterion 4", useUnmergedTree = true).assertExists()
+        compose.onAllNodesWithText("2wnd", substring = true, useUnmergedTree = true).assertCountEquals(0)
         compose.onAllNodesWithText("Task m7", useUnmergedTree = true).assertCountEquals(0)
         assertEquals("Show 5 more", textOf("$batchId:review:more"))
         compose.onNodeWithText("“These tasks serve criteria 4–11 here; their old project is done.”", useUnmergedTree = true).assertExists()
@@ -269,7 +270,7 @@ class CrossingCardViewsTest {
         putJsonObject("fromProject") { put("title", "Runner v1: control plane") }
         putJsonObject("toProject") { put("title", "Runner hardening") }
         if (kind != "FILE_TASK") putJsonObject("subjectTask") { put("title", "Task $id") }
-        putJsonObject("requestedCriterion") { put("key", "$criterion"); put("text", "Criterion $criterion") }
+        putJsonObject("requestedCriterion") { put("key", "2wndAAHBC95f4Al8rNFt%02d".format(criterion)); put("text", "Criterion text $criterion"); put("ordinal", criterion) }
     }
 
     private companion object { const val PROJECT = "AAATarget"; const val SESSION = "AAACoordinator"; const val ASKER = "AAAAsker" }
