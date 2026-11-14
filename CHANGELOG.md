@@ -29,6 +29,10 @@ Its notes also correct the 0.1.260 notes' lists of migrations and security fixes
 
 ### Added
 
+- Session Settings on every client (a web drawer, an iOS/macOS sheet, an Android page). A session's own
+  environment variables sit over the workspace's, with Restart to reload a live engine. It also holds
+  notification overrides and a mute, the session's labels and public link, and its usage and engine version.
+  The API is `PATCH /sessions/:id/settings` and `POST /sessions/:id/restart`.
 - Discard on the main checkout (web, macOS/iOS, Android): the chosen files go back to HEAD after the whole
   checkout is saved to `orbit/rescue-*`. It needs a runner with `main-checkout-discard/v1` (0.1.261).
 - Chat about this on a pending owner request in its conversation (web, macOS/iOS, Android).
@@ -83,8 +87,8 @@ These were merged before `v0.1.260` was tagged, but that release did not move th
 
 ### Upgrade notes
 
-- One additive migration since `v0.1.260`, `0770_main_checkout_discard`. Runners self-update; the update to
-  0.1.261 is taken under the rules of the runner it replaces. See the [release notes](release-notes/0.1.261.md).
+- Two additive migrations since `v0.1.260`: `0700_session_settings` and `0770_main_checkout_discard`. Runners
+  self-update; the update to 0.1.261 is taken under the rules of the runner it replaces. See the [release notes](release-notes/0.1.261.md).
 
 ## 0.1.257 to 0.1.260
 
