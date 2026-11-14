@@ -23,11 +23,37 @@ private struct RunnerUpdatingFootKey: EnvironmentKey {
     static let defaultValue: RunnerUpdatingFoot? = nil
 }
 
+private struct RunnerUpdatingQueuedKey: EnvironmentKey {
+    static let defaultValue: RunnerUpdatingFoot? = nil
+}
+
 extension EnvironmentValues {
     /// Set by `TranscriptView` while the session is held by its runner's update.
     var runnerUpdatingFoot: RunnerUpdatingFoot? {
         get { self[RunnerUpdatingFootKey.self] }
         set { self[RunnerUpdatingFootKey.self] = newValue }
+    }
+    /// Set on a queued-tail row the update holds (`RunnerUpdating.holdsQueued`): its queued line reads
+    /// `Queued · runner updating` (docs/mocks/queued-card-runner-updating ②⑤).
+    var runnerUpdatingQueued: RunnerUpdatingFoot? {
+        get { self[RunnerUpdatingQueuedKey.self] }
+        set { self[RunnerUpdatingQueuedKey.self] = newValue }
+    }
+}
+
+/// The word a queued turn's line opens with — `Queued`, or the label a card names — and, where its
+/// runner's update holds the turn, `Queued · runner updating` in its place, opening to why. Every
+/// card's queued line draws it, so a card says what holds it exactly as a message does.
+struct QueuedWord: View {
+    var label: String = RunnerUpdating.queuedWord
+    @Environment(\.runnerUpdatingQueued) private var held
+
+    var body: some View {
+        if let held {
+            RunnerUpdatingTagView(foot: held)
+        } else {
+            Text(label).font(.orbitMeta).foregroundStyle(.secondary)
+        }
     }
 }
 

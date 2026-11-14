@@ -52,7 +52,8 @@ struct QuestionReply: Equatable, Sendable {
         /// One of the project's owner items — the escalated exception, the pause — discussed
         /// rather than answered: the next send is an ordinary turn, with the item carried in front
         /// of the typed sentence. What it says reaches the coordinator as its next message, which
-        /// is the conversation this card is drawn in.
+        /// is the conversation this card is drawn in. A request this session filed for the owner
+        /// (`OwnerRequestCard`), talked about rather than answered, goes the same way to this session.
         case ownerItem(context: String)
 
         /// Whether the typed sentence IS the message: the two that reach no door carry nothing but
@@ -4165,6 +4166,16 @@ final class ConsoleModel {
                                                                    row: row, isPause: isPause)),
             banner: ExceptionCards.chatBanner(row, isPause: isPause),
             placeholder: ExceptionCards.chatPlaceholder)
+    }
+
+    /// Talk about a request this session filed for the owner instead of answering it: the next
+    /// composer send is an ordinary turn to this session, with the request named in front of it. The
+    /// card stays, and its own buttons stay the ways out.
+    func startOwnerRequestReply(_ request: OwnerRequest) {
+        replyContext = QuestionReply(
+            target: .ownerItem(context: OwnerRequests.chatContext(request)),
+            banner: OwnerRequests.chatPrefix + request.title,
+            placeholder: OwnerRequests.chatPlaceholder)
     }
 
     func cancelChatReply() { replyContext = nil }

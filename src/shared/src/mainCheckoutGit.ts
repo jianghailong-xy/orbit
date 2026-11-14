@@ -19,6 +19,10 @@ import type { RunnerRepoHealth } from './dto';
  *  clients draw the card's text and no buttons. Go twin: mainCheckoutGitCapabilityV1. */
 export const MAIN_CHECKOUT_GIT_CAPABILITY = 'main-checkout-git/v1';
 
+/** Runner capability for the discard action, on top of MAIN_CHECKOUT_GIT_CAPABILITY. Without it the clients draw no
+ *  Discard button. Go twin: mainCheckoutDiscardCapabilityV1. */
+export const MAIN_CHECKOUT_DISCARD_CAPABILITY = 'main-checkout-discard/v1';
+
 /** The most files a snapshot lists, and counts. Past it the runner stops and sets `truncated`. */
 export const MAIN_CHECKOUT_FILE_LIMIT = 200;
 /** Files the card shows before folding the rest into "and N more". */
@@ -98,7 +102,7 @@ export interface MainCheckoutHeartbeatFields {
 
 export type MainCheckoutRepoHealth = RunnerRepoHealth & MainCheckoutHeartbeatFields;
 
-export const MAIN_CHECKOUT_ACTION_KINDS = ['move', 'commit', 'push', 'rescue'] as const;
+export const MAIN_CHECKOUT_ACTION_KINDS = ['move', 'commit', 'push', 'rescue', 'discard'] as const;
 export type MainCheckoutActionKind = (typeof MAIN_CHECKOUT_ACTION_KINDS)[number];
 
 /** POST /workspaces/:id/main-checkout/actions. */
@@ -108,7 +112,7 @@ export interface MainCheckoutActionRequest {
   root: string;
   /** The snapshot's fingerprint, as the person saw it. Push checks only its HEAD part. */
   fingerprint: string;
-  /** move, commit: the chosen paths (non-empty, all in the snapshot). push, rescue: absent. */
+  /** move, commit, discard: the chosen paths (non-empty, all in the snapshot). push, rescue: absent. */
   files?: string[];
   /** commit only: the commit message, non-blank. */
   message?: string;
@@ -170,11 +174,11 @@ export interface MainCheckoutActionResult {
   /** Set unless status is 'done'. */
   code?: MainCheckoutRefusalCode;
   branch?: string;
-  /** Files the action took (move, commit, rescue). */
+  /** Files the action took (move, commit, rescue, discard). */
   fileCount?: number;
-  /** Changed files left in the main checkout afterwards (move). */
+  /** Changed files left in the main checkout afterwards (move, discard). */
   remaining?: number;
-  /** move, rescue: the branch holding the main checkout as it was. Orbit never deletes it. */
+  /** move, rescue, discard: the branch holding the main checkout as it was. Orbit never deletes it. */
   rescueBranch?: string;
   /** commit: the new commit. rescue: the commit the checkout was returned to. HEAD_MOVED: HEAD now. */
   head?: string;
@@ -251,6 +255,8 @@ export interface MainCheckoutView {
   diffs?: MainCheckoutFileDiff[];
   /** The runner declared the capability: clients draw the action buttons. */
   actionsSupported: boolean;
+  /** The runner declared MAIN_CHECKOUT_DISCARD_CAPABILITY too: clients draw Discard. */
+  discardSupported?: boolean;
   /** Set when the checkout's branch is one a project lands on. */
   managedBranch: MainCheckoutManagedBranch | null;
   /** The action on this checkout still waiting for its result, if any. */
@@ -333,11 +339,11 @@ export const MAIN_CHECKOUT_COPY = {
   review: 'Review',
   reviewAndCommitShort: 'Review and commit…',
   reviewMainCheckout: 'Review main checkout',
-  commitMessagePlaceholder: 'Commit message',
   notShown: 'Not shown: files your .gitignore ignores. Untracked files are included.',
   targetOpenedFrom: 'The session you opened this from',
   targetBusy: 'Working now — available when this turn ends',
   cleanUpCheckout: 'Clean up checkout',
+  discard: 'Discard',
 } as const;
 
 export function mainCheckoutCardTitle(fileCount: number, truncated: boolean): string {
@@ -373,6 +379,31 @@ export function mainCheckoutChooseFiles(chosen: number, total: number): string {
 
 export function mainCheckoutCommitButton(chosen: number, branch: string): string {
   return `Commit ${filesCount(chosen)} to ${branch}`;
+}
+
+/** A commit's message: the drawer has no box to type one in, so it is named after the chosen files. "Update a.ts", "Add a.ts and b.ts", "Update a.ts, b.ts, c.ts and
+ *  2 more files". Base names only; the verb is Add or Remove when every file was added or deleted. */
+export function mainCheckoutDefaultCommitMessage(files: ReadonlyArray<Pick<MainCheckoutFile, 'path' | 'status'>>): string {
+  const all = (status: MainCheckoutFileStatus) => files.length > 0 && files.every((f) => f.status === status);
+  const verb = all('A') ? 'Add' : all('D') ? 'Remove' : 'Update';
+  const names = files.map((f) => f.path.slice(f.path.lastIndexOf('/') + 1));
+  if (names.length <= 3) return `${verb} ${namePaths(names)}`;
+  const more = names.length - 3;
+  return `${verb} ${names.slice(0, 3).join(', ')} and ${more} more ${more === 1 ? 'file' : 'files'}`;
+}
+
+export function mainCheckoutDiscardButton(chosen: number): string {
+  return `Discard ${filesCount(chosen)}`;
+}
+
+export function mainCheckoutDiscardTitle(chosen: number): string {
+  return `Discard ${filesCount(chosen)}?`;
+}
+
+/** The discard confirmation's body: what happens, and where the copy goes. */
+export function mainCheckoutDiscardBody(chosen: number, branch: string): string {
+  const them = chosen === 1 ? 'It goes' : 'They go';
+  return `${them} back to the last commit on ${branch}; new files are deleted. A copy of the main checkout is saved on orbit/rescue-… first.`;
 }
 
 export function mainCheckoutUncommitted(n: number): string {
@@ -432,6 +463,7 @@ const NOTHING: Record<MainCheckoutActionKind, string> = {
   commit: 'Nothing committed',
   push: 'Nothing pushed',
   rescue: 'Nothing saved',
+  discard: 'Nothing discarded',
 };
 
 /** ACTION_FAILED: what git could not do. */
@@ -440,6 +472,7 @@ const GIT_VERB: Record<MainCheckoutActionKind, string> = {
   commit: 'commit',
   push: 'push',
   rescue: 'save',
+  discard: 'discard',
 };
 
 const CANT: Record<MainCheckoutActionKind, string> = {
@@ -447,6 +480,7 @@ const CANT: Record<MainCheckoutActionKind, string> = {
   commit: "Can't commit right now",
   push: "Can't push right now",
   rescue: "Can't save right now",
+  discard: "Can't discard right now",
 };
 
 function line(
@@ -529,6 +563,12 @@ export function mainCheckoutResultLine(
           ` and returned the main checkout to ${shortSha(r.head)}. Ignored files were left alone.`,
           { action: 'open-in-new-session', label: 'Open in a new session' },
         );
+      case 'discard': {
+        const after = r.remaining
+          ? ` The main checkout still has ${uncommittedFiles(r.remaining, true)}.`
+          : ' The main checkout is clean again.';
+        return line('ok', `Discarded ${n} from the main checkout.`, `${after} A copy of what it held is on ${r.rescueBranch}.`);
+      }
     }
   }
 
@@ -604,6 +644,15 @@ export function mainCheckoutResultLine(
         ` Orbit couldn't save the main checkout to a rescue branch first${quoted(r.gitMessage)}. The main checkout was left as it was.`,
       );
     case 'ACTION_FAILED':
+      // A Discard that failed part way: some files may be back at HEAD, every one is on its rescue branch.
+      if (r.rescueBranch) {
+        return line(
+          'refused',
+          `${nothing}:`,
+          ` git couldn't ${GIT_VERB[r.kind]}${quoted(r.gitMessage)}. A copy of what the main checkout held is on ${r.rescueBranch}.`,
+          reviewAgain,
+        );
+      }
       return line(
         'refused',
         `${nothing}:`,
@@ -669,7 +718,7 @@ export interface MainCheckoutCurrent {
 export const MAIN_CHECKOUT_CARD_HEALTH_LAG_SECONDS = 120;
 
 /**
- * Whether a main-checkout-changed card is done with, and why: 'result' when a Move or Save to a rescue branch
+ * Whether a main-checkout-changed card is done with, and why: 'result' when a Move, Discard or Save to a rescue branch
  * written after it in the same session succeeded for all its files, 'gone' when the current checkout provably holds
  * none of its paths, null when it is still live. A refusal, a partial move or a move of fewer files than the card
  * lists keeps it live, and so does a checkout Orbit can't see whole. `cardAgeSeconds` is how long ago the card was
@@ -685,7 +734,7 @@ export function mainCheckoutCardHandled(
     (r) =>
       r.root === notice.root &&
       r.status === 'done' &&
-      (r.kind === 'rescue' || (r.kind === 'move' && (r.fileCount ?? 0) >= notice.files.length)),
+      (r.kind === 'rescue' || ((r.kind === 'move' || r.kind === 'discard') && (r.fileCount ?? 0) >= notice.files.length)),
   );
   if (took) return 'result';
   if (cardAgeSeconds == null || !(cardAgeSeconds >= MAIN_CHECKOUT_CARD_HEALTH_LAG_SECONDS)) return null;

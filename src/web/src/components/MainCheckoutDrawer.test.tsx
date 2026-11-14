@@ -9,8 +9,9 @@ import type { MainCheckoutHost, MainCheckoutTarget } from '../lib/mainCheckout';
 import { useMainCheckoutController, type MainCheckoutControllerOptions } from './MainCheckoutDrawer';
 
 /**
- * Board 02: the session diff drawer, showing the main checkout. Files are all chosen by default, Commit waits for a
- * message, a busy session cannot take a Move, and a refusal because the checkout changed reads it again.
+ * Board 02: the session diff drawer, showing the main checkout. Files are all chosen by default, there is no message
+ * box (a commit is named after its files), Discard asks first, a busy session cannot take a Move, and a refusal because the checkout
+ * changed reads it again.
  */
 
 vi.mock('../api', async (importOriginal) => ({
@@ -147,14 +148,6 @@ const commitButton = () =>
   [...document.querySelectorAll<HTMLButtonElement>('.mck-drawer-actions button')].find((b) => b.textContent?.startsWith('Commit'))!;
 const checkbox = (path: string) => document.querySelector<HTMLElement>(`[aria-label="Commit ${path}"]`)!;
 
-async function type(text: string) {
-  const input = document.querySelector<HTMLInputElement>('input[aria-label="Commit message"]')!;
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, text);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-  });
-}
-
 describe('the main checkout review drawer (board 02)', () => {
   it('names the checkout in its head and chooses every file by default', async () => {
     serve(() => viewOf());
@@ -174,29 +167,24 @@ describe('the main checkout review drawer (board 02)', () => {
     await waitFor(() => !!document.querySelector('.wt-diff-pane')?.textContent?.includes('new'), 'the patch');
   });
 
-  it('holds Commit until there is a message, counts the files chosen, and commits only those', async () => {
+  it('asks for no message, counts the files chosen, and commits only those under one named after them', async () => {
     serve(() => viewOf());
     postMock.mockResolvedValue({ requestId: 'x', status: 'pending' });
     await openDrawer();
+    expect(document.querySelector('.mck-drawer-foot input, .mck-drawer-foot textarea')).toBeNull();
     expect(commitButton().textContent).toBe('Commit 3 files to main');
-    expect(commitButton().disabled).toBe(true);
+    expect(commitButton().disabled).toBe(false);
 
     await act(async () => checkbox('src/api/retry.test.ts').click());
     expect(document.querySelector('.mck-choose-toggle')?.textContent).toBe('Choose files to commit · 2 of 3');
     expect(commitButton().textContent).toBe('Commit 2 files to main');
-    expect(commitButton().disabled).toBe(true);
-
-    await type('   ');
-    expect(commitButton().disabled).toBe(true);
-    await type('Add retry backoff');
-    expect(commitButton().disabled).toBe(false);
 
     postMock.mockResolvedValueOnce({
       requestId: 'x',
       status: 'finished',
       result: {
         requestId: 'x', kind: 'commit', root: '/root/orbit', status: 'done', branch: 'main', fileCount: 2,
-        head: '8d41e0c0', subject: 'Add retry backoff', finishedAt: new Date().toISOString(),
+        head: '8d41e0c0', subject: 'Update client.ts and retry.ts', finishedAt: new Date().toISOString(),
       },
     } satisfies MainCheckoutActionAnswer);
     await act(async () => commitButton().click());
@@ -207,12 +195,41 @@ describe('the main checkout review drawer (board 02)', () => {
       root: '/root/orbit',
       fingerprint: 'mc1:62325fb:a',
       files: ['src/api/client.ts', 'src/api/retry.ts'],
-      message: 'Add retry backoff',
+      message: 'Update client.ts and retry.ts',
       initiatedFromSessionId: 'sess-1',
     });
     expect(typeof body.requestId).toBe('string');
     // Done: the drawer closes; the result line is written into the conversation.
     await waitFor(() => !document.querySelector('.mck-choose-toggle'), 'the drawer to close');
+  });
+
+  it('discards the chosen files only after the person confirms, and only on a runner that can', async () => {
+    serve(() => viewOf({}, { discardSupported: true }));
+    postMock.mockResolvedValue({ requestId: 'x', status: 'pending' });
+    await openDrawer();
+    await act(async () => checkbox('src/api/client.ts').click());
+    const discard = byText('.mck-drawer-actions button', 'Discard 2 files')!;
+    await act(async () => discard.click());
+    await waitFor(() => !!document.body.textContent?.includes('Discard 2 files?'), 'the confirmation');
+    expect(document.body.textContent).toContain(
+      'They go back to the last commit on main; new files are deleted. A copy of the main checkout is saved on orbit/rescue-… first.',
+    );
+    expect(postMock).not.toHaveBeenCalled();
+    const confirmButton = [...document.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Discard')!;
+    await act(async () => confirmButton.click());
+    await settle();
+    expect(postMock.mock.calls[0][1]).toMatchObject({
+      kind: 'discard',
+      fingerprint: 'mc1:62325fb:a',
+      files: ['src/api/retry.ts', 'src/api/retry.test.ts'],
+    });
+    expect((postMock.mock.calls[0][1] as MainCheckoutActionPost).message).toBeUndefined();
+  });
+
+  it('draws no Discard for a runner without the capability', async () => {
+    serve(() => viewOf());
+    await openDrawer();
+    expect(byText('.mck-drawer-actions button', 'Discard 3 files')).toBeUndefined();
   });
 
   it('lists the session it was opened from first, and a session running a turn can’t be chosen', async () => {
@@ -269,7 +286,6 @@ describe('the main checkout review drawer (board 02)', () => {
     });
     await openDrawer();
     const readsBefore = getMock.mock.calls.filter(([, d]) => !d || d.length === 0).length;
-    await type('Add retry backoff');
     await act(async () => commitButton().click());
     await waitFor(
       () => document.querySelector('.mck-choose-toggle')?.textContent === 'Choose files to commit · 4 of 4',
@@ -279,8 +295,8 @@ describe('the main checkout review drawer (board 02)', () => {
     expect(document.querySelector('.mck-drawer-foot .mck-result')?.textContent).toContain(
       'Nothing committed: the main checkout changed since you looked (src/api/types.ts).',
     );
-    // The drawer stayed open with the message kept, so a second look and a press is all it takes.
-    expect(document.querySelector<HTMLInputElement>('input[aria-label="Commit message"]')?.value).toBe('Add retry backoff');
+    // The drawer stayed open, so a second look and a press is all it takes.
+    expect(commitButton().textContent).toBe('Commit 4 files to main');
   });
 
   it('a card’s Move on a checkout the runner hasn’t reported yet is answered by the line, not a toast', async () => {

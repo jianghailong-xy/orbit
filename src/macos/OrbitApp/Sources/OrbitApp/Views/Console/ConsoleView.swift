@@ -954,14 +954,25 @@ struct TranscriptView: View {
         return session
     }
 
+    /// Whether a turn on the queued tail is what the update holds: then that turn's own queued line
+    /// says so (`runnerUpdatingQueued`), and neither the last message nor the queued page does.
+    private var runnerUpdatingTailHeld: Bool { RunnerUpdating.tailHolds(console.state.queued) }
+
     private var runnerUpdatingFoot: RunnerUpdatingFoot? {
-        guard let session = runnerUpdatingSession,
+        guard let session = runnerUpdatingSession, !runnerUpdatingTailHeld,
               let id = RunnerUpdating.footBubbleID(console.state.items) else { return nil }
         return RunnerUpdatingFoot(bubbleID: id, session: session, machine: console.runnerName, runnerID: console.runnerID)
     }
 
+    /// The tag a queued-tail turn the update holds reads in place of `Queued`.
+    private func runnerUpdatingQueued(_ bubble: UserBubble) -> RunnerUpdatingFoot? {
+        guard let session = runnerUpdatingSession, RunnerUpdating.holdsQueued(bubble) else { return nil }
+        return RunnerUpdatingFoot(bubbleID: bubble.id, session: session, machine: console.runnerName, runnerID: console.runnerID)
+    }
+
     @ViewBuilder private var runnerUpdatingPage: some View {
-        if let session = runnerUpdatingSession, RunnerUpdating.footBubbleID(console.state.items) == nil {
+        if let session = runnerUpdatingSession, !runnerUpdatingTailHeld,
+           RunnerUpdating.footBubbleID(console.state.items) == nil {
             RunnerUpdatingQueuedView(session: session, machine: console.runnerName, runnerID: console.runnerID,
                                      onOpenSession: { app.route(to: .session($0)) })
         }
@@ -1437,6 +1448,7 @@ struct TranscriptView: View {
             }, steer: SteerControls(bubble: bubble, withdrawing: console.withdrawingSteers) {
                 Task { await console.withdrawSteer(bubble) }
             }, putBack: putBack(bubble))
+            .environment(\.runnerUpdatingQueued, runnerUpdatingQueued(bubble))
         case .bottom:
             // Both shapes end in the room the list's fade lies over (`fadesIntoComposerBand`), so a list
             // at its tail has nothing in the fade. In the row's content, not its insets: every follow and
