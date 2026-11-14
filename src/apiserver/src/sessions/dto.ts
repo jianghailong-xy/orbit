@@ -107,6 +107,11 @@ export interface CreateSessionDto {
    *  (docs/session-folders-move-design.md §3.2). It has to be one of the caller's folders in this
    *  session's own `workspaceId`, else 400. Omitted files it in none. */
   folderId?: string;
+  /** `false` runs the session in its workspace's own directory, with no branch and no worktree, even when the
+   *  workspace's setting is worktrees: what `orbit` in a terminal sends, so its edits land in the folder it was typed
+   *  in (docs/terminal-session-design.md D4). It can only turn isolation off: `true` or omitted follows the
+   *  workspace. Anything but a boolean is a 400. */
+  worktree?: boolean;
 }
 
 export interface SessionTurnDto {

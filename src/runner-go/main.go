@@ -60,6 +60,9 @@ var defaultServer = "https://orbitd.io"
 var usage = `orbit — register a machine and run coding-agent tasks for an Orbit control plane
 
 Usage:
+  orbit                             In a terminal: talk to a new session in this folder (Orbit terminal client)
+  orbit --engine E [--model M]      The same, on that engine and model
+  orbit --pick                      The same, choosing the engine and model from a list first
   orbit register [options]          Register this machine + install the service (approve in the browser)
   orbit run                         Start the runner loop in the foreground
   orbit unregister [--yes]          Remove this runner: delete it server-side, stop the service, drop local config
@@ -335,8 +338,13 @@ func main() {
 	}
 	_, bools := parseFlags(args)
 
-	// Top-level help: `orbit`, `orbit help [cmd]`, `orbit --help`, `orbit -h`.
-	if cmd == "" || cmd == "help" || cmd == "--help" || cmd == "-h" {
+	// Bare `orbit` (and `orbit --engine E --model M`, `orbit --pick`): on a terminal, the Orbit TUI on a new
+	// session in the cwd's workspace; anywhere else, the help text, exit 0 (terminal_bare.go).
+	if isBareOrbit(args) {
+		os.Exit(cmdBareOrbit(args, stdioIsTerminal(), os.Stdout, os.Stderr))
+	}
+	// Top-level help: `orbit help [cmd]`, `orbit --help`, `orbit -h`.
+	if cmd == "help" || cmd == "--help" || cmd == "-h" {
 		if len(args) > 1 {
 			fmt.Print(helpFor(args[1]))
 		} else {

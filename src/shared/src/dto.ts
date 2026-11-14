@@ -892,11 +892,18 @@ export interface RunnerUpdateTurn {
 export interface RunnerDrainWaiting {
   sessions: number;
   messages: number;
+  /** The runner drains because its process is stopping (a stop signal: a service restart or stop, a
+   *  reboot), not for a release: its update phase is neither `draining` nor `restarting`. The clients
+   *  then say "is stopping" and offer neither Later nor Update Now. Absent from an older server. */
+  stopping?: boolean;
 }
 
 /** Why a queued session waits on its runner's self-update (queuedReason 'runner_updating'): the
  *  release, the owner's turns the drain waits for, and when the wait began. */
 export interface QueuedRunnerUpdate {
+  /** The runner is stopping, not updating (RunnerDrainWaiting.stopping): "Runner stopping", no actions.
+   *  Absent from an older server. */
+  stopping?: boolean;
   targetVersion: string | null;
   since: string | null;
   turns: Array<{ id: string; title: string | null }>;
@@ -2693,6 +2700,30 @@ export interface TakeoverTurnLeasesRequest {
 export interface TakeoverTurnLeasesResponse {
   ok: true;
   status: RunStatus;
+}
+
+/** The most sessions one batch takeover may name. */
+export const BATCH_TAKEOVER_TURN_LEASES_MAX = 500;
+
+/** Runner process → control plane: the takeover above for many sessions in one request, as a
+ *  restarted runner makes for the sessions a reclaim handed back. Each row is judged exactly as
+ *  the single route judges it, and one row's refusal does not refuse the others. */
+export interface BatchTakeoverTurnLeasesRequest {
+  leaseOwner: string;
+  sessions: Array<{ sessionId: string; expectedLeaseOwner?: string | null }>;
+}
+
+/** One row's answer, in request order: the status the single route answers with, or the
+ *  status code and reason it refuses with (403 not this runner's, 409 a conflict). */
+export interface BatchTakeoverTurnLeasesResult {
+  sessionId: string;
+  status?: RunStatus;
+  error?: { statusCode: number; message: string; code?: string };
+}
+
+export interface BatchTakeoverTurnLeasesResponse {
+  ok: true;
+  results: BatchTakeoverTurnLeasesResult[];
 }
 
 /** One open interactive session a restarted runner must retain. Only RUNNING is

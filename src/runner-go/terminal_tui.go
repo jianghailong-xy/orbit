@@ -31,6 +31,9 @@ type tuiOptions struct {
 	Machine string
 	In      io.Reader
 	Out     io.Writer
+	// Sent are messages this terminal sent before the TUI opened (a new session's first one), so they
+	// read as its own when they arrive.
+	Sent []string
 }
 
 // openSessionTUI is the entry point other commands call (bare `orbit`, `orbit resume <id>`): it
@@ -82,6 +85,7 @@ func runSessionTUI(opts tuiOptions) error {
 		}
 	}
 	m.transcript.live = true
+	m.transcript.pendingOwn = append(m.transcript.pendingOwn, opts.Sent...)
 	m.setApprovals(approvals)
 
 	p := tea.NewProgram(m, tea.WithInput(opts.In), tea.WithOutput(opts.Out), tea.WithContext(ctx))

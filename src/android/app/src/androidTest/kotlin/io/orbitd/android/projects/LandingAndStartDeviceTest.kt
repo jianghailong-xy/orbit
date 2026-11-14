@@ -12,6 +12,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.orbitd.android.openProjectSessionsPage
 import io.orbitd.android.BuildConfig
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
@@ -80,7 +81,7 @@ class LandingAndStartDeviceTest {
                 compose.pressSignIn()
                 compose.waitUntil(20_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
                 await { exists(hasTestTag("project-row:$launch")) }
-                compose.onNodeWithTag("project-row:$launch").performClick()
+                compose.openProjectSessionsPage(launch)
 
                 // ① In flight: its own card under the progress card — the ring turning, the clock, the wait, the branch.
                 await { exists(hasTestTag("landing-card")) && exists(hasTestTag("landing-ring:running"), unmerged = true) }
