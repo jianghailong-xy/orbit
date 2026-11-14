@@ -377,6 +377,35 @@ export class PushService {
   }
 
   /**
+   * A terminal asks to be approved (docs/terminal-session-design.md, "The terminal credential"): the owner's devices
+   * ring with the machine and the code the terminal shows, and the tap opens the approve card. Devices only — the
+   * approval is an owner-channel act made signed in to the app, so a Feishu card could not answer it. No badge, and
+   * collapsed per request. Fire-and-forget: the request is the fact, `GET /terminals/requests` its read.
+   */
+  async notifyTerminalLogin(requestId: string): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const request = await this.prisma.terminalLogin.findUnique({
+        where: { id: requestId },
+        select: { ownerId: true, runnerId: true, machineName: true, userCode: true, status: true },
+      });
+      if (!request || request.status !== 'PENDING') return;
+      const tokens = await this.targets(request.ownerId);
+      if (tokens.length === 0) return;
+      const alert = { title: 'Approve a terminal?', body: `Terminal on ${request.machineName} · code ${request.userCode}` };
+      const body = JSON.stringify({
+        aps: { alert, sound: 'default', 'thread-id': `terminal-login-${requestId}` },
+        kind: 'terminal-login',
+        runnerID: request.runnerId,
+        terminalLoginID: requestId,
+      });
+      await this.deliver(tokens, body, 'alert', '10', `terminal-login-${requestId}`);
+    } catch (err) {
+      this.log.warn(`terminal login notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
    * Tell a runner's owner that Claude Code can no longer use Anthropic there: a confirmed flip put the machine's Claude
    * connection to Anthropic in `region`, where Anthropic does not offer Claude (docs/claude-region-check-contract.md
    * §10, board 04 "push (flip)"). Edge-triggered by the check route on the blocked check that takes blockedChecks to 2,

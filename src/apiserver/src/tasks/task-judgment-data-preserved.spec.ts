@@ -2985,12 +2985,31 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0641_open_list_epoch_session_waits',
       // 0642 adds five nullable subagent_run columns, an index and the subagent_relay_event table; no preserved row, trigger or DONE fence change.
       '0642_subagent_run_remote',
+      // 0660 adds the terminal_login and terminal_credential tables, their indexes and foreign keys to "user" and
+      // "runner" only (docs/terminal-session-design.md); no preserved rows, triggers or DONE fence change, and no row
+      // is written.
+      '0660_terminal_credential',
+      // 0661 widens approval_decided_via_chk to allow 'TERMINAL' (docs/terminal-session-design.md); approval only, no
+      // preserved rows, triggers or DONE fence change, and no row is written.
+      '0661_approval_decided_by_terminal',
+      // 0662 adds two nullable columns to conversation_turn, sender_client and sender_client_detail (which client
+      // sent the turn, sessions/turn-sender-client.ts); no preserved rows, triggers or DONE fence change, and no row
+      // is written.
+      '0662_turn_sender_client',
+      // 0663 adds the nullable approval.decided_terminal_machine_name, ties it to a TERMINAL decision in
+      // approval_decided_via_chk and lets activity_credential_chk say TERMINAL; no preserved rows, triggers or DONE
+      // fence change, and no row is written.
+      '0663_approval_decided_terminal_machine',
       // 0705 adds a nullable `runner.engine_update_dismissals` JSONB only, catalog-only; `runner` is none of the
       // preserved relations, no trigger or DONE fence changes, and no row is written.
       '0705_runner_engine_update_dismissals',
       // 0720 adds a nullable runner_presence.resources (JSONB) only; no preserved rows, triggers or DONE fence change,
       // and no row is written.
       '0720_runner_presence_resources',
+      // 0730 adds one nullable column to session, work_subdir (the folder below its workspace's directory a no-worktree
+      // session runs in, sessions/work-subdir.ts); no preserved rows, triggers or DONE fence change, and no row is
+      // written.
+      '0730_session_work_subdir',
       // 0740 adds two nullable session columns (merge_after_turn_at, merge_after_turn_target) only; no preserved
       // rows, triggers or DONE fence change, and no row is written.
       '0740_session_merge_after_turn',

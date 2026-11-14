@@ -221,6 +221,41 @@ class PushAuthorityTest {
         }
     }
 
+    /** A terminal asking to be approved (docs/terminal-session-design.md): the shared fixture's sample is what notifyTerminalLogin
+     * sends (push.service.spec). It parses, rings on the needs-you channel, opens the Waiting on you inbox, and stands while the
+     * request is still waiting. Without its request or its machine it is not a notification. */
+    @Test fun aTerminalAskingToBeApprovedOpensTheInboxAndStandsWhileItWaits() = runBlocking {
+        val sample = pushFixture()["samples"]!!.jsonArray.map { it.jsonObject }
+            .single { it["name"]!!.jsonPrimitive.content == "terminal-login" }
+        val data = sample["data"]!!.jsonObject.mapValues { it.value.jsonPrimitive.content }
+        val push = PushMessage.parse(data) ?: throw AssertionError("the server's terminal-login push is dropped")
+        val request = "019a0000-0000-7000-8000-00000000000b"
+        assertEquals(PushType.ALERT, push.type)
+        assertEquals("terminal-login", push.payload.kind)
+        assertEquals("Approve a terminal?", push.payload.title)
+        assertEquals("Terminal on dev-laptop · code 7KQ-4MZ", push.payload.body)
+        assertTrue(push.payload.isTerminalLogin)
+        assertTrue(ObjectId.same(push.payload.terminalLoginId, request))
+        assertEquals(OrbitRoute(Destination.WAITING_ON_YOU, request, origin = Origin.EXTERNAL),
+            push.link?.let { OrbitLinks.parse(it, origin = Origin.EXTERNAL) })
+        for (missing in listOf("terminalLoginID", "runnerID")) {
+            val payload = Json.parseToJsonElement(data.getValue("payload")).jsonObject - missing
+            assertNull("terminal-login without $missing", PushMessage.parse(data + ("payload" to JsonObject(payload).toString())))
+        }
+        authorityFixture { authority, server, _ ->
+            var waiting = true
+            server.respond = { r -> when (r.path) {
+                "/api/terminals/requests" -> response(if (waiting) """{"requests":[{"id":"$request","userCode":"7KQ-4MZ",""" +
+                    """"machineName":"dev-laptop","runnerId":"$runnerId","createdAt":"2026-11-12T10:00:00.000Z",""" +
+                    """"expiresAt":"2026-11-12T10:10:00.000Z"}]}""" else """{"requests":[]}""")
+                else -> response("{}", 404)
+            } }
+            assertEquals(PushCheck.ACTIVE, authority.check(push))
+            waiting = false
+            assertEquals(PushCheck.STALE, authority.check(push))
+        }
+    }
+
     @Test fun watchNeedsExactMatchGenerationAndConfirmationNeedsActualProblemsRecord() = runBlocking {
         authorityFixture { authority, server, _ ->
             val watch = message("watch-matched", "watchID" to wid, "generation" to 2)
