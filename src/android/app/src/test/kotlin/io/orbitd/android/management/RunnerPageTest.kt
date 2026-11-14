@@ -259,7 +259,33 @@ class RunnerPageTest {
         val single = buildJsonObject { put("engine", "kimi"); put("installed", true); put("auth", "yes") }
         assertNull(RunnerPage.accountLines(single).single().signInAccount)
         assertTrue(RunnerPage.engineUpdateInFlight(buildJsonObject { put("mode", "update"); put("status", "installing") }))
-        assertEquals("Nothing to update.", RunnerPage.updateRelayLine(buildJsonObject { put("mode", "update"); put("status", "done") }))
+        assertEquals(listOf(RunnerPage.UpdateRelayLine("Nothing to update.")),
+            RunnerPage.updateRelayLines(buildJsonObject { put("mode", "update"); put("status", "done") }))
+    }
+
+    @Test fun updateEnginesNowListsOnlyWhatNeedsSomeoneAsIosDoes() {
+        fun run(vararg lines: String) = buildJsonObject {
+            put("mode", "update"); put("status", "failed"); put("message", lines.joinToString("\n"))
+        }
+        assertEquals(listOf(RunnerPage.UpdateRelayLine("Nothing here needs your attention.")), RunnerPage.updateRelayLines(run(
+            "Claude Code updated 2.1.284 → 2.1.290",
+            "Codex — 5 sessions running, it'll update once they finish",
+            "Kimi Code — updater finished, but its version couldn't be read",
+        )))
+        assertEquals(listOf(
+            RunnerPage.UpdateRelayLine("OpenCode — update timed out after 5m0s", failed = true),
+            RunnerPage.UpdateRelayLine("Antigravity — installed but does not run: signal: killed", failed = true),
+            RunnerPage.UpdateRelayLine("Gemini — owned by another user, left alone"),
+            RunnerPage.UpdateRelayLine("Cursor CLI — update failed: npm error code EACCES", failed = true),
+        ), RunnerPage.updateRelayLines(run(
+            "Claude Code — already up to date (2.1.323)",
+            "OpenCode — update timed out after 5m0s",
+            "Antigravity — installed but does not run: signal: killed",
+            "Gemini — owned by another user, left alone",
+            "Cursor CLI — update failed: npm error code EACCES",
+            "DeepSeek Harness — fixed supported version 0.2.0-rc.2",
+        )))
+        assertTrue(RunnerPage.updateRelayLines(buildJsonObject { put("mode", "install"); put("status", "pending") }).isEmpty())
     }
 
     @Test fun usageRowsLabelWindowsAsIosDoes() {

@@ -457,7 +457,7 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                 if (!offline) {
                     HorizontalDivider()
                     TextButton(onClick = { updateEngines() }, enabled = !RunnerPage.engineUpdateInFlight(runner.obj("install"))) { Text(RunnerCopy.UPDATE_ENGINES_NOW) }
-                    RunnerPage.updateRelayLine(runner.obj("install"))?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.muted) }
+                    RunnerPage.updateRelayLines(runner.obj("install")).forEach { Text(it.text, style = MaterialTheme.typography.labelMedium, color = if (it.failed) Ink.red else Ink.muted) }
                     TextButton(onClick = { scope.launch {
                         notice.show(model.press { api.post("runners/$id/refresh-models") } ?: "Re-reading this machine’s model lists — the picker updates within a minute.")
                     } }) { Text(RunnerCopy.REFRESH_MODEL_LISTS) }
@@ -877,7 +877,7 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                 TextButton(enabled = !offline && !RunnerPage.engineUpdateInFlight(runner.obj("install")), onClick = {
                     scope.launch { show(model.press { api.post("runners/$id/engine-update") }) }
                 }) { Text(RunnerCopy.UPDATE_ENGINES_NOW) }
-                RunnerPage.updateRelayLine(runner.obj("install"))?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.muted) }
+                RunnerPage.updateRelayLines(runner.obj("install")).forEach { Text(it.text, style = MaterialTheme.typography.labelMedium, color = if (it.failed) Ink.red else Ink.muted) }
             }
             Spacer(Modifier.height(48.dp))
         }

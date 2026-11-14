@@ -6841,6 +6841,7 @@ export function WorkspaceView({
     live: !!selected && !!live,
     status: selectedRunStatus,
     numTurns: selectedNumTurns,
+    nextTurnQueued: visibleQueuedTurns.some((turn) => turn.placement === 'queued' && turn.delivery == null),
   });
 
   // The composer's send, on a machine's setup page. Ready, it makes the workspace with the session.
