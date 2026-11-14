@@ -3005,7 +3005,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0740_session_merge_after_turn',
       // 0760 adds a nullable `runner.attention_fixes` JSONB only, catalog-only; `runner` is none of the preserved
       // relations, no trigger or DONE fence changes, and no row is written.
-      '0760_runner_attention_fixes'],
+      '0760_runner_attention_fixes',
+      // 0770 adds one nullable `session.agent_tools` JSONB (the session's Agent Tools report, kept by the event
+      // ingest), taking the lock in short tries inside one DO block as 0478 does; catalog-only, no preserved rows,
+      // triggers or DONE fence change, and no row is written.
+      '0770_session_agent_tools'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

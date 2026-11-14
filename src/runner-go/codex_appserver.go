@@ -104,6 +104,16 @@ type codexAppServer struct {
 	// one start failure worth another attempt. Read only after close() has joined that reader.
 	stateInitFailed atomic.Bool
 
+	// engineVersion is the Codex version its initialize answer names (codexVersionFromUserAgent), for the
+	// session's Agent Tools report.
+	engineVersion string
+	// The latest startup state Codex reported for Orbit's own MCP server (mcpServer/startupStatus/updated),
+	// read off the wire before the notification channel so that none is dropped, and who is told of the
+	// next one (onOrbitMCP, which the session's Agent Tools report sets). Guarded by mu.
+	orbitMCPState string
+	orbitMCPError string
+	onOrbitMCP    func(state, errText string)
+
 	// Set the first time this build answers a turn/steer with "unknown variant", which is the
 	// authoritative signal that it predates the method. It is a property of the process, not of
 	// a version guess, so once it is set no later steer spends a round trip finding out again
@@ -311,6 +321,18 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		asyncWg.Wait()
 	}()
 
+	// The session's Agent Tools report (agent_tools_report.go): Codex's own word on Orbit's MCP server, and
+	// the playbooks skill handed to it as a skill root of this session's own. A root it does not take is
+	// reported and changes nothing else: no step depends on the skill.
+	agentTools := newCodexAgentTools(job, app, emit)
+	if root := writeCodexManagedSkillRoot(scratchDir); root != "" {
+		_, rootErr := app.request(ctx, "skills/extraRoots/set", map[string]interface{}{"extraRoots": []string{root}})
+		agentTools.skillRoot(rootErr, root)
+	} else {
+		agentTools.skillRoot(nil, "")
+	}
+	app.listenOrbitMCP(agentTools.mcpStatus)
+
 	// A resumed thread already carries the developer message an earlier generation
 	// injected, and inject_items appends rather than replaces. Injecting again on every
 	// warm restart / LRU reload would accumulate a copy of the agent context per
@@ -337,6 +359,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 	job.RuntimeSessionID = threadID
 	writeSessionMetaWithCodexState(scratchDir, job, execDir, state.Layout, state.Partition, state.CodexHome)
 	emit(evSystem, map[string]interface{}{"subtype": "init", "sessionId": threadID, "provider": providerCodex, "runtime": "app-server"})
+	agentTools.carrier(app.currentInstructionMode())
 
 	var activeMu sync.Mutex
 	var active *codexAppActiveTurn
@@ -1307,6 +1330,7 @@ func (a *codexAppServer) initialize(ctx context.Context) error {
 		return err
 	}
 	a.setInstructionMode(codexInstructionModeForUserAgent(firstString(result, "userAgent")))
+	a.engineVersion = codexVersionFromUserAgent(firstString(result, "userAgent"))
 	return a.notify("initialized", map[string]interface{}{})
 }
 
@@ -1782,6 +1806,14 @@ func (a *codexAppServer) readLoop(r io.Reader) {
 						a.emit(evSystem, map[string]interface{}{"subtype": "context_compacted"})
 					}
 				}
+				if msg.Method == "mcpServer/startupStatus/updated" {
+					params := rawObject(msg.Params)
+					if name, _ := params["name"].(string); name == codexOrbitMCPServer {
+						state, _ := params["status"].(string)
+						errText, _ := params["error"].(string)
+						a.noteOrbitMCP(state, errText)
+					}
+				}
 				select {
 				case a.notifications <- msg:
 				default:
@@ -1793,6 +1825,29 @@ func (a *codexAppServer) readLoop(r io.Reader) {
 			readErr = err
 			return
 		}
+	}
+}
+
+// noteOrbitMCP keeps the startup state Codex reported for Orbit's MCP server and tells the listener.
+func (a *codexAppServer) noteOrbitMCP(state, errText string) {
+	a.mu.Lock()
+	a.orbitMCPState, a.orbitMCPError = state, errText
+	listener := a.onOrbitMCP
+	a.mu.Unlock()
+	if listener != nil {
+		listener(state, errText)
+	}
+}
+
+// listenOrbitMCP has listener told every startup state Codex reports for Orbit's MCP server from now on,
+// starting with the latest one if Codex has reported any.
+func (a *codexAppServer) listenOrbitMCP(listener func(state, errText string)) {
+	a.mu.Lock()
+	a.onOrbitMCP = listener
+	state, errText := a.orbitMCPState, a.orbitMCPError
+	a.mu.Unlock()
+	if state != "" && listener != nil {
+		listener(state, errText)
 	}
 }
 

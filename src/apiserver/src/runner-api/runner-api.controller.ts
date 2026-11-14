@@ -52,6 +52,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CreatorType, Prisma, RunStatus, TaskStatus, type Runner } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
+import { latestAgentToolsReport } from './agent-tools-report';
 import { withActiveSessions } from '../providers/active-sessions';
 import { accountAfterSignOut, accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount, waitsForWarmCache } from '../providers/plan-usage-accounts';
 import {
@@ -873,6 +874,7 @@ const INGESTED_SESSION_COLUMNS: Record<string, { column: string; type: 'text' | 
   runningBgJobs: { column: 'running_bg_jobs', type: 'text[]' },
   runningSubagents: { column: 'running_subagents', type: 'text[]' },
   runningBgJobActivity: { column: 'running_bg_job_activity', type: 'jsonb' },
+  agentTools: { column: 'agent_tools', type: 'jsonb' },
 };
 
 /** A value of an ingested Session column as text, or undefined when it is not one writeCallSessions carries. */
@@ -8900,6 +8902,8 @@ export class RunnerApiController {
       // it: a turn the runtime started for itself never reaches /turn-complete, so the session
       // stays AWAITING_INPUT for its whole duration.
       const engineTurnActive = engineTurnActiveAfter(durable);
+      // The session's Agent Tools report (Session.agentTools): the newest one in the batch, kept whole.
+      const agentTools = latestAgentToolsReport(durable);
       // What the engine is doing in a stretch where it produces nothing else — see
       // Session.enginePhase. Reduced separately from engineTurnActive above because the two
       // answer different questions off overlapping events: a compaction is not a turn, and the
@@ -8924,6 +8928,7 @@ export class RunnerApiController {
         ...(context ? { contextTokens: context.tokens } : {}),
         ...(context?.window ? { contextWindow: context.window } : {}),
         ...(engineTurnActive !== undefined ? { engineTurnActive } : {}),
+        ...(agentTools ? { agentTools: agentTools as Prisma.InputJsonValue } : {}),
         // null is a decision here (the phase is over), undefined is "this batch said nothing
         // about it" — so only the first may be written over the stored value.
         ...(enginePhase !== undefined ? { enginePhase } : {}),

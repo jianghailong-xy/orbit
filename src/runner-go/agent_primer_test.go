@@ -26,6 +26,8 @@ var agentPrimerHashes = map[string]string{
 	// Agent Contract 1.7.0 (P1-01): the objects paragraph ends by sending an agent to the guide tool, and the
 	// two parentheticals the guide's topics now carry (a list's settings, what "ready" means) give it the room.
 	"1.1.0": "42df1a6cdb6d4ca75601578a5c8b1dc7cacbda7ae9b44d8226853023aa2e80f5",
+	// Agent Contract 1.8.0 (P1-03): the first line names the new contract; no rule changed.
+	"1.2.0": "fefb962238b42c773beef5a583f091d19c3d24b68ddfdc0286e1f810114fbd2c",
 }
 
 // The snapshots: the primer exactly as `initialize` sends it, and the four shapes of the instructions

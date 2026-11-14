@@ -26,7 +26,7 @@ import (
 
 // agentGuideVersion is the version of the guide's content and shape. A topic added, removed or rewritten
 // is a new version.
-const agentGuideVersion = "1.0.0"
+const agentGuideVersion = "1.1.0"
 
 // guideObject is one of the contract's five objects (§1.1) and the question it answers.
 type guideObject struct {
@@ -88,8 +88,11 @@ type guideStep struct {
 }
 
 type guideTopic struct {
-	ID      string
-	Intent  string
+	ID     string
+	Intent string
+	// Asks are things a person says that this topic answers, as they would say them: what lets an agent tie
+	// the person's words to the recipe, and the examples the person's own guide shows (agent_tools_guide.go).
+	Asks    []string
 	Steps   []guideStep
 	Rules   []string
 	Done    string
@@ -100,6 +103,7 @@ type guideTopic struct {
 var guideTopics = []guideTopic{
 	{
 		ID:     "task-create",
+		Asks:   []string{"File this for later: the staging API key needs rotating.", "Someone should fix the flaky watch test."},
 		Intent: "Record one piece of work the user wants kept, followed up or done later.",
 		Steps: []guideStep{
 			{Op: "task_list", Optional: true, Why: "When the work may already be recorded, or you are not sure which project it belongs to, read before you write (R4).",
@@ -121,6 +125,7 @@ var guideTopics = []guideTopic{
 	},
 	{
 		ID:     "task-batch",
+		Asks:   []string{"Keep that plan in Orbit, in order.", "File these four steps so they run one after another."},
 		Intent: "Keep a plan that is already worked out: several tasks with their order and parts, in one call.",
 		Steps: []guideStep{
 			{Op: "task_create_batch", Optional: true, Why: "When you are not sure where the plan files, judge it first: a dry run writes nothing, asks nobody, and answers where every item would land.",
@@ -141,6 +146,7 @@ var guideTopics = []guideTopic{
 	},
 	{
 		ID:     "project-create",
+		Asks:   []string{"Set up the billing migration as a project, with what settles it."},
 		Intent: "Record a whole body of work with its own goal and acceptance, coordinated from this conversation.",
 		Steps: []guideStep{
 			{Op: "project_create", Why: "Propose it in a sentence or two first; the card is the user's answer, and a yes makes this conversation the project's coordinator.",
@@ -163,6 +169,7 @@ var guideTopics = []guideTopic{
 	},
 	{
 		ID:     "task-start",
+		Asks:   []string{"Run the recorded migration task now.", "Fix this now: file it and start it."},
 		Intent: "Run work now: recorded work on its assignee, or new work created and started on one card.",
 		Steps: []guideStep{
 			{Op: "task_start", Why: "Recorded work runs now on its assignee; its prerequisites must be DONE.", Example: map[string]interface{}{"taskId": "<taskId>"}},
@@ -179,6 +186,7 @@ var guideTopics = []guideTopic{
 	},
 	{
 		ID:     "task-schedule",
+		Asks:   []string{"Run the release checklist at 09:00 tomorrow."},
 		Intent: "Have the server start work once, at a set time.",
 		Steps: []guideStep{
 			{Op: "task_create", Why: "New work: create it with runAt.", Example: map[string]interface{}{"runAt": "<ISO 8601 date-time with zone>"}},
@@ -193,6 +201,7 @@ var guideTopics = []guideTopic{
 	},
 	{
 		ID:     "delegate",
+		Asks:   []string{"Have another agent look into the failing deploy while we keep going."},
 		Intent: "Hand work that should run now to another agent as its own conversation.",
 		Steps: []guideStep{
 			{Op: "session_create", Why: "Open the conversation on an agent; the sub-session follows its own permission mode."},
@@ -207,6 +216,7 @@ var guideTopics = []guideTopic{
 	},
 	{
 		ID:     "inspect",
+		Asks:   []string{"What is still open in the agent-contract project?", "Where is that task now?"},
 		Intent: "Read the state of a project, a task or a session before deciding anything.",
 		Steps: []guideStep{
 			{Op: "project_get", Optional: true, Why: "A project's goal, acceptance criteria, instructions, blockers and task counts."},
@@ -224,6 +234,7 @@ var guideTopics = []guideTopic{
 	},
 	{
 		ID:     "wait",
+		Asks:   []string{"Tell me when those three tasks are done."},
 		Intent: "Wait for Orbit work to finish without holding the turn open.",
 		Steps: []guideStep{
 			{Op: "task_await", Why: "Tasks reaching a status: create the wait and end your turn; Orbit starts a new one when it holds."},
@@ -239,6 +250,7 @@ var guideTopics = []guideTopic{
 	},
 	{
 		ID:     "wiki",
+		Asks:   []string{"Remember this pitfall about the migration ledger."},
 		Intent: "Find what is already known about a file or a pattern, and keep what you learned.",
 		Steps: []guideStep{
 			{Op: "wiki_search", Why: "Search by the file's path, or by words, before changing it or proposing: a near neighbour is better reinforced than duplicated."},
@@ -255,6 +267,7 @@ var guideTopics = []guideTopic{
 	},
 	{
 		ID:     "files",
+		Asks:   []string{"Keep this screenshot with the task."},
 		Intent: "Keep a screenshot, report or log in Orbit instead of the repository, or read one back.",
 		Steps: []guideStep{
 			{Op: "file_upload", Why: "Keep the file; it reads only this session's checkout and uploads directory."},
@@ -270,6 +283,7 @@ var guideTopics = []guideTopic{
 	},
 	{
 		ID:     "task-list",
+		Asks:   []string{"Run at most two of these at a time."},
 		Intent: "Give a class of work its own dispatch policy: a concurrency cap, a pause, standing instructions.",
 		Steps: []guideStep{
 			{Op: "tasklist_list", Optional: true, Why: "The lists that exist."},
@@ -285,6 +299,7 @@ var guideTopics = []guideTopic{
 	},
 	{
 		ID:     "agent",
+		Asks:   []string{"Which agent should run this?"},
 		Intent: "Choose where work runs and under which identity, or change an agent's defaults.",
 		Steps: []guideStep{
 			{Op: "agent_list", Why: "The agents (workspaces) there are, where each runs and under which identity."},
@@ -300,6 +315,7 @@ var guideTopics = []guideTopic{
 	},
 	{
 		ID:     "finish-task",
+		Asks:   []string{"Finish the task you are running and submit its evidence."},
 		Intent: "Carry the task this session runs to its end: progress, checks and the evidence its criterion decides by.",
 		Steps: []guideStep{
 			{Op: "task_get", Why: "Read the task this session runs (no id needed), its acceptance criteria and its comments, before acting."},
@@ -479,6 +495,7 @@ type guideTopicDocument struct {
 	CatalogHash    string          `json:"catalogHash"`
 	Topic          string          `json:"topic"`
 	Intent         string          `json:"intent"`
+	Asks           []string        `json:"asks,omitempty"`
 	Routes         []string        `json:"routes,omitempty"`
 	Context        guideContext    `json:"context"`
 	Steps          []guideStepView `json:"steps"`
@@ -576,6 +593,7 @@ func (f guideFacts) topic(built *builtOperationCatalog, topic *guideTopic) guide
 		CatalogHash:    hash,
 		Topic:          topic.ID,
 		Intent:         topic.Intent,
+		Asks:           topic.Asks,
 		Context:        f.context,
 		Rules:          topic.Rules,
 		Done:           topic.Done,
@@ -778,6 +796,9 @@ func guideText(doc interface{}) string {
 		b.WriteString("\nRun 'orbit guide TOPIC' for a topic's recipe.\n")
 	case guideTopicDocument:
 		fmt.Fprintf(&b, "%s — %s\n", d.Topic, d.Intent)
+		for _, ask := range d.Asks {
+			fmt.Fprintf(&b, "  e.g. \"%s\"\n", ask)
+		}
 		for _, step := range d.Steps {
 			optional := ""
 			if step.Optional {

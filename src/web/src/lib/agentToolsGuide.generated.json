@@ -1,0 +1,1072 @@
+{
+  "guideVersion": "1.0.0",
+  "generated": "src/runner-go/agent_tools_guide.go",
+  "sections": [
+    {
+      "id": "mcp-first",
+      "title": "MCP first, the CLI by exception",
+      "lead": "An agent reaches Orbit through Orbit's MCP tools whenever its tool list has them: they are checked against their schema, need no shell, and carry this session's identity without an argument.",
+      "points": [
+        "Claude Code lists them as mcp__orbit__<tool>; Codex and the other engines show the same server's tools under their own prefix.",
+        "Every write answers with a receipt: ok, outcome, the entity's id and its status. A write happened only when the receipt says ok: true and outcome: written.",
+        "When the agent is unsure which tool fits or how to call it, it calls guide: with no arguments for the routes, with a topic for the recipe. guide is listed in every session, whatever its switches.",
+        "MCP and the CLI reach the same server with the same approvals, attribution and ids: a task created on one is read on the other with no translation."
+      ],
+      "asks": [
+        "Which Orbit tools do you have in this session?",
+        "Call guide and tell me which tool records a follow-up."
+      ]
+    },
+    {
+      "id": "record-vs-plan",
+      "title": "Your record and the agent's private plan",
+      "lead": "Orbit is your durable record; the engine's own todo or plan tool is the agent's private scratch.",
+      "points": [
+        "A plan the engine keeps lives in this conversation only: nobody else sees it, and a compaction can drop it.",
+        "Work you want kept or followed up goes to Orbit, where it has an id and a status that you, the apps and later sessions can read.",
+        "The agent never calls a private plan a task, and never says it filed something without an id Orbit returned.",
+        "When you say \"keep that plan\", the plan becomes one task_create_batch: one task per item, its order as dependsOnRefs, its parts as parentRef, in one call and one card."
+      ],
+      "asks": [
+        "Think this migration through first; don't file anything yet.",
+        "OK, keep that plan in Orbit."
+      ]
+    },
+    {
+      "id": "which-object",
+      "title": "Which object a request belongs to",
+      "lead": "Each request goes to the object that answers its question; when two fit, the smaller one wins.",
+      "points": [
+        "Project: What is the whole thing for, and what settles it?",
+        "Task: What is the one piece of work?",
+        "Task list: How is this class of work dispatched?",
+        "Session: What is running right now?",
+        "Agent: Where does it run, and under which identity?",
+        "Not every request is an Orbit write: answering a question, explaining or editing code records nothing."
+      ],
+      "asks": [
+        "Remember to rotate the staging key.",
+        "What is still open in the agent-contract project?"
+      ]
+    },
+    {
+      "id": "create-vs-start",
+      "title": "Creating is not starting",
+      "lead": "task_create records work and runs nothing in the call; starting it is a decision of its own.",
+      "points": [
+        "task_start runs work that is already recorded, on its assignee, once its prerequisites are DONE.",
+        "task_create with startNow: true records the work and starts it on one card.",
+        "runAt starts it once, at a set time; it is not a deadline (that is dueDate).",
+        "autoRunWhenReady defaults to true: an assigned task in a started project starts by itself once every prerequisite is DONE. To hold work until you say so, the agent passes autoRunWhenReady: false.",
+        "Your own \"Create and start\" on the card starts it even if the agent asked for no start, and the agent does not undo that."
+      ],
+      "asks": [
+        "File this for later; nobody should start it until I say so.",
+        "Run the recorded migration task now."
+      ]
+    },
+    {
+      "id": "cli",
+      "title": "When the CLI is the right tool",
+      "lead": "The Orbit CLI is for what MCP does not do well: pipes and scripts, bulk input from a file or stdin, the few operations with no MCP tool, and commands that must outlive the turn.",
+      "points": [
+        "The agent runs it by the absolute path Orbit gives it, never an orbit found on PATH: a project-local binary is not this runner's CLI.",
+        "It finds a command with orbit guide [topic] --json or orbit capabilities --id <id> --json, and runs the argv they return.",
+        "--receipt prints the same receipt the MCP tool answers with, and the command exits 0 exactly when it wrote; --json prints the entity alone.",
+        "Never to get around a card, a refusal or a switch: the CLI reaches the same server under the same approvals, so a declined card or a missing switch there is the same answer.",
+        "Outside a session, a script files work as you, with a personal access token (ORBIT_USER_TOKEN): the runner's own credential has no card-free door.",
+        "The operations with no MCP tool are session_import, wiki_import, wiki_verify; the agent runs them at the CLI."
+      ],
+      "asks": [
+        "File the 30 issues in issues.csv as tasks.",
+        "Give me a command I can put in cron that files tomorrow's checklist."
+      ]
+    },
+    {
+      "id": "troubleshooting",
+      "title": "When something is missing",
+      "lead": "Every refusal says why and what to do, and none of them is solved by another door: the switches stay where they are, and Agent tools shows which one is off.",
+      "points": [
+        "Agent tools on the session shows whether its engine started Orbit's MCP server, and in the engine's own words why not.",
+        "A missing family of tools is a switch: Session orchestration for sessions, agents and runners; Watch for waits; the wiki for the wiki.",
+        "A refused call answers with a receipt whose error.code and error.retry say what to do; the table below reads them for you."
+      ],
+      "asks": [
+        "Why can't you start a session for this?",
+        "Call guide and tell me which Orbit tools you have and why any are missing."
+      ]
+    }
+  ],
+  "routes": [
+    {
+      "route": "R1.1",
+      "intent": "Remember this, file it, do it later, someone should fix it",
+      "object": "task",
+      "operations": [
+        "task_create"
+      ],
+      "topic": "task-create"
+    },
+    {
+      "route": "R1.2",
+      "intent": "Keep this plan: it is already worked out and counted",
+      "object": "task[]",
+      "operations": [
+        "task_create_batch"
+      ],
+      "topic": "task-batch"
+    },
+    {
+      "route": "R1.3",
+      "intent": "Set up this whole body of work, with its own goal and acceptance (4+ dependent steps, or several agents over days)",
+      "object": "project",
+      "operations": [
+        "project_create"
+      ],
+      "topic": "project-create"
+    },
+    {
+      "route": "R1.4",
+      "intent": "Run it now; it is already recorded",
+      "object": "task",
+      "operations": [
+        "task_start"
+      ],
+      "topic": "task-start"
+    },
+    {
+      "route": "R1.5",
+      "intent": "Run it now; it is not recorded yet",
+      "object": "task",
+      "operations": [
+        "task_create"
+      ],
+      "topic": "task-start"
+    },
+    {
+      "route": "R1.6",
+      "intent": "Do it at a set time",
+      "object": "task",
+      "operations": [
+        "task_create",
+        "task_update"
+      ],
+      "topic": "task-schedule"
+    },
+    {
+      "route": "R1.7",
+      "intent": "Hand this to another agent as its own conversation",
+      "object": "session",
+      "operations": [
+        "session_create"
+      ],
+      "topic": "delegate"
+    },
+    {
+      "route": "R1.8",
+      "intent": "What is the state of this project, task or session?",
+      "object": "none",
+      "operations": [
+        "project_get",
+        "task_get",
+        "task_list",
+        "session_get"
+      ],
+      "topic": "inspect"
+    },
+    {
+      "route": "R1.9",
+      "intent": "Wait for it to finish",
+      "object": "watch",
+      "operations": [
+        "task_await",
+        "session_await",
+        "watch_create"
+      ],
+      "topic": "wait"
+    },
+    {
+      "route": "R1.10",
+      "intent": "Remember this lesson or pitfall about a file or a pattern",
+      "object": "wiki",
+      "operations": [
+        "wiki_search",
+        "wiki_propose",
+        "wiki_note"
+      ],
+      "topic": "wiki"
+    },
+    {
+      "route": "R1.11",
+      "intent": "Keep this file, or read one back",
+      "object": "file",
+      "operations": [
+        "file_upload",
+        "file_fetch",
+        "file_list"
+      ],
+      "topic": "files"
+    },
+    {
+      "route": "R1.12",
+      "intent": "This class of work needs its own dispatch policy",
+      "object": "task_list",
+      "operations": [
+        "tasklist_create",
+        "tasklist_update"
+      ],
+      "topic": "task-list"
+    },
+    {
+      "route": "R1.13",
+      "intent": "Which agent should run this, or change an agent's defaults",
+      "object": "agent",
+      "operations": [
+        "agent_list",
+        "agent_create",
+        "agent_update"
+      ],
+      "topic": "agent"
+    },
+    {
+      "route": "R1.14",
+      "intent": "Answer, explain, or edit code",
+      "object": "none",
+      "operations": []
+    }
+  ],
+  "rules": [
+    "R2: The smaller object wins: one task beats a project; one task beats a batch of one.",
+    "R3: Never double-record: not a task per step of the current task, not a task for the current task, not a session to do what this turn can do.",
+    "R4: Read before write when the destination is uncertain: task_list --project-id, project_get, or task_create_batch dryRun.",
+    "R5: An engine plan/todo is private scratch; never call it an Orbit record, never claim a task without its id, never refuse to record work because a private plan covers it."
+  ],
+  "troubleshooting": [
+    {
+      "id": "not-connected",
+      "symptom": "The agent has no Orbit tools.",
+      "cause": "Its engine did not start Orbit's MCP server. Agent tools on the session shows Not connected, with the engine's own reason.",
+      "fix": "The agent can still use the Orbit CLI by the absolute path in its instructions, under the same approvals. A new session starts the server again."
+    },
+    {
+      "id": "orchestration-off",
+      "symptom": "No session, agent or runner tools, and a hand-off is filed as a task.",
+      "cause": "Session orchestration is off for this account.",
+      "fix": "Turn it on in Settings → Session orchestration. A session started before that gets the tools when its engine next starts; turning it off takes effect at once.",
+      "code": "ORCHESTRATION_OFF"
+    },
+    {
+      "id": "watch-off",
+      "symptom": "No task_await, session_await or watch tools.",
+      "cause": "Watch is off for this account on this Orbit server.",
+      "fix": "Nothing to change in the session: the agent looks again in a later turn instead of waiting."
+    },
+    {
+      "id": "wiki-off",
+      "symptom": "No wiki tools.",
+      "cause": "The wiki is off for this account on this Orbit server.",
+      "fix": "The agent works from the code and from what you tell it."
+    },
+    {
+      "id": "plan-mode",
+      "symptom": "A write is refused with SESSION_IN_PLAN_MODE.",
+      "cause": "The session is in Plan: Orbit's reads, waits and questions for you run, and every other write waits for the plan's approval.",
+      "fix": "Approve the plan or change the session's permission mode; the agent makes the write then.",
+      "code": "SESSION_IN_PLAN_MODE"
+    },
+    {
+      "id": "mode-unreadable",
+      "symptom": "A write is refused with PERMISSION_MODE_UNREADABLE.",
+      "cause": "The session's process could not read its permission mode from the runner, so it wrote nothing.",
+      "fix": "The same call is safe to send again. If it keeps happening, the runner restarted under the session: start a new one.",
+      "code": "PERMISSION_MODE_UNREADABLE"
+    },
+    {
+      "id": "declined",
+      "symptom": "The agent says you declined a card.",
+      "cause": "You answered the card with no.",
+      "fix": "Nothing was written, and the agent does not create it another way. Ask again in your own words if you change your mind.",
+      "code": "APPROVAL_DECLINED"
+    },
+    {
+      "id": "waiting",
+      "symptom": "A write is waiting.",
+      "cause": "Its card is waiting for your answer; the runner holds the call meanwhile.",
+      "fix": "Answer the card in the app; the agent is woken with your answer. A card that waits is not a no.",
+      "code": "AWAITING_OWNER"
+    },
+    {
+      "id": "chat",
+      "symptom": "The agent replies to what you wrote on a card instead of filing.",
+      "cause": "You pressed Chat about this: that is a conversation, not a no, and nothing was written.",
+      "fix": "Once you agree, the agent calls again, changed as agreed, and you get a new card."
+    },
+    {
+      "id": "invalid",
+      "symptom": "A call is refused with INVALID_ARGUMENTS.",
+      "cause": "Its arguments do not fit the tool's schema; the receipt names every field that does not.",
+      "fix": "The agent fixes the fields it names and calls again: nothing was sent.",
+      "code": "INVALID_ARGUMENTS"
+    },
+    {
+      "id": "unknown",
+      "symptom": "A create comes back with outcome unknown.",
+      "cause": "It was sent and no answer came back, so it may have landed.",
+      "fix": "The agent reads first (task_list) and only then decides; a create keyed with idempotencyKey is resent by the runner under the same key and cannot file twice.",
+      "code": "NO_RESPONSE"
+    },
+    {
+      "id": "machine-credential",
+      "symptom": "A script on the runner is refused with TASK_WRITE_NEEDS_OWNER_CARD.",
+      "cause": "Outside a session, the runner's own credential cannot file work: that would be a way around your cards.",
+      "fix": "Run the script with your personal access token (ORBIT_USER_TOKEN); the work is recorded as you.",
+      "code": "TASK_WRITE_NEEDS_OWNER_CARD"
+    },
+    {
+      "id": "wrong-binary",
+      "symptom": "An orbit command behaves unlike the agent's tools.",
+      "cause": "A different orbit was found on PATH, such as a project-local build.",
+      "fix": "The agent runs the absolute path in its instructions; capabilities --json names the cliVersion that answered."
+    }
+  ],
+  "examples": [
+    {
+      "id": "record-task",
+      "title": "Record a task",
+      "ask": "File this for later: rotate the staging API key. Nobody should start it until I say so.",
+      "does": "Says what it is about to file, then makes one task_create with autoRunWhenReady: false and a key derived from the work. You answer one card; nothing starts.",
+      "mcp": [
+        {
+          "tool": "task_create",
+          "arguments": {
+            "acceptanceCriteria": "<what you said would settle it>",
+            "autoRunWhenReady": false,
+            "completionCriterion": "EVIDENCE_JUDGMENT",
+            "description": "<background, where the key lives, the steps>",
+            "idempotencyKey": "rotate-staging-api-key",
+            "title": "Rotate the staging API key"
+          }
+        }
+      ],
+      "cli": [
+        [
+          "orbit",
+          "task",
+          "create",
+          "--title",
+          "Rotate the staging API key",
+          "--description",
+          "<background, where the key lives, the steps>",
+          "--completion-criterion",
+          "EVIDENCE_JUDGMENT",
+          "--acceptance-criteria",
+          "<what you said would settle it>",
+          "--auto-run-when-ready=false",
+          "--idempotency-key",
+          "rotate-staging-api-key",
+          "--receipt"
+        ]
+      ],
+      "proof": "The receipt reads ok: true, outcome: written, with the task's id and status OPEN; the agent links it as the task's name, and no session starts.",
+      "scenario": "E1-record-task, E3-create-no-start"
+    },
+    {
+      "id": "keep-plan",
+      "title": "Keep a plan of several steps",
+      "ask": "Keep that three-step migration plan in Orbit, in order, and hold the last step until I say so.",
+      "does": "Turns its private plan into one task_create_batch: one item per step, each later step dependsOnRefs the one before, the held step with autoRunWhenReady: false. One card covers the whole plan.",
+      "mcp": [
+        {
+          "tool": "task_create_batch",
+          "arguments": {
+            "dryRun": true,
+            "tasks": [
+              {
+                "acceptanceCriteria": "<what settles it>",
+                "completionCriterion": "EVIDENCE_JUDGMENT",
+                "description": "<what to do, the files, the steps>",
+                "ref": "s1",
+                "title": "Add the new columns"
+              },
+              {
+                "acceptanceCriteria": "<what settles it>",
+                "completionCriterion": "EVIDENCE_JUDGMENT",
+                "dependsOnRefs": [
+                  "s1"
+                ],
+                "description": "<what to do, the files, the steps>",
+                "ref": "s2",
+                "title": "Backfill the rows"
+              },
+              {
+                "acceptanceCriteria": "<what settles it>",
+                "autoRunWhenReady": false,
+                "completionCriterion": "EVIDENCE_JUDGMENT",
+                "dependsOnRefs": [
+                  "s2"
+                ],
+                "description": "<what to do, the files, the steps>",
+                "ref": "s3",
+                "title": "Switch the reads over"
+              }
+            ]
+          }
+        },
+        {
+          "tool": "task_create_batch",
+          "arguments": {
+            "idempotencyKey": "orders-migration-plan",
+            "tasks": [
+              {
+                "acceptanceCriteria": "<what settles it>",
+                "completionCriterion": "EVIDENCE_JUDGMENT",
+                "description": "<what to do, the files, the steps>",
+                "ref": "s1",
+                "title": "Add the new columns"
+              },
+              {
+                "acceptanceCriteria": "<what settles it>",
+                "completionCriterion": "EVIDENCE_JUDGMENT",
+                "dependsOnRefs": [
+                  "s1"
+                ],
+                "description": "<what to do, the files, the steps>",
+                "ref": "s2",
+                "title": "Backfill the rows"
+              },
+              {
+                "acceptanceCriteria": "<what settles it>",
+                "autoRunWhenReady": false,
+                "completionCriterion": "EVIDENCE_JUDGMENT",
+                "dependsOnRefs": [
+                  "s2"
+                ],
+                "description": "<what to do, the files, the steps>",
+                "ref": "s3",
+                "title": "Switch the reads over"
+              }
+            ]
+          }
+        }
+      ],
+      "cli": [
+        [
+          "orbit",
+          "task",
+          "create-batch",
+          "--tasks-file",
+          "-",
+          "--dry-run",
+          "--json"
+        ],
+        [
+          "orbit",
+          "task",
+          "create-batch",
+          "--tasks-file",
+          "-",
+          "--idempotency-key",
+          "orders-migration-plan",
+          "--receipt"
+        ]
+      ],
+      "proof": "The receipt reads ok: true, outcome: written, with three ids in input order, each with its ref; the order is visible as dependencies when the tasks are read back.",
+      "scenario": "E2-private-plan, E4-batch-plan",
+      "playbook": "keep-a-plan"
+    },
+    {
+      "id": "delegate-now",
+      "title": "Hand work off now",
+      "ask": "Have someone fix the flaky watch test right now.",
+      "does": "Recorded work: task_start on it. Work not recorded yet: task_create with startNow: true, one card for both. A conversation of its own: session_create, which needs Session orchestration; without it the agent files a task and tells you where the switch is.",
+      "mcp": [
+        {
+          "tool": "task_start",
+          "arguments": {
+            "taskId": "<taskId>"
+          }
+        },
+        {
+          "tool": "task_create",
+          "arguments": {
+            "acceptanceCriteria": "<what settles it>",
+            "completionCriterion": "EVIDENCE_JUDGMENT",
+            "description": "<the failing test, how it fails, where>",
+            "idempotencyKey": "fix-flaky-watch-test",
+            "startNow": true,
+            "title": "Fix the flaky watch test"
+          }
+        },
+        {
+          "tool": "session_create",
+          "arguments": {
+            "prompt": "<the whole brief: what, where, how to check>"
+          }
+        }
+      ],
+      "cli": [
+        [
+          "orbit",
+          "task",
+          "start",
+          "<taskId>",
+          "--receipt"
+        ],
+        [
+          "orbit",
+          "task",
+          "create",
+          "--title",
+          "Fix the flaky watch test",
+          "--description",
+          "<the failing test, how it fails, where>",
+          "--completion-criterion",
+          "EVIDENCE_JUDGMENT",
+          "--acceptance-criteria",
+          "<what settles it>",
+          "--start-now",
+          "--idempotency-key",
+          "fix-flaky-watch-test",
+          "--receipt"
+        ],
+        [
+          "orbit",
+          "session",
+          "create",
+          "--prompt",
+          "<the whole brief: what, where, how to check>",
+          "--receipt"
+        ]
+      ],
+      "proof": "A started session's id: task_start's receipt names it, a startNow create carries it as start.sessionId, and session_create's receipt is the session itself.",
+      "scenario": "E6-immediate-delegation, E7-no-orchestration",
+      "playbook": "delegate-now"
+    },
+    {
+      "id": "batch-script",
+      "title": "File many tasks from a script",
+      "ask": "File the 30 issues in issues.txt as tasks, held until I start them.",
+      "does": "Uses the CLI's bulk door instead of one task_create per line: a script turns the file into one --tasks document (at most 50 items), a dry run shows where it lands, and one create-batch writes it on one card.",
+      "mcp": [],
+      "cli": [
+        [
+          "orbit",
+          "task",
+          "create-batch",
+          "--tasks-file",
+          "-",
+          "--dry-run",
+          "--json"
+        ],
+        [
+          "orbit",
+          "task",
+          "create-batch",
+          "--tasks-file",
+          "-",
+          "--idempotency-key",
+          "issues-txt-part-1",
+          "--receipt"
+        ]
+      ],
+      "script": "jq -R -s 'split(\"\\n\") | map(select(length > 0)) | {tasks: map({title: ., description: (\"Fix: \" + .), completionCriterion: \"EVIDENCE_JUDGMENT\", acceptanceCriteria: \"<what settles it>\", autoRunWhenReady: false})}' issues.txt > plan.json\norbit task create-batch --tasks-file - --dry-run --json < plan.json\norbit task create-batch --tasks-file - --idempotency-key issues-txt-part-1 --receipt < plan.json",
+      "proof": "--receipt prints one receipt with every item's id in input order, and the command exits 0 exactly when it wrote. Outside a session the same command runs with ORBIT_USER_TOKEN and is recorded as you.",
+      "scenario": "E4-batch-plan",
+      "playbook": "batch-script"
+    }
+  ],
+  "playbooks": [
+    {
+      "id": "keep-a-plan",
+      "title": "Keep a worked-out plan",
+      "when": "The person asks you to keep a plan that is already worked out and counted, or several related pieces of work at once.",
+      "steps": [
+        "Pick the record. One item is one task_create. Several related items are one task_create_batch (at most 50). A body of work with its own goal and acceptance, 4 or more dependent steps or several agents over days, may be proposed as project_create first; its card is the person's answer, and a no means tasks.",
+        "Give every item a ref (s1, s2, ...). Order with dependsOnRefs (when an item may run) and nest with parentRef (what it is part of). dependsOnTaskIds and parentTaskId name tasks that already exist.",
+        "Ask the person what would settle each item and pass their words as acceptanceCriteria; declare completionCriterion on every item. If they have not said, ask and end your turn.",
+        "Hold what must not start: autoRunWhenReady: false on that item. startNow: true only on an item they want running now.",
+        "Unsure where it lands? Call task_create_batch with dryRun: true first: it writes nothing and asks nobody.",
+        "Say in a sentence or two what you are about to file, then call task_create_batch once, keyed with an idempotencyKey derived from the plan.",
+        "Read the receipt: ok: true, outcome: written, items[] in input order, each with its id. Link each as [title](orbit-task:<id>). A declined card is a refusal: do not file it another way."
+      ]
+    },
+    {
+      "id": "batch-script",
+      "title": "File many tasks from a file",
+      "when": "The work arrives as a file or a list too long to type: issues in a text file or a CSV, lines of a checklist.",
+      "steps": [
+        "Use the CLI's bulk door, by the absolute path your instructions give, never one task_create per line.",
+        "Build one --tasks document of at most 50 items with a script; every item carries title, description, completionCriterion and acceptanceCriteria, and autoRunWhenReady: false when it must wait.",
+        "Preview it: orbit task create-batch --tasks-file - --dry-run --json writes nothing and says where every item would land.",
+        "Write it: orbit task create-batch --tasks-file - --idempotency-key <a slug of the batch> --receipt. Inside a session it puts one card in front of the person; it exits 0 exactly when it wrote.",
+        "More than 50 items: split them into parts, each with its own key. A part that fails can be sent again with the same key and cannot file twice.",
+        "Outside a session (cron, CI) run the same command with the person's own token: ORBIT_USER_TOKEN=<token> orbit task create-batch ... is recorded as them and needs no card. The runner's machine credential cannot file work on its own (TASK_WRITE_NEEDS_OWNER_CARD)."
+      ],
+      "code": "jq -R -s 'split(\"\\n\") | map(select(length > 0)) | {tasks: map({title: ., description: (\"Fix: \" + .), completionCriterion: \"EVIDENCE_JUDGMENT\", acceptanceCriteria: \"<what settles it>\", autoRunWhenReady: false})}' issues.txt > plan.json\norbit task create-batch --tasks-file - --dry-run --json < plan.json\norbit task create-batch --tasks-file - --idempotency-key issues-txt-part-1 --receipt < plan.json"
+    },
+    {
+      "id": "delegate-now",
+      "title": "Hand work off now",
+      "when": "The person wants work running now, by another agent or in a conversation of its own.",
+      "steps": [
+        "Recorded already, with every prerequisite DONE: task_start on it. Its receipt names the started session.",
+        "Not recorded yet: task_create with startNow: true. One card covers the create and the start; do not call task_start after it.",
+        "The person wants a separate conversation rather than a work item: session_create on an agent. It exists only with Session orchestration on, and a sub-session never gets a wider permission mode than yours.",
+        "No session_* tools in your list: orchestration is off. Record the work as a task, tell the person the switch is in Settings -> Session orchestration, and never claim a delegation.",
+        "Then wait without polling: task_await or session_await, and end your turn. Orbit starts a new turn in this session when it finishes."
+      ]
+    },
+    {
+      "id": "diagnose",
+      "title": "Find out why an Orbit tool is missing or refused",
+      "when": "A tool you expected is not in your list, or a call was refused and you are not sure why.",
+      "steps": [
+        "Call guide: it is listed in every session and only reads. Its index says, route by route, whether the route is available here and why not.",
+        "No Orbit tools at all: your engine did not start Orbit's MCP server. Use the CLI at the absolute path your instructions give: orbit guide --json, then orbit capabilities --summary --json, whose unavailable and withheld groups say why each command is missing.",
+        "A refused call: read its receipt, not its prose. error.code says what happened and error.retry what to do: resend, reread_first, fix_input, do_not_retry or wait.",
+        "Never get around a refusal by changing surfaces: MCP and the CLI reach the same server under the same approvals, so the answer would be the same, and a second ask without a new question.",
+        "Tell the person what is missing and where the switch is; the switches are theirs to change."
+      ]
+    }
+  ],
+  "families": [
+    {
+      "id": "tasks",
+      "label": "Tasks",
+      "tools": [
+        "task_attribution",
+        "task_batch_pin",
+        "task_comment",
+        "task_confirmation_return",
+        "task_confirmation_review",
+        "task_create",
+        "task_create_batch",
+        "task_delete",
+        "task_dependency_add",
+        "task_dependency_graph",
+        "task_dependency_remove",
+        "task_evidence_decide",
+        "task_evidence_list",
+        "task_evidence_submit",
+        "task_get",
+        "task_labels",
+        "task_list",
+        "task_progress_report",
+        "task_reopen",
+        "task_start",
+        "task_update"
+      ]
+    },
+    {
+      "id": "projects",
+      "label": "Projects",
+      "tools": [
+        "criterion_check_report",
+        "criterion_check_start",
+        "criterion_confirm",
+        "criterion_confirmation_withdraw",
+        "integration_abandon",
+        "integration_observe",
+        "integration_request_promotion",
+        "integration_retry",
+        "integration_skip_merge_check",
+        "open_item_resolve",
+        "project_blocker_resolve",
+        "project_create",
+        "project_crossings",
+        "project_delete",
+        "project_get",
+        "project_integration_get",
+        "project_request_done",
+        "project_request_start",
+        "project_update"
+      ]
+    },
+    {
+      "id": "task-lists",
+      "label": "Task lists",
+      "tools": [
+        "tasklist_create",
+        "tasklist_delete",
+        "tasklist_get",
+        "tasklist_list",
+        "tasklist_propose_dag",
+        "tasklist_update"
+      ]
+    },
+    {
+      "id": "waits",
+      "label": "Waits",
+      "tools": [
+        "task_await",
+        "watch_cancel",
+        "watch_create",
+        "watch_get",
+        "watch_list",
+        "watch_update"
+      ]
+    },
+    {
+      "id": "files",
+      "label": "Files",
+      "tools": [
+        "file_fetch",
+        "file_list",
+        "file_pin",
+        "file_upload"
+      ]
+    },
+    {
+      "id": "background",
+      "label": "Background jobs",
+      "tools": [
+        "bg_kill",
+        "bg_list",
+        "bg_output",
+        "bg_run",
+        "schedule_wakeup"
+      ]
+    },
+    {
+      "id": "owner",
+      "label": "Questions for you",
+      "tools": [
+        "ask_owner",
+        "notify",
+        "open_item_hand_over",
+        "request_owner_action",
+        "task_request_confirmation",
+        "withdraw_owner_request"
+      ]
+    },
+    {
+      "id": "wiki",
+      "label": "Wiki",
+      "tools": [
+        "wiki_draft",
+        "wiki_get",
+        "wiki_note",
+        "wiki_propose",
+        "wiki_search"
+      ]
+    },
+    {
+      "id": "providers",
+      "label": "Providers",
+      "tools": [
+        "provider_create",
+        "provider_delete",
+        "provider_list",
+        "provider_update"
+      ]
+    },
+    {
+      "id": "merge-receipts",
+      "label": "Merge receipts",
+      "tools": [
+        "merge_receipt",
+        "merge_receipts",
+        "project_merge_evidence"
+      ]
+    },
+    {
+      "id": "guide",
+      "label": "Guide",
+      "tools": [
+        "guide"
+      ]
+    },
+    {
+      "id": "orchestration",
+      "label": "Sessions, agents and runners",
+      "tools": [
+        "agent_create",
+        "agent_delete",
+        "agent_list",
+        "agent_update",
+        "project_ensure_coordinator",
+        "project_send",
+        "runner_delete",
+        "runner_engine_install",
+        "runner_engine_install_status",
+        "runner_list",
+        "session_await",
+        "session_complete",
+        "session_create",
+        "session_delete",
+        "session_end",
+        "session_get",
+        "session_interrupt",
+        "session_list",
+        "session_merge",
+        "session_reply",
+        "session_search",
+        "session_send"
+      ]
+    }
+  ],
+  "instructions": {
+    "claude": [
+      {
+        "id": "engine",
+        "title": "Claude Code's system prompt",
+        "role": "system",
+        "roleLabel": "System",
+        "detail": "The engine's own.",
+        "source": "engine",
+        "when": [
+          "no_base"
+        ]
+      },
+      {
+        "id": "workspace-base",
+        "title": "This workspace's base instructions",
+        "role": "system",
+        "roleLabel": "System",
+        "detail": "In place of Claude Code's own system prompt (--system-prompt).",
+        "source": "workspace",
+        "when": [
+          "base"
+        ]
+      },
+      {
+        "id": "workspace",
+        "title": "This workspace's runtime instructions",
+        "role": "system",
+        "roleLabel": "System · appended",
+        "detail": "Appended to the system prompt (--append-system-prompt), before Orbit's.",
+        "source": "workspace",
+        "when": [
+          "workspace"
+        ]
+      },
+      {
+        "id": "orbit",
+        "title": "Orbit's runtime instructions",
+        "role": "system",
+        "roleLabel": "System · appended",
+        "detail": "The primer 1.2.0, then the CLI's absolute path, files, evidence, progress, waits and the wiki. Appended to the system prompt, so a compaction does not touch them.",
+        "source": "orbit"
+      },
+      {
+        "id": "repository",
+        "title": "CLAUDE.md files",
+        "role": "user",
+        "roleLabel": "Project context",
+        "detail": "Put by Claude Code at the top of your first message, as a reminder that they override its defaults. Orbit neither reads nor changes them.",
+        "source": "repository"
+      },
+      {
+        "id": "person",
+        "title": "Your messages",
+        "role": "user",
+        "roleLabel": "User",
+        "detail": "With the task or project context Orbit attaches to them.",
+        "source": "person"
+      },
+      {
+        "id": "mcp",
+        "title": "Orbit MCP server instructions",
+        "role": "system",
+        "roleLabel": "System message",
+        "detail": "The primer again, in the system message Claude Code adds after your first message, beside the environment and the list of skills.",
+        "source": "orbit"
+      },
+      {
+        "id": "skill",
+        "title": "Orbit playbooks · orbit:playbooks",
+        "role": "on_demand",
+        "roleLabel": "On demand",
+        "detail": "Listed in that system message by name; its recipes are read only when the agent opens it, and nothing depends on it.",
+        "source": "orbit"
+      }
+    ],
+    "codex": [
+      {
+        "id": "engine",
+        "title": "Codex's base instructions",
+        "role": "developer",
+        "roleLabel": "Developer",
+        "detail": "The engine's own.",
+        "source": "engine",
+        "when": [
+          "no_base"
+        ]
+      },
+      {
+        "id": "workspace-base",
+        "title": "This workspace's base instructions",
+        "role": "developer",
+        "roleLabel": "Developer",
+        "detail": "In place of Codex's own base instructions (baseInstructions).",
+        "source": "workspace",
+        "when": [
+          "base"
+        ]
+      },
+      {
+        "id": "skill",
+        "title": "Orbit playbooks · orbit-playbooks",
+        "role": "on_demand",
+        "roleLabel": "On demand",
+        "detail": "Listed among Codex's skills by name and description; its recipes are read only when the agent opens it, and nothing depends on it.",
+        "source": "orbit"
+      },
+      {
+        "id": "repository",
+        "title": "AGENTS.md files",
+        "role": "user",
+        "roleLabel": "Project context",
+        "detail": "Read by Codex from the checkout. Orbit neither reads nor changes them.",
+        "source": "repository"
+      },
+      {
+        "id": "workspace",
+        "title": "This workspace's runtime instructions",
+        "role": "developer",
+        "roleLabel": "Developer",
+        "detail": "Application context, just before Orbit's.",
+        "source": "workspace",
+        "when": [
+          "workspace",
+          "additional_context"
+        ]
+      },
+      {
+        "id": "orbit",
+        "title": "Orbit's runtime instructions",
+        "role": "developer",
+        "roleLabel": "Developer",
+        "detail": "The primer 1.2.0, then the CLI's absolute path, files, evidence, progress, waits and the wiki. Application context, sent with every turn, so a compaction cannot drop them.",
+        "source": "orbit",
+        "when": [
+          "additional_context"
+        ]
+      },
+      {
+        "id": "workspace",
+        "title": "This workspace's runtime instructions",
+        "role": "developer",
+        "roleLabel": "Developer",
+        "detail": "In the same developer message as Orbit's, before them.",
+        "source": "workspace",
+        "when": [
+          "workspace",
+          "developer_message"
+        ]
+      },
+      {
+        "id": "orbit",
+        "title": "Orbit's runtime instructions",
+        "role": "developer",
+        "roleLabel": "Developer",
+        "detail": "The primer 1.2.0, then the CLI's absolute path, files, evidence, progress, waits and the wiki. One developer message, sent again after a compaction.",
+        "source": "orbit",
+        "when": [
+          "developer_message"
+        ]
+      },
+      {
+        "id": "workspace",
+        "title": "This workspace's runtime instructions",
+        "role": "user",
+        "roleLabel": "User · turn input",
+        "detail": "In the same block as Orbit's, before them.",
+        "source": "workspace",
+        "when": [
+          "workspace",
+          "turn_input"
+        ]
+      },
+      {
+        "id": "orbit",
+        "title": "Orbit's runtime instructions",
+        "role": "user",
+        "roleLabel": "User · turn input",
+        "detail": "The primer 1.2.0, then the CLI's absolute path, files, evidence, progress, waits and the wiki. At the top of every turn's input.",
+        "source": "orbit",
+        "when": [
+          "turn_input"
+        ]
+      },
+      {
+        "id": "person",
+        "title": "Your messages",
+        "role": "user",
+        "roleLabel": "User",
+        "detail": "Codex's own base instructions put your message ahead of a skill or a repository file.",
+        "source": "person"
+      },
+      {
+        "id": "mcp",
+        "title": "Orbit MCP server instructions",
+        "role": "tools",
+        "roleLabel": "With the tools",
+        "detail": "Shown with Orbit's tools, cut to their first 250 characters; the runtime instructions above carry the whole primer either way.",
+        "source": "orbit"
+      }
+    ]
+  },
+  "instructionsNote": "Orbit's own instructions are the same words on every engine: they begin with the primer, and nothing in a repository, a CLAUDE.md or an AGENTS.md, adds to them or takes them away. Where they disagree with your own message, your message steers the turn.",
+  "permissionModes": [
+    {
+      "mode": "plan",
+      "label": "Plan",
+      "orbit": "Orbit's reads, waits and questions for you run. Every other Orbit write is refused with SESSION_IN_PLAN_MODE until the plan is approved, and background jobs are refused."
+    },
+    {
+      "mode": "default",
+      "label": "Default",
+      "orbit": "Orbit's reads and waits run unasked. A create, a batch, a project, a provider or an agent change puts a card in front of you first, and a background job asks before it starts."
+    },
+    {
+      "mode": "acceptEdits",
+      "label": "Accept Edits",
+      "orbit": "As Default for Orbit's calls: a create, a batch or a project still puts a card in front of you, and a background job asks before it starts."
+    },
+    {
+      "mode": "dontAsk",
+      "label": "Don't Ask",
+      "orbit": "Orbit's reads and writes run unasked, except a write that needs your card, which still asks. Background jobs are refused."
+    },
+    {
+      "mode": "auto",
+      "label": "Auto",
+      "orbit": "Orbit's calls run, and a write that needs your card still asks; on Codex a destructive call goes to Codex's own review first. Background jobs start without asking."
+    },
+    {
+      "mode": "bypassPermissions",
+      "label": "Bypass",
+      "orbit": "Orbit's calls run, and a write that needs your card still asks. Background jobs start without asking."
+    }
+  ],
+  "orchestration": {
+    "on": "Session orchestration is on for this account: the agent may open and steer sessions, and manage this account's agents and runners. A sub-session never gets a wider permission mode than this one.",
+    "off": "Session orchestration is off for this account, so the agent has no session, agent or runner tools and records a hand-off as a task instead. Turn it on in Settings → Session orchestration."
+  },
+  "status": {
+    "cancelled": "{engine} stopped starting Orbit's MCP server.",
+    "connected": "{engine} started Orbit's MCP server and lists {tools} Orbit tools.",
+    "failed": "{engine} could not start Orbit's MCP server.",
+    "fallback": "Orbit's runtime instructions still reached the agent, so it can use the Orbit CLI by its absolute path, under the same approvals. A new session starts the server again.",
+    "needs_auth": "{engine} is waiting for a sign-in before it starts Orbit's MCP server.",
+    "not_configured": "{engine} was started without Orbit's MCP server.",
+    "not_reported": "This session's engine does not report its MCP connections to the runner.",
+    "starting": "{engine} is still starting Orbit's MCP server."
+  },
+  "skill": {
+    "claude": "orbit:playbooks",
+    "codex": "orbit-playbooks",
+    "purpose": "Orbit's long recipes: keeping a worked-out plan as one batch, filing many tasks from a file with the CLI, handing work off now, and finding out why an Orbit tool is missing or refused. Optional: guide and the tools' own descriptions are enough for any single call."
+  },
+  "switchReasons": {
+    "not_connected": "The MCP server is not connected.",
+    "orchestration": "Session orchestration is off for this account.",
+    "watches": "Watch is off for this account on this Orbit server.",
+    "wiki": "The wiki is off for this account on this Orbit server."
+  },
+  "engineNames": {
+    "claude": "Claude Code",
+    "codex": "Codex"
+  }
+}

@@ -1,6 +1,6 @@
 # Orbit Agent Contract v1
 
-> **Status:** frozen at v1.7.0, 2026-11-14 (v1.0.0 review record in §11; the 1.1.0 to 1.7.0 changes
+> **Status:** frozen at v1.8.0, 2026-11-14 (v1.0.0 review record in §11; the 1.1.0 to 1.8.0 changes
 > are in §10). v1.1.0 adds the operation catalogue and changes no routing rule; v1.2.0 closes the
 > card-free task-write door on the runner's machine credential; v1.3.0 makes tool input strict and every
 > write's answer a structured receipt (§5.3, §6.3); v1.4.0 gives the owner's "Chat about this" on a card
@@ -8,7 +8,10 @@
 > agent primer (§2.6) and changes no rule; v1.6.0 makes the permission modes mean the same for Orbit's
 > calls on Claude and Codex: Plan runs Orbit's reads and refuses its writes with a receipt (§4.1, §6.3);
 > v1.7.0 adds graded discovery and the `guide` tool (§2.5), so calling one operation no longer means reading
-> the whole catalogue. This file is the authority for how an
+> the whole catalogue; v1.8.0 gives the person their side of the contract (§2.7): the Agent Tools guide,
+> generated from the catalogue, the managed playbooks skill, and each session's report of what its engine
+> took, and says "runtime instructions" where "system prompt" was not true on every engine. This file is the
+> authority for how an
 > in-session Claude or Codex agent uses Orbit: which object an intent belongs to, whether it travels
 > over MCP or the CLI, what a person must approve, how failures and retries are handled, and what
 > counts as a success receipt. The implementation tasks P0-02 … P2-01 work from this file. If the code
@@ -75,7 +78,7 @@
 | **Task** | "What is the one piece of work?" | The durable work item: title, executable `description`, exactly one `completionCriterion`, `acceptanceCriteria`, status, optional project, list, assignee (Agent), parent, prerequisites, priority, labels, due date, run schedule. | The agent's todo list; a session; a note. | `OPEN` → `IN_PROGRESS` → `DONE` / `FAILED` / `CANCELLED`. Completion is the projection of its declared criterion, never a direct write. |
 | **Task list** | "How is this class of work dispatched?" | The dispatch policy: `maxConcurrent`, `paused` (a dispatch hold, not a stop of runs already in flight), standing `instructions` spliced into each run prompt, and the queue in which task `priority` orders what is ready. | A plan; a project; a grouping for display only. It decides *when* work may run, not *what* the work is. | Exists until deleted. A paused list stays paused until someone unpauses it. |
 | **Session** | "What is running right now?" | One engine conversation on a runner: task-linked (the run of a task) or standalone (a conversation), with status, engine, provider, model, permission mode, spawn depth. | The durable record of the work. A session can end; the task outlives it. | `PENDING` → `RUNNING` → `AWAITING_INPUT` (turn settled, not terminal) → … → `SUCCEEDED` / `FAILED` / `CANCELLED` / `INTERRUPTED`, then lifecycle `COMPLETED` / `TRASH`. |
-| **Agent** | "Where does it run, and under which identity?" | The execution identity and location an operation is attributed to: name, working directory, runner binding, system prompts, environment, effort, and a legacy model pin. A workspace holds no engine or provider of its own — the engine/provider a run uses is bound on the session. In the live product this is the `workspace` row that MCP `agent_*`, CLI `orbit agent` and `task_start` all name. | A permission grant; a project role; the human. (The frozen domain contract separates a future pure-identity `agent` table from the workspace location — see `project-agent-contract.md` §3.1; the agent-facing alias is the workspace row until that split ships.) | Created, configured, deleted by the owner's account; sessions run under it. |
+| **Agent** | "Where does it run, and under which identity?" | The execution identity and location an operation is attributed to: name, working directory, runner binding, its instructions (runtime instructions added to every run, and rarely base instructions in place of the engine's own prompt), environment, effort, and a legacy model pin. A workspace holds no engine or provider of its own — the engine/provider a run uses is bound on the session. In the live product this is the `workspace` row that MCP `agent_*`, CLI `orbit agent` and `task_start` all name. | A permission grant; a project role; the human. (The frozen domain contract separates a future pure-identity `agent` table from the workspace location — see `project-agent-contract.md` §3.1; the agent-facing alias is the workspace row until that split ships.) | Created, configured, deleted by the owner's account; sessions run under it. |
 
 ### 1.2 Identity and naming
 
@@ -200,7 +203,8 @@ Since v1.7.0 an agent finds an operation a piece at a time; it never has to read
 to call one operation.
 
 - **The guide** (`guide` on MCP, `orbit guide [TOPIC] --json` at the CLI; `src/runner-go/agent_guide.go`,
-  guide `1.0.0`) is the catalogue arranged by what a person asks for. It is always listed — orchestration,
+  guide `1.1.0`) is the catalogue arranged by what a person asks for; since 1.1.0 (contract 1.8.0) each topic
+  also carries `asks`, things a person says that the topic answers, which the person's guide (§2.7) prints too. It is always listed — orchestration,
   Watch and the wiki off included — read-only (`readOnlyHint`), and asks the server nothing. Without a
   topic it answers the five objects and the question each answers (§1.1), the intent routes R1.1–R1.14
   (§1.3: what the person says, the object, the operations, the topic, and whether the route is
@@ -266,8 +270,8 @@ to call one operation.
 ### 2.6 The always-on primer
 
 §0 is also the first thing every agent Orbit runs reads, as one short text: the **agent primer**
-(`src/runner-go/agent_primer.go`; primer `1.1.0`, written from contract `1.7.0`; 1.0.1, from contract 1.6.0,
-changed only the contract version its first line names). Its first line names both versions. It says the
+(`src/runner-go/agent_primer.go`; primer `1.2.0`, written from contract `1.8.0`, which changed only the
+contract version its first line names, as 1.0.1, from contract 1.6.0, did). Its first line names both versions. It says the
 ten rules in eight paragraphs, names tools by their MCP names, and carries
 no engine's spelling of them and no path, so the same words are true in every client. Since primer
 `1.1.0` its objects paragraph ends by sending an agent unsure which operation fits, or how to call it,
@@ -313,6 +317,66 @@ What the text is held to (`src/runner-go/agent_primer_test.go`):
 `orbit mcp help` (also `orbit mcp --help`, `orbit help mcp`) names the runtimes the runner starts the
 server on and the objects its tools act on, read from the runner's runtime table and from the
 operation catalogue, and the primer version `initialize` answers with.
+
+### 2.7 The person's side: Agent Tools
+
+Since v1.8.0 (P1-03) the person reads the same contract the agent does, without the Orbit repository, and
+sees what one session's agent actually has. Four things, one source each:
+
+**The guide, generated.** `src/runner-go/agent_tools_guide.go` (guide `1.0.0`) holds what a person reads
+about how agents use Orbit — MCP first, the record versus the private plan, which object a request belongs
+to, create versus start, the CLI's place, and what to do when something is missing — with at least four
+worked examples (record a task, keep a plan of several steps, hand work off now, file many tasks from a
+script), each with the MCP calls, the CLI lines and what proves it. Everything that names an operation
+comes from the catalogue and the route guide (§2.5). It renders five outputs, each held to it byte for
+byte by `agent_tools_guide_test.go` (regenerated with `ORBIT_UPDATE_AGENT_TOOLS_GUIDE=1`): the public
+[`agent-tools-guide.md`](./agent-tools-guide.md), which also prints every guide topic as a workflow with
+each step's MCP tool and CLI command; the web console's copy (`src/web/src/lib/agentToolsGuide.generated.json`);
+OrbitKit's (`AgentTools/AgentToolsGuide.generated.swift`); and the playbooks skill for each engine. The same
+test passes every example's MCP arguments through its tool's own schema and every `orbit` line through its
+command's own flag parser, holds every refusal code the troubleshooting table names to a code Orbit answers,
+puts every MCP tool but the permission bridge in exactly one family, and holds what each permission mode is
+said to mean for a background job to `permission.backgroundJobsByMode` in the machine-readable index.
+
+**The playbooks skill, managed and off the critical path.** The long recipes only — keep a worked-out plan,
+file many tasks from a file, hand work off now, find out why a tool is missing or refused — rendered from
+the same rows. Claude Code is given it as the plugin `orbit` with the skill `playbooks` (listed as
+`orbit:playbooks`), written into the session's own scratch directory and passed with `--plugin-dir` (from
+Claude Code 2.1.325, where it was measured; an older CLI refuses an unknown flag and gets none). Codex is
+given it as `orbit-playbooks`, a skill root in the session's scratch directory handed to its app server
+with `skills/extraRoots/set` (measured on 0.167.2; a Codex that refuses it is reported, nothing else
+changes). Neither touches the person's own `~/.claude` or `CODEX_HOME`. The primer and the engine
+instructions never name it, a test holds that, and every single call is answered without it.
+
+**What the agent reads, measured.** Recorded on 2026-11-14 from each engine's own request to a local stub:
+
+| Engine | In the order the model reads them, with their role |
+| --- | --- |
+| Claude Code 2.1.325 | the system prompt (or the workspace's base instructions, `--system-prompt`); appended to it, the workspace's runtime instructions, then Orbit's (`--append-system-prompt`); the first user message, opening with a reminder carrying the CLAUDE.md files ("they override the defaults"), then the person's words; then a system-role message with the environment, Orbit's MCP server instructions (the primer) and the list of skills |
+| Codex 0.167.2 | the base instructions as a developer message (or the workspace's, `baseInstructions`); the skills list, developer; AGENTS.md, user; the workspace's runtime instructions, then Orbit's, developer application context (0.135 and later; one developer message on 0.125–0.134, the turn's input before); the person's message; Orbit's MCP server instructions travel with its tools, cut to their first 250 characters |
+
+"System prompt" is therefore Claude Code's word for one carrier, not Orbit's for what it sends: the clients,
+the CLI help, the catalogue and the cards say **runtime instructions** (added to every run) and **base
+instructions** (in place of the engine's own prompt), and on Codex the role is **Developer**.
+
+**Each session's report.** When its engine says something new, the runner sends one system event,
+`{"subtype": "agent_tools", "agentTools": <report v1>}` (`agent_tools_report.go`): the engine and its version;
+the contract, catalogue, primer, guide and playbooks versions it runs under; the MCP connection as the engine
+reports it — Claude Code's `system/init` `mcp_servers[].status` for `orbit` (`connected`, `failed`, `pending`
+as `starting`, `needs-auth`) and the `mcp__orbit__*` names in its `tools`, Codex's
+`mcpServer/startupStatus/updated` (`starting`, `ready` as `connected`, `failed` with the engine's own error,
+`cancelled`); the tools it has by family, with why a family is short (`orchestration`, `watches`, `wiki`,
+`not_connected`); the switches it was spawned with; how Orbit's instructions reached it (the carrier, and
+whether the workspace adds or replaces instructions); and whether it took the playbooks. The ingest keeps the
+newest as `session.agentTools` (migration 0770), served by `GET /sessions/:id` and not by the list. An
+unchanged report is not sent again. The other engines report no MCP connection to the runner, so they have no
+report, and the clients say so rather than guess.
+
+**Where the person sees it.** Read-only, with no switch or form (board `docs/mocks/agent-tools/01-board.png`,
+the owner's "Build as drawn", 2026-11-14): the web console's session More actions → Agent tools, which carries
+the connection's word on the menu row, and Workspace settings → Agent environment → Agent tools; on macOS the
+session toolbar's Agent Tools and the agent's settings. A session shows its report; a workspace shows what a
+session there is given, per engine. Both end with the guide and its examples.
 
 ---
 
@@ -978,6 +1042,7 @@ Other measured facts:
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.8.0 | 2026-11-14 | P1-03: the person's side of the contract (new §2.7). The Agent Tools guide (`agent_tools_guide.go`, guide 1.0.0) is generated into `docs/agent-tools-guide.md`, the web console's and OrbitKit's copies and the playbooks skill, each held to it byte for byte; it says MCP first, the record versus the private plan, which object, create versus start, the CLI's place and the troubleshooting table, with four examples whose MCP calls pass their schemas and whose `orbit` lines pass their parsers. The playbooks skill is managed per session — Claude Code's `orbit:playbooks` through `--plugin-dir` (2.1.325 and later), Codex's `orbit-playbooks` through `skills/extraRoots/set` — and is never named by the primer or the engine instructions. Each session's engine reports its Orbit MCP connection in its own words (Claude `system/init`, Codex `mcpServer/startupStatus/updated`) as an `agent_tools` system event, kept as `session.agentTools` (migration 0770) and shown read-only in Agent tools on web and macOS. The order and role of what each engine reads were measured from its own request and are stated in §2.7; the clients, the CLI help, the catalogue's agent fields and the workspace-write cards say runtime instructions and base instructions instead of system prompt. The route guide moves to 1.1.0 (each topic carries `asks`), the catalogue to 1.7.0 (agent_create/agent_update describe `systemPrompt` and `appendSystemPrompt` as base and runtime instructions), the primer to 1.2.0 (its first line names this version; no rule changed). No routing rule changes. |
 | 1.7.0 | 2026-11-14 | P1-01: graded discovery (§2.5, G7 closed). A new catalogued operation, `guide` (MCP tool, always listed and `readOnlyHint`; `orbit guide [TOPIC] --json`), answers the objects, the intent routes R1.1–R1.14 with their topics and availability, and the routing rules, or one topic's shortest recipe: each step's MCP tool and absolute argv, availability on each surface with the reason, mutates/approval, a minimal example and the success evidence, then the rules that span the tools. `orbit capabilities` gains `--summary`, `--family NAME` and `--id ID`, which answer the same offer a view at a time with the same `context`; a command this process is not offered is explained (a switch, a credential, an MCP-only door) rather than missing. The examples and leaf parameters are generated from the catalogue and held to both surfaces by tests, and a budget test bounds every graded answer (16 KiB) and the task-create discovery (24 KiB). The engine instructions send the CLI to the guide and `--id` instead of the whole document, the primer (1.1.0) sends an agent to the guide when unsure, and the Claude allowlist pre-approves `capabilities *` and `guide *`. `task_create`'s and `task_create_batch`'s descriptions keep their own call's facts (the start defaults, the card, the criterion declaration, the pure gate, and asking the person what settles the work before the call) and send the cross-tool rules (which object, how evidence is judged, ordering and nesting) to the guide's `task-create` and `task-batch` topics; `task_batch_pin`'s loses its benchmark history. The catalogue moves to 1.6.0. `orbit capabilities --json` is unchanged (`schemaVersion` 2). No routing rule changes. |
 | 1.6.0 | 2026-11-14 | P1-02. The permission modes mean the same for Orbit's calls on Claude and Codex, and §4.1 says what they mean rather than what they should: Plan reads, waits and asks the owner and refuses every other Orbit write, on both engines and both surfaces, with what to do instead (Orbit's own Plan gate, by the session's live mode). The refusal is a receipt (§6.3): `ok: false`, `outcome: refused`, `SESSION_IN_PLAN_MODE` with `retry: wait`; a session process whose mode cannot be read makes no write either (`PERMISSION_MODE_UNREADABLE`, `retry: resend`). Orbit's own tools never ask through either engine — Codex consents to them by their catalogue name, and every tool carries `readOnlyHint`/`destructiveHint`/`openWorldHint`; Claude Code's own Plan policy is measured (2.1.325: an allow rule holds in Plan, and Plan holds back any MCP tool not annotated read-only); the Claude CLI allowlist is generated from the operation catalogue; a schedule (`runAt`) and a dependency edge need no card outside Plan. The authoritative matrix is `permission-matrix.md`. The catalogue (1.5.0) carries each operation's Plan policy, as `planMode` in `orbit capabilities`. Codex sessions now pass `ORBIT_SPAWN_DEPTH` to `orbit mcp`, so a nested session's wait is halved per level as on Claude. Settings and the CLI help say the orchestration switch grants managing agents and runners as well as sessions. The primer's rules are unchanged; its first line names this version (primer 1.0.1). G9 closed; §2.6, §4.1, §6.3, S2, S5 updated. |
 | 1.5.0 | 2026-11-14 | P0-05. §0 is published as the always-on agent primer (`agent_primer.go`, primer 1.0.0, new §2.6): MCP `initialize` answers with it as versioned `instructions`, and every engine's injected instructions open with the same text (Claude `--append-system-prompt`; Codex application context, now sent as whole paragraphs in values of at most 900 bytes, its developer message or its turn input; Kimi, Cursor, Antigravity, DeepSeek Harness, OpenCode). The first paragraph stands alone in at most 512 characters, the primer is at most 3,200 bytes and the engine-side text at most 6,400, each snapshotted, and nothing is read from the checkout. The primer says what to do when the orchestration family is absent (S7), and it and the create tools' descriptions lead with `autoRunWhenReady` defaulting to true (G11). It reads a receipt as §6.2–§6.3 define it: a write is `ok: true` and `outcome: written`, every other outcome is `ok: false`, `error.retry` is followed except on a `chat` (answer the owner, then ask again), and the creates are keyed with `idempotencyKey`; a test holds those words to `receipt` in `contracts/orbit-agent.contract.json`, and the CLI paragraph points at `--receipt`. `orbit mcp help` names the runtimes and objects from the runner's own tables. The propose-dag CLI copy no longer says a session-less `--apply` applies directly: since 1.2.0 it is refused. No routing rule changes. §2.6 added; §8.2, §8.3 (S2, S3, S7, S8) and §8.4 (G2, G11 closed) updated. |

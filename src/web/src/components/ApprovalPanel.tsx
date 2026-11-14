@@ -421,7 +421,7 @@ function deleteInput(a: ApprovalInfo, now: number): DeleteInput | null {
 
 /**
  * Orbit's asks before a session writes what decides a workspace's next session (agent_create and
- * agent_update naming its variables, folder, system prompts, runner or worktree setting). The server
+ * agent_update naming its variables, folder, instructions, runner or worktree setting). The server
  * files the card with its own reading of the workspace, and writes only against a card a person
  * answered (`runner-workspace-approval.ts`), so like every ask Orbit raises for itself it is never
  * waived by a rule. It shows each variable's name and its value in full: the owner decides by reading
@@ -467,8 +467,8 @@ function workspaceWriteInput(a: ApprovalInfo): WorkspaceWriteInput | null {
   const written = (v: unknown): string => text(v) || 'Cleared';
   const fields: WorkspaceWriteInput['fields'] = [];
   if (changes.workDir !== undefined) fields.push({ caption: 'Working directory', value: written(changes.workDir) });
-  if (changes.systemPrompt !== undefined) fields.push({ caption: 'System prompt', value: written(changes.systemPrompt) });
-  if (changes.appendSystemPrompt !== undefined) fields.push({ caption: 'Appended system prompt', value: written(changes.appendSystemPrompt) });
+  if (changes.systemPrompt !== undefined) fields.push({ caption: 'Base instructions', value: written(changes.systemPrompt) });
+  if (changes.appendSystemPrompt !== undefined) fields.push({ caption: 'Runtime instructions', value: written(changes.appendSystemPrompt) });
   if (changes.runner !== undefined) fields.push({ caption: 'Runner', value: runnerName(changes.runner) });
   if (changes.enableWorktree !== undefined) {
     fields.push({
