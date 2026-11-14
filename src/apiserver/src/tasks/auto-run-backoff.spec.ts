@@ -145,6 +145,8 @@ function makeService(readyTaskIds: string[], history: FailureHistory[], options:
     },
     // No configured key holds a slug here: a credential that is no sign-in is a pool or nothing.
     modelProvider: { findFirst: async () => null },
+    // These fixtures have no projects, so no task has a coordinator to start on (start-anchor.ts).
+    task: { findMany: async () => [] },
     // Read for the Codex or Claude account a task's run spends, which is its workspace's to say.
     workspace: {
       findMany: async () => [

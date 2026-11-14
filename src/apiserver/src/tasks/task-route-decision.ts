@@ -26,7 +26,7 @@ import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
 import { followsRuntimeCatalog } from '../providers/preset-overlay';
 import { signedOutEngineRefusal } from '../sessions/engine-signin-preflight';
 import { blockedRunnerRegion } from '../runners/runner-region';
-import { agentProviderSeed } from '../workspaces/workspace-provider';
+import { taskRunSeed } from '../workspaces/start-anchor';
 import { RUNNER_BEATS } from '../runners/runner-presence';
 import { readExecutableAcceptanceOutcome } from './executable-acceptance-round';
 import {
@@ -70,7 +70,12 @@ export function taskRouteReads(prisma: PrismaService, ownerId: string, now: Date
         env: true, codexAccount: true, claudeAccount: true,
       },
     })),
-    seed: (workspaceId: string) => once(`seed:${workspaceId}`, () => agentProviderSeed(prisma, workspaceId)),
+    /** What an unpinned run of this task starts on: its project's coordinator, else its workspace's
+     *  seed (start-anchor.ts) — the baseline routing starts from (model-routing-design.md §2). */
+    seed: (workspaceId: string, taskId?: string | null) => once(
+      `seed:${workspaceId}:${taskId ?? ''}`,
+      () => taskRunSeed(prisma, taskId, workspaceId),
+    ),
     runner: (id: string) => once(`runner:${id}`, () => prisma.runner.findFirst({
       where: { id, ownerId },
       select: {
@@ -152,7 +157,7 @@ async function routeEngine(
  */
 async function routeBaseline(
   reads: TaskRouteReads,
-  task: { engine?: string | null; provider?: string | null },
+  task: { id?: string; engine?: string | null; provider?: string | null },
   workspaceId: string,
 ) {
   const pinnedEngine = isEngine(task.engine) ? task.engine : null;
@@ -172,7 +177,7 @@ async function routeBaseline(
       : pinnedEngine;
     providerSource = 'engine-pin';
   } else {
-    const seed = await reads.seed(workspaceId);
+    const seed = await reads.seed(workspaceId, task.id);
     provider = seed.provider;
     providerBuiltin = seed.providerBuiltin;
     seedEngine = seed.engine;
@@ -202,7 +207,7 @@ async function routeBaseline(
  */
 async function routeEnvironment(
   reads: TaskRouteReads,
-  task: { engine?: string | null; provider?: string | null },
+  task: { id?: string; engine?: string | null; provider?: string | null },
   workspaceId: string,
   runnerId: string | null,
 ) {
@@ -632,7 +637,7 @@ export interface ModelHintOption {
  */
 export async function readModelHintOptions(
   reads: TaskRouteReads,
-  task: { engine?: string | null; provider?: string | null; assigneeId?: string | null },
+  task: { id?: string; engine?: string | null; provider?: string | null; assigneeId?: string | null },
 ): Promise<ModelHintOption[]> {
   const agent = task.assigneeId ? await reads.workspace(task.assigneeId) : null;
   const env = agent ? await routeEnvironment(reads, task, task.assigneeId!, agent.runnerId) : null;

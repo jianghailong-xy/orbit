@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { previousCoordinatorAnchor } from '../workspaces/start-anchor';
 import {
   BadRequestException,
   ConflictException,
@@ -4788,7 +4789,16 @@ export class ProjectsService {
           ),
         },
         // The opening is the platform's own words, not the owner's (0493, design §3.5).
-        { source: 'user', titleManagedByProject: true, promptByOrbit: true, openedBy: 'COORDINATOR' },
+        {
+          source: 'user',
+          titleManagedByProject: true,
+          promptByOrbit: true,
+          openedBy: 'COORDINATOR',
+          // A re-created or replacing coordinator starts where the one before it ran, not on the
+          // workspace's newest conversation (docs/workspace-default-model-design.md §2.1). Read before
+          // the pointer swap below, so it is the previous coordinator, trashed or completed.
+          anchor: () => previousCoordinatorAnchor(this.prisma, project.id),
+        },
       );
     } catch (e) {
       if (fixed && (e instanceof ForbiddenException || e instanceof BadRequestException)) {
@@ -5101,7 +5111,7 @@ export class ProjectsService {
     const assertMayOpen = () => this.sessions.assertMayStartAtAccountDefault(
       ownerId,
       actingSessionId,
-      { workspaceId: project.coordinatorWorkspaceId },
+      { workspaceId: project.coordinatorWorkspaceId, anchor: () => previousCoordinatorAnchor(this.prisma, project.id) },
       "A project's coordinator opens in the account default. A person can open it from the project's " +
         'page, or switch this session to Auto.',
     );

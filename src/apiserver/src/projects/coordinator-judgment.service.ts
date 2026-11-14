@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import { ANCHOR_ROLE, previousCoordinatorAnchor } from '../workspaces/start-anchor';
 import { SessionDispatchOrigin, SessionRunSource } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -245,6 +246,9 @@ export class CoordinatorJudgmentService {
           // The opening is the fact as the platform tells it (0493, design §3.5).
           promptByOrbit: true,
           openedBy: 'COORDINATOR_JUDGMENT',
+          // On the project's coordinator's pair, not the workspace's newest conversation
+          // (docs/workspace-default-model-design.md §2.1).
+          anchor: () => previousCoordinatorAnchor(this.prisma, project.id, ANCHOR_ROLE.coordinator),
           ...(plannedSessionId ? { id: plannedSessionId } : {}),
         },
       );

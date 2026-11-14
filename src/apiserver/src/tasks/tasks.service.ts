@@ -9,6 +9,7 @@ import {
   OnModuleInit,
   Optional,
 } from '@nestjs/common';
+import { taskRunAnchor, taskRunAnchors } from '../workspaces/start-anchor';
 import { PushService } from '../push/push.service';
 import { ProjectOrphanSweepService } from '../projects/project-orphan-sweep.service';
 import {
@@ -9562,6 +9563,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           provider: dto.provider ?? before.provider,
           model: dto.model ?? before.model,
           workspaceId: dto.assigneeId ?? before.assigneeId,
+          anchor: () => taskRunAnchor(this.prisma, id),
         },
         'A schedule or auto-run would start this task in the account default, so nothing was written. ' +
           'A person can press Start on the task page, or switch this session to Auto.',
@@ -12210,6 +12212,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (candidates.length === 0) return engines;
     // One batched lookup for the whole sweep rather than one per row.
     const seeds = await lastProviderByWorkspace(this.prisma, candidates.map((c) => c.workspaceId));
+    // A project's task runs on its coordinator's pair before the workspace's (start-anchor.ts).
+    const anchors = await taskRunAnchors(this.prisma, candidates.map((c) => c.id));
     const taskIds = [...new Set(
       candidates.filter((c) => c.modelRouting === true && c.runnerId).map((c) => c.id),
     )];
@@ -12230,7 +12234,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const task = tasks.get(c.id);
       let credential = dispatchCredentialOf(
         { engine: c.taskEngine ?? null, provider: c.taskProvider ?? null },
-        seeds.get(c.workspaceId) ?? DEFAULT_AGENT_PROVIDER,
+        anchors.get(c.id) ?? seeds.get(c.workspaceId) ?? DEFAULT_AGENT_PROVIDER,
       );
       if (task && c.runnerId) {
         if (!reads.has(c.ownerId)) reads.set(c.ownerId, taskRouteReads(this.prisma, c.ownerId, this.now()));
@@ -14805,6 +14809,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // and asserting it here rather than per-caller is what keeps a future fifth caller from
         // quietly inheriting the salvage exemption.
         startsTaskWork: true,
+        // Unpinned and unrouted, a project's task runs on its coordinator's pair, not the
+        // workspace's newest conversation (docs/workspace-default-model-design.md §2.1).
+        anchor: () => taskRunAnchor(this.prisma, task.id),
       },
     );
     await this.clearStaleDispatchRefusal(task.id, session.id);
@@ -15286,7 +15293,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.sessions.assertMayStartAtAccountDefault(
         ownerId,
         actingSessionId,
-        { ...taskRunDispatch(task, route), workspaceId: task.assignee!.id },
+        { ...taskRunDispatch(task, route), workspaceId: task.assignee!.id, anchor: () => taskRunAnchor(this.prisma, task.id) },
         'This task would start in the account default. A person can press Start on the task page, or ' +
           'switch this session to Auto.',
       );

@@ -127,8 +127,8 @@ import {
   credentialIsAnthropicBound,
   type WikiChatContext,
 } from '@orbit/shared';
+import { ANCHOR_ROLE, anchoredSeed, sessionAnchor, type AnchorSeed } from '../workspaces/start-anchor';
 import {
-  agentProviderSeed,
   lastProviderByWorkspace,
   SESSION_OPENED_BY_PERSON,
   type SessionOpenedBy,
@@ -1087,6 +1087,13 @@ export class SessionsService {
        * (workspace-provider.ts). Internal: public session creation cannot claim it.
        */
       openedBy?: SessionOpenedBy;
+      /**
+       * The session this start follows when the request names neither an engine nor a provider
+       * (start-anchor.ts, docs/workspace-default-model-design.md §2.1): a project's coordinator for its
+       * task runs, the previous coordinator for a new one, the parent for an MCP child. Null falls back
+       * to the workspace's seed. Internal: public session creation cannot claim it.
+       */
+      anchor?: () => Promise<AnchorSeed | null>;
     },
   ) {
     refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
@@ -1252,7 +1259,7 @@ export class SessionsService {
       provider: dto.provider,
       model: dto.model,
       door: 'session',
-      seed: dto.workspaceId ? () => agentProviderSeed(this.prisma, dto.workspaceId!) : undefined,
+      seed: anchoredSeed(this.prisma, opts?.anchor, dto.workspaceId),
     });
     const { provider, providerBuiltin } = resolved;
     // The model as asked; an old OpenCode request's `orbit-<key>/<model>` is stored as its bare id.
@@ -2518,8 +2525,9 @@ export class SessionsService {
     const wantName = dto.workspaceName ?? dto.agentName;
     const workspaceId =
       wantId ?? (wantName ? await this.resolveWorkspaceByName(ownerId, wantName) : undefined);
+    const parentAnchor = () => sessionAnchor(this.prisma, ownerId, parentSessionId, ANCHOR_ROLE.parent);
     // Before anything is written, so a refused request leaves the parent as it found it.
-    const narrowedTo = await this.assertChildModeOrNarrow(ownerId, parent, dto, workspaceId);
+    const narrowedTo = await this.assertChildModeOrNarrow(ownerId, parent, dto, workspaceId, parentAnchor);
     // A root joins its own tree the first time it spawns; before that it belongs to no tree
     // and must not be counted against one. Nothing else writes this column on the parent, so
     // an unconditional write of the same value is idempotent under concurrent spawns.
@@ -2554,6 +2562,9 @@ export class SessionsService {
         // Orchestrated children appear in Open like any other session; the
         // parentSessionId link is what marks them as spawned/orchestrated.
         parentSessionId,
+        // Named neither, the child starts on its parent's pair, not the target workspace's seed
+        // (docs/workspace-default-model-design.md §2.1).
+        anchor: parentAnchor,
         tree: { rootSessionId, depth: parent.spawnDepth + 1 },
         ...(dto.worktree === false ? { noWorktree: true } : {}),
       },
@@ -2596,10 +2607,11 @@ export class SessionsService {
     parent: { permissionMode: string | null; engine: string | null; owner: { preferences: unknown } },
     dto: { permissionMode?: string; engine?: string; provider?: string; model?: string },
     workspaceId: string | undefined,
+    anchor: () => Promise<AnchorSeed | null>,
   ): Promise<string | undefined> {
     const starter = { mode: resolvePermissionMode(parent.permissionMode, parent.owner), engine: parent.engine };
     if (!modeLimitsWhatItStarts(starter.mode)) return undefined;
-    const engine = await this.engineOfStart(ownerId, { ...dto, workspaceId });
+    const engine = await this.engineOfStart(ownerId, { ...dto, workspaceId, anchor });
     if (dto.permissionMode) {
       if (!isWiderThanStarter(starter, dto.permissionMode, engine)) return undefined;
       throw widerModeRefusal(
@@ -2623,7 +2635,14 @@ export class SessionsService {
   async assertMayStartAtAccountDefault(
     ownerId: string,
     actingSessionId: string | undefined,
-    target: { engine?: string | null; provider?: string | null; model?: string | null; workspaceId?: string | null },
+    target: {
+      engine?: string | null;
+      provider?: string | null;
+      model?: string | null;
+      workspaceId?: string | null;
+      /** The start's anchor, as create() is handed it (start-anchor.ts). */
+      anchor?: () => Promise<AnchorSeed | null>;
+    },
     next: string,
   ): Promise<void> {
     if (!actingSessionId || !UUID_SHAPE.test(actingSessionId)) return;
@@ -2664,7 +2683,13 @@ export class SessionsService {
   /** The engine a session started this way would run on, by create()'s own rule; null when it would be refused there. */
   private async engineOfStart(
     ownerId: string,
-    target: { engine?: string | null; provider?: string | null; model?: string | null; workspaceId?: string | null },
+    target: {
+      engine?: string | null;
+      provider?: string | null;
+      model?: string | null;
+      workspaceId?: string | null;
+      anchor?: () => Promise<AnchorSeed | null>;
+    },
   ): Promise<string | null> {
     try {
       const resolved = await resolveEngineProvider(this.engineProviderDeps(), {
@@ -2673,7 +2698,7 @@ export class SessionsService {
         provider: target.provider ?? undefined,
         model: target.model ?? undefined,
         door: 'session',
-        seed: target.workspaceId ? () => agentProviderSeed(this.prisma, target.workspaceId!) : undefined,
+        seed: anchoredSeed(this.prisma, target.anchor, target.workspaceId),
       });
       return resolved.engine;
     } catch {

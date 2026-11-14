@@ -45,9 +45,12 @@ test('a fresh task run creates an Active-list session', async () => {
   assert.deepEqual(result, { ok: true, sessionId: 'session-1' });
   assert.equal(createCalls.length, 1);
   assert.equal((createCalls[0][1] as { taskId?: string }).taskId, 'task-1');
+  // The project-coordinator anchor an unpinned run starts on (start-anchor.ts): a read, handed over.
+  assert.equal(typeof (createCalls[0][2] as { anchor?: unknown }).anchor, 'function');
   assert.deepEqual(createCalls[0][2], {
     source: 'user',
     batch: undefined,
+    anchor: (createCalls[0][2] as { anchor?: unknown }).anchor,
     dispatchOrigin: SessionDispatchOrigin.USER,
     runSource: SessionRunSource.MANUAL,
     // §13.6 SU6: Run Now says on the row that it is starting the task's WORK, which is what lets
@@ -103,9 +106,12 @@ test('an automatic Task List run carries distinct auditable provenance', async (
 
   await service.execute('owner-1', 'task-1', { observedEpoch: 0n }, 'sweep-tick-1');
 
+  // The project-coordinator anchor an unpinned run starts on (start-anchor.ts): a read, handed over.
+  assert.equal(typeof (createCalls[0][2] as { anchor?: unknown }).anchor, 'function');
   assert.deepEqual(createCalls[0][2], {
     source: 'user',
     batch: undefined,
+    anchor: (createCalls[0][2] as { anchor?: unknown }).anchor,
     dispatchOrigin: SessionDispatchOrigin.LEGACY_SWEEP,
     runSource: SessionRunSource.TASK_LIST_AUTO,
     startsTaskWork: true,
