@@ -143,7 +143,7 @@ final class ProjectsWiringTests: XCTestCase {
     func testTheDrawerLeadsWithTheWorkAndClosesWithTheOpenProjects() throws {
         let shell = try appSource("Views/CompactShell.swift")
         let rail = code(try slice(shell, from: "            List {", to: "            .listStyle(.plain)"))
-        let order = ["ForEach(AppSection.workSections)", "workspacesHeader", "agentsRows", "projectRows"]
+        let order = ["ForEach(DrawerWorkLogic.rows(", "workspacesHeader", "agentsRows", "projectRows"]
         let positions = order.map { rail.range(of: $0)?.lowerBound }
         XCTAssertFalse(positions.contains(nil), "the rail lost one of \(order)")
         XCTAssertEqual(positions.compactMap { $0 }, positions.compactMap { $0 }.sorted(),

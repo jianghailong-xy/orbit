@@ -108,8 +108,11 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(page.contains("return projectListing.entries.map(\\.timeGroupingSession)"))
         XCTAssertTrue(page.contains("let projectRows = Dictionary(uniqueKeysWithValues: projectListing.projects.map { ($0.id, $0) })"))
         XCTAssertTrue(page.contains("let projectMarks = grouping.projectListing.marks"))
-        XCTAssertTrue(page.contains("listRow(session, projects: projectRows, marks: projectMarks)"))
-        XCTAssertFalse(page.contains("listRow(session, projects: projectRows)"), "every row is handed the marks")
+        XCTAssertTrue(page.contains("folderSection(index: index, section: section, projects: projectRows, marks: projectMarks)"),
+                      "the list's one ForEach hands the section its rows and marks")
+        XCTAssertTrue(page.contains("listRow(session, projects: projects, marks: marks)"),
+                      "and the section hands every row the marks")
+        XCTAssertFalse(page.contains("listRow(session, projects: projects)"), "every row is handed the marks")
         let folderRow = try slice(page, from: "@ViewBuilder private func listRow(_ s: Session, projects: [String: SessionProjectRow],", to: "\n    }")
         XCTAssertTrue(folderRow.contains("if let project = projects[s.id]"))
         XCTAssertTrue(folderRow.contains("projectRow(project)"))
@@ -145,12 +148,17 @@ final class SessionProjectPageWiringTests: XCTestCase {
             XCTAssertTrue(row.contains("let onOpen = {"))
             XCTAssertTrue(row.contains("SessionProjectRowView(row: row, onOpen: onTap)"), relative)
             let tap = try slice(row, from: "let onTap = {", to: "return SessionProjectRowView(")
-            XCTAssertTrue(tap.contains("switch rowNavigation == .push ? SessionProjectSheet.rowTap(row) : .sessions {"),
+            XCTAssertTrue(tap.contains("switch SessionProjectSheet.rowTap(row, held: app.sessions + "),
+                          "\(relative): the tap is OrbitKit's rule, read against the sessions the app holds")
+            XCTAssertTrue(tap.contains(", push: rowNavigation == .push) {"),
                           "\(relative): a phone's tap reads the row's coordinator; the iPad's column opens the page")
+            XCTAssertTrue(tap.contains("case .waitingMember(let member): app.openWaitingMember(member, project: "),
+                          "\(relative): a member waiting on you is opened at its card (owner 2026-11-14)")
+            XCTAssertTrue(tap.contains(", push: rowNavigation == .push)\n"), relative)
             XCTAssertTrue(tap.contains("case .coordinator(let coordinator): app.openProjectMember(coordinator, push: true)"),
                           "\(relative): the coordinator's conversation is pushed over the list")
             XCTAssertTrue(tap.contains("case .sessions: app.openProjectSessions("), relative)
-            XCTAssertFalse(tap.contains("row.target"), "\(relative): the tap is the coordinator's, not the row's lead")
+            XCTAssertFalse(tap.contains("row.target"), "\(relative): which session the line names is OrbitKit's to read")
             XCTAssertTrue(row.contains("switch row.target"))
             XCTAssertTrue(row.contains("case .session(let id):"))
             XCTAssertTrue(row.contains("$0.id == id"))
@@ -172,6 +180,73 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let folderMove = try slice(folder, from: ".sheet(item: $movingSession) { s in", to: "\n        }")
         XCTAssertTrue(folderMove.contains("app.agents?.agent(s.agent?.id ?? s.agentId ?? address.agentID)"))
         XCTAssertTrue(folderMove.contains("SessionMoveSheet(session: s, workspace: workspace, listed: app.agents?.allSessions ?? [])"))
+    }
+
+    /// Owner 2026-11-14: the waiting member's conversation opens at the top of its card. The model
+    /// points the console at the card before the frame goes up; the console spends that once the
+    /// card is read; the transcript places the card's top under the bar, off the live tail. Every
+    /// other way into a conversation keeps its bottom pin.
+    func testTheWaitingMemberOpensAtTheTopOfItsCard() throws {
+        let app = code(try appSource("AppModel.swift"))
+        let open = try slice(app, from: "func openWaitingMember(_ session: Session, project: SessionProjectAddress, push: Bool) {",
+                             to: "\n    }")
+        XCTAssertTrue(open.contains(".focusWaitingCard()"))
+        XCTAssertTrue(open.contains("if !push { openProjectSessions(project) }"),
+                      "a column shell shows the project's page beside the member")
+        XCTAssertTrue(open.contains("openProjectMember(session, push: push)"))
+        XCTAssertEqual(app.components(separatedBy: ".focusWaitingCard()").count - 1, 1,
+                       "only the project row's waiting tap lands on the card")
+
+        let console = code(try appSource("ConsoleModel.swift"))
+        let follow = try slice(console, from: "private func followPendingWaitingCard() {", to: "\n    }")
+        XCTAssertTrue(follow.contains("let rows = TranscriptRows.build(state: state, statusCards: localStatusCards,"),
+                      "the rows the transcript draws, so the request waits until the card is one of them")
+        XCTAssertTrue(follow.contains("decisionCards: decisionCards)"))
+        XCTAssertTrue(follow.contains("SessionProjectSheet.waitingCardRowID(rows: rows, openCards: openBelowRows)"))
+        XCTAssertTrue(follow.contains("cardRequest = ScrollRequest(rowID: rowID, tick: scrollTick)"))
+        let publish = try slice(console, from: "private func publishStateNow() {", to: "\n    }")
+        XCTAssertTrue(publish.contains("followPendingWaitingCard()"), "an approval read lands on its card")
+        let ruler = try slice(console, from: "func refreshRulerQuestions(force: Bool = false) async {",
+                              to: "lastRulerRead = Date()\n    }")
+        XCTAssertTrue(ruler.contains("followPendingWaitingCard()"), "a delivered card's read lands on it")
+        let deliver = try slice(console, from: "private func deliver(_ kind: DeliveredDecisionCard.Kind,\n                         placement: DeliveredDecisionCard.Placement) {", to: "\n    }")
+        XCTAssertTrue(deliver.contains("followPendingWaitingCard()"), "a card delivered by any read lands on it")
+        let requests = try slice(console, from: "func adoptOwnerRequests(_ requests: [OwnerRequest]) {", to: "\n    }")
+        XCTAssertTrue(requests.contains("followPendingWaitingCard()"),
+                      "an owner request — the board's card — arrives from the account's list, not from a publish")
+
+        let view = code(try appSource("Views/Console/ConsoleView.swift"))
+        let card = try slice(view, from: ".onChange(of: console.cardRequest, initial: true) { _, request in",
+                             to: "\n        }")
+        XCTAssertTrue(card.contains("console.cardRequestFollowed()"))
+        XCTAssertTrue(card.contains("atBottom = false"), "off the live tail, so the next publish does not pull it down")
+        XCTAssertTrue(card.contains("holdScroll(to: hold.rowID, anchor: .top, animated: false)"),
+                      "the card's top — header and title — not its middle or the transcript's end")
+        XCTAssertFalse(card.contains("opensReview"), "the card is answered in place, no review sheet")
+        XCTAssertTrue(card.contains("for delay in [0.4, 1.0, 2.0] {"),
+                      "re-aimed while the rows above are measured: a self-sizing List lands by estimates first")
+        let publishFollow = try slice(view, from: ".onChange(of: console.stateRevision) {", to: "recomputeStuck()")
+        XCTAssertTrue(publishFollow.contains("if let hold = cardHold, hold.sessionID == console.sessionID, Date() < hold.until {"),
+                      "a publish in the first moments keeps the card's top rather than following the tail")
+        XCTAssertTrue(view.contains("atBottom = true; cardHold = nil; console.readerTookOver()"),
+                      "the reader's own send lets go of the card, and of a request not yet followed")
+        // The reader's own scroll lets go too: the re-aims and the publish branch stop once a finger
+        // (or, on macOS, the trackpad or wheel) has moved the list.
+        let trackers = try slice(view, from: "private func tracker(ruler:", to: "private func repinAfterResize")
+        XCTAssertEqual(trackers.components(separatedBy: "readerScrolled: { cardHold = nil; console.readerTookOver() }").count - 1, 2,
+                       "both platforms' trackers clear the hold, and a request not yet followed, on the reader's scroll")
+        let tookOver = try slice(console, from: "func readerTookOver() {", to: "\n    }")
+        XCTAssertTrue(tookOver.contains("pendingWaitingCardUntil = nil"))
+        XCTAssertTrue(tookOver.contains("cardRequest = nil"))
+        let scrollTracker = try slice(view, from: "private struct ScrollTracker", to: "private struct AnchorRow: ViewModifier {")
+        XCTAssertTrue(scrollTracker.contains("if phase == .interacting { readerScrolled() }"),
+                      "the reader's interaction, never the app's own scrollTo (.animating or none)")
+        XCTAssertEqual(try branches(of: "if phase == .interacting { readerScrolled() }", in: scrollTracker), [],
+                       "on both platforms, not inside the iOS-only block")
+        let reaim = try slice(card, from: "for delay in [0.4, 1.0, 2.0] {", to: "holdScroll(")
+        XCTAssertTrue(reaim.contains("guard cardHold == hold"), "a re-aim after the reader scrolled does nothing")
+        XCTAssertTrue(view.contains(".onAppear { proxy.scrollTo(bottomID, anchor: .bottom); recomputeStuck() }"),
+                      "every other opening keeps the bottom pin")
     }
 
     func testTheTwoShellsOpenTheProjectSessionsPageTheirOwnWay() throws {

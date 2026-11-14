@@ -41,7 +41,7 @@ import { MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from './managed-run
 import type { ManagedRunnerSignIn } from './managed-runner-sign-in';
 import { managedRunnerWork, recordManagedDemand } from './managed-runner-work';
 import { DEFAULT_HEARTBEAT_FRESH_MS, managedRunnerStatus, managedRunnerUnavailableReason } from './managed-runner-status';
-import { ownerManagedKeys } from './managed-runner-supply';
+import { managedFirstSessionKeyOf, ownerManagedKeys } from './managed-runner-supply';
 import {
   MANAGED_RUNNER_VOLUME_SWITCH_REFUSED,
   ManagedVolumeSwitchRefused,
@@ -123,9 +123,10 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
       ownerDisabled,
       mapping,
       runner,
-      // What a first session would wait for the runner on, until READY records what it starts on.
+      // What a first session would wait for the runner on, until READY records what it starts on: the
+      // owner's first key that runner can run, never one on an engine it does not have.
       firstSessionKey: this.gate.enabled && mapping && !mapping.initialProvider
-        ? ((await ownerManagedKeys(this.prisma, ownerId))[0] ?? null)
+        ? managedFirstSessionKeyOf(await ownerManagedKeys(this.prisma, ownerId), runner)
         : null,
       now: new Date(),
       heartbeatFreshMs: this.runtime?.available ? this.runtime.profile.lifecycle.heartbeatFreshSeconds * 1000 : DEFAULT_HEARTBEAT_FRESH_MS,

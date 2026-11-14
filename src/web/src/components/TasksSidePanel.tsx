@@ -13,6 +13,7 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   MoreOutlined,
+  PlusOutlined,
   SettingOutlined,
   TeamOutlined,
   UserOutlined,
@@ -52,8 +53,10 @@ import type {
   RunnerUpdateTurn,
   RuntimeDefaultModels,
   SlashCommandInfo,
+  ManagedRunnerRow,
 } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
+import { managedRowOf, useManagedRunner } from '../lib/managedRunner';
 import { routeId, encodeId } from '../lib/idCodec';
 import { SharedWithMeGroup } from './SharedWithMe';
 import { useIsMobile } from '../lib/useMediaQuery';
@@ -97,6 +100,8 @@ import { Avatar } from './ui/Avatar';
 import { useConfirm } from './ui/ConfirmDialog';
 import { Menu, type MenuItem } from './ui/Menu';
 import { useMoveWikiToTrash } from './WikiTrashDialog';
+import { WikiCreateDialog } from './WikiSetUpDialog';
+import { WIKI_NEW } from '../lib/wikiStart';
 import { Tooltip } from './ui/Tooltip';
 
 const IS_MAC_PLATFORM =
@@ -379,6 +384,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const wikiRows = wikiSpaces.data ?? [];
   const wikiNames = useMemo(() => wikiSpaceNames(wikiSpaces.data ?? []), [wikiSpaces.data]);
   const [wikiOpen, setWikiOpen] = useState(true);
+  // New wiki… (docs/wiki-explicit-creation-design.md §3.4): the Create wiki form, opened from the group's last row.
+  const [creatingWiki, setCreatingWiki] = useState(false);
 
   // The open workspace comes from /workspaces/<id>; behind a /sessions/<id> link, resolve
   // it from that session so its row highlights there too. The session query reuses
@@ -579,6 +586,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     queryFn: () => api<Runner[]>('/runners'),
     refetchInterval: streamPoll(15_000),
   });
+  // The account's managed runner is never Offline here: asleep is Asleep, coming up is Waking up…
+  // (docs/managed-runner-existing-account-entry-design.md, D4). Nothing is read with the feature off.
+  const { managed: accountManaged } = useManagedRunner();
   const runnerOnlineById = useMemo(
     () => new Map((runners.data ?? []).map((runner) => [runner.id, runner.online])),
     [runners.data],
@@ -959,10 +969,11 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
               <span className="tp-rail-avatar">{(a.name.trim()[0] ?? '?').toUpperCase()}</span>
               <WorkspaceStateMark
                 compact
-                offline={workspaceRunnerIsOffline(
-                  runnerId,
-                  runnerId ? runnerOnlineById.get(runnerId) : undefined,
-                )}
+                managed={managedRowOf(accountManaged, runnerId)}
+                offline={
+                  !managedRowOf(accountManaged, runnerId) &&
+                  workspaceRunnerIsOffline(runnerId, runnerId ? runnerOnlineById.get(runnerId) : undefined)
+                }
                 running={(workspaceRunning.get(a.id) ?? 0) > 0}
                 jobs={workspaceJobs.get(a.id) ?? 0}
                 needsYou={workspaceNeedsYou.get(a.id) ?? 0}
@@ -1064,10 +1075,11 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                         workspace={a}
                         runnerLabel={runnerLabel}
                         active={a.id === litWorkspaceId}
-                        offline={workspaceRunnerIsOffline(
-                          runnerId,
-                          runnerId ? runnerOnlineById.get(runnerId) : undefined,
-                        )}
+                        managed={managedRowOf(accountManaged, runnerId)}
+                        offline={
+                          !managedRowOf(accountManaged, runnerId) &&
+                          workspaceRunnerIsOffline(runnerId, runnerId ? runnerOnlineById.get(runnerId) : undefined)
+                        }
                         running={(workspaceRunning.get(a.id) ?? 0) > 0}
                         jobs={workspaceJobs.get(a.id) ?? 0}
                         needsYou={workspaceNeedsYou.get(a.id) ?? 0}
@@ -1136,8 +1148,23 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     menu={wikiMenu(space)}
                   />
                 ))}
+              {wikiOpen && (
+                <div
+                  className="tp-item tp-wiki-new"
+                  onClick={() => setCreatingWiki(true)}
+                  onKeyDown={(event) => handleNavActivation(event, () => setCreatingWiki(true))}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <span className="tp-ico">
+                    <PlusOutlined aria-hidden="true" />
+                  </span>
+                  <span className="tp-label">{WIKI_NEW}</span>
+                </div>
+              )}
             </div>
           )}
+          {creatingWiki && <WikiCreateDialog onClose={() => setCreatingWiki(false)} />}
 
           {(hasWorkspaceRows || hasWikis) && hasProjects && <div className="tp-divider" />}
 
@@ -1403,6 +1430,7 @@ export function WikiRow({
  */
 export function WorkspaceStateMark({
   offline,
+  managed = null,
   running,
   jobs = 0,
   needsYou,
@@ -1410,6 +1438,8 @@ export function WorkspaceStateMark({
   compact = false,
 }: {
   offline: boolean;
+  /** The account's managed runner, when it is this workspace's: its shared state instead of Offline. */
+  managed?: ManagedRunnerRow | null;
   running: boolean;
   /** Sessions in this workspace with a background job in flight — see `workspaceJobs`. */
   jobs?: number;
@@ -1431,6 +1461,10 @@ export function WorkspaceStateMark({
     );
   }
   if (!compact) return badge;
+  if (managedRest(managed) && !running) {
+    if (badge) return badge;
+    return <ManagedRunnerMark row={managed!} className="tp-rail-managed" />;
+  }
   if (offline) {
     if (badge) return badge;
     const title = runnerLabel ? `${runnerLabel} is offline` : 'Runner offline';
@@ -1482,6 +1516,26 @@ export function WorkspaceStateMark({
   return badge;
 }
 
+/** A managed runner not simply ready: the sidebar marks it, quietly, where Offline would have been. */
+function managedRest(row: ManagedRunnerRow | null | undefined): boolean {
+  return !!row && row.kind !== 'available';
+}
+
+/** The managed runner's state on a workspace: a grey dot (asleep, waking) or an orange one, its words on hover. */
+export function ManagedRunnerMark({ row, className }: { row: ManagedRunnerRow; className: string }) {
+  const title = row.detail ? `${row.label} · ${row.detail}` : row.label;
+  return (
+    <Tooltip content={title}>
+      <span
+        className={`${className} managed-mark managed-mark--${row.tone}`}
+        role="img"
+        aria-label={title}
+        data-kind={row.kind}
+      />
+    </Tooltip>
+  );
+}
+
 // A compact, permanently visible workspace row. Its folder occupies the same icon column as the
 // fixed first-level destinations above, so Workspace names share their label alignment. Runner is
 // descriptive metadata on the same line, not a disclosure parent the user has to remember.
@@ -1490,6 +1544,7 @@ export function WorkspaceRow({
   runnerLabel,
   active,
   offline,
+  managed = null,
   running,
   jobs,
   needsYou,
@@ -1502,6 +1557,8 @@ export function WorkspaceRow({
   runnerLabel: string;
   active: boolean;
   offline: boolean;
+  /** The account's managed runner, when it is this workspace's: Asleep or Waking up…, never Offline. */
+  managed?: ManagedRunnerRow | null;
   running: boolean;
   jobs: number;
   needsYou: number;
@@ -1567,6 +1624,9 @@ export function WorkspaceRow({
         aria-label={offline ? offlineTitle : undefined}
       >
         <FolderOutlined aria-hidden="true" />
+        {managedRest(managed) && !showRunningDot && !showJobsDot && (
+          <ManagedRunnerMark row={managed!} className="tp-workspace-icon-managed" />
+        )}
         {offline && (
           <Tooltip content={offlineTitle}>
             <DisconnectOutlined
@@ -1596,6 +1656,7 @@ export function WorkspaceRow({
       {needsYou === 0 && shortcut}
       <WorkspaceStateMark
         offline={offline}
+        managed={managed}
         running={running}
         needsYou={needsYou}
         runnerLabel={runnerLabel}

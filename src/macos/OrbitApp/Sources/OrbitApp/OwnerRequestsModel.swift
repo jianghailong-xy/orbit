@@ -49,6 +49,13 @@ final class OwnerRequestsModel {
         snoozes = store.all()
     }
 
+    /// The store over a transport handed in (the observation tests): the app builds `api` above.
+    init(api: APIClient, store: OwnerRequestSnoozes = OwnerRequestSnoozes()) {
+        self.api = api
+        self.store = store
+        snoozes = store.all()
+    }
+
     var waitingCount: Int {
         OwnerRequests.waitingCount(open, questions: questions, snoozes: snoozes) + terminalRequests.count
     }
@@ -70,17 +77,17 @@ final class OwnerRequestsModel {
     func load() async {
         guard !unsupported else { return }
         do {
-            open = try await api.ownerRequests(state: "open").requests
-            all = try await api.ownerRequests(state: "all").requests
+            assignIfChanged(\.open, try await api.ownerRequests(state: "open").requests)
+            assignIfChanged(\.all, try await api.ownerRequests(state: "all").requests)
             if tab != .open { await loadTab(tab) }
             await loadQuestions()
             await loadTerminalRequests()
         } catch APIError.http(let status, _) where status == 404 {
-            unsupported = true
+            assignIfChanged(\.unsupported, true)
         } catch {
             // The next tick reads again; what was drawn stays.
         }
-        snoozes = store.all()
+        assignIfChanged(\.snoozes, store.all())
     }
 
     /// The open projects whose coordinator asked the owner something, and each one's open questions.
@@ -98,15 +105,15 @@ final class OwnerRequestsModel {
                                             coordinatorSessionID: document?.coordinatorSessionId,
                                             coordinatorWorkspaceID: document?.coordinatorWorkspaceId)
         }
-        questions = next
+        assignIfChanged(\.questions, next)
     }
 
     /// The terminals waiting for a decision. A server that predates terminals answers 404: no cards.
     func loadTerminalRequests() async {
         do {
-            terminalRequests = try await api.terminalRequests()
+            assignIfChanged(\.terminalRequests, try await api.terminalRequests())
         } catch APIError.http(let status, _) where status == 404 {
-            terminalRequests = []
+            assignIfChanged(\.terminalRequests, [])
         } catch {
             // The next tick reads again; what was drawn stays.
         }
@@ -125,7 +132,7 @@ final class OwnerRequestsModel {
 
     func loadTab(_ tab: OwnerRequests.InboxTab) async {
         guard tab != .open, let list = try? await api.ownerRequests(state: tab.filter) else { return }
-        ended[tab] = list.requests
+        if ended[tab] != list.requests { ended[tab] = list.requests }
     }
 
     func taskTitle(_ id: String) -> String { taskTitles[PublicID.storageKey(id)] ?? "Task" }
@@ -139,7 +146,7 @@ final class OwnerRequestsModel {
 
     func loadSavedSecrets() async {
         guard let list = try? await api.accountSecrets() else { return }
-        savedSecrets = list.secrets
+        assignIfChanged(\.savedSecrets, list.secrets)
     }
 
     /// The inbox, with this request's card open and its input focused: a push's first action, an
@@ -161,6 +168,11 @@ final class OwnerRequestsModel {
 
     func complete(_ request: OwnerRequest, _ body: OwnerRequestDoneBody) async throws {
         adopt(try await api.completeOwnerRequest(request.id, body))
+    }
+
+    /// A WIKI_CREATE card's Create wiki: the server makes the wiki and answers with the card, DONE.
+    func createWiki(_ request: OwnerRequest) async throws {
+        adopt(try await api.createWikiFromOwnerRequest(request.id))
     }
 
     func decline(_ request: OwnerRequest, reason: String) async throws {

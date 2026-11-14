@@ -4,6 +4,8 @@
 node_modules
 dist/
 dist-bin/
+# the release tag's runner source the upgrade skill unpacks for the web image build
+.runner-release/
 build/
 coverage/
 tmp/

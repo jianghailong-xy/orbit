@@ -46,6 +46,7 @@ import { FeishuActionsModule } from './feishu/feishu-actions.module';
 import { GithubModule } from './github/github.module';
 import { EmailModule } from './email/email.module';
 import { TerminalsModule } from './terminals/terminals.module';
+import { SchedulesModule } from './schedules/schedules.module';
 
 @Module({
   imports: [
@@ -102,6 +103,8 @@ import { TerminalsModule } from './terminals/terminals.module';
     EmailModule,
     // `orbit` in a terminal: the TERMINAL credential's sign-in, approval and revoke (docs/terminal-session-design.md).
     TerminalsModule,
+    // Scheduled tasks (docs/scheduled-tasks-design.md): the domain service, for the tools and doors built on it.
+    SchedulesModule,
   ],
   // Registered here rather than in main.ts (where WorkspaceAliasInterceptor is) because it needs
   // PrismaService injected, which only the DI container can provide.

@@ -243,6 +243,11 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		if s.wikiOff {
 			tools = withoutWikiTools(tools)
 		}
+		// A SubAgent cannot hand work on again (subagent.go).
+		if os.Getenv(envSubagentRunID) == "" {
+			cwd, _ := os.Getwd()
+			tools = append(tools, delegateToolDescriptor(schemaObject, sessionSubagentDefinitions(cwd)))
+		}
 		if s.onlyTools != nil {
 			tools = onlyMCPTools(tools, s.onlyTools)
 		}
@@ -251,12 +256,17 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		var p struct {
 			Name      string                 `json:"name"`
 			Arguments map[string]interface{} `json:"arguments"`
+			Meta      map[string]interface{} `json:"_meta"`
 		}
 		if json.Unmarshal(req.Params, &p) != nil {
 			return s.err(req.ID, -32602, "invalid params"), true
 		}
 		if s.onlyTools != nil && !s.onlyTools[p.Name] {
 			return s.ok(req.ID, toolResult(p.Name+" is not served in this session", true)), true
+		}
+		if p.Name == delegateToolName {
+			// Claude Code names the call this is; its SubAgent's events nest under that id.
+			return s.ok(req.ID, s.callDelegate(p.Arguments, asString(p.Meta["claudecode/toolUseId"]))), true
 		}
 		return s.ok(req.ID, s.invokeTool(p.Name, p.Arguments)), true
 	default:
@@ -2765,11 +2775,11 @@ func (s *mcpServer) permissionPrompt(args map[string]interface{}) map[string]int
 	if answer, decided := s.answerOrbitToolPrompt(args); decided {
 		return answer
 	}
-	id, err := s.t.createApproval(context.Background(), s.sessionID, map[string]interface{}{
-		"toolName":  getString(args, "tool_name"),
-		"input":     args["input"],
-		"toolUseId": getString(args, "tool_use_id"),
-	})
+	body, refusal := approvalBodyOfPrompt(args)
+	if refusal != "" {
+		return toolResult(denyJSON(refusal), false)
+	}
+	id, err := s.t.createApproval(context.Background(), s.sessionID, body)
 	if err != nil {
 		return toolResult(denyJSON("could not register approval: "+err.Error()), false)
 	}
@@ -2796,6 +2806,28 @@ func (s *mcpServer) permissionPrompt(args map[string]interface{}) map[string]int
 		msg = "denied by the user"
 	}
 	return toolResult(denyJSON(msg), false)
+}
+
+// approvalBodyOfPrompt is the card a permission prompt files, or the refusal a SubAgent gets instead
+// (docs/subagent-design.md §5.3). A SubAgent asks under its parent's session (ORBIT_SESSION_ID is the parent's):
+// its card names the run, and its call's id carries the run id as a prefix, as the parent's transcript writes it
+// (rewriteSubagentEvent). Its questions and plans are refused: nobody answers them.
+func approvalBodyOfPrompt(args map[string]interface{}) (map[string]interface{}, string) {
+	toolName := getString(args, "tool_name")
+	toolUseID := getString(args, "tool_use_id")
+	body := map[string]interface{}{"toolName": toolName, "input": args["input"], "toolUseId": toolUseID}
+	runID := strings.TrimSpace(os.Getenv(envSubagentRunID))
+	if runID == "" {
+		return body, ""
+	}
+	if toolName == "AskUserQuestion" || toolName == "ExitPlanMode" {
+		return nil, subagentAsksNobodyReason
+	}
+	if toolUseID != "" {
+		body["toolUseId"] = subagentToolID(runID, toolUseID)
+	}
+	body["subagentRunId"] = runID
+	return body, ""
 }
 
 // answerOrbitToolPrompt answers Claude's permission prompt for one of Orbit's own tools without a card. Every session
@@ -3328,10 +3360,16 @@ func ownerRequestBody(args map[string]interface{}, now time.Time) (map[string]in
 	kind := getString(args, "kind")
 	title := strings.TrimSpace(getString(args, "title"))
 	why := strings.TrimSpace(getString(args, "why"))
-	if kind == "" || title == "" || why == "" {
-		return nil, errors.New("kind, title and why are required")
+	if kind == "" || why == "" {
+		return nil, errors.New("kind and why are required")
 	}
-	body := map[string]interface{}{"kind": kind, "title": title, "why": why}
+	body := map[string]interface{}{"kind": kind, "why": why}
+	// A WIKI_CREATE's title is Orbit's to write (design §3.6); every other kind needs one.
+	if title != "" {
+		body["title"] = title
+	} else if kind != "WIKI_CREATE" {
+		return nil, errors.New("title is required for every kind but WIKI_CREATE")
+	}
 	copyIfPresent(body, args, "ifUnanswered", "steps", "secretSpec", "options", "recommendedOption", "clientRequestId")
 	if blocked := getStringSlice(args, "blocksTaskIds"); len(blocked) > 0 {
 		body["blocksTaskIds"] = blocked

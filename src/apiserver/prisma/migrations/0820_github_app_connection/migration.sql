@@ -1,4 +1,4 @@
--- 0762 — GitHub-backed workspaces, P0: the deployment's GitHub App, each account's connection to it,
+-- 0820 — GitHub-backed workspaces, P0: the deployment's GitHub App, each account's connection to it,
 -- and the workspace columns a clone will fill (docs/github-workspace-design.md §4).
 --
 -- `github_app_config`: one row (`id` = 'github'), saved by an administrator in Admin → Integrations.

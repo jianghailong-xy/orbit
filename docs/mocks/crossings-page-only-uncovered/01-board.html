@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Project page crossings: only what no conversation can answer · board</title>
+<style>
+  body { margin:0; background:#ececf0; font-family:-apple-system, BlinkMacSystemFont, 'Inter', 'PingFang SC', 'Noto Sans SC', 'Noto Sans CJK SC', sans-serif; color:#1d1d1f; }
+  .board { width:1400px; padding:36px 40px 48px; box-sizing:border-box; }
+  h1 { font-size:26px; margin:0 0 6px; }
+  .sub { color:#555; font-size:15px; margin-bottom:26px; line-height:1.6; }
+  .row { display:flex; gap:40px; margin-bottom:34px; align-items:flex-start; }
+  .frame { width:640px; flex:none; position:relative; }
+  .cap { font-size:15px; font-weight:600; margin:0 0 4px; }
+  .capnote { font-size:13px; color:#555; line-height:1.55; margin:0 0 10px; min-height:62px; }
+  .mark { position:absolute; width:26px; height:26px; border-radius:13px; background:#ff375f; color:#fff; font:700 14px/26px 'Inter',sans-serif; text-align:center; box-shadow:0 0 0 2px #fff; z-index:20; }
+
+  /* browser window */
+  .win { width:640px; border-radius:12px; overflow:hidden; background:#fff; box-shadow:0 0 0 1px #d2d2d7, 0 14px 40px rgba(0,0,0,.14); position:relative; }
+  .win-bar { height:34px; background:#f5f5f7; border-bottom:1px solid #e3e3e8; display:flex; align-items:center; gap:7px; padding:0 12px; }
+  .dot { width:11px; height:11px; border-radius:6px; background:#d2d2d7; }
+  .url { margin-left:14px; flex:1; height:22px; border-radius:6px; background:#fff; border:1px solid #e3e3e8; font-size:12px; color:#6e6e73; display:flex; align-items:center; padding:0 10px; }
+  .win-body { padding:18px 20px 22px; background:#fafafa; position:relative; }
+
+  /* project page blocks */
+  .ptitle { font-size:20px; font-weight:700; margin:0 0 4px; }
+  .pmeta { font-size:12.5px; color:#6e6e73; margin-bottom:14px; }
+  .blk { background:#fff; border:1px solid #e5e5ea; border-radius:10px; margin-bottom:12px; }
+  .blk-h { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border-bottom:1px solid #f0f0f2; font-weight:600; font-size:14px; }
+  .blk-h span.n { font-weight:400; color:#1d1d1f; font-variant-numeric:tabular-nums; }
+  .blk-b { padding:10px 14px; font-size:13px; }
+  .trow { display:flex; gap:8px; align-items:center; padding:5px 0; border-bottom:1px solid #f4f4f6; font-size:13px; }
+  .trow:last-child { border-bottom:none; }
+  .st { font:500 10.5px 'JetBrains Mono', ui-monospace, monospace; padding:1px 6px; border-radius:4px; background:#e8f5e9; color:#2e7d32; }
+  .st.open { background:#f2f2f6; color:#555; }
+  .muted { color:#86868b; }
+  .ghost { border:2px dashed #ff375f; border-radius:10px; padding:12px 14px; color:#c2185b; font-size:13px; background:rgba(255,55,95,.04); }
+  .ghost s { color:#999; }
+
+  /* crossing row (today's panel) */
+  .cr { padding:10px 0; border-top:1px solid #f0f0f2; font-size:13px; line-height:1.55; }
+  .cr:first-child { border-top:none; padding-top:2px; }
+  .tag { display:inline-block; font:500 11px 'JetBrains Mono', ui-monospace, monospace; padding:1px 7px; border-radius:4px; background:#f2f2f6; color:#333; margin-right:6px; }
+  .cr b { font-weight:600; }
+  .id { font:11px 'JetBrains Mono', ui-monospace, monospace; border:1px solid #e3e3e8; border-radius:4px; padding:0 4px; color:#444; }
+  .cr .why { color:#86868b; }
+  .btns { margin-top:6px; display:flex; gap:8px; }
+  .b { border:1px solid #d2d2d7; border-radius:6px; padding:3px 10px; font-size:12.5px; background:#fff; }
+  .b.r { border-color:#ff4d4f; color:#ff4d4f; }
+  .hidden-row { opacity:.35; text-decoration:line-through; }
+
+  /* chat */
+  .chat { background:#fff; padding:16px 22px 70px; min-height:330px; position:relative; }
+  .chat-h { font-weight:600; font-size:14px; padding-bottom:10px; border-bottom:1px solid #f0f0f2; margin:0 -22px 12px; padding-left:22px; }
+  .agent { font-size:14px; color:#333; line-height:1.55; margin:0 0 10px; }
+  .card { border:1px solid #ffd591; border-radius:12px; padding:14px; background:#fff; }
+  .card-h { display:flex; align-items:center; gap:8px; }
+  .ico { width:22px; height:22px; border-radius:6px; background:#fff7e6; color:#fa8c16; font-size:13px; display:flex; align-items:center; justify-content:center; }
+  .card-t { font-weight:700; font-size:15px; flex:1; }
+  .badge { font:500 11.5px 'JetBrains Mono', ui-monospace, monospace; color:#fa8c16; background:#fff7e6; border-radius:10px; padding:2px 7px; }
+  .card-s { font-size:13px; color:#6e6e73; margin:8px 0 10px; }
+  .card-l { display:flex; justify-content:space-between; border-top:1px solid #f0f0f2; margin:0 -14px; padding:10px 14px 0; color:#1677ff; font-size:13.5px; font-weight:600; }
+  .composer { position:absolute; left:22px; right:22px; bottom:16px; height:38px; border-radius:19px; border:1px solid #e3e3e8; color:#aeaeb2; display:flex; align-items:center; padding:0 16px; font-size:14px; }
+  .new { background:#fff1f0; border-left:3px solid #ff375f; padding:6px 10px; border-radius:4px; color:#1d1d1f; }
+
+  /* notes */
+  .panel { background:#fff; border-radius:16px; padding:20px 24px; font-size:14px; line-height:1.6; box-shadow:0 2px 10px rgba(0,0,0,.06); }
+  .panel h3 { margin:0 0 10px; font-size:17px; }
+  .panel h3 + p { margin-top:0; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  td, th { border-top:1px solid #e3e3e8; padding:6px 8px; vertical-align:top; text-align:left; }
+  th { color:#666; font-weight:600; border-top:none; }
+  code { font-family:'JetBrains Mono', ui-monospace, monospace; font-size:12px; background:#f2f2f6; padding:1px 4px; border-radius:4px; }
+  .q { margin:0 0 12px; }
+  .q b { color:#c2185b; }
+  .rec { color:#0a7d32; font-weight:600; }
+  .yes { color:#0a7d32; font-weight:600; }
+  .no { color:#c2185b; font-weight:600; }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>项目页的跨项目请求：会话里能批的，项目页不再显示 · Web 设计板（iOS / Android 同规则）</h1>
+  <div class="sub">
+    现状：同一条请求在两处都能看到，一处是目标项目协调者会话里的决定卡（<code>docs/mocks/handoff-in-chat</code>，11-11 上线），一处是项目页底部的 “Cross-project crossings” 面板。<br>
+    规则：<b>一条请求，只要目标项目有协调者会话（决定卡就画在那里），两端的项目页都不再显示它。</b>项目页只显示会话里答复不了的请求：把任务移出项目（目标为 no project），或目标项目没有协调者。项目页一条都没有要显示的，整块面板不画（连空状态那句也不显示）。<br>
+    界面文案为英文；项目名和任务标题是用户数据。
+  </div>
+
+  <div class="row">
+    <div class="frame">
+      <p class="cap">① 现状：飞书机器人集成的项目页</p>
+      <p class="capnote">这条 MOVE_TASK 请求的目标项目就是本项目，而本项目有协调者会话（③），所以这里和会话里出现了同一个问题。</p>
+      <div class="win">
+        <div class="win-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">orbitd.io/projects/34tJs8k23brO8Ie2WtMSk</span></div>
+        <div class="win-body">
+          <div class="ptitle">飞书机器人集成</div>
+          <div class="pmeta">OPEN · 18 of 19 criteria met</div>
+          <div class="blk">
+            <div class="blk-h">Tasks <span class="n muted">21</span></div>
+            <div class="blk-b">
+              <div class="trow"><span class="st">DONE</span>F3-2 Group routes: caps and preflight refusals</div>
+              <div class="trow"><span class="st open">OPEN</span>部署后 owner 在真实飞书租户里走一遍四条路径</div>
+            </div>
+          </div>
+          <div class="blk" style="border-color:#ff375f;box-shadow:0 0 0 2px rgba(255,55,95,.18)">
+            <div class="blk-h">Cross-project crossings <span class="n">1 waiting</span></div>
+            <div class="blk-b">
+              <div class="cr">
+                <span class="tag">PENDING</span><b>Waiting for your answer</b> <span class="tag">MOVE_TASK</span><br>
+                <span class="muted">Task to move:</span> <b>平台缺陷：首次落地已进 main 的任务，返工后不会再被推到 main</b><br>
+                <b>Orbit Files：证据文件不再进仓库</b> <span class="id">DONE</span> → <b>飞书机器人集成</b> <span class="id">OPEN</span><br>
+                <span class="why">the task stays in its project until you answer, and confirming moves it</span>
+                <div class="btns"><span class="b">Approve…</span><span class="b r">Refuse…</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <p class="cap">② 改后：同一个项目页，面板整块不画</p>
+      <p class="capnote">唯一一条请求已经在协调者会话里画成卡片，项目页没有要显示的，面板连同标题和 “0 waiting” 一起不画。红框只是标出原来的位置，界面上没有它。</p>
+      <div class="win">
+        <div class="win-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">orbitd.io/projects/34tJs8k23brO8Ie2WtMSk</span></div>
+        <div class="win-body">
+          <div class="ptitle">飞书机器人集成</div>
+          <div class="pmeta">OPEN · 18 of 19 criteria met</div>
+          <div class="blk">
+            <div class="blk-h">Tasks <span class="n muted">21</span></div>
+            <div class="blk-b">
+              <div class="trow"><span class="st">DONE</span>F3-2 Group routes: caps and preflight refusals</div>
+              <div class="trow"><span class="st open">OPEN</span>部署后 owner 在真实飞书租户里走一遍四条路径</div>
+            </div>
+          </div>
+          <div class="ghost"><s>Cross-project crossings · 1 waiting</s> — 不画（这条在协调者会话里答）</div>
+        </div>
+      </div>
+      <span class="mark" style="right:-10px;top:236px">1</span>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="frame">
+      <p class="cap">③ 不变：飞书机器人集成的协调者会话</p>
+      <p class="capnote">决定卡还是 handoff-in-chat 那张，挂在请求发出那一刻。这一页不改；它现在是这类请求唯一的答复处。</p>
+      <div class="win">
+        <div class="win-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">orbitd.io/sessions/34tEz76AIzMDf6FCY6ZsU</span></div>
+        <div class="chat">
+          <div class="chat-h">飞书机器人集成 · coordinator</div>
+          <p class="agent">Orbit Files is done and its coordinator has ended, so I asked to move its platform fix here; this project's line and merge check can take it to main.</p>
+          <div class="card">
+            <div class="card-h"><span class="ico">⇄</span><span class="card-t">Move this task here?</span><span class="badge">move</span></div>
+            <div class="card-s">1 task from Orbit Files：证据文件不再进仓库（M1 存储 + M2 证据引用）</div>
+            <div class="card-l"><span>View details &amp; act</span><span>›</span></div>
+          </div>
+          <div class="composer">Message…</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <p class="cap">④ 改后：会话里答复不了的请求仍留在项目页</p>
+      <p class="capnote">例：某项目里一条 “把任务移出项目” 的请求（目标 no project，没有会话能画卡）留在页面上；同一项目里另一条进入有协调者项目的请求不显示（划线那条只为对照，界面上没有）。计数只数显示出来的行。</p>
+      <div class="win">
+        <div class="win-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">orbitd.io/projects/34qIISTdcSurVokwRlp4w</span></div>
+        <div class="win-body">
+          <div class="ptitle">Orbit Files：证据文件不再进仓库（M1 存储 + M2 证据引用）</div>
+          <div class="pmeta">DONE · coordinator ended</div>
+          <div class="blk">
+            <div class="blk-h">Cross-project crossings <span class="n">1 waiting</span></div>
+            <div class="blk-b">
+              <div class="cr">
+                <span class="tag">PENDING</span><b>Waiting for your answer</b> <span class="tag">MOVE_TASK</span><br>
+                <span class="muted">Task to move:</span> <b>M2 证据引用：旧证据的迁移脚本</b><br>
+                <b>Orbit Files：证据文件不再进仓库</b> <span class="id">DONE</span> → <b>no project</b><br>
+                <span class="why">the task stays in its project until you answer, and confirming moves it</span>
+                <div class="btns"><span class="b">Approve…</span><span class="b r">Refuse…</span></div>
+              </div>
+              <div class="cr hidden-row">
+                <span class="tag">PENDING</span>MOVE_TASK · 平台缺陷：首次落地已进 main 的任务… → 飞书机器人集成
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <span class="mark" style="right:-10px;top:300px">2</span>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="panel" style="width:640px;box-sizing:border-box">
+      <h3>哪条请求出现在哪里</h3>
+      <table>
+        <tr><th>请求</th><th>协调者会话的卡片</th><th>项目页（两端）</th></tr>
+        <tr><td>目标项目有协调者会话</td><td class="yes">有（不变）</td><td class="no">不显示</td></tr>
+        <tr><td>目标项目没有协调者</td><td>没有</td><td class="yes">显示（不变）</td></tr>
+        <tr><td>移出项目（目标 no project）</td><td>没有</td><td class="yes">来源项目页显示（不变）</td></tr>
+        <tr><td>已答复的请求</td><td colspan="2">同上一条规则：有会话卡的，回执留在会话里，项目页不再列；没有的照旧列在项目页</td></tr>
+        <tr><td>待批期间目标项目新建了协调者</td><td colspan="2">下一次读取时这一行离开项目页，卡片出现在新会话里（锚点找不到时放在会话开头，现有逻辑）</td></tr>
+        <tr><td>要显示的行为 0</td><td colspan="2">整块面板不画，原来的 “Nothing has been asked about…” 空状态句删掉</td></tr>
+      </table>
+      <p style="margin:12px 0 0;font-size:13px;color:#555"><span class="mark" style="position:static;display:inline-block;width:20px;height:20px;line-height:20px;font-size:12px">1</span> ② 里面板消失　<span class="mark" style="position:static;display:inline-block;width:20px;height:20px;line-height:20px;font-size:12px">2</span> ④ 里计数和列表都只算会话里答复不了的请求</p>
+    </div>
+
+    <div class="panel" style="width:640px;box-sizing:border-box">
+      <h3>会改到的地方</h3>
+      <p>
+        <b>服务端</b>：<code>GET /projects/:id/handoffs</code> 每一行的 <code>toProject</code> 加上 <code>coordinatorSessionId</code>（没有协调者时为 null）。现在行里没有这个信息，客户端判断不了卡片画在哪。不加新接口。<br>
+        <b>Web</b>：<code>ProjectCrossingsCard.tsx</code> 按上表过滤行，没有行时返回 null。<br>
+        <b>iOS/macOS</b>：<code>ProjectCrossings.swift</code>；<b>Android</b>：<code>ProjectCrossings.kt</code>，同一条规则。<br>
+        <b>旧服务端</b>（行里没有这个字段）：照旧全部显示，宁可重复，不能让请求没处答。
+      </p>
+      <h3>待定</h3>
+      <p class="q"><b>Q1</b> 来源项目页（如 Orbit Files）也按同一规则隐藏进入有协调者项目的请求？<span class="rec">推荐：是</span>，否则一端隐藏一端显示，还是重复。</p>
+      <p class="q"><b>Q2</b> 协调者会话被删进回收站时，算 “没有协调者”、回到项目页显示？<span class="rec">推荐：是</span>，回收站里的会话不画卡片（<code>selectedTrashed</code>），不回来就没处答。</p>
+      <p class="q" style="margin:0"><b>Q3</b> 四端一起改？<span class="rec">推荐：是</span>，规则只差一个过滤条件，分端上线会让同一个账号在不同客户端看到不同的项目页。</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

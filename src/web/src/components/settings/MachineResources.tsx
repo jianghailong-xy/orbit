@@ -109,9 +109,12 @@ export function MachineResources({
   workspaceDisk,
   reserveMb,
   nowMs,
+  offlineLabel,
 }: {
   runnerId: string;
   online: boolean;
+  /** Said instead of Offline with no reading: the managed runner's shared state (Asleep, Preparing…). */
+  offlineLabel?: string;
   capabilities: readonly string[] | null | undefined;
   workspaceDisk: RunnerDisk | null;
   reserveMb: number | null;
@@ -182,7 +185,7 @@ export function MachineResources({
   const head = !online
     ? at
       ? runnerResourcesLastReading(ago(at, nowMs))
-      : RUNNER_RESOURCES_OFFLINE
+      : (offlineLabel ?? RUNNER_RESOURCES_OFFLINE)
     : reports
       ? RUNNER_RESOURCES_LIVE
       : RUNNER_RESOURCES_DISK_ONLY;

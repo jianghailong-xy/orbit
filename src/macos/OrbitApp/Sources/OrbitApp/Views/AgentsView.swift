@@ -421,11 +421,7 @@ struct AgentPanes: View {
                 searchResults
             } else if groupByTag {
                 ForEach(SessionTagGrouping.sections(shownSessions)) { section in
-                    Section {
-                        ForEach(section.sessions) { sessionRow($0) }
-                    } header: {
-                        sectionHeaderBand { tagSectionHeader(section.tag) }
-                    }
+                    tagGroupSection(section)
                 }
             } else {
                 groupedSections(folderListing: folderListing, timeSections: timeSections,
@@ -688,14 +684,7 @@ struct AgentPanes: View {
         // sections below. Trash, a tag filter and Group by Tag all leave this empty — see
         // `folderListing` — so the list goes on flat there.
         ForEach(Array(folderListing.folders.enumerated()), id: \.element.id) { index, row in
-            // The list draws a hairline at the top of its first row; with folder rows at the
-            // very top, that row is one of theirs (see the note on the first "Today" row
-            // below, whose trick this repeats).
-            if index == 0 {
-                folderRow(row).listRowSeparator(.hidden, edges: .top)
-            } else {
-                folderRow(row)
-            }
+            folderListRow(row, first: index == 0)
         }
         // The leading "Today" keeps no title. A list that opens on today — which is nearly
         // always — would be saying something its rows already say (each carries its own time
@@ -706,40 +695,59 @@ struct AgentPanes: View {
         // decision is the one the mock put second, `docs/mocks/ios-session-list-first-header.html`
         // — the reporter picked the first: never draw it, rather than only once it pins.)
         ForEach(Array(timeSections.enumerated()), id: \.element.id) { index, section in
-            if index == 0, section.title == "Today" {
-                // The list draws a hairline at the top of its first row — the title used to
-                // sit over it. With the title gone it reads as a stray rule above the first
-                // session, so that one row drops its top separator (measured on an iOS 26.2
-                // simulator: hiding the *section* separator, or giving the Section an empty
-                // header, both leave the line; only this removes it).
-                ForEach(section.sessions) { session in
-                    // Only the list's own first row drops the hairline above it: with
-                    // folder rows on top, the first "Today" row is not that row.
-                    if session.id == section.sessions.first?.id, folderListing.folders.isEmpty {
-                        listRow(session, projects: projectRows, marks: projectMarks)
-                            .listRowSeparator(.hidden, edges: .top)
-                    } else {
-                        listRow(session, projects: projectRows, marks: projectMarks)
-                    }
+            timeSection(index: index, section: section, foldersEmpty: folderListing.folders.isEmpty,
+                        projectRows: projectRows, projectMarks: projectMarks)
+        }
+    }
+
+    /// One folder row at the top of the list; the first drops the hairline the list draws there.
+    @ViewBuilder
+    private func folderListRow(_ row: SessionFolderRow, first: Bool) -> some View {
+        if first {
+            folderRow(row).listRowSeparator(.hidden, edges: .top)
+        } else {
+            folderRow(row)
+        }
+    }
+
+    /// One recency section: the leading "Today" without its title, the Pinned fold, or an
+    /// ordinary titled section. The section is the row this list's ForEach draws, so that closure
+    /// holds no branch or second ForEach of its own.
+    @ViewBuilder
+    private func timeSection(index: Int, section: SessionTimeSection, foldersEmpty: Bool,
+                             projectRows: [String: SessionProjectRow],
+                             projectMarks: [String: SessionProjectMark]) -> some View {
+        if index == 0, section.title == "Today" {
+            // The list draws a hairline at the top of its first row — the title used to
+            // sit over it. With the title gone it reads as a stray rule above the first
+            // session, so that one row drops its top separator (measured on an iOS 26.2
+            // simulator: hiding the *section* separator, or giving the Section an empty
+            // header, both leave the line; only this removes it).
+            ForEach(section.sessions) { session in
+                if session.id == section.sessions.first?.id, foldersEmpty {
+                    listRow(session, projects: projectRows, marks: projectMarks)
+                        .listRowSeparator(.hidden, edges: .top)
+                } else {
+                    listRow(session, projects: projectRows, marks: projectMarks)
                 }
-            } else if section.title == "Pinned" {
-                // Pinned folds to its header, as Notes' Pinned does: the rows leave the
-                // list, the header stays to bring them back. The rows are dropped here
-                // rather than through `Section(isExpanded:)`, whose disclosure only draws in
-                // the sidebar list style.
-                Section {
-                    if !pinnedCollapsed {
-                        ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
-                    }
-                } header: {
-                    sectionHeaderBand { pinnedSectionHeader(section.title) }
-                }
-            } else {
-                Section {
+            }
+        } else if section.title == "Pinned" {
+            // Pinned folds to its header, as Notes' Pinned does: the rows leave the
+            // list, the header stays to bring them back. The rows are dropped here
+            // rather than through `Section(isExpanded:)`, whose disclosure only draws in
+            // the sidebar list style.
+            Section {
+                if !pinnedCollapsed {
                     ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
-                } header: {
-                    sectionHeaderBand { Text(section.title).textCase(nil) }
                 }
+            } header: {
+                sectionHeaderBand { pinnedSectionHeader(section.title) }
+            }
+        } else {
+            Section {
+                ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
+            } header: {
+                sectionHeaderBand { Text(section.title).textCase(nil) }
             }
         }
     }
@@ -957,9 +965,11 @@ struct AgentPanes: View {
         }
         // A phone opens the coordinator's conversation, not the project's sessions page, which is
         // the button in that conversation's navigation bar (owner 2026-11-11, board 5). The iPad's
-        // column keeps the page.
+        // column keeps the page. A row whose line says a member is waiting on you opens that member
+        // instead, at its card, on both (owner 2026-11-14).
         let onTap = {
-            switch rowNavigation == .push ? SessionProjectSheet.rowTap(row) : .sessions {
+            switch SessionProjectSheet.rowTap(row, held: app.sessions + agents.allSessions, push: rowNavigation == .push) {
+            case .waitingMember(let member): app.openWaitingMember(member, project: address, push: rowNavigation == .push)
             case .coordinator(let coordinator): app.openProjectMember(coordinator, push: true)
             case .sessions: app.openProjectSessions(address)
             }
@@ -1114,6 +1124,16 @@ struct AgentPanes: View {
         Binding(get: { newFolderFailure != nil }, set: { if !$0 { newFolderFailure = nil } })
     }
 
+    /// One tag's sessions under the tag's header band. The section is the row the list's ForEach
+    /// draws, so the ForEach closure holds no branch of its own.
+    @ViewBuilder private func tagGroupSection(_ section: SessionTagSection) -> some View {
+        Section {
+            ForEach(section.sessions) { sessionRow($0) }
+        } header: {
+            sectionHeaderBand { tagSectionHeader(section.tag) }
+        }
+    }
+
     @ViewBuilder private func tagSectionHeader(_ tag: SessionTag?) -> some View {
         if let tag {
             HStack(spacing: 6) {
@@ -1165,15 +1185,40 @@ struct AgentPanes: View {
     /// the rows and their chips sit on (see `TagChipColor`). A row sliding under a pinned header now
     /// disappears behind it instead of reading through it.
     ///
+    /// On iOS 26 the list meets its top on the soft edge (the needs-you bar's `SoftEdgeLayer`), and
+    /// an opaque band pinned under it read as a solid strip cutting that edge off (the owner,
+    /// 2026-11-14: "Pinned has no glass"). There the band is glass of the same make — a material blur
+    /// under a wash of the page's colour — solid under the title, so a row still can't read through
+    /// it, and fading out over the 9pt below it, so rows blur into the header rather than end at a line.
+    /// Glass shows its own edges, so it is grown by the 20pt side insets as well and runs edge to edge
+    /// (measured on the iOS 26 simulator, probe run 43601744335: without them, a slab with hard sides).
+    ///
     /// The Mac's list draws its own section headers' backing, so there the band is the title alone.
     @ViewBuilder private func sectionHeaderBand<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         #if os(iOS)
         content()
             .frame(maxWidth: .infinity, alignment: .leading)
             .background {
-                Color(uiColor: .systemBackground)
+                if #available(iOS 26.0, *) {
+                    ZStack {
+                        Rectangle().fill(.ultraThinMaterial)
+                        Color(uiColor: .systemBackground).opacity(0.85)
+                    }
+                    .mask {
+                        VStack(spacing: 0) {
+                            Color.black
+                            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                                .frame(height: 9)
+                        }
+                    }
                     .padding(.top, -33)
                     .padding(.bottom, -9)
+                    .padding(.horizontal, -20)
+                } else {
+                    Color(uiColor: .systemBackground)
+                        .padding(.top, -33)
+                        .padding(.bottom, -9)
+                }
             }
         #else
         content()
@@ -2046,6 +2091,9 @@ struct AgentFormContent: View {
     @State private var workDir = ""
     @State private var enabled = true
     @State private var modelRouting = false
+    @State private var subagentsEnabled = true
+    @State private var optimizeFor = SubagentSettings.OptimizeFor.cost
+    @State private var subagentsMaxRunning = SubagentSettings.defaultMaxRunning
     @State private var confirmingDelete = false
 
     /// Not editable fields: an agent holds no engine or provider. This is what the project last ran
@@ -2122,6 +2170,9 @@ struct AgentFormContent: View {
                 }
             }
 
+            SubagentSettingsSection(agents: agents, enabled: $subagentsEnabled, optimizeFor: $optimizeFor,
+                                    maxRunning: $subagentsMaxRunning)
+
             if let env = agent.env, !env.isEmpty {
                 Section("Environment") {
                     ForEach(env.sorted(by: { $0.key < $1.key }), id: \.key) { k, v in
@@ -2174,6 +2225,9 @@ struct AgentFormContent: View {
         workDir = agent.workDir ?? ""
         enabled = agent.enabled ?? true
         modelRouting = agent.modelRouting ?? false
+        subagentsEnabled = agent.subagentsEnabled ?? true
+        optimizeFor = SubagentSettings.OptimizeFor(stored: agent.modelRoutingOptimizeFor)
+        subagentsMaxRunning = SubagentSettings.maxRunning(agent.subagentsMaxRunning)
     }
 
     /// True when the working copy diverges from the agent as prefilled — mirrors `prefill()` field
@@ -2190,6 +2244,9 @@ struct AgentFormContent: View {
         || workDir != (agent.workDir ?? "")
         || enabled != (agent.enabled ?? true)
         || modelRouting != (agent.modelRouting ?? false)
+        || subagentsEnabled != (agent.subagentsEnabled ?? true)
+        || optimizeFor != SubagentSettings.OptimizeFor(stored: agent.modelRoutingOptimizeFor)
+        || subagentsMaxRunning != SubagentSettings.maxRunning(agent.subagentsMaxRunning)
     }
 
     /// Save (only if changed and still valid) then close. An emptied name is invalid — the form was
@@ -2211,7 +2268,13 @@ struct AgentFormContent: View {
             workDir: workDir.isEmpty ? nil : workDir,
             enabled: enabled,
             // Only when moved: the switch is written by the user API alone, and only by a press.
-            modelRouting: modelRouting != (agent.modelRouting ?? false) ? modelRouting : nil
+            modelRouting: modelRouting != (agent.modelRouting ?? false) ? modelRouting : nil,
+            // SubAgents: each only when moved, like the switch above.
+            modelRoutingOptimizeFor: optimizeFor != SubagentSettings.OptimizeFor(stored: agent.modelRoutingOptimizeFor)
+                ? optimizeFor.rawValue : nil,
+            subagentsEnabled: subagentsEnabled != (agent.subagentsEnabled ?? true) ? subagentsEnabled : nil,
+            subagentsMaxRunning: subagentsMaxRunning != SubagentSettings.maxRunning(agent.subagentsMaxRunning)
+                ? subagentsMaxRunning : nil
         )
         Task { await agents.save(agent.id, req) }
     }

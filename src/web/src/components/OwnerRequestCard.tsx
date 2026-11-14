@@ -33,8 +33,18 @@ import {
   type OwnerRequestStep,
 } from '../lib/ownerRequests';
 import { accountSecretsQuery, ownerRequestsQuery, runnersQuery } from '../lib/queries';
+import {
+  WIKI_CREATE_CHANGE_SETTINGS,
+  WIKI_CREATE_MAINTENANCE,
+  WIKI_CREATE_NOT_HERE,
+  WIKI_CREATE_READS_FROM,
+  WIKI_CREATE_REPOSITORY,
+  WIKI_WORKSPACE_OFFLINE,
+  wikiCreateCardFacts,
+} from '../lib/wikiStart';
 import { ago, linkId, sameResourceId } from '../lib/watches';
 import { CardActionButton, CardActions } from './CardAction';
+import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { NOTE_PROMPT, OWN_ANSWER_PROMPT, YOUR_ANSWER, QuestionOptions, optionIndex, type Choice } from './CoordinatorQuestionCard';
 import { decisionReceiptTime } from './EvidenceDecisionCard';
 import Markdown from './Markdown';
@@ -45,6 +55,7 @@ import { Input } from './ui/Input';
 import { Menu } from './ui/Menu';
 import { PasswordInput } from './ui/PasswordInput';
 import { Textarea } from './ui/Textarea';
+import { WikiCreateDialog, sameId, useWikiWorkspaceChoices } from './WikiSetUpDialog';
 import './OwnerRequest.css';
 
 /**
@@ -54,13 +65,18 @@ import './OwnerRequest.css';
  * who and when, at the same place.
  */
 
-type Ending = { to: 'done'; body: { option?: number; text?: string } } | { to: 'decline'; body: { reason: string } };
+type Ending =
+  | { to: 'done'; body: { option?: number; text?: string } }
+  | { to: 'decline'; body: { reason: string } }
+  // WIKI_CREATE's Create wiki: the owner's door that makes the wiki and settles the card (design §3.6).
+  | { to: 'create-wiki'; body: Record<string, never> };
 
 const PRIMARY: Readonly<Record<OwnerRequest['kind'], string>> = {
   DECISION: 'Send answer',
   SECRET: 'Provide key',
   MANUAL_STEP: 'Mark done',
   CONFIRM: 'Confirm',
+  WIKI_CREATE: 'Create wiki',
 };
 
 /** The runner a secret goes to, by the name the owner knows it by. */
@@ -97,6 +113,26 @@ function Fact({ label, children }: { label: string; children: ReactNode }): JSX.
       <dt>{label}</dt>
       <dd>{children}</dd>
     </>
+  );
+}
+
+/**
+ * What a WIKI_CREATE card will make (docs/wiki-explicit-creation-design.md §3.6): the repository, the asking session's
+ * workspace it reads it from — offline when its runner is — and the maintenance it starts with.
+ */
+function WikiCreateFacts({ request }: { request: OwnerRequest }): JSX.Element {
+  const { choices } = useWikiWorkspaceChoices();
+  const workspaceId = choices.find((choice) => sameId(choice.id, request.workspaceId ?? null))?.id ?? request.workspaceId ?? null;
+  const facts = wikiCreateCardFacts({ repoUrlNorm: request.repoUrlNorm, workspaceId }, choices);
+  return (
+    <dl className="owner-request-facts">
+      {facts.repository ? <Fact label={WIKI_CREATE_REPOSITORY}>{facts.repository}</Fact> : null}
+      <Fact label={WIKI_CREATE_READS_FROM}>
+        {facts.readsFrom ?? '—'}
+        {facts.offline ? <span className="owner-request-offline">{WIKI_WORKSPACE_OFFLINE}</span> : null}
+      </Fact>
+      <Fact label={WIKI_CREATE_MAINTENANCE}>{facts.maintenance}</Fact>
+    </dl>
   );
 }
 
@@ -324,8 +360,15 @@ function RemindLater({ request, now }: { request: OwnerRequest; now: number }): 
   );
 }
 
+/** Hands a talk about the request to the conversation's composer. Only a conversation has one, so the inbox passes none. */
+type ChatAbout = (request: OwnerRequest) => void;
+
 /** A pending request, whole. */
-export function OwnerRequestCard({ request: given, now = Date.now() }: { request: OwnerRequest; now?: number }): JSX.Element {
+export function OwnerRequestCard({ request: given, now = Date.now(), onChat }: {
+  request: OwnerRequest;
+  now?: number;
+  onChat?: ChatAbout;
+}): JSX.Element {
   const qc = useQueryClient();
   const door = useSecretDoor(given);
   const request = door.current;
@@ -334,6 +377,7 @@ export function OwnerRequestCard({ request: given, now = Date.now() }: { request
   const [text, setText] = useState('');
   const [declining, setDeclining] = useState(false);
   const [reason, setReason] = useState('');
+  const [changing, setChanging] = useState(false);
   const runner = useRunnerName(request.secretSpec?.runnerId);
   const end = useMutation({
     mutationFn: ({ to, body }: Ending) =>
@@ -416,6 +460,7 @@ export function OwnerRequestCard({ request: given, now = Date.now() }: { request
           </dl>
         ) : null}
 
+        {request.kind === 'WIKI_CREATE' ? <WikiCreateFacts request={request} /> : null}
         {request.kind === 'MANUAL_STEP' ? <Steps steps={request.steps ?? []} /> : null}
         {request.kind === 'SECRET' && request.secretSpec ? (
           delivering ? (
@@ -464,7 +509,32 @@ export function OwnerRequestCard({ request: given, now = Date.now() }: { request
           <Alert type="error" title="That was not recorded" description={door.failure ?? (end.error as Error).message} />
         ) : null}
 
-        {declining ? (
+        {request.kind === 'WIKI_CREATE' ? (
+          <CardActions className="owner-request-actions">
+            <CardActionButton
+              tone="primary"
+              disabled={end.isPending || closed}
+              onClick={() => end.mutate({ to: 'create-wiki', body: {} })}
+            >
+              {PRIMARY.WIKI_CREATE}
+            </CardActionButton>
+            <CardActionButton disabled={end.isPending || closed} onClick={() => setChanging(true)}>
+              {WIKI_CREATE_CHANGE_SETTINGS}
+            </CardActionButton>
+            {onChat && !closed ? (
+              <CardActionButton onClick={() => onChat(request)}>{OWNER_SEND_BACK_ACTION}</CardActionButton>
+            ) : null}
+            <button
+              type="button"
+              className="owner-request-link owner-request-not-here"
+              disabled={end.isPending || closed}
+              onClick={() => end.mutate({ to: 'decline', body: { reason: WIKI_CREATE_NOT_HERE } })}
+            >
+              {WIKI_CREATE_NOT_HERE}
+            </button>
+            {changing ? <WikiCreateDialog workspaceId={request.workspaceId ?? null} onClose={() => setChanging(false)} /> : null}
+          </CardActions>
+        ) : declining ? (
           <div className="owner-request-decline">
             <Textarea
               value={reason}
@@ -498,6 +568,9 @@ export function OwnerRequestCard({ request: given, now = Date.now() }: { request
                 {PRIMARY[request.kind]}
               </CardActionButton>
             )}
+            {onChat && !closed ? (
+              <CardActionButton onClick={() => onChat(request)}>{OWNER_SEND_BACK_ACTION}</CardActionButton>
+            ) : null}
             <button type="button" className="owner-request-link" disabled={closed} onClick={() => setDeclining(true)}>
               {request.kind === 'MANUAL_STEP' ? 'Can’t do this…' : 'Decline…'}
             </button>
@@ -532,6 +605,7 @@ function outcomeLine(request: OwnerRequest, runner: string): string {
     if (label) return said ? `${label}: “${said}”` : label;
     return said ? `“${said}”` : 'Answered';
   }
+  if (request.kind === 'WIKI_CREATE') return request.answer?.name ? `Created the wiki ${request.answer.name}` : 'Wiki created';
   return request.kind === 'CONFIRM' ? 'Confirmed' : 'Marked done';
 }
 
@@ -637,13 +711,13 @@ function SnoozedRequest({ request, until, now }: { request: OwnerRequest; until:
 }
 
 /** One request where a conversation draws it: whole, folded for later, or as its summary. */
-function ConversationRequest({ request }: { request: OwnerRequest }): JSX.Element {
+function ConversationRequest({ request, onChat }: { request: OwnerRequest; onChat?: ChatAbout }): JSX.Element {
   const snoozes = useSnoozes();
   const now = Date.now();
   if (request.state !== 'PENDING') return <OwnerRequestResolved request={request} now={now} />;
   const until = snoozes[request.id] ?? 0;
   if (until > now) return <SnoozedRequest request={request} until={until} now={now} />;
-  return <OwnerRequestCard request={request} now={now} />;
+  return <OwnerRequestCard request={request} now={now} onChat={onChat} />;
 }
 
 /**
@@ -653,6 +727,7 @@ function ConversationRequest({ request }: { request: OwnerRequest }): JSX.Elemen
 export function useSessionOwnerRequestInserts(
   sessionId: string | null | undefined,
   events: ReadonlyArray<{ seq: number; ts?: string }>,
+  onChat?: ChatAbout,
 ): TranscriptInsert[] {
   const open = useQuery({ ...ownerRequestsQuery('open'), enabled: Boolean(sessionId) });
   const all = useQuery({ ...ownerRequestsQuery('all'), enabled: Boolean(sessionId) });
@@ -672,10 +747,10 @@ export function useSessionOwnerRequestInserts(
             anchor,
             moment: request.createdAt,
             key: `owner-request:${request.id}`,
-            element: <ConversationRequest request={request} />,
+            element: <ConversationRequest request={request} onChat={onChat} />,
           }];
     });
-  }, [sessionId, events, open.data, all.data]);
+  }, [sessionId, events, open.data, all.data, onChat]);
 }
 
 /** On a task a pending request holds up, wherever a task is listed or opened. */

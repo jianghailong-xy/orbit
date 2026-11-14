@@ -281,31 +281,41 @@ private struct GuestConversationPage: View {
 
     // MARK: Transcript
 
+    /// The control that reads the messages before what is loaded.
+    private var loadOlderRow: some View {
+        Button {
+            Task { await conversation.loadOlder() }
+        } label: {
+            HStack {
+                Spacer()
+                if conversation.loadingOlder { ProgressView().controlSize(.small) }
+                Text("Load earlier messages").font(.orbitLabel)
+                Spacer()
+            }
+        }
+        .buttonStyle(.borderless)
+        .listRowSeparator(.hidden)
+    }
+
     private var transcript: some View {
         ScrollViewReader { proxy in
             List {
-                if conversation.hasMoreOlder {
-                    Button {
-                        Task { await conversation.loadOlder() }
-                    } label: {
-                        HStack {
-                            Spacer()
-                            if conversation.loadingOlder { ProgressView().controlSize(.small) }
-                            Text("Load earlier messages").font(.orbitLabel)
-                            Spacer()
-                        }
+                ForEach(GuestTranscriptListLogic.rows(conversation.items,
+                                                      hasMoreOlder: conversation.hasMoreOlder,
+                                                      bottomID: bottomID)) { row in
+                    switch row {
+                    case .loadOlder:
+                        loadOlderRow
+                    case .item(let item):
+                        TranscriptItemView(item: item, fullPayload: { seq in await conversation.fullPayload(seq) })
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                    case .bottom(let id):
+                        Color.clear.frame(height: 1).id(id)
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
                     }
-                    .buttonStyle(.borderless)
-                    .listRowSeparator(.hidden)
                 }
-                ForEach(conversation.items) { item in
-                    TranscriptItemView(item: item, fullPayload: { seq in await conversation.fullPayload(seq) })
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                }
-                Color.clear.frame(height: 1).id(bottomID)
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)

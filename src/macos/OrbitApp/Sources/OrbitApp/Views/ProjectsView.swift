@@ -137,15 +137,8 @@ struct ProjectsListView: View {
                     .filter { !$0.projects.isEmpty }
                 List(selection: rowNavigation == .selection ? $model.selectedProjectID : nil) {
                     ForEach(groups) { group in
-                        Section {
-                            if !group.section.defaultCollapsed || showsCompleted || !query.isEmpty {
-                                ForEach(group.projects) { project in
-                                    row(project, now: context.date)
-                                }
-                            }
-                        } header: {
-                            header(group)
-                        }
+                        ProjectGroupSection(group: group, showsCompleted: $showsCompleted,
+                                            query: query, now: context.date, rowNavigation: rowNavigation)
                     }
                 }
                 .orbitRevealSurface()
@@ -186,8 +179,31 @@ struct ProjectsListView: View {
                 || ($0.goal ?? "").localizedCaseInsensitiveContains(needle)
         }
     }
+}
 
-    private func header(_ group: ProjectAttentionGroup) -> some View {
+/// One lane of the projects index: its header and, unless crowded shut, its projects. A child view
+/// so the index's ForEach draws one lane per row and no second ForEach sits under it.
+private struct ProjectGroupSection: View {
+    let group: ProjectAttentionGroup
+    @Binding var showsCompleted: Bool
+    let query: String
+    let now: Date
+    let rowNavigation: SessionRowNavigation
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Section {
+            if !group.section.defaultCollapsed || showsCompleted || !query.isEmpty {
+                ForEach(group.projects) { project in
+                    row(project)
+                }
+            }
+        } header: {
+            header
+        }
+    }
+
+    private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             // `Color`s rather than the hierarchical styles, for the same reason as the rows below.
             Text(group.section.title)
@@ -206,7 +222,7 @@ struct ProjectsListView: View {
         .textCase(nil)
     }
 
-    @ViewBuilder private func row(_ project: ProjectSummary, now: Date) -> some View {
+    @ViewBuilder private func row(_ project: ProjectSummary) -> some View {
         let row = ProjectRow(project: project, now: now)
         switch rowNavigation {
         case .selection:
@@ -502,24 +518,29 @@ struct ProjectDetailView: View {
     private func page(_ store: ProjectDetailModel, _ document: ProjectDocument, now: Date) -> some View {
         ScrollViewReader { proxy in
             List {
-                Section {
-                    header(store, document, now: now)
-                        .onAppear { headerOnScreen = true }
-                        .onDisappear { headerOnScreen = false }
+                ForEach(ProjectPageListLogic.rows) { row in
+                    switch row {
+                    case .header:
+                        Section {
+                            header(store, document, now: now)
+                                .onAppear { headerOnScreen = true }
+                                .onDisappear { headerOnScreen = false }
+                        }
+                        .listRowBackground(Color.clear)
+                    case .openItems:      openItemsAttention(store, document, now: now)
+                    case .overview:       overviewSection(store, document)
+                    case .coordinator:    coordinatorSection(store, document, now: now)
+                    case .runSettings:    runSettingsSection(store, document, now: now)
+                    case .goal:           goalSection(document)
+                    case .graph:          graphSection(store)
+                    case .blockers:       blockersSection(store, document, now: now)
+                    case .runQueue:       runQueueSection(store)
+                    case .criteria:       criteriaSection(store, document)
+                    case .instructions:   instructionsSection(document)
+                    case .tasks:          tasksSection(store, document)
+                    case .crossings:      crossingsSection(store)
+                    }
                 }
-                .listRowBackground(Color.clear)
-                openItemsAttention(store, document, now: now)
-                overviewSection(store, document)
-                coordinatorSection(store, document, now: now)
-                runSettingsSection(store, document, now: now)
-                goalSection(document)
-                graphSection(store)
-                blockersSection(store, document, now: now)
-                runQueueSection(store)
-                criteriaSection(store, document)
-                instructionsSection(document)
-                tasksSection(store, document)
-                crossingsSection(store)
             }
             .projectPageListStyle()
             .sheet(item: $pageSheet) { sheet in
@@ -810,15 +831,21 @@ struct ProjectDetailView: View {
                         .padding(.horizontal, 20)
                         .padding(.top, 8)
                     List {
-                        openItemsSection(store, document, now: context.date)
-                        if summary.count == 0,
-                           StartProject.pageRow(status: document.status, started: document.started,
-                                                openItems: store.openItems) == nil,
-                           ProjectDone.pageRow(status: document.status, derivedDone: document.derivedDone,
-                                               openItems: store.openItems) == nil {
-                            Text("Nothing is waiting on you or the coordinator.")
-                                .font(.orbitSubtext)
-                                .foregroundStyle(.secondary)
+                        ForEach(ProjectOpenItemsListLogic.rows(
+                            summaryCount: summary.count,
+                            hasStartRow: StartProject.pageRow(status: document.status, started: document.started,
+                                                              openItems: store.openItems) != nil,
+                            hasDoneRow: ProjectDone.pageRow(status: document.status,
+                                                            derivedDone: document.derivedDone,
+                                                            openItems: store.openItems) != nil)) { row in
+                            switch row {
+                            case .openItems:
+                                openItemsSection(store, document, now: context.date)
+                            case .empty:
+                                Text("Nothing is waiting on you or the coordinator.")
+                                    .font(.orbitSubtext)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                     #if os(iOS)
@@ -2427,10 +2454,11 @@ struct ProjectDetailView: View {
 
     /// Work asked across this project's line, in either direction — the account owner's to answer,
     /// and nobody else's (web's `ProjectCrossingsCard.tsx`). Last, where the web draws it; drawn once
-    /// the project is an end of a crossing, or when the read failed with nothing to show.
+    /// the project is an end of a crossing no coordinator conversation answers, or when the read
+    /// failed with nothing to show.
     @ViewBuilder
     private func crossingsSection(_ store: ProjectDetailModel) -> some View {
-        if let rows = store.crossings, !rows.isEmpty {
+        if let rows = store.crossings.map(ProjectCrossings.shownOnProjectPage), !rows.isEmpty {
             Section {
                 ForEach(ProjectCrossings.ordered(rows)) { row in
                     let asking = crossingAsk?.id == row.id
