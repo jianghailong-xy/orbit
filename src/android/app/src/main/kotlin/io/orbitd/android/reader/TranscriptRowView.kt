@@ -226,6 +226,15 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                     fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 else if (taskRunning) progress?.let(TaskProgressCopy::trayLine)?.let { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             }
+            // The owner's "Chat about this" reply to one of Orbit's own cards: their message, drawn as their turns are, under the
+            // call rather than left inside its output (web `OwnerChatBubble`, OrbitKit `OwnerChatReply`).
+            if (!detailOnly) ownerChatWords(row)?.let { words ->
+                Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(10.dp).testTag("owner-chat-reply"),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("You", style = MaterialTheme.typography.labelMedium)
+                    MarkdownText(words, open = open)
+                }
+            }
             if (expanded || detailOnly) {
                 // A workflow opens to its progress, its script folded under it; a sub-agent's totals close its transcript.
                 if (taskKind == "Workflow" && progress != null) TaskProgressView(progress, row) { card ->

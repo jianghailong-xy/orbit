@@ -106,6 +106,62 @@ or enroll a machine of your own as below.
 Expected: the runner belongs to the intended account/deployment, its heartbeat advances, and the
 selected runtime can authenticate. Runtime credentials stay on the runner for this local-login path.
 
+### Fresh Codex login in an isolated runtime home
+
+For a clean-install check, a new `ORBIT_HOME` isolates runner registration and logs; it does **not**
+isolate a runtime's login. Use a fresh runtime home too. Do not copy an existing `auth.json`, API key,
+configuration, or keychain entry. See the provider's public
+[authentication guide](https://developers.openai.com/codex/auth/) for device login and credential storage.
+
+The account owner must perform device login in a **private interactive terminal on the runner host**.
+Do not run this block through an Orbit tool, recorded terminal, screen share, `tee`, or transcript logger:
+the login prints a verification address and one-time code. Never paste those values into Orbit.
+If no private terminal is available, stop before starting login and arrange owner access first.
+
+In that private terminal, as the runner's OS user:
+
+```bash
+umask 077
+ORBIT_SMOKE_RUNTIME_HOME=$(mktemp -d /tmp/orbit-clean-codex.XXXXXXXX)
+chmod 700 "$ORBIT_SMOKE_RUNTIME_HOME"
+mkdir -m 700 "$ORBIT_SMOKE_RUNTIME_HOME/codex"
+printf 'cli_auth_credentials_store = "file"\n' > "$ORBIT_SMOKE_RUNTIME_HOME/codex/config.toml"
+# A clean environment excludes inherited provider tokens, API keys, endpoints and shell startup files.
+env -i PATH="$PATH" HOME="$ORBIT_SMOKE_RUNTIME_HOME" \
+  CODEX_HOME="$ORBIT_SMOKE_RUNTIME_HOME/codex" \
+  bash --noprofile --norc -c 'cd "$HOME" && codex login --device-auth'
+```
+
+Complete the provider's browser approval yourself. Device login may require enabling it in personal
+security settings or workspace permissions. Review the provider's consent screen: this authorizes
+Codex account access, not access restricted to one task. It creates a provider authentication session;
+a later task consumes quota. Do not grant repository integrations for this smoke check.
+
+Keep this private terminal open and retain the home path locally. Report only success/failure to the
+operator; do not share login output or credential files. Configure the supervised test runner with
+that same `CODEX_HOME` and isolated `HOME`, a separate `ORBIT_HOME`, and a clean environment containing
+only the required executable PATH and these explicit paths. Do not put provider credentials into
+Workspace environment variables. Start only the disposable task from step 5; a login-status response
+alone does not prove usable quota. This procedure has no reason to change an existing runner service.
+
+After the smoke task ends, stop the test runner, then in the **same private terminal** sign out:
+
+```bash
+env -i PATH="$PATH" HOME="$ORBIT_SMOKE_RUNTIME_HOME" \
+  CODEX_HOME="$ORBIT_SMOKE_RUNTIME_HOME/codex" \
+  bash --noprofile --norc -c 'cd "$HOME" && codex logout'
+# Remove only the freshly generated test directory; never substitute an existing runtime home.
+case "$ORBIT_SMOKE_RUNTIME_HOME" in
+  /tmp/orbit-clean-codex.????????) rm -rf -- "$ORBIT_SMOKE_RUNTIME_HOME" ;;
+  *) echo 'Unexpected runtime home; stop and inspect it privately.'; exit 1 ;;
+esac
+unset ORBIT_SMOKE_RUNTIME_HOME
+```
+
+Record only the logout outcome and whether the isolated home was removed. Local logout/deletion is
+not proof of server-side revocation. Review the provider's account/session controls for revocation;
+restore any account setting you enabled for device login. Do not retain the runtime's login logs.
+
 ## 5. Complete a small task
 
 - [ ] On the runner, create a disposable Git workspace owned by the runner OS account:
@@ -129,9 +185,31 @@ selected runtime can authenticate. Runtime credentials stay on the runner for th
   [backup verification procedure](postgres-backup-restore.md#verify-a-backup-without-touching-production)
   before treating this deployment as ready for valuable work.
 
+For a supervised CLI smoke test, the public [CLI guide](runner-cli.md) explains capability discovery.
+Use the enrolled test runner's `ORBIT_HOME` and the clean runtime environment from step 4. Discover
+`orbit capabilities --json` first and use its advertised arguments. With the disposable Workspace ID
+from the UI, create exactly one task (the returned JSON contains its ID):
+
+```bash
+orbit task create --title 'Create and verify smoke.txt' \
+  --description 'Create smoke.txt containing Orbit first task passed followed by a newline. Verify with cat smoke.txt. Change no other files.' \
+  --assignee-id '<disposable-workspace-id>' --engine codex --provider codex \
+  --completion-criterion EXECUTABLE \
+  --acceptance-command 'test "$(cat smoke.txt)" = "Orbit first task passed"' \
+  --acceptance-expected-exit-code 0 --json
+orbit task start '<returned-task-id>' --json
+orbit task get '<returned-task-id>' --json
+```
+
+Answer only permissions for the requested disposable file/check. Inspect the returned task and session
+transcript for the actual completion result; do not write status DONE yourself. Stop on authentication,
+quota or environment errors rather than retrying with another credential. Never include login output
+or runtime credential files in the retained evidence.
+
 A provider quota/authentication failure is a failed or blocked task check. Record it and rerun after
-resolving it; keep the existing [clean-host smoke record](evidence/clean-install-2026-09-29.md) as
-historical evidence, not proof that your first task passed.
+resolving it. The [current clean-host record](evidence/clean-install-2026-11-14.md) documents a completed
+first task and its limitations; the [2026-09-29 record](evidence/clean-install-2026-09-29.md) remains
+historical evidence of the earlier quota-blocked attempt.
 
 ## Evidence to retain
 
