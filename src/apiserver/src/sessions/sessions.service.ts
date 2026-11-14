@@ -127,7 +127,12 @@ import {
   credentialIsAnthropicBound,
   type WikiChatContext,
 } from '@orbit/shared';
-import { agentProviderSeed, lastProviderByWorkspace } from '../workspaces/workspace-provider';
+import {
+  agentProviderSeed,
+  lastProviderByWorkspace,
+  SESSION_OPENED_BY_PERSON,
+  type SessionOpenedBy,
+} from '../workspaces/workspace-provider';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   reprojectAfterSettledChecks,
@@ -1076,6 +1081,12 @@ export class SessionsService {
        * opening turn is then laid down now, carrying the sender, rather than by the claim, which knows of none.
        */
       externalSender?: ExternalTurnSender;
+      /**
+       * Which Orbit door opened this conversation on its own (Session.openedBy, migration 0670). Absent
+       * is PERSON: a person's own new session, the one the workspace default is read from
+       * (workspace-provider.ts). Internal: public session creation cannot claim it.
+       */
+      openedBy?: SessionOpenedBy;
     },
   ) {
     refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
@@ -1536,6 +1547,7 @@ export class SessionsService {
         titleManagedByProject: opts?.titleManagedByProject ?? false,
         titleBeforeProjectManagement: null,
         promptByOrbit: opts?.promptByOrbit ?? false,
+        openedBy: opts?.openedBy ?? SESSION_OPENED_BY_PERSON,
         branch,
         prompt: dto.prompt,
         status: RunStatus.PENDING,
@@ -1691,6 +1703,8 @@ export class SessionsService {
       titleBeforeProjectManagement: _titleBeforeProjectManagement,
       // Read where the row is (orbit-authored-turn.ts); the row already says it as `lastUserFromOrbit`.
       promptByOrbit: _promptByOrbit,
+      // Read by the workspace default (workspace-provider.ts), not by clients.
+      openedBy: _openedBy,
       ...publicSession
     } = session;
     return withSessionState(publicSession);
@@ -2758,7 +2772,7 @@ export class SessionsService {
         permissionMode: dto.permissionMode,
         effort,
       },
-      { batch: { id: scope.tokenId, maxConcurrent: SERVICE_TOKEN_CONCURRENCY } },
+      { batch: { id: scope.tokenId, maxConcurrent: SERVICE_TOKEN_CONCURRENCY }, openedBy: 'SERVICE_TOKEN' },
     );
     return {
       id: created.id,
@@ -4492,6 +4506,7 @@ export class SessionsService {
       titleBeforeProjectManagement: _titleBeforeProjectManagement,
       // Internal, as in `create`: the row says it as `lastUserFromOrbit`, the queue as `authoredByOrbit`.
       promptByOrbit: _promptByOrbit,
+      openedBy: _openedBy,
       // Read, never spread: it is the input to the count below, and a client that wants to know
       // which jobs are moving asks the count, not the per-job instants behind it.
       runningBgJobActivity,

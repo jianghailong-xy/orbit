@@ -138,7 +138,7 @@ export class FeishuGroupService {
         const made = await this.sessions.create(
           route.ownerId,
           { workspaceId: route.workspaceId, prompt: message.text, permissionMode: route.permissionMode },
-          { id: sessionId, credential: actor.credential, ...(sender ? { externalSender: sender } : {}) },
+          { id: sessionId, credential: actor.credential, openedBy: 'FEISHU', ...(sender ? { externalSender: sender } : {}) },
         );
         session = { id: made.id, title: made.title };
       } catch (error) {

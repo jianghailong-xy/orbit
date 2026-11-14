@@ -1869,6 +1869,13 @@ model Session {
   /// and add their own `kind: 'session'`, so a field called `kind` would be overwritten in the
   /// payload. The column keeps the short name.
   sessionKind          String    @default("CONVERSATION") @map("kind")
+  /// Who opened this conversation (migration 0670, docs/workspace-default-model-design.md §2.2):
+  /// PERSON, or the Orbit door that opened it on its own — COORDINATOR, COORDINATOR_JUDGMENT,
+  /// TASK_LIST_CONSOLE, WIKI_CHAT, FEISHU, SERVICE_TOKEN, MENTION_REPLY, or ORBIT for a row 0670 knew
+  /// was Orbit's but not through which door. Held to that set by `session_opened_by_check`. Written by
+  /// the creating door, never from a title; the workspace default (workspace-provider.ts) counts only
+  /// PERSON, through the partial index `session_workspace_person_opened_idx` (SQL only).
+  openedBy             String    @default("PERSON") @map("opened_by")
   // PENDING = created, claimable by its assigned runner.
   status               RunStatus @default(PENDING)
   // billing, accrued per turn

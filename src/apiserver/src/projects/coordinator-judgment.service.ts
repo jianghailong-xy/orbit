@@ -244,6 +244,7 @@ export class CoordinatorJudgmentService {
           runSource: SessionRunSource.PROJECT_COORDINATOR,
           // The opening is the fact as the platform tells it (0493, design §3.5).
           promptByOrbit: true,
+          openedBy: 'COORDINATOR_JUDGMENT',
           ...(plannedSessionId ? { id: plannedSessionId } : {}),
         },
       );

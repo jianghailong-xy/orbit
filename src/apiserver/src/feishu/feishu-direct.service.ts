@@ -250,7 +250,7 @@ export class FeishuDirectService {
     if (!session) {
       try {
         // No permissionMode: the account's default applies (§7.2).
-        const made = await this.sessions.create(app.ownerId, { workspaceId: workspace.id, prompt: text }, { id: sessionId, credential: actor.credential });
+        const made = await this.sessions.create(app.ownerId, { workspaceId: workspace.id, prompt: text }, { id: sessionId, credential: actor.credential, openedBy: 'FEISHU' });
         session = { id: made.id, title: made.title };
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {

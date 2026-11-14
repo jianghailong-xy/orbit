@@ -14435,6 +14435,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         id: sessionId,
         // The opening is the mention as the platform hands it on, not the owner's words (0493, design §3.5).
         promptByOrbit: true,
+        openedBy: 'MENTION_REPLY',
         // A conversation about a task needs no branch and no worktree. Creating one would leave an
         // unmerged branch behind for a reply to a comment, which reads as work nobody finished.
         noWorktree: true,

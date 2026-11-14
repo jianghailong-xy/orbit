@@ -50,6 +50,14 @@ test('workspace-spawned children are excluded, so a scripted probe cannot re-poi
   assert.match(seen.sql ?? '', /parent_session_id IS NULL/);
 });
 
+test('only conversations a person opened count, so a coordinator or a wiki chat cannot re-point the workspace', async () => {
+  // Every branch of the query reads the same predicate: the LATERAL that picks the session, and the two
+  // "no history yet" guards of a managed default workspace.
+  const { prisma, seen } = prismaStub();
+  await lastProviderByWorkspace(prisma, ['a1']);
+  assert.equal((seen.sql ?? '').match(/opened_by = 'PERSON'/g)?.length, 3);
+});
+
 test('duplicate and empty ids collapse, and an empty list never hits the database', async () => {
   const { prisma, seen } = prismaStub();
   await lastProviderByWorkspace(prisma, ['a1', 'a1', null, undefined]);
@@ -63,17 +71,19 @@ test('duplicate and empty ids collapse, and an empty list never hits the databas
 test('a project that has never run anything starts where Orbit starts', async () => {
   const { prisma } = prismaStub([]);
   assert.deepEqual(await agentProviderSeed(prisma, 'a1'), DEFAULT_AGENT_PROVIDER);
-  assert.deepEqual(DEFAULT_AGENT_PROVIDER, { engine: 'claude', provider: 'claude', providerBuiltin: true });
+  assert.deepEqual(DEFAULT_AGENT_PROVIDER, { engine: 'claude', provider: 'claude', providerBuiltin: true, model: null });
 });
 
 test('a project that has run something starts there again, on its engine and its credential', async () => {
   const { prisma } = prismaStub([
-    { workspace_id: 'a1', engine: 'dsh', provider: 'anthropic', provider_builtin: false, owner_id: 'o1' },
+    { workspace_id: 'a1', engine: 'dsh', provider: 'anthropic', model: 'claude-sonnet-5-5', provider_builtin: false, owner_id: 'o1' },
   ]);
   assert.deepEqual(await agentProviderSeed(prisma, 'a1'), {
     engine: 'dsh',
     provider: 'anthropic',
     providerBuiltin: false,
+    // The model that same session runs on: what a new-session draft preselects beside the engine.
+    model: 'claude-sonnet-5-5',
   });
 });
 
@@ -84,7 +94,7 @@ test('the seed of a session an older replica wrote derives its engine by the old
     user: { findUnique: async () => ({ role: 'USER' }) },
     modelProvider: { findFirst: async () => ({ runtime: 'codex' }) },
   } as never;
-  assert.deepEqual(await agentProviderSeed(prisma, 'a1'), { engine: 'codex', provider: 'anthropic', providerBuiltin: false });
+  assert.deepEqual(await agentProviderSeed(prisma, 'a1'), { engine: 'codex', provider: 'anthropic', providerBuiltin: false, model: null });
 });
 
 test("a managed default workspace with no history starts on what its runner was READY with: a runtime, or the owner's key", async () => {
@@ -103,9 +113,9 @@ test("a managed default workspace with no history starts on what its runner was 
   } as never;
   const seeds = await lastProviderByWorkspace(prisma, ['a1', 'a2']);
   // A runtime signed in on the runner is the engine and the credential at once.
-  assert.deepEqual(seeds.get('a1'), { engine: 'codex', provider: 'codex', providerBuiltin: true });
+  assert.deepEqual(seeds.get('a1'), { engine: 'codex', provider: 'codex', providerBuiltin: true, model: null });
   // A key is a configured credential, on the engine its row names.
-  assert.deepEqual(seeds.get('a2'), { engine: 'claude', provider: 'deepseek', providerBuiltin: false });
+  assert.deepEqual(seeds.get('a2'), { engine: 'claude', provider: 'deepseek', providerBuiltin: false, model: null });
   assert.deepEqual(asked, [{ where: { slug: 'deepseek', OR: [{ ownerId: 'o1' }, { ownerId: null }] }, select: { runtime: true } }]);
 });
 
@@ -131,13 +141,13 @@ test("a managed default workspace whose runner was never ready starts on the own
     },
   } as never;
   const seeds = await lastProviderByWorkspace(prisma, ['a1', 'a2']);
-  assert.deepEqual(seeds.get('a1'), { engine: 'claude', provider: 'deepseek', providerBuiltin: false });
+  assert.deepEqual(seeds.get('a1'), { engine: 'claude', provider: 'deepseek', providerBuiltin: false, model: null });
   assert.equal(seeds.has('a2'), false, 'an owner with no key of their own: the floor');
   assert.deepEqual(owners, [{ ownerId: 'o1', enabled: true }, { ownerId: 'o2', enabled: true }], "only the owner's own enabled keys");
 });
 
 test('workspace payloads carry the derived default, not a stored one', () => {
-  const seeds = new Map([['a1', { engine: 'codex' as never, provider: 'codex', providerBuiltin: true }]]);
+  const seeds = new Map([['a1', { engine: 'codex' as never, provider: 'codex', providerBuiltin: true, model: 'gpt-5.5' }]]);
   const [ran, neverRan] = withProviderSeed(
     // `provider` here stands in for the tombstoned column: it must not win.
     [
@@ -148,8 +158,10 @@ test('workspace payloads carry the derived default, not a stored one', () => {
   );
   assert.equal(ran.lastProvider, 'codex');
   assert.equal(ran.lastEngine, 'codex');
+  assert.equal(ran.lastModel, 'gpt-5.5');
   assert.equal(ran.provider, 'codex', 'the alias old iOS/macOS builds read agrees with it');
   assert.equal(neverRan.lastProvider, 'claude');
   assert.equal(neverRan.lastEngine, 'claude');
   assert.equal(neverRan.providerBuiltin, true);
+  assert.equal(neverRan.lastModel, null);
 });

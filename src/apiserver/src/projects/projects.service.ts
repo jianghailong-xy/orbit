@@ -2387,6 +2387,8 @@ export class ProjectsService {
                             ELSE COALESCE("title_before_project_management", "title") END,
                      "title" = ${coordinatorSessionTitle(dto.title)},
                      "title_managed_by_project" = TRUE,
+                     -- A coordinator no longer counts toward the workspace default (0670).
+                     "opened_by" = 'COORDINATOR',
                      "updated_at" = CURRENT_TIMESTAMP
                WHERE "id" = ${coordinator.sessionId}::uuid
                  AND "owner_id" = ${ownerId}::uuid
@@ -4786,7 +4788,7 @@ export class ProjectsService {
           ),
         },
         // The opening is the platform's own words, not the owner's (0493, design §3.5).
-        { source: 'user', titleManagedByProject: true, promptByOrbit: true },
+        { source: 'user', titleManagedByProject: true, promptByOrbit: true, openedBy: 'COORDINATOR' },
       );
     } catch (e) {
       if (fixed && (e instanceof ForbiddenException || e instanceof BadRequestException)) {
