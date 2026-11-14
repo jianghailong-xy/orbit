@@ -1,6 +1,6 @@
 {
   "name": "orbit.agent",
-  "contractVersion": "1.2.0",
+  "contractVersion": "1.3.0",
   "doc": "docs/orbit-agent-contract.md",
   "status": "frozen",
   "frozenAt": "2026-11-13",
@@ -91,10 +91,10 @@
       "toolsWithoutOrchestrationClaude": 76,
       "toolsWithoutOrchestrationCodex": 75,
       "initializeInstructions": null,
-      "resultShape": "since 1.2.0 every catalogued write answers with the versioned receipt (receipt.schema) as structuredContent and as its text, as does a call refused before it ran; a read keeps its text and carries the receipt as structuredContent when it answered with a JSON document or failed, a read answered in prose keeps its text alone; the wiki tools keep their own outputSchema and permission_prompt the engine's protocol",
+      "resultShape": "since 1.3.0 every catalogued write answers with the versioned receipt (receipt.schema) as structuredContent and as its text, as does a call refused before it ran; a read keeps its text and carries the receipt as structuredContent when it answered with a JSON document or failed, a read answered in prose keeps its text alone; the wiki tools keep their own outputSchema and permission_prompt the engine's protocol",
       "engineView": "measured 2026-11-13, Claude Code 2.1.325: a successful result's structuredContent reaches the model as compact JSON in place of its text; an error result's text is shown as it is; Codex prefers structuredContent likewise",
       "outputSchema": "the receipt schema, advertised on task_create, task_create_batch, task_update, task_start, project_create, project_update, tasklist_create, tasklist_update, session_create, agent_create, agent_update",
-      "unknownArguments": "since 1.2.0 refused before any request with INVALID_ARGUMENTS, naming the field; every object that names its properties is advertised additionalProperties:false (permission_prompt stays open)"
+      "unknownArguments": "since 1.3.0 refused before any request with INVALID_ARGUMENTS, naming the field; every object that names its properties is advertised additionalProperties:false (permission_prompt stays open)"
     },
     "cli": {
       "default": false,
@@ -104,8 +104,13 @@
       "discoveryToday": "one ~255 KB document in the fullest context (64 capabilities / ~214 KB with orchestration off, 53 / ~177 KB headless); no graded discovery",
       "jsonOutput": "entity document on stdout only (the receipt's entity); hints on stderr",
       "receiptOutput": "--receipt on any catalogued command: the receipt on stdout only, a failure's included; exit 0 exactly when ok; the capabilities document names it as receiptFlag",
-      "jsonPayloads": "since 1.2.0 a --tasks document is judged against task_create_batch's schema (closed items, types, required fields, exclusive pairs) before any card or request",
+      "jsonPayloads": "since 1.3.0 a --tasks document is judged against task_create_batch's schema (closed items, types, required fields, exclusive pairs) before any card or request",
       "unknownFlags": "refused with exit 1 before any request"
+    },
+    "writeAuthority": {
+      "machineCredential": "the agent's credential: task create, create-batch and DAG apply require a usable acting session (this runner's, this account's, not ended) and an ALLOWED card covering the exact write; there is no session-less form — x-orbit-session-id is attribution, so an agent can unset it (v1.2.0)",
+      "personCredential": "the owner's own act: orbit login or ORBIT_USER_TOKEN writes task create and create-batch on /api/tasks card-free by design; a person's terminal edits DAG edges one at a time, and the batch restructure has no person route (v1.2.0)",
+      "refusal": {"code": "TASK_WRITE_NEEDS_OWNER_CARD", "actions": ["ASK_THROUGH_THE_SAME_TOOL", "USE_A_PERSONAL_ACCESS_TOKEN"]}
     },
     "parity": {
       "note": "Since 1.1.0 the operation catalogue (src/runner-go/operation_catalog.go) is the single declaration; these are its current declared gaps, each with a reason in the catalogue row.",
@@ -154,7 +159,7 @@
       "receiptRetryRules": {"resend": "the same call unchanged is safe and may succeed; error.retryable is true exactly for this", "reread_first": "the outcome is unknown or conflicted: re-read, then decide", "fix_input": "change the arguments", "do_not_retry": "a boundary or a person's no: report it", "wait": "a person has not answered yet"},
       "never": ["retry by a different surface", "retry a declined card", "retry around a refusal"]
     },
-    "unknownFields": "since 1.2.0 refused before any network write with INVALID_ARGUMENTS, every violation as {path, problem, message} (G1 satisfied)",
+    "unknownFields": "since 1.3.0 refused before any network write with INVALID_ARGUMENTS, every violation as {path, problem, message} (G1 satisfied)",
     "violationProblems": ["unknown_field", "wrong_type", "missing_required", "not_in_enum", "too_short", "too_long", "too_few_items", "too_many_items", "below_minimum", "above_maximum", "mutually_exclusive"],
     "mutuallyExclusive": {"task_create": [["startNow", "runAt"], ["verification", "verifiesTaskId"]], "task_create_batch": [["tasks[].startNow", "tasks[].runAt"], ["tasks[].parentTaskId", "tasks[].parentRef"], ["tasks[].verifiesTaskId", "tasks[].verifiesRef"]], "integration_retry": [["taskId", "promotionId"]], "bg_output": [["sinceOffset", "tail"]]}
   },
@@ -168,7 +173,7 @@
     {"write": "project_create/project_update", "required": ["id", "status", "criteria as written"]},
     {"write": "session_create", "required": ["session id", "status"]},
     {"write": "file_upload", "required": ["file id", "reply link"]},
-    {"write": "declined card", "required": ["distinct refusal outcome", "who declined", "why"]}
+    {"write": "declined card", "required": ["refused true", "code APPROVAL_DECLINED", "tool", "message", "decidedBy when a person answered"], "shape": {"refused": true, "code": "APPROVAL_DECLINED", "tool": "orbit_task_create", "message": "the human rejected this task: why", "decidedBy": "user id, absent when no person answered"}}
   ],
   "receiptRules": [
     "No id, no claim.",
@@ -187,12 +192,12 @@
     "schema": {"description": "The Orbit receipt (docs/orbit-agent-contract.md §6): ok and outcome say what happened; id and status are the entity's; error says why not and whether a resend is safe.", "properties": {"action": {"type": "string"}, "approval": {"properties": {"card": {"type": "string"}, "decidedBy": {"type": "string"}, "decision": {"type": "string"}, "kind": {"type": "string"}, "message": {"type": "string"}, "outcome": {"enum": ["not_required", "not_asked", "approved", "declined", "pending"], "type": "string"}, "required": {"type": "boolean"}, "startAfterCreate": {"type": "boolean"}}, "required": ["required", "kind", "outcome"], "type": "object"}, "changedFields": {"items": {"type": "string"}, "type": "array"}, "count": {"type": "integer"}, "entity": {}, "entityType": {"type": "string"}, "error": {"properties": {"accepts": {"items": {"type": "string"}, "type": "array"}, "code": {"type": "string"}, "httpStatus": {"type": "integer"}, "message": {"type": "string"}, "requiredAction": {"type": "string"}, "retry": {"enum": ["resend", "reread_first", "fix_input", "do_not_retry", "wait"], "type": "string"}, "retryAfterSeconds": {"type": "integer"}, "retryable": {"type": "boolean"}, "violations": {"type": "array"}}, "required": ["code", "message", "retryable", "retry"], "type": "object"}, "id": {"type": ["string", "null"]}, "idempotency": {"properties": {"key": {"type": "string"}, "kind": {"enum": ["read", "caller_key", "server_key", "none"], "type": "string"}}, "required": ["kind"], "type": "object"}, "items": {"items": {"required": ["index", "id", "status"], "type": "object"}, "type": "array"}, "notes": {"items": {"type": "string"}, "type": "array"}, "ok": {"type": "boolean"}, "operation": {"type": "string"}, "outcome": {"enum": ["written", "read", "dry_run", "declined", "pending", "refused", "invalid", "unknown", "failed"], "type": "string"}, "receiptVersion": {"type": "integer"}, "start": {"required": ["by", "started", "sessionId", "status"], "type": "object"}, "status": {"type": ["string", "null"]}, "text": {"type": "string"}}, "required": ["receiptVersion", "ok", "outcome", "operation", "action", "entityType", "id", "status", "changedFields", "approval", "idempotency"], "title": "OrbitReceiptV1", "type": "object"}
   },
   "scenarios": [
-    {"id": "S1", "case": "E1-record-task", "name": "Record a task", "baseline": "PASS", "baselineNote": "since 1.2.0, contract-tested, not black-box measured; was PARTIAL", "baselineEvidence": "tool + card exist; the answer is the receipt with the task's id; G1/G3/G4 closed by P0-04"},
+    {"id": "S1", "case": "E1-record-task", "name": "Record a task", "baseline": "PASS", "baselineNote": "since 1.3.0, contract-tested, not black-box measured; was PARTIAL", "baselineEvidence": "tool + card exist; the answer is the receipt with the task's id (G1/G3 closed by P0-04); a decline is the shared APPROVAL_DECLINED outcome (G4 closed by P0-03, carried by the receipt since 1.3.0)"},
     {"id": "S2", "case": "E2-private-plan", "name": "Private plan", "baseline": "PARTIAL", "baselineEvidence": "primer states the rule; no enforcement; plan-mode write gate not implemented (G9)"},
     {"id": "S3", "case": "E3-create-no-start", "name": "Create without start", "baseline": "PARTIAL", "baselineEvidence": "the separation exists (startNow/runAt/autoRunWhenReady/card override), but autoRunWhenReady defaults to true and the create tool's top-level description does not lead with it: no-start requires an explicit false (G11)"},
-    {"id": "S4", "case": "E4-batch-plan", "name": "Batch plan", "baseline": "PASS", "baselineNote": "since 1.2.0, contract-tested, not black-box measured; was PARTIAL", "baselineEvidence": "dry-run receipt measured; atomic refs; a real write's receipt maps every item (items, count); a decline is outcome declined"},
+    {"id": "S4", "case": "E4-batch-plan", "name": "Batch plan", "baseline": "PASS", "baselineNote": "since 1.3.0, contract-tested, not black-box measured; was PARTIAL", "baselineEvidence": "dry-run receipt measured; atomic refs; a real write's receipt maps every item (items, count); since v1.2.0 the server refuses a session batch no answered card covers; a decline is outcome declined"},
     {"id": "S5", "case": "E5-read-only-project", "name": "Read-only project inspection", "baseline": "PASS", "baselineEvidence": "project_get measured; no project list surface (G6)"},
-    {"id": "S6", "case": "E6-immediate-delegation", "name": "Immediate delegation", "baseline": "PASS", "baselineEvidence": "task_start/session_create semantics hold; since 1.2.0 the create's receipt carries the start and a decline is one receipt (G3/G4 closed)"},
+    {"id": "S6", "case": "E6-immediate-delegation", "name": "Immediate delegation", "baseline": "PASS", "baselineEvidence": "task_start/session_create semantics hold; since 1.3.0 the create's receipt carries the start (G3 closed); decline is one document (G4 closed by P0-03)"},
     {"id": "S7", "case": "E7-no-orchestration", "name": "No orchestration", "baseline": "PARTIAL", "baselineEvidence": "22 tools disappear (measured); no instruction for the absent family (G2/P0-05)"},
     {"id": "S8", "case": "E8-compaction-recovery", "name": "Compaction recovery", "baseline": "PARTIAL", "baselineNote": "code-inspected; not black-box measured", "baselineEvidence": "Codex re-injects after compaction; Claude keeps the system prompt; no MCP instructions; no black-box test (G10)"}
   ],
@@ -200,7 +205,7 @@
     {"id": "G1", "gap": "unknown MCP fields and wrong types silently ignored", "owner": "P0-04", "status": "satisfied", "resolution": "every catalogued tool call is judged against its advertised closed schema and the catalogue's exclusive groups before any request; the CLI judges --tasks the same way"},
     {"id": "G2", "gap": "no MCP initialize.instructions", "owner": "P0-05"},
     {"id": "G3", "gap": "write receipts are unversioned text; start outcome split; no structuredContent", "owner": "P0-04", "status": "satisfied", "resolution": "the versioned receipt is every tool's structuredContent and every write's text; the five objects' creates/updates and task_start advertise it as outputSchema; --receipt prints it at the CLI"},
-    {"id": "G4", "gap": "declined card is a non-error MCP result and a non-zero CLI error", "owner": "P0-03/P0-04", "status": "shape satisfied", "resolution": "a declined card is one refusal receipt on both surfaces (outcome declined, APPROVAL_DECLINED, decision, decidedBy); the transport still differs"},
+    {"id": "G4", "gap": "declined card is a non-error MCP result and a non-zero CLI error", "owner": "P0-03 (closed); P0-04 for the remaining receipt format", "status": "CLOSED", "closedBy": "P0-03", "closedAt": "2026-11-13", "note": "both surfaces return the same APPROVAL_DECLINED document; the transport difference (tool result vs non-zero exit) is the surface's, not the outcome's. Since 1.3.0 (P0-04) that outcome is the receipt's: outcome declined, error.code APPROVAL_DECLINED, approval.decision and decidedBy, on MCP and on --receipt"},
     {"id": "G5", "gap": "task creates take no caller idempotency key", "owner": "P0-04", "status": "satisfied", "resolution": "task_create and task_create_batch take idempotencyKey (session-scoped; the account's for a person's own create); the runner resends a keyed create whose answer was lost"},
     {"id": "G6", "gap": "no project list surface on either agent surface", "owner": "P0-02/P1-01", "status": "decided", "resolution": "recorded as a deliberate absence in the operation catalogue; graded discovery, projects included, belongs to P1-01"},
     {"id": "G7", "gap": "one 255 KB capabilities document; no graded discovery", "owner": "P1-01"},

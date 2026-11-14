@@ -1,7 +1,7 @@
-# Orbit operation catalogue v1.1.0
+# Orbit operation catalogue v1.2.0
 
 > Generated from `src/runner-go/operation_catalog.go` — do not edit by hand.
-> Content hash: `683b07bebde1c725ebc84a943ddc83fced77a402eb0823e3e57fc23b488e043b`.
+> Content hash: `b0b4d62b8088555400cf230d8189f3bee622301813ee4a9a5e770971c0d29aca`.
 
 Every operation an Orbit agent can call is declared once in the operation catalogue. This table is that catalogue rendered for a person: `orbit capabilities --json` and the MCP `tools/list` payload are its two machine surfaces, and the leaf `--help` texts are held to it by tests. `MCP` and `CLI` say how each surface reaches the operation — `always`, an `orchestration` grant, an engine `permission_prompt` bridge, `session`-only, `headless`-only, or a `watch_switch`/`wiki_switch` — and `absent` when that surface deliberately has no door. Gates that must hold together are joined with `+` (for example `orchestration+watch_switch`). `Idempotency` is `read` (safe to repeat), `caller_key` (retry with the same key), `server_key` (a redelivered turn deduplicates) or `none` (re-read before retrying).
 
@@ -100,7 +100,7 @@ Every operation an Orbit agent can call is declared once in the operation catalo
 | `tasklist_delete` | task_list | high | yes | none | yes | none | always | always — `orbit task-list delete` | Delete a task list; its tasks are detached, not deleted. |
 | `tasklist_get` | task_list | low | no | none | no | read | always | always — `orbit task-list get` | Read one task list's dispatch policy and progress. |
 | `tasklist_list` | task_list | low | no | none | no | read | always | always — `orbit task-list list` | See the task lists and what each holds. |
-| `tasklist_propose_dag` | task_list | medium | yes | none | no | none | always | always — `orbit task-list propose-dag` | Preview or apply a batch of dependency changes to a list. |
+| `tasklist_propose_dag` | task_list | high | yes | card (`orbit_dag_change`) | no | none | always | always — `orbit task-list propose-dag` | Preview or apply a batch of dependency changes to a list. |
 | `tasklist_update` | task_list | medium | yes | none | no | none | always | always — `orbit task-list update` | Change a task list's concurrency, pause, instructions or foreman settings. |
 | `watch_cancel` | watch | medium | yes | none | no | none | watch_switch | session+watch_switch — `orbit watch cancel` | Cancel a watch so it wakes nobody. |
 | `watch_create` | watch | medium | yes | none | no | caller_key | watch_switch | session+watch_switch — `orbit watch create` | Ask Orbit to wake this session when a condition holds. |

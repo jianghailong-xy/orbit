@@ -43,8 +43,11 @@ into the new task's inputs, preserving the originals. Batch task JSON and the MC
 and `task_create_batch` accept the optional `attachmentIds` array on each task.
 
 Inside a task-backed Orbit session, task commands may omit the task ID and use `ORBIT_TASK_ID`. In-session
-CLI mutations are attributed to the current agent and session. Headless mutations that use only a runner
-credential fall back to the runner owner.
+CLI mutations are attributed to the current agent and session. Creating a task or a batch, and applying a
+DAG restructure, are carded by caller: on the machine credential they need that session and its answered
+card, and a headless process must act as the account owner with `ORBIT_USER_TOKEN` (or `orbit login`),
+which writes through the user route and is recorded as the person. Other headless mutations that use only
+a runner credential fall back to the runner owner.
 
 ### Receipts, strict input and retries
 

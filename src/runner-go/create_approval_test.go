@@ -128,8 +128,10 @@ func TestMCPCreatesWriteNothingWithoutAYes(t *testing.T) {
 	}
 }
 
-// Headless there is nobody to ask, so the write goes ahead rather than blocking forever on a card no
-// UI will ever show.
+// Headless there is nobody to ask, so this process raises no card and sends the write alone. The
+// control plane then refuses a machine-credential write with no acting session
+// (`task-write-approval.ts`); what is asserted here is the runner's half — it must not block on a
+// card no conversation will ever show.
 func TestMCPCreatesHeadlessDoNotAsk(t *testing.T) {
 	for tool, args := range map[string]map[string]interface{}{
 		"task_create":    {"title": "a", "completionCriterion": "EVIDENCE_JUDGMENT"},
@@ -215,6 +217,77 @@ func TestCLICreateBatchDryRunInsideASessionDoesNotAsk(t *testing.T) {
 	}
 	if len(*hits) != 1 || strings.Contains((*hits)[0], "/approvals") {
 		t.Fatalf("hits = %v, want the preview alone", *hits)
+	}
+}
+
+// A declined card is ONE document on both surfaces (docs/orbit-agent-contract.md §6.1, gap G4): the
+// same code, the same tool, the same reason — the MCP tool as its result text, the CLI as its error
+// (and so a non-zero exit). The transport is the only difference, and an agent classifies by the
+// document rather than by which door it knocked on.
+func TestADeclinedCardIsOneDocumentOnBothSurfaces(t *testing.T) {
+	document := func(t *testing.T, text string) map[string]interface{} {
+		t.Helper()
+		var doc map[string]interface{}
+		if err := json.Unmarshal([]byte(text), &doc); err != nil {
+			t.Fatalf("not the shared refusal document: %v (%q)", err, text)
+		}
+		return doc
+	}
+
+	srv, _, _ := createApprovalServer(t, `{"status":"DENIED","message":"not now"}`, `{"id":"x"}`)
+	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("task_create", map[string]interface{}{
+		"title": "a", "completionCriterion": "EVIDENCE_JUDGMENT",
+	})
+	if res["isError"] == true {
+		t.Fatalf("a refusal is an answer, not an error: %s", resultText(res))
+	}
+	mcpDocument := document(t, resultText(res))
+
+	cliSrv, _, _ := createApprovalServer(t, `{"status":"DENIED","message":"not now"}`, `{"id":"x"}`)
+	configureCLITestRunner(t, cliSrv.URL)
+	t.Setenv("ORBIT_SESSION_ID", "sess-1")
+	t.Setenv("ORBIT_AGENT_ID", "agent-1")
+	var out bytes.Buffer
+	err := cmdTaskCLI([]string{"create", "--title", "a", "--completion-criterion", "EVIDENCE_JUDGMENT", "--json"},
+		strings.NewReader(""), &out)
+	if err == nil {
+		t.Fatal("a declined card was reported as success")
+	}
+	cliDocument := document(t, err.Error())
+
+	for _, key := range []string{"refused", "code", "tool", "message"} {
+		if mcpDocument[key] != cliDocument[key] {
+			t.Errorf("%s differs: MCP %v, CLI %v", key, mcpDocument[key], cliDocument[key])
+		}
+	}
+	if mcpDocument["code"] != approvalDeclinedCode || mcpDocument["tool"] != taskCreateApprovalToolName {
+		t.Fatalf("document = %#v", mcpDocument)
+	}
+	if mcpDocument["message"] != "the human rejected this task: not now" {
+		t.Fatalf("message = %v", mcpDocument["message"])
+	}
+}
+
+// A batch is the same document, with the batch card's name.
+func TestADeclinedBatchIsTheSameDocument(t *testing.T) {
+	srv, _, _ := createApprovalServer(t, `{"status":"DENIED","message":"too many"}`, `{"id":"x"}`)
+	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("task_create_batch", map[string]interface{}{
+		"tasks": []interface{}{map[string]interface{}{"title": "a", "completionCriterion": "EVIDENCE_JUDGMENT"}},
+	})
+	if res["isError"] == true {
+		t.Fatalf("a refusal is an answer, not an error: %s", resultText(res))
+	}
+	var doc map[string]interface{}
+	if err := json.Unmarshal([]byte(resultText(res)), &doc); err != nil {
+		t.Fatalf("not the shared refusal document: %v (%q)", err, resultText(res))
+	}
+	if doc["code"] != approvalDeclinedCode || doc["tool"] != batchApprovalToolName {
+		t.Fatalf("document = %#v", doc)
+	}
+	if doc["message"] != "the human rejected this batch: too many" {
+		t.Fatalf("message = %v", doc["message"])
 	}
 }
 

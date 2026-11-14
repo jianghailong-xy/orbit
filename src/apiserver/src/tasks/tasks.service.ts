@@ -364,6 +364,7 @@ import {
   verifierWriteFromRunRefusalBody,
   verifiersNamedBy,
 } from './verifier-write-authority';
+import { assertSessionTaskWriteHasCard, type SessionTaskWrite } from './task-write-approval';
 import {
   normaliseCodelessReason,
   readTaskCommitEvidence,
@@ -3498,6 +3499,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * The card gate the runner doors call before a task write (`task-write-approval.ts`): the runner's
+   * machine credential is an agent's credential, so the write must name a usable acting session and
+   * one of that session's answered cards must cover exactly it. There is no card-free machine-
+   * credential write; a headless process acts as the account owner with a personal access token
+   * instead. Public because the caller identity arrives at the runner controller, while this
+   * service owns the Prisma read.
+   */
+  async assertSessionTaskWriteApproved(
+    ownerId: string,
+    runnerId: string,
+    sessionId: string | undefined,
+    write: SessionTaskWrite,
+  ): Promise<void> {
+    await assertSessionTaskWriteHasCard(this.prisma, { ownerId, runnerId, sessionId, write });
+  }
+
+  /**
    * §13.6 SU7: make THIS new task the successor of an attempt that already stopped, in the same
    * transaction that created it.
    *
@@ -5738,6 +5756,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * about the write, and only of a create that names a verifier: every other create pays nothing. Any ALLOWED card counts,
    * a workspace's standing grant included, since that is what the tools act on; the card is not spent, because a retried
    * create is the same create.
+   *
+   * Since the runner doors card EVERY session create by caller (`task-write-approval.ts`), that universal gate answers
+   * first at the HTTP door and this one is the backstop for any other caller that passes a session. Its refusal names
+   * the narrower verifier reason, which is why it stays rather than being folded into the universal one.
    */
   private async assertVerifierCreateHasCard(
     ownerId: string,

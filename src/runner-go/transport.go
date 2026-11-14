@@ -2631,12 +2631,17 @@ func (t *Transport) dagPreview(id string, body map[string]interface{}) (json.Raw
 
 // dagApply commits that batch, after a human allowed it. The server re-validates rather than
 // trusting the preview: approval happens at human speed and the graph may have moved.
-func (t *Transport) dagApply(id string, body map[string]interface{}) (json.RawMessage, error) {
+//
+// The session is passed rather than re-read from the environment: the caller already holds the
+// identity it acts for (`orbit mcp` knows its session, the CLI resolves it once), and the server
+// reads this header as WHO is writing — the rule that a restructure from a session needs the
+// answered card hangs off it, so it must not depend on a second read that can disagree.
+func (t *Transport) dagApply(id string, body map[string]interface{}, sessionID string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/task-lists/"+url.PathEscape(id)+"/dag-apply", body, &out, taskOpTimeout, callingSessionHeader())
+	err := t.doHeaders(nil, "POST", "/runner/task-lists/"+url.PathEscape(id)+"/dag-apply", body, &out, taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }
 

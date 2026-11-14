@@ -103,9 +103,11 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches bool) s
 		orbitWikiPathInstructions +
 		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: their inputs are schema-checked and " +
 		"they need no shell. The Orbit CLI at `" + command + "` is for shell composition (pipes, scripts, bulk input) and " +
-		"work that outlives this turn. Inside a session both attribute the task to you, so either is fine; the CLI needs " +
-		"`" + command + " capabilities --json` first to discover its commands, then run the returned argv with that exact " +
-		"absolute path. Use `--json` output. Do not run `" + command + " mcp` directly."
+		"work that outlives this turn. Inside a session both take the same approval and attribute the work to you: a " +
+		"create, a batch or a DAG change asks on the owner's card whichever door you use, so choose by what the work " +
+		"needs, never to get around a card. The CLI needs `" + command + " capabilities --json` first to discover its " +
+		"commands, then run the returned argv with that exact absolute path. Use `--json` output. Do not run `" +
+		command + " mcp` directly."
 }
 
 // orbitReplyFileInstructions says which files a reply can really hand over. The runner uploads a linked
