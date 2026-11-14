@@ -1,4 +1,4 @@
--- 0770 — scheduled tasks: the schedule, its revisions, its runs, its findings, and the changes waiting on the owner
+-- 0790 — scheduled tasks: the schedule, its revisions, its runs, its findings, and the changes waiting on the owner
 -- (docs/scheduled-tasks-design.md §3, §4, §8).
 --
 -- WHAT IT ADDS
@@ -25,8 +25,9 @@
 -- transaction), and one nullable column on `session` with no default: no stored row is read, written or
 -- backfilled (the new foreign key validates against a column that is NULL on every row).
 --
--- 0770: renumbered from 0750 when it was rebased onto project/34xKCJAxMQFF3BdZ41KFt; the highest number in use on
--- main, project/* and every pushed orbit/* branch was 0761 (2026-11-14).
+-- 0790: renumbered from 0750 when it was rebased onto project/34xKCJAxMQFF3BdZ41KFt, then from 0770 when main took
+-- 0770 for 0770_main_checkout_discard; the highest number in use on main, project/*, every pushed orbit/* branch and
+-- the local branches was 0780 (2026-11-15).
 
 ALTER TYPE "session_run_source" ADD VALUE IF NOT EXISTS 'SCHEDULE';
 

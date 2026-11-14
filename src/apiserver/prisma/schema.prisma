@@ -107,7 +107,7 @@ enum SessionRunSource {
   MANUAL
   TASK_LIST_AUTO
   PROJECT_COORDINATOR
-  /// A scheduled task's run (migration 0770): `Session.scheduleRunId` names the run.
+  /// A scheduled task's run (migration 0790): `Session.scheduleRunId` names the run.
   SCHEDULE
 
   @@map("session_run_source")
@@ -388,7 +388,7 @@ model User {
 
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
-  /// Scheduled tasks (migration 0770) and the changes to them waiting on this owner.
+  /// Scheduled tasks (migration 0790) and the changes to them waiting on this owner.
   schedules             Schedule[]
   scheduleChangeRequests ScheduleChangeRequest[]
 }
@@ -2393,7 +2393,7 @@ model Session {
   shareLinks            ShareLink[]
   guests                SessionGuest[] // the people the owner invited to reply (0560)
   guestInviteEmails     EmailOutbox[] // the email each invited person was sent (0618)
-  /// The scheduled-task run this session serves (migration 0770), set only with `runSource = SCHEDULE`. Its partial
+  /// The scheduled-task run this session serves (migration 0790), set only with `runSource = SCHEDULE`. Its partial
   /// index (`session_schedule_run_idx`, WHERE NOT NULL) lives in the migration.
   scheduleRunId         String?   @map("schedule_run_id") @db.Uuid
   scheduleRun           ScheduleRun? @relation(fields: [scheduleRunId], references: [id], onDelete: SetNull, map: "session_schedule_run_id_fkey")
@@ -9579,7 +9579,7 @@ model SessionGuest {
   @@map("session_guest")
 }
 
-/// Scheduled tasks (migration 0770, docs/scheduled-tasks-design.md §3–§4).
+/// Scheduled tasks (migration 0790, docs/scheduled-tasks-design.md §3–§4).
 
 enum ScheduleAccessLevel {
   CHECK_ONLY
