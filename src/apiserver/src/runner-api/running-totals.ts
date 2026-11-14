@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import type { ModelUsage, TurnCompleteRequest } from '@orbit/shared';
 
 /**
@@ -133,14 +133,7 @@ async function totalsBookedBeforeThisRule(
   const rows = await tx.$queryRaw<Array<{
     model: string; inputTokens: bigint; outputTokens: bigint;
     cacheCreationInputTokens: bigint; cacheReadInputTokens: bigint; costUsd: number;
-  }>>`
-    SELECT DISTINCT ON (model) model,
-           input_tokens AS "inputTokens", output_tokens AS "outputTokens",
-           cache_creation_input_tokens AS "cacheCreationInputTokens",
-           cache_read_input_tokens AS "cacheReadInputTokens", cost_usd AS "costUsd"
-      FROM usage
-     WHERE session_id = ${sessionId}::uuid
-     ORDER BY model, created_at DESC, id DESC`;
+  }>>(latestRowPerModel(Prisma.sql`session_id = ${sessionId}::uuid`));
   if (rows.length === 0) return null;
   const modelUsage: RunningTotalsBase['modelUsage'] = {};
   let costUsd = 0;
@@ -155,4 +148,65 @@ async function totalsBookedBeforeThisRule(
     costUsd += row.costUsd;
   }
   return { costUsd, modelUsage };
+}
+
+/** Each model's latest `usage` row among those `where` selects: what a running total last said. */
+function latestRowPerModel(where: Prisma.Sql): Prisma.Sql {
+  return Prisma.sql`
+    SELECT DISTINCT ON (model) model,
+           input_tokens AS "inputTokens", output_tokens AS "outputTokens",
+           cache_creation_input_tokens AS "cacheCreationInputTokens",
+           cache_read_input_tokens AS "cacheReadInputTokens", cost_usd AS "costUsd"
+      FROM usage
+     WHERE ${where}
+     ORDER BY model, created_at DESC, id DESC`;
+}
+
+/** A session's tokens over all its turns, as `GET /sessions/:id` answers them. */
+export interface SessionTokenTotals {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+}
+
+/**
+ * A session's tokens, read from its `usage` rows in one statement. A row written since this rule
+ * holds its turn's own counts and is summed. A Claude row written before it (before migration 0478
+ * applied, which shipped with it) held the process's running totals as they were then, so each
+ * model counts only its latest such row, the same base the first completion under this rule
+ * measured its own share from (totalsBookedBeforeThisRule): a naive SUM would count every turn
+ * again on each later one. Other engines always wrote a turn's own numbers, so `runningTotals`
+ * (does this session's engine report running totals) is false for them and every row is summed.
+ */
+export async function sessionTokenTotals(
+  db: Pick<Prisma.TransactionClient, '$queryRaw'>,
+  sessionId: string,
+  runningTotals: boolean,
+): Promise<SessionTokenTotals> {
+  const legacy = runningTotals
+    ? Prisma.sql`created_at < (SELECT max(finished_at) FROM "_prisma_migrations"
+                                WHERE migration_name = '0478_session_engine_usage_totals')`
+    : Prisma.sql`false`;
+  const [row] = await db.$queryRaw<Array<Record<keyof SessionTokenTotals, bigint | null>>>(Prisma.sql`
+    WITH counted AS (
+      SELECT input_tokens AS "inputTokens", output_tokens AS "outputTokens",
+             cache_creation_input_tokens AS "cacheCreationInputTokens",
+             cache_read_input_tokens AS "cacheReadInputTokens"
+        FROM usage
+       WHERE session_id = ${sessionId}::uuid AND (${legacy}) IS NOT TRUE
+      UNION ALL
+      SELECT "inputTokens", "outputTokens", "cacheCreationInputTokens", "cacheReadInputTokens"
+        FROM (${latestRowPerModel(Prisma.sql`session_id = ${sessionId}::uuid AND (${legacy}) IS TRUE`)}) legacy
+    )
+    SELECT sum("inputTokens")::bigint AS "inputTokens", sum("outputTokens")::bigint AS "outputTokens",
+           sum("cacheReadInputTokens")::bigint AS "cacheReadTokens",
+           sum("cacheCreationInputTokens")::bigint AS "cacheCreationTokens"
+      FROM counted`);
+  return {
+    inputTokens: Number(row?.inputTokens ?? 0),
+    outputTokens: Number(row?.outputTokens ?? 0),
+    cacheReadTokens: Number(row?.cacheReadTokens ?? 0),
+    cacheCreationTokens: Number(row?.cacheCreationTokens ?? 0),
+  };
 }
