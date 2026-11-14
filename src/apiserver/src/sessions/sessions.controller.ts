@@ -8,6 +8,7 @@ import {
   Header,
   Headers,
   MessageEvent,
+  Optional,
   Param,
   Patch,
   Post,
@@ -19,6 +20,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { ModuleRef } from '@nestjs/core';
+import { ProjectsService } from '../projects/projects.service';
 import { PublicIdPipe } from '../common/public-id';
 import { Prisma, RunStatus } from '@prisma/client';
 import { concatMap, defer, from, interval, map, merge, Observable, switchMap, throwError } from 'rxjs';
@@ -274,6 +277,9 @@ export class SessionsController {
     private readonly tags: SessionTagsService,
     private readonly mergeReceipts: MergeReceiptService,
     private readonly autoRetry: AutoRetryService,
+    /** Resolves ProjectsService at call time: SessionsModule does not import ProjectsModule, which
+     *  imports it (the reason MergeReceiptService resolves its dispatcher the same way). */
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {}
 
   // CreateSessionDto is an interface, so the global ValidationPipe never sees it and its ids
@@ -939,8 +945,12 @@ export class SessionsController {
   // Soft-delete: moves the session to the trash (deletedAt), retaining all data.
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Delete(':id')
-  remove(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
-    return this.sessions.remove(user.userId, id);
+  async remove(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    const removed = await this.sessions.remove(user.userId, id);
+    // A trashed coordinator of an OPEN project is replaced at once (`reopenTrashedCoordinator`).
+    const projects = this.moduleRef?.get(ProjectsService, { strict: false });
+    await projects?.reopenTrashedCoordinator(user.userId, id);
+    return removed;
   }
 
   // Hard-delete: permanently remove a trashed session and all its data (irreversible).
