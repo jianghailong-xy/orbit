@@ -227,9 +227,9 @@ describe('Account pools in Settings', { timeout: 30_000 }, () => {
     keys = [WORK, METERED, GATEWAY];
     pools = [];
     await mount('/settings/providers/pools');
-    // It stands before there is a pool, saying what one is; its heading's New account pool makes one, a Codex
+    // It stands before there is a pool, saying what one is; its heading's New pool makes one, a Codex
     // one included, and is the only press on it.
-    expect([...section()!.querySelectorAll('button')].map((el) => el.textContent)).toEqual(['New account pool']);
+    expect([...section()!.querySelectorAll('button')].map((el) => el.textContent)).toEqual(['New pool']);
     expect(section()!.querySelector('.pool-card')).toBeNull();
     expect(text()).not.toContain('Create a pool');
 
