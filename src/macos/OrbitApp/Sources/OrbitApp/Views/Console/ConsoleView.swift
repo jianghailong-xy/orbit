@@ -882,10 +882,12 @@ struct TranscriptView: View {
         return ScrollTracker(atBottom: $atBottom, tailOutOfView: $tailOutOfView, ruler: ruler,
                              recompute: recomputeStuck, follow: repinAfterResize, scroll: transcriptScroll,
                              readingBack: readingBack,
-                             dragged: { if bandOpened.wrappedValue { bandOpened.wrappedValue = false } })
+                             dragged: { if bandOpened.wrappedValue { bandOpened.wrappedValue = false } },
+                             readerScrolled: { cardHold = nil })
         #else
         return ScrollTracker(atBottom: $atBottom, tailOutOfView: $tailOutOfView, ruler: ruler,
-                             recompute: recomputeStuck, follow: repinAfterResize)
+                             recompute: recomputeStuck, follow: repinAfterResize,
+                             readerScrolled: { cardHold = nil })
         #endif
     }
 
@@ -2086,6 +2088,10 @@ private struct ScrollTracker: ViewModifier {
     /// A finger put on the list: a band its bar opened folds again.
     var dragged: () -> Void = {}
     #endif
+    /// The reader started moving the list themselves — a finger on iOS, the trackpad or wheel on
+    /// macOS (`.interacting`; a `scrollTo` the app makes never reports it): a waiting card's hold
+    /// lets go (`TranscriptView.cardHold`).
+    var readerScrolled: () -> Void = {}
     /// Whether the reader is the one moving the list: a finger on it, or the momentum of one.
     /// `.animating` is SwiftUI moving it (a jump-to-latest, the sticky header) and `.idle` is it
     /// sitting still while content is re-laid-out underneath — neither is a reader. `TailPinning`
@@ -2125,6 +2131,7 @@ private struct ScrollTracker: ViewModifier {
                 .onScrollPhaseChange { _, phase in
                     readerDriven = phase != .idle && phase != .animating
                     scrolling = phase != .idle
+                    if phase == .interacting { readerScrolled() }
                     #if os(iOS)
                     if phase == .interacting { dragged() }
                     #endif
