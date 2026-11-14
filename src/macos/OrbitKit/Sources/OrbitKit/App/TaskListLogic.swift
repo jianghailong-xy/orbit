@@ -391,4 +391,86 @@ public enum TaskListLogic {
         case .cancelled:  return TaskPill(kind: .cancelled, label: "Cancelled")
         }
     }
+
+    /// A task list's rows: the visible tasks in their order, then Load more while the server has
+    /// another page. One array, so the list draws one ForEach and no conditional row of its own.
+    public static func listRows(_ tasks: [TaskItem], hasMore: Bool) -> [TaskListRow] {
+        tasks.map(TaskListRow.task) + (hasMore ? [.loadMore] : [])
+    }
+
+    /// The phone's Tasks list in the web page's order: the header block, then either the batches or
+    /// Happening now over the rest of the rows, then Load more.
+    public static func compactRows(batches: Bool, pinned: [TaskItem], rest: [TaskItem],
+                                   hasMore: Bool) -> [TaskCompactListRow] {
+        if batches { return [.header, .batches] }
+        var rows: [TaskCompactListRow] = [.header]
+        if !pinned.isEmpty {
+            rows.append(.pinnedHeader)
+            rows.append(contentsOf: pinned.map(TaskCompactListRow.pinned))
+        }
+        if !rest.isEmpty {
+            rows.append(.restHeader)
+            rows.append(contentsOf: rest.map(TaskCompactListRow.rest))
+        }
+        if hasMore { rows.append(.loadMore) }
+        return rows
+    }
+}
+
+/// One row of a page listing the tasks a session created: a task, or the row that asks for the next
+/// page. Built as one array so the list holds one ForEach and no conditional row of its own.
+public enum CreatedTasksListRow: Equatable, Sendable, Identifiable {
+    case task(TaskItem)
+    case loadMore
+
+    public var id: String {
+        switch self {
+        case .task(let task): "task:\(task.id)"
+        case .loadMore: "load-more"
+        }
+    }
+}
+
+public enum CreatedTasksListLogic {
+    /// The page's rows: every loaded task in load order, then Load more while the server has another
+    /// page (`nextCursor` non-nil).
+    public static func rows(_ tasks: [TaskItem], hasMore: Bool) -> [CreatedTasksListRow] {
+        tasks.map(CreatedTasksListRow.task) + (hasMore ? [.loadMore] : [])
+    }
+}
+
+/// One row of the Tasks list: a task, or the row that asks for the next page.
+public enum TaskListRow: Equatable, Sendable, Identifiable {
+    case task(TaskItem)
+    case loadMore
+
+    public var id: String {
+        switch self {
+        case .task(let task): "task:\(task.id)"
+        case .loadMore: "load-more"
+        }
+    }
+}
+
+/// One row of the phone's Tasks list — the web page's blocks in their order, then the rows.
+public enum TaskCompactListRow: Equatable, Sendable, Identifiable {
+    case header
+    case batches
+    case pinnedHeader
+    case pinned(TaskItem)
+    case restHeader
+    case rest(TaskItem)
+    case loadMore
+
+    public var id: String {
+        switch self {
+        case .header: "header"
+        case .batches: "batches"
+        case .pinnedHeader: "pinned-header"
+        case .pinned(let task): "pinned:\(task.id)"
+        case .restHeader: "rest-header"
+        case .rest(let task): "rest:\(task.id)"
+        case .loadMore: "load-more"
+        }
+    }
 }
