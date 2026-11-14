@@ -21,7 +21,8 @@ func TestWithOrbitCLIInstructions(t *testing.T) {
 	for _, phrase := range []string{
 		"'/opt/orbit runner/bin/orbit' capabilities --json",
 		"mcp__orbit__*",
-		"Use `--json` output",
+		"Pass `--receipt` to read the receipt its MCP tool answers with",
+		"`--json` prints the entity alone",
 		" mcp` directly",
 		"durable record",
 		"No returned id, no claim.",

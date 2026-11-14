@@ -20,7 +20,7 @@ import (
 // is what an agent reads first in every session, so it changes only as a new version: a change to a
 // word under an old version fails here, and recording a new one is a reviewed line in this map.
 var agentPrimerHashes = map[string]string{
-	"1.0.0": "62fb5f07263e52b83e220a6c0eda8df77229cc3d0a629da940df9d838ae7618e",
+	"1.0.0": "41db1d1fd823c5c1d5f640aafdf153736db36a1913a0ae0687fcea4c6e34dbd8",
 }
 
 // The snapshots: the primer exactly as `initialize` sends it, and the four shapes of the instructions
@@ -158,11 +158,11 @@ func TestAgentPrimerSaysEveryRuleOfTheContract(t *testing.T) {
 		"2":  {"Pick the object by the question it answers", "Task list:", "Session:", "Agent:", "the smaller wins"},
 		"3":  {"Use Orbit's MCP tools first", "The Orbit CLI is for pipes, scripts, bulk input"},
 		"4":  {"Create is not start", "autoRunWhenReady defaults to true", "pass autoRunWhenReady: false", "startNow: true", "runAt"},
-		"5":  {"confirmation card", "writes nothing until they confirm it", "A declined card (APPROVAL_DECLINED) is a refusal", "owner-only decision"},
-		"6":  {"Only a structured receipt counts", "returned the entity's id and status", "`[Fix login redirect](orbit-task:<id>)`"},
-		"7":  {"Retry only a read, a call with an idempotency key"},
+		"5":  {"confirmation card", "writes nothing until they confirm it", "A declined card (APPROVAL_DECLINED) is a refusal", "A chat is not a no", "owner-only decision"},
+		"6":  {"Only a structured receipt counts", "ok: true and outcome: written, with the entity's id and status", "`[Fix login redirect](orbit-task:<id>)`"},
+		"7":  {"follow its error.retry", "idempotencyKey derived from the work"},
 		"8":  {"the same server under the same approvals"},
-		"9":  {"Session orchestration switch", "If your tool list has no session_* tools", "never claim a delegation"},
+		"9":  {"Session orchestration switch", "Without session_* tools", "never claim a delegation"},
 		"10": {"After compaction or a resume", "never rebuild an id, a status or an approval"},
 	}
 	if len(rules) != len(said) {
@@ -177,6 +177,77 @@ func TestAgentPrimerSaysEveryRuleOfTheContract(t *testing.T) {
 			if !strings.Contains(agentPrimer, phrase) {
 				t.Errorf("§0 rule %s (%s): the primer does not say %q", rule[1], rule[2], phrase)
 			}
+		}
+	}
+}
+
+// What the primer says about a receipt is what contracts/orbit-agent.contract.json's receipt says: the
+// outcomes it calls a success are exactly the schema's okOutcomes, every retry rule it lists is the
+// schema's and none is missing, the chat it singles out is an outcome there, and the idempotencyKey it
+// tells an agent to send is an argument of both creates.
+func TestAgentPrimerReadsAReceiptAsTheContractDefinesIt(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "contracts", "orbit-agent.contract.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var contract struct {
+		Receipt struct {
+			Outcomes   []string `json:"outcomes"`
+			OKOutcomes []string `json:"okOutcomes"`
+			Schema     struct {
+				Properties struct {
+					Error struct {
+						Properties struct {
+							Retry struct {
+								Enum []string `json:"enum"`
+							} `json:"retry"`
+						} `json:"properties"`
+					} `json:"error"`
+				} `json:"properties"`
+			} `json:"schema"`
+		} `json:"receipt"`
+	}
+	if err := json.Unmarshal(raw, &contract); err != nil {
+		t.Fatal(err)
+	}
+	receipt := contract.Receipt
+	if got := strings.Join(receipt.OKOutcomes, ","); got != "written,read,dry_run" {
+		t.Fatalf("the contract's okOutcomes are %s; the primer says a write is outcome written and read and dry_run wrote nothing", got)
+	}
+	for _, phrase := range []string{"ok: true and outcome: written", "read and dry_run wrote nothing", "Any other outcome is ok: false", "except on a chat"} {
+		if !strings.Contains(agentPrimerReceipts, phrase) {
+			t.Errorf("the receipt paragraph does not say %q: %q", phrase, agentPrimerReceipts)
+		}
+	}
+	outcomes := stringSet(receipt.Outcomes)
+	for _, named := range []string{"written", "read", "dry_run", "chat"} {
+		if !outcomes[named] {
+			t.Errorf("the primer names outcome %q, which the contract's receipt does not have (%v)", named, receipt.Outcomes)
+		}
+	}
+	listed := regexp.MustCompile(`follow its error\.retry \(([^)]*)\)`).FindStringSubmatch(agentPrimerReceipts)
+	if listed == nil {
+		t.Fatalf("the receipt paragraph lists no retry rules: %q", agentPrimerReceipts)
+	}
+	got := strings.Split(listed[1], ", ")
+	want := append([]string(nil), receipt.Schema.Properties.Error.Properties.Retry.Enum...)
+	sort.Strings(got)
+	sort.Strings(want)
+	if len(want) == 0 || strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("the primer lists error.retry %v, the contract's schema %v", got, want)
+	}
+	for _, tool := range []string{"task_create", "task_create_batch"} {
+		found := false
+		for _, descriptor := range toolDescriptors(true, true) {
+			if descriptor["name"] != tool {
+				continue
+			}
+			schema, _ := descriptor["inputSchema"].(map[string]interface{})
+			properties, _ := schema["properties"].(map[string]interface{})
+			_, found = properties["idempotencyKey"]
+		}
+		if !found {
+			t.Errorf("the primer tells an agent to key %s with idempotencyKey, which its input schema does not take", tool)
 		}
 	}
 }

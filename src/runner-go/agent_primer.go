@@ -35,7 +35,7 @@ const agentPrimerVersion = "1.0.0"
 
 // agentContractVersion is the Agent Contract version the primer was written from: the header of
 // docs/orbit-agent-contract.md and contractVersion in contracts/orbit-agent.contract.json.
-const agentContractVersion = "1.3.0"
+const agentContractVersion = "1.5.0"
 
 // agentPrimerLeadMaxChars is the most the first paragraph may take. It is read on its own: by a
 // client that shows only the beginning of a server's instructions, and by a model skimming them.
@@ -61,7 +61,7 @@ const (
 	agentPrimerObjects = "Pick the object by the question it answers. Project: the whole goal and what settles it. " +
 		"Task: one durable piece of work. Task list: how a class of work is dispatched (a concurrency cap, a pause, " +
 		"standing instructions), not a plan or a folder. Session: one execution running now. Agent: where work runs " +
-		"and under which identity. Never file the work this session is already doing as another task or session."
+		"and under which identity. Never file what this session is already doing as another task or session."
 
 	agentPrimerStart = "Start is its own decision: task_start runs recorded work, task_create with startNow: true " +
 		"records and starts it on one card, and runAt schedules one start. If the person said nothing should run " +
@@ -71,24 +71,25 @@ const (
 	agentPrimerCards = "A create, a batch, a project, a provider change or an agent change puts a confirmation card " +
 		"in front of the user and writes nothing until they confirm it, so first say in a sentence or two what you " +
 		"are about to create and why. A declined card (APPROVAL_DECLINED) is a refusal: do not create it another " +
-		"way. A card still waiting is not a no, and an owner-only decision is never yours to answer."
+		"way. A chat is not a no: answer the owner's words, then call the tool again, changed as agreed. A card still " +
+		"waiting is not a no either, and an owner-only decision is never yours to answer."
 
 	agentPrimerCLI = "The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with " +
-		"no MCP tool and commands that must outlive this turn, run by the absolute path Orbit gives you. It reaches " +
+		"no MCP tool and commands that outlive this turn, run by the absolute path Orbit gives you. It reaches " +
 		"the same server under the same approvals: a refusal, a declined card or a missing switch there is the same " +
 		"answer."
 
-	agentPrimerReceipts = "Only a structured receipt counts: a write happened when a tool returned the entity's id " +
-		"and status in this turn; prose, an error, a timeout, a waiting card or a dry run is not success. Name an " +
-		"Orbit object to the user by a link, never a bare id: `[Fix login redirect](orbit-task:<id>)`, likewise " +
-		"`orbit-session:<id>`, `orbit-project:<id>` and `orbit-list:<id>`, and a wiki entry as " +
-		"`[title](orbit-wiki:<id>)`. Retry only a read, a call with an idempotency key, or a create a re-read " +
-		"showed did not land."
+	agentPrimerReceipts = "Only a structured receipt counts: a write happened when its receipt says ok: true and " +
+		"outcome: written, with the entity's id and status; read and dry_run wrote nothing. Any other outcome is ok: " +
+		"false; except on a chat, follow its error.retry (resend, reread_first, fix_input, do_not_retry, wait). Key " +
+		"task_create and task_create_batch with an idempotencyKey derived from the work, so a retry cannot file twice. " +
+		"Name an Orbit object to the user by a link, never a bare id: `[Fix login redirect](orbit-task:<id>)`, " +
+		"likewise `orbit-session:<id>`, `orbit-project:<id>` and `orbit-list:<id>`, and a wiki entry as " +
+		"`[title](orbit-wiki:<id>)`."
 
 	agentPrimerOrchestration = "Session, agent and runner tools exist only while the account's Session " +
-		"orchestration switch is on. If your tool list has no session_* tools, do not try `orbit session`: record " +
-		"the work as a task, tell the user the switch is in Settings -> Session orchestration, and never claim a " +
-		"delegation."
+		"orchestration switch is on. Without session_* tools, do not try `orbit session`: record the work as a task, " +
+		"tell the user the switch is in Settings -> Session orchestration, and never claim a delegation."
 
 	agentPrimerRederive = "After compaction or a resume, read before you act -- task_get with no id reads this " +
 		"session's task -- and never rebuild an id, a status or an approval from memory or a summary."

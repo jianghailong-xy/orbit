@@ -97,7 +97,8 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches bool) s
 		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: their inputs are schema-checked and " +
 		"they need no shell. Inside a session the Orbit CLI at `" + command + "` takes the same approvals and attributes " +
 		"the work to you; it needs `" + command + " capabilities --json` first to discover its commands, then run the " +
-		"returned argv with that exact absolute path. Use `--json` output. Do not run `" + command + " mcp` directly."
+		"returned argv with that exact absolute path. Pass `--receipt` to read the receipt its MCP tool answers with; " +
+		"`--json` prints the entity alone. Do not run `" + command + " mcp` directly."
 }
 
 // orbitReplyFileInstructions says which files a reply can really hand over. The runner uploads a linked
