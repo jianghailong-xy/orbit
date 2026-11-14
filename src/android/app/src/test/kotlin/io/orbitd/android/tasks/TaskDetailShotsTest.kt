@@ -165,6 +165,23 @@ class TaskDetailShotsTest {
         shot("02-running-scrolled")
     }
 
+    /** Unpinned, "Runs with" says what the server's `runsWith` says dispatch would start — here the project's coordinator on Codex —
+     * not the assignee's lastEngine (Claude Code here); a runsWith on a key names that key. */
+    @Test fun runsWithIsTheServersRunsWith() {
+        page(running().replaceFirst("\"assignee\":", "\"runsWith\":{\"engine\":\"codex\",\"provider\":\"codex\",\"providerBuiltin\":true," +
+            "\"source\":\"PROJECT_COORDINATOR\",\"anchorSessionId\":\"C0\",\"refusal\":null},\"assignee\":"))
+        compose.onNodeWithTag("task-detail").performScrollToNode(hasTestTag("task-runs-with"))
+        compose.onNodeWithTag("task-runs-with").assertTextContains("Engine Assignee's · Codex", substring = true)
+    }
+
+    @Test fun runsWithOnAKeyNamesTheKey() {
+        fixture.providerCatalog = """[{"slug":"glm","label":"GLM work","runtime":"claude","engines":["claude"],"models":[]}]"""
+        page(running().replaceFirst("\"assignee\":", "\"runsWith\":{\"engine\":\"claude\",\"provider\":\"glm\",\"providerBuiltin\":false," +
+            "\"source\":\"WORKSPACE\",\"anchorSessionId\":null,\"refusal\":null},\"assignee\":"))
+        compose.onNodeWithTag("task-detail").performScrollToNode(hasTestTag("task-runs-with"))
+        compose.onNodeWithTag("task-runs-with").assertTextContains("Provider GLM work", substring = true)
+    }
+
     /** A done task: Delivered first, no press under the title, and Reopen task / Run again / Follow task / Add prerequisite in ⋯. */
     @Test fun doneFirstScreenMenuAndRunsWithSheet() {
         page(done(), evidence())
