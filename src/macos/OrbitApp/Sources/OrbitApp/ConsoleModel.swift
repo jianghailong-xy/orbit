@@ -5725,8 +5725,10 @@ final class ConsoleModel {
     }
 
     /// Until when this conversation, opened from a project row whose line says it is waiting on you,
-    /// still lands on its waiting card (`focusWaitingCard`). A card read later than that no longer
-    /// moves a reader who has started reading.
+    /// still lands on its waiting card (`focusWaitingCard`). The reader's own scroll or send ends it
+    /// sooner (`readerTookOver`); the ceiling only keeps a card read much later from moving a reader
+    /// who has been reading a while. Long enough for a slow first read: 15 s was not, on a cold
+    /// simulator.
     private var pendingWaitingCardUntil: Date?
     /// The waiting card's row, for the transcript to open at its top. Its own request, apart from
     /// `scrollRequest` (the bar's, which centres the card and opens its review) and `recordRequest`
@@ -5738,7 +5740,7 @@ final class ConsoleModel {
     /// than the screen would otherwise show its buttons with its title above the fold. Spent by the
     /// first publish or read that has the card; the reads run as the console opens.
     func focusWaitingCard() {
-        pendingWaitingCardUntil = Date().addingTimeInterval(15)
+        pendingWaitingCardUntil = Date().addingTimeInterval(60)
         followPendingWaitingCard()
         Task { await refreshRulerQuestions(force: true) }
     }
@@ -5758,6 +5760,13 @@ final class ConsoleModel {
     /// The transcript placed the reader at the card: consume the request, so a transcript appearing
     /// again later does not jump back to it.
     func cardRequestFollowed() {
+        cardRequest = nil
+    }
+
+    /// The reader moved the list or sent something before the card was reached: the conversation is
+    /// theirs now, and a card read after this does not move them.
+    func readerTookOver() {
+        pendingWaitingCardUntil = nil
         cardRequest = nil
     }
 

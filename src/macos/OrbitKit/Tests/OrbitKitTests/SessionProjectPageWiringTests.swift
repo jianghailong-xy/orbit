@@ -228,12 +228,16 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let publishFollow = try slice(view, from: ".onChange(of: console.stateRevision) {", to: "recomputeStuck()")
         XCTAssertTrue(publishFollow.contains("if let hold = cardHold, hold.sessionID == console.sessionID, Date() < hold.until {"),
                       "a publish in the first moments keeps the card's top rather than following the tail")
-        XCTAssertTrue(view.contains("atBottom = true; cardHold = nil"), "the reader's own send lets go of the card")
+        XCTAssertTrue(view.contains("atBottom = true; cardHold = nil; console.readerTookOver()"),
+                      "the reader's own send lets go of the card, and of a request not yet followed")
         // The reader's own scroll lets go too: the re-aims and the publish branch stop once a finger
         // (or, on macOS, the trackpad or wheel) has moved the list.
         let trackers = try slice(view, from: "private func tracker(ruler:", to: "private func repinAfterResize")
-        XCTAssertEqual(trackers.components(separatedBy: "readerScrolled: { cardHold = nil }").count - 1, 2,
-                       "both platforms' trackers clear the hold on the reader's scroll")
+        XCTAssertEqual(trackers.components(separatedBy: "readerScrolled: { cardHold = nil; console.readerTookOver() }").count - 1, 2,
+                       "both platforms' trackers clear the hold, and a request not yet followed, on the reader's scroll")
+        let tookOver = try slice(console, from: "func readerTookOver() {", to: "\n    }")
+        XCTAssertTrue(tookOver.contains("pendingWaitingCardUntil = nil"))
+        XCTAssertTrue(tookOver.contains("cardRequest = nil"))
         let scrollTracker = try slice(view, from: "private struct ScrollTracker", to: "private struct AnchorRow: ViewModifier {")
         XCTAssertTrue(scrollTracker.contains("if phase == .interacting { readerScrolled() }"),
                       "the reader's interaction, never the app's own scrollTo (.animating or none)")

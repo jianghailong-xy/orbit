@@ -883,11 +883,11 @@ struct TranscriptView: View {
                              recompute: recomputeStuck, follow: repinAfterResize, scroll: transcriptScroll,
                              readingBack: readingBack,
                              dragged: { if bandOpened.wrappedValue { bandOpened.wrappedValue = false } },
-                             readerScrolled: { cardHold = nil })
+                             readerScrolled: { cardHold = nil; console.readerTookOver() })
         #else
         return ScrollTracker(atBottom: $atBottom, tailOutOfView: $tailOutOfView, ruler: ruler,
                              recompute: recomputeStuck, follow: repinAfterResize,
-                             readerScrolled: { cardHold = nil })
+                             readerScrolled: { cardHold = nil; console.readerTookOver() })
         #endif
     }
 
@@ -1116,7 +1116,7 @@ struct TranscriptView: View {
         // they'd scrolled up to read history (the stateRevision follow above only re-pins while
         // already at the bottom). Web parity: onSend re-pins atBottom on send (AgentView.tsx).
         .onChange(of: console.localSendTick) {
-            atBottom = true; cardHold = nil
+            atBottom = true; cardHold = nil; console.readerTookOver()
             proxy.scrollTo(bottomID, anchor: .bottom)
         }
         // A local command is an explicit new tail item, so reveal it even when the reader had
