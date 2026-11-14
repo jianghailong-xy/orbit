@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
+import { Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -481,6 +482,16 @@ test('the channel client speaks to the channel\'s socket with its token, and tel
     await assert.rejects(slow.info(), (e: unknown) => e instanceof DockerChannelUnreachable && /no answer within 200 ms/.test(e.message) && e.connected);
     // No socket to connect to: nothing reached the channel.
     await assert.rejects(new DockerChannelClient({ socketPath: path.join(dir, 'nothing.sock') }, 't', 1_000).info(), (e: unknown) => e instanceof DockerChannelUnreachable && !e.connected);
+    // A connection that is never made (an address that drops packets): nothing reached the channel either,
+    // after the connect timeout, not the request timeout.
+    const started = Date.now();
+    const dropped = new DockerChannelClient({ url: 'http://10.0.0.1:7300' }, 't', 60_000, { timeoutMs: 150, create: () => new Socket() });
+    await assert.rejects(dropped.info(), (e: unknown) => e instanceof DockerChannelUnreachable && /no connection within 150 ms/.test(e.message) && !e.connected);
+    assert.ok(Date.now() - started < 5_000, 'failed at the connect timeout');
+    // The default connect timeout is never longer than the call's own (whichever of the two fires first).
+    const short = Date.now();
+    await assert.rejects(new DockerChannelClient({ url: 'http://10.0.0.1:7300' }, 't', 100, { create: () => new Socket() }).info(), (e: unknown) => e instanceof DockerChannelUnreachable && !e.connected);
+    assert.ok(Date.now() - short < 2_000, 'not the 3 s default');
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));

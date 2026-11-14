@@ -509,3 +509,42 @@ test('the loop drives every host; one whose channel cannot be reached does not s
   const single = new ManagedRunnerWorker(managerOf('a', true), 60_000, { error: () => undefined });
   await assert.rejects(single.drain(), /unreachable/);
 });
+
+test('while a host stays marked unreachable after its recheck, the loop drives none of its mappings, and the others at once', async () => {
+  const visited: string[] = [];
+  const backendA = {
+    location: { clusterKey: 'k', namespace: 'a' },
+    unreachable: true,
+    recheckReachability: async () => {
+      visited.push('a:recheck');
+    },
+  };
+  const managerOf = (name: string, backend: object) => ({
+    backend,
+    sweepDemand: async () => 0,
+    dueMappings: async () => {
+      visited.push(`${name}:due`);
+      return [`${name}-1`];
+    },
+    reconcile: async (id: string) => {
+      visited.push(id);
+      return 'READY';
+    },
+  }) as unknown as ManagedRunnerManager;
+  const worker = new ManagedRunnerWorker(
+    [managerOf('a', backendA), managerOf('b', { location: { clusterKey: 'k', namespace: 'b' }, unreachable: false })],
+    60_000,
+    { error: () => undefined },
+  );
+  await worker.drain();
+  assert.deepEqual(visited, ['a:recheck', 'b:due', 'b-1'], 'host a rechecked and skipped, host b driven');
+
+  // The recheck that finds it back clears the mark: its mappings are driven in that same pass.
+  visited.length = 0;
+  backendA.recheckReachability = async () => {
+    visited.push('a:recheck');
+    backendA.unreachable = false;
+  };
+  await worker.drain();
+  assert.deepEqual(visited, ['a:recheck', 'a:due', 'a-1', 'b:due', 'b-1']);
+});

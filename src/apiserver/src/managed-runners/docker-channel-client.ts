@@ -1,5 +1,5 @@
 import { readFileSync, statSync } from 'node:fs';
-import { request } from 'node:http';
+import { request, type RequestOptions } from 'node:http';
 
 import type { DockerRunnerProfile } from './managed-runner-profile';
 
@@ -140,12 +140,26 @@ export type DockerChannel = Pick<
   | 'createContainer' | 'dryRunContainer' | 'readContainer' | 'stopContainer' | 'removeContainer' | 'fencingReceipt'
 >;
 
+/**
+ * How long a call waits for its connection to the channel to be made, at most (never longer than the call's
+ * own timeout). The channel is on this host or a private link, where a connection is made in milliseconds or
+ * refused at once; one that is still not made after this long goes to an address that drops packets, and the
+ * call fails as one that reached nothing (`connected` false) rather than waiting out the request timeout.
+ */
+export const DOCKER_CHANNEL_CONNECT_TIMEOUT_MS = 3_000;
+
 export class DockerChannelClient {
+  private readonly connectTimeoutMs: number;
+
   constructor(
     private readonly target: DockerChannelTarget,
     private readonly token: string,
     private readonly timeoutMs: number,
-  ) {}
+    /** Tests only: the connect timeout, and what makes the connection (http.request's `createConnection`). */
+    private readonly connection: { timeoutMs?: number; create?: RequestOptions['createConnection'] } = {},
+  ) {
+    this.connectTimeoutMs = Math.min(timeoutMs, connection.timeoutMs ?? DOCKER_CHANNEL_CONNECT_TIMEOUT_MS);
+  }
 
   /** One request; the answer's status and JSON body, or DockerChannelUnreachable. */
   call<T>(method: string, path: string, body?: unknown): Promise<{ status: number; body: T | null }> {
@@ -160,7 +174,9 @@ export class DockerChannelClient {
       })();
     return new Promise((resolve, reject) => {
       let connected = false;
-      const req = request({ ...where, method, headers, agent: false, timeout: this.timeoutMs }, (res) => {
+      let connecting: ReturnType<typeof setTimeout> | undefined;
+      const create = this.connection.create ? { createConnection: this.connection.create } : {};
+      const req = request({ ...where, ...create, method, headers, agent: false, timeout: this.timeoutMs }, (res) => {
         const chunks: Buffer[] = [];
         res.on('data', (chunk: Buffer) => chunks.push(chunk));
         res.on('error', (error) => reject(new DockerChannelUnreachable(`the Docker channel's answer broke off: ${error.message}`)));
@@ -176,9 +192,19 @@ export class DockerChannelClient {
           resolve({ status: res.statusCode ?? 0, body: parsed as T | null });
         });
       });
-      req.on('socket', (socket) => socket.once('connect', () => (connected = true)));
+      req.on('socket', (socket) => {
+        connecting = setTimeout(() => req.destroy(new Error(`no connection within ${this.connectTimeoutMs} ms`)), this.connectTimeoutMs);
+        socket.once('connect', () => {
+          connected = true;
+          clearTimeout(connecting);
+        });
+        socket.once('close', () => clearTimeout(connecting));
+      });
       req.on('timeout', () => req.destroy(new Error(`no answer within ${this.timeoutMs} ms`)));
-      req.on('error', (error) => reject(new DockerChannelUnreachable(`the Docker channel could not be reached: ${error.message}`, connected)));
+      req.on('error', (error) => {
+        clearTimeout(connecting);
+        reject(new DockerChannelUnreachable(`the Docker channel could not be reached: ${error.message}`, connected));
+      });
       if (payload) req.write(payload);
       req.end();
     });
