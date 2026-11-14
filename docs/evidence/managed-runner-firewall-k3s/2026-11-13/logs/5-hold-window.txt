@@ -1,0 +1,138 @@
+
+### The window held open by hand (2026-11-13T22:40:20Z): the service stopped, Kubernetes' jumps above this program's
+ Container orbit-managed-runner-firewall Stopping 
+ Container orbit-managed-runner-firewall Stopped 
+
+### Rule listing: the window held open: kube-router and kube-proxy first, the service stopped (2026-11-13T22:40:21Z)
+-- iptables -t filter -S FORWARD
+ 1: -A FORWARD -m comment --comment "kube-router netpol - TEMCG2JMHZYE7H7T" -j KUBE-ROUTER-FORWARD
+ 2: -A FORWARD -i br-47331a1a866c -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD
+ 3: -A FORWARD -m conntrack --ctstate NEW -m comment --comment "kubernetes load balancer firewall" -j KUBE-PROXY-FIREWALL
+ 4: -A FORWARD -m comment --comment "kubernetes forwarding rules" -j KUBE-FORWARD
+ 5: -A FORWARD -m conntrack --ctstate NEW -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
+ 6: -A FORWARD -m conntrack --ctstate NEW -m comment --comment "kubernetes externally-visible service portals" -j KUBE-EXTERNAL-SERVICES
+ 7: -A FORWARD -j DOCKER-USER
+ 8: -A FORWARD -j DOCKER-FORWARD
+ 9: -A FORWARD -m comment --comment "flanneld forward" -j FLANNEL-FWD
+-- iptables -t filter -S INPUT
+ 1: -A INPUT -m comment --comment "kube-router netpol - 4IA2OSFRMVNDXBVV" -j KUBE-ROUTER-INPUT
+ 2: -A INPUT -i br-47331a1a866c -m comment --comment orbit-managed-runners -j ORBIT-MR-INPUT
+ 3: -A INPUT -m conntrack --ctstate NEW -m comment --comment "kubernetes load balancer firewall" -j KUBE-PROXY-FIREWALL
+ 4: -A INPUT -m comment --comment "kubernetes health check service ports" -j KUBE-NODEPORTS
+ 5: -A INPUT -m conntrack --ctstate NEW -m comment --comment "kubernetes externally-visible service portals" -j KUBE-EXTERNAL-SERVICES
+ 6: -A INPUT -j KUBE-FIREWALL
+-- iptables -t filter -S DOCKER-USER
+ 1: -N DOCKER-USER
+ 2: -A DOCKER-USER -i br-47331a1a866c -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD
+-- iptables -t nat -S PREROUTING
+ 1: -A PREROUTING -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
+ 2: -A PREROUTING -i br-47331a1a866c -m comment --comment orbit-managed-runners -j ORBIT-MR-PREROUTING
+ 3: -A PREROUTING -m addrtype --dst-type LOCAL -j DOCKER
+-- iptables -t raw -S PREROUTING
+ 1: -A PREROUTING -i br-47331a1a866c -m comment --comment orbit-managed-runners -j ORBIT-MR-RAW
+ 2: -A PREROUTING -d 172.18.0.2/32 ! -i br-47331a1a866c -j DROP
+-- iptables -S ORBIT-MR-FORWARD
+-A ORBIT-MR-FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN
+-A ORBIT-MR-FORWARD -p tcp -m conntrack --ctstate DNAT --ctorigdst 172.18.0.1 --ctorigdstport 2086 -j RETURN
+-A ORBIT-MR-FORWARD -d 10.0.0.0/8 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 172.16.0.0/12 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 192.168.0.0/16 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 100.64.0.0/10 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 169.254.0.0/16 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 127.0.0.0/8 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 0.0.0.0/8 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 192.0.0.0/24 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 192.0.2.0/24 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 198.18.0.0/15 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 198.51.100.0/24 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 203.0.113.0/24 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 224.0.0.0/4 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 240.0.0.0/4 -j REJECT --reject-with icmp-admin-prohibited
+-- iptables -S ORBIT-MR-INPUT
+-A ORBIT-MR-INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN
+-A ORBIT-MR-INPUT -d 172.18.0.1/32 -p tcp -m tcp --dport 2086 -j RETURN
+-A ORBIT-MR-INPUT -j REJECT --reject-with icmp-admin-prohibited
+-- iptables -t nat -S ORBIT-MR-PREROUTING
+-A ORBIT-MR-PREROUTING -d 172.18.0.1/32 -p tcp -m tcp --dport 2086 -j RETURN
+-A ORBIT-MR-PREROUTING -j ACCEPT
+-- iptables -t raw -S ORBIT-MR-RAW
+-A ORBIT-MR-RAW -d 172.18.0.1/32 -p tcp -m tcp --dport 2086 -j RETURN
+-A ORBIT-MR-RAW -d 10.0.0.0/8 -j MARK --set-xmark 0x100000/0x100000
+-A ORBIT-MR-RAW -d 172.16.0.0/12 -j MARK --set-xmark 0x100000/0x100000
+-A ORBIT-MR-RAW -d 192.168.0.0/16 -j MARK --set-xmark 0x100000/0x100000
+-A ORBIT-MR-RAW -d 100.64.0.0/10 -j MARK --set-xmark 0x100000/0x100000
+-A ORBIT-MR-RAW -d 169.254.0.0/16 -j MARK --set-xmark 0x100000/0x100000
+-A ORBIT-MR-RAW -d 127.0.0.0/8 -j MARK --set-xmark 0x100000/0x100000
+-A ORBIT-MR-RAW -d 0.0.0.0/8 -j MARK --set-xmark 0x100000/0x100000
+-A ORBIT-MR-RAW -d 192.0.0.0/24 -j MARK --set-xmark 0x100000/0x100000
+-A ORBIT-MR-RAW -d 192.0.2.0/24 -j MARK --set-xmark 0x100000/0x100000
+-A ORBIT-MR-RAW -d 198.18.0.0/15 -j MARK --set-xmark 0x100000/0x100000
+-A ORBIT-MR-RAW -d 198.51.100.0/24 -j MARK --set-xmark 0x100000/0x100000
+-A ORBIT-MR-RAW -d 203.0.113.0/24 -j MARK --set-xmark 0x100000/0x100000
+-A ORBIT-MR-RAW -d 224.0.0.0/4 -j MARK --set-xmark 0x100000/0x100000
+-A ORBIT-MR-RAW -d 240.0.0.0/4 -j MARK --set-xmark 0x100000/0x100000
+-- ip -4 rule
+0:	from all lookup local
+1:	from all fwmark 0x100000/0x100000 iif br-47331a1a866c prohibit
+32766:	from all lookup main
+32767:	from all lookup default
+-- ip6tables -t filter -S FORWARD
+ 1: -A FORWARD -i br-47331a1a866c -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD
+ 2: -A FORWARD -m conntrack --ctstate NEW -m comment --comment "kubernetes load balancer firewall" -j KUBE-PROXY-FIREWALL
+ 3: -A FORWARD -m comment --comment "kubernetes forwarding rules" -j KUBE-FORWARD
+ 4: -A FORWARD -m conntrack --ctstate NEW -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
+ 5: -A FORWARD -m conntrack --ctstate NEW -m comment --comment "kubernetes externally-visible service portals" -j KUBE-EXTERNAL-SERVICES
+ 6: -A FORWARD -j DOCKER-USER
+ 7: -A FORWARD -j DOCKER-FORWARD
+-- ip6tables -t filter -S INPUT
+ 1: -A INPUT -i br-47331a1a866c -m comment --comment orbit-managed-runners -j ORBIT-MR-INPUT
+ 2: -A INPUT -j KUBE-FIREWALL
+ 3: -A INPUT -m conntrack --ctstate NEW -m comment --comment "kubernetes load balancer firewall" -j KUBE-PROXY-FIREWALL
+ 4: -A INPUT -m comment --comment "kubernetes health check service ports" -j KUBE-NODEPORTS
+ 5: -A INPUT -m conntrack --ctstate NEW -m comment --comment "kubernetes externally-visible service portals" -j KUBE-EXTERNAL-SERVICES
+-- ip6tables -t nat -S PREROUTING
+ 1: -A PREROUTING -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
+ 2: -A PREROUTING -i br-47331a1a866c -m comment --comment orbit-managed-runners -j ORBIT-MR-PREROUTING
+ 3: -A PREROUTING -m addrtype --dst-type LOCAL -j DOCKER
+-- ip6tables -t raw -S PREROUTING
+ 1: -A PREROUTING -i br-47331a1a866c -m comment --comment orbit-managed-runners -j ORBIT-MR-RAW
+-- ip6tables ORBIT-MR-FORWARD, nat ORBIT-MR-PREROUTING, raw ORBIT-MR-RAW
+-A ORBIT-MR-FORWARD -j REJECT --reject-with icmp6-adm-prohibited
+-A ORBIT-MR-PREROUTING -j ACCEPT
+-A ORBIT-MR-RAW -j MARK --set-xmark 0x100000/0x100000
+-- ip -6 rule
+0:	from all lookup local
+1:	from all fwmark 0x100000/0x100000 iif br-47331a1a866c prohibit
+32766:	from all lookup main
+
+### From the runner container on orbit-managed-runners, as the runner's user (2026-11-13T22:40:21Z)
+gateway 172.18.0.1, CoreDNS pod 10.42.0.4
+{"target": "kube-dns ClusterIP", "to": "10.43.0.10:53", "result": "EHOSTUNREACH", "ms": 0}
+{"target": "kube-dns ClusterIP, a DNS question", "to": "udp 10.43.0.10:53", "result": "EHOSTUNREACH", "ms": 0}
+{"target": "kubernetes API ClusterIP", "to": "10.43.0.1:443", "result": "EHOSTUNREACH", "ms": 0}
+{"target": "CoreDNS pod IP", "to": "10.42.0.4:53", "result": "TimeoutError", "ms": 5002}
+{"target": "CoreDNS pod IP, a DNS question", "to": "udp 10.42.0.4:53", "result": "TIMEOUT", "ms": 3004}
+{"target": "CoreDNS pod IP, readiness port", "to": "10.42.0.4:8181", "result": "EHOSTUNREACH", "ms": 0}
+{"target": "the node address, k3s API", "to": "172.31.92.20:6443", "result": "EHOSTUNREACH", "ms": 0}
+{"target": "the node address, kubelet", "to": "172.31.92.20:10250", "result": "EHOSTUNREACH", "ms": 1032}
+{"target": "the node address, a NodePort", "to": "172.31.92.20:30053", "result": "TimeoutError", "ms": 5004}
+{"target": "the node's flannel cni0 address, kubelet", "to": "10.42.0.1:10250", "result": "EHOSTUNREACH", "ms": 0}
+{"target": "this host on the runners' network, port 22", "to": "172.18.0.1:22", "result": "EHOSTUNREACH", "ms": 1015}
+{"target": "this host on the runners' network, the k3s API", "to": "172.18.0.1:6443", "result": "EHOSTUNREACH", "ms": 1020}
+{"target": "the HPC host on the lab bridge", "to": "172.31.92.1:22", "result": "TimeoutError", "ms": 5004}
+{"target": "the HPC host's LAN address", "to": "192.168.1.12:22", "result": "TimeoutError", "ms": 5004}
+{"target": "the HPC host's wg1 address", "to": "10.66.0.2:22", "result": "TimeoutError", "ms": 5004}
+{"target": "cloud metadata", "to": "169.254.169.254:80", "result": "TimeoutError", "ms": 5004}
+{"target": "a private DNS server", "to": "udp 192.168.1.254:53", "result": "TIMEOUT", "ms": 3003}
+{"target": "a public address, port 443", "to": "1.1.1.1:443", "result": "CONNECTED", "ms": 5}
+{"target": "a public DNS server, a DNS question", "to": "udp 1.1.1.1:53", "result": "ANSWERED", "ms": 5}
+{"target": "a public https endpoint", "to": "https://www.cloudflare.com/cdn-cgi/trace", "result": "HTTP 200", "ms": 341}
+{"target": "another public https endpoint", "to": "https://github.com/", "result": "HTTP 200", "ms": 26}
+ Container orbit-channel-host-managed-runner-firewall-run-5b83da74a7b3 Creating 
+ Container orbit-channel-host-managed-runner-firewall-run-5b83da74a7b3 Created 
+{"backend": "nft", "enforced": false, "problems": ["IPv4: INPUT does not start with the jump for br-47331a1a866c: KUBE-ROUTER-INPUT come(s) before it", "IPv4: FORWARD does not start with the jump for br-47331a1a866c: KUBE-ROUTER-FORWARD come(s) before it", "IPv4: nat PREROUTING does not start with the jump for br-47331a1a866c: KUBE-SERVICES come(s) before it", "IPv6: nat PREROUTING does not start with the jump for br-47331a1a866c: KUBE-SERVICES come(s) before it"]}
+
+check: exit 1
+ Container orbit-managed-runner-firewall Starting 
+ Container orbit-managed-runner-firewall Started 
+service started again: {"state":"enforced","kubernetes":["IPv4","IPv6"]}
