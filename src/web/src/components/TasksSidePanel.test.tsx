@@ -258,6 +258,16 @@ describe('TasksSidePanel workspace rows', () => {
     expect(html).not.toContain('inset');
   });
 
+  // Board docs/mocks/workspace-runner-label E1: with a pointer the machine shows on the hovered row only.
+  it('shows the machine only on the hovered row, and on every row of a touch screen', () => {
+    const block = styles.match(/@media \(hover: hover\) and \(min-width: 961px\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
+    expect(block).toContain(
+      '.tp-item:not(:hover):not(.menu-open) .tp-workspace-separator,\n' +
+        '  .app-shell .app-nav:not(.collapsed) .tp-item:not(:hover):not(.menu-open) .tp-workspace-runner {\n    display: none;',
+    );
+    expect(block).toMatch(/\.tp-workspace-runner \{\n {4}flex: none;\n {4}max-width: 60%;/);
+  });
+
   it('puts a folder in the shared first-level icon column and keeps the collapsed rail unchanged', () => {
     const html = renderToStaticMarkup(
       <WorkspaceRow
