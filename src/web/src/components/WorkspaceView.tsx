@@ -3370,10 +3370,13 @@ export function WorkspaceView({
     entry.kind === 'project'
       ? entry.coordinator ? [[entry.coordinator.id, entry.projectId] as const] : []
       : entry.projectMark ? [[entry.id, entry.projectMark.projectId] as const] : [])), [folderListing]);
+  // The project each project row of the list stands for, by its coordinator alone.
+  const listedCoordinatorProjects = useMemo(() => new Map(folderListing.entries.flatMap((entry) =>
+    entry.kind === 'project' && entry.coordinator ? [[entry.coordinator.id, entry.projectId] as const] : [])), [folderListing]);
   // Wider than a phone an open column follows the selection (owner 2026-11-11, board 3; 2026-11-13): a
   // member of its project keeps it, a project row's coordinator or another project's member switches it
-  // to that project, and a session in no project closes it. With no column open, only a project row's
-  // own click opens one.
+  // to that project, and a session in no project closes it. With no column open, a project row's own
+  // click or the arrow keys onto it (`stepSession`) open one.
   const searchFor = useCallback((id: string): string => {
     if (isMobile || !openProjectId) return listSearch;
     if (allProjectMembers.some((s) => s.id === id)) return projectSearch;
@@ -3636,10 +3639,16 @@ export function WorkspaceView({
         next = cur + dir;
         if (next < 0 || next >= orderedSessions.length) return false; // stop at the ends
       }
-      navigate(sessionItemPath(orderedSessions[next]));
+      const target = orderedSessions[next];
+      // Wider than a phone, stepping onto a project row opens its column beside the coordinator, as
+      // the row's click does, even with none open (owner 2026-11-14).
+      const rowProjectId = isMobile ? undefined : listedCoordinatorProjects.get(target.id);
+      navigate(rowProjectId
+        ? sessionItemPath(target, `?project=${encodeId(rowProjectId)}${folderParam ? `&folder=${encodeURIComponent(folderParam)}` : ''}`)
+        : sessionItemPath(target));
       return true;
     },
-    [orderedSessions, selectedId, view, navigate, sessionItemPath],
+    [orderedSessions, selectedId, view, navigate, sessionItemPath, isMobile, listedCoordinatorProjects, folderParam],
   );
 
   // Up/Down arrows step through the session list (left column), switching the open
