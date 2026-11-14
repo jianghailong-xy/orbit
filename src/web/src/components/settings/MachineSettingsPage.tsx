@@ -76,6 +76,8 @@ import {
   RUNNER_CAPACITY_FOOTER,
   RUNNER_COPY_COMMAND,
   RUNNER_ENGINES,
+  RUNNER_RESOURCES,
+  MANAGED_RUNNER_NOT_REPORTED,
   RUNNER_ENGINES_FOOTER,
   RUNNER_ENGINES_OFFLINE_FOOTER,
   RUNNER_KEEP_FREE,
@@ -444,6 +446,9 @@ export function MachineSettingsPage() {
   // About's version line: current, catching up by itself, or stuck until someone upgrades it. A
   // runner that reports where its updates stand says which; an older one is judged by runsAsRoot.
   const version = runner.version?.trim() || null;
+  // The account's managed runner before it first reports (preparing, waiting for capacity, failed to
+  // start): no version, no readings, no engines. Once it reports, the page is the ordinary one.
+  const managedWaiting = !!managedRow && managedRow.kind !== 'available' && !version;
   const versionNote = (() => {
     if (!version || !latestVersion) return null;
     const stuck = attention.find((item) => item.kind === 'cannotSelfUpdate');
@@ -825,6 +830,19 @@ export function MachineSettingsPage() {
         </section>
       )}
 
+      {/* A managed runner that has not reported yet has no readings and no engines to show: one quiet
+          line each, not "Update runner" badges and Install rows for a machine still being started. */}
+      {managedWaiting ? (
+        <>
+          <SettingsSection title={RUNNER_RESOURCES} className="machine-section-resources">
+            <p className="machine-managed-waiting" data-testid="managed-waiting-resources">{MANAGED_RUNNER_NOT_REPORTED}</p>
+          </SettingsSection>
+          <SettingsSection title={RUNNER_ENGINES} className="machine-section-engines">
+            <p className="machine-managed-waiting" data-testid="managed-waiting-engines">{MANAGED_RUNNER_NOT_REPORTED}</p>
+          </SettingsSection>
+        </>
+      ) : (
+      <>
       {/* The machine's CPU, memory and disk, and their last hour (MachineResources.tsx). */}
       <MachineResources
         runnerId={runner.id}
@@ -892,6 +910,8 @@ export function MachineSettingsPage() {
           <div className="rd-hint">{runner.online ? RUNNER_ENGINES_FOOTER : RUNNER_ENGINES_OFFLINE_FOOTER}</div>
         )}
       </SettingsSection>
+      </>
+      )}
 
       <div ref={capacityRef} className="machine-capacity">
         <SettingsSection title={RUNNER_CAPACITY} className="machine-section-capacity">

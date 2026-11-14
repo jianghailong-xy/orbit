@@ -249,6 +249,13 @@
   margin: 12px 0 0;
 }
 
+/* A managed runner's Resources and Engines before it first reports: one quiet line each. */
+.machine-managed-waiting {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
 /* /settings/machines/managed: the notice and the page's one sentence under it. */
 .managed-runner-setup .managed-runner-notice {
   margin-top: 16px;

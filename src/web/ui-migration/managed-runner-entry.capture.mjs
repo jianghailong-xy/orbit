@@ -26,6 +26,19 @@ const LAPTOP = { ...RUNNER, id: uuidToBase62('0196e000-0000-7000-8000-0000000000
 const WORKSTATION = { ...RUNNER, name: 'workstation' };
 const preparing = state('preparing: requested');
 const MANAGED = { ...RUNNER, id: preparing.runnerId, name: 'managed', online: false, activeSessions: 0, engines: [] };
+// Once it has reported: online, its version and engines, READY.
+// It runs the current runner image, so it reports what a current runner does (its resources, DeepSeek Harness).
+const MANAGED_READY = {
+  ...RUNNER, id: preparing.runnerId, name: 'managed', online: true, activeSessions: 0, version: '0.1.250',
+  lastHeartbeatAt: '2026-09-28T11:59:50.000Z', capabilities: ['machine-resources/v1', 'provider:dsh'],
+};
+const READING = {
+  at: '2026-09-28T11:59:50.000Z',
+  latest: { cpuPercent: 3, cpuCores: 4, load1: 0.1, memTotalBytes: 8 * 2 ** 30, memAvailableBytes: 7 * 2 ** 30,
+    diskTotalBytes: 20 * 2 ** 30, diskFreeBytes: 18 * 2 ** 30 },
+  samples: [],
+};
+let ready = false;
 const MANAGED_WORKSPACE = { ...WORKSPACE, id: preparing.workspaceId, name: 'managed', runnerId: MANAGED.id };
 
 async function account(page) {
@@ -40,16 +53,17 @@ async function account(page) {
     const json = (body) => route.fulfill({ status: 200, json: body });
     const mapped = status.runnerId != null;
     if (method === 'GET' && path === '/api/auth/capabilities') return json({ managedRunners: { enabled: true, contractVersion: 1 } });
-    if (method === 'GET' && path === '/api/managed-runner') return json(status);
+    if (method === 'GET' && path === '/api/managed-runner') return json(ready ? state('available') : status);
     if (method === 'POST' && path === '/api/managed-runner/ensure') {
       status = preparing;
       return json(status);
     }
-    if (method === 'GET' && path === '/api/runners') return json(mapped ? [WORKSTATION, LAPTOP, MANAGED] : [WORKSTATION, LAPTOP]);
+    if (method === 'GET' && path === '/api/runners') return json(mapped ? [WORKSTATION, LAPTOP, ready ? MANAGED_READY : MANAGED] : [WORKSTATION, LAPTOP]);
     if (method === 'GET' && path === '/api/workspaces') return json(mapped ? [{ ...WORKSPACE, name: 'orbit' }, MANAGED_WORKSPACE] : [{ ...WORKSPACE, name: 'orbit' }]);
     if (method === 'GET' && path === '/api/providers/mine') return json([{ id: 'k1', slug: 'anthropic', label: 'Anthropic', presetSlug: 'anthropic' }]);
     if (method === 'GET' && path === '/api/providers/pools') return json([]);
     if (method === 'GET' && path.startsWith('/api/workspaces/session-counts')) return json([]);
+    if (method === 'GET' && path === `/api/runners/${MANAGED_READY.id}/resources` && ready) return json(READING);
     if (method === 'GET' && /^\/api\/runners\/[^/]+\/resources$/.test(path)) return json({ available: false });
     return route.fallback();
   });
@@ -100,7 +114,17 @@ await page.waitForURL(`**/settings/machines/${MANAGED.id}`);
 await page.locator('.settings-managed-state').waitFor();
 await page.locator('.machine-head').waitFor();
 await settle();
+await page.waitForTimeout(600);
 await page.screenshot({ path: `${out}3-after-setup.png` });
+
+// 5. The same runner once it reports: READY, with its version, the ordinary machine page.
+ready = true;
+await page.reload();
+await page.locator('.settings-managed-state[data-kind="available"]').waitFor();
+await page.locator('.machine-engines').waitFor();
+await page.waitForTimeout(600);
+await settle();
+await page.screenshot({ path: `${out}5-once-ready.png` });
 
 // 4. Asleep (the owner's 2026-11-14 ask): the fixture session's own runner is the managed one, asleep.
 // The sidebar marks its workspace Asleep, never Offline; the composer says sending wakes it.
@@ -126,5 +150,6 @@ await asleep.close();
 await beside(browser, '1-entry.png', 'Settings → Machines, Managed runner · Set up');
 await beside(browser, '2-confirmation.png', 'the confirmation before Set up');
 await beside(browser, '3-after-setup.png', 'after Set up: the runner’s machine page, its row Preparing');
+await beside(browser, '5-once-ready.png', 'the same runner once it reports: Ready, the ordinary machine page');
 await browser.close();
 console.log(`wrote ${out}`);

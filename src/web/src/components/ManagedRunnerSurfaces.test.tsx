@@ -53,23 +53,26 @@ const runner = (id: string, name: string, online: boolean) => ({
   activeSessions: 0,
   enrolledAt: '2026-06-18T09:00:00Z',
   lastHeartbeatAt: '2026-11-14T08:00:00Z',
-  engines: [],
+  engines: [{ engine: 'claude', installed: false, auth: 'no' }],
 });
 
 let server: { capabilities: { httpStatus: number; body: unknown }; status: ManagedRunnerStatus };
+/** What GET /runners says of the managed runner beyond the basics: e.g. the version it reported. */
+let managedReport: Record<string, unknown> = {};
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   server = { capabilities: ON, status: state('sleeping') };
+  managedReport = {};
   apiMock.mockImplementation((async (path: string) => {
     if (path === '/auth/capabilities') {
       if (server.capabilities.httpStatus !== 200) throw new ApiError('Not Found', server.capabilities.httpStatus);
       return server.capabilities.body;
     }
     if (path === '/managed-runner') return server.status;
-    if (path === '/runners') return [runner(OWN, 'workstation', false), runner(MANAGED, 'managed', false)];
+    if (path === '/runners') return [runner(OWN, 'workstation', false), { ...runner(MANAGED, 'managed', false), ...managedReport }];
     if (path === '/workspaces') return [];
     return [];
   }) as typeof api);
@@ -154,6 +157,52 @@ describe("the managed runner's machine page", () => {
     expect(page.querySelector('[data-testid="machine-status"]')?.textContent).toMatch(/Offline|Last seen/);
     expect(page.querySelector('.managed-runner-notice')).toBeNull();
     expect(askedStatus()).toBe(false);
+  });
+});
+
+describe("the managed runner's page before it first reports (owner, 2026-11-14: \"fix the preparing page\")", () => {
+  const broken = /Update runner|predates|Not installed|Orbit can install it here|Sign in/;
+  const waitingLines = (page: HTMLElement) =>
+    [...page.querySelectorAll('.machine-managed-waiting')].map((line) => line.textContent);
+
+  it.each(['preparing: requested', 'preparing: starting', 'waiting for capacity before the first start', 'failed: retryable'])(
+    '%s, no version yet: banner and pill, one quiet line for Resources and Engines, no badges and no engine rows',
+    async (name) => {
+      server.status = state(name);
+      const page = await machinePage(MANAGED);
+      expect(page.querySelector('.managed-runner-notice')).not.toBeNull();
+      expect(page.querySelector('[data-testid="machine-status"]')?.textContent).toBe(
+        MANAGED_RUNNER_COPY.short[fixture.states.find((s) => s.name === name)!.display!.kind as ManagedRunnerRowKind],
+      );
+      expect(waitingLines(page)).toEqual(['Available once the runner is ready.', 'Available once the runner is ready.']);
+      expect(page.querySelector('.machine-engines, .re-runner-card')).toBeNull();
+      expect(page.textContent).not.toMatch(broken);
+    },
+  );
+
+  it('READY with a version: the ordinary page, engine rows and Resources as today', async () => {
+    server.status = state('available');
+    managedReport = { version: '0.1.250', online: true };
+    const page = await machinePage(MANAGED);
+    expect(waitingLines(page)).toEqual([]);
+    expect(page.querySelector('.machine-engines')).not.toBeNull();
+    expect(page.querySelector('[data-testid="machine-status"]')?.textContent).toBe(MANAGED_RUNNER_COPY.short.available);
+  });
+
+  it('asleep after it had reported: the ordinary page under its Asleep pill', async () => {
+    server.status = state('sleeping');
+    managedReport = { version: '0.1.250' };
+    const page = await machinePage(MANAGED);
+    expect(waitingLines(page)).toEqual([]);
+    expect(page.querySelector('.machine-engines')).not.toBeNull();
+  });
+
+  it('a normal runner without a version is unchanged: its Update runner badges and engine rows stay', async () => {
+    server.status = state('preparing: requested');
+    const page = await machinePage(OWN);
+    expect(waitingLines(page)).toEqual([]);
+    expect(page.querySelector('.machine-engines')).not.toBeNull();
+    expect(page.textContent).toMatch(/predates/);
   });
 });
 
