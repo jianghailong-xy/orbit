@@ -331,7 +331,7 @@ func cliAgentCreate(args []string, out io.Writer, ctx cliOrchestrationContext) e
 	if declined, err := askBeforeAgentWrite(t, ctx.sessionID, "", body); err != nil {
 		return fmt.Errorf("create agent: %w", err)
 	} else if declined != "" {
-		return fmt.Errorf("create agent: the human rejected this write, and nothing was written: %s", declined)
+		return fmt.Errorf("create agent: %s", declinedText("the human rejected this write, and nothing was written", declined))
 	}
 	raw, err := t.createAgent(ctx.sessionID, ctx.token, body)
 	if err != nil {
@@ -366,7 +366,7 @@ func cliAgentUpdate(args []string, out io.Writer, ctx cliOrchestrationContext) e
 	if declined, err := askBeforeAgentWrite(t, ctx.sessionID, id, body); err != nil {
 		return fmt.Errorf("update agent: %w", err)
 	} else if declined != "" {
-		return fmt.Errorf("update agent: the human rejected this write, and nothing was written: %s", declined)
+		return fmt.Errorf("update agent: %s", declinedText("the human rejected this write, and nothing was written", declined))
 	}
 	raw, err := t.updateAgent(ctx.sessionID, ctx.token, id, body)
 	if err != nil {
@@ -395,7 +395,7 @@ func cliAgentDelete(args []string, out io.Writer, ctx cliOrchestrationContext) e
 	if declined, err := askBeforeCreate(t, ctx.sessionID, agentDeleteApprovalToolName, map[string]interface{}{"agentId": id}); err != nil {
 		return fmt.Errorf("delete agent: %w", err)
 	} else if declined != "" {
-		return fmt.Errorf("delete agent: the human rejected this deletion, and nothing was deleted: %s", declined)
+		return fmt.Errorf("delete agent: %s", declinedText("the human rejected this deletion, and nothing was deleted", declined))
 	}
 	raw, err := t.deleteAgent(ctx.sessionID, ctx.token, id)
 	if err != nil {
