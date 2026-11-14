@@ -185,8 +185,29 @@ restore any account setting you enabled for device login. Do not retain the runt
   [backup verification procedure](postgres-backup-restore.md#verify-a-backup-without-touching-production)
   before treating this deployment as ready for valuable work.
 
+For a supervised CLI smoke test, the public [CLI guide](runner-cli.md) explains capability discovery.
+Use the enrolled test runner's `ORBIT_HOME` and the clean runtime environment from step 4. Discover
+`orbit capabilities --json` first and use its advertised arguments. With the disposable Workspace ID
+from the UI, create exactly one task (the returned JSON contains its ID):
+
+```bash
+orbit task create --title 'Create and verify smoke.txt' \
+  --description 'Create smoke.txt containing Orbit first task passed followed by a newline. Verify with cat smoke.txt. Change no other files.' \
+  --assignee-id '<disposable-workspace-id>' --engine codex --provider codex \
+  --completion-criterion EXECUTABLE \
+  --acceptance-command 'test "$(cat smoke.txt)" = "Orbit first task passed"' \
+  --acceptance-expected-exit-code 0 --json
+orbit task start '<returned-task-id>' --json
+orbit task get '<returned-task-id>' --json
+```
+
+Answer only permissions for the requested disposable file/check. Inspect the returned task and session
+transcript for the actual completion result; do not write status DONE yourself. Stop on authentication,
+quota or environment errors rather than retrying with another credential. Never include login output
+or runtime credential files in the retained evidence.
+
 A provider quota/authentication failure is a failed or blocked task check. Record it and rerun after
-resolving it. The [current clean-host record](evidence/clean-install-2026-11-13.md) documents a completed
+resolving it. The [current clean-host record](evidence/clean-install-2026-11-14.md) documents a completed
 first task and its limitations; the [2026-09-29 record](evidence/clean-install-2026-09-29.md) remains
 historical evidence of the earlier quota-blocked attempt.
 

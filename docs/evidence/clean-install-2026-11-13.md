@@ -5,6 +5,9 @@ Task **PASS** with Claude Code. The initial Codex attempt **FAILED** authenticat
 This record supersedes the [2026-09-29 attempt](clean-install-2026-09-29.md) as the current install
 record while preserving that historical quota-blocked result.
 
+The [2026-11-14 follow-up](clean-install-2026-11-14.md) is now the current record: it adds fresh
+isolated Codex authentication, a public-document CLI rerun, and subsequent deletion of the test data.
+
 ## Scope and source
 
 The operator used the authorized non-production Debian 12 workstation, a clean session worktree,
