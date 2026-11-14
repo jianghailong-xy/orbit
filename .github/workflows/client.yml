@@ -54,6 +54,10 @@ on:
         description: "P1-03 shots branch only: photograph the Agent Tools sheet on a Mac"
         type: boolean
         default: false
+      orbitapp_build:
+        description: "P1-03 shots branch only: swift build OrbitApp without the OrbitKit tests"
+        type: boolean
+        default: false
 
 concurrency:
   group: client-${{ github.ref }}
@@ -316,3 +320,21 @@ jobs:
           path: |
             .agent-tools-probe/mac/shots
             .agent-tools-probe/mac/build.log
+
+  # TEMPORARY (P1-03, shots branch only): main's macOS job stops at its inherited OrbitKit parity reds and skips
+  # Build OrbitApp, so this compiles OrbitApp on its own, from the same sources as the task branch.
+  orbitapp-build:
+    name: OrbitApp build only (macOS)
+    if: github.event_name == 'workflow_dispatch' && inputs.orbitapp_build
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: latest-stable
+      - name: Toolchain
+        run: swift --version && xcodebuild -version
+      - name: Build OrbitApp
+        working-directory: src/macos/OrbitApp
+        run: swift build
