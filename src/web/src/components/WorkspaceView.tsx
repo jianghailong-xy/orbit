@@ -1,4 +1,10 @@
-import { type MergeRecoveryAction, type ProjectSidebarTaskCounts } from '@orbit/shared';
+import {
+  COORDINATOR_HANDOFF_COPY,
+  type MergeRecoveryAction,
+  type ProjectSidebarTaskCounts,
+  type SessionCoordinatorHandoff,
+  type SessionCoordinatorHandoffReceived,
+} from '@orbit/shared';
 import {
   AppstoreOutlined,
   ArrowDownOutlined,
@@ -49,6 +55,17 @@ import {
   type ReferenceMap,
 } from '../lib/composerRefs';
 import { WAITING_ON_YOU } from '../lib/ownerRequests';
+import {
+  ContextActions,
+  CoordinatorHandedOverBanner,
+  CoordinatorHandoffConfirm,
+  CoordinatorHandoffFailure,
+  CoordinatorHandoffProgress,
+  CoordinatorHandoffReceivedCard,
+  coordinatorHandoffRequest,
+  type ContextActionsProps,
+  type CoordinatorHandoffAction,
+} from './CoordinatorHandoff';
 import {
   NEAR_BOTTOM,
   READER_INPUT_GRACE_MS,
@@ -813,6 +830,7 @@ function ContextWindowIndicator({
   modelCatalog,
   configured,
   unavailable,
+  actions,
 }: {
   tokens: number;
   /** The window this session reported alongside its tokens, when it did. */
@@ -824,7 +842,11 @@ function ContextWindowIndicator({
   /** Why there will never be a reading: an engine that does not report context use (Cursor CLI over
    *  ACP, docs/cursor-runtime-contract.md §4.1), in a sentence. Never a 0% or a token count then. */
   unavailable?: string;
+  /** Compact and Start a new coordinator, below the gauge (board 01); absent where neither applies. */
+  actions?: Omit<ContextActionsProps, 'pct' | 'onPicked'>;
 }) {
+  // Controlled, so picking an action closes the popover it was picked in.
+  const [open, setOpen] = useState(false);
   if (unavailable) {
     return (
       <Popover
@@ -832,6 +854,8 @@ function ContextWindowIndicator({
         side="top"
         align="end"
         openOnHover
+        open={open}
+        onOpenChange={setOpen}
         nativeButton={false}
         trigger={
           <span className="composer-pill composer-usage" aria-label="Context window unavailable">
@@ -849,6 +873,7 @@ function ContextWindowIndicator({
             <div className="cu-reset">{unavailable}</div>
           </div>
         </div>
+        {actions && <ContextActions {...actions} pct={0} onPicked={() => setOpen(false)} />}
       </Popover>
     );
   }
@@ -870,7 +895,7 @@ function ContextWindowIndicator({
           <span className="cu-pct">{headline}</span>
         </div>
         {sized && (
-          <div className={`runner-util ${pct >= 90 ? 'full' : ''}`}>
+          <div className={`runner-util ${pct >= 90 ? 'danger' : pct >= 75 ? 'full' : ''}`}>
             <span className="runner-util-fill" style={{ width: `${pct}%` }} />
           </div>
         )}
@@ -893,6 +918,8 @@ function ContextWindowIndicator({
       side="top"
       align="end"
       openOnHover
+      open={open}
+      onOpenChange={setOpen}
       // The pill stays the span it was drawn as; the popover makes it a button for the keyboard.
       nativeButton={false}
       trigger={
@@ -912,6 +939,7 @@ function ContextWindowIndicator({
       }
     >
       {pop}
+      {actions && <ContextActions {...actions} pct={pct} onPicked={() => setOpen(false)} />}
     </Popover>
   );
 }
@@ -5928,6 +5956,8 @@ export function WorkspaceView({
       // and the toast below would be gone by the time anyone looks.
       if (vars.held) {
         if (vars.firstWorkspace?.runnerId === runner.id) setup.failHeld(e.message);
+        // Compact, from the Context popover: no composer holds it, so the toast is where it fails.
+        else if (!vars.firstWorkspace) message.error("Couldn't compact", e.message);
         return;
       }
       setText((draft) => composerDraftAfterSend(draft, false));
@@ -7218,6 +7248,80 @@ export function WorkspaceView({
     () => composerSlashItems(runner.commands, runner.skills, codexComposer, shownEngine, composerWorkspaceId),
     [runner.commands, runner.skills, composerWorkspaceId, codexComposer, shownEngine],
   );
+  // ── Compact and Start a new coordinator (boards 01 and 02, docs/coordinator-handoff.md) ──
+  // The handoff as the open session's detail and `session.updated` carry it: on the outgoing
+  // coordinator (`coordinatorHandoff`) and on its successor (`coordinatorHandoffReceived`).
+  const handoffRow = (selected ? (selectedSession ?? selected) : null) as any;
+  const coordinatorHandoff: SessionCoordinatorHandoff | null = handoffRow?.coordinatorHandoff ?? null;
+  const coordinatorHandoffReceived: SessionCoordinatorHandoffReceived | null =
+    handoffRow?.coordinatorHandoffReceived ?? null;
+  const handingOver = coordinatorHandoff?.state === 'WRITING' || coordinatorHandoff?.state === 'HANDING_OVER';
+  const coordinatorHandedOver = coordinatorHandoff?.state === 'COMPLETED';
+  const turnRunning = !!handoffRow && isGenerating(handoffRow, sessionRunStateOf(handoffRow));
+  // Only the project's current coordinator is its COORDINATOR member, and only while it is not completed.
+  const handoffProjectId: string | null =
+    handoffRow && !selectedTrashed && handoffRow.projectMembership?.role === 'COORDINATOR'
+      && sessionLifecycleStateOf(handoffRow) !== 'COMPLETED'
+      ? handoffRow.projectMembership.projectId
+      : null;
+  // Compact is the engine's own `/compact`, offered where the engine advertises it among its slash
+  // assets (Claude Code does; Cursor, Codex and the engines without a registry do not).
+  const compactOffered =
+    !!selected && !selectedTrashed && !selectedMissing && !handingOver && !coordinatorHandedOver
+    && slashItems.some((it) => it.type === 'command' && it.name === 'compact');
+  const [handoffConfirm, setHandoffConfirm] = useState<{ projectId: string; projectTitle: string; running: boolean } | null>(null);
+  // The outgoing coordinator the owner handed over from here: once its successor exists, go there.
+  const [followHandoff, setFollowHandoff] = useState<string | null>(null);
+  const handoffAction = useMutation({
+    mutationFn: ({ projectId, action }: { projectId: string; action: CoordinatorHandoffAction; sessionId: string }) =>
+      coordinatorHandoffRequest(projectId, action),
+    onSuccess: (view, { sessionId, action }) => {
+      qc.invalidateQueries({ queryKey: ['session', sessionId] });
+      refreshSessionLists();
+      if (action !== 'cancel') setFollowHandoff(sessionId);
+      if (view.handedOverToSessionId && selectedId === sessionId) navigate(sessionPath(view.handedOverToSessionId));
+    },
+    onError: (e: Error) => message.error("Couldn't hand over", e.message),
+  });
+  const runHandoffAction = (action: CoordinatorHandoffAction): void => {
+    const projectId = handoffRow?.projectMembership?.projectId ?? handoffRow?.projectId;
+    if (!projectId || !selectedId || handoffAction.isPending) return;
+    handoffAction.mutate({ projectId, action, sessionId: selectedId });
+  };
+  useEffect(() => {
+    if (!followHandoff || followHandoff !== selectedId) return;
+    if (coordinatorHandoff?.state === 'COMPLETED' && coordinatorHandoff.handedOverToSessionId) {
+      setFollowHandoff(null);
+      navigate(sessionPath(coordinatorHandoff.handedOverToSessionId));
+    }
+  }, [followHandoff, selectedId, coordinatorHandoff?.state, coordinatorHandoff?.handedOverToSessionId]);
+  const composerContextActions: Omit<ContextActionsProps, 'pct' | 'onPicked'> | undefined =
+    compactOffered || (handoffProjectId && !handingOver && !coordinatorHandedOver)
+      ? {
+          running: turnRunning,
+          compact: compactOffered
+            ? {
+                // Through the send path, as if typed — but by itself: whatever is in the composer stays.
+                onCompact: () => {
+                  if (send.isPending) return;
+                  pinToBottom();
+                  send.mutate({ content: '/compact', images: [], intent: 'NEXT_TURN', held: true });
+                },
+              }
+            : undefined,
+          startCoordinator:
+            handoffProjectId && !handingOver && !coordinatorHandedOver
+              ? {
+                  onStart: () =>
+                    setHandoffConfirm({
+                      projectId: handoffProjectId,
+                      projectTitle: handoffRow?.projectMembership?.projectTitle ?? 'This project',
+                      running: turnRunning,
+                    }),
+                }
+              : undefined,
+        }
+      : undefined;
   // "Chat about this" on a question card hands the reply off to the main composer: show the
   // reply-context chip and focus the box. The send itself is rerouted to a deny in onSend.
   const startChatReply = (id: string, question: string): void => {
@@ -8012,7 +8116,8 @@ export function WorkspaceView({
     workspacesForRunner.find((a) => a.id === shownWorkspaceId)?.name ??
     selected?.workspace?.name ??
     lockedWorkspace?.name;
-  const composerDisabled = selectedTrashed || selectedMissing;
+  // While the outgoing coordinator writes its note and hands over, nothing more goes to it (board 02-2).
+  const composerDisabled = selectedTrashed || selectedMissing || handingOver;
   // Switching session leaves whatever history recall was in progress; reset the cursor
   // so the next Up starts fresh from the (per-session) history.
   useEffect(() => {
@@ -9069,6 +9174,8 @@ export function WorkspaceView({
         : '';
   const composerPlaceholder = selectedTrashed
     ? 'Restore this session to continue'
+    : handingOver
+      ? COORDINATOR_HANDOFF_COPY.handingOver
     : selectedMissing
       ? 'Session not found'
       : sameSessionSendBlocked
@@ -10271,6 +10378,14 @@ export function WorkspaceView({
               {/* An unvisited session's history is still in flight: hold the shape of a
                   conversation instead of a blank pane. */}
               {placeholder === 'skeleton' && <TranscriptSkeleton />}
+              {/* The successor opens with its predecessor's note and the waits that moved here (board
+                  02-3): the conversation's first lines, so drawn once its first page is. */}
+              {selected && !selectedTrashed && coordinatorHandoffReceived && !hasMoreOlder && placeholder !== 'skeleton' && (
+                <CoordinatorHandoffReceivedCard
+                  received={coordinatorHandoffReceived}
+                  onOpenPrevious={() => navigate(sessionPath(coordinatorHandoffReceived.handoffFromSessionId))}
+                />
+              )}
               {/* The transcript, in the contexts its cards read (SessionConversation). */}
               <MainCheckoutCtx.Provider value={mainCheckout.host}>
               <QueuedFootCtx.Provider value={queuedFoot}>
@@ -10482,6 +10597,26 @@ export function WorkspaceView({
               {localStatusCards.map((card) => (
                 <SessionStatusCard card={card} key={card.id} />
               ))}
+              {/* The outgoing coordinator writing its handoff note, handing over, or failing to (board
+                  02-2, 02-5). */}
+              {selected && !selectedTrashed && coordinatorHandoff && handingOver && (
+                <CoordinatorHandoffProgress
+                  handoff={coordinatorHandoff}
+                  compacting={handoffRow?.enginePhase === 'compacting'}
+                  busy={handoffAction.isPending}
+                  onSkip={() => runHandoffAction('skip')}
+                  onCancel={() => runHandoffAction('cancel')}
+                />
+              )}
+              {selected && !selectedTrashed && coordinatorHandoff?.state === 'FAILED' && (
+                <CoordinatorHandoffFailure
+                  handoff={coordinatorHandoff}
+                  busy={handoffAction.isPending}
+                  onRetry={() => runHandoffAction('retry')}
+                  onSkip={() => runHandoffAction('skip')}
+                  onKeep={() => runHandoffAction('cancel')}
+                />
+              )}
               {/* The live drafts used to render here, after everything. They render inside the
                   transcript now, at the seq the stretch began — see StreamingDraftsCtx. */}
               {!selectedTrashed && approvals.map((a) => (
@@ -10860,6 +10995,17 @@ export function WorkspaceView({
             {composerProviderNote}
           </div>
         )}
+        {/* A coordinator that handed over takes nothing more: its composer's place says where the
+            project went (board 02-4). */}
+        {coordinatorHandedOver ? (
+          <CoordinatorHandedOverBanner
+            onOpen={
+              coordinatorHandoff?.handedOverToSessionId
+                ? () => navigate(sessionPath(coordinatorHandoff.handedOverToSessionId as string))
+                : undefined
+            }
+          />
+        ) : (
         <SessionComposer
           text={text}
           setText={setText}
@@ -10946,12 +11092,31 @@ export function WorkspaceView({
           configuredProviders={configuredProviders}
           showStop={showStop}
           onStop={() => selected && control.mutate(selected.id)}
-          canSend={canSend}
+          canSend={canSend && !handingOver}
           sending={send.isPending}
           onSend={onSend}
           queueOffered={queueOffered}
           defaultSendIntent={defaultSendIntent}
+          contextActions={composerContextActions}
         />
+        )}
+        {handoffConfirm && (
+          <CoordinatorHandoffConfirm
+            projectId={handoffConfirm.projectId}
+            projectTitle={handoffConfirm.projectTitle}
+            running={handoffConfirm.running}
+            onClose={() => setHandoffConfirm(null)}
+            onHandOver={async () => {
+              if (!selectedId) return;
+              const sessionId = selectedId;
+              const view = await coordinatorHandoffRequest(handoffConfirm.projectId, 'handoff');
+              setFollowHandoff(sessionId);
+              qc.invalidateQueries({ queryKey: ['session', sessionId] });
+              refreshSessionLists();
+              if (view.handedOverToSessionId) navigate(sessionPath(view.handedOverToSessionId));
+            }}
+          />
+        )}
       </div>
         </>
         )}
@@ -11108,6 +11273,8 @@ export interface SessionComposerProps {
   onSend: (intentOverride?: SessionTurnIntent) => void;
   queueOffered: boolean;
   defaultSendIntent: SessionTurnIntent;
+  /** Compact and Start a new coordinator in the Context popover (board 01). */
+  contextActions?: Omit<ContextActionsProps, 'pct' | 'onPicked'>;
 }
 
 export function SessionComposer({
@@ -11178,6 +11345,7 @@ export function SessionComposer({
   onSend,
   queueOffered,
   defaultSendIntent,
+  contextActions,
 }: SessionComposerProps) {
   // The textarea's scroll offset, mirrored so the chip layer stays in step once the draft passes
   // its auto-grow cap.
@@ -12074,6 +12242,7 @@ export function SessionComposer({
             modelCatalog={runner.modelCatalog}
             configured={configuredProviders}
             unavailable={shownEngine === AgentProvider.CURSOR ? CURSOR_CONTEXT_UNAVAILABLE : undefined}
+            actions={contextActions}
           />
         )}
         {showStop ? (

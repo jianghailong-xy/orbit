@@ -1,5 +1,5 @@
 {
-  "_comment": "Contract between the runner's ownerChatReply (src/runner-go/mcp.go) and the clients' readers of it: web @orbit/shared ownerChatReply.ts, OrbitKit OwnerChatReply.swift, Android OwnerChatReply.kt. The runner writes cases[0].result for writerWords.",
+  "_comment": "Contract between the runner's ownerChatReply (src/runner-go/mcp.go) and the clients' readers of it: web @orbit/shared ownerChatReply.ts, OrbitKit OwnerChatReply.swift, Android OwnerChatReply.kt. The runner writes cases[0].result for writerWords as the tool result's text, and the receipt case's result as its structuredContent (tool_receipt.go), which Claude Code and Codex record in place of the text.",
   "writerWords": "Will there be two databases during the move?",
   "cases": [
     {
@@ -25,6 +25,16 @@
     {
       "name": "the lead without the rest",
       "result": "Not done yet, and not a no: the owner pressed \"Chat about this\" on the card to talk it over before deciding. Their message:\n\ncut off",
+      "words": null
+    },
+    {
+      "name": "the receipt an engine shows in place of the text",
+      "result": "{\"receiptVersion\":1,\"ok\":false,\"outcome\":\"chat\",\"operation\":\"project_create\",\"action\":\"create\",\"entityType\":\"project\",\"id\":null,\"status\":null,\"changedFields\":[],\"approval\":{\"required\":true,\"kind\":\"card\",\"card\":\"orbit_project_create\",\"outcome\":\"chat\",\"decision\":\"DENIED\",\"decidedBy\":\"user-1\",\"message\":\"Will there be two databases during the move?\"},\"idempotency\":{\"kind\":\"none\"},\"text\":\"Not done yet, and not a no: the owner pressed \\\"Chat about this\\\" on the card to talk it over before deciding. Their message:\\n\\nWill there be two databases during the move?\\n\\nReply to it as you would to any message from them. Nothing was written. If the conversation still leads to this, call the tool again, changed as agreed: that puts a new card in front of them.\"}",
+      "words": "Will there be two databases during the move?"
+    },
+    {
+      "name": "a declined card's receipt",
+      "result": "{\"receiptVersion\":1,\"ok\":false,\"outcome\":\"declined\",\"operation\":\"project_create\",\"action\":\"create\",\"entityType\":\"project\",\"id\":null,\"status\":null,\"changedFields\":[],\"approval\":{\"required\":true,\"kind\":\"card\",\"card\":\"orbit_project_create\",\"outcome\":\"declined\",\"decision\":\"DENIED\",\"decidedBy\":\"user-1\",\"message\":\"denied by the user\"},\"idempotency\":{\"kind\":\"none\"},\"error\":{\"code\":\"APPROVAL_DECLINED\",\"message\":\"the human rejected this project: denied by the user\",\"retryable\":false,\"retry\":\"do_not_retry\"}}",
       "words": null
     }
   ]

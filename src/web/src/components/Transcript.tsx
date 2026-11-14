@@ -52,6 +52,7 @@ import {
   parseQuotaResetAt,
   isAsyncAgentLaunchAck,
   progressBadge,
+  COORDINATOR_HANDOFF_PROMPT_HEAD,
   QUESTION_RECORD_COPY,
   questionAnswerLine,
   questionLead,
@@ -1290,6 +1291,9 @@ function buildTranscript(
         // The same for a task run's opening turn (lib/taskStartCard): use the payload, or the
         // opening payload's snapshot for an exact retry, never infer a new card from text alone.
         const text = recorded ? recorded.text : p.text ? String(p.text) : '';
+        // The platform's ask for a coordinator's handoff note is not a message anyone sent: the
+        // conversation shows the handoff's own row instead (docs/coordinator-handoff.md).
+        if (text.startsWith(COORDINATOR_HANDOFF_PROMPT_HEAD)) break;
         const taskStartFromPayload = parseTaskStartCard(p);
         const retriedTaskStart = taskStartForRetry(parent, text);
         const taskStart = taskStartFromPayload ?? retriedTaskStart;

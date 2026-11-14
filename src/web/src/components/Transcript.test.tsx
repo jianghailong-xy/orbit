@@ -1469,6 +1469,29 @@ describe('Orbit write tool cards', () => {
     }
   });
 
+  it("draws the owner's words from the chat receipt an engine records in place of the text", () => {
+    // Claude Code and Codex record a result's structuredContent, the runner's receipt, instead of its
+    // text; a chat's receipt carries the same reply as its `text`.
+    const fixture = JSON.parse(
+      readFileSync(resolve(__dirname, '../../../shared/src/owner-chat-reply.fixture.json'), 'utf8'),
+    ) as { writerWords: string; cases: { name: string; result: string }[] };
+    const receipt = fixture.cases.find((c) => c.name === 'the receipt an engine shows in place of the text')!.result;
+    for (const content of [receipt, [{ type: 'text', text: receipt }]]) {
+      const html = renderToStaticMarkup(
+        <MemoryRouter>
+          <Transcript
+            events={[
+              toolEvent('mcp__orbit__project_create', { title: 'Move the database' }),
+              { seq: 2, type: 'tool_result', payload: { toolUseId: 't1', content } },
+            ]}
+          />
+        </MemoryRouter>,
+      );
+      expect(html).toContain('chat-msg chat-user');
+      expect(html).toContain(fixture.writerWords);
+    }
+  });
+
   it('says what a single create wrote, by name', () => {
     // One size down from the batch: the row names the task and carries its description, instead of
     // falling through to `orbit · task_create` over a dump of the call's own JSON.

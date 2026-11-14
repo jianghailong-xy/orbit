@@ -318,7 +318,7 @@ public enum SettingsCopy {
     /// The account's one switch, where a form has room to label and explain it (macOS). On iOS' Sessions
     /// page the row is the switch, under the row's own name, and the hint is its footer.
     public static let letSessionsOrchestrate = "Let sessions orchestrate"
-    public static let letSessionsOrchestrateHint = "Sessions in every workspace can spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused."
+    public static let letSessionsOrchestrateHint = "Sessions in every workspace can start and manage other sessions, and manage your agents and runners, through the orbit MCP tools and CLI: create, change and delete agents, install engines on runners and delete them. Off → those tools are hidden and refused."
 
     // MARK: Smart model selection (the web page's Session defaults card)
 

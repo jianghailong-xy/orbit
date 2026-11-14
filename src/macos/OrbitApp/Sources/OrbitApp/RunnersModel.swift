@@ -65,6 +65,14 @@ final class RunnersModel {
         if let counts = try? await api.sessionCounts() { sessionCounts = counts }
     }
 
+    /// GET /runners/:id/resources, by runner: a runner page's Resources (`MachineResources`).
+    private(set) var resources: [String: RunnerResourcesAnswer] = [:]
+
+    /// A failed read keeps the last answer rather than showing none.
+    func loadResources(_ id: String) async {
+        if let answer = try? await api.runnerResources(id) { resources[id] = answer }
+    }
+
     // MARK: presses — each answers nil once it went through, else why not, in a sentence
 
     @discardableResult

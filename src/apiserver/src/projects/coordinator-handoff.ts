@@ -1,4 +1,5 @@
 import {
+  COORDINATOR_HANDOFF_PROMPT_HEAD,
   COORDINATOR_HANDOFF_SECTIONS,
   COORDINATOR_HANDOFF_TURN_PREFIX,
   type CoordinatorHandoffFailureCode,
@@ -39,7 +40,7 @@ export function coordinatorHandoffTurnId(handoffId: string, attempt: number): st
 export function coordinatorHandoffPrompt(): string {
   const sections = COORDINATOR_HANDOFF_SECTIONS.map((title) => `${title}`).join('\n');
   return [
-    'From Orbit · handoff note',
+    COORDINATOR_HANDOFF_PROMPT_HEAD,
     'The owner is handing this project over to a new coordinator conversation. Before this one is completed, '
       + 'write the handoff note the new coordinator will start from.',
     'Your whole reply is the note. Use exactly these four sections, in this order, each title on a line of '

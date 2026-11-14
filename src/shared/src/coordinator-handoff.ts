@@ -22,6 +22,10 @@
 /** Every note turn's `clientTurnId` starts here: a platform turn, not the owner's message. */
 export const COORDINATOR_HANDOFF_TURN_PREFIX = 'coordinator-handoff:v1:';
 
+/** The note turn's first line. Its user event carries no turn key, so clients tell the platform's
+ *  prompt by this line and keep it out of the transcript. */
+export const COORDINATOR_HANDOFF_PROMPT_HEAD = 'From Orbit · handoff note';
+
 /** The four sections the note is asked for, in order, as the successor's card titles them. */
 export const COORDINATOR_HANDOFF_SECTIONS = [
   'Where things stand',

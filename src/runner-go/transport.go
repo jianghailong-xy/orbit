@@ -245,6 +245,9 @@ type Transport struct {
 	// noTakeoverBatch is set once the control plane has answered the batch takeover 404 or 405: it
 	// predates it, and every takeover from then on is one request per session, as before it.
 	noTakeoverBatch atomic.Bool
+	// observer hears about every request and card of the tool call it was set for (transport_observe.go).
+	observerMu sync.Mutex
+	observer   func(transportEvent)
 }
 
 // eventStreams is the sessions' event streams of the daemon's transport (link_events.go). Nil on any
@@ -357,12 +360,16 @@ func (t *Transport) doHeaders(ctx context.Context, method, path string, body, ou
 // (wiki_conn.go). On the daemon's transport a daemon route's call goes over the runner link
 // instead (linkMode.doVia); every other call is doHTTP's.
 func (t *Transport) doVia(ctx context.Context, client *http.Client, method, path string, body, out interface{}, timeout time.Duration, headers map[string]string) error {
+	var err error
 	if t.link != nil {
-		return t.link.doVia(ctx, method, path, body, out, timeout, headers, func(ctx context.Context) error {
+		err = t.link.doVia(ctx, method, path, body, out, timeout, headers, func(ctx context.Context) error {
 			return t.doHTTP(ctx, client, method, path, body, out, timeout, headers)
 		})
+	} else {
+		err = t.doHTTP(ctx, client, method, path, body, out, timeout, headers)
 	}
-	return t.doHTTP(ctx, client, method, path, body, out, timeout, headers)
+	t.observe(transportEvent{Kind: transportEventRequest, Method: method, Path: path, Err: err})
+	return err
 }
 
 // doHTTP is one call over HTTPS, as every call went before the runner link.
@@ -1256,6 +1263,7 @@ func (t *Transport) createApproval(ctx context.Context, sessionID string, body i
 	if err := t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/approvals", body, &r, 20*time.Second); err != nil {
 		return "", err
 	}
+	t.observe(transportEvent{Kind: transportEventApprovalFiled, ApprovalID: r.ID, ToolName: approvalToolName(body)})
 	return r.ID, nil
 }
 
@@ -2235,16 +2243,55 @@ func (t *Transport) removeTaskDependency(id, dependsOnTaskID string) (json.RawMe
 }
 
 func (t *Transport) createTask(agentID, sessionID string, body interface{}) (json.RawMessage, error) {
-	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/tasks", body, &out, taskOpTimeout, taskCreateHeaders(agentID, sessionID))
-	return out, err
+	return resendKeyedCreate(body, func() (json.RawMessage, error) {
+		var out json.RawMessage
+		err := t.doHeaders(nil, "POST", "/runner/tasks", body, &out, taskOpTimeout, taskCreateHeaders(agentID, sessionID))
+		return out, err
+	})
 }
 
 // createTasksBatch writes several tasks in one atomic call; body is {"tasks":[...]}.
 func (t *Transport) createTasksBatch(agentID, sessionID string, body interface{}) (json.RawMessage, error) {
-	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/tasks/batch-create", body, &out, taskOpTimeout, taskCreateHeaders(agentID, sessionID))
+	return resendKeyedCreate(body, func() (json.RawMessage, error) {
+		var out json.RawMessage
+		err := t.doHeaders(nil, "POST", "/runner/tasks/batch-create", body, &out, taskOpTimeout, taskCreateHeaders(agentID, sessionID))
+		return out, err
+	})
+}
+
+// resendKeyedCreate sends a create and, when — and only when — the body carries the caller's
+// idempotencyKey, sends it again under that same key while the answer is lost: a dropped connection,
+// a timeout, a body cut off after the status line. The key is what makes that safe (the server answers
+// the second delivery with what the first one wrote), so a create without one is sent exactly once and
+// a lost answer is handed back for the caller to re-read before it decides (docs/orbit-agent-contract.md
+// §5.2). A refusal the server answered is the result and is never resent. Bounded like startTask's.
+func resendKeyedCreate(body interface{}, send func() (json.RawMessage, error)) (json.RawMessage, error) {
+	out, err := send()
+	if !bodyCarriesIdempotencyKey(body) {
+		return out, err
+	}
+	delay := runRequestResendDelay
+	for attempt := 1; attempt < runRequestResendAttempts && err != nil && createAnswerWasLost(err); attempt++ {
+		time.Sleep(delay)
+		delay *= 2
+		out, err = send()
+	}
 	return out, err
+}
+
+func bodyCarriesIdempotencyKey(body interface{}) bool {
+	m, ok := body.(map[string]interface{})
+	if !ok {
+		return false
+	}
+	key, _ := m["idempotencyKey"].(string)
+	return strings.TrimSpace(key) != ""
+}
+
+// createAnswerWasLost says whether a create's attempt ended without the server's answer.
+func createAnswerWasLost(err error) bool {
+	var answered *transportHTTPError
+	return !errors.As(err, &answered)
 }
 
 // pinTasksBatch re-pins many tasks in one request — the door for "change the model of every task
@@ -2591,12 +2638,17 @@ func (t *Transport) dagPreview(id string, body map[string]interface{}) (json.Raw
 
 // dagApply commits that batch, after a human allowed it. The server re-validates rather than
 // trusting the preview: approval happens at human speed and the graph may have moved.
-func (t *Transport) dagApply(id string, body map[string]interface{}) (json.RawMessage, error) {
+//
+// The session is passed rather than re-read from the environment: the caller already holds the
+// identity it acts for (`orbit mcp` knows its session, the CLI resolves it once), and the server
+// reads this header as WHO is writing — the rule that a restructure from a session needs the
+// answered card hangs off it, so it must not depend on a second read that can disagree.
+func (t *Transport) dagApply(id string, body map[string]interface{}, sessionID string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/task-lists/"+url.PathEscape(id)+"/dag-apply", body, &out, taskOpTimeout, callingSessionHeader())
+	err := t.doHeaders(nil, "POST", "/runner/task-lists/"+url.PathEscape(id)+"/dag-apply", body, &out, taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }
 
