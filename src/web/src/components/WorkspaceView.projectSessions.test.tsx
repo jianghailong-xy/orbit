@@ -1824,7 +1824,13 @@ describe('project-specific supplemental reads', { timeout: 60_000 }, () => {
     remoteRows = [remote(829, 'Remote waiting question', { pendingApprovals: 1, waitingKind: 'OWNER_CONFIRMATION' })];
     await mount();
     await until(() => expect(preview()?.textContent).toContain('Remote waiting question'));
-    if (surface === 'page') await openSessions();
+    // The row itself opens the member waiting on you; the menu's Sessions still opens the page at the
+    // coordinator, which is the page this measures.
+    if (surface === 'page') {
+      await hoverProjectMenu();
+      await click(menuItem('Sessions'), 'the project menu’s Sessions');
+      await until(() => expect(page()).not.toBeNull());
+    }
     const stream = FakeEventSource.streams.find((candidate) => candidate.url.startsWith('/api/events?'));
     expect(stream).toBeTruthy();
     await act(async () => stream!.onopen?.());
