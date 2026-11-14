@@ -12,7 +12,8 @@ import { fileURLToPath } from 'node:url';
  *  - ci.yml's job runs on a dispatch only, as the same check the pull request runs (the same pinned
  *    action and settings), against explicit refs: main as the job resolves it, and the run's commit;
  *  - on every other event its skipped job reports under another name, so no skipped check called
- *    `Dependency review` stands beside the pull request's real one, where its skip would pass.
+ *    `Dependency review` stands beside the pull request's real one, where its skip would pass. GitHub
+ *    reports a skipped job's name expression unevaluated, as its text, which is never that name.
  *
  * The workflows are read as text: there is no YAML parser at the root, and the shapes checked here
  * are the plain block layout these two files use.
@@ -70,16 +71,26 @@ function keyOf(lines, key) {
   return null;
 }
 
+/** Whether a job runs on `event`: only an `if:` of the form `github.event_name == '<e>'` is read as excluding one. */
+function runsOn(lines, event) {
+  const only = /^github\.event_name == '([a-z_]+)'$/.exec(keyOf(lines, 'if') ?? '');
+  return only ? only[1] === event : true;
+}
+
 /**
- * The name a job's check reports under `event`. A literal is itself; the one expression shape allowed
- * for a name that mentions the context is `${{ github.event_name == '<e>' && '<a>' || '<b>' }}`, which
- * is read as GitHub evaluates it. Any other expression is a problem, not a guess.
+ * The name a job's check reports under `event`, as GitHub reports it. A literal is itself. A name that is one
+ * expression is evaluated only where the job runs; where its `if:` skips it, GitHub reports the expression's
+ * own text without evaluating it (probe run 43607713030, a push: the skipped job's check was named
+ * `github.event_name == 'workflow_dispatch' && 'Dependency review' || 'Dependency review (workflow_dispatch only)'`).
+ * The one expression read here is `github.event_name == '<e>' && '<a>' || '<b>'`; any other comes back null,
+ * a problem rather than a guess.
  */
-function checkName(name, event) {
-  const expression = /^\$\{\{\s*github\.event_name == '([a-z_]+)' && '([^']*)' \|\| '([^']*)'\s*\}\}$/.exec(name);
-  if (expression) return expression[1] === event ? expression[2] : expression[3];
-  if (name.includes('${{')) return null;
-  return name;
+function checkName(name, event, runs) {
+  const inner = /^\$\{\{\s*(.*?)\s*\}\}$/.exec(name)?.[1];
+  if (inner === undefined) return name.includes('${{') ? null : name;
+  if (!runs) return inner;
+  const expression = /^github\.event_name == '([a-z_]+)' && '([^']*)' \|\| '([^']*)'$/.exec(inner);
+  return expression ? (expression[1] === event ? expression[2] : expression[3]) : null;
 }
 
 /** The `with:` inputs of the step that uses `action` in a job, as key → value. */
@@ -134,7 +145,7 @@ export function problems(ci, pr) {
   for (const [jobId, jobLines] of jobs) {
     const name = keyOf(jobLines, 'name') ?? jobId;
     for (const event of EVENTS) {
-      const reported = checkName(name, event);
+      const reported = checkName(name, event, runsOn(jobLines, event));
       if (reported === null && name.includes(CONTEXT)) {
         found.push(`${CI} job ${jobId}'s name cannot be read: ${name}`);
       } else if (reported === CONTEXT && !(jobId === id && event === 'workflow_dispatch')) {
@@ -142,7 +153,7 @@ export function problems(ci, pr) {
       }
     }
   }
-  if (checkName(keyOf(lines, 'name') ?? id, 'workflow_dispatch') !== CONTEXT) {
+  if (checkName(keyOf(lines, 'name') ?? id, 'workflow_dispatch', runsOn(lines, 'workflow_dispatch')) !== CONTEXT) {
     found.push(`on workflow_dispatch, ${CI} job ${id} must report ${CONTEXT}`);
   }
 
@@ -195,4 +206,14 @@ test('the checks refuse the shapes that would let a skipped job pass for Depende
   const second = ci.replace('\n  dependency-audit:\n', `\n  impostor:\n    name: ${CONTEXT}\n    runs-on: ubuntu-latest\n\n  dependency-audit:\n`);
   assert.ok(problems(second, pr).some((p) => p.includes('job impostor reports a check named')));
   assert.ok(problems(ci, pr.replace('on:\n  pull_request:\n', 'on:\n  pull_request:\n  push:\n')).some((p) => p.includes('pull_request alone')));
+});
+
+test('the job reports what the probe runs saw: its text when skipped, Dependency review on a dispatch', () => {
+  const [, lines] = [...jobsOf(read(CI))].find(([, job]) => job.some((line) => line.includes(`uses: ${ACTION}`)));
+  const name = keyOf(lines, 'name');
+  // Probe run 43607713030, a push: the skipped job's check was named by its expression's text.
+  const skipped = "github.event_name == 'workflow_dispatch' && 'Dependency review' || 'Dependency review (workflow_dispatch only)'";
+  for (const event of ['push', 'pull_request']) assert.equal(checkName(name, event, runsOn(lines, event)), skipped);
+  // Probe run 43607986333, a dispatch: the job ran under the required name.
+  assert.equal(checkName(name, 'workflow_dispatch', runsOn(lines, 'workflow_dispatch')), CONTEXT);
 });

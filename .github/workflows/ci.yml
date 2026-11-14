@@ -123,11 +123,13 @@ jobs:
   # stands when the job runs, both passed explicitly because a dispatch has no pull request to read
   # them from.
   #
-  # Its name depends on the event, and that is the point. A job skipped by its `if:` still reports a
-  # check under its name, and a skipped check passes branch protection. Named `Dependency review` on
-  # a pull request or a push to main, the skipped job would be a second check of that name beside
-  # the pull request's real one, and its skip would read as that check's pass. So it is called
-  # `Dependency review` only where it runs. test/ci-dependency-review.test.mjs holds both rules.
+  # Its name is an expression, and that is the point. A job skipped by its `if:` still reports a
+  # check, and a skipped check passes branch protection. Named plainly `Dependency review`, the
+  # skipped job on a pull request or a push to main would be a second check of that name beside the
+  # pull request's real one, and its skip would read as that check's pass. GitHub evaluates a job's
+  # name only where the job runs: skipped, it reports the expression's text (probe run 43607713030,
+  # a push), which is never `Dependency review`, while a dispatch evaluates it to exactly that (probe
+  # run 43607986333). test/ci-dependency-review.test.mjs holds both rules.
   dependency-review:
     name: ${{ github.event_name == 'workflow_dispatch' && 'Dependency review' || 'Dependency review (workflow_dispatch only)' }}
     if: github.event_name == 'workflow_dispatch'
