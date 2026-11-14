@@ -880,7 +880,8 @@ final class WikiStartParityTests: XCTestCase {
                     "the web's picker")
 
         let drawer = try native("Views/CompactShell.swift")
-        assertSays(drawer, "newWiki: model.wiki?.spaces.isEmpty == false,", in: "CompactShell.swift")
+        // The last argument since the drawer lost its Waiting on you row (project 34vUNVEqe1OFz1uHNULOO).
+        assertSays(drawer, "newWiki: model.wiki?.spaces.isEmpty == false)) { row in", in: "CompactShell.swift")
         assertSays(drawer, "case .newWiki:        newWikiRow", in: "CompactShell.swift")
         let row = try slice(drawer, from: "private var newWikiRow: some View {", to: ".accessibilityIdentifier(\"drawer-new-wiki\")")
         assertOrder(row, ["model.wiki?.creating = true", "Image(systemName: \"plus\")", "Text(WikiStartCopy.newWiki)", ".foregroundStyle(.secondary)"],
