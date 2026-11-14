@@ -4856,11 +4856,17 @@ button.toast--pill:focus-visible {
     border-radius: 6px;
   }
 }
-/* A project entry is the one focusable session row; draw its ring inside, as folder rows do, so the
-   list's edge doesn't clip the browser's outer default ring. */
+/* A project entry is the one focusable session row. Keyboard focus takes the row's hover tint, not a
+   ring: the browser's outer ring is clipped by the list's edge, and an inner one is covered on the
+   right by the kebab's fade. */
 .session-project-row:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: -2px;
+  outline: none;
+  background: var(--bg-hover);
+  --session-menu-surface: var(--bg-hover);
+}
+.session-project-row.active:focus-visible {
+  background: var(--brand-tint-hover);
+  --session-menu-surface: var(--brand-tint-hover);
 }
 /* Trash rows are managed, not opened — no pointer affordance. */
 .session-row.no-open {
