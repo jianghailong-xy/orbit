@@ -5,7 +5,7 @@ import { uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
- * The receipt of one `project_create` or `session_create` request (docs/recovery-contract.md §7,
+ * The receipt of one `project_create` or `session_create` request (docs/recovery-contract.md §8,
  * migration 0645).
  *
  * The runner names every create it sends with `X-Orbit-Request-Id`, drawn once per tool call or CLI

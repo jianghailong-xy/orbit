@@ -122,9 +122,10 @@ class ComposerDeviceTest {
         compose.onNode(second).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10000) { stats()["config"]!!.jsonObject["account"]?.jsonPrimitive?.content == "1a2b3c4d" }
         // The menu's rows are pressable again once the move the fixture just took is settled in the app and the session read again.
-        val expired = hasText("Expired account") and hasText("Not signed in, sign in →")
-        compose.waitUntil(10000) { compose.onAllNodes(expired and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(expired).performScrollTo().assertIsEnabled()
+        // A signed-out account is not one the runner can run, so it has no row.
+        compose.waitUntil(10000) { compose.onAllNodes(second and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(second).performScrollTo().assertIsEnabled()
+        assertTrue(compose.onAllNodes(hasText("Expired account")).fetchSemanticsNodes().isEmpty())
         compose.onNodeWithText("Close").performClick()
         control("""{"status":"RUNNING"}"""); compose.runOnIdle { app.realtime.refreshSession() }; awaitText("Stop")
         // Queued for the next turn while this one runs — Send held offers it — the message waits in the tray above the composer

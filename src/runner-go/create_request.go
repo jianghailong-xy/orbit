@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// project_create and session_create under a request id (docs/recovery-contract.md §7).
+// project_create and session_create under a request id (docs/recovery-contract.md §8).
 //
 // Every create is named once, at the invocation: the id is drawn here, above any resend, and travels in
 // X-Orbit-Request-Id. The control plane keeps a receipt under it (apiserver create-request-receipts.ts),
@@ -64,8 +64,9 @@ type createRequestFailure struct {
 }
 
 // describeCreateFailure is what a failed create tells its caller. retry names how to send it again on this
-// surface (the tool, or the CLI command), look how to check whether it exists.
-func describeCreateFailure(what, retry, look, requestID string, err error) string {
+// surface (the tool, or the CLI command), look how to check whether it exists. It wraps err, so the failure
+// renderer (recovery_render.go) still reads the answer the server gave and the request id it went under.
+func describeCreateFailure(what, retry, look, requestID string, err error) error {
 	env := recoveryOf(err, requestID != "")
 	failure := createRequestFailure{Outcome: "NOT_CREATED", RequestID: requestID, Recovery: env}
 	switch {
@@ -91,7 +92,7 @@ func describeCreateFailure(what, retry, look, requestID string, err error) strin
 		}
 	}
 	receipt, _ := json.MarshalIndent(failure, "", "  ")
-	return fmt.Sprintf("create %s failed: %s\n\n%s\n%s", what, err.Error(), createReceiptLabel, receipt)
+	return fmt.Errorf("create %s failed: %w\n\n%s\n%s", what, err, createReceiptLabel, receipt)
 }
 
 // createRequestMerge is base with extra's headers laid over it; base itself is left as it was.

@@ -247,7 +247,7 @@ func TestCreateReceiptRefusalsSayWhatToDoNext(t *testing.T) {
 
 // With no id to protect a resend, an unknown outcome only ever says to look first.
 func TestAnUnknownOutcomeWithoutARequestIDIsNeverAdvisedAResend(t *testing.T) {
-	text := describeCreateFailure("project", "project_create", "the project list", "", fmt.Errorf("POST /runner/projects: reading response body: %w", io.ErrUnexpectedEOF))
+	text := describeCreateFailure("project", "project_create", "the project list", "", fmt.Errorf("POST /runner/projects: reading response body: %w", io.ErrUnexpectedEOF)).Error()
 	receipt := partialReceipt(t, text)
 	if receipt.Outcome != "UNKNOWN" || receipt.Recovery.Retry.Policy != "VERIFY_THEN_RETRY" ||
 		strings.Contains(receipt.Next, "again with the same") {
@@ -319,5 +319,52 @@ func TestSessionCreateWaitThatFailsKeepsTheChildAndPointsAtSessionGet(t *testing
 				t.Fatalf("create POSTs = %q, want exactly one", posts)
 			}
 		})
+	}
+}
+
+// The failure renderer's structured next step agrees with the create's receipt. A create whose answer
+// was lost under a request id the caller named is offered again under that same id, over MCP and at the
+// CLI; one whose id was drawn for the call is never offered as the same call, because that call would draw
+// a new id and could create a second one.
+func TestACreateFailureReportOffersOnlyTheSameRequestID(t *testing.T) {
+	srv := &receiptServer{t: t, firstAnswer: "drop"}
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+
+	m := headlessCreateMCP(t, ts)
+	named := decodeMCPReport(t, callCreate(m, "project_create", map[string]interface{}{"title": "P", "requestId": "req-mcp"}))
+	if named.Error.Effect != "UNKNOWN" || named.Next.Type != recoveryNextInvoke || named.Next.Tool != "project_create" ||
+		named.Next.Input["requestId"] != "req-mcp" {
+		t.Fatalf("MCP with a named id: %#v", named)
+	}
+	drawn := decodeMCPReport(t, callCreate(m, "project_create", map[string]interface{}{"title": "P"}))
+	if drawn.Error.Effect != "UNKNOWN" || drawn.Next.Type == recoveryNextInvoke {
+		t.Fatalf("MCP with a drawn id is offered as the same call: %#v", drawn)
+	}
+
+	recoveryRenderEnv(t, ts.URL)
+	cliReport := func(args ...string) recoveryReport {
+		t.Helper()
+		out, stderr, err := recoveryCLIProcess(t, append([]string{"project", "create", "--title", "P"}, args...))
+		if err == nil {
+			t.Fatalf("create succeeded: %s", out)
+		}
+		var report recoveryReport
+		if json.Unmarshal([]byte(out), &report) != nil {
+			t.Fatalf("stdout is not one report: %q (stderr %q)", out, stderr)
+		}
+		return report
+	}
+	cliNamed := cliReport("--request-id", "req-cli", "--json")
+	argv := strings.Join(cliNamed.Next.Argv, " ")
+	if cliNamed.Error.Effect != "UNKNOWN" || cliNamed.Next.Type != recoveryNextInvoke || !strings.Contains(argv, "--request-id req-cli") {
+		t.Fatalf("CLI with a named id: %#v", cliNamed)
+	}
+	if cliDrawn := cliReport("--json"); cliDrawn.Error.Effect != "UNKNOWN" || cliDrawn.Next.Type == recoveryNextInvoke {
+		t.Fatalf("CLI with a drawn id is offered as the same call: %#v", cliDrawn)
+	}
+	// Each of the four calls was delivered once: nothing was resent on its own.
+	if got := srv.postIDs(); len(got) != 4 {
+		t.Fatalf("create POSTs = %q, want 4 single deliveries", got)
 	}
 }

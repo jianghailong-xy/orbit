@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -691,7 +690,7 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchest
 	}
 	raw, err := t.createSession(ctx.sessionID, ctx.token, requestID, body)
 	if err != nil {
-		return errors.New(describeCreateFailure("session", "`orbit session create` (--request-id)", "`orbit session list`", requestID, err))
+		return describeCreateFailure("session", "`orbit session create` (--request-id)", "`orbit session list`", requestID, err)
 	}
 	if *wait {
 		// Never an error once the session exists (session_wait.go): a failed read or a wait that ran out

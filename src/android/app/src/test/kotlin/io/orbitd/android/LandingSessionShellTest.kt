@@ -473,7 +473,7 @@ class LandingSessionShellTest {
 
     private fun openSessionsPage() {
         await { exists(hasTestTag("project-row:$launch")) }
-        compose.onNodeWithTag("project-row:$launch").performClick()
+        compose.openProjectSessionsPage(launch)
         await { exists(hasTestTag("project-sessions")) }
     }
 
