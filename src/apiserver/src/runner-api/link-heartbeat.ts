@@ -378,7 +378,8 @@ export interface LinkBeatInput {
   planUsageDigest: string | null;
   /** The machine's reading, sanitized (runners/runner-resources.ts); absent or null for a beat without one. */
   resources?: RunnerResources | null;
-  /** The sessions its background jobs hold slots for, sanitized (runners/runner-background-holders.ts); empty for none. */
+  /** The sessions its background jobs hold slots for, sanitized (runners/runner-background-holders.ts); empty for none.
+   *  Only those assigned to this runner are kept. */
   backgroundJobSessionIds?: string[];
 }
 
@@ -443,7 +444,9 @@ export async function readLinkBeat(prisma: Pick<PrismaService, '$queryRaw'>, inp
                                      "background_job_session_ids")
       SELECT c."id", ${input.processId}::uuid, ${input.gatewayId}::text, (now() AT TIME ZONE 'UTC'), 'LINK',
              ${resourcesAfterBeatSql(Prisma.sql`NULL::jsonb`, input.resources ?? null)},
-             ${input.backgroundJobSessionIds ?? []}::uuid[]
+             ARRAY(SELECT s."id" FROM "session" s
+                    WHERE s."id" = ANY(${input.backgroundJobSessionIds ?? []}::uuid[]) AND s."assigned_runner_id" = c."id"
+                    ORDER BY s."id")
         FROM caller c
        WHERE c."credentialHeld" AND NOT c."ownerDisabled" AND NOT c."managed" AND NOT c."landingNamed"
       ON CONFLICT ("runner_id") DO UPDATE

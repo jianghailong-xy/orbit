@@ -10,7 +10,9 @@ import { runnerIsOnline, type RunnerBeats } from './runner-presence';
  * jobs of its own still run (src/runner-go/session_pool.go admissionOccupancy). The second kind runs no turn, so a count
  * of turns alone reads a full machine as having room. Each beat names those sessions, and the beat's own write keeps
  * them on the presence row, replaced every time: the link beat statement (runner-api/link-heartbeat.ts readLinkBeat) or,
- * over HTTPS and for a managed runner, recordRunnerBeat.
+ * over HTTPS and for a managed runner, recordRunnerBeat. Only the ids of sessions assigned to the beating runner are
+ * kept (in the link beat statement, and ownBackgroundJobSessionIds), so a beat cannot write another runner's session,
+ * let alone another account's, into its row.
  */
 
 /** At most this many ids are kept from one beat: far above any runner's maxConcurrent. */
@@ -27,6 +29,21 @@ export function sanitizeBackgroundJobSessionIds(value: unknown): string[] {
     if (ids.size >= BACKGROUND_JOB_SESSIONS_MAX) break;
   }
   return [...ids].sort();
+}
+
+/** Of the ids a beat over HTTPS (or a managed runner's) names, those of sessions assigned to that runner, sorted. */
+export async function ownBackgroundJobSessionIds(
+  prisma: Pick<PrismaService, 'session'>,
+  runnerId: string,
+  ids: readonly string[],
+): Promise<string[]> {
+  if (ids.length === 0) return [];
+  const rows = await prisma.session.findMany({
+    where: { id: { in: [...ids] }, assignedRunnerId: runnerId },
+    select: { id: true },
+    orderBy: { id: 'asc' },
+  });
+  return rows.map((r) => r.id);
 }
 
 /** A runner as runningSessionCounts reads it: its liveness, and the presence row's holders. */

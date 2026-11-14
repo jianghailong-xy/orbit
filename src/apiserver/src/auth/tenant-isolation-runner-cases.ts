@@ -1424,6 +1424,8 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'the earlier landing the control plane itself listed in this claim\'s command (J12), re-read only inside the '
     + 'reporting account and on the claiming job\'s own serial key: another account\'s job under that id is not '
     + 'found, and nothing of it is read or written (integration-job-relay.ts:1646)',
+  'POST /runner/heartbeat body backgroundJobSessionIds[]':
+    'only the ids of sessions assigned to the calling runner are kept on its own presence row, over HTTPS (runners/runner-background-holders.ts:35) and over the link (runner-api/link-heartbeat.ts:447); another account\'s session is dropped like an id that names nothing, and nothing of it is read back or answered; link-heartbeat.pg.spec.ts 14 sends another account\'s',
   'POST /runner/heartbeat body expiredCommitErrors[].operationId':
     'the commit attempt token the server minted for one of the machine\'s own sessions: compared only in the update '
     + 'scoped to that session on this runner (runner-api.controller.ts:1255)',

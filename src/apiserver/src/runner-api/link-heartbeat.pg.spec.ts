@@ -877,7 +877,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
       },
     });
     await beat({ backgroundJobSessionIds: [ended, theirs, 'not-a-session'] } as Partial<RunnerHeartbeatRequest>);
-    assert.deepEqual((await holders()).sort(), [ended, theirs].sort(), 'malformed ids are not kept');
+    assert.deepEqual(await holders(), [ended], 'only this runner\'s own sessions are kept: not another account\'s, nor a malformed id');
     assert.equal(await running(), inTurn, 'neither an ended session nor another runner\'s is counted');
 
     // A stale report counts as before.
