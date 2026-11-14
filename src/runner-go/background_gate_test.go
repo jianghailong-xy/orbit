@@ -795,13 +795,16 @@ func TestCodexConsentForBgRunIsTheGates(t *testing.T) {
 			t.Fatalf("%s: bg_run's consent = %v/%v, want answered yes", mode, allowed, decided)
 		}
 	}
-	// Another of Orbit's tools still asks in the modes that ask, and Plan still refuses it.
+	// Every other Orbit tool is consented to by its name as well (TestCodexAutomaticApprovalAnswersEveryOrbitToolByName),
+	// and what Plan refuses of one is Orbit's own Plan gate's, which answers the call with what to do instead.
 	other := codexApprovalRequest{mcpTool: true, server: codexOrbitMCPServer, tool: "task_update"}
-	if _, decided := codexAutomaticApproval("default", other); decided {
-		t.Fatal("another Orbit tool's consent was answered in Default")
+	for _, mode := range []string{"default", "plan"} {
+		if allowed, decided := codexAutomaticApproval(mode, other); !decided || !allowed {
+			t.Fatalf("%s: task_update's consent = %v/%v, want answered yes", mode, allowed, decided)
+		}
 	}
-	if allowed, decided := codexAutomaticApproval("plan", other); !decided || allowed {
-		t.Fatalf("another Orbit tool in Plan = %v/%v, want refused", allowed, decided)
+	if refusal := mcpPlanRefusal("task_update", nil, planModeIs("plan")); refusal == "" {
+		t.Fatal("Plan's gate let task_update through")
 	}
 	// A tool of that name on somebody else's server is not this gate's.
 	foreign := codexApprovalRequest{mcpTool: true, server: "acme", tool: "bg_run"}
