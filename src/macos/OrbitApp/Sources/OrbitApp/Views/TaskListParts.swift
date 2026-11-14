@@ -242,7 +242,7 @@ struct TaskLabelsSheet: View {
             List {
                 ForEach(filtered, id: \.label) { row in
                     Button {
-                        if picked.contains(row.label) { picked.remove(row.label) } else { picked.insert(row.label) }
+                        toggle(row.label)
                     } label: {
                         HStack(spacing: 12) {
                             Image(systemName: "checkmark")
@@ -282,6 +282,11 @@ struct TaskLabelsSheet: View {
             .onAppear { picked = Set(initial) }
         }
         .presentationDetents([.medium, .large])
+    }
+
+    /// One label on or off, in the order the sheet keeps them.
+    private func toggle(_ label: String) {
+        if picked.contains(label) { picked.remove(label) } else { picked.insert(label) }
     }
 
     private var filtered: [TaskLabelRow] {

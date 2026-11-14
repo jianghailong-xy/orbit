@@ -197,7 +197,10 @@ struct SectionSidebar: View {
         let shortcutIndex = model.agentShortcutIndex   // agentID → ⌘N slot, computed once per render
         return List(selection: $selection) {
             ForEach(sections) { row in
-                if row.newWiki { newWikiRow } else { sectionRow(row) }
+                switch row.newWiki {
+                case true:  newWikiRow
+                case false: sectionRow(row)
+                }
             }
             // "Waiting on you", raised as a sheet over whatever is selected.
             OwnerRequestInboxEntry()

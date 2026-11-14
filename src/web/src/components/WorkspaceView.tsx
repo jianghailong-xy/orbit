@@ -29,6 +29,7 @@ import {
   MessageOutlined,
   MinusCircleOutlined,
   MoreOutlined,
+  SettingOutlined,
   PaperClipOutlined,
   PauseCircleOutlined,
   PictureOutlined,
@@ -326,6 +327,7 @@ import { AntigravityRepairCard, antigravityRepair, AttachmentImage, QueuedFootCt
 import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
+import { approvalAction, delegateCallOfApproval, delegateDescription } from '../lib/subagentRuns';
 import {
   SessionDecisionStrip,
   decisionRowKey,
@@ -447,6 +449,7 @@ import { UNDER_REVIEW, underReviewLine } from './OwnerConfirmationReview';
 import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
+import { SessionSettingsDrawer } from './SessionSettingsDrawer';
 import type { Runner } from './TasksSidePanel';
 import { accountsOf } from './AccountSelect';
 import { PlanUsageIndicator } from './PlanUsageIndicator';
@@ -2486,6 +2489,8 @@ export function WorkspaceView({
     pressTimer.current = undefined;
   };
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
+  const [settingsOpen, setSettingsOpen] = useState(false); // the open session's Settings… drawer
+  useEffect(() => setSettingsOpen(false), [selectedId]); // it belongs to the session it was opened on
   // A row's Share action opens the share dialog for that row rather than for the open session.
   const [shareRow, setShareRow] = useState<any>(null);
   // The session the Move dialog is open for: a row's, or the open conversation's.
@@ -4794,15 +4799,42 @@ export function WorkspaceView({
     : null;
   const readByLiveJob = (a: ApprovalInfo): boolean =>
     !!a.backgroundJobId && (liveBackgroundJobIds === null || liveBackgroundJobIds.has(a.backgroundJobId));
+  // A SubAgent's card is read by its child engine, which outlives the parent's turn (docs/subagent-design.md
+  // §5.3): a question while the session still has a SubAgent running (or the row does not say) and the child's
+  // call has no result.
+  const subagentsStillRunning = (selectedSession?.runningSubagentCount ?? 1) > 0;
   const answerableApprovalIds = new Set(
     approvals
-      .filter(
-        (a) =>
-          readByLiveJob(a) ||
-          (turnStillGenerating && !(a.toolUseId && settledToolUseIds.has(a.toolUseId))),
+      .filter((a) =>
+        a.subagentRunId
+          ? (turnStillGenerating || subagentsStillRunning) && !(a.toolUseId && settledToolUseIds.has(a.toolUseId))
+          : readByLiveJob(a) ||
+            (turnStillGenerating && !(a.toolUseId && settledToolUseIds.has(a.toolUseId))),
       )
       .map((a) => a.id),
   );
+  // Each SubAgent card's delegate call, by card: the description its grey line names, and the block that says
+  // what it is waiting for.
+  const subagentCards = useMemo(() => {
+    const cards = new Map<string, { call: string | null; description: string }>();
+    for (const a of approvals) {
+      if (!a.subagentRunId) continue;
+      const call = delegateCallOfApproval(a, transcriptEvents);
+      cards.set(a.id, { call, description: delegateDescription(call, transcriptEvents) });
+    }
+    return cards;
+  }, [approvals, transcriptEvents]);
+  const answerableKey = [...answerableApprovalIds].join(',');
+  const subagentWaiting = useMemo(() => {
+    const waiting = new Map<string, string>();
+    for (const a of approvals) {
+      const call = subagentCards.get(a.id)?.call;
+      if (call && answerableApprovalIds.has(a.id) && !waiting.has(call)) waiting.set(call, approvalAction(a.toolName, a.input));
+    }
+    return waiting;
+    // answerableApprovalIds is rebuilt every render; its contents are the key.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [approvals, subagentCards, answerableKey]);
   // Questions submit only through their button, so they must not hold Enter against a later create.
   const activeApprovalId = approvals.find(
     (a) => a.toolName !== 'AskUserQuestion' && answerableApprovalIds.has(a.id),
@@ -10044,6 +10076,15 @@ export function WorkspaceView({
                                 label: MOVE_COPY.action,
                                 onSelect: () => openMove(selectedSession ?? selected),
                               },
+                              {
+                                key: 'settings',
+                                icon: <SettingOutlined />,
+                                label: 'Settings…',
+                                onSelect: () => {
+                                  setHeaderMenuOpen(false);
+                                  setSettingsOpen(true);
+                                },
+                              },
                               { key: 'divider-3', type: 'separator' as const },
                             ]
                           : selectedLifecycleState === 'OPEN'
@@ -10076,6 +10117,15 @@ export function WorkspaceView({
                                   icon: <FolderOutlined />,
                                   label: MOVE_COPY.action,
                                   onSelect: () => openMove(selectedSession ?? selected),
+                                },
+                                {
+                                  key: 'settings',
+                                  icon: <SettingOutlined />,
+                                  label: 'Settings…',
+                                  onSelect: () => {
+                                    setHeaderMenuOpen(false);
+                                    setSettingsOpen(true);
+                                  },
                                 },
                                 { key: 'divider-4', type: 'separator' as const },
                               ]
@@ -10143,6 +10193,25 @@ export function WorkspaceView({
             kind="SESSION"
             rootId={selected.id}
             guests={guestContextOf(selected, machineName(runner))}
+          />
+        )}
+        {selected && !selectedTrashed && !composing && (
+          <SessionSettingsDrawer
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            sessionId={selected.id}
+            sessionTags={(selected.tags ?? []) as SessionTagRef[]}
+            tagLibrary={sessionTags}
+            onToggleTag={toggleTag}
+            tagsSaving={setTagsMut.isPending}
+            engineName={selectedSession?.engine ? engineTitle.name : null}
+            runnerName={runner ? machineName(runner) : null}
+            accountLabel={
+              // An engine's own sign-in by the account it is on, as the composer's Provider row names it.
+              shownProviderRow?.kind === 'login'
+                ? `${engineTitle.name} · ${shownAccountLabel ?? shownProviderRow.label}`
+                : shownProviderValue
+            }
           />
         )}
         {shareRow && (
@@ -10336,6 +10405,7 @@ export function WorkspaceView({
                 linkRefreshKey={sessionDetailQ.dataUpdatedAt}
                 answeredQuestions={answeredQuestions}
                 wikiChat={wikiChatCards}
+                subagentWaiting={subagentWaiting}
               />
               </QueuedFootCtx.Provider>
               </MainCheckoutCtx.Provider>
@@ -10545,6 +10615,7 @@ export function WorkspaceView({
                   onChatAbout={startChatReply}
                   onDecline={startDeclineReply}
                   rememberable={approvalRememberOffered(shownEngine)}
+                  subagent={subagentCards.get(a.id)?.description ?? null}
                 />
               ))}
               <AnsweredQuestionsCtx.Provider value={answeredQuestions}>

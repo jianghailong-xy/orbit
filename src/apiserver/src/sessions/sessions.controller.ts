@@ -7,6 +7,7 @@ import {
   Get,
   Header,
   Headers,
+  HttpCode,
   MessageEvent,
   Optional,
   Param,
@@ -25,7 +26,7 @@ import { ProjectsService } from '../projects/projects.service';
 import { PublicIdPipe } from '../common/public-id';
 import { Prisma, RunStatus } from '@prisma/client';
 import { concatMap, defer, from, interval, map, merge, Observable, switchMap, throwError } from 'rxjs';
-import { ApprovalDecisionRequest, RunEventType } from '@orbit/shared';
+import { ApprovalDecisionRequest, RunEventType, SessionSettingsPatch } from '@orbit/shared';
 import { replayableEventSql } from '../common/system-noise';
 import { AllowQueryToken } from '../auth/allow-query-token.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -708,6 +709,27 @@ export class SessionsController {
     return this.sessions.updateConfig(user.userId, id, dto, user.credential);
   }
 
+  /** The session's Settings panel: its own env vars and notification overrides — see
+   *  SessionsService.updateSettings. Validated there, field by field. */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Patch(':id/settings')
+  updateSettings(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() body: SessionSettingsPatch,
+  ) {
+    return this.sessions.updateSettings(user.userId, id, body);
+  }
+
+  /** The Settings panel's Restart: reload the live engine with the session's env, after the turn
+   *  in flight if there is one — see SessionsService.restart. */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/restart')
+  @HttpCode(202)
+  restart(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.sessions.restart(user.userId, id);
+  }
+
   /** Which of its runner's Codex or Claude accounts the session runs on — see switchAccount. */
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Patch(':id/account')
@@ -983,6 +1005,16 @@ export class SessionsController {
     @Body() dto: ApprovalDecisionRequest,
   ) {
     return this.sessions.decideApproval(user.userId, id, approvalId, dto, user.credential);
+  }
+
+  /**
+   * The session's SubAgent runs (docs/subagent-design.md §6.1, §6.4), oldest first, each keyed by its
+   * `delegate` call: what the transcript's SubAgent block shows beside the call — tier, model, Why, time, cost.
+   */
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
+  @Get(':id/subagents')
+  subagentRuns(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.sessions.listSubagentRuns(user.userId, id);
   }
 
   /**

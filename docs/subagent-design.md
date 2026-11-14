@@ -127,9 +127,17 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 ### 4.3 失败
 
 - **额度 / 容量失败**（`USAGE_LIMIT_ERROR_MARKERS`、`MODEL_AT_CAPACITY_ERROR_MARKER`）：同档下一个候选重开，
-  Why 追加 `Retried on <model> after <model>'s account hit its limit`。同一次 `delegate` 最多换 2 次。
+  Why 追加 `Moved to <model> after <model>'s account hit its limit`（容量：`… was at capacity`）。同一次 `delegate` 最多换 2 次。
+  runner 问 `POST /runner/sessions/:id/subagents/:runId/fallback`（带子进程的原话）；服务端从开跑时存下的决策里取
+  候选（选中的那个 + `decision.fallbacks`，同档按排序剩下的），跳过已经撞过限额的 Provider，所以影子模式下同样生效。
+  每次尝试记进 `subagent_run.attempts`（引擎、Provider、模型、结果、原话）。Claude 账号池可以是选中项，也可以是换去的目标：
+  SubAgent 自己选池成员（`subagentPoolMember`，规则同 claim 的 `choosePoolMember`），记在那次尝试的 `poolMember` 上，
+  不写父会话的 `poolMemberProviderId`。Codex 账号池的网关按会话行上的账号发请求，SubAgent 无法有自己的成员，所以跳过并记原因。
+  换第 3 次时回 `SUBAGENT_FALLBACK_SPENT`，不是额度失败回 `SUBAGENT_NOT_A_LIMIT_FAILURE`。
+- **开跑时选中项起不来**（例如 Codex 账号池、凭证缺失）：按排序取同档下一个，被跳过的记进 `candidates` 并带原因，
+  Why 里计入被去掉的数目。
 - **活本身失败**：不升档、不重跑，交回父 Agent，结果里写明。父 Agent 决定加档再派，还是自己做。
-- 池子是空的：`delegate` 立刻返回错误 `NO_SUBAGENT_PROVIDER`，并列出每个 Provider 被去掉的原因。
+- 池子是空的：`delegate` 立刻返回错误 `NO_SUBAGENT_PROVIDER`，并列出每个 Provider 被去掉的原因；不会退回父会话的模型。
 
 ## 5. 执行
 
@@ -290,3 +298,13 @@ P1 不路由，所以可以先把最难的部分（同 cwd 子进程、事件内
 - 审批卡照 §5.3 发到父会话。父会话停止 / 结束时，服务端通知目标 runner 停掉它（宽限 10 s）；目标 runner 掉线时记
   `INTERRUPTED` 并唤醒父会话。花费照样计入父会话。
 - `subagent_run` 加列：`workspace_id`、`target_runner_id`。
+
+**服务端实现（2026-11-12）**：父会话的事件 seq 由父会话的 runner 编号（`runner-go/session.go` 的 `sessionEventBuffer`），
+服务端直接插 `run_event` 会占掉它下一条事件的 seq。所以事件分两段走：目标 runner 把子引擎的原始事件发到
+`POST /runner/subagent-runs/:runId/events`（只认 `target_runner_id`），服务端按 `rewriteSubagentEvent` 的规则改写
+（`parentToolUseId` = `delegate` 调用，子 id 加 run id 前缀）后存进 `subagent_relay_event`；父会话的 runner 从
+`GET /runner/sessions/:id/subagents/:runId/events?after=` 读出，再由它编号写进父会话的事件流。其余门：
+目标 runner 的 heartbeat 带 `remoteSubagentRuns`（待领取）和 `stopSubagentRunIds`（父会话已停止或结束）；
+`POST /runner/subagent-runs/:runId/claim` 交回目标 workspace 自己默认引擎和模型的 `exec`；`PATCH /runner/subagent-runs/:runId`
+报结束；父会话 runner 用 `POST /runner/sessions/:id/subagents/:runId/stop` 停它；审批卡由目标 runner 以父会话 id +
+`subagentRunId` 提交。目标 runner 掉线由唤醒 sweep 记 `INTERRUPTED`。代码：`apiserver/src/runner-api/subagent-remote.ts`。

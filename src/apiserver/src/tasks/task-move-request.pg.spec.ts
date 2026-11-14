@@ -576,7 +576,10 @@ test('unit L4: a session asks for a task to be moved, and only asks', { skip, co
       assert.deepEqual(move.subjectTask, { id: w.task, title: w.taskTitle });
       assert.equal(move.fromProjectId, w.projectA);
       assert.equal(move.toProjectId, w.projectB);
-      assert.deepEqual(move.fromProject, { title: 'card project A', status: 'OPEN' });
+      // The source's coordinator is named too; it draws only a move out of every project, which
+      // this is not, so the page reads the target's for this row.
+      assert.deepEqual(move.fromProject,
+        { title: 'card project A', status: 'OPEN', coordinatorSessionId: w.coordA });
       // The target's coordinator draws this row as a decision card, so the pages leave it out
       // (docs/mocks/crossings-page-only-uncovered).
       assert.deepEqual(move.toProject,

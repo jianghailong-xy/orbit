@@ -60,9 +60,13 @@ final class WikiWiringTests: XCTestCase {
     /// The rail's work rows lead with Projects, Tasks and the Wiki, and the Wiki gets its own row.
     func testTheDrawerDrawsAWikiRowAfterTasks() throws {
         let shell = code(try source("Views/CompactShell.swift"))
-        let rail = try slice(shell, from: "ForEach(AppSection.workSections) { section in", to: "workspacesHeader")
-        XCTAssertTrue(rail.contains("} else if section == .wiki {\n                        if model.wiki?.shown == true { wikiRow }"),
-                      "the Wiki's section is drawn by its own row, and only for an account that has the wiki")
+        // The work rows are one array (`DrawerWorkLogic.rows`), drawn by one ForEach; the Wiki is
+        // dropped there as data from the server's answer, not by an `if` in the row builder.
+        let rail = try slice(shell, from: "ForEach(DrawerWorkLogic.rows(", to: ".workspacesHeader")
+        XCTAssertTrue(rail.contains("wiki: model.wiki?.shown == true"),
+                      "the Wiki's visibility is the server's answer, carried into the row array")
+        XCTAssertTrue(rail.contains("case .wiki:"), "the Wiki's section is drawn by its own row")
+        XCTAssertTrue(rail.contains("wikiRow"), "the Wiki's row opens the section")
         XCTAssertTrue(shell.contains(".task { await model.wiki?.loadSpaces() }"),
                       "the drawer reads the spaces that its number counts")
     }
