@@ -84,13 +84,13 @@ owns display/removal. Every value in `data` is a string:
 | `type` | `alert` or silent `sync`. |
 | `registrationKey` | Must exactly match the active server/account binding. |
 | `eventId` | UUID stable across one send's retries; deduplicate within the binding. |
-| `notificationKey` | Tag for replacement, scoped to the binding. Stable for an approval session, settled session, owner item, confirmation record, watch generation, a wakeup loop's silence (`loop-missed`), or a dropped wakeup (`wakeup-dropped`). |
+| `notificationKey` | Tag for replacement, scoped to the binding. Stable for an approval session, settled session, owner item, confirmation record, watch generation, a wakeup loop's silence (`loop-missed`), a dropped wakeup (`wakeup-dropped`), or a terminal asking to be approved (`terminal-login-<request>`). |
 | `sentAt` | Server ISO timestamp for ordering/diagnostics, not proof of arrival time. |
 | `payload` | JSON object of `AndroidPushPayload`; examples are in the shared fixture. |
 
 The JSON payload carries `title`, `body`, `category`, `threadId`, `kind` and the
 existing route keys (`sessionID`, `projectID`, `openItemID`, `taskID`, `recordID`,
-`runnerID`, `engine`, `watchID`, `generation`, `wikiSpaceID`) when applicable.
+`runnerID`, `engine`, `watchID`, `generation`, `wikiSpaceID`, `terminalLoginID`) when applicable.
 Absent keys stay absent. These route IDs retain the existing push UUID spelling;
 normalize them to the same identity as REST public IDs in Android's protocol
 layer. REST accepts both spellings. `registrationKey` and `installationId` are

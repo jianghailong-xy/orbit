@@ -130,11 +130,26 @@ test('the runner task door stores, clears and reads back a task priority', { ski
     [owner, `${owner}@runner-task-priority.invalid`],
   );
   const token = `runner-token-${randomUUID()}`;
+  const runnerId = randomUUID();
   await sql.query(
     `INSERT INTO "runner"("id","name","owner_id","token_hash","status","last_heartbeat_at","capabilities")
      VALUES ($1,'runner task priority door',$2,$3,'ONLINE',clock_timestamp(),'{}'::text[])`,
-    [randomUUID(), owner, sha256(token)],
+    [runnerId, owner, sha256(token)],
   );
+  // The runner door is carded by caller (`task-write-approval.ts`): these creates name the acting
+  // session and carry its answered card. The subject of this file is where priority is stored.
+  const sessionId = randomUUID();
+  await prisma.session.create({
+    data: {
+      id: sessionId, title: 'runner task priority', prompt: 'runner task priority', ownerId: owner,
+      creatorId: owner, assignedRunnerId: runnerId, status: 'AWAITING_INPUT', startedAt: new Date(),
+      runtimeSessionId: `runtime-${sessionId}`, provider: 'claude',
+    },
+  });
+  const actingSession = uuidToBase62(sessionId);
+  const cardFor = (input: Record<string, unknown>) => prisma.approval.create({
+    data: { sessionId, toolName: 'orbit_task_create', input: input as never, status: 'ALLOWED', decidedById: owner, decidedAt: new Date() },
+  });
   const listId = randomUUID();
   await sql.query(
     `INSERT INTO "task_list"("id","owner_id","title","max_concurrent","updated_at")
@@ -154,7 +169,7 @@ test('the runner task door stores, clears and reads back a task priority', { ski
   async function send(method: 'GET' | 'POST' | 'PATCH', route: string, body?: Record<string, unknown>): Promise<Reply> {
     const response = await fetch(`${base}/api/runner/${route}`, {
       method,
-      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'x-orbit-session-id': actingSession },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const text = await response.text();
@@ -168,14 +183,18 @@ test('the runner task door stores, clears and reads back a task priority', { ski
   }
 
   const title = `prioritised through the runner door ${randomUUID()}`;
-  const created = await send('POST', 'tasks', { title, listId: uuidToBase62(listId), ...EXECUTABLE });
+  const firstBody = { title, listId: uuidToBase62(listId), ...EXECUTABLE };
+  await cardFor(firstBody);
+  const created = await send('POST', 'tasks', firstBody);
   assert.equal(created.status, 201, created.text);
   const { rows: [{ id: task }] } = await sql.query<{ id: string }>(
     `SELECT "id" FROM "task" WHERE "owner_id" = $1::uuid AND "title" = $2`,
     [owner, title],
   );
   const other = `left alone through the runner door ${randomUUID()}`;
-  assert.equal((await send('POST', 'tasks', { title: other, listId: uuidToBase62(listId), ...EXECUTABLE })).status, 201);
+  const otherBody = { title: other, listId: uuidToBase62(listId), ...EXECUTABLE };
+  await cardFor(otherBody);
+  assert.equal((await send('POST', 'tasks', otherBody)).status, 201);
   const address = `tasks/${uuidToBase62(task)}`;
 
   await t.test('(1) PATCH tasks/:id with a priority stores it', async () => {
@@ -223,7 +242,9 @@ test('the runner task door stores, clears and reads back a task priority', { ski
   await t.test('(5) GET tasks and tasks/page answer only the tasks at or above minPriority', async () => {
     // A third task between the two: 7 (case 3 left it there), 3, and the one nobody raised.
     const midTitle = `raised a little through the runner door ${randomUUID()}`;
-    assert.equal((await send('POST', 'tasks', { title: midTitle, listId: uuidToBase62(listId), ...EXECUTABLE })).status, 201);
+    const midBody = { title: midTitle, listId: uuidToBase62(listId), ...EXECUTABLE };
+    await cardFor(midBody);
+    assert.equal((await send('POST', 'tasks', midBody)).status, 201);
     const idByTitle = async (text: string) => (await sql.query<{ id: string }>(
       `SELECT "id" FROM "task" WHERE "owner_id" = $1::uuid AND "title" = $2`, [owner, text],
     )).rows[0].id;

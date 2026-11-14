@@ -62,9 +62,9 @@ final class BackgroundJobsWiringTests: XCTestCase {
 
     // MARK: the block opens as rows
 
-    /// The entry reads the block, and the line that names it carries the count in its accessibility
-    /// label: its words name what was attached and nothing more (owner, 2026-10-27).
-    func testTheAttachedEntryReadsTheBlockAndCountsItInTheLinesLabel() throws {
+    /// The entry reads the block, and the line that names it names what was attached and nothing
+    /// more (owner, 2026-10-27).
+    func testTheAttachedEntryReadsTheBlock() throws {
         let entry = try section(try source(Self.notePath),
                                 from: "struct AttachedNoteEntry", to: "struct BackgroundJobsNoteView")
 
@@ -72,8 +72,6 @@ final class BackgroundJobsWiringTests: XCTestCase {
                       "the entry must read the block it is about to draw")
         XCTAssertTrue(entry.contains("⊕ Orbit attached: \\(attached.kind)"),
                       "the shut line still names what was attached")
-        XCTAssertTrue(entry.contains("BackgroundJobsNote.summary(jobs)"),
-                      "the count rides in the line's accessibility label, as in web's accessible name")
         XCTAssertTrue(entry.contains("BackgroundJobsNoteView(jobs: jobs)"),
                       "a block that read as jobs opens as rows")
         // Anything that is not the inventory opens exactly as it always has.

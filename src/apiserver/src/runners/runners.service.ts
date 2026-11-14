@@ -11,8 +11,10 @@ import {
 import type {
   ClaudeRegionCheckRequest,
   DirProbeAnswer,
+  RunnerResourcesAnswer,
   InstallEngine,
   LoginEngine,
+  ReportedEngine,
   RunnerAccountRemoveState,
   RunnerEngineAccount,
   RunnerInstallState,
@@ -29,7 +31,8 @@ import type {
 } from '@orbit/shared';
 import { RunStatus } from '@prisma/client';
 import { generateToken, sha256 } from '../common/crypto.util';
-import { namedRunnerEngines, sanitizeRunnerEngines, usedPlanUsage, usedRunnerEngines } from '../common/runner-engines';
+import { agentFixesOf } from './attention-fix';
+import { namedRunnerEngines, sanitizeEngineUpdateDismissals, sanitizeRunnerEngines, usedPlanUsage, usedRunnerEngines } from '../common/runner-engines';
 import {
   antigravityGoogleLoginRefusal,
   antigravitySignInUnderWay,
@@ -62,6 +65,7 @@ import { ACCOUNT_ID_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunn
 import { accountPauseUntil } from '../common/account-pause';
 import { refuseManagedRunnerDeletion, refuseManagedRunnerRotation } from '../managed-runners/managed-runner-delete';
 import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from './runner-presence';
+import { runnerResourcesAnswerOf } from './runner-resources';
 import { DIR_PROBE_MAX_PATH, dirProbeAnswerOf } from './dir-probe';
 import { isInternalAddress } from '../shared/public-surface.guard';
 import { blockedRunnerRegion, claudeRegionSignInRefusal, regionMachineName, runnerRegionView } from './runner-region';
@@ -112,8 +116,9 @@ export class RunnersService {
     this.deviceLookups.set(userId, recent);
   }
 
-  async listRunners(ownerId: string) {
-    return this.runnerViews({ ownerId });
+  /** `onlyRunner`: that one runner, the list a TERMINAL credential reads (`terminalRunnerOf`). */
+  async listRunners(ownerId: string, onlyRunner?: string) {
+    return this.runnerViews(onlyRunner ? { ownerId, id: onlyRunner } : { ownerId });
   }
 
   /** One of this owner's runners, in exactly the shape the list gives each of them. */
@@ -182,6 +187,10 @@ export class RunnersService {
         accountNames: true,
         accountPauses: true,
         defaultRemoved: true,
+        // The engine update warnings dismissed here, each until the next release (migration 0705).
+        engineUpdateDismissals: true,
+        // The sessions Fix with an agent started here, one per warning (migration 0760).
+        attentionFixes: true,
         installStatus: true,
         installEngine: true,
         installCommand: true,
@@ -222,6 +231,9 @@ export class RunnersService {
     const used = runners.map((runner) => engineHealthWithActiveSessions(usedRunnerEngines(runner), atWork.get(runner.id)));
     const updateTurns = await this.updateTurnsOf(where.ownerId, runners);
     const drainWaiting = await drainWaitingOf(this.prisma, where.ownerId, runners);
+    // Fix with an agent: where a press would start its session on each runner, or why it can't, and the
+    // agents already at work there (attention-fix.ts, the same answer the fix endpoint acts on).
+    const agentFixes = await agentFixesOf(this.prisma, where.ownerId, runners, now);
     return runners.map(({
       availableCommands,
       availableSkills,
@@ -230,6 +242,8 @@ export class RunnersService {
       accountNames,
       accountPauses,
       defaultRemoved,
+      engineUpdateDismissals,
+      attentionFixes,
       installStatus,
       installEngine,
       installCommand,
@@ -255,6 +269,9 @@ export class RunnersService {
       // The effective verdict, never the stored one; null without the capability or a decided check.
       region: runnerRegionView({ region, capabilities: r.capabilities }, new Date(now)),
       engines: used[index],
+      // { engine: latest } — each engine's update warning stays hidden while this equals its update.latest.
+      engineUpdateDismissals: sanitizeEngineUpdateDismissals(engineUpdateDismissals),
+      agentFix: agentFixes.get(r.id) ?? null,
       antigravity: antigravityState({ capabilities: r.capabilities, engines: used[index] }),
       install: installStateOf({
         installStatus,
@@ -884,6 +901,32 @@ export class RunnersService {
   }
 
   /**
+   * Dismiss this runner's update warning for `engine` until its next release: the engine's current
+   * `update.latest`, as the runner last reported it, goes into its key of
+   * `runner.engine_update_dismissals` in one statement. Clients hide the warning while that equals
+   * the engine's `update.latest`, so a newer release brings it back by itself. Orbit's own record:
+   * the runner need not be online and is not woken, and Orbit keeps retrying the update on it.
+   * Refused when no release is known to dismiss against.
+   */
+  async dismissEngineUpdateWarning(
+    ownerId: string,
+    id: string,
+    engine: ReportedEngine,
+  ): Promise<{ engine: ReportedEngine; latest: string }> {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId }, select: { engines: true } });
+    if (!runner) throw new NotFoundException('runner not found');
+    const latest = sanitizeRunnerEngines(runner.engines)?.find((entry) => entry.engine === engine)?.update?.latest;
+    if (!latest) throw new BadRequestException('This engine reports no newer release to dismiss its warning until');
+    const written = await this.prisma.$executeRaw`
+      UPDATE "runner"
+         SET "engine_update_dismissals" =
+               COALESCE("engine_update_dismissals", '{}'::jsonb) || jsonb_build_object(${engine}::text, ${latest}::text)
+       WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid`;
+    if (written === 0) throw new NotFoundException('runner not found');
+    return { engine, latest };
+  }
+
+  /**
    * Rename one account a runner reports — Default included, which the machine itself never names.
    *
    * Only a label, and Orbit's own: kept in `runner.account_names` and laid over the report wherever
@@ -1345,6 +1388,16 @@ export class RunnersService {
     });
     if (!runner) throw new NotFoundException('runner not found');
     return dirProbeAnswerOf(runner, path);
+  }
+
+  /** The machine's resources as its presence row keeps them (runner-resources.ts). */
+  async getResources(ownerId: string, id: string): Promise<RunnerResourcesAnswer> {
+    const runner = await this.prisma.runner.findFirst({
+      where: { id, ownerId },
+      select: { presence: { select: { resources: true } } },
+    });
+    if (!runner) throw new NotFoundException('runner not found');
+    return runnerResourcesAnswerOf(runner.presence?.resources);
   }
 
   /** Current install-relay state, for the row to poll. */

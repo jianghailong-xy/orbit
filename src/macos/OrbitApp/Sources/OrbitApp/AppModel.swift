@@ -508,6 +508,8 @@ final class AppModel {
     /// Every personal access token the account has issued: Settings → Access tokens, and the count
     /// on its row.
     private(set) var accessTokens: AccessTokensModel?
+    /// Settings → Terminals: the terminals approved on this account, with Revoke.
+    private(set) var terminals: TerminalsModel?
     /// The shared pools the account is in: Machines & models' Account pools, and each pool's page.
     private(set) var sharedPools: SharedPoolsModel?
     /// The account's watches: Following, the console's Watching card, and every session's row and header.
@@ -589,6 +591,7 @@ final class AppModel {
         admin = AdminModel(baseURL: url, tokenStore: tokenStore)
         sharedLinks = SharedLinksModel(baseURL: url, tokenStore: tokenStore)
         accessTokens = AccessTokensModel(baseURL: url, tokenStore: tokenStore)
+        terminals = TerminalsModel(baseURL: url, tokenStore: tokenStore)
         sharedPools = SharedPoolsModel(baseURL: url, tokenStore: tokenStore)
         let managedRunnerModel = ManagedRunnerModel(baseURL: url, tokenStore: tokenStore)
         // A managed runner set up from Machines & models brings its runner and default workspace with it.
@@ -955,6 +958,7 @@ final class AppModel {
         }
         signedIn = false
         machineSetups = [:]
+        sharedWithMe = []
         sessions = []
         needsYouSessions = []
         agentNeedsYou = [:]
@@ -1388,6 +1392,13 @@ final class AppModel {
             wiki?.nudge()
             // A card made, replaced or pressed, or its rewrite moving (contract `chat.realtime`).
             wikiChat?.nudge()
+        // A terminal asked to be approved, a request was decided, or a terminal was revoked: the approve card's
+        // requests and Settings → Terminals are read again, and nothing else.
+        case .terminals:
+            Task {
+                await ownerRequests?.loadTerminalRequests()
+                await terminals?.load()
+            }
         // A folder was created, renamed or deleted, here or on another device: re-read the library
         // the Move panel lists (docs/session-folders-move-design.md §5.6). The event names the folder
         // and nothing else, and a session moved between folders is a `session.updated` of its own,
@@ -2096,6 +2107,45 @@ final class AppModel {
         selectedSection = .agents
         nav.openMachineDraft(runnerID: runnerID)
     }
+
+    // MARK: Shared with me — the sessions other people invited this account to reply in
+    // (docs/session-guests-design.md §4; web SharedWithMe.tsx)
+
+    /// The rows of the sidebar's / drawer's Shared with me group, newest invitation first. No group is
+    /// drawn while it is empty (`SharedWithMe.showsGroup`).
+    private(set) var sharedWithMe: [GuestSessionSummary] = []
+
+    /// The shared session whose guest view the Agents stack shows, if any.
+    var guestSessionID: String? { selectedSection == .agents ? nav.guestSessionOnTop : nil }
+
+    /// Read Shared with me once.
+    func loadSharedWithMe() async {
+        guard let api else { return }
+        let generation = apiGeneration
+        guard let sessions = try? await api.guestSessions(),
+              apiGeneration == generation, self.api === api else { return }
+        if sessions != sharedWithMe { sharedWithMe = sessions }
+    }
+
+    /// Read Shared with me now and every minute while the app is seen: a session can be shared with
+    /// you, or stop being, at any time. Bound to the rail's lifetime (`.task`).
+    func followSharedWithMe() async {
+        while !Task.isCancelled {
+            await loadSharedWithMe()
+            await VisibilityGate.app.pause(SharedWithMe.refreshInterval)
+        }
+    }
+
+    /// Open a shared session's guest view: the Shared with me row's own page, over nothing.
+    func openGuestSession(_ id: String) {
+        settingsPresented = false
+        closeTaskOverPage()
+        selectedSection = .agents
+        nav.openGuestSession(PublicID.toPublic(id))
+    }
+
+    /// The client the guest view reads and writes through — this account's, as every other read.
+    var guestDoor: APIClient? { api }
 
     /// Start a session on a machine, whatever it holds: its first workspace's draft once it has one.
     func startSession(onMachine runnerID: String) {
@@ -2983,6 +3033,7 @@ final class AppModel {
     private(set) var projectSessionsConfirmedAt: String?
 
     var projectSessionsColumn: SessionProjectAddress? { nav.projectSessionsColumn }
+    var projectSessionsColumnDestination: SessionProjectAddress? { nav.projectSessionsColumnDestination }
 
     func openProjectSessions(_ address: SessionProjectAddress) {
         nav.enterProjectSessions(address)
@@ -3018,6 +3069,8 @@ final class AppModel {
             openProjectSessions(projectID, inColumn: inColumn)
         case .machine(let runnerID):
             openMachineDraft(runnerID)
+        case .guestSession(let sessionID):
+            openGuestSession(sessionID)
         }
     }
 
@@ -3041,7 +3094,7 @@ final class AppModel {
         }
         let address = SessionProjectAddress(projectID: projectID, agentID: agentID, view: .open)
         if inColumn {
-            nav.enterProjectSessions(address)
+            nav.enterProjectSessions(address, asDestination: true)
         } else {
             nav.path = [.sessionProject(address, asDestination: true)]
         }
@@ -3821,6 +3874,15 @@ final class AppModel {
                 self.selectedAgentID = resolved.agent?.id ?? resolved.agentId
             } catch APIError.http(let status, _) where status == 404 {
                 guard self.apiGeneration == generation, self.api === api else { return }
+                // No session of yours: it may be one somebody shared with you. The web asks the guest
+                // door before saying not-found (WorkspaceConsole, D9), and so does this.
+                if (try? await api.guestSession(id, limit: 1)) != nil {
+                    guard self.apiGeneration == generation, self.api === api else { return }
+                    self.consoleRegistry?.discardMissing(id)
+                    self.nav.replaceConsoleWithGuest(id)
+                    return
+                }
+                guard self.apiGeneration == generation, self.api === api else { return }
                 self.discardMissingSession(id)
             } catch APIError.unauthorized {
                 guard self.apiGeneration == generation, self.api === api else { return }
@@ -3959,6 +4021,11 @@ final class AppModel {
             openOwnerRequest(id)
         case .snoozeOwnerRequest(let id):
             ownerRequests?.snooze(id, for: OwnerRequests.laterSeconds)
+        case .openTerminalRequests:
+            settingsPresented = false
+            ownerRequests?.tab = .open
+            ownerRequests?.inboxPresented = true
+            Task { await ownerRequests?.loadTerminalRequests() }
         }
     }
 

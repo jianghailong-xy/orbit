@@ -7,6 +7,8 @@ import {
   NON_REPLAYABLE_EVENT_TYPES,
   replayableEventSql,
 } from '../common/system-noise';
+import { SessionGuestsService } from '../session-guests/session-guests.service';
+import { SharedController } from '../shared/shared.controller';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
 
@@ -113,6 +115,17 @@ test('a shared transcript event fetched by seq sits behind the same fence', asyn
   assert.ok(captured.values.includes(replayableEventSql));
 });
 
+// What a raw read reads, by its SQL: the transcript (`run_event`) or the header's `activity`
+// (readSessionActivities, a `Prisma.sql` object over `session` rather than a tagged template).
+// Counting every `$queryRaw` as "events" is what once made the header's activity read look like a
+// second page of events.
+function rawRead(strings: TemplateStringsArray | { sql: string }): 'events' | 'activity' {
+  const sql = Array.isArray(strings) ? strings.join('?') : (strings as { sql: string }).sql;
+  if (/\bFROM\s+run_event\b/i.test(sql)) return 'events';
+  assert.match(sql, /FROM\s+"session"\s+s\b/, `an unexpected raw read: ${sql}`);
+  return 'activity';
+}
+
 test('what a shared session added after a seq sits behind the same fence, read after its header', async () => {
   const reads: string[] = [];
   let captured: TaggedQuery | undefined;
@@ -134,13 +147,9 @@ test('what a shared session added after a seq sits behind the same fence, read a
       },
     },
     $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
-      // The header's own second read, what the session is still doing (readSessionActivities, 29fc026c1), comes as one
-      // Prisma.sql object rather than a template: it is part of the header, not an events read.
-      if (!Array.isArray(strings)) {
-        reads.push('activity');
-        return [];
-      }
-      reads.push('events');
+      const read = rawRead(strings);
+      reads.push(read);
+      if (read === 'activity') return [];
       captured = { strings, values };
       return [];
     },
@@ -152,12 +161,106 @@ test('what a shared session added after a seq sits behind the same fence, read a
   assert.deepEqual(now.events, []);
   assert.equal(now.after, null);
   assert.equal(now.runState, 'RUNNING');
-  // The header first: an answer that says the run is over holds every event written before it.
+  // The header first — its row, then what the parked session is still doing — and the events after
+  // it, once: an answer that says the run is over holds every event written before it.
   assert.deepEqual(reads, ['header', 'activity', 'events']);
   assert.ok(captured);
   assert.match(renderedQuery(captured), /seq > \?/);
   assert.ok(captured.values.includes(7));
   assertReplayFence(captured, 'ASC');
+});
+
+/** A live shared session with two events after seq 7, answering its header, activity and run_event
+ *  reads by their SQL; `eventReads` counts the run_event reads. */
+function afterSeqFixture(extra: Record<string, unknown> = {}) {
+  const counts = { eventReads: 0 };
+  const row = (seq: number) => ({
+    seq,
+    type: RunEventType.TURN_END,
+    payload: {},
+    turnId: null,
+    createdAt: new Date('2026-08-31T02:00:00Z'),
+  });
+  const prisma = {
+    ...extra,
+    session: {
+      findFirst: async () => ({
+        id: SESSION,
+        title: 'shared',
+        status: 'RUNNING',
+        endReason: null,
+        completedAt: null,
+        archivedAt: null,
+        deletedAt: null,
+        createdAt: new Date('2026-08-31T02:00:00Z'),
+        workspace: null,
+      }),
+    },
+    $queryRaw: async (strings: TemplateStringsArray) => {
+      if (rawRead(strings) === 'activity') return [{ id: SESSION, activity: null }];
+      counts.eventReads += 1;
+      return [row(8), row(9)];
+    },
+  };
+  const sessions = new SessionsService(prisma as never, {} as never, {} as never);
+  return { prisma, sessions, counts };
+}
+
+/** Exactly one page of events in an answer: one `events` array, seqs 8 and 9 once each, and no
+ *  other field carrying a second group of them. */
+function assertOneEventGroup(answer: Record<string, unknown>): void {
+  const groups = Object.entries(answer).filter(([, value]) =>
+    Array.isArray(value) && value.some((item) => item && typeof item === 'object' && 'seq' in item));
+  assert.deepEqual(groups.map(([key]) => key), ['events']);
+  assert.deepEqual((answer.events as { seq: number }[]).map((event) => event.seq), [8, 9]);
+}
+
+test('a shared session read after a seq answers one page of events, each event once', async () => {
+  const { sessions, counts } = afterSeqFixture();
+
+  const now = await sessions.getSharedEventsAfter(SESSION, { after: 7, maxPayload: 2048 });
+
+  assert.equal(counts.eventReads, 1);
+  assert.deepEqual(now.events.map((event) => event.seq), [8, 9]);
+  assert.equal(now.after, null);
+  assert.equal(now.activity, null);
+});
+
+test('the public share door answers after a seq with one group of events, read once', async () => {
+  const { sessions, counts } = afterSeqFixture();
+  const links = {
+    resolve: async () => ({ sessionId: SESSION, include: { toolOutput: true } }),
+  };
+  const controller = new SharedController(links as never, sessions, {} as never);
+
+  const answer = await controller.events('token', undefined, '7', undefined, '2048');
+
+  assert.equal(counts.eventReads, 1);
+  assertOneEventGroup(answer as unknown as Record<string, unknown>);
+  assert.ok('runState' in answer, 'an after-seq answer carries the header');
+  assert.equal(answer.runState, 'RUNNING');
+});
+
+test('a guest following a session after a seq gets one group of events, read once', async () => {
+  const { prisma, sessions, counts } = afterSeqFixture({
+    sessionGuest: {
+      findFirst: async () => ({
+        id: 'guest-row',
+        openedAt: null,
+        session: { ownerId: 'owner' },
+        user: { name: 'Guest' },
+      }),
+    },
+    approval: { findMany: async () => [] },
+  });
+  const guests = new SessionGuestsService(prisma as never, sessions);
+
+  const answer = await guests.events('guest', SESSION, { after: '7', maxPayload: '2048' });
+
+  assert.equal(counts.eventReads, 1);
+  assertOneEventGroup(answer as unknown as Record<string, unknown>);
+  assert.ok('waitingOnOwner' in answer, 'an after-seq answer carries the header');
+  assert.equal(answer.waitingOnOwner, false);
 });
 
 test('the SSE history replay applies the same fence while leaving its live half alone', async () => {

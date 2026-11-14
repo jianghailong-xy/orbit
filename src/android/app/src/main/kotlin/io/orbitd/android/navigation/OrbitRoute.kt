@@ -15,7 +15,10 @@ enum class Destination { WORKSPACES, WORKSPACE, FOLDER, SEARCH, SESSION, DRAFT, 
     WIKI_BROWSE, WIKI_INDEX, WIKI_ARTICLE, WIKI_DOC, WIKI_REVIEW, WIKI_SETTINGS, WIKI_RUN, WIKI_JOB, WIKI_PLAN, WIKI_PLAN_DOC, WIKI_PLAN_SECTION,
     WIKI_ACTIVITY, WIKI_TRASH,
     /** The owner requests inbox (web `WaitingOnYouPage`): `id` the request whose card opens focused, from a push's action. */
-    WAITING_ON_YOU }
+    WAITING_ON_YOU,
+    /** A session someone shared with this account (docs/session-guests-design.md §4): `id` the session, drawn as the guest view. A
+     *  Shared with me row opens it; a session link the owner's read answers 404 for draws the same view through `SESSION`. */
+    GUEST_SESSION }
 enum class Origin { DRAWER, LIST, SEARCH, LINK, EXTERNAL }
 
 /** Object and source travel together; the preceding frame is the actual return destination. */
@@ -125,6 +128,9 @@ val OrbitRoute.waitsForDirectory get() = destination == Destination.PROJECT_SESS
  * spellings of its id are one destination. */
 fun projectDestination(id: String) = "project:${ObjectId.canonical(id) ?: id}"
 
+/** The destination of a drawer Shared with me row (OrbitKit `SidebarSelection.guestSession`). */
+fun guestDestination(id: String) = "guest:${ObjectId.canonical(id) ?: id}"
+
 /** The destination of a drawer Set up <machine> row (iOS `DrawerDestination.machineDraft`). */
 fun machineDraftDestination(id: String) = "setup:${ObjectId.canonical(id) ?: id}"
 
@@ -167,9 +173,10 @@ object OrbitLinks {
         "project" to Destination.PROJECT, "wiki" to Destination.WIKI_ENTRY, "list" to Destination.LIST)
     // `orbit://project/<id>` is a merge push's (A11-9): the project's sessions page. Like `orbit://wiki/<space>`, no iOS DeepLink host.
     // `orbit://owner-request/<id>` is an owner request push's action: the inbox, that request's card open on its input.
+    // `orbit://terminal-login/<id>` is a terminal asking to be approved: the inbox, whose Open tab heads with its card.
     private val deepLinks = references.filterKeys { it !in setOf("project", "wiki") } +
         mapOf("watch" to Destination.WATCH, "runner" to Destination.RUNNER, "wiki" to Destination.WIKI, "project" to Destination.PROJECT_SESSIONS,
-            "owner-request" to Destination.WAITING_ON_YOU)
+            "owner-request" to Destination.WAITING_ON_YOU, "terminal-login" to Destination.WAITING_ON_YOU)
     /** iOS DeepLink's `case "active", ""` (A05h, DL-1): an `orbit:` link with no host, an empty one or `active` (percent-decoded,
      * in any case) opens the workspaces home, whatever path, query or fragment follows — iOS's URL percent-encodes a blank there
      * and DeepLink never reads it — while a blank in the host is no URL there, so nothing opens. Read off the link itself:

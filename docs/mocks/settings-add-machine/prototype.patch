@@ -1,0 +1,127 @@
+diff --git a/src/web/src/App.tsx b/src/web/src/App.tsx
+index 4d166c0..1d4c746 100644
+--- a/src/web/src/App.tsx
++++ b/src/web/src/App.tsx
+@@ -280,6 +280,8 @@ export function App() {
+             <Route path="integrations/feishu" element={<FeishuIntegrationPage />} />
+             {/* Connecting a Feishu group, opened from the bot's card with its one-time ticket (docs/feishu-bot-design.md §8.1). */}
+             <Route path="integrations/feishu/connect-group" element={<FeishuConnectGroupPage />} />
++            {/* Adding a machine from Settings stays in Settings; a new account's first sign-in still lands on the welcome card at /runners/register. */}
++            <Route path="machines/new" element={<RunnerRegisterGuide inSettings />} />
+             <Route path="machines/:id" element={<SettingsMachineRoute />} />
+             {/* Providers (owner's choice C1, board-4; choice A, docs/mocks/settings-providers-compact): every
+                 API key on one page, a vendor's alone at its own address, Account pools, and a key's connect
+diff --git a/src/web/src/components/RunnerRegisterGuide.tsx b/src/web/src/components/RunnerRegisterGuide.tsx
+index 38ec830..752feb4 100644
+--- a/src/web/src/components/RunnerRegisterGuide.tsx
++++ b/src/web/src/components/RunnerRegisterGuide.tsx
+@@ -5,7 +5,8 @@ import { useNavigate } from 'react-router-dom';
+ import { api } from '../api';
+ import { copyText } from '../lib/clipboard';
+ import { machineDraftPath } from '../lib/machineSetup';
+-import { REGISTER_NEXT, START_A_SESSION } from '../lib/machineSetupCopy';
++import { REGISTER_NEXT, REGISTER_NEXT_IN_SETTINGS, START_A_SESSION } from '../lib/machineSetupCopy';
++import { Button } from './ui/Button';
+ import {
+   WELCOME_AFTER_STEP_ONE,
+   WELCOME_COMPUTER,
+@@ -61,7 +62,7 @@ function CommandBox({ cmd, copied, onCopy }: { cmd: string; copied: boolean; onC
+ }
+ 
+ /** Right-pane guide for connecting a new runner machine (shown from the side panel's “Add”). */
+-export function RunnerRegisterGuide() {
++export function RunnerRegisterGuide({ inSettings = false }: { inSettings?: boolean } = {}) {
+   const navigate = useNavigate();
+   const [os, setOs] = useState<OS>('macOS');
+   const [copied, setCopied] = useState(false);
+@@ -99,13 +100,13 @@ export function RunnerRegisterGuide() {
+     if (baselineOnline.current === null) {
+       // First load establishes the baseline; nothing to detect yet.
+       baselineOnline.current = new Set(list.filter((r) => r.online).map((r) => r.id));
+-      setWelcome(list.length === 0);
++      setWelcome(!inSettings && list.length === 0);
+       return;
+     }
+     if (connected) return; // latch the first runner we see come online
+     const fresh = list.find((r) => r.online && !baselineOnline.current!.has(r.id));
+     if (fresh) setConnected({ id: fresh.id, name: fresh.name });
+-  }, [list, connected]);
++  }, [list, connected, inSettings]);
+ 
+   useEffect(() => {
+     if (welcome && connected) navigate(machineDraftPath(connected.id), { replace: true });
+@@ -161,13 +162,13 @@ export function RunnerRegisterGuide() {
+   }
+ 
+   return (
+-    <div className="runner-guide">
+-      <div className="runner-center">
+-        <h1 className="page-title">Add a runner</h1>
++    <div className={inSettings ? undefined : 'runner-guide'}>
++      <div className={inSettings ? undefined : 'runner-center'}>
++        <h1 className="page-title" style={inSettings ? { marginTop: 8 } : undefined}>Add a runner</h1>
+         <p className="runner-sub">
+           A runner is a machine that runs Claude Code, Codex, or Kimi tasks for you. Run this one command on the
+           machine you want to add — it installs the orbit CLI, then opens your browser to confirm
+-          the machine belongs to you. It appears under Machines on the Machines & models page once it comes online.
++          the machine belongs to you. {inSettings ? 'It appears under Machines on the left' : 'It appears under Machines in Settings'} once it comes online.
+         </p>
+ 
+         <Segmented<OS>
+@@ -185,11 +186,14 @@ export function RunnerRegisterGuide() {
+             <CheckCircleFilled className="runner-status-icon" />
+             <div className="runner-status-text">
+               <div className="runner-status-title">Runner online — “{connected.name}” is ready</div>
+-              <div className="runner-status-sub">{REGISTER_NEXT}</div>
++              <div className="runner-status-sub">{inSettings ? REGISTER_NEXT_IN_SETTINGS : REGISTER_NEXT}</div>
+             </div>
+             {/* The machine alone can't do anything yet: sessions and tasks both hang off a workspace,
+                 and run on a CLI signed in there, so the real next step is its new session page, whose
+                 card asks for both. */}
++            {inSettings && (
++              <Button onClick={() => navigate(`/settings/machines/${connected.id}`)}>Machine settings</Button>
++            )}
+             <button
+               className="runner-done-btn"
+               onClick={() => navigate(machineDraftPath(connected.id))}
+diff --git a/src/web/src/components/settings/SettingsLayout.tsx b/src/web/src/components/settings/SettingsLayout.tsx
+index 2e8ce01..3b10ab7 100644
+--- a/src/web/src/components/settings/SettingsLayout.tsx
++++ b/src/web/src/components/settings/SettingsLayout.tsx
+@@ -234,7 +234,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
+   };
+ 
+   // New workspace starts by picking its machine; with no machine at all, registering one comes first.
+-  const addWorkspace = () => navigate(runners.length > 0 ? '/settings/workspaces/new' : '/runners/register');
++  const addWorkspace = () => navigate(runners.length > 0 ? '/settings/workspaces/new' : '/settings/machines/new');
+ 
+   return (
+     <nav className="settings-nav autohide-scrollbar" aria-label="Settings">
+@@ -266,8 +266,13 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
+           ))}
+         </NavGroup>
+ 
+-        <NavGroup title="Machines" add={{ label: 'Register a machine', onClick: () => navigate('/runners/register') }}>
+-          <MachineRows runners={runners} stateOf={stateOf} />
++        <NavGroup title="Machines" add={{ label: 'Register a machine', onClick: () => navigate('/settings/machines/new') }}>
++          {runners.length === 0 ? (
++            // With no machine at all, the group is the one way to register one, as Providers does.
++            <NavRow to="/settings/machines/new" icon={<PlusOutlined />} label="Register a machine" />
++          ) : (
++            <MachineRows runners={runners} stateOf={stateOf} />
++          )}
+         </NavGroup>
+ 
+         <NavGroup title="Providers" add={{ label: 'Connect a provider', onClick: () => navigate('/settings/providers/new') }}>
+diff --git a/src/web/src/lib/machineSetupCopy.ts b/src/web/src/lib/machineSetupCopy.ts
+index f2ad0a9..f76fe05 100644
+--- a/src/web/src/lib/machineSetupCopy.ts
++++ b/src/web/src/lib/machineSetupCopy.ts
+@@ -93,5 +93,7 @@ export const ENROLL_NEXT_BODY =
+ export const ENROLL_OPEN_MACHINE = 'Open machine instead';
+ export const REGISTER_NEXT =
+   "It's now on the Machines & models page, under Machines. Next, start a session on it — you pick the folder it works in and sign in a coding CLI there.";
++export const REGISTER_NEXT_IN_SETTINGS =
++  "It's now under Machines on the left. Next, start a session on it — you pick the folder it works in and sign in a coding CLI there.";
+ export const machineEmpty = (machine: string) =>
+   `No workspaces on ${machine} yet. Start a session and pick the folder it works in as you go — or add one here.`;

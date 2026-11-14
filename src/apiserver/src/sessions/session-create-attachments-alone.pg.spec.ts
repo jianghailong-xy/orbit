@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
+import { openingTurnId } from './orbit-authored-turn';
 import { SessionsService } from './sessions.service';
 
 /**
@@ -150,6 +151,53 @@ scenario('a session opened with words still leaves its opening turn to the claim
   assert.equal(session.title, 'debug it, pls');
   assert.deepEqual(await turnsOf(session.id), [], 'no turn until the runner claims it');
   assert.deepEqual(await attachmentRow(attachmentId), { session_id: session.id, turn_id: null });
+});
+
+scenario('a session no runner has claimed lists its opening, under the id its turn will have, until the echo', async () => {
+  const attachmentId = await upload('install.log');
+  const session = await sessions.create(OWNER_ID, {
+    prompt: 'Fix: Codex update failed',
+    workspaceId: WORKSPACE_ID,
+    effort: '',
+    attachmentIds: [attachmentId],
+  });
+  type Active = { turnId: string; kind: string; placement: string; content: string; opening?: true;
+    attachments: Array<{ id: string }> };
+  const active = async () => (await sessions.listQueuedTurns(OWNER_ID, session.id, 'active')) as Active[];
+  const shape = (rows: Active[]) => rows.map(({ turnId, kind, placement, content, opening, attachments }) =>
+    ({ turnId, kind, placement, content, opening, attachments: attachments.map((a) => a.id) }));
+  const opening = {
+    turnId: openingTurnId(session.id), kind: 'message', placement: 'accepted', content: 'Fix: Codex update failed',
+    opening: true, attachments: [attachmentId],
+  };
+
+  assert.deepEqual(await turnsOf(session.id), [], 'still no turn: the claim lays it down');
+  assert.deepEqual(shape(await active()), [opening], 'unclaimed, the first message is what the session page draws');
+  assert.deepEqual(await sessions.listQueuedTurns(OWNER_ID, session.id), [], 'the queue leaves the opening out');
+
+  // The opening laid down by the seeder every path shares (`ensurePromptSeeded`): the same id, so a
+  // client's placeholder is the row the echo takes over.
+  const row = await prisma.session.findUniqueOrThrow({
+    where: { id: session.id }, select: { id: true, prompt: true, importedAt: true, wikiChatSpaceId: true },
+  });
+  await (sessions as unknown as { seedOpeningTurn(s: typeof row): Promise<void> }).seedOpeningTurn(row);
+  const [seeded] = await turnsOf(session.id);
+  assert.equal(seeded.id, openingTurnId(session.id), 'the turn is written under the id the listing used');
+  assert.deepEqual(shape(await active()), [opening], 'seeded and waiting: the same row');
+
+  await admin.query(`UPDATE "conversation_turn" SET status = 'IN_FLIGHT' WHERE id = $1::uuid`, [seeded.id]);
+  assert.deepEqual(shape(await active()), [opening], 'taken but not yet echoed: still the accepted head');
+  await admin.query(
+    `INSERT INTO "run_event"(id, session_id, seq, type, payload, turn_id)
+     VALUES (gen_random_uuid(), $1::uuid, 1, 'user', '{"text":"Fix: Codex update failed"}'::jsonb, $2::uuid)`,
+    [session.id, seeded.id],
+  );
+  assert.deepEqual(await active(), [], 'echoed: the transcript holds the one copy');
+
+  // Ended before any runner took it: nothing is waiting any more, so nothing is listed.
+  const ended = await sessions.create(OWNER_ID, { prompt: 'never claimed', workspaceId: WORKSPACE_ID, effort: '' });
+  await admin.query(`UPDATE "session" SET status = 'CANCELLED' WHERE id = $1::uuid`, [ended.id]);
+  assert.deepEqual(await sessions.listQueuedTurns(OWNER_ID, ended.id, 'active'), []);
 });
 
 scenario('no words and nothing attached, or a shell command without its words, is still refused', async () => {

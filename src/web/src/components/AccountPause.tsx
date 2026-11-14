@@ -36,7 +36,7 @@ export function AccountPauseStatus({ until, now, status, detail, className = '',
   return (
     <div className={`re-status ${className}`.trim()}>
       {dot ? (
-        <span className={`status-dot status-dot-${tone}`} title={label}>
+        <span className={`account-status-dot account-status-dot-${tone}`} title={label}>
           {label}
         </span>
       ) : (

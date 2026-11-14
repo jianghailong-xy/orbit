@@ -65,12 +65,14 @@ func TestAttachLocalReplyFilesUploadsAndRewrites(t *testing.T) {
 		events, []string{dir}, newReplyAttachmentIDs())
 
 	// An image keeps its alt text; a file link carries its name as the markdown title; a path
-	// outside the session's own directories is left exactly as the agent wrote it.
+	// outside the session's own directories is left exactly as the agent wrote it, and the reply
+	// ends with a line that says why it was not attached.
 	want := "画了四格。要点：**聊天区静止时没有卡**。\n\n" +
 		"![卡在聊天区怎么出现：桌面 / iPhone](orbit-attachment:att-1)\n\n" +
 		"**桌面（①②）**\n\n- ① 静止：会话的最后一条就是最后一条。\n" +
 		"[效果图](orbit-attachment:att-1 \"card-surface-desktop-phone.png\")\n" +
-		"![这张在会话目录外](" + outside + ")\n"
+		"![这张在会话目录外](" + outside + ")\n" +
+		"\n\n_Not attached: `" + outside + "` is outside this session's working directory and uploads directory, so you cannot open it._"
 	if got := events[0].Payload["text"]; got != want {
 		t.Fatalf("rewritten reply =\n%q\nwant\n%q", got, want)
 	}
@@ -202,5 +204,96 @@ func TestSupervisedReplyUploadsTheFileItLinks(t *testing.T) {
 	s.mu.Unlock()
 	if len(uploads) != 1 || uploads[0] != filepath.Base(mock) {
 		t.Fatalf("uploads = %v, want [%s]", uploads, filepath.Base(mock))
+	}
+}
+
+// What sessions kept doing (34wwyaXrkDx9hjaA0EJa5 and others): an image rendered under /mnt/data or
+// /tmp, outside the session's checkout and its uploads directory, linked by that path. The runner
+// will not attach it, so the reply says so once, naming each such file once; the files the session
+// owns are attached as before, and links that are no local file are left alone.
+func TestAttachLocalReplyFilesNotesFilesOutsideTheSession(t *testing.T) {
+	workDir := t.TempDir()
+	uploadsDir := t.TempDir()
+	inCheckout := filepath.Join(workDir, "docs", "mocks", "a.png")
+	inUploads := filepath.Join(uploadsDir, "b.png")
+	outsideDir, err := os.MkdirTemp("/tmp", "reply-outside-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(outsideDir) })
+	outside := filepath.Join(outsideDir, "out", "real-03-heads.png")
+	outsideFile := filepath.Join(outsideDir, "report.txt")
+	for _, f := range []string{inCheckout, inUploads, outside, outsideFile} {
+		if err := os.MkdirAll(filepath.Dir(f), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(f, []byte("\x89PNG\r\n\x1a\n…"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var mu sync.Mutex
+	var uploaded []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Errorf("upload form: %v", err)
+		}
+		name := ""
+		for _, files := range r.MultipartForm.File {
+			name = files[0].Filename
+		}
+		mu.Lock()
+		uploaded = append(uploaded, name)
+		mu.Unlock()
+		fmt.Fprintf(w, `{"id":"att-%s"}`, strings.TrimSuffix(name, ".png"))
+	}))
+	defer srv.Close()
+
+	reply := "Rendered.\n\n" +
+		"![heads](" + outside + ")\n" +
+		"![heads again](" + outside + ")\n" +
+		"[report](" + outsideFile + ")\n" +
+		"![a](" + inCheckout + ")\n" +
+		"![b](" + inUploads + ")\n" +
+		"[site](https://example.com/x.png) [task](orbit-task:34xGMBOf31IJy137P02PT)"
+	events := []RunEvent{
+		{Seq: 1, Type: evAssistant, Payload: map[string]interface{}{"text": reply}},
+		// Owned files only: attached, no note.
+		{Seq: 2, Type: evAssistant, Payload: map[string]interface{}{"text": "![a](" + inCheckout + ") ![b](" + inUploads + ")"}},
+		// A delta is live typing, left alone whatever it links.
+		{Seq: 3, Type: evTextDelta, Payload: map[string]interface{}{"text": "![heads](" + outside + ")"}},
+	}
+	memo := newReplyAttachmentIDs()
+	roots := []string{workDir, uploadsDir}
+	attachLocalReplyFiles(context.Background(), NewTransport(srv.URL, "token"), "s1", events, roots, memo)
+
+	note := "\n\n_Not attached: `" + outside + "`, `" + outsideFile + "` are outside this session's working directory and uploads directory, so you cannot open them._"
+	want := "Rendered.\n\n" +
+		"![heads](" + outside + ")\n" +
+		"![heads again](" + outside + ")\n" +
+		"[report](" + outsideFile + ")\n" +
+		"![a](orbit-attachment:att-a)\n" +
+		"![b](orbit-attachment:att-b)\n" +
+		"[site](https://example.com/x.png) [task](orbit-task:34xGMBOf31IJy137P02PT)" + note
+	if got := events[0].Payload["text"]; got != want {
+		t.Fatalf("reply =\n%q\nwant\n%q", got, want)
+	}
+	if got := events[1].Payload["text"]; got != "![a](orbit-attachment:att-a) ![b](orbit-attachment:att-b)" {
+		t.Fatalf("owned-files reply = %q", got)
+	}
+	if got := events[2].Payload["text"]; got != "![heads]("+outside+")" {
+		t.Fatalf("delta was rewritten: %q", got)
+	}
+
+	// A failed flush restores the batch it rewrote and runs it through here again: still one note.
+	attachLocalReplyFiles(context.Background(), NewTransport(srv.URL, "token"), "s1", events, roots, memo)
+	if got := events[0].Payload["text"]; got != want {
+		t.Fatalf("retried reply =\n%q\nwant\n%q", got, want)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if strings.Join(uploaded, ",") != "a.png,b.png" {
+		t.Fatalf("uploaded = %v, want [a.png b.png] (nothing outside the session)", uploaded)
 	}
 }

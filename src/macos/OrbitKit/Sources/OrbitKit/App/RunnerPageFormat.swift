@@ -424,14 +424,33 @@ public enum RunnerPageFormat {
 
     /// `Update to 2.1.270 failed Sep 13` — only for a failure that has become the row's problem
     /// (`RunnerAttention.updateNoteOf` says warn); a failed pass the updater retries in half an hour
-    /// is the engine page's footnote, not the row's.
-    public static func updateFailedLine(_ health: RunnerEngineHealth, now: Date,
+    /// is the engine page's footnote, not the row's. `dismissed` is the release its warning was dismissed
+    /// against (`Runner.engineUpdateDismissals`), which keeps the line away while it is still the latest.
+    public static func updateFailedLine(_ health: RunnerEngineHealth, now: Date, dismissed: String? = nil,
                                         timeZone: TimeZone = .current) -> String? {
         guard health.installed == true, let update = health.update, update.status == "failed",
               let latest = update.latest?.trimmingCharacters(in: .whitespacesAndNewlines), !latest.isEmpty,
-              RunnerAttention.updateNoteOf(update, nowMs: nowMs(now))?.tone == .warn,
+              RunnerAttention.updateNoteOf(update, nowMs: nowMs(now), dismissed: dismissed)?.tone == .warn,
               let at = update.at, let when = day(at, now: now, timeZone: timeZone) else { return nil }
         return RunnerPageCopy.runnerEngineUpdateFailed(version: latest, when: when)
+    }
+
+    /// The engine a Needs Attention item's "Dismiss until next … release" dismisses: an engine not
+    /// updating whose latest release is known — only a warning against a known latest has a next one
+    /// to wait for (web MachineSettingsPage).
+    public static func updateWarningDismissEngine(_ item: RunnerAttentionItem) -> String? {
+        guard item.kind == .engineNotUpdating, let engine = item.action?.engine,
+              case .string(let latest)? = item.params["latest"], !latest.isEmpty else { return nil }
+        return engine
+    }
+
+    /// Whether the engine page offers Dismiss for this engine's update warning: an online runner, an
+    /// installed CLI whose note still warns, against a known latest (web RunnerEngines' panel).
+    public static func offersUpdateWarningDismiss(_ runner: Runner, health: RunnerEngineHealth, now: Date) -> Bool {
+        guard !isOffline(runner, now: now), health.installed == true,
+              let latest = health.update?.latest, !latest.isEmpty else { return false }
+        return RunnerAttention.updateNoteOf(health.update, nowMs: nowMs(now),
+                                            dismissed: runner.engineUpdateDismissals?[health.engine])?.tone == .warn
     }
 
     /// The Engines header's note: when the updater last looked (`Checked 6m ago`) — or, for a runner
@@ -756,17 +775,40 @@ public enum RunnerPageFormat {
         return install.status == "pending" || install.status == "installing"
     }
 
-    /// Where the last Update Engines Now got to, in the web engine section's words.
-    public static func updateRelayLine(_ install: RunnerInstallState?) -> String? {
-        guard let install, install.mode == "update", let status = install.status else { return nil }
+    /// One line of what the last Update Engines Now said, and whether it is a failure (drawn red).
+    public struct UpdateRelayLine: Equatable {
+        public let text: String
+        public let failed: Bool
+        public init(_ text: String, failed: Bool = false) {
+            self.text = text
+            self.failed = failed
+        }
+    }
+
+    /// Where the last Update Engines Now got to, in the web engine section's words. A finished run
+    /// lists only the engines that need someone (web `engineUpdateReportLines`): the failures, and
+    /// an install Orbit may not replace. Current, updated, pinned, waiting for sessions or retried
+    /// on the next pass sort themselves out, and listing them buried the line that mattered.
+    public static func updateRelayLines(_ install: RunnerInstallState?) -> [UpdateRelayLine] {
+        guard let install, install.mode == "update", let status = install.status else { return [] }
         switch status {
-        case "pending": return "Queued — the runner picks this up on its next check-in."
-        case "installing": return "Updating this machine’s engine CLIs…"
+        case "pending": return [UpdateRelayLine("Queued — the runner picks this up on its next check-in.")]
+        case "installing": return [UpdateRelayLine("Updating this machine’s engine CLIs…")]
         case "done", "failed":
             let message = install.message?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return message.isEmpty ? "Nothing to update." : message
-        default: return nil
+            if message.isEmpty { return [UpdateRelayLine("Nothing to update.")] }
+            let lines = message.split(separator: "\n").map(String.init)
+                .filter { updateLineFailed($0) || $0.contains("owned by another user") }
+                .map { UpdateRelayLine($0, failed: updateLineFailed($0)) }
+            return lines.isEmpty ? [UpdateRelayLine("Nothing here needs your attention.")] : lines
+        default: return []
         }
+    }
+
+    /// The runner's own rule for a failed run (`updateRunFailed`, src/runner-go/engineinstall.go),
+    /// read per line.
+    static func updateLineFailed(_ line: String) -> Bool {
+        line.contains("update failed") || line.contains("timed out") || line.contains("does not run")
     }
 
     // MARK: Workspaces
