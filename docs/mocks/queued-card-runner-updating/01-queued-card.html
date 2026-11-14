@@ -1,0 +1,191 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:Inter;src:url(/mnt/data/pe-mock/fonts/Inter.ttf)}
+@font-face{font-family:NotoSC;src:url(/mnt/data/pe-mock/fonts/NotoSansSC.ttf)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,NotoSC,sans-serif;background:#f2f2f4;color:#1c1c1e;padding:36px 40px;width:2160px}
+h1{font-size:28px;margin-bottom:6px}
+.lead{font-size:16px;color:#555;margin-bottom:26px;line-height:1.6;max-width:1900px}
+.row{display:flex;gap:28px;align-items:flex-start}
+.col{width:393px}
+.cap{font-size:15px;line-height:1.55;color:#333;margin-top:12px}
+.cap b{color:#000}
+.tag-n{display:inline-block;background:#1c1c1e;color:#fff;border-radius:11px;width:22px;height:22px;text-align:center;line-height:22px;font-size:13px;margin-right:6px}
+.bad{color:#c62828}.good{color:#2e7d32}
+.phone{width:393px;height:760px;background:#000;border-radius:44px;border:8px solid #2b2b2e;overflow:hidden;position:relative;color:#f2f2f7;font-size:15px}
+.top{height:96px;padding:14px 18px 0;background:linear-gradient(#000 70%,rgba(0,0,0,0))}
+.top .t{display:flex;justify-content:space-between;font-weight:600;font-size:15px}
+.nav{display:flex;align-items:center;gap:10px;margin-top:14px}
+.nav .back{width:38px;height:38px;border-radius:19px;background:#1c1c1e;display:flex;align-items:center;justify-content:center;font-size:20px}
+.nav .ttl{font-weight:600;font-size:15px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tx{padding:4px 16px;display:flex;flex-direction:column;gap:14px}
+.bubble{align-self:flex-end;max-width:78%;background:#2c2c2e;border-radius:18px;padding:9px 13px;line-height:1.4}
+.meta{align-self:flex-end;font-size:12px;color:#8e8e93;margin-top:-8px}
+.reply{line-height:1.45;color:#e5e5ea}
+.card{border:1.5px dashed #48484a;border-radius:14px;padding:12px 13px;background:#0d0d0f}
+.card .h{font-size:13px;color:#8e8e93;margin-bottom:4px}
+.card .title{color:#0a84ff;font-weight:600;font-size:16px;line-height:1.3;margin-bottom:6px}
+.card .body{font-size:13px;color:#c7c7cc;line-height:1.4;margin-bottom:8px}
+.card .sub{font-size:12px;color:#8e8e93;margin-bottom:6px}
+.card .told{font-size:12px;color:#8e8e93;display:flex;justify-content:space-between;margin-bottom:8px}
+.foot{font-size:12.5px;color:#8e8e93;display:flex;gap:8px;align-items:center}
+.foot .why{text-decoration:underline dotted;text-underline-offset:3px;color:#aeaeb2}
+.foot .cancel{color:#0a84ff}
+.hl{outline:2.5px solid #ff9f0a;outline-offset:4px;border-radius:6px}
+.hlr{outline:2.5px solid #ff453a;outline-offset:4px;border-radius:6px}
+.composer{position:absolute;left:12px;right:12px;bottom:18px;height:86px;border-radius:24px;background:#1c1c1e;border:1px solid #2c2c2e;padding:12px 16px;color:#636366}
+.pop{position:absolute;right:14px;width:300px;background:#2c2c2e;border-radius:14px;padding:14px;box-shadow:0 10px 30px rgba(0,0,0,.6);font-size:13.5px;line-height:1.45;z-index:3}
+.pop h4{font-size:16px;margin-bottom:6px}
+.pop .w{color:#8e8e93;margin-top:4px}
+.pop .btns{display:flex;gap:8px;margin-top:10px}
+.pop .btns span{background:#3a3a3c;border-radius:8px;padding:5px 10px;font-size:13px;color:#0a84ff}
+.mark{position:absolute;font-size:12px;background:#ff9f0a;color:#000;font-weight:700;border-radius:10px;padding:2px 8px}
+.mark.r{background:#ff453a;color:#fff}
+.dim{opacity:.35}
+.choices{margin-top:34px;background:#fff;border-radius:14px;padding:22px 26px;font-size:16px;line-height:1.7;max-width:2080px}
+.choices h2{font-size:20px;margin-bottom:8px}
+.choices li{margin-left:22px;margin-bottom:8px}
+code{font-family:Inter,monospace;background:#eee;border-radius:4px;padding:0 4px}
+</style></head><body>
+<h1>排队中的卡片 · runner 更新时的说明</h1>
+<div class="lead">场景：协调者 session 空闲，一张 “Notice from a task run” 卡片在排队，而 session 的 runner（HPC）正在为更新排空（<code>queuedReason = runner_updating</code>）。iPhone 暗色，手绘；卡片、字号、颜色照 iOS 现有的 <code>OpenItemDeliveryCardView</code> / <code>RunnerUpdatingTagView</code>。界面文字为英文原样，Web 与 Android 用同一套文字、放在同一位置。</div>
+<div class="row">
+
+<!-- ① today -->
+<div class="col">
+<div class="phone">
+ <div class="top"><div class="t"><span>8:16</span><span>67</span></div>
+  <div class="nav"><div class="back">‹</div><div class="ttl">Android: Compact and Start a new coordinator</div></div></div>
+ <div class="tx">
+  <div class="bubble">Pick up the Android dialog task next.</div>
+  <div class="meta"><span class="hl">Queued · <span style="text-decoration:underline dotted">runner updating</span></span></div>
+  <div class="reply">Got it — starting the Android dialog task now. I'll report back when the run finishes.</div>
+  <div class="card">
+   <div class="h">🔔 Notice from a task run</div>
+   <div class="title">Android: Compact and Start a new coordinator in the context dialog</div>
+   <div class="body">Background job 017f413e5 ended (exit code 1): cd /root/.orbit/worktrees/… && g.sh unit-r2 :app:testDebugUnitTest …</div>
+   <div class="sub">Nothing to reply to. It did not reach you.</div>
+   <div class="told"><span>What the coordinator was told</span><span>›</span></div>
+   <div class="foot hlr"><span>Queued</span><span class="cancel">Cancel</span></div>
+  </div>
+ </div>
+ <div class="composer">Message…</div>
+ <div class="mark" style="top:166px;left:24px">说明挂在这里 →</div>
+ <div class="mark r" style="top:476px;left:24px">↑ 真正被挡住的</div>
+</div>
+<div class="cap"><span class="tag-n">①</span><b>现在</b>：<span class="bad">“runner updating” 挂在上面一条早已送达、已经回复过的消息下</span>；真正在等的卡片只写 <code>Queued Cancel</code>，看不出为什么一直不送达。最后一条用户消息若本身是卡片，或 iOS 上最后一项是排队气泡，则<b>哪里都不显示</b>，居中的说明页也不出现。</div>
+</div>
+
+<!-- ② proposal updating -->
+<div class="col">
+<div class="phone">
+ <div class="top"><div class="t"><span>8:16</span><span>67</span></div>
+  <div class="nav"><div class="back">‹</div><div class="ttl">Android: Compact and Start a new coordinator</div></div></div>
+ <div class="tx">
+  <div class="bubble">Pick up the Android dialog task next.</div>
+  <div class="meta">8:02 PM</div>
+  <div class="reply">Got it — starting the Android dialog task now. I'll report back when the run finishes.</div>
+  <div class="card">
+   <div class="h">🔔 Notice from a task run</div>
+   <div class="title">Android: Compact and Start a new coordinator in the context dialog</div>
+   <div class="body">Background job 017f413e5 ended (exit code 1): cd /root/.orbit/worktrees/… && g.sh unit-r2 :app:testDebugUnitTest …</div>
+   <div class="sub">Nothing to reply to. It did not reach you.</div>
+   <div class="told"><span>What the coordinator was told</span><span>›</span></div>
+   <div class="foot hl"><span>Queued</span><span>·</span><span class="why">runner updating</span><span class="cancel" style="margin-left:6px">Cancel</span></div>
+  </div>
+ </div>
+ <div class="composer">Message…</div>
+</div>
+<div class="cap"><span class="tag-n">②</span><b>建议 · 更新中</b>：<span class="good">说明挂在被挡住的那一项上</span>——有排队项时就是排队项（卡片或气泡都行），旧消息恢复只显示时间。页脚 <code>Queued · runner updating  Cancel</code>，Cancel 保留在原位。</div>
+</div>
+
+<!-- ③ popover -->
+<div class="col">
+<div class="phone">
+ <div class="top"><div class="t"><span>8:16</span><span>67</span></div>
+  <div class="nav"><div class="back">‹</div><div class="ttl">Android: Compact and Start a new coordinator</div></div></div>
+ <div class="tx">
+  <div class="bubble dim">Pick up the Android dialog task next.</div>
+  <div class="reply dim">Got it — starting the Android dialog task now. I'll report back when the run finishes.</div>
+  <div class="card">
+   <div class="h">🔔 Notice from a task run</div>
+   <div class="title">Android: Compact and Start a new coordinator in the context dialog</div>
+   <div class="body">Background job 017f413e5 ended (exit code 1): cd /root/.orbit/worktrees/… && g.sh unit-r2 :app:testDebugUnitTest …</div>
+   <div class="sub">Nothing to reply to. It did not reach you.</div>
+   <div class="told"><span>What the coordinator was told</span><span>›</span></div>
+   <div class="foot"><span>Queued</span><span>·</span><span class="why" style="color:#fff">runner updating</span><span class="cancel" style="margin-left:6px">Cancel</span></div>
+  </div>
+ </div>
+ <div class="pop" style="top:248px">
+  <h4>Runner updating</h4>
+  <div>HPC starts no new turns until 2 turns finish, then updates to 0.1.261. This message is sent right after.</div>
+  <div class="w">Waiting 12 min.</div>
+  <div class="btns"><span>Later ▾</span><span>Update Now…</span></div>
+ </div>
+ <div class="composer">Message…</div>
+</div>
+<div class="cap"><span class="tag-n">③</span><b>点 runner updating</b>：打开现有的说明弹层，内容和按钮（Later / Update Now…）与今天气泡上的完全一样，不新增文字。</div>
+</div>
+
+<!-- ④ stopping -->
+<div class="col">
+<div class="phone">
+ <div class="top"><div class="t"><span>8:16</span><span>67</span></div>
+  <div class="nav"><div class="back">‹</div><div class="ttl">Android: Compact and Start a new coordinator</div></div></div>
+ <div class="tx">
+  <div class="bubble">Pick up the Android dialog task next.</div>
+  <div class="meta">8:02 PM</div>
+  <div class="reply">Got it — starting the Android dialog task now. I'll report back when the run finishes.</div>
+  <div class="card">
+   <div class="h">🔔 Notice from a task run</div>
+   <div class="title">Android: Compact and Start a new coordinator in the context dialog</div>
+   <div class="body">Background job 017f413e5 ended (exit code 1): cd /root/.orbit/worktrees/… && g.sh unit-r2 :app:testDebugUnitTest …</div>
+   <div class="sub">Nothing to reply to. It did not reach you.</div>
+   <div class="told"><span>What the coordinator was told</span><span>›</span></div>
+   <div class="foot hl"><span>Queued</span><span>·</span><span class="why">runner stopping</span><span class="cancel" style="margin-left:6px">Cancel</span></div>
+  </div>
+ </div>
+ <div class="pop" style="top:470px">
+  <h4>Runner stopping</h4>
+  <div>HPC starts no new turns until 2 turns finish, then stops. This message is sent once it is back.</div>
+ </div>
+ <div class="composer">Message…</div>
+</div>
+<div class="cap"><span class="tag-n">④</span><b>runner 在停止</b>：同一位置写 <code>runner stopping</code>；弹层没有 Later / Update Now（和今天停止时的规则一样）。</div>
+</div>
+
+<!-- ⑤ two queued -->
+<div class="col">
+<div class="phone">
+ <div class="top"><div class="t"><span>8:16</span><span>67</span></div>
+  <div class="nav"><div class="back">‹</div><div class="ttl">Android: Compact and Start a new coordinator</div></div></div>
+ <div class="tx">
+  <div class="reply">Got it — starting the Android dialog task now.</div>
+  <div class="card">
+   <div class="h">🔔 Notice from a task run</div>
+   <div class="title">Android: Compact and Start a new coordinator in the context dialog</div>
+   <div class="sub">Nothing to reply to. It did not reach you.</div>
+   <div class="told"><span>What the coordinator was told</span><span>›</span></div>
+   <div class="foot hl"><span>Queued</span><span>·</span><span class="why">runner updating</span><span class="cancel" style="margin-left:6px">Cancel</span></div>
+  </div>
+  <div class="card">
+   <div class="h">✓ From Orbit</div>
+   <div class="title" style="color:#f2f2f7;font-size:14.5px">Evidence revision 2 submitted: Android: Compact dialog</div>
+   <div class="told"><span>What the coordinator was told</span><span>›</span></div>
+   <div class="foot hl"><span>Queued</span><span>·</span><span class="why">runner updating</span><span class="cancel" style="margin-left:6px">Cancel</span></div>
+  </div>
+  <div class="bubble" style="border:1.5px dashed #48484a;background:#1c1c1e">Also check the iOS build.</div>
+  <div class="meta"><span class="hl">Queued · <span style="text-decoration:underline dotted">runner updating</span> &nbsp;<span style="color:#0a84ff">Cancel</span></span></div>
+ </div>
+ <div class="composer">Message…</div>
+</div>
+<div class="cap"><span class="tag-n">⑤</span><b>多项排队（建议）</b>：每一项排队都被同一次更新挡住，所以<b>每一项</b>都写 <code>runner updating</code>，包括你自己排队的消息。备选：只在最后一项上写，其余仍是 <code>Queued Cancel</code>。</div>
+</div>
+
+</div>
+<div class="choices"><h2>待你确认的选择（每项都有建议）</h2><ol>
+<li><b>说明放在哪</b>：<b>建议</b>放在被挡住的排队项上（②）；没有任何排队项时，仍按今天的规则挂在最后一条已送达的消息下，或在空会话里显示居中说明页。</li>
+<li><b>多项排队</b>：<b>建议</b>每一项都写（⑤），不用判断“哪一条”，各端规则一致；备选是只写在最后一项上。</li>
+<li><b>Cancel</b>：<b>建议</b>保留，位置照旧在最右；更新期间取消依然有效（被取消的通知以后会重新投递）。</li>
+<li><b>弹层文字</b>：<b>建议</b>沿用现有文字 “This message is sent right after.”，卡片上也一样，不为每种卡片另写一句。</li>
+</ol>适用于所有排队卡片（任务通知、Open item、Task start、后台唤醒、协调者通知、Session 消息等），Web / iOS / macOS / Android 一起改。</div>
+</body></html>

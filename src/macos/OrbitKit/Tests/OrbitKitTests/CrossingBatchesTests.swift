@@ -41,8 +41,8 @@ final class CrossingBatchesTests: XCTestCase {
         XCTAssertEqual(CrossingBatches.batches(rows, projectID: "uuid-\(Self.here)").count, 1)
     }
 
-    /// A move to no project has no target end: it never joins a batch, whatever id is asked, and
-    /// the rows around it batch as before.
+    /// A move to no project has no target end: it never joins a batch into a project, whatever id
+    /// is asked, and the rows around it batch as before. Its source conversation draws it instead.
     func testAMoveToNoProjectTargetsNoProject() {
         let out = ProjectCrossing(id: "uuid-O", publicId: "O", fromProjectId: "uuid-34bSource",
                                   fromProjectPublicId: "34bSource", toProjectId: nil, kind: "MOVE_TASK",
@@ -53,7 +53,89 @@ final class CrossingBatchesTests: XCTestCase {
         XCTAssertFalse(CrossingBatches.targets(out, projectID: "34bSource"))
         XCTAssertEqual(CrossingBatches.batches(rows, projectID: Self.here).map { $0.rows.map(\.publicId) },
                        [["A", "B"]])
-        XCTAssertEqual(CrossingBatches.batches([out], projectID: "34bSource").count, 0)
+        XCTAssertEqual(CrossingBatches.batches([out], projectID: "34bSource").map(\.out), [true])
+    }
+
+    /// One move out of its project, as the server writes it: no target, its source by both ids.
+    private func outRow(_ id: String, from: String = "34bSource", state: String = "PENDING",
+                        requestedAt: String, decidedAt: String? = nil,
+                        source: String? = "Runner v1") -> ProjectCrossing {
+        ProjectCrossing(id: "uuid-\(id)", publicId: id, fromProjectId: "uuid-\(from)",
+                        fromProjectPublicId: from, toProjectId: nil,
+                        fromProject: source.map { ProjectCrossing.ProjectEnd(title: $0) },
+                        kind: "MOVE_TASK", crossingKey: "key-\(id)", state: state, title: "Task \(id)",
+                        requestedAt: requestedAt, decidedAt: decidedAt)
+    }
+
+    /// A move out is batched only by the conversation of its source project, under either spelling
+    /// of that project's id; no other project's conversation draws it, and a filing that names no
+    /// target is not a move out.
+    func testAMoveOutBatchesOnlyForItsSourceProject() {
+        let out = outRow("O", requestedAt: at(2))
+        XCTAssertTrue(CrossingBatches.leaves(out, projectID: "34bSource"))
+        XCTAssertTrue(CrossingBatches.leaves(out, projectID: "uuid-34bSource"))
+        XCTAssertEqual(CrossingBatches.batches([out], projectID: "34bSource").map(\.out), [true])
+        XCTAssertEqual(CrossingBatches.batches([out], projectID: "uuid-34bSource").map { $0.rows.map(\.publicId) },
+                       [["O"]])
+        XCTAssertTrue(CrossingBatches.batches([out], projectID: Self.here).isEmpty)
+        XCTAssertTrue(CrossingBatches.batches([out], projectID: "34bElsewhere").isEmpty)
+
+        let filing = ProjectCrossing(id: "uuid-F", fromProjectId: "uuid-34bSource",
+                                     fromProjectPublicId: "34bSource", toProjectId: nil, kind: "FILE_TASK",
+                                     crossingKey: "key-F", state: "PENDING", title: "Task F",
+                                     requestedAt: at(1))
+        XCTAssertTrue(CrossingBatches.batches([filing], projectID: "34bSource").isEmpty)
+    }
+
+    /// Out-batches are grouped apart from into-batches, even from the same source and of the same
+    /// kind.
+    func testAMoveOutDoesNotJoinAMoveInFromTheSameSource() {
+        let into = ProjectCrossing(id: "uuid-I", publicId: "I", fromProjectId: "uuid-34bSource",
+                                   fromProjectPublicId: "34bSource", toProjectId: "uuid-34bSource",
+                                   toProjectPublicId: "34bSource", kind: "MOVE_TASK",
+                                   crossingKey: "key-I", state: "PENDING", title: "Task I",
+                                   requestedAt: at(1))
+        let batches = CrossingBatches.batches([into, outRow("O", requestedAt: at(2))],
+                                              projectID: "34bSource")
+        XCTAssertEqual(batches.map(\.out), [false, true])
+        XCTAssertEqual(batches.map { $0.rows.map(\.publicId) }, [["I"], ["O"]])
+    }
+
+    /// A move out's card says what it takes out of where, and its buttons say what each press does
+    /// to this project; an answered one reads `taken out`.
+    func testAMoveOutsWords() {
+        let one = CrossingBatches.batches([outRow("O1", requestedAt: at(1))], projectID: "34bSource")[0]
+        XCTAssertTrue(one.out)
+        XCTAssertEqual(CrossingBatches.title(one), "Take this task out of the project?")
+        XCTAssertEqual(CrossingBatches.summary(one), "1 task to take out of Runner v1")
+        XCTAssertEqual(CrossingBatches.listHead(for: one), "Tasks to take out")
+        XCTAssertEqual(CrossingBatches.consequence(one), CrossingBatches.takeOutConsequence)
+        XCTAssertEqual(CrossingBatches.consequence(one),
+                       "Confirming takes the task out of this project as soon as you answer, and nobody has to send the request again.")
+        XCTAssertEqual(CrossingBatches.approveLabel(for: one), "Take it out")
+        XCTAssertEqual(CrossingBatches.refuseLabel(for: one), "Keep it here")
+        XCTAssertEqual(CrossingBatches.badge(one), "move")
+        XCTAssertEqual(CrossingBatches.toNoProject, "No project")
+
+        let many = CrossingBatches.batches([outRow("O1", requestedAt: at(1)),
+                                            outRow("O2", requestedAt: at(2))], projectID: "34bSource")[0]
+        XCTAssertEqual(CrossingBatches.title(many), "Take these tasks out of the project?")
+        XCTAssertEqual(CrossingBatches.summary(many), "2 tasks to take out of Runner v1")
+        XCTAssertEqual(CrossingBatches.consequence(many),
+                       "Confirming takes the tasks out of this project as soon as you answer, and nobody has to send the request again.")
+        XCTAssertEqual(CrossingBatches.approveLabel(for: many), "Take them out")
+        XCTAssertEqual(CrossingBatches.refuseLabel(for: many), "Keep them here")
+
+        let answered = CrossingBatches.batches([outRow("O3", state: "APPLIED", requestedAt: at(1),
+                                                       decidedAt: at(5))], projectID: "34bSource")[0]
+        XCTAssertEqual(CrossingBatches.badge(answered), "taken out")
+        // Into-batches keep their current words.
+        let into = CrossingBatches.batches([row("A", requestedAt: at(1))], projectID: Self.here)[0]
+        XCTAssertFalse(into.out)
+        XCTAssertEqual(CrossingBatches.title(into), "Move this task here?")
+        XCTAssertEqual(CrossingBatches.approveLabel(for: into), "Approve")
+        XCTAssertEqual(CrossingBatches.refuseLabel(for: into), "Refuse")
+        XCTAssertEqual(CrossingBatches.listHead(for: into), "Tasks to move")
     }
 
     func testRowsAskedWhileTheBatchIsOpenJoinItAndLaterOnesStartANewOne() {

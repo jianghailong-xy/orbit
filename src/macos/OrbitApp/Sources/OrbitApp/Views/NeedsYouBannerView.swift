@@ -174,15 +174,22 @@ struct NeedsYouBannerView: View {
                                 .foregroundStyle(.primary)
                                 .lineLimit(1)
                             Spacer(minLength: 0)
-                            if more > 0 || unfolds {
+                            if more > 0 {
                                 HStack(spacing: 2) {
-                                    if more > 0 { Text("+\(more)") }
+                                    Text("+\(more)")
                                     if unfolds { Image(systemName: "chevron.down").imageScale(.small) }
                                 }
                                 .font(.orbitMeta.weight(.semibold))
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 6)
                                 .background(Color.primary.opacity(0.1), in: Capsule())
+                            } else if unfolds {
+                                // No count to carry it (sessions blocked on a tool call have no "+N"):
+                                // the ⌄ stands bare, as the ↑ that folds them does — a pill around the
+                                // chevron alone squashed to its glyph's height.
+                                Image(systemName: "chevron.down")
+                                    .font(.orbitLabel.weight(.semibold))
+                                    .foregroundStyle(.secondary)
                             }
                             if let since { NeedsYouAge(since: since) }
                         }

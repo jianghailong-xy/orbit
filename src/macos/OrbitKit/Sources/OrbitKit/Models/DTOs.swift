@@ -141,6 +141,13 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     /// model and effort of its tier; off (the default), routing is only recorded in shadow. Only the
     /// owner's user API writes it.
     public let modelRouting: Bool?
+    /// What smart model selection and SubAgents rank by: `cost`, `balance` or `intelligence`. Nil from an
+    /// older server reads as Cost (`SubagentSettings.OptimizeFor(stored:)`).
+    public var modelRoutingOptimizeFor: String? = nil
+    /// Whether this Agent's sessions may hand work to SubAgents (docs/subagent-design.md §7). Nil reads as on.
+    public var subagentsEnabled: Bool? = nil
+    /// How many of one session's SubAgents run at once. Nil reads as 4 (`SubagentSettings.maxRunning`).
+    public var subagentsMaxRunning: Int? = nil
     public let workDirExists: Bool?
     public let workDirIsGit: Bool?
     /// BIGINT columns are serialized as strings by the control plane; numeric fixtures and older
@@ -161,7 +168,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         case maxTurns, maxBudgetUsd, targetRunnerId, targetLabels, runnerId, env, enabled
         case antigravityKeyAvailableByRunner
         case autoInitGit, codexAccount, claudeAccount, antigravityAccount, kimiAccount, cursorAccount
-        case enableWorktree, modelRouting
+        case enableWorktree, modelRouting, modelRoutingOptimizeFor, subagentsEnabled, subagentsMaxRunning
         case workDirExists, workDirIsGit
         case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup, mainCheckoutActions
     }
@@ -199,6 +206,9 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         cursorAccount = try c.decodeIfPresent(String.self, forKey: .cursorAccount)
         enableWorktree = try c.decodeIfPresent(Bool.self, forKey: .enableWorktree)
         modelRouting = try c.decodeIfPresent(Bool.self, forKey: .modelRouting)
+        modelRoutingOptimizeFor = try c.decodeIfPresent(String.self, forKey: .modelRoutingOptimizeFor)
+        subagentsEnabled = try c.decodeIfPresent(Bool.self, forKey: .subagentsEnabled)
+        subagentsMaxRunning = try c.decodeIfPresent(Int.self, forKey: .subagentsMaxRunning)
         workDirExists = try c.decodeIfPresent(Bool.self, forKey: .workDirExists)
         workDirIsGit = try c.decodeIfPresent(Bool.self, forKey: .workDirIsGit)
         workDirFreeBytes = c.flexibleInt64(forKey: .workDirFreeBytes)
@@ -1316,8 +1326,8 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// predates the field.
     public let coordinatorDelivery: JSONValue?
     public var coordinatorDeliveryCard: CoordinatorDelivery? { CoordinatorDelivery.parseCard(coordinatorDelivery) }
-    /// The same for the turn that hands a task's run its brief (`taskStart`) — a resumed run's; a
-    /// run's opening turn is never listed — held raw for `TaskStart.parseCard`, the reader the echo's
+    /// The same for the turn that hands a task's run its brief (`taskStart`) — a resumed run's, or a
+    /// run's opening turn while no runner has taken it — held raw for `TaskStart.parseCard`, the reader the echo's
     /// payload is read by. Nil on every other turn, and from a server that predates the field.
     public let taskStart: JSONValue?
     public var taskStartCard: TaskStart? { TaskStart.parseCard(taskStart) }
@@ -1383,6 +1393,10 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// delivery — so nobody typed its words. Nil on every turn somebody sent, and from a server that
     /// predates the field.
     public let authoredByOrbit: Bool?
+    /// The session's opening prompt, listed as the accepted head until the runner echoes it — so a
+    /// session no runner has claimed yet still shows its first message. Nil on every other turn, and
+    /// from a server that predates the field.
+    public let opening: Bool?
 
     public init(turnId: String, kind: String? = nil, content: String,
                 attachments: [Attachment]? = nil, openItemDelivery: JSONValue? = nil,
@@ -1395,7 +1409,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
                 runQuestion: JSONValue? = nil, runNotice: JSONValue? = nil, sessionOpening: JSONValue? = nil,
                 placement: String? = nil, createdAt: String? = nil,
                 targetTurnId: String? = nil, delivery: String? = nil, deliveryCode: String? = nil,
-                deliveryReason: String? = nil) {
+                deliveryReason: String? = nil, opening: Bool? = nil) {
         self.turnId = turnId
         self.kind = kind
         self.placement = placement
@@ -1423,6 +1437,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
         self.runQuestion = runQuestion
         self.runNotice = runNotice
         self.sessionOpening = sessionOpening
+        self.opening = opening
     }
 }
 

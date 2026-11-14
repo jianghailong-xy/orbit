@@ -96,15 +96,21 @@ fun WorkspaceSettings(api: ManagementApi, workspaceId: String?, revision: Long, 
     var workDir by rememberSaveable(id) { mutableStateOf(saved.text("workDir")) }
     var enabled by rememberSaveable(id) { mutableStateOf(saved.bool("enabled") ?: true) }
     var modelRouting by rememberSaveable(id) { mutableStateOf(saved.bool("modelRouting") ?: false) }
+    val savedSubagents = SubagentSettings.of(saved)
+    var subagentsEnabled by rememberSaveable(id) { mutableStateOf(savedSubagents.enabled) }
+    var optimizeFor by rememberSaveable(id) { mutableStateOf(savedSubagents.optimizeFor) }
+    var subagentsMaxRunning by rememberSaveable(id) { mutableStateOf(savedSubagents.maxRunning) }
+    val subagents = SubagentSettings(subagentsEnabled, optimizeFor, subagentsMaxRunning)
     val dirty = name != saved.text("name") || effort != prefilledEffort || instructions != saved.text("appendSystemPrompt") ||
-        workDir != saved.text("workDir") || enabled != (saved.bool("enabled") ?: true) || modelRouting != (saved.bool("modelRouting") ?: false)
+        workDir != saved.text("workDir") || enabled != (saved.bool("enabled") ?: true) || modelRouting != (saved.bool("modelRouting") ?: false) ||
+        subagents != savedSubagents
     val options = WorkspaceEffort.options(engine, runner).let { if (effort in it) it else listOf(effort) + it }
     fun commit() {
         if (!dirty || name.isBlank()) { done(); return }
         saving = true; failure = null
         scope.launch {
             try {
-                api.patch("workspaces/$id", workspacePatch(saved, name, effort, instructions, workDir, enabled, modelRouting))
+                api.patch("workspaces/$id", workspacePatch(saved, name, effort, instructions, workDir, enabled, modelRouting, subagents))
                 changed(); done()
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { failure = personalFailure(e) }
@@ -160,6 +166,8 @@ fun WorkspaceSettings(api: ManagementApi, workspaceId: String?, revision: Long, 
                 Switch(checked = modelRouting, onCheckedChange = null)
             }
         }
+        SubagentsSection(api, subagentsEnabled, { subagentsEnabled = it }, optimizeFor, { optimizeFor = it },
+            subagentsMaxRunning, { subagentsMaxRunning = it })
         val env = (saved["env"] as? JsonObject)?.entries?.sortedBy { it.key }.orEmpty()
         if (env.isNotEmpty()) FormSection("Environment") {
             env.forEach { (key, value) ->
@@ -188,11 +196,15 @@ fun WorkspaceSettings(api: ManagementApi, workspaceId: String?, revision: Long, 
 
 /** UpdateAgentRequest as iOS sends it: name trimmed, effort and enabled always, the rest only when they mean a change. */
 internal fun workspacePatch(saved: JsonObject, name: String, effort: String, instructions: String, workDir: String,
-                            enabled: Boolean, modelRouting: Boolean) = buildJsonObject {
+                            enabled: Boolean, modelRouting: Boolean, subagents: SubagentSettings = SubagentSettings.of(saved)) = buildJsonObject {
     put("name", name.trim())
     if (instructions.isNotEmpty()) put("appendSystemPrompt", instructions)
     put("effort", effort)
     if (workDir.isNotEmpty()) put("workDir", workDir)
     put("enabled", enabled)
     if (modelRouting != (saved.bool("modelRouting") ?: false)) put("modelRouting", modelRouting)
+    val savedSubagents = SubagentSettings.of(saved)
+    if (subagents.enabled != savedSubagents.enabled) put("subagentsEnabled", subagents.enabled)
+    if (subagents.optimizeFor != savedSubagents.optimizeFor) put("modelRoutingOptimizeFor", subagents.optimizeFor)
+    if (subagents.maxRunning != savedSubagents.maxRunning) put("subagentsMaxRunning", subagents.maxRunning)
 }

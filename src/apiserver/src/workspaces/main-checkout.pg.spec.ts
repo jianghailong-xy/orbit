@@ -21,6 +21,7 @@ import { test } from 'node:test';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { ProjectStatus, RunStatus, RunnerStatus, type PrismaClient } from '@prisma/client';
 import {
+  MAIN_CHECKOUT_DISCARD_CAPABILITY,
   MAIN_CHECKOUT_GIT_CAPABILITY,
   MAIN_CHECKOUT_UNSUPPORTED_CODE,
   type MainCheckoutActionResult,
@@ -484,6 +485,32 @@ test('an old runner: actions refused with MAIN_CHECKOUT_UNSUPPORTED, nothing que
   assert.equal(ws.mainCheckoutActions, false);
   // Nor does a heartbeat without the capability hand anything out.
   assert.deepEqual(await w.service.dispatch({ runnerId: w.runnerId, capabilities: [] }), []);
+});
+
+test('discard: needs files, and a runner that declared the discard capability', { skip }, async (t) => {
+  const w = await world(t);
+  const discard = (over: Record<string, unknown> = {}) =>
+    w.service.act(w.ownerId, w.workspaceId, {
+      kind: 'discard', root: ROOT, fingerprint: FINGERPRINT, files: ['src/a.ts'], requestId: randomUUID(), ...over,
+    } as never);
+  // The git capability alone is a runner from before Discard: refused, nothing queued.
+  await assert.rejects(discard(), (error: unknown) => {
+    assert.ok(error instanceof ConflictException);
+    assert.equal((error.getResponse() as { code?: string }).code, MAIN_CHECKOUT_UNSUPPORTED_CODE);
+    return true;
+  });
+  assert.equal(await w.prisma.mainCheckoutRequest.count({ where: { ownerId: w.ownerId } }), 0);
+  await w.prisma.runner.update({
+    where: { id: w.runnerId },
+    data: { capabilities: [MAIN_CHECKOUT_GIT_CAPABILITY, MAIN_CHECKOUT_DISCARD_CAPABILITY] },
+  });
+  await assert.rejects(discard({ files: [] }), BadRequestException);
+  await assert.rejects(discard({ message: 'x' }), BadRequestException);
+  assert.equal((await discard()).status, 'pending');
+  const [handed] = await handOut(w);
+  assert.equal(handed.op, 'action');
+  assert.deepEqual(handed.op === 'action' && handed.command.files, ['src/a.ts']);
+  assert.equal(handed.op === 'action' && handed.command.kind, 'discard');
 });
 
 test('an offline runner: the action waits with a RUNNER_OFFLINE line, and Cancel ends it before it is handed out', { skip }, async (t) => {

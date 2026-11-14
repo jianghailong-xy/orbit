@@ -313,6 +313,8 @@ struct MainCheckoutReviewSheet: View {
     let workspaceID: String
     /// The session it was opened from; nil from a workspace's settings.
     var console: ConsoleModel?
+    /// The files Discard asks about, while its confirmation is up.
+    @State private var discarding: [String]?
 
     var body: some View {
         NavigationStack {
@@ -348,23 +350,32 @@ struct MainCheckoutReviewSheet: View {
                     #endif
                 }
                 Divider()
+                // The ways out sit with the files they act on: under the list, never under the diff.
+                let actions = read.actionsSupported && !read.snapshot.files.isEmpty
                 #if os(macOS)
                 HStack(spacing: 0) {
-                    fileList(read).frame(width: 280)
+                    VStack(spacing: 0) {
+                        fileList(read)
+                        if actions {
+                            Divider()
+                            actionBar(read)
+                        }
+                    }
+                    .frame(width: 280)
                     Divider()
                     diffPane
                 }
                 #else
                 VStack(spacing: 0) {
                     fileList(read).frame(maxHeight: 210)
+                    if actions {
+                        Divider()
+                        actionBar(read)
+                    }
                     Divider()
                     diffPane
                 }
                 #endif
-                if read.actionsSupported && !read.snapshot.files.isEmpty {
-                    Divider()
-                    actionBar(read)
-                }
             }
         } else if model.loading {
             ProgressView(MainCheckoutCopy.loading).frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -491,7 +502,6 @@ struct MainCheckoutReviewSheet: View {
     // MARK: exits
 
     private func actionBar(_ read: MainCheckoutRead) -> some View {
-        @Bindable var model = model
         let s = read.snapshot
         let branch = s.branch ?? "HEAD"
         let chosen = model.selection.paths
@@ -502,31 +512,53 @@ struct MainCheckoutReviewSheet: View {
                     .font(.orbitLabel).foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            TextField(MainCheckoutCopy.commitMessagePlaceholder, text: $model.message, axis: .vertical)
-                .lineLimit(1...4)
-                .textFieldStyle(.roundedBorder)
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 8) { commitButton(read, branch: branch, chosen: chosen); moveMenu(read, chosen: chosen); moreMenu(read, chosen: chosen) }
-                VStack(alignment: .leading, spacing: 8) {
-                    commitButton(read, branch: branch, chosen: chosen)
-                    HStack(spacing: 8) { moveMenu(read, chosen: chosen); moreMenu(read, chosen: chosen) }
-                }
-            }
+            commitButton(read, branch: branch, chosen: chosen)
+            discardButton(read, chosen: chosen)
+            HStack(spacing: 8) { moveMenu(read, chosen: chosen); moreMenu(read, chosen: chosen) }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .disabled(model.sending)
+        .orbitConfirmation(MainCheckoutCopy.discardTitle(chosen: discarding?.count ?? 0),
+                           isPresented: Binding(get: { discarding != nil }, set: { if !$0 { discarding = nil } })) {
+            Button(MainCheckoutCopy.discard, role: .destructive) {
+                guard let files = discarding else { return }
+                discarding = nil
+                send { requestId, from in
+                    .discard(root: s.root, fingerprint: s.fingerprint, files: files, requestId: requestId, from: from)
+                }
+            }
+            Button("Cancel", role: .cancel) { discarding = nil }
+        } message: {
+            Text(MainCheckoutCopy.discardBody(chosen: discarding?.count ?? 0, branch: branch))
+        }
+    }
+
+    /// Only on a runner that can: an older one would refuse it.
+    @ViewBuilder
+    private func discardButton(_ read: MainCheckoutRead, chosen: [String]) -> some View {
+        if read.discardSupported == true {
+            Button(role: .destructive) { discarding = chosen } label: {
+                Text(MainCheckoutCopy.discardButton(chosen: chosen.count)).frame(maxWidth: .infinity)
+            }
+            .controlSize(.large)
+            .disabled(!model.selection.canCommit || read.snapshot.head == nil)
+        }
     }
 
     private func commitButton(_ read: MainCheckoutRead, branch: String, chosen: [String]) -> some View {
-        Button(MainCheckoutCopy.commitButton(chosen: chosen.count, branch: branch)) {
-            let message = model.message
+        Button {
+            let message = model.selection.defaultMessage
             send { requestId, from in
                 .commit(root: read.snapshot.root, fingerprint: read.snapshot.fingerprint, files: chosen,
                         message: message, requestId: requestId, from: from)
             }
+        } label: {
+            Text(MainCheckoutCopy.commitButton(chosen: chosen.count, branch: branch)).frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
-        .disabled(!model.selection.canCommit(message: model.message))
+        .controlSize(.large)
+        .disabled(!model.selection.canCommit)
     }
 
     /// Sessions of this workspace on a worktree of their own; the one it was opened from first, and any
@@ -594,7 +626,6 @@ struct MainCheckoutReviewSheet: View {
     private func send(_ build: @escaping (_ requestId: String, _ from: String?) -> MainCheckoutActionPost) {
         Task {
             if await model.act(workspaceID: workspaceID, build) {
-                model.message = ""
                 app.refreshMainCheckoutSoon()
                 dismiss()
             }

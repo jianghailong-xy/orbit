@@ -49,6 +49,9 @@ struct ConsoleView: View {
     /// and the session's workspace list the Move panel counts its folders over.
     @State private var movingSession: Session?
     @State private var moveListed: [Session] = []
+    /// The session whose Settings sheet is open (`SessionSettingsSheet`), from Settings… in the ⋯ menu
+    /// or the Mac toolbar.
+    @State private var settingsSession: Session?
     #if os(iOS)
     /// The ⋯ menu's Rename… (web double-clicks its header title). Seeded from the session's own
     /// title — not `SessionHeader.title`, whose agent-name fallback would otherwise be typed in as if
@@ -96,6 +99,7 @@ struct ConsoleView: View {
             progress: { console.state.taskProgress[$0] },
             isRunning: { id in console.state.background.contains { $0.id == id && $0.status == "running" } },
             subagentItems: { console.state.subagentItems[$0] ?? [] },
+            subagentRun: { console.subagentRuns[$0] },
             fullPayload: { await console.fullPayload(seq: $0) })
     }
 
@@ -561,8 +565,26 @@ struct ConsoleView: View {
                     .disabled(sessionWorkspace(session) == nil)
                 }
             }
+            // Settings…, the iPhone's ⋯ menu item after Tags…: the same sheet. None on a landing
+            // session (LS6), which has no engine to set up.
+            ToolbarItem(placement: .primaryAction) {
+                if let session = appModel.session(id: sessionID), session.isLanding != true {
+                    Button { settingsSession = session } label: {
+                        Label(SessionSettingsPanel.menuItem, systemImage: "gearshape")
+                    }
+                    .help("Session settings: labels, public link, environment, notifications and info")
+                }
+            }
         }
         #endif
+        // Settings… (docs/mocks/session-settings native.html ①–④), on every platform.
+        .sheet(item: $settingsSession) { session in
+            if let baseURL = appModel.baseURL {
+                SessionSettingsSheet(sessionID: session.id,
+                                     api: APIClient(baseURL: baseURL, tokenStore: appModel.tokenStore))
+                    .environment(appModel)
+            }
+        }
         // The Move panel, from Move… or the region card (docs/session-folders-move-design.md §4).
         .sheet(item: $movingSession) { session in
             if let workspace = sessionWorkspace(session) {
@@ -686,6 +708,9 @@ struct ConsoleView: View {
                     .disabled(sessionWorkspace(session) == nil)
                     Button { taggingSession = session } label: {
                         Label("Tags…", systemImage: "tag")
+                    }
+                    Button { settingsSession = session } label: {
+                        Label(SessionSettingsPanel.menuItem, systemImage: "gearshape")
                     }
                 }
                 if let taskID = session.taskId {
@@ -929,14 +954,25 @@ struct TranscriptView: View {
         return session
     }
 
+    /// Whether a turn on the queued tail is what the update holds: then that turn's own queued line
+    /// says so (`runnerUpdatingQueued`), and neither the last message nor the queued page does.
+    private var runnerUpdatingTailHeld: Bool { RunnerUpdating.tailHolds(console.state.queued) }
+
     private var runnerUpdatingFoot: RunnerUpdatingFoot? {
-        guard let session = runnerUpdatingSession,
+        guard let session = runnerUpdatingSession, !runnerUpdatingTailHeld,
               let id = RunnerUpdating.footBubbleID(console.state.items) else { return nil }
         return RunnerUpdatingFoot(bubbleID: id, session: session, machine: console.runnerName, runnerID: console.runnerID)
     }
 
+    /// The tag a queued-tail turn the update holds reads in place of `Queued`.
+    private func runnerUpdatingQueued(_ bubble: UserBubble) -> RunnerUpdatingFoot? {
+        guard let session = runnerUpdatingSession, RunnerUpdating.holdsQueued(bubble) else { return nil }
+        return RunnerUpdatingFoot(bubbleID: bubble.id, session: session, machine: console.runnerName, runnerID: console.runnerID)
+    }
+
     @ViewBuilder private var runnerUpdatingPage: some View {
-        if let session = runnerUpdatingSession, RunnerUpdating.footBubbleID(console.state.items) == nil {
+        if let session = runnerUpdatingSession, !runnerUpdatingTailHeld,
+           RunnerUpdating.footBubbleID(console.state.items) == nil {
             RunnerUpdatingQueuedView(session: session, machine: console.runnerName, runnerID: console.runnerID,
                                      onOpenSession: { app.route(to: .session($0)) })
         }
@@ -1406,6 +1442,7 @@ struct TranscriptView: View {
             }, steer: SteerControls(bubble: bubble, withdrawing: console.withdrawingSteers) {
                 Task { await console.withdrawSteer(bubble) }
             }, putBack: putBack(bubble))
+            .environment(\.runnerUpdatingQueued, runnerUpdatingQueued(bubble))
         case .bottom:
             // Both shapes end in the room the list's fade lies over (`fadesIntoComposerBand`), so a list
             // at its tail has nothing in the fade. In the row's content, not its insets: every follow and
@@ -1688,6 +1725,17 @@ private extension View {
     }
 }
 #endif
+
+/// The session page's transcript in a wiki chat's panel (design §9): the same rows, cards and approvals,
+/// with the sticky question kept out of a navigation bar the panel does not have. It sits here, beside
+/// the view it initializes: an initializer for this struct declared in another file crashes Xcode 27's
+/// IRGen on the private `HeldScroll` (`Global is external, but doesn't have external or weak linkage`).
+extension TranscriptView {
+    init(wikiChat console: ConsoleModel) {
+        self.console = console
+        self.hidesStickyQuestion = true
+    }
+}
 
 /// A tap target that still fires while the enclosing `List` is coasting (momentum scroll) — the whole
 /// reason these controls aren't plain `Button`s. On iOS the scroll view's stop-on-tap arbitration eats

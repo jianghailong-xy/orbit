@@ -115,6 +115,7 @@ func init() {
 		createWorkDirCapabilityV1,
 		claudeRegionCapabilityV1,
 		mainCheckoutGitCapabilityV1,
+		mainCheckoutDiscardCapabilityV1,
 		selfUpdatePostponeCapabilityV1,
 		selfUpdateNowCapabilityV1,
 		taskForkCapabilityV1,
@@ -1260,6 +1261,8 @@ func (t *Transport) createApproval(ctx context.Context, sessionID string, body i
 		ID     string `json:"id"`
 		Status string `json:"status"`
 	}
+	// A SubAgent's engine asks under its parent's session, and its card names the run (subagentApprovalBody).
+	body = subagentApprovalBody(ctx, body)
 	if err := t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/approvals", body, &r, 20*time.Second); err != nil {
 		return "", err
 	}

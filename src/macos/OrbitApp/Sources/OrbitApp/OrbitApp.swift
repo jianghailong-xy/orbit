@@ -137,6 +137,7 @@ struct RootView: View {
                 MainView()
                     .sessionSearchSheet(model)
                     .ownerRequestInboxSheet(model)
+                    .wikiCreateHost(model)
             } else {
                 LoginView()
             }

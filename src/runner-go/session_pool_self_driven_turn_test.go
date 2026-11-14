@@ -1,12 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -43,6 +45,20 @@ type supervisedSession struct {
 	paths []string
 	// The worktree snapshots the runner reported with no turn to complete, in arrival order.
 	diffs []DiffResultRequest
+	// The SubAgent reports (PATCH …/subagents/:runId), in arrival order, and the runs opened so far.
+	subagentReports []map[string]interface{}
+	subagentsOpened int
+	// subagentProvider is the engine the server names for a SubAgent's child; "" is the parent's own, Claude.
+	subagentProvider string
+	// subagentRemote, when set, places every delegate call on that workspace (docs/subagent-design.md §10): the
+	// answer has no exec, the relayed events are remoteEvents, the run's end remoteStatus and remoteResult, and
+	// the bodies of the opening POSTs and the count of stop requests are kept.
+	subagentRemote string
+	remoteEvents   []map[string]interface{}
+	remoteStatus   string
+	remoteResult   string
+	remoteOpens    []map[string]interface{}
+	remoteStops    int
 }
 
 // superviseClaudeSession registers the session active, as a claim does, with one message
@@ -129,7 +145,7 @@ func (s *supervisedSession) serve(w http.ResponseWriter, r *http.Request) {
 			s.mu.Unlock()
 			time.Sleep(2 * time.Millisecond)
 		}
-	case strings.HasSuffix(r.URL.Path, "/events"):
+	case strings.HasSuffix(r.URL.Path, "/events") && !strings.Contains(r.URL.Path, "/subagents/"):
 		var batch RunEventBatch
 		if json.NewDecoder(r.Body).Decode(&batch) == nil {
 			s.mu.Lock()
@@ -154,6 +170,58 @@ func (s *supervisedSession) serve(w http.ResponseWriter, r *http.Request) {
 		if json.NewDecoder(r.Body).Decode(&req) == nil {
 			s.mu.Lock()
 			s.settled = append(s.settled, req)
+			s.mu.Unlock()
+		}
+	case strings.HasSuffix(r.URL.Path, "/subagents") && r.Method == http.MethodPost:
+		// A delegate call opens a run on the parent's own engine (runner-subagents.controller.ts).
+		s.mu.Lock()
+		s.subagentsOpened++
+		runID := fmt.Sprintf("run-%d", s.subagentsOpened)
+		provider := firstNonEmpty(s.subagentProvider, providerClaude)
+		remote := s.subagentRemote
+		if remote != "" {
+			var body map[string]interface{}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			s.remoteOpens = append(s.remoteOpens, body)
+		}
+		s.mu.Unlock()
+		if remote != "" {
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"runId": runID, "status": "RUNNING", "decision": map[string]interface{}{},
+				"remote": map[string]interface{}{"workspaceId": "ws-" + remote, "workspaceName": remote},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"runId": runID, "status": "RUNNING", "decision": map[string]interface{}{},
+			"exec": map[string]interface{}{"provider": provider, "model": "claude-test", "permissionMode": "acceptEdits",
+				"env": map[string]string{"ANTHROPIC_API_KEY": "test"}},
+		})
+		return
+	case strings.Contains(r.URL.Path, "/subagents/") && strings.HasSuffix(r.URL.Path, "/events") && r.Method == http.MethodGet:
+		// A remote run's relayed events after ?after=, and its status.
+		after, _ := strconv.Atoi(r.URL.Query().Get("after"))
+		s.mu.Lock()
+		var page []map[string]interface{}
+		for _, e := range s.remoteEvents {
+			if int(e["seq"].(int)) > after {
+				page = append(page, e)
+			}
+		}
+		status, result := firstNonEmpty(s.remoteStatus, "RUNNING"), s.remoteResult
+		s.mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"events": nonNilEventPage(page), "status": status, "resultSummary": result})
+		return
+	case strings.Contains(r.URL.Path, "/subagents/") && strings.HasSuffix(r.URL.Path, "/stop") && r.Method == http.MethodPost:
+		s.mu.Lock()
+		s.remoteStops++
+		s.mu.Unlock()
+	case strings.Contains(r.URL.Path, "/subagents/") && r.Method == http.MethodPatch:
+		var report map[string]interface{}
+		if json.NewDecoder(r.Body).Decode(&report) == nil {
+			report["runId"] = r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
+			s.mu.Lock()
+			s.subagentReports = append(s.subagentReports, report)
 			s.mu.Unlock()
 		}
 	case strings.HasSuffix(r.URL.Path, "/diff"):
@@ -575,4 +643,11 @@ func TestSelfDrivenTurnWithoutAWorktreeReportsNothing(t *testing.T) {
 	if s.requested("/diff") {
 		t.Fatal("a session with no worktree reported one")
 	}
+}
+
+func nonNilEventPage(page []map[string]interface{}) []map[string]interface{} {
+	if page == nil {
+		return []map[string]interface{}{}
+	}
+	return page
 }

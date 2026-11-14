@@ -124,11 +124,42 @@ export async function mintPoolLoginToken(
   await db.poolLoginToken.deleteMany({
     where: {
       sessionId: binding.sessionId,
-      OR: [{ poolId: { not: binding.poolId } }, { expiresAt: { lte: now } }, { revokedAt: { not: null } }],
+      OR: [
+        // A SubAgent's token on another pool (mintSubagentPoolLoginToken) is its child's, still running.
+        { poolId: { not: binding.poolId }, accountId: null, keyId: null },
+        { expiresAt: { lte: now } },
+        { revokedAt: { not: null } },
+      ],
     },
   });
   await db.poolLoginToken.updateMany({ where: { sessionId: binding.sessionId }, data: { expiresAt } });
   await db.poolLoginToken.create({ data: { ...binding, tokenHash: sha256(token), expiresAt } });
+  return token;
+}
+
+/**
+ * mintPoolLoginToken for a SubAgent's child on a Codex pool of the session owner's own (migration 0800): the token
+ * names the credential chosen for the SubAgent alone — one of the pool's ChatGPT accounts, or one of its API keys —
+ * which the gateway sends on in place of the session's own (`pool_codex_account_id`, `pool_key_id`), so the parent
+ * session's pool fields are never written. Bound to the parent session, whose end ends it; it moves no other token,
+ * and deletes only the session's SubAgent tokens that have expired or been revoked.
+ */
+export async function mintSubagentPoolLoginToken(
+  db: Prisma.TransactionClient | PrismaService,
+  binding: { poolId: string; userId: string; sessionId: string },
+  credential: { accountId: string; keyId: null } | { accountId: null; keyId: string },
+  now: Date,
+): Promise<string> {
+  const token = `${POOL_LOGIN_TOKEN_PREFIX}${generateToken(32)}`;
+  const expiresAt = new Date(now.getTime() + POOL_GATEWAY_TOKEN_TTL_MS);
+  await db.poolLoginToken.deleteMany({
+    where: {
+      sessionId: binding.sessionId,
+      OR: [{ accountId: { not: null } }, { keyId: { not: null } }],
+      AND: [{ OR: [{ expiresAt: { lte: now } }, { revokedAt: { not: null } }] }],
+    },
+  });
+  await db.poolLoginToken.create({ data: { ...binding, ...credential, tokenHash: sha256(token), expiresAt } });
   return token;
 }
 

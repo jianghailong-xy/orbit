@@ -171,9 +171,22 @@ public enum RunnerUpdating {
         return "\(first) This message is sent right after."
     }
 
-    /// The message whose foot row carries `Queued · runner updating`: the reader's last one in the
-    /// transcript (web `queuedFoot`). Nil where the transcript has none, and then the queued page says
-    /// it instead — the two are never drawn together.
+    /// A turn on the queued tail the update holds: still waiting for a turn of its own — not a steer,
+    /// nor one whose delivery settled. Its own queued line says `Queued · runner updating`
+    /// (docs/mocks/queued-card-runner-updating ②⑤; web `queuedTurnWaitsItsTurn`).
+    public static func holdsQueued(_ bubble: UserBubble) -> Bool {
+        !bubble.steer && !bubble.undelivered && !SteerDelivery.settles(bubble.delivery)
+    }
+
+    /// Whether the transcript's queued tail — what the tray does not hold — has a turn the update
+    /// holds. Then that turn says why, and neither the last message nor the queued page does.
+    public static func tailHolds(_ queued: [UserBubble]) -> Bool {
+        queued.contains { !PendingTray.holds($0) && holdsQueued($0) }
+    }
+
+    /// The message whose foot row carries `Queued · runner updating` where the queued tail holds
+    /// nothing (`tailHolds`): the reader's last one in the transcript (web `queuedFoot`). Nil where the
+    /// transcript has none, and then the queued page says it instead — the two are never drawn together.
     public static func footBubbleID(_ items: [TranscriptItem]) -> String? {
         for item in items.reversed() {
             if case .user(let bubble) = item { return bubble.id }

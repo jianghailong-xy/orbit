@@ -178,6 +178,27 @@ describe('the pending card', () => {
   });
 });
 
+describe('Chat about this', () => {
+  it('in a conversation, hands the request to the composer and leaves it open', async () => {
+    const onChat = vi.fn();
+    await mount(<OwnerRequestCard now={NOW} request={request()} onChat={onChat} />);
+    await press(button('Chat about this'));
+    expect(onChat).toHaveBeenCalledWith(expect.objectContaining({ id: 'req1' }));
+    expect(apiMock).not.toHaveBeenCalledWith(expect.stringMatching(/^\/owner-requests\/req1\//), expect.anything());
+    expect(button('Confirm').disabled).toBe(false);
+  });
+
+  it('is not offered where there is no conversation to talk in, nor past the deadline', async () => {
+    await mount(<OwnerRequestCard now={NOW} request={request()} />);
+    expect(host.textContent).not.toContain('Chat about this');
+    act(() => root?.unmount());
+    await mount(
+      <OwnerRequestCard now={NOW} request={request({ expiresAt: new Date(NOW - MINUTE).toISOString() })} onChat={vi.fn()} />,
+    );
+    expect(host.textContent).not.toContain('Chat about this');
+  });
+});
+
 describe('MANUAL_STEP', () => {
   const steps = request({
     kind: 'MANUAL_STEP',

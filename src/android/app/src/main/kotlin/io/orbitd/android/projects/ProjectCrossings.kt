@@ -74,6 +74,12 @@ object ProjectCrossings {
         return pending.sortedBy { it.text("requestedAt").orEmpty() } + answered.sortedByDescending { it.text("requestedAt").orEmpty() }
     }
     fun waitingCount(rows: List<JsonObject>) = rows.count { isAnswerable(it.text("state")) }
+    /** The rows the project page lists: those no coordinator conversation answers. A target with a live coordinator draws the
+     * row as a decision card there, so neither end's page lists it, answered or not. No target, a null `coordinatorSessionId`, or an
+     * older server that sends no such key: the row stays — better twice than nowhere to answer it. */
+    fun pageRows(rows: List<JsonObject>) = rows.filter { row ->
+        (row["toProject"] as? JsonObject)?.get("coordinatorSessionId").let { it == null || it is JsonNull }
+    }
 
     // Ids and names: the id a person can read and paste — Base62 when the server sent it.
     fun fromId(row: JsonObject) = row.text("fromProjectPublicId") ?: row.text("fromProjectId").orEmpty()

@@ -755,24 +755,27 @@ struct NavigationDrawer: View {
                 // from them by a rule; the open projects themselves close it, where the task lists
                 // and Recents used to be. Machines & models lives under Settings, Settings is the action bar's
                 // gear below, Admin sits inside Settings, and Following has no row (see its section).
-                ForEach(AppSection.workSections) { section in
-                    if section == .projects {
-                        projectsRow
-                    } else if section == .wiki {
-                        // No row at all for an account the server has not switched the wiki on for
-                        // (WIKI_DISABLED), as the web sidebar draws none: a row that led to a refusal
-                        // would be worse than none.
-                        if model.wiki?.shown == true { wikiRow }
-                    } else {
-                        sectionRow(section)
+                // The rows are one array (`DrawerWorkLogic`), drawn by one ForEach: an `if` or a
+                // second ForEach under it is the shape the source list's reload aborted on.
+                ForEach(DrawerWorkLogic.rows(
+                    AppSection.workSections,
+                    wiki: model.wiki?.shown == true,
+                    // New wiki… (docs/wiki-explicit-creation-design.md §3.4): once there is a wiki; before
+                    // that the Wiki's own page is the Set up your first wiki card.
+                    newWiki: model.wiki?.spaces.isEmpty == false,
+                    waitingOnYou: model.ownerRequests.map { !$0.unsupported } ?? false)) { row in
+                    switch row {
+                    case .projects:       projectsRow
+                    case .wiki:           wikiRow
+                    case .newWiki:        newWikiRow
+                    case .section(let section): sectionRow(section)
+                    case .waitingOnYou:   waitingOnYouRow(model.ownerRequests)
+                    case .workspacesHeader: workspacesHeader
+                    case .agents:         agentsRows
+                    case .openProjects:   projectRows
+                    case .sharedWithMe:   sharedWithMeRows
                     }
                 }
-                // What agents have asked the owner to do: the inbox, with how many are waiting.
-                if let requests = model.ownerRequests, !requests.unsupported { waitingOnYouRow(requests) }
-                workspacesHeader
-                agentsRows
-                projectRows
-                sharedWithMeRows
             }
             .listStyle(.plain)
             // Let each row's own padding set its height and let the drawer background show through, so
@@ -1044,7 +1047,14 @@ struct NavigationDrawer: View {
     /// it: only answering what waits does. Selected whenever the Wiki is what is showing, since the
     /// drawer has no rows below it for the Wiki's pages.
     /// "Waiting on you": a sheet rather than a page, so a push's action can raise it over anything.
-    private func waitingOnYouRow(_ requests: OwnerRequestsModel) -> some View {
+    @ViewBuilder
+    private func waitingOnYouRow(_ requests: OwnerRequestsModel?) -> some View {
+        if let requests {
+            waitingOnYouButton(requests)
+        }
+    }
+
+    private func waitingOnYouButton(_ requests: OwnerRequestsModel) -> some View {
         let waiting = requests.waitingCount
         return Button {
             requests.tab = .open
@@ -1094,6 +1104,27 @@ struct NavigationDrawer: View {
         }
         .buttonStyle(.plain)
         .drawerRow()
+    }
+
+    /// New wiki…, under the Wiki row (board 46 part 4 ②): grey, a plus, no count. It raises the Create wiki form over
+    /// the shell and leaves the drawer where it is.
+    private var newWikiRow: some View {
+        Button {
+            model.wiki?.creating = true
+        } label: {
+            pill(selected: false) {
+                HStack(spacing: 12) {
+                    Image(systemName: "plus")
+                        .frame(width: 24)
+                    Text(WikiStartCopy.newWiki)
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .drawerRow()
+        .accessibilityIdentifier("drawer-new-wiki")
     }
 
     /// The rule and the group label that set the Workspaces apart from the work above them.

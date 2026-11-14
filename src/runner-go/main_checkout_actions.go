@@ -122,6 +122,7 @@ func handleMainCheckoutRequest(t *Transport, req MainCheckoutRunnerRequest, deps
 func actionFailedResult(cmd MainCheckoutActionCommand, partial MainCheckoutActionResult, err error) MainCheckoutActionResult {
 	r := newMainCheckoutResult(cmd)
 	r.Branch = partial.Branch
+	r.RescueBranch = partial.RescueBranch // a Discard that failed part way: its copy
 	var secrets []string
 	if root, rerr := mainCheckoutRoot(context.Background(), cmd.Root); rerr == nil {
 		r.Root = root
@@ -186,6 +187,8 @@ func runMainCheckoutAction(cmd MainCheckoutActionCommand, deps mainCheckoutDeps)
 		return moveMainCheckoutFiles(cmd, deps)
 	case mainCheckoutRescue:
 		return saveAndCleanMainCheckout(cmd, deps)
+	case mainCheckoutDiscard:
+		return discardMainCheckoutFiles(cmd, deps)
 	case mainCheckoutCommit, mainCheckoutPush:
 		if root, err := mainCheckoutRoot(context.Background(), cmd.Root); err != nil || (deps.owns != nil && !deps.owns(root)) {
 			r := newMainCheckoutResult(cmd)
