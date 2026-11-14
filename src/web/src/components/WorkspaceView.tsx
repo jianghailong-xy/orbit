@@ -10305,8 +10305,9 @@ export function WorkspaceView({
               <SessionConversation
                 sessionId={selectedId}
                 stream={stream}
-                // Held for the region or by its runner's update: nothing is working on its message.
-                live={live && !selectedRegionHeld && !runnerUpdatingGate}
+                // Held for the region or by its runner's update, or not claimed by any runner yet:
+                // nothing is working on its message, which waits under the Queued state.
+                live={live && !selectedRegionHeld && !runnerUpdatingGate && !selectedIsQueued}
                 turnImages={turnImages}
                 inserts={transcriptInserts}
                 authErrorHelp={authErrorHelp}

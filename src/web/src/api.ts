@@ -831,6 +831,9 @@ export interface ActiveSessionTurn extends TurnCards {
   /** The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
    *  delivery — so nobody typed its words. Absent on every turn somebody sent. */
   authoredByOrbit?: true;
+  /** The session's opening prompt, listed until the runner echoes it: the same message a tab that
+   *  created the session drew itself (`initial:<session>`). */
+  opening?: true;
 }
 
 /** Opt into active PENDING/IN_FLIGHT turns not represented by the transcript yet — restores
