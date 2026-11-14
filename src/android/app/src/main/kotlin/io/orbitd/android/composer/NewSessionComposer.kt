@@ -106,6 +106,10 @@ fun NewSessionComposer(
             val current = detail
             val fresh = current != null && current.flag("enabled") != false
             val session = current?.let { SessionState(target.key, snapshot = SessionSnapshot(it, emptyList(), emptyList(), emptyList(), emptyMap()), fresh = fresh) }
+            // The managed runner asleep is no fault: sending wakes it, and the composer says so (the shared composer line).
+            if (managedDraft && !welcomeUp && ManagedRunner.row(managed?.status?.runnerId, managed?.status)?.asleep == true)
+                Text(ManagedRunner.Asleep.COMPOSER, Modifier.padding(horizontal = 16.dp, vertical = 4.dp).testTag("managed-runner-asleep-line"),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Box(Modifier.heightIn(max = composerHeight)) {
                 SessionComposer(app, handle, target.key, session, target, focusRequest = focusRequest, openRunner = openRunner,
                     placeholder = if (welcomeUp) WelcomeCopy.WELCOME_PLACEHOLDER else null)

@@ -119,6 +119,14 @@ object ManagementFixture {
     @Volatile var deviceConflict = false
     @Volatile var deviceLastSeen: String? = null
     @Volatile var deviceGate: CompletableDeferred<Unit>? = null
+    /** GET auth/capabilities' body, or null for a server from before it (404). Without one there is no managed UI and no managed read. */
+    @Volatile var capabilities: String? = null
+    /** GET managed-runner's body; POST managed-runner/ensure runs [onEnsure] and answers [ensured] (or refuses 403 with [ensureRefusal]). */
+    @Volatile var managedStatus = "{}"
+    @Volatile var ensured = "{}"
+    @Volatile var ensureRefusal: String? = null
+    @Volatile var onEnsure: () -> Unit = {}
+    val ensureBodies = CopyOnWriteArrayList<JsonObject>()
     /** Completing it drops the control stream; a reconnect then never opens. */
     @Volatile var drop = CompletableDeferred<Unit>()
     @Volatile private var opened = 0
@@ -138,7 +146,19 @@ object ManagementFixture {
         balances.clear(); balanceGates.clear(); task = "{}"; evidence = "[]"
         keyCheckAnswer = """{"ok":true,"keyCheck":"VALID","message":"Cursor accepted this key.","recorded":true,"keyCheckState":"VALID","keyCheckedAt":null}"""
         onKeyCheck = {}
+        capabilities = null; managedStatus = "{}"; ensured = "{}"; ensureRefusal = null; onEnsure = {}; ensureBodies.clear()
     }
+
+    /** A managed runner status as GET managed-runner answers it (contract 1). */
+    fun managed(state: String, runnerId: String? = null, canEnsure: Boolean = false, canWake: Boolean = true, usable: Boolean = false,
+                desired: String? = null, initialProvider: String? = null, enabled: Boolean = true, reason: String? = null) =
+        """{"contractVersion":1,"enabled":$enabled,"revision":3,"managementState":"$state","desiredState":${desired?.let { "\"$it\"" } ?: "null"},
+        "runnerId":${runnerId?.let { "\"$it\"" } ?: "null"},"workspaceId":${runnerId?.let { "\"$WORKSPACE\"" } ?: "null"},"usable":$usable,
+        "reason":${reason?.let { "{\"code\":\"$it\",\"message\":null}" } ?: "null"},"initialProvider":${initialProvider?.let { "\"$it\"" } ?: "null"},
+        "firstSessionProvider":null,"actions":{"canEnsure":$canEnsure,"canWake":$canWake,"canRetry":false}}"""
+
+    /** The capability a server with managed runners switched on answers. */
+    const val MANAGED_ON = """{"managedRunners":{"enabled":true,"contractVersion":1}}"""
 
     fun writes(path: String) = calls.filter { it.endsWith(" $path") && !it.startsWith("GET ") }
 
@@ -236,6 +256,9 @@ object ManagementFixture {
             "workspaces" -> ok("[${workspace()}]")
             "workspaces/$WORKSPACE" -> { if (api.method == HttpMethod.PATCH) workspaceName = body()["name"]!!.jsonPrimitive.content; ok(workspace()) }
             "runners" -> ok(runners())
+            "auth/capabilities" -> capabilities?.let(::ok) ?: fail(404, "Cannot GET /api/auth/capabilities")
+            "managed-runner" -> ok(managedStatus)
+            "managed-runner/ensure" -> { ensureBodies += body(); ensureRefusal?.let { fail(403, it) } ?: run { onEnsure(); ok(ensured) } }
             "runners/reorder" -> { runnerOrder = body()["ids"]!!.jsonArray.map { it.jsonPrimitive.content }; ok(runners()) }
             "runners/$RUNNER_TWO" -> if (api.method == HttpMethod.DELETE) { removedRunners = removedRunners + RUNNER_TWO; ok("{}") } else ok(runnerTwo())
             "runners/$RUNNER" -> {

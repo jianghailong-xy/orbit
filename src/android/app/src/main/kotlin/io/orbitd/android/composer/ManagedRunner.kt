@@ -1,5 +1,6 @@
 package io.orbitd.android.composer
 
+import io.orbitd.android.navigation.ObjectId
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -175,4 +176,75 @@ object ManagedRunner {
 
     /** What a first session in the managed default workspace starts on, as the server says. */
     fun firstSessionProvider(status: Status): String? = status.firstSessionProvider ?: status.initialProvider
+
+    // The managed runner as one machine in the machine list (docs/managed-runner-existing-account-entry-design.md), MANAGED_RUNNER_COPY's
+    // short, entry, confirm and asleep words and MANAGED_RUNNER_ROW_TONE, held to the fixture by ManagedRunnerFixtureTest.
+
+    /** The row's label per display kind, in place of the heartbeat's Online/Offline: asleep is Asleep, never Offline. */
+    val SHORT = mapOf(
+        "setup" to "Set up",
+        "preparing" to "Preparing",
+        "waking" to "Waking up…",
+        "modelUnavailable" to "Needs a model",
+        "waitingCapacity" to "Waiting for capacity",
+        "available" to "Ready",
+        "unresponsive" to "Not responding",
+        "stopping" to "Going to sleep",
+        "sleeping" to "Asleep",
+        "waitingOperator" to "Waiting for an operator",
+        "failed" to "Failed",
+        "removing" to "Removing",
+        "removed" to "Removed",
+    )
+
+    /** How a row marks the state: READY green, PROGRESS a spinner, IDLE grey (asleep is never a fault's colour), ATTENTION orange. */
+    enum class Tone { READY, PROGRESS, IDLE, ATTENTION }
+    val ROW_TONE = mapOf(
+        "setup" to Tone.IDLE, "preparing" to Tone.PROGRESS, "waking" to Tone.PROGRESS, "modelUnavailable" to Tone.ATTENTION,
+        "waitingCapacity" to Tone.PROGRESS, "available" to Tone.READY, "unresponsive" to Tone.PROGRESS, "stopping" to Tone.PROGRESS,
+        "sleeping" to Tone.IDLE, "waitingOperator" to Tone.ATTENTION, "failed" to Tone.ATTENTION, "removing" to Tone.PROGRESS,
+        "removed" to Tone.IDLE,
+    )
+
+    /** Machines & models' Managed runner section, for an account with no mapping that the server offers one. */
+    object Entry {
+        const val TITLE = "Managed runner"
+        const val ACTION = "Set up"
+        const val SUBTITLE = "Orbit runs a runner for you on this server."
+    }
+
+    /** Asked before Set up on an account that already has a machine or a workspace. */
+    object Confirm {
+        const val TITLE = "Set up a managed runner?"
+        const val BODY = "Orbit will start a runner for you on this server and add a workspace for it. Your own machines and workspaces stay as they are."
+        const val CANCEL = "Cancel"
+        const val CONFIRM = "Set up"
+    }
+
+    /** Sleep is not a fault: sending wakes it, and nothing says it is offline. */
+    object Asleep {
+        const val ROW = "Wakes automatically when you start a session"
+        const val COMPOSER = "Your managed runner is asleep. Sending wakes it (about 10 s)."
+    }
+
+    /** A machine row's (or a workspace's runner's) reading of the account's managed runner (`managedRunnerRow`). */
+    data class Row(val kind: String, val label: String, val tone: Tone, val detail: String?, val acceptsWork: Boolean, val asleep: Boolean)
+
+    /** Whether [runnerId] is the account's managed runner and how to show it; null when it is not, or there is no managed UI. */
+    fun row(runnerId: String?, status: Status?): Row? {
+        // Lists name a runner by its public id or its UUID: the same runner either way.
+        if (runnerId.isNullOrEmpty() || status?.runnerId == null || !ObjectId.same(status.runnerId, runnerId)) return null
+        val display = display(status) ?: return null
+        val kind = display.kind.takeIf { it != "notOffered" } ?: return null
+        val tone = ROW_TONE.getValue(kind)
+        return Row(
+            kind = kind,
+            label = SHORT.getValue(kind),
+            // A spinner only while it moves by itself (not while the environment is unavailable).
+            tone = if (tone == Tone.PROGRESS && !display.moving) Tone.IDLE else tone,
+            detail = if (kind == "sleeping" && display.acceptsWork) Asleep.ROW else null,
+            acceptsWork = display.acceptsWork,
+            asleep = (kind == "sleeping" || kind == "stopping") && display.acceptsWork,
+        )
+    }
 }

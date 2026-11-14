@@ -63,6 +63,8 @@ import io.orbitd.android.composer.NewSessionComposer
 import io.orbitd.android.composer.NoMachineWelcomeCard
 import io.orbitd.android.composer.rememberAccountName
 import io.orbitd.android.composer.rememberManagedOffered
+import io.orbitd.android.composer.FollowManagedRunner
+import io.orbitd.android.composer.ManagedRunner
 import io.orbitd.android.composer.rememberManagedRunner
 import io.orbitd.android.composer.rememberNewAccount
 import io.orbitd.android.text.LocalReaderResources
@@ -268,7 +270,10 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         // landed on, so Back still reaches it; an account that has had a session keeps today's landing.
         var managedLanded by remember(signedIn.handle) { mutableStateOf(false) }
         val onlyWorkspace = workspaces.singleOrNull()?.id
-        val managedForLanding = rememberManagedRunner(management, ask = data.ready && onlyWorkspace != null && !managedLanded)
+        // Read while the directory is up: the landing below, and the drawer's workspace rows, where the managed runner asleep reads
+        // Asleep, never Offline. Nothing is read without the capability.
+        val managedForLanding = rememberManagedRunner(management, ask = data.ready)
+        FollowManagedRunner(managedForLanding, follow = data.ready && managedForLanding.shown != null)
         val managedDefault = managedForLanding.shown?.status?.workspaceId
             ?.takeIf { onlyWorkspace != null && ObjectId.same(it, onlyWorkspace) }?.let { onlyWorkspace }
         val newManagedAccount = rememberNewAccount(management, managedDefault != null && !managedLanded)
@@ -341,7 +346,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                             val sessions = data.sessions["open"].orEmpty().filter { ObjectId.same(it.workspace, workspace.id) }
                             NavigationDrawerItem(selected = navigation.section == workspace.id,
                                 label = { Column { Text(workspace.name); Text(listOfNotNull(runner?.name,
-                                    if (!workspace.enabled) "Disabled" else if (runner?.online == false) "Offline" else null,
+                                    if (!workspace.enabled) "Disabled" else if (runner?.online == false)
+                                        ManagedRunner.row(runner.id, managedForLanding.shown?.status)?.label ?: "Offline" else null,
                                     sessions.sumOf { it.pendingApprovals }.takeIf { it > 0 }?.let { "$it need you" },
                                     sessions.count { it.runState == "RUNNING" || it.status == "RUNNING" }.takeIf { it > 0 }?.let { "$it running" }).joinToString(" · "), style = MaterialTheme.typography.bodySmall) } },
                                 icon = { Icon(painterResource(R.drawable.ic_workspace), null) },
