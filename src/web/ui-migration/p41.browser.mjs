@@ -187,36 +187,40 @@ test.describe('P4.1 sign-in and first-run setup', () => {
 });
 
 test.describe('P4.1 profile', () => {
-  test('password form: each check, the linked confirmation and the reset', async ({ evidence }, testInfo) => {
+  test('password dialog: opened from the Password row, each check, the linked confirmation, and a fresh form next time', async ({ evidence }, testInfo) => {
     const { page, capture } = evidence;
     const fixtures = await installP41Fixtures(page, { theme: testInfo.project.use.colorScheme });
     const trace = [];
     await page.goto(P41_PATHS.profile);
     await expect(page.getByRole('heading', { name: 'Profile', exact: true })).toBeVisible();
-    const form = card(page, 'Change password');
+    // No password form on the page: the Password row's Change opens it in a dialog.
+    await expect(field(page, 'Current password')).toHaveCount(0);
+    const opener = button(page.locator('[data-method="password"]'), 'Change');
+    await opener.click();
+    const form = page.getByRole('dialog', { name: 'Change password' });
+    await expect(form).toBeVisible();
+    await expect(field(form, 'Current password')).toBeFocused();
     const change = button(form, 'Change password');
-    await change.scrollIntoViewIfNeeded();
     trace.push(await observe(page, fixtures, 'open'));
 
-    await field(page, 'Current password').fill('old password');
-    await field(page, 'Current password').press('Enter');
-    await expect(field(page, 'New password')).toHaveAttribute('aria-invalid', 'true');
+    await field(form, 'Current password').fill('old password');
+    await field(form, 'Current password').press('Enter');
+    await expect(field(form, 'New password')).toHaveAttribute('aria-invalid', 'true');
     await frames(page);
     trace.push(await observe(page, fixtures, 'enter in the first field'));
 
-    await fill(field(page, 'New password'), 'abc');
-    await fill(field(page, 'Confirm new password'), 'abcdef');
-    await change.scrollIntoViewIfNeeded();
+    await fill(field(form, 'New password'), 'abc');
+    await fill(field(form, 'Confirm new password'), 'abcdef');
     await frames(page);
     trace.push(await observe(page, fixtures, 'short new password, confirmation differs'));
-    await capture('p41-profile-mismatch', { card: form, newPassword: field(page, 'New password') });
+    await capture('p41-profile-mismatch', { card: form, newPassword: field(form, 'New password') });
 
-    await fill(field(page, 'New password'), 'abcdef');
-    await expect(form.getByText(/do not match|At least 6/)).toHaveCount(0);
-    await change.scrollIntoViewIfNeeded();
+    await fill(field(form, 'New password'), 'abcdef');
+    await expect(form.getByText(/do not match/)).toHaveCount(0);
+    await expect(form.locator('.orbit-field-error')).toHaveCount(0);
     await frames(page);
     trace.push(await observe(page, fixtures, 'new password long enough and now matching'));
-    await capture('p41-profile-ready', { card: form, confirm: field(page, 'Confirm new password') });
+    await capture('p41-profile-ready', { card: form, confirm: field(form, 'Confirm new password') });
 
     const revokeBox = form.getByRole('checkbox', { name: 'Also revoke all my access tokens' });
     await revokeBox.click();
@@ -224,12 +228,15 @@ test.describe('P4.1 profile', () => {
     await change.click();
     const notifications = page.getByRole('region', { name: 'Notifications', exact: true });
     await expect(notifications.getByText('Password changed', { exact: true })).toBeVisible();
-    await expect(field(page, 'New password')).toHaveValue('');
+    await expect(form).toHaveCount(0);
+    await expect(opener).toBeFocused();
+
+    await opener.click();
+    await expect(field(form, 'New password')).toHaveValue('');
     await expect(revokeBox).not.toBeChecked();
-    await change.scrollIntoViewIfNeeded();
     await frames(page);
-    trace.push(await observe(page, fixtures, 'changed, tokens revoked, form reset'));
-    await capture('p41-profile-reset', { card: form, current: field(page, 'Current password') });
+    trace.push(await observe(page, fixtures, 'changed, tokens revoked, opened again empty'));
+    await capture('p41-profile-reset', { card: form, current: field(form, 'Current password') });
     await attachTrace(testInfo, trace);
   });
 

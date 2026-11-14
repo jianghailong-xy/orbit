@@ -485,7 +485,7 @@ class LandingEntriesShellTest {
     private fun openPage() {
         signIn()
         await { exists(hasTestTag("project-row:$launch")) }
-        compose.onNodeWithTag("project-row:$launch").performClick()
+        compose.openProjectSessionsPage(launch)
         await { exists(hasTestTag("project-sessions")) && exists(hasText("Coordinate launch") and hasClickAction()) }
     }
 

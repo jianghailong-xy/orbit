@@ -1212,3 +1212,37 @@ test('(12) §10.9 2: work pushed as another commit opens LANDING_UNOBSERVED (APP
       await stack.db.$disconnect();
     }
   });
+
+// ═══ (13) a landing still on its way answers for its task ══════════════════════════════════════
+
+test('(13) an observation writes no receipt for a PLATFORM task whose LAND_TASK is still on its way: the 0.1.253 bump, frozen at a stale tip on main, kept its own commit off main',
+  { skip, timeout: 300_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'stale-tip', { line: 'PROJECT_BRANCH', deliveryMode: 'PLATFORM' });
+      // The identity was frozen at (a), a tip from before the task's own commit, already on main.
+      const bump = await finishedTask(stack, w, 'the bump', { branch: 'orbit/the-bump', branchSha: sha('a'), baseSha: sha('b') });
+      const landing = await stack.db.projectIntegrationJob.findFirst({
+        where: { taskId: bump.taskId, kind: 'LAND_TASK' }, select: { state: true },
+      });
+      assert.ok(landing && ['QUEUED', 'RUNNING'].includes(landing.state),
+        `CONTROL: the DONE queued the task's landing (${landing?.state ?? 'none'})`);
+
+      await observeAgain(stack, w);
+      const command = await claimObservation(stack, w.runnerId, 'observer');
+      assert.ok(command, 'CONTROL: an observation was handed out');
+      assert.deepEqual(command.observeTasks?.map((t) => t.taskId), [bump.taskId],
+        'CONTROL: the observation was asked about the bump');
+      await report(stack, w, command, observed(command, [
+        seen({ taskId: bump.taskId, deliveredSha: sha('a'), baseSha: sha('b') }, { onUpstream: true }),
+      ]));
+
+      assert.deepEqual((await receiptsOf(stack, bump.taskId)).map((r) => `${r.result} ${r.targetBranch} ${r.sourceSha}`), [],
+        'the observation wrote a receipt about the stale commit while the task\'s own landing was still on its way');
+      assert.equal(await landingOf(stack, bump.taskId), 'NOT_KNOWN');
+      const [job] = (await observations(stack, w)).filter((row) => row.id === command.jobId);
+      assert.equal(job?.state, 'OBSERVED', 'the observation still ends OBSERVED');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });

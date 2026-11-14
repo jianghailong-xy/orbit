@@ -117,6 +117,12 @@
 // Task D2 (34bsPmWGZjo7CPt4BFI5G), which the owner confirmed on 2026-11-05, deletes the HTTPS work path, so the same task's
 // guard (the coordinator's decision of that day) makes the apiserver's signing key required: a deployment with no link gets
 // a refusal from Compose naming what to run, and /upgrade's script reads the requirement as the mark of a link-only build.
+//
+// On 2026-11-11T15:21:29Z the account owner decided to give the apiserver a 30 s stop grace period (question card
+// 34vneMIw93BkO20LqQJnS, "Raise to 30 s"; project 34uUvixOgW5SbuNGvkAKA, task 34vngrzu4tw2WTGXvvxaj), so that the
+// requests in flight when it stops, long polls included, are answered rather than cut at Docker's default 10 s. It adds
+// one line to the apiserver, `stop_grace_period: 30s`, and nothing else: no service, mount, port or environment. A
+// second apiserver defined with `extends` takes it with the rest of the definition. The block below pins it.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -347,6 +353,12 @@ function directivesNotInBaseline(block, baselineBlock) {
 // The exception is an approved block of the apiserver's. It is listed here as directives — comments
 // explaining it do not count — so a line added anywhere else still turns this red exactly as it did before.
 const APPROVED_APISERVER_BLOCKS = [
+  // The stop grace period (2026-11-11, card 34vneMIw93BkO20LqQJnS, the top of this file): 30 s, which
+  // src/apiserver/src/common/graceful-stop.spec.ts reads and holds the apiserver's own stop bounds under. Listed first
+  // because the line comes right after `logging`, before the environment.
+  [
+    '    stop_grace_period: 30s',
+  ],
   // The proxies in front of the gateway (2026-10-28, the top of this file), empty unless the host's .env sets it.
   // Listed first because the line comes right after PUBLIC_ORIGIN's, before the runner link's.
   [

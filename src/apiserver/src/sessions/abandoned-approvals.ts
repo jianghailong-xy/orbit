@@ -267,6 +267,22 @@ export async function reapApprovalsOfReturnedCalls(
   return collected.map((row) => row.id);
 }
 
+/** reapApprovalsOfReplacedSupervisor for many sessions taken over at once (the batch takeover), in one statement. */
+export async function reapApprovalsOfReplacedSupervisors(
+  tx: Prisma.TransactionClient,
+  sessionIds: readonly string[],
+): Promise<Array<{ sessionId: string; id: string }>> {
+  const collected = await tx.$queryRaw<Array<{ id: string; sessionId: string }>>`
+    UPDATE "approval"
+       SET "status" = ${APPROVAL_ABANDONED_STATUS}, "message" = ${APPROVAL_ORPHANED_MESSAGE}
+     WHERE "session_id" = ANY(${[...sessionIds]}::uuid[]) AND "status" = 'PENDING'
+    RETURNING "id", "session_id" AS "sessionId"`;
+  for (const sessionId of new Set(collected.map((row) => row.sessionId))) {
+    await eraseEnvValuesOfCollectedCards(tx, sessionId);
+  }
+  return collected.map((row) => ({ sessionId: row.sessionId, id: row.id }));
+}
+
 /**
  * reapApprovalsOfReturnedCalls for the sessions of a merged runner link call at once, in one statement
  * (RunnerApiController.ingestLinkEventCall): the same cards, each session's from its own returned calls. Returns the ids

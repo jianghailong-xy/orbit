@@ -77,7 +77,7 @@ public struct SessionLine: Equatable, Sendable {
             if let held = ClaudeRegion.heldWords(s, machine: machine) { return SessionLine(text: held, tone: .queued) }
             // A runner draining for its update is the one queue word in the warning colour (board 5,
             // web `sessionLine`): it can last hours, and only the owner can shorten it.
-            if RunnerUpdating.holds(s) { return SessionLine(text: RunnerUpdating.RUNNER_UPDATING_TITLE, tone: .warning) }
+            if RunnerUpdating.holds(s) { return SessionLine(text: RunnerUpdating.title(s), tone: .warning) }
             return SessionLine(text: "Queued", tone: .queued)
         }
         // Parked while a sub-agent or workflow it started works on: the workspace itself still
@@ -91,6 +91,11 @@ public struct SessionLine: Equatable, Sendable {
         // line, so the row and the strip above its composer read the same (web parity).
         if live, let watching, s.effectiveRunState == .awaitingInput {
             return SessionLine(text: watching.rowLine, tone: .watching)
+        }
+        // The same place for a wait the server reports and this caller holds no watch for — a
+        // scheduled wake-up, an armed auto-retry (web `resumeWords`).
+        if live, s.resumesOnItsOwn {
+            return SessionLine(text: SessionHeader.waitingToResume, tone: .watching)
         }
         // Parked (AWAITING_INPUT) but a background process is still running — not idle, though
         // not the agent working either (see the glyph): muted, not the working blue.

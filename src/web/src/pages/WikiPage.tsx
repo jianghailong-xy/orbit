@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, type CSSProperties } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { DownOutlined, HistoryOutlined, SearchOutlined } from '@ant-design/icons';
@@ -44,6 +44,7 @@ import {
   type WikiSpaceRow,
 } from '../lib/wiki';
 import { wikiArticlePath, wikiCount } from '../lib/wikiArticles';
+import { useWikiDirectoryWidth } from '../lib/wikiDirectoryWidth';
 import { wikiStatusParts, wikiStatusText } from '../lib/wikiHealth';
 import { wikiDocPath } from '../lib/wikiDocs';
 import {
@@ -332,6 +333,7 @@ function WikiFrame({
   const rows = spaces.data ?? (space ? [space] : []);
   const activity = at?.view === 'activity';
   const home = at?.view === 'home';
+  const [directoryWidth, startDirectoryResize] = useWikiDirectoryWidth();
   // A desktop draws the head, the search and the directory as one column (board docs/mocks/wiki-rail ③); the head
   // row and the search line above stay for a phone and for a docked chat that folds the column away.
   const search = (
@@ -348,6 +350,7 @@ function WikiFrame({
   const page = (
     <div
       className={`wk-page${at && !home && !activity ? ' wk-page--reading' : ''}${activity ? ' wk-page--activity' : ''}${space && at ? ' wk-page--railed' : ''}`}
+      style={{ '--wk-dir-w': `${directoryWidth}px` } as CSSProperties}
     >
       <div className="wk-title-row">
         <h1 className="page-title">{WIKI_TITLE}</h1>
@@ -366,7 +369,7 @@ function WikiFrame({
 
       {space && at ? (
         <div className={`wk-layout${home ? ' home' : ''}`}>
-          <div className="wk-dir-col">
+          <div className="wk-dir-col autohide-scrollbar">
             <div className="wk-rail-top">
               <div className="wk-rail-head">
                 <h1 className="page-title">{WIKI_TITLE}</h1>
@@ -384,6 +387,7 @@ function WikiFrame({
               <WikiSettingsButton spaceSlug={space.slug} />
               <WikiShareButton spaceId={space.id} spaceSlug={space.slug} />
             </div>
+            <div className="wk-dir-resizer" role="separator" aria-orientation="vertical" onMouseDown={startDirectoryResize} />
           </div>
           <div className="wk-main">{children}</div>
         </div>
