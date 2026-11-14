@@ -451,6 +451,9 @@ public enum DeliveryAnchor {
 public enum TranscriptRow: Identifiable, Equatable, Sendable {
     /// What this conversation made as it started (`CreatedWorkspaceLine`): its first line.
     case createdWorkspace(CreatedWorkspaceLine)
+    /// A successor coordinator's handoff from the one before it (board 02 ③): the note card and
+    /// the waits that moved here, at the top of the conversation it opened.
+    case handoffReceived(SessionCoordinatorHandoffReceived)
     case loadOlder(cursor: Int)
     case item(TranscriptItem)
     /// How long a turn worked, or has been working: drawn under the message that opened it and over
@@ -482,6 +485,7 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
     public var id: String {
         switch self {
         case .createdWorkspace:      return "created-workspace"
+        case .handoffReceived:       return "coordinator-handoff-received"
         case .loadOlder(let cursor): return "load-older-\(cursor)"
         case .item(let item):        return item.id
         case .turnHead(let line):    return "turn-head-\(line.bubbleID)"
@@ -515,6 +519,7 @@ public enum TranscriptRows {
     ///
     /// `createdWorkspace` is the conversation's first line, so it is above everything — and only once
     /// the first page is loaded: first means first, not the top of a window that starts later.
+    /// `handoffReceived` (a successor coordinator's note card) follows it, by the same rule.
     public static func build(state: TranscriptState,
                              statusCards: [LocalStatusCard],
                              canPageOlder: Bool,
@@ -525,9 +530,12 @@ public enum TranscriptRows {
                              recap: RecapCard? = nil,
                              foldExchanges: Bool = true,
                              watchName: ((WatchWake, WatchWakeTarget) -> String?)? = nil,
-                             createdWorkspace: CreatedWorkspaceLine? = nil) -> [TranscriptRow] {
+                             createdWorkspace: CreatedWorkspaceLine? = nil,
+                             handoffReceived: SessionCoordinatorHandoffReceived? = nil) -> [TranscriptRow] {
         var rows: [TranscriptRow] = []
         if let createdWorkspace, !canPageOlder { rows.append(.createdWorkspace(createdWorkspace)) }
+        // The note the conversation opened with, by the same rule: first, once the first page is in.
+        if let handoffReceived, !canPageOlder { rows.append(.handoffReceived(handoffReceived)) }
         // A command run before the first transcript event belongs above events that arrive later;
         // the rest are placed after the item that was last at invocation time.
         var anchored: [String: [LocalStatusCard]] = [:]

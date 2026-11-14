@@ -660,7 +660,8 @@ struct ComposerView: View {
                                        configured: console.configuredProviders,
                                        unavailable: console.engine == CursorRuntime.engine
                                            ? CursorRuntime.contextUnavailable : nil,
-                                       modelLine: console.engine == CursorRuntime.engine ? cursorModelLine : nil)
+                                       modelLine: console.engine == CursorRuntime.engine ? cursorModelLine : nil,
+                                       actions: contextActions)
             }
             sendControls
         }
@@ -670,6 +671,31 @@ struct ComposerView: View {
         // The toolbar's words are tappable controls, not metadata — list-subtitle size on iOS (15pt)
         // for comfortable targets; macOS keeps the dense web-parity caption.
         .font(.orbitListSubtitle)
+    }
+
+    /// What the context panel offers this session (boards 01 and 03): Compact where the engine has
+    /// it, Start a new coordinator on the project's current, open coordinator. A draft offers neither.
+    private var contextActions: ContextActions {
+        guard !console.isDraft, let session = app.session(id: console.sessionID) else { return ContextActions() }
+        let running = session.isGenerating || console.state.status == .running
+        let projectID = session.projectId
+        return ContextActions(
+            offersCompact: CoordinatorContextActions.offersCompact(slashItems: console.composerSlashItems,
+                                                                   engine: console.engine),
+            compactEnabled: CoordinatorContextActions.compactEnabled(running: running,
+                                                                     handoff: session.coordinatorHandoff),
+            offersNewCoordinator: CoordinatorContextActions.offersNewCoordinator(session),
+            running: running,
+            projectTitle: session.projectTitle ?? "the project",
+            compact: { Task { await console.compactConversation() } },
+            pendingWaits: {
+                guard let projectID else { return [] }
+                return await console.coordinatorPendingWaits(projectID: projectID)
+            },
+            handOver: {
+                guard let projectID else { return }
+                Task { await console.coordinatorHandoff(projectID: projectID, .start) }
+            })
     }
 
     /// Send, or Stop while a turn runs — the toolbar's right end, in a 32pt frame so its centre sits
@@ -2119,7 +2145,12 @@ private struct ContextWindowIndicator: View {
     /// The model the session runs, as the chip names it, for a row of its own under the reading — what
     /// the context is of, when there is no number to read (Cursor CLI, board iOS 5 ④).
     var modelLine: String? = nil
+    /// Compact and Start a new coordinator, under the reading (boards 01 and 03).
+    var actions = ContextActions()
     @State private var showDetail = false
+    /// The waits the confirm names, once read: non-nil is the confirm on screen (board 02 ①; a system
+    /// Alert on a phone, board 03 iOS 2).
+    @State private var confirmWaits: [CoordinatorPendingWait]?
 
     private var window: Int? {
         reportedWindow ?? AgentDefaults.contextWindow(for: model, catalog: modelCatalog,
@@ -2156,7 +2187,23 @@ private struct ContextWindowIndicator: View {
         .help(helpText)
         .accessibilityLabel(helpText)
         .modifier(ContextWindowDetailPresentation(isPresented: $showDetail, tokens: tokens, window: window, pct: pct,
-                                                  known: known, unavailable: unavailable, modelLine: modelLine))
+                                                  known: known, unavailable: unavailable, modelLine: modelLine,
+                                                  actions: actions, startNewCoordinator: startNewCoordinator))
+        .modifier(CoordinatorHandoffConfirmPresentation(waits: $confirmWaits, actions: actions))
+    }
+
+    /// Start a new coordinator: the panel goes, the waits are read, and the confirm asks — it never
+    /// hands over on the press itself (board 01 ②).
+    private func startNewCoordinator() {
+        showDetail = false
+        Task {
+            let waits = await actions.pendingWaits()
+            #if os(iOS)
+            // An Alert cannot come up while the sheet it replaces is still leaving.
+            try? await Task.sleep(for: .milliseconds(450))
+            #endif
+            confirmWaits = waits
+        }
     }
 
     private var helpText: String {
@@ -2206,21 +2253,32 @@ private struct ContextWindowDetailPresentation: ViewModifier {
     var unavailable: String? = nil
     /// The model row under the reading (`ContextWindowIndicator.modelLine`).
     var modelLine: String? = nil
+    /// The action rows under the reading, and what Start a new coordinator does.
+    var actions = ContextActions()
+    var startNewCoordinator: () -> Void = {}
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
 
     private var sized: Bool { (window ?? 0) > 0 }
+    private var reading: String {
+        unavailable != nil ? "Unavailable" : !known ? "—" : sized ? "\(pct)%" : fmtTokens(tokens)
+    }
+
+    private var actionRows: some View {
+        ContextActionRows(actions: actions, pct: pct,
+                          dismiss: { isPresented = false }, startNewCoordinator: startNewCoordinator)
+    }
 
     private var detail: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text("Context window").foregroundStyle(.secondary)
                 Spacer()
-                Text(unavailable != nil ? "Unavailable" : !known ? "—" : sized ? "\(pct)%" : fmtTokens(tokens))
+                Text(reading)
                     .monospacedDigit()
             }
-            if sized && unavailable == nil { UsageBar(percent: pct).frame(height: 4) }
+            if sized && unavailable == nil { UsageBar(percent: pct, warn: pct >= 75, critical: pct >= 90).frame(height: 4) }
             Text(detailCaption).font(.caption).foregroundStyle(.secondary)
             if let modelLine {
                 Divider().padding(.vertical, 4)
@@ -2248,7 +2306,21 @@ private struct ContextWindowDetailPresentation: ViewModifier {
     func body(content: Content) -> some View {
         #if os(macOS)
         content.popover(isPresented: $isPresented, arrowEdge: .top) {
-            detail.padding(14).frame(width: 220)
+            if actions.isEmpty {
+                detail.padding(14).frame(width: 220)
+            } else {
+                // Board 01: the reading as it was, a rule, then the action rows.
+                VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(CoordinatorContextCopy.title).font(.headline)
+                        detail
+                    }
+                    .padding(14)
+                    Divider()
+                    actionRows.padding(6)
+                }
+                .frame(width: 300)
+            }
         }
         #else
         if ComposerFooterDetailLayout.usesPopover(horizontalSizeClass: horizontalSizeClass) {
@@ -2256,9 +2328,22 @@ private struct ContextWindowDetailPresentation: ViewModifier {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Context").font(.headline)
                     detail
+                    if !actions.isEmpty {
+                        Divider()
+                        actionRows
+                    }
                 }
                 .padding(16)
                 .frame(width: ComposerFooterDetailLayout.popoverWidth)
+            }
+        } else if !actions.isEmpty {
+            // Board 03 iOS 1: a medium sheet, the reading in one group and the actions in another.
+            content.sheet(isPresented: $isPresented) {
+                ContextActionsSheet(reading: reading, pct: pct,
+                                    showsBar: sized && unavailable == nil, caption: detailCaption,
+                                    modelLine: modelLine, actions: actions,
+                                    dismiss: { isPresented = false },
+                                    startNewCoordinator: startNewCoordinator)
             }
         } else {
             content.sheet(isPresented: $isPresented) {
@@ -2452,13 +2537,15 @@ private struct UsageBar: View {
     /// Nothing left (`PlanUsageRow.spent`): the whole bar red, even where `percent` counts what is
     /// left and is 0.
     var spent: Bool = false
+    /// Red short of spent: the context reading from 90%, as its ring is (board 01 ①).
+    var critical: Bool = false
     private var fraction: CGFloat { spent ? 1 : CGFloat(min(100, max(0, percent))) / 100 }
 
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule().fill(.quaternary)
-                Capsule().fill(spent ? Color.red : (warn ?? (percent >= 90)) ? Color.orange : Color.accentColor)
+                Capsule().fill(spent || critical ? Color.red : (warn ?? (percent >= 90)) ? Color.orange : Color.accentColor)
                     .frame(width: geo.size.width * fraction)
             }
         }
@@ -2539,3 +2626,168 @@ private let removeGlyphFont: Font = .subheadline
 #else
 private let removeGlyphFont: Font = .orbitMeta
 #endif
+
+/// What the context panel can do for this session (boards 01 and 03): built by the composer from
+/// `CoordinatorContextActions`, drawn by `ContextWindowIndicator`. Empty draws the panel as before.
+struct ContextActions {
+    var offersCompact = false
+    var compactEnabled = false
+    var offersNewCoordinator = false
+    var running = false
+    var projectTitle = ""
+    var compact: () -> Void = {}
+    var pendingWaits: () async -> [CoordinatorPendingWait] = { [] }
+    var handOver: () -> Void = {}
+
+    var isEmpty: Bool { !offersCompact && !offersNewCoordinator }
+
+    var compactDetail: String {
+        compactEnabled ? CoordinatorContextCopy.compactDetail : CoordinatorContextCopy.compactWhileRunning
+    }
+    var newCoordinatorDetail: String {
+        running ? CoordinatorContextCopy.newCoordinatorWhileRunning : CoordinatorContextCopy.newCoordinatorDetail
+    }
+}
+
+/// The action rows of the Mac's (and an iPad's) context popover, board 01.
+private struct ContextActionRows: View {
+    let actions: ContextActions
+    let pct: Int
+    let dismiss: () -> Void
+    let startNewCoordinator: () -> Void
+
+    var body: some View {
+        VStack(spacing: 2) {
+            if actions.offersCompact {
+                ContextActionRow(systemImage: ContextActionSymbol.compact, title: CoordinatorContextCopy.compact,
+                                 detail: actions.compactDetail,
+                                 emphasized: actions.compactEnabled
+                                     && CoordinatorContextActions.emphasizesCompact(percent: pct),
+                                 enabled: actions.compactEnabled) {
+                    dismiss()
+                    actions.compact()
+                }
+                .accessibilityIdentifier("context-action-compact")
+            }
+            if actions.offersNewCoordinator {
+                ContextActionRow(systemImage: ContextActionSymbol.newCoordinator,
+                                 title: CoordinatorContextCopy.newCoordinator,
+                                 detail: actions.newCoordinatorDetail, action: startNewCoordinator)
+                    .accessibilityIdentifier("context-action-new-coordinator")
+            }
+        }
+    }
+}
+
+#if os(iOS)
+/// The phone's context panel once it has something to do (board 03 iOS 1): a medium sheet with the
+/// reading in one group and the actions in another, the actions in the system's blue.
+private struct ContextActionsSheet: View {
+    let reading: String
+    let pct: Int
+    let showsBar: Bool
+    let caption: String
+    let modelLine: String?
+    let actions: ContextActions
+    let dismiss: () -> Void
+    let startNewCoordinator: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text(CoordinatorContextCopy.title)
+                .font(.headline)
+                .padding(.top, 22)
+                .padding(.bottom, 4)
+            List {
+                Section {
+                    HStack {
+                        Text("Context window")
+                        Spacer()
+                        Text(reading).monospacedDigit().foregroundStyle(.secondary)
+                    }
+                    if showsBar {
+                        UsageBar(percent: pct, warn: pct >= 75, critical: pct >= 90).frame(height: 4)
+                    }
+                    Text(caption).foregroundStyle(.secondary)
+                    if let modelLine {
+                        HStack {
+                            Text("Model")
+                            Spacer()
+                            Text(modelLine).lineLimit(1).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                Section {
+                    if actions.offersCompact {
+                        row(ContextActionSymbol.compact, CoordinatorContextCopy.compact, actions.compactDetail,
+                            enabled: actions.compactEnabled) {
+                            dismiss()
+                            actions.compact()
+                        }
+                        .accessibilityIdentifier("context-action-compact")
+                    }
+                    if actions.offersNewCoordinator {
+                        row(ContextActionSymbol.newCoordinator, CoordinatorContextCopy.newCoordinator,
+                            actions.newCoordinatorDetail, enabled: true, action: startNewCoordinator)
+                            .accessibilityIdentifier("context-action-new-coordinator")
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+        }
+        .background(Color(uiColor: .systemGroupedBackground))
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func row(_ symbol: String, _ title: String, _ detail: String, enabled: Bool,
+                     action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: symbol).foregroundStyle(enabled ? Color.accentColor : Color.secondary)
+                    .frame(width: 22)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).foregroundStyle(enabled ? Color.accentColor : Color.secondary)
+                    Text(detail).font(.orbitLabel).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .disabled(!enabled)
+    }
+}
+#endif
+
+/// The confirm Start a new coordinator asks (board 02 ①): the Mac's own dialog naming the note and
+/// each wait; on iOS the system Alert, Hand over bold above Cancel and the waits a count only
+/// (board 03 iOS 2).
+private struct CoordinatorHandoffConfirmPresentation: ViewModifier {
+    @Binding var waits: [CoordinatorPendingWait]?
+    let actions: ContextActions
+
+    private var shown: Binding<Bool> {
+        Binding(get: { waits != nil }, set: { if !$0 { waits = nil } })
+    }
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content.sheet(isPresented: shown) {
+            CoordinatorHandoffConfirmView(projectTitle: actions.projectTitle, running: actions.running,
+                                          waits: waits ?? [],
+                                          onCancel: { waits = nil },
+                                          onHandOver: {
+                                              waits = nil
+                                              actions.handOver()
+                                          })
+        }
+        #else
+        content.alert(CoordinatorHandoffCopy.confirmTitle, isPresented: shown) {
+            Button(CoordinatorHandoffCopy.handOver) { actions.handOver() }
+                .keyboardShortcut(.defaultAction)
+            Button(CoordinatorHandoffCopy.cancel, role: .cancel) {}
+        } message: {
+            Text(CoordinatorContextCopy.phoneConfirmBody(waits: waits?.count ?? 0, running: actions.running))
+        }
+        #endif
+    }
+}

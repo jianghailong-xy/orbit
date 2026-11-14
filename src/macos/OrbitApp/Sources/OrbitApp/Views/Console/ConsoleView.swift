@@ -335,7 +335,24 @@ struct ConsoleView: View {
             // The landing this conversation's work fed, at the session's own bottom (owner
             // 2026-10-19, board v4 06 e): absent from a session that produced no landing work.
             SourceLandingChip(console: console)
-            ComposerView(console: console)
+            // A coordinator handing itself over (board 02): the note being written, the handover, or
+            // its failure above the composer; the composer locked while it runs; and once it is done,
+            // the way to the successor in the composer's place.
+            let handoff = appModel.session(id: console.sessionID)?.coordinatorHandoff
+            let handoffRow = CoordinatorHandoffRow.resolve(handoff)
+            if let handoffRow {
+                if case .completed = handoffRow {} else {
+                    CoordinatorHandoffStatusView(row: handoffRow) { handoffPress(console, $0) }
+                        .padding(.bottom, .composerBandGap)
+                }
+            }
+            if case .completed(let successor)? = handoffRow {
+                CoordinatorHandedOverBanner { appModel.route(to: .session(successor)) }
+            } else if CoordinatorContextActions.locksComposer(handoff) {
+                CoordinatorHandoffLockedComposer()
+            } else {
+                ComposerView(console: console)
+            }
             // What the provider pick standing in the composer will do, and WHEN — the
             // part that matters, because a run keeps its provider for its whole life.
             // In flow under the composer, and it stays for as long as the pick does.
@@ -345,6 +362,14 @@ struct ConsoleView: View {
                     .padding(.top, 4)
             }
         }
+    }
+
+    /// A press on the handoff's row: Skip the note, Cancel handover, or a failure's way out. The
+    /// project is the one this conversation coordinates — or, once it no longer does, belongs to.
+    private func handoffPress(_ console: ConsoleModel, _ action: CoordinatorHandoffAction) {
+        let session = appModel.session(id: console.sessionID)
+        guard let projectID = session?.projectId ?? session?.projectMembership?.projectId else { return }
+        Task { await console.coordinatorHandoff(projectID: projectID, action) }
     }
 
     private func consoleBody(navTitleWidth: CGFloat) -> some View {
@@ -1269,7 +1294,8 @@ struct TranscriptView: View {
                              clocks: console.receiptClocks,
                              recap: recapCard,
                              watchName: watchWakeName,
-                             createdWorkspace: console.createdWorkspaceLine)
+                             createdWorkspace: console.createdWorkspaceLine,
+                             handoffReceived: app.session(id: console.sessionID)?.coordinatorHandoffReceived)
     }
 
     /// The name a folded watch turn gives its one target (`OrbitExchangeFold.orbitTurn`): the watch's
@@ -1351,6 +1377,11 @@ struct TranscriptView: View {
         case .createdWorkspace(let line):
             // No `AnchorRow`: what the conversation made is no "Your question".
             CreatedWorkspaceLineView(line: line, console: console)
+        case .handoffReceived(let received):
+            // The note this coordinator opened with, linking back to the one that wrote it.
+            CoordinatorHandoffNoteCardView(received: received) {
+                app.route(to: .session(received.handoffFromSessionId))
+            }
         case .loadOlder:
             // List laziness keeps this un-materialized — and the fetch un-fired — while the user
             // stays at the tail.

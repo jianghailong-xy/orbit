@@ -1500,7 +1500,26 @@ final class AppModel {
     /// the caller should nudge a refresh.
     private func mergeSessionSummary(_ summary: ControlSessionSummary) -> Bool {
         patchSessionProjectRelation(summary)
-        return applySessionRow(OpenRowChange.merging(summary, into: sessions))
+        let merged = applySessionRow(OpenRowChange.merging(summary, into: sessions))
+        patchCoordinatorHandoff(summary)
+        return merged
+    }
+
+    /// The coordinator handoff (docs/coordinator-handoff.md) on every loaded copy of the row, by the
+    /// project relation's rule: the outgoing coordinator leaves Open as its handoff completes, and its
+    /// open console still has to show the banner that leads to the successor. A row held nowhere is
+    /// read again when a console has it open.
+    private func patchCoordinatorHandoff(_ summary: ControlSessionSummary) {
+        guard summary.coordinatorHandoff != nil || summary.coordinatorHandoffReceived != nil else { return }
+        if let index = sessions.firstIndex(where: { $0.id == summary.id }) {
+            let merged = sessions[index].applyingCoordinatorHandoff(summary)
+            if merged != sessions[index] { applySessionRow(.replace(index: index, row: merged)) }
+        }
+        if let cached = sessionDetails.resolve(summary.id) {
+            sessionDetails.store(cached.applyingCoordinatorHandoff(summary))
+        } else if consoleRegistry?.peek(summary.id) != nil {
+            refreshUnlistedSession(summary.id, adoptingAgent: false)
+        }
     }
 
     /// Relation metadata has a different membership rule from run/lifecycle state: a Project can

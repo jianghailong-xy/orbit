@@ -3768,6 +3768,27 @@ final class ConsoleModel {
         catch { statusMessage = "Interrupt failed" }
     }
 
+    // MARK: coordinator handoff (docs/coordinator-handoff.md)
+
+    /// The waits a handover would move, for the confirm. A failed read is no row rather than no
+    /// confirm: the waits move either way, the row only names them.
+    func coordinatorPendingWaits(projectID: String) async -> [CoordinatorPendingWait] {
+        (try? await api.coordinatorPendingWaits(projectID)) ?? []
+    }
+
+    /// One of the handoff's presses. What it changed reaches this conversation as `session.updated`
+    /// (every transition publishes it), so the answer is read only for a refusal.
+    func coordinatorHandoff(projectID: String, _ action: CoordinatorHandoffAction) async {
+        do { _ = try await api.coordinatorHandoff(projectID, action) }
+        catch { statusMessage = "The handover didn't go through: \(APIClient.failureReason(error))." }
+    }
+
+    /// Compact: the engine's own command, sent as if typed — no confirm, and the composer's draft
+    /// stays where it is.
+    func compactConversation() async {
+        await send(overrideText: CoordinatorContextActions.compactCommand)
+    }
+
     /// "Stop the current turn and send THIS instead" — one request, not a stop followed by a send
     /// (web parity, `interruptAndSend`). Two requests could not express it: the interrupt drops the
     /// follow-ups queued behind the running turn, so a send racing it might be deleted by it, and a

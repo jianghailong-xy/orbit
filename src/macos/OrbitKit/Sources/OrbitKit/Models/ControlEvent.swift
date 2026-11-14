@@ -166,6 +166,12 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     /// saying the session is in no folder — how a move out of one reaches the owner's other
     /// clients — and `.some(id)` is the folder it is in now.
     public let folderId: String??
+    /// The handoff on the outgoing coordinator and the one a successor received. Doubly optional for
+    /// `retryAt`'s reason: `nil` is an older control plane that never sends the key (keep the row's),
+    /// `.some(nil)` is this server saying there is none — a cancelled handoff — and `.some(value)`
+    /// is where it stands now.
+    public let coordinatorHandoff: SessionCoordinatorHandoff??
+    public let coordinatorHandoffReceived: SessionCoordinatorHandoffReceived??
 
     public var effectiveRunStatus: RunStatus { runStatus ?? status }
     public var effectiveRunState: SessionRunState {
@@ -236,6 +242,13 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
             : nil
         folderId = values.contains(.folderId)
             ? .some(try values.decodeIfPresent(String.self, forKey: .folderId))
+            : nil
+        coordinatorHandoff = values.contains(.coordinatorHandoff)
+            ? .some(try? values.decodeIfPresent(SessionCoordinatorHandoff.self, forKey: .coordinatorHandoff))
+            : nil
+        coordinatorHandoffReceived = values.contains(.coordinatorHandoffReceived)
+            ? .some(try? values.decodeIfPresent(SessionCoordinatorHandoffReceived.self,
+                                                forKey: .coordinatorHandoffReceived))
             : nil
     }
 }
