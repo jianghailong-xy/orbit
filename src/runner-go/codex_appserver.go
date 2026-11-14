@@ -1364,7 +1364,7 @@ func (a *codexAppServer) startTurn(ctx context.Context, threadID string, job *Cl
 	mode, generation := a.prepareInstructionContext(func() error {
 		return a.injectAgentContext(ctx, threadID, job.instructionAgent(), job.insideRecordedWork(), job.watchesOn())
 	})
-	prompt = a.turnPrompt(prompt)
+	prompt = a.turnPrompt(prompt, job.insideRecordedWork())
 	result, err := a.request(ctx, "turn/start", codexTurnParams(
 		threadID, job, execDir, upDir, orbitTurnID, prompt, imagePaths,
 		codexTurnContextOptions{
@@ -1381,8 +1381,8 @@ func (a *codexAppServer) startTurn(ctx context.Context, threadID string, job *Cl
 
 // turnPrompt is the person's words as the next turn/start sends them: led by orbitContextResetNote, once, after a
 // compaction or a resume (context_reset_note.go).
-func (a *codexAppServer) turnPrompt(prompt string) string {
-	return withContextResetNote(prompt, a.resetNotePending.Swap(false))
+func (a *codexAppServer) turnPrompt(prompt string, taskSession bool) string {
+	return withContextResetNote(prompt, a.resetNotePending.Swap(false), taskSession)
 }
 
 func (a *codexAppServer) injectAgentContext(

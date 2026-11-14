@@ -130,6 +130,7 @@ type evalPlane struct {
 	turn          int
 	selfSession   string // decoded (UUID) id of the session under eval
 	selfAgent     string
+	selfTask      string // the task the session runs, when it is a task's run
 	orchestration bool
 	owner         evalOwnerPolicy
 	// dropCreateAnswers drops the answer of that many task creates, after writing the task.
@@ -484,6 +485,13 @@ func (p *evalPlane) newTaskFromBody(body map[string]interface{}, agent string) *
 	} else {
 		task.AssigneeID = agent
 	}
+	// A task's run files under the project of the task it is executing, unless it names one (the server's
+	// coordination scope, tasks.service.ts resolveCreationOrigin).
+	if task.ProjectID == "" {
+		if own := p.taskByIDLocked(p.selfTask); own != nil {
+			task.ProjectID = own.ProjectID
+		}
+	}
 	for _, dep := range stringsFromJSON(body["dependsOnTaskIds"]) {
 		task.DependsOn = append(task.DependsOn, dep)
 	}
@@ -663,6 +671,10 @@ func (p *evalPlane) taskRoute(w http.ResponseWriter, r *http.Request, rest []str
 		writeEvalJSON(w, 200, p.taskDoc(task))
 		return 200, ""
 	case len(rest) == 1 && r.Method == http.MethodPatch:
+		// DONE is derived from the task's criterion and never written directly, by anyone (tasks.service.ts).
+		if asString(body["status"]) == "DONE" {
+			return p.refuse(w, 403, "DIRECT_TASK_DONE_REFUSED", "task.status DONE is derived from the declared criterion and cannot be written directly", "")
+		}
 		var fields []string
 		for k, v := range body {
 			fields = append(fields, k)
@@ -679,6 +691,10 @@ func (p *evalPlane) taskRoute(w http.ResponseWriter, r *http.Request, rest []str
 				}
 			case "runAt":
 				task.RunAt = asString(v)
+			case "projectId":
+				if id := asString(v); id == "" || (p.project != nil && id == p.project.ID) {
+					task.ProjectID = id
+				}
 			}
 		}
 		sort.Strings(fields)

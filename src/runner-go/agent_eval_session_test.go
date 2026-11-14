@@ -108,6 +108,7 @@ func newEvalSession(sc *evalScenario, provider string) (*evalSession, error) {
 		current := s.plane.seedTask(&evalTaskRow{Title: title, Description: description, Status: "IN_PROGRESS",
 			ProjectID: s.world.ProjectID, AssigneeID: agentID})
 		s.world.TaskID = current.ID
+		s.plane.selfTask = current.ID
 	}
 	for _, seed := range sc.Setup.Seeds {
 		row := &evalTaskRow{Title: seed.Title, Description: seed.Description, Status: seed.Status}

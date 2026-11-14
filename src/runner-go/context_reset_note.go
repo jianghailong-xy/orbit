@@ -13,17 +13,30 @@ package main
 // already carries the output of a `!` shell or the paths of uploaded files: in what the engine reads, not in the
 // `user` event the clients show.
 
-const orbitContextResetNote = "[Orbit: this conversation was compacted or resumed since your last turn. Before you act " +
-	"on this message, read what you are working on again from Orbit's tools (task_get with no id reads this session's " +
-	"task), and do not rebuild an id, a status or an approval from the summary or from memory.]"
+// orbitContextResetNote is the note for a session that runs a task; orbitContextResetNoteFree for one that runs
+// none, where task_get with no id has nothing to read. Measured on the first: told only to read "what you are working
+// on", the agent re-read the follow-up it had filed and not its own task, so the note names the task.
+const (
+	orbitContextResetNote = "[Orbit: this conversation was compacted or resumed since your last turn. Before you act on " +
+		"this message, read this session's task again with task_get (no id) and any other record you will name, and do " +
+		"not rebuild an id, a status or an approval from the summary or from memory.]"
+	orbitContextResetNoteFree = "[Orbit: this conversation was compacted or resumed since your last turn. Before you act " +
+		"on this message, read again from Orbit's tools any record you will name, and do not rebuild an id, a status or " +
+		"an approval from the summary or from memory.]"
+)
 
-// withContextResetNote is text as the engine is to read it: led by the note when the conversation was reset.
-func withContextResetNote(text string, reset bool) string {
+// withContextResetNote is text as the engine is to read it: led by the note when the conversation was reset, the one
+// for a task's run when taskSession is set.
+func withContextResetNote(text string, reset, taskSession bool) string {
 	if !reset {
 		return text
 	}
-	if text == "" {
-		return orbitContextResetNote
+	note := orbitContextResetNoteFree
+	if taskSession {
+		note = orbitContextResetNote
 	}
-	return orbitContextResetNote + "\n\n" + text
+	if text == "" {
+		return note
+	}
+	return note + "\n\n" + text
 }

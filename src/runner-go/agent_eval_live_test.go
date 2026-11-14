@@ -103,6 +103,9 @@ type claudeEvalEngine struct {
 	compacted              atomic.Bool
 	firstUsage             int
 	sessionDir             string
+	// reset mirrors runClaudeSessionProcess's contextReset: set by a compact_boundary and by a resumed process,
+	// carried by the next message as orbitContextResetNote (context_reset_note.go).
+	resetNote atomic.Bool
 }
 
 func (e *claudeEvalEngine) identity() (string, string, string, string) {
@@ -176,6 +179,9 @@ func (e *claudeEvalEngine) spawn(s *evalSession, first bool) error {
 					}
 				case "compact_boundary":
 					e.compacted.Store(true)
+					if msg["parent_tool_use_id"] == nil {
+						e.resetNote.Store(true)
+					}
 				}
 			case "result":
 				usage := mapValue(msg["usage"])
@@ -237,7 +243,8 @@ func (e *claudeEvalEngine) send(s *evalSession, text string) (claudeEvalResult, 
 }
 
 func (e *claudeEvalEngine) turn(s *evalSession, log *evalTurnLog) error {
-	res, err := e.send(s, log.Prompt)
+	// The message as the session's delivery feeds it: led by the note after a compaction or a resume.
+	res, err := e.send(s, withContextResetNote(log.Prompt, e.resetNote.Swap(false), s.job.insideRecordedWork()))
 	if err != nil {
 		return err
 	}
@@ -277,6 +284,7 @@ func (e *claudeEvalEngine) reset(s *evalSession, how string) (bool, error) {
 		if err := e.spawn(s, false); err != nil {
 			return false, err
 		}
+		e.resetNote.Store(true)
 		return true, nil
 	}
 	return false, fmt.Errorf("unknown reset %q", how)

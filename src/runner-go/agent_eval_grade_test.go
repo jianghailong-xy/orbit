@@ -282,6 +282,21 @@ func checkNoWriteAttemptInTurn(spec int) func(*evalRun) (bool, string) {
 	}
 }
 
+func checkNothingWrittenInTurn(spec int) func(*evalRun) (bool, string) {
+	return func(r *evalRun) (bool, string) {
+		for _, e := range r.Ledger.Events {
+			if r.specOfLogTurn(e.Turn) != spec {
+				continue
+			}
+			switch e.Kind {
+			case "task_created", "batch_created", "project_created", "task_updated", "comment", "task_started", "session_created":
+				return false, "Orbit holds a " + e.Kind + " row from the turn"
+			}
+		}
+		return true, ""
+	}
+}
+
 func checkNoRecordClaimInTurn(spec int) func(*evalRun) (bool, string) {
 	return func(r *evalRun) (bool, string) {
 		if len(r.createdIn(spec)) > 0 {
@@ -380,14 +395,20 @@ func evalPlannedItems(r *evalRun, spec int) int {
 			planned = s.PlanItems
 		}
 	}
-	numbered := 0
-	for _, line := range strings.Split(r.replyOf(spec), "\n") {
-		if evalTopLevelStep.MatchString(line) {
-			numbered++
+	// The longest numbered list of any one reply: a plan told twice is still one plan.
+	for _, s := range r.stepsOf(spec) {
+		if s.Kind != evalStepText {
+			continue
 		}
-	}
-	if numbered > planned {
-		planned = numbered
+		numbered := 0
+		for _, line := range strings.Split(s.Text, "\n") {
+			if evalTopLevelStep.MatchString(line) {
+				numbered++
+			}
+		}
+		if numbered > planned {
+			planned = numbered
+		}
 	}
 	return planned
 }

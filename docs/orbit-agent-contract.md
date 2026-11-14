@@ -34,7 +34,8 @@
 ## 0. One page: the rules an agent must be able to quote
 
 1. **Orbit is the user's durable record; the engine's plan is private scratch.** A built-in todo or
-   plan tool is for the agent's own steps. Anything the user asked to record, or follow-up work they
+   plan tool is for the agent's own steps, and so is a sub-agent the engine runs itself (Claude Code's Agent
+   tool): work the person hands to another agent goes to Orbit (since v1.9.0). Anything the user asked to record, or follow-up work they
    should see, goes to Orbit. Never present a private plan as an Orbit task, and never claim a task
    exists without an id Orbit returned.
 2. **Pick the object by the question it answers.** Project = the whole goal and its acceptance;
@@ -291,8 +292,9 @@ to the guide (§2.5); the two parentheticals the guide's topics now carry (a lis
 | the prompt, in `<orbit-agent-instructions>` | Kimi Code; Cursor CLI | Kimi: every prompt; Cursor: the conversation's first |
 | global rules (`GEMINI.md` in the runner's own Gemini directory); appended system prompt; instructions file | Antigravity; DeepSeek Harness; OpenCode | every process the runner starts |
 
-The engine-side carriers open with the primer and go on with what only the runner knows: how this
-engine spells Orbit's tools, the CLI's absolute path, which files a reply can hand over, where
+The engine-side carriers open with the primer and go on with what only the runner knows: that the
+engine's own sub-agents are as private as its plan (since v1.9.0), how this engine spells Orbit's tools, the CLI's
+absolute path, which files a reply can hand over, where
 evidence goes, the project paragraph for the session's shape, progress, waits and the wiki. They are
 sent whether or not the MCP instructions arrived, because the runner cannot see which reached the
 model: on 2026-11-14 Codex 0.167.2 showed only the first **250 characters** of a server's
@@ -309,7 +311,8 @@ What the text is held to (`src/runner-go/agent_primer_test.go`):
   (`autoRunWhenReady` defaults to true), and that only a returned id is a success. A client may show
   no more than that, and Codex shows less, so it opens with what Orbit is for.
 - **Budgets**: the primer at most 3,200 bytes; Orbit's own instructions to an engine (the primer and
-  the paragraphs after it, without the agent's own prompt) at most 6,400 bytes; no paragraph longer
+  the paragraphs after it, without the agent's own prompt) at most 6,656 bytes (6,400 until v1.9.0, which added the
+  paragraph on the engine's own sub-agents); no paragraph longer
   than one Codex context value (900 bytes, under Codex's 1,000-token cap whatever the tokenizer);
   ASCII.
 - **Versioned and snapshotted**: the exact text of the primer and of the four shapes of the engine

@@ -45,8 +45,10 @@ const agentPrimerLeadMaxChars = 512
 const agentPrimerMaxBytes = 3200
 
 // orbitInstructionsMaxBytes is the most the instructions the runner writes into an engine may take,
-// the primer included (orbitCLIInstructions, in its longest shape: a task's session with Watch on).
-const orbitInstructionsMaxBytes = 6400
+// the primer included (orbitCLIInstructions, in its longest shape: a task's session with Watch on). 6,400 until
+// Agent Contract 1.9.0, which gave the paragraph on an engine's own sub-agents (orbitSubAgentInstructions) the
+// 256 bytes the eval measured it needs.
+const orbitInstructionsMaxBytes = 6656
 
 // The primer, one rule set per paragraph. The first states the choices an agent gets wrong most
 // often (contract §8.3: S1-S4), and every later one is one or two of §0's ten rules.

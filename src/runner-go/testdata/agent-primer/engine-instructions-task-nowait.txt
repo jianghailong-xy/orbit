@@ -14,6 +14,8 @@ Session, agent and runner tools exist only while the account's Session orchestra
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
 
+Your engine's own sub-agents are as private as its plan: work the person hands to another agent goes to Orbit, task_start if task_list shows it recorded, else task_create with startNow or session_create.
+
 To hand the user a file, link it in your reply as `[name](path)`, or `![name](path)` to show an image. Orbit attaches a linked file only if it is inside your working directory or this session's uploads directory; from anywhere else, /tmp included, the user cannot open it, so copy the file there first and link the copy. Whatever git does not ignore in your working directory can end up in a commit, so a file that does not belong in the repository goes in the uploads directory or a git-ignored path.
 
 For evidence, cite a command's output by its tool call rather than saving a log, and keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a link that also works in a reply, and an id to cite as a FILE check.

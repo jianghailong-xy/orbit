@@ -58,13 +58,14 @@ func TestTheMessageAfterACompactionCarriesTheContextResetNote(t *testing.T) {
 	claimAndSend("turn-2", "Continue.")
 	claimAndSend("turn-3", "And then?")
 
-	if first := fedText(t, s, 0); strings.Contains(first, orbitContextResetNote) {
+	if first := fedText(t, s, 0); strings.Contains(first, "this conversation was compacted or resumed") {
 		t.Errorf("the session's first message carried the note: %q", first)
 	}
-	if second := fedText(t, s, 1); second != orbitContextResetNote+"\n\nContinue." {
+	note := withContextResetNote("", true, s.job.insideRecordedWork())
+	if second := fedText(t, s, 1); second != note+"\n\nContinue." {
 		t.Errorf("the message after the compaction = %q, want the note and then the person's words", second)
 	}
-	if third := fedText(t, s, 2); strings.Contains(third, orbitContextResetNote) {
+	if third := fedText(t, s, 2); strings.Contains(third, note) {
 		t.Errorf("the note was carried twice: %q", third)
 	}
 	for _, e := range s.eventsOf(func(e RunEvent) bool { return e.Type == evUser }) {
@@ -116,19 +117,25 @@ func TestATurnThatTouchedOrbitFilesItsTelemetryBeforeItsTurnEnd(t *testing.T) {
 // Codex's next turn after a compaction or a resume leads with the note, once; an ordinary turn carries nothing.
 func TestCodexTurnAfterACompactionOrAResumeCarriesTheContextResetNote(t *testing.T) {
 	app := &codexAppServer{instructionMode: codexInstructionsAdditionalContext}
-	if got := app.turnPrompt("first"); got != "first" {
+	if got := app.turnPrompt("first", true); got != "first" {
 		t.Fatalf("an ordinary turn = %q", got)
 	}
 	app.markInstructionContextForRefresh()
-	if got := app.turnPrompt("Continue."); got != orbitContextResetNote+"\n\nContinue." {
+	if got := app.turnPrompt("Continue.", true); got != orbitContextResetNote+"\n\nContinue." {
 		t.Fatalf("the turn after a compaction = %q", got)
 	}
-	if got := app.turnPrompt("again"); got != "again" {
+	if got := app.turnPrompt("again", true); got != "again" {
 		t.Fatalf("the note was carried twice: %q", got)
 	}
 	// A resumed thread is the other reset (startOrResumeThread sets it on thread/resume).
 	app.resetNotePending.Store(true)
-	if got := app.turnPrompt(""); got != orbitContextResetNote {
+	if got := app.turnPrompt("", true); got != orbitContextResetNote {
 		t.Fatalf("an empty turn after a resume = %q", got)
+	}
+	// A session that runs no task is told to re-read what it names, not a task it does not have.
+	app.resetNotePending.Store(true)
+	if got := app.turnPrompt("Continue.", false); got != orbitContextResetNoteFree+"\n\nContinue." ||
+		strings.Contains(got, "task_get (no id)") {
+		t.Fatalf("the turn after a reset in a session with no task = %q", got)
 	}
 }

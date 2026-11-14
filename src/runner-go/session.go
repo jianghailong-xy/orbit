@@ -2533,7 +2533,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				// A conversation compacted or resumed since the last message: this one says so first. Like the
 				// shell output, the flag is cleared only once the message is accepted below.
 				carriesReset := !steer && contextReset.Load()
-				feedText = withContextResetNote(feedText, carriesReset)
+				feedText = withContextResetNote(feedText, carriesReset, job.insideRecordedWork())
 				// Tell claude where the written-to-disk uploads landed (absolute paths outside
 				// the worktree), so it reads them with its tools instead of expecting inline
 				// content it never received.

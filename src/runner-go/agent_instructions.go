@@ -89,6 +89,7 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches bool) s
 	}
 	command := shellQuote(executable)
 	return agentPrimer + "\n\n" +
+		orbitSubAgentInstructions +
 		orbitReplyFileInstructions +
 		orbitEvidenceFileInstructions +
 		orbitProjectInstructions(insideRecordedWork) +
@@ -101,6 +102,15 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches bool) s
 		"--json`, then run the argv it returns with that exact absolute path. Pass `--receipt` to read the receipt its " +
 		"MCP tool answers with; `--json` prints the entity alone. Do not run `" + command + " mcp` directly."
 }
+
+// orbitSubAgentInstructions is §0 rule 1 for the engine's own sub-agents (Claude Code's Agent tool, a Codex sub-agent):
+// they run inside this session, so the person cannot see them and they end with it, as a todo list does. The
+// agent-contract eval measured the need on 2026-11-14 (E6/E7 on Claude Code 2.1.325, claude-sonnet-5-5): asked to
+// have another agent fix a test now, the agent launched its own background sub-agent and told the person the work
+// was handed off, with no Orbit record and no receipt.
+const orbitSubAgentInstructions = "Your engine's own sub-agents are as private as its plan: work the person hands to " +
+	"another agent goes to Orbit, task_start if task_list shows it recorded, else task_create with startNow or " +
+	"session_create.\n\n"
 
 // orbitReplyFileInstructions says which files a reply can really hand over. The runner uploads a linked
 // file only out of the session's own directories (reply_attachments.go), so an agent that leaves its
