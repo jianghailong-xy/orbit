@@ -42,7 +42,7 @@ function row(i: number, over: Partial<ProjectCrossingRow> = {}): ProjectCrossing
     kind: 'MOVE_TASK',
     subjectTaskId: `t${i}`,
     subjectTask: { id: `t${i}`, title: `Moved task ${i}` },
-    requestedCriterion: { key: String(3 + i), text: `criterion ${3 + i}` },
+    requestedCriterion: { key: `2wndAAHBC95f4Al8rNFt${i}`, text: `criterion ${3 + i}`, ordinal: 3 + i },
     withdrawnCriterion: null,
     crossingKey: `key-${i}`,
     state: 'PENDING',
@@ -203,7 +203,7 @@ describe('the crossing decision card in a coordinator conversation', () => {
     expect(previews[0]).toContain('View details & act');
     expect(previews[1]).toContain('File this task here?');
     expect(previews[1]).toContain('file');
-    for (const preview of previews) expect(preview).not.toMatch(/Crossing\d|0195c0de|key-/);
+    for (const preview of previews) expect(preview).not.toMatch(/Crossing\d|0195c0de|key-|2wnd/);
     // The pinned strip counts both batches, by the cards' own question.
     expect(document.querySelector('[data-pointers]')!.textContent).toBe('Move these tasks here?|File this task here?');
     // Drawn where the batch was asked: after the last event before it.
@@ -221,7 +221,8 @@ describe('the crossing decision card in a coordinator conversation', () => {
     expect(review).toContain('To this project');
     expect(review).toContain('Tasks to move');
     expect(review).toContain('Moved task 1');
-    expect(review).toContain('Target criterion requested: 4');
+    expect(review).toContain('Target criterion requested: Criterion 4');
+    expect(review).not.toContain('2wnd');
     expect(review).not.toContain('Moved task 4');
     expect(review).toContain('Show 2 more');
     expect(review).toContain('“These tasks serve criteria here; their old project is done.”');

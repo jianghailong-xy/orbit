@@ -139,11 +139,15 @@ export interface HandoffListRow extends HandoffRow {
   /** The session that asked, by title. Null once it is gone: the row keeps its id regardless. */
   requestedBySession: { id: string; title: string } | null;
   /** MOVE_TASK: the target project's criterion the request names, with its words now. `text` is
-   *  null when that criterion has since been deleted. Null when the request names none. */
-  requestedCriterion: { key: string; text: string | null } | null;
+   *  null when that criterion has since been deleted. Null when the request names none.
+   *  `ordinal` is its 1-based position in that project's `acceptanceCriteriaItems` as they read
+   *  now — what a card calls it ("Criterion 4"), since the key is an opaque id. Null when the
+   *  criterion is gone. */
+  requestedCriterion: { key: string; text: string | null; ordinal: number | null } | null;
   /** MOVE_TASK: the source project's criterion the task declares today, which the move takes
-   *  back. Null when it declares none, or none of the source project's. */
-  withdrawnCriterion: { key: string; text: string } | null;
+   *  back. Null when it declares none, or none of the source project's. `ordinal` as above, in
+   *  the source project's list. */
+  withdrawnCriterion: { key: string; text: string; ordinal: number | null } | null;
 }
 
 /**
@@ -1048,6 +1052,24 @@ export class ProjectHandoffService {
           select: { id: true, projectId: true, text: true },
         })
       : [];
+    // The position a criterion holds in its project's list, which is what a person calls it.
+    // Counted over the list as it stands rather than read off the stored `ordinal`, so a gap left
+    // by an edit can never make the card name a criterion that is not there.
+    const criterionProjectIds = ids(criteria.map((criterion) => criterion.projectId));
+    const siblings = criterionProjectIds.length
+      ? await this.prisma.projectAcceptanceCriterionDefinition.findMany({
+          where: { projectId: { in: criterionProjectIds }, project: { ownerId } },
+          select: { id: true, projectId: true },
+          orderBy: [{ projectId: 'asc' }, { ordinal: 'asc' }],
+        })
+      : [];
+    const positionById = new Map<string, number>();
+    const countByProject = new Map<string, number>();
+    for (const sibling of siblings) {
+      const position = (countByProject.get(sibling.projectId) ?? 0) + 1;
+      countByProject.set(sibling.projectId, position);
+      positionById.set(sibling.id, position);
+    }
     const subjectById = new Map(subjects.map((task) => [task.id, task]));
     const sessionById = new Map(sessions.map((session) => [session.id, session]));
     const criterionById = new Map(criteria.map((criterion) => [criterion.id, criterion]));
@@ -1070,10 +1092,15 @@ export class ProjectHandoffService {
           ? {
               key: criterionKeyOf(row.requestedCriterionDefinitionId),
               text: requested?.text.trim() ?? null,
+              ordinal: requested ? positionById.get(requested.id) ?? null : null,
             }
           : null,
         withdrawnCriterion: declared && declared.projectId === row.fromProjectId
-          ? { key: criterionKeyOf(declared.id), text: declared.text.trim() }
+          ? {
+              key: criterionKeyOf(declared.id),
+              text: declared.text.trim(),
+              ordinal: positionById.get(declared.id) ?? null,
+            }
           : null,
       };
     });

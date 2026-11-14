@@ -82,7 +82,8 @@ class ConversationCrossingShotsTest {
                 putJsonObject("fromProject") { put("title", "Runner v1: control-plane link to WebSocket"); put("status", "DONE") }
                 putJsonObject("toProject") { put("title", "Launch"); put("status", "OPEN") }
                 putJsonObject("subjectTask") { put("id", "34vMovedTask%02d".format(n)); put("title", title) }
-                putJsonObject("requestedCriterion") { put("key", "$n"); put("text", "Criterion $n") }
+                // Real keys are base62 ids; the card names the criterion by the server's ordinal.
+                putJsonObject("requestedCriterion") { put("key", "2wndAAHBC95f4Al8rNFt%02d".format(n)); put("text", "Criterion text $n"); put("ordinal", n) }
             }
         }
         publish()

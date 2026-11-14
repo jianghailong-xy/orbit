@@ -133,17 +133,31 @@ object CrossingCards {
 
     fun sourceTitle(batch: CrossingBatch) = batch.first.obj("fromProject")?.text("title")?.takeIf { it.isNotBlank() } ?: ProjectCrossings.unnamedProject
 
-    /** "for criteria 4–11", "for criteria 4, 6, 9", "for criterion 4", or null when no row asks for a criterion. */
+    /** A criterion's 1-based position in its project's list, as the server numbers it; null from an older server or once it is gone. */
+    private fun ordinal(criterion: JsonObject) = (criterion["ordinal"] as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull
+
+    /** What a person calls a criterion: "Criterion 4", or its words when the server sends no number. Never its key, which is an
+     *  opaque id. Null when it has neither (deleted). */
+    fun criterionName(criterion: JsonObject): String? =
+        ordinal(criterion)?.let { "Criterion $it" } ?: criterion.text("text")?.trim()?.takeIf { it.isNotEmpty() }
+
+    /** "4–11" when the numbers are a run, else "4, 6, 9". */
+    fun criteriaRange(ordinals: Collection<Int>): String {
+        val sorted = ordinals.distinct().sorted()
+        return if (sorted.size > 1 && sorted.zipWithNext().all { (a, b) -> b == a + 1 }) "${sorted.first()}–${sorted.last()}"
+        else sorted.joinToString(", ")
+    }
+
+    /** "for criteria 4–11", "for criteria 4, 6, 9", "for criterion 4" — by number, falling back to a criterion's words where the
+     *  number is missing — or null when no row asks for a criterion it can name. */
     fun criteria(batch: CrossingBatch): String? {
-        val keys = batch.rows.mapNotNull { it.obj("requestedCriterion")?.text("key") }.distinct()
-        if (keys.isEmpty()) return null
-        if (keys.size == 1) return "for criterion ${keys.single()}"
-        val numbers = keys.map { it.toIntOrNull() }
-        val range = if (numbers.all { it != null }) {
-            val sorted = numbers.filterNotNull().sorted()
-            if (sorted.zipWithNext().all { (a, b) -> b == a + 1 }) "${sorted.first()}–${sorted.last()}" else sorted.joinToString(", ")
-        } else keys.sorted().joinToString(", ")
-        return "for criteria $range"
+        val criteria = batch.rows.mapNotNull { it.obj("requestedCriterion") }.distinctBy { it.text("key") }
+        val ordinals = criteria.mapNotNull(::ordinal).distinct()
+        val words = criteria.filter { ordinal(it) == null }.mapNotNull { it.text("text")?.trim()?.takeIf(String::isNotEmpty) }.map { "“$it”" }
+        val named = ordinals.size + words.size
+        if (named == 0) return null
+        val parts = listOfNotNull(ordinals.takeIf { it.isNotEmpty() }?.let(::criteriaRange)) + words
+        return "for ${if (named == 1) "criterion" else "criteria"} ${parts.joinToString(", ")}"
     }
 
     /** "8 tasks from Runner v1 · for criteria 4–11". */
@@ -161,10 +175,9 @@ object CrossingCards {
     /** The lines under a row's subject: the criteria it asks for and serves now, and where it stands once answered. */
     fun rowNotes(row: JsonObject): List<String> = buildList {
         row.obj("requestedCriterion")?.let { criterion ->
-            add("${ProjectCrossings.moveRequestedCriterionLabel}: ${criterion.text("key").orEmpty()}" +
-                if (criterion.text("text") == null) " — ${ProjectCrossings.moveCriterionGone}" else "")
+            add("${ProjectCrossings.moveRequestedCriterionLabel}: ${criterionName(criterion) ?: ProjectCrossings.moveCriterionGone}")
         }
-        row.obj("withdrawnCriterion")?.let { add("${ProjectCrossings.moveWithdrawnCriterionLabel}: ${it.text("key").orEmpty()}") }
+        row.obj("withdrawnCriterion")?.let(::criterionName)?.let { add("${ProjectCrossings.moveWithdrawnCriterionLabel}: $it") }
         row.text("state")?.takeUnless(ProjectCrossings::isAnswerable)?.let { add(ProjectCrossings.label(it)) }
     }
 

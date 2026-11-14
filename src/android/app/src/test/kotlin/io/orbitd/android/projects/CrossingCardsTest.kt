@@ -16,17 +16,22 @@ class CrossingCardsTest {
     private val utc = ZoneOffset.UTC
 
     private fun row(id: String, kind: String = "MOVE_TASK", from: String = "AAASource", to: String = here, state: String = "PENDING",
-        requestedAt: String = "2026-11-10T09:00:00.000Z", decidedAt: String? = null, criterion: String? = null, criterionText: String? = "text",
-        withdrawn: String? = null, reason: String? = null, fromTitle: String? = "Runner v1", publicId: String? = "P$id") = buildJsonObject {
+        requestedAt: String = "2026-11-10T09:00:00.000Z", decidedAt: String? = null, criterion: Int? = null, criterionText: String? = "text",
+        numbered: Boolean = true, withdrawn: Int? = null, reason: String? = null, fromTitle: String? = "Runner v1", publicId: String? = "P$id") = buildJsonObject {
         put("id", id); publicId?.let { put("publicId", it) }; put("fromProjectId", from); put("toProjectId", to); put("kind", kind)
         put("crossingKey", "key-$id"); put("state", state); put("title", "Title $id"); put("requestedAt", requestedAt)
         put("decidedAt", decidedAt?.let(::JsonPrimitive) ?: JsonNull)
         fromTitle?.let { t -> putJsonObject("fromProject") { put("title", t) } }
         if (kind != "FILE_TASK") putJsonObject("subjectTask") { put("title", "Subject $id") }
-        criterion?.let { key -> putJsonObject("requestedCriterion") { put("key", key); put("text", criterionText?.let(::JsonPrimitive) ?: JsonNull) } }
-        withdrawn?.let { key -> putJsonObject("withdrawnCriterion") { put("key", key); put("text", "old") } }
+        // Real keys are base62 ids; `criterion` is the number the server gives it (`numbered = false`: an older server, none).
+        criterion?.let { n -> putJsonObject("requestedCriterion") {
+            put("key", base62(n)); put("text", criterionText?.let(::JsonPrimitive) ?: JsonNull)
+            if (numbered) put("ordinal", if (criterionText == null) JsonNull else JsonPrimitive(n))
+        } }
+        withdrawn?.let { n -> putJsonObject("withdrawnCriterion") { put("key", base62(100 + n)); put("text", "old"); if (numbered) put("ordinal", n) } }
         reason?.let { put("reason", it) }
     }
+    private fun base62(n: Int) = "5QwwlrpmVQesF7jgVjMx%02d".format(n)
     private fun at(minute: Int) = "2026-11-10T09:%02d:00.000Z".format(minute)
     private fun batch(vararg rows: JsonObject) = CrossingBatch(rows.toList())
 
@@ -108,21 +113,37 @@ class CrossingCardsTest {
     }
 
     @Test fun theSummaryNamesTheSourceAndTheCriteriaRange() {
-        val eight = CrossingBatch((4..11).reversed().map { row("m$it", criterion = "$it") })
+        val eight = CrossingBatch((4..11).reversed().map { row("m$it", criterion = it) })
         assertEquals("8 tasks from Runner v1 · for criteria 4–11", CrossingCards.summary(eight))
-        assertEquals("for criteria 4, 6, 9", CrossingCards.criteria(batch(row("a", criterion = "9"), row("b", criterion = "4"), row("c", criterion = "6"), row("d", criterion = "6"))))
-        assertEquals("for criteria alpha, beta", CrossingCards.criteria(batch(row("a", criterion = "beta"), row("b", criterion = "alpha"))))
-        assertEquals("1 dependency from Runner v1 · for criterion 4", CrossingCards.summary(batch(row("a", kind = "DEPEND_ON_TASK", criterion = "4"))))
+        assertEquals("for criteria 4, 6, 9", CrossingCards.criteria(batch(row("a", criterion = 9), row("b", criterion = 4), row("c", criterion = 6), row("d", criterion = 6))))
+        assertEquals("1 dependency from Runner v1 · for criterion 4", CrossingCards.summary(batch(row("a", kind = "DEPEND_ON_TASK", criterion = 4))))
         assertEquals("2 tasks from unnamed project", CrossingCards.summary(batch(row("a", kind = "FILE_TASK", fromTitle = null), row("b", kind = "FILE_TASK"))))
+        assertFalse(CrossingCards.summary(eight).contains("5Qww"))
+    }
+
+    @Test fun withoutANumberTheCardUsesTheCriterionWordsNeverItsKey() {
+        // An older server sends no ordinal: the words stand in for the number.
+        val older = row("a", criterion = 4, criterionText = "A wedged drain restarts within a minute.", numbered = false, withdrawn = 2)
+        assertEquals("1 task from Runner v1 · for criterion “A wedged drain restarts within a minute.”", CrossingCards.summary(batch(older)))
+        assertEquals(listOf("Target criterion requested: A wedged drain restarts within a minute.", "Source criterion it serves now: old"),
+            CrossingCards.rowNotes(older))
+        // Numbers first, then the words of the one without a number.
+        assertEquals("for criteria 3, “two”",
+            CrossingCards.criteria(batch(row("a", criterion = 3), row("b", criterion = 5, criterionText = "two", numbered = false))))
+        // A criterion that is gone has neither: the summary leaves it out and the row says it is gone.
+        val gone = row("g", criterion = 7, criterionText = null)
+        assertEquals("1 task from Runner v1", CrossingCards.summary(batch(gone)))
+        assertEquals(listOf("Target criterion requested: The target project no longer states this criterion."), CrossingCards.rowNotes(gone))
+        for (line in CrossingCards.rowNotes(older) + CrossingCards.rowNotes(gone) + CrossingCards.summary(batch(older))) assertFalse(line, line.contains("5Qww"))
     }
 
     @Test fun theReviewRowsReasonsAndConsequence() {
-        val move = row("a", criterion = "4", criterionText = null, withdrawn = "2", reason = " serves 4 here ")
+        val move = row("a", criterion = 4, criterionText = null, withdrawn = 2, reason = " serves 4 here ")
         assertEquals("Subject a", CrossingCards.subject(move))
         assertEquals("Title f", CrossingCards.subject(row("f", kind = "FILE_TASK")))
-        assertEquals(listOf("Target criterion requested: 4 — The target project no longer states this criterion.", "Source criterion it serves now: 2"),
+        assertEquals(listOf("Target criterion requested: The target project no longer states this criterion.", "Source criterion it serves now: Criterion 2"),
             CrossingCards.rowNotes(move))
-        assertEquals(listOf("Target criterion requested: 5", "Refused"), CrossingCards.rowNotes(row("b", criterion = "5", state = "DENIED")))
+        assertEquals(listOf("Target criterion requested: Criterion 5", "Refused"), CrossingCards.rowNotes(row("b", criterion = 5, state = "DENIED")))
         assertEquals(listOf("“serves 4 here”", "“other”"), CrossingCards.reasons(batch(move, row("b", reason = "serves 4 here"), row("c", reason = "other"), row("d", reason = ""))))
         assertEquals(CrossingCards.batchMoveConsequence, CrossingCards.consequence(batch(row("a"), row("b"))))
         assertEquals(ProjectCrossings.moveApproveConsequence, CrossingCards.consequence(batch(row("a"))))

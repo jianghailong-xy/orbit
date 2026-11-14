@@ -219,26 +219,37 @@ export function crossingListHead(kind: string): string {
   return 'Tasks to move';
 }
 
-/** The criteria a batch asks for: `4–11` when they are a run of numbers, else a list. */
-export function criteriaRange(keys: readonly string[]): string {
-  const distinct = [...new Set(keys)];
-  const numeric = distinct.every((key) => /^\d+$/.test(key));
-  if (numeric) {
-    const numbers = distinct.map(Number).sort((a, b) => a - b);
-    const contiguous = numbers.every((n, i) => i === 0 || n === numbers[i - 1] + 1);
-    if (numbers.length > 1 && contiguous) return `${numbers[0]}–${numbers[numbers.length - 1]}`;
-    return numbers.join(', ');
-  }
-  return distinct.sort((a, b) => a.localeCompare(b)).join(', ');
+/** The criteria a batch asks for, by number: `4–11` when they are a run, else `4, 6, 9`. */
+export function criteriaRange(ordinals: readonly number[]): string {
+  const numbers = [...new Set(ordinals)].sort((a, b) => a - b);
+  const contiguous = numbers.every((n, i) => i === 0 || n === numbers[i - 1] + 1);
+  if (numbers.length > 1 && contiguous) return `${numbers[0]}–${numbers[numbers.length - 1]}`;
+  return numbers.join(', ');
+}
+
+type NamedCriterion = { text: string | null; ordinal?: number | null };
+
+/** What a person calls a criterion: `Criterion 4`, or its words from a server that sends no
+ *  number. Never its key, which is an opaque id. Null when it has neither (deleted). */
+export function criterionName(criterion: NamedCriterion): string | null {
+  if (criterion.ordinal != null) return `Criterion ${criterion.ordinal}`;
+  return criterion.text?.trim() || null;
 }
 
 export function crossingSummary(batch: CrossingBatch): string {
   const count = batch.rows.length;
   const head = `${count} ${crossingNoun(batch.kind, count)} from ${batch.sourceTitle}`;
-  const keys = batch.rows.flatMap((row) => (row.requestedCriterion ? [row.requestedCriterion.key] : []));
-  if (keys.length === 0) return head;
-  const distinct = new Set(keys).size;
-  return `${head} · for ${distinct === 1 ? 'criterion' : 'criteria'} ${criteriaRange(keys)}`;
+  const distinct = new Map<string, NamedCriterion>();
+  for (const row of batch.rows) {
+    if (row.requestedCriterion) distinct.set(row.requestedCriterion.key, row.requestedCriterion);
+  }
+  const criteria = [...distinct.values()];
+  const ordinals = criteria.flatMap((c) => (c.ordinal != null ? [c.ordinal] : []));
+  const texts = criteria.flatMap((c) => (c.ordinal == null && c.text?.trim() ? [`“${c.text.trim()}”`] : []));
+  const named = new Set(ordinals).size + texts.length;
+  if (named === 0) return head;
+  const parts = [...(ordinals.length ? [criteriaRange(ordinals)] : []), ...texts];
+  return `${head} · for ${named === 1 ? 'criterion' : 'criteria'} ${parts.join(', ')}`;
 }
 
 export function waitingLine(batch: CrossingBatch): string {
@@ -252,15 +263,14 @@ export function subjectTitle(row: ProjectCrossingRow): string {
 export function requestedCriterionLine(row: ProjectCrossingRow): string | null {
   const requested = row.requestedCriterion;
   if (!requested) return null;
-  return `${MOVE_TASK_REQUESTED_CRITERION_LABEL}: ${requested.key}${
-    requested.text == null ? ` — ${MOVE_TASK_CRITERION_GONE}` : ''
-  }`;
+  return `${MOVE_TASK_REQUESTED_CRITERION_LABEL}: ${criterionName(requested) ?? MOVE_TASK_CRITERION_GONE}`;
 }
 
 export function withdrawnCriterionLine(row: ProjectCrossingRow): string | null {
-  return row.withdrawnCriterion
-    ? `${MOVE_TASK_WITHDRAWN_CRITERION_LABEL}: ${row.withdrawnCriterion.key}`
-    : null;
+  const withdrawn = row.withdrawnCriterion;
+  if (!withdrawn) return null;
+  const name = criterionName(withdrawn);
+  return name ? `${MOVE_TASK_WITHDRAWN_CRITERION_LABEL}: ${name}` : null;
 }
 
 /** Each distinct reason given, once. */
