@@ -23,7 +23,9 @@ Nothing yet.
 
 The current version of record; its operator notes are in
 [`release-notes/0.1.261.md`](release-notes/0.1.261.md). The stable release after `v0.1.260`, with everything
-merged since that tag. Its notes also correct the 0.1.260 notes' lists of migrations and security fixes.
+merged since that tag. It supersedes `v0.1.261-beta.1`, this version's beta
+([notes](release-notes/0.1.261-beta.1.md)), which was tagged from `main` before the last of this work merged.
+Its notes also correct the 0.1.260 notes' lists of migrations and security fixes.
 
 ### Added
 
