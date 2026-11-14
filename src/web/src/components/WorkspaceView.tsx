@@ -973,7 +973,7 @@ const JUMP_TO_START_PAGES = 30;
 // between — the normal state while a reply streams — must not flash the button.
 const STRANDED_AFTER_MS = 400;
 // What the sticky bar calls a turn the person typed — the only turn it ever names. A turn the control
-// plane opened (a card carrying `data-sticky-label`) is nobody's question: the owner ruled on
+// plane opened (a card carrying `data-orbit-round`) is nobody's question: the owner ruled on
 // 2026-11-14 that machine messages never appear on the bar, so over one the bar is hidden.
 const STICKY_LABEL = 'Your question';
 
@@ -3370,10 +3370,13 @@ export function WorkspaceView({
     entry.kind === 'project'
       ? entry.coordinator ? [[entry.coordinator.id, entry.projectId] as const] : []
       : entry.projectMark ? [[entry.id, entry.projectMark.projectId] as const] : [])), [folderListing]);
+  // The project each project row of the list stands for, by its coordinator alone.
+  const listedCoordinatorProjects = useMemo(() => new Map(folderListing.entries.flatMap((entry) =>
+    entry.kind === 'project' && entry.coordinator ? [[entry.coordinator.id, entry.projectId] as const] : [])), [folderListing]);
   // Wider than a phone an open column follows the selection (owner 2026-11-11, board 3; 2026-11-13): a
   // member of its project keeps it, a project row's coordinator or another project's member switches it
-  // to that project, and a session in no project closes it. With no column open, only a project row's
-  // own click opens one.
+  // to that project, and a session in no project closes it. With no column open, a project row's own
+  // click or the arrow keys onto it (`stepSession`) open one.
   const searchFor = useCallback((id: string): string => {
     if (isMobile || !openProjectId) return listSearch;
     if (allProjectMembers.some((s) => s.id === id)) return projectSearch;
@@ -3636,10 +3639,16 @@ export function WorkspaceView({
         next = cur + dir;
         if (next < 0 || next >= orderedSessions.length) return false; // stop at the ends
       }
-      navigate(sessionItemPath(orderedSessions[next]));
+      const target = orderedSessions[next];
+      // Wider than a phone, stepping onto a project row opens its column beside the coordinator, as
+      // the row's click does, even with none open (owner 2026-11-14).
+      const rowProjectId = isMobile ? undefined : listedCoordinatorProjects.get(target.id);
+      navigate(rowProjectId
+        ? sessionItemPath(target, `?project=${encodeId(rowProjectId)}${folderParam ? `&folder=${encodeURIComponent(folderParam)}` : ''}`)
+        : sessionItemPath(target));
       return true;
     },
-    [orderedSessions, selectedId, view, navigate, sessionItemPath],
+    [orderedSessions, selectedId, view, navigate, sessionItemPath, isMobile, listedCoordinatorProjects, folderParam],
   );
 
   // Up/Down arrows step through the session list (left column), switching the open
@@ -4435,19 +4444,19 @@ export function WorkspaceView({
     );
     // A turn the control plane queued is scanned too — it is where the answer under it starts, so the
     // question above it no longer heads what is on screen — but nobody typed it, so the bar is hidden
-    // over it rather than naming a machine's message (`data-sticky-label` marks its card). Its queued
+    // over it rather than naming a machine's message (`data-orbit-round` marks its card). Its queued
     // twin in the tail is skipped like any queued turn: it hasn't been asked yet. A watch's wake, a
     // background job's news or a wakeup coming due is not one: it is a line inside the answer the
     // agent is still giving (WatchWakeCard, BackgroundWakeCard), so the bar keeps the question.
     const bubbles = Array.from(
-      el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued), [data-sticky-label]:not(.is-queued)'),
+      el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued), [data-orbit-round]:not(.is-queued)'),
     ).filter((b) => !b.closest('.chat-subagent')); // ignore prompts nested in a sub-workspace transcript
     let cur: HTMLElement | null = null;
     for (const b of bubbles) {
       if (b.getBoundingClientRect().bottom <= topY + 1) cur = b;
       else break;
     }
-    if (cur?.hasAttribute('data-sticky-label')) {
+    if (cur?.hasAttribute('data-orbit-round')) {
       setStuck(null);
     } else if (cur) {
       // Only the bubble's rendered markdown — the bubble also holds attachment thumbnails whose

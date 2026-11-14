@@ -17,25 +17,19 @@ class StickySummaryTest {
     @Test fun aPersonsTurnIsTheirQuestionWithoutWhatDeliveryAppended() {
         val note = "\n\n<referenced-task>\nid: 1\n</referenced-task>"
         val event = user(1, buildJsonObject { put("text", "Ship it?$note"); put("controlPlaneNote", note) })
-        assertEquals("↑ Your question" to "Ship it?", StickySummary.of(event))
+        assertEquals("Ship it?", event.personWords())
+        assertFalse(StickySummary.isOrbits(transcriptCards(event)))
         assertTrue(StickySummary.isAnchor(event))
     }
 
-    @Test fun cardTurnsAreNamedByTheirCardsOwnWords() {
-        assertEquals("↑ From Planner" to "Please review", StickySummary.of(user(1, buildJsonObject {
-            put("text", "Please review"); putJsonObject("sessionMessage") { put("fromSessionId", "s"); put("fromTitle", " Planner ") } })))
-        assertEquals("↑ From Untitled session" to "Hi", StickySummary.of(user(1, buildJsonObject {
-            put("text", "Hi"); putJsonObject("sessionMessage") { put("fromSessionId", "s"); put("fromTitle", "") } })))
-        assertEquals("↑ Exception item" to "Merge conflict: Land A06c", StickySummary.of(user(2, buildJsonObject {
-            put("text", "x"); putJsonObject("openItemDelivery") { put("itemId", "i"); put("kind", "INTEGRATION_CONFLICT"); put("title", "Land A06c") } })))
-        assertEquals("the title already says the kind", "↑ Exception item" to "Task failed: A06c", StickySummary.of(user(2, buildJsonObject {
-            put("text", "x"); putJsonObject("openItemDelivery") { put("itemId", "i"); put("kind", "TASK_FAILED"); put("title", "Task failed: A06c") } })))
-        assertEquals("↑ Task started" to "A06c", StickySummary.of(user(3, buildJsonObject {
-            put("text", "brief"); putJsonObject("taskStart") { put("taskId", "t"); put("title", "A06c") } })))
-        assertEquals("↑ Project switched on" to "Android", StickySummary.of(user(4, buildJsonObject {
-            put("text", "x"); putJsonObject("projectStarted") { put("projectId", "p"); put("projectTitle", "Android"); put("by", "SWITCH") } })))
-        assertEquals("↑ Project started", StickySummary.of(user(4, buildJsonObject {
-            put("text", "x"); putJsonObject("projectStarted") { put("projectId", "p"); put("projectTitle", "Android"); put("by", "CONFIRMATION") } })).first)
+    /** Every card the control plane draws for a round it opened is Orbit's: the bar hides over it rather than naming it. */
+    @Test fun cardTurnsAreOrbits() {
+        listOf(
+            buildJsonObject { put("text", "Please review"); putJsonObject("sessionMessage") { put("fromSessionId", "s"); put("fromTitle", " Planner ") } },
+            buildJsonObject { put("text", "x"); putJsonObject("openItemDelivery") { put("itemId", "i"); put("kind", "INTEGRATION_CONFLICT"); put("title", "Land A06c") } },
+            buildJsonObject { put("text", "brief"); putJsonObject("taskStart") { put("taskId", "t"); put("title", "A06c") } },
+            buildJsonObject { put("text", "x"); putJsonObject("projectStarted") { put("projectId", "p"); put("projectTitle", "Android"); put("by", "SWITCH") } },
+        ).forEach { payload -> assertTrue("$payload", StickySummary.isOrbits(transcriptCards(user(1, payload)))) }
     }
 
     /** A08-14: a watch's wake is a line inside the answer, like a background job's news — the bar keeps naming the question. */
@@ -52,7 +46,8 @@ class StickySummaryTest {
         assertFalse(StickySummary.isAnchor(user(6, buildJsonObject { put("text", wake); put("controlPlaneNote", wake) })))
         val typed = user(7, buildJsonObject { put("text", "And also this$wake"); put("controlPlaneNote", wake) })
         assertTrue(StickySummary.isAnchor(typed))
-        assertEquals("↑ Your question" to "And also this", StickySummary.of(typed))
+        assertEquals("And also this", typed.personWords())
+        assertFalse(StickySummary.isOrbits(transcriptCards(typed)))
     }
 
     /** The owner's answer handed to the coordinator is a line inside the coordinator's work: the bar keeps the question above it. */
@@ -82,12 +77,11 @@ class StickySummaryTest {
             }
         })
         assertTrue(StickySummary.isAnchor(fact))
-        assertEquals("↑ From Orbit" to "Evidence revision 1 submitted: Wiki queue", StickySummary.of(fact))
-        assertEquals("the capsule keeps the card's label", "↑ From Orbit", StickySummary.compactLabel(StickySummary.of(fact).first))
+        assertTrue(StickySummary.isOrbits(transcriptCards(fact)))
         val rows = transcriptRows(listOf(user(1, text("Q1")), RunEvent("assistant", 2, text("A1")), fact, RunEvent("assistant", 4, text("Read it."))))
         assertNull("the reply under the fact is named by nobody", StickyQuestions(rows).above("event:4"))
         assertEquals("the fact itself still sits under the question", "event:1", StickyQuestions(rows).above("event:3")?.key)
-        assertEquals("with no card it is the reader's message, as before", "↑ Your question", StickySummary.of(user(5, text(told))).first)
+        assertFalse("with no card it is the reader's message, as before", StickySummary.isOrbits(transcriptCards(user(5, text(told)))))
     }
 
     /** "↑ Evidence to review" over a coordinator's reply (the owner's screenshot, 2026-11-14): Orbit's own rounds never take the bar. */
@@ -117,14 +111,5 @@ class StickySummaryTest {
         assertEquals("a wake does not take the bar", "event:1", questions.above("event:5")?.key)
         assertEquals("event:5", questions.above("event:6")?.key)
         assertEquals("event:5", questions.last?.key)
-    }
-
-    /** The bar's capsule keeps the arrow and drops "Your question" — the words beside it are the reader's own — and leaves every
-     * card's label as the card has it (OrbitKit `testTheCompactLabelDropsOnlyWhoseQuestionItIs`, d87e5fa67). */
-    @Test fun theCompactLabelDropsOnlyWhoseQuestionItIs() {
-        assertEquals("↑", StickySummary.compactLabel(StickySummary.of(user(1, text("部署"))).first))
-        listOf("↑ Task started", "↑ Project started", "↑ Exception item", "↑ From Planner").forEach { card ->
-            assertEquals(card, StickySummary.compactLabel(card))
-        }
     }
 }

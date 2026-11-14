@@ -674,6 +674,9 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 				step+detail+" — the installed "+spec.name+" does not run at all (it is present and cannot be exec'd).", facts)
 			return rec, spec.name + " — installed but does not run: " + detail
 		}
+		if tool := missingUpdaterTool(out.bytes(), servicePath); tool != "" {
+			detail = missingUpdaterToolDetail(spec.name, tool)
+		}
 		logln("engine-update:", spec.name, "failed:", detail)
 		rec := recordEngineUpdate(spec.bin, updateFailed, step+detail, facts)
 		return rec, spec.name + " — update failed: " + detail
@@ -817,6 +820,41 @@ func updateErrDetail(err error, out []byte) string {
 		return firstLine(err.Error()) + " — last output: " + clean[len(clean)-1]
 	}
 	return firstLine(err.Error())
+}
+
+// missingUpdaterTool names the package manager `codex update` handed the update to, when that is
+// what failed to start. An npm-installed Codex updates itself by running `npm install -g`, and
+// with no npm on the PATH all it prints is "Updating Codex via `npm install -g @openai/codex`..."
+// and then "Error: No such file or directory (os error 2)" — which names no file, so nobody
+// reading it on the machine page can tell what to install (aivps-sg, 2026-11: 13 days behind).
+// Only a tool the service PATH really lacks counts, so the advice is never a guess.
+func missingUpdaterTool(out []byte, servicePath string) string {
+	s := string(out)
+	if !strings.Contains(s, "(os error 2)") {
+		return ""
+	}
+	_, after, ok := strings.Cut(s, "Updating Codex via `")
+	if !ok {
+		return ""
+	}
+	tool, _, _ := strings.Cut(after, " ")
+	tool = strings.TrimSuffix(tool, "`")
+	if tool == "" {
+		return ""
+	}
+	if _, found := lookPathIn(tool, servicePath); found {
+		return ""
+	}
+	return tool
+}
+
+func missingUpdaterToolDetail(engine, tool string) string {
+	install := "Install " + tool + " on this machine"
+	if tool == "npm" {
+		install += " (on Debian or Ubuntu: `sudo apt install npm`)"
+	}
+	return engine + " updates itself with " + tool + ", and " + tool + " isn't on this runner's PATH. " +
+		install + ", then press Update Engines Now."
 }
 
 // cmdEngineUpdate is the `orbit engine-update` entry point: update every installed engine
