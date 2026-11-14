@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CopyOutlined, WarningOutlined } from '@ant-design/icons';
+import { CopyOutlined } from '@ant-design/icons';
 import { useSearchParams } from 'react-router-dom';
 import { putShareLink, turnOffShareLinks, type ShareLink, type ShareLinkState } from '../api';
 import { SettingsHeader } from '../components/settings';
@@ -11,7 +11,7 @@ import { Popconfirm } from '../components/ui/Popconfirm';
 import { Spinner } from '../components/ui/Spinner';
 import { copyText } from '../lib/clipboard';
 import { shareLinksQuery } from '../lib/queries';
-import { includeChips, publicLinkUrl, shortDate, staleSessionLinks } from '../lib/shareLinks';
+import { includeChips, publicLinkUrl, shortDate } from '../lib/shareLinks';
 import { sessionLifecycleLabel, sessionLifecycleStateOf } from '../lib/sessionState';
 import { wikiSpacePath } from '../lib/wiki';
 import { useToast } from '../lib/toast';
@@ -72,9 +72,9 @@ function endedWhy(link: ShareLink): string {
  * Settings → Shared links: every public link this account has made, filed by where it stands —
  * Active (anyone with it can open it), Paused (its session is in Trash; restoring the session turns
  * it back on) and Ended (turned off or expired, for good). The page Following is, for links: a title,
- * a line on what it lists, counted tabs, one card per link. Links for sessions completed more than
- * 30 days ago are named above the list with a way to turn them all off, since nobody is watching
- * those. docs/share-links-design.md §3, §8; docs/mocks/share-links/06-manage-and-entry.
+ * a line on what it lists, counted tabs, one card per link. A link stays as the owner set it: the page
+ * names no link as stale, since finishing a session doesn't undo sharing it (expiry is chosen when
+ * sharing). docs/share-links-design.md §3, §8; docs/mocks/share-links/06-manage-and-entry.
  */
 export function SharedLinksPage() {
   const [params, setParams] = useSearchParams();
@@ -88,7 +88,6 @@ export function SharedLinksPage() {
   const current = TABS.find((t) => t.key === tab)!;
   const byState = (state: ShareLinkState) => links.filter((link) => link.state === state);
   const shown = byState(current.state);
-  const stale = staleSessionLinks(links, now);
   // A root with a link that has not ended: ending one of its older links again, or sharing it
   // again, would be about a different link than the row's.
   const openRoots = new Set(links.filter((link) => link.state !== 'ENDED').map((link) => link.root.id));
@@ -144,32 +143,6 @@ export function SharedLinksPage() {
           </button>
         ))}
       </div>
-      {tab === 'active' && stale.length > 0 && (
-        <div className="shared-links-banner" role="status">
-          <WarningOutlined className="shared-links-banner-icon" />
-          <span className="shared-links-banner-text">
-            <b>
-              {stale.length === 1
-                ? '1 link is for a session completed more than 30 days ago.'
-                : `${stale.length} links are for sessions completed more than 30 days ago.`}
-            </b>{' '}
-            {stale.length === 1 ? 'It still opens for anyone who has it.' : 'They still open for anyone who has them.'}
-          </span>
-          <Popconfirm
-            title={stale.length === 1 ? TURN_OFF_TITLE : `Turn off these ${stale.length} links?`}
-            description={stale.length === 1 ? TURN_OFF_DETAIL : 'Anyone who has them loses access right away.'}
-            confirmText="Turn off"
-            danger
-            cancelText="Cancel"
-            onConfirm={() => turnOff.mutate(stale.map((link) => link.id))}
-            trigger={
-              <Button size="small" loading={turnOff.isPending}>
-                {stale.length === 1 ? 'Turn off this link' : `Turn off these ${stale.length}`}
-              </Button>
-            }
-          />
-        </div>
-      )}
       <div role="tabpanel" className="following-panel">
         {linksQ.isPending ? (
           <div className="following-empty">

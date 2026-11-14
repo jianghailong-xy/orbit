@@ -21824,28 +21824,6 @@ div.landing-jobs-open {
 .shared-links-page {
   max-width: 1080px;
 }
-.shared-links-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 0 12px;
-  padding: 9px 12px;
-  border: 1px solid var(--warning-border);
-  border-radius: 8px;
-  background: var(--warning-bg);
-  color: var(--text-1);
-  font-size: 13px;
-}
-.shared-links-banner-icon {
-  color: var(--warning);
-}
-.shared-links-banner-text {
-  flex: 1;
-  min-width: 0;
-}
-.shared-links-banner-text b {
-  font-weight: 600;
-}
 .shared-links-list {
   display: flex;
   flex-direction: column;

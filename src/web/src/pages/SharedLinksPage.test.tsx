@@ -8,9 +8,9 @@ import type { ShareLink } from '../api';
 
 /**
  * Settings → Shared links (docs/share-links-design.md §3, §8; mock 06-manage-and-entry), in a real
- * document over the links GET /share-links answers with: the three tabs and their counts, the
- * banner that names the links nobody is working behind any more and turns them off in one request,
- * and what each row says and offers in each state.
+ * document over the links GET /share-links answers with: the three tabs and their counts, that no
+ * link is singled out for its session being finished long ago, and what each row says and offers in
+ * each state.
  */
 
 vi.mock('../api', async (importOriginal) => ({
@@ -159,7 +159,6 @@ const rows = () =>
     actions: [...row.querySelectorAll('.shared-link-actions button')].map((b) => b.textContent?.trim()),
   }));
 
-const banner = () => page().querySelector<HTMLElement>('.shared-links-banner');
 
 /** The anchored question a Turn off asks, its words by what the dialog is named and described by. */
 const question = () => document.body.querySelector<HTMLElement>('[role="dialog"]');
@@ -219,39 +218,14 @@ describe('Settings → Shared links', { timeout: 60_000 }, () => {
     expect(rows().map((row) => row.title)).toEqual([STALE_A, STALE_B, STALE_C, RECENT, OPEN, TASK].map((l) => l.root.title));
   });
 
-  it('names the links for sessions completed more than 30 days ago, and turns exactly those off', async () => {
+  it('names no link for its session being finished long ago: a finished session stays shared as set', async () => {
     serve(LINKS);
     await open();
 
-    expect(banner()?.textContent).toContain('3 links are for sessions completed more than 30 days ago.');
-    expect(banner()?.textContent).toContain('They still open for anyone who has them.');
-    const button = banner()!.querySelector('button');
-    expect(button?.textContent?.trim()).toBe('Turn off these 3');
-
-    await click(button, 'Turn off these 3');
-    // One question for the batch, then one request naming exactly the three.
-    expect(turnOffShareLinks).not.toHaveBeenCalled();
-    const asked = question();
-    expect(nameOf(asked!)).toBe('Turn off these 3 links?');
-    const confirm = [...asked!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Turn off');
-    await click(confirm, 'Turn off');
-
-    expect(turnOffShareLinks).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(turnOffShareLinks).mock.calls[0][0]).toEqual([STALE_A.id, STALE_B.id, STALE_C.id]);
-    await vi.waitFor(() =>
-      expect(tabs()).toEqual([
-        { label: 'Active', count: '3', selected: true },
-        { label: 'Paused', count: '1', selected: false },
-        { label: 'Ended', count: '5', selected: false },
-      ]),
-    );
-    expect(banner()).toBeNull();
-  });
-
-  it('says nothing about old links when no open link is for a session finished 30 days ago', async () => {
-    serve([RECENT, OPEN, TASK, PAUSED]);
-    await open();
-    expect(banner()).toBeNull();
+    // Three of the six active links are for sessions completed 31 to 73 days ago.
+    expect(page().textContent).not.toContain('30 days');
+    expect(page().querySelector('[role="status"]')).toBeNull();
+    expect([...page().querySelectorAll('button')].map((b) => b.textContent?.trim())).not.toContain('Turn off these 3');
   });
 
   it('gives every active link Copy, Settings and Turn off, and says what it includes and how long it lives', async () => {
@@ -387,7 +361,6 @@ describe('Settings → Shared links', { timeout: 60_000 }, () => {
       },
     ]);
     expect(page().querySelector('.shared-link-paused')?.textContent).toBe('Paused · in Trash');
-    expect(banner()).toBeNull();
   });
 
   it('Ended: says how and when each ended, and offers Share again only for an expired one', async () => {
