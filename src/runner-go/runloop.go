@@ -49,6 +49,11 @@ const (
 	// How often a draining runner looks again whether its turns have run out: the drain holds work
 	// back, so it should not outlast them by a whole check interval.
 	selfUpdateDrainCheckInterval = 15 * time.Second
+	// How long a drain waits for the turns in flight before it interrupts them, as the owner's Update
+	// Now does (owner, 2026-11-14: "wait at most 5 minutes"). Holding every new session and follow-up
+	// behind a turn that runs for hours cost more than cutting it: the cut turn is handed back as the
+	// update's continuation and goes on on the updated runner.
+	selfUpdateDrainLimit = 5 * time.Minute
 	// How long the runner must have been quiet — no turn ended, no session or turn claimed — before an
 	// automatic update installs (closeForUpdate). A conversation between two turns has nothing in
 	// flight, and an update taken then makes the owner's next message wait behind the restart and
@@ -129,8 +134,10 @@ func waitForRunLoopStop(ctx context.Context, signals <-chan os.Signal, server st
 // the pool drains for it (drainForUpdate): this runner claims no new session or turn and the
 // heartbeat says it is draining, so the control plane hands it no merge, commit, landing or
 // repository operation either, and a follow-up the control plane hands a session's permit to as its
-// turn ends does not start (holdFollowUpForUpdate). Nothing running is stopped — the drain waits for the turns and
-// operations in flight to end by themselves, and the first check that finds none takes the update.
+// turn ends does not start (holdFollowUpForUpdate). The drain waits for the turns and operations in
+// flight to end by themselves, and the first check that finds none takes the update — for drainLimit
+// at most (selfUpdateDrainLimit): the first check past it takes the update as the owner's Update Now
+// does, interrupting the turns still in flight.
 // Draining, a check does not read the release again: one that failed would otherwise reopen the
 // pool, and the install that follows the stop reads the assigned release anyway (selfUpdate). The
 // clock is not restarted by a check that finds nothing, a failed one included: the runner has been
@@ -153,6 +160,8 @@ type selfUpdateGate struct {
 	pool                   *sessionPool
 	operations             func() int
 	interval, limit, quiet time.Duration
+	// drainLimit: how long a drain waits for its turns before interrupting them (selfUpdateDrainLimit).
+	drainLimit time.Duration
 
 	mu                                           sync.Mutex
 	deferredSince, drainingSince, postponedUntil time.Time
@@ -170,7 +179,7 @@ type selfUpdateGate struct {
 }
 
 func newSelfUpdateGate(check selfUpdateChecker, pool *sessionPool, operations func() int, interval, limit, quiet time.Duration) *selfUpdateGate {
-	return &selfUpdateGate{check: check, pool: pool, operations: operations, interval: interval, limit: limit, quiet: quiet}
+	return &selfUpdateGate{check: check, pool: pool, operations: operations, interval: interval, limit: limit, quiet: quiet, drainLimit: selfUpdateDrainLimit}
 }
 
 // take is updateWhenNoTurnInFlight's check. While the owner's postponement lasts it reports the
@@ -206,9 +215,11 @@ func (g *selfUpdateGate) take(ctx context.Context, server string) (string, bool)
 		}
 	}
 	g.target = remote
-	if g.nowAsked {
-		// The owner's Update Now: the turns in flight are interrupted, not waited for — nor the quiet
-		// window or the heartbeat's operations, which the stop gives their own budget and hands back.
+	if g.nowAsked || (g.draining != "" && now.Sub(g.drainingSince) >= g.drainLimit) {
+		// The owner's Update Now, or a drain past drainLimit: the turns in flight are interrupted, not
+		// waited for — nor the quiet window or the heartbeat's operations, which the stop gives their
+		// own budget and hands back.
+		asked := g.nowAsked
 		g.nowAsked = false
 		turns := g.pool.closeForUpdateNow()
 		g.restarting, g.interrupting = true, true
@@ -219,7 +230,12 @@ func (g *selfUpdateGate) take(ctx context.Context, server string) (string, bool)
 			availableSince: g.deferredSince, drainingSince: g.drainingSince,
 			interruptedTurns: turns,
 		})
-		logln(fmt.Sprintf("orbit %s update now, as the owner asked; interrupting the %d turn(s) in flight, then updating", remote, turns))
+		if asked {
+			logln(fmt.Sprintf("orbit %s update now, as the owner asked; interrupting the %d turn(s) in flight, then updating", remote, turns))
+		} else {
+			logln(fmt.Sprintf("orbit %s update drained for %s, the limit; interrupting the %d turn(s) in flight, then updating",
+				remote, now.Sub(g.drainingSince).Round(time.Second), turns))
+		}
 		return remote, true
 	}
 	window := g.quiet
