@@ -401,7 +401,11 @@ export function MachineSettingsPage() {
 
   const shownName = runner.displayName || runner.name;
   const nowMs = Date.now();
-  const attention = runnerAttention({ runner, workspaces, nowMs, latestVersion });
+  // The managed runner's state is its shared label and notice: its heartbeat's "offline" card is not repeated.
+  const managedRow = managedRowOf(managed, runnerId);
+  const attention = runnerAttention({ runner, workspaces, nowMs, latestVersion }).filter(
+    (item) => !(managedRow && item.kind === 'offline'),
+  );
 
   // The tightest disk its workspaces sit on (Resources' Disk, for a runner that reads none itself), and the floor
   // it keeps free.
@@ -679,7 +683,6 @@ export function MachineSettingsPage() {
   // The status pill: online and how many of its sessions are running, amber when something needs a
   // person (the nav's dot says the same), grey and when it was last seen while offline.
   // The managed runner's pill is its shared short label instead (asleep is Asleep, never Offline).
-  const managedRow = managedRowOf(managed, runnerId);
   const pillTone = managedRow
     ? MANAGED_PILL[managedRow.tone]
     : !runner.online ? 'offline' : attention.length > 0 ? 'attention' : 'online';
@@ -826,6 +829,7 @@ export function MachineSettingsPage() {
       <MachineResources
         runnerId={runner.id}
         online={!!runner.online}
+        offlineLabel={managedRow?.label}
         capabilities={runner.capabilities}
         workspaceDisk={disk}
         reserveMb={reserveMb}

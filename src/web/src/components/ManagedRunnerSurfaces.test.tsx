@@ -130,6 +130,9 @@ describe("the managed runner's machine page", () => {
     const page = await machinePage(MANAGED);
     const kind = s.display!.kind as ManagedRunnerRowKind;
     expect(page.querySelector('[data-testid="machine-status"]')?.textContent).toBe(MANAGED_RUNNER_COPY.short[kind]);
+    // Its heartbeat's offline card and Resources' Offline are not said beside it.
+    expect(page.textContent).not.toContain('Never checked in');
+    expect(page.querySelector('.machine-section-resources .machine-section-note')?.textContent).not.toBe('Offline');
     const notice = page.querySelector('.managed-runner-notice');
     if (kind === 'available') expect(notice).toBeNull();
     else {

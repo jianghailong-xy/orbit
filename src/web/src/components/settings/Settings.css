@@ -244,6 +244,11 @@
   max-width: none;
 }
 
+/* The managed runner's notice at the top of its machine page, under the head. */
+.machine-page > .machine-managed-notice {
+  margin: 12px 0 0;
+}
+
 /* /settings/machines/managed: the notice and the page's one sentence under it. */
 .managed-runner-setup .managed-runner-notice {
   margin-top: 16px;
