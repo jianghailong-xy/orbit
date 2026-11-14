@@ -2047,6 +2047,13 @@ struct AgentFormContent: View {
     @State private var enabled = true
     @State private var modelRouting = false
     @State private var confirmingDelete = false
+    #if os(macOS)
+    /// Agent Tools for this workspace (docs/mocks/agent-tools board ⑤), and whether its Edit asked for the
+    /// Instructions editor, which takes the focus once the sheet has gone.
+    @State private var showingAgentTools = false
+    @State private var editInstructionsAfterAgentTools = false
+    @FocusState private var instructionsFocused: Bool
+    #endif
 
     /// Not editable fields: an agent holds no engine or provider. This is what the project last ran
     /// on, and it is here only because the effort vocabulary below genuinely differs by engine. The
@@ -2095,9 +2102,23 @@ struct AgentFormContent: View {
                 TextEditor(text: $instructions)
                     .frame(minHeight: 90)
                     .font(.body)
+                    #if os(macOS)
+                    .focused($instructionsFocused)
+                    #endif
                 Text("Added to every run's runtime instructions (optional).")
                     .font(.orbitLabel).foregroundStyle(.secondary)
             }
+
+            #if os(macOS)
+            // Agent Tools (docs/mocks/agent-tools board ⑤): what a session here is given — Orbit's tools, the
+            // instructions it reads and in what order, the playbooks — in the read-only sheet a session's toolbar
+            // opens, without the session's own connection. The Mac only this round; iOS changed only the copy.
+            Section {
+                Button(AgentToolsCopy.settingsButton) { showingAgentTools = true }
+            } footer: {
+                Text(AgentToolsCopy.workspaceRow)
+            }
+            #endif
 
             Section("Working directory") {
                 TextField("Path", text: $workDir,
@@ -2151,6 +2172,25 @@ struct AgentFormContent: View {
             }
         }
         .formStyle(.grouped)
+        #if os(macOS)
+        // The instructions it lays out are the ones in the editor above, so what is typed shows before Done.
+        .sheet(isPresented: $showingAgentTools, onDismiss: {
+            if editInstructionsAfterAgentTools { instructionsFocused = true }
+            editInstructionsAfterAgentTools = false
+        }) {
+            AgentToolsSheet(
+                mode: .workspace(
+                    name: agent.name, instructions: instructions,
+                    baseInstructions: !(agent.systemPrompt ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                    // Settings' reading of the switch: absent is on.
+                    orchestrationOn: app.user?.preferences?.enableOrchestration ?? true),
+                onDone: { showingAgentTools = false },
+                onEditInstructions: {
+                    editInstructionsAfterAgentTools = true
+                    showingAgentTools = false
+                })
+        }
+        #endif
         .onAppear(perform: prefill)
         // Cancel/Done pair (the iOS editing-sheet idiom, e.g. Contacts): "Done" commits the working
         // copy and closes, "Cancel" discards and closes — a discoverable exit that also works on
