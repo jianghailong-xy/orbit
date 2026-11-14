@@ -423,6 +423,11 @@ export enum RunEventType {
   // Nothing depends on it (contract `realtime.correctness`): the wiki pages re-read on focus and on
   // reconnect, so a dropped one costs latency and nothing else.
   WIKI_CHANGED = 'wiki_changed',
+  // The owner's terminals changed: a terminal asked to be approved, a request was approved, denied or
+  // collected, or a terminal credential was revoked (docs/terminal-session-design.md). Owner-scoped like
+  // the libraries above, and only a nudge carrying the request's or credential's id: the approve card
+  // and Settings → Terminals re-read `GET /terminals/requests` and `GET /terminals`.
+  TERMINALS_CHANGED = 'terminals_changed',
 }
 
 /** Control-plane-internal lifecycle signals (see RunEventType): published through the realtime
@@ -441,7 +446,8 @@ export function isLifecycleType(t: RunEventType): boolean {
     t === RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED ||
     t === RunEventType.PROJECT_CHANGED ||
     t === RunEventType.WATCH_CHANGED ||
-    t === RunEventType.WIKI_CHANGED
+    t === RunEventType.WIKI_CHANGED ||
+    t === RunEventType.TERMINALS_CHANGED
   );
 }
 

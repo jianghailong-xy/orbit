@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
  */
 @Composable
 internal fun AttachedNoteEntry(note: String) {
+    if (remember(note) { describeNote(note) }.isEmpty()) return
     var open by rememberSaveable(note) { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         AttachedNoteLabel(note, open) { open = !open }

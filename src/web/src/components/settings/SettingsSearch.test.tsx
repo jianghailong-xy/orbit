@@ -325,7 +325,7 @@ describe('Settings search', () => {
     await type('orbit');
     expect(results()).toEqual({
       // A long line is cut so the match shows.
-      Personal: [['Let sessions orchestrate', '… other sessions via the [orbit] MCP tools.']],
+      Personal: [['Let sessions orchestrate', '…ts and runners, via the [orbit] MCP tools.']],
       Workspaces: [['[orbit]', 'gpu-box']],
     });
     await press('ArrowDown');

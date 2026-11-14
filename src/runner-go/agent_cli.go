@@ -25,7 +25,7 @@ An agent is a machine plus a project directory. It has no provider of its own �
 orchestration cannot be switched here: it is one switch for the whole account, in Settings.
 
 These commands run inside a live Orbit session while the account's Session orchestration
-switch is on.
+switch is on: the switch that grants managing other sessions grants managing agents too.
 Run 'orbit agent <command> --help' for options.
 `
 
@@ -61,7 +61,7 @@ Options:
   --default-merge-target BRANCH  Branch this agent's sessions merge into by default
   --json
 
-`+agentCardHelp,
+` + agentCardHelp,
 	"update": `orbit agent update — update an agent's configuration
 
 Usage:
@@ -82,7 +82,7 @@ Options:
 Existing env values are secret and never returned by 'orbit agent list', so pass the
 complete desired map whenever --env is used at all.
 
-`+agentCardHelp,
+` + agentCardHelp,
 	"delete": `orbit agent delete — delete an agent
 
 Usage:
@@ -99,13 +99,6 @@ Prints what was deleted.
 Options:
   --json                         Emit compact JSON
 `,
-}
-
-var agentCLICapabilities = []cliCapabilitySpec{
-	{Tool: "agent_list", Argv: []string{"orbit", "agent", "list"}, Usage: "orbit agent list [--json]", Arguments: []string{"--json"}},
-	{Tool: "agent_create", Argv: []string{"orbit", "agent", "create"}, Usage: "orbit agent create --name NAME [options]", Arguments: []string{"--name <text> (required)", "--description <text>", "--system-prompt <text>", "--append-system-prompt <text>", "--work-dir <path>", "--runner-id <id>", "--enable-worktree[=true|false]", "--env <KEY=VALUE> (repeatable; replaces all)", "--default-merge-target <branch>", "--json"}, Mutates: true},
-	{Tool: "agent_update", Argv: []string{"orbit", "agent", "update"}, Usage: "orbit agent update AGENT_ID [options]", Arguments: []string{"[agent-id] (required)", "--name <text>", "--description <text>", "--system-prompt <text>", "--append-system-prompt <text>", "--work-dir <path>", "--runner-id <id>", "--enable-worktree[=true|false]", "--env <KEY=VALUE> (repeatable; replaces all)", "--default-merge-target <branch>", "--json"}, Mutates: true},
-	{Tool: "agent_delete", Argv: []string{"orbit", "agent", "delete"}, Usage: "orbit agent delete AGENT_ID [--json]", Arguments: []string{"[agent-id] (required)", "--json"}, Mutates: true},
 }
 
 // agentDeleteApprovalToolName keys the card an agent delete is asked on. The server matches the delete
@@ -333,6 +326,7 @@ func cliAgentCreate(args []string, out io.Writer, ctx cliOrchestrationContext) e
 	} else if declined != "" {
 		return fmt.Errorf("create agent: %s", declinedText("the human rejected this write, and nothing was written", declined))
 	}
+	cliRecord().sentBody(body)
 	raw, err := t.createAgent(ctx.sessionID, ctx.token, body)
 	if err != nil {
 		return fmt.Errorf("create agent: %w", err)
@@ -368,6 +362,7 @@ func cliAgentUpdate(args []string, out io.Writer, ctx cliOrchestrationContext) e
 	} else if declined != "" {
 		return fmt.Errorf("update agent: %s", declinedText("the human rejected this write, and nothing was written", declined))
 	}
+	cliRecord().sentBody(body)
 	raw, err := t.updateAgent(ctx.sessionID, ctx.token, id, body)
 	if err != nil {
 		return fmt.Errorf("update agent: %w", err)

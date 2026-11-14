@@ -21,6 +21,7 @@ export const PERSONAL_PAGES = [
   { path: '/settings/storage', label: 'Storage' },
   { path: '/settings/shared-links', label: 'Shared links' },
   { path: '/settings/access-tokens', label: 'Access tokens' },
+  { path: '/settings/terminals', label: 'Terminals' },
 ] as const;
 
 /** The Integrations group of Settings: each connected service's page, its nav label and address. */
@@ -62,7 +63,7 @@ export const PERSONAL_SETTINGS = {
     'enableOrchestration',
     '/settings/general',
     'Let sessions orchestrate',
-    'Sessions in every workspace can spawn and manage other sessions via the orbit MCP tools.',
+    'Sessions can start and manage other sessions, and manage agents and runners, via the orbit MCP tools.',
   ),
   // Settings › Translation (docs/mocks/session-translation, frames 1 and 2): between New sessions and Orchestration.
   translationEnabled: setting(

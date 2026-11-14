@@ -51,7 +51,7 @@ test('(a) HUMAN_SIGNOFF is not a completionCriterion value at any door', () => {
   const runnerController = read('src/apiserver/src/runner-api/runner-tasks.controller.ts');
   assert.doesNotMatch(runnerController, /HUMAN_SIGNOFF/);
   for (const file of ['src/runner-go/task_cli.go', 'src/runner-go/mcp.go',
-    'src/runner-go/task_create_completion.go']) {
+    'src/runner-go/operation_catalog.go', 'src/runner-go/task_create_completion.go']) {
     assert.doesNotMatch(read(file), /HUMAN_SIGNOFF/, `${file} still offers the removed criterion`);
   }
   // The CLI/MCP enumerations that a caller picks from name the three peers and not the removed one.

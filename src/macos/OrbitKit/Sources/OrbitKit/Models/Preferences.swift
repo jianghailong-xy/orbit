@@ -16,9 +16,9 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     /// default; otherwise an `Effort` raw value. Synced so a value chosen on web seeds new
     /// sessions here, and vice-versa (replaces web's per-browser localStorage).
     public let defaultEffort: String?
-    /// Whether this account's sessions may orchestrate — spawn and drive other sessions via the orbit
-    /// MCP session tools. One switch for every workspace, enforced server-side on each claim, spawn
-    /// and call. Absent means on; only opting out is ever written.
+    /// Whether this account's sessions may orchestrate — spawn and drive other sessions, and manage the
+    /// account's agents and runners, via the orbit MCP tools and CLI. One switch for every workspace,
+    /// enforced server-side on each claim, spawn and call. Absent means on; only opting out is ever written.
     public let enableOrchestration: Bool?
     /// Whether a session settling — finished on its own, or failed for good — pushes an alert to
     /// this account's devices. Absent means on; only opting out is ever written.

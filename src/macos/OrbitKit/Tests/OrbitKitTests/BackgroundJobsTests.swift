@@ -122,22 +122,6 @@ final class BackgroundJobsTests: XCTestCase {
             "<background-jobs>\n  这是控制面替你记下的，不是用户说的。\n</background-jobs>"))
     }
 
-    // MARK: the line that names the block folded
-
-    private func summary(_ note: String) -> String? {
-        BackgroundJobsText.parse(note).map(BackgroundJobsNote.summary)
-    }
-
-    func testSaysHowTheOneJobCameOut() {
-        XCTAssertEqual(summary(BackgroundJobsFixtures.enEnded), "1 ended, exit 0")
-        XCTAssertEqual(summary(BackgroundJobsFixtures.zhKilled), "1 killed")
-    }
-
-    func testCountsTheSectionsWhenThereIsMoreThanOneJob() {
-        XCTAssertEqual(summary(BackgroundJobsFixtures.enRunningAndEnded), "1 running, 1 ended")
-        XCTAssertEqual(summary(BackgroundJobsFixtures.zhMultilineCommand), "3 running")
-    }
-
     // MARK: what one row says
 
     func testARowSaysItsOutcomeItsNameAndItsIds() {

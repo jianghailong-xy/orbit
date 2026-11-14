@@ -577,7 +577,10 @@ test('unit L4: a session asks for a task to be moved, and only asks', { skip, co
       assert.equal(move.fromProjectId, w.projectA);
       assert.equal(move.toProjectId, w.projectB);
       assert.deepEqual(move.fromProject, { title: 'card project A', status: 'OPEN' });
-      assert.deepEqual(move.toProject, { title: 'card project B', status: 'OPEN' });
+      // The target's coordinator draws this row as a decision card, so the pages leave it out
+      // (docs/mocks/crossings-page-only-uncovered).
+      assert.deepEqual(move.toProject,
+        { title: 'card project B', status: 'OPEN', coordinatorSessionId: w.coordB });
       assert.deepEqual(move.requestedCriterion,
         { key: criterionKeyOf(w.criterionB), text: 'card: what B wants' });
       assert.deepEqual(move.withdrawnCriterion,
@@ -601,5 +604,11 @@ test('unit L4: a session asks for a task to be moved, and only asks', { skip, co
         }
       }
     }
+    // A coordinator in Trash draws no card: the row reads as having no conversation to answer it.
+    await admin.query('UPDATE "session" SET "deleted_at" = now() WHERE "id" = $1::uuid', [w.coordB]);
+    const trashed = (await handoffs.listForProject(w.ownerId, w.projectA))
+      .find((row) => row.kind === 'MOVE_TASK')!;
+    assert.deepEqual(trashed.toProject,
+      { title: 'card project B', status: 'OPEN', coordinatorSessionId: null });
   });
 });

@@ -835,6 +835,9 @@ export interface ActiveSessionTurn extends TurnCards {
   /** Settings › Translation: the owner's message as typed, and how far its translation got. While
    *  TRANSLATING or FAILED the turn is held and not delivered; `content` is then what they typed. */
   translation?: TurnTranslation;
+  /** The session's opening prompt, listed until the runner echoes it: the same message a tab that
+   *  created the session drew itself (`initial:<session>`). */
+  opening?: true;
 }
 
 /** Settings › Translation, a held message whose translation failed (1A): translate it again. */

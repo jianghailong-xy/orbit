@@ -74,7 +74,7 @@ describe('session orchestration, one switch for the whole account', () => {
     // Absent means on: only turning it off is ever written.
     const html = render({});
     expect(switchIn(rowOf(html, 'Let sessions orchestrate'))).toContain('aria-checked="true"');
-    expect(html).toContain('Sessions in every workspace can spawn and manage other sessions');
+    expect(html).toContain('Sessions can start and manage other sessions, and manage agents and runners, via the orbit MCP tools.');
   });
 
   it('reads off once the account turned it off', () => {

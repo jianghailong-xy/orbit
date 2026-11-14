@@ -15,6 +15,8 @@ export interface AcceptedUserTurn extends TurnCards {
   source: 'local' | 'activeSnapshot';
   /** Present for send/resume. A new session's lazily seeded opening turn has no id yet. */
   turnId?: string;
+  /** The session's opening prompt, as the active snapshot listed it (`ActiveSessionTurn.opening`). */
+  opening?: true;
   text: string;
   acceptedAt: string;
   attachments: { id: string; mime?: string; name?: string }[];
@@ -222,8 +224,12 @@ export function queuedTurnEvent(turn: QueuedTurnRow): UserTurnEvent {
  * The snapshot owns only rows recovered from an earlier active snapshot, and may remove such a row
  * only when it already existed when this request began. Local POST acknowledgements remain until
  * their matching durable user event or terminal boundary arrives: the API can observe that event
- * before this tab's SSE does, and an empty response must not cause a visible gap. Opening prompts
- * are also preserved because the endpoint deliberately omits the synthetic initial turn.
+ * before this tab's SSE does, and an empty response must not cause a visible gap.
+ *
+ * The opening prompt this tab sent with the session has no turn id (`initial:<session>`). The server
+ * lists the opening as the accepted head until the runner echoes it, so a snapshot carrying a row is
+ * that same message under its id (`opening`), and the id-less copy gives way to it: one bubble, not
+ * two. A server that does not list the opening returns nothing for it, and the local copy stays.
  */
 export function reconcileAcceptedUserTurnSnapshot(
   snapshot: readonly AcceptedUserTurn[],
@@ -248,8 +254,10 @@ export function reconcileAcceptedUserTurnSnapshot(
     included.add(turn.key);
   }
 
+  const openingListed = snapshot.some((turn) => turn.opening);
   for (const turn of current) {
     if (turn.sessionId !== sessionId || included.has(turn.key)) continue;
+    if (openingListed && turn.source === 'local' && turn.turnId === undefined) continue;
     // The initial create turn is outside the active snapshot's contract, so REST absence says
     // nothing about it. An id-backed entry that was known before the request is absent from an
     // authoritative response and is therefore no longer active.

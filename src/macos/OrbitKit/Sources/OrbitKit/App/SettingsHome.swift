@@ -6,7 +6,7 @@ import CoreGraphics   // CGSize/CGRect's Swift members on Apple platforms; Found
 /// A page Settings opens from its list, each one a frame of Settings' own stack
 /// (`NavNode.settingsPage`).
 public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
-    case machinesAndModels, sessions, notifications, sharedLinks, accessTokens, changePassword, admin
+    case machinesAndModels, sessions, notifications, sharedLinks, accessTokens, terminals, changePassword, admin
 
     /// The page's navigation title — the same words as the row that opens it.
     public var title: String {
@@ -16,6 +16,7 @@ public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
         case .notifications:  return SettingsHome.title(.notifications)
         case .sharedLinks:    return SettingsHome.title(.sharedLinks)
         case .accessTokens:   return SettingsHome.title(.accessTokens)
+        case .terminals:      return SettingsHome.title(.terminals)
         case .changePassword: return SettingsHome.title(.changePassword)
         case .admin:          return SettingsHome.title(.admin)
         }
@@ -42,7 +43,7 @@ public enum SettingsHome {
     public enum Row: String, CaseIterable, Sendable {
         case machinesAndModels
         case sessions, notifications, appearance
-        case email, instance, sharedLinks, accessTokens, changePassword, admin
+        case email, instance, sharedLinks, accessTokens, terminals, changePassword, admin
     }
 
     /// A group's header. Machines & models has none: its one row says that name, and a header over it
@@ -61,7 +62,7 @@ public enum SettingsHome {
         case .machines:    return [.machinesAndModels]
         case .preferences: return [.sessions, .notifications, .appearance]
         case .account:
-            let rows: [Row] = [.email, .instance, .sharedLinks, .accessTokens, .changePassword]
+            let rows: [Row] = [.email, .instance, .sharedLinks, .accessTokens, .terminals, .changePassword]
             return isAdmin ? rows + [.admin] : rows
         }
     }
@@ -76,6 +77,7 @@ public enum SettingsHome {
         case .instance:          return "Instance"
         case .sharedLinks:       return "Shared links"
         case .accessTokens:      return AccessTokensList.title
+        case .terminals:         return Terminals.title
         case .changePassword:    return "Change password"
         case .admin:             return AppSection.admin.title
         }
@@ -92,6 +94,7 @@ public enum SettingsHome {
         case .instance:          return "globe"
         case .sharedLinks:       return "link"
         case .accessTokens:      return "key.horizontal"
+        case .terminals:         return "terminal"
         case .changePassword:    return "lock.rotation"
         case .admin:             return AppSection.admin.systemImage
         }
@@ -106,6 +109,7 @@ public enum SettingsHome {
         case .notifications:  return .notifications
         case .sharedLinks:    return .sharedLinks
         case .accessTokens:   return .accessTokens
+        case .terminals:      return .terminals
         case .changePassword: return .changePassword
         case .admin:          return .admin
         case .appearance, .email, .instance:
@@ -330,7 +334,7 @@ public enum SettingsCopy {
     /// The account's one switch, where a form has room to label and explain it (macOS). On iOS' Sessions
     /// page the row is the switch, under the row's own name, and the hint is its footer.
     public static let letSessionsOrchestrate = "Let sessions orchestrate"
-    public static let letSessionsOrchestrateHint = "Sessions in every workspace can spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused."
+    public static let letSessionsOrchestrateHint = "Sessions in every workspace can start and manage other sessions, and manage your agents and runners, through the orbit MCP tools and CLI: create, change and delete agents, install engines on runners and delete them. Off → those tools are hidden and refused."
 
     // MARK: Smart model selection (the web page's Session defaults card)
 

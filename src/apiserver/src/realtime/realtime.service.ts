@@ -1328,6 +1328,16 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     this.publishForUser(ownerId, RunEventType.WIKI_CHANGED, spaceId);
   }
 
+  /**
+   * The owner's terminals changed (docs/terminal-session-design.md): a terminal asked to be approved, a request was
+   * decided or collected, or a credential was revoked. THE PAYLOAD IS THE REQUEST'S OR CREDENTIAL'S ID AND NOTHING
+   * ELSE — never the user code or the machine name. An accelerant only: the approve card and Settings → Terminals
+   * re-read their lists, and a dropped one costs latency. Published after the write commits.
+   */
+  publishTerminalsChanged(ownerId: string, id: string): void {
+    this.publishForUser(ownerId, RunEventType.TERMINALS_CHANGED, id);
+  }
+
   /** Same, but for a deployment-wide change every user sees — today only the shared (admin-owned)
    *  model providers. Reaches every connected stream; keep it to genuinely global, low-rate edits. */
   publishForAllUsers(type: RunEventType, id: string): void {

@@ -354,6 +354,47 @@ The other way, `/bin/cp -c`, would start a process for every file or directory o
 
 Decision: accepted, with no override or audit exception. GO-2026-5024 needs none, since its package is not imported.
 
+## Bubble Tea for the Orbit TUI (2026-11-12)
+
+The Orbit TUI (`src/runner-go/terminal_tui*.go`, `docs/terminal-session-design.md` "Landing" step 2) draws a session
+in the terminal with Bubble Tea, the dependency the design names. It needs only the program loop, key reading and the
+inline renderer. Colours are plain ANSI written by the TUI itself.
+
+| Module | Version | Purpose | License |
+| --- | --- | --- | --- |
+| `github.com/charmbracelet/bubbletea` | v1.3.4 | The TUI's program loop, key input and renderer. New in `src/runner-go/go.mod`. | MIT |
+| `github.com/charmbracelet/lipgloss` | v1.0.0 | Indirect: Bubble Tea's renderer. | MIT |
+| `github.com/charmbracelet/x/ansi`, `github.com/charmbracelet/x/term` | v0.8.0, v0.2.1 | Indirect: escape-sequence parsing, raw mode. | MIT |
+| `github.com/muesli/termenv`, `github.com/muesli/ansi`, `github.com/muesli/cancelreader` | v0.15.2, v0.0.0-20230316100256-276c6243b2f6, v0.2.2 | Indirect: terminal capabilities, cancellable input. | MIT |
+| `github.com/mattn/go-isatty`, `github.com/mattn/go-runewidth`, `github.com/rivo/uniseg` | v0.0.20, v0.0.16, v0.4.7 | Indirect: TTY detection, cell widths. | MIT |
+| `github.com/aymanbagabas/go-osc52/v2`, `github.com/lucasb-eyer/go-colorful` | v2.0.1, v1.2.0 | Indirect: termenv's clipboard and colour code. | MIT |
+| `github.com/mattn/go-localereader`, `github.com/erikgeiser/coninput` | v0.0.1, v0.0.0-20211004153227-1c3628e74d0f | Indirect: Windows console input only. | MIT |
+| `golang.org/x/sync` | v0.11.0 | Indirect: `errgroup` in Bubble Tea's command runner. | BSD-3-Clause |
+| `golang.org/x/text` | v0.3.8 | Indirect: go-localereader's `transform`, Windows builds only. | BSD-3-Clause |
+
+- **Version.** v1.3.4 is the newest Bubble Tea whose module graph keeps `src/runner-go/go.mod` at `go 1.23` and
+  `golang.org/x/sys` at v0.30.0. v1.3.10 raises the `go` line to 1.24.0 and x/sys to v0.36.0 (see the x/sys section
+  above for why the line stays).
+- **Source and integrity.** `go mod verify` passes for every module in `go.sum`.
+- **Known vulnerabilities.** OSV lists nothing for any module above at its version, except `golang.org/x/text` v0.3.8:
+  - GO-2026-5970 (CVE-2026-56852), `x/text/unicode/norm`, fixed in v0.39.0.
+  - GO-2026-6629 (CVE-2026-56851), `x/text/secure/precis`, fixed in v0.41.0.
+
+  Neither package of the module is built. On linux and darwin `go list -deps` shows no package of the x/text module
+  at all: only the standard library's own vendored copy, which is the toolchain's. On Windows only
+  `golang.org/x/text/transform` is added, and the runner has no Windows build. The fixed releases ask for go 1.25.0, so
+  taking one would raise the `go` line. govulncheck v1.9.0 with the scanning host's go1.27.1 reports, beyond that
+  toolchain's own standard-library advisories, only GO-2026-5024 in `golang.org/x/sys` as required and not called. It
+  reports the same for main's `src/runner-go`, so this change adds no finding.
+- **Reach.** The TUI reads keys from the person's own terminal and draws events the person's own session produced. The
+  events come from the Orbit server over TLS, authenticated with the TERMINAL credential. Nothing reads input from
+  anyone else.
+- **Updates.** Dependabot's existing `gomod` entry for `/src/runner-go` covers these modules. Take a later Bubble Tea
+  only with a decision to raise the module's `go` line.
+
+Decision: accepted, with no override or audit exception. The x/text advisories need none, since neither affected
+package is built.
+
 ## MCP client in the DeepSeek DSH lockfiles (2026-11-13)
 
 [Dependabot alerts #75](https://github.com/jianghailong-xy/orbit/security/dependabot/75) and

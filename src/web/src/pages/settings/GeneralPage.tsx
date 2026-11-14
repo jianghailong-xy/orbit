@@ -30,7 +30,7 @@ export const GENERAL_HINTS = {
   },
   enableOrchestration: {
     short: S.enableOrchestration.description,
-    full: 'Sessions in every workspace can spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused.',
+    full: 'Sessions in every workspace can start and manage other sessions, and manage your agents and runners, through the orbit MCP tools and CLI: create, change and delete agents, install engines on runners and delete them. Off → those tools are hidden and refused.',
   },
 } as const;
 

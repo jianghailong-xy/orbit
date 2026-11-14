@@ -15,6 +15,7 @@ import {
 import { PublicIdPipe } from '../common/public-id';
 import { randomUUID } from 'crypto';
 import { Prisma, Runner, RunStatus } from '@prisma/client';
+import { ProjectsService } from '../projects/projects.service';
 import { RunnerSessionScope, SessionsService } from '../sessions/sessions.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { RecordMergeReceiptDto } from '../sessions/dto';
@@ -97,6 +98,9 @@ export class RunnerSessionsController {
      * goes exactly as it did before without it.
      */
     @Optional() private readonly requests?: SessionRequestService,
+    /** Opens the next coordinator when this door trashes one (`reopenTrashedCoordinator`).
+     *  `@Optional()` for the reason `fuse` is. */
+    @Optional() private readonly projects?: ProjectsService,
   ) {}
 
   /**
@@ -384,6 +388,9 @@ export class RunnerSessionsController {
     const turn = { clientTurnId, content: dto.message };
     const charge = {
       senderSessionId,
+      // A headless credential is the runner's own: the `orbit` CLI or a script on the machine (turn-sender-client.ts).
+      // A session's message is said by its sender column instead.
+      ...(senderSessionId ? {} : { senderClient: { client: 'runner' as const } }),
       // AU3/TH3, but only for a NEW turn that has already passed idempotency and placement. The
       // callback runs under createTurn's Session lock and in its transaction: a retry observes the
       // durable clientTurnId first and spends nothing, while a refusal rolls back both charge and
@@ -636,7 +643,9 @@ export class RunnerSessionsController {
       id,
       RunnerSessionsController.actor(callingSessionId),
     );
-    return this.sessions.remove(runner.ownerId, id);
+    const removed = await this.sessions.remove(runner.ownerId, id);
+    await this.projects?.reopenTrashedCoordinator(runner.ownerId, id, callingSessionId);
+    return removed;
   }
 
   /** @deprecated Compatibility route for older runner binaries. */

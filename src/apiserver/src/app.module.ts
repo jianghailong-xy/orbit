@@ -37,12 +37,14 @@ import { WatchDeliveryModule } from './watches/watch-delivery.module';
 import { ScheduledWakeupModule } from './runner-api/scheduled-wakeup.module';
 import { SessionRequestWorkerModule } from './sessions/session-request-worker.module';
 import { WikiModule } from './wiki/wiki.module';
+import { RunnerAttentionFixModule } from './runners/runner-attention-fix.module';
 import { WikiChatModule } from './wiki/wiki-chat.module';
 import { ManagedRunnerGateModule } from './managed-runners/managed-runner-gate';
 import { ManagedRunnerModule } from './managed-runners/managed-runner.module';
 import { FeishuModule } from './feishu/feishu.module';
 import { FeishuActionsModule } from './feishu/feishu-actions.module';
 import { EmailModule } from './email/email.module';
+import { TerminalsModule } from './terminals/terminals.module';
 
 @Module({
   imports: [
@@ -86,6 +88,8 @@ import { EmailModule } from './email/email.module';
     WikiModule,
     // The wiki chat's door: its own module, as it makes sessions through SessionsService (wiki-chat.module.ts).
     WikiChatModule,
+    // Fix with an agent: its own module, as it makes sessions through SessionsService (runner-attention-fix.module.ts).
+    RunnerAttentionFixModule,
     ManagedRunnerGateModule,
     ManagedRunnerModule,
     // Each account's own Feishu (Lark) app, and the administrators' switch for them (docs/feishu-bot-design.md).
@@ -93,6 +97,8 @@ import { EmailModule } from './email/email.module';
     FeishuActionsModule,
     // Outgoing email: Admin → Email and the welcome-email outbox worker (docs/welcome-email-design.md).
     EmailModule,
+    // `orbit` in a terminal: the TERMINAL credential's sign-in, approval and revoke (docs/terminal-session-design.md).
+    TerminalsModule,
   ],
   // Registered here rather than in main.ts (where WorkspaceAliasInterceptor is) because it needs
   // PrismaService injected, which only the DI container can provide.
