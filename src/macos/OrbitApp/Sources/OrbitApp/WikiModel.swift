@@ -14,6 +14,9 @@ import OrbitKit
 final class WikiModel {
     /// Every space, by slug, each with the proposals waiting in it.
     private(set) var spaces: [WikiSpace] = []
+    /// New wiki… (docs/wiki-explicit-creation-design.md §3.4): the drawer's row and the head picker's item raise the
+    /// Create wiki form over whichever shell is showing (`WikiCreateHost`).
+    var creating = false
     private(set) var spacesState = ListLoadState()
     /// The server said the wiki is not switched on for this account (404 WIKI_DISABLED): an answer,
     /// not a failure — the drawer draws no Wiki row, and the section says why.

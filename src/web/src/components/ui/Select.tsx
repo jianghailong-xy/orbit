@@ -15,6 +15,8 @@ export interface SelectOption<Value extends string = string> {
 }
 export interface SelectGroup<Value extends string = string> {
   label: string;
+  /** A tag at the end of the group's label, such as why its options cannot be picked. */
+  note?: string;
   options: SelectOption<Value>[];
 }
 export type SelectOptions<Value extends string = string> = (SelectOption<Value> | SelectGroup<Value>)[];
@@ -120,7 +122,9 @@ export function Select<Value extends string = string>({ options, value, onValueC
           }}>
           <BaseSelect.List className="orbit-select-list">
             {options.map((entry) => 'options' in entry ? <BaseSelect.Group key={entry.label}>
-              <BaseSelect.GroupLabel className="orbit-select-group-label">{entry.label}</BaseSelect.GroupLabel>{entry.options.map(item)}
+              <BaseSelect.GroupLabel className="orbit-select-group-label">
+                {entry.label}{entry.note && <span className="orbit-select-group-note">{entry.note}</span>}
+              </BaseSelect.GroupLabel>{entry.options.map(item)}
             </BaseSelect.Group> : item(entry))}
           </BaseSelect.List>
           {flat.length === 0 && <div className="orbit-select-empty" role="status">{emptyContent}</div>}

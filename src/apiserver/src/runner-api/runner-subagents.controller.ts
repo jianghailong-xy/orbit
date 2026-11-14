@@ -51,7 +51,7 @@ import { reapApprovalsOfEndedSubagents } from '../sessions/abandoned-approvals';
 import { assertEngineSession } from '../sessions/engine-session';
 import { SessionsService } from '../sessions/sessions.service';
 import { RealtimeService } from '../realtime/realtime.service';
-import { sessionProviderExec } from './session-provider-exec';
+import { sessionProviderExec, type SubagentPoolMemberChoice } from './session-provider-exec';
 import { stripNul } from './strip-nul';
 import {
   attemptsOf,
@@ -94,7 +94,7 @@ interface ChildExec {
   resolvedModel: string;
   effort: string | undefined;
   /** The account of an account pool chosen for this SubAgent alone. */
-  poolMember?: { providerId: string; label: string };
+  poolMember?: SubagentPoolMemberChoice;
 }
 
 /** A refusal's own words. */

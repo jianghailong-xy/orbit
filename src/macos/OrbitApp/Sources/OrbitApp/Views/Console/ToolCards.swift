@@ -174,6 +174,8 @@ struct ToolCardView: View {
     /// pair (`manualOpen ?? defaultOpen`) for the same reason.
     @State private var manualOpen: Bool?
     @State private var scriptExpanded = false
+    /// A SubAgent's Why opened to every reason and every removed candidate (web's `Details`).
+    @State private var whyExpanded = false
     // Filled once, off the render path, when the untrimmed call/result lands. `fullDisplay` is
     // recomputed there rather than per-render because `describe` runs an LCS diff for Edit cards.
     @State private var fullDisplay: ToolDisplay?
@@ -547,11 +549,24 @@ struct ToolCardView: View {
         let previews = previewImages
         return VStack(alignment: .leading, spacing: 8) {
             // A SubAgent opens on its router's reasons, then its steps, then the result (board 03).
+            // The server's one-line Why, at most two lines; the full reasons sit behind Details.
             if let why = subagent?.why {
                 (Text("Why").fontWeight(.semibold) + Text(" · \(why)"))
                     .font(.orbitLabel).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(2).truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                if let details = subagent?.details, !details.isEmpty {
+                    DisclosureGroup("Details", isExpanded: $whyExpanded) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(Array(details.enumerated()), id: \.offset) { _, line in
+                                Text(line)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                }
             }
             // A workflow opens to its progress; a sub-agent's totals close its transcript instead.
             if card.name == "Workflow", let taskProgress {

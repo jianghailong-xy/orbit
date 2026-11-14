@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# TEMPORARY evidence probe (never merged): the macOS sidebar crash driver.
+# The macOS sidebar crash driver — the evidence probe the sidebar fix ran, and the harness behind
+# client.yml's `macos-runtime-probe` job (the macOS runtime crash gate).
 #
-#   ./run.sh <label>            # label names the run, e.g. "control-prefix" or "fixed"
+#   ./run.sh <label>            # label names the run, e.g. "control-prefix", "fixed" or "ci"
 #
 # Serves stub.py (a fake server whose data keeps changing), builds the REAL macOS app from the
 # shared sources, launches it against the stub, and clicks across every sidebar row 200 times.
@@ -12,7 +13,9 @@
 # on a host whose automation mode is enabled (CI, or after the owner enables it).
 #
 # The run records the DiagnosticReports list before and after and samples the app's PID, so a
-# crash is visible both as the missing DRIVER_DONE line and as a new Orbit .ips.
+# crash is visible both as the missing DRIVER_DONE line and as a new Orbit .ips. It exits non-zero
+# if the app wrote one, if the driver did not finish 200 clicks with the process still alive, or
+# if the build/driver itself failed — that is the runtime crash gate's answer.
 set -uo pipefail
 cd "$(dirname "$0")"
 
@@ -179,6 +182,24 @@ while read -r r; do
   [ -n "$r" ] && cp "$REPORTS/$r" "$OUT/new-reports/" 2>/dev/null || true
 done < "$OUT/reports-new.txt"
 CLICKS_DONE=$(grep -c "CLICK " "$OUT/driver-lines.txt" 2>/dev/null || true)
+DONE=$(grep -h "DRIVER_DONE" "$OUT/driver.log" 2>/dev/null | tail -1)
+CLICKED=$(printf '%s' "$DONE" | sed -nE 's/.*clicked=([0-9]+).*/\1/p')
+# The gate's three answers, whatever the driver managed to log before the process died: a report
+# the OS wrote for this app during the run IS the crash; the driver's own last line says whether the
+# process was still there after the last click; and the click count is what the run claims to be.
+if [ -s "$OUT/reports-new.txt" ]; then
+  echo "==> the app crashed: $(wc -l < "$OUT/reports-new.txt" | tr -d ' ') new Orbit report(s): $(tr '\n' ' ' < "$OUT/reports-new.txt")" >&2
+  STATUS=1
+fi
+if [ "${CLICKED:-0}" -lt "$CLICKS" ]; then
+  echo "==> only ${CLICKED:-0} of $CLICKS clicks completed (last DRIVER_DONE: ${DONE:-none})" >&2
+  STATUS=1
+fi
+case "$DONE" in
+  *alive=true*) ;;
+  *) echo "==> the driver did not report the app alive after the last click" >&2
+     STATUS=1 ;;
+esac
 {
   echo "label=$LABEL"
   echo "mode=$MODE"
@@ -187,7 +208,9 @@ CLICKS_DONE=$(grep -c "CLICK " "$OUT/driver-lines.txt" 2>/dev/null || true)
   echo "tree=$(tr '\n' ' ' < "$OUT/tree.txt")"
   echo "existing_reports=$(wc -l < "$OUT/reports-before.txt" | tr -d ' ')"
   echo "new_reports=$(wc -l < "$OUT/reports-new.txt" | tr -d ' ')"
-  echo "driver_done=$(grep DRIVER_DONE "$OUT/driver.log" 2>/dev/null | tail -1)"
+  echo "driver_done=$DONE"
+  echo "clicks_asked=$CLICKS"
+  echo "clicks_completed=${CLICKED:-0}"
   echo "click_lines=$CLICKS_DONE"
   echo "app_exit=$(cat "$OUT/app-exit-code.txt" 2>/dev/null)"
   echo "alive_samples=$(grep -c alive "$OUT/pids.log" 2>/dev/null || echo 0)"
