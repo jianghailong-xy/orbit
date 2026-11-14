@@ -51,7 +51,7 @@ describe('transcript sign-in cards', () => {
     expect(cards(html)).toBe(1);
   });
 
-  it('keeps a card per failure when the runner reports different ones', () => {
+  it('keeps a row per failure when the runner reports different ones — the older one settled', () => {
     const html = renderToStaticMarkup(
       <Transcript
         events={[
@@ -61,7 +61,8 @@ describe('transcript sign-in cards', () => {
       />,
     );
 
-    expect(cards(html)).toBe(2);
+    expect(cards(html)).toBe(1);
+    expect(html).toContain('data-settled="superseded"');
   });
 
   it('shows the message the retry would re-send', () => {
@@ -75,6 +76,65 @@ describe('transcript sign-in cards', () => {
 
     expect(html).toContain('ship the thing');
     expect(html).toContain('Retry — re-send my last message');
+  });
+
+  // Once the session has moved past a failure its card is history: one muted row, no sign-in and
+  // no Retry — whose re-send is the session's latest message, not the one this failure ate.
+  describe('a card the session has moved past', () => {
+    const OTHER = 'Failed to authenticate: OAuth session expired and could not be refreshed';
+    const user = (seq: number, text: string): RunEvent => ({ seq, type: 'user', payload: { text } });
+    const switched = (seq: number, notice: string): RunEvent => ({
+      seq,
+      type: 'system',
+      payload: { subtype: 'init', notice, noticeKind: 'pool-member-switched' },
+    });
+    const render = (events: RunEvent[]) =>
+      renderToStaticMarkup(
+        <AuthErrorCtx.Provider value={{ provider: 'codex', onRetry: () => {}, retryText: 'ship the thing' }}>
+          <Transcript events={events} />
+        </AuthErrorCtx.Provider>,
+      );
+    const settled = (html: string) => [...html.matchAll(/data-settled="(\w+)"/g)].map((m) => m[1]);
+
+    it('keeps only the latest unsettled failure as a full card', () => {
+      const html = render([
+        user(1, 'deploy'),
+        errorEvent(2, AUTH_FAILED),
+        user(3, 'deploy'),
+        errorEvent(4, OTHER),
+      ]);
+
+      expect(settled(html)).toEqual(['superseded']);
+      expect(cards(html)).toBe(1);
+      expect(html.split('Retry — re-send my last message').length - 1).toBe(1);
+    });
+
+    it('marks failures resolved once the agent works again, and mutes the account switches', () => {
+      const html = render([
+        user(1, 'deploy'),
+        switched(2, 'Switched to B — A is signed out'),
+        errorEvent(3, AUTH_FAILED),
+        user(4, 'deploy'),
+        switched(5, 'Switched to A — B is signed out'),
+        errorEvent(6, OTHER),
+        user(7, 'deploy'),
+        switched(8, 'Switched to B — A is signed out'),
+        { seq: 9, type: 'assistant', payload: { text: 'Deployed.' } },
+      ]);
+
+      expect(settled(html)).toEqual(['superseded', 'resolved']);
+      expect(cards(html)).toBe(0);
+      expect(html).not.toContain('Retry — re-send my last message');
+      expect(html).toContain('— resolved');
+      expect(html.split('chat-notice chat-notice-settled').length - 1).toBe(3);
+    });
+
+    it('leaves the switch beside a live card in the warning tone', () => {
+      const html = render([user(1, 'deploy'), switched(2, 'Switched to B — A is signed out'), errorEvent(3, AUTH_FAILED)]);
+
+      expect(cards(html)).toBe(1);
+      expect(html).not.toContain('chat-notice-settled');
+    });
   });
 });
 
@@ -1382,6 +1442,33 @@ describe('Orbit write tool cards', () => {
     payload: { id: 't1', name, input },
   });
 
+  it("draws the owner's Chat about this reply to a card as their message, not inside the call", () => {
+    const fixture = JSON.parse(
+      readFileSync(resolve(__dirname, '../../../shared/src/owner-chat-reply.fixture.json'), 'utf8'),
+    ) as { writerWords: string; cases: { result: string }[] };
+    for (const name of ['mcp__orbit__project_create', 'mcp__orbit__runner_delete']) {
+      const html = renderToStaticMarkup(
+        <MemoryRouter>
+          <Transcript
+            events={[
+              toolEvent(name, { title: 'Move the database' }),
+              {
+                seq: 2,
+                type: 'tool_result',
+                payload: { toolUseId: 't1', content: [{ type: 'text', text: fixture.cases[0].result }] },
+              },
+            ]}
+          />
+        </MemoryRouter>,
+      );
+      // Its own bubble, as anything else they type is, and never folded into a steps line (where
+      // the native client used to leave it, under "Used tool").
+      expect(html).toContain('chat-msg chat-user');
+      expect(html).toContain(fixture.writerWords);
+      expect(html).not.toContain('Not done yet, and not a no');
+    }
+  });
+
   it('says what a single create wrote, by name', () => {
     // One size down from the batch: the row names the task and carries its description, instead of
     // falling through to `orbit · task_create` over a dump of the call's own JSON.
@@ -2165,6 +2252,53 @@ describe('an interrupt row says what stopped the turn', () => {
   });
 });
 
+// The owner's Update Now (D4): the runner cuts the turn with `reason: runner_update` and the release, and
+// the updated runner is handed the turn back as Orbit's continuation — drawn as one Orbit line, never as a
+// bubble in the reader's name, with the background-jobs note delivery appended under it.
+describe('a turn the owner’s Update Now cut, and the turn Orbit sent to continue it', () => {
+  const continuation =
+    '[Orbit] The runner update interrupted this turn; continue. Orbit updated its runner to 0.1.254 at the owner’s request, ' +
+    'which stopped this turn; the conversation so far has been restored.\n\nThe interrupted message:\nBackfill the missing shard rows.';
+  const doc = (drop?: number) => new JSDOM(renderToStaticMarkup(
+    <Transcript
+      events={([
+        { seq: 1, type: 'user', turnId: 't1', ts: '2026-11-12T12:19:00.000Z', payload: { text: 'Backfill the missing shard rows.' } },
+        { seq: 2, type: 'assistant', turnId: 't1', ts: '2026-11-12T12:19:10.000Z', payload: { text: 'Step 3 of 8.' } },
+        // The call the cut stopped, and the runner's synthetic result that answers it (interrupted_tool_calls.go).
+        { seq: 21, type: 'tool_use', turnId: 't1', ts: '2026-11-12T12:20:00.000Z',
+          payload: { id: 'exec-cut', name: 'Bash', input: { command: 'sleep 25; echo step 4 >> steps.log' } } },
+        { seq: 22, type: 'tool_result', turnId: 't1', ts: '2026-11-12T12:20:26.000Z',
+          payload: { toolUseId: 'exec-cut', isError: true, interrupted: 'runner_update',
+            content: '[Tool call interrupted: the runner update stopped this turn before this call\'s result was recorded, so its outcome is unknown.]' } },
+        { seq: 3, type: 'interrupt', turnId: 't1', ts: '2026-11-12T12:20:26.000Z', payload: { reason: 'runner_update', targetVersion: '0.1.254' } },
+        { seq: 4, type: 'user', turnId: 't1', ts: '2026-11-12T12:21:01.000Z',
+          payload: { text: continuation + '\n\n<background-jobs>\nnone\n</background-jobs>', controlPlaneNote: '\n\n<background-jobs>\nnone\n</background-jobs>' } },
+        { seq: 5, type: 'assistant', turnId: 't1', ts: '2026-11-12T12:21:05.000Z', payload: { text: 'Checking steps.log first.' } },
+        { seq: 6, type: 'interrupt', turnId: 't2', ts: '2026-11-12T12:30:00.000Z', payload: { reason: 'runner_update' } },
+      ] as RunEvent[]).filter((ev) => ev.seq !== drop)}
+    />,
+  )).window.document;
+
+  it('says the runner updated, and to which release', () => {
+    expect(doc().querySelector('.chat-note[data-seq="3"]')?.textContent).toBe('⊘ interrupted — the runner updated to 0.1.254');
+    expect(doc().querySelector('.chat-note[data-seq="6"]')?.textContent).toBe('⊘ interrupted — the runner updated');
+  });
+
+  it('leaves no call the cut stopped drawn as pending: it reads as interrupted', () => {
+    // Folded, the steps line counts the call as settled — failed, since its outcome is unknown.
+    expect(doc().querySelector('.chat-steps-failed')?.textContent).toBe(' · 1 failed');
+    // Control: without the runner's synthetic result the same call settles as nothing at all.
+    expect(doc(22).querySelector('.chat-steps-failed')).toBeNull();
+  });
+
+  it('draws the continuation as one Orbit line, not the reader’s bubble', () => {
+    const d = doc();
+    expect(d.querySelector('.runner-update-resume[data-seq="4"]')?.textContent).toBe('The runner update interrupted this turn; continue.');
+    expect(d.body.textContent).not.toContain('The interrupted message');
+    expect(d.body.textContent).toContain('Checking steps.log first.');
+  });
+});
+
 describe('runtime authentication help', () => {
   // The relay branch renders RunnerSignIn, which reads the query cache.
   const card = (provider: string) =>
@@ -2228,14 +2362,14 @@ describe('runtime authentication help', () => {
   });
 });
 
-describe('shared-checkout notice', () => {
+describe('main-checkout notice', () => {
   const NOTICE =
-    'This turn left 1 file modified in the shared checkout /root/orbit, outside this session’s worktree: src/a.ts.';
+    "1 file changed in the main checkout during this turn /root/orbit on main, outside this session's worktree. Orbit saw them appear; it can't tell who wrote them.";
 
   it('renders a runner notice as a calm note, not an error', () => {
     const html = renderToStaticMarkup(
       <Transcript
-        events={[{ seq: 1, type: 'system', payload: { notice: NOTICE, noticeKind: 'shared-checkout-dirty' } }]}
+        events={[{ seq: 1, type: 'system', payload: { notice: NOTICE, noticeKind: 'main-checkout-changed' } }]}
       />,
     );
 

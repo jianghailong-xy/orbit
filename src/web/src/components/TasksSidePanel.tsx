@@ -46,6 +46,7 @@ import type {
   RunnerModelCatalog,
   RunnerRegionView,
   RunnerSelfUpdate,
+  RunnerDrainWaiting,
   RunnerUpdateTurn,
   RuntimeDefaultModels,
   SlashCommandInfo,
@@ -54,6 +55,7 @@ import { api, clearToken, logoutSession } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
 import { SharedWithMeGroup } from './SharedWithMe';
 import { useIsMobile } from '../lib/useMediaQuery';
+import { useSidebarFolded } from '../lib/sidebarFold';
 import {
   avatarQuery,
   meQuery,
@@ -148,8 +150,8 @@ interface TopNavItem {
   shortcut?: string;
 }
 
-// Fixed product destinations, the same for every account: Machines & models and Admin are rows of the
-// account menu at the panel's foot, not among these. Individual Workspace rows are primary destinations
+// Fixed product destinations, the same for every account: Admin is a row of the account menu at the
+// panel's foot, not among these. Individual Workspace rows are primary destinations
 // in their own right, so there is no proxy Workspaces parent here.
 const TOP: TopNavItem[] = [
   {
@@ -175,7 +177,7 @@ const TOP: TopNavItem[] = [
   // in each session's header and Watching strip, and those are what link to /following.
   // No Machines & models either (docs/mocks/machines-and-models, 02): where agents run and whose quota
   // they spend is set up once and fixed when something says so — every card that needs it fixed links
-  // there — so it is reached as the phone reaches it, from Settings, and from the account menu.
+  // there — so it is reached as the phone reaches it, from Settings.
 ];
 
 // The left sidebar is user-resizable; the chosen width persists across refreshes.
@@ -268,6 +270,8 @@ export interface Runner {
   selfUpdate?: RunnerSelfUpdate | null;
   // Only on a runner draining for its self-update: the reader's turns the drain waits for (board 4).
   updateTurns?: RunnerUpdateTurn[];
+  // Only while it drains and something of the reader's waits on it: the workspace banner (D3).
+  drainWaiting?: RunnerDrainWaiting | null;
   // Free-space floor in MB (PATCH minFreeDiskMb): below it this machine takes no new task runs.
   // null = no floor.
   minFreeDiskMb?: number | null;
@@ -420,11 +424,13 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
       ? `project:${openProjectId}`
       : null;
   // A project's sessions page — the console with `?project=` — is that project's row's, over
-  // whichever workspace or member session it shows, and the workspace's row is not lit there.
+  // whichever workspace or member session it shows, and the workspace's row is not lit there. That is
+  // a phone's: wider, `?project=` is a column beside the conversation and the list stays the
+  // workspace's, so the workspace's row stays lit (owner 2026-11-14).
   const onConsole = !!(workspacesMatch ?? agentsMatch) || !!sessionId;
   const projectPageId = onConsole ? routeId(searchParams.get('project')) : null;
   const projectPageKey =
-    projectPageId && openProjects.some((p) => encodeId(p.id) === projectPageId)
+    narrow && projectPageId && openProjects.some((p) => encodeId(p.id) === projectPageId)
       ? `project:${projectPageId}`
       : null;
   const litWorkspaceId = projectPageKey ? null : activeWorkspaceId;
@@ -494,16 +500,28 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
 
   // Collapse the whole panel to a slim icon rail (desktop) — hands the content
   // region the full width back. Persisted so the choice survives a refresh.
-  const [collapsed, setCollapsed] = useState<boolean>(
+  const [kept, setCollapsed] = useState<boolean>(
     () => localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1',
   );
+  // A page may ask for the icon rail while it needs the width (the Wiki's chat column, `useSidebarFolded`): shown
+  // collapsed then, and the toggle opens it back for that while without changing the choice kept above.
+  const folded = useSidebarFolded();
+  const [unfolded, setUnfolded] = useState(false);
+  useEffect(() => {
+    if (!folded) setUnfolded(false);
+  }, [folded]);
+  const collapsed = kept || (folded && !unfolded);
   const toggleCollapsed = useCallback(() => {
+    if (folded && !kept) {
+      setUnfolded((u) => !u);
+      return;
+    }
     setCollapsed((c) => {
       const next = !c;
       localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0');
       return next;
     });
-  }, []);
+  }, [folded, kept]);
   // Cmd/Ctrl + Backslash toggles the sidebar — the VS Code / Linear / Notion convention.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -619,7 +637,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
               label: 'Configure',
               onSelect: () => {
                 onNavigate?.();
-                navigate(`/runners/${encodeId(runnerId)}?workspace=${encodeId(a.id)}`);
+                navigate(`/settings/workspaces/${encodeId(a.id)}`);
               },
             },
             { type: 'separator' as const, key: 'divider' },
@@ -822,8 +840,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const openProject = (project: SidebarProject) => {
     onNavigate?.();
     const key = encodeId(project.id);
-    if (sel === `project:${key}`) return;
-    setSel(`project:${key}`);
+    // Wider than a phone the workspace's row stays lit (above), so the project's is not lit ahead.
+    if (sel === `project:${key}` || (!narrow && projectPageId === key)) return;
+    if (narrow) setSel(`project:${key}`);
     if (sessionId && !narrow) {
       navigate(`/sessions/${encodeId(sessionId)}?project=${key}`);
       return;
@@ -1209,15 +1228,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                   if (mode !== it.key) setMode(it.key);
                 },
               })),
-            },
-            // Where agents run and whose quota they spend, two clicks away as the phone has it (Settings, then
-            // its row) — the page left the sidebar's fixed rows for here and Settings
-            // (docs/mocks/machines-and-models, 02).
-            {
-              key: 'machines',
-              icon: <SidebarNavIcon name="runners" />,
-              label: 'Machines & models',
-              onSelect: () => navigate('/infrastructure'),
             },
             {
               key: 'settings',

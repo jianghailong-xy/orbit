@@ -421,7 +421,7 @@ struct ComposerView: View {
             if showsCompletedResumeNotice {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.circle").foregroundStyle(.secondary)
-                    Text("Completed · Sending a message will resume this session in Open.")
+                    Text("Completed · Send a message to reopen this session.")
                         .font(.orbitLabel).foregroundStyle(.secondary)
                     Spacer(minLength: 0)
                 }
@@ -970,6 +970,18 @@ struct ComposerView: View {
                                     sessionKeyItem(choice)
                                 } else {
                                     providerItems(choice)
+                                }
+                            }
+                            // What a pool's row risks (`ProviderChoice.notice`), said once under the
+                            // pools (web parity).
+                            if group.id == "pools" {
+                                ForEach(SessionProviderChoices.notices(group.choices), id: \.self) { notice in
+                                    #if os(macOS)
+                                    ForEach(Array(ComposerLogic.menuLines(notice).enumerated()),
+                                            id: \.offset) { _, line in Text(line) }
+                                    #else
+                                    ForEach(ComposerLogic.sentences(notice), id: \.self) { Text($0) }
+                                    #endif
                                 }
                             }
                         }

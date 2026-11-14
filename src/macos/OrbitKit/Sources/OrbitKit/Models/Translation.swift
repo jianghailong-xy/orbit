@@ -37,7 +37,7 @@ public enum TranslationLanguage: String, CaseIterable, Codable, Equatable, Senda
 }
 
 /// The words every client shows about translation, byte for byte the web's (`TRANSLATION_COPY` in
-/// src/web/src/lib/translation.ts and the Translation card of src/web/src/pages/SettingsPage.tsx).
+/// src/web/src/lib/translation.ts and the Translation section of src/web/src/pages/settings/GeneralPage.tsx).
 public enum TranslationCopy {
     // MARK: Settings › Translation
     public static let title = "Translation"

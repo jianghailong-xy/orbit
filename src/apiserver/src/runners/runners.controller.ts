@@ -13,6 +13,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import type { RunnerSelfUpdateNowRequest, RunnerSelfUpdatePostponeRequest } from '@orbit/shared';
 import { isLoginEngine } from '../common/runner-engines';
 import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -85,6 +86,14 @@ export class RunnersController {
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.runners.getRunner(user.userId, id);
+  }
+
+  /** The machine's CPU, memory and disk: its latest reading and its last hour (runner-resources.ts). Polled by the
+   *  machine page's Resources section. Owner-scoped: anyone else's is a 404. */
+  @PatScope('runners:read', { workspaceConfinable: false })
+  @Get(':id/resources')
+  resources(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.runners.getResources(user.userId, id);
   }
 
   @PatForbidden('RUNNER_CONTROL')
@@ -261,6 +270,30 @@ export class RunnersController {
   @Post(':id/self-update')
   requestSelfUpdate(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.runners.requestSelfUpdate(user.userId, id);
+  }
+
+  // Later: end this runner's drain for its update now and put the release off until `until`, at most
+  // 09:00 tomorrow in the owner's zone. Owner-scoped like Update Runner Now, and recorded.
+  @PatForbidden('RUNNER_CONTROL')
+  @Post(':id/self-update/postpone')
+  postponeSelfUpdate(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() body: RunnerSelfUpdatePostponeRequest,
+  ) {
+    return this.runners.postponeSelfUpdate(user.userId, id, body);
+  }
+
+  // Update Now: install the waiting release now, interrupting the turns in flight (they resume after
+  // the restart). Owner-scoped like Update Runner Now, recorded, and only with interruptTurns: true.
+  @PatForbidden('RUNNER_CONTROL')
+  @Post(':id/self-update/now')
+  updateSelfNow(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() body: RunnerSelfUpdateNowRequest,
+  ) {
+    return this.runners.updateSelfNow(user.userId, id, body);
   }
 
   // Check again: have this machine check where its Claude connection to Anthropic comes out now

@@ -1,0 +1,869 @@
+<!doctype html><html lang="zh"><head><meta charset="utf-8"><style>
+@font-face { font-family: Inter; src: url(/mnt/data/pe-mock/fonts/Inter.ttf); }
+@font-face { font-family: NotoSC; src: url(/mnt/data/pe-mock/fonts/NotoSansSC.ttf); }
+:root {
+  color-scheme: light;
+  /* surfaces: base = canvas, raised = cards/nav/rows/popovers (in dark, higher = lighter) */
+  --bg-base: #ffffff;
+  --bg-raised: #ffffff;
+  --bg-subtle: #fafbfc;
+  --bg-sunken: #f7f8fa;
+  --bg-hover: #f5f6f7;
+  --bg-hover-strong: #e3e6eb;
+  --fill-muted: #f1f1f4;
+  /* A panel sunk into whatever surface it sits on. Deliberately translucent, unlike --bg-sunken:
+     the opaque one only reads as recessed against the one surface it was picked for, and lands
+     as a bright hole on any tinted card (a warning's amber, notably). Alpha per theme because
+     one value cannot span "white page" and "dark card". */
+  --fill-inset: rgba(0, 0, 0, 0.05);
+  --border: #dee0e3;
+  --border-subtle: #eceef1;
+  --scrollbar-hover: #c9cdd4;
+  /* text, four steps + idle dot */
+  --text-1: #1f2329;
+  --text-2: #646a73;
+  --text-3: #8f959e;
+  --text-4: #a8acb3;
+  --dot-idle: #c0c4cc;
+  /* brand */
+  --brand: #3370ff;
+  --brand-strong: #245ae0;
+  --brand-tint: #eaf1ff;
+  --brand-tint-hover: #e1ebff;
+  --brand-border: #bcd3ff;
+  /* status: fg / solid dot / tint bg / border */
+  --success: #1a7f37;
+  --success-solid: #2ea121;
+  --success-bg: #e8f6ec;
+  --success-border: #b6e7c4;
+  --error: #cf3b35;
+  --error-solid: #d4380d;
+  --error-bg: #fdeceb;
+  --error-border: #ffccc7;
+  --warning: #c2710c;
+  --warning-solid: #fa8c16;
+  --warning-bg: #fff4e6;
+  --warning-border: #ffd591;
+  /* what smart model selection would have picked, on a run that kept the agent's own model */
+  --route-shadow: #5b2fb8;
+  /* high-contrast inverted button (dark CTA on light, light CTA on dark) */
+  --invert-surface: #1f2329;
+  --invert-surface-hover: #000000;
+  --invert-text: #ffffff;
+}
+/* The Settings window (docs/mocks/settings-redesign, board-2): the nav on the left, the page in a
+   centred column on the right. Theme tokens only, so dark mode follows. */
+.settings-shell {
+  display: flex;
+  height: var(--app-vh);
+  background: var(--bg-base);
+  color: var(--text-1);
+}
+
+.settings-nav {
+  flex: 0 0 272px;
+  overflow-y: auto;
+  padding: 18px 12px 24px;
+  background: var(--bg-base);
+  border-right: 1px solid var(--border-subtle);
+}
+
+.settings-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.settings-back:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.settings-back .anticon {
+  font-size: 11px;
+}
+
+.settings-title {
+  margin: 10px 8px 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.settings-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 8px;
+  margin-bottom: 18px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  color: var(--text-3);
+}
+.settings-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+}
+.settings-search input::placeholder {
+  color: var(--text-3);
+}
+.settings-search:focus-within {
+  box-shadow: 0 0 0 2px var(--brand-border);
+}
+
+.settings-nav-group + .settings-nav-group {
+  margin-top: 16px;
+}
+.settings-nav-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.settings-nav-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.settings-nav-add:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+/* A group's + shows under the pointer, on keyboard focus, and while the group is empty.
+   Where nothing hovers (touch) it stays in sight. */
+@media (hover: hover) {
+  .settings-nav-group:not(.settings-nav-group--empty) .settings-nav-add {
+    opacity: 0;
+  }
+  .settings-nav-group:hover .settings-nav-add,
+  .settings-nav-group .settings-nav-add:focus-visible {
+    opacity: 1;
+  }
+}
+
+.settings-nav-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 8px;
+  border-radius: 6px;
+  color: var(--text-1);
+  font-size: 14px;
+  text-decoration: none;
+}
+.settings-nav-row:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.settings-nav-row.active {
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.settings-nav-row.active .settings-nav-icon,
+.settings-nav-row.active .settings-nav-meta {
+  color: var(--brand);
+}
+.settings-nav-icon {
+  display: inline-flex;
+  width: 16px;
+  justify-content: center;
+  color: var(--text-2);
+  font-size: 14px;
+}
+/* A machine's row (MachineRows): its grip takes the icon's place on hover or focus, so at rest the
+   group looks like every other (board-3). */
+.settings-nav-sortable {
+  position: relative;
+}
+.settings-nav-sortable.dragging {
+  z-index: 1;
+}
+.settings-nav-sortable.dragging .settings-nav-row {
+  background: var(--bg-hover-strong);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  cursor: grabbing;
+}
+.settings-nav-grip {
+  position: absolute;
+  top: 5px;
+  left: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 13px;
+  cursor: grab;
+  touch-action: none;
+  opacity: 0;
+}
+.settings-nav-sortable:hover .settings-nav-grip,
+.settings-nav-sortable.dragging .settings-nav-grip,
+.settings-nav-grip:focus-visible {
+  opacity: 1;
+}
+.settings-nav-sortable:hover .settings-nav-icon,
+.settings-nav-sortable.dragging .settings-nav-icon,
+.settings-nav-sortable:has(.settings-nav-grip:focus-visible) .settings-nav-icon {
+  visibility: hidden;
+}
+.settings-nav-grip:hover,
+.settings-nav-grip:focus-visible {
+  background: var(--bg-hover-strong);
+  color: var(--text-1);
+  outline: none;
+}
+.settings-nav-grip:disabled {
+  cursor: default;
+}
+.settings-nav-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-nav-meta {
+  flex-shrink: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.settings-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  margin-right: 4px;
+  border-radius: 50%;
+}
+.settings-dot--online {
+  background: var(--success-solid);
+}
+.settings-dot--attention {
+  background: var(--warning-solid);
+}
+.settings-dot--offline {
+  background: var(--dot-idle);
+}
+
+/* Search results (SettingsSearch), in place of the nav while there is a query. */
+.settings-search-hit {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.settings-search-hit:hover,
+.settings-search-hit.chosen {
+  background: var(--bg-hover);
+}
+.settings-search-hit.chosen {
+  background: var(--bg-hover-strong);
+}
+.settings-search-hit-label,
+.settings-search-hit-detail {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-search-hit-detail {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.settings-search-hit mark {
+  border-radius: 2px;
+  background: var(--brand-tint);
+  color: var(--text-1);
+}
+
+.settings-main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+.settings-column {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 40px 24px 64px;
+}
+
+/* SettingsSection, SettingsCard, SettingsRow */
+.settings-section + .settings-section {
+  margin-top: 28px;
+}
+.settings-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.settings-section-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.settings-section-description {
+  margin: -4px 0 10px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.settings-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  padding: 0 16px;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+}
+.settings-row + .settings-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.settings-row-text {
+  flex: 1;
+  min-width: 0;
+}
+.settings-row-title {
+  font-size: 14px;
+  color: var(--text-1);
+}
+.settings-row-description {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.settings-row-control {
+  flex-shrink: 0;
+}
+/* The row a search result opened, lit for a moment across the card's width (useFoundRowFlash). */
+.settings-row--found {
+  animation: settings-row-found 2s ease-out;
+}
+@keyframes settings-row-found {
+  0%,
+  60% {
+    background: var(--brand-tint);
+    box-shadow:
+      -16px 0 0 var(--brand-tint),
+      16px 0 0 var(--brand-tint);
+  }
+  100% {
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
+/* Narrower than 760px (board-6): the nav is a page of its own at /settings, and a page opens full
+   width under "‹ Settings". SettingsLayout draws one or the other; these give each the window. */
+.settings-shell--narrow .settings-nav {
+  flex: 1 1 auto;
+  padding: 18px 16px 24px;
+  border-right: 0;
+  background: var(--bg-base);
+}
+.settings-shell--narrow .settings-nav-row,
+.settings-shell--narrow .settings-search-hit {
+  min-height: 40px;
+  font-size: 14px;
+}
+.settings-shell--narrow .settings-search {
+  height: 36px;
+}
+.settings-shell--narrow .settings-column {
+  padding: 14px 16px 48px;
+}
+.settings-back--list {
+  margin: 0 0 12px -8px;
+}
+.settings-empty {
+  color: var(--text-2);
+}
+
+/* Providers: the API keys page (settings-providers-compact board-1) and Account pools. */
+.sp-vendor-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sp-vendor-title {
+  flex: 1;
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.sp-vendor-sub {
+  margin: 6px 0 28px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.sp-count {
+  margin-left: 4px;
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+.sp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -12px 0 20px;
+}
+.sp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  font-size: 12px;
+  color: var(--text-2);
+  text-decoration: none;
+}
+.sp-chip:hover {
+  color: var(--text-1);
+  background: var(--bg-hover);
+}
+.sp-chip.on {
+  background: var(--text-1);
+  border-color: var(--text-1);
+  color: var(--bg);
+}
+.sp-chip-count {
+  opacity: 0.6;
+}
+.sp-vendor-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.sp-pools-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-2);
+  text-decoration: none;
+}
+.sp-pools-link:hover {
+  color: var(--text-1);
+}
+.pool-sec-action {
+  margin-left: auto;
+  align-self: center;
+}
+/* A pool's account rows, sized for a 900px page, in Settings' narrower column: the status and quota
+   columns give the name the room they don't need. Below 700px index.css stacks the row anyway. */
+@media (min-width: 701px) {
+  .settings-column .pool-row,
+  .settings-column .pool-detail .pool-row {
+    grid-template-columns: minmax(0, 1fr) 120px 110px auto;
+  }
+}
+
+/* SettingsHeader: the page's name and the line under it (board-2). */
+.settings-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.settings-header-text {
+  min-width: 0;
+}
+.settings-header-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.settings-header-description {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.settings-header-action {
+  flex-shrink: 0;
+}
+.settings-row-description {
+  max-width: 600px;
+}
+
+/* A Personal page drawn from ui/Card (Profile's sign-in methods and password, Feishu's sections) reads as a
+   SettingsSection: the card's title above, its body as the rounded card. */
+.settings-page .orbit-card {
+  margin-bottom: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+.settings-page .orbit-card + .orbit-card,
+.settings-page .settings-section + .orbit-card,
+.settings-page .orbit-card + .settings-section {
+  margin-top: 28px;
+}
+.settings-page .orbit-card > .orbit-card-head {
+  min-height: 0;
+  margin: 0 0 10px;
+  padding: 0;
+  border: 0;
+}
+.settings-page .orbit-card > .orbit-card-head > .orbit-card-title {
+  font-size: 15px;
+}
+.settings-page .orbit-card > .orbit-card-body {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  padding: 16px;
+}
+.settings-storage-size {
+  font-size: 13px;
+  color: var(--text-2);
+}
+.settings-card + .settings-section {
+  margin-top: 28px;
+}
+
+/* A page whose body is a table or list of many columns (Shared links, Access tokens) takes the room the
+   window has, rather than the settings rows' 880px. */
+.settings-column:has(> .settings-page--wide) {
+  max-width: 1080px;
+}
+
+/* A machine's page (board-3): its name, a status pill and ⋯, then the sections. */
+.machine-page > .settings-section,
+.machine-page > .rd-section,
+.machine-page > .machine-capacity {
+  margin-top: 32px;
+}
+.machine-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.machine-title {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.machine-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.machine-pill .settings-dot {
+  margin-right: 0;
+}
+.machine-pill--online {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.machine-pill--attention {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.machine-pill--offline {
+  background: var(--fill-muted);
+  color: var(--text-2);
+}
+.machine-more.orbit-button {
+  border-radius: 16px;
+}
+.machine-metaline {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+.machine-attention {
+  margin-top: 20px;
+}
+.machine-section-note {
+  font-size: 12.5px;
+  color: var(--text-3);
+  text-align: right;
+}
+.machine-engines {
+  border-radius: 12px;
+}
+.machine-disk-bar.rd-disk-bar {
+  width: 180px;
+  margin-top: 0;
+}
+.machine-workspace-row {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+.machine-workspace-row + .machine-workspace-row .settings-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.machine-workspace-row:hover .settings-row-title {
+  color: var(--brand);
+}
+.machine-workdir {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  background: none;
+  padding: 0;
+}
+.machine-workspace-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-3);
+}
+.machine-empty {
+  padding: 16px 0;
+}
+.machine-about-value {
+  font-size: 13px;
+  color: var(--text-1);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.machine-about-value small {
+  margin-left: 5px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.machine-about-value small.warn {
+  color: var(--warning);
+  font-weight: 500;
+}
+
+/* Workspaces (board-5): a workspace's own page. */
+.settings-nav-none {
+  padding: 4px 8px 4px 34px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.settings-row--block {
+  display: block;
+}
+.settings-row--block > .rd-form-field,
+.settings-row--block > .rd-route-engines {
+  margin: 0;
+}
+.workspace-text-setting.orbit-input,
+.settings-row-control .workspace-text-setting {
+  width: 300px;
+}
+.workspace-text-setting--mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12.5px;
+}
+.workspace-machine-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  text-decoration: none;
+}
+.workspace-machine-link:hover {
+  color: var(--text-1);
+}
+.workspace-machine-choice {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+.workspace-machine-choice + .workspace-machine-choice .settings-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.workspace-machine-choice:hover .settings-row-title {
+  color: var(--brand);
+}
+.workspace-change-machine {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--brand);
+  cursor: pointer;
+}
+.workspace-new-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+/* Admin, drawn as Settings is (AdminLayout, docs/mocks/admin-settings-style): text fields 300px wide in a row's
+   control, a value or a code line in place of one, and one Save under the page's sections. Narrower than 760px a
+   row with a field or a picker puts it under the row's text, full width. */
+.admin-form .settings-row-control .admin-row-input {
+  width: 300px;
+}
+.admin-row-code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  word-break: break-all;
+}
+.admin-form-note {
+  margin-top: 10px;
+}
+.admin-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+.admin-email-ok {
+  color: var(--success);
+}
+.settings-shell--narrow .admin-form .settings-row:has(.admin-row-input, [role="combobox"]) {
+  flex-wrap: wrap;
+}
+.settings-shell--narrow .admin-form .settings-row:has(.admin-row-input, [role="combobox"]) .settings-row-control {
+  width: 100%;
+}
+/* Over the picker's own inline width. */
+.settings-shell--narrow .admin-form .settings-row:has(.admin-row-input, [role="combobox"]) .settings-row-control > * {
+  width: 100% !important;
+}
+/* Admin → Users: the search across the column, the table in a card as Settings' are. */
+.admin-users-page .admin-users-search {
+  width: 100%;
+  margin-bottom: 12px;
+}
+.admin-users-page .admin-users-frame {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.admin-users-page .admin-users-frame tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.anticon { display: inline-flex; align-items: center; line-height: 0; }
+body { margin: 0; padding: 32px; background: #f2f3f5; font-family: Inter, NotoSC, sans-serif; color: #1f2329; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+.sub { color: #646a73; font-size: 14px; margin: 0 0 24px; max-width: 1500px; line-height: 1.6; }
+.row { display: flex; gap: 20px; align-items: flex-start; }
+.panel { width: 300px; }
+.tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 4px; background: #e3e6eb; color: #646a73; }
+.panel.after .tag { background: #eaf1ff; color: #3370ff; }
+.panel.choice .tag { background: #fff3e0; color: #c2710c; }
+h2 { font-size: 15px; margin: 8px 0 4px; }
+.note { font-size: 12.5px; color: #646a73; line-height: 1.55; margin: 0 0 10px; min-height: 58px; }
+.frame { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.08); overflow: hidden; position: relative; }
+.frame .settings-nav { flex: none; width: 272px; padding: 12px 14px 16px; border-right: 0; }
+/* Board only: "before" draws every + as main draws it today. */
+.before .settings-nav-add { opacity: 1 !important; }
+/* Board only: choice B hides the + on Providers while its only row is "Connect a provider". */
+.choice-b .settings-nav-group[aria-label="Providers"] .settings-nav-add { opacity: 0; }
+.choice-b .settings-nav-group[aria-label="Providers"]:hover .settings-nav-add { opacity: 1; }
+.cursor { position: absolute; width: 16px; pointer-events: none; z-index: 5; }
+.foot { margin-top: 22px; font-size: 12.5px; color: #8f959e; line-height: 1.6; }
+.rec { color: #1a7f37; font-weight: 600; }
+</style></head><body>
+<h1>Settings 侧栏：组标题的 + 只在需要时出现</h1>
+<p class="sub">Machines / Providers / Workspaces 三个组。改后：鼠标在这一组上（标题或任意一行）才出现 +；组里一个都没有时一直显示；Tab 到它时显示；触屏设备没有悬停，保持一直显示。+ 隐藏时仍占位，出现时标题不跳动。</p>
+<div class="row">
+<section class="panel before" id="p1"><div class="tag">现在</div><h2>+ 一直在</h2><p class="note">三个组标题右侧的 + 始终可见（你截图里的样子）。</p><div class="frame"><nav class="settings-nav"><div class="settings-nav-groups">
+  <div class="settings-nav-group" role="group" aria-label="Machines"><div class="settings-nav-heading"><span>Machines</span><button type="button" class="settings-nav-add" aria-label="Register a machine"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M482 152h60q8 0 8 8v704q0 8-8 8h-60q-8 0-8-8V160q0-8 8-8z" /><path d="M192 474h672q8 0 8 8v60q0 8-8 8H160q-8 0-8-8v-60q0-8 8-8z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">HPC</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">wikova</span><span class="settings-dot settings-dot--online"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">workstation</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">longdeMac-mini.local</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">orbit@austin</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div></div>
+  <div class="settings-nav-group" role="group" aria-label="Providers"><div class="settings-nav-heading"><span>Providers</span><button type="button" class="settings-nav-add" aria-label="Connect a provider"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M482 152h60q8 0 8 8v704q0 8-8 8h-60q-8 0-8-8V160q0-8 8-8z" /><path d="M192 474h672q8 0 8 8v60q0 8-8 8H160q-8 0-8-8v-60q0-8 8-8z" /></svg></span></button></div><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M811.4 418.7C765.6 297.9 648.9 212 512.2 212S258.8 297.8 213 418.6C127.3 441.1 64 519.1 64 612c0 110.5 89.5 200 199.9 200h496.2C870.5 812 960 722.5 960 612c0-92.7-63.1-170.7-148.6-193.3zm36.3 281a123.07 123.07 0 01-87.6 36.3H263.9c-33.1 0-64.2-12.9-87.6-36.3A123.3 123.3 0 01140 612c0-28 9.1-54.3 26.2-76.3a125.7 125.7 0 0166.1-43.7l37.9-9.9 13.9-36.6c8.6-22.8 20.6-44.1 35.7-63.4a245.6 245.6 0 0152.4-49.9c41.1-28.9 89.5-44.2 140-44.2s98.9 15.3 140 44.2c19.9 14 37.5 30.8 52.4 49.9 15.1 19.3 27.1 40.7 35.7 63.4l13.8 36.5 37.8 10c54.3 14.5 92.1 63.8 92.1 120 0 33.1-12.9 64.3-36.3 87.7z" /></svg></span></span><span class="settings-nav-label">API keys</span><span class="settings-nav-meta">8</span></a><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M856 376H648V168c0-8.8-7.2-16-16-16H168c-8.8 0-16 7.2-16 16v464c0 8.8 7.2 16 16 16h208v208c0 8.8 7.2 16 16 16h464c8.8 0 16-7.2 16-16V392c0-8.8-7.2-16-16-16zm-480 16v188H220V220h360v156H392c-8.8 0-16 7.2-16 16zm204 52v136H444V444h136zm224 360H444V648h188c8.8 0 16-7.2 16-16V444h156v360z" /></svg></span></span><span class="settings-nav-label">Account pools</span><span class="settings-nav-meta">1</span></a></div>
+  <div class="settings-nav-group" role="group" aria-label="Workspaces"><div class="settings-nav-heading"><span>Workspaces</span><button type="button" class="settings-nav-add" aria-label="New workspace"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M482 152h60q8 0 8 8v704q0 8-8 8h-60q-8 0-8-8V160q0-8 8-8z" /><path d="M192 474h672q8 0 8 8v60q0 8-8 8H160q-8 0-8-8v-60q0-8 8-8z" /></svg></span></button></div><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z" /></svg></span></span><span class="settings-nav-label">HPC</span><span class="settings-nav-meta">HPC</span></a><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z" /></svg></span></span><span class="settings-nav-label">orbit-develop</span><span class="settings-nav-meta">HPC</span></a></div>
+</div></nav></div></section>
+<section class="panel after" id="p2"><div class="tag">改后</div><h2>鼠标不在侧栏上</h2><p class="note">三个组都有内容，+ 全部隐藏。</p><div class="frame"><nav class="settings-nav"><div class="settings-nav-groups">
+  <div class="settings-nav-group" role="group" aria-label="Machines"><div class="settings-nav-heading"><span>Machines</span><button type="button" class="settings-nav-add" aria-label="Register a machine"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M482 152h60q8 0 8 8v704q0 8-8 8h-60q-8 0-8-8V160q0-8 8-8z" /><path d="M192 474h672q8 0 8 8v60q0 8-8 8H160q-8 0-8-8v-60q0-8 8-8z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">HPC</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">wikova</span><span class="settings-dot settings-dot--online"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">workstation</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">longdeMac-mini.local</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">orbit@austin</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div></div>
+  <div class="settings-nav-group" role="group" aria-label="Providers"><div class="settings-nav-heading"><span>Providers</span><button type="button" class="settings-nav-add" aria-label="Connect a provider"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M482 152h60q8 0 8 8v704q0 8-8 8h-60q-8 0-8-8V160q0-8 8-8z" /><path d="M192 474h672q8 0 8 8v60q0 8-8 8H160q-8 0-8-8v-60q0-8 8-8z" /></svg></span></button></div><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M811.4 418.7C765.6 297.9 648.9 212 512.2 212S258.8 297.8 213 418.6C127.3 441.1 64 519.1 64 612c0 110.5 89.5 200 199.9 200h496.2C870.5 812 960 722.5 960 612c0-92.7-63.1-170.7-148.6-193.3zm36.3 281a123.07 123.07 0 01-87.6 36.3H263.9c-33.1 0-64.2-12.9-87.6-36.3A123.3 123.3 0 01140 612c0-28 9.1-54.3 26.2-76.3a125.7 125.7 0 0166.1-43.7l37.9-9.9 13.9-36.6c8.6-22.8 20.6-44.1 35.7-63.4a245.6 245.6 0 0152.4-49.9c41.1-28.9 89.5-44.2 140-44.2s98.9 15.3 140 44.2c19.9 14 37.5 30.8 52.4 49.9 15.1 19.3 27.1 40.7 35.7 63.4l13.8 36.5 37.8 10c54.3 14.5 92.1 63.8 92.1 120 0 33.1-12.9 64.3-36.3 87.7z" /></svg></span></span><span class="settings-nav-label">API keys</span><span class="settings-nav-meta">8</span></a><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M856 376H648V168c0-8.8-7.2-16-16-16H168c-8.8 0-16 7.2-16 16v464c0 8.8 7.2 16 16 16h208v208c0 8.8 7.2 16 16 16h464c8.8 0 16-7.2 16-16V392c0-8.8-7.2-16-16-16zm-480 16v188H220V220h360v156H392c-8.8 0-16 7.2-16 16zm204 52v136H444V444h136zm224 360H444V648h188c8.8 0 16-7.2 16-16V444h156v360z" /></svg></span></span><span class="settings-nav-label">Account pools</span><span class="settings-nav-meta">1</span></a></div>
+  <div class="settings-nav-group" role="group" aria-label="Workspaces"><div class="settings-nav-heading"><span>Workspaces</span><button type="button" class="settings-nav-add" aria-label="New workspace"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M482 152h60q8 0 8 8v704q0 8-8 8h-60q-8 0-8-8V160q0-8 8-8z" /><path d="M192 474h672q8 0 8 8v60q0 8-8 8H160q-8 0-8-8v-60q0-8 8-8z" /></svg></span></button></div><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z" /></svg></span></span><span class="settings-nav-label">HPC</span><span class="settings-nav-meta">HPC</span></a><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z" /></svg></span></span><span class="settings-nav-label">orbit-develop</span><span class="settings-nav-meta">HPC</span></a></div>
+</div></nav></div></section>
+<section class="panel after hover-machines" id="p3"><div class="tag">改后</div><h2>鼠标在 Machines 组上</h2><p class="note">指向 Machines 组里任何位置（这里是 wikova 一行），只有 Machines 的 + 出现。拖动手柄是原有的行悬停效果。</p><div class="frame"><nav class="settings-nav"><div class="settings-nav-groups">
+  <div class="settings-nav-group" role="group" aria-label="Machines"><div class="settings-nav-heading"><span>Machines</span><button type="button" class="settings-nav-add" aria-label="Register a machine"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M482 152h60q8 0 8 8v704q0 8-8 8h-60q-8 0-8-8V160q0-8 8-8z" /><path d="M192 474h672q8 0 8 8v60q0 8-8 8H160q-8 0-8-8v-60q0-8 8-8z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">HPC</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">wikova</span><span class="settings-dot settings-dot--online"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">workstation</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">longdeMac-mini.local</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">orbit@austin</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div></div>
+  <div class="settings-nav-group" role="group" aria-label="Providers"><div class="settings-nav-heading"><span>Providers</span><button type="button" class="settings-nav-add" aria-label="Connect a provider"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M482 152h60q8 0 8 8v704q0 8-8 8h-60q-8 0-8-8V160q0-8 8-8z" /><path d="M192 474h672q8 0 8 8v60q0 8-8 8H160q-8 0-8-8v-60q0-8 8-8z" /></svg></span></button></div><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M811.4 418.7C765.6 297.9 648.9 212 512.2 212S258.8 297.8 213 418.6C127.3 441.1 64 519.1 64 612c0 110.5 89.5 200 199.9 200h496.2C870.5 812 960 722.5 960 612c0-92.7-63.1-170.7-148.6-193.3zm36.3 281a123.07 123.07 0 01-87.6 36.3H263.9c-33.1 0-64.2-12.9-87.6-36.3A123.3 123.3 0 01140 612c0-28 9.1-54.3 26.2-76.3a125.7 125.7 0 0166.1-43.7l37.9-9.9 13.9-36.6c8.6-22.8 20.6-44.1 35.7-63.4a245.6 245.6 0 0152.4-49.9c41.1-28.9 89.5-44.2 140-44.2s98.9 15.3 140 44.2c19.9 14 37.5 30.8 52.4 49.9 15.1 19.3 27.1 40.7 35.7 63.4l13.8 36.5 37.8 10c54.3 14.5 92.1 63.8 92.1 120 0 33.1-12.9 64.3-36.3 87.7z" /></svg></span></span><span class="settings-nav-label">API keys</span><span class="settings-nav-meta">8</span></a><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M856 376H648V168c0-8.8-7.2-16-16-16H168c-8.8 0-16 7.2-16 16v464c0 8.8 7.2 16 16 16h208v208c0 8.8 7.2 16 16 16h464c8.8 0 16-7.2 16-16V392c0-8.8-7.2-16-16-16zm-480 16v188H220V220h360v156H392c-8.8 0-16 7.2-16 16zm204 52v136H444V444h136zm224 360H444V648h188c8.8 0 16-7.2 16-16V444h156v360z" /></svg></span></span><span class="settings-nav-label">Account pools</span><span class="settings-nav-meta">1</span></a></div>
+  <div class="settings-nav-group" role="group" aria-label="Workspaces"><div class="settings-nav-heading"><span>Workspaces</span><button type="button" class="settings-nav-add" aria-label="New workspace"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M482 152h60q8 0 8 8v704q0 8-8 8h-60q-8 0-8-8V160q0-8 8-8z" /><path d="M192 474h672q8 0 8 8v60q0 8-8 8H160q-8 0-8-8v-60q0-8 8-8z" /></svg></span></button></div><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z" /></svg></span></span><span class="settings-nav-label">HPC</span><span class="settings-nav-meta">HPC</span></a><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z" /></svg></span></span><span class="settings-nav-label">orbit-develop</span><span class="settings-nav-meta">HPC</span></a></div>
+</div></nav></div></section>
+<section class="panel after" id="p4"><div class="tag">改后</div><h2>还没有工作区</h2><p class="note">Workspaces 组是空的，它的 + 不用悬停就一直显示；其他组照常隐藏。</p><div class="frame"><nav class="settings-nav"><div class="settings-nav-groups">
+  <div class="settings-nav-group" role="group" aria-label="Machines"><div class="settings-nav-heading"><span>Machines</span><button type="button" class="settings-nav-add" aria-label="Register a machine"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M482 152h60q8 0 8 8v704q0 8-8 8h-60q-8 0-8-8V160q0-8 8-8z" /><path d="M192 474h672q8 0 8 8v60q0 8-8 8H160q-8 0-8-8v-60q0-8 8-8z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">HPC</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">wikova</span><span class="settings-dot settings-dot--online"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">workstation</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">longdeMac-mini.local</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">orbit@austin</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div></div>
+  <div class="settings-nav-group" role="group" aria-label="Providers"><div class="settings-nav-heading"><span>Providers</span><button type="button" class="settings-nav-add" aria-label="Connect a provider"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M482 152h60q8 0 8 8v704q0 8-8 8h-60q-8 0-8-8V160q0-8 8-8z" /><path d="M192 474h672q8 0 8 8v60q0 8-8 8H160q-8 0-8-8v-60q0-8 8-8z" /></svg></span></button></div><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M811.4 418.7C765.6 297.9 648.9 212 512.2 212S258.8 297.8 213 418.6C127.3 441.1 64 519.1 64 612c0 110.5 89.5 200 199.9 200h496.2C870.5 812 960 722.5 960 612c0-92.7-63.1-170.7-148.6-193.3zm36.3 281a123.07 123.07 0 01-87.6 36.3H263.9c-33.1 0-64.2-12.9-87.6-36.3A123.3 123.3 0 01140 612c0-28 9.1-54.3 26.2-76.3a125.7 125.7 0 0166.1-43.7l37.9-9.9 13.9-36.6c8.6-22.8 20.6-44.1 35.7-63.4a245.6 245.6 0 0152.4-49.9c41.1-28.9 89.5-44.2 140-44.2s98.9 15.3 140 44.2c19.9 14 37.5 30.8 52.4 49.9 15.1 19.3 27.1 40.7 35.7 63.4l13.8 36.5 37.8 10c54.3 14.5 92.1 63.8 92.1 120 0 33.1-12.9 64.3-36.3 87.7z" /></svg></span></span><span class="settings-nav-label">API keys</span><span class="settings-nav-meta">8</span></a><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M856 376H648V168c0-8.8-7.2-16-16-16H168c-8.8 0-16 7.2-16 16v464c0 8.8 7.2 16 16 16h208v208c0 8.8 7.2 16 16 16h464c8.8 0 16-7.2 16-16V392c0-8.8-7.2-16-16-16zm-480 16v188H220V220h360v156H392c-8.8 0-16 7.2-16 16zm204 52v136H444V444h136zm224 360H444V648h188c8.8 0 16-7.2 16-16V444h156v360z" /></svg></span></span><span class="settings-nav-label">Account pools</span><span class="settings-nav-meta">1</span></a></div>
+  <div class="settings-nav-group settings-nav-group--empty" role="group" aria-label="Workspaces"><div class="settings-nav-heading"><span>Workspaces</span><button type="button" class="settings-nav-add" aria-label="New workspace"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M482 152h60q8 0 8 8v704q0 8-8 8h-60q-8 0-8-8V160q0-8 8-8z" /><path d="M192 474h672q8 0 8 8v60q0 8-8 8H160q-8 0-8-8v-60q0-8 8-8z" /></svg></span></button></div></div>
+</div></nav></div></section>
+</div>
+<div class="row" style="margin-top:28px">
+<section class="panel after choice" id="p5"><div class="tag">待定 · A <span class="rec">（建议）</span></div><h2>没有 Provider：+ 也显示</h2><p class="note">空组一律显示 +，规则统一。这里同时有一行 “Connect a provider”，两者去同一个页面。（已提交的代码就是 A）</p><div class="frame"><nav class="settings-nav"><div class="settings-nav-groups">
+  <div class="settings-nav-group" role="group" aria-label="Machines"><div class="settings-nav-heading"><span>Machines</span><button type="button" class="settings-nav-add" aria-label="Register a machine"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M482 152h60q8 0 8 8v704q0 8-8 8h-60q-8 0-8-8V160q0-8 8-8z" /><path d="M192 474h672q8 0 8 8v60q0 8-8 8H160q-8 0-8-8v-60q0-8 8-8z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">HPC</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">wikova</span><span class="settings-dot settings-dot--online"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">workstation</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">longdeMac-mini.local</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">orbit@austin</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div></div>
+  <div class="settings-nav-group settings-nav-group--empty" role="group" aria-label="Providers"><div class="settings-nav-heading"><span>Providers</span><button type="button" class="settings-nav-add" aria-label="Connect a provider"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M482 152h60q8 0 8 8v704q0 8-8 8h-60q-8 0-8-8V160q0-8 8-8z" /><path d="M192 474h672q8 0 8 8v60q0 8-8 8H160q-8 0-8-8v-60q0-8 8-8z" /></svg></span></button></div><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M482 152h60q8 0 8 8v704q0 8-8 8h-60q-8 0-8-8V160q0-8 8-8z" /><path d="M192 474h672q8 0 8 8v60q0 8-8 8H160q-8 0-8-8v-60q0-8 8-8z" /></svg></span></span><span class="settings-nav-label">Connect a provider</span></a></div>
+  <div class="settings-nav-group" role="group" aria-label="Workspaces"><div class="settings-nav-heading"><span>Workspaces</span><button type="button" class="settings-nav-add" aria-label="New workspace"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M482 152h60q8 0 8 8v704q0 8-8 8h-60q-8 0-8-8V160q0-8 8-8z" /><path d="M192 474h672q8 0 8 8v60q0 8-8 8H160q-8 0-8-8v-60q0-8 8-8z" /></svg></span></button></div><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z" /></svg></span></span><span class="settings-nav-label">HPC</span><span class="settings-nav-meta">HPC</span></a><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z" /></svg></span></span><span class="settings-nav-label">orbit-develop</span><span class="settings-nav-meta">HPC</span></a></div>
+</div></nav></div></section>
+<section class="panel after choice choice-b" id="p6"><div class="tag">待定 · B</div><h2>没有 Provider：只留那一行</h2><p class="note">Providers 空时本来就有 “Connect a provider” 一行，+ 就不另外显示，悬停时才出现。</p><div class="frame"><nav class="settings-nav"><div class="settings-nav-groups">
+  <div class="settings-nav-group" role="group" aria-label="Machines"><div class="settings-nav-heading"><span>Machines</span><button type="button" class="settings-nav-add" aria-label="Register a machine"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M482 152h60q8 0 8 8v704q0 8-8 8h-60q-8 0-8-8V160q0-8 8-8z" /><path d="M192 474h672q8 0 8 8v60q0 8-8 8H160q-8 0-8-8v-60q0-8 8-8z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">HPC</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">wikova</span><span class="settings-dot settings-dot--online"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">workstation</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">longdeMac-mini.local</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div><div class="settings-nav-sortable"><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM496 208H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8zM312 544h184c4.4 0 8-3.6 8-8v-48c0-4.4-3.6-8-8-8H312c-4.4 0-8 3.6-8 8v48c0 4.4 3.6 8 8 8zm328 244a40 40 0 1080 0 40 40 0 10-80 0z" /></svg></span></span><span class="settings-nav-label">orbit@austin</span><span class="settings-dot settings-dot--attention"></span></a><button type="button" class="settings-nav-grip"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z" /></svg></span></button></div></div>
+  <div class="settings-nav-group settings-nav-group--empty" role="group" aria-label="Providers"><div class="settings-nav-heading"><span>Providers</span><button type="button" class="settings-nav-add" aria-label="Connect a provider"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M482 152h60q8 0 8 8v704q0 8-8 8h-60q-8 0-8-8V160q0-8 8-8z" /><path d="M192 474h672q8 0 8 8v60q0 8-8 8H160q-8 0-8-8v-60q0-8 8-8z" /></svg></span></button></div><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M482 152h60q8 0 8 8v704q0 8-8 8h-60q-8 0-8-8V160q0-8 8-8z" /><path d="M192 474h672q8 0 8 8v60q0 8-8 8H160q-8 0-8-8v-60q0-8 8-8z" /></svg></span></span><span class="settings-nav-label">Connect a provider</span></a></div>
+  <div class="settings-nav-group" role="group" aria-label="Workspaces"><div class="settings-nav-heading"><span>Workspaces</span><button type="button" class="settings-nav-add" aria-label="New workspace"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M482 152h60q8 0 8 8v704q0 8-8 8h-60q-8 0-8-8V160q0-8 8-8z" /><path d="M192 474h672q8 0 8 8v60q0 8-8 8H160q-8 0-8-8v-60q0-8 8-8z" /></svg></span></button></div><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z" /></svg></span></span><span class="settings-nav-label">HPC</span><span class="settings-nav-meta">HPC</span></a><a class="settings-nav-row" href="#"><span class="settings-nav-icon"><span class="anticon"><svg viewBox="64 64 896 896" focusable="false" width="1em" height="1em" fill="currentColor"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z" /></svg></span></span><span class="settings-nav-label">orbit-develop</span><span class="settings-nav-meta">HPC</span></a></div>
+</div></nav></div></section>
+</div>
+<p class="foot">画法：组件 DOM 按 SettingsLayout.tsx 的真实 class 手写，样式直接内联本分支的 Settings.css 和 index.css 浅色 token，图标是 Ant Design 真实路径。悬停面板由 Playwright 真实移动鼠标得到，不是伪造的 :hover。“现在”一栏用一条只在本图生效的规则把 + 全部显出，等同 main 当前的样子。</p>
+</body></html>

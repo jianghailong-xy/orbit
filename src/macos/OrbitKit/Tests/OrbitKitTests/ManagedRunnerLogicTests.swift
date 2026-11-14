@@ -188,9 +188,9 @@ final class ManagedRunnerLogicTests: XCTestCase {
                        .runners)
     }
 
-    // MARK: Infrastructure and polling
+    // MARK: Machines & models and polling
 
-    func testInfrastructureShowsTheManagedRunnerOnlyToAnAccountWithNoRunner() throws {
+    func testMachinesAndModelsShowsTheManagedRunnerOnlyToAnAccountWithNoRunner() throws {
         let setUp = try XCTUnwrap(ManagedRunnerLogic.display(Self.state("no mapping, offered")))
         XCTAssertEqual(ManagedRunnerLogic.onboarding(setUp, runnerCount: 0)?.ensure, true)
         XCTAssertNil(ManagedRunnerLogic.onboarding(setUp, runnerCount: 1))

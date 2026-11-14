@@ -90,10 +90,15 @@ var taskActionHelp = map[string]string{
 	"list": `orbit task list — list tasks
 
 Usage:
-  orbit task list [--status OPEN|IN_PROGRESS|DONE|CANCELLED|FAILED] [--list-id ID] [--project-id ID] [--label L] [--min-priority N] [--limit N | --all [--cursor C]] [--json]
+  orbit task list [--status OPEN|IN_PROGRESS|DONE|CANCELLED|FAILED] [--list-id ID] [--project-id ID] [--label L] [--min-priority N] [--limit N | --all] [--cursor C] [--summary] [--json]
 
 Returns the newest tasks first, without their descriptions (use ` + "`orbit task get`" + ` for one
 task in full). --limit defaults to 100 and may not exceed 200.
+
+--summary prints what the task_list tool answers by default: one compact row per task (id, title,
+status, projectId, parentTaskId, assigneeId, listId, labels, priority, updatedAt) under 20,000
+characters, 50 rows unless --limit says otherwise, after a first line naming the cursor of the next
+page. Continue with --summary --cursor CURSOR and the same filters. Not with --all.
 
 --min-priority keeps only the tasks whose priority is at least N: 1 is "the ones somebody raised"
 with ` + "`orbit task update --priority`" + `, so --list-id L --status OPEN --min-priority 1 is the
@@ -145,10 +150,14 @@ task-id defaults to ORBIT_TASK_ID inside an Orbit task session.
 `,
 	"evidence-list": `orbit task evidence-list — list explicit completion-evidence revisions
 Usage:
-  orbit task evidence-list [task-id] [--json]
+  orbit task evidence-list [task-id] [--summary [--before N]] [--revision N] [--json]
 
 Returns every immutable revision in task-local order. This does not inspect task comments or
 Session status. task-id defaults to ORBIT_TASK_ID inside an Orbit task session.
+
+--summary prints what the task_evidence_list tool answers by default: the newest 10 revisions with
+the claim and decision note shortened and checks and gaps counted, under 20,000 characters; --before N
+is the page of revisions older than N. --revision N prints that one revision in full.
 `,
 	"evidence-submit": `orbit task evidence-submit — submit structured completion evidence
 
@@ -160,6 +169,15 @@ defaults to ORBIT_SESSION_ID and must execute this task; its lifecycle state is 
 --idempotency-key makes transport retries return the same revision. Equivalent object-key order,
 Unicode composition and line endings share one stable digest; changed evidence makes a new revision.
 This command does not change task status and does not add a comment.
+
+The envelope is {"claim": ..., "checks": [...], "gaps": [...]}. It names no standard: Orbit records
+the one the task is held to (its declared criterion, else its own acceptance criteria) with the
+revision itself. A "criterion" an older client still sends is accepted and ignored.
+
+Each gap is a plain sentence. When one leaves a clause of the task's standard unproven, add the
+optional "gapClauses": [{"gap": <index into gaps>, "criterionClause": ..., "followUpTaskId": ...}].
+The follow-up must be a task in the same project; while a marked gap has none, the evidence can be
+sent back but not confirmed.
 
 Each entry of checks is {"kind": ..., "ref": ...}, kind one of TOOL_CALL, COMMIT, ARTIFACT or FILE.
 A screenshot or a report goes in as {"kind": "FILE", "ref": "<id>"}, the id 'orbit file upload'
@@ -185,7 +203,10 @@ evidence is decided from the project it is in now, and a task moved out takes it
 evidence with it, so the project it left can no longer decide it. A run of another task, or a
 conversation a run opened, is refused unless the evidence is addressed to that session, as the
 subject of the task it verifies or a task in no project it dispatched
-(EVIDENCE_JUDGMENT_FROM_RUN_REFUSED).
+(EVIDENCE_JUDGMENT_FROM_RUN_REFUSED). A CONFIRM is refused while a gap names a clause of the
+task's standard in gapClauses without a followUpTaskId in the same project
+(EVIDENCE_JUDGMENT_GAP_WITHOUT_FOLLOW_UP); plain-text gaps do not block it, and SEND_BACK is never
+blocked by gaps.
 --note is required for SEND_BACK: it is delivered to the run that submitted the revision as a
 platform message, so it is what the next revision aims at. The deciding Session is ORBIT_SESSION_ID
 and is not a flag.
@@ -245,6 +266,8 @@ Options:
                               task by itself once this instant has come (see below)
   --start-now                 Start the task as soon as it is created: one approval covers the
                               create and the start (see below); not with --run-at
+  --fork-from-session         Start the task from this session's work, uncommitted edits
+                              included, on this machine in its own checkout
   --engine ENGINE             Pin the CLI the run uses: claude (Claude Code), codex (Codex),
                               kimi (Kimi Code), antigravity (Antigravity CLI), opencode
                               (OpenCode), dsh (DeepSeek Harness) or cursor (Cursor CLI)
@@ -600,15 +623,17 @@ Options:
                               with nothing to send again. No agent, and no coordinator of either
                               project, confirms it. Read it with 'orbit project crossings'
   --no-project                Take this task out of every project: the membership goes, the task
-                              and where it was noticed stay. Not a crossing and needs nobody's
-                              approval, but still the ACCOUNT OWNER's to make — a session acting
-                              under a project scope is refused UNMAPPED_PROJECT_WORK, because work
-                              under no goal is counted by nothing
-  --handoff-reason TEXT       Ask for the move --project names, and say why. Passing it IS the
-                              request; it needs a --project and carries no authority. The task
-                              stays where it is until the ACCOUNT OWNER confirms the request, and
-                              their confirmation is the move. See below for who may ask, what a
-                              request may carry and which moves are refused
+                              and where it was noticed stay. The ACCOUNT OWNER's to make — a
+                              session acting under a project scope is refused
+                              UNMAPPED_PROJECT_WORK, because work under no goal is counted by
+                              nothing, unless it asks with --handoff-reason; the owner's
+                              confirmation then takes the task out
+  --handoff-reason TEXT       Ask for the move --project or --no-project names, and say why.
+                              Passing it IS the request; it needs one of those two and carries no
+                              authority. The task stays where it is until the ACCOUNT OWNER
+                              confirms the request, and their confirmation is the move. See below
+                              for who may ask, what a request may carry and which moves are
+                              refused
   --fixes-open-item-id ITEM_ID | --clear-fixes-open-item
                               Attach/detach the concrete fix link. The item must be OPEN, be an
                               integration/TASK_FAILED item in this task's project, and be assigned
@@ -718,6 +743,9 @@ act: do not send the update again. What may be asked:
     (PROJECT_REOPEN_REQUIRED);
   - a task whose landing is queued or running is refused MOVE_TASK_LANDING_IN_FLIGHT until that job
     has ended.
+--no-project with --handoff-reason asks the same way for the task to be taken out of every project:
+only from the project it is in, with no --criterion-key, and the owner's confirmation files it under
+none.
 Undeclared, the same move is refused PROJECT_SCOPE_MISMATCH. The account owner never needs to ask:
 §4 R1 lets them move a task directly, from a terminal outside any Orbit session.
 
@@ -1387,6 +1415,7 @@ func cliTaskList(args []string, out io.Writer) error {
 	all := fs.Bool("all", false, "fetch every matching task, paging until the list is exhausted")
 	cursor := fs.String("cursor", "", "resume an interrupted --all walk from this cursor")
 	minPriorityFlag := fs.Int("min-priority", 0, "only tasks whose priority is at least this (1 = the ones somebody raised)")
+	summary := fs.Bool("summary", false, "one compact row per task, under the tool result budget, with the next page's cursor")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -1417,12 +1446,29 @@ func cliTaskList(args []string, out io.Writer) error {
 	if !*all && (*limit < 1 || *limit > maxTaskListLimit) {
 		return fmt.Errorf("--limit must be between 1 and %d", maxTaskListLimit)
 	}
-	// A cursor names a position in a walk; without one there is nothing to resume.
-	if *cursor != "" && !*all {
-		return fmt.Errorf("--cursor is only meaningful with --all")
+	if *summary && *all {
+		return fmt.Errorf("--summary and --all are mutually exclusive: --summary pages, --all walks everything")
+	}
+	// A cursor names a position in a walk or a summary listing; without one there is nothing to resume.
+	if *cursor != "" && !*all && !*summary {
+		return fmt.Errorf("--cursor is only meaningful with --all or --summary")
 	}
 	t, err := cliTaskTransport()
 	if err != nil {
+		return err
+	}
+	if *summary {
+		n := *limit
+		if !flagWasSet(fs, "limit") {
+			n = defaultTaskSummaryLimit
+		}
+		text, err := boundedTaskSummary(func(n int) (json.RawMessage, string, error) {
+			return t.listTaskPage(*status, *listID, *projectID, labels, n, *cursor, minPriority)
+		}, n)
+		if err != nil {
+			return fmt.Errorf("list tasks: %w", err)
+		}
+		_, err = fmt.Fprint(out, text)
 		return err
 	}
 	if *all {
@@ -1500,6 +1546,9 @@ func cliTaskGet(args []string, out io.Writer) error {
 func cliTaskEvidenceList(args []string, out io.Writer) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit task evidence-list")
+	summary := fs.Bool("summary", false, "the newest revisions in summary form, under the tool result budget")
+	before := fs.String("before", "", "with --summary: the page of revisions older than this one")
+	revision := fs.String("revision", "", "one revision in full")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(rest); err != nil {
 		return err
@@ -1512,9 +1561,20 @@ func cliTaskEvidenceList(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if *before != "" && !*summary {
+		return fmt.Errorf("--before is only meaningful with --summary")
+	}
 	raw, err := t.listTaskEvidence(id)
 	if err != nil {
 		return fmt.Errorf("list task evidence: %w", err)
+	}
+	if *summary || *revision != "" {
+		text, err := renderEvidenceView(raw, strings.TrimSpace(*revision), strings.TrimSpace(*before))
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintln(out, text)
+		return err
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
@@ -1522,7 +1582,7 @@ func cliTaskEvidenceList(args []string, out io.Writer) error {
 func cliTaskEvidenceSubmit(args []string, in io.Reader, out io.Writer) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit task evidence-submit")
-	evidenceText := fs.String("evidence", "", "completion evidence envelope as one JSON object: {claim, criterion{key,text}, checks[], gaps[]}")
+	evidenceText := fs.String("evidence", "", "completion evidence envelope as one JSON object: {claim, checks[], gaps[]}")
 	evidenceFile := fs.String("evidence-file", "", "read evidence JSON from stdin (-)")
 	sourceSessionID := fs.String("source-session-id", "", "source task Session (defaults to ORBIT_SESSION_ID)")
 	idempotencyKey := fs.String("idempotency-key", "", "caller retry identity (max 200 characters)")
@@ -1674,6 +1734,7 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	dueDate := fs.String("due-date", "", "ISO due date")
 	runAt := fs.String("run-at", "", "one-time scheduled start: when the server starts this task by itself (ISO 8601 date-time)")
 	startNow := fs.Bool("start-now", false, "start the task as soon as it is created: one approval covers the create and the start")
+	forkFromSession := fs.Bool("fork-from-session", false, "start the task from this session's work, uncommitted edits included")
 	engine := fs.String("engine", "", "run on this engine (the CLI) instead of the assignee's")
 	provider := fs.String("provider", "", "run on this provider (the credential) instead of the assignee's")
 	model := fs.String("model", "", "run on this model instead of the assignee's")
@@ -1973,6 +2034,14 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	// turn's re-created tasks (see TasksService idempotency). ORBIT_AGENT_ID stays the default
 	// assignee regardless.
 	agentID, sessionID := cliTaskAttribution()
+	// The snapshot the MCP door takes (design §2.2), at the start of the call and before the card.
+	var fork *forkSnapshot
+	if *forkFromSession {
+		if fork, err = takeForkSnapshot(sessionID, *title); err != nil {
+			return fmt.Errorf("--fork-from-session: %w", err)
+		}
+		body["fork"] = fork.payload()
+	}
 	// The same card the MCP tool raises: an agent that shells out to this command must not find a
 	// door the tool keeps closed. Headless there is no session, and so nobody to ask — nor as the
 	// person, who is the one asking: a card is filed by a session, on the runner's routes.
@@ -1980,9 +2049,11 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	if runner, ok := t.(*Transport); ok {
 		declined, start, err := askBeforeTaskCreate(runner, sessionID, body)
 		if err != nil {
+			fork.release()
 			return fmt.Errorf("create task: %w", err)
 		} else if declined != "" {
-			return fmt.Errorf("create task: the human rejected this task: %s", declined)
+			fork.release()
+			return fmt.Errorf("create task: %s", declinedText("the human rejected this task", declined))
 		}
 		startAfterCreate = start
 	}
@@ -1992,6 +2063,9 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	}
 	raw, err := t.createTask(agentID, sessionID, body)
 	if err != nil {
+		if createRefused(err) {
+			fork.release()
+		}
 		// Verbatim, plus how to ask when the refusal is the one whose own requiredAction offers a
 		// handoff as the way through.
 		return fmt.Errorf("create task: %w%s", err, crossProjectCrossingGuidance(err))
@@ -2187,6 +2261,27 @@ func cliTaskCreateBatch(args []string, in io.Reader, out io.Writer) error {
 	}
 	// In-session agent attribution + session link, same as `orbit task create`.
 	agentID, sessionID := cliTaskAttribution()
+	// forkFromSession, as on the MCP tool: one snapshot for every item that asks, none for a dry run.
+	var forking []int
+	for i, item := range items {
+		if fork, _ := item["forkFromSession"].(bool); fork {
+			forking = append(forking, i)
+		}
+		delete(item, "forkFromSession")
+	}
+	var fork *forkSnapshot
+	if len(forking) > 0 && !*dryRun {
+		title, _ := items[forking[0]]["title"].(string)
+		if len(forking) > 1 {
+			title = fmt.Sprintf("%s (and %d more)", title, len(forking)-1)
+		}
+		if fork, err = takeForkSnapshot(sessionID, title); err != nil {
+			return fmt.Errorf("create tasks: %w", err)
+		}
+		for _, i := range forking {
+			items[i]["fork"] = fork.payload()
+		}
+	}
 	body := map[string]interface{}{"tasks": items}
 	verb := "create tasks"
 	if *dryRun {
@@ -2197,13 +2292,18 @@ func cliTaskCreateBatch(args []string, in io.Reader, out io.Writer) error {
 	// from a session, whose card rides the runner's routes, as `orbit task create`'s does.
 	if runner, ok := t.(*Transport); ok && !*dryRun {
 		if declined, err := askBeforeBatch(runner, agentID, sessionID, items); err != nil {
+			fork.release()
 			return fmt.Errorf("%s: %w", verb, err)
 		} else if declined != "" {
-			return fmt.Errorf("%s: the human rejected this batch: %s", verb, declined)
+			fork.release()
+			return fmt.Errorf("%s: %s", verb, declinedText("the human rejected this batch", declined))
 		}
 	}
 	out2, err := t.createTasksBatch(agentID, sessionID, body)
 	if err != nil {
+		if createRefused(err) {
+			fork.release()
+		}
 		return fmt.Errorf("%s: %w%s", verb, err, crossProjectCrossingGuidance(err))
 	}
 	return writeCLIRawJSON(out, out2, *jsonOut)
@@ -3166,17 +3266,17 @@ type cliCapabilitySpec struct {
 }
 
 var baseCLICapabilities = withTaskCompletionCapabilityArgs([]cliCapabilitySpec{
-	{Tool: "task_list", Argv: []string{"orbit", "task", "list"}, Usage: "orbit task list [--status STATUS] [--list-id ID] [--project-id ID] [--label L] [--min-priority N] [--limit N | --all [--cursor C]] [--json]", Arguments: []string{"--status <OPEN|IN_PROGRESS|DONE|CANCELLED|FAILED>", "--list-id <id>", "--project-id <id> (only tasks filed under this project; unknown or another owner's lists empty)", "--label <labels[,labels...]> (repeatable; matches tasks carrying ALL of them)", "--min-priority <int> (minPriority: only tasks whose priority is at least this; 1 = the ones somebody raised)", "--limit <n> (default 100, max 200)", "--all (every match as NDJSON, paged; excludes --limit)", "--cursor <c> (resume an interrupted --all)", "--json"}},
+	{Tool: "task_list", Argv: []string{"orbit", "task", "list"}, Usage: "orbit task list [--status STATUS] [--list-id ID] [--project-id ID] [--label L] [--min-priority N] [--limit N | --all] [--cursor C] [--summary] [--json]", Arguments: []string{"--status <OPEN|IN_PROGRESS|DONE|CANCELLED|FAILED>", "--list-id <id>", "--project-id <id> (only tasks filed under this project; unknown or another owner's lists empty)", "--label <labels[,labels...]> (repeatable; matches tasks carrying ALL of them)", "--min-priority <int> (minPriority: only tasks whose priority is at least this; 1 = the ones somebody raised)", "--limit <n> (default 100, max 200)", "--all (every match as NDJSON, paged; excludes --limit)", "--cursor <c> (resume an interrupted --all, or continue a --summary page)", "--summary (summary rows under 20,000 characters, with the next page's cursor; what the MCP tool answers by default, where summary=false asks for full rows)", "--json"}},
 	{Tool: "task_labels", Argv: []string{"orbit", "task", "labels"}, Usage: "orbit task labels [--list-id ID] [--json]", Arguments: []string{"--list-id <id>", "--json"}, Description: "Every label in use with its own status breakdown, counted over every task carrying it. One call answers for all labels, where task_list --label answers for one; also how to discover how a label is spelled before filtering on it."},
 	{Tool: "task_get", Argv: []string{"orbit", "task", "get"}, Usage: "orbit task get [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}},
-	{Tool: "task_evidence_list", Argv: []string{"orbit", "task", "evidence-list"}, Usage: "orbit task evidence-list [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Description: "List immutable structured completion-evidence revisions in task-local order. Reads no comments and depends on no Session lifecycle state."},
+	{Tool: "task_evidence_list", Argv: []string{"orbit", "task", "evidence-list"}, Usage: "orbit task evidence-list [task-id] [--summary [--before N]] [--revision N] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--summary (the newest 10 revisions in summary form under 20,000 characters; what the MCP tool answers by default, where summary=false asks for the whole ledger)", "--before <n> (with --summary: the page of revisions older than n)", "--revision <n> (one revision in full)", "--json"}, Description: "List immutable structured completion-evidence revisions in task-local order. Reads no comments and depends on no Session lifecycle state."},
 	{Tool: "task_evidence_submit", Argv: []string{"orbit", "task", "evidence-submit"}, Usage: "orbit task evidence-submit [task-id] (--evidence JSON | --evidence-file -) [--source-session-id ID] [--idempotency-key KEY] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--evidence <JSON object> | --evidence-file - (required)", "--source-session-id <id> (defaults to ORBIT_SESSION_ID)", "--idempotency-key <key> (max 200 characters)", "--json"}, Description: "Submit an explicit structured completion-evidence fact from a task Session. It appends or replays a revision without changing Task or Session state and without adding a comment.", Mutates: true},
-	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--project-id <id> (file the task under this project; orthogonal to --list-id, must be owned by the caller)", "--handoff-reason <text> (handoff: DECLARE that this create crosses into the project --project-id names, and why. Only meaningful beside an explicit --project-id — a crossing has to name where it is going — and it carries no authority: it makes the crossing askable, and the ACCOUNT OWNER answers. Undeclared, a write into another project is refused PROJECT_SCOPE_MISMATCH; declared, it waits as CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING, read back with `orbit project crossings`)", "--parent-task-id <id> (create it as a subtask of this existing task; must be owned by the caller and in the same project)", "--verifies-task-id <id> (file it as a verification of this existing task: what makes a check a structured relation, and the precondition for a verdict; same project, not itself, and not itself a verification)", "--supersedes-task-id <id> (record in this same write that the new task REPLACES that stopped attempt: the predecessor must be CANCELLED or FAILED, owned by you and in the same project, and must not already have been replaced)", "--acceptance-criteria <text> | --acceptance-criteria-file - (what would settle that this task is done; max 4,000 characters)", "--criterion-key <key> (criterionKey: which of the PROJECT's stated acceptance criteria this work serves, as a key from project_get; required of a project's judgment session and optional for everybody else)", "--codeless[=true|false] (codeless: this work produces no code — a rollout, a walkthrough, research — so it takes no part in its acceptance criterion's landing; no reason is needed at creation)", "--due-date <ISO date>", "--run-at <ISO 8601 date-time> (runAt: a one-time scheduled start, not a deadline — the server's once-a-minute scan starts the task once the time has come, whether or not --auto-run-when-ready is set, and only while it is OPEN, not held, with an assignee bound to a runner, its prerequisites satisfied and no session occupying it; the run it starts clears it)", "--start-now (startNow: start the task as soon as it is created, for work the person wants run now — one approval covers the create and the start, so do not ask them again or run orbit task start after; it writes a --run-at of now, so it cannot be combined with --run-at, and a refused start leaves the task created with the start deferred to the server's once-a-minute scan)", engineArgument() + " (pin the CLI its runs use)", "--provider <slug> (pin where their credential comes from: an engine's own sign-in, opencode, an account pool or an API key; named alone it pins the engine it runs on by default too)", "--model <model>", "--depends-on <id[,id...]> (repeatable)", "--attachment-id <id[,id...]> (repeatable; attachmentIds: copy uploaded attachments you own as task inputs, preserving the originals)", "--label <labels[,labels...]> (repeatable)", "--auto-run-when-ready[=true|false] (autoRunWhenReady: start the task without a manual start once it is ready. " + taskAutoRunUnfiledNoPrerequisites + ")", "--completion-policy <MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED> (how this task's own completion is decided once it has subtasks; MANUAL, the default, never completes it automatically)", "--json"}, Description: "Create a task. Inside a session it is attributed to this agent (ORBIT_AGENT_ID), the same as the MCP task tools; run headless with no session it is attributed to the runner owner. ORBIT_AGENT_ID is also the default assignee. This only records the task unless --start-now is passed; otherwise call task_start when it should run. Inside a session it first puts a confirmation card in front of the user and waits for the answer: nothing is written if they decline. Every runner task creation requires --completion-criterion explicitly; EVIDENCE_JUDGMENT remains available when intended but is never inferred from omission, and verifier, executable, or policy flags do not replace the declaration. --project-id files the task under a project you own, which is orthogonal to --list-id: the project says what the work is for, the list decides how it is dispatched. --parent-task-id makes it a subtask of an existing task, which must be in the same project as this one — pass both flags for a subtask under a project's task, since the project is not inherited from the parent. --acceptance-criteria states what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal; the server accepts up to 4,000 characters. --acceptance-criteria-file reads it from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream. --supersedes-task-id records, in the same transaction that creates this task, that it replaces an attempt that already stopped: the predecessor keeps the CANCELLED or FAILED it ended with and gains a pointer to this task plus terminalReason SUPERSEDED. Use it instead of creating the replacement and remembering to link it afterwards — the link is what every downstream reader actually consults, and an attempt that never got one is re-dispatched by the control loop as an ordinary unfinished failure.", Mutates: true},
+	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--project-id <id> (file the task under this project; orthogonal to --list-id, must be owned by the caller)", "--handoff-reason <text> (handoff: DECLARE that this create crosses into the project --project-id names, and why. Only meaningful beside an explicit --project-id — a crossing has to name where it is going — and it carries no authority: it makes the crossing askable, and the ACCOUNT OWNER answers. Undeclared, a write into another project is refused PROJECT_SCOPE_MISMATCH; declared, it waits as CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING, read back with `orbit project crossings`)", "--parent-task-id <id> (create it as a subtask of this existing task; must be owned by the caller and in the same project)", "--verifies-task-id <id> (file it as a verification of this existing task: what makes a check a structured relation, and the precondition for a verdict; same project, not itself, and not itself a verification)", "--supersedes-task-id <id> (record in this same write that the new task REPLACES that stopped attempt: the predecessor must be CANCELLED or FAILED, owned by you and in the same project, and must not already have been replaced)", "--acceptance-criteria <text> | --acceptance-criteria-file - (what would settle that this task is done; max 4,000 characters)", "--criterion-key <key> (criterionKey: which of the PROJECT's stated acceptance criteria this work serves, as a key from project_get; required of a project's judgment session and optional for everybody else)", "--codeless[=true|false] (codeless: this work produces no code — a rollout, a walkthrough, research — so it takes no part in its acceptance criterion's landing; no reason is needed at creation)", "--due-date <ISO date>", "--run-at <ISO 8601 date-time> (runAt: a one-time scheduled start, not a deadline — the server's once-a-minute scan starts the task once the time has come, whether or not --auto-run-when-ready is set, and only while it is OPEN, not held, with an assignee bound to a runner, its prerequisites satisfied and no session occupying it; the run it starts clears it)", "--start-now (startNow: start the task as soon as it is created, for work the person wants run now — one approval covers the create and the start, so do not ask them again or run orbit task start after; it writes a --run-at of now, so it cannot be combined with --run-at, and a refused start leaves the task created with the start deferred to the server's once-a-minute scan)", "--fork-from-session (forkFromSession: start the task from this session's work, its uncommitted edits included, on this machine and in its own checkout; refused with FORK_SUBMODULE_NOT_SHAREABLE when a submodule has work the snapshot cannot carry)", engineArgument() + " (pin the CLI its runs use)", "--provider <slug> (pin where their credential comes from: an engine's own sign-in, opencode, an account pool or an API key; named alone it pins the engine it runs on by default too)", "--model <model>", "--depends-on <id[,id...]> (repeatable)", "--attachment-id <id[,id...]> (repeatable; attachmentIds: copy uploaded attachments you own as task inputs, preserving the originals)", "--label <labels[,labels...]> (repeatable)", "--auto-run-when-ready[=true|false] (autoRunWhenReady: start the task without a manual start once it is ready. " + taskAutoRunUnfiledNoPrerequisites + ")", "--completion-policy <MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED> (how this task's own completion is decided once it has subtasks; MANUAL, the default, never completes it automatically)", "--json"}, Description: "Create a task. Inside a session it is attributed to this agent (ORBIT_AGENT_ID), the same as the MCP task tools; run headless with no session it is attributed to the runner owner. ORBIT_AGENT_ID is also the default assignee. This only records the task unless --start-now is passed; otherwise call task_start when it should run. Inside a session it first puts a confirmation card in front of the user and waits for the answer: nothing is written if they decline. Every runner task creation requires --completion-criterion explicitly; EVIDENCE_JUDGMENT remains available when intended but is never inferred from omission, and verifier, executable, or policy flags do not replace the declaration. --project-id files the task under a project you own, which is orthogonal to --list-id: the project says what the work is for, the list decides how it is dispatched. --parent-task-id makes it a subtask of an existing task, which must be in the same project as this one — pass both flags for a subtask under a project's task, since the project is not inherited from the parent. --acceptance-criteria states what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal; the server accepts up to 4,000 characters. --acceptance-criteria-file reads it from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream. --supersedes-task-id records, in the same transaction that creates this task, that it replaces an attempt that already stopped: the predecessor keeps the CANCELLED or FAILED it ended with and gains a pointer to this task plus terminalReason SUPERSEDED. Use it instead of creating the replacement and remembering to link it afterwards — the link is what every downstream reader actually consults, and an attempt that never got one is re-dispatched by the control loop as an ordinary unfinished failure.", Mutates: true},
 	{Tool: "task_evidence_decide", Argv: []string{"orbit", "task", "evidence-decide"}, Usage: "orbit task evidence-decide [task-id] --decision CONFIRM|SEND_BACK --evidence-revision N [--note TEXT] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--decision <CONFIRM|SEND_BACK> (required)", "--evidence-revision <N> (required, as evidence-list returns it)", "--note <text> (required for SEND_BACK, max 4000 characters)", "--json"}, Description: "Record this session's decision about ONE version of a task's completion evidence, as one row and nothing else — no task status, no session state, no comment. The revision answered must still be the task's latest, the criterion the evidence quotes must still be worded the way the project states it today, the deciding session must not have done the work, a session acting for one project may not decide a task in another — a moved task's evidence is decided by the project it is in now — and a run of another task may not decide evidence that is not addressed to it: each refusal carries its code and the action that would clear it. SEND_BACK carries a note saying what the next revision must show and leaves the task OPEN. The deciding Session is ORBIT_SESSION_ID, never a flag.", Mutates: true},
 	{Tool: "task_attribution", Argv: []string{"orbit", "task", "attribution"}, Usage: "orbit task attribution [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Description: "Read one task's attribution boundary — where this work COUNTS (the project's title, Base62 id and status: the only authoritative attribution there is), where it was NOTICED (the discovery project, trigger event, source task and source session — evidence, and labelled as evidence, because finding work somewhere grants nothing about where it may be filed), the declared cross-project crossing that touches it with the stable code and required action a writer meeting it is given, and the attribution blocker holding it up. The acceptance lane went with migration 0229, which removed the project acceptance judgment: the criteria are still stated, and nothing judges them. Every absent fact is null beside a reason, so \"nothing is holding this up\" and \"this build cannot tell you\" read differently. Read it BEFORE writing where you are not certain the work belongs: the alternative is learning it from the refusal, which is after the decision was made."},
 	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required; every item requires explicit completionCriterion, an item that crosses into another project carries \"handoff\": {\"reason\": \"...\"} beside its own projectId, and an OWNER_CONFIRMED item outside an Automatic project carries \"ownerConfirmationReason\")", "--dry-run (judge the plan and write nothing; report where each item would land)", "--json"}, Description: "Create several tasks in one atomic call — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create, including \"attachmentIds\" (copy uploaded attachments you own as task inputs, preserving the originals) \"runAt\" (an item's one-time scheduled start, as --run-at is on task create) and \"startNow\" (the item's runAt becomes now, so the server's once-a-minute scan starts it after the create; not with \"runAt\") among them; nothing is written unless every item is valid. Every item declares completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred, and verifier, executable, or policy fields do not replace the declaration. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet, or name it in \"parentRef\" to be created as a subtask of it — so a plan lands as a tree in one call. The two answer different questions: dependsOnRefs is when an item may run, parentRef is what it is a part of. \"parentTaskId\" is the same link to a task that already exists (same project as the item); one item cannot carry both. Attribution matches task_create: this agent inside a session, the runner owner headless. Inside a session a real write (not --dry-run) first puts the batch on a confirmation card and waits for the user's answer; nothing is written if they decline. ORBIT_AGENT_ID is also each item's default assignee. --dry-run judges the plan and writes none of it — not one task, and not even the approval question a declared cross-project crossing would otherwise file — answering instead with where every item WOULD land (project id, title and status), every finding that refuses or warns, and how many rows the real call would add. Use it before filing a plan whose attribution you are not certain of: a refusal tells you which item is wrong, and a dry run tells you where the ones that are RIGHT would go.", Mutates: true},
 	{Tool: "task_batch_pin", Argv: []string{"orbit", "task", "batch-pin"}, Usage: "orbit task batch-pin (--task-id ID | --project ID | --list-id ID | --label L) (--engine ENGINE | --clear-engine) (--provider SLUG | --clear-provider) (--model MODEL | --clear-model) [--json]", Arguments: []string{"--task-id <id[,id...]> (repeatable; narrows rather than excludes — naming it beside a filter re-pins the intersection)", "--project <id> (taskIds: re-pin every task filed under this project — the selector this command exists for, since a project of a hundred thousand tasks cannot be spelled as an id list)", "--list-id <id>", "--label <labels[,labels...]> (repeatable; matches tasks carrying ALL of them)", engineArgument() + " | --clear-engine (an engine named alone is checked against every provider pin the selection holds, and the whole batch is refused when one cannot run on it)", "--provider <slug> | --clear-provider (named alone it pins the engine it runs on by default too)", "--model <model> | --clear-model", "--json"}, Description: "Re-pin many tasks at once: set engine, provider and/or model on every task a selector matches, in ONE request that writes only the rows whose pin really changes. The door for \"change the model of every task in this project\", which task_update can only spell as one call per task — a hundred thousand round trips and as many non-HOT rewrites, of the rows whose model did not change included. A row already carrying the target value is not written at all, so its updated_at is not bumped; that column's one reader is the project list's lastActivityAt, so this makes it more accurate, not less. At least one selector is required (a request naming none is refused rather than read as \"every task this owner has\"), and at least one of engine/provider/model (naming none writes nothing). Tasks with a run in flight are re-pinned like any other: a session already holding the task keeps the model it started on, and the disagreement is reported when the NEXT attempt starts, as TASK_RUN_PIN_CONFLICT. Prints {\"changed\": N}.", Mutates: true},
-	{Tool: "task_update", Argv: []string{"orbit", "task", "update"}, Usage: "orbit task update [task-id] [options]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--title <text>", "--description <text> | --description-file -", "--status <OPEN|IN_PROGRESS|DONE|CANCELLED|FAILED> (DONE is refused; satisfy the task's declared criterion instead)", "--assignee-id <id> | --clear-assignee", "--list-id <id> | --clear-list", "--project <id> | --no-project (projectId: which project this task is filed under — how a mis-filing is corrected once the task exists. --no-project takes it out of every project, --project files it under another one. The ACCOUNT OWNER writes either directly; a session acting under a project scope is refused UNMAPPED_PROJECT_WORK for the first and PROJECT_SCOPE_MISMATCH for the second unless it asks for the move with --handoff-reason, which files a request, answers CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING and leaves the task where it is. The owner's confirmation moves the task at once, with nothing to send again; read the request with `orbit project crossings` — no agent answers it)", "--handoff-reason <text> (handoff: ASK for the move --project names, and why. Needs that --project — a move has to name where it is going — and carries no authority: it files a MOVE_TASK request, and the task stays where it is until the ACCOUNT OWNER confirms it, which moves the task at once with nothing to send again. Only a session whose own project is the move's source or its target may ask, any other is refused PROJECT_SCOPE_MISMATCH; the request carries --project, --handoff-reason and optionally --criterion-key, a criterion of the TARGET project that the task declares once moved, while what it declares in its current project is withdrawn. Out of a settled (DONE or CANCELLED) project only a task serving none of that project's acceptance criteria may move; into a settled project nothing may (PROJECT_REOPEN_REQUIRED))", "--parent-task-id <id> | --clear-parent (move this task under that task, or detach it; same project, never itself or one of its own subtasks)", "--verifies-task-id <id> | --clear-verifies (point this task at the task it verifies, or detach it; refused once this verification has concluded anything)", "--due-date <ISO date> | --clear-due-date", "--run-at <ISO 8601 date-time> | --clear-run-at (runAt: set or move this task's one-time scheduled start, or cancel it; passing neither leaves it as it is)", engineArgument() + " | --clear-engine (pin the CLI its runs use, or clear only that pin; named alone it keeps the provider pin, which then has to run on it)", "--provider <slug> | --clear-provider (pin where their credential comes from, or clear only that pin; named alone it pins the engine it runs on by default too)", "--model <model> | --clear-model", "--acceptance-criteria <text> | --acceptance-criteria-file - | --clear-acceptance-criteria (replaces what would settle that this task is done; max 4,000 characters)", "--criterion-key <key> | --clear-criterion-key (criterionKey: which of the PROJECT's stated acceptance criteria this task serves, as a key from project_get; re-sending the same key re-records that criterion's CURRENT revision, which is how work declared against wording that has since moved is brought up to date, and clearing takes the declaration back without touching the task)", "--codeless[=true|false] (codeless: declare that this task produces no code, which takes it out of its acceptance criterion's landing, or take the declaration back with =false; declaring needs --codeless-reason and is refused for a task that already has commits of its own)", "--codeless-reason <text> (codelessReason: why this task produces no code; required when the call turns the task codeless, stored on the task beside the declaration)", "--depends-on <id[,id...]> (repeatable; replaces all)", "--clear-dependencies", "--label <labels[,labels...]> (repeatable; replaces all) | --clear-labels", "--auto-run-when-ready[=true|false] (autoRunWhenReady: start the task without a manual start once it is ready. " + taskAutoRunUnfiledNoPrerequisites + ")", "--priority <int> | --clear-priority (priority: where this task stands in its list's queue — when the list has more ready tasks than free slots, the server's automatic dispatch gives the next slot to the highest priority first; 0 is the default and equal priorities keep the order they had, a negative value goes after everything left at 0; it starts nothing and gets past no gate, and --clear-priority returns it to 0)", "--completion-policy <MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED> (how this task's completion is decided once it has subtasks)", "--verdict <PASS|FAIL|INCONCLUSIVE> | --clear-verdict (this VERIFICATION task's conclusion about the task it verifies; revoking a PASS reopens a subject VERIFICATION_PASSED had completed)", "--superseded-by-task-id <id> | --clear-superseded ( the later attempt that replaced this one; only a CANCELLED or FAILED task may name one, and it must be in the same project)", "--terminal-reason <SUPERSEDED|ABANDONED> | --clear-terminal-reason (terminalReason: why this task stopped, when its status alone does not say)", "--json"}, Description: "Update a task. Only the flags you pass are sent, so a partial edit never blanks the rest of the task. --project with --handoff-reason asks for a move rather than making one: the request waits for the account owner, and their confirmation moves the task, with nothing to send again. Direct status DONE is refused for every actor; the structured refusal names the declared EXECUTABLE, VERIFICATION, or EVIDENCE_JUDGMENT path. FAILED remains writable as a run's conservative self-report. --parent-task-id moves the task under another task you own and --clear-parent detaches it, which is how a decomposition is corrected once the tasks exist rather than by deleting and recreating them; the parent must be in the same project, and neither a task itself nor one of its own subtasks may be named (both close a loop). It is membership, not ordering — when a task runs is --depends-on. --acceptance-criteria replaces what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal rather than this one task. It is a whole-field replacement: omitting it preserves the task's current criteria, text replaces them (\"\" records that there are none worth stating), and --clear-acceptance-criteria removes them, which is why clearing cannot be combined with either form. Expect to use it after creation — what proves a task done is often only clear once the work is understood. The server accepts up to 4,000 characters. --acceptance-criteria-file reads the replacement from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream.", Mutates: true},
+	{Tool: "task_update", Argv: []string{"orbit", "task", "update"}, Usage: "orbit task update [task-id] [options]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--title <text>", "--description <text> | --description-file -", "--status <OPEN|IN_PROGRESS|DONE|CANCELLED|FAILED> (DONE is refused; satisfy the task's declared criterion instead)", "--assignee-id <id> | --clear-assignee", "--list-id <id> | --clear-list", "--project <id> | --no-project (projectId: which project this task is filed under — how a mis-filing is corrected once the task exists. --no-project takes it out of every project, --project files it under another one. The ACCOUNT OWNER writes either directly; a session acting under a project scope is refused UNMAPPED_PROJECT_WORK for the first and PROJECT_SCOPE_MISMATCH for the second unless it asks for either with --handoff-reason, which files a request, answers CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING and leaves the task where it is. The owner's confirmation moves the task at once, with nothing to send again; read the request with `orbit project crossings` — no agent answers it)", "--handoff-reason <text> (handoff: ASK for the move --project or --no-project names, and why. Needs one of the two — a move has to say where it is going, and --no-project asks for the task to be taken out of every project, from the project it is in and with no --criterion-key — and carries no authority: it files a MOVE_TASK request, and the task stays where it is until the ACCOUNT OWNER confirms it, which moves the task at once with nothing to send again. Only a session whose own project is the move's source or its target may ask, any other is refused PROJECT_SCOPE_MISMATCH; the request carries --project, --handoff-reason and optionally --criterion-key, a criterion of the TARGET project that the task declares once moved, while what it declares in its current project is withdrawn. Out of a settled (DONE or CANCELLED) project only a task serving none of that project's acceptance criteria may move; into a settled project nothing may (PROJECT_REOPEN_REQUIRED))", "--parent-task-id <id> | --clear-parent (move this task under that task, or detach it; same project, never itself or one of its own subtasks)", "--verifies-task-id <id> | --clear-verifies (point this task at the task it verifies, or detach it; refused once this verification has concluded anything)", "--due-date <ISO date> | --clear-due-date", "--run-at <ISO 8601 date-time> | --clear-run-at (runAt: set or move this task's one-time scheduled start, or cancel it; passing neither leaves it as it is)", engineArgument() + " | --clear-engine (pin the CLI its runs use, or clear only that pin; named alone it keeps the provider pin, which then has to run on it)", "--provider <slug> | --clear-provider (pin where their credential comes from, or clear only that pin; named alone it pins the engine it runs on by default too)", "--model <model> | --clear-model", "--acceptance-criteria <text> | --acceptance-criteria-file - | --clear-acceptance-criteria (replaces what would settle that this task is done; max 4,000 characters)", "--criterion-key <key> | --clear-criterion-key (criterionKey: which of the PROJECT's stated acceptance criteria this task serves, as a key from project_get; re-sending the same key re-records that criterion's CURRENT revision, which is how work declared against wording that has since moved is brought up to date, and clearing takes the declaration back without touching the task)", "--codeless[=true|false] (codeless: declare that this task produces no code, which takes it out of its acceptance criterion's landing, or take the declaration back with =false; declaring needs --codeless-reason and is refused for a task that already has commits of its own)", "--codeless-reason <text> (codelessReason: why this task produces no code; required when the call turns the task codeless, stored on the task beside the declaration)", "--depends-on <id[,id...]> (repeatable; replaces all)", "--clear-dependencies", "--label <labels[,labels...]> (repeatable; replaces all) | --clear-labels", "--auto-run-when-ready[=true|false] (autoRunWhenReady: start the task without a manual start once it is ready. " + taskAutoRunUnfiledNoPrerequisites + ")", "--priority <int> | --clear-priority (priority: where this task stands in its list's queue — when the list has more ready tasks than free slots, the server's automatic dispatch gives the next slot to the highest priority first; 0 is the default and equal priorities keep the order they had, a negative value goes after everything left at 0; it starts nothing and gets past no gate, and --clear-priority returns it to 0)", "--completion-policy <MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED> (how this task's completion is decided once it has subtasks)", "--verdict <PASS|FAIL|INCONCLUSIVE> | --clear-verdict (this VERIFICATION task's conclusion about the task it verifies; revoking a PASS reopens a subject VERIFICATION_PASSED had completed)", "--superseded-by-task-id <id> | --clear-superseded ( the later attempt that replaced this one; only a CANCELLED or FAILED task may name one, and it must be in the same project)", "--terminal-reason <SUPERSEDED|ABANDONED> | --clear-terminal-reason (terminalReason: why this task stopped, when its status alone does not say)", "--json"}, Description: "Update a task. Only the flags you pass are sent, so a partial edit never blanks the rest of the task. --project with --handoff-reason asks for a move rather than making one: the request waits for the account owner, and their confirmation moves the task, with nothing to send again. Direct status DONE is refused for every actor; the structured refusal names the declared EXECUTABLE, VERIFICATION, or EVIDENCE_JUDGMENT path. FAILED remains writable as a run's conservative self-report. --parent-task-id moves the task under another task you own and --clear-parent detaches it, which is how a decomposition is corrected once the tasks exist rather than by deleting and recreating them; the parent must be in the same project, and neither a task itself nor one of its own subtasks may be named (both close a loop). It is membership, not ordering — when a task runs is --depends-on. --acceptance-criteria replaces what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal rather than this one task. It is a whole-field replacement: omitting it preserves the task's current criteria, text replaces them (\"\" records that there are none worth stating), and --clear-acceptance-criteria removes them, which is why clearing cannot be combined with either form. Expect to use it after creation — what proves a task done is often only clear once the work is understood. The server accepts up to 4,000 characters. --acceptance-criteria-file reads the replacement from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream.", Mutates: true},
 	{Tool: "task_reopen", Argv: []string{"orbit", "task", "reopen"}, Usage: "orbit task reopen [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Description: "Take a stopped task — DONE, CANCELLED or FAILED — back to OPEN in place, so this same task carries the next attempt instead of a new one being filed. History is kept (evidence, comments, dependencies, the project it is filed under, its criterion declaration); the run's progress is not, because reopening starts a new lifecycle epoch. A SUPERSEDED/ABANDONED retirement is cleared in the same write, which is what makes a replaced attempt runnable again — Run refuses one while that record stands. Refusals are the server's own and pass through unread: a verification task carrying a verdict is told to revoke it first.", Mutates: true},
 	{Tool: "task_delete", Argv: []string{"orbit", "task", "delete"}, Usage: "orbit task delete [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},
 	{Tool: "task_start", Argv: []string{"orbit", "task", "start"}, Usage: "orbit task start [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},

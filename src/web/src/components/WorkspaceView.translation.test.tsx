@@ -257,7 +257,7 @@ describe('the composer tag (6A)', () => {
     await mount();
     await waitForUi(() => expect(tag()?.textContent).toBe('Chinese → English'));
     await act(async () => tag()!.click());
-    expect(locations).toContain('/settings#translation');
+    expect(locations).toContain('/settings/general');
   });
 
   it('names the language the account picked', async () => {

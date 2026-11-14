@@ -13,7 +13,9 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
     case toolCall(ToolCard)
     /// A turn stopped short. `runnerRestart`: nobody pressed Stop — the runner restarted under the
     /// turn and cut it off (`TranscriptReducer.cutByRunnerRestart`), so the row says that instead.
-    case interrupt(id: String, seq: Int, runnerRestart: Bool = false)
+    /// `runnerUpdate`: the owner's Update Now cut it (`reason: runner_update`), and the row names the
+    /// release it updated to (`TranscriptReducer.cutByRunnerUpdate`).
+    case interrupt(id: String, seq: Int, runnerRestart: Bool = false, runnerUpdate: RunnerUpdateCut? = nil)
     case error(id: String, message: String)
     /// A sign-in failure, rendered as a remedy card rather than an error line: the runtime reports
     /// it as ordinary assistant text (or an `error` event, when the engine never got to spawn), but
@@ -26,12 +28,17 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
     /// A heads-up carried on a `system` event (`payload.notice`): the turn worked, but something
     /// about it needs saying — the session moved to another account in its pool, fell back to the
     /// runner's own login, left edits in the shared checkout. A calm note, not an error: nothing is
-    /// broken (web parity: `NoticeNode`).
-    case notice(id: String, message: String)
+    /// broken (web parity: `NoticeNode`). `accountSwitch`: the session moved to another account
+    /// (`noticeKind: pool-member-switched`), a line `TranscriptSettlement` mutes once it is history.
+    case notice(id: String, message: String, accountSwitch: Bool = false)
     /// A runtime diagnostic its runner marked recoverable: an auxiliary path degraded while the turn
     /// went on (Codex failing to refresh its model catalog, say). Quieter than a notice, as web's
     /// `.chat-notice.chat-diagnostic` draws it: only the mark keeps the warning tone.
     case diagnostic(DiagnosticNotice)
+    /// A main checkout line (docs/main-checkout-git-contract.md §7): the card for files that appeared in
+    /// the main checkout during a worktree turn, or one action's result. Read from a `system` event's
+    /// `noticeKind`, so it never falls back to the generic notice row.
+    case mainCheckout(MainCheckoutNoticeItem)
 
     public var id: String {
         switch self {
@@ -39,14 +46,49 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
         case .assistant(let b): return b.id
         case .thinking(let b): return b.id
         case .toolCall(let c): return c.id
-        case .interrupt(let id, _, _): return id
+        case .interrupt(let id, _, _, _): return id
         case .error(let id, _): return id
         case .authError(let id, _): return id
         case .autoRetry(let n): return n.id
-        case .notice(let id, _): return id
+        case .notice(let id, _, _): return id
         case .diagnostic(let d): return d.id
+        case .mainCheckout(let m): return m.id
         }
     }
+}
+
+/// One `main-checkout-changed` or `main-checkout-action-result` event, decoded.
+public struct MainCheckoutNoticeItem: Equatable, Sendable, Codable, Identifiable {
+    public static let changedKind = "main-checkout-changed"
+    public static let resultKind = "main-checkout-action-result"
+
+    public let id: String
+    public let seq: Int
+    /// The event's own sentence, for anywhere that draws only text.
+    public let notice: String
+    /// Set for the card.
+    public let changed: MainCheckoutChangedNotice?
+    /// Set for a result line.
+    public let result: MainCheckoutActionResult?
+    /// The event's `ts`: when the card was written, which decides whether the heartbeat can speak for it.
+    public var ts: String? = nil
+
+    public init(id: String, seq: Int, notice: String, changed: MainCheckoutChangedNotice? = nil,
+                result: MainCheckoutActionResult? = nil, ts: String? = nil) {
+        self.id = id
+        self.seq = seq
+        self.notice = notice
+        self.changed = changed
+        self.result = result
+        self.ts = ts
+    }
+}
+
+/// What an interrupt row knows of the owner's Update Now that cut its turn: the release the runner
+/// updated to, nil when the runner did not name it.
+public struct RunnerUpdateCut: Equatable, Sendable, Codable {
+    public let targetVersion: String?
+    public init(targetVersion: String?) { self.targetVersion = targetVersion }
 }
 
 /// One recoverable diagnostic, with the repeats of it folded into its row (web parity: `DiagnosticNode`).

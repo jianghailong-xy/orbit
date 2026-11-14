@@ -899,6 +899,40 @@ func TestUpdateEngineSkipsTheCommandWhenAlreadyCurrent(t *testing.T) {
 	}
 }
 
+// An npm-installed Codex with no npm on the service PATH: `codex update` says only "os error 2".
+// The record must say what to install instead, and stay quiet when npm is there after all.
+func TestUpdateEngineNamesTheMissingPackageManager(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	dir := t.TempDir()
+	stub := filepath.Join(dir, providerCodex)
+	if err := os.WriteFile(stub, []byte("#!/bin/sh\necho 'codex-cli 0.159.2'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"version":"0.169.0"}`))
+	}))
+	defer feed.Close()
+	spec := engineSpec{
+		name: "Codex", bin: providerCodex, latestURL: feed.URL, latestField: "version",
+		updateCmd: "echo 'Updating Codex via `npm install -g @openai/codex`...'; echo 'Error: No such file or directory (os error 2)' >&2; exit 1",
+	}
+
+	rec, _ := updateEngine(context.Background(), spec, dir, nil)
+	want := "0.159.2 → 0.169.0: Codex updates itself with npm, and npm isn't on this runner's PATH. " +
+		"Install npm on this machine (on Debian or Ubuntu: `sudo apt install npm`), then press Update Engines Now."
+	if rec.Status != updateFailed || rec.Message != want {
+		t.Fatalf("record = %+v, want message %q", rec, want)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "npm"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ = updateEngine(context.Background(), spec, dir, nil)
+	if !strings.HasSuffix(rec.Message, "Error: No such file or directory (os error 2)") {
+		t.Fatalf("with npm on PATH the message = %q, want codex's own words", rec.Message)
+	}
+}
+
 // The counterpart: a machine that is behind still runs its updater, and what it reports names the
 // version it was reaching for. "Update timed out" is unactionable; "2.1.226 → 2.1.228" is not.
 func TestUpdateEngineNamesTheVersionItWasFetching(t *testing.T) {
@@ -951,6 +985,66 @@ func TestEngineOutputProgress(t *testing.T) {
 	}
 	if updateErrDetail(errors.New("exit status 1"), flood.bytes()) != "npm error code EACCES" {
 		t.Fatal("the tail dropped the line that names the cause")
+	}
+}
+
+// An updater that stops to ask a question leaves a tail that reads like progress — bytes, then
+// silence — unless the message quotes it. This is the tail of `opencode upgrade` on a machine
+// whose npm prefix no longer holds the install: a spinner, then "Install anyways?".
+func TestEngineOutputLastLinesQuotesTheQuestion(t *testing.T) {
+	out := &engineOutput{}
+	_, _ = out.Write([]byte("\x1b[0m\n  ⠀  ▄\n\x1b[?25l│\n⠋  Upgrading\x1b[999D\x1b[J⠙  Upgrading\x1b[999D\x1b[J"))
+	_, _ = out.Write([]byte("\n◇  opencode is installed to /usr/lib/node_modules/opencode-ai and may be managed by a package manager\n│\n●  Install anyways?\n│  ● Yes\n│  ○ No\n└\n"))
+
+	if got, want := out.lastLines(engineOutputQuoteLines, engineOutputQuoteRunes), "● Install anyways? · │ ● Yes · │ ○ No"; got != want {
+		t.Fatalf("lastLines = %q, want %q", got, want)
+	}
+	if strings.ContainsRune(out.lastLines(engineOutputQuoteLines, engineOutputQuoteRunes), '\x1b') {
+		t.Fatal("the quote kept a terminal escape")
+	}
+	if got := (&engineOutput{}).lastLines(engineOutputQuoteLines, engineOutputQuoteRunes); got != "" {
+		t.Fatalf("a silent command quoted %q", got)
+	}
+	// Long tails are clipped rather than carried whole into a heartbeat-sized message.
+	flood := &engineOutput{}
+	_, _ = flood.Write([]byte(strings.Repeat("word ", 500)))
+	if got := flood.lastLines(engineOutputQuoteLines, engineOutputQuoteRunes); len([]rune(got)) > engineOutputQuoteRunes+1 {
+		t.Fatalf("quoted %d runes", len([]rune(got)))
+	}
+}
+
+// The timeout's message has to name the question, because the question is the failure. Live on
+// vmi3129740: `opencode upgrade` asked "Install anyways?" every 30 minutes and the record said
+// only "it printed 543 B, last 4m31s ago" — a stall nobody could act on.
+func TestUpdateEngineTimeoutQuotesWhatItWasWaitingOn(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	dir := t.TempDir()
+	stub := filepath.Join(dir, providerOpenCode)
+	if err := os.WriteFile(stub, []byte("#!/bin/sh\necho '1.18.35'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("1.19.5"))
+	}))
+	defer feed.Close()
+
+	// The prompt, then the wait it turns into with no TTY to answer from. The stub's directory
+	// leads the service PATH; the rest of it is the real one, so the updater has its `sleep`.
+	asking := `printf '\033[?25l│\n●  Install anyways?\n│  ● Yes\n│  ○ No\n└\n'; sleep 60`
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	rec, line := updateEngine(ctx, engineSpec{
+		name: "OpenCode", bin: providerOpenCode, updateCmd: asking, latestURL: feed.URL,
+	}, dir+":"+os.Getenv("PATH"), nil)
+
+	if rec.Status != updateFailed {
+		t.Fatalf("record = %+v, want a failure", rec)
+	}
+	if !strings.Contains(rec.Message, "Install anyways?") {
+		t.Fatalf("message = %q, want the question the command stopped on", rec.Message)
+	}
+	if !strings.Contains(rec.Message, "was still running after") || !strings.Contains(line, "timed out") {
+		t.Fatalf("message = %q, line = %q, want both to report the stopped command", rec.Message, line)
 	}
 }
 
@@ -1341,5 +1435,61 @@ func TestEngineUpdateRefreshesTheCatalogBeforeASlowEngineFinishes(t *testing.T) 
 			default:
 			}
 		})
+	}
+}
+
+// The report prints the number, not the CLI's whole --version line: "2.1.323 (Claude Code)" put
+// the engine's name in twice, and a probe that didn't answer left "already up to date ()".
+func TestUpdateEngineReportLinesPrintVersionNumbers(t *testing.T) {
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("2.1.229"))
+	}))
+	defer feed.Close()
+	for _, c := range []struct {
+		name, stub, updateCmd, want string
+	}{
+		{"already current", "echo '2.1.229 (Claude Code)'", "exit 1",
+			"Claude Code — already up to date (2.1.229)"},
+		{"updater moved nothing", "echo '2.1.228 (Claude Code)'", "true",
+			"Claude Code — already up to date (2.1.228)"},
+		{"version unreadable", "exit 1", "true",
+			"Claude Code — updater finished, but its version couldn't be read"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("ORBIT_HOME", t.TempDir())
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, providerClaude), []byte("#!/bin/sh\n"+c.stub+"\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			_, line := updateEngine(context.Background(), engineSpec{
+				name: "Claude Code", bin: providerClaude, updateCmd: c.updateCmd, latestURL: feed.URL,
+			}, dir, nil)
+			if line != c.want {
+				t.Fatalf("line = %q, want %q", line, c.want)
+			}
+		})
+	}
+}
+
+func TestUpdateEngineUpdatedLinePrintsVersionNumbers(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	dir := t.TempDir()
+	stub := filepath.Join(dir, providerClaude)
+	if err := os.WriteFile(stub, []byte("#!/bin/sh\necho '2.1.228 (Claude Code)'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("2.1.229"))
+	}))
+	defer feed.Close()
+	// The "update" rewrites the stub to answer with the new version.
+	update := "printf '#!/bin/sh\\necho \"2.1.229 (Claude Code)\"\\n' > " + stub
+
+	_, line := updateEngine(context.Background(), engineSpec{
+		name: "Claude Code", bin: providerClaude, updateCmd: update, latestURL: feed.URL,
+	}, dir, nil)
+
+	if want := "Claude Code updated 2.1.228 → 2.1.229"; line != want {
+		t.Fatalf("line = %q, want %q", line, want)
 	}
 }

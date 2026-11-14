@@ -954,9 +954,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// run_event held the message. Keep the last one so finalize can carry it.
 	var lastErrMu sync.Mutex
 	lastErrorMessage := ""
-	// Baseline for the shared-checkout warning below, taken before this session runs anything
-	// so pre-existing dirt is never blamed on it. Nil unless the session is isolated.
-	sharedDirt := watchSharedCheckout(job.WT)
+	// Baseline for the main-checkout card below, taken before this session runs anything so
+	// pre-existing changes are never blamed on it. Nil unless the session is isolated.
+	mainCheckout := watchMainCheckout(job.WT)
 	// The session's background work (newBgTailer below), declared ahead of emitThrough, which
 	// announces its runner-hosted jobs again behind every `resumed` handshake.
 	var bg *bgTailer
@@ -964,8 +964,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// once emitFor exists: the server's next-message guess for an engine without one
 	// (orbit_prompt_suggestion.go), filed against the turn it follows like the engine's own.
 	var requestOrbitSuggestion func(turnID string, at int)
-	// emitThrough buffers one event, filed against turnID, if gate still admits it.
-	emitThrough := func(gate *eventEmissionGate, turnID, eventType string, payload map[string]interface{}) {
+	// emitOne buffers one event, filed against turnID, if gate still admits it (emitThrough).
+	emitOne := func(gate *eventEmissionGate, turnID, eventType string, payload map[string]interface{}) {
 		// Every owner-request secret this runner holds is scrubbed from every string of the payload before anything
 		// below reads it, the spool included (secret_store.go).
 		payload = runnerSecrets().scrubPayload(payload)
@@ -1015,6 +1015,17 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// slow post must never stall draining claude's stdout (backpressure freeze).
 		// The 250ms flush goroutine owns all network sends.
 	}
+	// The tool calls each turn has open, so a runner stop that cuts the turn answers them in the
+	// transcript before its interrupt (interrupted_tool_calls.go): every engine's events pass here.
+	toolCalls := &interruptedToolCalls{}
+	// emitThrough buffers one event, filed against turnID, if gate still admits it — preceded, for a
+	// runner stop's interrupt, by the synthetic results of the calls that turn leaves open.
+	emitThrough := func(gate *eventEmissionGate, turnID, eventType string, payload map[string]interface{}) {
+		for _, result := range toolCalls.observe(turnID, eventType, payload) {
+			emitOne(gate, turnID, evToolResult, result)
+		}
+		emitOne(gate, turnID, eventType, payload)
+	}
 	// emitFor files one event against a turn the caller names, instead of against whatever
 	// the attribution cursor happens to hold. Only one thing needs it: a steer's own `user`
 	// event belongs to the steer's turn, while every byte the engine is streaming at that
@@ -1050,6 +1061,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	emit := emitOn(emissionGate)
 	// Where a file left out of a commit for holding a secret is told about (secretUnstagedWarning).
 	defer registerSecretWarnings(sessionID, emit)()
+	// Where a main checkout result line the control plane queued as a `notice` turn is written (main_checkout_notice.go).
+	defer registerMainCheckoutNotices(sessionID, emitFor)()
 
 	// What the stream still holds, left in the spool by an earlier process or not yet seen stored for an
 	// earlier supervisor of the session, is stored before this supervisor emits anything: it was written
@@ -1153,7 +1166,18 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		defer cancelReport()
 		return flushWithContext(reportCtx)
 	})
-	bg.adoptJobs(pool.takeHostlessJobs(sessionID))
+	if adopted := pool.takeHostlessJobs(sessionID); len(adopted) > 0 {
+		bg.adoptJobs(adopted)
+		// Announced before this session's first inbox fetch: the control plane writes the turn it hands
+		// out with a <background-jobs> note, and a job last reported by the image before reads there as
+		// one whose runner went away, ended. The Update Now drill (2026-11-12) caught a Claude session
+		// told its adopted ticker had ended while the same jobs on a Codex session read as running.
+		flushCtx, cancelFlush := context.WithTimeout(context.Background(), bgHandedOnReportTimeout)
+		if err := flushWithContext(flushCtx); err != nil {
+			logln("could not report the background jobs adopted for", sessionID, "before its first turn:", err)
+		}
+		cancelFlush()
+	}
 	// Claude records background-shell completions in its transcript even while the session is
 	// idle, but only streams them to stdout on the next turn; tail the transcript so a shell
 	// that finishes between turns still clears from the "Background processes" tray. (Claude
@@ -1238,12 +1262,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// terminal are persisted but no longer broadcast — the notice would exist and nobody
 		// would see it. Every runtime's turn ends through this one function, so this covers all
 		// of them; non-isolated sessions have no watch and skip it entirely.
-		if paths := sharedDirt.newlyDirty(); len(paths) > 0 {
-			emit(evSystem, map[string]interface{}{
-				"notice":     sharedCheckoutNotice(job.WT.RepoDir, effectiveBranch(job.WT), paths),
-				"noticeKind": "shared-checkout-dirty",
-				"paths":      paths,
-			})
+		if notice := mainCheckout.changed(); notice != nil {
+			emit(evSystem, notice.payload())
 		}
 		completionCtx := turnAckCtx
 		cancelCompletion := func() {}
@@ -1312,7 +1332,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				// AWAITING_INPUT, a new send/claim may reach pool.activate before this
 				// response returns; generation matching prevents this old ack from
 				// releasing the new claim's permit.
-				permitGeneration = pool.permitGeneration(live)
+				permitGeneration = pool.beginTurnCompletion(live)
 				// What the turn wrote — the engine's transcript, its Git work — is on the volume
 				// before the control plane hears the turn is over.
 				syncManagedVolume("a turn", execDir)
@@ -1331,6 +1351,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			// The permit went straight to a queued follow-up; a drain for an update holds it back.
 			pool.holdFollowUpForUpdate(live, permitGeneration)
 		}
+		pool.endTurnCompletion(live)
 		return err
 	}
 	// The server changes PENDING -> RUNNING before returning a claim and may wake
@@ -1849,6 +1870,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	if runtimeProvider(job) == providerClaude {
 		finalizeRequest.ClaudeSessionID = job.SessionUUID
 	}
+	// A codeless run's detached checkout goes, or becomes job.WT on its branch, before the report is made.
+	if job.Detached != nil {
+		finalizeCodelessCheckout(job)
+	}
 	if job.WT != nil {
 		finalizeWorktreeReport(&finalizeRequest, job.SessionID, job.WT, status)
 	}
@@ -2071,18 +2096,32 @@ func watchShutdownDrain(procCtx, shutdownCtx context.Context, pending <-chan str
 	pollCancel()
 	tk := time.NewTicker(drainPollInterval)
 	defer tk.Stop()
+	// The owner's Update Now cuts a turn in the engine at once (stopDrainBudget); a shell turn the
+	// runner runs itself — a `!cmd`, an acceptance command whose -1 would fail its task — still gets
+	// the whole drain.
+	turnDeadline := time.After(stopDrainBudget(shutdownCtx, timeout))
 	deadline := time.After(timeout)
 	for len(pending) > 0 || shells.Load() > 0 {
 		select {
 		case <-tk.C:
+			continue
 		case <-procCtx.Done():
 			return
+		case <-turnDeadline:
+			turnDeadline = nil
+			if len(pending) == 0 {
+				continue
+			}
 		case <-deadline:
-			emit(evInterrupt, map[string]interface{}{"reason": "runner_restart"})
-			logln("drain timeout for", sessionID+"; tearing down mid-turn")
-			procCancel()
-			return
 		}
+		emit(evInterrupt, stopInterruptPayload(shutdownCtx))
+		if stoppingForUpdateNow(shutdownCtx) {
+			logln("update now for", sessionID+"; interrupting the turn in flight")
+		} else {
+			logln("drain timeout for", sessionID+"; tearing down mid-turn")
+		}
+		procCancel()
+		return
 	}
 	procCancel()
 }
@@ -3092,10 +3131,14 @@ scanLoop:
 			// A Claude API error — or an expired sign-in — returns as assistant text + a
 			// "success" result with no is_error, so it slips past resultFrom. Treat the turn
 			// as failed so the control plane surfaces it (and reclaims a task session)
-			// instead of parking the session as if the turn succeeded.
+			// instead of parking the session as if the turn succeeded. A failure of the
+			// connection to the API — Cloudflare's block page, a dropped socket — is neither
+			// an API error nor a sign-in failure and is named separately: it is still a dead
+			// turn (control plane arms the retry from it).
 			if turnStatus == stSucceeded &&
 				(isAPIError(r.Result) || isAPIError(lastAssistantText) ||
-					isAuthError(r.Result) || isAuthError(lastAssistantText)) {
+					isAuthError(r.Result) || isAuthError(lastAssistantText) ||
+					isConnectionFailure(r.Result) || isConnectionFailure(lastAssistantText)) {
 				turnStatus = stFailed
 			}
 			lastAssistantText = ""

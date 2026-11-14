@@ -13,6 +13,10 @@ const REASON_MAX = 1000;
 const DIR_MAX = 1024;
 const VERSION_MAX = 64;
 const TURNS_MAX = 10_000;
+/** A quiet window longer than a day is not one a runner means. */
+const QUIET_WINDOW_MAX_SECONDS = 86_400;
+/** A restart that took longer than a day is not one the Updated card names. */
+const LAST_UPDATE_MAX_SECONDS = 86_400;
 
 /**
  * Normalize the self-update report a runner sent (RunnerHeartbeatRequest.selfUpdate) — on the way
@@ -47,6 +51,12 @@ export function sanitizeRunnerSelfUpdate(value: unknown): RunnerSelfUpdate | nul
   const postponedUntil = phase ? isoTime(raw.postponedUntil) : undefined;
   const turnsInFlight = phase ? count(raw.turnsInFlight) : undefined;
   const turnsAtDrain = phase ? count(raw.turnsAtDrain) : undefined;
+  const interruptedTurns = phase ? count(raw.interruptedTurns) : undefined;
+  // The last update's restart, beside lastUpdatedAt: the Updated card's "Took 34 s".
+  const lastUpdateSeconds = wholeNumber(raw.lastUpdateSeconds, LAST_UPDATE_MAX_SECONDS);
+  const lastUpdateInterruptedTurns = count(raw.lastUpdateInterruptedTurns);
+  // With or without a phase: About's "installs when the runner has been idle for …" reads it.
+  const quietWindowSeconds = wholeNumber(raw.quietWindowSeconds, QUIET_WINDOW_MAX_SECONDS);
   return {
     state: state as RunnerSelfUpdateState,
     ...(reason ? { reason } : {}),
@@ -61,6 +71,10 @@ export function sanitizeRunnerSelfUpdate(value: unknown): RunnerSelfUpdate | nul
     ...(postponedUntil ? { postponedUntil } : {}),
     ...(turnsInFlight ? { turnsInFlight } : {}),
     ...(turnsAtDrain ? { turnsAtDrain } : {}),
+    ...(interruptedTurns ? { interruptedTurns } : {}),
+    ...(lastUpdateSeconds ? { lastUpdateSeconds } : {}),
+    ...(lastUpdateInterruptedTurns ? { lastUpdateInterruptedTurns } : {}),
+    ...(quietWindowSeconds ? { quietWindowSeconds } : {}),
   };
 }
 
@@ -68,6 +82,16 @@ export function sanitizeRunnerSelfUpdate(value: unknown): RunnerSelfUpdate | nul
 function isoTime(value: unknown): string | undefined {
   const at = text(value, 64);
   return at && !Number.isNaN(Date.parse(at)) ? new Date(at).toISOString() : undefined;
+}
+
+/**
+ * Whether a runner whose heartbeat says draining is stopping rather than updating. It drains for a
+ * release only in the phases `draining` (past the deferral limit) and `restarting` (installing it);
+ * any other drain is its process finishing its turns before it exits on a stop signal, whatever
+ * release may also be waiting (runner-go runloop: `draining := loopCtx.Err() != nil || …`).
+ */
+export function runnerDrainIsStop(report: Pick<RunnerSelfUpdate, 'phase'> | null | undefined): boolean {
+  return report?.phase !== 'draining' && report?.phase !== 'restarting';
 }
 
 /**
@@ -85,6 +109,7 @@ export function queuedRunnerUpdateOf(row: {
   if (row.queuedReason !== 'runner_updating') return null;
   const report = sanitizeRunnerSelfUpdate(row.queuedRunnerSelfUpdate);
   return {
+    stopping: runnerDrainIsStop(report),
     targetVersion: report?.targetVersion ?? null,
     since: report?.drainingSince ?? row.queuedSince?.toISOString() ?? null,
     turns: row.queuedRunnerTurns ?? [],
@@ -93,7 +118,12 @@ export function queuedRunnerUpdateOf(row: {
 
 /** A turn count: a whole number from 1 to TURNS_MAX; 0 is the same as absent. */
 function count(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= TURNS_MAX ? value : undefined;
+  return wholeNumber(value, TURNS_MAX);
+}
+
+/** A whole number from 1 to max; 0 is the same as absent. */
+function wholeNumber(value: unknown, max: number): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= max ? value : undefined;
 }
 
 function text(value: unknown, max: number): string | undefined {

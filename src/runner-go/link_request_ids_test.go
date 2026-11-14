@@ -302,18 +302,31 @@ func TestAFetchUnderALostRequestIDCanGoUnansweredToo(t *testing.T) {
 }
 
 // The answer to a claim is lost after the control plane claimed a session, and the link stays down past the claim
-// call's deadline: the claims while it is down, and the first once it is back, go under the lost claim's request id,
-// which the control plane answers with the session it claimed (QueueService.trySessionClaim). It comes back once. Every
-// claim answered after it, with nothing, with the session or with a refusal, moves the next to a new id; one that got
-// no answer keeps it, and is asked again with no hint saying anything waits.
+// call's deadline: the claims while it is down, and those once it is back, go under the lost claim's request id until
+// one gets an answer, which the control plane gives with the session it claimed (QueueService.trySessionClaim). It
+// comes back once. How many claims that takes is no promise: the first once the link is back can see its answer come
+// after its call's deadline, which waiting for the link used up, as the "unanswered once the link is back" case forces.
+// Every claim answered after it, with nothing, with the session or with a refusal, moves the next to a new id; one that
+// got no answer keeps it, and is asked again with no hint saying anything waits.
 func TestALostClaimAnswerComesBackAfterTheLinkWasDownLongerThanACall(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		late int32 // claims under the lost id, once the link is back, that get no answer either
+	}{{"answered once the link is back", 0}, {"unanswered once the link is back", 1}} {
+		t.Run(c.name, func(t *testing.T) { testALostClaimAnswerComesBack(t, c.late) })
+	}
+}
+
+func testALostClaimAnswerComesBack(t *testing.T, late int32) {
 	outage := linkOutageForTest(t)
 	shortenLinkWaits(t, 200*time.Millisecond, linkApprovalRecheck, linkAfterSeqWait)
 	r := newLinkWorkRig(t)
 	var mu sync.Mutex
 	claimedBy, silentFor := "", ""
-	others := 0
+	others, seen := 0, map[string]bool{}
 	var lostAt time.Time
+	var unanswered atomic.Int32
+	unanswered.Store(late)
 	r.g.backend = func(c *fakeWorkConn, rpc *linkpb.Rpc) *linkpb.RpcResult {
 		if rpc.GetTunnel().GetPath() != "/runner/sessions/claim" {
 			return fakeWorkAnswer(rpc, 200, `{}`)
@@ -328,10 +341,17 @@ func TestALostClaimAnswerComesBackAfterTheLinkWasDownLongerThanACall(t *testing.
 			c.drop()
 			return nil
 		case id == claimedBy:
+			if unanswered.Add(-1) >= 0 {
+				return nil // its answer comes after its call's deadline: no answer, the connection up
+			}
 			return fakeWorkAnswer(rpc, 200, `{"sessionId":"session-c","title":"claimed before the link went down"}`)
 		case id == silentFor:
 			return fakeWorkAnswer(rpc, http.StatusServiceUnavailable, `{"code":"DATABASE_UNAVAILABLE","retryable":true}`)
 		default:
+			if seen[id] {
+				return fakeWorkAnswer(rpc, 200, `null`) // asked again under its id: its first answer came too late
+			}
+			seen[id] = true
 			if others++; others == 2 {
 				silentFor = id
 				return nil // no answer, the connection up: the call's deadline passes
@@ -372,15 +392,28 @@ func TestALostClaimAnswerComesBackAfterTheLinkWasDownLongerThanACall(t *testing.
 	}
 	t.Logf("session-c came back %s after its claim's answer was lost and the link went down for %s, %s after the link was back",
 		handedBack.Sub(lost).Round(time.Millisecond), outage, handedBack.Sub(back).Round(time.Millisecond))
+	// The claims under the lost id: the lost one, then those once the link was back, the last of them answered.
 	calls := r.g.rpcsTo("/runner/sessions/claim")
-	if len(calls) != 2 || calls[0].requestID != calls[1].requestID || calls[1].at.Before(back) {
-		t.Fatalf("claims %+v: want the lost one, then the first once the link was back, under its id", calls)
+	under := 1
+	for under < len(calls) && calls[under].requestID == calls[0].requestID {
+		under++
+	}
+	if under < 2 || calls[1].at.Before(back) {
+		t.Fatalf("claims %+v: want the lost one, then those once the link was back under its id until one was answered", calls)
+	}
+	if under != len(calls) {
+		t.Fatalf("claims %+v: one went under a new id before the session came back", calls)
+	}
+	if want := 2 + int(late); under < want {
+		t.Fatalf("claims %+v: %d under the lost id, want at least %d with %d left unanswered once the link was back", calls, under, want, late)
 	}
 	if claims.kept() {
 		t.Fatal("the answered claim kept its request id")
 	}
 
 	// After it: answered with nothing (new id), no answer (kept, asked again with no hint), a refusal (new id), nothing.
+	// Each answer can come after its claim's shortened deadline on a loaded host: that claim keeps its id and is asked
+	// again under it until one is answered (answered), as the claim after the silent one is.
 	ask := func(want string) (string, error) {
 		t.Helper()
 		before := len(r.g.rpcsTo("/runner/sessions/claim"))
@@ -395,8 +428,20 @@ func TestALostClaimAnswerComesBackAfterTheLinkWasDownLongerThanACall(t *testing.
 		calls := r.g.rpcsTo("/runner/sessions/claim")
 		return calls[len(calls)-1].requestID, err
 	}
+	answered := func(want, id string, err error) (string, error) {
+		t.Helper()
+		for claims.kept() {
+			again, e := ask(want + ", again under its id")
+			if again != id {
+				t.Fatalf("the claim %s that got no answer was asked again under %s, not %s", want, again, id)
+			}
+			err = e
+		}
+		return id, err
+	}
 	r.m.gates.markClaim() // a ClaimHint
 	afterIt, err := ask("after the session came back")
+	afterIt, err = answered("after the session came back", afterIt, err)
 	if err != nil || afterIt == calls[0].requestID {
 		t.Fatalf("the claim after the answered one went under %s (%v), want a new id", afterIt, err)
 	}
@@ -406,11 +451,13 @@ func TestALostClaimAnswerComesBackAfterTheLinkWasDownLongerThanACall(t *testing.
 		t.Fatalf("the claim no backend answered went under %s (%v; kept %v), want a new id, kept", silent, err, claims.kept())
 	}
 	again, err := ask("again, with no hint") // nothing marked it: the claim that got no answer did
+	again, err = answered("again, with no hint", again, err)
 	if again != silent || err == nil || claims.kept() {
 		t.Fatalf("the claim after the unanswered one went under %s (%v; kept %v), want %s, refused, not kept", again, err, claims.kept(), silent)
 	}
 	r.m.gates.markClaim()
 	last, err := ask("after the refusal")
+	last, err = answered("after the refusal", last, err)
 	if err != nil || last == silent {
 		t.Fatalf("the claim after the refused one went under %s (%v), want a new id", last, err)
 	}
@@ -439,7 +486,7 @@ func TestTheClaimLoopHoldsItsReconciliationsWhileAClaimWaitsForItsAnswer(t *test
 	for _, want := range []string{
 		"if !reclaimRetryAt.IsZero() && time.Now().After(reclaimRetryAt) && !claims.kept() && startupStarts.finished() {",
 		"if !lateClaimCheckAt.IsZero() && time.Now().After(lateClaimCheckAt) && !claims.kept() && startupStarts.finished() {",
-		"job, err := t.claimSession(loopCtx, &claims)",
+		"job, err := t.claimSession(loopCtx, &claims, scope...)",
 	} {
 		if !strings.Contains(inLoop, want) {
 			t.Errorf("the claim loop no longer reads: %s", want)

@@ -84,7 +84,7 @@ class DshSessionShellTest : ComposerShellTest() {
         await { ComposerShell.calls.contains("POST sessions/${ComposerShell.SESSION}/retry-message") }
     }
 
-    /** Every DeepSeek key runs Harness (contract §2.1), so another one is not this session's: the way to a key is Infrastructure's API
+    /** Every DeepSeek key runs Harness (contract §2.1), so another one is not this session's: the way to a key is Machines & models' API
      * keys, where one is connected or turned back on (web `onEditDshKey`) — no longer the retired `deepseek-harness` form. */
     @Test fun aSessionWithNoKeyIsSentToConnectOne() {
         onHarness()

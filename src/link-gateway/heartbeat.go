@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unique"
+	"unsafe"
 
 	"orbit/link-gateway/linkpb"
 )
@@ -34,10 +36,27 @@ type factCache struct {
 	bytes  int
 }
 
+// cachedFact is one fact a connection holds. Its digest and content are interned: the shared parts of every runner's
+// heartbeat (engines, model catalogs, commands: about 7 KB) are alike across most runners, and are held once for all
+// the connections that sent them rather than once each.
 type cachedFact struct {
-	sha  string
-	json []byte
+	sha  unique.Handle[string]
+	json unique.Handle[string]
 }
+
+// newCachedFact interns a fact's digest and content.
+func newCachedFact(sha string, raw []byte) cachedFact {
+	return cachedFact{sha: unique.Make(sha), json: unique.Make(string(raw))}
+}
+
+// content is the fact's JSON. It shares the interned string's bytes, which nothing may write to: it is only ever
+// read, as a member of the body the heartbeat is forwarded with.
+func (f cachedFact) content() json.RawMessage {
+	v := f.json.Value()
+	return json.RawMessage(unsafe.Slice(unsafe.StringData(v), len(v)))
+}
+
+func (f cachedFact) size() int { return len(f.json.Value()) }
 
 // Bounds on what one connection's cache holds. A fact past them is used for its beat and not kept, so its next
 // digest-only beat asks for it again.
@@ -60,8 +79,8 @@ func (fc *factCache) resolve(facts []*linkpb.Fact, m *gatewayMetrics) (members m
 		}
 		raw := f.GetJson()
 		if len(raw) == 0 {
-			if cached, ok := fc.byKind[kind]; ok && cached.sha == f.GetSha256() {
-				members[kind] = cached.json
+			if cached, ok := fc.byKind[kind]; ok && cached.sha.Value() == f.GetSha256() {
+				members[kind] = cached.content()
 				m.heartbeatFacts.inc("cached")
 			} else {
 				wanted[kind] = true
@@ -84,7 +103,7 @@ func (fc *factCache) resolve(facts []*linkpb.Fact, m *gatewayMetrics) (members m
 			continue
 		}
 		m.heartbeatFacts.inc("whole")
-		fc.keep(kind, cachedFact{sha: strings.ToLower(f.GetSha256()), json: append([]byte(nil), raw...)})
+		fc.keep(kind, newCachedFact(strings.ToLower(f.GetSha256()), raw))
 	}
 	for kind := range wanted {
 		want = append(want, kind)
@@ -95,14 +114,14 @@ func (fc *factCache) resolve(facts []*linkpb.Fact, m *gatewayMetrics) (members m
 
 func (fc *factCache) keep(kind string, f cachedFact) {
 	old, had := fc.byKind[kind]
-	size := fc.bytes + len(f.json)
+	size := fc.bytes + f.size()
 	if had {
-		size -= len(old.json)
+		size -= old.size()
 	}
 	if size > maxFactBytes || (!had && len(fc.byKind) >= maxFactKinds) {
 		if had {
 			// Stale now: it no longer matches what the runner holds.
-			fc.bytes -= len(old.json)
+			fc.bytes -= old.size()
 			delete(fc.byKind, kind)
 		}
 		return
@@ -111,12 +130,16 @@ func (fc *factCache) keep(kind string, f cachedFact) {
 	fc.bytes = size
 }
 
-// onHeartbeat hands the beat to the connection's heartbeat worker. A beat still waiting for its turn is replaced by
-// the newer one: each beat is complete and reconciled level-triggered, so the newest says everything the older did.
+// onHeartbeat hands the beat to the connection's heartbeat worker, which it starts when none is running. A beat still
+// waiting for its turn is replaced by the newer one: each beat is complete and reconciled level-triggered, so the
+// newest says everything the older did.
 func (l *linkState) onHeartbeat(hb *linkpb.Heartbeat) {
 	for {
 		select {
 		case l.beats <- hb:
+			if l.beating.CompareAndSwap(false, true) {
+				go l.heartbeatWorker()
+			}
 			return
 		default:
 		}
@@ -128,14 +151,25 @@ func (l *linkState) onHeartbeat(hb *linkpb.Heartbeat) {
 	}
 }
 
-// heartbeatLoop forwards the connection's heartbeats one at a time, in order.
-func (l *linkState) heartbeatLoop() {
+// heartbeatWorker forwards the connection's heartbeats one at a time, in order, and ends when none is waiting: a
+// connection has a goroutine for its heartbeats only while one is forwarded, a few milliseconds every 30 s, rather
+// than all its life.
+func (l *linkState) heartbeatWorker() {
 	for {
 		select {
 		case <-l.c.ctx.Done():
+			l.beating.Store(false)
 			return
 		case hb := <-l.beats:
 			l.forwardHeartbeat(hb)
+			continue
+		default:
+		}
+		l.beating.Store(false)
+		// A beat that came after the channel was found empty and before beating was cleared started no worker: this
+		// one goes on for it.
+		if len(l.beats) == 0 || !l.beating.CompareAndSwap(false, true) {
+			return
 		}
 	}
 }

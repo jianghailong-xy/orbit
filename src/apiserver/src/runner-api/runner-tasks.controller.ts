@@ -73,6 +73,7 @@ export class RunnerTasksController {
     @Body() dto: CreateTaskDto,
   ) {
     RunnerTasksController.refuseImplicitEvidenceJudgment(dto);
+    if (dto.fork) await this.tasks.assertForkCallerOnRunner(runner.ownerId, runner.id, sessionId);
     const creator = await this.tasks.resolveAgentCreator(runner.ownerId, actingWorkspaceId(workspaceId, legacyAgentId));
     return this.tasks.create(runner.ownerId, dto, creator, sessionId);
   }
@@ -93,6 +94,10 @@ export class RunnerTasksController {
     @Body() dto: CreateTasksBatchDto,
   ) {
     RunnerTasksController.refuseImplicitEvidenceJudgmentBatch(dto);
+    // SR55: a fork comes from the session making the call, on this credential — one check for the batch.
+    if (dto.tasks?.some((item) => item.fork)) {
+      await this.tasks.assertForkCallerOnRunner(runner.ownerId, runner.id, sessionId);
+    }
     const creator = await this.tasks.resolveAgentCreator(runner.ownerId, actingWorkspaceId(workspaceId, legacyAgentId));
     return dto.dryRun
       ? this.tasks.previewPlan(runner.ownerId, dto, creator, sessionId)

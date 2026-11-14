@@ -92,6 +92,21 @@ final class NeedsYouCapsuleWiringTests: XCTestCase {
         XCTAssertTrue(view.contains("Text(\"+\\(more)\")"))
     }
 
+    /// Several waiting (the owner, 2026-11-13, option B of 03-expand.html): folded, the press
+    /// unfolds and the "+N" carries a ⌄; unfolded, one capsule per conversation in `entries`'
+    /// order, each opening its own, the first carrying the ↑ that folds them — a press of its own.
+    func testSeveralWaitingUnfoldIntoOneCapsuleEach() throws {
+        let view = try banner
+        XCTAssertTrue(view.contains("model.needsYouEntries(excluding: excluding)"))
+        XCTAssertTrue(view.contains("if banner.count > 1 { setUnfolded(true) } else { open(banner) }"))
+        XCTAssertTrue(view.contains("if unfolds { Image(systemName: \"chevron.down\")"))
+        XCTAssertTrue(view.contains("fold: index == 0 ? { setUnfolded(false) } : nil"))
+        XCTAssertTrue(view.contains("Image(systemName: \"chevron.up\")"))
+        XCTAssertTrue(view.contains("entries.prefix(NeedsYouLogic.unfoldedLimit)"), "at most five")
+        let model = code(try source("AppModel.swift"))
+        XCTAssertTrue(model.contains("NeedsYouLogic.entries(waiting: needsYouSessions, excluding: focused)"))
+    }
+
     /// Where the press goes elsewhere the capsule carries no chevron — the whole of it is the press;
     /// in the conversation on screen the chevron stays, pointing the way the card lies.
     func testOnlyTheInConversationBarPoints() throws {

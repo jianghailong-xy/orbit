@@ -9,6 +9,7 @@ import { meQuery, type UserPreferences } from '../lib/queries';
 import type { ConfiguredProvider } from '../lib/workspaceDefaults';
 import { PROVIDER_POOLS_KEY, type ProviderPool } from '../lib/providerPools';
 import { SHARED_POOLS_KEY } from '../lib/sharedPools';
+import { CODEX_POOL_ON_CLAUDE_NOTICE } from '../lib/sessionProviderChoices';
 
 /**
  * Smart model selection in the task panel (docs/model-routing-design.md §9; the web mock §2–§3).
@@ -449,6 +450,26 @@ describe('the task pin: an engine, then a credential it runs (board 6)', { timeo
     expect(groupLabels()).toEqual(['Account pools', 'Your keys']);
   });
 
+  /** A Codex pool of one's own, which the server also lists under Claude Code (ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY on). */
+  const mine = {
+    id: 'pool-2', slug: 'my-chatgpt', label: 'My ChatGPT', engine: 'codex', engines: ['codex', 'claude'], resetsAt: null, unavailable: null,
+    members: [{ id: 'm2', slug: 'my-chatgpt', label: 'me@chatgpt', presetSlug: 'openai', enabled: true, planUsage: null, state: 'OK', resetsAt: null, next: true, login: true }],
+  } as unknown as ProviderPool;
+  const chatgpt = key('my-chatgpt', 'My ChatGPT', { runtime: 'codex', presetSlug: 'openai', models: [], defaultModel: null, engines: ['codex', 'claude'] });
+  const foot = () => [...document.body.querySelectorAll('.tdp-pin-foot p')].map((p) => p.textContent);
+
+  it('says under Claude Code’s list what a Codex pool of one’s own risks, as the session picker does', async () => {
+    await mount(detail({ engine: 'claude' }), {}, dshRunner, [...keys, chatgpt], undefined, [mine]);
+    expect((await openField('Provider')).map(words)).toContain('My ChatGPT');
+    expect(foot()).toEqual([CODEX_POOL_ON_CLAUDE_NOTICE]);
+  });
+
+  it('says nothing of it under Codex, the pool’s own CLI', async () => {
+    await mount(detail({ engine: 'codex' }), {}, dshRunner, [...keys, chatgpt], undefined, [mine]);
+    expect((await openField('Provider')).map(words)).toContain('My ChatGPT');
+    expect(foot()).toEqual([]);
+  });
+
   it('pins a credential together with the engine it runs on', async () => {
     await mount(detail(), { lastEngine: 'claude', lastProvider: 'claude' }, dshRunner, keys);
     const options = await openField('Provider');
@@ -477,7 +498,7 @@ describe('the task pin: an engine, then a credential it runs (board 6)', { timeo
     expect(words(field('Provider'))).toContain('env key');
   });
 
-  it('links a Gemini key that needs a runner update to Infrastructure rather than pinning it', async () => {
+  it('links a Gemini key that needs a runner update to its machine’s page rather than pinning it', async () => {
     const gemini: ConfiguredProvider = {
       slug: 'gemini', label: 'Gemini', runtime: 'antigravity', presetSlug: 'gemini', models: [], engines: ['antigravity', 'opencode'],
     };
@@ -488,7 +509,7 @@ describe('the task pin: an engine, then a credential it runs (board 6)', { timeo
     const row = options.find((option) => words(option).startsWith('Gemini'))!;
     expect(words(row)).toContain('Update runner');
     await press(row, 'Gemini needing a runner update');
-    expect(where).toBe('/infrastructure');
+    expect(where).toBe(`/settings/machines/${RUNNER}`);
     expect(patches()).toEqual([]);
   });
 });

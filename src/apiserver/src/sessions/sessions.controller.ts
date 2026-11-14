@@ -28,6 +28,7 @@ import { AllowQueryToken } from '../auth/allow-query-token.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden, PatScope, workspaceConfinement } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
+import { untilStopping } from '../common/graceful-stop';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SetSessionTagsDto } from '../session-tags/dto';
@@ -1193,9 +1194,11 @@ export class SessionsController {
     // the events. The ownership check above rejects a non-owner within a single DB round-trip —
     // long before the first ping fires — and merge propagates that error, so no ping ever leaks to
     // an unauthorized caller.
+    // As this apiserver stops, the stream ends cleanly and the client opens it again on another, from the last
+    // stored event it had (`sinceSeq`, above; common/graceful-stop.ts).
     return merge(
       events$,
       interval(KEEPALIVE_MS).pipe(map(() => ({ data: { type: 'ping' } }) as MessageEvent)),
-    );
+    ).pipe(untilStopping());
   }
 }

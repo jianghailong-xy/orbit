@@ -152,6 +152,9 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let workDirTotalBytes: Int64?
     public let repoHealth: RunnerRepoHealth?
     public let repoCleanup: RunnerRepoCleanup?
+    /// Its runner declares `main-checkout-git/v1`: the Main checkout bar and card draw their buttons.
+    /// Nil from an older server, read as no.
+    public var mainCheckoutActions: Bool? = nil
     /// The repository its directory is a checkout of, as the runner reported it; nil for a workspace on none.
     public let repoUrl: String?
 
@@ -163,7 +166,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         case autoInitGit, codexAccount, claudeAccount, antigravityAccount, kimiAccount, cursorAccount
         case enableWorktree, modelRouting
         case workDirExists, workDirIsGit
-        case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup
+        case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup, mainCheckoutActions
     }
 
     public init(from decoder: Decoder) throws {
@@ -205,6 +208,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         workDirTotalBytes = c.flexibleInt64(forKey: .workDirTotalBytes)
         repoHealth = try c.decodeIfPresent(RunnerRepoHealth.self, forKey: .repoHealth)
         repoCleanup = try c.decodeIfPresent(RunnerRepoCleanup.self, forKey: .repoCleanup)
+        mainCheckoutActions = try? c.decodeIfPresent(Bool.self, forKey: .mainCheckoutActions)
         repoUrl = try c.decodeIfPresent(String.self, forKey: .repoUrl)
     }
 }
@@ -272,6 +276,9 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// Only on a runner draining for its self-update: the reader's turns the drain waits for, longest
     /// running first (shared `RunnerUpdateTurn`), which the runner page's Update card lists.
     public var updateTurns: [RunnerUpdateTurn]? = nil
+    /// Only while it drains for its self-update and something of the reader's waits on it (D3): how many
+    /// sessions and messages. Needs you's "studio-mac is updating — 1 session waiting" line reads it.
+    public var drainWaiting: RunnerDrainWaiting? = nil
     /// What the runner declared it can do on its last poll — `codex-account-move/v1` and
     /// `claude-account-move/v1` say it carries a session's conversation to another of its accounts;
     /// `antigravity-account-login/v1`, that it signs in Antigravity accounts of their own, which is all
@@ -497,8 +504,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// minutes. nil from an older control plane, in which case the row shows no elapsed time.
     public let currentTurnStartedAt: String?
     /// When this session was pinned to the top of its list (ISO-8601 string), or nil if unpinned.
-    /// The list payload already sorts pinned sessions first; the row draws a leading accent bar to
-    /// mark the state at rest, mirroring web's `.session-row.pinned`.
+    /// The list payload already sorts pinned sessions first, under a "Pinned" section; as on web,
+    /// the row itself draws no pin mark at rest.
     public let pinnedAt: String?
     /// The session's stored config. A LIVE session's composer shows these (the server's
     /// choice); before the session exists the pills reflect local picks instead.
@@ -568,6 +575,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// while tools and replies stream for minutes. Absent from older servers, which simply keeps
     /// the old parked reading. See `isGenerating`.
     public let engineTurnActive: Bool?
+    /// What the session is doing beyond its status, as the server decides it (`SessionActivity`:
+    /// `TURN`, `BACKGROUND_JOB` or `WAITING`; nil when none, and from an older server). See
+    /// `resumesOnItsOwn`.
+    public let activity: String?
     /// Terminal-state detail the status glyph needs (mirrors web `StatusIcon`): `error` tells a
     /// runner-offline disconnect apart from a real crash; `endReason` tells a benign recycle
     /// (idle / task-done / user-ended — shown as dormant) apart from a hard cancel/orphan.
@@ -584,6 +595,11 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// §10.1's fifth column with `fixAction` folded in — what the refusal was about, in the ref's
     /// and the runner's own words.
     public let sourceRefusalDetail: SourceRefusalDetail?
+    /// SR18's sentence for a session of a task forked from another session
+    /// (docs/task-fork-from-session-design.md §2.3), finished by the server — "Forked from session
+    /// «title» at abc1234 (includes uncommitted changes)" — and drawn as it is. The detail read's
+    /// only: nil on a list row, on a task that was not forked, and from an older server.
+    public let forkSource: String?
     /// When the server will re-send the message a self-healing failure killed — a spent quota, a
     /// 529, a runner that vanished mid-turn — or nil when nothing is armed. What makes a FAILED
     /// row not yet an outcome: the run continues on its own when this fires, so `isSettled` (and
@@ -626,6 +642,13 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public var isGenerating: Bool {
         let state = effectiveRunState
         return state == .running || (state == .awaitingInput && engineTurnActive == true)
+    }
+    /// Whether something will resume this parked session by itself — a watch it observes, a
+    /// scheduled wake-up, an armed auto-retry (the server's `activity` WAITING). The watch strip
+    /// names a watch in its own words; this is what the header, glyph and row say when they hold
+    /// no watch to name, instead of "Waiting for your reply" (web `resumeWords`).
+    public var resumesOnItsOwn: Bool {
+        effectiveRunState == .awaitingInput && activity == "WAITING"
     }
     /// Whether work this session started is still running under a parked turn — a sub-agent or
     /// workflow the runtime started, or a background process. A port of web's
@@ -745,12 +768,14 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         runningBgJobCount = try values.decodeIfPresent(Int.self, forKey: .runningBgJobCount)
         runningSubagentCount = try values.decodeIfPresent(Int.self, forKey: .runningSubagentCount)
         engineTurnActive = try values.decodeIfPresent(Bool.self, forKey: .engineTurnActive)
+        activity = try values.decodeIfPresent(String.self, forKey: .activity)
         error = try values.decodeIfPresent(String.self, forKey: .error)
         endReason = try values.decodeIfPresent(String.self, forKey: .endReason)
         sourceState = try values.decodeIfPresent(String.self, forKey: .sourceState)
         sourceRefusalCode = try values.decodeIfPresent(String.self, forKey: .sourceRefusalCode)
         sourceRefusalDetail = try? values.decodeIfPresent(SourceRefusalDetail.self,
                                                           forKey: .sourceRefusalDetail)
+        forkSource = try? values.decodeIfPresent(String.self, forKey: .forkSource)
         retryAt = try values.decodeIfPresent(String.self, forKey: .retryAt)
         agent = try values.decodeIfPresent(SessionAgentRef.self, forKey: .agent)
         tags = try values.decodeIfPresent([SessionTag].self, forKey: .tags)
@@ -784,9 +809,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 runningBgJobCount: Int? = nil,
                 runningSubagentCount: Int? = nil,
                 engineTurnActive: Bool? = nil,
+                activity: String? = nil,
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
                 sourceState: String? = nil, sourceRefusalCode: String? = nil,
-                sourceRefusalDetail: SourceRefusalDetail? = nil,
+                sourceRefusalDetail: SourceRefusalDetail? = nil, forkSource: String? = nil,
                 pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil,
                 currentTurnStartedAt: String? = nil,
                 tags: [SessionTag]? = nil, retryAt: String? = nil,
@@ -863,11 +889,13 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.runningBgJobCount = runningBgJobCount
         self.runningSubagentCount = runningSubagentCount
         self.engineTurnActive = engineTurnActive
+        self.activity = activity
         self.error = error
         self.endReason = endReason
         self.sourceState = sourceState
         self.sourceRefusalCode = sourceRefusalCode
         self.sourceRefusalDetail = sourceRefusalDetail
+        self.forkSource = forkSource
         self.retryAt = retryAt
         self.agent = agent
         self.pinnedAt = pinnedAt

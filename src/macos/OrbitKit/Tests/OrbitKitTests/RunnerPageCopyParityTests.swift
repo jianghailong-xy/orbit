@@ -96,6 +96,8 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("RUNNER_WORKSPACES", RunnerPageCopy.RUNNER_WORKSPACES),
         ("RUNNER_ABOUT", RunnerPageCopy.RUNNER_ABOUT),
         ("RUNNER_MAX_CONCURRENT", RunnerPageCopy.RUNNER_MAX_CONCURRENT),
+        ("RUNNER_MAX_CONCURRENT_HINT", RunnerPageCopy.RUNNER_MAX_CONCURRENT_HINT),
+        ("RUNNER_EDIT", RunnerPageCopy.RUNNER_EDIT),
         ("RUNNER_DISK", RunnerPageCopy.RUNNER_DISK),
         ("RUNNER_KEEP_FREE", RunnerPageCopy.RUNNER_KEEP_FREE),
         ("RUNNER_KEEP_FREE_OFF", RunnerPageCopy.RUNNER_KEEP_FREE_OFF),
@@ -198,6 +200,15 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("ATTENTION_UPDATE_DIDNT_GO_THROUGH", RunnerPageCopy.ATTENTION_UPDATE_DIDNT_GO_THROUGH),
         ("RUNNER_UPDATE_RUNNER_NOW", RunnerPageCopy.RUNNER_UPDATE_RUNNER_NOW),
         ("RUNNER_UPDATE_RUNNER_REQUESTED", RunnerPageCopy.RUNNER_UPDATE_RUNNER_REQUESTED),
+        ("RUNNER_UPDATE_LATER", RunnerPageCopy.RUNNER_UPDATE_LATER),
+        ("RUNNER_UPDATE_CHANGE", RunnerPageCopy.RUNNER_UPDATE_CHANGE),
+        ("RUNNER_UPDATE_LATER_HOUR", RunnerPageCopy.RUNNER_UPDATE_LATER_HOUR),
+        ("RUNNER_UPDATE_LATER_TONIGHT", RunnerPageCopy.RUNNER_UPDATE_LATER_TONIGHT),
+        ("RUNNER_UPDATE_LATER_TOMORROW", RunnerPageCopy.RUNNER_UPDATE_LATER_TOMORROW),
+        ("RUNNER_UPDATE_POSTPONE_FAILED", RunnerPageCopy.RUNNER_UPDATE_POSTPONE_FAILED),
+        ("RUNNER_UPDATE_NOW", RunnerPageCopy.RUNNER_UPDATE_NOW),
+        ("RUNNER_UPDATE_NOW_CONFIRM_BODY", RunnerPageCopy.RUNNER_UPDATE_NOW_CONFIRM_BODY),
+        ("RUNNER_UPDATE_NOW_CONFIRM", RunnerPageCopy.RUNNER_UPDATE_NOW_CONFIRM),
         ("RUNNER_UPDATE_TAG_AVAILABLE", RunnerPageCopy.RUNNER_UPDATE_TAG_AVAILABLE),
         ("RUNNER_UPDATE_TAG_DRAINING", RunnerPageCopy.RUNNER_UPDATE_TAG_DRAINING),
         ("RUNNER_UPDATE_TAG_RESTARTING", RunnerPageCopy.RUNNER_UPDATE_TAG_RESTARTING),
@@ -208,7 +219,36 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("RUNNER_UPDATE_TURNS", RunnerPageCopy.RUNNER_UPDATE_TURNS),
         ("RUNNER_UPDATE_RESTARTING_BODY", RunnerPageCopy.RUNNER_UPDATE_RESTARTING_BODY),
         ("RUNNER_UPDATE_UNTITLED_TURN", RunnerPageCopy.RUNNER_UPDATE_UNTITLED_TURN),
+        ("RUNNER_UPDATE_NOW_JOBS_NOTE", RunnerPageCopy.RUNNER_UPDATE_NOW_JOBS_NOTE),
+        ("RUNNER_UPDATE_NOW_FAILED", RunnerPageCopy.RUNNER_UPDATE_NOW_FAILED),
+        ("RUNNER_UPDATE_RESTARTING_BODY_ONE", RunnerPageCopy.RUNNER_UPDATE_RESTARTING_BODY_ONE),
+        ("RUNNER_UPDATE_RESUMED_ONE", RunnerPageCopy.RUNNER_UPDATE_RESUMED_ONE),
+        ("RUNNER_UPDATE_NOW_CONFIRM_ONE", RunnerPageCopy.RUNNER_UPDATE_NOW_CONFIRM_ONE),
+        ("RUNNER_UPDATE_INTERRUPTED", RunnerPageCopy.RUNNER_UPDATE_INTERRUPTED),
     ]
+
+    /// The numbers the copy declares beside its sentences (`export const NAME = 24;`).
+    private static let numbers: [(name: String, value: Int)] = []
+
+    /// The functions that choose between sentences, so their body is more than one template. None: the
+    /// choosing lives outside runnerCopy.ts and RunnerPageCopy.swift (runnerUpdateNow.ts, RunnerUpdateNow.swift),
+    /// and each sentence it picks is a constant or a template of its own, listed above and below.
+    private static let branching: [(name: String, literal: String, rendered: String, values: [String: String])] = []
+
+    /// Every `export function name(…) … { … }` the web file declares, by name: its whole body.
+    private func webFunctionBodies() throws -> [String: String] {
+        let found = try captures(try flatWebCopy(), "^export function (\\w+)\\([^)]*\\)[^{]*\\{\\n((?:.*\\n)*?)\\}$")
+        return Dictionary(found.map { ($0[0], $0[1]) }, uniquingKeysWith: { first, _ in first })
+    }
+
+    /// `literal` with each `${…}` filled in from `values`, or from the web constant of that name.
+    private static func fill(_ literal: String, _ values: [String: String], _ constants: [String: String]) -> String {
+        var out = literal
+        for (name, value) in values.merging(constants, uniquingKeysWith: { mine, _ in mine }) {
+            out = out.replacingOccurrences(of: "${\(name)}", with: value)
+        }
+        return out
+    }
 
     /// A rendered line with each number sentinel put back as the web's interpolation of it.
     private static func put(_ rendered: String, _ numbers: [Int: String]) -> String {
@@ -223,6 +263,10 @@ final class RunnerPageCopyParityTests: XCTestCase {
     private static let templates: [(name: String, rendered: String)] = [
         ("runnerOfflineLastSeen", RunnerPageCopy.runnerOfflineLastSeen(when: "${when}")),
         ("runnerVersionTag", RunnerPageCopy.runnerVersionTag(version: "${version}")),
+        ("runnerVersionInstallsWhenQuiet", put(RunnerPageCopy.runnerVersionInstallsWhenQuiet(minutes: 90_001),
+                                               [90_001: "minutes"])),
+        ("runnerUpdateAvailableBodyQuiet", put(RunnerPageCopy.runnerUpdateAvailableBodyQuiet(minutes: 90_001, unit: "${unit}"),
+                                               [90_001: "minutes"])),
         ("runnerRunningOf", put(RunnerPageCopy.runnerRunningOf(active: 90_001, max: 90_002),
                                 [90_001: "active", 90_002: "max"])),
         ("runnerSlots", put(RunnerPageCopy.runnerSlots(active: 90_001, max: 90_002),
@@ -306,7 +350,25 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("runnerUpdateRestartingTitle", RunnerPageCopy.runnerUpdateRestartingTitle(version: "${version}")),
         ("runnerUpdatePostponedTitle", RunnerPageCopy.runnerUpdatePostponedTitle(version: "${version}",
                                                                                  until: "${until}")),
+        ("runnerUpdateLaterUntil", RunnerPageCopy.runnerUpdateLaterUntil(clock: "${clock}")),
+        ("runnerUpdatePostponedToast", RunnerPageCopy.runnerUpdatePostponedToast(clock: "${clock}")),
+        ("runnerUpdateNowConfirmTitle", RunnerPageCopy.runnerUpdateNowConfirmTitle(version: "${version}")),
         ("runnerUpdatePostponedBody", RunnerPageCopy.runnerUpdatePostponedBody(until: "${until}")),
+        ("runnerUpdateUpdatedTitle", RunnerPageCopy.runnerUpdateUpdatedTitle(version: "${version}")),
+        ("runnerUpdateNowTitle", RunnerPageCopy.runnerUpdateNowTitle(runner: "${runner}")),
+        ("runnerUpdateNowToast", RunnerPageCopy.runnerUpdateNowToast(version: "${version}")),
+        ("runnerUpdateRestartingBodyMany", put(RunnerPageCopy.runnerUpdateRestartingBodyMany(turns: 90_001), [90_001: "turns"])),
+        ("runnerUpdateTookSeconds", put(RunnerPageCopy.runnerUpdateTookSeconds(seconds: 90_001), [90_001: "seconds"])),
+        ("runnerUpdateTookMinutesSeconds", put(RunnerPageCopy.runnerUpdateTookMinutesSeconds(minutes: 90_001, seconds: 90_002),
+                                               [90_001: "minutes", 90_002: "seconds"])),
+        ("runnerUpdateTookMinutes", put(RunnerPageCopy.runnerUpdateTookMinutes(minutes: 90_001), [90_001: "minutes"])),
+        ("runnerUpdateUpdatedTook", RunnerPageCopy.runnerUpdateUpdatedTook(took: "${took}")),
+        ("runnerUpdateResumedMany", put(RunnerPageCopy.runnerUpdateResumedMany(turns: 90_001), [90_001: "turns"])),
+        ("runnerUpdateNowBodyNone", RunnerPageCopy.runnerUpdateNowBodyNone(version: "${version}")),
+        ("runnerUpdateNowBodyOne", RunnerPageCopy.runnerUpdateNowBodyOne(version: "${version}")),
+        ("runnerUpdateNowBodyMany", RunnerPageCopy.runnerUpdateNowBodyMany(version: "${version}")),
+        ("runnerUpdateNowConfirmMany", put(RunnerPageCopy.runnerUpdateNowConfirmMany(turns: 90_001), [90_001: "turns"])),
+        ("runnerUpdateInterruptedTo", RunnerPageCopy.runnerUpdateInterruptedTo(version: "${version}")),
         ("attentionInstallFolderNotWritableDetail",
          RunnerPageCopy.attentionInstallFolderNotWritableDetail(folder: "${folder}", version: "${version}",
                                                                 latest: "${latest}", command: "${command}")),
@@ -337,6 +399,27 @@ final class RunnerPageCopyParityTests: XCTestCase {
         }
     }
 
+    func testEveryNumberIsTheWebDeclarationOfTheSameName() throws {
+        let web = try flatWebCopy()
+        for (name, value) in Self.numbers {
+            XCTAssertTrue(web.contains("export const \(name) = \(value);"),
+                          "\(name) drifted: runnerCopy.ts no longer declares it as \(value)")
+        }
+    }
+
+    /// Each sentence a choosing function can say is written in its web body word for word, and this end
+    /// says it for the same inputs.
+    func testEveryChoosingFunctionSaysTheWebsSentences() throws {
+        let bodies = try webFunctionBodies()
+        let constants = try webConstants()
+        for (name, literal, rendered, values) in Self.branching {
+            let body = try XCTUnwrap(bodies[name], "runnerCopy.ts no longer writes \(name)(…)")
+            XCTAssertTrue(body.contains("`\(literal)`") || body.contains("'\(literal)'"),
+                          "\(name): runnerCopy.ts no longer says \(literal.debugDescription)")
+            XCTAssertEqual(rendered, Self.fill(literal, values, constants), "\(name) drifted from runnerCopy.ts")
+        }
+    }
+
     // MARK: the names
 
     /// Every sentence at either end has its counterpart under the same name. A declaration this check
@@ -345,31 +428,37 @@ final class RunnerPageCopyParityTests: XCTestCase {
         let raw = try source(Self.webCopy)
         let webConstants = try webConstants()
         let webTemplates = try webTemplates()
-        XCTAssertEqual(webConstants.count, try captures(raw, "^export const (\\w+)").count,
+        let numberNames = Set(Self.numbers.map(\.name))
+        let branchingNames = Set(Self.branching.map(\.name))
+        XCTAssertEqual(webConstants.count + numberNames.count, try captures(raw, "^export const (\\w+)").count,
                        "runnerCopy.ts declares a constant this check cannot read — keep each fixed "
                            + "sentence one single-quoted `export const`")
-        XCTAssertEqual(webTemplates.count, try captures(raw, "^export function (\\w+)").count,
+        XCTAssertEqual(webTemplates.count + branchingNames.count,
+                       try captures(raw, "^export function (\\w+)").count,
                        "runnerCopy.ts declares a function this check cannot read — keep each one a "
                            + "single `return` of one template literal")
 
         let swift = try source(Self.swiftCopy)
-        let swiftConstants = Set(try captures(swift, "static let (\\w+)").map { $0[0] })
+        let swiftConstants = Set(try captures(swift, "static let (\\w+)").map { $0[0] }).subtracting(numberNames)
         let swiftTemplates = Set(try captures(swift, "static func (\\w+)").map { $0[0] })
         let tableConstants = Set(Self.constants.map(\.name))
-        let tableTemplates = Set(Self.templates.map(\.name))
+        let listedTemplates = Set(Self.templates.map(\.name))
+        let tableTemplates = listedTemplates.union(branchingNames)
+        let webTemplateNames = Set(webTemplates.keys).union(branchingNames)
 
         XCTAssertEqual(tableConstants.count, Self.constants.count, "a constant is listed twice above")
-        XCTAssertEqual(tableTemplates.count, Self.templates.count, "a template is listed twice above")
+        XCTAssertEqual(listedTemplates.count, Self.templates.count, "a template is listed twice above")
+        XCTAssertTrue(listedTemplates.isDisjoint(with: branchingNames), "a template is listed as choosing too")
         for name in Set(webConstants.keys).subtracting(swiftConstants).sorted() {
             XCTFail("runnerCopy.ts declares \(name), which RunnerPageCopy does not")
         }
         for name in swiftConstants.subtracting(webConstants.keys).sorted() {
             XCTFail("RunnerPageCopy declares \(name), which runnerCopy.ts does not")
         }
-        for name in Set(webTemplates.keys).subtracting(swiftTemplates).sorted() {
+        for name in webTemplateNames.subtracting(swiftTemplates).sorted() {
             XCTFail("runnerCopy.ts writes \(name)(…), which RunnerPageCopy does not")
         }
-        for name in swiftTemplates.subtracting(webTemplates.keys).sorted() {
+        for name in swiftTemplates.subtracting(webTemplateNames).sorted() {
             XCTFail("RunnerPageCopy writes \(name)(…), which runnerCopy.ts does not")
         }
         XCTAssertEqual(tableConstants, swiftConstants, "list every RunnerPageCopy constant above")

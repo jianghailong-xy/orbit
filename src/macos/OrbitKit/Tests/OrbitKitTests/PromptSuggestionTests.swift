@@ -133,7 +133,16 @@ final class PromptSuggestionTests: XCTestCase {
             }
             dir = dir.deletingLastPathComponent()
         }
-        throw XCTSkip("\(path) is not beside this checkout")
+        // Deliberately a failure and not an `XCTSkip`: the touch clients' check reads the web and
+        // Android sources, and one that opts out when they are gone is green on exactly that day.
+        throw MissingFile(path: path)
+    }
+
+    private struct MissingFile: Error, CustomStringConvertible {
+        let path: String
+        var description: String {
+            "\(path) was not found above this test file; if it moved, point this test at it rather than deleting the check"
+        }
     }
 
     func testTheComposerOffersItFillsTheBoxAndSendsNothing() throws {

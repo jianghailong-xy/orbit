@@ -122,7 +122,8 @@ export async function profileScenario({ page, expect, capture, measure }) {
   await expect(page.getByRole('region', { name: 'Notifications', exact: true }).getByText('Name saved', { exact: true })).toBeVisible();
   await expect(name).toHaveValue('Baseline Reviewer Updated');
   await expect(save).toBeDisabled();
-  await page.getByRole('button', { name: 'Change password', exact: true }).click();
+  await page.locator('[data-method="password"]').getByRole('button', { name: 'Change', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Change password' }).getByRole('button', { name: 'Change password', exact: true }).click();
   await expect(page.getByText('Enter your current password', { exact: true })).toBeVisible();
   await expect(page.getByText('Enter a new password', { exact: true })).toBeVisible();
   await capture('profile-validation', { field: '.orbit-field[data-help]', error: '.orbit-field-error' });

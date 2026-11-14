@@ -69,13 +69,18 @@ extension View {
     /// 2026-09-11). It is set here and nowhere else, so no card is dimmed twice.
     ///
     /// `dashed` draws the hairline dashed, as every card still waiting on the queue is.
-    func approvalChrome(_ tone: Color, dimmed: Bool = false, dashed: Bool = false) -> some View {
+    ///
+    /// `emphasized` draws the edge solid and heavier, for the one card that must not be scrolled
+    /// past: a coordinator question still waiting on the owner (the owner's pick, 2026-11-13).
+    func approvalChrome(_ tone: Color, dimmed: Bool = false, dashed: Bool = false,
+                        emphasized: Bool = false) -> some View {
         padding(ApprovalMetrics.padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(tone.opacity(0.07), in: RoundedRectangle(cornerRadius: ApprovalMetrics.radius))
             .overlay {
                 RoundedRectangle(cornerRadius: ApprovalMetrics.radius)
-                    .strokeBorder(tone.opacity(0.28), style: StrokeStyle(lineWidth: 1, dash: dashed ? [4, 3] : []))
+                    .strokeBorder(tone.opacity(emphasized ? 1 : 0.28),
+                                  style: StrokeStyle(lineWidth: emphasized ? 1.5 : 1, dash: dashed ? [4, 3] : []))
             }
             .opacity(dimmed ? 0.72 : 1)
     }
@@ -267,6 +272,12 @@ struct ToolApprovalCard: View {
     /// the card, and the write itself.
     private var writing: WorkspaceWritePreview? {
         approval.input.flatMap { Approvals.workspaceWritePreview(toolName: approval.toolName ?? "", from: $0) }
+    }
+
+    /// Adding, changing or deleting one of the owner's providers: the fields by name and the models one
+    /// a row. Without it the plain card drew the call's JSON.
+    private var provider: ProviderWritePreview? {
+        approval.input.flatMap { Approvals.providerWritePreview(toolName: approval.toolName ?? "", from: $0) }
     }
 
     /// The field written for the agent that will execute the task, folded to a line that carries its
@@ -531,6 +542,46 @@ struct ToolApprovalCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        } else if let provider {
+            // The header stays on one line, so the provider's name takes the row under it and wraps.
+            ApprovalHeader(symbol: "powerplug", title: provider.heading, tone: .orange, badge: provider.badge)
+            VStack(alignment: .leading, spacing: 6) {
+                if !provider.name.isEmpty {
+                    Text(provider.name).font(provider.verb == .add ? Font.orbitProse : Font.orbitMono)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                ForEach(provider.fields) { field in
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text(field.caption).font(.orbitLabel).foregroundStyle(.secondary)
+                        Text(field.value).font(field.mono ? Font.orbitMono : Font.orbitProse)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                if let models = provider.models {
+                    Text(provider.modelsCaption).font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+                    ForEach(models) { model in
+                        VStack(alignment: .leading, spacing: 2) {
+                            (Text(model.value).font(.orbitMono)
+                                + Text(model.isDefault ? "  · default" : "").font(.orbitLabel).foregroundColor(.secondary))
+                            if !model.detail.isEmpty {
+                                Text(model.detail).font(.orbitLabel).foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                if let note = provider.note {
+                    Text(note).font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             ApprovalHeader(symbol: "hand.raised.fill", title: "Approve tool call",
                            tone: .orange, badge: approval.toolName ?? "Tool")
@@ -543,6 +594,8 @@ struct ToolApprovalCard: View {
                     .font(.orbitMono).foregroundStyle(.secondary)
                     .lineLimit(3).truncationMode(.middle)   // a path keeps its root AND its filename
                     .frame(maxWidth: .infinity, alignment: .leading)
+            } else if let raw = approval.input.flatMap(Approvals.rawInput) {
+                workspaceWriteBlock(raw)
             }
         }
     }
@@ -597,6 +650,7 @@ struct ToolApprovalCard: View {
         if mergeCheck != nil { return MergeCheckChangePreview.action }
         if deleting != nil { return Approvals.deleteAction }
         if let writing { return writing.action }
+        if let provider { return provider.action }
         return "Allow"
     }
     /// The single-task card's second yes, offered only when nothing would start the task otherwise and
@@ -973,6 +1027,8 @@ private struct EvidenceDecisionCard: View {
         switch standing.state {
         case .sent(let sent) where !inReview:
             SentToCoordinatorLine(sent: sent)
+        case .restart(let row):
+            EvidenceRestartCard(row: row) { await console.restartFromEvidence(row) }
         default:
             if inReview { review(standing) } else { card(standing) }
         }
@@ -1094,6 +1150,79 @@ private struct EvidenceDecisionCard: View {
         Task {
             await console.decideEvidence(row, decision)
             deciding = false
+        }
+    }
+}
+
+/// Restart the task, on a revision nobody else can move (`EvidenceRestart`): which task and revision,
+/// the door's reason it cannot be decided, what the press does, and the press with its busy, refused
+/// and started states. Web's `EvidenceRestartAction`, in the same words. The press is handed in
+/// (`ConsoleModel.restartFromEvidence`) and answers nil for a start or the refusal.
+struct EvidenceRestartCard: View {
+    let row: EvidenceDecisionRow
+    let restart: () async -> Error?
+    @State private var restarting = false
+    @State private var started = false
+    @State private var refusal: (title: String, reason: String)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+            ApprovalHeader(symbol: "arrow.clockwise.circle.fill",
+                           title: EvidenceRestart.heading, tone: .orange)
+            Text(row.title)
+                .font(.orbitProse.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(EvidenceDecisions.addressLine(EvidenceDecisionStanding(
+                taskId: row.taskId, evidenceRevision: row.evidenceRevision, state: .restart(row))))
+                .font(.orbitMonoFine).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let reason = row.decidability.refusal {
+                Text(reason)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .padding(.horizontal, 10).padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.orange.opacity(0.08),
+                                in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+            }
+            Text(EvidenceRestart.explanation)
+                .font(.orbitLabel)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let refusal {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(refusal.title).font(.orbitLabel.weight(.semibold))
+                    Text(refusal.reason).font(.orbitLabel).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if started {
+                Text(EvidenceRestart.started)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                ApprovalActions {
+                    Button { press() } label: {
+                        Text(EvidenceRestart.action).approvalActionLabel()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(restarting)
+                }
+            }
+        }
+        .approvalChrome(.orange)
+    }
+
+    private func press() {
+        guard !restarting, !started else { return }
+        PlatformHaptics.tap()
+        restarting = true
+        refusal = nil
+        Task {
+            if let error = await restart() {
+                refusal = (EvidenceRestart.refusalTitle(error), APIClient.failureReason(error))
+            } else {
+                started = true
+            }
+            restarting = false
         }
     }
 }
@@ -2614,23 +2743,52 @@ private struct CriteriaDecisionReceiptCard: View {
 private struct EvidenceDecisionReceiptCard: View {
     let decided: RecordedEvidenceDecision
     @Environment(\.openEvidenceFiles) private var openFiles
+    /// Whether the note is showing. Folded: a record is three lines, and its note can be thirty
+    /// (the owner's call, 2026-11-13).
+    @State private var noteOpen = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
-            ApprovalHeader(symbol: "checkmark.circle.fill",
-                           title: decided.recordedByAgent ? EvidenceDecisions.agentRecordedHeading
-                                                          : EvidenceDecisions.recordedHeading,
-                           tone: .blue)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.orbitMeta)
+                    .foregroundStyle(Color.blue)
+                    .frame(width: 22, height: 22)
+                    .background(Color.blue.opacity(0.16), in: RoundedRectangle(cornerRadius: 6))
+                Text(decided.recordedByAgent ? EvidenceDecisions.agentRecordedHeading
+                                             : EvidenceDecisions.recordedHeading)
+                    .font(.orbitLabel.weight(.semibold))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
             Text(decided.title)
-                .font(.orbitProse.bold())
+                .font(.orbitLabel)
+                .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(EvidenceDecisions.receiptLine(decided))
-                .font(.orbitProse)
+                .font(.orbitLabel).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let note = decided.note, !note.isEmpty {
-                Text("\(EvidenceDecisions.receiptReasonLabel)：\(note)")
+                // Not `DisclosureToggle`: its 44pt row left the folded record with a blank band
+                // under the words, and the record is meant to be three lines.
+                Button {
+                    PlatformHaptics.tap()
+                    noteOpen.toggle()
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(EvidenceDecisions.noteToggle(decided, open: noteOpen))
+                        Image(systemName: noteOpen ? "chevron.up" : "chevron.down").font(.orbitMeta)
+                    }
                     .font(.orbitLabel).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                if noteOpen {
+                    Text("\(EvidenceDecisions.noteLabel(decided))：\(note)")
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             // The one way to an older version's files, and so to where they are seen to expire: the latest
             // version's do not (§2.8), and only the latest is ever a card. Read when it is pressed, not here.
@@ -3954,10 +4112,13 @@ private struct CoordinatorQuestionCardView: View {
 
     private var questionCard: some View {
         let standing = self.standing
+        // Orange while it waits on the owner, the colour of the `open question below` capsule
+        // that points at it; blue once it is no longer a question.
+        let open = CoordinatorQuestions.isOpen(standing)
         return ApprovalReviewLayout(title: CoordinatorQuestions.heading,
-                             symbol: "questionmark.bubble.fill", tone: .blue,
+                             symbol: "questionmark.bubble.fill", tone: open ? .orange : .blue,
                              summary: previewSummary,
-                             dimmed: !CoordinatorQuestions.isOpen(standing)) {
+                             dimmed: !open, emphasized: open) {
             Text(CoordinatorQuestions.provenance)
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -4002,7 +4163,9 @@ private struct CoordinatorQuestionCardView: View {
     }
 
     private var previewSummary: String {
-        if case .open(let row) = standing { return row.question?.question ?? row.detailLine }
+        // Flattened, as the record's card is: blank lines and table rows of the Markdown would
+        // otherwise spend the preview's three lines on nothing.
+        if case .open(let row) = standing { return row.question.map(CoordinatorQuestions.lead) ?? row.detailLine }
         return CoordinatorQuestions.gone
     }
 
