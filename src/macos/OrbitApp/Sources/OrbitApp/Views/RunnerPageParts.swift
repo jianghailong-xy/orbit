@@ -316,7 +316,8 @@ struct RunnerEngineRow: View {
                     Text(statusLine)
                         .font(.orbitListSubtitle)
                         .foregroundStyle(Color.secondary)
-                    if let failed = RunnerPageFormat.updateFailedLine(health, now: now) {
+                    let dismissed = runner.engineUpdateDismissals?[health.engine]
+                    if let failed = RunnerPageFormat.updateFailedLine(health, now: now, dismissed: dismissed) {
                         Text(failed)
                             .font(.orbitListSubtitle)
                             .foregroundStyle(RunnerInk.amber)

@@ -424,14 +424,33 @@ public enum RunnerPageFormat {
 
     /// `Update to 2.1.270 failed Sep 13` — only for a failure that has become the row's problem
     /// (`RunnerAttention.updateNoteOf` says warn); a failed pass the updater retries in half an hour
-    /// is the engine page's footnote, not the row's.
-    public static func updateFailedLine(_ health: RunnerEngineHealth, now: Date,
+    /// is the engine page's footnote, not the row's. `dismissed` is the release its warning was dismissed
+    /// against (`Runner.engineUpdateDismissals`), which keeps the line away while it is still the latest.
+    public static func updateFailedLine(_ health: RunnerEngineHealth, now: Date, dismissed: String? = nil,
                                         timeZone: TimeZone = .current) -> String? {
         guard health.installed == true, let update = health.update, update.status == "failed",
               let latest = update.latest?.trimmingCharacters(in: .whitespacesAndNewlines), !latest.isEmpty,
-              RunnerAttention.updateNoteOf(update, nowMs: nowMs(now))?.tone == .warn,
+              RunnerAttention.updateNoteOf(update, nowMs: nowMs(now), dismissed: dismissed)?.tone == .warn,
               let at = update.at, let when = day(at, now: now, timeZone: timeZone) else { return nil }
         return RunnerPageCopy.runnerEngineUpdateFailed(version: latest, when: when)
+    }
+
+    /// The engine a Needs Attention item's "Dismiss until next … release" dismisses: an engine not
+    /// updating whose latest release is known — only a warning against a known latest has a next one
+    /// to wait for (web MachineSettingsPage).
+    public static func updateWarningDismissEngine(_ item: RunnerAttentionItem) -> String? {
+        guard item.kind == .engineNotUpdating, let engine = item.action?.engine,
+              case .string(let latest)? = item.params["latest"], !latest.isEmpty else { return nil }
+        return engine
+    }
+
+    /// Whether the engine page offers Dismiss for this engine's update warning: an online runner, an
+    /// installed CLI whose note still warns, against a known latest (web RunnerEngines' panel).
+    public static func offersUpdateWarningDismiss(_ runner: Runner, health: RunnerEngineHealth, now: Date) -> Bool {
+        guard !isOffline(runner, now: now), health.installed == true,
+              let latest = health.update?.latest, !latest.isEmpty else { return false }
+        return RunnerAttention.updateNoteOf(health.update, nowMs: nowMs(now),
+                                            dismissed: runner.engineUpdateDismissals?[health.engine])?.tone == .warn
     }
 
     /// The Engines header's note: when the updater last looked (`Checked 6m ago`) — or, for a runner

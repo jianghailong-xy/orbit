@@ -113,6 +113,7 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("RUNNER_ENGINE_NO_READING", RunnerPageCopy.RUNNER_ENGINE_NO_READING),
         ("RUNNER_SIGN_IN", RunnerPageCopy.RUNNER_SIGN_IN),
         ("RUNNER_UPDATE_ENGINES_NOW", RunnerPageCopy.RUNNER_UPDATE_ENGINES_NOW),
+        ("RUNNER_ENGINE_UPDATE_DISMISS", RunnerPageCopy.RUNNER_ENGINE_UPDATE_DISMISS),
         ("RUNNER_REFRESH_MODEL_LISTS", RunnerPageCopy.RUNNER_REFRESH_MODEL_LISTS),
         ("RUNNER_ENGINES_FOOTER", RunnerPageCopy.RUNNER_ENGINES_FOOTER),
         ("RUNNER_ENGINES_OFFLINE_FOOTER", RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER),
@@ -378,6 +379,8 @@ final class RunnerPageCopyParityTests: XCTestCase {
                                                           latest: "${latest}")),
         ("attentionEngineUpdateFailed", RunnerPageCopy.attentionEngineUpdateFailed(engine: "${engine}")),
         ("attentionEngineUpdateDetail", RunnerPageCopy.attentionEngineUpdateDetail(note: "${note}")),
+        ("attentionDismissUntilNextRelease",
+         RunnerPageCopy.attentionDismissUntilNextRelease(engine: "${engine}")),
     ]
 
     // MARK: the words
