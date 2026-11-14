@@ -117,6 +117,7 @@ import { managedRunnerInstanceClaimable, type ManagedRunnerInstance } from '../m
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import { DISPATCH_PAUSED } from './dispatch-pause';
 import { CLAUDE_REGION_ERROR_PREFIX, claudeRegionHold } from '../runners/runner-region';
+import { openingTurnId } from '../sessions/orbit-authored-turn';
 
 /** What a claim attempt answers when another transaction holds the row it picked (FOR UPDATE NOWAIT, 55P03). */
 const LOST_LOCK = Symbol('the claim lost the row lock');
@@ -940,6 +941,8 @@ export class QueueService {
         });
         const turn = await tx.conversationTurn.create({
           data: {
+            // The id the active view listed the opening under while no runner had it (`openingTurnId`).
+            id: openingTurnId(session.id),
             sessionId: session.id,
             seq: (last?.seq ?? 0) + 1,
             clientTurnId: seedClientTurnId,
