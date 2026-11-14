@@ -887,6 +887,12 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
   'POST /projects/:id/criteria/:criterionId/confirmations': 'the criterion is read by (id, the project, the caller as the project\'s owner) before anything is read or written, so another account\'s project or criterion answers 404 (projects/project-criterion-confirmation.service.ts:244); project-criterion-confirmation.spec.ts reads the door',
   'POST /projects/:id/criteria/:criterionId/confirmations/withdraw': 'the criterion is read by (id, the project, the caller as the project\'s owner) before anything is read or written, so another account\'s project or criterion answers 404 (projects/project-criterion-confirmation.service.ts:244), and the UPDATE is keyed by that definition id',
   'POST /projects/:id/criteria/:criterionId/checks': 'the criterion is read by (id, the project, the caller as the project\'s owner) before anything is read or written, so another account\'s project or criterion answers 404 (projects/project-criterion-confirmation.service.ts:244); the check task is then filed through TasksService.create under the same owner',
+  'POST /terminals/requests/:id/approve':
+    'the sign-in is read by (id, the caller) and nothing else, 404 for another account\'s id (terminals/terminal-login.service.ts:236), and the write is a compare-and-set on (id, the caller, PENDING) (terminals/terminal-login.service.ts:136); terminal-credential.pg.spec.ts (b) sends another account\'s',
+  'POST /terminals/requests/:id/deny':
+    'the same read and compare-and-set as approve (terminals/terminal-login.service.ts:236, :136); terminal-credential.pg.spec.ts (b) sends another account\'s',
+  'DELETE /terminals/:id':
+    'written by (id, the caller, not revoked) and read back by (id, the caller), 404 when that finds nothing (terminals/terminal-login.service.ts:162); terminal-credential.pg.spec.ts (e) sends another account\'s',
   'GET /owner-requests/:id':
     'the request is read by (id, the caller) and nothing else, so another account\'s id answers 404 (owner-requests/owner-requests.service.ts:193); owner-requests.pg.spec.ts (f) sends it',
   'POST /owner-requests/:id/done':

@@ -508,6 +508,8 @@ final class AppModel {
     /// Every personal access token the account has issued: Settings → Access tokens, and the count
     /// on its row.
     private(set) var accessTokens: AccessTokensModel?
+    /// Settings → Terminals: the terminals approved on this account, with Revoke.
+    private(set) var terminals: TerminalsModel?
     /// The shared pools the account is in: Machines & models' Account pools, and each pool's page.
     private(set) var sharedPools: SharedPoolsModel?
     /// The account's watches: Following, the console's Watching card, and every session's row and header.
@@ -589,6 +591,7 @@ final class AppModel {
         admin = AdminModel(baseURL: url, tokenStore: tokenStore)
         sharedLinks = SharedLinksModel(baseURL: url, tokenStore: tokenStore)
         accessTokens = AccessTokensModel(baseURL: url, tokenStore: tokenStore)
+        terminals = TerminalsModel(baseURL: url, tokenStore: tokenStore)
         sharedPools = SharedPoolsModel(baseURL: url, tokenStore: tokenStore)
         let managedRunnerModel = ManagedRunnerModel(baseURL: url, tokenStore: tokenStore)
         // A managed runner set up from Machines & models brings its runner and default workspace with it.
@@ -1389,6 +1392,13 @@ final class AppModel {
             wiki?.nudge()
             // A card made, replaced or pressed, or its rewrite moving (contract `chat.realtime`).
             wikiChat?.nudge()
+        // A terminal asked to be approved, a request was decided, or a terminal was revoked: the approve card's
+        // requests and Settings → Terminals are read again, and nothing else.
+        case .terminals:
+            Task {
+                await ownerRequests?.loadTerminalRequests()
+                await terminals?.load()
+            }
         // A folder was created, renamed or deleted, here or on another device: re-read the library
         // the Move panel lists (docs/session-folders-move-design.md §5.6). The event names the folder
         // and nothing else, and a session moved between folders is a `session.updated` of its own,
@@ -4011,6 +4021,11 @@ final class AppModel {
             openOwnerRequest(id)
         case .snoozeOwnerRequest(let id):
             ownerRequests?.snooze(id, for: OwnerRequests.laterSeconds)
+        case .openTerminalRequests:
+            settingsPresented = false
+            ownerRequests?.tab = .open
+            ownerRequests?.inboxPresented = true
+            Task { await ownerRequests?.loadTerminalRequests() }
         }
     }
 

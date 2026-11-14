@@ -337,6 +337,7 @@ import {
   settleUnrunSessionRequests,
 } from '../sessions/session-request';
 import { readTurnCards } from '../sessions/turn-cards';
+import { sentFromOf } from '../sessions/turn-sender-client';
 import {
   reprojectAfterSettledChecks,
   settleChecksOfEndedRun,
@@ -372,6 +373,7 @@ import {
   withProjectStarted,
   withSessionMessage,
   withExternalSender,
+  withSentFrom,
   withSessionReplies,
   withTaskStart,
 } from './control-plane-note';
@@ -4228,6 +4230,8 @@ export class RunnerApiController {
         agent: workspaceCfg,
         workDir: workspace?.workDir ?? undefined,
         branch: s.branch ?? undefined,
+        // cf. the claim path: the folder below workDir a no-worktree session runs in.
+        ...(s.workSubdir ? { workSubdir: s.workSubdir } : {}),
         // cf. the claim path: a codeless run with no branch yet goes back to its detached checkout.
         ...codelessClaimFields(s, workspace, runner.capabilities),
         autoInitGit: workspace?.autoInitGit ?? undefined,
@@ -8596,6 +8600,7 @@ export class RunnerApiController {
             select: {
               id: true, content: true, clientTurnId: true, senderSessionId: true,
               externalSenderSource: true, externalSenderName: true,
+              senderClient: true, senderClientDetail: true,
             },
           })
         : [];
@@ -8642,6 +8647,11 @@ export class RunnerApiController {
         e.payload = withSessionMessage(e.payload, cards?.sessionMessage ?? null);
         e.payload = withSessionReplies(e.payload, cards?.sessionReplies ?? null);
         e.payload = withExternalSender(e.payload, cards?.externalSender ?? null);
+        const sentTurn = e.turnId ? userTurnById.get(e.turnId) : undefined;
+        e.payload = withSentFrom(
+          e.payload,
+          sentTurn ? sentFromOf(sentTurn, cards?.sessionMessage, cards?.externalSender) : null,
+        );
       }
       // A move between account-pool members is said on the first engine start after it — the first
       // event from a process holding the new member's key. It rides on the runner's own event
