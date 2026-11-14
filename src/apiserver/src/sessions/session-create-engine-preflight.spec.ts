@@ -65,6 +65,25 @@ function makeService(engines: unknown, runnerOverrides: Record<string, unknown> 
 
 const PROMPT = { prompt: 'Dispatch the next Lark message', title: 'Dispatch', workspaceId: 'workspace-1' };
 
+
+/** The recovery fields beside the typed refusal (session-recovery.ts): a person signs the engine in. */
+const SIGNED_OUT_RECOVERY = {
+  statusCode: 409,
+  error: 'Conflict',
+  owner: 'USER',
+  requiredAction: 'AWAIT_USER_FIX',
+  retryable: false,
+  recovery: {
+    effect: 'NONE',
+    retryPolicy: 'AFTER_STATE_CHANGE',
+    retryAfterSeconds: null,
+    actionCode: 'AWAIT_USER_FIX',
+    actor: 'USER',
+    userConfirmation: 'NOT_REQUIRED',
+    resources: [{ type: 'RUNNER', id: 'runner-1' }],
+  },
+};
+
 test('a session bound for a signed-out runtime is refused before anything is created', async () => {
   const fixture = makeService(SIGNED_OUT);
 
@@ -219,6 +238,7 @@ test('with neither, built-in Antigravity is refused with the Google sign-in that
         engine: 'antigravity',
         runnerId: 'runner-1',
         signIn: { engine: 'antigravity' },
+        ...SIGNED_OUT_RECOVERY,
       });
       return true;
     },
@@ -310,6 +330,7 @@ test('the other engines refuse as they did, now naming the engine and runner as 
       message: error.message,
       engine: 'claude',
       runnerId: 'runner-1',
+      ...SIGNED_OUT_RECOVERY,
     });
     return true;
   });
