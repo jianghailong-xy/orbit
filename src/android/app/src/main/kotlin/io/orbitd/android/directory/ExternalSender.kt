@@ -23,6 +23,10 @@ internal object ExternalSender {
     const val guestSource = "ORBIT_GUEST"
     /** Web `EXTERNAL_SENDER_FROM_GUEST`: a guest is named after it, `From <name>`. */
     const val fromGuest = "From"
+    /** The guest view's own messages (core `GuestTranscript.ownMessages`): headed `You`, on a page where the conversation is somebody
+     * else's — the web's `sentByReader`, OrbitKit `ExternalSender.readerSource`. Never sent by a server. */
+    const val readerSource = "ORBIT_READER"
+    const val you = "You"
 
     /** The sender a payload (`externalSender`) or a row (`lastUserFromExternal`) carries, or null. Anything that is not one — absent,
      * from an older server, or of a source this build does not know — reads as null, so the turn keeps the reading it has always had
@@ -35,6 +39,7 @@ internal object ExternalSender {
         return when (source) {
             feishuSource -> ExternalMessageFrom(name)
             guestSource -> name?.let { ExternalMessageFrom(it, guestSource) }
+            readerSource -> ExternalMessageFrom(null, readerSource)
             else -> null
         }
     }
@@ -42,6 +47,7 @@ internal object ExternalSender {
     /** `From <name>` for a guest; `From Feishu · <name>`, or `From Feishu` when Feishu would not say the name (web
      * `externalSenderLabel`). */
     fun label(from: ExternalMessageFrom): String = when {
+        from.source == readerSource -> you
         from.source == guestSource && from.name != null -> "$fromGuest ${from.name}"
         else -> from.name?.let { "$fromFeishu$nameSeparator$it" } ?: fromFeishu
     }

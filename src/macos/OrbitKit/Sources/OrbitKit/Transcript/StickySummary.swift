@@ -106,6 +106,21 @@ public enum StickySummary {
         return (yourQuestion, text)
     }
 
+    /// Whether Orbit, not a person, opened this turn: one of the control plane's cards stands in for
+    /// the bubble. Such a turn still heads the round under it (`isAnchor`), so the question above it no
+    /// longer names what is on screen — but the bar never names a machine's message either (the owner,
+    /// 2026-11-14: "↑ Evidence to review" over a coordinator's reply), so over it the bar is hidden
+    /// (`StickyQuestions`). Web: a card carrying `data-sticky-label` hides `WorkspaceView`'s bar.
+    /// A watch's wake, a job's news and the owner's answer are lines inside an answer, not rounds, and
+    /// are left to `isAnchor`.
+    public static func isOrbits(_ b: UserBubble) -> Bool {
+        b.itemCard != nil || b.coordinatorDelivery != nil || b.taskStart != nil || b.startedCard != nil
+            || b.sessionMessage != nil || !(b.sessionReplies ?? []).isEmpty
+            || b.reviewRequest != nil || b.reviewReturn != nil || b.reviewAnswers != nil
+            || b.evidenceReview != nil || b.evidenceSendBack != nil || b.runQuestion != nil
+            || b.runNotice != nil || b.sessionOpening != nil
+    }
+
     /// The label as the iPhone draws it, in a capsule between the nav bar's back and menu buttons
     /// (`ConsoleView.stickyQuestion`): the arrow alone over the person's own words — the capsule has
     /// no room to say whose they are, and needs none — and a card's title as it stands over anything
@@ -125,7 +140,8 @@ public enum StickySummary {
 public struct StickyQuestions {
     /// Each item's position, by id — the first one, as the walk stopped at the first.
     private let position: [String: Int]
-    /// `above[i]`: the last question before item `i`; `above[items.count]`, the last of them all.
+    /// `above[i]`: the last question before item `i` — nil where a round Orbit opened came after it;
+    /// `above[items.count]`, the last of them all.
     private let above: [String?]
 
     /// `isQuestion` is the console's own test of one user turn (`namesAQuestion`).
@@ -137,7 +153,8 @@ public struct StickyQuestions {
         for (index, item) in items.enumerated() {
             if position[item.id] == nil { position[item.id] = index }
             above.append(last)
-            if case .user(let b) = item, isQuestion(b) { last = b.id }
+            // A round Orbit opened ends the question's reach without taking the bar (`isOrbits`).
+            if case .user(let b) = item, isQuestion(b) { last = StickySummary.isOrbits(b) ? nil : b.id }
         }
         above.append(last)
         self.position = position
