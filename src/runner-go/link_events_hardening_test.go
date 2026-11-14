@@ -233,7 +233,8 @@ func TestAStoppingRunnerKeepsWhatMemoryHoldsWhenTheSpoolFails(t *testing.T) {
 
 // A turn completion waits for the session's last event the control plane stores as a row, never for a bare ping, which
 // it acknowledges and stores as nothing. At the cut-over a reply delta numbered over HTTPS goes as such a ping
-// (linkLiveEventSeqPlaceholder); a completion that waited for it would wait for ever.
+// (linkLiveEventSeqPlaceholder); a completion that waited for it would wait for ever. One that named the ping would be
+// answered pending, and go again: one call is what shows it waited for nothing, however long the host took.
 func TestATurnCompletionDoesNotWaitForAPingThatIsNeverStored(t *testing.T) {
 	shortenLinkWaits(t, linkHintWait, linkApprovalRecheck, 300*time.Millisecond)
 	r, in := newLinkEventsRig(t)
@@ -247,12 +248,11 @@ func TestATurnCompletionDoesNotWaitForAPingThatIsNeverStored(t *testing.T) {
 	if err := r.deliver(t, ctx, "session-p", RunEventBatch{Events: events}); err != nil {
 		t.Fatal(err)
 	}
-	began := time.Now()
 	if _, err := r.t.turnComplete(ctx, "session-p", TurnCompleteRequest{TurnID: "turn-1"}); err != nil {
 		t.Fatalf("the turn completion: %v (%d calls)", err, calls.Load())
 	}
-	if took, n := time.Since(began), calls.Load(); took > 250*time.Millisecond || n != 1 {
-		t.Errorf("the turn completion took %s and %d calls", took, n)
+	if n := calls.Load(); n != 1 {
+		t.Errorf("the turn completion took %d calls, want 1: it waited for the ping", n)
 	}
 }
 

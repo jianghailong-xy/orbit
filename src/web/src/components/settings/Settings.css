@@ -753,3 +753,77 @@
 .admin-users-page .admin-users-frame tbody tr:last-child td {
   border-bottom: 0;
 }
+
+/* Settings → Storage: each ranking row opens the files it counts. */
+.storage-usage-chevron {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.storage-files-back {
+  margin: 0 0 8px -8px;
+}
+.storage-file-row {
+  align-items: flex-start;
+}
+.storage-file-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--fill-muted);
+  color: var(--text-2);
+  font-size: 15px;
+}
+.storage-file-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.storage-file-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.storage-file-pin {
+  font-size: 12px;
+  color: var(--brand);
+}
+.storage-file-facts {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.storage-file-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.storage-files-more {
+  margin-top: 12px;
+  text-align: center;
+}
+.storage-menu-blocked {
+  display: flex;
+  flex-direction: column;
+  max-width: 240px;
+  white-space: normal;
+}
+.storage-menu-why {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+/* A file list goes back to Storage, not to the Settings list. */
+.settings-column:has(.storage-files-page) > .settings-back--list {
+  display: none;
+}
+.storage-files-empty {
+  margin: 24px 0 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
