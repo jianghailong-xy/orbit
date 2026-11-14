@@ -10,16 +10,42 @@ public enum SessionProjectSheet {
     /// The project glyph the button draws beside its count.
     public static let glyph = "square.grid.2x2"
 
-    /// What a tap on a project row opens on a phone.
+    /// What a tap on a project row opens.
     public enum RowTap: Equatable, Sendable {
-        /// The coordinator's conversation, pushed over the list.
+        /// The member whose card the row's line says is waiting on you (owner 2026-11-14): pushed
+        /// over the list on a phone, and selected beside the project's page in a column shell.
+        case waitingMember(Session)
+        /// The coordinator's conversation, pushed over the list (a phone only).
         case coordinator(Session)
-        /// The project's sessions page, for a row whose coordinator the app does not hold.
+        /// The project's sessions page: a column shell's tap on any other row, and a phone's on a
+        /// row whose coordinator the app does not hold.
         case sessions
     }
 
-    public static func rowTap(_ row: SessionProjectRow) -> RowTap {
-        row.coordinator.map(RowTap.coordinator) ?? .sessions
+    /// A row whose line says a member is waiting on you (the approval tone, aimed at a session
+    /// other than the coordinator — the oldest waiting member, `SessionProjectGrouping`) opens that
+    /// member, found among the row's members or the sessions the app holds; the row's own words
+    /// and the card are both in it. Every other row opens what it always did: the coordinator on a
+    /// phone (`push`, owner 2026-11-11, board 5), the project's page in a column shell.
+    public static func rowTap(_ row: SessionProjectRow, held: [Session] = [], push: Bool = true) -> RowTap {
+        if let member = waitingMember(row, held: held) { return .waitingMember(member) }
+        guard push else { return .sessions }
+        return row.coordinator.map(RowTap.coordinator) ?? .sessions
+    }
+
+    private static func waitingMember(_ row: SessionProjectRow, held: [Session]) -> Session? {
+        guard row.line.tone == .approval, case .session(let id) = row.target,
+              id != row.coordinator?.id else { return nil }
+        return (row.members + held).first { $0.id == id }
+    }
+
+    /// The row a conversation opened from such a row lands on: the top of the card waiting on you,
+    /// not the transcript's end, so a card taller than the screen shows its header and title. The
+    /// first in the transcript's order — its open delivered cards, oldest in the conversation first
+    /// (`ConsoleModel.openBelowRows`), are drawn above the pending approvals at its tail
+    /// (`TranscriptRows.build`). Nil while neither has been read.
+    public static func waitingCardRowID(openCards: [BelowRow], pendingApprovals: [PendingApproval]) -> String? {
+        openCards.first?.rowID ?? pendingApprovals.first.map { TranscriptRow.approval($0).id }
     }
 
     /// The project whose button a conversation's navigation bar carries: the one it is a member of,
