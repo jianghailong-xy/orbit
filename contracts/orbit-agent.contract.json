@@ -1,9 +1,9 @@
 {
   "name": "orbit.agent",
-  "contractVersion": "1.3.0",
+  "contractVersion": "1.4.0",
   "doc": "docs/orbit-agent-contract.md",
   "status": "frozen",
-  "frozenAt": "2026-11-13",
+  "frozenAt": "2026-11-14",
   "baseline": {
     "recordedAt": "2026-11-13",
     "cliVersion": "0.1.254",
@@ -173,23 +173,25 @@
     {"write": "project_create/project_update", "required": ["id", "status", "criteria as written"]},
     {"write": "session_create", "required": ["session id", "status"]},
     {"write": "file_upload", "required": ["file id", "reply link"]},
-    {"write": "declined card", "required": ["refused true", "code APPROVAL_DECLINED", "tool", "message", "decidedBy when a person answered"], "shape": {"refused": true, "code": "APPROVAL_DECLINED", "tool": "orbit_task_create", "message": "the human rejected this task: why", "decidedBy": "user id, absent when no person answered"}}
+    {"write": "declined card", "required": ["refused true", "code APPROVAL_DECLINED", "tool", "message", "decidedBy when a person answered"], "shape": {"refused": true, "code": "APPROVAL_DECLINED", "tool": "orbit_task_create", "message": "the human rejected this task: why", "decidedBy": "user id, absent when no person answered"}},
+    {"write": "card answered with Chat about this", "required": ["ok false", "outcome chat", "approval.outcome chat", "approval.message: the owner's words", "approval.decidedBy", "text: the owner's message as ownerChatReply writes it", "no error"], "note": "since 1.4.0: not a refusal. Nothing was written and the proposal is still open: answer the owner's message, then call again, changed as agreed. The MCP result is not marked isError and its text is that same reply; the CLI exits non-zero with it as the error"}
   ],
   "receiptRules": [
     "No id, no claim.",
     "Read back when the claim matters.",
     "A receipt is a document, not prose about it: read ok, outcome and id from it.",
     "A decline is a refusal, not a success: outcome declined, APPROVAL_DECLINED, on both surfaces.",
+    "A chat is neither: outcome chat means the owner pressed Chat about this; reply to their words (approval.message), then ask again, changed as agreed.",
     "Evidence is its own envelope (task_evidence_submit); a comment is not evidence and evidence is not a status write."
   ],
   "receipt": {
     "version": 1,
     "doc": "docs/orbit-agent-contract.md §6.3",
-    "outcomes": ["written", "read", "dry_run", "declined", "pending", "refused", "invalid", "unknown", "failed"],
+    "outcomes": ["written", "read", "dry_run", "declined", "pending", "refused", "invalid", "unknown", "failed", "chat"],
     "okOutcomes": ["written", "read", "dry_run"],
-    "approvalOutcomes": ["not_required", "not_asked", "approved", "declined", "pending"],
+    "approvalOutcomes": ["not_required", "not_asked", "approved", "declined", "pending", "chat"],
     "runnerErrorCodes": ["INVALID_ARGUMENTS", "APPROVAL_DECLINED", "AWAITING_OWNER", "NO_RESPONSE", "NOT_SENT", "NOT_DONE", "ORCHESTRATION_OFF", "TASK_ID_REQUIRED", "TOOL_REFUSED"],
-    "schema": {"description": "The Orbit receipt (docs/orbit-agent-contract.md §6): ok and outcome say what happened; id and status are the entity's; error says why not and whether a resend is safe.", "properties": {"action": {"type": "string"}, "approval": {"properties": {"card": {"type": "string"}, "decidedBy": {"type": "string"}, "decision": {"type": "string"}, "kind": {"type": "string"}, "message": {"type": "string"}, "outcome": {"enum": ["not_required", "not_asked", "approved", "declined", "pending"], "type": "string"}, "required": {"type": "boolean"}, "startAfterCreate": {"type": "boolean"}}, "required": ["required", "kind", "outcome"], "type": "object"}, "changedFields": {"items": {"type": "string"}, "type": "array"}, "count": {"type": "integer"}, "entity": {}, "entityType": {"type": "string"}, "error": {"properties": {"accepts": {"items": {"type": "string"}, "type": "array"}, "code": {"type": "string"}, "httpStatus": {"type": "integer"}, "message": {"type": "string"}, "requiredAction": {"type": "string"}, "retry": {"enum": ["resend", "reread_first", "fix_input", "do_not_retry", "wait"], "type": "string"}, "retryAfterSeconds": {"type": "integer"}, "retryable": {"type": "boolean"}, "violations": {"type": "array"}}, "required": ["code", "message", "retryable", "retry"], "type": "object"}, "id": {"type": ["string", "null"]}, "idempotency": {"properties": {"key": {"type": "string"}, "kind": {"enum": ["read", "caller_key", "server_key", "none"], "type": "string"}}, "required": ["kind"], "type": "object"}, "items": {"items": {"required": ["index", "id", "status"], "type": "object"}, "type": "array"}, "notes": {"items": {"type": "string"}, "type": "array"}, "ok": {"type": "boolean"}, "operation": {"type": "string"}, "outcome": {"enum": ["written", "read", "dry_run", "declined", "pending", "refused", "invalid", "unknown", "failed"], "type": "string"}, "receiptVersion": {"type": "integer"}, "start": {"required": ["by", "started", "sessionId", "status"], "type": "object"}, "status": {"type": ["string", "null"]}, "text": {"type": "string"}}, "required": ["receiptVersion", "ok", "outcome", "operation", "action", "entityType", "id", "status", "changedFields", "approval", "idempotency"], "title": "OrbitReceiptV1", "type": "object"}
+    "schema": {"description": "The Orbit receipt (docs/orbit-agent-contract.md §6): ok and outcome say what happened; id and status are the entity's; error says why not and whether a resend is safe.", "properties": {"action": {"type": "string"}, "approval": {"properties": {"card": {"type": "string"}, "decidedBy": {"type": "string"}, "decision": {"type": "string"}, "kind": {"type": "string"}, "message": {"type": "string"}, "outcome": {"enum": ["not_required", "not_asked", "approved", "declined", "pending", "chat"], "type": "string"}, "required": {"type": "boolean"}, "startAfterCreate": {"type": "boolean"}}, "required": ["required", "kind", "outcome"], "type": "object"}, "changedFields": {"items": {"type": "string"}, "type": "array"}, "count": {"type": "integer"}, "entity": {}, "entityType": {"type": "string"}, "error": {"properties": {"accepts": {"items": {"type": "string"}, "type": "array"}, "code": {"type": "string"}, "httpStatus": {"type": "integer"}, "message": {"type": "string"}, "requiredAction": {"type": "string"}, "retry": {"enum": ["resend", "reread_first", "fix_input", "do_not_retry", "wait"], "type": "string"}, "retryAfterSeconds": {"type": "integer"}, "retryable": {"type": "boolean"}, "violations": {"type": "array"}}, "required": ["code", "message", "retryable", "retry"], "type": "object"}, "id": {"type": ["string", "null"]}, "idempotency": {"properties": {"key": {"type": "string"}, "kind": {"enum": ["read", "caller_key", "server_key", "none"], "type": "string"}}, "required": ["kind"], "type": "object"}, "items": {"items": {"required": ["index", "id", "status"], "type": "object"}, "type": "array"}, "notes": {"items": {"type": "string"}, "type": "array"}, "ok": {"type": "boolean"}, "operation": {"type": "string"}, "outcome": {"enum": ["written", "read", "dry_run", "declined", "pending", "refused", "invalid", "unknown", "failed", "chat"], "type": "string"}, "receiptVersion": {"type": "integer"}, "start": {"required": ["by", "started", "sessionId", "status"], "type": "object"}, "status": {"type": ["string", "null"]}, "text": {"type": "string"}}, "required": ["receiptVersion", "ok", "outcome", "operation", "action", "entityType", "id", "status", "changedFields", "approval", "idempotency"], "title": "OrbitReceiptV1", "type": "object"}
   },
   "scenarios": [
     {"id": "S1", "case": "E1-record-task", "name": "Record a task", "baseline": "PASS", "baselineNote": "since 1.3.0, contract-tested, not black-box measured; was PARTIAL", "baselineEvidence": "tool + card exist; the answer is the receipt with the task's id (G1/G3 closed by P0-04); a decline is the shared APPROVAL_DECLINED outcome (G4 closed by P0-03, carried by the receipt since 1.3.0)"},

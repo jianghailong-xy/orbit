@@ -2146,13 +2146,20 @@ func declinedReason(dec *ApprovalDecisionResponse) string {
 	if dec.Status == "ALLOWED" {
 		return ""
 	}
-	if dec.Message != "" && dec.DecidedByID != "" {
+	if isOwnerChat(dec) {
 		return ownerChatReply(dec.Message)
 	}
 	if dec.Message != "" {
 		return dec.Message
 	}
 	return "denied by the user"
+}
+
+// isOwnerChat says whether a card's answer is the owner's "Chat about this": not a yes, and carrying
+// their own words (decidedById set). It is the one test the text the agent is handed (declinedReason),
+// the refusal document (declinedCardRefusal) and the receipt's chat outcome (tool_receipt.go) share.
+func isOwnerChat(dec *ApprovalDecisionResponse) bool {
+	return dec != nil && dec.Status != "ALLOWED" && dec.Message != "" && dec.DecidedByID != ""
 }
 
 // ownerChatLead opens every ownerChatReply, which is how declinedText tells one from a refusal.

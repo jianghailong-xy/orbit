@@ -15,9 +15,10 @@ import (
 // The receipt (docs/orbit-agent-contract.md §6, gaps G3/G4).
 //
 // Every catalogued tool answers with one document of one shape, whatever happened: a write that
-// took, a read, a dry run, a card the person declined, a card still waiting for them, a refusal, a
-// call refused before anything was sent, and a request whose answer never came. It is the MCP
-// result's structuredContent and, for every tool that writes, also its text; `orbit … --json`
+// took, a read, a dry run, a card the person declined, a card the owner wants to chat about, a card
+// still waiting for them, a refusal, a call refused before anything was sent, and a request whose
+// answer never came. It is the MCP result's structuredContent and, for every tool that writes, also
+// its text (a chat's text is the owner's message as ownerChatReply hands it over); `orbit … --json`
 // prints the same document for the same write (cli_receipt.go). A caller finds what it needs at
 // fixed places instead of in prose:
 //
@@ -27,7 +28,7 @@ import (
 //   - changedFields: the fields this call wrote (a clear shows as written: the field is named);
 //   - approval: whether a person was asked, and what they answered;
 //   - idempotency: how a retry of this call is made safe;
-//   - error: code, message and the retry rule, when ok is false;
+//   - error: code, message and the retry rule, when ok is false and the outcome is not a chat;
 //   - entity: the server's document, exactly as it answered.
 //
 // The receipt is versioned (receiptVersion) and its schema is every tool's advertised
@@ -46,10 +47,13 @@ const (
 	outcomeInvalid  = "invalid"
 	outcomeUnknown  = "unknown"
 	outcomeFailed   = "failed"
+	// outcomeChat is the owner's "Chat about this" on the card (isOwnerChat): nothing was written and
+	// nothing was refused. Their words are a message to answer, and the proposal is still open.
+	outcomeChat = "chat"
 )
 
 var receiptOutcomes = []string{outcomeWritten, outcomeRead, outcomeDryRun, outcomeDeclined, outcomePending,
-	outcomeRefused, outcomeInvalid, outcomeUnknown, outcomeFailed}
+	outcomeRefused, outcomeInvalid, outcomeUnknown, outcomeFailed, outcomeChat}
 
 // The approval outcomes.
 const (
@@ -58,10 +62,12 @@ const (
 	approvalOutcomeApproved    = "approved"
 	approvalOutcomeDeclined    = "declined"
 	approvalOutcomePending     = "pending"
+	// approvalOutcomeChat: the owner answered "Chat about this" and wants to talk it over first.
+	approvalOutcomeChat = "chat"
 )
 
 var receiptApprovalOutcomes = []string{approvalOutcomeNotRequired, approvalOutcomeNotAsked, approvalOutcomeApproved,
-	approvalOutcomeDeclined, approvalOutcomePending}
+	approvalOutcomeDeclined, approvalOutcomePending, approvalOutcomeChat}
 
 // The retry rules an error carries (docs/orbit-agent-contract.md §5.2). Only resend is retryable:
 // sending the same call again, unchanged, is safe and may succeed.
@@ -403,14 +409,31 @@ func (rec *callRecord) receipt(text string, isErr bool) toolReceipt {
 		r.Approval.Decision = decision.Status
 		r.Approval.DecidedBy = decision.DecidedByID
 		r.Approval.StartAfterCreate = decision.StartAfterCreate
-		if decision.Status == "ALLOWED" {
+		switch {
+		case decision.Status == "ALLOWED":
 			r.Approval.Outcome = approvalOutcomeApproved
-		} else {
+		case isOwnerChat(decision):
+			// The owner's words as they sent them; the reply around them is the receipt's text.
+			r.Approval.Outcome = approvalOutcomeChat
+			r.Approval.Message = decision.Message
+		default:
 			r.Approval.Outcome = approvalOutcomeDeclined
 			r.Approval.Message = declinedReason(decision)
 		}
 	}
 	switch {
+	case isOwnerChat(decision), decision == nil && !isErr && strings.HasPrefix(text, ownerChatLead):
+		// "Chat about this" refuses nothing: nothing was written, the proposal is still open, and the
+		// owner's words are a message to answer before calling again, changed as agreed. So there is
+		// no error and no retry rule; the text is the reply every Orbit ask hands over (ownerChatReply).
+		r.Outcome = outcomeChat
+		r.Approval.Required = true
+		r.Approval.Outcome = approvalOutcomeChat
+		r.Text = text
+		if decision != nil {
+			r.Text = ownerChatReply(decision.Message)
+		}
+		return r
 	case decision != nil && decision.Status != "ALLOWED", !isErr && strings.HasPrefix(text, "the human rejected"):
 		r.Outcome = outcomeDeclined
 		r.Approval.Required = true
@@ -867,6 +890,14 @@ func (rec *callRecord) structure(result map[string]interface{}) map[string]inter
 	isErr := result["isError"] == true
 	text := mcpResultText(result)
 	r := rec.receipt(text, isErr)
+	if r.Outcome == outcomeChat {
+		// The owner's words are a message to answer, so the text stays the reply word for word, which
+		// is where the clients read the words back from (ownerChatWords in @orbit/shared). The
+		// receipt is the structured content beside it.
+		out := toolResult(r.Text, false)
+		out["structuredContent"] = r
+		return out
+	}
 	if rec.op.Mutates {
 		return receiptResult(r, isErr)
 	}

@@ -1,9 +1,10 @@
 # Orbit Agent Contract v1
 
-> **Status:** frozen at v1.3.0, 2026-11-13 (v1.0.0 review record in §11; the 1.1.0, 1.2.0 and 1.3.0
-> changes are in §10). v1.1.0 adds the operation catalogue and changes no routing rule; v1.2.0 closes the
+> **Status:** frozen at v1.4.0, 2026-11-14 (v1.0.0 review record in §11; the 1.1.0, 1.2.0, 1.3.0 and
+> 1.4.0 changes are in §10). v1.1.0 adds the operation catalogue and changes no routing rule; v1.2.0 closes the
 > card-free task-write door on the runner's machine credential; v1.3.0 makes tool input strict and every
-> write's answer a structured receipt (§5.3, §6.3). This file is the authority for how an
+> write's answer a structured receipt (§5.3, §6.3); v1.4.0 gives the owner's "Chat about this" on a card
+> its own receipt outcome, `chat`, which is not a refusal (§6.2). This file is the authority for how an
 > in-session Claude or Codex agent uses Orbit: which object an intent belongs to, whether it travels
 > over MCP or the CLI, what a person must approve, how failures and retries are handled, and what
 > counts as a success receipt. The implementation tasks P0-02 … P2-01 work from this file. If the code
@@ -41,7 +42,8 @@
    `autoRunWhenReady: false`; omitting the field is not "do not start".
 5. **A person answers the consequential writes.** A create, a batch, a project, a provider change and
    every owner-only decision are cards. The card is the approval; there is no second door. A declined
-   card is a refusal, never a success.
+   card is a refusal, never a success. A card the owner answers with "Chat about this" is neither: it
+   is their message to answer, and the proposal stays open.
 6. **Success is a receipt with an id.** A write is done when the call returns the entity's id and
    status. Link it for the user as `orbit-<kind>:<id>`; do not paste bare ids.
 7. **Retry only what is safe.** Server-side transient conflicts are retried for you; a caller's retry
@@ -175,7 +177,7 @@ argument.
 | Attribution | Inside a session, the write is attributed to this agent and linked to this session; a person's own credential is recorded as the person. The model never invents an author. |
 | Identity and ids | Same entity, same public id, same status. A task created over the CLI is fetchable by the MCP `task_get` with no translation. |
 | Output | Every catalogued MCP tool that writes answers with the receipt (§6.3) as `structuredContent` and as its text; a read keeps the text it always was and carries the receipt beside it when its answer is a JSON document (or it failed). At the CLI `--json` emits the entity document on stdout and nothing else — the receipt's `entity` — and `--receipt` emits the receipt itself; hints go to stderr. |
-| Failure | A refusal is a refusal on both surfaces, and a declined card is ONE outcome. Since v1.2.0 it is the document `{"refused":true,"code":"APPROVAL_DECLINED","tool":…,"message":…,"decidedBy":…}`; since v1.3.0 the receipt carries it field for field — `refused` is `!ok` with `outcome: declined`, `code` is `error.code`, `tool` is `approval.card`, `message` is `error.message`, `decidedBy` is `approval.decidedBy`. MCP returns the receipt as the tool result (not marked isError); the CLI returns the document as the command's error (stderr, non-zero exit), and `--receipt` prints the receipt. The transport differs because a tool result is not a process; the outcome does not. |
+| Failure | A refusal is a refusal on both surfaces, and a declined card is ONE outcome. Since v1.2.0 it is the document `{"refused":true,"code":"APPROVAL_DECLINED","tool":…,"message":…,"decidedBy":…}`; since v1.3.0 the receipt carries it field for field — `refused` is `!ok` with `outcome: declined`, `code` is `error.code`, `tool` is `approval.card`, `message` is `error.message`, `decidedBy` is `approval.decidedBy`. MCP returns the receipt as the tool result (not marked isError); the CLI returns the document as the command's error (stderr, non-zero exit), and `--receipt` prints the receipt. The transport differs because a tool result is not a process; the outcome does not. The owner's "Chat about this" is not a refusal: since v1.4.0 it is `outcome: chat` on both surfaces, carrying their words (§6.2 rule 4). |
 
 **Since v1.1.0 the approval row is enforced by the control plane, by caller; since v1.2.0 it has no
 session-less exception on the machine credential.** The runner's machine credential is the agent's
@@ -347,7 +349,7 @@ A DAG batch restructure has no person route today: a person's terminal edits edg
 | Input / schema | missing required field, wrong type, mutually exclusive fields, cap exceeded | fix the call; do not retry blind |
 | Business validation | `OWNER_CONFIRMATION_REASON_REQUIRED`, a criterion shape the server refuses, a batch item invalid (`itemIndex`) | fix the named field/item; a batch is all-or-nothing |
 | Authorization | orchestration off, not the owner, cross-project crossing needs the owner, no live session | report the boundary; never swap doors |
-| Approval | card declined, card pending, permission prompt denied, a session write no answered card covers (`TASK_WRITE_NEEDS_OWNER_CARD`) | treat as a refusal; ask a new question only if the person asks |
+| Approval | card declined, card pending, permission prompt denied, a session write no answered card covers (`TASK_WRITE_NEEDS_OWNER_CARD`) | treat as a refusal; ask a new question only if the person asks. A card answered with "Chat about this" (`outcome: chat`) is not a refusal: answer the owner's message, then ask again, changed as agreed |
 | Conflict | task already running, generation/revision conflict (`409 PROGRESS_REVISION_CONFLICT`), dependency not done | re-read, reconcile, then retry the corrected call |
 | Transport / transient | 5xx, 429 with `Retry-After`, a transient database conflict | see §5.2 |
 
@@ -381,7 +383,8 @@ A DAG batch restructure has no person route today: a person's terminal edits edg
    `retryAfterSeconds`), `reread_first` (the outcome is unknown or conflicted: re-read, then decide),
    `fix_input` (change the arguments), `do_not_retry` (a boundary or a person's no; report it) or
    `wait` (a person has not answered yet; you will be woken). `error.retryable` is true exactly for
-   `resend`.
+   `resend`. A chat (`outcome: chat`, since 1.4.0) is not a failure and carries no `error`: nothing
+   was written, and the call is made again once the conversation with the owner leads to it.
 
 ### 5.3 Unknown fields and types
 
@@ -444,6 +447,7 @@ their schema has always told an agent to send them.
 | `session_create` | the session id and status |
 | `file_upload` | the file/attachment id and a link that works in a reply |
 | A declined card | the `APPROVAL_DECLINED` document below, distinguishable from a write, naming the card's tool, who declined it and why |
+| A card answered with "Chat about this" | `outcome: chat` (§6.2 rule 4): the owner's words, who sent them, and the reply the agent is handed, distinguishable from both a write and a refusal |
 
 **The one refusal document (v1.1.0).** A card the person declined produces this document on both
 surfaces — the MCP tool as its result text, the CLI as its error (non-zero exit):
@@ -470,7 +474,17 @@ in prose, and their receipt format belongs to P0-04.
 4. **A decline is a refusal, not a success.** A declined card is `ok: false`, `outcome: declined`,
    `approval.outcome: declined`, `error.code: APPROVAL_DECLINED` — the `APPROVAL_DECLINED` document
    of §2.4, carried by the receipt. The MCP result is not marked isError and the CLI exits non-zero:
-   classify by the outcome, never by the transport or the absence of an exception.
+   classify by the outcome, never by the transport or the absence of an exception. **A chat is not a
+   decline (since 1.4.0).** A card answer that carries the owner's own words (`decidedBy` set) comes
+   from the card's "Chat about this": they want to talk the proposal over before deciding. Its receipt
+   is `ok: false`, `outcome: chat`, `approval.outcome: chat`, `approval.message` (their words, as they
+   sent them) and `text`: the reply every Orbit ask hands over, "Not done yet, and not a no: … Their
+   message: …". It has no `error`. Nothing was written. Answer their message, then call the tool
+   again, changed as agreed: that puts a new card in front of them. A bare no (no words) and a card
+   the server abandoned stay `declined`. The MCP result's text is that same reply, not the receipt,
+   because the clients read the owner's words back from it (`src/shared/src/owner-chat-reply.fixture.json`
+   pins the writer and every reader, the receipt form included). The CLI exits non-zero with the
+   reply as its error, as it does for anything that wrote nothing.
 5. **Evidence is its own envelope.** A task's completion evidence is submitted with
    `task_evidence_submit` (`claim`, `checks`, `gaps`); a comment is not evidence, and evidence is not
    a status write. The completion criterion decides DONE, never the agent's summary.
@@ -479,7 +493,8 @@ in prose, and their receipt format belongs to P0-04.
 
 Every catalogued MCP tool that writes answers with one document of one shape — `receiptVersion: 1` —
 as its `structuredContent` and as its text content, so a client that reads only the text reads the
-receipt too; so does every call refused before it ran. A read keeps the text it always had, and
+receipt too; so does every call refused before it ran. The one exception is a chat (§6.2 rule 4),
+whose text is the owner's message and whose receipt is beside it. A read keeps the text it always had, and
 carries the receipt as `structuredContent` when it answered with a JSON document or failed; a read
 answered in prose (a summary, a background job's output) keeps its text alone. That split is what an
 engine shows its model: measured 2026-11-13 with Claude Code 2.1.325, a successful result's
@@ -494,16 +509,16 @@ whose outputSchema describes their answer, and `permission_prompt`, the engine's
 | Field | Always | Meaning |
 | --- | --- | --- |
 | `ok` | yes | The call did what it asked: `true` exactly for `written`, `read` and `dry_run`. |
-| `outcome` | yes | `written` · `read` · `dry_run` · `declined` (a person said no) · `pending` (a person has not answered; the call was handed to a runner-hosted job) · `refused` (the server, or the tool's own rule, said no; nothing written) · `invalid` (refused before anything was sent, §5.3) · `unknown` (no answer, or a 5xx: the write may have landed) · `failed` (a read that could not be answered). |
+| `outcome` | yes | `written` · `read` · `dry_run` · `declined` (a person said no) · `pending` (a person has not answered; the call was handed to a runner-hosted job) · `refused` (the server, or the tool's own rule, said no; nothing written) · `invalid` (refused before anything was sent, §5.3) · `unknown` (no answer, or a 5xx: the write may have landed) · `failed` (a read that could not be answered) · `chat` (since 1.4.0: the owner answered the card with "Chat about this"; nothing written, nothing refused, rule 4). |
 | `operation` / `action` / `entityType` | yes | The catalogue's operation id (= the MCP tool = the capability id), its verb (`create`, `update`, `start`, `read`, …) and the object the answer is (`task`, `project`, `task_list`, `session`, `agent`, …) — `task_start`'s is the `session` it started. |
 | `id` / `status` | yes (null when none) | The entity's own public id and status as the server answered — the id to link as `orbit-<kind>:<id>`. For an answer that is not one entity, the id the call addressed. A batch has none: see `items`. |
 | `changedFields` | yes | The fields this call wrote, sorted, including the defaults the tool filled in (a create's `assigneeId`, a `startNow`'s `runAt`); a clear is listed like any write. Empty unless `outcome` is `written`. |
-| `approval` | yes | `{required, kind, card?, outcome, decision?, decidedBy?, message?, startAfterCreate?}`: `kind` is the catalogue's (`none`/`card`/`owner`), `outcome` one of `not_required` · `not_asked` (the call stopped before the card) · `approved` · `declined` · `pending`; `decision` is the card's own status (`ALLOWED`, `DENIED`, `ABANDONED`, …). |
+| `approval` | yes | `{required, kind, card?, outcome, decision?, decidedBy?, message?, startAfterCreate?}`: `kind` is the catalogue's (`none`/`card`/`owner`), `outcome` one of `not_required` · `not_asked` (the call stopped before the card) · `approved` · `declined` · `pending` · `chat` (the owner wants to talk it over; `message` is their words); `decision` is the card's own status (`ALLOWED`, `DENIED`, `ABANDONED`, …). |
 | `idempotency` | yes | `{kind, key?}`: `caller_key` when this call carried a key (and the key), `server_key` for a keyless create (only a redelivered turn deduplicates), `none`, or `read`. |
-| `error` | when `ok` is false | `{code, message, httpStatus?, retryable, retry, retryAfterSeconds?, requiredAction?, violations?, accepts?}`. `code` is the server's own refusal code when it sent one (`PROJECT_SCOPE_MISMATCH`, `TASK_WRITE_NEEDS_OWNER_CARD`, …), else `HTTP_<status>`, or the runner's: `INVALID_ARGUMENTS`, `APPROVAL_DECLINED`, `AWAITING_OWNER`, `NO_RESPONSE` (sent, never answered: `unknown`), `NOT_SENT` (the connection was never made: `failed`, safe to `resend`), `NOT_DONE` (a 2xx answer that says `ok: false`, such as a skipped start: `refused`), `ORCHESTRATION_OFF`, `TASK_ID_REQUIRED`, `TOOL_REFUSED`. `retry` is §5.2 rule 7. `message` is the sentence a person reads. |
+| `error` | when `ok` is false, except `chat` | `{code, message, httpStatus?, retryable, retry, retryAfterSeconds?, requiredAction?, violations?, accepts?}`. `code` is the server's own refusal code when it sent one (`PROJECT_SCOPE_MISMATCH`, `TASK_WRITE_NEEDS_OWNER_CARD`, …), else `HTTP_<status>`, or the runner's: `INVALID_ARGUMENTS`, `APPROVAL_DECLINED`, `AWAITING_OWNER`, `NO_RESPONSE` (sent, never answered: `unknown`), `NOT_SENT` (the connection was never made: `failed`, safe to `resend`), `NOT_DONE` (a 2xx answer that says `ok: false`, such as a skipped start: `refused`), `ORCHESTRATION_OFF`, `TASK_ID_REQUIRED`, `TOOL_REFUSED`. `retry` is §5.2 rule 7. `message` is the sentence a person reads. |
 | `start` | a create that also started | `{by: startNow\|owner, started, sessionId, status, deferred?, session?}` — the started session, or why its start was deferred. |
 | `items` / `count` | a written batch | `[{index, ref?, id, status}]` in input order, and how many were written. |
-| `notes` / `text` | when there are any | Sentences that used to travel as prose beside the document; `text` is an answer that is not JSON. |
+| `notes` / `text` | when there are any | Sentences that used to travel as prose beside the document; `text` is an answer that is not JSON, and a chat's reply. |
 | `entity` | when there is one | The server's document, exactly as it answered. |
 
 The CLI is the same mapping: `orbit … --receipt` prints this document — built by the same code from
@@ -829,6 +844,7 @@ Other measured facts:
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.4.0 | 2026-11-14 | P0-04, merged with main's "Chat about this" change (8334e6e6a). When a card's answer carries the owner's own words (`decidedById` set), the owner pressed "Chat about this". That answer is now the receipt's own outcome, `chat`, and not `declined`: `ok: false`, `approval.outcome: chat`, `approval.message` (their words), `text` (the reply every Orbit ask hands over, "Not done yet, and not a no: …"), and no `error`. Nothing is written, and the proposal stays open to ask again after the talk. A bare no and an abandoned card stay `declined` / `APPROVAL_DECLINED`. The MCP text of a chat is that reply rather than the receipt, and the web, OrbitKit and Android readers also read a chat receipt that an engine shows in its place. `owner-chat-reply.fixture.json` pins both forms. §0 rule 5, §2.4, §5.1, §5.2 rule 7, §6.1–6.3 updated. The catalogue moves to 1.3.0, because the receipt `outputSchema` gains the value. |
 | 1.3.0 | 2026-11-13 | P0-04: strict input and the receipt. Every catalogued tool call is judged against its advertised schema before any request (closed objects advertised as `additionalProperties: false`, types, bounds, required fields, the catalogue's mutually exclusive groups) and refused with `INVALID_ARGUMENTS`; the CLI judges `--tasks` the same way. Every write answers with the versioned receipt (§6.3) as `structuredContent` and as its text, and a read answered with a document carries it as `structuredContent` — with `ok`, `outcome`, `id`, `status`, `changedFields`, `approval`, `idempotency` and a retry-ruled `error`; the five objects' creates/updates and `task_start` advertise it as `outputSchema`; `--receipt` prints it at the CLI. `task_create`/`task_create_batch` take `idempotencyKey` (G5). G1, G3 and G5 are satisfied, and the receipt carries G4's APPROVAL_DECLINED outcome. The catalogue moves to 1.2.0 (`task_create`/`task_create_batch` idempotency `caller_key`, `Exclusive` groups, closed input schemas). |
 | 1.2.0 | 2026-11-13 | P0-03. The approval row is enforced by the control plane, by caller: a session's `task_create`, `task_create_batch` (including one that starts work at once) and `task-list propose-dag --apply` each require an ALLOWED card covering that exact write, refused otherwise as `TASK_WRITE_NEEDS_OWNER_CARD`. The in-session CLI's DAG restructure now asks on the same card as the MCP tool (it previously applied with no approval); the injected primer no longer says the two surfaces are interchangeable, and says instead that they take the same approval. A declined card is one document, `APPROVAL_DECLINED` (G4 closed). §0 rule 8, §2.4, §6.1–2, §8.3, §8.4 updated. Revision 2 closes the machine-credential door itself: there is no card-free task write on it. `POST /runner/tasks`, `/runner/tasks/batch-create` and `/runner/task-lists/:id/dag-apply` now require a usable acting session (this runner's, this account's, not ended) as well as the answered card covering the exact write; a request naming no session, a forged id or an ended one is refused `TASK_WRITE_NEEDS_OWNER_CARD` with `USE_A_PERSONAL_ACCESS_TOKEN`, because `x-orbit-session-id` is attribution and an agent can unset it. The card-free door is a person's own credential on the user routes, stated as deliberate in the new §4.5. §2.2, §2.4, §4.4 updated; the CLI copy no longer offers a headless machine-credential create. |
 | 1.1.0 | 2026-11-13 | P0-02: the operation catalogue. `orbit capabilities` gains per-operation `object`, `intent`, `risk`, `approval`, `destructive`, `idempotency`, `retry`, `successEvidence`, `nextStep`, `returns` and `availability`, and the document gains `catalogVersion`/`catalogHash` (all additive; `schemaVersion` stays 2). MCP `tools/list` and the CLI capabilities are both projections of the catalogue, every deliberate surface gap is declared with a reason, and every advertised `argv`/`helpArgv` is executed by a mandatory test. G8 is satisfied; G6 is recorded as deliberately absent. |

@@ -146,11 +146,17 @@ func rpcCall(t *testing.T, s *mcpServer, name string, args map[string]interface{
 		t.Fatalf("%s: structuredContent is not a receipt: %v", name, err)
 	}
 	assertReceiptMatchesItsSchema(t, name, structured)
-	if op.Mutates || receipt.Outcome == outcomeInvalid {
+	content, _ := result["content"].([]interface{})
+	text, _ := content[0].(map[string]interface{})["text"].(string)
+	if receipt.Outcome == outcomeChat {
+		// A chat's text is the owner's message as every Orbit ask hands it over (ownerChatReply), and
+		// the receipt's text is that same reply: an engine that shows either shows the same words.
+		if !strings.HasPrefix(text, ownerChatLead) || text != receipt.Text || result["isError"] == true {
+			t.Fatalf("%s: a chat's text is not the owner's message\ntext: %s\nstructured: %s", name, text, reencoded)
+		}
+	} else if op.Mutates || receipt.Outcome == outcomeInvalid {
 		// The text of a write, and of a call refused before it ran, IS the receipt: a client that
 		// reads only the text reads the same document. A read keeps the text it always had.
-		content, _ := result["content"].([]interface{})
-		text, _ := content[0].(map[string]interface{})["text"].(string)
 		var fromText interface{}
 		if err := json.Unmarshal([]byte(text), &fromText); err != nil {
 			t.Fatalf("%s: the text of a receipt result is not JSON: %v\n%s", name, err, text)
@@ -415,18 +421,22 @@ func TestContractCreateAndStartReceiptCarriesTheStartedSession(t *testing.T) {
 }
 
 // A declined card is a refusal with its own outcome, never a success, and nothing is written.
+// cardWrites are the creates of the five objects that ask on a card first, with arguments that fit.
+var cardWrites = []struct {
+	tool string
+	args map[string]interface{}
+}{
+	{"task_create", map[string]interface{}{"title": "a", "completionCriterion": "EVIDENCE_JUDGMENT"}},
+	{"project_create", map[string]interface{}{"title": "P"}},
+	{"task_create_batch", map[string]interface{}{"tasks": []interface{}{map[string]interface{}{"title": "a", "completionCriterion": "EVIDENCE_JUDGMENT"}}}},
+	{"agent_create", map[string]interface{}{"name": "r", "systemPrompt": "x"}},
+}
+
+// A person's bare "no" (decidedById set, no words: the card's Deny) is the APPROVAL_DECLINED refusal.
 func TestContractDeclinedCardIsARefusalReceipt(t *testing.T) {
-	for _, tc := range []struct {
-		tool string
-		args map[string]interface{}
-	}{
-		{"task_create", map[string]interface{}{"title": "a", "completionCriterion": "EVIDENCE_JUDGMENT"}},
-		{"project_create", map[string]interface{}{"title": "P"}},
-		{"task_create_batch", map[string]interface{}{"tasks": []interface{}{map[string]interface{}{"title": "a", "completionCriterion": "EVIDENCE_JUDGMENT"}}}},
-		{"agent_create", map[string]interface{}{"name": "r", "systemPrompt": "x"}},
-	} {
+	for _, tc := range cardWrites {
 		t.Run(tc.tool, func(t *testing.T) {
-			cs, srv := newContractServer(t, `{"status":"DENIED","message":"not now","decidedById":"owner-1"}`, func(r *http.Request, _ map[string]interface{}) (int, string) {
+			cs, srv := newContractServer(t, `{"status":"DENIED","decidedById":"owner-1"}`, func(r *http.Request, _ map[string]interface{}) (int, string) {
 				if strings.Contains(r.URL.Path, "batch-preview") {
 					return 200, `{"tasks":1}`
 				}
@@ -441,7 +451,7 @@ func TestContractDeclinedCardIsARefusalReceipt(t *testing.T) {
 			if receipt.OK || receipt.Outcome != outcomeDeclined {
 				t.Fatalf("receipt = %+v", receipt)
 			}
-			if !receipt.Approval.Required || receipt.Approval.Outcome != approvalOutcomeDeclined || receipt.Approval.Decision != "DENIED" || receipt.Approval.DecidedBy != "owner-1" || receipt.Approval.Message != "not now" {
+			if !receipt.Approval.Required || receipt.Approval.Outcome != approvalOutcomeDeclined || receipt.Approval.Decision != "DENIED" || receipt.Approval.DecidedBy != "owner-1" || receipt.Approval.Message != "denied by the user" {
 				t.Fatalf("approval = %+v", receipt.Approval)
 			}
 			if receipt.Error == nil || receipt.Error.Code != errorCodeApprovalDeclined || receipt.Error.Retry != retryDoNot || receipt.Error.Retryable {
@@ -449,6 +459,45 @@ func TestContractDeclinedCardIsARefusalReceipt(t *testing.T) {
 			}
 			if receipt.ID != nil || len(receipt.ChangedFields) != 0 {
 				t.Fatalf("a decline reports a write: id=%v changed=%v", receipt.ID, receipt.ChangedFields)
+			}
+		})
+	}
+}
+
+// The owner's "Chat about this" (their words, decidedById set) refuses nothing: the receipt's outcome
+// is chat, not declined, with no error and no retry rule; it carries their words, and the text is the
+// reply every Orbit ask hands over. Nothing is written.
+func TestContractChatAboutThisIsItsOwnOutcomeNotARefusal(t *testing.T) {
+	const words = "Will there be two databases during the move?"
+	for _, tc := range cardWrites {
+		t.Run(tc.tool, func(t *testing.T) {
+			cs, srv := newContractServer(t, `{"status":"DENIED","message":"`+words+`","decidedById":"owner-1"}`, func(r *http.Request, _ map[string]interface{}) (int, string) {
+				if strings.Contains(r.URL.Path, "batch-preview") {
+					return 200, `{"tasks":1}`
+				}
+				return 200, `{"id":"x"}`
+			})
+			result, receipt := rpcCall(t, contractMCP(srv.URL), tc.tool, tc.args)
+			for _, w := range cs.writes() {
+				if !strings.Contains(w.Path, "batch-preview") {
+					t.Fatalf("a chat wrote: %+v", cs.writes())
+				}
+			}
+			if result["isError"] == true || receipt.OK || receipt.Outcome != outcomeChat {
+				t.Fatalf("isError=%v receipt = %+v", result["isError"], receipt)
+			}
+			if !receipt.Approval.Required || receipt.Approval.Outcome != approvalOutcomeChat || receipt.Approval.Decision != "DENIED" ||
+				receipt.Approval.DecidedBy != "owner-1" || receipt.Approval.Message != words {
+				t.Fatalf("approval = %+v", receipt.Approval)
+			}
+			if receipt.Error != nil {
+				t.Fatalf("a chat carries an error: %+v", receipt.Error)
+			}
+			if receipt.Text != ownerChatReply(words) || strings.Contains(receipt.Text, "rejected") {
+				t.Fatalf("text = %q", receipt.Text)
+			}
+			if receipt.ID != nil || len(receipt.ChangedFields) != 0 {
+				t.Fatalf("a chat reports a write: id=%v changed=%v", receipt.ID, receipt.ChangedFields)
 			}
 		})
 	}
@@ -915,7 +964,7 @@ func TestCLIRefusesAnInvalidBatchDocumentBeforeAnyRequest(t *testing.T) {
 
 // A card declined at the terminal is the same refusal receipt, and a non-zero exit.
 func TestCLIReceiptForADeclinedCard(t *testing.T) {
-	cs, srv := newContractServer(t, `{"status":"DENIED","message":"not now","decidedById":"owner-1"}`, entityAnswer)
+	cs, srv := newContractServer(t, `{"status":"DENIED","decidedById":"owner-1"}`, entityAnswer)
 	configureCLITestRunner(t, srv.URL)
 	t.Setenv("ORBIT_AGENT_ID", "agent-1")
 	t.Setenv("ORBIT_SESSION_ID", "sess-1")
@@ -933,6 +982,75 @@ func TestCLIReceiptForADeclinedCard(t *testing.T) {
 	}
 	if len(cs.writes()) != 0 {
 		t.Fatalf("a declined create wrote: %+v", cs.writes())
+	}
+}
+
+// "Chat about this" at the terminal: --receipt prints the chat receipt MCP answers with (outcome chat,
+// the owner's words, the reply as text, no error), and the command still exits non-zero with the
+// reply as its error, since nothing was written. Without --receipt the error is the same reply.
+func TestCLIReceiptForAChatAboutThis(t *testing.T) {
+	const words = "Will there be two databases during the move?"
+	decision := `{"status":"DENIED","message":"` + words + `","decidedById":"owner-1"}`
+	for _, tc := range []struct {
+		tool string
+		argv []string
+		args map[string]interface{}
+	}{
+		{"task_create", []string{"task", "create", "--title", "a", "--completion-criterion", "EVIDENCE_JUDGMENT"},
+			map[string]interface{}{"title": "a", "completionCriterion": "EVIDENCE_JUDGMENT"}},
+		{"project_create", []string{"project", "create", "--title", "P"}, map[string]interface{}{"title": "P"}},
+	} {
+		t.Run(tc.tool, func(t *testing.T) {
+			cs, srv := newContractServer(t, decision, entityAnswer)
+			configureCLITestRunner(t, srv.URL)
+			t.Setenv("ORBIT_AGENT_ID", "agent-1")
+			t.Setenv("ORBIT_SESSION_ID", "sess-1")
+			t.Setenv(envOrchestrationToken, "")
+			var out, errOut bytes.Buffer
+			err := runOrbitCLI(append(append([]string{}, tc.argv...), "--receipt"), strings.NewReader(""), &out, &errOut)
+			if err == nil {
+				t.Fatal("a create the owner has not said yes to exited zero")
+			}
+			if !strings.Contains(err.Error(), ownerChatReply(words)) || strings.Contains(err.Error(), "rejected") {
+				t.Fatalf("the command's error is not the owner's message: %v", err)
+			}
+			var cli toolReceipt
+			if jsonErr := json.Unmarshal(out.Bytes(), &cli); jsonErr != nil {
+				t.Fatalf("stdout is not a receipt: %v\n%s", jsonErr, out.String())
+			}
+			var generic interface{}
+			_ = json.Unmarshal(out.Bytes(), &generic)
+			assertReceiptMatchesItsSchema(t, tc.tool+" --receipt", generic)
+			if cli.OK || cli.Outcome != outcomeChat || cli.Error != nil || cli.Approval.Outcome != approvalOutcomeChat ||
+				cli.Approval.Message != words || cli.Approval.DecidedBy != "owner-1" || cli.Text != ownerChatReply(words) {
+				t.Fatalf("receipt = %+v", cli)
+			}
+			plain := runOrbitCLI(tc.argv, strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{})
+			if plain == nil || !strings.Contains(plain.Error(), ownerChatReply(words)) || strings.Contains(plain.Error(), "rejected") {
+				t.Fatalf("plain run error = %v", plain)
+			}
+			if len(cs.writes()) != 0 {
+				t.Fatalf("a chat wrote: %+v", cs.writes())
+			}
+
+			// The same call over MCP answers with the same receipt, field for field where the two doors
+			// can agree (the CLI reports no idempotency key it was not given, and neither does MCP).
+			_, mcp := rpcCall(t, contractMCP(srv.URL), tc.tool, tc.args)
+			type mapped struct {
+				OK                bool
+				Outcome           string
+				Operation, Action string
+				EntityType        string
+				Approval          receiptApproval
+				Text              string
+			}
+			project := func(r toolReceipt) mapped {
+				return mapped{r.OK, r.Outcome, r.Operation, r.Action, r.EntityType, r.Approval, r.Text}
+			}
+			if !reflect.DeepEqual(project(cli), project(mcp)) {
+				t.Fatalf("the two doors disagree\n cli: %+v\n mcp: %+v", project(cli), project(mcp))
+			}
+		})
 	}
 }
 

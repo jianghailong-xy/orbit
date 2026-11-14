@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -497,5 +498,51 @@ func TestOwnerChatReplyMatchesTheClientsFixture(t *testing.T) {
 	}
 	if got := ownerChatReply(fixture.WriterWords); got != fixture.Cases[0].Result {
 		t.Fatalf("the runner writes\n%q\nthe clients read\n%q", got, fixture.Cases[0].Result)
+	}
+}
+
+// Claude Code and Codex record a result's structuredContent in place of its text, so the clients also
+// read the owner's words out of the chat receipt. The fixture's two receipt cases are what this runner
+// answers a project_create card with: the owner's "Chat about this", which carries the words, and a
+// bare no, which carries none.
+func TestChatReceiptMatchesTheClientsFixture(t *testing.T) {
+	raw, err := os.ReadFile("../shared/src/owner-chat-reply.fixture.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		WriterWords string `json:"writerWords"`
+		Cases       []struct {
+			Name   string `json:"name"`
+			Result string `json:"result"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	results := map[string]string{}
+	for _, c := range fixture.Cases {
+		results[c.Name] = c.Result
+	}
+	words, _ := json.Marshal(fixture.WriterWords)
+	for name, decision := range map[string]string{
+		"the receipt an engine shows in place of the text": `{"status":"DENIED","message":` + string(words) + `,"decidedById":"user-1"}`,
+		"a declined card's receipt":                        `{"status":"DENIED","decidedById":"user-1"}`,
+	} {
+		want, ok := results[name]
+		if !ok {
+			t.Fatalf("the fixture has no case %q", name)
+		}
+		_, srv := newContractServer(t, decision, func(*http.Request, map[string]interface{}) (int, string) { return 200, `{"id":"x"}` })
+		result, _ := rpcCall(t, contractMCP(srv.URL), "project_create", map[string]interface{}{"title": "Move the database"})
+		got, _ := json.Marshal(result["structuredContent"])
+		var gotDoc, wantDoc interface{}
+		_ = json.Unmarshal(got, &gotDoc)
+		if err := json.Unmarshal([]byte(want), &wantDoc); err != nil {
+			t.Fatalf("%s: the fixture's result is not a receipt: %v", name, err)
+		}
+		if !reflect.DeepEqual(gotDoc, wantDoc) {
+			t.Fatalf("%s: the runner answers\n%s\nthe clients read\n%s", name, got, want)
+		}
 	}
 }

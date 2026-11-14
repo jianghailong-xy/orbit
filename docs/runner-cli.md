@@ -56,7 +56,9 @@ a runner credential fall back to the runner owner.
 ([agent contract §6.3](orbit-agent-contract.md)): one JSON document with `ok`, `outcome`, the entity's
 `id` and `status`, the `changedFields`, the `approval` outcome, the `idempotency` used and, when `ok` is
 false, an `error` with its code and a `retry` rule. It is printed on stdout for a failure too, and the
-exit status is 0 exactly when `ok` is true:
+exit status is 0 exactly when `ok` is true. A card the owner answered with "Chat about this" is
+`outcome: chat`, not a refusal: no `error`, their words in `approval.message`, and the reply in `text`.
+Nothing was written, so the exit status is non-zero, and the reply is also the command's error.
 
 ```bash
 orbit task create --title "Rotate the staging key" --completion-criterion EVIDENCE_JUDGMENT \
