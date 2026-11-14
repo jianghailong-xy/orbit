@@ -112,6 +112,11 @@ export interface CreateSessionDto {
    *  in (docs/terminal-session-design.md D4). It can only turn isolation off: `true` or omitted follows the
    *  workspace. Anything but a boolean is a 400. */
   worktree?: boolean;
+  /** The folder below the workspace's workDir a session with no worktree runs in: what `orbit` typed in a
+   *  subfolder of a workspace sends, so the engine starts in that subfolder. Relative, `/`-separated and
+   *  normalized, with no `..` segment (work-subdir.ts); anything else, or one sent for a session that has a
+   *  worktree, is a 400 and nothing is created. Omitted runs the session at workDir. */
+  workSubdir?: string;
 }
 
 export interface SessionTurnDto {

@@ -399,3 +399,50 @@ func TestStartSessionInDirDeclinedCreatesNothing(t *testing.T) {
 		t.Fatalf("declined: exit %d, stderr %q", code, errOut.String())
 	}
 }
+
+// `orbit` in a folder below the workspace's directory sends that folder, relative and `/`-separated, as
+// workSubdir: the session runs in the cwd itself. Typed through a symlink to the workspace it is the same folder.
+// Nothing says the session runs at the workspace root any more.
+func TestStartSessionInDirSendsTheSubfolder(t *testing.T) {
+	root := t.TempDir()
+	sub := filepath.Join(root, "services", "api")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "shop")
+	if err := os.Symlink(root, link); err != nil {
+		t.Fatal(err)
+	}
+	cred := &terminalCredential{RunnerID: bareTestRunner, MachineName: "dev-laptop"}
+	for _, c := range []struct{ cwd, want string }{
+		{sub, "services/api"},
+		{filepath.Join(link, "services", "api"), "services/api"},
+		{filepath.Join(root, "services"), "services"},
+		{root, ""},
+	} {
+		f := newTUIFakeServer(t)
+		raw, _ := json.Marshal([]tuiWorkspace{{ID: "w-shop", Name: "shop-api", WorkDir: root}})
+		f.workspacesJSON = string(raw)
+		r, w, _ := os.Pipe()
+		var out lockedBuffer
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		go keysAfter(t, w, &out, "enter send", "hi\r")
+		_, _, err := startSessionInDir(ctx, newTUIClient(f.URL, "orbit_term_test"), cred, newSessionRequest{}, c.cwd, r, &out)
+		cancel()
+		r.Close()
+		w.Close()
+		if err != nil {
+			t.Fatalf("%s: %v; output:\n%s", c.cwd, err, tuiPlain(out.String()))
+		}
+		want := map[string]any{"workspaceId": "w-shop", "assignedRunnerId": bareTestRunner, "worktree": false, "prompt": "hi"}
+		if c.want != "" {
+			want["workSubdir"] = c.want
+		}
+		if got := f.body("POST /api/sessions"); !reflect.DeepEqual(got, want) {
+			t.Fatalf("%s: POST /sessions body\n got: %v\nwant: %v", c.cwd, got, want)
+		}
+		if strings.Contains(tuiPlain(out.String()), "the session runs in") {
+			t.Fatalf("%s: still says where else the session runs:\n%s", c.cwd, tuiPlain(out.String()))
+		}
+	}
+}

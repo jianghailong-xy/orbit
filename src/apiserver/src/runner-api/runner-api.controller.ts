@@ -4214,6 +4214,8 @@ export class RunnerApiController {
         agent: workspaceCfg,
         workDir: workspace?.workDir ?? undefined,
         branch: s.branch ?? undefined,
+        // cf. the claim path: the folder below workDir a no-worktree session runs in.
+        ...(s.workSubdir ? { workSubdir: s.workSubdir } : {}),
         // cf. the claim path: a codeless run with no branch yet goes back to its detached checkout.
         ...codelessClaimFields(s, workspace, runner.capabilities),
         autoInitGit: workspace?.autoInitGit ?? undefined,

@@ -657,6 +657,7 @@ func claimedSessionFromReclaim(r ReclaimSession) *ClaimedSession {
 		CodelessCheckout:   r.CodelessCheckout,
 		CodelessBranch:     r.CodelessBranch,
 		CreateWorkDir:      r.CreateWorkDir,
+		WorkSubdir:         r.WorkSubdir,
 		MergeTarget:        r.MergeTarget,
 		AgentID:            r.AgentID,
 		TaskID:             r.TaskID,

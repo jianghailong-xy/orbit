@@ -1128,6 +1128,9 @@ export class QueueService {
       // Per-session worktree branch (generated at creation); the runner isolates the
       // session in a `git worktree` on this branch when workDir is a git repo.
       branch: session.branch ?? undefined,
+      // The folder below workDir a no-worktree session runs in (POST /sessions `workSubdir`); the runner refuses
+      // one that is missing or leaves workDir. Only when set, so every other claim keeps the shape it had.
+      ...(session.workSubdir ? { workSubdir: session.workSubdir } : {}),
       // A codeless task's run with no branch yet (design §3, B2): a detached checkout, and the branch to
       // make only if the run changes something — or, for a runner too old for that, the branch up front.
       ...codelessClaimFields(session, workspace, session.assignedRunner?.capabilities),

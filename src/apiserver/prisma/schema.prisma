@@ -2155,6 +2155,9 @@ model Session {
   // 'worktree' (isolated) or 'shared-nogit' (workDir wasn't a git repo, so it ran in
   // the shared dir with no isolation). All null for pre-feature / never-run sessions.
   branch               String?
+  /// The folder below its workspace's workDir a no-worktree session runs in (POST /sessions `workSubdir`): relative,
+  /// normalized, no `..`. Null runs it at workDir. Delivered on the claim; the runner refuses one that leaves workDir.
+  workSubdir           String?   @map("work_subdir")
   baseSha              String?   @map("base_sha")
   changedFiles         Json?     @map("changed_files")
   isolationStatus      String?   @map("isolation_status")

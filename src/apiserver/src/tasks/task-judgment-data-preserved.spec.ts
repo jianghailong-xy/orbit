@@ -2989,7 +2989,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0663 adds the nullable approval.decided_terminal_machine_name, ties it to a TERMINAL decision in
       // approval_decided_via_chk and lets activity_credential_chk say TERMINAL; no preserved rows, triggers or DONE
       // fence change, and no row is written.
-      '0663_approval_decided_terminal_machine'],
+      '0663_approval_decided_terminal_machine',
+      // 0710 adds one nullable column to session, work_subdir (the folder below its workspace's directory a no-worktree
+      // session runs in, sessions/work-subdir.ts); no preserved rows, triggers or DONE fence change, and no row is
+      // written.
+      '0710_session_work_subdir'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
