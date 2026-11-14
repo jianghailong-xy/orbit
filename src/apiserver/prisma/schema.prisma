@@ -336,7 +336,7 @@ model User {
   mergeReceipts    SessionMergeReceipt[] // merges recorded against this user's session branches
   agents           Agent[] // Agent identities this user owns (tenant scope)
   avatar           UserAvatar? // the profile photo, when one is set (0335)
-  emailOutbox      EmailOutbox[] // the welcome email of this account, when it was created after 0517
+  emailOutbox      EmailOutbox[] // the welcome email of this account (after 0517), and its session invitations (0618)
 
   /// Presses of Run Now this user made, and the receipts of their requests (0137).
   runRequests       TaskRunRequest[]
@@ -536,16 +536,25 @@ model EmailSettings {
   @@map("email_settings")
 }
 
-/// One email to send (docs/welcome-email-design.md §3.3; migration 0517), written in the transaction that
-/// creates the account. `kind` is only WELCOME; status PENDING | SENT | FAILED | SKIPPED (CHECKs live in
-/// the migration). No body and no secret: the email is rendered when it is sent.
+/// One email to send (docs/welcome-email-design.md §3.3; migrations 0517, 0618): a WELCOME row written in the
+/// transaction that creates the account, or a SESSION_INVITE row written with a session guest's new invitation.
+/// Status PENDING | SENT | FAILED | SKIPPED (CHECKs live in the migrations). No body and no secret: the email
+/// is rendered when it is sent.
+///
+/// 0618 adds the unique index this schema cannot spell — UNIQUE NULLS NOT DISTINCT (kind, user_id, session_id),
+/// one WELCOME per account and one SESSION_INVITE per (account, session) — and the CHECK that session_id is
+/// set exactly when kind is SESSION_INVITE.
 model EmailOutbox {
   id                String    @id @default(uuid(7)) @db.Uuid
   kind              String
   userId            String    @map("user_id") @db.Uuid
   user              User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// The session a SESSION_INVITE is for; null for a WELCOME (0618).
+  sessionId         String?   @map("session_id") @db.Uuid
+  session           Session?  @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   toAddress         String    @map("to_address")
-  /// The administrator who created the account; null for a Google sign-up. No relation, as updatedById.
+  /// The administrator who created the account, or the owner who invited the guest; null for a Google
+  /// sign-up. No relation, as updatedById.
   createdById       String?   @map("created_by_id") @db.Uuid
   status            String
   attempts          Int       @default(0)
@@ -559,7 +568,7 @@ model EmailOutbox {
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  @@unique([kind, userId], map: "email_outbox_kind_user_id_key")
+  @@index([sessionId], map: "email_outbox_session_id_idx")
   @@map("email_outbox")
 }
 
@@ -948,6 +957,15 @@ model Runner {
   /// `default`, taken back out by restoreDefault, and never by the runner. Empty is every Default
   /// listed and used, as before. NOT NULL DEFAULT '{}' in SQL, like every scalar list here.
   defaultRemoved String[]  @default([]) @map("default_removed")
+  /// The engine update warnings dismissed on this runner (migration 0705), each until the next release:
+  /// { "<engine>": "<latest>" }, the `update.latest` the failure was against when Dismiss was pressed.
+  /// Clients hide that engine's update warning while it equals the engine's current `update.latest`.
+  /// Written by RunnersService.dismissEngineUpdateWarning, never by the runner. NULL is nothing dismissed.
+  engineUpdateDismissals Json? @map("engine_update_dismissals")
+  /// The sessions Fix with an agent started here, one per warning (migration 0760):
+  /// { "<kind>[:<engine>]": { "sessionId": "<uuid>", "at": "<iso>" } }. A second start for a warning is
+  /// refused while its session is open. Written by RunnerAttentionFixService.fix, never by the runner.
+  attentionFixes Json? @map("attention_fixes")
 
   // Browser-driven install of one engine CLI, the same one-slot relay shape as the sign-in above
   // (a machine installs one CLI at a time; the request is redelivered until the runner reports).
@@ -1047,6 +1065,10 @@ model RunnerPresence {
   /// gateway opened a new connection for it, or when a link beat came after it missed one. Null until either has
   /// (migration 0450). What the reaper reads a mass disconnection off once the runner is back.
   lostAt        DateTime? @map("lost_at")
+  /// The machine's CPU, memory and disk as its beats report them, and its last hour of them (migration 0720):
+  /// {at, latest, samples: [[ms, cpu %, memory %, disk %], …]}. Null until the runner reports one; a beat without
+  /// one leaves it as it is (runners/runner-presence.ts).
+  resources     Json?     @map("resources")
 
   @@map("runner_presence")
 }
@@ -2108,6 +2130,12 @@ model Session {
   /// this session runs a turn of its own — when a merge is refused — the check waits here until that
   /// turn ends. Null when no check is owed (migration 0431).
   mergeRepairTurnEndedAt DateTime? @map("merge_repair_turn_ended_at")
+  /// A merge this session asked for of itself during its own turn (SessionsService.mergeToMain), which
+  /// could not be queued while that turn ran: when it was asked, and the target it named (null → the
+  /// default). Taken up when the turn ends (SessionsService.mergeAfterOwnTurn) and cleared by any merge
+  /// that queues. Null when none is owed (migration 0740).
+  mergeAfterTurnAt     DateTime? @map("merge_after_turn_at")
+  mergeAfterTurnTarget String?   @map("merge_after_turn_target")
   mergeRequestedAt     DateTime? @map("merge_requested_at")
   /// Who pressed Merge for the operation queued (0454, contract §10.6 O-R3): `USER` for a request carrying
   /// the account owner's credential, `AGENT` for one made from a session, NULL for one the server queued
@@ -2252,6 +2280,8 @@ model Session {
   messageCharges        SessionMessageCharge[] @relation("SessionMessageChargeRecipient")
   poolGatewayTokens     PoolGatewayToken[]
   keyGatewayTokens      KeyGatewayToken[]
+  coordinatorHandoffsFrom CoordinatorHandoff[] @relation("CoordinatorHandoffFrom")
+  coordinatorHandoffsTo   CoordinatorHandoff[] @relation("CoordinatorHandoffTo")
   keyGatewayUsage       KeyGatewayUsage[]
   poolLoginTokens       PoolLoginToken[]
   poolLoginUsage        PoolLoginUsage[]
@@ -2301,6 +2331,7 @@ model Session {
   /// Public links with this session as their root, ended ones included (migration 0306).
   shareLinks            ShareLink[]
   guests                SessionGuest[] // the people the owner invited to reply (0560)
+  guestInviteEmails     EmailOutbox[] // the email each invited person was sent (0618)
 
   @@index([assignedRunnerId, status])
   // "what did this workspace last run on", the derived seed a new session inherits when the
@@ -3377,6 +3408,7 @@ model Project {
   // `@unique` already is one.)
   @@index([coordinatorWorkspaceId])
   @@map("project")
+  coordinatorHandoffs CoordinatorHandoff[]
 }
 
 /// A Project's explicit binding to ONE line of code (`docs/project-source-contract.md` §3.1,
@@ -5751,6 +5783,27 @@ model Task {
   /// declaration takes the task out of its criterion's landing conjunction. NULL on a task that is
   /// not codeless, and on one created codeless — creating it so is the first statement, not a change.
   codelessReason     String?  @map("codeless_reason")
+  /// The session this task was forked from (migration 0615, SOURCE row PF, SR55): the session whose
+  /// create call filed it, on that call's runner credential. The five fork columns are all NULL or
+  /// all set, written by the create doors in the task's own INSERT and never afterwards (0615's
+  /// `task_fork_guard`), so every run of the task, a retry included, starts from the same commit.
+  /// No foreign key: deleting that session does not move where this task starts.
+  forkSessionId           String?  @map("fork_session_id") @db.Uuid
+  /// The machine the forking session ran on when it forked: where the snapshot commit exists, and
+  /// the `RUNNER_LOCAL` authority of a forked run. No foreign key, as above.
+  forkRunnerId            String?  @map("fork_runner_id") @db.Uuid
+  /// The snapshot commit the task starts from, 40 lowercase hex.
+  forkSha                 String?  @map("fork_sha")
+  /// The forking session's HEAD when it took the snapshot, 40 lowercase hex.
+  forkBaseHead            String?  @map("fork_base_head")
+  /// Whether the snapshot carries edits the forking session had not committed: exactly when
+  /// `forkSha` is not `forkBaseHead` (0615's `task_fork_shape_chk`).
+  forkIncludesUncommitted Boolean? @map("fork_includes_uncommitted")
+  /// The paths the snapshot changed relative to `forkBaseHead`, as the runner read them when it took
+  /// it (migration 0617): what a forked task's task_await payload names (design §2.7 F4). Empty when
+  /// the task was not forked, the snapshot changed nothing, or its runner sent none; written once,
+  /// like the five above.
+  forkChangedFiles        String[] @default([]) @map("fork_changed_files")
   /// The refusal this task's most recent start met before its run could begin (migration 0298):
   /// a `TaskDispatchRefusal` (@orbit/shared) — the §10.1 code and its fixAction, when, which run,
   /// the commit it stood on and the prerequisite commits that commit did not contain. NULL when
@@ -7291,6 +7344,40 @@ model PoolGatewayToken {
 /// each claim, reclaim and provider-switch reload; earlier tokens of the same session and key stay good, their
 /// expiry pushed out with each claim. Deleting the session, the key or the person deletes its tokens; a key
 /// disabled or rotated revokes them (`revokedAt`).
+/// A coordinator handoff (migration 0761, docs/coordinator-handoff.md): the outgoing coordinator
+/// writes a note in a platform turn, then the replacement opens its successor with that note. One
+/// live row (WRITING, HANDING_OVER, FAILED) per outgoing coordinator; COMPLETED names the successor.
+model CoordinatorHandoff {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  ownerId       String    @map("owner_id") @db.Uuid
+  projectId     String    @map("project_id") @db.Uuid
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  fromSessionId String    @map("from_session_id") @db.Uuid
+  fromSession   Session   @relation("CoordinatorHandoffFrom", fields: [fromSessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  toSessionId   String?   @map("to_session_id") @db.Uuid
+  toSession     Session?  @relation("CoordinatorHandoffTo", fields: [toSessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// WRITING | HANDING_OVER | FAILED | CANCELLED | COMPLETED (a CHECK).
+  state         String
+  /// Advanced by Try again; the note turn's key carries it.
+  attempt       Int       @default(1)
+  /// The note turn's `conversation_turn.client_turn_id`; null once a skip took the note out.
+  clientTurnId  String?   @map("client_turn_id")
+  startedAt     DateTime  @default(now()) @map("started_at")
+  /// TURN_FAILED | TURN_STOPPED | TIMED_OUT | EMPTY_NOTE | REPLACE_FAILED, only while FAILED.
+  failureCode   String?   @map("failure_code")
+  note          String?
+  /// The waits the swap moved, as `{ id, label, paused }`.
+  movedWaits    Json      @default("[]") @map("moved_waits")
+  endedAt       DateTime? @map("ended_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@index([fromSessionId, createdAt])
+  @@index([toSessionId])
+  @@index([projectId])
+  @@map("coordinator_handoff")
+}
+
 model KeyGatewayToken {
   id         String        @id @default(uuid(7)) @db.Uuid
   tokenHash  String        @unique @map("token_hash")

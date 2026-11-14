@@ -7,6 +7,7 @@ import {
   SessionRunState,
   SessionState,
 } from './enums';
+import type { SessionCoordinatorHandoff, SessionCoordinatorHandoffReceived } from './coordinator-handoff';
 import type { SessionCapabilities } from './dto';
 import type { ConfirmationUnderReview } from './owner-confirmation-review';
 import type { SessionOwnerItem, SessionWaitingKind } from './project-progress';
@@ -306,6 +307,14 @@ export interface ControlSessionSummary {
    *  row then says "From Feishu · <name>". Null for anybody else and cleared with `lastUserText` — a value, as
    *  `lastUserFrom` is; only an absent key, from an older control plane, means "unchanged". */
   lastUserFromExternal?: ExternalMessageFrom | null;
+  /** On a project's outgoing coordinator: its handoff (coordinator-handoff.ts) — WRITING, HANDING_OVER,
+   *  FAILED with a reason, or COMPLETED naming its successor. Null when there is none (a cancelled one
+   *  included) — a value, so a row learns a handoff cleared; only an absent key, from an older control
+   *  plane, means "unchanged". */
+  coordinatorHandoff?: SessionCoordinatorHandoff | null;
+  /** On the successor: the previous coordinator, its note and the waits that moved here. Null on any
+   *  other session; same convention. */
+  coordinatorHandoffReceived?: SessionCoordinatorHandoffReceived | null;
 }
 
 /** `data` for `session.ended`. */

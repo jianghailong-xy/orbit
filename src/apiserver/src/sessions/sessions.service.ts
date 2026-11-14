@@ -1,8 +1,9 @@
+import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
 import { visibleQuestions, questionsWithCoordinator } from './run-question';
 import { isRunNotifyTurn, runNotifyContent } from './run-notify';
 import {
   SESSION_MERGE_RECOVERY_V1, readMergeRecovery, mergeRecoveryConfirmable, mergeRecoveryContinuePrompt, mergeRecoveryPrompt,
-  mergeRecoveryReady, type MergeRecovery, type MergeRecoveryAction,
+  mergeRecoveryReady, type MergeRecovery, type MergeRecoveryAction, type SessionActivity,
 } from '@orbit/shared';
 import {
   BadRequestException,
@@ -30,6 +31,7 @@ import { appendScheduledWakeupContext, endWakeupLoop, readSessionWakeups } from 
 import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
 import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
+import { readSessionActivities, sessionActivitySql } from './task-work-carrier';
 import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
@@ -160,6 +162,7 @@ import { cursorDefaultPermissionMode } from '../common/permission-semantics';
 import { PatRefusal, refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { orchestrationEnabled } from '../common/orchestration-switch';
+import { isStopping } from '../common/graceful-stop';
 import { normalizePermissionRules } from '../common/permission-rules';
 import { reachesPastOneMcpTool } from './remember-rules';
 import {
@@ -177,7 +180,17 @@ import {
   readOwnerDecisionsBySession,
   sessionWaitingKind,
 } from '../projects/owner-decision-signal';
-import { chatSourceColumns, decideSessionSource, type SessionSourceTaskRow } from '../projects/session-source';
+import {
+  chatSourceColumns,
+  decideSessionSource,
+  forkSourceLine,
+  SESSION_SOURCE_TASK_SELECT,
+  type SessionSourceDecision,
+  type SessionSourceTaskRow,
+} from '../projects/session-source';
+import { SourceResolutionRefusal } from '../projects/source-selector';
+import { forkRefusalBody } from '../tasks/task-fork';
+import { isCodelessTaskRun } from './codeless-checkout';
 import { readWikiChatContext, sameWikiChatContext, wikiContextOutsideChat } from '../wiki/wiki-chat-context';
 import { branchName } from '../projects/project-criterion-landing';
 import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
@@ -1304,15 +1317,7 @@ export class SessionsService {
     if (dto.taskId) {
       const task = await this.prisma.task.findFirst({
         where: { id: dto.taskId, ownerId },
-        select: {
-          id: true,
-          projectId: true,
-          verifiesTaskId: true,
-          pinnedRevision: true,
-          codeless: true,
-          attemptGeneration: true,
-          knownGoodSha: true,
-        },
+        select: SESSION_SOURCE_TASK_SELECT,
       });
       if (!task) throw new ForbiddenException('task not found');
       sourceTask = task;
@@ -1329,9 +1334,29 @@ export class SessionsService {
     //
     // A wiki chat is the one session that executes no task and still freezes a selector: origin/main,
     // by a constant rule rather than the table (SR54).
-    const source = wikiChat
+    const source: Pick<SessionSourceDecision, 'columns' | 'forkRunnerId'> = wikiChat
       ? { columns: chatSourceColumns(wikiChat.repository) }
-      : await decideSessionSource(this.prisma, sourceTask);
+      : await decideSessionSource(this.prisma, sourceTask).catch((error: unknown) => {
+          // SR55's resolution-time refusal (a binding added to the project after the fork was filed),
+          // answered in the shape the task's create door answers it in, rather than as a bare error.
+          if (error instanceof SourceResolutionRefusal && error.code === 'FORK_IN_BOUND_PROJECT') {
+            throw new ConflictException(forkRefusalBody('FORK_IN_BOUND_PROJECT', error.message, error.detail));
+          }
+          throw error;
+        });
+    // SR55's placement rule, at the door every run passes: a forked task's snapshot exists only in the
+    // forking session's repository, on that session's machine, so a run placed anywhere else could only
+    // be refused there later (or worse, find a same-named commit in some other repository). The create
+    // doors refuse an assignee on another machine; this is what holds after an edit moved the task, or
+    // its workspace, since.
+    if (source.forkRunnerId && source.forkRunnerId !== assignedRunnerId) {
+      throw new ConflictException(forkRefusalBody(
+        'FORK_SOURCE_NOT_REACHABLE',
+        "this task starts from a session's snapshot, which exists only on the machine that session ran on, and this "
+          + 'run would be placed on another machine. Assign the task to a workspace on that machine.',
+        { taskId: sourceTask?.id ?? null, forkRunnerId: source.forkRunnerId, runnerId: assignedRunnerId },
+      ));
+    }
     // Validate any compose-page image refs up front (caller's, still unscoped) so a bad
     // one fails the request before a session is created. They're scoped to the session
     // below and linked to the seeded first turn when the runner claims it (queue.service).
@@ -1361,7 +1386,20 @@ export class SessionsService {
             ).map((a) => a.fileName),
           )
         : titleFromPrompt(dto.prompt));
-    let branch = enableWorktree ? makeBranchName(title) : null;
+    // A forked task's run always gets its own branch, whatever the workspace says (SR55, design §2.4):
+    // a pinned run with no branch is refused at checkout (WORKTREE_REQUIRED), and running it in the
+    // shared workDir would put it in the very directory the session it forked from may be writing.
+    //
+    // A codeless task's run gets no branch here (design §3, B2): it is still isolated, in a checkout the claim
+    // asks for detached, and its branch is made at finalize only if the run changed something.
+    const codelessRun = isCodelessTaskRun({
+      taskId: sourceTask?.id ?? null,
+      sourceKind: source.columns.sourceKind ?? null,
+      task: sourceTask,
+    });
+    let branch = (enableWorktree && !codelessRun) || source.columns.sourceKind === 'SESSION_FORK'
+      ? makeBranchName(title)
+      : null;
     // Refuse now if the machine this is bound for cannot start it at all, rather than creating a
     // session (and, on the runner, a git checkout) that dies a second later with the same message.
     // Only for a runtime signed out on an online runner — see signedOutEngineRefusal for
@@ -3833,6 +3871,7 @@ export class SessionsService {
       runningBgJobs: string[];
       runningBgJobActivity: Prisma.JsonValue;
       runningSubagentCount: number;      engineTurnActive: boolean;
+      activity: SessionActivity | null;
       engineStartedAt: Date | null;
       enginePhase: string | null;
       runClaimedAt: Date | null;
@@ -3972,6 +4011,9 @@ export class SessionsService {
         s.running_bg_job_activity AS "runningBgJobActivity",
         cardinality(s.running_subagents)::int AS "runningSubagentCount",
         s.engine_turn_active AS "engineTurnActive",
+        -- What it is doing beyond its status (sessionActivitySql): the one answer to whether a parked
+        -- session is still working, so no client has to rebuild it from the columns around it.
+        (${Prisma.raw(sessionActivitySql('s'))}) AS "activity",
         s.engine_started_at AS "engineStartedAt",
         s.engine_phase AS "enginePhase",
         s.run_claimed_at AS "runClaimedAt",
@@ -4184,6 +4226,7 @@ export class SessionsService {
         runningBgJobCount: freshRunningBgJobs(r.runningBgJobs, r.runningBgJobActivity).length,
         runningSubagentCount: r.runningSubagentCount,
         engineTurnActive: r.engineTurnActive,
+        activity: r.activity,
         engineStartedAt: r.engineStartedAt,
         // What the list row needs to tell a three-second cold start from an engine that has been
         // compacting for four minutes; both are RUNNING with a null engineStartedAt.
@@ -4352,6 +4395,10 @@ export class SessionsService {
         task: {
           select: {
             codeless: true,
+            // Row PF's facts, for SR18's line (`forkSource` below).
+            forkSessionId: true,
+            forkSha: true,
+            forkIncludesUncommitted: true,
             project: {
               select: {
                 codebases: {
@@ -4515,6 +4562,8 @@ export class SessionsService {
       route,
       poolCodexLogin,
       mergeTarget,
+      // SR18's sentence when the task this session runs was forked from a session (design §2.3).
+      forkSource: await forkSourceLine(this.prisma, task),
       // When its turn last ended or it finished, and what it last said — what a repair waiting for the
       // owner asked — clipped to the session list's preview length, in code points as `left()` counts.
       mergeRepairSession: children[0] ? withSessionState({
@@ -4543,6 +4592,9 @@ export class SessionsService {
       lastUserFromOrbit: lastUserFromOrbitOf({ lastUserFromOrbit }),
       lastUserFromExternal: lastUserFromExternalOf({ lastUserFromExternalSource, lastUserFromExternalName }),
       sourceLanding,
+      // A coordinator's handoff (projects/coordinator-handoff.ts): `coordinatorHandoff` on the outgoing
+      // one, `coordinatorHandoffReceived` on its successor, null on every other session.
+      ...(await readSessionCoordinatorHandoffs(this.prisma, session.id)),
       ...(landing ? { landing } : {}),
       shareToken: shareLinks?.[0]?.token ?? null,
       sharedAt: shareLinks?.[0]?.createdAt ?? null,
@@ -4864,10 +4916,14 @@ export class SessionsService {
     });
     if (!session) throw linkNotFound();
     const stateful = withSessionState(session);
+    // A parked session can still be working (a self-driven turn, a sub-agent, a job, a wait that
+    // wakes it): without this the page read its AWAITING_INPUT as idle and said "Awaiting reply".
+    const activity = (await readSessionActivities(this.prisma, [session.id])).get(session.id) ?? null;
     return {
       title: session.title,
       workspaceName: session.workspace?.name ?? null,
       status: stateful.status,
+      activity,
       runStatus: stateful.runStatus,
       sessionState: stateful.sessionState,
       runState: stateful.runState,
@@ -7577,6 +7633,9 @@ export class SessionsService {
       previewId?: string;
       /** Who pressed (§10.6 O-R3): the owner's credential, or a session. Recorded with the operation. */
       requestedBy?: MergeRequester;
+      /** The session asked to merge ITSELF, which it can only do from inside one of its own turns: a
+       *  turn that is running is waited out (`mergeAfterTurnAt`) rather than refused, see queueMerge. */
+      selfRequest?: boolean;
     } = {},
   ) {
     await this.assertEngineSession(ownerId, id);
@@ -7602,6 +7661,24 @@ export class SessionsService {
     // Have that runner heartbeat now instead of at its next 30s tick: whoever pressed Merge is
     // watching a spinner. Only a nudge; a lost wake leaves the merge to that tick.
     if (queuedOn) this.realtime.notifyRunnerWake(queuedOn);
+    if (workspaceId && typeof workspaceId === 'object' && 'afterTurn' in workspaceId) {
+      // Nothing is queued yet, so there is nothing to wait for either: the turn this request came from
+      // is the one being waited out, and holding its tool call open would hold that turn open with it.
+      this.realtime.publishSessionUpdated(id);
+      const nextStep = 'this session is running a turn, so the merge is queued when that turn ends; read its outcome '
+        + 'then with merge_receipts';
+      if (wait !== null) {
+        return {
+          outcome: 'AFTER_TURN' as const,
+          operationId: null,
+          mergeStatus: null,
+          receipt: null,
+          receiptAbsentReason: 'MERGE_AFTER_TURN' as const,
+          nextStep,
+        };
+      }
+      return { ok: true as const, mergeAfterTurn: true as const, nextStep };
+    }
     if (workspaceId && typeof workspaceId === 'object' && 'alreadyLanded' in workspaceId) {
       // Nothing was queued and nothing will be executed: the receipt that already says this landed
       // IS the answer. Handing it back rather than re-running the merge is the whole of CP4's
@@ -7657,7 +7734,9 @@ export class SessionsService {
     ownerId: string,
     id: string,
     target: string | null,
-    options: { recoveryAction?: MergeRecoveryAction; previewId?: string; requestedBy?: MergeRequester },
+    options: {
+      recoveryAction?: MergeRecoveryAction; previewId?: string; requestedBy?: MergeRequester; selfRequest?: boolean;
+    },
     also: Pick<Prisma.SessionUncheckedUpdateInput, 'mergeRepairTurnEndedAt'> = {},
   ) {
     // Queueing, heartbeat claim, new-turn enqueue, Adopt, and terminal Resume
@@ -7693,6 +7772,16 @@ export class SessionsService {
       throw new ConflictException('wait for the pending worktree commit to finish');
     }
     if (SessionsService.mergeWaitsForTurn(session)) {
+      // A session merging itself asks from inside its own turn, so "wait for the turn" can never be
+      // answered by asking again. The request is kept instead, and mergeAfterOwnTurn queues it when the
+      // turn ends. Anyone else can wait for the turn and ask then.
+      if (options.selfRequest && !options.recoveryAction) {
+        await tx.session.update({
+          where: { id },
+          data: { mergeAfterTurnAt: new Date(), mergeAfterTurnTarget: target },
+        });
+        return { outcome: { afterTurn: true as const }, operationId: null, queuedOn: null };
+      }
       throw new ConflictException('wait for the current turn to finish before merging');
     }
     const recovery = readMergeRecovery(session.mergeRecovery);
@@ -7764,7 +7853,8 @@ export class SessionsService {
         mergeStatus: 'pending',
         mergeTarget: target ?? (options.recoveryAction ? readMergeRecovery(session.mergeRecovery)?.targetBranch ?? null : null),
         mergeRecoveryAction: options.recoveryAction ?? null,
-        ...(!options.recoveryAction ? { mergeRecovery: Prisma.DbNull } : {}),
+        // A merge being queued answers one a session asked for after its turn as well.
+        ...(!options.recoveryAction ? { mergeRecovery: Prisma.DbNull, mergeAfterTurnAt: null, mergeAfterTurnTarget: null } : {}),
         mergeRequestedAt: new Date(),
         // §10.6 O-R3: who pressed, for the receipt the result writes. Null for an operation the server
         // queued itself (a check after a repair turn), which lands nothing.
@@ -7868,6 +7958,77 @@ export class SessionsService {
   private static mergeWaitsForTurn(session: { status: RunStatus; cancelRequestedAt: Date | null }): boolean {
     return !SessionsService.TERMINAL.includes(session.status) &&
       (session.status !== RunStatus.AWAITING_INPUT || !!session.cancelRequestedAt);
+  }
+
+  /**
+   * Queue the merge a session asked for of itself during its own turn (`mergeAfterTurnAt`, kept by
+   * {@link queueMerge}), now that a turn of it has ended. Called after the settle or finalize that ended
+   * the turn has committed (RunnerApiController#checkRecoveryAfterTurn), with the row re-read under the
+   * lock {@link queueMerge} takes:
+   *
+   * - nothing owed → nothing is written;
+   * - the turn that ended did not succeed (`turnSucceeded` false: it failed or was stopped), or the
+   *   session ended FAILED or CANCELLED → the request is dropped: the turn that asked did not finish, so
+   *   its work is not merged on its word;
+   * - another turn already running (a queued follow-up started) → nothing is written, and that turn's
+   *   end asks again;
+   * - a merge already in flight, or the work already in the target → the request is answered by it, and
+   *   cleared;
+   * - otherwise queued through {@link queueMerge} as the session's own (`AGENT`) merge, whose write clears
+   *   the request. A refusal there is recorded on the session as a failed merge (`mergeStatus` 'error'),
+   *   because nobody is waiting on a response to read it from.
+   */
+  async mergeAfterOwnTurn(id: string, turnSucceeded = true): Promise<'QUEUED' | 'DEFERRED' | 'NOTHING_OWED' | 'DROPPED' | 'ANSWERED' | 'REFUSED'> {
+    let queuedOn: string | null = null;
+    let wrote = false;
+    const outcome = await withTransactionRetry(this.prisma, async (tx) => {
+      queuedOn = null;
+      wrote = false;
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session" WHERE id = ${id}::uuid FOR UPDATE`;
+      if (locked.length === 0) return 'NOTHING_OWED' as const;
+      const session = await tx.session.findUniqueOrThrow({
+        where: { id },
+        select: {
+          ownerId: true, status: true, cancelRequestedAt: true, mergeStatus: true,
+          mergeAfterTurnAt: true, mergeAfterTurnTarget: true,
+        },
+      });
+      if (!session.mergeAfterTurnAt) return 'NOTHING_OWED' as const;
+      const settle = { mergeAfterTurnAt: null, mergeAfterTurnTarget: null };
+      const clear = async (data: Prisma.SessionUncheckedUpdateInput = settle) => {
+        await tx.session.update({ where: { id }, data });
+        wrote = true;
+      };
+      if (!turnSucceeded || session.status === RunStatus.FAILED || session.status === RunStatus.CANCELLED) {
+        await clear();
+        return 'DROPPED' as const;
+      }
+      if (SessionsService.mergeWaitsForTurn(session)) return 'DEFERRED' as const;
+      if (session.mergeStatus === 'pending') {
+        await clear();
+        return 'ANSWERED' as const;
+      }
+      try {
+        const queued = await this.queueMerge(tx, session.ownerId, id, session.mergeAfterTurnTarget,
+          { requestedBy: 'AGENT' });
+        if (!queued.operationId) {
+          await clear();
+          return 'ANSWERED' as const;
+        }
+        queuedOn = queued.queuedOn;
+        wrote = true;
+        return 'QUEUED' as const;
+      } catch (error) {
+        // queueMerge refuses before it writes anything, so this transaction is still good to write in.
+        if (!(error instanceof HttpException)) throw error;
+        await clear({ ...settle, mergeStatus: 'error', mergeError: error.message });
+        return 'REFUSED' as const;
+      }
+    }, loggedRetry(this.logger, 'sessions.mergeAfterOwnTurn'));
+    if (queuedOn) this.realtime.notifyRunnerWake(queuedOn);
+    if (wrote) this.realtime.publishSessionUpdated(id);
+    return outcome;
   }
 
   /** Recoveries a preview may not replace: each is a landing being finished, by its own retry or sync. */
@@ -8023,7 +8184,8 @@ export class SessionsService {
         };
       }
       const remaining = deadline - Date.now();
-      if (remaining <= 0) {
+      // A stopping apiserver stops waiting (common/graceful-stop.ts): the merge is the runner's, and goes on.
+      if (remaining <= 0 || isStopping()) {
         return {
           outcome: 'TIMED_OUT' as const,
           operationId,
@@ -8031,7 +8193,9 @@ export class SessionsService {
           receipt: null,
           receiptAbsentReason: 'MERGE_STILL_RUNNING' as const,
           nextStep:
-            `no outcome after ${waitSeconds}s, and none is claimed here: the merge is still queued ` +
+            (remaining > 0
+              ? 'no outcome yet: this server is restarting, so it stopped waiting early. None is claimed here: the merge is still queued '
+              : `no outcome after ${waitSeconds}s, and none is claimed here: the merge is still queued `) +
             `as operation ${operationId ?? '(none recorded)'}. A runner picks a merge up on its ` +
             'next heartbeat, which ticks every 30 seconds, so a shorter wait than that times out ' +
             'even for a merge that then succeeds. Read the outcome with merge_receipts on this ' +

@@ -279,16 +279,17 @@ final class BackgroundWakeCopyParityTests: XCTestCase {
 
     /// The bar pinned to the top of the transcript does not point at this turn: it is a line inside
     /// the answer, so the bar keeps naming the question (`StickySummary.isAnchor`, which
-    /// `StickySummaryTests` holds). The browser's half of that rule is the attribute pair its scanner
-    /// reads, which the line must never stamp.
+    /// `StickySummaryTests` holds). The browser's half of that rule is the round mark its scanner
+    /// reads, which the line must never carry.
     func testTheLineIsNoTurnTheStickyBarPointsAt() throws {
         let web = try flat(Self.webCard)
         let root = try section(web, from: "className={`bgwake ", to: "data-seq={seq}>", Self.webCard)
 
-        XCTAssertFalse(root.contains("data-sticky"), "the line's root stamps what the bar's scanner reads")
-        XCTAssertFalse(web.contains("data-sticky-label=") || web.contains("data-sticky-text="),
-                       "\(Self.webCard) stamps an attribute the bar's scanner reads, so the bar points "
-                           + "at the line and the question leaves it")
+        XCTAssertFalse(root.contains("data-orbit-round"), "the line's root carries what the bar's scanner reads")
+        // The attribute, not a comment naming it in backticks.
+        XCTAssertNil(web.range(of: "data-orbit-round(?!`)", options: .regularExpression),
+                       "\(Self.webCard) carries the round mark the bar's scanner reads, so the bar hides "
+                           + "over the line and the question leaves it")
     }
 
     func testTheCardsOwnLinesMatchTheWebCard() throws {

@@ -5,9 +5,9 @@
  *
  * The outgoing coordinator is completed by a replacement, and a completed observer is refused every
  * delivery (OBSERVER_SESSION_COMPLETED). So `ProjectsService.coordinator(…, 'replace')` re-points
- * every ACTIVE watch the outgoing session observes to the new one, in the transaction that swaps
+ * every live watch (ACTIVE or PAUSED, the PAUSED one keeping its state) the outgoing session observes to the new one, in the transaction that swaps
  * `project.coordinator_session_id`, and answers how many it moved. A swap that fails or loses the
- * race moves nothing; a watch that is not ACTIVE, or that another session observes, stays put.
+ * race moves nothing; a watch that has ended, or that another session observes, stays put.
  *
  * The service is the real one over the real database. The session service is the only stand-in:
  * `create` inserts a real session row (it is where the cases below inject a concurrent change, in
@@ -140,7 +140,7 @@ async function observers(db: PrismaClient, ids: string[]): Promise<Record<string
   return Object.fromEntries(rows.map((r) => [r.id, r.observerSessionId]));
 }
 
-test('(a)+(c) a replacement moves the outgoing coordinator\'s ACTIVE watches to the successor, answers how many, and leaves the rest', { skip, timeout: 120_000 }, async () => {
+test('(a)+(c) a replacement moves the outgoing coordinator\'s ACTIVE and PAUSED watches to the successor, PAUSED kept, answers how many, and leaves the rest', { skip, timeout: 120_000 }, async () => {
   const f = await fixture();
   const active1 = await watch(f, f.outgoing, 'ACTIVE', { kind: 'TASK', id: f.taskId, leaf: 'TASK_DONE' });
   const active2 = await watch(f, f.outgoing, 'ACTIVE', { kind: 'SESSION', id: f.bystander, leaf: 'SESSION_TURN_SETTLED' });
@@ -155,23 +155,24 @@ test('(a)+(c) a replacement moves the outgoing coordinator\'s ACTIVE watches to 
 
   assert.equal(replaced.created, true);
   assert.notEqual(replaced.sessionId, f.outgoing);
-  assert.equal(replaced.movedWatches, 2, 'the answer counts exactly the ACTIVE watches it moved');
+  assert.equal(replaced.movedWatches, 3, 'the answer counts exactly the live watches it moved');
   assert.deepEqual(await observers(f.db, [active1, active2, paused, matched, cancelled, expired, others]), {
     [active1]: replaced.sessionId,
     [active2]: replaced.sessionId,
-    [paused]: f.outgoing,
+    [paused]: replaced.sessionId,
     [matched]: f.outgoing,
     [cancelled]: f.outgoing,
     [expired]: f.outgoing,
     [others]: f.bystander,
   });
-  assert.deepEqual([...published].sort(), [active1, active2].sort(), 'each moved watch is announced once, after commit');
+  assert.deepEqual([...published].sort(), [active1, active2, paused].sort(), 'each moved watch is announced once, after commit');
+  assert.equal((await f.db.watch.findUniqueOrThrow({ where: { id: paused } })).state, 'PAUSED', 'a PAUSED watch moves and stays paused');
   const project = await f.db.project.findUniqueOrThrow({ where: { id: f.projectId } });
   assert.equal(project.coordinatorSessionId, replaced.sessionId);
 
   // A second replacement moves them on again: the successor is now the outgoing one.
   const again = await service(f.db, f).projects.coordinator(f.ownerId, f.projectId, undefined, 'replace');
-  assert.equal(again.movedWatches, 2);
+  assert.equal(again.movedWatches, 3);
   assert.equal((await observers(f.db, [active1]))[active1], again.sessionId);
 });
 
@@ -262,24 +263,25 @@ test('(a) a watch that settles while the swap waits on its row lock is not moved
   }
 });
 
-test('(d) the pending-waits read lists the coordinator\'s ACTIVE watches only, as id + label', { skip, timeout: 120_000 }, async () => {
+test('(d) the pending-waits read lists the coordinator\'s live watches, as id + label + paused', { skip, timeout: 120_000 }, async () => {
   const f = await fixture();
   const onTask = await watch(f, f.outgoing, 'ACTIVE', { kind: 'TASK', id: f.taskId, leaf: 'TASK_DONE' });
   const onSession = await watch(f, f.outgoing, 'ACTIVE', { kind: 'SESSION', id: f.bystander, leaf: 'SESSION_TURN_SETTLED' });
-  await watch(f, f.outgoing, 'PAUSED', { kind: 'TASK', id: f.taskId, leaf: 'TASK_FAILED' });
+  const paused = await watch(f, f.outgoing, 'PAUSED', { kind: 'TASK', id: f.taskId, leaf: 'TASK_FAILED' });
   await watch(f, f.outgoing, 'MATCHED', { kind: 'TASK', id: f.taskId, leaf: 'TASK_FAILED' });
   await watch(f, f.outgoing, 'CANCELLED', { kind: 'TASK', id: f.taskId, leaf: 'TASK_FAILED' });
   await watch(f, f.bystander, 'ACTIVE', { kind: 'TASK', id: f.taskId, leaf: 'TASK_FAILED' });
   const { projects } = service(f.db, f);
 
   assert.deepEqual(await projects.coordinatorPendingWaits(f.ownerId, f.projectId), [
-    { id: onTask, label: 'Waiting for "Fix login redirect" to be DONE' },
-    { id: onSession, label: 'Waiting for "a bystander" to finish its turn' },
+    { id: onTask, label: 'Waiting for "Fix login redirect" to be DONE', paused: false },
+    { id: onSession, label: 'Waiting for "a bystander" to finish its turn', paused: false },
+    { id: paused, label: 'Waiting for "Fix login redirect" to fail', paused: true },
   ]);
 
   // After the replacement, the same read asks about the successor — which now holds them.
   await projects.coordinator(f.ownerId, f.projectId, undefined, 'replace');
-  assert.deepEqual((await projects.coordinatorPendingWaits(f.ownerId, f.projectId)).map((w) => w.id), [onTask, onSession]);
+  assert.deepEqual((await projects.coordinatorPendingWaits(f.ownerId, f.projectId)).map((w) => w.id), [onTask, onSession, paused]);
 
   // Another owner's read of this project is a 404, not an empty list.
   await assert.rejects(projects.coordinatorPendingWaits(randomUUID(), f.projectId), /project not found/);

@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { MergeRecovery } from '@orbit/shared';
 import type { MergeRepairSession } from '../api';
-import { MergeRecoveryPanel, mergeRecoveryChecking, mergeRecoveryTargetMovedAfterRepair, mergeRepairLoopLive } from './MergeRecoveryPanel';
+import { MergeOperationLine, MergeRecoveryPanel, mergeRecoveryChecking, mergeRecoveryFastForward, mergeRecoveryTargetMovedAfterRepair, mergeRepairLoopLive } from './MergeRecoveryPanel';
 
 const reviewed: MergeRecovery = {
   code: 'READY', targetBranch: 'develop', previewId: 'exact-preview',
@@ -43,7 +45,8 @@ it('shows every extra commit and the full diff, then approves exactly the displa
   expect(h.element.textContent).toContain('Adds one merge commit');
   expect(h.element.textContent).toContain('no merge check is configured');
   expect(h.element.textContent).not.toContain('check passed');
-  await act(async () => button(h.element, /^Sync develop and merge$/)!.click());
+  expect(h.element.querySelector('strong')?.textContent).toBe('Local develop has 1 commit that isn’t on origin');
+  await act(async () => button(h.element, /^Merge into develop$/)!.click());
   expect(h.action).toHaveBeenCalledExactlyOnceWith('apply', 'exact-preview');
 });
 
@@ -63,7 +66,7 @@ it('lists exactly what the push adds, each commit labelled by where it comes fro
   expect(h.element.textContent).not.toContain('— included in the push');
   expect(h.element.textContent).not.toContain('Preserves both target histories');
   expect(h.element.querySelector('.wt-recovery-diff pre')?.textContent).toBe(reviewed.patch);
-  await act(async () => button(h.element, /^Sync develop and merge$/)!.click());
+  await act(async () => button(h.element, /^Push 3 commits and merge$/)!.click());
   expect(h.action).toHaveBeenCalledExactlyOnceWith('apply', 'exact-preview');
 });
 
@@ -84,7 +87,7 @@ it('never points at local-only commits that are not there', async () => {
 
 it.each(['CONFLICT', 'PREVIEW_CHANGED', 'CHECK_FAILED', 'LINEAR_HISTORY_REQUIRED'])('%s cannot approve a candidate', async (code) => {
   const h = await mount({ ...reviewed, code, phase: 'TARGET_SYNC' });
-  expect(button(h.element, /^Sync develop and merge$/)).toBeUndefined();
+  expect(button(h.element, /and merge$|^Merge into/)).toBeUndefined();
   expect(h.element.textContent).toContain('actual runner detail');
   await act(async () => button(h.element, /^Check again$/)!.click());
   expect(h.action).toHaveBeenCalledExactlyOnceWith('preview');
@@ -170,13 +173,13 @@ it('repair finished, checking: the old snapshot fades and the one button is a di
 it('repair finished, ready: the row states the check and the next step is Sync and merge', async () => {
   const h = await mountRepair({ ...reviewed, checkedAt: ago(5_000), repairBranch: 'orbit/recovery/exact-preview',
     pushCommits: [{ sha: 'd'.repeat(40), subject: 'Session work', author: 'coordinator', date: ago(3 * 3_600_000) }] }, repairOf());
-  expect(h.element.querySelector('strong')?.textContent).toBe('Review synchronization into develop');
+  expect(h.element.querySelector('strong')?.textContent).toBe('Local develop has 1 commit that isn’t on origin');
   expect(rowOf(h.element)?.className).toContain('is-ready');
   expect(rowOf(h.element)?.querySelector('.wt-recovery-repair-note')?.textContent).toBe('Checked just now — ready to merge');
   expect(h.element.querySelector('.wt-recovery-push small')?.textContent).toBe('This session · coordinator · 3h ago · dddddddd');
   expect(h.element.querySelector('.wt-recovery-snapshot')?.classList.contains('is-stale')).toBe(false);
-  expect(primaryOf(h.element).textContent).toBe('Sync develop and merge');
-  expect(actionLabels(h.element)).toEqual(['Sync develop and merge', 'Prepare PR candidate']);
+  expect(primaryOf(h.element).textContent).toBe('Push 1 commit and merge');
+  expect(actionLabels(h.element)).toEqual(['Push 1 commit and merge', 'Prepare PR candidate']);
   await act(async () => primaryOf(h.element).click());
   expect(h.action).toHaveBeenCalledExactlyOnceWith('apply', 'exact-preview');
   await act(async () => button(h.element, /^Prepare PR candidate$/)!.click());
@@ -385,4 +388,86 @@ it('a check counts as running only for a preview in flight or one owed to a turn
   expect(mergeRecoveryChecking({ mergeStatus: 'pending', mergeRecoveryAction: 'apply' })).toBe(false);
   expect(mergeRecoveryChecking({ mergeStatus: 'conflict', mergeRecoveryAction: 'preview' })).toBe(false);
   expect(mergeRecoveryChecking({ mergeStatus: 'conflict', mergeRecoveryAction: 'preview', mergeRepairTurnEndedAt: ago(1_000) })).toBe(true);
+});
+
+// One state, one sentence, one primary action (docs/mocks/merge-recovery-one-state/01-states.html).
+const fastForward: MergeRecovery = { ...reviewed, remoteSha: reviewed.localSha, localCommits: undefined, remoteCommits: undefined,
+  addsMergeCommit: false, pushCommits: [{ sha: 'a'.repeat(40), subject: 'Session work', author: 'coordinator', date: '2026-10-01' }] };
+
+it('a ready fast-forward of only this session’s commits needs no review panel', () => {
+  expect(mergeRecoveryFastForward(fastForward)).toBe(true);
+  // Anything the owner should see first keeps the panel.
+  expect(mergeRecoveryFastForward(reviewed)).toBe(false);
+  expect(mergeRecoveryFastForward({ ...fastForward, addsMergeCommit: true })).toBe(false);
+  expect(mergeRecoveryFastForward({ ...fastForward, pushCommits: undefined })).toBe(false);
+  expect(mergeRecoveryFastForward({ ...fastForward, code: 'CONFLICT' })).toBe(false);
+  expect(mergeRecoveryFastForward({ ...fastForward, localSha: 'f'.repeat(40), localCommits: [fastForward.pushCommits![0]] })).toBe(false);
+});
+
+it('a busy panel never claims a check it is not running, and says when a turn is what it waits for', async () => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  container = document.createElement('div'); document.body.appendChild(container);
+  root = createRoot(container);
+  await act(async () => root!.render(<MergeRecoveryPanel recovery={{ ...reviewed, code: 'TARGET_DIVERGED' }} busy supported
+    onAction={vi.fn()} onRepair={vi.fn()} waitingForTurn />));
+  expect(container.textContent).not.toContain('Checking');
+  expect(button(container, /^Check again$/)?.disabled).toBe(true);
+  expect(container.querySelector('.wt-recovery-actions-note')?.textContent).toBe('Available when this session’s turn ends.');
+});
+
+it('a pending operation is one line: what, since when, where — and says so once it is overdue', async () => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  container = document.createElement('div'); document.body.appendChild(container);
+  root = createRoot(container);
+  const runner = { name: 'mac-mini', lastHeartbeatAt: ago(11 * 60_000) };
+  await act(async () => root!.render(<MergeOperationLine action="apply" target="main" requestedAt={ago(40_000)} runner={runner} />));
+  expect(container.textContent).toBe('Merging into main· started just now on mac-mini');
+  expect(container.querySelector('.wt-merge-op.is-overdue')).toBeNull();
+  await act(async () => root!.render(<MergeOperationLine action="preview" target="main" requestedAt={ago(12 * 60_000)} runner={runner} />));
+  expect(container.querySelector('.wt-merge-op')?.className).toContain('is-overdue');
+  expect(container.textContent).toBe('Still checking main against origin/main· started 12m ago on mac-mini· mac-mini last reported 11m ago');
+  expect(container.querySelector('button')).toBeNull();
+});
+
+it('a failed merge on a ready check says it failed and why, above the same Merge', async () => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  container = document.createElement('div'); document.body.appendChild(container);
+  root = createRoot(container);
+  await act(async () => root!.render(<MergeRecoveryPanel recovery={fastForward} message={'push rejected: fetch first\nhint: run git pull'}
+    busy={false} supported failed onAction={vi.fn()} onRepair={vi.fn()} />));
+  expect(container.querySelector('strong')?.textContent).toBe('The merge into develop didn’t go through');
+  expect(container.querySelector('.wt-recovery-failure')?.textContent).toBe('push rejected: fetch first');
+  expect(container.querySelector('.wt-recovery-more pre')?.textContent).toBe('push rejected: fetch first\nhint: run git pull');
+  expect(primaryOf(container).textContent).toBe('Merge into develop');
+});
+
+it('a conflict counts its files in the title, and resolving them is the one primary step', async () => {
+  const replay = await mount(conflicted);
+  expect(replay.element.querySelector('strong')?.textContent).toBe('2 files conflict with origin/develop');
+  expect(primaryOf(replay.element).textContent).toBe('Resolve in repair session');
+  await act(async () => root!.unmount()); root = null; container?.remove();
+  const sync = await mount({ ...conflicted, phase: 'TARGET_SYNC', conflicts: [AGENTS] });
+  expect(sync.element.querySelector('strong')?.textContent).toBe('Local develop and origin/develop conflict in 1 file');
+});
+
+it('keeps a long push list inside the panel, with its title, repair row and actions out of the scroll', async () => {
+  // The owner's 2026-11-14 screenshot: ten commits to push, a repair session running, and the composer below the window.
+  const pushCommits = Array.from({ length: 10 }, (_, i) =>
+    ({ sha: `${i}`.repeat(40), subject: `Commit ${i}`, author: 'coordinator', date: '2026-11-14' }));
+  const h = await mount({ ...reviewed, code: 'PREVIEW_CHANGED', pushCommits },
+    false, true, { id: 'r1', status: 'RUNNING', title: 'Resolve the conflict' } as MergeRepairSession);
+  const css = ['src/index.css', 'src/web/src/index.css'].map((p) => resolve(process.cwd(), p)).find(existsSync)!;
+  const style = document.createElement('style');
+  style.textContent = readFileSync(css, 'utf8');
+  document.head.appendChild(style);
+  try {
+    const snapshot = h.element.querySelector('.wt-recovery-snapshot')!;
+    expect(snapshot.querySelectorAll('.wt-recovery-push > div')).toHaveLength(10);
+    expect(parseFloat(getComputedStyle(snapshot).maxHeight)).toBeCloseTo(0.28 * window.innerHeight);
+    expect(getComputedStyle(snapshot).overflowY).toBe('auto');
+    for (const kept of ['.wt-recovery > strong', '.wt-recovery-repair-status', '.wt-recovery-actions']) {
+      expect(h.element.querySelector(kept), kept).not.toBeNull();
+      expect(snapshot.contains(h.element.querySelector(kept)), kept).toBe(false);
+    }
+  } finally { style.remove(); }
 });

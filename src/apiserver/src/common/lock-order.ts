@@ -141,6 +141,17 @@ export const LOCK_ORDER = [
       'ranked below it.',
   },
   {
+    rank: 46,
+    relation: 'coordinator_handoff',
+    modes: 'FOR NO KEY UPDATE (the coordinator swap completing a handoff: one row by id, a CAS on HANDING_OVER)',
+    why:
+      'After `watch` because the one transaction that holds a project and writes a handoff row, the ' +
+      'coordinator pointer swap in ProjectsService.coordinator, takes its Sessions (30), the project ' +
+      '(40) and the outgoing coordinator\'s live watches (45) first and completes the handoff last. ' +
+      'Every other write of the row (CoordinatorHandoffService) is one statement of its own that ' +
+      'holds nothing else.',
+  },
+  {
     rank: 50,
     relation: 'task',
     modes: 'FOR UPDATE (delete) · FOR NO KEY UPDATE (update) · FOR SHARE (the admission and authority re-read: SessionsService.resume, taskWorkRefusalFor, ProjectHandoffService.declare, TasksService.assertPlanAuthorityUnchanged) · FOR KEY SHARE (edge + session.task_id FK, the X-E5 tick\'s SKIP LOCKED hold)',

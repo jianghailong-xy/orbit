@@ -260,6 +260,10 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// Each engine CLI's install/sign-in state as of that heartbeat's probe (`orbit doctor`).
     /// Absent from an older server, and from a runner that hasn't reported one.
     public let engines: [RunnerEngineHealth]?
+    /// The engine update warnings dismissed on this runner, by engine: the `update.latest` each was
+    /// dismissed against (POST /runners/:id/engines/:engine/update-warning/dismiss). Nil from an older
+    /// server, which dismisses nothing (`RunnerAttention.updateNoteOf`'s `dismissed`).
+    public var engineUpdateDismissals: [String: String]? = nil
     /// Antigravity support and CLI readiness resolved by the server from the runner's report.
     public var antigravity: RunnerAntigravityState? = nil
     /// Whether this runner's process is root, which costs the machine one permission mode: claude
@@ -294,11 +298,96 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// (docs/claude-region-check-contract.md §6). Nil for a runner that does not check, one no check
     /// has decided yet, or an older server: never gated, drawn as before.
     public var region: RunnerRegionView? = nil
+    /// Where a press of Fix with an agent on this runner starts its session, or why it can't, and the
+    /// warnings an agent is fixing now (@orbit/shared `RunnerAgentFix`). Nil from an older server, which
+    /// draws no button (`RunnerAgentFixLogic`).
+    public var agentFix: RunnerAgentFix? = nil
 
     /// This runner's last probe of one engine, if it reported that engine at all.
     public func engineHealth(_ engine: LoginEngine) -> RunnerEngineHealth? {
         engines?.first { $0.engine == engine.rawValue }
     }
+}
+
+/// `agentFix` on GET /runners (@orbit/shared `RunnerAgentFix`): the workspace on the machine used most
+/// recently, the engine its sessions start on, why no agent can start (`blocked`, its `message` the line a
+/// client shows) and the open sessions a press started (`fixing`). Codes and kinds stay raw strings, so a
+/// newer control plane cannot make the runner list undecodable.
+public struct RunnerAgentFix: Codable, Equatable, Sendable {
+    public let workspaceId: String?
+    public let workspaceName: String?
+    /// The engine slug ("claude") and its name ("Claude Code").
+    public let engine: String?
+    public let engineName: String?
+    public let blocked: Blocked?
+    public let fixing: [RunnerAgentFixing]?
+
+    /// `code` is `offline`, `noWorkspace` or `engineSignedOut`.
+    public struct Blocked: Codable, Equatable, Sendable {
+        public let code: String
+        public let message: String
+
+        public init(code: String, message: String) {
+            self.code = code
+            self.message = message
+        }
+    }
+
+    public init(workspaceId: String?, workspaceName: String?, engine: String?, engineName: String?,
+                blocked: Blocked?, fixing: [RunnerAgentFixing]?) {
+        self.workspaceId = workspaceId
+        self.workspaceName = workspaceName
+        self.engine = engine
+        self.engineName = engineName
+        self.blocked = blocked
+        self.fixing = fixing
+    }
+}
+
+/// An agent at work on one warning (@orbit/shared `RunnerAgentFixing`): `kind` is a
+/// `RunnerAttentionFixKind`'s raw value; `engine` is nil for `cannotSelfUpdate`.
+public struct RunnerAgentFixing: Codable, Equatable, Sendable {
+    public let kind: String
+    public let engine: String?
+    public let sessionId: String
+    public let workspaceId: String
+    public let workspaceName: String
+
+    public init(kind: String, engine: String?, sessionId: String, workspaceId: String, workspaceName: String) {
+        self.kind = kind
+        self.engine = engine
+        self.sessionId = sessionId
+        self.workspaceId = workspaceId
+        self.workspaceName = workspaceName
+    }
+}
+
+/// The warnings Fix with an agent is offered on (@orbit/shared `RunnerAttentionFixKind`), the `:kind` of
+/// POST /runners/:id/attention/:kind/fix.
+public enum RunnerAttentionFixKind: String, Codable, Equatable, Sendable {
+    case engineNotUpdating
+    case cannotSelfUpdate
+    case installFailed
+}
+
+/// POST /runners/:id/attention/:kind/fix body: `engine` for `engineNotUpdating` and `installFailed`,
+/// `latest` (the newest runner release the client knows of) for `cannotSelfUpdate`. Nil fields are left out.
+public struct RunnerAttentionFixRequest: Codable, Equatable, Sendable {
+    public let engine: String?
+    public let latest: String?
+
+    public init(engine: String? = nil, latest: String? = nil) {
+        self.engine = engine
+        self.latest = latest
+    }
+}
+
+/// What the fix endpoint answers with: the session it started.
+public struct RunnerAttentionFixResult: Codable, Equatable, Sendable {
+    public let sessionId: String
+    public let workspaceId: String
+    public let workspaceName: String
+    public let title: String
 }
 
 /// `region` on GET /runners (docs/claude-region-check-contract.md §6, the web's `RunnerRegionView`):
@@ -572,6 +661,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// while tools and replies stream for minutes. Absent from older servers, which simply keeps
     /// the old parked reading. See `isGenerating`.
     public let engineTurnActive: Bool?
+    /// What the session is doing beyond its status, as the server decides it (`SessionActivity`:
+    /// `TURN`, `BACKGROUND_JOB` or `WAITING`; nil when none, and from an older server). See
+    /// `resumesOnItsOwn`.
+    public let activity: String?
     /// Terminal-state detail the status glyph needs (mirrors web `StatusIcon`): `error` tells a
     /// runner-offline disconnect apart from a real crash; `endReason` tells a benign recycle
     /// (idle / task-done / user-ended — shown as dormant) apart from a hard cancel/orphan.
@@ -588,6 +681,11 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// §10.1's fifth column with `fixAction` folded in — what the refusal was about, in the ref's
     /// and the runner's own words.
     public let sourceRefusalDetail: SourceRefusalDetail?
+    /// SR18's sentence for a session of a task forked from another session
+    /// (docs/task-fork-from-session-design.md §2.3), finished by the server — "Forked from session
+    /// «title» at abc1234 (includes uncommitted changes)" — and drawn as it is. The detail read's
+    /// only: nil on a list row, on a task that was not forked, and from an older server.
+    public let forkSource: String?
     /// When the server will re-send the message a self-healing failure killed — a spent quota, a
     /// 529, a runner that vanished mid-turn — or nil when nothing is armed. What makes a FAILED
     /// row not yet an outcome: the run continues on its own when this fires, so `isSettled` (and
@@ -630,6 +728,13 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public var isGenerating: Bool {
         let state = effectiveRunState
         return state == .running || (state == .awaitingInput && engineTurnActive == true)
+    }
+    /// Whether something will resume this parked session by itself — a watch it observes, a
+    /// scheduled wake-up, an armed auto-retry (the server's `activity` WAITING). The watch strip
+    /// names a watch in its own words; this is what the header, glyph and row say when they hold
+    /// no watch to name, instead of "Waiting for your reply" (web `resumeWords`).
+    public var resumesOnItsOwn: Bool {
+        effectiveRunState == .awaitingInput && activity == "WAITING"
     }
     /// Whether work this session started is still running under a parked turn — a sub-agent or
     /// workflow the runtime started, or a background process. A port of web's
@@ -749,12 +854,14 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         runningBgJobCount = try values.decodeIfPresent(Int.self, forKey: .runningBgJobCount)
         runningSubagentCount = try values.decodeIfPresent(Int.self, forKey: .runningSubagentCount)
         engineTurnActive = try values.decodeIfPresent(Bool.self, forKey: .engineTurnActive)
+        activity = try values.decodeIfPresent(String.self, forKey: .activity)
         error = try values.decodeIfPresent(String.self, forKey: .error)
         endReason = try values.decodeIfPresent(String.self, forKey: .endReason)
         sourceState = try values.decodeIfPresent(String.self, forKey: .sourceState)
         sourceRefusalCode = try values.decodeIfPresent(String.self, forKey: .sourceRefusalCode)
         sourceRefusalDetail = try? values.decodeIfPresent(SourceRefusalDetail.self,
                                                           forKey: .sourceRefusalDetail)
+        forkSource = try? values.decodeIfPresent(String.self, forKey: .forkSource)
         retryAt = try values.decodeIfPresent(String.self, forKey: .retryAt)
         agent = try values.decodeIfPresent(SessionAgentRef.self, forKey: .agent)
         tags = try values.decodeIfPresent([SessionTag].self, forKey: .tags)
@@ -788,9 +895,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 runningBgJobCount: Int? = nil,
                 runningSubagentCount: Int? = nil,
                 engineTurnActive: Bool? = nil,
+                activity: String? = nil,
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
                 sourceState: String? = nil, sourceRefusalCode: String? = nil,
-                sourceRefusalDetail: SourceRefusalDetail? = nil,
+                sourceRefusalDetail: SourceRefusalDetail? = nil, forkSource: String? = nil,
                 pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil,
                 currentTurnStartedAt: String? = nil,
                 tags: [SessionTag]? = nil, retryAt: String? = nil,
@@ -867,11 +975,13 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.runningBgJobCount = runningBgJobCount
         self.runningSubagentCount = runningSubagentCount
         self.engineTurnActive = engineTurnActive
+        self.activity = activity
         self.error = error
         self.endReason = endReason
         self.sourceState = sourceState
         self.sourceRefusalCode = sourceRefusalCode
         self.sourceRefusalDetail = sourceRefusalDetail
+        self.forkSource = forkSource
         self.retryAt = retryAt
         self.agent = agent
         self.pinnedAt = pinnedAt

@@ -838,6 +838,19 @@ button.toast--pill:focus-visible {
   white-space: nowrap;
   color: var(--text-3);
 }
+/* With a pointer, the machine shows only on the row pointed at (board docs/mocks/workspace-runner-label,
+   E1): the list reads as names, the hovered row says where it runs, and there the machine stays whole
+   while the name gives way. A touch screen has no hover, so it keeps the machine on every row. */
+@media (hover: hover) and (min-width: 961px) {
+  .app-shell .app-nav:not(.collapsed) .tp-item:not(:hover):not(.menu-open) .tp-workspace-separator,
+  .app-shell .app-nav:not(.collapsed) .tp-item:not(:hover):not(.menu-open) .tp-workspace-runner {
+    display: none;
+  }
+  .app-shell .app-nav:not(.collapsed) .tp-workspace-runner {
+    flex: none;
+    max-width: 60%;
+  }
+}
 .tp-workspace-icon {
   position: relative;
 }
@@ -2179,6 +2192,49 @@ button.toast--pill:focus-visible {
 }
 .rd-attention-action {
   margin-top: 9px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+/* Dismiss until next <Engine> release, beside Update Engines Now: a link, not a second button. */
+.rd-attention-action .re-link {
+  font-size: 12.5px;
+}
+/* Fix with an agent (components/AgentFix.tsx): the line under a card's or an Install failed panel's
+   buttons — where the agent is at work, why none can start, or where it would run. */
+.agent-fix-line {
+  margin-top: 7px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+.re-panel .agent-fix-line {
+  font-size: 11.5px;
+}
+.agent-fix-line.fixing {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 4px;
+  color: var(--text-2);
+}
+.agent-fix-row .agent-fix-line.fixing {
+  margin-top: 0;
+}
+.agent-fix-dot {
+  width: 7px;
+  height: 7px;
+  margin-right: 3px;
+  border-radius: 50%;
+  background: var(--accent, #2563eb);
+  flex: none;
+}
+.re-panel-hint.agent-fix-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
 }
 /* The Update card (board 4): a release this runner is behind, across both columns. Amber while it
    holds work back or restarts, plain while work goes on as usual. */
@@ -2320,39 +2376,80 @@ button.toast--pill:focus-visible {
 .runner-updating-pop .runner-update-actions {
   justify-content: flex-start;
 }
-/* Board 3 ⑥: one line atop the conversation pane while the runner drains with the reader's work waiting. */
-.runner-drain-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+/* docs/mocks/runner-update-indicator: a quiet pill left of the header's ⋯ while the runner drains with the
+   reader's work waiting; its popover holds the rest. */
+.runner-update-pill {
+  display: inline-flex;
   flex: none;
-  /* Edge to edge across the pane, over its top padding (board 3 ⑥); the header keeps its own spacing below. */
-  margin: -16px calc(-1 * var(--pane-gutter)) 16px;
-  padding: 10px var(--pane-gutter);
-  background: var(--warning-bg, #fdf3e3);
-  border-bottom: 1px solid var(--warning-border, #f3dcb5);
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--fill-muted);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.runner-update-pill:hover,
+.runner-update-pill[data-popup-open] {
+  background: var(--bg-hover-strong);
+}
+.runner-update-pill-short {
+  display: none;
+}
+@media (max-width: 640px) {
+  .runner-update-pill { padding: 0 8px; }
+  .runner-update-pill-label { display: none; }
+  .runner-update-pill-short { display: inline; }
+}
+.runner-update-popover {
+  width: 380px;
   font-size: 13px;
 }
-.runner-drain-banner-icon {
-  color: var(--warning, #c47a00);
-  flex: none;
+.runner-update-popover-body,
+.runner-update-popover-waits {
+  margin: 0 0 10px;
+  color: var(--text-2);
 }
-.runner-drain-banner-text {
-  flex: 1;
+.runner-update-popover-turns {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+.runner-update-popover-turns li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.runner-update-popover-turns li:last-child {
+  border-bottom: 0;
+}
+.runner-update-popover-turns a {
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.runner-drain-banner-actions {
+.runner-update-popover-turns span,
+.runner-update-popover-more {
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.runner-update-popover-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: none;
 }
-.runner-drain-banner-close {
-  border: 0;
-  background: none;
-  color: var(--text-tertiary, #8a8a8a);
-  cursor: pointer;
-  padding: 4px;
+.runner-update-popover-open {
+  margin-left: auto;
 }
 /* A Later row: what it does on the left, the clock time on the right in the meta voice. */
 .runner-update-later-item {
@@ -2439,16 +2536,13 @@ button.toast--pill:focus-visible {
   background: var(--bg-subtle);
   border: 1px solid var(--border-subtle);
 }
-.rd-engine-relay.bad {
-  background: var(--error-bg);
-  border-color: var(--error-border);
-}
 .rd-engine-relay-row {
   font-size: 12.5px;
   color: var(--text-2);
   white-space: pre-wrap;
 }
-.rd-engine-relay.bad .rd-engine-relay-row {
+/* Only the engines that failed: the card stays neutral, so the lines that were fine read as fine. */
+.rd-engine-relay-row.bad {
   color: var(--error);
   font-weight: 500;
 }
@@ -2934,6 +3028,7 @@ button.toast--pill:focus-visible {
 /* ---- Agent console: two-pane master-detail (session list | conversation) ---- */
 .workspace-split {
   display: flex;
+  position: relative;
   height: 100%;
   min-height: 0;
   /* One gutter token drives every horizontal gap. It lives on the panes (.session-col /
@@ -2950,6 +3045,65 @@ button.toast--pill:focus-visible {
   flex-direction: column;
   min-height: 0;
   padding: 24px var(--pane-gutter);
+}
+/* The project column unfolded on demand in a window too narrow for it beside the conversation:
+   it lies over the conversation's right edge rather than squeezing it under 480px. */
+.session-project-column-over {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  background: var(--bg-raised);
+  border-left: 1px solid var(--border-subtle);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.08);
+}
+/* At phone width the project's sessions page comes up as a bottom sheet over the conversation
+   (owner 2026-11-11, board 5): the shared bottom drawer, rounded on top, its title kept for the
+   reader only (the page head inside draws it), and a grabber that drags it between medium and full. */
+.project-sessions-sheet {
+  border-radius: 14px 14px 0 0;
+  background: var(--bg-raised);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .project-sessions-sheet:not(.dragging) { transition: translate .3s, height .25s; }
+}
+.project-sessions-sheet > .orbit-overlay-header {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  border: 0;
+}
+.project-sessions-sheet > .orbit-overlay-body {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+.project-sessions-sheet-grabber {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 6px;
+  cursor: grab;
+  touch-action: none;
+}
+.project-sessions-sheet-grabber > span {
+  width: 36px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--text-4);
+  opacity: 0.6;
+}
+/* Portalled out of .workspace-split, so it sets the phone's pane gutter itself. */
+.project-sessions-sheet-page {
+  --pane-gutter: 14px;
+  flex: 1;
+  min-height: 0;
+  padding: 0 var(--pane-gutter);
 }
 /* Draggable divider between the session list and the conversation. The visible
    1px line matches the old column border; ::before widens the grab area. */
@@ -3246,6 +3400,11 @@ button.toast--pill:focus-visible {
   padding-bottom: 16px;
   border-bottom: 1px solid var(--border-subtle);
 }
+/* The title bar's Project sessions button (docs/mocks/project-sessions-column, boards 2-4): a text
+   button, tinted like a selected row while the project column is open, plain grey while it is folded. */
+.workspace-header-project { flex: none; color: var(--text-2); }
+.workspace-header-project[aria-pressed='true'],
+.workspace-header-project[aria-pressed='true']:hover:where(:not(:disabled)) { color: var(--brand); background: var(--brand-tint); }
 .workspace-status-dot {
   width: 9px;
   height: 9px;
@@ -4753,6 +4912,18 @@ button.toast--pill:focus-visible {
     border-radius: 6px;
   }
 }
+/* A project entry is the one focusable session row. Keyboard focus takes the row's hover tint, not a
+   ring: the browser's outer ring is clipped by the list's edge, and an inner one is covered on the
+   right by the kebab's fade. */
+.session-project-row:focus-visible {
+  outline: none;
+  background: var(--bg-hover);
+  --session-menu-surface: var(--bg-hover);
+}
+.session-project-row.active:focus-visible {
+  background: var(--brand-tint-hover);
+  --session-menu-surface: var(--brand-tint-hover);
+}
 /* Trash rows are managed, not opened — no pointer affordance. */
 .session-row.no-open {
   cursor: default;
@@ -5754,9 +5925,11 @@ button.toast--pill:focus-visible {
   background: var(--bg-hover);
   --row-bg: var(--bg-hover);
 }
+/* Keyboard focus takes the hover tint, as a project row's does, not a ring. */
 .session-folder-row:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: -2px;
+  outline: none;
+  background: var(--bg-hover);
+  --row-bg: var(--bg-hover);
 }
 .session-folder-row.editing {
   height: auto;
@@ -9395,6 +9568,38 @@ button.chat-jump-start:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+/* A sign-in card the session has moved past: one muted row, the runtime's words behind it. */
+.chat-notice-settled {
+  color: var(--text-3);
+}
+.chat-authfix-settled {
+  margin: 6px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+.chat-authfix-settled > summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+.chat-authfix-settled > summary::-webkit-details-marker {
+  display: none;
+}
+.chat-authfix-settled > summary::after {
+  content: '›';
+  margin-left: auto;
+}
+.chat-authfix-settled[open] > summary::after {
+  content: '⌄';
+}
+.chat-authfix-settled-ok {
+  color: var(--success);
 }
 /* Browser-driven runner sign-in, inside the sign-in card. */
 /* No panel of its own: the card is already the container, and buttons are self-delimiting —
@@ -13126,7 +13331,7 @@ button.chat-jump-start:hover {
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--bg);
+  background: var(--bg-base);
   font-size: 13.5px;
   cursor: pointer;
 }
@@ -13619,6 +13824,13 @@ button.chat-jump-start:hover {
   margin: -2px 0 6px;
   font-size: 12.5px;
   color: var(--text-3);
+}
+/* Where a task forked from a session took its checkout from, under its meta row. */
+.tdp-fork-source {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+  word-break: break-word;
 }
 /* How this row is judged, under its title. One pill either way: the judgment method on a row that
    has its own work, and the plain statement that a gate row has none. */
@@ -15506,6 +15718,34 @@ button.chat-jump-start:hover {
   .workspace-split.show-conversation .workspace-header {
     padding-bottom: 10px;
   }
+  /* Beside ←, the Project sessions button and ⋯, a title sharing its row with the Coordinator badge
+     and the watch chips is left a few letters. Here the title takes the row to itself and the badges
+     and chips drop onto the status line under it: the title line's box steps aside (display:
+     contents) so its children wrap in the header column, the title a full row. The status text
+     follows the badges while it fits beside them and takes the next line when it does not. */
+  .workspace-header-main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 2px;
+  }
+  .workspace-header-main > .workspace-title-line {
+    display: contents;
+  }
+  .workspace-header-main > .workspace-header-task,
+  .workspace-title-line > .workspace-name,
+  .workspace-title-line > .workspace-name-input {
+    flex: 0 0 100%;
+  }
+  .workspace-header-main > .workspace-sub {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-top: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   /* In-pane back button: leaves the open conversation for the session list. */
   .workspace-back-mobile {
     display: flex;
@@ -16215,7 +16455,22 @@ button.chat-jump-start:hover {
   font-size: 13px;
 }
 
-/* The guest page (GuestSessionPage, docs/session-guests-design.md §4; board 10-session-guests-3). */
+/* The guest view (GuestSessionPage, docs/session-guests-design.md §4; boards 10-session-guests-3, 11-guest-one-link-2):
+   drawn inside the app's own main pane at /sessions/<id>, so it fills that pane rather than the window. */
+.share-page.guest-view {
+  height: 100%;
+  min-height: 0;
+  /* Nothing in it may reach past the pane, as nothing in the owner's console does (.workspace-view,
+     .workspace-scroll-wrap): a box the transcript positions against otherwise sits outside the
+     conversation's scroller, and the page grew taller than the window with it. */
+  position: relative;
+  overflow: hidden;
+}
+.share-page.guest-view > .share-scroll {
+  position: relative;
+  /* Reaching the end of the conversation ends the scroll there: it is not handed on to the page. */
+  overscroll-behavior: contain;
+}
 .share-subtitle {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -16780,7 +17035,8 @@ button.chat-jump-start:hover {
 
 /* One vendor's keys on its Settings page (ProviderKeyRows, docs/mocks/settings-redesign board-4): a
    SettingsRow per key, its name over one line of what it runs on, the model it starts on, the pools it
-   is in and when it was last used; Edit and ⋯ on its right. */
+   is in and when it was last used; a borderless ⋯ and the › that says the row opens (settings-buttons
+   board 01) on its right. */
 .vk-line {
   display: flex;
   flex-wrap: wrap;
@@ -16790,13 +17046,21 @@ button.chat-jump-start:hover {
 .vk-line .infra-model {
   color: var(--text-1);
 }
-.vk-used {
+.vk-used,
+.vk-used-item {
   white-space: nowrap;
 }
 .vk-act {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
+}
+.vk-act .orbit-button-text {
+  color: var(--text-3);
+}
+.vk-chev {
+  color: var(--text-3);
+  font-size: 11px;
 }
 
 /* ============================================================================
@@ -17280,6 +17544,11 @@ button.chat-jump-start:hover {
 .re-grp.folded .re-upd {
   display: block;
 }
+/* A dismissed warning keeps its drift on the version line, in grey (`13d behind 0.169.0 · warning
+   dismissed`): longer than the line was sized for, so it wraps rather than lose its end. */
+.re-meta:has(.re-upd.dismissed) {
+  white-space: normal;
+}
 /* "Next: …" over the window it names. */
 .re-quota-next {
   overflow-wrap: anywhere;
@@ -17515,7 +17784,11 @@ button.chat-jump-start:hover {
   margin-top: 10px;
 }
 .pool-row {
-  grid-template-columns: minmax(0, 1fr) 196px 140px 110px;
+  /* Top-aligned (settings-buttons board 02): the status, the quota's head and the actions sit level with
+     the name's line, however many lines the quota column takes. The last column holds a way back
+     (Resume Now, Sign in again) beside the ⋯. */
+  grid-template-columns: minmax(0, 1fr) 160px 140px 146px;
+  align-items: start;
 }
 .pool-status {
   min-width: 0;
@@ -17550,7 +17823,7 @@ button.chat-jump-start:hover {
 /* The pool's page takes accounts out, so its rows carry up to two actions: Re-add key and the
    remove mark (88 + 8 + 24px measured). */
 .pool-detail .pool-row {
-  grid-template-columns: minmax(0, 1fr) 196px 130px 124px;
+  grid-template-columns: minmax(0, 1fr) 160px 130px 146px;
 }
 /* The head's gauge: the account the next session runs on, never an average of them. */
 .pool-gauge {
@@ -17764,8 +18037,70 @@ button.chat-jump-start:hover {
 .re-chip.pool-shared-chip {
   flex: none;
   margin-left: 0;
-  background: var(--brand-tint);
-  color: var(--brand);
+  font-weight: 500;
+}
+/* The pool card's head (settings-buttons board 02): a chevron that can be seen, the name on one line,
+   the whole head lit under the pointer since a press anywhere on it folds (foldFromAnywhere). */
+.pool-card .re-head:hover {
+  background: var(--bg-hover);
+}
+.re-chev.pool-chev {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+.pool-card .re-runner {
+  white-space: nowrap;
+}
+.pool-card .re-summary {
+  border-left: 0;
+  padding-left: 0;
+}
+/* A row's ⋯, quiet beside the buttons that are a way back. */
+.pool-row .pool-more.orbit-button:not(:hover):not(:active) {
+  color: var(--text-3);
+}
+/* A status as a dot before plain words (AccountPauseStatus dot): on rows whose buttons sit beside it. */
+.account-status-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  font-size: 12px;
+  line-height: 24px;
+  color: var(--text-1);
+  white-space: nowrap;
+}
+.account-status-dot::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dot-idle);
+}
+.account-status-dot-success::before,
+.account-status-dot-green::before {
+  background: var(--success-solid);
+}
+.account-status-dot-warning::before,
+.account-status-dot-orange::before,
+.account-status-dot-gold::before {
+  background: var(--warning-solid);
+}
+.account-status-dot-error::before,
+.account-status-dot-red::before {
+  background: var(--error-solid);
+}
+.account-status-dot-info::before,
+.account-status-dot-blue::before {
+  background: var(--brand);
+}
+.account-status-dot-error,
+.account-status-dot-red {
+  color: var(--error);
 }
 .pool-people {
   display: inline-flex;
@@ -17797,9 +18132,8 @@ button.chat-jump-start:hover {
   margin-top: 1px;
   font-size: 12px;
   color: var(--text-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Wraps rather than cut: an ellipsis left "· …" where the last part was (settings-buttons board 02). */
+  overflow-wrap: anywhere;
 }
 
 /* ── the pool's page: its title, its people and its rules ─────────────────────── */
@@ -18190,12 +18524,6 @@ button.chat-jump-start:hover {
 }
 .pool-login-window + .pool-login-window {
   margin-top: 8px;
-}
-/* The sign-out mark rests grey and turns red only under the pointer: red on a row that is fine read
-   as something wrong with it. At rest only: under the pointer and pressed it keeps the danger
-   button's own red. */
-.pool-row .pool-signout.orbit-button:not(:hover):not(:active) {
-  color: var(--text-3);
 }
 .pool-login-reset {
   margin-top: 3px;
@@ -21568,28 +21896,6 @@ div.landing-jobs-open {
 .shared-links-page {
   max-width: 1080px;
 }
-.shared-links-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 0 12px;
-  padding: 9px 12px;
-  border: 1px solid var(--warning-border);
-  border-radius: 8px;
-  background: var(--warning-bg);
-  color: var(--text-1);
-  font-size: 13px;
-}
-.shared-links-banner-icon {
-  color: var(--warning);
-}
-.shared-links-banner-text {
-  flex: 1;
-  min-width: 0;
-}
-.shared-links-banner-text b {
-  font-weight: 600;
-}
 .shared-links-list {
   display: flex;
   flex-direction: column;
@@ -21597,7 +21903,7 @@ div.landing-jobs-open {
 }
 .shared-link-row {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) 180px 110px 110px 236px;
+  grid-template-columns: 26px minmax(0, 1fr) 180px 110px 110px auto;
   gap: 12px;
   align-items: center;
   padding: 10px 12px;
@@ -21679,10 +21985,29 @@ div.landing-jobs-open {
 .shared-link-since {
   color: var(--text-3);
 }
+.shared-link-row.is-pressable {
+  cursor: pointer;
+}
+.shared-link-row.is-pressable:hover {
+  background: var(--bg-hover);
+}
 .shared-link-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 2px;
+  min-width: 92px;
+}
+.shared-link-actions .orbit-button-text {
+  color: var(--text-3);
+}
+.shared-link-chev {
+  width: 16px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.shared-link-chev.is-ghost {
+  visibility: hidden;
 }
 @media (max-width: 900px) {
   .shared-link-row {
@@ -21734,52 +22059,14 @@ div.landing-jobs-open {
   color: var(--text-3);
   font-size: 12px;
 }
-
-/* The admin area: its sections side by side (AdminNav), and the Sign-in settings (AdminSignInPage). */
-.admin-nav {
+.signin-method-actions {
   display: flex;
-  gap: 4px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--border-subtle);
+  flex: none;
+  align-items: center;
+  gap: 8px;
 }
-.admin-nav-link {
-  margin-bottom: -1px;
-  padding: 8px 12px;
-  border-bottom: 2px solid transparent;
-  color: var(--text-2);
-  font-weight: 500;
-  text-decoration: none;
-}
-.admin-nav-link:hover {
-  color: var(--text-1);
-}
-.admin-nav-link.active {
-  border-bottom-color: var(--brand);
-  color: var(--brand);
-}
-.admin-nav-link:focus-visible {
-  border-radius: 4px;
-  outline: 2px solid var(--brand);
-  outline-offset: 1px;
-}
-/* One width for every admin page, so their shared tabs stay put between them: wide enough for the
-   user list's columns. */
-.admin-page {
-  max-width: 1200px;
-  margin: 0 auto;
-}
-.admin-page > .page-title {
-  margin-bottom: 16px;
-}
-/* Its form is a card (the class names of components/ui/Card, which a form root cannot render). */
-.admin-signin {
-  max-width: 640px;
-  margin-bottom: 16px;
-}
-.admin-signin-fields {
-  display: grid;
-  gap: 20px;
-}
+
+/* The admin area's Sign-in settings (AdminSignInPage), whose label, hint and row classes other pages reuse. */
 .admin-signin-row {
   display: flex;
   align-items: center;
@@ -21799,7 +22086,7 @@ div.landing-jobs-open {
   font-size: 12px;
 }
 .admin-signin-note {
-  margin-top: -12px;
+  margin-top: 10px;
   color: var(--warning);
   font-size: 12px;
 }
@@ -21818,32 +22105,8 @@ div.landing-jobs-open {
   background: var(--warning-bg);
   color: var(--warning);
 }
-.admin-signin-redirect {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-.admin-signin-redirect code {
-  min-width: 0;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: var(--fill-muted);
-  color: var(--text-1);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 12.5px;
-  overflow-wrap: anywhere;
-}
-.admin-signin-actions {
-  display: flex;
-  justify-content: flex-end;
-}
 .admin-signin-error {
   color: var(--error);
-}
-/* Admin → Integrations: how many Feishu apps accounts have connected. */
-.admin-feishu-count {
-  color: var(--text-2);
 }
 /* Settings → Integrations → Feishu (FeishuIntegrationPage): the account's own app, then the steps in Feishu's
    console. Its fields reuse the admin Sign-in settings' rows, labels and hints. */
@@ -21956,29 +22219,6 @@ div.landing-jobs-open {
    Orbit, since when — and its actions: the one most often wanted in sight, the rest in its menu
    (docs/mocks/admin-users-redesign, direction A). Columns give way as the table's own box narrows,
    whatever the side nav's width: Created first, then Sign-in, Status and Last active. */
-.admin-users-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-.admin-users-head .page-title {
-  margin: 0;
-}
-.admin-users-sub {
-  margin-top: 4px;
-  color: var(--text-3);
-  font-size: 13px;
-}
-.admin-users-tools {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.admin-users-search {
-  width: 240px;
-}
 .admin-users-frame {
   container: admin-users / inline-size;
 }
@@ -22131,16 +22371,6 @@ div.landing-jobs-open {
 @container admin-users (max-width: 479px) {
   .admin-users-who-text {
     max-width: 200px;
-  }
-}
-@media (max-width: 768px) {
-  .admin-users-head {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .admin-users-search {
-    flex: 1;
-    width: auto;
   }
 }
 /* Add user: the fields stacked 8px apart. */
@@ -24689,6 +24919,27 @@ button.project-open-item-action:disabled {
 .wk-space-tag { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 13px;
                 background: var(--fill-muted); font-size: 12.5px; color: var(--text-2); white-space: nowrap;
                 max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+/* The space's name is the Wiki's title, on every head that has a space (board docs/mocks/wiki-rail-name B): the heading's
+   type, no box, and with more than one space a picker drawn as the Tasks title's scope picker (.tasks-scope-trigger). */
+.wk-name-title { display: flex; align-items: center; min-width: 0; }
+.wk-name-title .wk-select, .wk-name-title .wk-space-tag { height: auto; max-width: 100%; margin-left: -6px; padding: 0 6px; gap: 6px;
+                                                         border: 0; border-radius: 6px; background: transparent; font: inherit; color: inherit; }
+.wk-name-title .wk-space-tag { display: block; }
+.wk-name-title .wk-select .v { max-width: 190px; }
+.wk-name-title .wk-select:hover { background: var(--bg-hover); }
+.wk-name-title .wk-select:focus-within { box-shadow: 0 0 0 2px var(--brand-tint); }
+.wk-name-title .wk-select .ic.caret { position: static; font-size: 12px; color: var(--text-3); }
+/* The space menu the name opens (board docs/mocks/wiki-space-menu): a row a space, its name over its repository and
+   documents, the sidebar's amber count at its end; the current one lit and ticked, Manage spaces at the foot. */
+.orbit-menu.wk-space-menu { min-width: 260px; max-width: min(420px, calc(100vw - 24px)); max-height: 70vh; overflow-y: auto; }
+.wk-space-menu .orbit-menu-item { align-items: flex-start; padding-top: 7px; padding-bottom: 7px; }
+.wk-space-menu .orbit-menu-icon { padding-top: 3px; }
+.wk-space-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.wk-space-row-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.wk-space-row-text .n { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.wk-space-row-text .s { font-size: 12px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; }
+.wk-space-row .tp-count.needs-you { flex: none; }
+.wk-name-title .wk-select { cursor: pointer; }
 .wk-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 /* The space's public link, as the head's buttons are sized (mock share-links 08 ②). */
 .wk-actions > .session-shared-pill { height: 32px; padding: 0 12px; font-size: 13px; }
@@ -25209,6 +25460,9 @@ button.project-open-item-action:disabled {
   .wk-page, .rv-page { max-width: none; }
   .wk-drawer { width: 100%; }
   .wk-select .v, .wk-space-tag { max-width: 120px; }
+  .wk-title-row .wk-name-title .wk-select .v { max-width: none; overflow: hidden; text-overflow: ellipsis; }
+  .wk-title-row .wk-name-title .wk-select { min-width: 0; }
+  .wk-title-row .wk-name-title .wk-space-tag { max-width: 100%; }
   .wk-dkv, .wk-pkv { grid-template-columns: minmax(0, 1fr); }
   .wk-pkv > .k { padding-top: 6px; }
   .rv-head { flex-direction: column; align-items: flex-start; }
@@ -25227,6 +25481,7 @@ button.project-open-item-action:disabled {
 .wk-page .wk-contents-btn { display: none; }
 
 .wk-toc { display: block; min-width: 0; margin-left: -8px; padding-top: 2px; }
+.wk-dir-resizer { display: none; }
 .wk-toc-item { display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 8px; border-radius: 6px;
                font-size: 13.5px; color: var(--text-1); white-space: nowrap; min-width: 0; text-decoration: none; }
 .wk-toc-item:hover { background: var(--bg-hover); color: var(--text-1); }
@@ -25398,13 +25653,13 @@ button.project-open-item-action:disabled {
   /* Prose: 47 Chinese characters to the line at .wk-art's size, where 880px is 55. */
   .wk-page--reading > .wk-layout > .wk-main > .wk-art-page { max-width: 760px; }
   .wk-layout > .wk-dir-col { position: sticky; top: 0; max-height: calc(var(--app-vh, 100vh) - 48px); overflow-y: auto;
-                             overscroll-behavior: contain; margin-left: -8px; scrollbar-width: thin; }
+                             overscroll-behavior: contain; margin-left: -8px; }
   .wk-layout > .wk-dir-col > .wk-toc { margin-left: 0; }
   /* The head, the search and the directory as one column from the window's top to its foot (board
      docs/mocks/wiki-rail ③): the title and the space, the search, then the rows, which scroll on their own, and
      Settings and Share at the foot. The head row and the search line above it give way to it; the main column
      starts at the top, the home's line first. */
-  .wk-page--railed { display: grid; grid-template-columns: 248px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
+  .wk-page--railed { display: grid; grid-template-columns: var(--wk-dir-w, 248px) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
                      column-gap: 32px; align-items: start; }
   .wk-page--railed > .wk-title-row, .wk-page--railed > .wk-search { display: none; }
   /* The home's line was the head's; Activity has its own head and status row (as on a phone). */
@@ -25414,13 +25669,16 @@ button.project-open-item-action:disabled {
   .wk-page--railed > .wk-layout > .wk-dir-col { grid-column: 1; grid-row: 1 / span 2; display: flex; flex-direction: column;
                                                 top: -24px; height: var(--app-vh, 100vh); max-height: none; overflow: hidden;
                                                 margin: -24px 0 -24px -32px; padding: 16px 0 0 24px;
-                                                border-right: 1px solid var(--border-subtle); background: var(--bg-subtle); }
+                                                border-right: 1px solid var(--border-subtle); background: var(--bg-raised); }
+  /* The column's border drags its width, as the app sidebar's does (.tp-resizer). Inside the column's edge: the column
+     clips what lies past it. */
+  .wk-page--railed > .wk-layout > .wk-dir-col > .wk-dir-resizer { display: block; position: absolute; top: 0; right: 0; width: 6px;
+                                                                  height: 100%; z-index: 5; cursor: col-resize; }
+  .wk-page--railed > .wk-layout > .wk-dir-col > .wk-dir-resizer:hover { background: rgba(51, 112, 255, 0.12); }
   .wk-rail-top { flex: none; padding: 0 16px 10px 0; }
-  .wk-rail-head { display: flex; align-items: center; gap: 12px; height: 32px; }
-  .wk-rail-head .wk-select .v, .wk-rail-head .wk-space-tag { max-width: 150px; }
-  .wk-rail-top > .wk-search { margin-top: 14px; }
+  .wk-rail-head { height: 32px; }
   .wk-page--railed > .wk-layout > .wk-dir-col > .wk-toc { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
-                                                         padding: 0 10px 12px 0; scrollbar-width: thin; }
+                                                         padding: 0 10px 12px 0; }
   .wk-rail-foot { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 16px 12px 0;
                   border-top: 1px solid var(--border-subtle); }
   .wk-rail-foot > .session-shared-pill { height: 32px; padding: 0 12px; font-size: 13px; }
@@ -26201,6 +26459,23 @@ button.agent-progress-agent:hover {
 .wt-recovery { margin: 0 12px 12px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-subtle); font-size: 12px; overflow-wrap: anywhere; }
 .wt-recovery p { margin: 10px 0; color: var(--text-2); }
 .wt-recovery summary { cursor: pointer; margin: 10px 0; }
+/* What the last check found scrolls inside the panel: the panel stands in the band above the composer, and a long
+   push list must not push the composer off screen. The title, the repair row and the actions stay in view. */
+/* A recovery with a repair session folds into one row of the branch bar, in the strip's row language (.bg-tray-row):
+   where the repair stands, its next step, and the arrow that opens the panel under it (docs/mocks/merge-repair-strip-row). */
+.wt-repair-row { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 3px 6px 3px 10px; font-size: 12px; border-top: 1px solid var(--border-subtle); cursor: pointer; }
+.wt-repair-row:hover { background: var(--bg-hover); }
+.wt-repair-row-icon { flex: none; display: inline-flex; font-size: 14px; color: var(--text-3); }
+.wt-repair-row.is-running .wt-repair-row-icon, .wt-repair-row.is-checking .wt-repair-row-icon { color: var(--brand); }
+.wt-repair-row-head { flex: none; color: var(--text-1); font-weight: 500; white-space: nowrap; }
+.wt-repair-row-note { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); }
+.wt-repair-row.is-ready :is(.wt-repair-row-icon, .wt-repair-row-note) { color: var(--success); }
+.wt-repair-row:is(.is-conflict, .is-reply) :is(.wt-repair-row-icon, .wt-repair-row-note) { color: var(--warning); }
+.wt-repair-row.is-failed .wt-repair-row-icon { color: var(--error); }
+.wt-repair-row-step { flex: none; padding: 3px 10px; border-radius: 6px; cursor: pointer; font: inherit; }
+.wt-repair-row-step:not(.wt-merge-btn) { border: 1px solid var(--border); background: var(--bg-base); color: var(--text-1); }
+.wt-repair-row-step:disabled { opacity: .55; cursor: default; }
+.wt-recovery-snapshot { max-height: 28vh; overflow-y: auto; }
 .wt-recovery-histories { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .wt-recovery-histories > :only-child { grid-column: 1 / -1; }
 .wt-recovery-route code { font-size: 11px; }
@@ -26209,7 +26484,7 @@ button.agent-progress-agent:hover {
 .wt-recovery pre { white-space: pre-wrap; max-height: 400px; overflow: auto; font-size: 11px; }
 .wt-recovery-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 .wt-recovery-actions button { padding: 5px 10px; border-radius: 6px; cursor: pointer; }
-.wt-recovery-actions button:not(.wt-merge-btn) { border: 1px solid var(--border); background: var(--bg); color: var(--text-1); font: inherit; }
+.wt-recovery-actions button:not(.wt-merge-btn) { border: 1px solid var(--border); background: var(--bg-base); color: var(--text-1); font: inherit; }
 .wt-recovery-actions button:disabled { opacity: .55; cursor: default; }
 .wt-recovery-repair-status { display: flex; align-items: center; gap: 10px; width: 100%; margin: 10px 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-raised); color: var(--text-1); text-align: left; cursor: pointer; font: inherit; }
 .wt-recovery-repair-status.is-running { border-color: color-mix(in srgb, var(--brand) 38%, var(--border)); background: color-mix(in srgb, var(--brand) 8%, var(--bg-raised)); }
@@ -26228,6 +26503,11 @@ button.agent-progress-agent:hover {
 .wt-recovery-link { padding: 0; border: 0; background: none; color: var(--brand); font: inherit; cursor: pointer; }
 .wt-recovery-link:disabled { opacity: .55; cursor: default; }
 .wt-recovery-snapshot.is-stale { opacity: .45; }
+.wt-recovery .wt-recovery-failure { color: var(--error); }
+/* The merge slot while a merge operation is pending: what Orbit is doing, since when, on which runner. Amber once overdue. */
+.wt-merge-op { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 12px 12px; padding: 8px 12px; border-radius: 8px; font-size: 12px; color: var(--brand); background: color-mix(in srgb, var(--brand) 8%, var(--bg-raised)); }
+.wt-merge-op span { color: var(--text-2); }
+.wt-merge-op.is-overdue { color: var(--warning); background: color-mix(in srgb, var(--warning) 10%, var(--bg-raised)); }
 .wt-recovery-files { margin: 10px 0; }
 .wt-recovery-files ul { display: grid; gap: 4px; margin: 6px 0 0; padding: 0; list-style: none; }
 .wt-recovery-files code { font-size: 11px; }
@@ -27387,61 +27667,18 @@ button.agent-progress-agent:hover {
   line-height: 1.5;
 }
 .project-done-findings ul { list-style: none; padding: 0; margin: 0; }
-/* Admin → Email (AdminEmailPage, docs/welcome-email-design.md §3.1): the Sign-in card's rows, with From and
-   Reply-To side by side, the test email's answer beside its buttons, and the last week under a rule. */
-.admin-email-off {
-  margin-top: -8px;
-}
-.admin-email-pair {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-@media (max-width: 600px) {
-  .admin-email-pair {
-    grid-template-columns: 1fr;
-  }
-}
-.admin-email-divided {
-  padding-top: 20px;
-  border-top: 1px solid var(--border-subtle, var(--border));
-}
-.admin-email-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.admin-email-buttons {
-  display: flex;
-  gap: 8px;
-  margin-left: auto;
-}
+/* Admin → Email (AdminEmailPage, docs/welcome-email-design.md §3.1): the unreadable-key alert, failed counts and
+   the last week's failures. */
 .admin-email-result {
   padding: 8px 12px;
   border: 1px solid;
   border-radius: 6px;
   overflow-wrap: anywhere;
 }
-.admin-email-result-ok {
-  border-color: var(--success-border);
-  background: var(--success-bg);
-  color: var(--success);
-}
 .admin-email-result-error {
   border-color: var(--error-border);
   background: var(--error-bg);
   color: var(--error);
-}
-.admin-email-week {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border-subtle, var(--border));
-  color: var(--text-2);
 }
 .admin-email-failed {
   color: var(--error);
@@ -27449,7 +27686,7 @@ button.agent-progress-agent:hover {
 .admin-email-failures {
   display: grid;
   gap: 6px;
-  margin: -8px 0 0;
+  margin: 4px 0 0;
   padding: 0;
   list-style: none;
   color: var(--text-2);
@@ -27882,3 +28119,9 @@ button.agent-progress-agent:hover {
 .confirm-criterion-shot { display: flex; gap: 10px; align-items: flex-end; }
 .confirm-criterion-shot img { max-width: 220px; max-height: 140px; border: 1px solid var(--border-subtle); border-radius: 6px; }
 .acceptance-mode-row { margin-top: 4px; }
+
+/* A coordinator question still waiting on the owner: orange and heavier-edged, the colour of the
+   `open question below` capsule that points at it (the owner's pick, 2026-11-13). */
+.approval-card.coordinator-question {
+  border: 1.5px solid var(--warning-solid);
+}

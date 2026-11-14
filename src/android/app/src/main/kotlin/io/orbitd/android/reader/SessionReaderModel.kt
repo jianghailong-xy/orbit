@@ -28,7 +28,7 @@ internal enum class ReadingSource(val wire: String) { CACHE("cache"), NETWORK("n
 /** One route/account lifetime; the application's A04 store continues to own all SSE and authority. */
 internal class SessionReaderModel(private val auth: AuthSession, private val handle: SessionHandle,
     private val store: RealtimeStore, val id: String, private val scope: CoroutineScope, record: String?,
-    restoreSavedRecord: Boolean = false) : AutoCloseable {
+    restoreSavedRecord: Boolean = false) : AutoCloseable, FullEvents {
     private val job = SupervisorJob(scope.coroutineContext[Job])
     private val owner = CoroutineScope(scope.coroutineContext + job)
     private val api = TranscriptApi(auth, handle, id)
@@ -142,7 +142,7 @@ internal class SessionReaderModel(private val auth: AuthSession, private val han
         }
     }
     fun show(seq: Long) { following = false; mutable.update { it.copy(targetSeq = seq, targetOffset = 0, targetTick = it.targetTick + 1) } }
-    suspend fun full(seq: Long): RunEvent {
+    override suspend fun full(seq: Long): RunEvent {
         val version = generation
         val event = read(recordScoped = true) { api.full(seq) }
         if (version != generation || mutable.value.denied || !cache.valid(access.revision)) throw CancellationException("Reading access changed")

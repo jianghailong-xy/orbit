@@ -118,6 +118,7 @@ const previews = {
       error: null,
       retryAt: null,
       engineTurnActive: false,
+      activity: null,
       pendingApprovals: 0,
       waitingKind: null,
       runningBgCount: 0,

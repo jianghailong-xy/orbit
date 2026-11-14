@@ -1,5 +1,7 @@
+import { CoordinatorHandoffService } from '../projects/coordinator-handoff.service';
 import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from '../sessions/run-question';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
+import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
 import { readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import {
@@ -31,6 +33,7 @@ import type { Request, Response } from 'express';
 import { plainToInstance } from 'class-transformer';
 import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
+import { isStopping, pauseUnlessStopping } from '../common/graceful-stop';
 import { registerFeishuReply } from '../feishu/feishu-outbox-register';
 import { deriveSessionCapabilities, type SessionCapabilityFields } from '../sessions/session-state';
 import { readWorktreeArtifactRequest, worktreeFileAnswerKey } from '../sessions/worktree-artifact';
@@ -140,6 +143,10 @@ import {
   SourcePinResponse,
   TakeoverTurnLeasesRequest,
   TakeoverTurnLeasesResponse,
+  BATCH_TAKEOVER_TURN_LEASES_MAX,
+  type BatchTakeoverTurnLeasesRequest,
+  type BatchTakeoverTurnLeasesResponse,
+  type BatchTakeoverTurnLeasesResult,
   TurnAttachment,
   TurnCompleteRequest,
   type WikiRepoOpCommand,
@@ -166,6 +173,7 @@ import {
   type NormalizedRunEvent,
   toUuid,
   CLAUDE_REGION_V1,
+  TASK_FORK_V1,
   CLAUDE_REGION_REFUSED_SUBTYPE,
   CLAUDE_REGION_STOPPED_SUBTYPE,
   type ClaudeRegionCheckRequest,
@@ -207,7 +215,7 @@ import {
 import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { DISPATCH_PAUSED } from '../queue/dispatch-pause';
 import { QueueService } from '../queue/queue.service';
-import { approvalRequestEvent, RealtimeService, runEventBatchNotice } from '../realtime/realtime.service';
+import { approvalRequestEvent, RealtimeService, type RestatedSeqs } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
 import { CreateTaskBatchItemDto } from '../tasks/dto';
 import { TASK_CRITERION_SHAPE_ADVICE_CODE } from '../tasks/task-criterion-shape-advice';
@@ -218,6 +226,7 @@ import {
   APPROVAL_ABANDONED_STATUS,
   reapApprovalsOfEndedTurns,
   reapApprovalsOfReplacedSupervisor,
+  reapApprovalsOfReplacedSupervisors,
   reapApprovalsOfReturnedCalls,
   reapApprovalsOfReturnedCallsIn,
 } from '../sessions/abandoned-approvals';
@@ -466,7 +475,6 @@ import { loginCodeRelay } from '../runners/login-code-relay';
 import { readDirProbeResult } from '../runners/dir-probe';
 import { readRunnerRepoHealth, sanitizeRunnerRepoHealth, workspacesWithChangedRepoHealth } from '../common/runner-repo-health';
 import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
-import { claimDrainWaitingPush } from '../common/runner-drain-waiting';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
 import { orchestrationEnabled } from '../common/orchestration-switch';
@@ -498,7 +506,7 @@ import {
 import { coordinatorCreateAllowedBy } from './unstarted-project-create';
 import {
   freezeSessionSourcePin,
-  sessionSourceSnapshot,
+  forkAuthorityBindings, sessionSourceSnapshot,
 } from '../projects/session-source';
 import { providerDispatchWhereOn } from '../providers/custom-provider';
 import { dispatchKeyRow } from '../providers/engine-provider';
@@ -533,6 +541,7 @@ import {
   recordRunnerBeat,
   runnerLastBeatAt,
 } from '../runners/runner-presence';
+import { recordRunnerResources, sanitizeRunnerResources } from '../runners/runner-resources';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -634,6 +643,8 @@ interface IngestOutcome {
   events: NormalizedRunEvent[];
   durable: NormalizedRunEvent[];
   alreadyStored: number;
+  /** The range of the batch's replayable seqs an earlier delivery stored, announced again (RestatedSeqs); null when none. */
+  restated: RestatedSeqs | null;
   /** The batch's events not stored because their seq holds another event, and the door they came by. */
   seqConflicts: RunEventSeqConflict[];
   door: RunEventDoor;
@@ -973,17 +984,24 @@ interface RepairCheckAfter {
   parentSessionId: string | null;
   /** This session's own recovery: a repair turn's check has been waiting for this session's turn to end. */
   owesCheck: boolean;
+  /** A merge this session asked for of itself during its turn (SessionsService.mergeAfterOwnTurn): queued
+   *  when the turn that ended succeeded, dropped when it did not; null when none was asked for. */
+  merge: 'QUEUE' | 'DROP' | null;
 }
 // Read off the session row the settle locked. Only a repair session (startMergeRepair's server-owned
 // source) triggers one — an ordinary child of the same parent, a task's run or anything else does not —
 // and only for a turn that ended, which a finalize says only of a session it found running one.
 function repairCheckAfter(
-  session: { source: string; parentSessionId: string | null; mergeRepairTurnEndedAt: Date | null },
+  session: {
+    source: string; parentSessionId: string | null; mergeRepairTurnEndedAt: Date | null; mergeAfterTurnAt: Date | null;
+  },
   turnEnded = true,
+  turnSucceeded = true,
 ): RepairCheckAfter {
   return {
     parentSessionId: turnEnded && session.source === 'merge-repair' ? session.parentSessionId : null,
     owesCheck: session.mergeRepairTurnEndedAt != null,
+    merge: session.mergeAfterTurnAt == null ? null : turnSucceeded ? 'QUEUE' : 'DROP',
   };
 }
 // Tool-permission approvals: `orbit mcp`'s permission tool, which holds no link, blocks on this
@@ -1263,6 +1281,21 @@ export function runnerSupportsCapability(
  *  locked and the transaction declared what the database asks of it, so only a guard refusing it gets
  *  here; the runner retries as it does every refused takeover. */
 const LEASE_WRITE_REFUSED = 'the inbox lease was not written; retry';
+
+/** A batch takeover row's refusal, as the single route would have answered it: its status code, its
+ *  message and the code it carries. Only a refusal (an HttpException) is a row's answer; anything else
+ *  is a fault and is raised as it is. */
+function takeoverRowRefusal(error: unknown): { statusCode: number; message: string; code?: string } {
+  if (!(error instanceof HttpException)) throw error;
+  const body = error.getResponse();
+  if (typeof body === 'string') return { statusCode: error.getStatus(), message: body };
+  const { message, code } = body as { message?: unknown; code?: unknown };
+  return {
+    statusCode: error.getStatus(),
+    message: Array.isArray(message) ? message.join('; ') : String(message ?? error.message),
+    ...(typeof code === 'string' ? { code } : {}),
+  };
+}
 
 /** The repository operations' refusal as a status (contract `repoOps`): 409 for a claim that was taken
  *  over or a row already settled, 404 for one this runner cannot see, 400 for a body that is not a
@@ -1614,6 +1647,12 @@ export class RunnerApiController {
      * routes answer 503.
      */
     @Optional() private readonly mainCheckout?: MainCheckoutService,
+    /**
+     * A coordinator's handoff (projects/coordinator-handoff.service.ts): the end of its note turn is
+     * settled from turnComplete. `@Optional()` like the rest: without it a note turn's end is settled
+     * by the handoff sweep instead.
+     */
+    @Optional() private readonly coordinatorHandoffs?: CoordinatorHandoffService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -1927,6 +1966,7 @@ export class RunnerApiController {
         namedSessionIds: named,
         supervisedSessionIds: supervised,
         planUsageDigest: digests.facts.planUsage ?? null,
+        resources: sanitizeRunnerResources(dto?.resources),
       });
     } catch (error) {
       // Nothing recorded this beat: the reaper must not read the silence it leaves as the runner's.
@@ -1973,9 +2013,6 @@ export class RunnerApiController {
       }
     }
     if (verdict.answer !== 'FULL') {
-      // Work queuing behind a drain moves nothing a quiet beat reads, so a draining beat asks for the drain's push here
-      // too: at most one statement per beat, and only while the runner drains.
-      if (dto?.draining === true) await this.pushDrainWaiting(runnerId);
       // Whichever apiserver process holds them (cursor-key-check-relay.ts): the gateway forwards a beat to any.
       const cursorKeyChecks = await cursorKeyCheckRelay.takeAnywhere(runnerId);
       return quietHeartbeatAnswer(row, {
@@ -1989,19 +2026,6 @@ export class RunnerApiController {
       row,
       digests,
     });
-  }
-
-  /**
-   * A runner draining for its update with something of its owner's waiting on it: tell them, once per drain (D3). The
-   * claim is the guard — only the beat whose UPDATE matched pushes — and a failure costs the push, never the heartbeat.
-   */
-  private async pushDrainWaiting(runnerId: string): Promise<void> {
-    try {
-      const push = await claimDrainWaitingPush(this.prisma, runnerId);
-      if (push) void this.push.notifyRunnerDrainWaiting(push);
-    } catch (error) {
-      this.logger.warn(`runner ${runnerId}: drain push skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
-    }
   }
 
   /** What a link heartbeat's answer says waits for the runner: the beat statement's HintState, and this process's own. */
@@ -2134,8 +2158,6 @@ export class RunnerApiController {
         // to send a leaseOwner or a draining flag writes NULL: no active lease, not draining.
         heartbeatLeaseOwner,
         heartbeatDraining: typeof dto?.draining === 'boolean' ? dto.draining : null,
-        // A beat that is not draining ends the drain's one push (migration 0595): the next drain pushes again.
-        ...(dto?.draining === true ? {} : { drainWaitingPushedAt: null }),
         // Per-engine health for Infrastructure. Sanitized on the way in as well as out, so a
         // malformed report can't be stored as a claim about this machine; an older runner omits
         // the field entirely and keeps whatever was last known.
@@ -2199,6 +2221,13 @@ export class RunnerApiController {
         linkState: link ? 'LINK' : 'HTTP',
         at: beatAt,
       }).catch(beatLost);
+      // The machine's reading, on the row the beat just wrote. Advisory: a reading lost is the page's dash until the next.
+      const resources = sanitizeRunnerResources(dto?.resources);
+      if (resources) {
+        await recordRunnerResources(this.prisma, runner.id, resources).catch((error) =>
+          this.logger.warn(`runner ${runner.id}: resources not recorded this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`),
+        );
+      }
     }
     // Whether this instance's mapping is draining to sleep, and what it is told about it. Advisory
     // like the relays below: a read that fails hands out this beat's work as usual, and the instance,
@@ -2329,7 +2358,6 @@ export class RunnerApiController {
         void this.push.notifyEngineSignedOut(runner.id, current.engine);
       }
     }
-    if (dto?.draining === true) await this.pushDrainWaiting(runner.id);
     // A finished install stops being news the moment the probe confirms it: clear the slot so the
     // row goes back to speaking from engine health (which then says "signed out", with the sign-in
     // that actually comes next) rather than sitting on a terminal status nobody has to act on.
@@ -2522,6 +2550,7 @@ export class RunnerApiController {
     let postponeSelfUpdateUntil: RunnerHeartbeatResponse['postponeSelfUpdateUntil'];
     let selfUpdateNow: RunnerHeartbeatResponse['selfUpdateNow'];
     let regionCheckRequest: RunnerHeartbeatResponse['regionCheckRequest'];
+    let forkSnapshotsOpen: RunnerHeartbeatResponse['forkSnapshotsOpen'];
     try {
       cancelSessionIds = await this.realtime.drainCancellations(runner.id);
       // Manual git mutations are fail-closed: a runner must advertise its process owner,
@@ -2584,6 +2613,9 @@ export class RunnerApiController {
       selfUpdateNow = await this.drainSelfUpdateNow(runner.id);
       // The owner's Check again, redelivered rather than claimed: a beat that skips it costs nothing, so it is last.
       regionCheckRequest = await this.drainRegionCheckRequest(runner.id, capabilities);
+      // A listing, read on every full beat like agentDirs; a beat that fails before it states nothing, which the
+      // runner reads as "delete nothing".
+      forkSnapshotsOpen = await this.forkSnapshotsOpen(updated.ownerId, runner.id, capabilities);
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
@@ -2662,6 +2694,8 @@ export class RunnerApiController {
       ...(cursorKeyChecks.length > 0 ? { cursorKeyChecks } : {}),
       // Only while the owner's Check again waits, and only to a process that declared claude-region/v1.
       ...(regionCheckRequest ? { regionCheckRequest } : {}),
+      // Only to a process that declared task-fork/v1: an older runner's response keeps its shape.
+      ...(forkSnapshotsOpen ? { forkSnapshotsOpen } : {}),
       // Only to a runner that declared owner-secret/v1: ids and expiries, never a value.
       ...(secretReconcile ?? {}),
       // Only on a link call, which the gateway takes it out of: an HTTPS response keeps its shape.
@@ -3045,6 +3079,26 @@ export class RunnerApiController {
       data: { selfUpdateNowRequestedAt: null },
     });
     return claimed.count > 0 ? true : undefined;
+  }
+
+  /**
+   * The snapshots this runner's open forked tasks start from (docs/task-fork-from-session-design.md §2.6, SR55): the
+   * distinct `fork_sha` of every OPEN or IN_PROGRESS task forked on this runner. The runner deletes each keep-alive ref
+   * whose snapshot is not listed, so a task that closed lets its snapshot go. Only to a process that declares
+   * task-fork/v1; undefined otherwise, which deletes nothing. Reads only, through the owner's status index.
+   */
+  private async forkSnapshotsOpen(
+    ownerId: string,
+    runnerId: string,
+    capabilities: string | string[] | undefined,
+  ): Promise<string[] | undefined> {
+    if (!runnerSupportsCapability(capabilities, TASK_FORK_V1)) return undefined;
+    const rows = await this.prisma.task.findMany({
+      where: { ownerId, status: { in: ['OPEN', 'IN_PROGRESS'] }, forkRunnerId: runnerId, forkSha: { not: null } },
+      select: { forkSha: true },
+      distinct: ['forkSha'],
+    });
+    return rows.map((r) => r.forkSha as string);
   }
 
   /**
@@ -3874,7 +3928,7 @@ export class RunnerApiController {
   async reclaim(
     // runsAsRoot rides the authenticated row (RunnerAuthGuard loads it whole): the claim below has
     // to withdraw Bypass for the machine that is about to spawn the process, not for some other.
-    @CurrentRunner() runner: { id: string; ownerId: string; runsAsRoot?: boolean | null },
+    @CurrentRunner() runner: { id: string; ownerId: string; runsAsRoot?: boolean | null; capabilities?: string[] | null },
     @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
   ): Promise<ReclaimResponse> {
     const sessions = await this.prisma.session.findMany({
@@ -3974,6 +4028,8 @@ export class RunnerApiController {
         sourceBindings.set(binding.id, binding);
       }
     }
+    // A fork's authority is the machine its task's snapshot is on (SR55), not a binding's.
+    const forkBindings = await forkAuthorityBindings(this.prisma, sessions);
     // Reclaim never mutates lifecycle/lease ownership. The runner takes each row over with an
     // expected-owner CAS after receiving the snapshot; therefore a timed-out, delayed request
     // cannot retire a generation activated from a newer response. The only writes below are an
@@ -4179,6 +4235,8 @@ export class RunnerApiController {
         agent: workspaceCfg,
         workDir: workspace?.workDir ?? undefined,
         branch: s.branch ?? undefined,
+        // cf. the claim path: a codeless run with no branch yet goes back to its detached checkout.
+        ...codelessClaimFields(s, workspace, runner.capabilities),
         autoInitGit: workspace?.autoInitGit ?? undefined,
         // cf. the claim path: a folder Orbit made the workspace in is made on the machine if it is missing.
         ...(workspace?.autoCreateWorkDir ? { createWorkDir: true } : {}),
@@ -4204,7 +4262,8 @@ export class RunnerApiController {
         // that happens to have the same id.
         source: sessionSourceSnapshot(
           s,
-          s.sourceCodebaseId ? (sourceBindings.get(s.sourceCodebaseId) ?? null) : null,
+          forkBindings.get(s.id)
+            ?? (s.sourceCodebaseId ? (sourceBindings.get(s.sourceCodebaseId) ?? null) : null),
         ),
       });
     }
@@ -4443,6 +4502,206 @@ export class RunnerApiController {
     }
     this.realtime.notifyInbox(sessionId);
     return { ok: true, status: taken.status as SharedRunStatus };
+  }
+
+  /**
+   * The takeover above for every session a reclaim handed back, in one request and one transaction.
+   *
+   * Each row is judged by the same fences, read under the same row lock, and answered with what the
+   * single route would answer: its status, or the 403/409 it would refuse with — and one row's
+   * refusal refuses none of the others. The writes are set-based: one locking read, one lease
+   * write, one generation insert, one turn expiry and one approval reap for the whole batch, so a
+   * restart's few hundred takeovers cost a handful of statements instead of a request each.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/takeover-leases')
+  @HttpCode(200)
+  async takeoverLeasesBatch(
+    @CurrentRunner() runner: { id: string },
+    @Body() dto: BatchTakeoverTurnLeasesRequest,
+    @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
+  ): Promise<BatchTakeoverTurnLeasesResponse> {
+    const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
+    if (!leaseOwner) throw new BadRequestException('leaseOwner is required');
+    const rows = dto?.sessions;
+    if (!Array.isArray(rows) || rows.length === 0) throw new BadRequestException('sessions is required');
+    if (rows.length > BATCH_TAKEOVER_TURN_LEASES_MAX) {
+      throw new BadRequestException(`at most ${BATCH_TAKEOVER_TURN_LEASES_MAX} sessions per takeover`);
+    }
+    const asked = rows.map((row) => {
+      let sessionId: string;
+      try {
+        if (typeof row?.sessionId !== 'string' || row.sessionId === '') throw new Error('no id');
+        sessionId = toUuid(row.sessionId);
+      } catch {
+        throw new BadRequestException('invalid sessionId');
+      }
+      return { sessionId, expectedLeaseOwner: parseLeaseGeneration(row?.expectedLeaseOwner ?? undefined) };
+    });
+    const ids = asked.map((row) => row.sessionId);
+    if (new Set(ids).size !== ids.length) throw new BadRequestException('a session is named twice');
+
+    // The single route's first refusal, on the caller's own account: a landing is the platform's (§2.9 LS6).
+    const refusedBeforeLock = new Map<string, BatchTakeoverTurnLeasesResult['error']>();
+    const ownerId = (runner as { ownerId?: string }).ownerId;
+    const kinds = await this.prisma.session.findMany({
+      where: { id: { in: ids }, ...(ownerId ? { ownerId } : {}) },
+      select: { id: true, sessionKind: true },
+    });
+    for (const row of kinds) {
+      try {
+        assertEngineSessionRow(row);
+      } catch (error) {
+        refusedBeforeLock.set(row.id, takeoverRowRefusal(error));
+      }
+    }
+
+    const taken = await withTransactionRetry(this.prisma, async (tx) => {
+      const answers = new Map<string, BatchTakeoverTurnLeasesResult>();
+      const lockable = ids.filter((id) => !refusedBeforeLock.has(id));
+      // Locked in id order, as every batch takes them, so two batches cannot deadlock on each other.
+      const locked = lockable.length === 0 ? [] : await tx.$queryRaw<
+        Array<{
+          id: string;
+          provider: string;
+          providerBuiltin: boolean;
+          engine: string | null;
+          ownerId: string;
+          inboxLeaseGeneration: string | null;
+          inboxLeaseOwner: string | null;
+          status: RunStatus;
+          mergeStatus: string | null;
+          mergeOperationId: string | null;
+          mergeOperationOwner: string | null;
+          mergeRequestedAt: Date | null;
+          commitStatus: string | null;
+          commitOperationId: string | null;
+          commitOperationOwner: string | null;
+          commitRequestedAt: Date | null;
+        }>
+      >`
+        SELECT id, provider, "provider_builtin" AS "providerBuiltin", engine, "owner_id" AS "ownerId", "inbox_lease_generation" AS "inboxLeaseGeneration",
+               "inbox_lease_owner" AS "inboxLeaseOwner", status,
+               "merge_status" AS "mergeStatus",
+               "merge_operation_id" AS "mergeOperationId",
+               "merge_operation_owner" AS "mergeOperationOwner",
+               "merge_requested_at" AS "mergeRequestedAt",
+               "commit_status" AS "commitStatus",
+               "commit_operation_id" AS "commitOperationId",
+               "commit_operation_owner" AS "commitOperationOwner",
+               "commit_requested_at" AS "commitRequestedAt"
+        FROM "session"
+        WHERE id = ANY(${lockable}::uuid[]) AND "assigned_runner_id" = ${runner.id}::uuid
+        ORDER BY id
+        FOR UPDATE
+      `;
+      const byId = new Map(locked.map((row) => [row.id, row]));
+      const writes: Array<{ id: string; fence: string; predecessor: string | null; status: RunStatus; declared: string | null }> = [];
+      for (const { sessionId, expectedLeaseOwner } of asked) {
+        const refused = refusedBeforeLock.get(sessionId);
+        if (refused) {
+          answers.set(sessionId, { sessionId, error: refused });
+          continue;
+        }
+        const row = byId.get(sessionId);
+        if (!row) {
+          answers.set(sessionId, { sessionId, error: { statusCode: 403, message: 'session does not belong to this runner' } });
+          continue;
+        }
+        let declared: string | null;
+        try {
+          declared = await assertDeclaredLeaseSupport(tx, runner.id, row, providerHeader);
+        } catch (error) {
+          answers.set(sessionId, { sessionId, error: takeoverRowRefusal(error) });
+          continue;
+        }
+        const conflict = (message: string) => answers.set(sessionId, { sessionId, error: { statusCode: 409, message } });
+        if (!OPEN.includes(row.status)) {
+          conflict('session is no longer open');
+          continue;
+        }
+        const currentOwner = row.inboxLeaseOwner;
+        if (currentOwner === leaseOwner) {
+          answers.set(sessionId, { sessionId, status: row.status as SharedRunStatus });
+          continue;
+        }
+        if (
+          pendingWorktreeOperationMayBeExecuting(row.mergeStatus, row.mergeOperationId, row.mergeOperationOwner, row.mergeRequestedAt) ||
+          pendingWorktreeOperationMayBeExecuting(row.commitStatus, row.commitOperationId, row.commitOperationOwner, row.commitRequestedAt)
+        ) {
+          conflict('wait for the pending worktree operation to finish');
+          continue;
+        }
+        if (currentOwner !== expectedLeaseOwner) {
+          conflict('inbox lease owner changed; refresh the session snapshot');
+          continue;
+        }
+        writes.push({ id: sessionId, fence: row.inboxLeaseGeneration ?? randomUUID(), predecessor: currentOwner, status: row.status, declared });
+      }
+
+      const orphanedApprovals: Array<{ sessionId: string; id: string }> = [];
+      if (writes.length > 0) {
+        // The single route's writes, once for the batch. The lease write goes first here so a row a
+        // guard refuses (it skips the row rather than raising) retires nothing and reaps nothing —
+        // what the single route gets by rolling its whole transaction back.
+        await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+        const acquiredRows = await tx.$queryRaw<Array<{ id: string }>>`
+          UPDATE "session" AS s
+          SET "inbox_lease_generation" = w.fence,
+              "inbox_lease_owner" = ${leaseOwner}::uuid,
+              "running_bg_shells" = '{}'::text[],
+              "running_bg_jobs" = '{}'::text[],
+              "running_bg_job_activity" = '{}'::jsonb,
+              "running_subagents" = '{}'::text[],
+              "engine_turn_active" = false
+          FROM unnest(${writes.map((w) => w.id)}::uuid[], ${writes.map((w) => w.fence)}::uuid[]) AS w(id, fence)
+          WHERE s.id = w.id
+          RETURNING s.id
+        `;
+        const acquired = new Set(acquiredRows.map((row) => row.id));
+        const landed = writes.filter((w) => acquired.has(w.id));
+        for (const w of writes) {
+          answers.set(w.id, acquired.has(w.id)
+            ? { sessionId: w.id, status: w.status as SharedRunStatus }
+            : { sessionId: w.id, error: { statusCode: 409, message: w.declared ?? LEASE_WRITE_REFUSED } });
+        }
+        if (landed.length > 0) {
+          await tx.$executeRaw`
+            INSERT INTO "inbox_lease_generation"
+              ("generation", "session_id", "lease_owner", "retired_at")
+            SELECT g.fence, g.session_id, g.owner, now()
+            FROM unnest(${landed.map((w) => w.fence)}::uuid[], ${landed.map((w) => w.id)}::uuid[],
+                        ${landed.map((w) => w.predecessor)}::uuid[]) AS g(fence, session_id, owner)
+            ON CONFLICT ("generation") DO UPDATE
+              SET "retired_at" = COALESCE("inbox_lease_generation"."retired_at", now())
+            WHERE "inbox_lease_generation"."session_id" = EXCLUDED."session_id"
+          `;
+          await tx.$executeRaw`
+            UPDATE "conversation_turn"
+            SET "lease_deadline_at" = now() - interval '1 second'
+            WHERE "session_id" = ANY(${landed.map((w) => w.id)}::uuid[])
+              AND kind IN ('message', 'shell')
+              AND status = 'IN_FLIGHT'
+          `;
+          const replaced = landed.filter((w) => w.predecessor).map((w) => w.id);
+          if (replaced.length > 0) {
+            orphanedApprovals.push(...await reapApprovalsOfReplacedSupervisors(tx, replaced));
+          }
+        }
+      }
+      return { results: ids.map((id) => answers.get(id)!), orphanedApprovals };
+    }, loggedRetry(this.logger, 'runnerApi.takeoverLeasesBatch'));
+
+    for (const { sessionId, id } of taken.orphanedApprovals) {
+      this.realtime.publish(sessionId, {
+        seq: 0,
+        type: RunEventType.APPROVAL_RESOLVED,
+        payload: { id, status: APPROVAL_ABANDONED_STATUS },
+        ts: new Date().toISOString(),
+      });
+    }
+    for (const row of taken.results) if (row.status) this.realtime.notifyInbox(row.sessionId);
+    return { ok: true, results: taken.results };
   }
 
   /** Activate one freshly reserved engine as this session's sole inbox consumer. */
@@ -6080,8 +6339,9 @@ export class RunnerApiController {
           ...(a.startAfterCreate ? { startAfterCreate: true } : {}),
         };
       }
-      if (Date.now() >= deadline) return { id: a.id, status: 'PENDING' };
-      await new Promise((r) => setTimeout(r, APPROVAL_POLL_INTERVAL_MS));
+      // A stopping apiserver answers at once, as when the window elapses: the reader asks again, of another apiserver.
+      if (Date.now() >= deadline || isStopping()) return { id: a.id, status: 'PENDING' };
+      await pauseUnlessStopping(APPROVAL_POLL_INTERVAL_MS);
     }
   }
 
@@ -6386,6 +6646,8 @@ export class RunnerApiController {
           source: true,
           parentSessionId: true,
           mergeRepairTurnEndedAt: true,
+          // And whether this session asked to merge itself during the turn that just ended.
+          mergeAfterTurnAt: true,
         },
       });
       // Read the row being completed before changing it. A reserved shell turn is the one path
@@ -7562,7 +7824,7 @@ export class RunnerApiController {
         requestsClosed: [...stoppedRequestsClosed, ...requestsClosed],
         reviewToDeliver,
         reviewsAbandoned,
-        repairCheck: repairCheckAfter(current),
+        repairCheck: repairCheckAfter(current, true, dto.status === RunStatus.SUCCEEDED),
         droppedWakeups,
         checksSettled,
       };
@@ -7595,6 +7857,16 @@ export class RunnerApiController {
       }
       if (finalized.regionHeld) this.queue.notifySessionQueued(runner.id);
       return { ok: true, status: finalized.status };
+    }
+    // A coordinator's handoff note turn that ended (projects/coordinator-handoff.service.ts): a success
+    // runs the coordinator replacement, which the runner — blocked on this reply — must not wait for,
+    // so it is settled off the response path. Any other turn of the session is a read that finds
+    // no WRITING handoff and stops.
+    if (finalized.applied && !finalized.steer && this.coordinatorHandoffs) {
+      void this.coordinatorHandoffs.afterTurn(sessionId, dto.turnId, dto.status).catch((error) => this.logger.warn(
+        `coordinator handoff after turn ${dto.turnId} of ${sessionId} failed: `
+        + `${error instanceof Error ? error.message : error}`,
+      ));
     }
     // The review this completion recorded, handed to its reviewer after the commit (§2 D2); and the
     // ones this completion found it had been handed and dropped, whose cards are the owner's now (T5).
@@ -7835,6 +8107,16 @@ export class RunnerApiController {
    * queued is logged — the owner's Check again is still there.
    */
   private async checkRecoveryAfterTurn(sessionId: string, check: RepairCheckAfter, endedAt: Date): Promise<void> {
+    // First the merge this session asked for of itself during the turn: it is what the session wanted
+    // done, and a recovery check queued ahead of it would leave it nothing to queue.
+    if (check.merge) {
+      try {
+        await this.sessions?.mergeAfterOwnTurn(sessionId, check.merge === 'QUEUE');
+      } catch (error) {
+        this.logger.warn(`the merge ${sessionId} asked for during its turn was not queued: `
+          + `${error instanceof Error ? error.message : error}`);
+      }
+    }
     const checks: Array<[string, Date | null]> = [];
     if (check.parentSessionId) checks.push([check.parentSessionId, endedAt]);
     if (check.owesCheck) checks.push([sessionId, null]);
@@ -7961,8 +8243,13 @@ export class RunnerApiController {
    *     (writeCallSessions), and their run_event rows in one statement once every batch is derived. Alone a batch
    *     issues one or more of each, and in a merged call each one was a round trip the transaction waited on the
    *     apiserver's event loop for: task C2b measured 72% of a merged transaction's time spent so;
-   *   - the other replicas' notice of each batch, sent by the transaction itself, so they hear of each batch once, at
-   *     its commit (§6.7).
+   *   - the other replicas' notice of each batch, every one of them in one statement of its own once the transaction
+   *     has committed, and before the call is answered (§6.7). Sent by the transaction, a NOTIFY made its COMMIT take
+   *     PostgreSQL's one notification-queue lock and hold it through its WAL flush, so every merged call committed one
+   *     at a time, and one that queued past LINK_CALL_LOCK_TIMEOUT_MS rolled back at its COMMIT and sent every batch
+   *     alone (task C2b). A process that dies between the commit and the notice never answers the call; the gateway
+   *     then sends the call again, to another apiserver (it is idempotent), or fails each batch to its runner, which
+   *     sends it again: either way an ingest finds the batch's seqs stored and announces them again (restated).
    *
    * A batch the call cannot take as the events route would is answered `sendAlone`, and so is one whose ingest fails:
    * the transaction is run again without it, at most LINK_CALL_RERUNS times, and past that every batch left is sent
@@ -8119,21 +8406,6 @@ export class RunnerApiController {
       if (runEvents) {
         await callWrite(() => chunkedCreateMany((data) => tx.runEvent.createMany({ data, skipDuplicates: true }), runEvents as never[]));
       }
-      // The other replicas hear of each batch once, at this commit, of what was stored while the session is open: what
-      // publishBatch tells them after an ingest of its own.
-      const notices = ingested.flatMap(({ batch, outcome }) => {
-        if (!OPEN.includes(outcome.session.status)) return [];
-        const notice = runEventBatchNotice(
-          instance, batch.sessionId, outcome.events.filter((e) => !isNoiseSystemEvent(e)), outcome.engineStarted,
-        );
-        return notice ? [notice] : [];
-      });
-      if (notices.length > 0) {
-        await tx.$executeRaw`
-          SELECT pg_notify(n.channel, n.payload)
-            FROM unnest(${notices.map((n) => n.channel)}::text[], ${notices.map((n) => n.payload)}::text[]) AS n(channel, payload)
-        `;
-      }
       return { ingested, lockedAt };
     };
     let heldMs = 0;
@@ -8143,9 +8415,24 @@ export class RunnerApiController {
           transaction: { timeout: LINK_CALL_TRANSACTION_TIMEOUT_MS, maxWait: LINK_CALL_TRANSACTION_TIMEOUT_MS },
         }));
         heldMs = committed.lockedAt === null ? 0 : Math.round(performance.now() - committed.lockedAt);
+        // The other replicas hear of each batch once it has committed, of what was stored while the session is open:
+        // what publishBatch tells them after an ingest of its own, every batch's in one statement, before the call is
+        // answered. One that fails fails the call, once the rest is announced: every batch is then forwarded alone,
+        // finds its seqs stored, and is announced again (restated).
+        const told = this.realtime.sendNotices(committed.ingested.flatMap(({ batch, outcome }) => (
+          OPEN.includes(outcome.session.status)
+            ? this.realtime.batchNotices(batch.sessionId, outcome.events.filter((e) => !isNoiseSystemEvent(e)), outcome.engineStarted, outcome.restated)
+            : []
+        ))).then(() => null, (error: unknown) => error);
         for (const { batch, outcome, coordinator } of committed.ingested) {
           await this.announceIngest(batch.sessionId, outcome, { coordinator });
           results[batch.index] = await this.linkCallAnswer(batch, outcome);
+        }
+        const untold = await told;
+        if (untold !== null) {
+          this.logger.error(`a merged runner link call of ${committed.ingested.length} batches committed, and the other apiservers could not be `
+            + `told of it (${(untold as Error)?.message ?? String(untold)}); failing the call, so that every batch is sent alone and announced again`);
+          throw untold;
         }
         break;
       } catch (error) {
@@ -8247,6 +8534,14 @@ export class RunnerApiController {
       // taken whole, as it always was.
       const stored = merged ? merged.stored : link ? await this.storedSeqs(tx, sessionId, batch, link.tombstones) : new Set<number>();
       const events = stored.size > 0 ? batch.filter((e) => !stored.has(e.seq)) : batch;
+      // What of the batch an earlier delivery stored and the replicas read back: announced again, as its delivery may
+      // not have lived to announce it (RestatedSeqs).
+      const restatedSeqs = stored.size > 0
+        ? batch.filter((e) => stored.has(e.seq) && !NON_REPLAYABLE_EVENT_TYPES.includes(e.type) && !isNoiseSystemEvent(e)).map((e) => e.seq)
+        : [];
+      const restated = restatedSeqs.length > 0
+        ? { from: Math.min(...restatedSeqs), to: Math.max(...restatedSeqs) }
+        : null;
       const tombstones = link ? link.tombstones.filter((t) => !stored.has(t.seq)) : [];
       // What was left out is the same event sent again, or another at its seq, which nothing will store: that one is
       // logged and counted once the batch commits (run-event-seq-conflicts.ts). Over HTTPS it is found by the insert.
@@ -8940,7 +9235,7 @@ export class RunnerApiController {
       }
       return {
         session, currentWorkAcknowledged, abandonedApprovals, accountReload, events, durable, alreadyStored: stored.size,
-        seqConflicts, door: link ? 'link' : 'https', engineStarted,
+        restated, seqConflicts, door: link ? 'link' : 'https', engineStarted,
       };
     };
     return ingest.call(this);
@@ -8948,7 +9243,7 @@ export class RunnerApiController {
 
   /**
    * What is announced of a batch once its ingest has committed (ingestEvents). For a batch of a merged link call
-   * (`merged`, ingestLinkEventCall) the other replicas have already heard of it, in the call's transaction, so its
+   * (`merged`, ingestLinkEventCall) the call tells the other replicas of every batch in one statement, so its
    * events go to this replica's streams alone; and the spend fuse is asked only for a session the call found
    * coordinating a project.
    */
@@ -8959,6 +9254,8 @@ export class RunnerApiController {
   ): Promise<void> {
     // What the attempt that committed stored: the whole batch, or for a link batch what was not already stored.
     const { events, durable } = eventOutcome;
+    /** Alone: the other replicas' notice of the batch, null once sent, or why it could not be (publishBatch). */
+    let told: Promise<unknown> | undefined;
     if (eventOutcome.seqConflicts.length > 0) {
       // Each of them is an event nothing will store, acknowledged with the batch (run-event-seq-conflicts.ts).
       const { seqConflicts, door } = eventOutcome;
@@ -8997,14 +9294,25 @@ export class RunnerApiController {
       // client, so spending a frame on it only costs the reader bandwidth. The replay paths
       // drop the same events (notNoiseSql), so live and replayed transcripts agree. Published
       // as one batch: the other replicas hear of it once, not once per event (publishBatch). A merged
-      // call's notice went with its transaction (ingestLinkEventCall), so only this replica is left.
+      // call tells them itself (ingestLinkEventCall), so only this replica is left. Alone, the batch is
+      // answered once they have heard: a notice that could not be sent fails the answer once the rest is
+      // announced, and the batch sent again finds its seqs stored and announces them again (restated).
       // A batch that ended the starting state is followed by a session_updated: the clients read that
       // state off the session row, and no event the engine sends re-reads it (controlTypeFor), so the
       // "Getting the session ready" notice stayed up over the engine's tool calls until a list's
       // one-minute safety read.
       const published = events.filter((e) => !isNoiseSystemEvent(e));
-      if (merged) this.realtime.publishBatchHere(sessionId, published, eventOutcome.engineStarted);
-      else this.realtime.publishBatch(sessionId, published, eventOutcome.engineStarted);
+      if (merged) this.realtime.publishBatchHere(sessionId, published, eventOutcome.engineStarted, eventOutcome.restated);
+      else {
+        told = (async () => {
+          try {
+            await this.realtime.publishBatch(sessionId, published, eventOutcome.engineStarted, eventOutcome.restated);
+            return null;
+          } catch (error) {
+            return error;
+          }
+        })();
+      }
     }
     // Two of the three facts the spend fuse is read on (contract §6.1 F5): this batch committed a
     // turn nobody delivered, or a call that opened a session. Decided from the batch already in
@@ -9024,6 +9332,12 @@ export class RunnerApiController {
       if (fused) await this.fuse?.afterCoordinatorSpend(sessionId, 'run_event');
     } else if (events.some((e) => e.type === RunEventType.TOOL_USE)) {
       if (fused) await this.fuse?.afterCoordinatorSpend(sessionId, 'tool_call');
+    }
+    const untold = await told;
+    if (untold) {
+      this.logger.error(`session ${sessionId}: a batch committed, and the other apiservers could not be told of it `
+        + `(${(untold as Error)?.message ?? String(untold)}); failing its answer, so that it is sent again and announced again`);
+      throw untold;
     }
   }
 
@@ -9077,6 +9391,9 @@ export class RunnerApiController {
       const current = await tx.session.findUniqueOrThrow({
         where: { id: sessionId },
       });
+      // A branch the session was not created with is accepted only from a codeless task's run, which makes
+      // its branch at finalize (design §3, B2); any other such report is not written (codeless-checkout.ts).
+      dto.branch = await acceptedFinalizeBranch(tx, current, dto.branch);
 
       // If cancel/end won the row lock, its reason is authoritative regardless of what
       // the runner reports. TASK_DONE settles SUCCEEDED; task-cancel/user-end/idle and
@@ -9376,7 +9693,8 @@ export class RunnerApiController {
         currentWorkTerminalized,
         // A session the runner finalizes while it runs a turn ends that turn here — completed, failed or
         // stopped — rather than at a turn-complete; one already parked has had its turn's end settled.
-        repairCheck: repairCheckAfter(current, current.status === RunStatus.RUNNING),
+        repairCheck: repairCheckAfter(current, current.status === RunStatus.RUNNING,
+          effectiveStatus === RunStatus.SUCCEEDED),
         droppedWakeups,
         checksSettled,
       };

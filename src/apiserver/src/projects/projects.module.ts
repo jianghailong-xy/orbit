@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { PushModule } from '../push/push.module';
 import { SessionsModule } from '../sessions/sessions.module';
 import { ProjectsController } from './projects.controller';
+import { CoordinatorHandoffController } from './coordinator-handoff.controller';
+import { CoordinatorHandoffService } from './coordinator-handoff.service';
 import { ProjectDoneNotYetController } from './project-done-not-yet.controller';
 import { ProjectPromotionController } from './project-promotion.controller';
 import { ProjectIntegrationRetryController } from './project-integration-retry.controller';
@@ -39,9 +41,14 @@ import { IntegrationJobRelay } from '../runner-api/integration-job-relay';
     ProjectPromotionController,
     ProjectDoneNotYetController,
     ProjectIntegrationRetryController,
+    // "Start a new coordinator" with a handoff note (board 02); its own controller, see there.
+    CoordinatorHandoffController,
   ],
   providers: [
     ProjectsService,
+    // The handoff note in front of the coordinator replacement; exported so the runner's
+    // turn-complete settles a note turn's end through the same instance.
+    CoordinatorHandoffService,
     ConvergenceLedgerService,
     SessionAttemptService,
     AttemptBudgetMeterService,
@@ -64,6 +71,7 @@ import { IntegrationJobRelay } from '../runner-api/integration-job-relay';
   ],
   exports: [
     ProjectHandoffModule,
+    CoordinatorHandoffService,
     ProjectAttributionModule,
     ProjectsService,
     ConvergenceLedgerService,

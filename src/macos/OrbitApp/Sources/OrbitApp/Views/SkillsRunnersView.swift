@@ -477,12 +477,9 @@ struct RunnerDetailContent: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
 
-    /// Max Concurrent as the stepper shows it, saved when the press lets go.
-    @State private var maxConc = 1
-    /// A press on the stepper is under way — hold the save until it ends.
-    @State private var stepping = false
-    /// The limit last sent, so a release and the settle after it save it once.
-    @State private var committedMax: Int?
+    /// Max Concurrent's sheet, and the limit its stepper holds while open — saved on Save.
+    @State private var editingMax = false
+    @State private var maxDraft = 1
     /// Keep Free as the picker shows it; nil is Off. Saved as it changes.
     @State private var keepFree: Int?
     @State private var seeded = false
@@ -491,6 +488,8 @@ struct RunnerDetailContent: View {
     @State private var confirmingRemove = false
     /// The postponed Update card's Update Now… asks first (a runner without `self-update-now/v1`).
     @State private var confirmingUpdateNow = false
+    /// A Fix with an agent press is on its way: its button holds until the list read after it.
+    @State private var fixPressing = false
     /// The token a rotation just minted: shown on this page once, and gone with it.
     @State private var rotatedToken: String?
     @State private var notice: String?
@@ -510,7 +509,7 @@ struct RunnerDetailContent: View {
             if !items.isEmpty {
                 attentionSection(items, now: now)
             }
-            capacitySection(workspaces)
+            capacitySection(workspaces, now: now)
             enginesSection(offline: offline, now: now)
             workspacesSection(workspaces)
             aboutSection(now: now)
@@ -525,24 +524,12 @@ struct RunnerDetailContent: View {
         #endif
         .runnerNotice(notice)
         .onAppear(perform: seed)
-        .onChange(of: runner.maxConcurrent) { _, value in
-            guard !stepping else { return }
-            maxConc = value ?? 1
-            committedMax = nil
-        }
         .onChange(of: runner.minFreeDiskMb) { _, value in
             keepFree = RunnerPageFormat.keepFreeValue(value)
         }
         .onChange(of: keepFree) { _, value in
             guard seeded, value != RunnerPageFormat.keepFreeValue(runner.minFreeDiskMb) else { return }
             saveKeepFree(value)
-        }
-        // The stepper's release saves; this catches a change that ended without one (a keyboard's
-        // arrow on a Mac), once it has settled.
-        .task(id: maxConc) {
-            try? await Task.sleep(for: .milliseconds(900))
-            guard !Task.isCancelled, seeded, !stepping else { return }
-            saveMaxConcurrent(maxConc)
         }
         .task {
             await runners.loadReleaseVersion()
@@ -696,17 +683,34 @@ struct RunnerDetailContent: View {
 
     /// How much it is given: slots, saved when the stepper lets go; the disk it fills; and the reserve
     /// under which task runs stop being sent here.
-    @ViewBuilder private func capacitySection(_ workspaces: [Agent]) -> some View {
+    @ViewBuilder private func capacitySection(_ workspaces: [Agent], now: Date) -> some View {
         Section {
-            Stepper(value: $maxConc, in: 1...64, onEditingChanged: steppingChanged) {
-                HStack {
+            // A meter, as Disk is: the name, `3 of 16 running` and Edit on a line, a bar of the slots
+            // taken across the row under them (online only), amber once all are. Edit opens the sheet
+            // that changes the limit.
+            let slots = RunnerPageFormat.slots(runner, now: now)
+            let limit = runner.maxConcurrent ?? 1
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(alignment: .firstTextBaseline) {
                     Text(RunnerPageCopy.RUNNER_MAX_CONCURRENT)
                     Spacer(minLength: 8)
-                    Text(verbatim: "\(maxConc)")
+                    Text(verbatim: slots.map { RunnerPageCopy.runnerRunningOf(active: $0.active, max: $0.max) } ?? "\(limit)")
+                        .font(.orbitListSubtitle)
                         .foregroundStyle(Color.secondary)
                         .monospacedDigit()
+                    Button(RunnerPageCopy.RUNNER_EDIT) {
+                        maxDraft = limit
+                        editingMax = true
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("\(RunnerPageCopy.RUNNER_EDIT) \(RunnerPageCopy.RUNNER_MAX_CONCURRENT)")
+                }
+                if let slots {
+                    RunnerGauge(fraction: slots.fraction, tint: slots.full ? RunnerInk.full : Color.accentColor, height: 7)
                 }
             }
+            .padding(.vertical, slots == nil ? 0 : 4)
+            .sheet(isPresented: $editingMax) { maxConcurrentSheet }
             if let disk = RunnerAttention.runnerDisk(workspaces) {
                 diskRow(disk)
             }
@@ -721,6 +725,45 @@ struct RunnerDetailContent: View {
         } footer: {
             Text(RunnerPageCopy.RUNNER_CAPACITY_FOOTER)
         }
+    }
+
+    /// Max Concurrent's sheet: the limit on a stepper, what it means, and Cancel or Save.
+    private var maxConcurrentSheet: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Stepper(value: $maxDraft, in: 1...64) {
+                        HStack {
+                            Text(RunnerPageCopy.RUNNER_MAX_CONCURRENT)
+                            Spacer(minLength: 8)
+                            Text(verbatim: "\(maxDraft)")
+                                .foregroundStyle(Color.secondary)
+                                .monospacedDigit()
+                        }
+                    }
+                } footer: {
+                    Text(RunnerPageCopy.RUNNER_MAX_CONCURRENT_HINT)
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle(RunnerPageCopy.RUNNER_MAX_CONCURRENT)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { editingMax = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        editingMax = false
+                        saveMaxConcurrent(maxDraft)
+                    }
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 380, minHeight: 180)
+        #else
+        .presentationDetents([.medium])
+        #endif
     }
 
     /// What it runs: each engine — a row that opens the engine's page — and the two presses that act
@@ -738,10 +781,15 @@ struct RunnerDetailContent: View {
             if !offline {
                 Button(RunnerPageCopy.RUNNER_UPDATE_ENGINES_NOW) { updateEngines() }
                     .disabled(RunnerPageFormat.engineUpdateInFlight(runner.install))
-                if let relay = RunnerPageFormat.updateRelayLine(runner.install) {
-                    Text(relay)
-                        .font(.orbitLabel)
-                        .foregroundStyle(Color.secondary)
+                let relay = RunnerPageFormat.updateRelayLines(runner.install)
+                if !relay.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(Array(relay.enumerated()), id: \.offset) { _, line in
+                            Text(line.text)
+                                .font(.orbitLabel)
+                                .foregroundStyle(line.failed ? RunnerInk.red : Color.secondary)
+                        }
+                    }
                 }
                 Button(RunnerPageCopy.RUNNER_REFRESH_MODEL_LISTS) { refreshModels() }
             }
@@ -884,9 +932,45 @@ struct RunnerDetailContent: View {
     }
 
     @ViewBuilder private func attentionAction(_ item: RunnerAttentionItem) -> some View {
-        if let action = item.action {
-            attentionButton(action)
-                .buttonStyle(RunnerCapsuleButtonStyle())
+        // Fix with an agent, on an engine not updating and a runner that can't update itself: after the
+        // card's own press, before its dismissal; the line under the row says why it is greyed, or which
+        // session is fixing it.
+        let fix = RunnerAgentFixLogic.attentionState(runner, item: item)
+        if let fix, let target = RunnerAgentFixLogic.target(item) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 12) {
+                    if let action = item.action {
+                        attentionButton(action)
+                            .buttonStyle(RunnerCapsuleButtonStyle())
+                    }
+                    RunnerAgentFixButton(state: fix, pressing: fixPressing) { fixWithAnAgent(target) }
+                    if let engine = RunnerPageFormat.updateWarningDismissEngine(item) {
+                        Button(RunnerPageCopy.attentionDismissUntilNextRelease(
+                            engine: RunnerPageFormat.engineName(engine))) { dismissUpdateWarning(engine) }
+                            .linkButtonStyle()
+                            .font(.orbitListSubtitle)
+                            .padding(.top, 7)
+                    }
+                }
+                RunnerAgentFixLine(state: fix) { openSession($0) }
+            }
+        } else if let action = item.action {
+            // An engine not updating against a known latest can be dismissed until its next release,
+            // beside Update Engines Now.
+            if let engine = RunnerPageFormat.updateWarningDismissEngine(item) {
+                HStack(spacing: 12) {
+                    attentionButton(action)
+                        .buttonStyle(RunnerCapsuleButtonStyle())
+                    Button(RunnerPageCopy.attentionDismissUntilNextRelease(
+                        engine: RunnerPageFormat.engineName(engine))) { dismissUpdateWarning(engine) }
+                        .linkButtonStyle()
+                        .font(.orbitListSubtitle)
+                        .padding(.top, 7)
+                }
+            } else {
+                attentionButton(action)
+                    .buttonStyle(RunnerCapsuleButtonStyle())
+            }
         }
     }
 
@@ -986,24 +1070,15 @@ struct RunnerDetailContent: View {
 
     private func seed() {
         guard !seeded else { return }
-        maxConc = runner.maxConcurrent ?? 1
         keepFree = RunnerPageFormat.keepFreeValue(runner.minFreeDiskMb)
         seeded = true
     }
 
-    private func steppingChanged(_ editing: Bool) {
-        stepping = editing
-        if !editing { saveMaxConcurrent(maxConc) }
-    }
-
     private func saveMaxConcurrent(_ value: Int) {
-        guard value != (committedMax ?? runner.maxConcurrent ?? 1) else { return }
-        committedMax = value
+        guard value != (runner.maxConcurrent ?? 1) else { return }
         let id = runner.id
         Task {
             guard let failure = await runners.setMaxConcurrent(id, value) else { return }
-            committedMax = nil
-            maxConc = runners.runner(id)?.maxConcurrent ?? maxConc
             show(failure)
         }
     }
@@ -1021,6 +1096,26 @@ struct RunnerDetailContent: View {
         let id = runner.id
         Task {
             if let failure = await runners.updateEngines(id) { show(failure) }
+        }
+    }
+
+    private func dismissUpdateWarning(_ engine: String) {
+        let id = runner.id
+        Task {
+            if let failure = await runners.dismissEngineUpdateWarning(id, engine: engine) { show(failure) }
+        }
+    }
+
+    /// One press, no sheet: the session starts and the list read after it turns the button into the
+    /// fixing line; the page stays where it is. A refusal is the server's own sentence.
+    private func fixWithAnAgent(_ target: RunnerAgentFixTarget) {
+        let id = runner.id
+        fixPressing = true
+        Task {
+            if let failure = await runners.fixAttention(id, target: target) {
+                show("\(RunnerPageCopy.AGENT_FIX_FAILED) — \(failure)")
+            }
+            fixPressing = false
         }
     }
 

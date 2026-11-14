@@ -42,6 +42,7 @@ import { isSessionGenerating } from '../common/session-generating';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { readOpenRequestPeers } from '../sessions/session-request';
 import { lastUserFromExternalOf, lastUserFromOf, lastUserFromOrbitOf } from '../sessions/session-message';
+import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
 import { readSessionProjectMembership } from '../sessions/session-project-membership';
 import { readConfirmationsUnderReview } from '../tasks/owner-confirmation-read';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
@@ -253,8 +254,9 @@ function endedSessionStates(
  * The notification publishBatch sends the other replicas of a batch of a session's events, from the replica named
  * `instanceId`, or null when nothing of the batch is stored and the session's row did not change: the stored events
  * whole when they fit (MAX_NOTIFY_BYTES), otherwise their seq range. A function of its arguments alone, so that a
- * transaction storing several sessions' batches (RunnerApiController.ingestLinkEventCall) sends each one's itself,
- * and the other replicas hear of every batch once, at its commit (docs/runner-link-design.md §6.7).
+ * call storing several sessions' batches in one transaction (RunnerApiController.ingestLinkEventCall) sends every
+ * one's in one statement once it has committed, and the other replicas hear of every batch once
+ * (docs/runner-link-design.md §6.7).
  *
  * `rowChanged` (`u`) says the batch changed what the session's list row shows in a way no event of it announces
  * (controlTypeFor): the receiving replica follows the batch with a session_updated (batchRowUpdate).
@@ -275,6 +277,35 @@ export function runEventBatchNotice(
   const to = seqs.reduce((a, b) => Math.max(a, b));
   return { channel: EVENT_CHANNEL, payload: JSON.stringify({ i: instanceId, r: runId, f: from, t: to, ...u }) };
 }
+
+/**
+ * The seqs of a batch an earlier delivery already stored, sent again: the batch's answer never reached the gateway, so
+ * it was forwarded again, and this ingest found those seqs stored (IngestOutcome.restated). Whether the delivery that
+ * stored them lived to announce them is not known here: its process may have died between its commit and its notice
+ * (RunnerApiController.ingestLinkEventCall). So they are announced again as a range every replica reads back from
+ * run_event (relayStoredBatch), this one included; a stream that already had them drops them by seq.
+ */
+export interface RestatedSeqs {
+  from: number;
+  to: number;
+}
+
+/** The notification of a batch's restated seqs (RestatedSeqs): their range, read back by the other replicas. */
+export function restatedBatchNotice(instanceId: string, runId: string, restated: RestatedSeqs): { channel: string; payload: string } {
+  return { channel: EVENT_CHANNEL, payload: JSON.stringify({ i: instanceId, r: runId, f: restated.from, t: restated.to }) };
+}
+
+/**
+ * The statements notifications are sent with, on their own, never inside a transaction that writes anything. A
+ * transaction that sends a NOTIFY takes PostgreSQL's one notification-queue lock at its commit (PreCommit_Notify:
+ * object, database 0, classid 1262, objid 0, AccessExclusiveLock) and holds it until the commit is done, so a writer's
+ * NOTIFY holds it through that writer's WAL flush, and every writer that notifies commits one at a time. A transaction
+ * that only notifies is given no transaction id, writes no commit record and flushes nothing (PostgreSQL 13 and later):
+ * it holds the lock for as long as it takes to queue its notifications.
+ */
+const NOTIFY_ONE_SQL = 'SELECT pg_notify($1, $2)';
+/** NOTIFY_ONE_SQL for several notifications, in order, as one statement. */
+const NOTIFY_MANY_SQL = 'SELECT pg_notify(n.channel, n.payload) FROM unnest($1::text[], $2::text[]) AS n(channel, payload)';
 
 /** The session_updated a batch whose ingest changed the session's row is followed by (runEventBatchNotice). */
 function batchRowUpdate(): NormalizedRunEvent {
@@ -666,13 +697,26 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   }
 
   private notifyRaw(channel: string, payload: string): void {
+    this.sendNotices([{ channel, payload }]).catch((e) => this.log.warn('pg_notify failed: ' + (e as Error).message));
+  }
+
+  /**
+   * Send these notifications, in order, in one statement of their own (NOTIFY_ONE_SQL), and resolve once it has
+   * committed: once every listener has been told. Rejects when the statement fails, and then nobody was told.
+   * For a writer whose rows have committed and whose answer waits for its notifications
+   * (RunnerApiController.ingestLinkEventCall, publishBatch).
+   */
+  async sendNotices(notices: ReadonlyArray<{ channel: string; payload: string }>): Promise<void> {
+    if (notices.length === 0) return;
     // executeRaw (not queryRaw): pg_notify returns void, which Prisma's queryRaw
     // can't deserialize ("Failed to deserialize column of type 'void'"). executeRaw
     // runs the statement — firing the NOTIFY — and returns an affected-row count
     // instead of reading result columns.
-    this.prisma
-      .$executeRawUnsafe('SELECT pg_notify($1, $2)', channel, payload)
-      .catch((e) => this.log.warn('pg_notify failed: ' + (e as Error).message));
+    if (notices.length === 1) {
+      await this.prisma.$executeRawUnsafe(NOTIFY_ONE_SQL, notices[0].channel, notices[0].payload);
+      return;
+    }
+    await this.prisma.$executeRawUnsafe(NOTIFY_MANY_SQL, notices.map((n) => n.channel), notices.map((n) => n.payload));
   }
 
   // ── inbox (interactive turn delivery) ───────────────────────────────────
@@ -830,18 +874,34 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    *     of the replica it posts to, which with one replica is every stream there is.
    *   - the stored events ride the notification whole when it fits (MAX_NOTIFY_BYTES), and otherwise as the seq range
    *     the other replicas read back from run_event, where the ingest has already stored them.
+   *
+   * Seqs of the batch an earlier delivery stored (`restated`, RestatedSeqs) go first, read back here and announced
+   * as their range. Resolves once the other replicas have been told (sendNotices), and rejects when they could not
+   * be: the batch's answer then fails, and the batch sent again is announced again, as restated.
    */
-  publishBatch(runId: string, events: readonly NormalizedRunEvent[], rowChanged = false): void {
-    this.publishBatchHere(runId, events, rowChanged);
+  async publishBatch(runId: string, events: readonly NormalizedRunEvent[], rowChanged = false, restated?: RestatedSeqs | null): Promise<void> {
+    this.publishBatchHere(runId, events, rowChanged, restated);
+    await this.sendNotices(this.batchNotices(runId, events, rowChanged, restated));
+  }
+
+  /** What publishBatch tells the other replicas of a batch, in order: its restated seqs, then the batch. */
+  batchNotices(
+    runId: string,
+    events: readonly NormalizedRunEvent[],
+    rowChanged = false,
+    restated?: RestatedSeqs | null,
+  ): Array<{ channel: string; payload: string }> {
     const notice = runEventBatchNotice(this.instanceId, runId, events, rowChanged);
-    if (notice) this.notifyRaw(notice.channel, notice.payload);
+    return [...(restated ? [restatedBatchNotice(this.instanceId, runId, restated)] : []), ...(notice ? [notice] : [])];
   }
 
   /**
    * publishBatch without its notification: the batch to this replica's streams alone. For a batch whose notification
-   * the transaction that stored it sent (runEventBatchNotice), once that transaction has committed.
+   * was sent on its own (batchNotices), once the transaction that stored it has committed. Its restated seqs are
+   * read back first, and the batch's events wait behind that read-back (toHub).
    */
-  publishBatchHere(runId: string, events: readonly NormalizedRunEvent[], rowChanged = false): void {
+  publishBatchHere(runId: string, events: readonly NormalizedRunEvent[], rowChanged = false, restated?: RestatedSeqs | null): void {
+    if (restated) this.relayStoredBatch(runId, restated.from, restated.to);
     for (const event of events) this.publishHere(runId, event);
     if (rowChanged) this.publishHere(runId, batchRowUpdate());
   }
@@ -1621,6 +1681,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // That Orbit wrote it, with the notification card its line is written from; cleared with it.
       lastUserFromOrbit: lastUserFromOrbitOf(s),
       lastUserFromExternal: lastUserFromExternalOf(s),
+      // A coordinator's handoff, both halves, sent as null too — a value, which is how a row learns
+      // one cleared (projects/coordinator-handoff.ts).
+      ...(await readSessionCoordinatorHandoffs(this.prisma, sessionId)),
       recapText: s.recapText ?? null,
       recapAt: s.recapAt ? s.recapAt.toISOString() : null,
       // Read fresh with the status it qualifies: the same summary has to be able to say both

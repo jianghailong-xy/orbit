@@ -118,3 +118,27 @@ describe('the watching status glyph', () => {
     for (const html of [subagent, turn, asking]) expect(html).not.toContain('anticon-eye');
   });
 });
+
+/**
+ * A parked session the server says something else will resume (activity WAITING: a scheduled wake-up,
+ * an armed auto-retry, a watch the caller did not hand in) is not waiting for your reply either.
+ */
+describe('a wait the server reports', () => {
+  const parked = { status: 'AWAITING_INPUT', runningSubagentCount: 0, pendingApprovals: 0, activity: 'WAITING' };
+
+  it('takes the eye and says it will resume', () => {
+    const html = renderToStaticMarkup(<StatusIcon session={parked} />);
+    expect(html).toContain('anticon-eye');
+    expect(html).not.toContain('anticon-message');
+    expect(statusLabel(parked)).toBe('Waiting to resume');
+  });
+
+  it('gives way to the watch words the caller has, and to a sub-agent', () => {
+    expect(statusLabel(parked, 'Watching 1 target')).toBe('Watching 1 target');
+    expect(renderToStaticMarkup(<StatusIcon session={{ ...parked, runningSubagentCount: 1 }} />)).toContain('anticon-loading');
+  });
+
+  it('is not invented when the server says nothing', () => {
+    expect(statusLabel({ ...parked, activity: null })).toBe('Waiting for your reply');
+  });
+});

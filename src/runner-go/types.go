@@ -103,6 +103,9 @@ type HeartbeatRequest struct {
 	// for it here can only ever fail. A pointer so `false` is still sent — the control plane's
 	// NULL means "not reported", and a non-root runner has to be able to say so.
 	RunsAsRoot *bool `json:"runsAsRoot,omitempty"`
+	// Resources is the machine's CPU, memory and disk now (machine_resources.go), sent on every beat
+	// by a runner that declares machine-resources/v1.
+	Resources *MachineResources `json:"resources,omitempty"`
 	// SelfUpdate is where this runner's updates of itself stand (selfUpdateReport). Sent on every
 	// beat once the startup update has looked, so the control plane can tell a runner too old to
 	// report it — which omits it — from one that reports.
@@ -519,6 +522,11 @@ type HeartbeatResponse struct {
 	// response until the control plane records a check made at or after it. Nil on older control
 	// planes and whenever nobody is asking.
 	RegionCheckRequest *ClaudeRegionCheckRequest `json:"regionCheckRequest,omitempty"`
+	// The snapshots this runner's open forked tasks start from (docs/task-fork-from-session-design.md
+	// §2.6): the keep-alive refs whose snapshot is not listed are this runner's to delete (forkRefGC). A
+	// POINTER because only a present list states anything: absent (an older control plane, a quiet link
+	// beat, a read that failed) deletes nothing. Sent only to a runner that declares task-fork/v1.
+	ForkSnapshotsOpen *[]string `json:"forkSnapshotsOpen,omitempty"`
 }
 
 // StorageBudget is the storage a runner's checkouts may take where statfs cannot say: a Docker local
@@ -1401,6 +1409,12 @@ type ClaimedSession struct {
 	// Branch is the per-session git worktree branch (server-set). When non-empty and
 	// WorkDir is a git repo, the runner isolates the session in its own checkout on it.
 	Branch string `json:"branch,omitempty"`
+	// CodelessCheckout: a codeless task's run with no branch yet (design §3 B2, codelessCheckoutCapabilityV1).
+	// It runs in its own checkout detached at its base; at finalize the checkout is removed when nothing
+	// changed, or CodelessBranch is created there and the run is finalized on it like any other.
+	CodelessCheckout bool `json:"codelessCheckout,omitempty"`
+	// CodelessBranch is the branch a CodelessCheckout run makes at finalize if it changed anything.
+	CodelessBranch string `json:"codelessBranch,omitempty"`
 	// AutoInitGit: agent opted in to auto-`git init` a non-git workDir so it can be isolated.
 	AutoInitGit bool `json:"autoInitGit,omitempty"`
 	// CreateWorkDir: Orbit made this workspace in a new folder, which the runner makes before the
@@ -1422,7 +1436,11 @@ type ClaimedSession struct {
 	Source *SessionSource `json:"source,omitempty"`
 	// WT and IsolationStatus are runner-internal, resolved by setupWorktree at start: WT
 	// is the live worktree (nil when running shared), IsolationStatus what was done.
-	WT              *Worktree `json:"-"`
+	WT *Worktree `json:"-"`
+	// Detached is a CodelessCheckout run's checkout while it has no branch: never job.WT, so nothing reports a
+	// branch, a branch tip or a live diff for it. finalizeCodelessCheckout either removes it or turns it into
+	// job.WT on CodelessBranch.
+	Detached        *Worktree `json:"-"`
 	IsolationStatus string    `json:"-"`
 	// CheckoutCreation is how the runner made the session's checkout, when this process made it: cloned from the
 	// workspace's own checkout (checkoutCloned) or written out by git (checkoutPlain). It is "" for a checkout found
@@ -1630,6 +1648,9 @@ type ReclaimSession struct {
 	OrchestrationToken string `json:"orchestrationToken,omitempty"`
 	// Branch is the session's worktree branch, cf. ClaimedSession.Branch.
 	Branch string `json:"branch,omitempty"`
+	// CodelessCheckout and CodelessBranch, cf. ClaimedSession.
+	CodelessCheckout bool   `json:"codelessCheckout,omitempty"`
+	CodelessBranch   string `json:"codelessBranch,omitempty"`
 	// AutoInitGit, cf. ClaimedSession.AutoInitGit.
 	AutoInitGit bool `json:"autoInitGit,omitempty"`
 	// CreateWorkDir, cf. ClaimedSession.CreateWorkDir.

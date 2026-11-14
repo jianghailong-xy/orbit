@@ -580,6 +580,56 @@ public final class APIClient: @unchecked Sendable {
         return list.guests
     }
 
+    // MARK: The guest's door — Shared with me and the guest view (docs/session-guests-design.md §4, §7)
+
+    /// Shared with me: every session the signed-in account was invited to reply in, newest invitation
+    /// first. Web parity: `listGuestSessions`.
+    public func guestSessions() async throws -> [GuestSessionSummary] {
+        let list: GuestSessionList = try await get("guest-sessions")
+        return list.sessions
+    }
+
+    /// The guest view's root: the head and the newest `limit` events. A 404 is "not shared with you"
+    /// — removed, left, Trash and deleted all read the same. Web parity: `getGuestSession`.
+    public func guestSession(_ sessionID: String, limit: Int) async throws -> GuestSession {
+        try await get("guest-sessions/\(sessionID)", query: [
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)),
+        ])
+    }
+
+    /// The page of the guest's transcript just older than `before`. Web parity: `getGuestEventPage`.
+    public func guestEventsBefore(_ sessionID: String, before: Int, limit: Int) async throws -> GuestEventPage {
+        try await get("guest-sessions/\(sessionID)/events", query: [
+            URLQueryItem(name: "before", value: String(before)),
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)),
+        ])
+    }
+
+    /// What the conversation added since `after`, and how it stands now: one read follows both.
+    /// Web parity: `getGuestEventsAfter`.
+    public func guestEventsAfter(_ sessionID: String, after: Int, limit: Int) async throws -> GuestSessionNow {
+        try await get("guest-sessions/\(sessionID)/events", query: [
+            URLQueryItem(name: "after", value: String(after)),
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)),
+        ])
+    }
+
+    /// One event whole, for a card that came back `truncated`. Web parity: `getGuestEventFull`.
+    public func guestEventFull(_ sessionID: String, seq: Int) async throws -> RunEvent {
+        try await get("guest-sessions/\(sessionID)/events/\(seq)")
+    }
+
+    /// A guest's message — text only, a turn of the owner's session, which restarts it when it has
+    /// ended. Web parity: `sendGuestTurn`.
+    @discardableResult
+    public func sendGuestTurn(_ sessionID: String, clientTurnId: String, content: String) async throws -> GuestTurnAccepted {
+        try await post("guest-sessions/\(sessionID)/turns",
+                       body: GuestTurnRequest(clientTurnId: clientTurnId, content: content))
+    }
+
     // MARK: personal access tokens — listed and revoked here, issued only on the web
     // (docs/personal-access-token-design.md §6.5, §9)
 
@@ -1900,6 +1950,21 @@ public final class APIClient: @unchecked Sendable {
     /// removal is, so it works with the runner offline.
     public func restoreRunnerDefault(_ id: String, engine: LoginEngine) async throws {
         try await postRaw("runners/\(id)/accounts/\(engine.rawValue)/default/restore", body: Optional<Empty>.none)
+    }
+
+    /// Dismiss this runner's update warning for `engine` until its next release: the server records the
+    /// engine's current `update.latest` (`Runner.engineUpdateDismissals`), and the warning stays quiet
+    /// while that is still the latest.
+    public func dismissEngineUpdateWarning(_ id: String, engine: String) async throws {
+        try await postRaw("runners/\(id)/engines/\(engine)/update-warning/dismiss", body: Optional<Empty>.none)
+    }
+
+    /// Fix with an agent: start a session on this runner's most recently used workspace about one warning.
+    /// A 409 (`AGENT_FIX_BLOCKED`, `AGENT_FIX_RUNNING`, `AGENT_FIX_NO_WARNING`) throws with the server's
+    /// `message` in its body, which `failureReason` reads out.
+    public func fixRunnerAttention(_ id: String, kind: RunnerAttentionFixKind,
+                                   body: RunnerAttentionFixRequest) async throws -> RunnerAttentionFixResult {
+        try await post("runners/\(id)/attention/\(kind.rawValue)/fix", body: body)
     }
 
     public func pauseRunnerAccount(_ id: String, engine: LoginEngine, account: String,

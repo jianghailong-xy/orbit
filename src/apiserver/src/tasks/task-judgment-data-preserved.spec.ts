@@ -2959,7 +2959,36 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0612 adds a nullable `model_provider.spent_until` only; no preserved row, trigger or DONE fence changes.
       '0612_model_provider_spent_until',
       // 0613 creates `key_gateway_usage` only; no existing table, trigger or DONE fence is touched.
-      '0613_key_gateway_usage'],
+      '0613_key_gateway_usage',
+      // 0615 adds five nullable task fork columns, their CHECK and an immutability trigger on them alone,
+      // and swaps four session SOURCE CHECKs; no preserved rows, triggers or DONE fence change.
+      '0615_task_session_fork',
+      // 0616 only validates 0615's five CHECKs.
+      '0616_task_session_fork_checks',
+      // 0617 adds `task.fork_changed_files` (TEXT[] NOT NULL DEFAULT '{}', catalog-only) and restates 0615's fork
+      // guard to cover it; no preserved rows, triggers or DONE fence change, and no row is written.
+      '0617_task_fork_changed_files',
+      // 0618 adds a nullable email_outbox.session_id, its foreign key and index, two CHECKs and a wider unique index
+      // only; no preserved rows, triggers or DONE fence change, and no row is written.
+      '0618_email_outbox_session_invite',
+      // 0641 adds statement triggers on session_scheduled_wakeup and watch that bump the Open list's epoch, and the
+      // function one of them calls; no preserved rows, no preserved table's triggers or DONE fence change, and no row
+      // is written.
+      '0641_open_list_epoch_session_waits',
+      // 0705 adds a nullable `runner.engine_update_dismissals` JSONB only, catalog-only; `runner` is none of the
+      // preserved relations, no trigger or DONE fence changes, and no row is written.
+      '0705_runner_engine_update_dismissals',
+      // 0720 adds a nullable runner_presence.resources (JSONB) only; no preserved rows, triggers or DONE fence change,
+      // and no row is written.
+      '0720_runner_presence_resources',
+      // 0740 adds two nullable session columns (merge_after_turn_at, merge_after_turn_target) only; no preserved
+      // rows, triggers or DONE fence change, and no row is written.
+      '0740_session_merge_after_turn',
+      // 0760 adds a nullable `runner.attention_fixes` JSONB only, catalog-only; `runner` is none of the preserved
+      // relations, no trigger or DONE fence changes, and no row is written.
+      '0760_runner_attention_fixes',
+      // 0761 creates `coordinator_handoff` only; no existing table, trigger or DONE fence is touched.
+      '0761_coordinator_handoff'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

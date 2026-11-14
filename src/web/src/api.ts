@@ -698,6 +698,10 @@ export const fetchAttachmentObjectUrl = async (id: string): Promise<string> => {
 export const setAttachmentPinned = (id: string, pinned: boolean): Promise<EvidenceFilePinAnswer> =>
   api<EvidenceFilePinAnswer>(`/attachments/${encodeURIComponent(id)}/pin`, { method: pinned ? 'PUT' : 'DELETE' });
 
+/** Delete a file everywhere this account keeps it, from Settings → Storage. 409 while evidence or a session holds it. */
+export const deleteAttachmentEverywhere = (id: string): Promise<void> =>
+  api<void>(`/attachments/${encodeURIComponent(id)}/everywhere`, { method: 'DELETE' });
+
 export const fetchSessionArtifactObjectUrl = async (sessionId: string, artifactPath: string): Promise<string> => {
   const res = await authedFetch(
     `/api/sessions/${encodeURIComponent(sessionId)}/artifacts?path=${encodeURIComponent(artifactPath)}`,
@@ -1430,6 +1434,8 @@ export interface SharedSession {
   sessionState?: string;
   runStatus?: string;
   status: string;
+  /** What the session is doing beyond its status (SessionActivity); absent from an older server. */
+  activity?: string | null;
   createdAt: string;
   /** The transcript's newest page, not all of it. */
   events: SharedEvent[];
@@ -1925,6 +1931,10 @@ export interface SessionDetail {
   sourceRef?: string | null;
   sourceRefusalCode?: string | null;
   sourceRefusalDetail?: Record<string, unknown> | null;
+  /** The SOURCE line of the task this session runs when that task was forked from a session
+   *  (docs/task-fork-from-session-design.md §2.3), as the server words it; null otherwise.
+   *  Optional, because an older server does not send it. */
+  forkSource?: string | null;
   /** On an account pool: the member its last claim dispatched on (null before the first). */
   poolMemberProviderId?: string | null;
   /** On a shared pool: the key its last claim chose (null before the first, or when none could run). */
@@ -2002,6 +2012,10 @@ export interface SessionDetail {
   /** Non-null while a check a repair turn left owed waits for this session's own turn to end; the server then runs it. */
   mergeRepairTurnEndedAt?: string | null;
   mergeRecoverySupported?: boolean;
+  /** When the merge operation now pending was requested. */
+  mergeRequestedAt?: string | null;
+  /** The runner this session runs on, as far as the merge slot names it. */
+  assignedRunner?: { name?: string | null; displayName?: string | null; lastHeartbeatAt?: string | null } | null;
   mergedAt?: string | null;
   // The server-resolved merge target: an explicit choice, a project integration line, or the
   // workspace/runner default. Shown on the merged ✓ chip and used by Retry merge.

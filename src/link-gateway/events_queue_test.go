@@ -97,6 +97,7 @@ func TestTheIngestQueueStaysWithinItsBoundHoweverManyConnectionsSend(t *testing.
 	b := queueBook(t, func(tune *linkTuning) {
 		tune.MaxQueued = creditLevel{Events: 2_000, Bytes: 512 << 10}
 		tune.HighWater, tune.LowWater = tune.MaxQueued.half(), tune.MaxQueued.half().half()
+		tune.CreditHold = 0
 	})
 	// 1,500 connections at 1,000 events each is 1.5 million events: 750 times the bound.
 	if n := uint64(1_500) * uint64(b.tune.Reduced.Events); n < 500*uint64(b.tune.MaxQueued.Events) {
@@ -344,6 +345,7 @@ func TestConnectionsPastTheBoundAreHeldBackAndStoredOnceTheIngestCatchesUp(t *te
 		c.link.Reduced = creditLevel{Events: 10, Bytes: 1 << 20}
 		c.link.MaxQueued = creditLevel{Events: 12, Bytes: 64 << 20}
 		c.link.HighWater, c.link.LowWater = c.link.MaxQueued.half(), c.link.MaxQueued.half().half()
+		c.link.CreditHold = 0
 	})
 	// A test that fails first must not leave the backend's handlers waiting: this runs before either server closes.
 	t.Cleanup(open)

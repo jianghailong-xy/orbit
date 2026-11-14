@@ -49,8 +49,9 @@ struct WorkspaceFolderIcon: View {
 /// descriptive metadata, never a disclosure parent; the trailing slot carries at most one live
 /// state, with user attention taking precedence over background work. On the Mac a row with no
 /// state shows its faint ⌘1…⌘9 shortcut there while ⌘ is held (`shortcut`, 0-based; nil otherwise).
-/// An empty `runnerLabel` leaves the runner off the row (the Mac names it only where two workspaces
-/// share a name).
+/// An empty `runnerLabel` leaves the runner off the row. With `runnerOnHover` it shows only while
+/// the pointer is on the row, and whole, the name giving way (the Mac's sidebar, board
+/// docs/mocks/workspace-runner-label E1); off the Mac nothing hovers, so such a row never names it.
 struct WorkspaceNavigationRow: View {
     let agent: Agent
     let runnerLabel: String
@@ -62,6 +63,8 @@ struct WorkspaceNavigationRow: View {
     var jobs: Bool = false
     let waiting: Int
     var shortcut: Int? = nil
+    var runnerOnHover: Bool = false
+    @State private var hovering = false
 
     var body: some View {
         let status = WorkspaceNavigationStatusLogic.resolve(
@@ -71,10 +74,11 @@ struct WorkspaceNavigationRow: View {
             HStack(spacing: 0) {
                 workspaceName
                 disabledBadge
-                if !runnerLabel.isEmpty {
+                if !runnerLabel.isEmpty && (!runnerOnHover || hovering) {
                     Text(" · \(runnerLabel)")
                         .lineLimit(1)
                         .foregroundStyle(.secondary)
+                        .layoutPriority(runnerOnHover ? 3 : 0)
                 }
             }
             Spacer(minLength: 6)
@@ -97,6 +101,10 @@ struct WorkspaceNavigationRow: View {
                     .foregroundStyle(.tertiary)
             }
         }
+        #if os(macOS)
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        #endif
     }
 
     private var workspaceName: some View {
@@ -454,9 +462,17 @@ struct AgentPanes: View {
                 }
                 #endif
             } else if agents.agentSessions.isEmpty {
-                ContentUnavailableView(
-                    agents.sessionsLoading ? "Loading…" : "No \(view.title.lowercased()) sessions",
-                    systemImage: "bubble.left.and.bubble.right")
+                #if os(iOS)
+                // No list saved yet (a fresh install, a new account): grey rows where the sessions
+                // will be, while the title's line says "Loading sessions…" (board 02 ④).
+                if agents.sessionsLoading && view == .open {
+                    SessionListPlaceholder()
+                } else {
+                    emptyList
+                }
+                #else
+                emptyList
+                #endif
             }
         }
         #if os(iOS)
@@ -576,12 +592,12 @@ struct AgentPanes: View {
             // fallback branch is the same item with nothing to hide.
             if #available(iOS 26.0, *) {
                 ToolbarItem(placement: .topBarLeading) {
-                    WorkspaceTitle(name: agent.name)
+                    listTitle
                 }
                 .sharedBackgroundVisibility(.hidden)
             } else {
                 ToolbarItem(placement: .topBarLeading) {
-                    WorkspaceTitle(name: agent.name)
+                    listTitle
                 }
             }
             #else
@@ -727,6 +743,24 @@ struct AgentPanes: View {
             }
         }
     }
+
+    private var emptyList: some View {
+        ContentUnavailableView(
+            agents.sessionsLoading ? "Loading…" : "No \(view.title.lowercased()) sessions",
+            systemImage: "bubble.left.and.bubble.right")
+    }
+
+    #if os(iOS)
+    /// The workspace name over the list, with the Open list's freshness line under it while the rows
+    /// may still be the previous run's (docs/mocks/ios-launch-updating). Completed / Trash read for
+    /// themselves, so they draw the name alone.
+    private var listTitle: some View {
+        WorkspaceTitle(name: agent.name,
+                       status: view == .open ? app.openListStatus : nil,
+                       empty: agents.agentSessions.isEmpty,
+                       retry: { app.retryOpenList() })
+    }
+    #endif
 
     /// Open / Completed / Trash, over the list on the Mac and on regular iPad. This is deliberately
     /// content-width, not fixed-width, so it continues to fit the middle column at larger Dynamic
@@ -921,7 +955,16 @@ struct AgentPanes: View {
             case .project: app.openProjectSessions(address)
             }
         }
-        return SessionProjectRowView(row: row, onOpen: { app.openProjectSessions(address) })
+        // A phone opens the coordinator's conversation, not the project's sessions page, which is
+        // the button in that conversation's navigation bar (owner 2026-11-11, board 5). The iPad's
+        // column keeps the page.
+        let onTap = {
+            switch rowNavigation == .push ? SessionProjectSheet.rowTap(row) : .sessions {
+            case .coordinator(let coordinator): app.openProjectMember(coordinator, push: true)
+            case .sessions: app.openProjectSessions(address)
+            }
+        }
+        return SessionProjectRowView(row: row, onOpen: onTap)
         .sessionProjectRowActions(row, view: view, onOpen: onOpen, onSessions: { app.openProjectSessions(address) }, onProject: {
             app.openProject(row.projectId)
         }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })
@@ -1204,7 +1247,12 @@ struct AgentConsoleDetail: View {
     }
 
     var body: some View {
-        if let runnerID = app.machineDraftRunnerID {
+        if let guestID = app.guestSessionID {
+            // A session somebody shared with this account: its guest view (Shared with me, or a
+            // session id the owner's read found nothing of yours at).
+            GuestSessionView(sessionID: guestID)
+                .id(guestID)
+        } else if let runnerID = app.machineDraftRunnerID {
             // A machine's own new session page, whose Set up row put it here (board rule 1).
             MachineDraftPage(runnerID: runnerID)
                 .id(runnerID)
@@ -2168,3 +2216,32 @@ struct AgentFormContent: View {
         Task { await agents.save(agent.id, req) }
     }
 }
+
+#if os(iOS)
+/// Grey rows standing in for a session list that has never been read on this phone (board 02 ④ of
+/// docs/mocks/ios-launch-updating), in place of a blank page with a centred "Loading…".
+private struct SessionListPlaceholder: View {
+    private static let widths: [(CGFloat, CGFloat)] = [
+        (0.72, 0.46), (0.60, 0.52), (0.80, 0.38), (0.55, 0.60), (0.68, 0.42), (0.76, 0.50),
+    ]
+
+    var body: some View {
+        GeometryReader { geo in
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Self.widths.indices, id: \.self) { i in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Capsule().frame(width: geo.size.width * Self.widths[i].0, height: 12)
+                        Capsule().frame(width: geo.size.width * Self.widths[i].1, height: 10)
+                    }
+                    .padding(.vertical, 14)
+                    Divider()
+                }
+            }
+            .foregroundStyle(.quaternary)
+            .padding(.horizontal, 16)
+        }
+        .accessibilityHidden(true)
+        .allowsHitTesting(false)
+    }
+}
+#endif

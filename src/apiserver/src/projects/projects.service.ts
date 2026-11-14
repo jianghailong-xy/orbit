@@ -41,6 +41,18 @@ import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { type CoordinatorPendingWait, pendingWaitLabel } from './coordinator-pending-waits';
+
+/** A handoff a replacement completes (`ProjectsService.coordinator`'s `handoff`). */
+export interface CoordinatorHandoffBinding {
+  /** The coordinator_handoff row, which must be HANDING_OVER. */
+  id: string;
+  /** The coordinator it hands over; the project must still name it. */
+  fromSessionId: string;
+  /** Appended to the successor's opening; null when the note was skipped. */
+  note: string | null;
+  /** The pending-waits preview read before the swap, for the moved waits' labels. */
+  waits: readonly CoordinatorPendingWait[];
+}
 import { MergeReceiptRow, mergeReceiptRow } from '../sessions/merge-receipt';
 import {
   DependencyState,
@@ -4693,11 +4705,18 @@ export class ProjectsService {
     id: string,
     workspaceId?: string,
     intent: CoordinatorIntent = 'open',
+    /**
+     * A handoff this replacement completes (coordinator-handoff.service.ts): the note goes into the
+     * successor's opening, and the handoff row turns COMPLETED in the swap's own transaction, naming
+     * the successor and the waits that moved. Refused 409 when the project's coordinator is no longer
+     * the one the handoff started from. Only with `replace`.
+     */
+    handoff?: CoordinatorHandoffBinding,
   ): Promise<{
     sessionId: string;
     created: boolean;
     workspaceId: string | null;
-    /** How many of the outgoing coordinator's ACTIVE watches now observe the new one; 0 unless this call swapped. */
+    /** How many of the outgoing coordinator's live (ACTIVE or PAUSED) watches now observe the new one; 0 unless this call swapped. */
     movedWatches: number;
   }> {
     const project = await this.prisma.project.findFirst({
@@ -4720,6 +4739,11 @@ export class ProjectsService {
       },
     });
     if (!project) throw new NotFoundException('project not found');
+    if (handoff && (intent !== 'replace' || project.coordinatorSessionId !== handoff.fromSessionId)) {
+      throw new ConflictException(
+        'this project’s coordinator changed since the handover started — the handover was not completed',
+      );
+    }
 
     // Trashed, not merely ended: reviving a session out of Trash behind the user's back would undo
     // a deletion they performed deliberately.
@@ -4791,6 +4815,7 @@ export class ProjectsService {
             project.id,
             project.coordinatorEnabled,
             modelRoutingEnabled(project.owner),
+            handoff?.note,
           ),
         },
         // The opening is the platform's own words, not the owner's (0493, design §3.5).
@@ -4900,19 +4925,51 @@ export class ProjectsService {
           });
           // The waits the outgoing coordinator set go to its successor, in this transaction: a
           // completed observer is refused every delivery (OBSERVER_SESSION_COMPLETED), so a
-          // `task_await` left addressed to it would never wake anyone. ACTIVE only — a watch that has
-          // ended stays with the conversation it ended for. Rank 45, after the project (40), rows
-          // locked in id order in one statement; the new observer's FK check is covered by the
-          // Session lock already held.
-          movedWatches = (await tx.$queryRaw<Array<{ id: string }>>`
+          // `task_await` left addressed to it would never wake anyone. Live ones only, ACTIVE and
+          // PAUSED — a PAUSED watch keeps its state, since the statement writes only the observer; a
+          // watch that has ended stays with the conversation it ended for. Rank 45, after the project
+          // (40), rows locked in id order in one statement; the new observer's FK check is covered by
+          // the Session lock already held.
+          const moved = await tx.$queryRaw<Array<{ id: string; state: string }>>`
             UPDATE "watch" SET "observer_session_id" = ${session.id}::uuid, "updated_at" = now()
              WHERE "id" IN (
                SELECT "id" FROM "watch"
                 WHERE "observer_session_id" = ${project.coordinatorSessionId}::uuid
-                  AND "owner_id" = ${ownerId}::uuid AND "state" = 'ACTIVE'
+                  AND "owner_id" = ${ownerId}::uuid AND "state" IN ('ACTIVE', 'PAUSED')
                 ORDER BY "id"
                 FOR UPDATE)
-            RETURNING "id"`).map((row) => row.id);
+            RETURNING "id", "state"`;
+          movedWatches = moved.map((row) => row.id);
+          // The handoff this replacement completes, in the same transaction as the swap (rank 46,
+          // after the watches): COMPLETED with its successor and the waits that moved, labelled as the
+          // preview read them before the swap. A compare-and-set on HANDING_OVER — the one state a
+          // replacement is run from — so a handoff that is not that any more rolls the swap back.
+          if (handoff) {
+            const labels = new Map(handoff.waits.map((wait) => [wait.id, wait.label]));
+            // Oldest first, as the preview lists them (RETURNING has no order); one created since
+            // the preview, last.
+            const rank = new Map(handoff.waits.map((wait, index) => [wait.id, index]));
+            const ordered = [...moved].sort((a, b) =>
+              (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER)
+              || a.id.localeCompare(b.id));
+            const movedWaits: CoordinatorPendingWait[] = ordered.map((row) => ({
+              id: row.id,
+              label: labels.get(row.id) ?? pendingWaitLabel(null, []),
+              paused: row.state === 'PAUSED',
+            }));
+            const completed = await tx.coordinatorHandoff.updateMany({
+              where: { id: handoff.id, fromSessionId: project.coordinatorSessionId, state: 'HANDING_OVER' },
+              data: {
+                state: 'COMPLETED',
+                toSessionId: session.id,
+                movedWaits: movedWaits as unknown as Prisma.InputJsonValue,
+                endedAt: new Date(),
+              },
+            });
+            if (completed.count === 0) {
+              throw new ConflictException('this handover is no longer in progress — the handover was not completed');
+            }
+          }
         }
         return { count: swapped.count, movedWatches };
       }, loggedRetry(this.logger, 'projects.coordinator'));
@@ -4986,9 +5043,10 @@ export class ProjectsService {
   }
 
   /**
-   * The waits a replacement would move (see the swap in `coordinator`): every ACTIVE watch whose
-   * observer is this project's current coordinator, oldest first, as `{ id, label }` for the
-   * confirm dialog. Empty when the project has no coordinator or it is waiting on nothing.
+   * The waits a replacement would move (see the swap in `coordinator`): every live watch — ACTIVE or
+   * PAUSED — whose observer is this project's current coordinator, oldest first, as
+   * `{ id, label, paused }` for the confirm dialog. Empty when the project has no coordinator or it is
+   * waiting on nothing.
    */
   async coordinatorPendingWaits(ownerId: string, id: string): Promise<CoordinatorPendingWait[]> {
     const project = await this.prisma.project.findFirst({
@@ -4998,10 +5056,11 @@ export class ProjectsService {
     if (!project) throw new NotFoundException('project not found');
     if (!project.coordinatorSessionId) return [];
     const watches = await this.prisma.watch.findMany({
-      where: { ownerId, observerSessionId: project.coordinatorSessionId, state: 'ACTIVE' },
+      where: { ownerId, observerSessionId: project.coordinatorSessionId, state: { in: ['ACTIVE', 'PAUSED'] } },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       select: {
         id: true,
+        state: true,
         predicate: true,
         targets: { select: { targetKind: true, targetResourceId: true }, orderBy: { id: 'asc' } },
       },
@@ -5020,6 +5079,7 @@ export class ProjectsService {
     return watches.map((w) => ({
       id: w.id,
       label: pendingWaitLabel(w.predicate, w.targets.map((t) => titles.get(t.targetResourceId) ?? null)),
+      paused: w.state === 'PAUSED',
     }));
   }
 
