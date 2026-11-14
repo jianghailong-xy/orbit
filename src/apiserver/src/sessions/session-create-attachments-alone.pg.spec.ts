@@ -191,8 +191,8 @@ scenario('a queued session lists its opening as the accepted head until the runn
     'taken but not yet echoed, it is still the accepted head',
   );
   await admin.query(
-    `INSERT INTO "run_event"(session_id, seq, type, payload, turn_id)
-     VALUES ($1::uuid, 1, 'user', '{"text":"Fix: Codex update failed"}'::jsonb, $2::uuid)`,
+    `INSERT INTO "run_event"(id, session_id, seq, type, payload, turn_id)
+     VALUES (gen_random_uuid(), $1::uuid, 1, 'user', '{"text":"Fix: Codex update failed"}'::jsonb, $2::uuid)`,
     [session.id, opening.id],
   );
   assert.deepEqual(

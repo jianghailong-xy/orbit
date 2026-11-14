@@ -922,17 +922,16 @@ test('a session row says when the message it previews is Orbit’s own', {
   // ── 5. the opening of a session the platform opened with its own prompt ───────────────────────
 
   /**
-   * What the runner's claim does to a fresh session (QueueService.buildSession): its prompt laid down as
-   * the opening turn, under the key every session's prompt has. Answers the prompt.
+   * A fresh session as the runner's claim finds it (QueueService.buildSession): its prompt already laid
+   * down by `create` as the opening turn, under the key every session's prompt has. Answers the prompt.
    */
   async function seedOpening(sessionId: string): Promise<string> {
     const row = await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: { prompt: true } });
-    await prisma.conversationTurn.create({
-      data: {
-        sessionId, seq: 1, clientTurnId: SessionsService.initialTurnClientId(sessionId),
-        kind: 'message', content: row.prompt, status: 'PENDING',
-      },
+    const opening = await prisma.conversationTurn.findUniqueOrThrow({
+      where: { sessionId_clientTurnId: { sessionId, clientTurnId: SessionsService.initialTurnClientId(sessionId) } },
+      select: { seq: true, kind: true, content: true, status: true },
     });
+    assert.deepEqual(opening, { seq: 1, kind: 'message', content: row.prompt, status: 'PENDING' }, 'create laid the opening down');
     // A session just made is waiting for a runner; the claim starts it, and a resume and the inbox read it
     // parked.
     await prisma.session.update({
