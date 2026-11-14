@@ -26,7 +26,7 @@ A runner is a machine that runs Orbit sessions. Its id is what --runner-id takes
 'orbit agent create' and 'orbit agent update'.
 
 These commands run inside a live Orbit session while the account's Session orchestration
-switch is on.
+switch is on: the switch that grants managing other sessions grants managing runners too.
 Run 'orbit runner <command> --help' for options.
 `
 
@@ -109,13 +109,6 @@ Options:
   --runner-id ID                 Runner to delete (required); 'orbit runner list' shows the ids
   --json                         Emit compact JSON
 `,
-}
-
-var runnerCLICapabilities = []cliCapabilitySpec{
-	{Tool: "runner_list", Argv: []string{"orbit", "runner", "list"}, Usage: "orbit runner list [--json]", Arguments: []string{"--json"}},
-	{Tool: "runner_engine_install", Argv: []string{"orbit", "runner", "install"}, Usage: "orbit runner install --runner-id ID --engine ENGINE [--update] [--wait] [--json]", Arguments: []string{"--runner-id <id> (required)", engineArgument() + " (required)", "--update (every engine CLI on the runner, instead of installing --engine)", "--wait (until the runner reports the outcome)", "--json"}, Mutates: true},
-	{Tool: "runner_engine_install_status", Argv: []string{"orbit", "runner", "install-status"}, Usage: "orbit runner install-status --runner-id ID [--json]", Arguments: []string{"--runner-id <id> (required)", "--json"}},
-	{Tool: "runner_delete", Argv: []string{"orbit", "runner", "delete"}, Usage: "orbit runner delete --runner-id ID [--json]", Arguments: []string{"--runner-id <id> (required)", "--json"}, Mutates: true},
 }
 
 // runnerDeleteApprovalToolName keys the card a runner delete is asked on. The server matches the delete

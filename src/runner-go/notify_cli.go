@@ -35,17 +35,6 @@ already alerted them within the last minute) — the exit status is still 0, bec
 worked; it is the answer that says nobody was told.
 `
 
-var notifyCLICapabilities = []cliCapabilitySpec{
-	{
-		Tool:        "notify",
-		Argv:        []string{"orbit", "notify"},
-		Usage:       "orbit notify --message TEXT [--json]",
-		Arguments:   []string{"--message <text> (required)", "--json"},
-		Description: "In a task run of an Automatic project this goes to the project's coordinator, not to the owner's devices. Read recipient in the result to see who got it: coordinator, or owner when Orbit fell back. Alert the human this runs for on their devices, with a line you write. For when you need something only they can give and are otherwise stuck, or the thing they were waiting for is done — not for progress updates. Inside a session they can reply from the notification. At most one per session per minute; read the result, which says whether anybody was actually alerted.",
-		Mutates:     true,
-	},
-}
-
 func cmdNotifyCLI(args []string, out io.Writer) error {
 	if wantsHelp(args) {
 		_, err := fmt.Fprint(out, notifyHelp)

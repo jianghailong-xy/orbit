@@ -2192,6 +2192,49 @@ button.toast--pill:focus-visible {
 }
 .rd-attention-action {
   margin-top: 9px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+/* Dismiss until next <Engine> release, beside Update Engines Now: a link, not a second button. */
+.rd-attention-action .re-link {
+  font-size: 12.5px;
+}
+/* Fix with an agent (components/AgentFix.tsx): the line under a card's or an Install failed panel's
+   buttons — where the agent is at work, why none can start, or where it would run. */
+.agent-fix-line {
+  margin-top: 7px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+.re-panel .agent-fix-line {
+  font-size: 11.5px;
+}
+.agent-fix-line.fixing {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 4px;
+  color: var(--text-2);
+}
+.agent-fix-row .agent-fix-line.fixing {
+  margin-top: 0;
+}
+.agent-fix-dot {
+  width: 7px;
+  height: 7px;
+  margin-right: 3px;
+  border-radius: 50%;
+  background: var(--accent, #2563eb);
+  flex: none;
+}
+.re-panel-hint.agent-fix-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
 }
 /* The Update card (board 4): a release this runner is behind, across both columns. Amber while it
    holds work back or restarts, plain while work goes on as usual. */
@@ -17500,6 +17543,11 @@ button.chat-jump-start:hover {
 }
 .re-grp.folded .re-upd {
   display: block;
+}
+/* A dismissed warning keeps its drift on the version line, in grey (`13d behind 0.169.0 · warning
+   dismissed`): longer than the line was sized for, so it wraps rather than lose its end. */
+.re-meta:has(.re-upd.dismissed) {
+  white-space: normal;
 }
 /* "Next: …" over the window it names. */
 .re-quota-next {

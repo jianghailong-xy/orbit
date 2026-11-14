@@ -37,6 +37,7 @@ import { WatchDeliveryModule } from './watches/watch-delivery.module';
 import { ScheduledWakeupModule } from './runner-api/scheduled-wakeup.module';
 import { SessionRequestWorkerModule } from './sessions/session-request-worker.module';
 import { WikiModule } from './wiki/wiki.module';
+import { RunnerAttentionFixModule } from './runners/runner-attention-fix.module';
 import { WikiChatModule } from './wiki/wiki-chat.module';
 import { ManagedRunnerGateModule } from './managed-runners/managed-runner-gate';
 import { ManagedRunnerModule } from './managed-runners/managed-runner.module';
@@ -87,6 +88,8 @@ import { TerminalsModule } from './terminals/terminals.module';
     WikiModule,
     // The wiki chat's door: its own module, as it makes sessions through SessionsService (wiki-chat.module.ts).
     WikiChatModule,
+    // Fix with an agent: its own module, as it makes sessions through SessionsService (runner-attention-fix.module.ts).
+    RunnerAttentionFixModule,
     ManagedRunnerGateModule,
     ManagedRunnerModule,
     // Each account's own Feishu (Lark) app, and the administrators' switch for them (docs/feishu-bot-design.md).
