@@ -26406,6 +26406,7 @@ button.agent-progress-agent:hover {
 .wt-recovery-link { padding: 0; border: 0; background: none; color: var(--brand); font: inherit; cursor: pointer; }
 .wt-recovery-link:disabled { opacity: .55; cursor: default; }
 .wt-recovery-snapshot.is-stale { opacity: .45; }
+.wt-recovery .wt-recovery-failure { color: var(--error); }
 /* The merge slot while a merge operation is pending: what Orbit is doing, since when, on which runner. Amber once overdue. */
 .wt-merge-op { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 12px 12px; padding: 8px 12px; border-radius: 8px; font-size: 12px; color: var(--brand); background: color-mix(in srgb, var(--brand) 8%, var(--bg-raised)); }
 .wt-merge-op span { color: var(--text-2); }
