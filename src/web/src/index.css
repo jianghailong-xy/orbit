@@ -25320,6 +25320,7 @@ button.project-open-item-action:disabled {
 .wk-page .wk-contents-btn { display: none; }
 
 .wk-toc { display: block; min-width: 0; margin-left: -8px; padding-top: 2px; }
+.wk-dir-resizer { display: none; }
 .wk-toc-item { display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 8px; border-radius: 6px;
                font-size: 13.5px; color: var(--text-1); white-space: nowrap; min-width: 0; text-decoration: none; }
 .wk-toc-item:hover { background: var(--bg-hover); color: var(--text-1); }
@@ -25497,7 +25498,7 @@ button.project-open-item-action:disabled {
      docs/mocks/wiki-rail ③): the title and the space, the search, then the rows, which scroll on their own, and
      Settings and Share at the foot. The head row and the search line above it give way to it; the main column
      starts at the top, the home's line first. */
-  .wk-page--railed { display: grid; grid-template-columns: 248px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
+  .wk-page--railed { display: grid; grid-template-columns: var(--wk-dir-w, 248px) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
                      column-gap: 32px; align-items: start; }
   .wk-page--railed > .wk-title-row, .wk-page--railed > .wk-search { display: none; }
   /* The home's line was the head's; Activity has its own head and status row (as on a phone). */
@@ -25508,6 +25509,11 @@ button.project-open-item-action:disabled {
                                                 top: -24px; height: var(--app-vh, 100vh); max-height: none; overflow: hidden;
                                                 margin: -24px 0 -24px -32px; padding: 16px 0 0 24px;
                                                 border-right: 1px solid var(--border-subtle); background: var(--bg-raised); }
+  /* The column's border drags its width, as the app sidebar's does (.tp-resizer). Inside the column's edge: the column
+     clips what lies past it. */
+  .wk-page--railed > .wk-layout > .wk-dir-col > .wk-dir-resizer { display: block; position: absolute; top: 0; right: 0; width: 6px;
+                                                                  height: 100%; z-index: 5; cursor: col-resize; }
+  .wk-page--railed > .wk-layout > .wk-dir-col > .wk-dir-resizer:hover { background: rgba(51, 112, 255, 0.12); }
   .wk-rail-top { flex: none; padding: 0 16px 10px 0; }
   .wk-rail-head { display: flex; align-items: center; gap: 12px; height: 32px; }
   .wk-rail-head .wk-select .v, .wk-rail-head .wk-space-tag { max-width: 150px; }
