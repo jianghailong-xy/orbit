@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+@testable import OrbitKit
 
 /// SwiftUI doesn't exist on Linux, so nothing here compiles the app shells. These hold the
 /// coordinator conversation's crossing card to its source: the console reads the project's
