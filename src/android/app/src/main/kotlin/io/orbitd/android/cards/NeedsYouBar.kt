@@ -15,6 +15,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.layout.onSizeChanged
@@ -144,13 +146,14 @@ internal fun NeedsYouBar(text: String, chevron: NeedsYouChevron?, hint: String, 
     val amber = LocalOrbitColors.current.needsYou
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val press = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); onPress() }
+    val toggles = unfolds || onFold != null
     Box(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 16.dp, end = 16.dp, bottom = 6.dp)
         .testTag("needs-you-bar")) {
         // Read as its words, a button, and what the press does (iOS `accessibilityHint`).
         Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant),
             verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f).heightIn(min = 44.dp).clickable(onClickLabel = hint, role = Role.Button, onClick = press)
-                .padding(start = 7.dp, end = if (onFold == null) 16.dp else 0.dp, top = 5.dp, bottom = 5.dp),
+                .padding(start = 7.dp, end = if (toggles) 0.dp else 16.dp, top = 5.dp, bottom = 5.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 // The one place the amber is; the words stay the surface's own — amber words on amber were the band's trap.
                 Box(Modifier.size(30.dp).background(amber.copy(alpha = 0.15f), CircleShape), contentAlignment = Alignment.Center) {
@@ -160,18 +163,9 @@ internal fun NeedsYouBar(text: String, chevron: NeedsYouChevron?, hint: String, 
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(text, Modifier.weight(1f).testTag("needs-you-bar-text"), color = MaterialTheme.colorScheme.onSurface,
                             style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        // "+N" for those behind it, with a ⌄ when the press unfolds them rather than going.
-                        if (more > 0) Row(Modifier.background(muted.copy(alpha = 0.14f), CircleShape).padding(horizontal = 6.dp),
-                            horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("+$more", Modifier.testTag("needs-you-bar-more"), style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold, color = muted)
-                            if (unfolds) Icon(painterResource(R.drawable.ic_chevron_down), null,
-                                Modifier.size(10.dp).testTag("needs-you-bar-unfolds"), tint = muted)
-                        }
-                        // No count to carry it (sessions blocked on a tool call have no "+N"): the ⌄ stands bare, as the fold's
-                        // ↑ does — a pill around the chevron alone squashed to the glyph's height.
-                        else if (unfolds) Icon(painterResource(R.drawable.ic_chevron_down), null,
-                            Modifier.size(14.dp).testTag("needs-you-bar-unfolds"), tint = muted)
+                        // "+N" for those behind it.
+                        if (more > 0) Text("+$more", Modifier.background(muted.copy(alpha = 0.14f), CircleShape).padding(horizontal = 6.dp)
+                            .testTag("needs-you-bar-more"), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = muted)
                         since?.let { NeedsYouAge(it) }
                     }
                     detail?.let {
@@ -184,13 +178,16 @@ internal fun NeedsYouBar(text: String, chevron: NeedsYouChevron?, hint: String, 
                         Modifier.size(14.dp).rotate(if (it == NeedsYouChevron.UP) 180f else 0f).testTag("needs-you-bar-chevron:${it.name}"), tint = muted)
                 }
             }
-            // The ↑ on the first capsule of the unfolded stack: a press of its own, folding them back.
-            onFold?.let { fold ->
-                Box(Modifier.size(48.dp).clickable(onClickLabel = NeedsYouLogic.foldLabel, role = Role.Button) {
-                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); fold()
-                }.testTag("needs-you-bar-fold"), contentAlignment = Alignment.Center) {
-                    Icon(painterResource(R.drawable.ic_chevron_down), NeedsYouLogic.foldLabel, Modifier.size(14.dp).rotate(180f), tint = muted)
-                }
+            // One trailing slot for both chevrons, centred (the owner, 2026-11-15): the ⌄ when the press unfolds them — the
+            // capsule's own press, already labelled — and the ↑ on the first capsule of the unfolded stack, a press of its own
+            // folding them back. Pressing it flips the chevron in place, and the age before it stays where it was.
+            if (onFold != null) Box(Modifier.size(48.dp).clickable(onClickLabel = NeedsYouLogic.foldLabel, role = Role.Button) {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); onFold()
+            }.testTag("needs-you-bar-fold"), contentAlignment = Alignment.Center) {
+                Icon(painterResource(R.drawable.ic_chevron_down), NeedsYouLogic.foldLabel, Modifier.size(14.dp).rotate(180f), tint = muted)
+            } else if (unfolds) Box(Modifier.size(48.dp).clickable(onClick = press).semantics { hideFromAccessibility() }
+                .testTag("needs-you-bar-unfolds"), contentAlignment = Alignment.Center) {
+                Icon(painterResource(R.drawable.ic_chevron_down), null, Modifier.size(14.dp), tint = muted)
             }
         }
     }

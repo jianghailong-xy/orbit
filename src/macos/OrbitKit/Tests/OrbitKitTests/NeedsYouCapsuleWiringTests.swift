@@ -93,16 +93,19 @@ final class NeedsYouCapsuleWiringTests: XCTestCase {
     }
 
     /// Several waiting (the owner, 2026-11-13, option B of 03-expand.html): folded, the press
-    /// unfolds and the "+N" carries a ⌄; unfolded, one capsule per conversation in `entries`'
+    /// unfolds and a ⌄ says so; unfolded, one capsule per conversation in `entries`'
     /// order, each opening its own, the first carrying the ↑ that folds them — a press of its own.
     func testSeveralWaitingUnfoldIntoOneCapsuleEach() throws {
         let view = try banner
         XCTAssertTrue(view.contains("model.needsYouEntries(excluding: excluding)"))
         XCTAssertTrue(view.contains("if banner.count > 1 { setUnfolded(true) } else { open(banner) }"))
-        XCTAssertTrue(view.contains("if unfolds { Image(systemName: \"chevron.down\")"))
-        XCTAssertTrue(view.contains("} else if unfolds {"), "no \"+N\" to carry it: the ⌄ stands bare, not in a squashed pill")
+        // One trailing slot for both chevrons (the owner, 2026-11-15): the ⌄ no longer rides in the
+        // "+N" or the first line, so pressing it flips the chevron in place and the age stays put.
+        XCTAssertTrue(view.contains("let toggles = unfolds || fold != nil"))
+        XCTAssertTrue(view.contains("Image(systemName: fold == nil ? \"chevron.down\" : \"chevron.up\")"))
+        XCTAssertTrue(view.contains("if let fold { fold() } else { action() }"), "the ⌄ is the capsule's own press")
+        XCTAssertFalse(view.contains("if unfolds { Image(systemName: \"chevron.down\")"), "not in the \"+N\" pill")
         XCTAssertTrue(view.contains("fold: index == 0 ? { setUnfolded(false) } : nil"))
-        XCTAssertTrue(view.contains("Image(systemName: \"chevron.up\")"))
         XCTAssertTrue(view.contains("entries.prefix(NeedsYouLogic.unfoldedLimit)"), "at most five")
         let model = code(try source("AppModel.swift"))
         XCTAssertTrue(model.contains("NeedsYouLogic.entries(waiting: needsYouSessions, excluding: focused)"))

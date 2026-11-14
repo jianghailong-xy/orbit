@@ -3,14 +3,19 @@ package io.orbitd.android.cards
 import android.content.ComponentName
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import io.orbitd.android.TestOrbitApplication
 import io.orbitd.android.tasks.TaskTime
 import io.orbitd.android.ui.OrbitTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.ExternalResource
@@ -86,6 +91,32 @@ class NeedsYouBarTest {
         compose.setContent { OrbitTheme { NeedsYouBar("4 sessions need you", null, NeedsYouLogic.unfoldHint(4), unfolds = true) {} } }
         compose.onNodeWithTag("needs-you-bar-unfolds", useUnmergedTree = true).assertExists()
         compose.onNodeWithTag("needs-you-bar-more", useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    /** The ⌄ and the ↑ stand in one trailing slot (the owner, 2026-11-15): the same place, the same size, after the age — not
+     * in the "+N" or the first line — so pressing it flips the chevron in place and the age does not move. The ⌄ is the
+     * capsule's own press. */
+    @Test fun theUnfoldAndFoldChevronsShareOneSlotAfterTheAge() {
+        var pressed = 0
+        val since = "2026-01-01T00:00:00Z"
+        compose.setContent { OrbitTheme { Column {
+            NeedsYouBar("3 sessions need you", null, NeedsYouLogic.unfoldHint(3), Modifier.testTag("folded"), detail = "Android",
+                since = since, more = 1, unfolds = true) { pressed++ }
+            NeedsYouBar("orbit-develop needs you", null, NeedsYouLogic.sessionHint, Modifier.testTag("unfolded"), detail = "Android",
+                since = since, onFold = {}) {}
+        } } }
+        val down = compose.onNodeWithTag("needs-you-bar-unfolds", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val up = compose.onNodeWithTag("needs-you-bar-fold", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        fun near(a: Dp, b: Dp) = assertEquals(a.value, b.value, 0.5f)
+        near(up.left, down.left); near(up.right, down.right)
+        val ages = compose.onAllNodesWithTag("needs-you-bar-age", useUnmergedTree = true)
+        near(ages[1].getUnclippedBoundsInRoot().right, ages[0].getUnclippedBoundsInRoot().right)
+        assertTrue(ages[0].getUnclippedBoundsInRoot().right <= down.left)
+        // Centred in the capsule (the bar less its 6 dp foot), not on the first line.
+        val folded = compose.onNodeWithTag("folded").getUnclippedBoundsInRoot()
+        near((folded.top + folded.bottom - 6.dp) / 2, (down.top + down.bottom) / 2)
+        compose.onNodeWithTag("needs-you-bar-unfolds", useUnmergedTree = true).performClick()
+        compose.runOnIdle { assertEquals(1, pressed) }
     }
 
     @Test fun theThreeHintsAreIosOwn() {

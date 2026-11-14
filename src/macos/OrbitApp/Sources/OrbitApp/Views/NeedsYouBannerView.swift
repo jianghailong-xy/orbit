@@ -111,7 +111,8 @@ struct NeedsYouBannerView: View {
             } else {
                 // No chevron: the whole capsule is the press, as the nav bar's question capsule is —
                 // and where it goes is somewhere else, which the words already say. With more than
-                // one waiting the press unfolds them instead, and the "+N" carries a ⌄ to say so.
+                // one waiting the press unfolds them instead, and a ⌄ says so from the slot the ↑
+                // that folds them stands in.
                 chrome {
                     bar(text: banner.text, detail: banner.detail, since: banner.since, more: banner.more,
                         glyph: banner.glyph, chevron: nil,
@@ -145,12 +146,16 @@ struct NeedsYouBannerView: View {
 
     /// One capsule, whichever fact it is carrying: the two differ in their words, their mark and
     /// which way a chevron points, and in nothing else — it is one signal, and a second style for it
-    /// would read as a second kind of thing. `unfolds` marks the "+N" with a ⌄ (the press shows them
-    /// all); `fold` is the ↑ on the first capsule of the unfolded stack, a press of its own.
+    /// would read as a second kind of thing. `unfolds` puts a ⌄ at the trailing end (the press shows
+    /// them all); `fold` puts the ↑ there on the first capsule of the unfolded stack, a press of its
+    /// own. Both stand in the one 44pt slot, centred, so pressing it flips the chevron in place and
+    /// the age before it stays where it was (the owner, 2026-11-15: the ⌄ sat in the first line
+    /// before the age while the ↑ sat after it, so the two swapped and the age jumped 32pt).
     private func bar(text: String, detail: String?, since: String?, more: Int, glyph: NeedsYouGlyph,
                      chevron: String?, hint: String, unfolds: Bool = false, fold: (() -> Void)? = nil,
                      action: @escaping () -> Void) -> some View {
-        HStack(spacing: 0) {
+        let toggles = unfolds || fold != nil
+        return HStack(spacing: 0) {
             Button {
                 // A press here moves the reader somewhere. The tap feedback is the same one the cards
                 // give, so "I pressed it" is answered before the scroll starts.
@@ -175,21 +180,11 @@ struct NeedsYouBannerView: View {
                                 .lineLimit(1)
                             Spacer(minLength: 0)
                             if more > 0 {
-                                HStack(spacing: 2) {
-                                    Text("+\(more)")
-                                    if unfolds { Image(systemName: "chevron.down").imageScale(.small) }
-                                }
-                                .font(.orbitMeta.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 6)
-                                .background(Color.primary.opacity(0.1), in: Capsule())
-                            } else if unfolds {
-                                // No count to carry it (sessions blocked on a tool call have no "+N"):
-                                // the ⌄ stands bare, as the ↑ that folds them does — a pill around the
-                                // chevron alone squashed to its glyph's height.
-                                Image(systemName: "chevron.down")
-                                    .font(.orbitLabel.weight(.semibold))
+                                Text("+\(more)")
+                                    .font(.orbitMeta.weight(.semibold))
                                     .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 6)
+                                    .background(Color.primary.opacity(0.1), in: Capsule())
                             }
                             if let since { NeedsYouAge(since: since) }
                         }
@@ -208,7 +203,7 @@ struct NeedsYouBannerView: View {
                 }
                 // Concentric: the circle stands in 7pt from the capsule's round end.
                 .padding(.leading, 7)
-                .padding(.trailing, fold == nil ? 16 : 0)
+                .padding(.trailing, toggles ? 0 : 16)
                 .padding(.vertical, 5)
                 .frame(minHeight: 44)
                 .contentShape(Rectangle())
@@ -218,12 +213,14 @@ struct NeedsYouBannerView: View {
             .accessibilityHint(hint)
             // Android's `needs-you-bar` tag: a session row can carry the same words.
             .accessibilityIdentifier("needs-you-bar")
-            if let fold {
+            if toggles {
+                // The ⌄ is the capsule's own press, already read out with its hint; the ↑ is one of
+                // its own and says so.
                 Button {
                     PlatformHaptics.tap()
-                    fold()
+                    if let fold { fold() } else { action() }
                 } label: {
-                    Image(systemName: "chevron.up")
+                    Image(systemName: fold == nil ? "chevron.down" : "chevron.up")
                         .font(.orbitLabel.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .frame(width: 44, height: 44)
@@ -232,6 +229,7 @@ struct NeedsYouBannerView: View {
                 .buttonStyle(.plain)
                 .padding(.trailing, 4)
                 .accessibilityLabel("Collapse")
+                .accessibilityHidden(fold == nil)
             }
         }
         .needsYouCapsule()
