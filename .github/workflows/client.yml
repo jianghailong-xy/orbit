@@ -50,6 +50,10 @@ on:
         description: "Also run the iOS http://ip ATS probe (simulator, A/B against no ATS keys)"
         type: boolean
         default: false
+      agent_tools_probe:
+        description: "P1-03 shots branch only: photograph the Agent Tools sheet on a Mac"
+        type: boolean
+        default: false
 
 concurrency:
   group: client-${{ github.ref }}
@@ -94,7 +98,7 @@ jobs:
   macos:
     name: macOS (build + test)
     # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    if: false  # P1-03 shots branch: the task branch's own dispatch compiles; this one only photographs
     runs-on: macos-15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -120,7 +124,7 @@ jobs:
   ios:
     name: iOS (generate + build)
     # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    if: false  # P1-03 shots branch: the task branch's own dispatch compiles; this one only photographs
     runs-on: macos-15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -288,3 +292,27 @@ jobs:
           git commit -q -m "source-refused probe results for ${{ github.sha }} (run ${{ github.run_id }})"
           git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
             results:refs/heads/probe/source-refused-mac-shots-results
+
+  # TEMPORARY (P1-03, shots branch only): the Agent Tools sheet photographed on a Mac runner.
+  agent-tools-shots:
+    name: Agent Tools probe (macOS sheet)
+    if: github.event_name == 'workflow_dispatch' && inputs.agent_tools_probe
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: latest-stable
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && sw_vers
+      - name: Build, host and capture
+        run: bash .agent-tools-probe/mac/run.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: agent-tools-shots
+          path: |
+            .agent-tools-probe/mac/shots
+            .agent-tools-probe/mac/build.log
