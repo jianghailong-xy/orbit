@@ -54,15 +54,17 @@ class AttachedNoteTest {
     }
 
     @Test fun namesEveryBlockOneDeliveryAppended() {
-        assertEquals("background jobs", describeNote("\n\n$backgroundJobs"))
         assertEquals("list conditions", describeNote(conditions))
-        assertEquals("", describeNote(coordinator))  // Orbit's routine on every coordinator turn: unnamed
-        assertEquals("referenced list", describeNote(refList))
-        assertEquals("referenced task", describeNote(refTask))
+        // Unnamed (owner, 2026-11-14): a coordinator's role and the jobs inventory are Orbit's routine,
+        // and a `#`-reference is already a link in the person's own words.
+        assertEquals("", describeNote(coordinator))
+        assertEquals("", describeNote("\n\n$backgroundJobs"))
+        assertEquals("", describeNote(refList))
+        assertEquals("", describeNote(refTask))
         assertEquals("session message", describeNote("\n\n$sessionMessage"))
-        assertEquals("referenced task ×2, background jobs",
-            describeNote("\n\n$refTask\n\n$refTask\n\n$backgroundJobs\n\n$coordinator"))
-        assertEquals("referenced list", describeNote("\n\n$refList\n\n$coordinator"))
+        assertEquals("list conditions ×2",
+            describeNote("\n\n$refTask\n\n$conditions\n\n$conditions\n\n$backgroundJobs\n\n$coordinator"))
+        assertEquals("", describeNote("\n\n$refList\n\n$coordinator"))
         assertEquals("context", describeNote("<orbit_something_new>\n  x\n</orbit_something_new>"))
         assertEquals("context", describeNote("<background-jobs-v2>\n  x\n</background-jobs-v2>"))
         assertEquals("context", describeNote("[Image #1]"))
@@ -77,21 +79,26 @@ class AttachedNoteTest {
     }
 
     @Test fun theLineSaysWhatIsAttachedAndOpensToWhatTheModelRead() {
-        compose.runOnUiThread { compose.activity.setContent { MaterialTheme { AttachedNoteEntry(backgroundJobs) } } }
+        compose.runOnUiThread { compose.activity.setContent { MaterialTheme { AttachedNoteEntry(conditions) } } }
         // One line and nothing else to press: none of the card it replaced.
-        compose.onNodeWithText("⊕ Orbit attached: background jobs").assertIsDisplayed()
+        compose.onNodeWithText("⊕ Orbit attached: list conditions").assertIsDisplayed()
         compose.onAllNodesWithText("Orbit context", substring = true).assertCountEquals(0)
         compose.onAllNodesWithText("View full context").assertCountEquals(0)
-        val head = compose.onNodeWithContentDescription("⊕ Orbit attached: background jobs")
+        val head = compose.onNodeWithContentDescription("⊕ Orbit attached: list conditions")
         head.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Collapsed"))
-        compose.onNodeWithText(backgroundJobs).assertDoesNotExist()
+        compose.onNodeWithText(conditions).assertDoesNotExist()
         head.performClick()
-        compose.onNodeWithText(backgroundJobs).assertIsDisplayed()
+        compose.onNodeWithText(conditions).assertIsDisplayed()
         // The plus that opened it is a minus while it is open.
-        compose.onNodeWithText("⊖ Orbit attached: background jobs").assertIsDisplayed()
+        compose.onNodeWithText("⊖ Orbit attached: list conditions").assertIsDisplayed()
         head.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Expanded"))
         head.performClick()
-        compose.onNodeWithText(backgroundJobs).assertDoesNotExist()
-        compose.onNodeWithText("⊕ Orbit attached: background jobs").assertIsDisplayed()
+        compose.onNodeWithText(conditions).assertDoesNotExist()
+        compose.onNodeWithText("⊕ Orbit attached: list conditions").assertIsDisplayed()
+    }
+
+    @Test fun theJobsInventoryAloneDrawsNoLine() {
+        compose.runOnUiThread { compose.activity.setContent { MaterialTheme { AttachedNoteEntry(backgroundJobs) } } }
+        compose.onAllNodesWithText("Orbit attached", substring = true).assertCountEquals(0)
     }
 }

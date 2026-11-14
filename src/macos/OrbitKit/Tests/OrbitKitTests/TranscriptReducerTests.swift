@@ -782,7 +782,7 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(r.state.items.count, 1, "must reconcile, not duplicate")
         XCTAssertEqual(r.state.items[0].asUser?.pending, false)
         XCTAssertEqual(r.state.items[0].asUser?.text, typed)
-        XCTAssertEqual(r.state.items[0].asUser?.attached?.kind, "referenced list")
+        XCTAssertEqual(r.state.items[0].asUser?.note, refListBlock)
     }
 
     // The shapes the server appends at delivery (background-jobs-context.ts, list-events.service.ts).
@@ -828,8 +828,7 @@ final class TranscriptReducerTests: XCTestCase {
     /// view names, and a snapshot keeps it. Where the typed words end is the note the apiserver
     /// recorded when it stored the event — the only thing that tells these two blocks apart at all.
     func testDurableUserEventSplitsAppendedContextOutOfTheBubble() throws {
-        for (typed, block, kind) in [("已经部署，请帮我测试", backgroundJobsBlock, "background jobs"),
-                                     ("这个列表现在什么情况？", listConditionsBlock, "list conditions")] {
+        for (typed, block, kind) in [("这个列表现在什么情况？", listConditionsBlock, "list conditions")] {
             var r = TranscriptReducer()
 
             r.apply(userEvent(seq: 1, "\(typed)\n\n\(block)", note: "\n\n\(block)"))
@@ -893,7 +892,7 @@ final class TranscriptReducerTests: XCTestCase {
             XCTAssertEqual(idle.state.items.count, 1, "must reconcile, not duplicate")
             XCTAssertEqual(idle.state.items[0].asUser?.pending, false, "no longer Sending…")
             XCTAssertEqual(idle.state.items[0].asUser?.text, typed)
-            XCTAssertEqual(idle.state.items[0].asUser?.attached?.text, block)
+            XCTAssertEqual(idle.state.items[0].asUser?.note, block)
 
             var queued = TranscriptReducer()
             queued.apply(RunEvent(seq: 1, type: .assistant, payload: .object(["text": .string("on it")])))
@@ -903,7 +902,7 @@ final class TranscriptReducerTests: XCTestCase {
             XCTAssertTrue(queued.state.queued.isEmpty, "leased → no Queued placeholder left behind")
             XCTAssertEqual(queued.state.items.count, 2, "[assistant, user] — no duplicate")
             XCTAssertEqual(queued.state.items.last?.asUser?.pending, false)
-            XCTAssertEqual(queued.state.items.last?.asUser?.attached?.text, block)
+            XCTAssertEqual(queued.state.items.last?.asUser?.note, block)
         }
     }
 

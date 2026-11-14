@@ -153,19 +153,23 @@ export function lastTypedUserMessageText(
 
 /** What each of Orbit's blocks is called where a recorded note shows it (describeNote). */
 const TAG_LABEL: Record<string, string> = {
-  'referenced-list': 'referenced list',
-  'referenced-task': 'referenced task',
   'list-conditions': 'list conditions',
-  'background-jobs': 'background jobs',
   'orbit-session-message': 'session message',
   // The runner's note after a Feishu group member's message (runner-go external_sender.go).
   'orbit-external-sender': 'sender note',
   'orbit-session-reply': 'session reply',
 };
 
-/** A coordinator's standing role, appended to each of its turns: Orbit's own routine, not something
- *  anyone attached, so describeNote leaves it unnamed and a note holding only it draws no line. */
-const COORDINATOR_CONTEXT_TAG = 'orbit_project_coordinator_context';
+/** Blocks describeNote leaves unnamed, so a note holding only them draws no line (owner, 2026-11-14):
+ *  a coordinator's standing role and the background-jobs inventory are Orbit's routine, and a
+ *  `#`-reference's task or list is already a link in the bubble's own words. The fold still opens to
+ *  them beside any other block. */
+const UNNAMED_TAGS: ReadonlySet<string> = new Set([
+  'orbit_project_coordinator_context',
+  'referenced-task',
+  'referenced-list',
+  'background-jobs',
+]);
 
 /** The wiki context block, whose line says how much it holds rather than only what it is. Exported
  *  because the entries inside it are read by a second parser (`lib/wikiContext`), and two spellings
@@ -184,7 +188,7 @@ function countNames(names: string[]): string {
 }
 
 /**
- * "referenced task ×2, background jobs" — what a recorded note holds, counted where it repeats.
+ * "list conditions ×2, session message" — what a recorded note holds, counted where it repeats.
  *
  * Named rather than merely counted: "2 blocks attached" tells the reader nothing about why the
  * reply mentions something they never asked about, which is the entire reason this line exists.
@@ -215,7 +219,7 @@ export function describeNote(note: string): string {
     if (tag === WIKI_CONTEXT_TAG) {
       const count = /^<orbit_wiki_context\s+entries="(\d+)"/.exec(rest)?.[1];
       names.push(count ? `Wiki context · ${count} entries` : 'Wiki context');
-    } else if (tag === WIKI_CHAT_NOTE_TAGS.chat || tag === COORDINATOR_CONTEXT_TAG) {
+    } else if (tag === WIKI_CHAT_NOTE_TAGS.chat || (tag && UNNAMED_TAGS.has(tag))) {
       // Skipped past below, unnamed.
     } else if (tag && WIKI_CHAT_TAGS.has(tag)) {
       const chatNote = parseWikiChatNoteTag(rest);

@@ -120,16 +120,3 @@ function isPublicId(id: string): boolean {
     return false;
   }
 }
-
-/**
- * "DONE" — or "6 DONE, 2 OPEN" — in the accessible name and tooltip of the line that names the note.
- *
- * What the reader came for is the state of the thing they referenced, so one task says its status
- * outright and several are counted by it, in the order the note named them.
- */
-export function summarizeReferencedTasks(tasks: ReferencedTask[]): string {
-  if (tasks.length === 1) return tasks[0].status;
-  const counts = new Map<string, number>();
-  for (const task of tasks) counts.set(task.status, (counts.get(task.status) ?? 0) + 1);
-  return [...counts].map(([status, n]) => `${n} ${status}`).join(', ');
-}

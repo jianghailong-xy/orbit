@@ -22,14 +22,13 @@ internal fun RunEvent.personWords(): String =
 
 /** What each of Orbit's blocks is called where it is shown — web's `TAG_LABEL`. */
 private val injectedTagLabels = mapOf(
-    "referenced-list" to "referenced list",
-    "referenced-task" to "referenced task",
     "list-conditions" to "list conditions",
-    "background-jobs" to "background jobs",
     "orbit-session-message" to "session message",
     "orbit-external-sender" to "sender note",
     "orbit-session-reply" to "session reply",
 )
+
+private val unnamedTags = setOf("orbit_project_coordinator_context", "referenced-task", "referenced-list", "background-jobs")
 
 private fun openingTag(text: String): String? {
     if (!text.startsWith("<")) return null
@@ -39,7 +38,7 @@ private fun openingTag(text: String): String? {
 }
 
 /**
- * "referenced list, referenced task ×2" — what a recorded note holds, each block named by its opening
+ * "background jobs, list conditions ×2" — what a recorded note holds, each block named by its opening
  * tag and skipped past its closing one (OrbitKit's `describeNote`). Only a name: nothing here decides
  * what is shown as the person's.
  */
@@ -48,9 +47,10 @@ internal fun describeNote(note: String): String {
     var rest = note.trim()
     while (rest.isNotEmpty()) {
         val tag = openingTag(rest)
-        // A coordinator's standing role rides on each of its turns: Orbit's routine, not an
-        // attachment (web parity), so it is skipped unnamed and a note holding only it draws no line.
-        if (tag != "orbit_project_coordinator_context") names += tag?.let { injectedTagLabels[it] } ?: "context"
+        // Skipped unnamed, so a note holding only these draws no line (web parity, owner 2026-11-14):
+        // a coordinator's standing role and the background-jobs inventory are Orbit's routine, and a
+        // `#`-reference is already a link in the bubble's own words.
+        if (tag !in unnamedTags) names += tag?.let { injectedTagLabels[it] } ?: "context"
         val close = tag?.let { rest.indexOf("\n</$it>") }?.takeIf { it >= 0 } ?: break
         rest = rest.substring(close + "\n</$tag>".length).trim()
     }

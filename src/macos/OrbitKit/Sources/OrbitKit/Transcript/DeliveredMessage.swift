@@ -41,14 +41,14 @@ public func splitRecordedNote(_ text: String?, note: String?) -> (text: String, 
 /// None of them is ever read out of a person's text: only a recorded note shows one (`describeNote`),
 /// which is also what keeps a paste of one inside the bubble it was typed into.
 let injectedTagLabels: [String: String] = [
-    "referenced-list": "referenced list",
-    "referenced-task": "referenced task",
     "list-conditions": "list conditions",
-    "background-jobs": "background jobs",
     "orbit-session-message": "session message",
     "orbit-external-sender": "sender note",
     "orbit-session-reply": "session reply",
 ]
+
+/// Blocks `describeNote` leaves unnamed, so a note holding only them draws no line.
+let unnamedTags: Set<String> = ["orbit_project_coordinator_context", "referenced-task", "referenced-list", "background-jobs"]
 
 /// The tag `text` opens with, as `<tag>` or `<tag …>`. Nil when it opens with anything else.
 private func openingTag(_ text: String) -> String? {
@@ -79,7 +79,7 @@ private func countNames(_ names: [String]) -> String {
     }.joined(separator: ", ")
 }
 
-/// "referenced list, referenced task ×2" — what a recorded note holds, counted where it repeats.
+/// "background jobs, list conditions ×2" — what a recorded note holds, counted where it repeats.
 ///
 /// Only a name. The note was told apart from the person's words by where the apiserver recorded it
 /// ends (`splitRecordedNote`), so nothing here decides what is shown as theirs. Delivery can append
@@ -98,9 +98,10 @@ public func describeNote(_ note: String) -> String {
     var rest = note.trimmingCharacters(in: .whitespacesAndNewlines)
     while !rest.isEmpty {
         let tag = openingTag(rest)
-        // A coordinator's standing role rides on each of its turns: Orbit's routine, not an attachment
-        // (web parity: `describeNote`), so it is skipped unnamed like the chat's own words.
-        if let tag, tag == WikiChatLogic.noteTags["chat"] || tag == "orbit_project_coordinator_context" {
+        // Skipped unnamed like the chat's own words (web parity: `describeNote`, owner 2026-11-14): a
+        // coordinator's standing role and the background-jobs inventory are Orbit's routine, and a
+        // `#`-reference is already a link in the bubble's own words.
+        if let tag, tag == WikiChatLogic.noteTags["chat"] || unnamedTags.contains(tag) {
             // Skipped past below, unnamed.
         } else if let tag, WikiChatLogic.noteTags.values.contains(tag) {
             names.append(WikiChatLogic.parseNoteTag(rest).map(WikiChatLogic.noteLabel) ?? "context")

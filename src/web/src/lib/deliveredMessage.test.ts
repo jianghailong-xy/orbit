@@ -89,15 +89,17 @@ describe('splitRecordedNote', () => {
 
 describe('describeNote', () => {
   it('names a recorded note by the block it opens with', () => {
-    expect(describeNote(`\n\n${BACKGROUND_JOBS}`)).toBe('background jobs');
     expect(describeNote(CONDITIONS)).toBe('list conditions');
-    // The coordinator's standing role is Orbit's routine on every turn, not an attachment: unnamed.
+    // Unnamed (owner, 2026-11-14): the coordinator's standing role and the background-jobs inventory
+    // are Orbit's routine, and a `#`-reference is already a link in the person's own words.
     expect(describeNote(COORDINATOR)).toBe('');
+    expect(describeNote(`\n\n${BACKGROUND_JOBS}`)).toBe('');
+    expect(describeNote(`\n\n${REF_TASK}\n\n${REF_LIST}`)).toBe('');
   });
 
   it('names the block that says another session sent the message, beside what else rode along', () => {
     expect(describeNote(`\n\n${SESSION_MESSAGE}`)).toBe('session message');
-    expect(describeNote(`\n\n${SESSION_MESSAGE}\n\n${BACKGROUND_JOBS}`)).toBe('session message, background jobs');
+    expect(describeNote(`\n\n${SESSION_MESSAGE}\n\n${BACKGROUND_JOBS}`)).toBe('session message');
   });
 
   it('says how many notes the wiki context holds, off the count the block carries', () => {
@@ -111,10 +113,10 @@ describe('describeNote', () => {
   it('names every block one delivery appended, and counts a repeat instead of listing it twice', () => {
     // Delivery appends references, then the condition board, then background jobs, then the
     // coordinator's role: a coordinator with a build still running gets two blocks in one note.
-    const appended = `\n\n${REF_TASK}\n\n${REF_TASK}\n\n${BACKGROUND_JOBS}\n\n${COORDINATOR}`;
+    const appended = `\n\n${REF_TASK}\n\n${CONDITIONS}\n\n${CONDITIONS}\n\n${BACKGROUND_JOBS}\n\n${COORDINATOR}`;
 
-    expect(describeNote(appended)).toBe('referenced task ×2, background jobs');
-    expect(describeNote(`\n\n${REF_LIST}\n\n${COORDINATOR}`)).toBe('referenced list');
+    expect(describeNote(appended)).toBe('list conditions ×2');
+    expect(describeNote(`\n\n${REF_LIST}\n\n${COORDINATOR}`)).toBe('');
   });
 
   it('names a wiki context beside the block a coordinator gets on the same turn, and only it', () => {

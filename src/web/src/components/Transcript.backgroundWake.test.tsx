@@ -336,11 +336,8 @@ describe('a wake turn in the transcript', () => {
     await mount([wakeEvent(`${ZH_JOB_DONE}\n\n${inventory}`)]);
 
     expect(container.querySelector('.chat-user')).toBeNull();
-    const toggle = [...fold().querySelectorAll('button')].find((b) =>
-      b.textContent?.startsWith('⊕ Orbit attached:'),
-    );
-    expect(toggle?.textContent).toBe('⊕ Orbit attached: background jobs');
-    expect(toggle?.getAttribute('aria-label')).toBe('⊕ Orbit attached: background jobs · 1 ended, exit 0');
+    // The inventory is Orbit's routine and names nothing, so no entry is drawn for it (owner, 2026-11-14).
+    expect(container.textContent).not.toContain('Orbit attached');
     // The wake itself is still the line's own subject, not one of the entry's rows.
     expect(row().querySelector('.bgwake-title')?.textContent).toBe('Background job finished');
   });

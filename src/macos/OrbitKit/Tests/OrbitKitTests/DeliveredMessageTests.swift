@@ -83,23 +83,24 @@ final class DeliveredMessageTests: XCTestCase {
     // MARK: naming what delivery appended
 
     func testNamesARecordedNoteByTheBlockItOpensWith() {
-        XCTAssertEqual(describeNote("\n\n\(backgroundJobs)"), "background jobs")
         XCTAssertEqual(describeNote(conditions), "list conditions")
-        XCTAssertEqual(describeNote(coordinator), "")  // Orbit's routine on every coordinator turn: unnamed
-        XCTAssertEqual(describeNote(refList), "referenced list")
-        XCTAssertEqual(describeNote(refTask), "referenced task")
+        // Unnamed (owner, 2026-11-14): a coordinator's role and the jobs inventory are Orbit's routine,
+        // and a `#`-reference is already a link in the person's own words.
+        XCTAssertEqual(describeNote(coordinator), "")
+        XCTAssertEqual(describeNote("\n\n\(backgroundJobs)"), "")
+        XCTAssertEqual(describeNote(refList), "")
+        XCTAssertEqual(describeNote(refTask), "")
         XCTAssertEqual(describeNote("\n\n\(sessionMessage)"), "session message")
     }
 
     func testNamesEveryBlockOneDeliveryAppended() {
         // Delivery appends references, then the condition board, then background jobs, then the
         // coordinator's role: a coordinator with a build still running gets two blocks in one note.
-        let appended = "\n\n\(refTask)\n\n\(refTask)\n\n\(backgroundJobs)\n\n\(coordinator)"
+        let appended = "\n\n\(refTask)\n\n\(conditions)\n\n\(conditions)\n\n\(backgroundJobs)\n\n\(coordinator)"
 
-        XCTAssertEqual(describeNote(appended), "referenced task ×2, background jobs")
-        XCTAssertEqual(describeNote("\n\n\(refList)\n\n\(coordinator)"), "referenced list")
-        XCTAssertEqual(describeNote("\n\n\(sessionMessage)\n\n\(backgroundJobs)"),
-                       "session message, background jobs")
+        XCTAssertEqual(describeNote(appended), "list conditions ×2")
+        XCTAssertEqual(describeNote("\n\n\(refList)\n\n\(coordinator)"), "")
+        XCTAssertEqual(describeNote("\n\n\(sessionMessage)\n\n\(backgroundJobs)"), "session message")
     }
 
     func testStillNamesAnOpeningItDoesNotRecogniseGenerically() {
