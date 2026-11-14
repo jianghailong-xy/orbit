@@ -1018,11 +1018,17 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// The tool calls each turn has open, so a runner stop that cuts the turn answers them in the
 	// transcript before its interrupt (interrupted_tool_calls.go): every engine's events pass here.
 	toolCalls := &interruptedToolCalls{}
+	// How the turn used Orbit, in counts and codes only, filed ahead of its turn_end (agent_contract_telemetry.go).
+	contractTelemetry := newSessionAgentContractTelemetry(job)
 	// emitThrough buffers one event, filed against turnID, if gate still admits it — preceded, for a
-	// runner stop's interrupt, by the synthetic results of the calls that turn leaves open.
+	// runner stop's interrupt, by the synthetic results of the calls that turn leaves open, and for a
+	// turn_end by the turn's agent-contract telemetry.
 	emitThrough := func(gate *eventEmissionGate, turnID, eventType string, payload map[string]interface{}) {
 		for _, result := range toolCalls.observe(turnID, eventType, payload) {
 			emitOne(gate, turnID, evToolResult, result)
+		}
+		if summary := contractTelemetry.observe(turnID, eventType, payload); summary != nil {
+			emitOne(gate, turnID, evSystem, summary)
 		}
 		emitOne(gate, turnID, eventType, payload)
 	}

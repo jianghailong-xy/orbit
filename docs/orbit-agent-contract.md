@@ -1,6 +1,6 @@
 # Orbit Agent Contract v1
 
-> **Status:** frozen at v1.8.0, 2026-11-14 (v1.0.0 review record in §11; the 1.1.0 to 1.8.0 changes
+> **Status:** frozen at v1.9.0, 2026-11-14 (v1.0.0 review record in §11; the 1.1.0 to 1.9.0 changes
 > are in §10). v1.1.0 adds the operation catalogue and changes no routing rule; v1.2.0 closes the
 > card-free task-write door on the runner's machine credential; v1.3.0 makes tool input strict and every
 > write's answer a structured receipt (§5.3, §6.3); v1.4.0 gives the owner's "Chat about this" on a card
