@@ -1,0 +1,40 @@
+2026-11-13T22:25:20Z watch k3s-first-start started for 200 s
+2026-11-13T22:25:20Z k3s server started
+
+### First rule of each hook every 0.5 s for 190 s, printed when it changes (2026-11-13T22:25:20Z) k3s starting for the first time
+22:25:20.  FORWARD: -j DOCKER-USER  INPUT: -j ORBIT-MR-INPUT  nat: -j DOCKER  raw: -j DROP  ip6 FORWARD: -j DOCKER-USER  rule1: 0
+22:25:29.  FORWARD: -j DOCKER-USER  INPUT: -j KUBE-FIREWALL  nat: -j DOCKER  raw: -j DROP  ip6 FORWARD: -j DOCKER-USER  rule1: 0
+22:25:30.  FORWARD: -j KUBE-PROXY-FIREWALL  INPUT: -j KUBE-PROXY-FIREWALL  nat: -j KUBE-SERVICES  raw: -j DROP  ip6 FORWARD: -j KUBE-FORWARD  rule1: 0
+22:25:31.  FORWARD: -j KUBE-PROXY-FIREWALL  INPUT: -j KUBE-PROXY-FIREWALL  nat: -j KUBE-SERVICES  raw: -j DROP  ip6 FORWARD: -j KUBE-PROXY-FIREWALL  rule1: 0
+22:25:32.  FORWARD: -j ORBIT-MR-FORWARD  INPUT: -j ORBIT-MR-INPUT  nat: -j ORBIT-MR-PREROUTING  raw: -j ORBIT-MR-RAW  ip6 FORWARD: -j ORBIT-MR-FORWARD  rule1: 1
+22:25:41.  FORWARD: -j KUBE-ROUTER-FORWARD  INPUT: -j KUBE-ROUTER-INPUT  nat: -j ORBIT-MR-PREROUTING  raw: -j ORBIT-MR-RAW  ip6 FORWARD: -j ORBIT-MR-FORWARD  rule1: 1
+22:25:43.  FORWARD: -j ORBIT-MR-FORWARD  INPUT: -j ORBIT-MR-INPUT  nat: -j ORBIT-MR-PREROUTING  raw: -j ORBIT-MR-RAW  ip6 FORWARD: -j ORBIT-MR-FORWARD  rule1: 1
+22:25:58.  FORWARD: -j KUBE-ROUTER-FORWARD  INPUT: -j KUBE-ROUTER-INPUT  nat: -j ORBIT-MR-PREROUTING  raw: -j ORBIT-MR-RAW  ip6 FORWARD: -j ORBIT-MR-FORWARD  rule1: 1
+22:26:03.  FORWARD: -j ORBIT-MR-FORWARD  INPUT: -j ORBIT-MR-INPUT  nat: -j ORBIT-MR-PREROUTING  raw: -j ORBIT-MR-RAW  ip6 FORWARD: -j ORBIT-MR-FORWARD  rule1: 1
+NAME    STATUS   ROLES           AGE    VERSION        INTERNAL-IP    EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION                 CONTAINER-RUNTIME
+mrk3s   Ready    control-plane   3m6s   v1.37.2+k3s1   172.31.92.20   <none>        Alpine Linux v3.24   6.12.107+deb13-amd64 (amd64)   containerd://2.3.7-k3s1
+NAMESPACE     NAME                                      READY   STATUS      RESTARTS   AGE   IP          NODE    NOMINATED NODE   READINESS GATES
+kube-system   coredns-577d995dff-dkcfs                  1/1     Running     0          3m    10.42.0.4   mrk3s   <none>           <none>
+kube-system   helm-install-gateway-api-crd-bjd6z        0/1     Completed   0          3m    10.42.0.2   mrk3s   <none>           <none>
+kube-system   local-path-provisioner-56c6584955-6lxq9   1/1     Running     0          3m    10.42.0.3   mrk3s   <none>           <none>
+NAMESPACE     NAME         TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)                  AGE
+default       kubernetes   ClusterIP   10.43.0.1    <none>        443/TCP                  3m7s
+kube-system   kube-dns     ClusterIP   10.43.0.10   <none>        53/UDP,53/TCP,9153/TCP   3m2s
+
+### Continuous connects from the runner container: k3s-first-start
+{"start": "22:25:21", "seconds": 200.0, "every": 0.5}
+{"target": "tcp 10.42.0.2:53", "attempts": 43, "EHOSTUNREACH": 2, "TIMEOUT": 41}
+{"target": "tcp 10.42.0.3:53", "attempts": 43, "EHOSTUNREACH": 2, "TIMEOUT": 41}
+{"target": "tcp 10.42.0.4:53", "attempts": 43, "EHOSTUNREACH": 1, "TIMEOUT": 42}
+{"target": "tcp 10.42.0.5:53", "attempts": 43, "EHOSTUNREACH": 2, "TIMEOUT": 41}
+{"target": "tcp 10.42.0.6:53", "attempts": 43, "EHOSTUNREACH": 2, "TIMEOUT": 41}
+{"target": "tcp 10.42.0.3:8181", "attempts": 43, "EHOSTUNREACH": 2, "TIMEOUT": 41}
+{"target": "tcp 10.43.0.10:53", "attempts": 43, "EHOSTUNREACH": 1, "TIMEOUT": 42}
+{"target": "udp 10.43.0.10:53", "attempts": 43, "EHOSTUNREACH": 1, "TIMEOUT": 42}
+{"target": "udp 10.42.0.3:53", "attempts": 43, "TIMEOUT": 43}
+{"target": "tcp 10.43.0.1:443", "attempts": 43, "EHOSTUNREACH": 1, "TIMEOUT": 42}
+{"target": "tcp 172.31.92.20:30053", "attempts": 43, "EHOSTUNREACH": 17, "TIMEOUT": 26}
+{"target": "tcp 172.31.92.20:6443", "attempts": 43, "EHOSTUNREACH": 17, "TIMEOUT": 26}
+{"target": "tcp 10.42.0.1:10250", "attempts": 43, "EHOSTUNREACH": 9, "TIMEOUT": 34}
+{"end": "22:28:42", "reached": 0}
+watch exit 0
