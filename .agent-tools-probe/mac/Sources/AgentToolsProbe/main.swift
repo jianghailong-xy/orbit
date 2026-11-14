@@ -73,21 +73,27 @@ func sheet() -> AgentToolsSheet {
     }
 }
 
+/// A window AppKit does not shrink to the screen: the runner's display is shorter than the sheet, and the picture
+/// is of the whole sheet.
+final class TallWindow: NSWindow {
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
+}
+
 /// The window the app's sheet would be: built by hand, because an unbundled executable's SwiftUI scene opens none
-/// on a runner. It is as tall as the screen allows, so the sheet's Form shows as much of itself as it can.
+/// on a runner. Taller than any variant's content, so its Form never scrolls; the blank below is cropped after.
 final class ProbeDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let host = NSHostingController(rootView: sheet())
         host.sceneBridgingOptions = [.toolbars]
-        let window = NSWindow(contentViewController: host)
+        let window = TallWindow(contentViewController: host)
         window.title = Probe.variant == "workspace" ? "Agent Tools · orbit-op" : "Agent Tools"
         window.styleMask = [.titled, .closable, .resizable, .fullSizeContentView]
         window.toolbarStyle = .unified
         let visible = NSScreen.main?.visibleFrame.height ?? 900
-        window.setContentSize(NSSize(width: 600, height: min(1300, visible - 40)))
-        window.center()
+        window.setContentSize(NSSize(width: 600, height: 2300))
+        window.setFrameTopLeftPoint(NSPoint(x: 40, y: (NSScreen.main?.visibleFrame.maxY ?? 900) - 10))
         window.makeKeyAndOrderFront(nil)
         self.window = window
         NSApp.activate(ignoringOtherApps: true)
