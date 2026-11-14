@@ -415,9 +415,9 @@ func renderPermissionMatrixMarkdown() string {
 			"job), and a background job is refused. On Codex, Don't Ask runs every command unasked: Codex takes no allowlist.",
 		"**Where the gate reads the mode.** The runner hosting the session answers it over the session's socket " +
 			"(`bgJobService`, op `mode`); a write is refused when the socket does not answer, and there is no gate where there " +
-			"is no session or no socket (a person's own terminal, or a background job, whose environment has neither). Like " +
-			"the background-job gate, this protects against an agent acting ahead of the owner, not against a hostile " +
-			"process on the machine.",
+			"is no session or no socket to ask: a person's own terminal has neither, and a background job's environment " +
+			"carries the session but not the socket, so a job started before Plan can still write. Like the background-job " +
+			"gate, this protects against an agent acting ahead of the owner, not against a hostile process on the machine.",
 	} {
 		b.WriteString("- " + note + "\n")
 	}
