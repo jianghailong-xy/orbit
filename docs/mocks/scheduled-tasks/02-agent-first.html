@@ -1,0 +1,343 @@
+<!-- DESIGN MOCK (2026-11-14), revision 4. What docs/scheduled-tasks-design.md rev 4 adds to the rev 3 boards:
+     the create card (goal read back, May, Costs, Today), the envelope card for a bigger budget, the inspector's
+     intent / note / use, a run changing its own schedule, approvals that hold for later runs.
+     Demo data throughout. Render: node render.mjs $PWD/02-agent-first.html $PWD/02-agent-first.png -->
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>定时任务 第 4 版：Agent-First</title>
+<style>
+  @font-face { font-family:"MockInter"; src:url("file:///mnt/data/tmp/mockfonts/Inter.ttf"); font-weight:100 900; }
+  @font-face { font-family:"MockSC"; src:url("file:///mnt/data/tmp/mockfonts/NotoSansSC.ttf"); font-weight:100 900; }
+  :root { --brand:#3E69F6; --brand-bg:#EAF0FF; --t1:#111114; --t2:#8a8a90; --t3:#b4b4ba; --sep:#e4e4e8;
+          --grp:#f2f2f7; --green:#23a15a; --green-bg:#e3f5ea; --red:#e0453a; --red-bg:#fde8e6;
+          --amber:#b86e00; --amber-bg:#FFF4E0; --grey-bg:#efeff2; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:36px 40px 48px; width:1500px; background:#ececef; color:var(--t1);
+         font:14px/1.5 -apple-system,"MockInter","MockSC",sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:25px; margin:0 0 6px; } .lede { color:#55555e; margin:0 0 24px; max-width:1400px; }
+  .grid { display:grid; grid-template-columns:repeat(3, 440px); gap:30px 30px; }
+  .fh { font-weight:700; font-size:15px; margin:0 0 8px; display:flex; gap:8px; align-items:center; }
+  .fh small { font-weight:400; color:#6b6b75; font-size:12.5px; }
+  .tag { font:600 11.5px/1 sans-serif; padding:4px 7px; border-radius:5px; background:#dcf3e5; color:#17683b; }
+  .note { font-size:12.5px; color:#55555e; margin:8px 2px 0; line-height:1.65; } .note b { color:var(--t1); }
+  code { font:12px "DejaVu Sans Mono",monospace; }
+
+  /* ---- phone, 430 pt ---- */
+  .ph { width:430px; background:var(--grp); border-radius:22px; box-shadow:0 1px 0 #d5d5da, 0 6px 24px rgba(0,0,0,.06);
+        font-size:15px; position:relative; padding-bottom:16px; }
+  .ph.white { background:#fff; }
+  .nav { display:flex; align-items:center; padding:12px 16px 6px; gap:8px; min-height:44px; }
+  .nav .back { color:var(--brand); font-size:16px; white-space:nowrap; }
+  .nav .tt { flex:1; text-align:center; font-weight:600; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .nav .act { color:var(--brand); font-size:16px; font-weight:600; white-space:nowrap; }
+  .big { font-size:30px; font-weight:700; padding:2px 18px 10px; }
+  .gh { font-size:12.5px; color:var(--t2); text-transform:uppercase; letter-spacing:.02em; padding:14px 32px 6px; }
+  .gf { font-size:12.5px; color:var(--t2); padding:6px 32px 0; line-height:1.45; }
+  .grp { background:#fff; border-radius:12px; margin:0 16px; }
+  .row { display:flex; align-items:center; gap:10px; padding:11px 14px; min-height:44px; border-top:1px solid var(--sep); }
+  .row:first-child { border-top:0; }
+  .row .l { flex:1; min-width:0; }
+  .row .v { color:var(--t2); white-space:nowrap; }
+  .row .chev { color:var(--t3); font-size:18px; }
+  .sub { color:var(--t2); font-size:13px; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .t1 { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pill { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:600; border-radius:999px; padding:2px 8px; white-space:nowrap; flex:none; }
+  .p-ok { background:var(--grey-bg); color:#55555e; } .p-new { background:var(--green-bg); color:#17683b; }
+  .p-fail { background:var(--red-bg); color:#b3261e; } .p-held { background:var(--amber-bg); color:var(--amber); }
+  .p-run { background:var(--brand-bg); color:#2546b8; } .p-pause { background:var(--grey-bg); color:var(--t2); }
+  .p-mute { background:transparent; color:var(--t2); border:1px dashed #cfcfd5; }
+  .ico { width:15px; height:15px; flex:none; }
+  .seg { display:flex; background:#e3e3e8; border-radius:9px; padding:2px; margin:0; }
+  .seg span { flex:1; text-align:center; font-size:13.5px; padding:5px 0; border-radius:7px; color:var(--t1); }
+  .seg span.on { background:#fff; font-weight:600; box-shadow:0 1px 2px rgba(0,0,0,.1); }
+  .radio { width:20px; height:20px; border-radius:50%; border:1.6px solid #c7c7cc; flex:none; }
+  .radio.on { border:6px solid var(--brand); }
+  .tog { width:46px; height:28px; border-radius:14px; background:#34c759; position:relative; flex:none; }
+  .tog::after { content:''; position:absolute; right:2px; top:2px; width:24px; height:24px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2); }
+  .tog.off { background:#e3e3e8; } .tog.off::after { right:auto; left:2px; }
+  .text { padding:11px 14px; font-size:15px; line-height:1.45; min-height:96px; }
+
+  /* hero card on the detail page */
+  .hero { background:#fff; border-radius:12px; margin:4px 16px 0; padding:14px 16px; }
+  .hero .k { color:var(--t2); font-size:12.5px; }
+  .hero .n { font-size:22px; font-weight:700; margin:1px 0 2px; }
+  .hero .z { color:var(--t2); font-size:13px; }
+  .acts { display:flex; gap:8px; margin:12px 16px 0; }
+  .btn { flex:1; text-align:center; background:#fff; border-radius:10px; padding:9px 0; font-weight:600; color:var(--brand); font-size:14.5px; }
+  .btn.pri { background:var(--brand); color:#fff; }
+  .last { display:flex; gap:10px; align-items:flex-start; }
+  .last .b { flex:1; min-width:0; }
+  .banner { margin:6px 16px 0; border-radius:12px; padding:12px 14px; font-size:14px; line-height:1.45; }
+  .banner.held { background:var(--amber-bg); color:#6b4200; }
+  .banner.fail { background:var(--red-bg); color:#8c1d15; }
+  .banner b { display:block; margin-bottom:2px; }
+  .banner .go { color:var(--brand); font-weight:600; margin-top:6px; display:block; }
+
+  /* chat */
+  .bub { margin:8px 16px 0 70px; background:var(--brand); color:#fff; border-radius:18px 18px 4px 18px; padding:9px 13px; font-size:14.5px; line-height:1.45; }
+  .ans { margin:10px 18px 0; font-size:14.5px; line-height:1.5; }
+  .card { background:#fff; border:1px solid var(--sep); border-radius:14px; margin:10px 16px 0; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+  .card .hd { display:flex; align-items:center; gap:8px; padding:11px 14px 4px; font-weight:700; }
+  .card .kv { display:grid; grid-template-columns:86px 1fr; gap:4px 10px; padding:6px 14px 10px; font-size:13.5px; }
+  .card .kv .k { color:var(--t2); }
+  .card .ft { display:flex; border-top:1px solid var(--sep); }
+  .card .ft span { flex:1; text-align:center; padding:10px 0; font-weight:600; color:var(--brand); }
+  .card .ft span + span { border-left:1px solid var(--sep); }
+  .card .ft span.pri { background:var(--brand); color:#fff; }
+  .runhd { background:#fff; border-bottom:1px solid var(--sep); padding:10px 16px; font-size:13.5px; display:flex; gap:8px; align-items:center; }
+  .report { background:#fff; border:1px solid var(--sep); border-left:3px solid var(--green); border-radius:10px; margin:10px 16px 0; padding:10px 12px; font-size:13.5px; line-height:1.5; }
+  .report .h { font-weight:700; display:flex; gap:6px; align-items:center; }
+  .report a { color:var(--brand); text-decoration:none; }
+  .push { background:rgba(250,250,252,.97); border-radius:18px; margin:12px 10px 4px; padding:11px 13px; box-shadow:0 4px 18px rgba(0,0,0,.12); font-size:13.5px; line-height:1.4; }
+  .push .a { display:flex; gap:7px; align-items:center; color:var(--t2); font-size:12px; margin-bottom:3px; }
+  .push .a i { width:18px; height:18px; border-radius:5px; background:var(--brand); display:inline-block; }
+  .push b { display:block; }
+  .push .tm { margin-left:auto; }
+
+  .x { position:relative; } .x::after { content:attr(data-n); position:absolute; top:-9px; right:-9px; width:19px; height:19px; border-radius:50%;
+       background:#d93838; color:#fff; font:700 11.5px/19px sans-serif; text-align:center; z-index:2; }
+
+  .sheet { background:#fff; border-radius:12px; padding:18px 22px; margin-top:30px; }
+  .sheet h2 { font-size:16px; margin:0 0 10px; }
+  table { border-collapse:collapse; width:100%; font-size:12.5px; } td, th { border-top:1px solid #eee; padding:6px 8px; text-align:left; vertical-align:top; }
+  th { color:#6b6b75; font-weight:600; background:#fafafb; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:28px; }
+  .q { background:#fff7e6; border:1px solid #f1d9a8; border-radius:10px; padding:12px 16px; margin-top:20px; font-size:13px; line-height:1.7; }
+  .q b { color:#7a4a00; }
+</style>
+<style>
+  .drawer { background:#f7f7f9; }
+  .dr-brand { font-size:20px; font-weight:700; padding:16px 20px 10px; display:flex; align-items:center; gap:8px; }
+  .dr-row { display:flex; align-items:center; gap:12px; padding:10px 14px; margin:0 8px; border-radius:10px; font-size:16px; }
+  .dr-row.on { background:rgba(62,105,246,.14); font-weight:600; }
+  .dr-row .ic { width:24px; text-align:center; color:var(--t1); }
+  .dr-row.on .ic { color:var(--brand); }
+  .dr-row .cnt { margin-left:auto; color:#f08a00; font-weight:600; font-size:14px; }
+  .dr-h { font-size:13px; color:var(--t2); font-weight:600; padding:16px 22px 6px; }
+  .dr-sep { height:1px; background:var(--sep); margin:10px 20px; }
+  .rev { background:#fafafc; }
+  .undo { color:var(--brand); font-weight:600; font-size:14px; }
+  .bar { display:flex; gap:8px; margin:14px 16px 0; }
+  .bar .btn { padding:9px 0; }
+  .line { display:flex; gap:8px; align-items:center; margin:10px 16px 0; padding:9px 12px; border-radius:10px; background:var(--grp); font-size:13.5px; color:#55555e; }
+  .line b { color:var(--t1); }
+  .line .r { margin-left:auto; display:flex; gap:12px; color:var(--brand); font-weight:600; white-space:nowrap; }
+  .card.widen { border-color:#f1c27d; }
+  .card.widen .hd { color:#7a4500; }
+  .card .nt { padding:0 14px 10px; font-size:12.5px; color:var(--t2); }
+  .sheethd { display:flex; align-items:center; padding:14px 16px 8px; }
+  .sheethd .tt { font-size:17px; font-weight:700; flex:1; }
+  .wcard { background:#fff; border:1px solid #f3d9a4; border-radius:12px; margin:10px 16px 0; overflow:hidden; }
+  .wcard .wh { background:#fff6e6; color:#a35f00; font-size:12.5px; font-weight:600; padding:6px 12px; display:flex; }
+  .wcard .wh span { margin-left:auto; font-weight:400; color:#b98a3e; }
+  .wcard .wb { padding:10px 12px 12px; font-size:13.5px; line-height:1.45; }
+  .wcard .wt { font-weight:700; font-size:14.5px; margin-bottom:3px; }
+  .wcard .ws { display:flex; gap:8px; margin-top:10px; }
+  .wcard .ws span { font-size:13.5px; font-weight:600; border-radius:8px; padding:6px 12px; background:var(--grp); color:var(--brand); }
+  .wcard .ws span.pri { background:var(--brand); color:#fff; }
+  .card, .wcard { overflow:visible !important; }
+  .card .ft span.pri { border-radius:0 0 13px 0; }
+  .wcard .wh { border-radius:11px 11px 0 0; }
+  .xl::after { left:-26px; right:auto; top:0; }
+  .crumb { color:var(--brand); font-size:13px; padding:0 18px; }
+  .empty { text-align:center; padding:56px 26px 10px; }
+  .empty .ei { width:56px; height:56px; border-radius:16px; background:var(--brand-bg); color:var(--brand); display:grid; place-items:center; margin:0 auto 14px; }
+  .empty h3 { margin:0 0 6px; font-size:19px; }
+  .empty p { color:#55555e; margin:0 0 18px; font-size:14.5px; }
+  .ex { background:#fff; border-radius:12px; text-align:left; }
+  .ex div { padding:11px 14px; border-top:1px solid var(--sep); font-size:14px; }
+  .ex div:first-child { border-top:0; }
+  .rt { color:var(--brand); font-size:30px; font-weight:700; padding:2px 18px 0; display:flex; align-items:baseline; }
+  .rt .n { margin-left:auto; color:var(--t3); font-weight:600; }
+  .rtools { display:flex; gap:8px; padding:6px 18px 0; font-size:13px; color:var(--t2); align-items:center; }
+  .rtools .chip { border:1px solid #dcdce1; border-radius:999px; padding:2px 10px; color:var(--t1); background:#fff; }
+  .rsec { padding:14px 18px 0; }
+  .rsec h4 { margin:0; font-size:17px; font-weight:700; padding-bottom:4px; border-bottom:1px solid var(--sep); display:flex; gap:8px; align-items:baseline; }
+  .rsec h4 small { color:var(--t2); font-weight:400; font-size:13px; }
+  .rsec.red h4 { color:var(--red); } .rsec.dim h4 { color:var(--t2); }
+  .rr { display:flex; gap:11px; padding-top:9px; }
+  .rr .bd { flex:1; min-width:0; border-bottom:1px solid var(--sep); padding-bottom:9px; display:flex; gap:8px; }
+  .rr .tx { flex:1; min-width:0; }
+  .rr .t { font-size:15.5px; line-height:21px; }
+  .rr .s { font-size:12.5px; color:var(--t2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rr .tm { font-size:13px; color:var(--t2); white-space:nowrap; }
+  .rr .tg { font-size:12px; font-weight:600; white-space:nowrap; padding-top:2px; }
+  .rr.past .t { color:var(--t2); } .rr.draft .t { color:var(--t2); font-style:italic; }
+  .rc { width:22px; height:22px; border-radius:50%; border:1.7px solid #c7c7cc; flex:none; display:grid; place-items:center; color:#fff; font:700 12px/1 sans-serif; }
+  .rc.ok { background:#c0c0c6; border-color:#c0c0c6; } .rc.new { background:var(--green); border-color:var(--green); }
+  .rc.fail { background:var(--red); border-color:var(--red); } .rc.held { border-color:#e08a00; color:#e08a00; }
+  .rc.run { border-color:var(--brand); border-right-color:transparent; } .rc.draft { border-style:dashed; border-color:var(--brand); }
+  .radd { display:flex; gap:11px; align-items:center; padding:14px 18px 0; color:var(--t3); font-size:15.5px; }
+  .radd .pl { width:22px; height:22px; border-radius:50%; background:var(--brand); color:#fff; display:grid; place-items:center; font-weight:700; flex:none; }
+  .radd .in { flex:1; border-bottom:1px solid var(--sep); padding-bottom:8px; }
+  .radd .ws { border:1px solid #dcdce1; border-radius:999px; padding:1px 9px; font-size:12px; color:var(--t2); }
+  .sheet-ph { position:relative; }
+  .dimbg { position:absolute; inset:0; background:rgba(0,0,0,.28); }
+  .bsheet { position:absolute; left:0; right:0; bottom:0; top:96px; background:var(--grp); border-radius:14px 14px 0 0; box-shadow:0 -4px 20px rgba(0,0,0,.15); overflow:visible; }
+  .bsheet .grab { width:38px; height:5px; border-radius:3px; background:#c7c7cc; margin:7px auto 0; }
+</style>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.6V8l2.3 1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="spin" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-opacity=".25" stroke-width="2"/><path d="M8 2a6 6 0 0 1 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="warn" viewBox="0 0 16 16"><path d="M8 1.8 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6.2v3.6M8 11.6v.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="check" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="m5.2 8.2 2 2 3.8-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="cal" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2 6.5h12M5.5 1.6v2.6M10.5 1.6v2.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="pause" viewBox="0 0 16 16"><path d="M5.5 3.5v9M10.5 3.5v9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+</svg>
+
+<style>
+  .rb { padding:2px 14px 8px; font-size:14px; line-height:1.5; }
+  .card .ttl { padding:0 14px 2px; font-weight:600; font-size:15px; }
+  .ft3 span { font-size:14px; }
+  .sec { font-size:12.5px; color:var(--t2); text-transform:uppercase; letter-spacing:.02em; padding:14px 32px 6px; }
+  .box { background:#fff; border-radius:12px; margin:0 16px; padding:11px 14px; font-size:14px; line-height:1.5; }
+  .box .m { color:var(--t2); font-size:12.5px; margin-top:3px; }
+  .hrow { display:flex; gap:10px; align-items:flex-start; padding:10px 14px; border-top:1px solid var(--sep); font-size:14px; }
+  .hrow:first-child { border-top:0; } .hrow .b { flex:1; min-width:0; } .hrow .m { color:var(--t2); font-size:12.5px; }
+  .who { font-size:11.5px; font-weight:600; border-radius:999px; padding:2px 7px; background:var(--grey-bg); color:#55555e; white-space:nowrap; }
+  .who.run { background:var(--brand-bg); color:#2546b8; } .who.you { background:var(--green-bg); color:#17683b; }
+  .sheet td b { white-space:nowrap; }
+</style>
+<h1>定时任务 第 4 版：按 Agent-First 重新推一遍</h1>
+<p class="lede">依据 <code>docs/scheduled-tasks-design.md</code> 第 4 版（D1–D4 已定）。第 3 版的页面（左侧抽屉、Reminders 式时间线、详情面板、输入行）<b>都不变</b>，见 <code>01-board.png</code> 和 <code>web/</code>。这一版只画新增的部分，出发点是一句话：<b>人只对目标、风险、预算和不可委托的授权负责，其余归 Agent</b>。所以创建卡上正好四行对应这四件事；判断要不要弹卡只有一条规则：<b>改动是否超出人批准过的信封</b>。界面文案英文，注释中文；名称、时间、版本号都是演示数据。</p>
+
+<div class="grid">
+
+<!-- 1 -->
+<div>
+  <div class="fh"><span class="tag">改</span> ① 创建卡：四行对应人负责的四件事</div>
+  <div class="ph white">
+    <div class="nav"><span class="back">‹</span><span class="tt">Codex release watch</span><span class="act"> </span></div>
+    <div class="bub">每天北京时间 10 点检查 Codex 官方稳定版，和 apiserver 固定的版本比一下。没变化就别吵我，有新版告诉我版本号和发布说明。</div>
+    <div class="ans x" data-n="1">I checked just now: the latest stable Codex is 0.48.0 and the apiserver pins 0.48.0, so there is nothing to report today. I can do this every morning; closing this chat won't stop it.</div>
+    <div class="card">
+      <div class="hd"><svg class="ico" style="color:var(--brand);width:17px;height:17px"><use href="#cal"/></svg>Create scheduled task?</div>
+      <div class="ttl">Codex stable check</div>
+      <div class="rb x" data-n="2">Every day at 10:00 Beijing time I check the latest stable Codex against the version the apiserver pins, and tell you only when there is a new one.</div>
+      <div class="kv">
+        <span class="k">When</span><span>Daily 10:00 · Asia/Shanghai<br><span style="color:var(--t2)">First run tomorrow</span></span>
+        <span class="k">Runs in</span><span>apiserver · Codex agent</span>
+        <span class="k">May</span><span class="x" data-n="3"><b>Check only</b> · reads and reports, edits nothing</span>
+        <span class="k">Costs</span><span class="x" data-n="4">Up to <b>7 runs a week</b>, 30 min each</span>
+        <span class="k">Today</span><span class="x" data-n="5">Codex 0.48.0, same as pinned. Nothing to report.</span>
+      </div>
+      <div class="nt">You'll hear about new versions and failures only.</div>
+      <div class="ft"><span>Not now</span><span class="pri">Create</span></div>
+    </div>
+    <div style="height:14px"></div>
+  </div>
+  <p class="note"><b>1</b> Agent 先在当前会话里把这件事<b>真做一遍</b>，用今天的结果回答你（D2）。<b>2</b> 目标：Agent 用一句话把它理解的目标读回来；你的原话原样存在任务上。<b>3</b> 风险：权限一行。<b>4</b> 预算：每周最多几次、每次最长多久（D1）。<b>5</b> 今天的结果作为起点记下来，明天第一次执行不会把“现状”当成新发现来通知你。卡上仍然没有可编辑的字段；不对就在会话里说。</p>
+</div>
+
+<!-- 2 -->
+<div>
+  <div class="fh"><span class="tag">新增</span> ② 一条规则：超出信封才弹卡</div>
+  <div class="ph white">
+    <div class="nav"><span class="back">‹</span><span class="tt">Codex release watch</span><span class="act"> </span></div>
+    <div class="bub">这个一周查一次就够了，周一早上。</div>
+    <div class="line x" data-n="1"><svg class="ico" style="color:var(--brand)"><use href="#cal"/></svg><span>Changed <b>Codex stable check</b>: Daily → Mondays 10:00</span><span class="r">Undo</span></div>
+    <div class="bub" style="margin-top:14px">算了，还是每天查吧。</div>
+    <div class="ans">You cut this down to once a week, so going back to daily is more than it is allowed now. One tap:</div>
+    <div class="card widen x" data-n="2">
+      <div class="hd"><svg class="ico" style="color:#e08a00;width:16px;height:16px"><use href="#warn"/></svg>Let Codex stable check run more often?</div>
+      <div class="kv">
+        <span class="k">Now</span><span>Mondays 10:00 · up to 1 run a week</span>
+        <span class="k">Asked</span><span><b>Daily 10:00</b> · up to 7 runs a week, 30 min each</span>
+      </div>
+      <div class="nt">Applies from the next run.</div>
+      <div class="ft"><span>Keep weekly</span><span class="pri">Allow</span></div>
+    </div>
+    <div style="height:14px"></div>
+  </div>
+  <p class="note">信封 = 工作区、权限、每周次数、单次时长，只有你按卡才会改写。<b>1</b> 往小改（更少次数、更窄权限、改时间、改内容）<b>直接生效</b>，可 Undo。因为这是<b>你</b>说的收紧，信封跟着缩小。<b>2</b> 再往大改就超出信封，要你按一次 Allow。第 3 版里“扩大权限要卡”是这条规则的一个特例。反过来，如果是任务<b>自己</b>在某次执行里降频（见 ④），信封不缩，之后恢复到每天不用再问：授过的权不问第二遍，收回的权要重新问。</p>
+</div>
+
+<!-- 3 -->
+<div>
+  <div class="fh"><span class="tag">改</span> ③ 详情面板：原话、留给下次的备注、用量</div>
+  <div class="ph" style="padding-top:6px">
+    <div class="nav"><span class="back">Close</span><span class="tt"></span><span class="act">⋯</span></div>
+    <div class="big" style="font-size:24px;padding-bottom:2px">Codex stable check</div>
+    <div class="sub" style="padding:0 18px 8px">↻ Daily 10:00 · Asia/Shanghai · apiserver · Check only</div>
+    <div class="hero"><div class="k">Next run</div><div class="n">Tomorrow 10:00</div><div class="z">Last: today 10:00 · no change</div></div>
+    <div class="acts"><span class="btn pri">Run now</span><span class="btn">Pause</span><span class="btn">Change…</span></div>
+    <div class="sec">What was asked</div>
+    <div class="box x" data-n="1">每天北京时间 10 点检查 Codex 官方稳定版，和 apiserver 固定的版本比一下。没变化就别吵我，有新版告诉我版本号和发布说明。</div>
+    <div class="sec">Notes for the next run</div>
+    <div class="box x" data-n="2">Release notes moved to github.com/openai/codex/releases. The old changelog URL is 404.<div class="m">Left by the run of Nov 12</div></div>
+    <div class="sec">This month</div>
+    <div class="box x" data-n="3">14 runs · 41 min<div class="m">Allowed: up to 7 runs a week, 30 min each</div></div>
+    <div class="sec">History</div>
+    <div class="grp">
+      <div class="hrow"><div class="b">Today 10:00 · no change</div><span class="who run">Run</span></div>
+      <div class="hrow x" data-n="4"><div class="b">Prompt: check the releases page instead of the changelog<div class="m">Nov 12 10:03</div></div><span class="who run">Run</span><span class="undo">Undo</span></div>
+      <div class="hrow"><div class="b">Name: Codex check → Codex stable check<div class="m">Nov 11 · Codex release watch</div></div><span class="who">Session</span><span class="undo">Undo</span></div>
+      <div class="hrow"><div class="b">Created · Check only · up to 7 runs a week<div class="m">Nov 10</div></div><span class="who you">You</span></div>
+    </div>
+  </div>
+  <p class="note"><b>1</b> 你的原话原样保留。Agent 可以改写它自己的执行内容，但原话不动，所以随时能对照“当初要的”和“现在做的”。<b>2</b> 每次执行都是新会话，不带上一次的上下文；上一次可以留一段备注给下一次（最多 2000 字）。<b>3</b> 本月用量对照批准的上限；按次数和分钟计，因为订阅账号没有单次费用。<b>4</b> 历史里每一条都写明是谁改的：你（按卡）、某个会话、还是某次执行自己。</p>
+</div>
+
+<!-- 4 -->
+<div>
+  <div class="fh"><span class="tag">新增</span> ④ 执行可以在信封内调整自己，目标达成就收工</div>
+  <div class="ph white">
+    <div class="push x" data-n="1"><div class="a"><i></i>ORBIT<span class="tm">10:02</span></div><b>Release 2.0 freeze watch ended itself</b>2.0 shipped on Nov 13 and the freeze label is gone, so there is nothing left to watch.</div>
+    <div class="nav" style="border-top:1px solid var(--sep);margin-top:8px"><span class="back">‹ Release 2.0 freeze watch</span><span class="tt"></span></div>
+    <div class="big" style="font-size:22px">Run of Nov 14</div>
+    <div class="runhd" style="border-top:1px solid var(--sep)"><svg class="ico" style="color:var(--brand)"><use href="#cal"/></svg><span>Planned 10:00 · started 10:00 · Check only</span></div>
+    <div class="ans">Tag v2.0.0 was published yesterday and no open PR carries the <code>freeze-exception</code> label any more. The reason for this schedule is gone.</div>
+    <div class="report"><div class="h"><svg class="ico" style="color:var(--green)"><use href="#check"/></svg>Reported: Changed · released@2.0.0</div>2.0 shipped; no freeze exceptions are open.</div>
+    <div class="line x" data-n="2"><svg class="ico" style="color:var(--brand)"><use href="#cal"/></svg><span>Ended <b>Release 2.0 freeze watch</b>: goal reached</span><span class="r">Undo</span></div>
+    <div style="height:14px"></div>
+  </div>
+  <p class="note">D4。执行自己的会话可以对<b>它所服务的那个任务</b>做三件事，都在信封内：改写执行内容、降低频率（之后可以恢复到信封上限）、目标达成后结束任务。<b>1</b> 自己结束会通知你一次。<b>2</b> 每一项都记进历史，带 Undo；Undo 结束就是恢复。它<b>不能</b>给自己扩权：要更大的权限，会变成一张卡进 Waiting on you（见 ⑤），这次执行仍按现有权限做完。</p>
+</div>
+
+<!-- 5 -->
+<div>
+  <div class="fh"><span class="tag">改</span> ⑤ Waiting on you：允许过的，下次执行不再问</div>
+  <div class="ph" style="padding-top:4px">
+    <div class="sheethd"><span class="tt">Waiting on you</span><span class="undo">Done</span></div>
+    <div class="wcard">
+      <div class="wh">Scheduled run<span>Today 02:03</span></div>
+      <div class="wb"><b>Nightly pg spec sweep wants to run a command</b><br><code>psql -h 127.0.0.1 -p 55490 -c "select 1"</code><br><span style="color:var(--t2);display:block;margin-right:12px" class="x" data-n="1">If nobody answers by 04:00 this run fails; the next one starts tomorrow.</span>
+        <div class="bar" style="margin:10px 0 0"><span class="btn" style="background:var(--grp)">Deny</span><span class="btn" style="background:var(--grp)">Allow once</span><span class="btn pri x" data-n="2">Always allow</span></div>
+        <div style="color:var(--t2);font-size:12.5px;margin-top:8px">Always allow covers <code>psql:*</code> in apiserver. Later runs won't ask for this.</div>
+      </div>
+    </div>
+    <div class="wcard">
+      <div class="wh">Scheduled<span>Nov 13</span></div>
+      <div class="wb x" data-n="3"><b>Let Codex stable check open PRs?</b><br>Its run of Nov 13 found 0.49.0 and asks to open the upgrade PR itself from now on.<br><span style="color:var(--t2)">Now: Check only. Asked: Open a PR · edits in its own worktree and opens a PR. Can't merge or deploy.</span>
+        <div class="bar" style="margin:10px 0 0"><span class="btn" style="background:var(--grp)">Keep check only</span><span class="btn pri">Allow</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>1</b> 第 3 版已有：无人值守时碰到审批，2 小时没人答就算这次失败，不会一直挂着。<b>2</b> 新写明的一点：选 Always allow 写的是现有的<b>工作区级</b>允许规则（<code>WorkspacePermissionRule</code>），而每次执行都是该工作区的新会话，所以<b>明晚不会停在同一张卡上</b>。不需要新机制，卡上要说清楚。<b>3</b> 执行自己提出的扩权，和会话里的扩权是同一张卡，只是没人在会话里，所以送到这里。</p>
+</div>
+
+<!-- 6 -->
+<div class="sheet" style="margin-top:0;align-self:start">
+  <h2>谁负责什么</h2>
+  <table>
+    <tr><th>人负责</th><th>怎么体现</th><th>按几下</th></tr>
+    <tr><td><b>目标</b></td><td>说一遍，原话存为 intent；卡上读回一句</td><td>0</td></tr>
+    <tr><td><b>风险</b></td><td>卡上 May 一行</td><td rowspan="3">创建 1 次；<br>信封变大时 1 次</td></tr>
+    <tr><td><b>预算</b></td><td>卡上 Costs 一行</td></tr>
+    <tr><td><b>授权</b></td><td>Create / Allow，只能本人按</td></tr>
+    <tr><th>Agent 负责</th><th colspan="2">怎么体现</th></tr>
+    <tr><td>名称、执行内容、判重的 key</td><td colspan="2">详情里可读，改了记历史</td></tr>
+    <tr><td>时间、时区、首次执行</td><td colspan="2">卡上 When</td></tr>
+    <tr><td>起点</td><td colspan="2">创建前先做一遍，卡上 Today</td></tr>
+    <tr><td>记忆</td><td colspan="2">每次执行留给下一次的备注</td></tr>
+    <tr><td>调整</td><td colspan="2">信封内自己改、降频、收工，可 Undo</td></tr>
+    <tr><td>要不要告诉你</td><td colspan="2">只有新发现或需要你时才通知</td></tr>
+  </table>
+  <div class="q"><b>已定（2026-11-14，D1–D4 都按 A；文档 §13）</b><br>
+    <b>D1</b> 预算进不进信封：A 进，卡上一行“每周最多几次、每次多久”，变大要 Allow；B 第一版不管预算。<br>
+    <b>D2</b> 创建前 Agent 先做一遍：A 做，卡上显示今天的结果，首次执行不把现状当新发现；B 不做。<br>
+    <b>D3</b> 一次性的定时（“今晚 6 点查一下部署并告诉我”）：A 第一版就支持；B 只做周期性的。<br>
+    <b>D4</b> 执行能不能改自己的任务：A 能，限信封内，可 Undo，自己结束时通知一次；B 不能，只上报。
+  </div>
+</div>
+
+</div>
