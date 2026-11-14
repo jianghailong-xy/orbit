@@ -7,7 +7,6 @@ import {
   contextWindowFor,
   defaultEngineOf,
   defaultModelFor,
-  defaultModelKey,
   effectiveSessionEffort,
   effectiveSessionModel,
   effortOptionsFor,
@@ -24,7 +23,6 @@ import {
   permissionModeSupported,
   providerEngines,
   providerIdentityResolved,
-  rememberedModel,
   sessionEngineOf,
   sessionPick,
   supportsAuto,
@@ -33,60 +31,25 @@ import {
 
 const { CLAUDE, CODEX, KIMI, ANTIGRAVITY, OPENCODE, DSH } = AgentProvider;
 
-describe('remembered new-session models', () => {
+describe('a new-session draft’s model: the workspace’s lastModel', () => {
   const catalog: RunnerModelCatalog = { codex: [
     { value: 'gpt-5.6-sol', label: 'GPT-5.6-Sol' },
     { value: 'gpt-6.1-sol', label: 'GPT-6.1-Sol' },
   ] };
-  const defaults = { codex: 'gpt-5.6-sol' };
-  it('uses only this engine and provider’s last pick and drops retired models', () => {
-    expect(newSessionModelFor(CODEX, 'codex', { 'codex:codex': 'gpt-6.1-sol' }, catalog, null, defaults)).toBe('gpt-6.1-sol');
-    expect(newSessionModelFor(CODEX, 'codex', { 'claude:claude': 'claude-sonnet-5' }, catalog, null, defaults)).toBe('gpt-5.6-sol');
-    expect(newSessionModelFor(CODEX, 'codex', { 'codex:codex': 'gpt-retired' }, catalog, null, defaults)).toBe('gpt-5.6-sol');
+  const defaults = { codex: 'gpt-5.6-sol', claude: 'claude-opus-5' };
+  const last = { engine: CODEX, provider: 'codex', model: 'gpt-6.1-sol' };
+  it('is lastModel when the draft runs on the workspace’s lastEngine and lastProvider', () => {
+    expect(newSessionModelFor(CODEX, 'codex', last, catalog, null, defaults)).toBe('gpt-6.1-sol');
   });
-  it('keeps a remembered model while the catalog is unavailable, including OpenCode’s empty choice', () => {
-    expect(newSessionModelFor(CODEX, 'codex', { 'codex:codex': 'gpt-6.1-sol' }, null, null, defaults)).toBe('gpt-6.1-sol');
-    expect(newSessionModelFor(OPENCODE, 'opencode', { 'opencode:opencode': '' }, null, null, { opencode: 'some/model' })).toBe('');
+  it('falls back to the runner or key default on another engine or provider, or with no lastModel', () => {
+    expect(newSessionModelFor(CLAUDE, 'claude', last, catalog, null, defaults)).toBe('claude-opus-5');
+    expect(newSessionModelFor(CODEX, 'codex-2', last, catalog, null, defaults)).toBe(defaultModelFor(CODEX, 'codex-2', catalog, null, defaults));
+    expect(newSessionModelFor(CODEX, 'codex', { ...last, model: null }, catalog, null, defaults)).toBe('gpt-5.6-sol');
+    expect(newSessionModelFor(CODEX, 'codex', null, catalog, null, defaults)).toBe('gpt-5.6-sol');
   });
-});
-
-describe('the model remembered per engine and provider (contract §6.5)', () => {
-  const deepseek: ConfiguredProvider = {
-    slug: 'deepseek',
-    label: 'DeepSeek',
-    runtime: 'claude',
-    presetSlug: 'deepseek',
-    models: [{ value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' }],
-    engines: ['claude', 'opencode', 'dsh'],
-  };
-  const configured = [deepseek];
-
-  it('is written under `<engine>:<provider>`', () => {
-    expect(defaultModelKey(DSH, 'deepseek-2')).toBe('dsh:deepseek-2');
-    expect(defaultModelKey(CODEX, 'codex')).toBe('codex:codex');
-  });
-
-  it('keeps one key’s pick on each engine apart', () => {
-    const picks = { 'claude:deepseek': 'deepseek-v4-pro', 'dsh:deepseek': 'acp-token-flash' };
-    expect(rememberedModel(CLAUDE, 'deepseek', picks, configured)).toBe('deepseek-v4-pro');
-    expect(rememberedModel(DSH, 'deepseek', picks, configured)).toBe('acp-token-flash');
-    expect(rememberedModel(OPENCODE, 'deepseek', picks, configured)).toBeUndefined();
-  });
-
-  it('reads what an older client remembered, on the engine the provider runs on by default only', () => {
-    // A bare slug was the engine it ran on before engines were their own field.
-    expect(rememberedModel(CLAUDE, 'deepseek', { deepseek: 'deepseek-v4-flash' }, configured)).toBe('deepseek-v4-flash');
-    expect(rememberedModel(DSH, 'deepseek', { deepseek: 'deepseek-v4-flash' }, configured)).toBeUndefined();
-    expect(rememberedModel(CODEX, 'codex', { codex: 'gpt-6.1-sol' })).toBe('gpt-6.1-sol');
-    // OpenCode's old keys: `opencode/<slug>` named the key inside its value; `opencode` its own pick.
-    expect(rememberedModel(OPENCODE, 'deepseek', { 'opencode/deepseek': 'orbit-deepseek/deepseek-v4-pro' }, configured)).toBe(
-      'deepseek-v4-pro',
-    );
-    expect(rememberedModel(OPENCODE, 'deepseek', { 'opencode/deepseek': 'orbit-glm/glm-5' }, configured)).toBeUndefined();
-    expect(rememberedModel(OPENCODE, 'opencode', { opencode: 'anthropic/claude-sonnet-4' })).toBe('anthropic/claude-sonnet-4');
-    expect(rememberedModel(OPENCODE, 'opencode', { opencode: 'orbit-deepseek/deepseek-v4-pro' })).toBeUndefined();
-    // The pair's own key wins over an old one.
-    expect(rememberedModel(CLAUDE, 'deepseek', { deepseek: 'old', 'claude:deepseek': 'new' }, configured)).toBe('new');
+  it('drops a retired lastModel, and keeps it while the catalog is unavailable', () => {
+    expect(newSessionModelFor(CODEX, 'codex', { ...last, model: 'gpt-retired' }, catalog, null, defaults)).toBe('gpt-5.6-sol');
+    expect(newSessionModelFor(CODEX, 'codex', last, null, null, defaults)).toBe('gpt-6.1-sol');
   });
 });
 
@@ -697,7 +660,7 @@ describe('Antigravity defaults', () => {
     expect(livePinnedModel('', ANTIGRAVITY, 'antigravity', catalog)).toBeUndefined();
     expect(effectiveSessionModel(ANTIGRAVITY, 'antigravity', '', null, catalog)).toBe('gemini-3.8-flash');
     expect(effectiveSessionModel(ANTIGRAVITY, 'antigravity', '', null, null)).toBe('');
-    expect(newSessionModelFor(ANTIGRAVITY, 'antigravity', { 'antigravity:antigravity': '' }, catalog)).toBe('gemini-3.8-flash');
+    expect(newSessionModelFor(ANTIGRAVITY, 'antigravity', { engine: ANTIGRAVITY, provider: 'antigravity', model: '' }, catalog)).toBe('gemini-3.8-flash');
     // A pin the runner still lists stays; one it no longer lists falls to the current default.
     expect(effectiveSessionModel(ANTIGRAVITY, 'antigravity', 'gemini-3.1-pro', null, catalog)).toBe('gemini-3.1-pro');
     expect(effectiveSessionModel(ANTIGRAVITY, 'antigravity', 'gemini-2.9-pro', null, catalog)).toBe('gemini-3.8-flash');

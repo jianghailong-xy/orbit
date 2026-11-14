@@ -281,18 +281,17 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     },
   } as unknown as Runner;
 
-  const serveCodexDraft = (preferences: Record<string, unknown> = {}) => {
+  // The workspace payload carries what its last person-opened session ran on (lastEngine, lastProvider,
+  // lastModel); `preferences` is the account's, which no longer says anything about a draft's model.
+  const serveCodexDraft = (
+    preferences: Record<string, unknown> = {},
+    last: Record<string, unknown> = {},
+  ) => {
     const served = apiMock.getMockImplementation()!;
     apiMock.mockImplementation(async (p, options) => {
-      if (p === '/users/me/preferences' && options?.method === 'PATCH') {
-        const patch = options.body as { defaultModels?: Record<string, string> };
-        preferences = { ...preferences, defaultModels: {
-          ...(preferences.defaultModels as Record<string, string> | undefined), ...patch.defaultModels,
-        } };
-        return {} as never;
-      }
+      if (p === '/users/me/preferences' && options?.method === 'PATCH') return {} as never;
       if (p === '/workspaces') {
-        return [{ id: WORKSPACE, name: 'orbit', runnerId: RUNNER_ID, lastProvider: 'codex', model: 'gpt-5.6-sol' }] as never;
+        return [{ id: WORKSPACE, name: 'orbit', runnerId: RUNNER_ID, lastEngine: 'codex', lastProvider: 'codex', lastModel: null, ...last }] as never;
       }
       if (p === '/users/me') {
         return { id: 'user-1', email: 'r@example.com', preferences } as never;
@@ -300,6 +299,7 @@ describe('the composer model control', { timeout: 60_000 }, () => {
       return served(p, options);
     });
   };
+  const preferenceWrites = () => apiMock.mock.calls.filter(([p]) => p === '/users/me/preferences').map(([, o]) => o?.body);
 
   it('opens under the engine the session runs on, as a title that picks nothing', async () => {
     // The session is on `anthropic-2`, a configured Claude-runtime provider: the title names the CLI
@@ -313,14 +313,15 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     expect(configCalls()).toHaveLength(0);
   });
 
-  it('starts a new Codex session with the remembered model and clamps effort for that model', async () => {
-    serveCodexDraft({ defaultModels: { codex: 'gpt-6.1-sol', claude: 'claude-sonnet-5' }, defaultEffort: 'max' });
+  it('starts a new Codex session with the workspace’s lastModel and clamps effort for that model', async () => {
+    // An old client's account-wide memory names another model: it is no longer read.
+    serveCodexDraft({ defaultModels: { 'codex:codex': 'gpt-5.6-sol', codex: 'gpt-5.6-sol' }, defaultEffort: 'max' }, { lastModel: 'gpt-6.1-sol' });
     await mount('GPT-6.1-SolDefault', `/workspaces/${WORKSPACE}/new`, codexRunner);
     expect(chip()?.querySelector('.composer-model-name')?.textContent).toBe('GPT-6.1-Sol');
     expect(configCalls()).toHaveLength(0);
     const box = mounted().querySelector<HTMLTextAreaElement>('.composer-box textarea')!;
     await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(box, 'Use the remembered model');
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(box, 'Use the last model');
       box.dispatchEvent(new Event('input', { bubbles: true }));
     });
     await click(mounted().querySelector<HTMLButtonElement>('button[aria-label="Send"]') ?? undefined, 'Send');
@@ -328,7 +329,7 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     expect(vi.mocked(createInteractiveSession).mock.calls[0]?.[0]).toMatchObject({ model: 'gpt-6.1-sol', effort: '' });
   });
 
-  it('remembers an explicit draft model pick and uses it when opening the next new session', async () => {
+  it('applies an explicit draft model pick to that draft only, and writes no account preference', async () => {
     serveCodexDraft();
     await mount('GPT-5.6-SolDefault', `/workspaces/${WORKSPACE}/new`, codexRunner);
     await click(chip(), 'the model control');
@@ -338,11 +339,8 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     await click(row('GPT-6.1-Sol'), 'GPT-6.1-Sol');
     await settle();
     expect(chip()?.textContent).toBe('GPT-6.1-SolDefault');
-    // Remembered for the pair it was picked on — Codex on its own sign-in (contract §6.5).
-    expect(client?.getQueryData<{ preferences: unknown }>(['user', 'me'])?.preferences)
-      .toMatchObject({ defaultModels: { 'codex:codex': 'gpt-6.1-sol' } });
-    expect(apiMock.mock.calls.filter(([p]) => p === '/users/me/preferences').map(([, o]) => o?.body))
-      .toEqual([{ defaultModels: { 'codex:codex': 'gpt-6.1-sol' } }]);
+    expect(preferenceWrites()).toEqual([]);
+    expect(client?.getQueryData<{ preferences: unknown }>(['user', 'me'])?.preferences).toEqual({});
 
     await act(async () => {
       root!.render(
@@ -357,29 +355,24 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     });
     await settle();
     await act(async () => {
-      await vi.waitFor(() => expect(chip()?.textContent).toBe('GPT-6.1-SolDefault'));
+      await vi.waitFor(() => expect(chip()?.textContent).toBe('GPT-5.6-SolDefault'));
     });
   });
 
-  it('falls back to the runner default when the remembered Codex model has been retired', async () => {
-    serveCodexDraft({ defaultModels: { codex: 'gpt-retired' } });
+  it('falls back to the runner default when the workspace’s lastModel has been retired', async () => {
+    serveCodexDraft({}, { lastModel: 'gpt-retired' });
     await mount('GPT-5.6-SolDefault', `/workspaces/${WORKSPACE}/new`, codexRunner);
   });
 
-  it('adopts late model preferences only while the new-session picker is untouched', async () => {
+  it('adopts a late lastModel only while the new-session picker is untouched', async () => {
     serveCodexDraft();
-    const served = apiMock.getMockImplementation()!;
-    let reply!: (value: never) => void;
-    const me = new Promise<never>((resolve) => { reply = resolve; });
-    apiMock.mockImplementation((p, options) => p === '/users/me' ? me : served(p, options));
     await mount('GPT-5.6-SolDefault', `/workspaces/${WORKSPACE}/new`, codexRunner);
+    const workspaceWith = (lastModel: string) => [
+      { id: WORKSPACE, name: 'orbit', runnerId: RUNNER_ID, lastEngine: 'codex', lastProvider: 'codex', lastModel },
+    ];
     await act(async () => {
-      reply({ id: 'user-1', email: 'r@example.com', preferences: { defaultModels: { codex: 'gpt-6.1-sol' } } } as never);
-      await me;
+      client!.setQueryData(['workspaces'], workspaceWith('gpt-6.1-sol'));
     });
-    await settle();
-    expect(client?.getQueryData<{ preferences: unknown }>(['user', 'me'])?.preferences)
-      .toMatchObject({ defaultModels: { codex: 'gpt-6.1-sol' } });
     await act(async () => {
       await vi.waitFor(() => expect(chip()?.textContent).toBe('GPT-6.1-SolDefault'));
     });
@@ -389,22 +382,18 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     });
     await click(row('GPT-5.6-Sol'), 'a manual model choice');
     await act(async () => {
-      client!.setQueryData(['user', 'me'], {
-        id: 'user-1', preferences: { defaultModels: { codex: 'gpt-6.1-sol' } },
-      });
+      client!.setQueryData(['workspaces'], workspaceWith('gpt-6.1-sol'));
     });
     expect(chip()?.textContent).toBe('GPT-5.6-SolDefault');
+    expect(preferenceWrites()).toEqual([]);
   });
 
-  it('remembers a model picked in an existing session without changing the model of other sessions', async () => {
+  it('changes the model of an existing session alone, writing no account preference', async () => {
     await mount();
     await open();
     await click(row('Sonnet 5'), 'another model');
     await settle();
-    // Under the session's own pair — its engine and the key it spends — not the key alone, which
-    // runs on several engines.
-    expect(apiMock.mock.calls.filter(([p]) => p === '/users/me/preferences').map(([, o]) => o?.body))
-      .toEqual([{ defaultModels: { 'claude:anthropic-2': 'claude-sonnet-5' } }]);
+    expect(preferenceWrites()).toEqual([]);
     expect(configCalls()).toHaveLength(1);
   });
 

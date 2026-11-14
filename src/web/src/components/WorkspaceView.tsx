@@ -175,7 +175,6 @@ import {
   DEFAULT_MODEL,
   defaultEngineOf,
   defaultModelFor,
-  defaultModelKey,
   effectiveSessionEffort,
   effectiveSessionModel,
   effortOptionsFor,
@@ -2354,17 +2353,6 @@ export function WorkspaceView({
   const prevDraftKey = useRef(draftKey);
   const [mode, setMode] = useState('Auto');
   const [model, setModel] = useState(DEFAULT_MODEL);
-  const modelPreferenceMut = useMutation({
-    // Keep rapid picks in order, including across a composer remount.
-    scope: { id: 'model-preferences' },
-    // Remembered per engine and provider (`<engine>:<provider>`, docs/provider-engine-contract.md
-    // §6.5): one key's model on Claude Code is not its model on DeepSeek Harness.
-    mutationFn: ({ engine, provider, model }: { engine: string; provider: string; model: string }) =>
-      api('/users/me/preferences', {
-        method: 'PATCH',
-        body: { defaultModels: { [defaultModelKey(engine, provider)]: model } },
-      }),
-  });
   // Runtime catalogs and configured providers arrive asynchronously. Track whether the user has
   // touched Model within the current draft/session context so a late default can fill an untouched
   // picker without overwriting an explicit choice. Context changes deliberately reset dirty.
@@ -3906,7 +3894,7 @@ export function WorkspaceView({
     ? newSessionModelFor(
         pickedEngine,
         pickedProvider,
-        me.data?.preferences?.defaultModels,
+        { engine: lastWorkspaceEngine, provider: lastWorkspaceProvider, model: pickedWorkspace?.lastModel },
         runner.modelCatalog,
         configuredProviders,
         runner.runtimeDefaultModels,
@@ -8522,17 +8510,8 @@ export function WorkspaceView({
     busy: retryInFlight || startRunAgain.isPending || installCursor.isPending || regionCheck.asking,
   };
   const pickModel = (v: string): void => {
-    // A re-selection is still a preference, even when the session config already matches it.
-    qc.setQueryData<Me>(meQuery().queryKey, (prev) =>
-      prev ? {
-        ...prev,
-        preferences: {
-          ...prev.preferences,
-          defaultModels: { ...prev.preferences?.defaultModels, [defaultModelKey(shownEngine, shownProvider)]: v },
-        },
-      } : prev,
-    );
-    modelPreferenceMut.mutate({ engine: shownEngine, provider: shownProvider, model: v });
+    // A pick applies to this session (or draft) only: the next draft's model is the workspace's
+    // `lastModel`, not an account-wide memory. A re-selection still marks the picker touched.
     if (v === shownModelName) {
       modelSeedState.current = dirtyContextSeed(modelContextKey);
       return;

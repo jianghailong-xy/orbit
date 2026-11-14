@@ -420,47 +420,24 @@ export const livePinnedModel = (
   return retired(model) && (judge !== AgentProvider.CURSOR || retired(decodeCursorModel(model).model)) ? undefined : model;
 };
 
-/** The key a model picked for `engine` on `provider` is remembered under in
- *  `User.preferences.defaultModels` (docs/provider-engine-contract.md §6.5). */
-export const defaultModelKey = (engine: string, provider: string): string => `${engine}:${provider}`;
-
 /**
- * The model last picked for `engine` on `provider`, read in §6.5's order: the pair's own key, then
- * what an older client remembered under the old keys — `opencode/<slug>` (whose value names the key,
- * `orbit-<slug>/<model>`) and `opencode` for OpenCode, the bare slug for the engine a provider runs
- * on by default. Undefined when nothing was picked for it.
+ * The model a new session drafted on `engine` and `provider` starts with: the workspace's `lastModel` —
+ * the model of the session a person last opened there (apiserver workspaces/workspace-provider.ts) —
+ * when the draft runs on that same engine and provider, else the runner's or the key's default. A
+ * retired `lastModel` drops out to the default, as a retired pin does at dispatch. The account-wide
+ * `preferences.defaultModels` memory is retired: nothing reads or writes it
+ * (docs/workspace-default-model-design.md).
  */
-export function rememberedModel(
-  engine: AgentProvider,
-  provider: string,
-  accountModels?: Record<string, string> | null,
-  configured?: ConfiguredProvider[] | null,
-): string | undefined {
-  if (!accountModels) return undefined;
-  const own = accountModels[defaultModelKey(engine, provider)];
-  if (own !== undefined) return own;
-  if (engine === AgentProvider.OPENCODE) {
-    if (provider === AgentProvider.OPENCODE) {
-      const old = accountModels[AgentProvider.OPENCODE];
-      return old !== undefined && !openCodeKeyOf(old) ? old : undefined;
-    }
-    const named = openCodeKeyOf(accountModels[`${AgentProvider.OPENCODE}/${provider}`]);
-    return named && named.slug === provider ? named.model : undefined;
-  }
-  return defaultEngineOf(provider, configured) === engine ? accountModels[provider] : undefined;
-}
-
-/** A new interactive session remembers the last explicit model pick for this engine and provider. */
 export const newSessionModelFor = (
   engine: AgentProvider,
   provider: string,
-  accountModels?: Record<string, string> | null,
+  last?: { engine: AgentProvider; provider: string; model?: string | null } | null,
   modelCatalog?: RunnerModelCatalog | null,
   configured?: ConfiguredProvider[] | null,
   runtimeDefaultModels?: RuntimeDefaultModels,
 ): string =>
   livePinnedModel(
-    rememberedModel(engine, provider, accountModels, configured),
+    last && last.engine === engine && last.provider === provider ? (last.model ?? undefined) : undefined,
     engine,
     provider,
     modelCatalog,
