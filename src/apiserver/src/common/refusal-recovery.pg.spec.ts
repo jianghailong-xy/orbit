@@ -10,8 +10,10 @@
  *       parser as that decision: a stale revision re-reads the project, a dependency refusal reads the
  *       graph, a non-empty delete waits for the owner's confirmation, a retired task stops, a
  *       prerequisite is a wait, a missing assignee is the caller's to fix;
- *   (2) the plan preflight's one-body answer is held by task-plan-preflight.spec.ts on the real body
- *       builder; no plan this door accepts reaches it here without a structural check refusing first;
+ *   (2) a plan a coordinator files through the runner door is judged whole before anything is
+ *       written: every refusing finding, the warnings, a summary, a stable code and one top-level
+ *       recovery come back in one answer, each finding with its own block and its project. The
+ *       account owner's own writes are outside preflight (§4 R1), so this is the door it guards;
  *   (3) the security boundary: another account's ids, ids that name nothing, and no credential at all
  *       are answered byte for byte alike, with no recovery block and no id of the other account's in
  *       them — so a recovery block never says that something of someone else's exists.
@@ -25,10 +27,11 @@ import { test } from 'node:test';
 import { parseRecovery, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
-import { hashPassword } from './crypto.util';
+import { generateToken, hashPassword, sha256 } from './crypto.util';
+import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-test-apiserver';
-import { REFUSAL_RECOVERY } from './refusal-recovery';
+import { DISPOSITION_SEVERITY, REFUSAL_RECOVERY, planFindingRecovery } from './refusal-recovery';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -57,8 +60,10 @@ test('Project and Task refusals carry their contracted recovery, and leak nothin
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   let server: Apiserver | undefined;
+  const db = prismaClientFor(url);
   t.after(async () => {
     await server?.stop();
+    await db.$disconnect().catch(() => undefined);
     await sql.end().catch(() => undefined);
   });
   await verifyCoordinatorPgIdentity(sql);
@@ -134,6 +139,83 @@ test('Project and Task refusals carry their contracted recovery, and leak nothin
     assert.equal(parseRecovery({ source: 'HTTP', status: 409, body: reply.text })!.userConfirmation, 'REQUIRED');
     const still = await sql.query(`SELECT count(*)::int AS n FROM task WHERE project_id = (SELECT id FROM project WHERE title = $1)`, [`A ${RUN}`]);
     assert.equal(still.rows[0].n, 4, 'nothing was detached or deleted');
+  });
+
+  await t.test('(2) a coordinator\'s refused plan answers every finding, its warnings and a summary, in one body', async () => {
+    // A's machine, an agent on it, and a conversation that coordinates project B — the scope a
+    // coordinator files a plan from. The owner's own plans are not preflighted (§4 R1).
+    const ownerId = (await sql.query(`SELECT id FROM "user" WHERE email = $1`, [`a-${RUN}@refusal-recovery.invalid`])).rows[0].id as string;
+    const runnerToken = generateToken(32);
+    const runnerId = randomUUID();
+    await sql.query(`INSERT INTO runner (id, owner_id, name, token_hash) VALUES ($1, $2, $3, $4)`,
+      [runnerId, ownerId, `refusal-${RUN}`, sha256(runnerToken)]);
+    const workspaceId = randomUUID();
+    await db.workspace.create({ data: { id: workspaceId, ownerId, runnerId, name: `refusal agent ${RUN}`, enabled: true } });
+    const coordinatorId = randomUUID();
+    await db.session.create({
+      data: {
+        id: coordinatorId, title: 'coordinator', prompt: 'coordinator', ownerId, creatorId: ownerId, workspaceId,
+        assignedRunnerId: runnerId, status: 'AWAITING_INPUT', startedAt: new Date(), runtimeSessionId: `runtime-${coordinatorId}`,
+      },
+    });
+    const pb = await project(a, `B ${RUN}`);
+    // A budget that admits nothing: refused at the API's door, so written the way a restored backup
+    // would leave it. Its finding is the owner's to clear; the edge onto A's project is a crossing
+    // nobody asked for. Two findings of two kinds, both in one answer.
+    await sql.query(`UPDATE project SET session_budget_per_day = 0, coordinator_session_id = $2 WHERE title = $1`,
+      [`B ${RUN}`, coordinatorId]);
+    const item = (title: string, extra: Record<string, unknown> = {}) => ({
+      title, projectId: pb.id, completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0,
+      autoRunWhenReady: false, ...extra,
+    });
+    const before = await sql.query(`SELECT count(*)::int AS n FROM task WHERE owner_id = $1`, [ownerId]);
+    const reply = await call(server!, 'POST', '/api/runner/tasks/batch-create', runnerToken, {
+      tasks: [item('plan one'), item('plan two', { dependsOnTaskIds: [t2] })],
+    }, { 'x-orbit-session-id': coordinatorId });
+
+    assert.equal(reply.status, 400, reply.text);
+    assert.equal(reply.json.code, 'PLAN_PREFLIGHT_FAILED', reply.text);
+    assert.equal(reply.json.written, 0);
+    const findings = reply.json.findings as Array<{ index: number; code: string; requiredAction: string; severity: string;
+      recovery: Record<string, unknown> & { disposition: string; userConfirmation: string; resources: unknown[] } }>;
+    const codes = findings.map((f) => f.code);
+    assert.ok(codes.includes('PLAN_BUDGET_ADMITS_NOTHING'), reply.text);
+    assert.ok(findings.length >= 2, `every refusal in one answer: ${reply.text}`);
+    assert.ok(findings.some((f) => f.index === 1 && f.code !== 'PLAN_BUDGET_ADMITS_NOTHING'),
+      `the crossing edge is a finding of its own: ${reply.text}`);
+    for (const f of findings) {
+      assert.equal(f.severity, 'REFUSE');
+      // Each finding's block is its contract entry, and names the project its item lands in.
+      const { resources, ...stated } = f.recovery;
+      assert.deepEqual(stated, planFindingRecovery(f.code, f.requiredAction), f.code);
+      assert.deepEqual(resources, [{ type: 'PROJECT', id: pb.id }], f.code);
+    }
+    // The whole plan: counted, warned about, and as stuck as its stuckest finding.
+    assert.ok(Array.isArray(reply.json.warnings));
+    const byDisposition: Record<string, number> = {};
+    const byCode: Record<string, number> = {};
+    for (const f of findings) {
+      byDisposition[f.recovery.disposition] = (byDisposition[f.recovery.disposition] ?? 0) + 1;
+      byCode[f.code] = (byCode[f.code] ?? 0) + 1;
+    }
+    assert.deepEqual(reply.json.summary, { refusing: findings.length, warnings: reply.json.warnings.length, byDisposition, byCode });
+    const top = reply.json.recovery;
+    const worst = DISPOSITION_SEVERITY.find((d) => byDisposition[d])!;
+    assert.equal(top.disposition, worst);
+    assert.equal(top.actionCode, 'FIX_REQUEST');
+    assert.equal(top.effect, 'NONE');
+    assert.equal(top.retryPolicy, 'NEVER');
+    assert.equal(top.userConfirmation, worst === 'CONFIRM_THEN_RUN' ? 'REQUIRED' : 'NOT_REQUIRED', 'the confirmation boundary');
+    assert.deepEqual(top.resources, [{ type: 'PROJECT', id: pb.id }]);
+    // The client reads the same decision from the served body.
+    const env = parseRecovery({ source: 'HTTP', status: 400, body: reply.text })!;
+    assert.equal(env.code, 'PLAN_PREFLIGHT_FAILED');
+    assert.equal(env.disposition, worst);
+    assert.equal(env.actionCode, 'FIX_REQUEST');
+    assert.deepEqual(env.resources, [{ type: 'PROJECT', id: pb.id }]);
+    // Nothing of the plan was written.
+    const after = await sql.query(`SELECT count(*)::int AS n FROM task WHERE owner_id = $1`, [ownerId]);
+    assert.equal(after.rows[0].n, before.rows[0].n, 'nothing of the plan was written');
   });
 
   await t.test('(3) another account\'s ids are answered as ids that name nothing, and carry no recovery', async () => {

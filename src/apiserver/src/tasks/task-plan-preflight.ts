@@ -46,7 +46,7 @@ import {
   type TaskCompletionCriterionValue,
 } from './task-completion-criterion';
 import type { TaskCompletionPolicyValue } from '../projects/task-aggregation';
-import type { RecoveryDisposition } from '@orbit/shared';
+import { uuidToBase62, type RecoveryDisposition, type RecoveryResource } from '@orbit/shared';
 import { DISPOSITION_SEVERITY, planFindingRecovery, type RefusalRecoveryStated } from '../common/refusal-recovery';
 
 export const PLAN_PREFLIGHT_DIMENSIONS = [
@@ -588,9 +588,9 @@ export interface PlanPreflightRefusalBody {
   /** Nothing of the plan was written. Stated in the body because it is the caller first question. */
   written: 0;
   /** Every refusing finding, each with its own `recovery` block. */
-  findings: Array<PlanPreflightFinding & { recovery: RefusalRecoveryStated }>;
+  findings: Array<PlanPreflightFinding & { recovery: FindingRecovery }>;
   /** Every warning too, so one answer says everything the next attempt will meet. */
-  warnings: Array<PlanPreflightFinding & { recovery: RefusalRecoveryStated }>;
+  warnings: Array<PlanPreflightFinding & { recovery: FindingRecovery }>;
   /** The top-level count: how many refuse, how many warn, and how many of the refusals fall under
    *  each disposition and code. */
   summary: {
@@ -601,20 +601,40 @@ export interface PlanPreflightRefusalBody {
   };
   /** The plan's own answer: changed and sent again as a whole, and only as soon as its most stuck
    *  finding allows (`DISPOSITION_SEVERITY`). */
-  recovery: RefusalRecoveryStated & { resources: [] };
+  recovery: FindingRecovery;
   plan: PlanItemLanding[];
 }
 
-function withRecovery(finding: PlanPreflightFinding): PlanPreflightFinding & { recovery: RefusalRecoveryStated } {
-  return { ...finding, recovery: planFindingRecovery(finding.code, finding.requiredAction) };
+/** A finding's stated block, with the project its item would land in as the row to read first. */
+type FindingRecovery = RefusalRecoveryStated & { resources: RecoveryResource[] };
+
+/** The project a finding is about, public: its item's, or none for a finding about the plan as a whole. */
+function findingProject(finding: PlanPreflightFinding, facts: PlanFacts): RecoveryResource[] {
+  const projectId = facts.items.find((item) => item.index === finding.index)?.projectId;
+  if (!projectId) return [];
+  try {
+    return [{ type: 'PROJECT', id: uuidToBase62(projectId) }];
+  } catch {
+    return [{ type: 'PROJECT', id: projectId }];
+  }
+}
+
+function withRecovery(
+  finding: PlanPreflightFinding,
+  facts: PlanFacts,
+): PlanPreflightFinding & { recovery: FindingRecovery } {
+  return {
+    ...finding,
+    recovery: { ...planFindingRecovery(finding.code, finding.requiredAction), resources: findingProject(finding, facts) },
+  };
 }
 
 export function planPreflightRefusalBody(
   findings: readonly PlanPreflightFinding[],
   facts: PlanFacts,
 ): PlanPreflightRefusalBody {
-  const refusals = planPreflightRefusals(findings).map(withRecovery);
-  const warnings = findings.filter((finding) => finding.severity !== 'REFUSE').map(withRecovery);
+  const refusals = planPreflightRefusals(findings).map((finding) => withRecovery(finding, facts));
+  const warnings = findings.filter((finding) => finding.severity !== 'REFUSE').map((finding) => withRecovery(finding, facts));
   const byDisposition: Partial<Record<RecoveryDisposition, number>> = {};
   const byCode: Record<string, number> = {};
   for (const finding of refusals) {
@@ -642,7 +662,9 @@ export function planPreflightRefusalBody(
       // as CONFIRM_THEN_RUN whatever else is stated, and a STOP or HUMAN finding outranks it.
       userConfirmation: disposition === 'CONFIRM_THEN_RUN' ? 'REQUIRED' : 'NOT_REQUIRED',
       disposition,
-      resources: [],
+      // Every project a refusal is about, once each, in finding order: what the caller reads first.
+      resources: refusals.flatMap((finding) => finding.recovery.resources)
+        .filter((r, i, all) => all.findIndex((o) => o.type === r.type && o.id === r.id) === i),
     },
     plan: planItemLandings(facts),
   };

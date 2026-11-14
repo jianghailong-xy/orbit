@@ -11,6 +11,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { uuidToBase62 } from '@orbit/shared';
 
 import {
   PLAN_PREFLIGHT_COVERAGE,
@@ -319,6 +320,11 @@ test('every finding comes back, in a fixed order, and the body says nothing was 
   assert.equal(body.recovery.disposition, 'CONFIRM_THEN_RUN');
   assert.equal(body.recovery.userConfirmation, 'REQUIRED');
   assert.equal(body.recovery.actionCode, 'FIX_REQUEST');
+  // Each finding names the project its item lands in, public; the plan names each such project once.
+  assert.deepEqual(body.findings.map((f) => f.recovery.resources), [
+    [{ type: 'PROJECT', id: uuidToBase62(A) }], [{ type: 'PROJECT', id: uuidToBase62(A) }],
+  ]);
+  assert.deepEqual(body.recovery.resources, [{ type: 'PROJECT', id: uuidToBase62(A) }]);
 });
 
 test('L7: a dry run reports what a refusal throws, plus the warnings a refusal leaves out', () => {
