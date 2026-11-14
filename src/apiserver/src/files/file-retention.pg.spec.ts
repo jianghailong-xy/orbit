@@ -39,7 +39,9 @@
  *  (22) a date ahead of a cited file keeps its session in Trash too, until the tombstone: then the purge takes the row, and
  *       evidence is left with the sha256 it recorded;
  *  (23) a person's act takes the file all the same: emptying Trash by hand, pinned or held, and deleting a task, once the
- *       sweep has dated and tombstoned its rows, though a pin outlasts the task as it outlasts any date.
+ *       sweep has dated and tombstoned its rows, though a pin outlasts the task as it outlasts any date;
+ *  (26) what one of usage's rows counts, file by file: each content once with what holds it, and a delete that takes every
+ *       row of a content as expiry would, refused while evidence or a session holds it; and none of it another account's.
  *
  * Not destructive: every row belongs to users this run creates. Each case uses bytes of its own, because a sweep looks at
  * every row in the database.
@@ -876,6 +878,88 @@ test('Orbit Files retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, 
     assert.equal(after.totalBytes, 1000 + 500 + 10 + 70, 'an expired file no longer counts');
     assert.equal(after.weeks[7].bytes, 1610, 'though it arrived');
     assert.equal((await call(api, 'GET', '/api/attachments/usage', stranger.bearer)).json.tasks.length, 0, 'and another account sees none of it');
+  });
+
+  await t.test('(26) what a row of usage counts, file by file, and deleting one everywhere', async () => {
+    const who = await accountOf('storage list');
+    const project = randomUUID();
+    await db.project.create({ data: { id: project, ownerId: who.ownerId, title: 'a project to look into' } });
+    const a = await workOf('task a', who, { projectId: project });
+    const b = await workOf('task b', who);
+    const sized = (length: number) => randomBytes(Math.ceil(length / 2)).toString('hex').slice(0, length);
+    const shared = sized(1000);
+    const big = await kept(a.runId, shared, 'big.txt', who);
+    await kept(a.runId, shared, 'big-again.txt', who);
+    const inB = await kept(b.runId, shared, 'shared.txt', who);
+    const cited = await kept(a.runId, sized(300), 'cited.txt', who);
+    await cite(a, cited.publicId);
+    const reply = await upload(api, 'POST', `/api/runner/sessions/${b62(a.runId)}/attachments`, { authorization: `Bearer ${who.token}` }, { name: 'reply.txt', type: 'text/plain', content: sized(200) });
+    assert.equal(reply.status, 201, reply.text.slice(0, 300));
+    const input = await upload(api, 'POST', `/api/attachments?taskId=${b62(a.taskId)}`, { authorization: `Bearer ${who.bearer}` }, { name: 'spec.txt', type: 'text/plain', content: sized(100) });
+    assert.equal(input.status, 201, input.text.slice(0, 300));
+    await kept(a.runId, sized(50), 'small.txt', who);
+
+    const list = async (route: string, as = who.bearer, status = 200) => {
+      const answer = await call(api, 'GET', `/api/attachments/usage/${route}`, as);
+      assert.equal(answer.status, status, answer.text.slice(0, 300));
+      return answer.json;
+    };
+    type Listed = { id: string; fileName: string; sizeBytes: number; source: string; heldBy: string | null; expiresAt: string | null; pinnedAt: string | null; alsoIn: number; taskTitle: string | null; createdAt: string };
+    const byName = (files: Listed[]) => Object.fromEntries(files.map((file) => [file.fileName, file]));
+
+    const ofProject = await list(`projects/${b62(project)}/files`);
+    assert.equal(ofProject.title, 'a project to look into');
+    assert.equal(ofProject.totalBytes, 1000 + 300 + 200 + 100 + 50, 'each content once, as usage counts the project');
+    assert.equal(ofProject.fileCount, 5);
+    assert.deepEqual(ofProject.files.map((file: Listed) => file.fileName), ['big.txt', 'cited.txt', 'reply.txt', 'spec.txt', 'small.txt'], 'largest first, shown by its first upload');
+    assert.equal(ofProject.nextCursor, null);
+    const shown = byName(ofProject.files);
+    assert.deepEqual([shown['big.txt'].source, shown['big.txt'].heldBy, shown['big.txt'].alsoIn], ['upload', null, 2], 'the same bytes, kept twice more');
+    assert.notEqual(shown['big.txt'].expiresAt, null);
+    assert.equal(shown['big.txt'].taskTitle, 'task a');
+    assert.deepEqual([shown['cited.txt'].heldBy, shown['cited.txt'].expiresAt], ['EVIDENCE', null], 'evidence holds it');
+    assert.deepEqual([shown['reply.txt'].source, shown['reply.txt'].heldBy], ['conversation', 'CONVERSATION']);
+    assert.deepEqual([shown['spec.txt'].source, shown['spec.txt'].heldBy], ['task-input', null]);
+    const newest = (await list(`projects/${b62(project)}/files?order=newest`)).files.map((file: Listed) => Date.parse(file.createdAt));
+    assert.deepEqual(newest, [...newest].sort((x, y) => y - x), 'or newest first');
+
+    const ofTask = await list(`tasks/${b62(b.taskId)}/files`);
+    assert.deepEqual([ofTask.title, ofTask.totalBytes, ofTask.files.map((file: Listed) => file.fileName)], ['task b', 1000, ['shared.txt']]);
+    const usage = (await call(api, 'GET', '/api/attachments/usage', who.bearer)).json;
+    const week = usage.weeks[7].weekStart;
+    const ofWeek = await list(`weeks/${week}/files`);
+    assert.equal(ofWeek.totalBytes, usage.weeks[7].bytes, 'a week lists what its row counts');
+
+    await list(`projects/${b62(project)}/files`, stranger.bearer, 404);
+    await list(`tasks/${b62(a.taskId)}/files`, stranger.bearer, 404);
+    assert.equal((await list(`weeks/${week}/files`, stranger.bearer)).fileCount, 0, 'another account sees none of it');
+    await list('weeks/next-week/files', who.bearer, 400);
+    await list(`tasks/${b62(a.taskId)}/files?order=oldest`, who.bearer, 400);
+
+    const remove = (id: string, as = who.bearer) => call(api, 'DELETE', `/api/attachments/${b62(id)}/everywhere`, as);
+    assert.equal((await remove(big.id, stranger.bearer)).status, 404, 'another account\'s file is not found');
+    assert.equal(await db.attachment.count({ where: { ownerId: who.ownerId, sha256: big.sha256, expiredAt: { not: null } } }), 0, 'and nothing was written');
+    const heldByEvidence = await remove(cited.id);
+    assert.deepEqual([heldByEvidence.status, heldByEvidence.json.code, heldByEvidence.json.heldBy], [409, 'FILE_HELD', 'EVIDENCE']);
+    assert.equal((await row(cited.id)).expiredAt, null);
+    const heldBySession = await remove(toUuid(reply.json.id));
+    assert.deepEqual([heldBySession.status, heldBySession.json.heldBy], [409, 'CONVERSATION']);
+
+    await call(api, 'PUT', `/api/attachments/${inB.publicId}/pin`, who.bearer);
+    const removed = await remove(big.id);
+    assert.equal(removed.status, 204, removed.text.slice(0, 300));
+    const gone = await db.attachment.findMany({ where: { ownerId: who.ownerId, sha256: big.sha256 } });
+    assert.equal(gone.length, 3, 'every row stays');
+    assert.ok(gone.every((file) => file.expiredAt !== null && file.pinnedAt === null), 'each with a tombstone, and no pin');
+    assert.equal((await remove(big.id)).status, 204, 'a second delete finds it gone');
+    assert.equal((await remove(toUuid(input.json.id))).status, 204, 'a task input no run was handed goes');
+    assert.equal(await db.attachment.count({ where: { id: toUuid(input.json.id) } }), 0);
+
+    const after = await list(`projects/${b62(project)}/files`);
+    assert.deepEqual([after.totalBytes, after.files.map((file: Listed) => file.fileName)], [300 + 200 + 50, ['cited.txt', 'reply.txt', 'small.txt']]);
+    assert.equal((await list(`tasks/${b62(b.taskId)}/files`)).fileCount, 0);
+    const weekAfter = byName((await list(`weeks/${week}/files`)).files);
+    assert.notEqual((weekAfter['big.txt'] as unknown as { expiredAt: string | null }).expiredAt, null, 'a week still lists what arrived, as expired');
   });
 
   await t.test('(18) past its quota an upload is refused, with a code and a sentence', async () => {

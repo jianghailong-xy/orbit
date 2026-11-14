@@ -1442,6 +1442,56 @@ describe('Orbit write tool cards', () => {
     payload: { id: 't1', name, input },
   });
 
+  it("draws the owner's Chat about this reply to a card as their message, not inside the call", () => {
+    const fixture = JSON.parse(
+      readFileSync(resolve(__dirname, '../../../shared/src/owner-chat-reply.fixture.json'), 'utf8'),
+    ) as { writerWords: string; cases: { result: string }[] };
+    for (const name of ['mcp__orbit__project_create', 'mcp__orbit__runner_delete']) {
+      const html = renderToStaticMarkup(
+        <MemoryRouter>
+          <Transcript
+            events={[
+              toolEvent(name, { title: 'Move the database' }),
+              {
+                seq: 2,
+                type: 'tool_result',
+                payload: { toolUseId: 't1', content: [{ type: 'text', text: fixture.cases[0].result }] },
+              },
+            ]}
+          />
+        </MemoryRouter>,
+      );
+      // Its own bubble, as anything else they type is, and never folded into a steps line (where
+      // the native client used to leave it, under "Used tool").
+      expect(html).toContain('chat-msg chat-user');
+      expect(html).toContain(fixture.writerWords);
+      expect(html).not.toContain('Not done yet, and not a no');
+    }
+  });
+
+  it("draws the owner's words from the chat receipt an engine records in place of the text", () => {
+    // Claude Code and Codex record a result's structuredContent, the runner's receipt, instead of its
+    // text; a chat's receipt carries the same reply as its `text`.
+    const fixture = JSON.parse(
+      readFileSync(resolve(__dirname, '../../../shared/src/owner-chat-reply.fixture.json'), 'utf8'),
+    ) as { writerWords: string; cases: { name: string; result: string }[] };
+    const receipt = fixture.cases.find((c) => c.name === 'the receipt an engine shows in place of the text')!.result;
+    for (const content of [receipt, [{ type: 'text', text: receipt }]]) {
+      const html = renderToStaticMarkup(
+        <MemoryRouter>
+          <Transcript
+            events={[
+              toolEvent('mcp__orbit__project_create', { title: 'Move the database' }),
+              { seq: 2, type: 'tool_result', payload: { toolUseId: 't1', content } },
+            ]}
+          />
+        </MemoryRouter>,
+      );
+      expect(html).toContain('chat-msg chat-user');
+      expect(html).toContain(fixture.writerWords);
+    }
+  });
+
   it('says what a single create wrote, by name', () => {
     // One size down from the batch: the row names the task and carries its description, instead of
     // falling through to `orbit · task_create` over a dump of the call's own JSON.

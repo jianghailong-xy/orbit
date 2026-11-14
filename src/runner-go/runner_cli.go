@@ -278,7 +278,7 @@ func cliRunnerDelete(args []string, out io.Writer, ctx cliOrchestrationContext) 
 	if declined, err := askBeforeCreate(t, ctx.sessionID, runnerDeleteApprovalToolName, map[string]interface{}{"runnerId": id}); err != nil {
 		return fmt.Errorf("delete runner: %w", err)
 	} else if declined != "" {
-		return fmt.Errorf("delete runner: the human rejected this deletion, and nothing was deleted: %s", declined)
+		return fmt.Errorf("delete runner: %s", declinedText("the human rejected this deletion, and nothing was deleted", declined))
 	}
 	raw, err := t.deleteRunner(ctx.sessionID, ctx.token, id)
 	if err != nil {

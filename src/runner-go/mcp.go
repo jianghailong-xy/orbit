@@ -62,6 +62,8 @@ type mcpServer struct {
 	// How long the engine lets one tool call run before it reports the call failed (ORBIT_MCP_CALL_TIMEOUT_SECONDS);
 	// 0 when it waits for as long as the call takes. See handOffOwnerWait.
 	callTimeout time.Duration
+	// rec is what the tool call being answered did, for its receipt (tool_receipt.go); nil outside one.
+	rec *callRecord
 	// Reads the session's live permission mode for Orbit's Plan gate (plan_gate.go); nil reads it from the runner
 	// (sessionPermissionMode).
 	permissionMode func() (string, bool, error)
@@ -253,7 +255,7 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		if s.onlyTools != nil && !s.onlyTools[p.Name] {
 			return s.ok(req.ID, toolResult(p.Name+" is not served in this session", true)), true
 		}
-		return s.ok(req.ID, s.callTool(p.Name, p.Arguments)), true
+		return s.ok(req.ID, s.invokeTool(p.Name, p.Arguments)), true
 	default:
 		if isNotification {
 			return rpcResponse{}, false // ignore unknown notifications
@@ -647,11 +649,12 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if declined, err := askBeforeCreate(s.t, s.sessionID, projectCreateApprovalToolName, body); err != nil {
 			return toolResult(err.Error(), true)
 		} else if declined != "" {
-			return toolResult("the human rejected this project: "+declined, false)
+			return toolResult(declinedText("the human rejected this project", declined), false)
 		}
 		// The calling session goes with it, the same as it does on task_create — here so the
 		// server can bind THIS session as the new project's coordinator, which is what makes
 		// opening the project later come back to this conversation instead of starting another.
+		s.rec.sentBody(body)
 		raw, err := s.t.createProject(s.sessionID, s.orchestrationToken, body)
 		if err != nil {
 			return toolResult("create project failed: "+err.Error(), true)
@@ -723,12 +726,13 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// conversation's words, a loosening it proposes is filed under this session rather than
 		// under the account owner who never asked for it, and a merge check is written against the
 		// card this session was answered on rather than against a card filed somewhere else.
+		s.rec.sentBody(body)
 		raw, declined, err := updateProjectWithApproval(s.t, s.sessionID, id, body)
 		if err != nil {
 			return toolResult("update project failed: "+err.Error(), true)
 		}
 		if declined != "" {
-			return toolResult("the owner did not approve this merge-check change: "+declined, false)
+			return toolResult(declinedText("the owner did not approve this merge-check change", declined), false)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -748,7 +752,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("resolve blocker failed: "+err.Error(), true)
 		}
 		if declined != "" {
-			return toolResult("the human left this blocker open: "+declined, false)
+			return toolResult(declinedText("the human left this blocker open", declined), false)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -1106,8 +1110,8 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult(err.Error(), true)
 		}
 		if declined != "" {
-			return toolResult("the human did not approve skipping this check, and nothing was queued: "+
-				declined, false)
+			return toolResult(declinedText(
+				"the human did not approve skipping this check, and nothing was queued", declined), false)
 		}
 		raw, err := s.t.skipIntegrationMergeCheck(s.sessionID, id, taskID, reason, approvalID)
 		if err != nil {
@@ -1175,7 +1179,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "engine", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff")
+		copyIfPresent(body, args, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "engine", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff", "idempotencyKey")
 		// Before the card, so the card's forecast says what the yes will do (task_start_now.go).
 		startNow := getBool(args, "startNow")
 		if startNow {
@@ -1217,6 +1221,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if startAfterCreate && !startNow {
 			body["runAt"] = dueNow(time.Now())
 		}
+		s.rec.sentBody(body)
 		raw, err := s.t.createTask(s.agentID, s.sessionID, body)
 		if err != nil {
 			if createRefused(err) {
@@ -1229,6 +1234,15 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		if startNow || startAfterCreate {
 			started, deferred := startCreatedTask(s.t, raw)
+			by := "startNow"
+			if !startNow {
+				by = "owner"
+			}
+			s.rec.setEntity(raw)
+			s.rec.startOutcome(by, started, deferred)
+			if deferred == "" {
+				s.rec.note(startedAtOnceNote)
+			}
 			return toolResult(startedTaskResult(raw, started, deferred), false)
 		}
 		return toolResult(prettyJSON(raw), false)
@@ -1303,7 +1317,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if getBool(args, "dryRun") {
 			return s.createBatchNow(map[string]interface{}{"tasks": bodies, "dryRun": true})
 		}
-		return s.createBatchWithApproval(bodies, fork)
+		return s.createBatchWithApproval(bodies, fork, getString(args, "idempotencyKey"))
 
 	case "task_batch_pin":
 		body := map[string]interface{}{}
@@ -1334,6 +1348,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if err := requireHandoffNamesItsDestination(body); err != nil {
 			return toolResult(err.Error(), true)
 		}
+		s.rec.sentBody(body)
 		raw, err := s.t.updateTask(s.sessionID, id, body)
 		if err != nil {
 			// Verbatim, plus the address of the crossing when the refusal is one a projectId move
@@ -1442,6 +1457,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if title == "" {
 			return toolResult("title is required", true)
 		}
+		s.rec.sentBody(map[string]interface{}{"title": title})
 		raw, err := s.t.createTaskList(title)
 		if err != nil {
 			return toolResult("create task-list failed: "+err.Error(), true)
@@ -1472,6 +1488,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if len(body) == 0 {
 			return toolResult("nothing to update", true)
 		}
+		s.rec.sentBody(body)
 		raw, err := s.t.updateTaskList(id, s.agentID, s.sessionID, body)
 		if err != nil {
 			return toolResult("update task-list failed: "+err.Error(), true)
@@ -1510,7 +1527,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if declined, err := askBeforeCreate(s.t, s.sessionID, providerCreateApprovalToolName, providerCard("", body)); err != nil {
 			return toolResult(err.Error(), true)
 		} else if declined != "" {
-			return toolResult("the human rejected this provider: "+declined, false)
+			return toolResult(declinedText("the human rejected this provider", declined), false)
 		}
 		raw, err := s.t.createProvider(body)
 		if err != nil {
@@ -1531,7 +1548,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if declined, err := askBeforeCreate(s.t, s.sessionID, providerUpdateApprovalToolName, providerCard(slug, body)); err != nil {
 			return toolResult(err.Error(), true)
 		} else if declined != "" {
-			return toolResult("the human rejected this change: "+declined, false)
+			return toolResult(declinedText("the human rejected this change", declined), false)
 		}
 		raw, err := s.t.updateProvider(slug, body)
 		if err != nil {
@@ -1547,7 +1564,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if declined, err := askBeforeCreate(s.t, s.sessionID, providerDeleteApprovalToolName, providerCard(slug, nil)); err != nil {
 			return toolResult(err.Error(), true)
 		} else if declined != "" {
-			return toolResult("the human rejected this deletion: "+declined, false)
+			return toolResult(declinedText("the human rejected this deletion", declined), false)
 		}
 		raw, err := s.t.deleteProvider(slug)
 		if err != nil {
@@ -1629,6 +1646,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		} else if s.agentID != "" {
 			body["agentId"] = s.agentID
 		}
+		s.rec.sentBody(body)
 		raw, err := s.t.createSession(s.sessionID, s.orchestrationToken, body)
 		if err != nil {
 			return toolResult("create session failed: "+err.Error(), true)
@@ -1891,7 +1909,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if declined, err := askBeforeCreate(s.t, s.sessionID, runnerDeleteApprovalToolName, map[string]interface{}{"runnerId": runnerID}); err != nil {
 			return toolResult(err.Error(), true)
 		} else if declined != "" {
-			return toolResult("the human rejected this deletion, and nothing was deleted: "+declined, false)
+			return toolResult(declinedText("the human rejected this deletion, and nothing was deleted", declined), false)
 		}
 		raw, err := s.t.deleteRunner(s.sessionID, s.orchestrationToken, runnerID)
 		if err != nil {
@@ -1912,8 +1930,9 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if declined, err := askBeforeAgentWrite(s.t, s.sessionID, "", body); err != nil {
 			return toolResult(err.Error(), true)
 		} else if declined != "" {
-			return toolResult("the human rejected this write, and nothing was written: "+declined, false)
+			return toolResult(declinedText("the human rejected this write, and nothing was written", declined), false)
 		}
+		s.rec.sentBody(body)
 		raw, err := s.t.createAgent(s.sessionID, s.orchestrationToken, body)
 		if err != nil {
 			return toolResult("create agent failed: "+err.Error(), true)
@@ -1936,8 +1955,9 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if declined, err := askBeforeAgentWrite(s.t, s.sessionID, id, body); err != nil {
 			return toolResult(err.Error(), true)
 		} else if declined != "" {
-			return toolResult("the human rejected this write, and nothing was written: "+declined, false)
+			return toolResult(declinedText("the human rejected this write, and nothing was written", declined), false)
 		}
+		s.rec.sentBody(body)
 		raw, err := s.t.updateAgent(s.sessionID, s.orchestrationToken, id, body)
 		if err != nil {
 			return toolResult("update agent failed: "+err.Error(), true)
@@ -1958,7 +1978,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if declined, err := askBeforeCreate(s.t, s.sessionID, agentDeleteApprovalToolName, map[string]interface{}{"agentId": id}); err != nil {
 			return toolResult(err.Error(), true)
 		} else if declined != "" {
-			return toolResult("the human rejected this deletion, and nothing was deleted: "+declined, false)
+			return toolResult(declinedText("the human rejected this deletion, and nothing was deleted", declined), false)
 		}
 		raw, err := s.t.deleteAgent(s.sessionID, s.orchestrationToken, id)
 		if err != nil {
@@ -2086,6 +2106,7 @@ func (s *mcpServer) handOffOwnerWait(name string, args map[string]interface{}) m
 		JobID string `json:"jobId"`
 	}
 	_ = json.Unmarshal(raw, &job)
+	s.rec.waitingForOwner(job.JobID, raw)
 	return toolResult(fmt.Sprintf("Not done yet — handed to runner-hosted job %s. %s waits for the owner's "+
 		"confirmation, which can take longer than this engine lets a tool call run (%s), so that job asks them and "+
 		"waits instead of this call. Nothing is written unless the owner confirms; if they do, the job performs the "+
@@ -2133,14 +2154,52 @@ func askBeforeTaskCreate(t *Transport, sessionID string, body map[string]interfa
 }
 
 // declinedReason is "" for a yes, and otherwise what to hand back in place of the write.
+//
+// Words the owner sent with the answer (decidedById set) came from the card's "Chat about this": the
+// only way a client attaches a message to one of Orbit's own asks. That press opens a conversation
+// about the proposal, so the agent is handed the owner's words as a message to answer, not as the
+// reason for a refusal (ownerChatReply). A message without an owner is the server's own (the card
+// went away) and stays a refusal.
 func declinedReason(dec *ApprovalDecisionResponse) string {
 	if dec.Status == "ALLOWED" {
 		return ""
+	}
+	if isOwnerChat(dec) {
+		return ownerChatReply(dec.Message)
 	}
 	if dec.Message != "" {
 		return dec.Message
 	}
 	return "denied by the user"
+}
+
+// isOwnerChat says whether a card's answer is the owner's "Chat about this": not a yes, and carrying
+// their own words (decidedById set). It is the one test the text the agent is handed (declinedReason),
+// the refusal document (declinedCardRefusal) and the receipt's chat outcome (tool_receipt.go) share.
+func isOwnerChat(dec *ApprovalDecisionResponse) bool {
+	return dec != nil && dec.Status != "ALLOWED" && dec.Message != "" && dec.DecidedByID != ""
+}
+
+// ownerChatLead opens every ownerChatReply, which is how declinedText tells one from a refusal.
+const ownerChatLead = "Not done yet, and not a no: the owner pressed \"Chat about this\" on the card to talk it over before deciding."
+
+// ownerChatReply is what an agent is handed when the owner answered a card with "Chat about this":
+// nothing was written, the owner's words are a message in the conversation, and the proposal is
+// still open. Asking again after the talk is the point of the press, not a second proposal of
+// something already refused.
+func ownerChatReply(words string) string {
+	return ownerChatLead + " Their message:\n\n" + words + "\n\n" +
+		"Reply to it as you would to any message from them. Nothing was written. If the conversation " +
+		"still leads to this, call the tool again, changed as agreed: that puts a new card in front of them."
+}
+
+// declinedText is the answer to a declined ask: refusal (what was refused, "the human rejected this
+// project") followed by the reason, or the owner's chat reply on its own, which refuses nothing.
+func declinedText(refusal, declined string) string {
+	if strings.HasPrefix(declined, ownerChatLead) {
+		return declined
+	}
+	return refusal + ": " + declined
 }
 
 // askCreateCard files the card and waits for its answer; nil, with nothing filed, when headless.
@@ -2192,6 +2251,8 @@ func awaitApprovalDecision(ctx context.Context, t *Transport, sessionID, approva
 		dec, err := t.pollApproval(ctx, sessionID, approvalID)
 		if err == nil {
 			if dec.Status != "PENDING" {
+				// The answer, for the receipt of the call that asked (transport_observe.go).
+				t.observe(transportEvent{Kind: transportEventApprovalDecided, ApprovalID: approvalID, Decision: dec})
 				return dec, nil
 			}
 			continue // the server's long-poll window elapsed undecided
@@ -2265,7 +2326,7 @@ func askBeforeBatch(t *Transport, agentID, sessionID string, bodies []map[string
 // while looking like the least: fifty titles say nothing, and what actually happens is some number
 // of runs starting within the minute. This deployment has the cautionary case — one session
 // created 43 lists and ~21,500 tasks before anybody looked.
-func (s *mcpServer) createBatchWithApproval(bodies []map[string]interface{}, fork *forkSnapshot) map[string]interface{} {
+func (s *mcpServer) createBatchWithApproval(bodies []map[string]interface{}, fork *forkSnapshot, idempotencyKey string) map[string]interface{} {
 	declined, err := askBeforeBatch(s.t, s.agentID, s.sessionID, bodies)
 	if err != nil {
 		fork.release()
@@ -2275,7 +2336,12 @@ func (s *mcpServer) createBatchWithApproval(bodies []map[string]interface{}, for
 		fork.release()
 		return toolResult(declinedCardRefusal(batchApprovalToolName, "this batch", declined), false)
 	}
-	raw, err := s.t.createTasksBatch(s.agentID, s.sessionID, map[string]interface{}{"tasks": bodies})
+	s.rec.sentBatch(bodies)
+	batch := map[string]interface{}{"tasks": bodies}
+	if idempotencyKey != "" {
+		batch["idempotencyKey"] = idempotencyKey
+	}
+	raw, err := s.t.createTasksBatch(s.agentID, s.sessionID, batch)
 	if err != nil {
 		if createRefused(err) {
 			fork.release()
@@ -2536,10 +2602,7 @@ func askForSkipMergeCheck(t *Transport, sessionID string, facts map[string]inter
 	if dec.Status == "ALLOWED" {
 		return id, "", nil
 	}
-	if dec.Message != "" {
-		return id, dec.Message, nil
-	}
-	return id, "denied by the user", nil
+	return id, declinedReason(dec), nil
 }
 
 // projectMergeCheckCard is the card the owner answers before a merge check moves: which project,

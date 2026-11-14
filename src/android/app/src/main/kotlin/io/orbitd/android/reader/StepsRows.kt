@@ -44,6 +44,8 @@ internal object Steps {
         if (event.type == "thinking") return true
         if (event.type != "tool_use" || row.children.isNotEmpty()) return false
         if (event.toolId()?.startsWith("shell-") == true) return false
+        // The owner's "Chat about this" reply to a card is their message, drawn under the call; folded it would vanish.
+        if (ownerChatWords(row) != null) return false
         return name(event) !in CARD_TOOLS
     }
 

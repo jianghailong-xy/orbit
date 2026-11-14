@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -126,6 +128,46 @@ func TestMCPCreatesWriteNothingWithoutAYes(t *testing.T) {
 			}
 		})
 	}
+}
+
+// "Chat about this" is the owner's way to talk a proposal over: it carries their words (decidedById
+// set) and writes nothing. The agent gets those words as a message to answer, with the proposal still
+// open, not as the reason it was refused; at both doors.
+func TestCreatesAnsweredByChatAboutThisAreNotARefusal(t *testing.T) {
+	const words = "Will there be two databases during the move?"
+	decision := `{"status":"DENIED","message":"` + words + `","decidedById":"user-1"}`
+	check := func(t *testing.T, hits []string, body string) {
+		if wroteAnything(hits) {
+			t.Fatalf("wrote without a yes: %v", hits)
+		}
+		if !strings.Contains(body, words) || !strings.Contains(body, "Chat about this") {
+			t.Fatalf("owner's words not handed over as a chat: %v", body)
+		}
+		if strings.Contains(body, "rejected") {
+			t.Fatalf("a chat reads as a refusal: %v", body)
+		}
+	}
+	t.Run("mcp", func(t *testing.T) {
+		srv, hits, _ := createApprovalServer(t, decision, `{"id":"x"}`)
+		mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
+		res := mcp.callTool("project_create", map[string]interface{}{"title": "P"})
+		if res["isError"] == true {
+			t.Fatalf("a chat is an answer, not an error: %#v", res["content"])
+		}
+		check(t, *hits, fmt.Sprintf("%v", res["content"]))
+	})
+	t.Run("cli", func(t *testing.T) {
+		srv, hits, _ := createApprovalServer(t, decision, `{"id":"x"}`)
+		configureCLITestRunner(t, srv.URL)
+		t.Setenv("ORBIT_SESSION_ID", "sess-1")
+		t.Setenv("ORBIT_AGENT_ID", "agent-1")
+		t.Setenv(envOrchestrationToken, "")
+		err := cmdProjectCLI([]string{"create", "--title", "P", "--json"}, strings.NewReader(""), &bytes.Buffer{})
+		if err == nil {
+			t.Fatal("a create the owner has not said yes to succeeded")
+		}
+		check(t, *hits, err.Error())
+	})
 }
 
 // Headless there is nobody to ask, so this process raises no card and sends the write alone. The
@@ -435,5 +477,72 @@ func TestCardsNameTheBackgroundJobThatAskedForThem(t *testing.T) {
 	inTurn := ask(t, "")
 	if _, named := inTurn["backgroundJobId"]; named {
 		t.Fatalf("an in-turn ask named a job: %#v", inTurn["backgroundJobId"])
+	}
+}
+
+// The clients read the owner's words back out of what ownerChatReply writes (ownerChatWords in
+// @orbit/shared and its native copies); the shared fixture's first case is what this writer must write.
+func TestOwnerChatReplyMatchesTheClientsFixture(t *testing.T) {
+	raw, err := os.ReadFile("../shared/src/owner-chat-reply.fixture.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		WriterWords string `json:"writerWords"`
+		Cases       []struct {
+			Result string `json:"result"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	if got := ownerChatReply(fixture.WriterWords); got != fixture.Cases[0].Result {
+		t.Fatalf("the runner writes\n%q\nthe clients read\n%q", got, fixture.Cases[0].Result)
+	}
+}
+
+// Claude Code and Codex record a result's structuredContent in place of its text, so the clients also
+// read the owner's words out of the chat receipt. The fixture's two receipt cases are what this runner
+// answers a project_create card with: the owner's "Chat about this", which carries the words, and a
+// bare no, which carries none.
+func TestChatReceiptMatchesTheClientsFixture(t *testing.T) {
+	raw, err := os.ReadFile("../shared/src/owner-chat-reply.fixture.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		WriterWords string `json:"writerWords"`
+		Cases       []struct {
+			Name   string `json:"name"`
+			Result string `json:"result"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	results := map[string]string{}
+	for _, c := range fixture.Cases {
+		results[c.Name] = c.Result
+	}
+	words, _ := json.Marshal(fixture.WriterWords)
+	for name, decision := range map[string]string{
+		"the receipt an engine shows in place of the text": `{"status":"DENIED","message":` + string(words) + `,"decidedById":"user-1"}`,
+		"a declined card's receipt":                        `{"status":"DENIED","decidedById":"user-1"}`,
+	} {
+		want, ok := results[name]
+		if !ok {
+			t.Fatalf("the fixture has no case %q", name)
+		}
+		_, srv := newContractServer(t, decision, func(*http.Request, map[string]interface{}) (int, string) { return 200, `{"id":"x"}` })
+		result, _ := rpcCall(t, contractMCP(srv.URL), "project_create", map[string]interface{}{"title": "Move the database"})
+		got, _ := json.Marshal(result["structuredContent"])
+		var gotDoc, wantDoc interface{}
+		_ = json.Unmarshal(got, &gotDoc)
+		if err := json.Unmarshal([]byte(want), &wantDoc); err != nil {
+			t.Fatalf("%s: the fixture's result is not a receipt: %v", name, err)
+		}
+		if !reflect.DeepEqual(gotDoc, wantDoc) {
+			t.Fatalf("%s: the runner answers\n%s\nthe clients read\n%s", name, got, want)
+		}
 	}
 }

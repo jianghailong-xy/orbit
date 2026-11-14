@@ -655,6 +655,7 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchest
 	if err != nil {
 		return err
 	}
+	cliRecord().sentBody(body)
 	raw, err := t.createSession(ctx.sessionID, ctx.token, body)
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)

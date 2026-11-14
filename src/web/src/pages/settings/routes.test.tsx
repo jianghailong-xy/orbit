@@ -17,6 +17,7 @@ describe('the Personal pages, each at /settings/<slug>', () => {
     ['appearance', '<AppearanceSettingsPage />'],
     ['profile', '<ProfilePage />'],
     ['storage', '<StorageSettingsPage />'],
+    ['storage/:kind/:id', '<StorageFilesPage />'],
     ['shared-links', '<SharedLinksPage />'],
     ['access-tokens', '<AccessTokensPage />'],
     ['integrations/feishu', '<FeishuIntegrationPage />'],

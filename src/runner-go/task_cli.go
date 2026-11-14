@@ -297,6 +297,9 @@ Options:
                               task by itself once this instant has come (see below)
   --start-now                 Start the task as soon as it is created: one approval covers the
                               create and the start (see below); not with --run-at
+  --idempotency-key KEY       Your name for this create: the same key sent again (after a
+                              timeout, or in a later turn) answers with the first task instead
+                              of writing another; the same key with a different title is refused
   --fork-from-session         Start the task from this session's work, uncommitted edits
                               included, on this machine in its own checkout
   --engine ENGINE             Pin the CLI the run uses: claude (Claude Code), codex (Codex),
@@ -561,9 +564,15 @@ would add. Read it before a plan you cannot easily undo: a batch is the most
 consequential thing an agent does here and the least visible — the request is fifty
 titles, and the result is a graph of work filed against somebody's goals.
 
+Every item is judged against task_create_batch's own schema before anything is sent: an unknown
+field, a wrong type, a missing title or completionCriterion, and an item carrying both of startNow
+and runAt, parentTaskId and parentRef, or verifiesTaskId and verifiesRef are refused, naming the item.
+
 Options:
   --tasks JSON | --tasks-file -
   --dry-run                   Judge the plan and write nothing
+  --idempotency-key KEY       Your name for this batch: the same key sent again answers with the
+                              tasks the first send wrote instead of filing the plan twice
   --json
 `,
 	"attribution": `orbit task attribution — where this work counts, and everything that follows
@@ -1782,6 +1791,7 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	dueDate := fs.String("due-date", "", "ISO due date")
 	runAt := fs.String("run-at", "", "one-time scheduled start: when the server starts this task by itself (ISO 8601 date-time)")
 	startNow := fs.Bool("start-now", false, "start the task as soon as it is created: one approval covers the create and the start")
+	idempotencyKey := fs.String("idempotency-key", "", "your name for this create: the same key sent again answers with the first task instead of writing another")
 	forkFromSession := fs.Bool("fork-from-session", false, "start the task from this session's work, uncommitted edits included")
 	engine := fs.String("engine", "", "run on this engine (the CLI) instead of the assignee's")
 	provider := fs.String("provider", "", "run on this provider (the credential) instead of the assignee's")
@@ -2063,6 +2073,13 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 		}
 		body["completionPolicy"] = *completionPolicy
 	}
+	if flagWasSet(fs, "idempotency-key") {
+		key := strings.TrimSpace(*idempotencyKey)
+		if key == "" || len([]rune(key)) > 200 {
+			return fmt.Errorf("--idempotency-key must be 1 to 200 characters")
+		}
+		body["idempotencyKey"] = key
+	}
 	// The runner API intentionally keeps the user/JWT compatibility default out of agent writes.
 	// Refuse locally too: the old server might still accept omission, and a CLI that knows the
 	// invariant should never make an avoidable HTTP request that silently creates human work.
@@ -2112,6 +2129,7 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	if startAfterCreate && !*startNow {
 		body["runAt"] = dueNow(time.Now())
 	}
+	cliRecord().sentBody(body)
 	raw, err := t.createTask(agentID, sessionID, body)
 	if err != nil {
 		if createRefused(err) {
@@ -2125,8 +2143,17 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 		return writeCLIRawJSON(out, raw, *jsonOut)
 	}
 	// The created task stays the whole of stdout, so --json is still one document; what became of the
-	// start is said beside it.
+	// start is said beside it, and in the receipt's start (cli_receipt.go).
 	started, deferred := startCreatedTask(t, raw)
+	startedBy := "startNow"
+	if !*startNow {
+		startedBy = "owner"
+	}
+	cliRecord().setEntity(raw)
+	cliRecord().startOutcome(startedBy, started, deferred)
+	if deferred == "" {
+		cliRecord().note(startedAtOnceNote)
+	}
 	if err := writeCLIRawJSON(out, raw, *jsonOut); err != nil {
 		return err
 	}
@@ -2291,6 +2318,7 @@ func cliTaskCreateBatch(args []string, in io.Reader, out io.Writer) error {
 	// work filed against somebody's goals — so this is the way to see WHERE those fifty land
 	// before any of them exists.
 	dryRun := fs.Bool("dry-run", false, "judge the plan and write nothing; report where each item would land")
+	idempotencyKey := fs.String("idempotency-key", "", "your name for this batch: the same key sent again answers with the tasks the first send wrote")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -2304,6 +2332,18 @@ func cliTaskCreateBatch(args []string, in io.Reader, out io.Writer) error {
 	}
 	if !rawSet {
 		return fmt.Errorf("--tasks or --tasks-file is required")
+	}
+	key := ""
+	if flagWasSet(fs, "idempotency-key") {
+		if key = strings.TrimSpace(*idempotencyKey); key == "" || len([]rune(key)) > 200 {
+			return fmt.Errorf("--idempotency-key must be 1 to 200 characters")
+		}
+	}
+	// The plan is judged against task_create_batch's own schema before any default is applied or
+	// anything is sent: an unknown field in an item, a wrong type, a missing title or criterion, and
+	// two fields of one exclusive pair are refused here exactly as over MCP.
+	if err := validateTaskBatchPayload(raw, *dryRun, key); err != nil {
+		return err
 	}
 	items, err := parseTaskBatchItems(raw)
 	if err != nil {
@@ -2341,6 +2381,8 @@ func cliTaskCreateBatch(args []string, in io.Reader, out io.Writer) error {
 	if *dryRun {
 		body["dryRun"] = true
 		verb = "preview plan"
+	} else if key != "" {
+		body["idempotencyKey"] = key
 	}
 	// A preview writes nothing, so only the real write is asked, exactly as on the MCP tool — and only
 	// from a session, whose card rides the runner's routes, as `orbit task create`'s does.
@@ -2353,6 +2395,9 @@ func cliTaskCreateBatch(args []string, in io.Reader, out io.Writer) error {
 			return errors.New(declinedCardRefusal(batchApprovalToolName, "this batch", declined))
 		}
 	}
+	if !*dryRun {
+		cliRecord().sentBatch(items)
+	}
 	out2, err := t.createTasksBatch(agentID, sessionID, body)
 	if err != nil {
 		if createRefused(err) {
@@ -2361,6 +2406,47 @@ func cliTaskCreateBatch(args []string, in io.Reader, out io.Writer) error {
 		return fmt.Errorf("%s: %w%s", verb, err, crossProjectCrossingGuidance(err))
 	}
 	return writeCLIRawJSON(out, out2, *jsonOut)
+}
+
+// validateTaskBatchPayload judges a --tasks document as the arguments of task_create_batch: its items
+// against the tool's item schema and exclusive pairs. The request shape {"tasks": [...]} may carry
+// nothing but tasks — --dry-run and --idempotency-key are flags, so a dryRun or idempotencyKey inside
+// the document would be a second, silent answer to what the flags already said.
+func validateTaskBatchPayload(raw string, dryRun bool, key string) error {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil
+	}
+	var document interface{}
+	if err := json.Unmarshal([]byte(trimmed), &document); err != nil {
+		return nil // parseTaskBatchItems words the syntax error
+	}
+	args := map[string]interface{}{}
+	switch v := document.(type) {
+	case []interface{}:
+		args["tasks"] = v
+	case map[string]interface{}:
+		var unknown []argumentViolation
+		for name := range v {
+			if name != "tasks" {
+				unknown = append(unknown, argumentViolation{Path: name, Problem: violationUnknownField,
+					Message: fmt.Sprintf("unknown field %q in the --tasks document: it carries tasks only (use --dry-run and --idempotency-key for the rest)", name)})
+			}
+		}
+		if len(unknown) > 0 {
+			return &cliInvalidArguments{tool: "task_create_batch", violations: unknown}
+		}
+		args["tasks"] = v["tasks"]
+	default:
+		return nil
+	}
+	if dryRun {
+		args["dryRun"] = true
+	}
+	if key != "" {
+		args["idempotencyKey"] = key
+	}
+	return validateCLIPayload("task_create_batch", args)
 }
 
 // parseTaskBatchItems accepts either a bare JSON array of task objects or the request
@@ -2903,6 +2989,7 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	// The acting session, for the same reason create passes it: the server's independence rule
 	// (§13.2) needs to know which run is writing, and a terminal outside a session simply has none.
 	_, sessionID := cliTaskAttribution()
+	cliRecord().sentBody(body)
 	raw, err := t.updateTask(sessionID, id, body)
 	if err != nil {
 		// The server's refusal, exactly as it came back, plus the one thing it cannot say about
@@ -3154,6 +3241,7 @@ func cliTaskListUpdate(args []string, in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	cliRecord().sentBody(body)
 	raw, err := t.updateTaskList(id, os.Getenv("ORBIT_AGENT_ID"), os.Getenv("ORBIT_SESSION_ID"), body)
 	if err != nil {
 		return fmt.Errorf("update task list: %w", err)
@@ -3178,6 +3266,7 @@ func cliTaskListCreate(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	cliRecord().sentBody(map[string]interface{}{"title": *title})
 	raw, err := t.createTaskList(*title)
 	if err != nil {
 		return fmt.Errorf("create task list: %w", err)
@@ -3356,6 +3445,9 @@ type cliCapability struct {
 	NextStep        string                    `json:"nextStep,omitempty"`
 	Returns         string                    `json:"returns"`
 	Availability    cliCapabilityAvailability `json:"availability"`
+	// The groups of arguments of which a call may send one (operationMeta.Exclusive); refused before
+	// any request when two are sent together.
+	MutuallyExclusive [][]string `json:"mutuallyExclusive,omitempty"`
 	// What Plan mode does with the command: runs, refused, or own_gate (docs/orbit-agent-contract.md §4.1).
 	PlanMode operationPlan `json:"planMode"`
 }
@@ -3394,7 +3486,10 @@ type cliCapabilitiesDocument struct {
 	Context           cliCapabilityContext `json:"context"`
 	// Who this process acts as and why (docs/personal-access-token-design.md §7.4): `orbit whoami`'s
 	// answer, without the request that has the server confirm a personal access token.
-	Identity     cliIdentity     `json:"identity"`
+	Identity cliIdentity `json:"identity"`
+	// ReceiptFlag is the flag that makes any of these commands print the receipt its MCP tool answers
+	// with, in place of its output (cli_receipt.go): "--receipt".
+	ReceiptFlag  string          `json:"receiptFlag"`
 	Capabilities []cliCapability `json:"capabilities"`
 }
 
@@ -3542,6 +3637,7 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 			command.NextStep = op.NextStep
 			command.Returns = op.Returns
 			command.Availability = op.availability()
+			command.MutuallyExclusive = op.Exclusive
 			command.PlanMode = op.Plan
 		}
 		commands = append(commands, command)
@@ -3568,6 +3664,7 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 		UnavailableReason:        unavailableReason,
 		Context:                  ctx,
 		Identity:                 identity,
+		ReceiptFlag:              "--receipt",
 		Capabilities:             commands,
 	}
 }

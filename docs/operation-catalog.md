@@ -1,7 +1,7 @@
-# Orbit operation catalogue v1.2.0
+# Orbit operation catalogue v1.4.0
 
 > Generated from `src/runner-go/operation_catalog.go` — do not edit by hand.
-> Content hash: `5caa6883466dff4f78dc93c9d66b8b8c61623ef655f67d8349700de6e889d159`.
+> Content hash: `a81e9105b71f3fd5df9348d7f3928fc0d1aca0cec37a081f240437f51139e189`.
 
 Every operation an Orbit agent can call is declared once in the operation catalogue. This table is that catalogue rendered for a person: `orbit capabilities --json` and the MCP `tools/list` payload are its two machine surfaces, and the leaf `--help` texts are held to it by tests. `MCP` and `CLI` say how each surface reaches the operation — `always`, an `orchestration` grant, an engine `permission_prompt` bridge, `session`-only, `headless`-only, or a `watch_switch`/`wiki_switch` — and `absent` when that surface deliberately has no door. Gates that must hold together are joined with `+` (for example `orchestration+watch_switch`). `Idempotency` is `read` (safe to repeat), `caller_key` (retry with the same key), `server_key` (a redelivered turn deduplicates) or `none` (re-read before retrying). `Plan` is what a session in Plan mode gets: the call `runs`, is `refused` with what to do instead, or its `own_gate` decides; the per-engine matrix is docs/permission-matrix.md.
 
@@ -79,8 +79,8 @@ Every operation an Orbit agent can call is declared once in the operation catalo
 | `task_comment` | task | medium | yes | none | no | none | refused | always | always — `orbit task comment` | Add a comment to a task. |
 | `task_confirmation_return` | task | medium | yes | none | no | none | refused | always | always — `orbit task confirmation-return` | Send an owner-confirmation request back to its run with what must change. |
 | `task_confirmation_review` | task | medium | yes | none | no | none | refused | always | always — `orbit task confirmation-review` | Record this session's review of an owner-confirmation request. |
-| `task_create` | task | high | yes | card (`orbit_task_create`) | no | server_key | refused | always | always — `orbit task create` | Record one durable piece of work. |
-| `task_create_batch` | task | high | yes | card (`orbit_task_batch`) | no | server_key | refused | always | always — `orbit task create-batch` | Record a whole plan of tasks, with their edges, in one atomic call. |
+| `task_create` | task | high | yes | card (`orbit_task_create`) | no | caller_key | refused | always | always — `orbit task create` | Record one durable piece of work. |
+| `task_create_batch` | task | high | yes | card (`orbit_task_batch`) | no | caller_key | refused | always | always — `orbit task create-batch` | Record a whole plan of tasks, with their edges, in one atomic call. |
 | `task_delete` | task | high | yes | none | yes | none | refused | always | always — `orbit task delete` | Delete a task permanently. |
 | `task_dependency_add` | task | medium | yes | none | no | none | refused | always | always — `orbit task dependency-add` | Make one task wait for another. |
 | `task_dependency_graph` | task | low | no | none | no | read | runs | always | always — `orbit task dependency-graph` | Read a task's dependency graph. |
