@@ -56,7 +56,7 @@
   - `DELETE` 等于 Access → Only you。
   - 旧接口 `POST /sessions/:id/share` 保留：用默认值 upsert，返回 `{shareToken, sharedAt}`，给还在用的旧 iOS 版本。会话详情里的 `shareToken` 继续返回。
 - `GET /share-links`：管理页用。每行包含 kind、目标的最小投影（id、title、状态）、include、到期时间、访问次数、最近访问时间，以及 `state`（`ACTIVE` | `PAUSED` | `ENDED`）和原因。
-- `DELETE /share-links/:id`：单个撤销。批量关闭（例如「30 天前完成的会话」）走显式的 id 列表。
+- `DELETE /share-links/:id`：单个撤销。批量关闭走显式的 id 列表。
 
 公开接口（无 JWT；`token` 已在 `public-id-coverage.spec.ts` 的 `NON_ID_PARAMS` 里）：
 
@@ -102,7 +102,7 @@
   - 会话列表：已公开的会话在时间旁显示地球图标。
 - 管理页：Settings → `Shared links`（`/settings/shared-links`）。
   - 结构照 Following 页：tab 为 Active / Paused / Ended。
-  - 提示条：「N links are for sessions completed more than 30 days ago.」，配「Turn off these N」。
+  - 不按「会话完成多久」点名链接（2026-11-14，效果图 12）：完成不等于不想分享了，要限时在分享时选 Expires。
   - 每行三个动作：Copy / Settings / Turn off。
 - iOS/macOS：
   - 项目菜单里现在的「Share link」（分享登录地址）改名为 `Copy Link`，新增 `Share…`。
