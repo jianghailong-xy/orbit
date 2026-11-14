@@ -10139,13 +10139,11 @@ export function WorkspaceView({
             onClick={() => {
               const seq = stuck?.seq;
               if (!seq) return;
-              const card = scrollRef.current?.querySelector<HTMLElement>(
-                `.chat-user[data-seq="${seq}"], [data-sticky-label][data-seq="${seq}"]`,
-              );
+              const card = scrollRef.current?.querySelector<HTMLElement>(`.chat-user[data-seq="${seq}"]`);
               revealCard(card, 'start', false);
             }}
           >
-            {/* The arrow points up at the turn the bar names, whoever's turn it was. */}
+            {/* The arrow points up at the question the bar names. */}
             <span className="chat-sticky-label">↑ {STICKY_LABEL}</span>
             <span className="chat-sticky-text">
               {stuck.loading ? 'Loading earlier messages…' : stuck.text}

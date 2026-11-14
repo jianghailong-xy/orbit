@@ -1,5 +1,6 @@
 package io.orbitd.android.reader
 
+import io.orbitd.android.core.cards.transcriptCards
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.RunEvent
 import kotlinx.serialization.json.*
@@ -69,9 +70,9 @@ class StickySummaryTest {
         assertTrue("with no card it is the reader's message, as before", StickySummary.isAnchor(user(5, text("From Orbit · owner answer: …"))))
     }
 
-    /** A fact told to this session heads the reply under it: scrolled past, the bar reads "↑ From Orbit" and the line's sentence —
-     * never "Your question" over words the reader did not write (web `CoordinatorDeliveryLine`'s `data-sticky-label`). */
-    @Test fun aFactToldToThisSessionTakesTheBarAsFromOrbit() {
+    /** A fact told to this session heads the reply under it, but it is no question of the reader's: the owner ruled on 2026-11-14
+     * that a machine's message never appears on the bar, so scrolled past it the bar is empty (web `WorkspaceView`). */
+    @Test fun aFactToldToThisSessionLeavesTheBarEmpty() {
         val told = "From Orbit · project “Runner link v1” has a revision of completion evidence for you to decide\n\nTask “Wiki queue” submitted revision 1."
         val fact = user(3, buildJsonObject {
             put("text", told)
@@ -84,8 +85,26 @@ class StickySummaryTest {
         assertEquals("↑ From Orbit" to "Evidence revision 1 submitted: Wiki queue", StickySummary.of(fact))
         assertEquals("the capsule keeps the card's label", "↑ From Orbit", StickySummary.compactLabel(StickySummary.of(fact).first))
         val rows = transcriptRows(listOf(user(1, text("Q1")), RunEvent("assistant", 2, text("A1")), fact, RunEvent("assistant", 4, text("Read it."))))
-        assertEquals("the reply under the fact is named by it", "event:3", StickyQuestions(rows).above("event:4")?.key)
+        assertNull("the reply under the fact is named by nobody", StickyQuestions(rows).above("event:4"))
+        assertEquals("the fact itself still sits under the question", "event:1", StickyQuestions(rows).above("event:3")?.key)
         assertEquals("with no card it is the reader's message, as before", "↑ Your question", StickySummary.of(user(5, text(told))).first)
+    }
+
+    /** "↑ Evidence to review" over a coordinator's reply (the owner's screenshot, 2026-11-14): Orbit's own rounds never take the bar. */
+    @Test fun aRoundOrbitOpenedLeavesTheBarEmpty() {
+        val started = user(3, buildJsonObject {
+            put("text", "brief")
+            putJsonObject("taskStart") { put("taskId", "t"); put("title", "A06c") }
+        })
+        assertTrue(StickySummary.isOrbits(transcriptCards(started)))
+        assertFalse(StickySummary.isOrbits(transcriptCards(user(1, text("Q1")))))
+        assertFalse("a watch's wake is a line, not a round", StickySummary.isOrbits(transcriptCards(user(5, text(watch)))))
+        val rows = transcriptRows(listOf(user(1, text("Q1")), RunEvent("assistant", 2, text("A1")), started,
+            RunEvent("assistant", 4, text("working")), user(5, text("Q2")), RunEvent("assistant", 6, text("A2"))))
+        val questions = StickyQuestions(rows)
+        assertNull(questions.above("event:4"))
+        assertEquals("event:5", questions.above("event:6")?.key)
+        assertEquals("event:5", questions.last?.key)
     }
 
     @Test fun theIndexStepsBackThroughQuestionsAndSkipsWakes() {
