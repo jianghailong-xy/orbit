@@ -84,6 +84,9 @@ jobs:
         run: npm run test:upgrade-source-sha
       - name: Test what install and upgrade do for the runner link
         run: npm run test:upgrade-runner-link
+      # The two-stage release: built and pushed on one host, pulled and brought up on another, which builds nothing.
+      - name: Test the two-stage release's build and deploy stages
+        run: npm run test:upgrade-two-stage
       # The backup sidecar's rsync --delete is what can wipe the only off-host copy of the archive. Real rsync over local
       # paths, in seconds; it fails, rather than skips, where rsync is not installed.
       - name: Test what the backup sidecar does to its off-host target

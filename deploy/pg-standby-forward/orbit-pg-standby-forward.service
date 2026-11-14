@@ -1,0 +1,8 @@
+[Unit]
+Description=Forward 10.66.0.1:5432 on wg1, for 10.66.0.4 only, to orbit-postgres (PG16 streaming standby)
+After=docker.service wg-quick@wg1.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/orbit-pg-standby-forward
