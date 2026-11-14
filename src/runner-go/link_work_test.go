@@ -1028,3 +1028,55 @@ func TestABeatOnANewConnectionFindsTheReleaseItsWelcomeAssigned(t *testing.T) {
 		t.Fatal("the first beat on the connection did not ask for the release check its Welcome owes")
 	}
 }
+
+// The sessions a background job alone holds slots for (backgroundJobSessionIds) ride the link heartbeat as a Fact, as
+// every member without a typed field does: whole on the first beat, by digest while unchanged and filled in by the
+// gateway, whole again once they change, and left out of the forwarded body once there are none.
+func TestLinkHeartbeatCarriesTheBackgroundJobSlotHolders(t *testing.T) {
+	r := newLinkWorkRig(t)
+	r.useLink(t)
+	hb := linkTestHeartbeat(r.t.leaseOwner)
+	hb.BackgroundJobSessionIDs = []string{"session-c", "session-d"}
+	for i := 0; i < 2; i++ {
+		if _, err := r.t.heartbeat(hb); err != nil {
+			t.Fatal(err)
+		}
+	}
+	hb.BackgroundJobSessionIDs = []string{"session-d"}
+	if _, err := r.t.heartbeat(hb); err != nil {
+		t.Fatal(err)
+	}
+	hb.BackgroundJobSessionIDs = nil
+	if _, err := r.t.heartbeat(hb); err != nil {
+		t.Fatal(err)
+	}
+	_, _, beats := r.g.snapshot()
+	if len(beats) != 4 {
+		t.Fatalf("beats: %d", len(beats))
+	}
+	fact := func(i int) (whole bool, present bool) {
+		for _, f := range beats[i].frame.GetFacts() {
+			if f.GetKind() == "backgroundJobSessionIds" {
+				return len(f.GetJson()) != 0, true
+			}
+		}
+		return false, false
+	}
+	for i, want := range []struct {
+		whole, present bool
+		forwarded      string
+	}{
+		{true, true, `["session-c","session-d"]`},
+		{false, true, `["session-c","session-d"]`},
+		{true, true, `["session-d"]`},
+		{false, false, ""},
+	} {
+		whole, present := fact(i)
+		if whole != want.whole || present != want.present {
+			t.Errorf("beat %d sent the member whole=%v present=%v, want whole=%v present=%v", i, whole, present, want.whole, want.present)
+		}
+		if got := string(beats[i].forwarded["backgroundJobSessionIds"]); got != want.forwarded {
+			t.Errorf("beat %d forwarded backgroundJobSessionIds as %q, want %q", i, got, want.forwarded)
+		}
+	}
+}

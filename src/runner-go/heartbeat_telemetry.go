@@ -264,7 +264,7 @@ func sendHeartbeatCycle(
 	supervisors, supervised, sessions, targets := heartbeatSessionSnapshot(pool, telemetry)
 	request.SupervisedSessionIDs = supervised
 	request.Sessions = sessions
-	request.IdleCapacity = pool.admissionIdleCapacity()
+	request.IdleCapacity, request.BackgroundJobSessionIDs = pool.admissionOccupancy()
 	if request.Draining {
 		request.IdleCapacity = 0
 	}
