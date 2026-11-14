@@ -18,8 +18,6 @@ import io.orbitd.android.TestOrbitApplication
 import io.orbitd.android.core.cards.CoordinatorDeliveryLine
 import io.orbitd.android.core.cards.transcriptCards
 import io.orbitd.android.core.realtime.RunEvent
-import io.orbitd.android.reader.QuestionCapsule
-import io.orbitd.android.reader.TranscriptRow
 import io.orbitd.android.ui.OrbitTheme
 import java.io.File
 import java.time.Instant
@@ -35,8 +33,7 @@ import org.robolectric.shadows.ShadowDialog
 
 /**
  * NATIVE frames of a fact told to the coordinator on a phone (docs/mocks/coordinator-delivery-line/ 03): the line as the reader
- * draws it — the sentence on its first row, "Sent to the coordinator · time" on its second — and the sticky header's capsule once the
- * line is scrolled past, `↑ From Orbit` and the sentence; and the owner's answer to a criteria proposal told to a task's run, which is
+ * draws it — the sentence on its first row, "Sent to the coordinator · time" on its second — and the owner's answer to a criteria proposal told to a task's run, which is
  * not the coordinator, with what it opens to. Each is drawn by the production composable and written under
  * `src/android/build/evidence/coordinator-delivery-android/` beside its semantics tree; the rows' bounds are asserted, not eyeballed.
  */
@@ -135,14 +132,5 @@ class CoordinatorDeliveryShotsTest {
         view.draw(Canvas(bitmap))
         File(output, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()
-    }
-
-    /** Scrolled past, the reader's top bar names the line in its capsule: `↑ From Orbit`, then the line's own sentence. */
-    @Test fun theStickyHeader() {
-        show { Column(Modifier.fillMaxWidth().padding(16.dp)) { QuestionCapsule(TranscriptRow(event)) {} } }
-        compose.onNodeWithText("↑ From Orbit", useUnmergedTree = true).assertIsDisplayed()
-        compose.onNodeWithText(sentence, useUnmergedTree = true).assertIsDisplayed()
-        compose.onAllNodesWithText("Your question", substring = true, useUnmergedTree = true).assertCountEquals(0)
-        shot("sticky-header")
     }
 }

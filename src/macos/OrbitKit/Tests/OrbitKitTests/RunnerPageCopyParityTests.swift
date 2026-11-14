@@ -96,6 +96,8 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("RUNNER_WORKSPACES", RunnerPageCopy.RUNNER_WORKSPACES),
         ("RUNNER_ABOUT", RunnerPageCopy.RUNNER_ABOUT),
         ("RUNNER_MAX_CONCURRENT", RunnerPageCopy.RUNNER_MAX_CONCURRENT),
+        ("RUNNER_MAX_CONCURRENT_HINT", RunnerPageCopy.RUNNER_MAX_CONCURRENT_HINT),
+        ("RUNNER_EDIT", RunnerPageCopy.RUNNER_EDIT),
         ("RUNNER_DISK", RunnerPageCopy.RUNNER_DISK),
         ("RUNNER_KEEP_FREE", RunnerPageCopy.RUNNER_KEEP_FREE),
         ("RUNNER_KEEP_FREE_OFF", RunnerPageCopy.RUNNER_KEEP_FREE_OFF),

@@ -412,7 +412,7 @@ struct ComposerView: View {
             if showsCompletedResumeNotice {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.circle").foregroundStyle(.secondary)
-                    Text("Completed · Sending a message will resume this session in Open.")
+                    Text("Completed · Send a message to reopen this session.")
                         .font(.orbitLabel).foregroundStyle(.secondary)
                     Spacer(minLength: 0)
                 }

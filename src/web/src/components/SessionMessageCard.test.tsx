@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { uuidToBase62, type SessionMessageCard as Card } from '@orbit/shared';
-import { parseSessionMessage, sessionMessageSticky } from '../lib/sessionMessage';
+import { parseSessionMessage } from '../lib/sessionMessage';
 import { acceptedUserTurnEvent } from '../lib/acceptedUserTurn';
 import { SessionMessageCard } from './SessionMessageCard';
 import { Transcript, type RunEvent } from './Transcript';
@@ -113,10 +113,9 @@ describe('another session’s message', () => {
     // The block only tells the agent what the card already says: it is not folded under it again.
     expect(el!.querySelector('.chat-injected')).toBeNull();
     expect(el!.querySelector('.smc-narrower')).toBeNull();
-    // Not the owner's bubble, and not named as the owner's question by the sticky bar.
+    // Not the owner's bubble, and never named on the sticky bar.
     expect(container.querySelector('.chat-user')).toBeNull();
-    expect(el!.getAttribute('data-sticky-label')).toBe('From Worker: criterion 3');
-    expect(el!.getAttribute('data-sticky-text')).toBe(SENT);
+    expect(el!.hasAttribute('data-orbit-round'), 'Orbit opened this round: the sticky bar hides over it').toBe(true);
   });
 
   it('folds only what else delivery appended beside the block', async () => {
@@ -208,9 +207,5 @@ describe('parseSessionMessage', () => {
       .toEqual({ fromSessionId: CARD.fromSessionId, fromTitle: '', fromAgentName: '' });
     expect(parseSessionMessage({ text: SENT })).toBeNull();
     expect(parseSessionMessage(null)).toBeNull();
-  });
-
-  it('names the turn on the sticky bar by who sent it', () => {
-    expect(sessionMessageSticky(CARD, SENT)).toEqual({ label: 'From Worker: criterion 3', text: SENT });
   });
 });

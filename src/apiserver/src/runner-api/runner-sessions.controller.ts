@@ -528,8 +528,11 @@ export class RunnerSessionsController {
     const caller = await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     await this.sessions.assertMayReach(runner.ownerId, caller, id, 'merge');
     // A Merge pressed from a session (§10.6 O-R3): recorded with the operation, so a landing it makes
-    // on a PLATFORM project's main is put in front of the owner.
-    return this.sessions.mergeToMain(runner.ownerId, id, dto.targetBranch, dto.waitSeconds, { requestedBy: 'AGENT' });
+    // on a PLATFORM project's main is put in front of the owner. A session merging itself asks from
+    // inside its own turn, so its merge waits that turn out instead of being refused for it.
+    return this.sessions.mergeToMain(runner.ownerId, id, dto.targetBranch, dto.waitSeconds, {
+      requestedBy: 'AGENT', selfRequest: caller === id,
+    });
   }
 
   /**

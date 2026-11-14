@@ -448,6 +448,13 @@ final class AppModel {
     private var sessionsLoadPending = false
     private var sessionsLoadSucceeded = false
     private var sessionsLoadGeneration = 0
+    /// Whether the Open list on screen is known to be the server's since a cold launch or a return
+    /// from the background, and what the line under the iPhone list's workspace name says about it
+    /// (`OpenListFreshness`; docs/mocks/ios-launch-updating). `openListStatus` is what is drawn; the
+    /// task redraws it when the clock alone moves it.
+    @ObservationIgnored private var openListFreshness = OpenListFreshness()
+    private(set) var openListStatus: OpenListFreshness.Status?
+    @ObservationIgnored private var openListStatusTask: Task<Void, Never>?
     /// How a poll reads the Open list: the delta against the last list fetched where the server has
     /// it, else the tagged full read that comes back as an empty 304 when nothing changed. Told
     /// whenever `sessions` is written any other way (an event folded in), so an "unchanged" answer
@@ -948,6 +955,7 @@ final class AppModel {
         }
         signedIn = false
         machineSetups = [:]
+        sharedWithMe = []
         sessions = []
         needsYouSessions = []
         agentNeedsYou = [:]
@@ -965,6 +973,8 @@ final class AppModel {
         openListFromLaunchSnapshot = false
         openListAnswered = false
         openListIsReaderBase = false
+        openListFreshness = OpenListFreshness()
+        redrawOpenListStatus()
         eventWrittenRows = []
         menuSummary = .empty
         updateDockBadge(nil)
@@ -1082,6 +1092,7 @@ final class AppModel {
     /// and while that read fails (offline), the floors wait too.
     func startPolling() {
         guard pollTask == nil else { return }
+        beginOpenListRound()
         startControlPlane()
         // The always-mounted drawer or sidebar performs the initial Workspace + Runner load. Start the
         // lightweight refresh one interval later instead of duplicating that request.
@@ -1188,6 +1199,7 @@ final class AppModel {
     /// (the watchdog would catch it, but a relaunch is immediate). No-op when signed out.
     func kickControlPlane() {
         guard controlTask != nil else { return }
+        beginOpenListRound()
         controlTask?.cancel()
         controlTask = nil
         controlPlaneLive = false
@@ -1688,6 +1700,11 @@ final class AppModel {
     /// once a fetch that started after it has finished: true when that fetch adopted a list.
     @discardableResult
     func loadSessions() async -> Bool {
+        let freshnessRound = openListFreshness.round
+        defer {
+            openListFreshness.finish(round: freshnessRound, ok: sessionsLoadSucceeded, at: Date())
+            redrawOpenListStatus()
+        }
         sessionsLoadPending = true
         if sessionsLoadTask == nil {
             let generation = sessionsLoadGeneration
@@ -1701,6 +1718,32 @@ final class AppModel {
         }
         await sessionsLoadTask?.value
         return sessionsLoadSucceeded
+    }
+
+    /// The Open list in hand may be stale from now: the previous run's (a cold launch) or from
+    /// before a trip to the background. The read that answers is the poll's or the reconnect's own.
+    private func beginOpenListRound() {
+        openListFreshness.begin(at: Date())
+        redrawOpenListStatus()
+    }
+
+    /// "Offline · Tap to retry": read the Open list now.
+    func retryOpenList() {
+        beginOpenListRound()
+        Task { await loadSessions() }
+    }
+
+    private func redrawOpenListStatus() {
+        let now = Date()
+        let status = openListFreshness.status(at: now)
+        if status != openListStatus { openListStatus = status }
+        openListStatusTask?.cancel()
+        guard let next = openListFreshness.nextChange(after: now) else { openListStatusTask = nil; return }
+        openListStatusTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(max(0, next.timeIntervalSinceNow) * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            self?.redrawOpenListStatus()
+        }
     }
 
     private func fetchOpenSessions() async -> Bool {
@@ -2054,6 +2097,45 @@ final class AppModel {
         selectedSection = .agents
         nav.openMachineDraft(runnerID: runnerID)
     }
+
+    // MARK: Shared with me — the sessions other people invited this account to reply in
+    // (docs/session-guests-design.md §4; web SharedWithMe.tsx)
+
+    /// The rows of the sidebar's / drawer's Shared with me group, newest invitation first. No group is
+    /// drawn while it is empty (`SharedWithMe.showsGroup`).
+    private(set) var sharedWithMe: [GuestSessionSummary] = []
+
+    /// The shared session whose guest view the Agents stack shows, if any.
+    var guestSessionID: String? { selectedSection == .agents ? nav.guestSessionOnTop : nil }
+
+    /// Read Shared with me once.
+    func loadSharedWithMe() async {
+        guard let api else { return }
+        let generation = apiGeneration
+        guard let sessions = try? await api.guestSessions(),
+              apiGeneration == generation, self.api === api else { return }
+        if sessions != sharedWithMe { sharedWithMe = sessions }
+    }
+
+    /// Read Shared with me now and every minute while the app is seen: a session can be shared with
+    /// you, or stop being, at any time. Bound to the rail's lifetime (`.task`).
+    func followSharedWithMe() async {
+        while !Task.isCancelled {
+            await loadSharedWithMe()
+            await VisibilityGate.app.pause(SharedWithMe.refreshInterval)
+        }
+    }
+
+    /// Open a shared session's guest view: the Shared with me row's own page, over nothing.
+    func openGuestSession(_ id: String) {
+        settingsPresented = false
+        closeTaskOverPage()
+        selectedSection = .agents
+        nav.openGuestSession(PublicID.toPublic(id))
+    }
+
+    /// The client the guest view reads and writes through — this account's, as every other read.
+    var guestDoor: APIClient? { api }
 
     /// Start a session on a machine, whatever it holds: its first workspace's draft once it has one.
     func startSession(onMachine runnerID: String) {
@@ -2941,6 +3023,7 @@ final class AppModel {
     private(set) var projectSessionsConfirmedAt: String?
 
     var projectSessionsColumn: SessionProjectAddress? { nav.projectSessionsColumn }
+    var projectSessionsColumnDestination: SessionProjectAddress? { nav.projectSessionsColumnDestination }
 
     func openProjectSessions(_ address: SessionProjectAddress) {
         nav.enterProjectSessions(address)
@@ -2976,6 +3059,8 @@ final class AppModel {
             openProjectSessions(projectID, inColumn: inColumn)
         case .machine(let runnerID):
             openMachineDraft(runnerID)
+        case .guestSession(let sessionID):
+            openGuestSession(sessionID)
         }
     }
 
@@ -2999,7 +3084,7 @@ final class AppModel {
         }
         let address = SessionProjectAddress(projectID: projectID, agentID: agentID, view: .open)
         if inColumn {
-            nav.enterProjectSessions(address)
+            nav.enterProjectSessions(address, asDestination: true)
         } else {
             nav.path = [.sessionProject(address, asDestination: true)]
         }
@@ -3237,14 +3322,6 @@ final class AppModel {
 
     // MARK: session folders (docs/session-folders-move-design.md §3–4)
 
-    #if os(iOS)
-    /// A member picked in the project sessions sheet over a phone's conversation (board 5): its
-    /// conversation takes the place of the one the sheet was opened over (`NavState.switchConsole`).
-    func openProjectMemberFromSheet(_ session: Session) {
-        sessionDetails.store(session)
-        nav.switchConsole(to: .console(sessionID: session.id, origin: .list))
-    }
-
     /// The project's session count, read by both the project sessions button and the page's
     /// "Project · N sessions" (`SessionProjectSheet.sessionCount`). Nil until the page's read has
     /// answered for this project.
@@ -3253,6 +3330,14 @@ final class AppModel {
             projectID: projectID,
             page: projectSessionsAddress.map { ($0.projectID, projectSessions) },
             answered: projectSessionsReadAt != nil)
+    }
+
+    #if os(iOS)
+    /// A member picked in the project sessions sheet over a phone's conversation (board 5): its
+    /// conversation takes the place of the one the sheet was opened over (`NavState.switchConsole`).
+    func openProjectMemberFromSheet(_ session: Session) {
+        sessionDetails.store(session)
+        nav.switchConsole(to: .console(sessionID: session.id, origin: .list))
     }
 
     /// The sessions page a conversation's project sessions button reads and opens
@@ -3778,6 +3863,15 @@ final class AppModel {
                       self.selectedAgentSessionID == id else { return } // stale navigation resolve
                 self.selectedAgentID = resolved.agent?.id ?? resolved.agentId
             } catch APIError.http(let status, _) where status == 404 {
+                guard self.apiGeneration == generation, self.api === api else { return }
+                // No session of yours: it may be one somebody shared with you. The web asks the guest
+                // door before saying not-found (WorkspaceConsole, D9), and so does this.
+                if (try? await api.guestSession(id, limit: 1)) != nil {
+                    guard self.apiGeneration == generation, self.api === api else { return }
+                    self.consoleRegistry?.discardMissing(id)
+                    self.nav.replaceConsoleWithGuest(id)
+                    return
+                }
                 guard self.apiGeneration == generation, self.api === api else { return }
                 self.discardMissingSession(id)
             } catch APIError.unauthorized {

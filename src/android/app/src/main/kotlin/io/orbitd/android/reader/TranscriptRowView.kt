@@ -46,8 +46,16 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 
+/** Where a row reads an event whole when it came back `truncated`: the owner's reader ([SessionReaderModel]), or the guest door
+ * (GuestSessionPage). */
+internal fun interface FullEvents { suspend fun full(seq: Long): RunEvent }
+
+/** The heading of a `user` row that names no other sender: the reader's own words, `You` — and in the guest view, where the
+ * conversation is the owner's, the owner's name (GuestSessionPage); the guest's own are attributed to the reader there. */
+internal val LocalOwnerHeading = staticCompositionLocalOf { ExternalSender.you }
+
 @Composable
-internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, live: Transcript?, open: (String) -> Unit, highlighted: Boolean = false,
+internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Transcript?, open: (String) -> Unit, highlighted: Boolean = false,
     detailOnly: Boolean = false, target: Long? = null) {
     // The turns Orbit opened, folded with their answers (ExchangeFold): [target] opens the way down to a record a link landed on.
     if (row.exchanges.isNotEmpty()) {
@@ -124,7 +132,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             // Somebody other than the owner — a connected Feishu group's member (`externalSender`, docs/feishu-bot-design.md §8.2), or
             // a guest the owner invited (docs/session-guests-design.md §3): their words, headed `From Feishu · <name>` or `From <name>`
             // so they do not read as the owner's own (web `.chat-user-from`, OrbitKit `UserBubbleView`).
-            ?: ExternalSender.parse(event.fields["externalSender"])?.let(ExternalSender::label) ?: "You"
+            ?: ExternalSender.parse(event.fields["externalSender"])?.let(ExternalSender::label) ?: LocalOwnerHeading.current
         "assistant" -> "Assistant"
         "thinking" -> "Thinking"
         "tool_use" -> if (questions.isNotEmpty()) "Question" else shown.fields.string("name") ?: shown.fields.string("toolName") ?: "Tool"
@@ -230,6 +238,15 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                 if (liveLine != null) Text(liveLine, Modifier.testTag("subagent-live-line"), color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 else if (taskRunning) progress?.let(TaskProgressCopy::trayLine)?.let { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            }
+            // The owner's "Chat about this" reply to one of Orbit's own cards: their message, drawn as their turns are, under the
+            // call rather than left inside its output (web `OwnerChatBubble`, OrbitKit `OwnerChatReply`).
+            if (!detailOnly) ownerChatWords(row)?.let { words ->
+                Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(10.dp).testTag("owner-chat-reply"),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("You", style = MaterialTheme.typography.labelMedium)
+                    MarkdownText(words, open = open)
+                }
             }
             if (expanded || detailOnly) {
                 // A workflow opens to its progress, its script folded under it; a sub-agent's totals close its transcript.

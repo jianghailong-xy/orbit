@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { MACHINE_RESOURCES_CAPABILITY, type RunnerResourcesAnswer } from '@orbit/shared';
 import type { Runner } from '../TasksSidePanel';
 import type { RunnerAttentionInput } from '../../lib/runnerAttention';
 import cases from '../../lib/runnerAttention.cases.json';
@@ -70,6 +71,8 @@ let host: HTMLDivElement | null = null;
 let scrolledTo: Element[] = [];
 /** What /dl/version.json publishes: the mounted case's latest release. */
 let published: string | null = null;
+/** What GET /runners/:id/resources answers. */
+let resourcesAnswer: RunnerResourcesAnswer | null = null;
 
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -123,6 +126,7 @@ afterEach(() => {
   vi.mocked(copyText).mockClear();
   scrolledTo = [];
   published = null;
+  resourcesAnswer = null;
   document.body.innerHTML = '';
 });
 
@@ -143,6 +147,7 @@ async function mount(m: Machine, counts: Array<{ workspaceId: string; running: n
       return path.endsWith('/rotate-token') ? { token: 'orbit_rt_fresh' } : {};
     }
     if (path === '/runners') return [m.runner];
+    if (path === `/runners/${RUNNER_ID}/resources`) return resourcesAnswer ?? { at: null, latest: null, samples: [] };
     if (path === '/workspaces') return m.workspaces;
     if (path === '/sessions/counts') {
       return counts.map((count) => ({ ...count, active: count.running, needsYou: 0 }));
@@ -222,6 +227,8 @@ const cards = () =>
     detail: text($('.rd-attention-detail', card)),
     action: text(card.querySelector('.rd-attention-action button')),
   }));
+/** Each Resources tile: which figure, and everything it says. */
+const tiles = () => $$('.machine-res-tile').map((tile) => [tile.dataset.resource, text(tile)]);
 const sectionTitles = () => $$('.machine-page .settings-section-title').map(text);
 /** About's rows: the label, the value's own text, and the note beside it. */
 const about = () =>
@@ -274,6 +281,7 @@ describe('a runner’s page, laid out as web.png', () => {
     expect([...page.children].map((el) => el.className)).toEqual([
       'machine-head',
       'rd-attention machine-attention',
+      'settings-section machine-section-resources',
       'settings-section machine-section-engines',
       'machine-capacity',
       'settings-section machine-section-workspaces',
@@ -282,6 +290,7 @@ describe('a runner’s page, laid out as web.png', () => {
     ]);
     expect($('.rd-attention').getAttribute('aria-label')).toBe('Needs Attention');
     expect(sectionTitles()).toEqual([
+      'Resources',
       'Engines',
       'Capacity',
       'Workspaces on this machine',
@@ -367,14 +376,32 @@ describe('a runner’s page, laid out as web.png', () => {
     expect(text($('.re-panel .rsi-btn', claude))).toBe('Sign in to Claude Code');
   });
 
-  it('saves Max Concurrent as it is typed — on blur, and on Enter — and Keep Free as it is picked', async () => {
+  it('reads Max Concurrent as a meter, changes it from Edit in a dialog, and Keep Free as it is picked', async () => {
     const { sent } = await mount(machine('real wikova'));
-    const input = $<HTMLInputElement>('.rd-max-concurrent input');
-    expect(input.value).toBe('12');
+    // Its use of the limit: `4 of 12 running` and a bar across the row, amber once every slot is taken.
+    const row = capacityRow('Max Concurrent');
+    expect(text($('.machine-meter-value', row))).toBe('4 of 12 running');
+    expect($('.machine-meter-bar', row).className).toBe('rd-disk-bar machine-meter-bar');
+    expect($<HTMLElement>('.machine-meter-bar > span', row).style.width).toBe('33%');
+    const value = $<HTMLButtonElement>('.machine-max-edit', row);
+    expect(text(value)).toBe('Edit');
+    expect(value.getAttribute('aria-label')).toBe('Edit Max Concurrent');
+    expect(document.querySelector('.rd-max-concurrent')).toBeNull();
 
-    await typeNumber(input, '8', 'blur');
+    // Cancel sends nothing.
+    await click(value);
+    expect($<HTMLInputElement>('.rd-max-concurrent input').value).toBe('12');
+    await typeNumber($<HTMLInputElement>('.rd-max-concurrent input'), '5', 'blur');
+    await click(button('Cancel'));
+    expect(sent).toEqual([]);
+    // Save sends what was typed.
+    await click($('.machine-max-edit'));
+    expect($<HTMLInputElement>('.rd-max-concurrent input').value).toBe('12');
+    await typeNumber($<HTMLInputElement>('.rd-max-concurrent input'), '8', 'blur');
+    await click(button('Save'));
     expect(sent).toEqual([{ method: 'PATCH', path: `/runners/${RUNNER_ID}`, body: { maxConcurrent: 8 } }]);
-    // There is no ceiling: a big machine keeps what is typed.
+    // There is no ceiling: a big machine keeps what is typed, and Enter saves too.
+    await click($('.machine-max-edit'));
     await typeNumber($<HTMLInputElement>('.rd-max-concurrent input'), '99', 'enter');
     expect(sent.at(-1)).toEqual({ method: 'PATCH', path: `/runners/${RUNNER_ID}`, body: { maxConcurrent: 99 } });
 
@@ -386,6 +413,13 @@ describe('a runner’s page, laid out as web.png', () => {
     expect(sent).toHaveLength(3);
   });
 
+  it('fills Max Concurrent’s bar amber once every slot is taken', async () => {
+    await mount(machine('real wikova', { activeSessions: 12 }));
+    expect(text($('.machine-meter-value', capacityRow('Max Concurrent')))).toBe('12 of 12 running');
+    expect($('.machine-meter-bar', capacityRow('Max Concurrent')).className).toContain('warn');
+    expect($<HTMLElement>('.machine-meter-bar > span', capacityRow('Max Concurrent')).style.width).toBe('100%');
+  });
+
   it('shows a floor set to something else as it is, and Off clears it', async () => {
     const { sent } = await mount(machine('real wikova', { minFreeDiskMb: 15000 }));
     expect(text($('.rd-keep-free'))).toBe('15 GB');
@@ -395,15 +429,66 @@ describe('a runner’s page, laid out as web.png', () => {
     expect(sent).toEqual([{ method: 'PATCH', path: `/runners/${RUNNER_ID}`, body: { minFreeDiskMb: null } }]);
   });
 
-  it('draws the disk its workspaces fill first, amber from 90%', async () => {
+  it('a runner that reads no resources: Update runner for CPU and memory, the disk its workspaces fill first, amber from 90%', async () => {
     await mount(machine('real wikova'));
-    expect(text($('.settings-row-text', capacityRow('Disk')))).toBe('Disk187 of 197 GB used');
-    expect($('.rd-disk-bar', capacityRow('Disk')).className).toBe('rd-disk-bar machine-disk-bar warn');
-    expect($<HTMLElement>('.rd-disk-bar > span').style.width).toBe('95%');
+    expect(text($('.machine-section-resources .machine-section-note'))).toBe('Disk is read from your workspaces');
+    expect(tiles()).toEqual([
+      ['cpu', 'CPUUpdate runnerThis runner predates CPU readings.'],
+      ['mem', 'MemoryUpdate runnerThis runner predates memory readings.'],
+      ['disk', 'Disk95%187 of 197 GB used · 9.4 GB free'],
+    ]);
+    expect($('[data-resource="disk"]').className).toBe('machine-res-tile warn');
+    expect($$('.machine-res-spark')).toEqual([]);
+    // Capacity keeps the two settings; the disk is a reading, under Resources.
+    expect($$('.machine-section-capacity .settings-row-title').map(text)).toEqual(['Max Concurrent', 'Keep Free']);
     expect(text($('.machine-section-capacity .rd-hint'))).toBe(
       'Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, task runs stop ' +
         'being sent here and finished worktrees are cleaned up sooner.',
     );
+  });
+
+  it('a runner that reads its resources: each figure large, its hour under it, memory amber from 90%', async () => {
+    const at = new Date(NOW - 20_000).toISOString();
+    const GB = 1024 ** 3;
+    resourcesAnswer = {
+      at,
+      latest: {
+        cpuPercent: 38.4, cpuCores: 8, load1: 3.04, memTotalBytes: 32 * GB, memAvailableBytes: 2 * GB,
+        diskTotalBytes: 926 * GB, diskFreeBytes: 198 * GB,
+      },
+      samples: [
+        { at: new Date(NOW - 50 * 60_000).toISOString(), cpu: 20, mem: 90, disk: 78 },
+        { at: new Date(NOW - 49.5 * 60_000).toISOString(), cpu: 25, mem: 91, disk: 78 },
+        // Unheard for most of an hour: the line breaks.
+        { at: new Date(NOW - 50_000).toISOString(), cpu: 30, mem: 92, disk: 79 },
+        { at, cpu: 38.4, mem: 94, disk: 79 },
+      ],
+    };
+    await mount(machine('real wikova', { capabilities: [MACHINE_RESOURCES_CAPABILITY] }));
+    expect(text($('.machine-section-resources .machine-section-note'))).toBe('Live · every 30 s · last hour');
+    expect(tiles()).toEqual([
+      ['cpu', 'CPU38%8 cores · load 3.0'],
+      ['mem', 'Memory94%30 of 32 GB usedNearly full — new sessions may be slow to start.'],
+      ['disk', 'Disk79%728 of 926 GB used · 198 GB free'],
+    ]);
+    expect($('[data-resource="cpu"]').className).toBe('machine-res-tile');
+    expect($('[data-resource="mem"]').className).toBe('machine-res-tile warn');
+    const runs = $$('polyline', $('[data-resource="cpu"]'));
+    expect(runs).toHaveLength(2);
+    expect(runs[0].getAttribute('points')).toBe('40.0,35.2 42.0,33.0');
+  });
+
+  it('an offline machine shows its last reading in grey, and when it came', async () => {
+    resourcesAnswer = {
+      at: new Date(NOW - 14 * 60_000).toISOString(),
+      latest: { cpuPercent: 12, cpuCores: 4 },
+      samples: [],
+    };
+    await mount(machine('real wikova', { capabilities: [MACHINE_RESOURCES_CAPABILITY], online: false }));
+    expect(text($('.machine-section-resources .machine-section-note'))).toBe('Offline · last reading 14m ago');
+    expect($('[data-resource="cpu"]').className).toBe('machine-res-tile off');
+    expect(tiles()[0]).toEqual(['cpu', 'CPU12%4 cores']);
+    expect(tiles()[1]).toEqual(['mem', 'Memory—No reading yet']);
   });
 
   it('says in About what the Details grid said, with Rename beside the name', async () => {
@@ -499,6 +584,9 @@ describe('a runner’s page, laid out as web.png', () => {
     await mount(machine('real longdeMac-mini.local'));
     expect(text($('[data-testid="machine-status"]'))).toMatch(/^Offline · last seen /);
     expect($('[data-testid="machine-status"]').className).toContain('machine-pill--offline');
+    // Offline, its count of running sessions is stale, so Max Concurrent has just its limit and no bar.
+    expect(text($('.machine-meter-value', capacityRow('Max Concurrent')))).toBe('16');
+    expect(capacityRow('Max Concurrent').querySelector('.machine-meter-bar')).toBeNull();
     expect(cards().map(({ tone, title, action }) => [tone, title, action])).toEqual([
       ['idle', 'Offline for 14 days', null],
       ['warn', 'Can’t update itself', 'Copy Command'],

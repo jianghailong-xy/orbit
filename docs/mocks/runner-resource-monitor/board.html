@@ -1,0 +1,71 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Machine page · CPU, memory, disk</title><style>
+body{margin:0;background:#f3f4f6}
+.b-part{font:15px/1.6 Inter,"Noto Sans SC",sans-serif;color:#1f2328;background:#fff;width:2060px;padding:36px 44px 40px;box-sizing:border-box;margin:0 0 24px}
+.b-part h1{font-size:26px;margin:0 0 6px}.b-part h2{font-size:20px;margin:26px 0 10px}
+.b-lead{color:#4b5563;margin:0 0 14px}
+.b-row{display:flex;gap:24px;align-items:flex-start}
+.b-frame{margin:0;width:640px}
+.b-arrow{align-self:center;font-size:30px;color:#9ca3af;margin:0 -12px}
+.b-shot{position:relative;border:1px solid #d1d5db;border-radius:10px;line-height:0}
+.b-shot img{border-radius:10px}
+.b-frame figcaption{font-size:14px;color:#374151;margin-top:8px}
+.b-frame figcaption b{color:#111}
+.b-pin{position:absolute;width:24px;height:24px;border-radius:50%;background:#e11d48;color:#fff;font:700 13px/24px Inter,sans-serif;text-align:center;box-shadow:0 0 0 3px #fff}
+.b-ring{position:absolute;border:2.5px dashed #e11d48;border-radius:8px}
+.b-notes{counter-reset:n;padding:0;list-style:none;margin:10px 0 0}
+.b-notes li{position:relative;padding-left:34px;margin:8px 0}
+.b-notes li::before{counter-increment:n;content:counter(n);position:absolute;left:0;top:2px;width:22px;height:22px;border-radius:50%;background:#e11d48;color:#fff;font:700 12px/22px Inter,sans-serif;text-align:center}
+.b-bad{color:#b91c1c;font-weight:600}.b-ok{color:#047857;font-weight:600}
+table.b-t{border-collapse:collapse;width:100%;font-size:14px;margin-top:6px}
+.b-t th,.b-t td{border:1px solid #e5e7eb;padding:8px 10px;text-align:left;vertical-align:top}
+.b-t th{background:#f9fafb}
+.b-rec{background:#ecfdf5}
+.b-tag{display:inline-block;font-size:12px;border-radius:4px;padding:0 6px;background:#fef3c7;color:#92400e;margin-left:6px}
+code{font:13px "JetBrains Mono",monospace;background:#f3f4f6;padding:1px 4px;border-radius:4px}
+</style></head><body>
+<section class="b-part" id="part-1"><h1>Settings → Machines → studio · CPU / 内存 / 硬盘监控（真实页面，HEAD 5cc046b01）</h1>
+<p class="b-lead">示例机器 studio（虚构），窗口 1280 宽。左：今天；右：方案（在真实页面上注入的原型 DOM，用页面自己的 section 样式）。</p>
+<div class="b-row">
+<figure class="b-frame" style="width:860px"><div class="b-shot"><img src="shots/today.png" width="860"><span class="b-ring" style="left:6px;top:736px;width:844px;height:58px"></span><span class="b-pin" style="left:826px;top:712px">1</span></div><figcaption><b>① 今天</b> 只有硬盘，藏在 Capacity 里的一行（读的是 workspace 所在盘里最紧的那块）。没有 CPU 和内存。</figcaption></figure>
+<div class="b-arrow">→</div>
+<figure class="b-frame" style="width:860px"><div class="b-shot"><img src="shots/new-live.png" width="860"><span class="b-ring" style="left:6px;top:136px;width:844px;height:190px"></span><span class="b-pin" style="left:826px;top:112px">2</span><span class="b-ring" style="left:6px;top:892px;width:844px;height:106px"></span><span class="b-pin" style="left:826px;top:868px">3</span></div><figcaption><b>② 方案</b> 页头下面加一节 <b>Resources</b>：三张卡 CPU / Memory / Disk。</figcaption></figure>
+</div>
+<ol class="b-notes">
+<li>今天的 Disk 行：一个条 + “728 of 926 GB used”。</li>
+<li><b>Resources</b> 一节放在 Engines 上面（先看机器忙不忙，再看引擎）。每张卡：大号百分比、一行明细、最近一小时的折线。右上角写清楚数据多新：“Live · every 30 s · last hour”（runner 本来就每 30 s 心跳一次，读数跟着心跳走，不多开连接）。<br>CPU：整机占用 % + 核数 + 1 分钟 load。Memory：已用 / 总量（已用 = 总量 − 可用，不把系统缓存算成占用）。Disk：沿用今天的数据和算法，多写一个 “free”。</li>
+<li>Disk 从 Capacity 搬出去：Capacity 只剩两项设置（Max Concurrent、Keep Free），读数都在 Resources。</li>
+</ol>
+</section>
+
+<section class="b-part" id="part-2"><h1>各种状态（原型，真实页面）</h1>
+<div class="b-row">
+<figure class="b-frame" style="width:860px"><div class="b-shot"><img src="shots/new-warn.png" width="860"></div><figcaption><b>④ 占用高</b> ≥ 90% 的卡变橙色（数字、折线）。内存满时加一句 “Nearly full — new sessions may be slow to start.” 硬盘满已有今天的提醒卡（Disk 96% full / Set a Reserve…），卡里不再重复。CPU 高不变色：跑 agent 时 CPU 满是正常的。</figcaption></figure>
+<figure class="b-frame" style="width:860px"><div class="b-shot"><img src="shots/new-offline.png" width="860"></div><figcaption><b>⑤ 离线</b> 显示最后一次读数，全部变灰，折线在掉线处断开；右上角 “Offline · last reading 14 min ago”。</figcaption></figure>
+</div>
+<div class="b-row" style="margin-top:20px">
+<figure class="b-frame" style="width:860px"><div class="b-shot"><img src="shots/new-old.png" width="860"></div><figcaption><b>⑥ 旧 runner</b>（不报 CPU / 内存）：两张卡显示 “Update runner”，和 Engines 里 DeepSeek Harness 的写法一致；Disk 照旧（来自 workspace 探测）。runner 空闲时会自己升级，之后自动出现。</figcaption></figure>
+<figure class="b-frame" style="width:390px"><div class="b-shot"><img src="shots/new-phone.png" width="390"></div><figcaption><b>⑦ 窄屏</b>（390 宽）三张卡竖排。</figcaption></figure>
+</div>
+</section>
+
+<section class="b-part" id="part-3"><h1>规则 · 数据从哪来 · 待你定</h1>
+<h2>规则</h2>
+<table class="b-t"><tr><th>项</th><th>数字</th><th>明细行</th><th>变橙</th><th>旧 runner</th></tr>
+<tr><td>CPU</td><td>整机占用 %（两次心跳之间的平均）</td><td>8 cores · load 3.0</td><td>不变色</td><td>Update runner</td></tr>
+<tr><td>Memory</td><td>(总量 − 可用) / 总量</td><td>21.6 of 32 GB used</td><td>≥ 90%，加一句提示</td><td>Update runner</td></tr>
+<tr><td>Disk</td><td>今天的 runnerDisk（workspace 所在盘里最紧的）</td><td>728 of 926 GB used · 198 GB free</td><td>≥ 90% 或低于 Keep Free（和今天的条一样）</td><td>照常显示</td></tr></table>
+<h2>数据从哪来（实现时）</h2>
+<table class="b-t"><tr><th>层</th><th>改动</th></tr>
+<tr><td>runner-go</td><td>心跳里加 <code>resources: { cpuPercent, cpuCores, load1, memTotalBytes, memAvailableBytes }</code>。Linux 读 <code>/proc/stat</code>、<code>/proc/meminfo</code>、<code>/proc/loadavg</code>；macOS 用 <code>host_statistics</code> / <code>sysctl</code>；Windows 先不报（卡上显示 “—”）。新增 capability <code>resources/v1</code>。</td></tr>
+<tr><td>apiserver</td><td>最新一次读数存在 Runner 行上；一小时折线：每台机器只留最近 120 个点（30 s 一个），见待定 B。<code>GET /api/runners/:id</code> 带出来。</td></tr>
+<tr><td>shared</td><td><code>dto.ts</code> 加 <code>RunnerResources</code> 类型。</td></tr>
+<tr><td>web</td><td><code>MachineSettingsPage.tsx</code> 新 Resources 一节，Disk 行从 Capacity 移走；<code>runnerCopy.ts</code> 加文案；<code>Settings.css</code>。</td></tr></table>
+<h2>待你定（推荐都是 A）</h2>
+<table class="b-t"><tr><th>#</th><th>问题</th><th>A</th><th>B</th></tr>
+<tr><td>1</td><td>放哪</td><td class="b-rec">A 单独一节 Resources，在 Engines 上面（本板）</td><td>B 并进 Capacity，三行条形，不要卡片</td></tr>
+<tr><td>2</td><td>历史</td><td class="b-rec">A 最近 1 小时折线：每台只存 120 个点，滚动覆盖</td><td>B 只显示当前值，不存历史，不画线</td></tr>
+<tr><td>3</td><td>Disk 从 Capacity 搬走？</td><td class="b-rec">A 搬走，Capacity 只留设置</td><td>B 两处都显示</td></tr>
+<tr><td>4</td><td>范围</td><td class="b-rec">A 先做 web；iOS / macOS / Android 另开任务</td><td>B 四端一起</td></tr>
+<tr><td>5</td><td>Machines 侧栏 / 机器列表要不要也显示一个小指标</td><td class="b-rec">A 不要，只在机器页</td><td>B 侧栏机器名旁显示 CPU%</td></tr></table>
+</section>
+</body></html>

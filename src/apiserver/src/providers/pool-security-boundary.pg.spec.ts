@@ -1015,6 +1015,8 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
       await ask(person_, 'GET', 'providers', {}, undefined, 200);
       await ask(person_, 'GET', 'providers/mine', {}, undefined, 200);
       await ask(person_, 'GET', 'providers/pools', {}, undefined, 200);
+      // The Providers page's Tier column: each owner's own providers and their models' tiers, no key.
+      await ask(person_, 'GET', 'providers/subagent-tiers', {}, undefined, 200);
     }
     await ask(alice, 'GET', 'providers/presets', {}, undefined, 200);
     // A shared provider, which only an admin manages and whose key nobody reads back.
@@ -1053,6 +1055,28 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
       'the balance body checked below carries a balance',
     );
     await ask(alice, 'DELETE', 'providers/mine/:id', { id: deepseekId }, undefined, 200);
+    // A tier set by her on a model her own endpoint lists, answered with the provider keyless; nobody sets one
+    // on anyone else's, nor on a shared provider or a pool, which every one reads as no provider of theirs.
+    const tiered = await ask(
+      alice,
+      'POST',
+      'providers/mine',
+      {},
+      { label: 'Tiered', baseUrl: ANTHROPIC, apiKey: subscription(), models: [{ value: 'her-model', label: 'Her model' }] },
+      201,
+    );
+    const tieredId = String(tiered.json.id);
+    const tier = { model: 'her-model', tier: 'M' };
+    await ask(alice, 'PATCH', 'providers/mine/:id/model-tier', { id: tieredId }, tier, 200);
+    await ask(bob, 'PATCH', 'providers/mine/:id/model-tier', { id: tieredId }, tier, 404);
+    await ask(alice, 'PATCH', 'providers/mine/:id/model-tier', { id: sharedId }, tier, 404);
+    await ask(alice, 'PATCH', 'providers/mine/:id/model-tier', { id: uuidToBase62(alicePool.id) }, tier, 404);
+    assert.deepEqual(
+      (await db.modelProvider.findUniqueOrThrow({ where: { id: toUuid(tieredId) }, select: { modelTiers: true } })).modelTiers,
+      { 'her-model': 'M' },
+      'her tier was written, and nobody else\'s request wrote over it',
+    );
+    await ask(alice, 'DELETE', 'providers/mine/:id', { id: tieredId }, undefined, 200);
     // A key typed into the connect form is probed with, not echoed.
     await ask(alice, 'POST', 'providers/test', {}, { baseUrl: ANTHROPIC, apiKey: subscription(), model: 'claude-opus-5', runtime: 'claude' }, 201);
     // One of her own connected, its key rotated, then deleted.
@@ -1296,6 +1320,7 @@ exec sleep 300
       await ask(bearer, 'GET', 'providers/presets', {}, undefined, 200);
       await ask(bearer, 'GET', 'providers/pools', {}, undefined, 200);
       await ask(bearer, 'GET', 'providers/shared-pools', {}, undefined, 200);
+      await ask(bearer, 'GET', 'providers/subagent-tiers', {}, undefined, 200);
       await ask(runner, 'GET', 'runner/providers', {}, undefined, 200);
       await ask(bearer, 'GET', 'admin/providers', {}, undefined, 403);
       await ask(bearer, 'GET', 'providers/pools/:id', at, undefined, by(404, 200));
@@ -1311,6 +1336,7 @@ exec sleep 300
       await ask(bearer, 'GET', 'providers/mine/:id/usage', at, undefined, 404);
       await ask(bearer, 'POST', 'providers/mine/:id/key-check', at, undefined, 404);
       await ask(bearer, 'PATCH', 'providers/mine/:id', at, { label: 'Renamed' }, 404);
+      await ask(bearer, 'PATCH', 'providers/mine/:id/model-tier', at, { model: 'gpt-5.5-codex', tier: 'M' }, 404);
       await ask(bearer, 'DELETE', 'providers/mine/:id', at, undefined, 404);
       await ask(bearer, 'POST', 'providers/pools/:id/members', at, { providerId: at.id }, 404);
       await ask(bearer, 'DELETE', 'providers/pools/:id/members/:providerId', { ...at, providerId: at.id }, undefined, by(404, 200));

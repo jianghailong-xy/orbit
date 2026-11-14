@@ -82,12 +82,30 @@ internal object RunnerCopy {
     const val WORKSPACES = "Workspaces"
     const val ABOUT = "About This Runner"
     const val MAX_CONCURRENT = "Max Concurrent"
+    const val MAX_CONCURRENT_HINT = "How many sessions this machine runs at once. A change applies to the next session it picks up — no restart."
+    const val EDIT = "Edit"
     const val DISK = "Disk"
     const val KEEP_FREE = "Keep Free"
     const val CAPACITY_FOOTER = "Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, task " +
         "runs stop being sent here and finished worktrees are cleaned up sooner."
     fun gb(amount: String) = "$amount GB"
     fun diskUsed(used: String, total: String) = "$used of $total GB used"
+    // Resources (web runnerCopy.ts "MARK: Resources", docs/mocks/runner-resource-monitor)
+    const val RESOURCES = "Resources"
+    const val RESOURCES_CPU = "CPU"
+    const val RESOURCES_MEMORY = "Memory"
+    const val RESOURCES_LIVE = "Live · every 30 s · last hour"
+    const val RESOURCES_OFFLINE = "Offline"
+    const val RESOURCES_DISK_ONLY = "Disk is read from your workspaces"
+    const val RESOURCES_UPDATE = "Update runner"
+    const val RESOURCES_NO_READING = "No reading yet"
+    const val RESOURCES_MEMORY_FULL = "Nearly full — new sessions may be slow to start."
+    fun resourcesLastReading(ago: String) = "Offline · last reading $ago"
+    fun resourcesPredates(what: String) = "This runner predates $what readings."
+    const val CPU_ONE_CORE = "1 core"
+    fun cpuCores(count: String) = "$count cores"
+    fun cpuLoad(load: String) = "load $load"
+    fun diskFree(free: String) = "$free GB free"
     const val SIGNED_IN = "Signed in"
     const val SIGNED_OUT = "Signed out"
     const val NOT_INSTALLED = "Not installed"
@@ -1243,15 +1261,34 @@ internal object RunnerPage {
 
     fun engineUpdateInFlight(install: JsonObject?) = install?.str("mode") == "update" && install.str("status") in setOf("pending", "installing")
 
-    fun updateRelayLine(install: JsonObject?): String? {
-        if (install?.str("mode") != "update") return null
+    /** One line of what the last Update Engines Now said, and whether it is a failure (drawn red). */
+    data class UpdateRelayLine(val text: String, val failed: Boolean = false)
+
+    /**
+     * Where the last Update Engines Now got to (iOS `updateRelayLines`). A finished run lists only the engines that need
+     * someone: the failures, and an install Orbit may not replace. Current, updated, pinned, waiting for sessions or retried
+     * on the next pass sort themselves out, and listing them buried the line that mattered.
+     */
+    fun updateRelayLines(install: JsonObject?): List<UpdateRelayLine> {
+        if (install?.str("mode") != "update") return emptyList()
         return when (install.str("status")) {
-            "pending" -> "Queued — the runner picks this up on its next check-in."
-            "installing" -> "Updating this machine’s engine CLIs…"
-            "done", "failed" -> install.str("message")?.trim()?.takeIf { it.isNotEmpty() } ?: "Nothing to update."
-            else -> null
+            "pending" -> listOf(UpdateRelayLine("Queued — the runner picks this up on its next check-in."))
+            "installing" -> listOf(UpdateRelayLine("Updating this machine’s engine CLIs…"))
+            "done", "failed" -> {
+                val message = install.str("message")?.trim().orEmpty()
+                if (message.isEmpty()) return listOf(UpdateRelayLine("Nothing to update."))
+                message.split("\n")
+                    .filter { updateLineFailed(it) || it.contains("owned by another user") }
+                    .map { UpdateRelayLine(it, failed = updateLineFailed(it)) }
+                    .ifEmpty { listOf(UpdateRelayLine("Nothing here needs your attention.")) }
+            }
+            else -> emptyList()
         }
     }
+
+    /** The runner's own rule for a failed run (`updateRunFailed`, src/runner-go/engineinstall.go), read per line. */
+    private fun updateLineFailed(line: String) =
+        line.contains("update failed") || line.contains("timed out") || line.contains("does not run")
 
     // workspaces
     /** A path as a terminal spells it, with the machine's home directory as `~`. */

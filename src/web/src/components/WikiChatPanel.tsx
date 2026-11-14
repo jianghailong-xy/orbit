@@ -1281,7 +1281,12 @@ function WikiChatSession({
   });
 
   // ── Sending, by the session page's rules: into the running turn unless held or ⌥Enter, Stop with nothing typed ──
-  const defaultSendIntent = defaultSessionTurnIntent({ live, status: runStatus, numTurns: Number(session?.numTurns ?? 0) });
+  const defaultSendIntent = defaultSessionTurnIntent({
+    live,
+    status: runStatus,
+    numTurns: Number(session?.numTurns ?? 0),
+    nextTurnQueued: visibleQueuedTurns.some((turn) => turn.placement === 'queued' && turn.delivery == null),
+  });
   const generating = !!session && (isGenerating(session, sessionRunStateOf(session)) || outlivingSessionWork(session) !== null);
   const showStop = generating && !draft.text.trim() && draft.readyImages.length === 0;
   const queueOffered = defaultSendIntent === 'CURRENT_WORK' && !showStop && runtimeTakesMidTurnSteer(engine);

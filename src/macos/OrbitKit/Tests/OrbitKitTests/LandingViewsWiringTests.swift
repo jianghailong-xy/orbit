@@ -292,6 +292,13 @@ final class LandingViewsWiringTests: XCTestCase {
         let chip = code(try appSource("Views/LandingEntryLink.swift"))
         XCTAssertTrue(chip.contains("SessionProjectLandings.sourceLabel(console.worktree.detail?.sourceLanding)"))
         XCTAssertTrue(chip.contains("orbit-session:"))
+        // Where the worktree card is, it says the landing and the chip stands down
+        // (docs/mocks/session-landing-slot-ios).
+        XCTAssertTrue(chip.contains("if !carriedByWorktreeBar, let label"))
+        let bar = code(try appSource("Views/WorktreeBar.swift"))
+        XCTAssertTrue(bar.contains("SessionProjectLandings.sourceSlot(d.sourceLanding, membership: d.projectMembership)"))
+        XCTAssertTrue(bar.contains("hasSourceLanding: d?.sourceLanding != nil"))
+        XCTAssertTrue(bar.contains("SourceLandingRow(slot: landing)"))
     }
 
     /// Each Re-run the check door names its own sentence, as web's two doors do: the merge card on

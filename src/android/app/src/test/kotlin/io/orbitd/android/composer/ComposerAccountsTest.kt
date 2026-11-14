@@ -29,13 +29,13 @@ class ComposerAccountsTest {
             runner("env_key", "no", null).accountChoices("antigravity"))
     }
 
-    @Test fun codexRowsSayTheirTightestWindowAndASignedOutOneWhy() {
+    @Test fun codexRowsSayTheirTightestWindowAndASignedOutOneIsLeftOut() {
         val catalog = ComposerCatalog(obj("""{"id":"r","engines":[{"engine":"codex","installed":true,"auth":"yes",
             "accounts":[{"id":"default","auth":"yes"},{"id":"1a2b3c4d","name":"Second account","auth":"yes"},{"id":"deadbeef","name":"Expired account","auth":"no"}]}],
             "planUsage":{"codex":{"provider":"codex","primary":{"utilization":23,"windowDurationMins":300},"secondary":{"utilization":40,"windowDurationMins":10080},
               "accounts":{"1a2b3c4d":{"provider":"codex","primary":{"utilization":71,"windowDurationMins":300}}}}}}"""), emptyList())
-        assertEquals(listOf(AccountChoice("default", "Default", "Weekly 40%"), AccountChoice("1a2b3c4d", "Second account", "5h 71%"),
-            AccountChoice("deadbeef", "Expired account", unavailable = "Not signed in")), catalog.accountChoices("codex"))
+        assertEquals(listOf(AccountChoice("default", "Default", "Weekly 40%"), AccountChoice("1a2b3c4d", "Second account", "5h 71%")),
+            catalog.accountChoices("codex"))
         assertEquals(emptyList<AccountChoice>(), catalog.accountChoices("kimi"))
     }
 
@@ -48,8 +48,8 @@ class ComposerAccountsTest {
             "planUsage":{"kimi":{"provider":"kimi","fiveHour":{"utilization":12},"sevenDay":{"utilization":34},"month":{"utilization":8},"monthCode":{"utilization":50},
               "accounts":{"5c2e91a0":{"provider":"kimi","fiveHour":{"utilization":91},"sevenDay":{"utilization":61},"month":{"utilization":22}}}}}}"""), emptyList())
         val kimi = catalog("\"kimi-account-move/v1\"")
-        assertEquals(listOf(AccountChoice("default", "Default", "Weekly 34%"), AccountChoice("5c2e91a0", "Work", "5h 91%", nearLimit = true),
-            AccountChoice("deadbeef", "Old", unavailable = "Not signed in")), kimi.accountChoices("kimi"))
+        assertEquals(listOf(AccountChoice("default", "Default", "Weekly 34%"), AccountChoice("5c2e91a0", "Work", "5h 91%", nearLimit = true)),
+            kimi.accountChoices("kimi"))
         assertTrue(kimi.movesAccounts("kimi"))
         assertFalse("Codex's capability carries no Kimi conversation", catalog("\"codex-account-move/v1\"").movesAccounts("kimi"))
         fun fiveHours(detail: String) = kimi.usage(obj(detail))?.get("fiveHour")?.jsonObject?.get("utilization")?.jsonPrimitive?.int

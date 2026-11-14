@@ -1,7 +1,8 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, type CSSProperties } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { DownOutlined, HistoryOutlined, SearchOutlined } from '@ant-design/icons';
+import { CheckOutlined, DownOutlined, HistoryOutlined, SearchOutlined, SettingOutlined } from '@ant-design/icons';
+import { Menu, type MenuItem } from '../components/ui/Menu';
 import { OrbitLinkCardsProvider } from '../components/OrbitLinkCard';
 import { statusLabel } from '../components/WorkspaceView';
 import { WikiActivityButton, WikiActivityPage } from '../components/WikiActivityPage';
@@ -35,6 +36,7 @@ import {
   WIKI_SEARCH_SHORTCUT,
   WIKI_SPACE_PICKER_HINT,
   WIKI_ENTRY_NOUN,
+  WIKI_MANAGE_SPACES,
   WIKI_TITLE,
   WIKI_TO_REVIEW,
   wikiActivityPath,
@@ -44,8 +46,10 @@ import {
   type WikiSpaceRow,
 } from '../lib/wiki';
 import { wikiArticlePath, wikiCount } from '../lib/wikiArticles';
+import { useWikiDirectoryWidth } from '../lib/wikiDirectoryWidth';
 import { wikiStatusParts, wikiStatusText } from '../lib/wikiHealth';
-import { wikiDocPath } from '../lib/wikiDocs';
+import { WIKI_NO_DOCUMENTS, wikiDocPath, wikiDocumentCount } from '../lib/wikiDocs';
+import { wikiSettingsPath } from '../lib/wikiReviewMode';
 import {
   readWikiFromWorkspace,
   readWikiLastSpace,
@@ -53,6 +57,7 @@ import {
   wikiSpaceNames,
   wikiSpaceOption,
   wikiWaiting,
+  wikiWaitingIn,
   writeWikiLastSpace,
 } from '../lib/wikiSpace';
 
@@ -301,8 +306,8 @@ function RunRoute({ space, runParam }: { space: SpaceRow; runParam: string }) {
 /**
  * The chrome every Wiki view wears: the title row (the space, Contents, Activity, Settings, Share — no New entry since
  * board 45: an entry of the owner's own is said in the chat, whose card writes it as theirs)
- * and the search line. On a desktop beside the directory they are the directory's column instead: the title and the
- * space, the search, Activity among the rows and Settings and Share at its foot (board docs/mocks/wiki-rail ③). It is the project page's own title row and toolbar, which is
+ * and the search line. On a desktop beside the directory they are the directory's column instead: the space's name
+ * as its title (board docs/mocks/wiki-rail-name), Activity among the rows and Settings and Share at its foot (board docs/mocks/wiki-rail ③). It is the project page's own title row and toolbar, which is
  * what the design's mock links and draws — the counts are the page's counts, not a new row of numbers.
  *
  * ONLY ACTIVITY HAS THE STATUS ROW (design §12.3.1, board docs/mocks/wiki-rail ③): the line under the home's head says
@@ -332,8 +337,9 @@ function WikiFrame({
   const rows = spaces.data ?? (space ? [space] : []);
   const activity = at?.view === 'activity';
   const home = at?.view === 'home';
-  // A desktop draws the head, the search and the directory as one column (board docs/mocks/wiki-rail ③); the head
-  // row and the search line above stay for a phone and for a docked chat that folds the column away.
+  const [directoryWidth, startDirectoryResize] = useWikiDirectoryWidth();
+  // A desktop draws the space's name and the directory as one column (boards docs/mocks/wiki-rail ③, wiki-rail-name); the
+  // head row and the search line above stay for a phone and for a docked chat that folds the column away.
   const search = (
     <div className="wk-search" role="search">
       {/* The palette's own search: ⌘K answers entries in its Wiki group, so this line opens it. */}
@@ -348,10 +354,17 @@ function WikiFrame({
   const page = (
     <div
       className={`wk-page${at && !home && !activity ? ' wk-page--reading' : ''}${activity ? ' wk-page--activity' : ''}${space && at ? ' wk-page--railed' : ''}`}
+      style={{ '--wk-dir-w': `${directoryWidth}px` } as CSSProperties}
     >
       <div className="wk-title-row">
-        <h1 className="page-title">{WIKI_TITLE}</h1>
-        {space && <WikiHeadSpace space={space} spaces={rows} />}
+        {/* With a space, its name is the title (board docs/mocks/wiki-rail-name B); without one, the Wiki's. */}
+        {space ? (
+          <h1 className="page-title wk-name-title">
+            <WikiHeadSpace space={space} spaces={rows} />
+          </h1>
+        ) : (
+          <h1 className="page-title">{WIKI_TITLE}</h1>
+        )}
         <div className="wk-actions">
           {space && at && <WikiContentsButton />}
           {space && <WikiActivityButton spaceSlug={space.slug} waiting={wikiWaiting(rows)} on={activity} />}
@@ -367,12 +380,12 @@ function WikiFrame({
       {space && at ? (
         <div className={`wk-layout${home ? ' home' : ''}`}>
           <div className="wk-dir-col autohide-scrollbar">
+            {/* The space's name alone, in the heading's type (board docs/mocks/wiki-rail-name B): the app's sidebar
+                already lights Wiki, and ⌘K opens the search from any page. */}
             <div className="wk-rail-top">
-              <div className="wk-rail-head">
-                <h1 className="page-title">{WIKI_TITLE}</h1>
+              <h1 className="page-title wk-name-title wk-rail-head">
                 <WikiHeadSpace space={space} spaces={rows} />
-              </div>
-              {search}
+              </h1>
             </div>
             <WikiDirectory
               spaceId={space.id}
@@ -384,6 +397,7 @@ function WikiFrame({
               <WikiSettingsButton spaceSlug={space.slug} />
               <WikiShareButton spaceId={space.id} spaceSlug={space.slug} />
             </div>
+            <div className="wk-dir-resizer" role="separator" aria-orientation="vertical" onMouseDown={startDirectoryResize} />
           </div>
           <div className="wk-main">{children}</div>
         </div>
@@ -448,18 +462,51 @@ function WikiHeadSpace({ space, spaces }: { space: SpaceRow; spaces: readonly Sp
       </span>
     );
   }
+  // The console's own menu, as the Tasks title's scope picker opens (board docs/mocks/wiki-space-menu): a row a space —
+  // its name, the repository and its documents under it, what waits in it as the sidebar's amber count — the current one
+  // lit, and Manage spaces at the foot, into Wiki settings, as the native pickers end (iOS and Android `WikiSpacePicker`).
+  const items: MenuItem[] = [
+    ...spaces.map((row): MenuItem => {
+      const rowName = names.get(row.id) ?? row.title;
+      const waiting = wikiWaitingIn(row);
+      const line = [row.repoUrlNorm || null, row.docs ? wikiDocumentCount(row.docs.total) : WIKI_NO_DOCUMENTS].filter(Boolean).join(' · ');
+      const current = row.id === space.id;
+      return {
+        key: row.slug,
+        // What a screen reader says and typeahead reads: the name, and what waits in it in words.
+        textValue: wikiSpaceOption(names.get(row.id) ?? row.title, row),
+        selected: current,
+        icon: current ? <CheckOutlined /> : <span />,
+        label: (
+          <span className="wk-space-row">
+            <span className="wk-space-row-text">
+              <span className="n">{rowName}</span>
+              <span className="s">{line}</span>
+            </span>
+            {waiting > 0 && (
+              <span className="tp-count needs-you" title={wikiWaitingOnYou(waiting)}>
+                {waiting}
+              </span>
+            )}
+          </span>
+        ),
+        onSelect: current ? undefined : () => navigate(wikiSpacePath(row.slug)),
+      };
+    }),
+    { type: 'separator', key: 'rule' },
+    { key: 'manage', label: WIKI_MANAGE_SPACES, icon: <SettingOutlined />, onSelect: () => navigate(wikiSettingsPath(space.slug)) },
+  ];
   return (
-    <span className="wk-select" title={WIKI_SPACE_PICKER_HINT}>
-      <span className="v">{name}</span>
-      <select value={space.slug} aria-label={WIKI_SPACE_PICKER_HINT} onChange={(event) => navigate(wikiSpacePath(event.target.value))}>
-        {spaces.map((row) => (
-          <option key={row.id} value={row.slug}>
-            {wikiSpaceOption(names.get(row.id) ?? row.title, row)}
-          </option>
-        ))}
-      </select>
-      <DownOutlined className="ic caret" />
-    </span>
+    <Menu
+      popupClassName="wk-space-menu"
+      items={items}
+      trigger={
+        <button type="button" className="wk-select" title={WIKI_SPACE_PICKER_HINT} aria-label={`${name}: ${WIKI_SPACE_PICKER_HINT}`}>
+          <span className="v">{name}</span>
+          <DownOutlined className="ic caret" />
+        </button>
+      }
+    />
   );
 }
 

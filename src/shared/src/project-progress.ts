@@ -1947,11 +1947,14 @@ export interface SessionOwnerItem<Instant = string> {
  * close", over the "Is this project done?" card. `RECORD_AS_DONE` is a project that looks finished
  * and that its coordinator did not ask to have recorded done within the project's escalation window:
  * the row says "Record as done…". A row counting anything else (a blocked tool call, a proposal)
- * keeps the generic approval wording, and so does one counting two kinds at once.
+ * keeps the generic approval wording, and so does one counting two kinds at once. `OWNER_REQUEST`
+ * is an owner request (`request_owner_action`) the conversation filed and the owner has not ended:
+ * the row says "Waiting on you", over the request's card.
  */
 export type SessionWaitingKind =
   | 'OWNER_CONFIRMATION'
   | 'OWNER_ITEM'
   | 'START_REQUEST'
   | 'DONE_REQUEST'
-  | 'RECORD_AS_DONE';
+  | 'RECORD_AS_DONE'
+  | 'OWNER_REQUEST';

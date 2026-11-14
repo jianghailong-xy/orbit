@@ -137,11 +137,10 @@ describe('the turn that starts a task run', () => {
     expect(el!.querySelector('details.tsc-raw pre')?.textContent).toBe(BRIEF);
   });
 
-  it('names itself on the sticky bar the way every card that is nobody\'s message does', async () => {
+  it('marks a round Orbit opened, which the sticky bar hides over', async () => {
     await mount([started(CARD)]);
 
-    expect(card()!.getAttribute('data-sticky-label')).toBe('Task started');
-    expect(card()!.getAttribute('data-sticky-text')).toBe(CARD.title);
+    expect(card()!.hasAttribute('data-orbit-round'), 'Orbit opened this round: the sticky bar hides over it').toBe(true);
     expect(card()!.getAttribute('data-seq')).toBe('1');
   });
 

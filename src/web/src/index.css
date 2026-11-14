@@ -838,6 +838,19 @@ button.toast--pill:focus-visible {
   white-space: nowrap;
   color: var(--text-3);
 }
+/* With a pointer, the machine shows only on the row pointed at (board docs/mocks/workspace-runner-label,
+   E1): the list reads as names, the hovered row says where it runs, and there the machine stays whole
+   while the name gives way. A touch screen has no hover, so it keeps the machine on every row. */
+@media (hover: hover) and (min-width: 961px) {
+  .app-shell .app-nav:not(.collapsed) .tp-item:not(:hover):not(.menu-open) .tp-workspace-separator,
+  .app-shell .app-nav:not(.collapsed) .tp-item:not(:hover):not(.menu-open) .tp-workspace-runner {
+    display: none;
+  }
+  .app-shell .app-nav:not(.collapsed) .tp-workspace-runner {
+    flex: none;
+    max-width: 60%;
+  }
+}
 .tp-workspace-icon {
   position: relative;
 }
@@ -2480,16 +2493,13 @@ button.toast--pill:focus-visible {
   background: var(--bg-subtle);
   border: 1px solid var(--border-subtle);
 }
-.rd-engine-relay.bad {
-  background: var(--error-bg);
-  border-color: var(--error-border);
-}
 .rd-engine-relay-row {
   font-size: 12.5px;
   color: var(--text-2);
   white-space: pre-wrap;
 }
-.rd-engine-relay.bad .rd-engine-relay-row {
+/* Only the engines that failed: the card stays neutral, so the lines that were fine read as fine. */
+.rd-engine-relay-row.bad {
   color: var(--error);
   font-weight: 500;
 }
@@ -4859,6 +4869,18 @@ button.toast--pill:focus-visible {
     border-radius: 6px;
   }
 }
+/* A project entry is the one focusable session row. Keyboard focus takes the row's hover tint, not a
+   ring: the browser's outer ring is clipped by the list's edge, and an inner one is covered on the
+   right by the kebab's fade. */
+.session-project-row:focus-visible {
+  outline: none;
+  background: var(--bg-hover);
+  --session-menu-surface: var(--bg-hover);
+}
+.session-project-row.active:focus-visible {
+  background: var(--brand-tint-hover);
+  --session-menu-surface: var(--brand-tint-hover);
+}
 /* Trash rows are managed, not opened — no pointer affordance. */
 .session-row.no-open {
   cursor: default;
@@ -5860,9 +5882,11 @@ button.toast--pill:focus-visible {
   background: var(--bg-hover);
   --row-bg: var(--bg-hover);
 }
+/* Keyboard focus takes the hover tint, as a project row's does, not a ring. */
 .session-folder-row:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: -2px;
+  outline: none;
+  background: var(--bg-hover);
+  --row-bg: var(--bg-hover);
 }
 .session-folder-row.editing {
   height: auto;
@@ -13331,7 +13355,7 @@ button.chat-jump-start:hover {
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--bg);
+  background: var(--bg-base);
   font-size: 13.5px;
   cursor: pointer;
 }
@@ -16460,6 +16484,16 @@ button.chat-jump-start:hover {
 .share-page.guest-view {
   height: 100%;
   min-height: 0;
+  /* Nothing in it may reach past the pane, as nothing in the owner's console does (.workspace-view,
+     .workspace-scroll-wrap): a box the transcript positions against otherwise sits outside the
+     conversation's scroller, and the page grew taller than the window with it. */
+  position: relative;
+  overflow: hidden;
+}
+.share-page.guest-view > .share-scroll {
+  position: relative;
+  /* Reaching the end of the conversation ends the scroll there: it is not handed on to the page. */
+  overscroll-behavior: contain;
 }
 .share-subtitle {
   overflow: hidden;
@@ -17025,7 +17059,8 @@ button.chat-jump-start:hover {
 
 /* One vendor's keys on its Settings page (ProviderKeyRows, docs/mocks/settings-redesign board-4): a
    SettingsRow per key, its name over one line of what it runs on, the model it starts on, the pools it
-   is in and when it was last used; Edit and ⋯ on its right. */
+   is in and when it was last used; a borderless ⋯ and the › that says the row opens (settings-buttons
+   board 01) on its right. */
 .vk-line {
   display: flex;
   flex-wrap: wrap;
@@ -17035,13 +17070,21 @@ button.chat-jump-start:hover {
 .vk-line .infra-model {
   color: var(--text-1);
 }
-.vk-used {
+.vk-used,
+.vk-used-item {
   white-space: nowrap;
 }
 .vk-act {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
+}
+.vk-act .orbit-button-text {
+  color: var(--text-3);
+}
+.vk-chev {
+  color: var(--text-3);
+  font-size: 11px;
 }
 
 /* ============================================================================
@@ -17760,7 +17803,11 @@ button.chat-jump-start:hover {
   margin-top: 10px;
 }
 .pool-row {
-  grid-template-columns: minmax(0, 1fr) 196px 140px 110px;
+  /* Top-aligned (settings-buttons board 02): the status, the quota's head and the actions sit level with
+     the name's line, however many lines the quota column takes. The last column holds a way back
+     (Resume Now, Sign in again) beside the ⋯. */
+  grid-template-columns: minmax(0, 1fr) 160px 140px 146px;
+  align-items: start;
 }
 .pool-status {
   min-width: 0;
@@ -17795,7 +17842,7 @@ button.chat-jump-start:hover {
 /* The pool's page takes accounts out, so its rows carry up to two actions: Re-add key and the
    remove mark (88 + 8 + 24px measured). */
 .pool-detail .pool-row {
-  grid-template-columns: minmax(0, 1fr) 196px 130px 124px;
+  grid-template-columns: minmax(0, 1fr) 160px 130px 146px;
 }
 /* The head's gauge: the account the next session runs on, never an average of them. */
 .pool-gauge {
@@ -18009,8 +18056,70 @@ button.chat-jump-start:hover {
 .re-chip.pool-shared-chip {
   flex: none;
   margin-left: 0;
-  background: var(--brand-tint);
-  color: var(--brand);
+  font-weight: 500;
+}
+/* The pool card's head (settings-buttons board 02): a chevron that can be seen, the name on one line,
+   the whole head lit under the pointer since a press anywhere on it folds (foldFromAnywhere). */
+.pool-card .re-head:hover {
+  background: var(--bg-hover);
+}
+.re-chev.pool-chev {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+.pool-card .re-runner {
+  white-space: nowrap;
+}
+.pool-card .re-summary {
+  border-left: 0;
+  padding-left: 0;
+}
+/* A row's ⋯, quiet beside the buttons that are a way back. */
+.pool-row .pool-more.orbit-button:not(:hover):not(:active) {
+  color: var(--text-3);
+}
+/* A status as a dot before plain words (AccountPauseStatus dot): on rows whose buttons sit beside it. */
+.account-status-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  font-size: 12px;
+  line-height: 24px;
+  color: var(--text-1);
+  white-space: nowrap;
+}
+.account-status-dot::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dot-idle);
+}
+.account-status-dot-success::before,
+.account-status-dot-green::before {
+  background: var(--success-solid);
+}
+.account-status-dot-warning::before,
+.account-status-dot-orange::before,
+.account-status-dot-gold::before {
+  background: var(--warning-solid);
+}
+.account-status-dot-error::before,
+.account-status-dot-red::before {
+  background: var(--error-solid);
+}
+.account-status-dot-info::before,
+.account-status-dot-blue::before {
+  background: var(--brand);
+}
+.account-status-dot-error,
+.account-status-dot-red {
+  color: var(--error);
 }
 .pool-people {
   display: inline-flex;
@@ -18042,9 +18151,8 @@ button.chat-jump-start:hover {
   margin-top: 1px;
   font-size: 12px;
   color: var(--text-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Wraps rather than cut: an ellipsis left "· …" where the last part was (settings-buttons board 02). */
+  overflow-wrap: anywhere;
 }
 
 /* ── the pool's page: its title, its people and its rules ─────────────────────── */
@@ -18435,12 +18543,6 @@ button.chat-jump-start:hover {
 }
 .pool-login-window + .pool-login-window {
   margin-top: 8px;
-}
-/* The sign-out mark rests grey and turns red only under the pointer: red on a row that is fine read
-   as something wrong with it. At rest only: under the pointer and pressed it keeps the danger
-   button's own red. */
-.pool-row .pool-signout.orbit-button:not(:hover):not(:active) {
-  color: var(--text-3);
 }
 .pool-login-reset {
   margin-top: 3px;
@@ -21813,28 +21915,6 @@ div.landing-jobs-open {
 .shared-links-page {
   max-width: 1080px;
 }
-.shared-links-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 0 12px;
-  padding: 9px 12px;
-  border: 1px solid var(--warning-border);
-  border-radius: 8px;
-  background: var(--warning-bg);
-  color: var(--text-1);
-  font-size: 13px;
-}
-.shared-links-banner-icon {
-  color: var(--warning);
-}
-.shared-links-banner-text {
-  flex: 1;
-  min-width: 0;
-}
-.shared-links-banner-text b {
-  font-weight: 600;
-}
 .shared-links-list {
   display: flex;
   flex-direction: column;
@@ -21842,7 +21922,7 @@ div.landing-jobs-open {
 }
 .shared-link-row {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) 180px 110px 110px 236px;
+  grid-template-columns: 26px minmax(0, 1fr) 180px 110px 110px auto;
   gap: 12px;
   align-items: center;
   padding: 10px 12px;
@@ -21924,10 +22004,29 @@ div.landing-jobs-open {
 .shared-link-since {
   color: var(--text-3);
 }
+.shared-link-row.is-pressable {
+  cursor: pointer;
+}
+.shared-link-row.is-pressable:hover {
+  background: var(--bg-hover);
+}
 .shared-link-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 2px;
+  min-width: 92px;
+}
+.shared-link-actions .orbit-button-text {
+  color: var(--text-3);
+}
+.shared-link-chev {
+  width: 16px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.shared-link-chev.is-ghost {
+  visibility: hidden;
 }
 @media (max-width: 900px) {
   .shared-link-row {
@@ -21978,6 +22077,12 @@ div.landing-jobs-open {
   margin-top: 4px;
   color: var(--text-3);
   font-size: 12px;
+}
+.signin-method-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
 }
 
 /* The admin area's Sign-in settings (AdminSignInPage), whose label, hint and row classes other pages reuse. */
@@ -24833,6 +24938,27 @@ button.project-open-item-action:disabled {
 .wk-space-tag { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 13px;
                 background: var(--fill-muted); font-size: 12.5px; color: var(--text-2); white-space: nowrap;
                 max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+/* The space's name is the Wiki's title, on every head that has a space (board docs/mocks/wiki-rail-name B): the heading's
+   type, no box, and with more than one space a picker drawn as the Tasks title's scope picker (.tasks-scope-trigger). */
+.wk-name-title { display: flex; align-items: center; min-width: 0; }
+.wk-name-title .wk-select, .wk-name-title .wk-space-tag { height: auto; max-width: 100%; margin-left: -6px; padding: 0 6px; gap: 6px;
+                                                         border: 0; border-radius: 6px; background: transparent; font: inherit; color: inherit; }
+.wk-name-title .wk-space-tag { display: block; }
+.wk-name-title .wk-select .v { max-width: 190px; }
+.wk-name-title .wk-select:hover { background: var(--bg-hover); }
+.wk-name-title .wk-select:focus-within { box-shadow: 0 0 0 2px var(--brand-tint); }
+.wk-name-title .wk-select .ic.caret { position: static; font-size: 12px; color: var(--text-3); }
+/* The space menu the name opens (board docs/mocks/wiki-space-menu): a row a space, its name over its repository and
+   documents, the sidebar's amber count at its end; the current one lit and ticked, Manage spaces at the foot. */
+.orbit-menu.wk-space-menu { min-width: 260px; max-width: min(420px, calc(100vw - 24px)); max-height: 70vh; overflow-y: auto; }
+.wk-space-menu .orbit-menu-item { align-items: flex-start; padding-top: 7px; padding-bottom: 7px; }
+.wk-space-menu .orbit-menu-icon { padding-top: 3px; }
+.wk-space-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.wk-space-row-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.wk-space-row-text .n { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.wk-space-row-text .s { font-size: 12px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; }
+.wk-space-row .tp-count.needs-you { flex: none; }
+.wk-name-title .wk-select { cursor: pointer; }
 .wk-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 /* The space's public link, as the head's buttons are sized (mock share-links 08 ②). */
 .wk-actions > .session-shared-pill { height: 32px; padding: 0 12px; font-size: 13px; }
@@ -25353,6 +25479,9 @@ button.project-open-item-action:disabled {
   .wk-page, .rv-page { max-width: none; }
   .wk-drawer { width: 100%; }
   .wk-select .v, .wk-space-tag { max-width: 120px; }
+  .wk-title-row .wk-name-title .wk-select .v { max-width: none; overflow: hidden; text-overflow: ellipsis; }
+  .wk-title-row .wk-name-title .wk-select { min-width: 0; }
+  .wk-title-row .wk-name-title .wk-space-tag { max-width: 100%; }
   .wk-dkv, .wk-pkv { grid-template-columns: minmax(0, 1fr); }
   .wk-pkv > .k { padding-top: 6px; }
   .rv-head { flex-direction: column; align-items: flex-start; }
@@ -25371,6 +25500,7 @@ button.project-open-item-action:disabled {
 .wk-page .wk-contents-btn { display: none; }
 
 .wk-toc { display: block; min-width: 0; margin-left: -8px; padding-top: 2px; }
+.wk-dir-resizer { display: none; }
 .wk-toc-item { display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 8px; border-radius: 6px;
                font-size: 13.5px; color: var(--text-1); white-space: nowrap; min-width: 0; text-decoration: none; }
 .wk-toc-item:hover { background: var(--bg-hover); color: var(--text-1); }
@@ -25548,7 +25678,7 @@ button.project-open-item-action:disabled {
      docs/mocks/wiki-rail ③): the title and the space, the search, then the rows, which scroll on their own, and
      Settings and Share at the foot. The head row and the search line above it give way to it; the main column
      starts at the top, the home's line first. */
-  .wk-page--railed { display: grid; grid-template-columns: 248px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
+  .wk-page--railed { display: grid; grid-template-columns: var(--wk-dir-w, 248px) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
                      column-gap: 32px; align-items: start; }
   .wk-page--railed > .wk-title-row, .wk-page--railed > .wk-search { display: none; }
   /* The home's line was the head's; Activity has its own head and status row (as on a phone). */
@@ -25559,10 +25689,13 @@ button.project-open-item-action:disabled {
                                                 top: -24px; height: var(--app-vh, 100vh); max-height: none; overflow: hidden;
                                                 margin: -24px 0 -24px -32px; padding: 16px 0 0 24px;
                                                 border-right: 1px solid var(--border-subtle); background: var(--bg-raised); }
+  /* The column's border drags its width, as the app sidebar's does (.tp-resizer). Inside the column's edge: the column
+     clips what lies past it. */
+  .wk-page--railed > .wk-layout > .wk-dir-col > .wk-dir-resizer { display: block; position: absolute; top: 0; right: 0; width: 6px;
+                                                                  height: 100%; z-index: 5; cursor: col-resize; }
+  .wk-page--railed > .wk-layout > .wk-dir-col > .wk-dir-resizer:hover { background: rgba(51, 112, 255, 0.12); }
   .wk-rail-top { flex: none; padding: 0 16px 10px 0; }
-  .wk-rail-head { display: flex; align-items: center; gap: 12px; height: 32px; }
-  .wk-rail-head .wk-select .v, .wk-rail-head .wk-space-tag { max-width: 150px; }
-  .wk-rail-top > .wk-search { margin-top: 14px; }
+  .wk-rail-head { height: 32px; }
   .wk-page--railed > .wk-layout > .wk-dir-col > .wk-toc { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
                                                          padding: 0 10px 12px 0; }
   .wk-rail-foot { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 16px 12px 0;
@@ -26345,6 +26478,23 @@ button.agent-progress-agent:hover {
 .wt-recovery { margin: 0 12px 12px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-subtle); font-size: 12px; overflow-wrap: anywhere; }
 .wt-recovery p { margin: 10px 0; color: var(--text-2); }
 .wt-recovery summary { cursor: pointer; margin: 10px 0; }
+/* What the last check found scrolls inside the panel: the panel stands in the band above the composer, and a long
+   push list must not push the composer off screen. The title, the repair row and the actions stay in view. */
+/* A recovery with a repair session folds into one row of the branch bar, in the strip's row language (.bg-tray-row):
+   where the repair stands, its next step, and the arrow that opens the panel under it (docs/mocks/merge-repair-strip-row). */
+.wt-repair-row { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 3px 6px 3px 10px; font-size: 12px; border-top: 1px solid var(--border-subtle); cursor: pointer; }
+.wt-repair-row:hover { background: var(--bg-hover); }
+.wt-repair-row-icon { flex: none; display: inline-flex; font-size: 14px; color: var(--text-3); }
+.wt-repair-row.is-running .wt-repair-row-icon, .wt-repair-row.is-checking .wt-repair-row-icon { color: var(--brand); }
+.wt-repair-row-head { flex: none; color: var(--text-1); font-weight: 500; white-space: nowrap; }
+.wt-repair-row-note { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); }
+.wt-repair-row.is-ready :is(.wt-repair-row-icon, .wt-repair-row-note) { color: var(--success); }
+.wt-repair-row:is(.is-conflict, .is-reply) :is(.wt-repair-row-icon, .wt-repair-row-note) { color: var(--warning); }
+.wt-repair-row.is-failed .wt-repair-row-icon { color: var(--error); }
+.wt-repair-row-step { flex: none; padding: 3px 10px; border-radius: 6px; cursor: pointer; font: inherit; }
+.wt-repair-row-step:not(.wt-merge-btn) { border: 1px solid var(--border); background: var(--bg-base); color: var(--text-1); }
+.wt-repair-row-step:disabled { opacity: .55; cursor: default; }
+.wt-recovery-snapshot { max-height: 28vh; overflow-y: auto; }
 .wt-recovery-histories { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .wt-recovery-histories > :only-child { grid-column: 1 / -1; }
 .wt-recovery-route code { font-size: 11px; }
@@ -26353,7 +26503,7 @@ button.agent-progress-agent:hover {
 .wt-recovery pre { white-space: pre-wrap; max-height: 400px; overflow: auto; font-size: 11px; }
 .wt-recovery-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 .wt-recovery-actions button { padding: 5px 10px; border-radius: 6px; cursor: pointer; }
-.wt-recovery-actions button:not(.wt-merge-btn) { border: 1px solid var(--border); background: var(--bg); color: var(--text-1); font: inherit; }
+.wt-recovery-actions button:not(.wt-merge-btn) { border: 1px solid var(--border); background: var(--bg-base); color: var(--text-1); font: inherit; }
 .wt-recovery-actions button:disabled { opacity: .55; cursor: default; }
 .wt-recovery-repair-status { display: flex; align-items: center; gap: 10px; width: 100%; margin: 10px 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-raised); color: var(--text-1); text-align: left; cursor: pointer; font: inherit; }
 .wt-recovery-repair-status.is-running { border-color: color-mix(in srgb, var(--brand) 38%, var(--border)); background: color-mix(in srgb, var(--brand) 8%, var(--bg-raised)); }
@@ -26372,6 +26522,11 @@ button.agent-progress-agent:hover {
 .wt-recovery-link { padding: 0; border: 0; background: none; color: var(--brand); font: inherit; cursor: pointer; }
 .wt-recovery-link:disabled { opacity: .55; cursor: default; }
 .wt-recovery-snapshot.is-stale { opacity: .45; }
+.wt-recovery .wt-recovery-failure { color: var(--error); }
+/* The merge slot while a merge operation is pending: what Orbit is doing, since when, on which runner. Amber once overdue. */
+.wt-merge-op { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 12px 12px; padding: 8px 12px; border-radius: 8px; font-size: 12px; color: var(--brand); background: color-mix(in srgb, var(--brand) 8%, var(--bg-raised)); }
+.wt-merge-op span { color: var(--text-2); }
+.wt-merge-op.is-overdue { color: var(--warning); background: color-mix(in srgb, var(--warning) 10%, var(--bg-raised)); }
 .wt-recovery-files { margin: 10px 0; }
 .wt-recovery-files ul { display: grid; gap: 4px; margin: 6px 0 0; padding: 0; list-style: none; }
 .wt-recovery-files code { font-size: 11px; }

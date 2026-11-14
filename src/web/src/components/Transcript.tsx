@@ -58,6 +58,7 @@ import {
   questionLead,
   questionOutcome,
   questionReplyLine,
+  ownerChatWords,
   workflowLaunchReceipt,
   workflowTitle,
   type AskedQuestion,
@@ -2176,7 +2177,26 @@ function isGroupableTool(node: Node, chat = false): node is ToolNode {
     node.name !== 'mcp__orbit__task_create_batch' &&
     node.name !== 'mcp__orbit__task_create' &&
     node.name !== 'mcp__orbit__project_create' &&
-    !isBackgroundTaskCall(node.name)
+    !isBackgroundTaskCall(node.name) &&
+    !ownerChatReplyOf(node)
+  );
+}
+
+// The owner's words when they answered one of Orbit's own asks with "Chat about this": the runner
+// hands them to the agent as the call's result (`ownerChatWords`), and the conversation draws them as
+// the message they are, under the call (OwnerChatBubble), rather than inside its folded result.
+function ownerChatReplyOf(node: ToolNode): string | null {
+  if (!node.name.startsWith('mcp__orbit__') || !node.result || node.result.isError) return null;
+  return ownerChatWords(resultText(node.result.content));
+}
+
+function OwnerChatBubble({ words }: { words: string }) {
+  return (
+    <div className="chat-user-wrap">
+      <div className="chat-msg chat-user">
+        <MD breaks>{words}</MD>
+      </div>
+    </div>
   );
 }
 
@@ -4307,7 +4327,9 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // The session-created card parses its result as JSON even while folded, so a clipped copy would
   // fail to parse and render nothing — it needs the whole result regardless of the fold. So does a
   // question's record.
-  const needsWholeResult = node.name === 'mcp__orbit__session_create' || isQuestion || draftCall;
+  // So does the owner's chat reply to a card, whose words are the end of the result.
+  const chatReply = ownerChatReplyOf(node) !== null;
+  const needsWholeResult = node.name === 'mcp__orbit__session_create' || isQuestion || draftCall || chatReply;
   const hideResult = resultRepeatsBody(node);
   const fullResult = useFullPayload(
     node.result?.seq ?? 0,
@@ -4319,6 +4341,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // How a question ended lives only in the result text ("The user answered: …"), so the card reads
   // it back (`questionOutcome`, the same reader the native client is held to).
   const answer = node.result ? resultText(resultContent) : '';
+  const ownerWords = chatReply ? ownerChatWords(answer) : null;
   const questions = useMemo(() => (isQuestion ? askedQuestions(input) : []), [isQuestion, input]);
   const outcome = useMemo(
     () => (questions.length ? questionOutcome(questions, answer, !!node.result?.isError) : null),
@@ -4380,101 +4403,104 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
     if (node.result.truncated && !fullResult) return null;
   }
   return (
-    <div
-      data-seq={node.seq}
-      className={`chat-tool-card chat-tone-${tone ?? 'default'}${isSubWorkspace ? ' chat-tool-task' : ''}${
-        hasDetail && open ? ' is-open' : ''
-      }`}
-    >
+    <>
       <div
-        className={`chat-tool-row${hasDetail ? '' : ' no-detail'}`}
-        onClick={hasDetail ? () => setManualOpen((prev) => !(prev ?? defaultOpen)) : undefined}
+        data-seq={node.seq}
+        className={`chat-tool-card chat-tone-${tone ?? 'default'}${isSubWorkspace ? ' chat-tool-task' : ''}${
+          hasDetail && open ? ' is-open' : ''
+        }`}
       >
-        {/* Keep the disclosure column stable even before a result gives a no-input tool something
-            to expand. The empty slot preserves alignment without suggesting the row is clickable. */}
-        <span className="chat-tool-caret">
-          {hasDetail ? (open ? <DownOutlined /> : <RightOutlined />) : null}
-        </span>
-        <span className="chat-tool-icon">{icon}</span>
-        <span className="chat-tool-name">{label}</span>
-        {p ? (
-          <span className="chat-tool-summary mono chat-path" title={path}>
-            <b className="chat-path-file">{p.base}</b>
-            {p.dir && <span className="chat-path-dir">{p.dir}</span>}
+        <div
+          className={`chat-tool-row${hasDetail ? '' : ' no-detail'}`}
+          onClick={hasDetail ? () => setManualOpen((prev) => !(prev ?? defaultOpen)) : undefined}
+        >
+          {/* Keep the disclosure column stable even before a result gives a no-input tool something
+              to expand. The empty slot preserves alignment without suggesting the row is clickable. */}
+          <span className="chat-tool-caret">
+            {hasDetail ? (open ? <DownOutlined /> : <RightOutlined />) : null}
           </span>
-        ) : (
-          title && <span className={`chat-tool-summary${summaryMono ? ' mono' : ''}`}>{title}</span>
+          <span className="chat-tool-icon">{icon}</span>
+          <span className="chat-tool-name">{label}</span>
+          {p ? (
+            <span className="chat-tool-summary mono chat-path" title={path}>
+              <b className="chat-path-file">{p.base}</b>
+              {p.dir && <span className="chat-path-dir">{p.dir}</span>}
+            </span>
+          ) : (
+            title && <span className={`chat-tool-summary${summaryMono ? ' mono' : ''}`}>{title}</span>
+          )}
+          {tag && <span className="chat-tool-tag">{tag}</span>}
+          {isBackgroundTask ? (
+            <TaskBadgeAndStatus node={node} live={live} meta={meta} />
+          ) : outcome?.kind === 'replied' ? (
+            // The engine files "Chat about this" as the call's error; it is the person's reply.
+            <MessageFilled className="chat-tool-status replied" />
+          ) : (
+            <>
+              {meta && <span className="chat-tool-meta">{meta}</span>}
+              <ToolStatus node={node} live={live} />
+            </>
+          )}
+        </div>
+        {isBackgroundTask && !(hasDetail && open) && (waitingLine ?? <SubagentLiveLine node={node} live={live} />)}
+        {questions.length > 0 && !(hasDetail && open) && (
+          <QuestionFolded
+            questions={questions}
+            outcome={outcome}
+            onOpen={() => setManualOpen((prev) => !(prev ?? defaultOpen))}
+          />
         )}
-        {tag && <span className="chat-tool-tag">{tag}</span>}
-        {isBackgroundTask ? (
-          <TaskBadgeAndStatus node={node} live={live} meta={meta} />
-        ) : outcome?.kind === 'replied' ? (
-          // The engine files "Chat about this" as the call's error; it is the person's reply.
-          <MessageFilled className="chat-tool-status replied" />
-        ) : (
-          <>
-            {meta && <span className="chat-tool-meta">{meta}</span>}
-            <ToolStatus node={node} live={live} />
-          </>
+        {hasDetail && open && (
+          <div className="chat-tool-detail">
+            {why && <SubagentWhy why={why} run={run} />}
+            {/* A failed call is opened to find out why, and the input is rarely the answer — a
+                heredoc alone clamps to sixteen lines, which is enough to push the reason off the
+                bottom of the card. Put the error first when there is one; everywhere else the
+                call still reads input-then-output. */}
+            {node.result?.isError && !outcome && (
+              <ToolResult seq={node.seq} content={resultContent} isError compact markdown={isSubWorkspace} />
+            )}
+            {node.name === 'Workflow' && (
+              <WorkflowProgressDetail
+                node={node}
+                live={live}
+                // Before a runner that reports progress, a workflow's receipt is still all there is.
+                // An agent's ack is internal metadata; its own transcript below says what it did.
+                fallback={
+                  launchReceipt && node.name === 'Workflow' ? (
+                    <ToolResult seq={node.seq} content={resultContent} compact />
+                  ) : null
+                }
+              />
+            )}
+            {body && (node.name === 'Workflow' ? (
+              <details className="chat-workflow-source" open={exp ? true : undefined}>
+                <summary>Workflow source</summary>
+                <div className="chat-tool-body">{body}</div>
+              </details>
+            ) : <div className="chat-tool-body">{body}</div>)}
+            {node.name !== 'Workflow' && (node.children.length > 0 || waitingLine) && (
+              <div className="chat-subagent">
+                <NodeList nodes={node.children} live={live} />
+                {waitingLine}
+              </div>
+            )}
+            {/* A sub-agent's totals close its transcript rather than open it. */}
+            {isBackgroundTask && node.name !== 'Workflow' && <TaskProgressDetail id={node.id} />}
+            {/* A question's result, once read, is only the replay above said again. */}
+            {isDelegate
+              ? node.result && !node.result.isError && (
+                  <DelegateResult content={resultContent} run={run} seq={node.seq} steps={node.children} />
+                )
+              : node.result && !node.result.isError && !hideResult && !launchReceipt && !outcome && (
+                  <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
+                )}
+            {!node.result && isShell && <LiveShellOutput toolUseId={node.id} seq={node.seq} />}
+          </div>
         )}
       </div>
-      {isBackgroundTask && !(hasDetail && open) && (waitingLine ?? <SubagentLiveLine node={node} live={live} />)}
-      {questions.length > 0 && !(hasDetail && open) && (
-        <QuestionFolded
-          questions={questions}
-          outcome={outcome}
-          onOpen={() => setManualOpen((prev) => !(prev ?? defaultOpen))}
-        />
-      )}
-      {hasDetail && open && (
-        <div className="chat-tool-detail">
-          {why && <SubagentWhy why={why} run={run} />}
-          {/* A failed call is opened to find out why, and the input is rarely the answer — a
-              heredoc alone clamps to sixteen lines, which is enough to push the reason off the
-              bottom of the card. Put the error first when there is one; everywhere else the
-              call still reads input-then-output. */}
-          {node.result?.isError && !outcome && (
-            <ToolResult seq={node.seq} content={resultContent} isError compact markdown={isSubWorkspace} />
-          )}
-          {node.name === 'Workflow' && (
-            <WorkflowProgressDetail
-              node={node}
-              live={live}
-              // Before a runner that reports progress, a workflow's receipt is still all there is.
-              // An agent's ack is internal metadata; its own transcript below says what it did.
-              fallback={
-                launchReceipt && node.name === 'Workflow' ? (
-                  <ToolResult seq={node.seq} content={resultContent} compact />
-                ) : null
-              }
-            />
-          )}
-          {body && (node.name === 'Workflow' ? (
-            <details className="chat-workflow-source" open={exp ? true : undefined}>
-              <summary>Workflow source</summary>
-              <div className="chat-tool-body">{body}</div>
-            </details>
-          ) : <div className="chat-tool-body">{body}</div>)}
-          {node.name !== 'Workflow' && (node.children.length > 0 || waitingLine) && (
-            <div className="chat-subagent">
-              <NodeList nodes={node.children} live={live} />
-              {waitingLine}
-            </div>
-          )}
-          {/* A sub-agent's totals close its transcript rather than open it. */}
-          {isBackgroundTask && node.name !== 'Workflow' && <TaskProgressDetail id={node.id} />}
-          {/* A question's result, once read, is only the replay above said again. */}
-          {isDelegate
-            ? node.result && !node.result.isError && (
-                <DelegateResult content={resultContent} run={run} seq={node.seq} steps={node.children} />
-              )
-            : node.result && !node.result.isError && !hideResult && !launchReceipt && !outcome && (
-                <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
-              )}
-          {!node.result && isShell && <LiveShellOutput toolUseId={node.id} seq={node.seq} />}
-        </div>
-      )}
-    </div>
+      {ownerWords && <OwnerChatBubble words={ownerWords} />}
+    </>
   );
 }
 
