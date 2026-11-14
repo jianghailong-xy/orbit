@@ -154,7 +154,7 @@ struct ProjectStartedCardView: View {
     /// The queue's own line at the card's foot, in the words a queued message already uses.
     private func queuedFoot(_ cancel: @escaping () -> Void) -> some View {
         HStack(spacing: 8) {
-            Text("Queued").font(.orbitMeta).foregroundStyle(.secondary)
+            QueuedWord()
             Button("Cancel") { cancel() }
                 .buttonStyle(.plain)
                 .font(.orbitMeta)

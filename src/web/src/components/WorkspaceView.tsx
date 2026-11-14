@@ -2179,6 +2179,7 @@ export function QueuedTurnMeta({
   deliveryCode,
   deliveryReason,
   wake,
+  held,
   onCancel,
   onPutBack,
 }: {
@@ -2188,6 +2189,9 @@ export function QueuedTurnMeta({
   deliveryReason?: string;
   /** The turn is a wake a watch queued (lib/watches `parseWatchWake`), not a message anyone typed. */
   wake?: boolean;
+  /** What holds a turn waiting for its own turn, said in place of its label: `Queued · runner updating`
+   *  (RunnerUpdatingTag) while its runner's update holds the session (board queued-card-runner-updating ②). */
+  held?: ReactNode;
   onCancel: () => void;
   onPutBack?: () => void;
 }) {
@@ -2201,15 +2205,29 @@ export function QueuedTurnMeta({
   const why = delivery != null ? deliveryFailureExplanation(deliveryCode, deliveryReason) : undefined;
   return (
     <span className="chat-queued-meta" title={deliveryReason}>
-      <span className={`chat-queued-tag${delivery != null ? ' chat-queued-tag-failed' : ''}`}>
-        {label}
-      </span>
+      {held && queuedTurnWaitsItsTurn({ placement, delivery }) ? held : (
+        <span className={`chat-queued-tag${delivery != null ? ' chat-queued-tag-failed' : ''}`}>
+          {label}
+        </span>
+      )}
       {why && <span className="chat-queued-why">{why}</span>}
       {delivery == null
         ? placement === 'queued' && <a onClick={onCancel}>{wake ? 'Withdraw wake' : 'Cancel'}</a>
         : onPutBack && <a onClick={onPutBack}>Put back in the composer</a>}
     </span>
   );
+}
+
+/** A queued-tail turn still waiting for its own turn — what a runner's update holds, and whose line
+ *  says so (QueuedTurnMeta `held`). A steer and a settled delivery are not. */
+export function queuedTurnWaitsItsTurn(turn: { placement: string; delivery?: string }): boolean {
+  return turn.placement === 'queued' && turn.delivery == null;
+}
+
+/** The seq of the reader's last message in the transcript, or null where there is none. */
+export function lastUserEventSeq(events: ReadonlyArray<{ type: string; seq: number }>): number | null {
+  for (let i = events.length - 1; i >= 0; i--) if (events[i].type === 'user') return events[i].seq;
+  return null;
 }
 
 // Remembers the session the user last had open per workspace (workspace id → session id). Switching
@@ -4529,24 +4547,6 @@ export function WorkspaceView({
   // delivery settled undelivered, which is part of the conversation's record.
   // The message a runner update holds: the last one the reader sent, whose foot row says why
   // (board 2 ⑤). None while the session is not held by an update.
-  let queuedFoot: { seq: number; tag: ReactNode } | null = null;
-  if (runnerUpdatingGate) {
-    for (let i = transcriptEvents.length - 1; i >= 0; i--) {
-      if (transcriptEvents[i].type !== 'user') continue;
-      queuedFoot = {
-        seq: transcriptEvents[i].seq,
-        tag: (
-          <RunnerUpdatingTag
-            gate={runnerUpdatingGate}
-            machine={machineName(runner)}
-            actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <RunnerUpdateLaterMenu runnerId={runner.id} />}
-            updateNow={!isRunnerStopping(runnerUpdatingGate) && runnerTakesUpdateNow(runner) ? runner : undefined}
-          />
-        ),
-      };
-      break;
-    }
-  }
   const queuedTailEvents = useMemo(
     () =>
       visibleQueuedTurns
@@ -4554,6 +4554,21 @@ export function WorkspaceView({
         .map((turn) => ({ turn, event: queuedTurnEvent(turn) })),
     [visibleQueuedTurns],
   );
+  // The tag says it on each turn of the queued tail the update holds — what is actually waiting
+  // (board queued-card-runner-updating ②⑤) — and falls back to that last message only where the
+  // tail holds none.
+  const runnerUpdatingHeldTag = runnerUpdatingGate ? (
+    <RunnerUpdatingTag
+      gate={runnerUpdatingGate}
+      machine={machineName(runner)}
+      actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <RunnerUpdateLaterMenu runnerId={runner.id} />}
+      updateNow={!isRunnerStopping(runnerUpdatingGate) && runnerTakesUpdateNow(runner) ? runner : undefined}
+    />
+  ) : null;
+  const tailHeld = !!runnerUpdatingHeldTag && queuedTailEvents.some(({ turn }) => queuedTurnWaitsItsTurn(turn));
+  const footSeq = runnerUpdatingHeldTag && !tailHeld ? lastUserEventSeq(transcriptEvents) : null;
+  const queuedFoot: { seq: number; tag: ReactNode } | null =
+    footSeq !== null ? { seq: footSeq, tag: runnerUpdatingHeldTag } : null;
   // What stands in for an empty transcript — exactly one of these, so the loading skeleton can't
   // stack on top of the centered "waiting for a slot" pane. See lib/transcriptPaint.
   const placeholder = transcriptPlaceholder({
@@ -10489,6 +10504,7 @@ export function WorkspaceView({
                 !neverStarted &&
                 // The foot row of the waiting message says it instead (board 2 ⑤).
                 !queuedFoot &&
+                !tailHeld &&
                 transcriptEvents.length > 0 && (
                 dshQueueRepair ? <DshRepairCard repair={dshQueueRepair} help={authErrorHelp} /> : antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-note chat-slot-wait">
                   <span>{queuedTitle(selectedSession ?? selected)}</span>
@@ -10557,6 +10573,7 @@ export function WorkspaceView({
                         deliveryCode={q.deliveryCode}
                         deliveryReason={q.deliveryReason}
                         wake={wake}
+                        held={runnerUpdatingHeldTag}
                         onCancel={() => (wake ? withdrawWake(q.turnId) : cancelQueued(q.turnId))}
                         onPutBack={
                           restoreUndelivered && returnsToComposer(q) ? () => takeBackUndelivered(q) : undefined
