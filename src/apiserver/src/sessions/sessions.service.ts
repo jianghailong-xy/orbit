@@ -1,3 +1,4 @@
+import { checkedWorkSubdir } from './work-subdir';
 import { visibleQuestions, questionsWithCoordinator } from './run-question';
 import { isRunNotifyTurn, runNotifyContent } from './run-notify';
 import {
@@ -1086,6 +1087,8 @@ export class SessionsService {
     }
     // `worktree: false` from any caller is the same deliberate override the internal doors pass as noWorktree.
     const noWorktree = opts?.noWorktree === true || dto.worktree === false;
+    // The folder below workDir the session runs in: checked here, before anything is read or written.
+    const workSubdir = checkedWorkSubdir(dto.workSubdir, noWorktree);
     const wikiChat = opts?.wikiChat;
     // A chat is a conversation of its workspace and nothing else: it executes no task, makes no
     // workspace and opens with words (wiki contract `chat.create`). The door never asks for more.
@@ -1545,6 +1548,7 @@ export class SessionsService {
         titleBeforeProjectManagement: null,
         promptByOrbit: opts?.promptByOrbit ?? false,
         branch,
+        workSubdir,
         prompt: dto.prompt,
         status: RunStatus.PENDING,
         provider,
@@ -10887,6 +10891,8 @@ export class SessionsService {
         folderId,
         assignedRunnerId: target.runnerId,
         branch: branchAfterMove(session, fromWorktree, target.enableWorktree),
+        // A folder below the old workspace's directory names nothing in the new one.
+        workSubdir: null,
         baseSha: null,
         changedFiles: Prisma.DbNull,
         isolationStatus: null,

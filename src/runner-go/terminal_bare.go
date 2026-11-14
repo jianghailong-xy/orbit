@@ -16,8 +16,8 @@ import (
 
 // Bare `orbit` on a TTY (docs/terminal-session-design.md, "Flow of orbit"; board-1 ②, board-2): this
 // terminal's credential, the workspace on this machine's runner that holds the cwd, a new session there
-// that runs in the workspace's own directory with no worktree (D4: `worktree: false` on POST /sessions),
-// and the Orbit TUI on it. `--engine`/`--model` name the engine and model; `--pick` opens the picker.
+// that runs in the cwd itself with no worktree (D4: `worktree: false` on POST /sessions, and `workSubdir`, the
+// cwd relative to the workspace's directory, when the cwd is below it), and the Orbit TUI on it. `--engine`/`--model` name the engine and model; `--pick` opens the picker.
 
 // noRunnerMessage is what bare `orbit` says on a machine with no runner (board-2): the session runs on
 // this machine's runner, so without one there is nowhere for it to run.
@@ -181,6 +181,16 @@ func resolvedDir(dir string) string {
 	return dir
 }
 
+// workSubdirFor is cwd relative to the workspace's directory, `/`-separated, as POST /sessions takes it: "" when
+// cwd is that directory itself. workspaceForDir chose ws because it holds cwd, so the path never steps up.
+func workSubdirFor(ws tuiWorkspace, cwd string) string {
+	rel, err := filepath.Rel(resolvedDir(ws.WorkDir), resolvedDir(cwd))
+	if err != nil || rel == "." {
+		return ""
+	}
+	return filepath.ToSlash(rel)
+}
+
 func expandHome(p string) string {
 	if p == "~" || strings.HasPrefix(p, "~/") {
 		if home := userHome(); home != "" {
@@ -191,13 +201,17 @@ func expandHome(p string) string {
 }
 
 // newSessionBody is POST /sessions for a terminal's session, without its prompt: the workspace, this
-// machine's runner, no worktree, and the engine and model the command line named (none: the server's
-// default, where the workspace last started, on its runtime's default model).
-func newSessionBody(ws tuiWorkspace, runnerID string, req newSessionRequest) map[string]any {
+// machine's runner, no worktree, the folder below the workspace's directory cwd is in (none at the workspace's
+// own directory), and the engine and model the command line named (none: the server's default, where the
+// workspace last started, on its runtime's default model).
+func newSessionBody(ws tuiWorkspace, runnerID, cwd string, req newSessionRequest) map[string]any {
 	body := map[string]any{
 		"workspaceId":      ws.ID,
 		"assignedRunnerId": runnerID,
 		"worktree":         false,
+	}
+	if sub := workSubdirFor(ws, cwd); sub != "" {
+		body["workSubdir"] = sub
 	}
 	if req.Engine != "" {
 		body["engine"] = req.Engine
@@ -243,11 +257,7 @@ func startSessionInDir(ctx context.Context, client *tuiClient, cred *terminalCre
 		// T7 turns this into `Add it as a workspace? [Y/n]` (board-2 ⑧).
 		return "", "", fmt.Errorf("%s is not in a workspace on %s. Add it as a workspace in the Orbit app, then run `orbit` here again.", cwd, machine)
 	}
-	if resolvedDir(ws.WorkDir) != resolvedDir(cwd) {
-		fmt.Fprintf(out, "%s◆ Orbit%s %s is inside the workspace %s; the session runs in %s.\n", tuiBlue, tuiReset, cwd, ws.Name, ws.WorkDir)
-	}
-
-	body := newSessionBody(ws, cred.RunnerID, req)
+	body := newSessionBody(ws, cred.RunnerID, cwd, req)
 	label := []string{ws.Name, cred.MachineName}
 	if req.Pick {
 		choice, err := pickEngineAndModel(ctx, client, cred.RunnerID, in, out)
