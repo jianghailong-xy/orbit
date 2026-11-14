@@ -521,7 +521,7 @@ describe('the Wiki head', () => {
       expect(rail).not.toContain('>Wiki<');
       expect(rail).not.toContain('wk-search');
       // The search line above the column stays, for a phone and a docked chat that folds the column away.
-      expect(html.indexOf('class="wk-search"')).toBeLessThan(html.indexOf('class="wk-dir-col"'));
+      expect(html.indexOf('class="wk-search"')).toBeLessThan(html.indexOf('class="wk-dir-col'));
       // The head row a phone draws is headed by the name too, with no Wiki title beside it.
       const head = html.slice(html.indexOf('class="wk-title-row"'), html.indexOf('class="wk-actions"'));
       expect(head).toMatch(/^class="wk-title-row"><h1 class="page-title wk-name-title"><span class="(wk-space-tag|wk-select)"/);
