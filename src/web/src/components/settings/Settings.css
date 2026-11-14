@@ -716,6 +716,36 @@
 .machine-res-dot.off {
   background: var(--text-3);
 }
+/* Capacity's meters: the name, the reading and an action on one line, the bar across the row under
+   them at the row's full width. */
+.settings-row.machine-meter {
+  display: block;
+}
+.machine-meter-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 24px;
+}
+.machine-meter-line .settings-row-title {
+  flex: 1;
+  min-width: 0;
+}
+.machine-meter-value {
+  font-size: 13px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.machine-meter-bar.rd-disk-bar {
+  margin-top: 10px;
+}
+/* Edit ends where the bar under it does. */
+.orbit-button.machine-max-edit {
+  padding-inline: 0;
+}
+.machine-max-concurrent-hint {
+  margin: 0 0 12px;
+}
 .machine-workspace-row {
   display: block;
   color: inherit;

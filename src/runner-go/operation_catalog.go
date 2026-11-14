@@ -2771,7 +2771,7 @@ func buildOperationCatalog() []*operation {
 			},
 			map[string]interface{}{
 				"name":        "session_merge",
-				"description": "Merge a session's git worktree branch into its target branch (default: the runner's main/master). Only for worktree-isolated sessions; fails cleanly on conflict. Without waitSeconds this only QUEUES the merge and the reply says nothing about whether it worked — read the outcome with merge_receipts. With waitSeconds the reply waits for the outcome and carries the receipt itself.",
+				"description": "Merge a session's git worktree branch into its target branch (default: the runner's main/master). Only for worktree-isolated sessions; fails cleanly on conflict. Without waitSeconds this only QUEUES the merge and the reply says nothing about whether it worked — read the outcome with merge_receipts. With waitSeconds the reply waits for the outcome and carries the receipt itself. A session merging ITSELF is asked during its own turn, so its merge is queued when that turn ends rather than refused: the reply says so at once (mergeAfterTurn, or outcome AFTER_TURN with waitSeconds), and merge_receipts has the outcome afterwards.",
 				"inputSchema": obj(map[string]interface{}{
 					"sessionId":    sessionIDProp,
 					"targetBranch": str,

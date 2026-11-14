@@ -140,6 +140,18 @@ describe('the pill left of the header’s ⋯', () => {
     expect(actions.querySelector('a')?.textContent).toBe('Open HPC');
   });
 
+  it('Update Now… closes the popover and confirms outside it, where its dialog covers the page', async () => {
+    // Inside the popover, the dialog would be held to the popover's box: its positioner is placed by a transform.
+    mount(runner());
+    await open();
+    await act(async () => popover()!.querySelector<HTMLButtonElement>('button.runner-update-now-button')!.click());
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    const confirm = document.querySelector('.orbit-confirm');
+    expect(confirm?.textContent).toContain('Interrupt 5 Turns and Update');
+    expect(confirm?.closest('.orbit-floating-positioner')).toBeNull();
+    expect(popover()).toBeNull();
+  });
+
   it('offers no Update Now… on a runner too old to take it', async () => {
     mount(runner({ capabilities: [] }));
     await open();

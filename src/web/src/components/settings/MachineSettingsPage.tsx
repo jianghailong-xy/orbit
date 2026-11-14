@@ -70,6 +70,8 @@ import {
   RUNNER_KEEP_FREE,
   RUNNER_LINE_SEPARATOR,
   RUNNER_MAX_CONCURRENT,
+  RUNNER_MAX_CONCURRENT_HINT,
+  RUNNER_EDIT,
   RUNNER_NEEDS_ATTENTION,
   RUNNER_OFFLINE,
   RUNNER_UPDATE_NOW,
@@ -256,12 +258,14 @@ export function MachineSettingsPage() {
     onError: (e: Error) => message.error("Couldn't rename the runner", e.message),
   });
 
-  // What is typed into Max Concurrent, shown until its save settles. The ref is what a save reads:
-  // it is written the moment the field reports a value — including the in-range one it corrects an
-  // out-of-range entry to as focus leaves — which the state would only have by the next render.
+  // Max Concurrent's dialog, and what is typed into it. The ref is
+  // what Save reads: it is written the moment the field reports a value — including the in-range one
+  // it corrects an out-of-range entry to — which the state would only have by the next render.
+  const [maxOpen, setMaxOpen] = useState(false);
   const [maxDraft, setMaxDraft] = useState<number | null>(null);
   const maxTyped = useRef<number | null>(null);
-  // Capacity saves as it changes — Max Concurrent on blur or Enter, Keep Free on pick. The value goes
+  const maxButton = useRef<HTMLButtonElement>(null);
+  // Capacity saves as it changes — Max Concurrent on its dialog's Save, Keep Free on pick. The value goes
   // into the runner list at once, so a control doesn't snap back to the old number while the save lands.
   const capacityMut = useMutation({
     mutationFn: (patch: { maxConcurrent?: number; minFreeDiskMb?: number | null }) =>
@@ -282,7 +286,6 @@ export function MachineSettingsPage() {
       message.error("Couldn't save the capacity", e.message);
     },
     onSettled: () => {
-      setMaxDraft(null);
       void qc.invalidateQueries({ queryKey: ['runners'] });
     },
   });
@@ -392,12 +395,25 @@ export function MachineSettingsPage() {
       : []),
   ].sort((a, b) => a.value - b.value);
 
-  const commitMaxConcurrent = () => {
+  // Max Concurrent's use: how many of its slots are taken now — online only, as the head's count; amber when all are.
+  const running =
+    runner.online && typeof runner.maxConcurrent === 'number' && runner.maxConcurrent > 0
+      ? {
+          active: runner.activeSessions ?? 0,
+          max: runner.maxConcurrent,
+          percent: Math.min(100, Math.round(((runner.activeSessions ?? 0) / runner.maxConcurrent) * 100)),
+          full: (runner.activeSessions ?? 0) >= runner.maxConcurrent,
+        }
+      : null;
+  const openMaxConcurrent = () => {
+    maxTyped.current = runner.maxConcurrent ?? 1;
+    setMaxDraft(runner.maxConcurrent ?? 1);
+    setMaxOpen(true);
+  };
+  const saveMaxConcurrent = () => {
     const next = maxTyped.current;
-    maxTyped.current = null;
-    if (next === null) return;
-    if (next === runner.maxConcurrent) setMaxDraft(null);
-    else capacityMut.mutate({ maxConcurrent: next });
+    setMaxOpen(false);
+    if (next !== null && next !== runner.maxConcurrent) capacityMut.mutate({ maxConcurrent: next });
   };
 
   // About's version line: current, catching up by itself, or stuck until someone upgrades it. A
@@ -806,26 +822,24 @@ export function MachineSettingsPage() {
       <div ref={capacityRef} className="machine-capacity">
         <SettingsSection title={RUNNER_CAPACITY} className="machine-section-capacity">
           <SettingsCard>
-            <SettingsRow
+            {/* A meter — the name and `3 of 16 running` on a line, a bar across the row under them. The
+                limit is changed from Edit, in a dialog. */}
+            <CapacityMeter
               title={RUNNER_MAX_CONCURRENT}
-              control={
-                // Saved on blur from around the field, so it runs after the field has settled what was
-                // typed (1 or more, whole) — and on Enter, which the field settles first as well.
-                <span onBlur={commitMaxConcurrent}>
-                  <NumberInput
-                    className="rd-max-concurrent"
-                    aria-label={RUNNER_MAX_CONCURRENT}
-                    size="small"
-                    min={1}
-                    precision={0}
-                    value={maxDraft ?? runner.maxConcurrent ?? null}
-                    onValueChange={(v) => {
-                      maxTyped.current = v;
-                      setMaxDraft(v);
-                    }}
-                    onPressEnter={commitMaxConcurrent}
-                  />
-                </span>
+              value={running ? runnerRunningOf(running.active, running.max) : String(runner.maxConcurrent ?? '—')}
+              percent={running?.percent}
+              warn={running?.full}
+              action={
+                <Button
+                  ref={maxButton}
+                  variant="link"
+                  size="small"
+                  className="machine-max-edit"
+                  aria-label={`${RUNNER_EDIT} ${RUNNER_MAX_CONCURRENT}`}
+                  onClick={openMaxConcurrent}
+                >
+                  {RUNNER_EDIT}
+                </Button>
               }
             />
             <SettingsRow
@@ -980,6 +994,35 @@ export function MachineSettingsPage() {
 
       <Dialog
         className="runner-dialog"
+        title={RUNNER_MAX_CONCURRENT}
+        open={maxOpen}
+        onClose={() => setMaxOpen(false)}
+        returnFocus={maxButton}
+        footer={
+          <>
+            <Button onClick={() => setMaxOpen(false)}>Cancel</Button>
+            <Button variant="primary" onClick={saveMaxConcurrent}>
+              Save
+            </Button>
+          </>
+        }
+      >
+        <div className="rd-hint machine-max-concurrent-hint">{RUNNER_MAX_CONCURRENT_HINT}</div>
+        <NumberInput
+          className="rd-max-concurrent"
+          aria-label={RUNNER_MAX_CONCURRENT}
+          min={1}
+          precision={0}
+          value={maxDraft}
+          onValueChange={(v) => {
+            maxTyped.current = v;
+            setMaxDraft(v);
+          }}
+          onPressEnter={saveMaxConcurrent}
+        />
+      </Dialog>
+      <Dialog
+        className="runner-dialog"
         title="Rename runner"
         open={renaming}
         onClose={() => setRenaming(false)}
@@ -1011,6 +1054,37 @@ export function MachineSettingsPage() {
 
       {confirmation}
       {rotation.dialogs}
+    </div>
+  );
+}
+
+/** A Capacity reading: its name, how much is used of how much (`3 of 16 running`) and an action on one
+ *  line, and a bar of the share across the row under them — amber when warn. No bar without a share. */
+function CapacityMeter({
+  title,
+  value,
+  percent,
+  warn,
+  action,
+}: {
+  title: string;
+  value: string;
+  percent?: number;
+  warn?: boolean;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="settings-row machine-meter">
+      <div className="machine-meter-line">
+        <div className="settings-row-title">{title}</div>
+        <div className="machine-meter-value">{value}</div>
+        {action}
+      </div>
+      {percent != null && (
+        <div className={`rd-disk-bar machine-meter-bar${warn ? ' warn' : ''}`}>
+          <span style={{ width: `${percent}%` }} />
+        </div>
+      )}
     </div>
   );
 }
