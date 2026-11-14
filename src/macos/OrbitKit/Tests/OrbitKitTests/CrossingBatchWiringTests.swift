@@ -58,6 +58,13 @@ final class CrossingBatchWiringTests: XCTestCase {
         XCTAssertTrue(view.contains("symbol: \"arrow.left.arrow.right\""))
         XCTAssertTrue(view.contains("tone: .orange"))
         XCTAssertTrue(view.contains("await console.decideCrossingBatch(batchID, decision)"))
+        XCTAssertTrue(view.contains("CrossingBatches.approveLabel(for: batch)"),
+                      "a move out's approve button takes it out")
+        XCTAssertTrue(view.contains("CrossingBatches.refuseLabel(for: batch)"),
+                      "a move out's refuse button keeps it here")
+        XCTAssertTrue(view.contains("CrossingBatches.listHead(for: batch)"))
+        XCTAssertTrue(view.contains("Text(batch.out ? CrossingBatches.toNoProject : CrossingBatches.toThisProject)"),
+                      "a move out's route ends at no project")
         let review = try app("Views/ApprovalReview.swift")
         XCTAssertTrue(review.contains("return console.crossingAnsweredHere(batchID)"),
                       "the review leaves after its own press, like every other card's")

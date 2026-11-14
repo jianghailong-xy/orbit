@@ -124,9 +124,14 @@ import {
  * and the row says the request's kind in words of its own ("Decision for you", "Key needed", …).
  *
  * `MOVE_REQUEST` is a PENDING MOVE_TASK crossing, counted on the session that asked for it AND on
- * the target project's coordinator conversation — the move card is drawn in both, from the same
- * rows. One session's moves out of one project into another are one group: the count is the number
- * of groups (one card each), and the row says the number of moves ("Approve 8 task moves").
+ * the target project's coordinator conversation (for a move out of every project, which has no
+ * target, the source project's) — the move card is drawn in both, from the same rows. One session's
+ * moves out of one project into another are one group: the count is the number of groups (one card
+ * each), and the row says the number of moves ("Approve 8 task moves").
+ *
+ * `CROSSING_REQUEST` is a PENDING FILE_TASK crossing (new work filed into another project), counted
+ * on the target project's coordinator conversation, where its decision card is drawn. It has no row
+ * word of its own: the row keeps "Waiting for approval".
  */
 export type OwnerDecisionKind =
   | 'PROJECT_DECISION'
@@ -137,7 +142,8 @@ export type OwnerDecisionKind =
   | 'DONE_REQUEST'
   | 'RECORD_AS_DONE'
   | 'OWNER_REQUEST'
-  | 'MOVE_REQUEST';
+  | 'MOVE_REQUEST'
+  | 'CROSSING_REQUEST';
 
 export interface OwnerDecisionSignal {
   /** The conversation to open: the project's bound coordinator, or the waiting task's own session.
@@ -182,6 +188,7 @@ export async function readOwnerDecisionSignals(
     ...(await readRecordAsDoneSignals(tx, ownerId, sessionIds)),
     ...(await readOwnerRequestSignals(tx, ownerId, sessionIds)),
     ...(await readMoveRequestSignals(tx, ownerId, sessionIds)),
+    ...(await readCrossingRequestSignals(tx, ownerId, sessionIds)),
     ...confirmations.map((waiting) => ({
       sessionId: waiting.sessionId,
       projectId: waiting.projectId,
@@ -302,6 +309,51 @@ async function readProjectDecisionSignals(
     }
   }
   return signals;
+}
+
+/**
+/**
+ * The new work filed into another project (FILE_TASK crossings) still PENDING, on the conversation
+ * that draws each one as a decision card (`CrossingDecisionCard`): the target project's coordinator.
+ * Task moves are `MOVE_REQUEST` (`readMoveRequestSignals`), which also lights the session that asked.
+ * The project pages leave a row with such a conversation off their list, so this is the only place
+ * the owner is sent to. Open conversations only, as everywhere here.
+ */
+async function readCrossingRequestSignals(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  sessionIds: readonly string[] | undefined,
+): Promise<OwnerDecisionSignal[]> {
+  const open = { completedAt: null, archivedAt: null, deletedAt: null };
+  const pending = await tx.projectHandoffApproval.findMany({
+    where: {
+      ownerId,
+      kind: 'FILE_TASK',
+      state: 'PENDING',
+      toProjectId: { not: null },
+      toProject: { coordinatorSession: open },
+    },
+    select: {
+      toProjectId: true,
+      fromProjectId: true,
+      toProject: { select: { coordinatorSessionId: true } },
+    },
+  });
+  const bySession = new Map<string, { projectId: string; count: number }>();
+  for (const row of pending) {
+    const sessionId = row.toProject?.coordinatorSessionId;
+    if (!sessionId || (sessionIds && !sessionIds.includes(sessionId))) continue;
+    const projectId = row.toProjectId ?? row.fromProjectId;
+    const entry = bySession.get(sessionId);
+    if (entry) entry.count += 1;
+    else bySession.set(sessionId, { projectId, count: 1 });
+  }
+  return [...bySession].map(([sessionId, { projectId, count }]) => ({
+    sessionId,
+    projectId,
+    count,
+    kind: 'CROSSING_REQUEST' as const,
+  }));
 }
 
 /**
@@ -535,6 +587,7 @@ async function readMoveRequestSignals(
           OR: [
             { requestedBySessionId: { in: [...sessionIds] } },
             { toProject: { coordinatorSessionId: { in: [...sessionIds] } } },
+            { toProjectId: null, fromProject: { coordinatorSessionId: { in: [...sessionIds] } } },
           ],
         }
         : {}),
@@ -548,23 +601,28 @@ async function readMoveRequestSignals(
       fromProjectId: true,
       toProjectId: true,
       toProject: { select: { coordinatorSessionId: true } },
+      fromProject: { select: { coordinatorSessionId: true } },
     },
   });
   if (rows.length === 0) return [];
+  // The conversation that draws the move's card: the target's coordinator, or for a move out of
+  // every project (no target) the source's (main's 57a2943fa).
+  const cardSession = (row: (typeof rows)[number]) =>
+    row.toProjectId ? row.toProject?.coordinatorSessionId ?? null : row.fromProject.coordinatorSessionId;
   const open = await openSessionsAmong(
     tx,
     ownerId,
-    rows.flatMap((row) => [row.requestedBySessionId, ...(row.toProject?.coordinatorSessionId ? [row.toProject.coordinatorSessionId] : [])]),
+    rows.flatMap((row) => [row.requestedBySessionId, ...(cardSession(row) ? [cardSession(row)!] : [])]),
     sessionIds,
   );
 
   const bySession = new Map<string, { signal: OwnerDecisionSignal; groups: Map<string, SessionTaskMoveGroup<Date>> }>();
   for (const row of rows) {
-    const on = new Set([row.requestedBySessionId, row.toProject?.coordinatorSessionId]);
+    const on = new Set([row.requestedBySessionId, cardSession(row)]);
     for (const sessionId of on) {
       if (sessionId == null || !open.has(sessionId)) continue;
       const entry = bySession.get(sessionId) ?? {
-        signal: { sessionId, projectId: row.toProjectId, count: 0, kind: 'MOVE_REQUEST' as const, moves: [] },
+        signal: { sessionId, projectId: row.toProjectId ?? row.fromProjectId, count: 0, kind: 'MOVE_REQUEST' as const, moves: [] },
         groups: new Map<string, SessionTaskMoveGroup<Date>>(),
       };
       const key = `${row.requestedBySessionId}|${row.fromProjectId}|${row.toProjectId}`;
@@ -700,6 +758,8 @@ export type { SessionWaitingKind };
  *     kind's word (`OWNER_REQUEST_ROW_WORDS`). Two kinds of request on one row are a mix: null.
  *   * `MOVE_REQUEST` — everything counted is waiting task moves: "Approve task move" /
  *     "Approve N task moves" (`taskMovesRowWord`).
+ *   * `CROSSING_REQUEST` (new work filed into this conversation's project, waiting on its decision
+ *     card) has no word of its own: alone it is null, and the row says "Waiting for approval".
  *
  * Null otherwise — a blocked tool call on the same row, which holds a turn open and is the more
  * urgent thing to say; a kind with no words of its own (`PROJECT_DECISION` really is a proposal

@@ -56,10 +56,13 @@ RUN if [ -n "$ORBIT_MACOS_SIGNING" ]; then \
         "apple-codesign-0.29.0-$arch-unknown-linux-musl/rcodesign" && \
       rm /tmp/rcodesign.tar.gz; \
     fi
-COPY src/runner-go ./src/runner-go
-COPY package.json ./package.json
-COPY scripts ./scripts
-COPY contracts/runner-write-protocol.json ./contracts/runner-write-protocol.json
+# The tree the runner is built from: the build context itself, or, from the upgrade skill, the newest release
+# tag's tree it unpacks at .runner-release/ (ORBIT_RUNNER_SOURCE), whose commit ORBIT_RUNNER_SOURCE_SHA names.
+ARG ORBIT_RUNNER_SOURCE=.
+COPY ${ORBIT_RUNNER_SOURCE}/src/runner-go ./src/runner-go
+COPY ${ORBIT_RUNNER_SOURCE}/package.json ./package.json
+COPY ${ORBIT_RUNNER_SOURCE}/scripts ./scripts
+COPY ${ORBIT_RUNNER_SOURCE}/contracts/runner-write-protocol.json ./contracts/runner-write-protocol.json
 # The commit this build stamps into the binaries, when ORBIT_SOURCE_SHA was not passed:
 # .git/HEAD plus the refs, which is all the .dockerignore lets through. Bracketed so a
 # source tree without Git metadata still builds (it must then pass ORBIT_SOURCE_SHA).
@@ -68,6 +71,7 @@ COPY .gi[t] ./.git/
 # build-binaries.sh) so a self-hosted runner's `orbit register` needs no --server.
 ARG PUBLIC_ORIGIN
 ARG ORBIT_SOURCE_SHA
+ARG ORBIT_RUNNER_SOURCE_SHA
 ENV PUBLIC_ORIGIN=$PUBLIC_ORIGIN
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=secret,id=orbit_macos_signing_p12 \
@@ -76,7 +80,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
       export ORBIT_MACOS_SIGNING_P12=/run/secrets/orbit_macos_signing_p12 \
         ORBIT_MACOS_SIGNING_PASSWORD_FILE=/run/secrets/orbit_macos_signing_password; \
     fi; \
-    ORBIT_SOURCE_SHA="$ORBIT_SOURCE_SHA" bash scripts/build-binaries.sh dist-bin
+    ORBIT_SOURCE_SHA="${ORBIT_RUNNER_SOURCE_SHA:-$ORBIT_SOURCE_SHA}" bash scripts/build-binaries.sh dist-bin
 
 # The image PREVIOUS_RELEASE_IMAGE names, whose /dl the runtime stage reads (empty: scratch).
 FROM ${PREVIOUS_RELEASE_IMAGE} AS previous-release

@@ -2209,6 +2209,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         for (const sessionId of sessionIds) this.realtime?.publishSessionCreated?.(sessionId);
       },
     });
+    // A question filed for the account owner: one push, and the conversation that draws its card
+    // redraws its row; an answer redraws it again. After the commit, and never in the way of the
+    // write.
+    this.handoffs.bindChangeListener(({ id, ownerId, filed }) => {
+      if (filed) void this.push?.notifyCrossingRequest(id);
+      void this.handoffs.cardSessionOf(ownerId, id)
+        .then((sessionId) => { if (sessionId) this.realtime.publishSessionUpdated(sessionId); })
+        .catch(() => undefined);
+    });
     this.completionInputs = completionInputs;
     this.pauseProjector = pauseProjector;
     this.openItems = openItems;

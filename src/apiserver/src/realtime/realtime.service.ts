@@ -319,7 +319,7 @@ function batchRowUpdate(): NormalizedRunEvent {
  * input is whatever the asker sent. Seq 0, like every live-only event: a card is never stored in run_event.
  */
 export function approvalRequestEvent(
-  approval: { id: string; toolName: string; input: unknown; toolUseId: string | null; backgroundJobId: string | null; coordinatorFallback?: string | null },
+  approval: { id: string; toolName: string; input: unknown; toolUseId: string | null; backgroundJobId: string | null; subagentRunId?: string | null; coordinatorFallback?: string | null },
   ts: string,
 ): NormalizedRunEvent {
   return {
@@ -335,6 +335,9 @@ export function approvalRequestEvent(
       // up, whatever the conversation is doing, and a client that reads only the turn would
       // take the card down the moment the turn ended (`WorkspaceView`'s local predicate).
       backgroundJobId: approval.backgroundJobId ?? undefined,
+      // The SubAgent that asked under this session: the card's grey "SubAgent · …" line, and the reader that
+      // outlives the turn the way a job does.
+      ...(approval.subagentRunId ? { subagentRunId: approval.subagentRunId } : {}),
       ...(approval.coordinatorFallback ? { coordinatorFallback: approval.coordinatorFallback } : {}),
     },
     ts,
@@ -589,7 +592,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         this.readBackInOrder(m.r, `approval ${approvalId}`, async () => {
           const row = await this.prisma.approval.findFirst({
             where: { id: approvalId, sessionId: m.r },
-            select: { id: true, toolName: true, input: true, toolUseId: true, backgroundJobId: true, createdAt: true, coordinatorFallback: true },
+            select: { id: true, toolName: true, input: true, toolUseId: true, backgroundJobId: true, subagentRunId: true, createdAt: true, coordinatorFallback: true },
           });
           return row ? [approvalRequestEvent(row, ts ?? row.createdAt.toISOString())] : [];
         });
@@ -1509,7 +1512,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         // and this is the number the client overwrites its row with.
         const reader = await this.prisma.session.findUnique({
           where: { id: sessionId },
-          select: { id: true, taskId: true, status: true, engineTurnActive: true, runningBgShells: true },
+          select: { id: true, taskId: true, status: true, engineTurnActive: true, runningBgShells: true, runningSubagents: true },
         });
         const approvals = reader ? await countLiveApprovals(this.prisma, reader) : 0;
         const decisions = await this.ownerDecisionsOn(sessionId, ownerId);
@@ -1567,6 +1570,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         // Read by the approval count below: the set a card's `background_job_id` has to be in to
         // be a question on a conversation that is not generating (migration 0291).
         runningBgShells: true,
+        runningSubagents: true,
         engineStartedAt: true,
         enginePhase: true,
         runClaimedAt: true,

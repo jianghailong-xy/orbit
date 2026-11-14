@@ -205,6 +205,20 @@ final class Phase3LogicTests: XCTestCase {
         XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
                                             userInfo: ["sessionID": "s1", "kind": "approve-merge-to-main"]),
                        .open(.session("s1")), "an alert naming no project still opens its conversation")
+
+        // A crossing request opens the conversation that draws its decision card; a source with no
+        // coordinator conversation leaves only the project to open.
+        XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
+                                            userInfo: ["kind": "crossing-request", "sessionID": "s3",
+                                                       "projectID": "p1", "handoffID": "h1"]),
+                       .open(.session("s3")))
+        XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
+                                            userInfo: ["kind": "crossing-request", "projectID": "p1",
+                                                       "handoffID": "h1"]),
+                       .openProject(projectID: "p1"))
+        XCTAssertNil(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
+                                          userInfo: ["kind": "crossing-request", "handoffID": "h1"]),
+                     "nothing to open without a conversation or a project")
     }
 
     // MARK: menu-bar summary

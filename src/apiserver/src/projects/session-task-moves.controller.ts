@@ -10,7 +10,8 @@ import { ProjectHandoffService } from './project-handoff.service';
 /**
  * The task-move card a session draws, and the one answer it gives for a whole batch.
  *
- * A session draws the MOVE_TASK requests it asked for and those into a project it coordinates, in
+ * A session draws the MOVE_TASK requests it asked for and those into a project it coordinates (or,
+ * with no target, out of one it coordinates), in
  * batches (same asker, same source and target project). Separate from `ProjectsController` for the
  * reason `ProjectDoneNotYetController` gives: that one is built positionally by several specs.
  */

@@ -26,6 +26,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { criterionKeyOf } from '../projects/project-acceptance';
 import { ProjectHandoffService } from '../projects/project-handoff.service';
+import { readOwnerDecisionSignals } from '../projects/owner-decision-signal';
 import { ProjectsController } from '../projects/projects.controller';
 import type { PrismaService } from '../prisma/prisma.service';
 import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
@@ -85,6 +86,10 @@ test('unit L4: the account owner confirms a move, and the task moves', { skip, c
     { publishTaskChanged: () => undefined, publishForUser: () => undefined } as never,
     handoffs,
   );
+  // What the TasksService over this instance is told: a question filed (push it, redraw its card's
+  // row) and every answer (redraw again). Bound after it, so the spec reads them rather than pushing.
+  const changes: Array<{ id: string; filed: boolean }> = [];
+  handoffs.bindChangeListener(({ id, filed }) => { changes.push({ id, filed }); });
   const evidence = new TaskCompletionEvidenceService(prisma as unknown as PrismaService);
   const progress = new TaskProgressService(prisma as unknown as PrismaService);
   // The door the confirmation card posts to: `POST /projects/:id/handoffs/:handoffId/decision`.
@@ -263,6 +268,14 @@ test('unit L4: the account owner confirms a move, and the task moves', { skip, c
     // The target's coordinator pulls the task over and names the criterion it will serve there —
     // the shape of the 2026-10-06 request this project started from.
     const question = await asked(w, w.coordB, { criterionKey: criterionKeyOf(w.criterionB) });
+    // Its card is drawn in the TARGET's coordinator conversation, and that row waits on the owner
+    // (here the asker too): one task move, `MOVE_REQUEST`.
+    assert.equal(await handoffs.cardSessionOf(w.ownerId, question.id), w.coordB);
+    assert.deepEqual((await readOwnerDecisionSignals(prisma as never, w.ownerId))
+      .filter((signal) => signal.kind === 'MOVE_REQUEST' || signal.kind === 'CROSSING_REQUEST')
+      .map(({ sessionId, projectId, count, kind }) => ({ sessionId, projectId, count, kind })), [{
+      sessionId: w.coordB, projectId: w.projectB, count: 1, kind: 'MOVE_REQUEST',
+    }]);
     // B rewords that criterion while the question waits: the move declares it as it reads when the
     // owner answers, not as it read when the agent asked.
     await admin.query(
@@ -754,17 +767,33 @@ test('unit L4: the account owner confirms a move, and the task moves', { skip, c
     const undeclared = await refusalOf(() => ask(w, w.coordA, { projectId: null, handoff: undefined }));
     assert.equal(undeclared.body.code, 'UNMAPPED_PROJECT_WORK');
 
-    // The card lists it with no target.
+    // The card lists it with no target, and says which conversation answers it: A's coordinator,
+    // since "no project" has none.
     const [listed] = await handoffs.listForProject(w.ownerId, w.projectA);
     assert.equal(listed.id, question.id);
     assert.equal(listed.toProjectId, null);
     assert.equal(listed.toProject, null);
+    assert.equal(listed.fromProject.coordinatorSessionId, w.coordA);
     assert.deepEqual(listed.withdrawnCriterion?.key, criterionKeyOf(w.criterionA));
+    assert.equal(await handoffs.cardSessionOf(w.ownerId, question.id), w.coordA);
+
+    // Filed once, so told once; asking again filed nothing and told nobody.
+    assert.deepEqual(changes.filter((c) => c.id === question.id), [{ id: question.id, filed: true }]);
+    // And that conversation's row is waiting on the owner while it stands: a task move (`MOVE_REQUEST`),
+    // on the source's coordinator, which both asked and answers it.
+    const crossingSignals = async () => (await readOwnerDecisionSignals(prisma as never, w.ownerId))
+      .filter((signal) => signal.kind === 'MOVE_REQUEST' || signal.kind === 'CROSSING_REQUEST')
+      .map(({ sessionId, projectId, count, kind }) => ({ sessionId, projectId, count, kind }));
+    assert.deepEqual(await crossingSignals(), [{
+      sessionId: w.coordA, projectId: w.projectA, count: 1, kind: 'MOVE_REQUEST',
+    }]);
 
     const answer = await card.decideHandoff(owner(w), w.projectA, question.id, {
       decision: 'APPROVE', acknowledgedCrossingKey: question.crossing_key,
     } as never);
     assert.equal(answer.row.state, 'APPLIED');
+    assert.deepEqual(await crossingSignals(), [], 'answered, so nothing waits on the owner');
+    assert.deepEqual(changes.filter((c) => c.id === question.id).map((c) => c.filed), [true, false]);
     assert.deepEqual(await taskRow(w.task), {
       project_id: null, criterion_definition_id: null, criterion_revision: null, description: null,
     }, 'in no project, and A\'s declaration taken back');

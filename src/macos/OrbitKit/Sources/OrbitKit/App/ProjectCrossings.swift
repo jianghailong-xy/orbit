@@ -315,11 +315,14 @@ public enum ProjectCrossings {
         return pending + answered
     }
 
-    /// A crossing the target project's coordinator conversation answers as a decision card is not
-    /// listed on either end's project page; only what no conversation can answer is — a move out to
-    /// no project, a target with no coordinator, or a row from a server that does not say.
+    /// A crossing a coordinator conversation answers as a decision card is not listed on either
+    /// end's project page; only what no conversation can answer is. A move into a project is
+    /// answered in the target's conversation; a move out to no project is answered in the SOURCE's.
+    /// A row from a server that does not say is listed — better a duplicate than a request nowhere
+    /// to answer.
     public static func isShownOnProjectPage(_ row: ProjectCrossing) -> Bool {
-        row.toProject?.coordinatorSessionId == nil
+        if row.toProjectId == nil { return row.fromProject?.coordinatorSessionId == nil }
+        return row.toProject?.coordinatorSessionId == nil
     }
 
     /// The rows the project page lists.

@@ -185,6 +185,14 @@ public struct ToolDisplay: Equatable, Sendable {
                                summary: input["description"]?.stringValue, summaryMono: false, path: nil, meta: nil,
                                body: (prompt?.isEmpty == false) ? .markdown(prompt!) : .none, autoOpen: false)
 
+        // Orbit's own SubAgent (docs/subagent-design.md §6.4): the purple Agent card. The row names it
+        // and its description; the type, tier, model and duration sit on the grey second line below
+        // (see `SubagentBlock`), because a phone has no room for web's trailing meta.
+        case SubagentBlock.toolName:
+            return ToolDisplay(label: "SubAgent", symbol: "sparkle", tone: .agent,
+                               summary: input["description"]?.stringValue, summaryMono: false,
+                               path: nil, meta: nil, body: .none, autoOpen: false)
+
         case "Workflow":
             // A team of agents the runtime runs in the background. Named here by its script's own
             // meta; the card prefers the launch receipt's summary once that lands (a resumed run

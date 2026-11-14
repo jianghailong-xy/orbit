@@ -14,7 +14,9 @@ import {
   crossingListHead,
   crossingSummary,
   crossingTitle,
+  decisionLabels,
   isLive,
+  moveBatches,
   notRecordedNote,
   requestedCriterionLine,
   waitingLine,
@@ -84,8 +86,12 @@ describe('crossingBatches — one card per batch', () => {
     n = 0;
     const out = row({ toProjectId: null, toProjectPublicId: null, toProject: null, requestedCriterion: null });
     const absent = row({ toProjectId: null, toProjectPublicId: undefined, toProject: null, requestedCriterion: null });
-    for (const id of [TARGET, 'TgtPub', SOURCE, 'SrcPub']) {
+    for (const id of [TARGET, 'TgtPub']) {
       expect(crossingBatches([out, absent], id)).toEqual([]);
+    }
+    // It is drawn only in its SOURCE's conversation, as a request to take tasks out (below).
+    for (const id of [SOURCE, 'SrcPub']) {
+      expect(crossingBatches([out, absent], id).map((b) => [b.out, b.rows])).toEqual([[true, [out, absent]]]);
     }
     // Beside an ordinary move from the same source, it neither joins nor splits that batch.
     const into = row();
@@ -249,5 +255,55 @@ describe('crossingBatches — the words', () => {
     expect(anotherEndLine('REFUSED')).toBe('Refused at another end');
     expect(notRecordedNote(1)).toBe('1 answer was not recorded');
     expect(notRecordedNote(3)).toBe('3 answers were not recorded');
+  });
+});
+
+describe('crossingBatches — a task asked to be taken out of every project', () => {
+  const out = (over: Partial<ProjectCrossingRow> = {}) =>
+    row({ toProjectId: null, toProjectPublicId: null, toProject: null, requestedCriterion: null, ...over });
+
+  it('is drawn in the source project\'s conversation, as a batch of its own', () => {
+    n = 0;
+    const rows = [out(), row({ fromProjectId: SOURCE, toProjectId: OTHER_SOURCE, toProjectPublicId: 'x' }), out()];
+    const batches = crossingBatches(rows, SOURCE);
+    expect(batches.map((b) => [b.kind, b.out, b.rows.length])).toEqual([['MOVE_TASK', true, 2]]);
+    // ...by either spelling of the id, and never in another project's conversation.
+    expect(crossingBatches([out()], 'SrcPub')).toHaveLength(1);
+    expect(crossingBatches([out()], TARGET)).toHaveLength(0);
+  });
+
+  it('says what it does: take the task out, or keep it here', () => {
+    n = 0;
+    const [one] = crossingBatches([out()], SOURCE);
+    expect(crossingTitle(one.kind, 1, null, true)).toBe('Take this task out of the project?');
+    expect(crossingTitle(one.kind, 2, null, true)).toBe('Take these tasks out of the project?');
+    expect(crossingSummary(one)).toBe('1 task to take out of Runner link v1');
+    expect(crossingListHead(one.kind, true)).toBe('Tasks to take out');
+    expect(approveConsequence(one)).toMatch(/^Confirming takes the task out of this project/);
+    expect(decisionLabels(one)).toEqual({ approve: 'Take it out', refuse: 'Keep it here' });
+    expect(answeredBadge(one.kind, 'APPROVED', true)).toBe('taken out');
+    const [two] = crossingBatches([out(), out()], SOURCE);
+    expect(decisionLabels(two)).toEqual({ approve: 'Take them out', refuse: 'Keep them here' });
+    // An ordinary move keeps its words.
+    const [into] = crossingBatches([row()], TARGET);
+    expect(into.out).toBe(false);
+    expect(decisionLabels(into)).toEqual({ approve: 'Approve', refuse: 'Refuse' });
+  });
+});
+
+describe('moveBatches — a move out of every project, from the session read', () => {
+  it('is a take-out batch with no target, in the asking session and in the source coordinator alike', () => {
+    n = 0;
+    const move = row({ toProjectId: null, toProjectPublicId: null, toProject: null, requestedCriterion: null });
+    for (const drawnAs of [['REQUESTER'], ['TARGET_COORDINATOR']] as const) {
+      const [batch] = moveBatches([{
+        batchKey: 'k', requestedBySessionId: 's', fromProjectId: SOURCE, toProjectId: null, state: 'PENDING',
+        since: move.requestedAt, decidedAt: null, drawnAs, moves: [move],
+      }]);
+      expect(batch.out).toBe(true);
+      expect(batch.targetTitle).toBeNull();
+      expect(crossingTitle(batch.kind, 1, batch.targetTitle, batch.out)).toBe('Take this task out of the project?');
+      expect(decisionLabels(batch)).toEqual({ approve: 'Take it out', refuse: 'Keep it here' });
+    }
   });
 });
