@@ -138,20 +138,17 @@ async function click(el: Element) {
  * line's accessible name, not its words — folded until clicked, what the model read once open
  * under that row, and folded again on a second click.
  *
- * Two of them open as something other than their own text — the inventory a returning engine is
- * handed, and the tasks a person named with `#` (`card`, whose title is the link the block's id
- * could only be read as). Everything else opens verbatim, which is the whole of what this says
- * about it.
+ * The inventory a returning engine is handed opens as rows; everything else opens verbatim, which
+ * is the whole of what this says about it. A `#`-referenced task and a coordinator's role draw no
+ * line at all (below).
  */
-async function expectFoldedEntry({ typed, block, kind, count, marker, card }: {
+async function expectFoldedEntry({ typed, block, kind, count, marker }: {
   typed: string;
   block: string;
   kind: string;
   /** What a block that opens as rows or cards adds to its own name once shut; '' for the rest. */
   count: string;
   marker: string;
-  /** The one card a `#`-reference opens as, for the block that opens as one. */
-  card?: { title: string; href: string };
 }) {
   const toggle = attachedToggle();
   expect(toggle, `no entry signed ${LABEL}:\n${container.innerHTML}`).not.toBeNull();
@@ -173,16 +170,8 @@ async function expectFoldedEntry({ typed, block, kind, count, marker, card }: {
   expect(toggle!.textContent).toBe(`${OPEN_LABEL} ${kind}`);
   const entry = opened();
   expect(entry, `nothing opened under the meta row:\n${container.innerHTML}`).not.toBeNull();
-  if (card) {
-    const link = entry!.querySelector('a.reftask-title');
-    expect(link?.textContent, `the opened entry is not a card:\n${container.innerHTML}`).toBe(card.title);
-    expect(link?.getAttribute('href')).toBe(card.href);
-    // The table is what the card replaced, the sentence addressed to the agent with it.
-    expect(entry!.textContent).not.toContain('详情请用 task_get 自取');
-  } else {
-    const original = [...entry!.querySelectorAll('*')].find((el) => el.textContent === block);
-    expect(original, `the opened entry does not show the block verbatim:\n${container.innerHTML}`).toBeTruthy();
-  }
+  const original = [...entry!.querySelectorAll('*')].find((el) => el.textContent === block);
+  expect(original, `the opened entry does not show the block verbatim:\n${container.innerHTML}`).toBeTruthy();
   expect(words()).toBe(typed);
 
   await click(toggle!);
@@ -193,20 +182,13 @@ async function expectFoldedEntry({ typed, block, kind, count, marker, card }: {
 }
 
 describe.each([
-  { tag: '<background-jobs>', typed: '已经部署，请帮我测试', block: BACKGROUND_JOBS, kind: 'background jobs', count: ' · 1 ended, exit 0', marker: 'bgj_3a1af2b50428' },
   { tag: '<list-conditions>', typed: '这个列表现在什么情况？', block: LIST_CONDITIONS, kind: 'list conditions', count: '', marker: '累计 47 次' },
-  { tag: '<orbit_project_coordinator_context>', typed: '把这个项目协调起来', block: COORDINATOR, kind: 'project coordinator context', count: '', marker: '的协调会话' },
-  {
-    tag: '<referenced-task>', typed: '这个任务现在什么状态？', block: REFERENCED_TASK,
-    kind: 'referenced task', count: ' · OPEN', marker: '回填历史 user 事件的 controlPlaneNote',
-    card: { title: '回填历史 user 事件的 controlPlaneNote', href: '/tasks/34MQb2AXbj3QAkZko92ob' },
-  },
-])('$tag', ({ typed, block, kind, count, marker, card }) => {
+])('$tag', ({ typed, block, kind, count, marker }) => {
   it('with the note recorded: only the typed words are the bubble’s own, and the block is a folded entry under them that opens to what the model read', async () => {
     const appended = `\n\n${block}`;
     await mount([userEvent(`${typed}${appended}`, appended)]);
 
-    await expectFoldedEntry({ typed, block, kind, count, marker, card });
+    await expectFoldedEntry({ typed, block, kind, count, marker });
   });
 
   it('with no note: someone who typed the same characters sees them in their bubble as typed, and nothing is folded away', async () => {
@@ -220,18 +202,36 @@ describe.each([
   });
 });
 
-it('is one line after the hidden copy and time, the counts in its name and tooltip, and nothing else to press', async () => {
+// The owner's ruling (2026-11-14): a coordinator's standing role and the background-jobs inventory
+// are Orbit's routine, and a `#`-referenced task is already a link in the person's own words, so
+// none of them draws a line.
+it.each([
+  { what: 'the background-jobs inventory', typed: '已经部署，请帮我测试', block: BACKGROUND_JOBS, marker: 'bgj_3a1af2b50428' },
+  { what: "a coordinator's standing role", typed: '把这个项目协调起来', block: COORDINATOR, marker: '的协调会话' },
+  { what: 'a #-referenced task', typed: '这个任务现在什么状态？', block: REFERENCED_TASK, marker: '回填历史 user 事件的 controlPlaneNote' },
+  { what: 'both at once', typed: '这个任务现在什么状态？', block: `${REFERENCED_TASK}\n\n${COORDINATOR}`, marker: '的协调会话' },
+])('draws no line for $what', async ({ typed, block, marker }) => {
+  const appended = `\n\n${block}`;
+  await mount([userEvent(`${typed}${appended}`, appended)]);
+
+  expect(bubble().textContent?.trim()).toBe(typed);
+  expect(attachedToggle()).toBeNull();
+  expect(container.textContent).not.toContain('Orbit attached');
+  expect(container.textContent).not.toContain(marker);
+});
+
+it('is one line after the hidden copy and time, and nothing else to press', async () => {
   // The owner's ruling (2026-10-27, docs/mocks/attached-context-note): what the person typed is what
   // the eye lands on. So no card in the bubble — the line is in the meta row's own voice and says
-  // what was attached; how it stands ("1 ended, exit 0") waits in its name and its tooltip.
-  const appended = `\n\n${BACKGROUND_JOBS}`;
-  await mount([userEvent(`已经部署，请帮我测试${appended}`, appended)]);
+  // what was attached.
+  const appended = `\n\n${LIST_CONDITIONS}`;
+  await mount([userEvent(`这个列表现在什么情况？${appended}`, appended)]);
 
   const row = container.querySelector('.chat-user-wrap > .chat-user-meta')!;
   const line = row.lastElementChild as HTMLButtonElement;
-  expect(line.textContent).toBe(`${LABEL} background jobs`);
-  expect(line.getAttribute('aria-label')).toBe(`${LABEL} background jobs · 1 ended, exit 0`);
-  expect(line.title).toBe('Orbit attached: background jobs · 1 ended, exit 0. The agent read it with this message.');
+  expect(line.textContent).toBe(`${LABEL} list conditions`);
+  expect(line.getAttribute('aria-label')).toBe(`${LABEL} list conditions`);
+  expect(line.title).toBe('Orbit attached: list conditions. The agent read it with this message.');
   expect([...row.children].map((child) => child.className)).toEqual([
     'chat-copy',
     'chat-time',
@@ -246,8 +246,8 @@ it('is one line after the hidden copy and time, the counts in its name and toolt
 
   const wrap = container.querySelector('.chat-user-wrap')!;
   expect(wrap.lastElementChild?.className, 'the rows open under the meta row').toBe('chat-injected-panel');
-  expect(line.textContent).toBe(`${OPEN_LABEL} background jobs`);
-  expect(bubble().textContent?.trim()).toBe('已经部署，请帮我测试');
+  expect(line.textContent).toBe(`${OPEN_LABEL} list conditions`);
+  expect(bubble().textContent?.trim()).toBe('这个列表现在什么情况？');
 });
 
 describe('a wiki chat’s first message (board 42 ①, C15)', () => {
@@ -302,11 +302,11 @@ describe('the exported transcript', () => {
   // Rendered here rather than imported: that module inlines the stylesheet through Vite `?raw`
   // imports, which Vite refuses to serve from a node_modules linked in from outside the tree.
   it('is drawn by the same component, so the line is under the bubble there too — and open, since a file has nothing to click', () => {
-    const appended = `\n\n${BACKGROUND_JOBS}`;
+    const appended = `\n\n${LIST_CONDITIONS}`;
     const html = renderToStaticMarkup(
       <ExportCtx.Provider value={{ images: new Map() }}>
         <div className="workspace-sessions">
-          <Transcript events={[userEvent(`已经部署，请帮我测试${appended}`, appended)]} live={false} />
+          <Transcript events={[userEvent(`这个列表现在什么情况？${appended}`, appended)]} live={false} />
         </div>
       </ExportCtx.Provider>,
     );
@@ -316,19 +316,19 @@ describe('the exported transcript', () => {
     );
 
     expect(toggle?.textContent, `no open entry signed ${OPEN_LABEL} under the exported bubble:\n${html}`).toBe(
-      `${OPEN_LABEL} background jobs`,
+      `${OPEN_LABEL} list conditions`,
     );
     expect(toggle!.getAttribute('aria-expanded')).toBe('true');
     const panel = exported!.querySelector(':scope > .chat-injected-panel');
-    expect([...(panel?.querySelectorAll('*') ?? [])].some((el) => el.textContent === BACKGROUND_JOBS)).toBe(true);
-    expect(exported!.querySelector('.chat-user')!.textContent!.trim()).toBe('已经部署，请帮我测试');
+    expect([...(panel?.querySelectorAll('*') ?? [])].some((el) => el.textContent === LIST_CONDITIONS)).toBe(true);
+    expect(exported!.querySelector('.chat-user')!.textContent!.trim()).toBe('这个列表现在什么情况？');
   });
 });
 
 describe('the entry’s focus ring', () => {
   it('is drawn for keyboard focus alone (:focus-visible), so a click leaves no ring behind', async () => {
-    const appended = `\n\n${BACKGROUND_JOBS}`;
-    await mount([userEvent(`已经部署，请帮我测试${appended}`, appended)]);
+    const appended = `\n\n${LIST_CONDITIONS}`;
+    await mount([userEvent(`这个列表现在什么情况？${appended}`, appended)]);
     const toggle = attachedToggle();
     expect(toggle, `no entry signed ${LABEL}:\n${container.innerHTML}`).not.toBeNull();
 

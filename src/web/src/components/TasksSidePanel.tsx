@@ -42,6 +42,8 @@ import type {
   RunnerAntigravityState,
   RunnerAccountRemoveState,
   RunnerEngineHealth,
+  RunnerEngineUpdateDismissals,
+  RunnerAgentFix,
   RunnerInstallState,
   RunnerModelCatalog,
   RunnerRegionView,
@@ -283,6 +285,12 @@ export interface Runner {
   // Per-engine health this runner reported (installed / version / signed in). null when it has
   // never reported — which is not the same as "nothing installed", so the two stay distinct.
   engines?: RunnerEngineHealth[] | null;
+  // The engine update warnings dismissed on this runner, by engine: the update.latest each was
+  // dismissed against. Absent from an older server, which dismisses nothing.
+  engineUpdateDismissals?: RunnerEngineUpdateDismissals | null;
+  // Fix with an agent: where a press would start its session here, or why it can't, and the agents
+  // already at work on this runner's warnings. Absent from an older server, which draws no button.
+  agentFix?: RunnerAgentFix | null;
   /** Server-computed capability and CLI readiness for Gemini sessions. */
   antigravity?: RunnerAntigravityState;
   // The engine install this runner has in flight, if any.

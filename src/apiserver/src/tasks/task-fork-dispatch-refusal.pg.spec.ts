@@ -126,18 +126,27 @@ test('a forked task refused at dispatch is recorded and not re-dispatched', { sk
 
   /** A forked task filed by the forking session, assigned to its machine, opted into auto-run. */
   async function forkedTask(w: World): Promise<string> {
+    const body = {
+      title: 'Finish the claim refactor',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
+      assigneeId: w.workspaceA,
+      autoRunWhenReady: true,
+      fork: { sessionId: w.forkingSessionId, sha: SHA('5'), baseHead: SHA('4'), includesUncommitted: true },
+    };
+    // The runner door is carded by caller (`task-write-approval.ts`): this create carries the
+    // answered card the forking session's own tool would have raised for the same body.
+    await prisma.approval.create({
+      data: {
+        sessionId: w.forkingSessionId, toolName: 'orbit_task_create', input: body as never,
+        status: 'ALLOWED', decidedById: w.ownerId, decidedAt: new Date(),
+      },
+    });
     const task = await runnerDoor.createTask(
       { id: w.runnerA, ownerId: w.ownerId } as never,
       w.workspaceA,
       undefined,
       w.forkingSessionId,
-      {
-        title: 'Finish the claim refactor',
-        completionCriterion: 'EVIDENCE_JUDGMENT',
-        assigneeId: w.workspaceA,
-        autoRunWhenReady: true,
-        fork: { sessionId: w.forkingSessionId, sha: SHA('5'), baseHead: SHA('4'), includesUncommitted: true },
-      } as never,
+      body as never,
     ) as { id: string };
     const row = await prisma.task.findUniqueOrThrow({
       where: { id: task.id }, select: { projectId: true, autoRunWhenReady: true, forkRunnerId: true },

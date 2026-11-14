@@ -58,14 +58,13 @@ func TestMCPTaskWritesNameTheCallingSession(t *testing.T) {
 }
 
 func TestDagApplyNamesTheCallingSessionAndAPreviewDoesNot(t *testing.T) {
-	t.Setenv("ORBIT_SESSION_ID", " caller-session ")
 	srv, seen := recordNamedSessions(t)
 	transport := NewTransport(srv.URL, "tok")
 	body := map[string]interface{}{"ops": []interface{}{}}
 	if _, err := transport.dagPreview("list-1", body); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := transport.dagApply("list-1", body); err != nil {
+	if _, err := transport.dagApply("list-1", body, "caller-session"); err != nil {
 		t.Fatal(err)
 	}
 	want := []namedSessionRequest{
@@ -111,9 +110,6 @@ func TestCLITaskWritesNameTheCallingSession(t *testing.T) {
 		{func() error {
 			return cmdTaskCLI([]string{"progress", "t1", "--phase", "tests"}, strings.NewReader(""), &strings.Builder{})
 		}, http.MethodPost, "/api/runner/tasks/t1/progress"},
-		{func() error {
-			return cmdTaskListCLI([]string{"propose-dag", "list-1", "--add", "t1:p1", "--apply"}, strings.NewReader(""), &strings.Builder{})
-		}, http.MethodPost, "/api/runner/task-lists/list-1/dag-apply"},
 	}
 	for _, sessionID := range []string{"caller-session", ""} {
 		srv, seen := recordNamedSessions(t)
@@ -132,4 +128,63 @@ func TestCLITaskWritesNameTheCallingSession(t *testing.T) {
 			}
 		}
 	}
+}
+
+// The DAG batch names its session where it writes, and inside a session it asks first — the card,
+// the poll and the apply are three requests, and only the apply carries the attribution header
+// (dag_approval.go). A process in no session sends the apply alone, which the server then refuses on
+// the machine credential (TASK_WRITE_NEEDS_OWNER_CARD).
+func TestCLIDagApplyNamesTheCallingSessionAfterTheCard(t *testing.T) {
+	t.Setenv("ORBIT_SESSION_ID", "caller-session")
+	srv, seen := recordNamedSessionDag(t)
+	configureCLITestRunner(t, srv.URL)
+	if err := cmdTaskListCLI([]string{"propose-dag", "list-1", "--add", "t1:p1", "--apply"},
+		strings.NewReader(""), &strings.Builder{}); err != nil {
+		t.Fatal(err)
+	}
+	want := []namedSessionRequest{
+		{http.MethodPost, "/api/runner/task-lists/list-1/dag-preview", ""},
+		{http.MethodPost, "/api/runner/sessions/caller-session/approvals", ""},
+		{http.MethodGet, "/api/runner/sessions/caller-session/approvals/ap1", ""},
+		{http.MethodPost, "/api/runner/task-lists/list-1/dag-apply", "caller-session"},
+	}
+	if len(*seen) != len(want) {
+		t.Fatalf("sent %+v, want %+v", *seen, want)
+	}
+	for index, entry := range want {
+		if (*seen)[index] != entry {
+			t.Errorf("request %d = %+v, want %+v", index, (*seen)[index], entry)
+		}
+	}
+
+	t.Setenv("ORBIT_SESSION_ID", "")
+	srv, seen = recordNamedSessionDag(t)
+	configureCLITestRunner(t, srv.URL)
+	if err := cmdTaskListCLI([]string{"propose-dag", "list-1", "--add", "t1:p1", "--apply"},
+		strings.NewReader(""), &strings.Builder{}); err != nil {
+		t.Fatal(err)
+	}
+	if len(*seen) != 1 || (*seen)[0] != (namedSessionRequest{http.MethodPost, "/api/runner/task-lists/list-1/dag-apply", ""}) {
+		t.Fatalf("headless sent %+v, want the apply alone", *seen)
+	}
+}
+
+func recordNamedSessionDag(t *testing.T) (*httptest.Server, *[]namedSessionRequest) {
+	t.Helper()
+	var seen []namedSessionRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, namedSessionRequest{r.Method, r.URL.Path, r.Header.Get("X-Orbit-Session-Id")})
+		switch {
+		case strings.Contains(r.URL.Path, "/dag-preview"):
+			_, _ = w.Write([]byte(`{"effectiveCount":1,"noopCount":0}`))
+		case strings.HasSuffix(r.URL.Path, "/approvals"):
+			_, _ = w.Write([]byte(`{"id":"ap1","status":"PENDING"}`))
+		case strings.Contains(r.URL.Path, "/approvals/"):
+			_, _ = w.Write([]byte(`{"status":"ALLOWED"}`))
+		default:
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &seen
 }

@@ -272,6 +272,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `PATCH` | `/api/runners/:id/accounts/:engine/:account` | body `RenameAccountDto`; path `account`, `engine`, `id` | `RunnersController.renameAccount` |
 | `POST` | `/api/runners/:id/accounts/:engine/:account/pause` | body `PauseAccountDto`; path `account`, `engine`, `id` | `RunnersController.pauseAccount` |
 | `POST` | `/api/runners/:id/accounts/:engine/default/restore` | path `engine`, `id` | `RunnersController.restoreDefault` |
+| `POST` | `/api/runners/:id/attention/:kind/fix` | body `Object`; path `id`, `kind` | `RunnerAttentionFixController.fix` |
 | `GET` | `/api/runners/:id/claude-history` | path `id`; query `workDir` | `RunnersController.claudeHistory` |
 | `POST` | `/api/runners/:id/claude-history` | body `Object`; path `id` | `RunnersController.askClaudeHistory` |
 | `DELETE` | `/api/runners/:id/codex-accounts/:account` | path `account`, `id` | `RunnersController.removeCodexAccount` |
@@ -281,6 +282,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/runners/:id/dir-probe` | path `id`; query `path` | `RunnersController.dirProbe` |
 | `POST` | `/api/runners/:id/dir-probe` | body `Object`; path `id` | `RunnersController.askDirProbe` |
 | `POST` | `/api/runners/:id/engine-update` | path `id` | `RunnersController.startEngineUpdate` |
+| `POST` | `/api/runners/:id/engines/:engine/update-warning/dismiss` | path `engine`, `id` | `RunnersController.dismissEngineUpdateWarning` |
 | `DELETE` | `/api/runners/:id/install` | path `id` | `RunnersController.cancelInstall` |
 | `GET` | `/api/runners/:id/install` | path `id` | `RunnersController.installState` |
 | `POST` | `/api/runners/:id/install` | body `StartInstallDto`; path `id` | `RunnersController.startInstall` |
