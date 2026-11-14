@@ -374,7 +374,9 @@ func TestEveryAdvertisedCapabilityIsPreApproved(t *testing.T) {
 // The allowlist is generated from the catalogue (orbitCLICommands), and this holds it to the other projection of
 // the same catalogue an agent reads: in a session, with the orchestration grant and without, Claude Code pre-approves
 // exactly the commands `capabilities --json` offers it — none missing, so no advertised command meets a prompt, and
-// none extra, so nothing the session is not offered is pre-approved — plus `capabilities --json` itself.
+// none extra, so nothing the session is not offered is pre-approved — plus the document's own doors:
+// `capabilities --json` itself, and its graded views (`capabilities *`: --summary, --family, --id), which the
+// instructions send an agent to instead of the whole document (operation_discovery.go).
 func TestTheCLIAllowlistIsExactlyWhatCapabilitiesOffersTheSession(t *testing.T) {
 	exe := "/usr/local/bin/orbit"
 	for _, orchestration := range []bool{false, true} {
@@ -382,7 +384,7 @@ func TestTheCLIAllowlistIsExactlyWhatCapabilitiesOffersTheSession(t *testing.T) 
 		if !orchestration {
 			t.Setenv(envMCPOrchestration, "false")
 		}
-		want := map[string]bool{"Bash(" + exe + " capabilities --json)": true}
+		want := map[string]bool{"Bash(" + exe + " capabilities --json)": true, "Bash(" + exe + " capabilities *)": true}
 		for _, capability := range buildCLICapabilities(exe).Capabilities {
 			want["Bash("+strings.Join(capability.Argv, " ")+" *)"] = true
 		}
