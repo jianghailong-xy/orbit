@@ -6,7 +6,8 @@
     "move",
     "commit",
     "push",
-    "rescue"
+    "rescue",
+    "discard"
   ],
   "refusalCodes": [
     "FINGERPRINT_STALE",
@@ -239,6 +240,15 @@
       "root": "/root/orbit",
       "fingerprint": "mc1:62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7:27a2714bb42c00aee96da70da7154696ed3f0e90e9fa66183614c6e8fdc54ba8",
       "requestId": "req-rescue"
+    },
+    {
+      "kind": "discard",
+      "root": "/root/orbit",
+      "fingerprint": "mc1:62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7:27a2714bb42c00aee96da70da7154696ed3f0e90e9fa66183614c6e8fdc54ba8",
+      "files": [
+        "src/api/retry.ts"
+      ],
+      "requestId": "req-discard"
     }
   ],
   "command": {
@@ -372,6 +382,24 @@
         "action": "open-in-new-session",
         "label": "Open in a new session"
       }
+    },
+    {
+      "name": "discard done",
+      "onBoard": false,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "discard",
+        "status": "done",
+        "branch": "main",
+        "fileCount": 2,
+        "remaining": 1,
+        "rescueBranch": "orbit/rescue-5f2c1a9"
+      },
+      "view": {},
+      "lead": "Discarded 2 files from the main checkout.",
+      "text": "Discarded 2 files from the main checkout. The main checkout still has 1 other uncommitted file. A copy of what it held is on orbit/rescue-5f2c1a9."
     },
     {
       "name": "FINGERPRINT_STALE",
@@ -683,6 +711,28 @@
       "text": "Nothing committed: git couldn't commit (“unable to auto-detect email address (got 'root@hpc.(none)')”). The main checkout was left as it was."
     },
     {
+      "name": "discard ACTION_FAILED",
+      "onBoard": false,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "discard",
+        "status": "refused",
+        "code": "ACTION_FAILED",
+        "branch": "main",
+        "rescueBranch": "orbit/rescue-5f2c1a9",
+        "gitMessage": "unable to unlink old 'a.txt': Permission denied"
+      },
+      "view": {},
+      "lead": "Nothing discarded:",
+      "text": "Nothing discarded: git couldn't discard (“unable to unlink old 'a.txt': Permission denied”). A copy of what the main checkout held is on orbit/rescue-5f2c1a9.",
+      "link": {
+        "action": "review-again",
+        "label": "Review again"
+      }
+    },
+    {
       "name": "ACTION_IN_FLIGHT",
       "onBoard": false,
       "result": {
@@ -793,6 +843,44 @@
         "current": null,
         "cardAgeSeconds": 600,
         "handled": "result"
+      },
+      {
+        "name": "discard done for all its files",
+        "results": [
+          {
+            "requestId": "req-1",
+            "root": "/root/orbit",
+            "finishedAt": "2026-11-12T08:00:00.000Z",
+            "kind": "discard",
+            "status": "done",
+            "branch": "main",
+            "remaining": 0,
+            "rescueBranch": "orbit/rescue-5f2c1a9",
+            "fileCount": 3
+          }
+        ],
+        "current": null,
+        "cardAgeSeconds": 600,
+        "handled": "result"
+      },
+      {
+        "name": "discard of fewer files keeps it live",
+        "results": [
+          {
+            "requestId": "req-1",
+            "root": "/root/orbit",
+            "finishedAt": "2026-11-12T08:00:00.000Z",
+            "kind": "discard",
+            "status": "done",
+            "branch": "main",
+            "remaining": 0,
+            "rescueBranch": "orbit/rescue-5f2c1a9",
+            "fileCount": 1
+          }
+        ],
+        "current": null,
+        "cardAgeSeconds": 600,
+        "handled": null
       },
       {
         "name": "MOVE_CONFLICT keeps it live",
@@ -1058,6 +1146,105 @@
         "current": null,
         "cardAgeSeconds": 1,
         "handled": "result"
+      }
+    ]
+  },
+  "defaultCommitMessages": {
+    "_comment": "mainCheckoutDefaultCommitMessage: the message a commit is sent with, named after the chosen files (no client asks for one).",
+    "cases": [
+      {
+        "files": [
+          {
+            "path": "docker-compose.override.yml",
+            "status": "M"
+          }
+        ],
+        "message": "Update docker-compose.override.yml"
+      },
+      {
+        "files": [
+          {
+            "path": "src/a.ts",
+            "status": "A"
+          },
+          {
+            "path": "src/b.ts",
+            "status": "A"
+          }
+        ],
+        "message": "Add a.ts and b.ts"
+      },
+      {
+        "files": [
+          {
+            "path": "old/x.go",
+            "status": "D"
+          }
+        ],
+        "message": "Remove x.go"
+      },
+      {
+        "files": [
+          {
+            "path": ".env.bak",
+            "status": "A"
+          },
+          {
+            "path": "docker-compose.override.yml",
+            "status": "M"
+          },
+          {
+            "path": "src/c.ts",
+            "status": "D"
+          }
+        ],
+        "message": "Update .env.bak, docker-compose.override.yml and c.ts"
+      },
+      {
+        "files": [
+          {
+            "path": "a",
+            "status": "M"
+          },
+          {
+            "path": "b",
+            "status": "M"
+          },
+          {
+            "path": "c",
+            "status": "M"
+          },
+          {
+            "path": "d",
+            "status": "M"
+          }
+        ],
+        "message": "Update a, b, c and 1 more file"
+      },
+      {
+        "files": [
+          {
+            "path": "a",
+            "status": "A"
+          },
+          {
+            "path": "b",
+            "status": "A"
+          },
+          {
+            "path": "c",
+            "status": "A"
+          },
+          {
+            "path": "d",
+            "status": "A"
+          },
+          {
+            "path": "e",
+            "status": "A"
+          }
+        ],
+        "message": "Add a, b, c and 2 more files"
       }
     ]
   }
