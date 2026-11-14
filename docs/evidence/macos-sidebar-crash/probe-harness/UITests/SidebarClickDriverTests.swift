@@ -30,10 +30,16 @@ final class SidebarClickDriverTests: XCTestCase {
         app.launch()
         dismissSystemPrompts()
         XCTAssertTrue(waitForWindow(app, timeout: 20), "no window after launch")
+        // The CI Mac does not make a launched app frontmost on its own: its accessibility tree read
+        // `Disabled` and every row `Not hittable`, which is why earlier runs "clicked" 200 times
+        // without selecting anything. Ask for the front explicitly.
+        app.activate()
+        settle(1)
 
         signIn(app)
         XCTAssertTrue(appears(app, "Workspaces", timeout: 60),
                       "the sidebar never drew; the app did not sign in against the stub")
+        app.activate()
         settle(2)
         note("signed in; sidebar is up; \(windowSize(app))")
         note("sidebar dump (first 6000 chars):\n" + String(app.debugDescription.prefix(6000)))
@@ -87,36 +93,27 @@ final class SidebarClickDriverTests: XCTestCase {
     private var lastSelectedRows = 0
 
     /// One press on the sidebar, cycling the rows by index so every row — the Wiki included, and
-    /// whatever the churn is drawing at this instant — gets clicked. The named rows are the
-    /// fallback when the host does not expose the list's rows as elements.
+    /// whatever the churn is drawing at this instant — gets clicked; the named rows are the fallback
+    /// when the host does not expose the list's rows as elements. Nothing here may raise: a row that
+    /// is gone or not hittable is skipped, not clicked. An XCUITest "Not hittable" failure unwinds
+    /// the enclosing block even inside an expected-failure allowance (the first run that used one
+    /// ended after its first press), so the driver asks before it presses instead.
     private func pressNextRow(_ app: XCUIApplication, step: Int) -> Bool {
-        var pressed = false
-        // A row can leave the list while its accessibility snapshot is being taken — that churn is
-        // exactly what this gate runs against, and XCTest records a failed snapshot as a failure,
-        // which would fail a healthy run on a race of the harness's own making. A snapshot race is
-        // therefore an expected failure here; a CRASH is not, and the two checks that carry it stay
-        // outside this block: the loop's `appIsAlive` and run.sh's new-Orbit*.ips test.
-        let options = XCTExpectedFailure.Options()
-        options.isStrict = false
-        XCTExpectFailure("an accessibility snapshot taken while the sidebar reloads", options: options) {
-            pressed = pressOnce(app, step: step)
-        }
-        return pressed
-    }
-
-    private func pressOnce(_ app: XCUIApplication, step: Int) -> Bool {
         let rows = sidebarRows(app)
         if !rows.isEmpty {
             let index = step % rows.count
             let row = rows[index]
-            // The row's own element click: a coordinate click at the row's centre did NOT select
-            // the row on the CI Mac (the run's request log shows the Tasks page was never opened,
-            // only its sidebar count polled), so this is the press a reader's pointer makes.
-            row.click()
-            lastSelectedRows = selectedRows(app)
-            print("CLICK \(step + 1) row=\(index)/\(rows.count) selected=\(lastSelectedRows)"
-                  + " at \(Date().timeIntervalSince1970)")
-            return true
+            // The row's own element click, and only when the row is really there and hittable:
+            // a coordinate click at the row's centre did NOT select the row on the CI Mac (the
+            // run's request log shows the Tasks page was never opened, only its sidebar count
+            // polled), and a click on a row reported "Not hittable" aborts the test outright.
+            if row.exists && row.isHittable {
+                row.click()
+                lastSelectedRows = selectedRows(app)
+                print("CLICK \(step + 1) row=\(index)/\(rows.count) selected=\(lastSelectedRows)"
+                      + " at \(Date().timeIntervalSince1970)")
+                return true
+            }
         }
         for offset in 0..<targetLabels.count {
             let label = targetLabels[(step + offset) % targetLabels.count]
