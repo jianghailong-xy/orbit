@@ -41,7 +41,7 @@ type recoveryReport struct {
 	Text  string           `json:"text,omitempty"`
 }
 
-// recoveryNext is the one step to take next. Type is invoke, ask_user, wait or manual. An invoke names
+// recoveryNext is the one step to take next. Type is invoke, ask_user, wait, manual or stop. An invoke names
 // either Tool and Input (MCP) or Argv and Stdin (CLI); Argv[0] is an absolute path, and Stdin is the
 // exact bytes to write to the command's standard input (null when it reads none).
 type recoveryNext struct {
@@ -53,6 +53,11 @@ type recoveryNext struct {
 	Stdin        *string                `json:"stdin,omitempty"`
 	AfterSeconds *int                   `json:"afterSeconds"`
 	Reason       string                 `json:"reason"`
+	// Disposition is how an agent is to treat this step: AUTOMATIC (do it now, nobody in between), WAIT
+	// (wait or poll; the state changes by itself), CONFIRM_THEN_RUN (a person confirms, then it is sent),
+	// MANUAL (someone has to change something first: the caller its request, or — actor USER — a person
+	// the world) or STOP (send nothing more of this kind).
+	Disposition string `json:"disposition"`
 }
 
 const (
@@ -60,6 +65,15 @@ const (
 	recoveryNextAskUser = "ask_user"
 	recoveryNextWait    = "wait"
 	recoveryNextManual  = "manual"
+	recoveryNextStop    = "stop"
+)
+
+const (
+	recoveryDispositionAutomatic      = "AUTOMATIC"
+	recoveryDispositionWait           = "WAIT"
+	recoveryDispositionConfirmThenRun = "CONFIRM_THEN_RUN"
+	recoveryDispositionManual         = "MANUAL"
+	recoveryDispositionStop           = "STOP"
 )
 
 // recoveryLocalRefusedCode is the code of a failure this process made before sending anything.
@@ -273,9 +287,40 @@ func recoveryInvoke(n recoveryNext, env recoveryEnvelope, reason string) recover
 	return n
 }
 
-// renderRecoveryNext maps the envelope's semantic actionCode onto surface. It never offers a step that
-// writes past a required user confirmation, and never an invoke the surface cannot run.
+// renderRecoveryNext maps the envelope's semantic actionCode onto surface and says how to treat the step.
+// It never offers a step that writes past a required user confirmation, never an invoke the surface cannot
+// run, and never an invoke that sends a request again for a wait, a stop or a fix only a person can make.
 func renderRecoveryNext(env recoveryEnvelope, surface recoverySurface, requestIDSent bool) recoveryNext {
+	n := renderRecoveryStep(env, surface, requestIDSent)
+	n.Disposition = recoveryDisposition(n, env)
+	return n
+}
+
+// recoveryDisposition classifies a rendered step. A poll is a WAIT even though it invokes a reader; an
+// ask_user is CONFIRM_THEN_RUN only when a person's confirmation is all that stands between the caller and
+// the send, and MANUAL when they have to fix something first.
+func recoveryDisposition(n recoveryNext, env recoveryEnvelope) string {
+	action := ""
+	if env.ActionCode != nil {
+		action = *env.ActionCode
+	}
+	switch {
+	case n.Type == recoveryNextStop:
+		return recoveryDispositionStop
+	case n.Type == recoveryNextWait || action == "POLL_STATE":
+		return recoveryDispositionWait
+	case n.Type == recoveryNextAskUser:
+		if action == "AWAIT_USER_FIX" || (action == "" && env.UserConfirmation != "REQUIRED") {
+			return recoveryDispositionManual
+		}
+		return recoveryDispositionConfirmThenRun
+	case n.Type == recoveryNextInvoke:
+		return recoveryDispositionAutomatic
+	}
+	return recoveryDispositionManual
+}
+
+func renderRecoveryStep(env recoveryEnvelope, surface recoverySurface, requestIDSent bool) recoveryNext {
 	action := ""
 	if env.ActionCode != nil {
 		action = *env.ActionCode
@@ -316,6 +361,23 @@ func renderRecoveryNext(env recoveryEnvelope, surface recoverySurface, requestID
 		return recoveryStep(recoveryNextManual, env, "The outcome is not known and no reader for it is available here: check the state by hand before sending anything again.")
 	case "AWAIT_OWNER_DECISION":
 		return recoveryStep(recoveryNextAskUser, env, "The account owner has to decide; nothing is sent again until they have.")
+	case "POLL_STATE":
+		// A wait, never an invoke: the read is for after afterSeconds, of the resource in error.resources.
+		// A wait step names no call (on any surface), so a surface with the reader and one without say the
+		// same thing.
+		return recoveryStep(recoveryNextWait, env, "The state ends by itself: wait afterSeconds, read the resource in error.resources again, and act on what it then says. Do not resend the request until it has changed.")
+	case "WAIT_FOR_SESSIONS":
+		return recoveryStep(recoveryNextWait, env, "Wait for the sessions named in error.resources to settle (await them; do not poll), then send the request once more. Never resend it on a timer.")
+	case "AWAIT_SYSTEM_FIX":
+		return recoveryStep(recoveryNextWait, env, "The platform has to recover by itself: wait afterSeconds and read the resource; ask a person if it has not recovered.")
+	case "AWAIT_USER_FIX":
+		return recoveryStep(recoveryNextAskUser, env, "A person has to fix this; it is not the caller's to change. Tell them what the message says and send nothing again until they have.")
+	case "RETURN_TO_PARENT":
+		return recoveryStep(recoveryNextStop, env, "Start nothing further down from here: do the work in this session, or hand the result back to the session above it.")
+	case "STOP_LOOP":
+		return recoveryStep(recoveryNextStop, env, "This is repeating without progress: stop sending it and end the turn.")
+	case "CREATE_REPLACEMENT":
+		return recoveryStep(recoveryNextManual, env, "This resource can never take the request again: make a new one with a self-contained brief instead of resending to it.")
 	case "":
 		switch {
 		case confirm || env.Actor == "USER":

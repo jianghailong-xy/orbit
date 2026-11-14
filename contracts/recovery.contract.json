@@ -103,6 +103,41 @@
       "meaning": "Write into the caller's own project, or send the write again with a handoff declaration.",
       "automaticRetry": false,
       "mayWrite": true
+    },
+    "WAIT_FOR_SESSIONS": {
+      "meaning": "Wait for the sessions named in resources to settle (end their turn or finish), then send the request again. Never resent on a timer: the state that refuses it changes only as those sessions settle.",
+      "automaticRetry": false,
+      "mayWrite": true
+    },
+    "POLL_STATE": {
+      "meaning": "The resource is passing through a state that ends by itself. Read it again after retry.afterSeconds, and act on what it then says. Reading is all this action does.",
+      "automaticRetry": false,
+      "mayWrite": false
+    },
+    "RETURN_TO_PARENT": {
+      "meaning": "Do not send this kind of request again from here: do the work in this session, or hand the result back to the session above it. Nothing below this point may be started.",
+      "automaticRetry": false,
+      "mayWrite": false
+    },
+    "CREATE_REPLACEMENT": {
+      "meaning": "The resource can never take this request again. Make a new one (a new session with a self-contained brief) instead of resending to it.",
+      "automaticRetry": false,
+      "mayWrite": true
+    },
+    "AWAIT_USER_FIX": {
+      "meaning": "A person has to change something the caller may not change (restore from Trash, sign an engine in, turn a setting on). Tell them; send again only once they have.",
+      "automaticRetry": false,
+      "mayWrite": true
+    },
+    "AWAIT_SYSTEM_FIX": {
+      "meaning": "The platform has to recover by itself (a machine coming back online). Wait retry.afterSeconds, read the resource, and ask a person once it has not recovered.",
+      "automaticRetry": false,
+      "mayWrite": true
+    },
+    "STOP_LOOP": {
+      "meaning": "The caller is repeating itself without progress. Stop sending this request and end the turn; nothing is resent automatically, whatever retry.afterSeconds says.",
+      "automaticRetry": false,
+      "mayWrite": false
     }
   },
   "defaultActionByPolicy": {
@@ -291,6 +326,9 @@
     "RETRY_SAME_REQUEST"
   ],
   "readOnlyActionCodes": [
-    "VERIFY_STATE"
+    "VERIFY_STATE",
+    "POLL_STATE",
+    "RETURN_TO_PARENT",
+    "STOP_LOOP"
   ]
 }

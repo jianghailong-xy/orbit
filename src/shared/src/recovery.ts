@@ -57,6 +57,13 @@ export const RECOVERY_ACTION_CODES = [
   'ANSWER_ADVICE',
   'AWAIT_OWNER_DECISION',
   'FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF',
+  'WAIT_FOR_SESSIONS',
+  'POLL_STATE',
+  'RETURN_TO_PARENT',
+  'CREATE_REPLACEMENT',
+  'AWAIT_USER_FIX',
+  'AWAIT_SYSTEM_FIX',
+  'STOP_LOOP',
 ] as const;
 
 export const RECOVERY_DEFAULT_ACTION_BY_POLICY: Record<RecoveryRetryPolicy, string | null> = {
@@ -209,13 +216,20 @@ export const RECOVERY_ACTION_SEMANTICS: Record<string, { automaticRetry: boolean
   ANSWER_ADVICE: { automaticRetry: false, mayWrite: true },
   AWAIT_OWNER_DECISION: { automaticRetry: false, mayWrite: true },
   FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF: { automaticRetry: false, mayWrite: true },
+  WAIT_FOR_SESSIONS: { automaticRetry: false, mayWrite: true },
+  POLL_STATE: { automaticRetry: false, mayWrite: false },
+  RETURN_TO_PARENT: { automaticRetry: false, mayWrite: false },
+  CREATE_REPLACEMENT: { automaticRetry: false, mayWrite: true },
+  AWAIT_USER_FIX: { automaticRetry: false, mayWrite: true },
+  AWAIT_SYSTEM_FIX: { automaticRetry: false, mayWrite: true },
+  STOP_LOOP: { automaticRetry: false, mayWrite: false },
 };
 
 /** The actions that resend the identical request with nobody in between. */
 export const RECOVERY_AUTOMATIC_RETRY_ACTION_CODES: readonly string[] = ['RETRY', 'RETRY_SAME_REQUEST'];
 
-/** The only actions a COMMITTED envelope may carry: they read, and never lead to another write. */
-export const RECOVERY_READ_ONLY_ACTION_CODES: readonly string[] = ['VERIFY_STATE'];
+/** The only actions a COMMITTED envelope may carry: they read or stop, and never lead to another write. */
+export const RECOVERY_READ_ONLY_ACTION_CODES: readonly string[] = ['VERIFY_STATE', 'POLL_STATE', 'RETURN_TO_PARENT', 'STOP_LOOP'];
 
 /** The resource type that names a request id the server can read an earlier answer back by. */
 export const RECOVERY_REQUEST_ID_RESOURCE_TYPE = 'REQUEST';

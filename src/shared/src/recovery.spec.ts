@@ -143,7 +143,7 @@ describe('recovery contract', () => {
       checked++;
     }
     expect(checked).toBe(SERVER_BLOCK_COMBINATIONS);
-    expect(SERVER_BLOCK_COMBINATIONS).toBe(5400);
+    expect(SERVER_BLOCK_COMBINATIONS).toBe(9180);
   });
 
   it('decides the branch from stable fields only: rewording the prose changes nothing', () => {

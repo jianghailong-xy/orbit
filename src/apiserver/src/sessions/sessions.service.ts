@@ -298,6 +298,9 @@ import {
   engineSignInAction,
   signedOutEngineRefusal,
 } from './engine-signin-preflight';
+import {
+  mergePendingNext, nextTurnStartingRefusal, resumeBlockedRefusal, sessionRecoveryBody, sessionRefusal,
+} from './session-recovery';
 import { claudeRegionCreateRefusal, isClaudeRegionError, regionCredentialOf } from '../runners/runner-region';
 import { assertManagedFirstSessionRuntime } from '../managed-runners/managed-runner-supply';
 import {
@@ -769,7 +772,23 @@ interface ResolvedProviderSwitch extends SessionSwitch {
  * from "the write failed" cannot afford to read error strings — the two answers lead opposite ways,
  * and one of them silently discards a real failure. Still a 409 with the same text on the wire.
  */
-export class SessionNotSendable extends ConflictException {}
+export class SessionNotSendable extends ConflictException {
+  /** SESSION_TRASHED: only a person restores it (session-recovery.ts). */
+  static trashed(sessionId: string): SessionNotSendable {
+    return new SessionNotSendable(sessionRecoveryBody('SESSION_TRASHED', 'the session is in Trash; restore it before sending a message', {
+      resources: [{ type: 'SESSION', id: sessionId }],
+      extra: { sessionId, resumeBlockedReason: 'TRASHED' },
+    }));
+  }
+
+  /** SESSION_ENDED: sent without resumeIfEnded, so as sent it is never accepted. */
+  static ended(sessionId: string): SessionNotSendable {
+    return new SessionNotSendable(sessionRecoveryBody('SESSION_ENDED', 'the session has ended', {
+      resources: [{ type: 'SESSION', id: sessionId }],
+      extra: { sessionId },
+    }));
+  }
+}
 
 /** What SessionsService.checkAfterRepairTurn did about a merge recovery after a repair session's turn. */
 export type RepairTurnCheck =
@@ -2392,6 +2411,9 @@ export class SessionsService {
    */
   private static readonly SPAWN_TREE_RATE = 60;
 
+  /** How many of a full tree's unsettled sessions a SPAWN_TREE_OUTSTANDING_LIMIT refusal names. */
+  private static readonly SPAWN_BLOCKERS_NAMED = 20;
+
   /**
    * Spawn a child session from a parent session's workspace (orbit mcp `session_create`). The
    * parent's workspace must have orchestration enabled; the child is attributed to the parent
@@ -2455,10 +2477,23 @@ export class SessionsService {
     });
     if (!parent) throw new NotFoundException('parent session not found');
     if (!parent.workspaceId || !orchestrationEnabled(parent.owner)) {
-      throw new ForbiddenException('orchestration is not enabled for this account');
+      // Only the account owner turns orchestration on: a person's switch, never the caller's.
+      throw sessionRefusal('ORCHESTRATION_DISABLED', 'orchestration is not enabled for this account', {
+        resources: [{ type: 'SESSION', id: parentSessionId }],
+        extra: { sessionId: parentSessionId },
+      });
     }
     if (parent.spawnDepth >= SessionsService.MAX_SPAWN_DEPTH) {
-      throw new ForbiddenException(`spawn depth limit (${SessionsService.MAX_SPAWN_DEPTH}) reached`);
+      // Policy NEVER and RETURN_TO_PARENT: the same spawn is never offered again from this depth.
+      throw sessionRefusal('SPAWN_DEPTH_LIMIT', `spawn depth limit (${SessionsService.MAX_SPAWN_DEPTH}) reached`, {
+        resources: [
+          { type: 'SESSION', id: parentSessionId },
+          ...(parent.rootSessionId && parent.rootSessionId !== parentSessionId
+            ? [{ type: 'SESSION' as const, id: parent.rootSessionId }]
+            : []),
+        ],
+        extra: { sessionId: parentSessionId, spawnDepth: parent.spawnDepth, maxSpawnDepth: SessionsService.MAX_SPAWN_DEPTH },
+      });
     }
     // The whole tree shares one id — rooted at the session it grew from — so the claim queue
     // caps how many of it run concurrently, on top of the runner's own max_concurrent. Per
@@ -2477,10 +2512,22 @@ export class SessionsService {
       where: { rootSessionId, status: { in: UNSETTLED_SESSION_STATUSES } },
     });
     if (outstanding >= SPAWN_TREE_OUTSTANDING) {
-      throw new HttpException(
+      // The blockers by name, so the caller waits on them rather than on a timer: nothing but one
+      // of these settling changes the answer. Not retryable, and no wait is offered.
+      const blocking = await this.prisma.session.findMany({
+        where: { rootSessionId, status: { in: UNSETTLED_SESSION_STATUSES } },
+        select: { id: true },
+        orderBy: { createdAt: 'asc' },
+        take: SessionsService.SPAWN_BLOCKERS_NAMED,
+      });
+      throw sessionRefusal(
+        'SPAWN_TREE_OUTSTANDING_LIMIT',
         `this run already has ${outstanding} unfinished sessions (limit ${SPAWN_TREE_OUTSTANDING}); ` +
           `wait for some to finish before starting more`,
-        HttpStatus.TOO_MANY_REQUESTS,
+        {
+          resources: blocking.map((row) => ({ type: 'SESSION' as const, id: row.id })),
+          extra: { sessionId: parentSessionId, rootSessionId, outstanding, limit: SPAWN_TREE_OUTSTANDING },
+        },
       );
     }
     // And how fast it may churn. A tree whose children finish quickly can stay far under the
@@ -2493,10 +2540,26 @@ export class SessionsService {
       },
     });
     if (startedThisHour >= SessionsService.SPAWN_TREE_RATE) {
-      throw new HttpException(
+      // STOP_LOOP: the caller is churning, and the honest answer is to stop. retryAfterSeconds says
+      // when the window would admit one more — information, not an invitation: no automatic resend.
+      const windowStart = new Date(Date.now() - SessionsService.SPAWN_RATE_WINDOW_MS);
+      const oldest = await this.prisma.session.findFirst({
+        where: { rootSessionId, createdAt: { gt: windowStart } },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      });
+      const retryAfterSeconds = oldest
+        ? Math.max(1, Math.ceil((oldest.createdAt.getTime() + SessionsService.SPAWN_RATE_WINDOW_MS - Date.now()) / 1000))
+        : Math.ceil(SessionsService.SPAWN_RATE_WINDOW_MS / 1000);
+      throw sessionRefusal(
+        'SPAWN_TREE_RATE_LIMIT',
         `this run has started ${startedThisHour} sessions in the past hour ` +
           `(limit ${SessionsService.SPAWN_TREE_RATE}); it is looping rather than making progress`,
-        HttpStatus.TOO_MANY_REQUESTS,
+        {
+          resources: [{ type: 'SESSION', id: rootSessionId }],
+          retryAfterSeconds,
+          extra: { sessionId: parentSessionId, rootSessionId, startedThisHour, limit: SessionsService.SPAWN_TREE_RATE },
+        },
       );
     }
     // Resolve an @-mentioned workspace name to its id (owner-scoped). An explicit workspaceId wins.
@@ -2692,10 +2755,17 @@ export class SessionsService {
     const matches = await this.prisma.workspace.findMany({
       where: { ownerId, name, deletedAt: null },
       select: { id: true },
-      take: 2,
+      take: 10,
     });
-    if (matches.length === 0) throw new BadRequestException(`no workspace named "${name}"`);
-    if (matches.length > 1) throw new BadRequestException(`multiple workspaces named "${name}"; use workspaceId`);
+    if (matches.length === 0) {
+      throw sessionRefusal('WORKSPACE_NAME_NOT_FOUND', `no workspace named "${name}"`, { extra: { workspaceName: name } });
+    }
+    if (matches.length > 1) {
+      throw sessionRefusal('WORKSPACE_NAME_AMBIGUOUS', `multiple workspaces named "${name}"; use workspaceId`, {
+        resources: matches.map((row) => ({ type: 'WORKSPACE' as const, id: row.id })),
+        extra: { workspaceName: name },
+      });
+    }
     return matches[0].id;
   }
 
@@ -5798,22 +5868,12 @@ export class SessionsService {
     RunStatus.CANCELLED,
   ];
 
-  private static resumeBlocked(reason: SessionResumeBlockedReason): ConflictException {
-    switch (reason) {
-      case 'TRASHED':
-        return new ConflictException('the session is in Trash; restore it before sending a message');
-      case 'ENDING':
-        return new ConflictException('the session is ending');
-      case 'NOT_TERMINAL':
-        return new ConflictException('the session has not started yet');
-      case 'NOT_STARTED':
-      case 'MISSING_CONTEXT':
-        return new ConflictException('this session never ran and cannot be resumed');
-      case 'NO_RUNNER':
-        return new ConflictException('the session has no runner to resume on');
-      case 'RUNNER_OFFLINE':
-        return new ConflictException('the runner is offline; it must be online to resume this session');
-    }
+  private static resumeBlocked(
+    reason: SessionResumeBlockedReason,
+    sessionId: string,
+    runnerId?: string | null,
+  ): HttpException {
+    return resumeBlockedRefusal(reason, sessionId, runnerId);
   }
 
   /**
@@ -5860,10 +5920,10 @@ export class SessionsService {
     // one loader, and none of them may drive the platform's container (§2.9 LS6).
     assertEngineSessionRow(session);
     if (session.deletedAt) {
-      throw new SessionNotSendable('the session is in Trash; restore it before sending a message');
+      throw SessionNotSendable.trashed(session.id);
     }
     if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
-      throw new SessionNotSendable('the session has ended');
+      throw SessionNotSendable.ended(session.id);
     }
     return session;
   }
@@ -6485,10 +6545,10 @@ export class SessionsService {
       // response-lost retry must replay its committed receipt, not become a new refusal because
       // the turn completed or the user filed the Session in the meantime.
       if (session.deletedAt) {
-        throw new SessionNotSendable('the session is in Trash; restore it before sending a message');
+        throw SessionNotSendable.trashed(session.id);
       }
       if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
-        throw new SessionNotSendable('the session has ended');
+        throw SessionNotSendable.ended(session.id);
       }
       // A server-routed send is placed before anything may join it: whether it goes into the running
       // turn or waits behind it decides which queued turn it can join, and a placement changed after
@@ -6888,13 +6948,18 @@ export class SessionsService {
       // A committed follow-up is returned above even if the Session later ended or was filed in
       // Trash. Only a new operation is judged against the lifecycle it is trying to mutate.
       if (!SessionsService.LIVE.includes(session.status) || session.cancelRequestedAt) {
-        throw new ConflictException('the session has ended');
+        // A plain 409, not SessionNotSendable: the callers that re-home a message on that class
+        // never reach the interrupt, and this keeps it that way.
+        throw sessionRefusal('SESSION_ENDED', 'the session has ended', {
+          resources: [{ type: 'SESSION', id }],
+          extra: { sessionId: id },
+        });
       }
       // The same bar createTurn holds a message to. Stopping a trashed session's work is
       // still allowed — it is running, and stopping is the whole point — but nothing new
       // may be queued onto it behind that.
       if (followUp && session.deletedAt) {
-        throw new ConflictException('the session is in Trash; restore it before sending a message');
+        throw resumeBlockedRefusal('TRASHED', id);
       }
       // Checked before anything is dropped, so a request that cannot be honoured leaves
       // the queue exactly as it found it.
@@ -6971,7 +7036,7 @@ export class SessionsService {
           // turnComplete already handed the slot to a queued follow-up, but that next
           // turn has not been leased. Dropping it would strand the runner-local permit;
           // roll back and let the caller retry once the next turn actually starts.
-          throw new ConflictException('the next turn is already starting');
+          throw nextTurnStartingRefusal(id);
         }
       }
       await this.insertTurnLocked(tx, id, {
@@ -7511,10 +7576,10 @@ export class SessionsService {
       const session = await tx.session.findUniqueOrThrow({ where: { id } });
       assertEngineSessionRow(session);
       if (session.deletedAt) {
-        throw new SessionNotSendable('the session is in Trash; restore it before sending a message');
+        throw SessionNotSendable.trashed(session.id);
       }
       if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
-        throw new SessionNotSendable('the session has ended');
+        throw SessionNotSendable.ended(session.id);
       }
       const turn = await tx.conversationTurn.findFirst({
         where: { id: turnId, sessionId: id },
@@ -7692,7 +7757,21 @@ export class SessionsService {
       });
     }
     if (wait !== null) return this.awaitMergeConclusion(ownerId, id, operationId, wait);
-    return { ok: true };
+    // The Merge button's answer stays `{ ok: true }` byte for byte: it watches the realtime stream.
+    if (options.requestedBy !== 'AGENT') return { ok: true };
+    // An agent reads `ok: true` as "merged" (see awaitMergeConclusion), so its door is told outright:
+    // queued, PENDING, under this operation, no receipt yet — and `next` names the read that will
+    // show the outcome (session-recovery.ts mergePendingNext).
+    return {
+      ok: true as const,
+      outcome: 'PENDING' as const,
+      sessionId: id,
+      operationId,
+      mergeStatus: 'pending' as const,
+      receipt: null,
+      receiptAbsentReason: 'MERGE_STILL_RUNNING' as const,
+      next: mergePendingNext(id),
+    };
   }
 
   /**
@@ -8083,6 +8162,7 @@ export class SessionsService {
           mergeStatus,
           receipt: null,
           receiptAbsentReason: 'MERGE_STILL_RUNNING' as const,
+          next: mergePendingNext(sessionId),
           nextStep:
             (remaining > 0
               ? 'no outcome yet: this server is restarting, so it stopped waiting early. None is claimed here: the merge is still queued '
@@ -9322,10 +9402,10 @@ export class SessionsService {
     }
     const initialCapabilities = deriveSessionCapabilities(session);
     if (initialCapabilities.resumeBlockedReason === 'TRASHED') {
-      throw SessionsService.resumeBlocked('TRASHED');
+      throw SessionsService.resumeBlocked('TRASHED', id);
     }
     if (initialCapabilities.resumeBlockedReason === 'ENDING') {
-      throw SessionsService.resumeBlocked('ENDING');
+      throw SessionsService.resumeBlocked('ENDING', id);
     }
     // Still live — a normal turn belongs on the running process, not a revive. But a
     // "Resolve in session" rebase reaches resume() on a live session too: the bar offers it
@@ -9361,7 +9441,7 @@ export class SessionsService {
       initialCapabilities.resumeBlockedReason !== 'NO_RUNNER' &&
       initialCapabilities.resumeBlockedReason !== 'RUNNER_OFFLINE'
     ) {
-      throw SessionsService.resumeBlocked(initialCapabilities.resumeBlockedReason);
+      throw SessionsService.resumeBlocked(initialCapabilities.resumeBlockedReason, id, session.assignedRunnerId);
     }
     // Before the offline gate below: a managed runner that is asleep, draining, starting or waiting
     // for capacity is asked to wake, and comes back by itself — so its revive is queued, the way a
@@ -9511,10 +9591,10 @@ export class SessionsService {
       }
       const capabilities = deriveSessionCapabilities(current);
       if (capabilities.resumeBlockedReason === 'TRASHED') {
-        throw SessionsService.resumeBlocked('TRASHED');
+        throw SessionsService.resumeBlocked('TRASHED', id);
       }
       if (capabilities.resumeBlockedReason === 'ENDING') {
-        throw SessionsService.resumeBlocked('ENDING');
+        throw SessionsService.resumeBlocked('ENDING', id);
       }
 
       // Idempotent retry: once another request queued this clientTurnId, return it even
@@ -9550,18 +9630,18 @@ export class SessionsService {
       }
       if (!SessionsService.TERMINAL.includes(current.status)) {
         if (existing) return { turn: existing, wasCompleted: false, wasRevived: false };
-        throw SessionsService.resumeBlocked('NOT_TERMINAL');
+        throw SessionsService.resumeBlocked('NOT_TERMINAL', id);
       }
       if (
         capabilities.resumeBlockedReason &&
         capabilities.resumeBlockedReason !== 'NO_RUNNER' &&
         capabilities.resumeBlockedReason !== 'RUNNER_OFFLINE'
       ) {
-        throw SessionsService.resumeBlocked(capabilities.resumeBlockedReason);
+        throw SessionsService.resumeBlocked(capabilities.resumeBlockedReason, id, current.assignedRunnerId);
       }
       if (existing) return { turn: existing, wasCompleted: false, wasRevived: false };
       if (capabilities.resumeBlockedReason && !(capabilities.resumeBlockedReason === 'RUNNER_OFFLINE' && managedComingBack)) {
-        throw SessionsService.resumeBlocked(capabilities.resumeBlockedReason);
+        throw SessionsService.resumeBlocked(capabilities.resumeBlockedReason, id, current.assignedRunnerId);
       }
       if (
         pendingWorktreeOperationMayBeExecuting(

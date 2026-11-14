@@ -74,6 +74,8 @@ var (
 	recoveryActionCodes       = []string{
 		"RETRY", "RETRY_SAME_REQUEST", "VERIFY_STATE", "FIX_REQUEST", "USE_NEW_REQUEST_ID",
 		"ANSWER_ADVICE", "AWAIT_OWNER_DECISION", "FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF",
+		"WAIT_FOR_SESSIONS", "POLL_STATE", "RETURN_TO_PARENT", "CREATE_REPLACEMENT", "AWAIT_USER_FIX",
+		"AWAIT_SYSTEM_FIX", "STOP_LOOP",
 	}
 	// "" stands for no default action.
 	recoveryDefaultActionByPolicy = map[string]string{
@@ -222,13 +224,20 @@ var recoveryActionSemantics = map[string]struct{ AutomaticRetry, MayWrite bool }
 	"ANSWER_ADVICE":                          {AutomaticRetry: false, MayWrite: true},
 	"AWAIT_OWNER_DECISION":                   {AutomaticRetry: false, MayWrite: true},
 	"FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF": {AutomaticRetry: false, MayWrite: true},
+	"WAIT_FOR_SESSIONS":                      {AutomaticRetry: false, MayWrite: true},
+	"POLL_STATE":                             {AutomaticRetry: false, MayWrite: false},
+	"RETURN_TO_PARENT":                       {AutomaticRetry: false, MayWrite: false},
+	"CREATE_REPLACEMENT":                     {AutomaticRetry: false, MayWrite: true},
+	"AWAIT_USER_FIX":                         {AutomaticRetry: false, MayWrite: true},
+	"AWAIT_SYSTEM_FIX":                       {AutomaticRetry: false, MayWrite: true},
+	"STOP_LOOP":                              {AutomaticRetry: false, MayWrite: false},
 }
 
 // The actions that resend the identical request with nobody in between.
 var recoveryAutomaticRetryActionCodes = []string{"RETRY", "RETRY_SAME_REQUEST"}
 
-// The only actions a COMMITTED envelope may carry: they read, and never lead to another write.
-var recoveryReadOnlyActionCodes = []string{"VERIFY_STATE"}
+// The only actions a COMMITTED envelope may carry: they read or stop, and never lead to another write.
+var recoveryReadOnlyActionCodes = []string{"VERIFY_STATE", "POLL_STATE", "RETURN_TO_PARENT", "STOP_LOOP"}
 
 // The resource type that names a request id the server can read an earlier answer back by.
 const recoveryRequestIDResourceType = "REQUEST"

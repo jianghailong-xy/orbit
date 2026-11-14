@@ -1797,7 +1797,7 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 		if err != nil {
 			return toolResult("merge session failed: "+err.Error(), true)
 		}
-		return toolResult(prettyJSON(raw), false)
+		return toolResult(prettyJSON(withMergePendingCall(raw)), false)
 
 	case "session_end":
 		if !s.orchestrationEnabled() {
@@ -5305,7 +5305,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			map[string]interface{}{
 				"name":        "session_merge",
-				"description": "Merge a session's git worktree branch into its target branch (default: the runner's main/master). Only for worktree-isolated sessions; fails cleanly on conflict. Without waitSeconds this only QUEUES the merge and the reply says nothing about whether it worked — read the outcome with merge_receipts. With waitSeconds the reply waits for the outcome and carries the receipt itself.",
+				"description": "Merge a session's git worktree branch into its target branch (default: the runner's main/master). Only for worktree-isolated sessions; fails cleanly on conflict. Without waitSeconds this only QUEUES the merge: the reply is outcome PENDING with no receipt, and its next names the read to make (session_get after afterSeconds, or merge_receipts) — it never says the merge worked. With waitSeconds the reply waits for the outcome and carries the receipt itself.",
 				"inputSchema": obj(map[string]interface{}{
 					"sessionId":    sessionIDProp,
 					"targetBranch": str,

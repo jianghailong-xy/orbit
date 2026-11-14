@@ -1164,6 +1164,561 @@
         "resources": []
       },
       "legacyText": "  refused: X_COMMITTED_FUTURE\n  what:    saved\n"
+    },
+    {
+      "name": "session recovery: ORCHESTRATION_DISABLED",
+      "input": {
+        "source": "HTTP",
+        "status": 403,
+        "body": "{\"statusCode\":403,\"error\":\"Forbidden\",\"code\":\"ORCHESTRATION_DISABLED\",\"message\":\"orchestration is not enabled for this session\",\"owner\":\"USER\",\"requiredAction\":\"AWAIT_USER_FIX\",\"retryable\":false,\"sessionId\":\"SESSION_FIXTURE_1\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"retryAfterSeconds\":null,\"actionCode\":\"AWAIT_USER_FIX\",\"actor\":\"USER\",\"userConfirmation\":\"NOT_REQUIRED\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "ORCHESTRATION_DISABLED",
+        "message": "orchestration is not enabled for this session",
+        "kind": "REFUSAL",
+        "status": 403,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "USER",
+        "owner": "USER",
+        "actionCode": "AWAIT_USER_FIX",
+        "requiredAction": "AWAIT_USER_FIX",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          }
+        ]
+      },
+      "legacyText": "  refused: ORCHESTRATION_DISABLED\n  what:    orchestration is not enabled for this session\n  owner:   USER\n  do:      AWAIT_USER_FIX\n"
+    },
+    {
+      "name": "session recovery: CALLER_SESSION_NOT_LIVE",
+      "input": {
+        "source": "HTTP",
+        "status": 403,
+        "body": "{\"statusCode\":403,\"error\":\"Forbidden\",\"code\":\"CALLER_SESSION_NOT_LIVE\",\"message\":\"orchestration is not enabled for this session\",\"owner\":\"CALLER\",\"requiredAction\":\"STOP_LOOP\",\"retryable\":false,\"sessionId\":\"SESSION_FIXTURE_1\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"NEVER\",\"retryAfterSeconds\":null,\"actionCode\":\"STOP_LOOP\",\"actor\":\"CALLER\",\"userConfirmation\":\"NOT_REQUIRED\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "CALLER_SESSION_NOT_LIVE",
+        "message": "orchestration is not enabled for this session",
+        "kind": "REFUSAL",
+        "status": 403,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": "CALLER",
+        "actionCode": "STOP_LOOP",
+        "requiredAction": "STOP_LOOP",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          }
+        ]
+      },
+      "legacyText": "  refused: CALLER_SESSION_NOT_LIVE\n  what:    orchestration is not enabled for this session\n  owner:   CALLER\n  do:      STOP_LOOP\n"
+    },
+    {
+      "name": "session recovery: SPAWN_DEPTH_LIMIT",
+      "input": {
+        "source": "HTTP",
+        "status": 403,
+        "body": "{\"statusCode\":403,\"error\":\"Forbidden\",\"code\":\"SPAWN_DEPTH_LIMIT\",\"message\":\"spawn depth limit (5) reached\",\"owner\":\"CALLER\",\"requiredAction\":\"RETURN_TO_PARENT\",\"retryable\":false,\"sessionId\":\"SESSION_FIXTURE_1\",\"spawnDepth\":5,\"maxSpawnDepth\":5,\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"NEVER\",\"retryAfterSeconds\":null,\"actionCode\":\"RETURN_TO_PARENT\",\"actor\":\"CALLER\",\"userConfirmation\":\"NOT_REQUIRED\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"},{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_ROOT\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SPAWN_DEPTH_LIMIT",
+        "message": "spawn depth limit (5) reached",
+        "kind": "REFUSAL",
+        "status": 403,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": "CALLER",
+        "actionCode": "RETURN_TO_PARENT",
+        "requiredAction": "RETURN_TO_PARENT",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          },
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_ROOT"
+          }
+        ]
+      },
+      "legacyText": "  refused: SPAWN_DEPTH_LIMIT\n  what:    spawn depth limit (5) reached\n  owner:   CALLER\n  do:      RETURN_TO_PARENT\n"
+    },
+    {
+      "name": "session recovery: SPAWN_TREE_OUTSTANDING_LIMIT",
+      "input": {
+        "source": "HTTP",
+        "status": 429,
+        "body": "{\"statusCode\":429,\"error\":\"Too Many Requests\",\"code\":\"SPAWN_TREE_OUTSTANDING_LIMIT\",\"message\":\"this run already has 20 unfinished sessions (limit 20); wait for some to finish before starting more\",\"owner\":\"CALLER\",\"requiredAction\":\"WAIT_FOR_SESSIONS\",\"retryable\":false,\"sessionId\":\"SESSION_FIXTURE_1\",\"rootSessionId\":\"SESSION_FIXTURE_ROOT\",\"outstanding\":20,\"limit\":20,\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"retryAfterSeconds\":null,\"actionCode\":\"WAIT_FOR_SESSIONS\",\"actor\":\"CALLER\",\"userConfirmation\":\"NOT_REQUIRED\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_CHILD_1\"},{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_CHILD_2\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SPAWN_TREE_OUTSTANDING_LIMIT",
+        "message": "this run already has 20 unfinished sessions (limit 20); wait for some to finish before starting more",
+        "kind": "REFUSAL",
+        "status": 429,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": "CALLER",
+        "actionCode": "WAIT_FOR_SESSIONS",
+        "requiredAction": "WAIT_FOR_SESSIONS",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_CHILD_1"
+          },
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_CHILD_2"
+          }
+        ]
+      },
+      "legacyText": "  refused: SPAWN_TREE_OUTSTANDING_LIMIT\n  what:    this run already has 20 unfinished sessions (limit 20); wait for some to finish before starting more\n  owner:   CALLER\n  do:      WAIT_FOR_SESSIONS\n"
+    },
+    {
+      "name": "session recovery: SPAWN_TREE_RATE_LIMIT",
+      "input": {
+        "source": "HTTP",
+        "status": 429,
+        "body": "{\"statusCode\":429,\"error\":\"Too Many Requests\",\"code\":\"SPAWN_TREE_RATE_LIMIT\",\"message\":\"this run has started 60 sessions in the past hour (limit 60); it is looping rather than making progress\",\"owner\":\"CALLER\",\"requiredAction\":\"STOP_LOOP\",\"retryable\":false,\"retryAfterSeconds\":540,\"sessionId\":\"SESSION_FIXTURE_1\",\"rootSessionId\":\"SESSION_FIXTURE_ROOT\",\"startedThisHour\":60,\"limit\":60,\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"retryAfterSeconds\":540,\"actionCode\":\"STOP_LOOP\",\"actor\":\"CALLER\",\"userConfirmation\":\"NOT_REQUIRED\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_ROOT\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SPAWN_TREE_RATE_LIMIT",
+        "message": "this run has started 60 sessions in the past hour (limit 60); it is looping rather than making progress",
+        "kind": "REFUSAL",
+        "status": 429,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": 540
+        },
+        "actor": "CALLER",
+        "owner": "CALLER",
+        "actionCode": "STOP_LOOP",
+        "requiredAction": "STOP_LOOP",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_ROOT"
+          }
+        ]
+      },
+      "legacyText": "  refused: SPAWN_TREE_RATE_LIMIT\n  what:    this run has started 60 sessions in the past hour (limit 60); it is looping rather than making progress\n  owner:   CALLER\n  do:      STOP_LOOP\n"
+    },
+    {
+      "name": "session recovery: WORKSPACE_NAME_AMBIGUOUS",
+      "input": {
+        "source": "HTTP",
+        "status": 400,
+        "body": "{\"statusCode\":400,\"error\":\"Bad Request\",\"code\":\"WORKSPACE_NAME_AMBIGUOUS\",\"message\":\"multiple workspaces named \\\"twin\\\"; use workspaceId\",\"owner\":\"CALLER\",\"requiredAction\":\"FIX_REQUEST\",\"retryable\":false,\"workspaceName\":\"twin\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"NEVER\",\"retryAfterSeconds\":null,\"actionCode\":\"FIX_REQUEST\",\"actor\":\"CALLER\",\"userConfirmation\":\"NOT_REQUIRED\",\"resources\":[{\"type\":\"WORKSPACE\",\"id\":\"WORKSPACE_FIXTURE_1\"},{\"type\":\"WORKSPACE\",\"id\":\"WORKSPACE_FIXTURE_2\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "WORKSPACE_NAME_AMBIGUOUS",
+        "message": "multiple workspaces named \"twin\"; use workspaceId",
+        "kind": "REFUSAL",
+        "status": 400,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": "CALLER",
+        "actionCode": "FIX_REQUEST",
+        "requiredAction": "FIX_REQUEST",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "WORKSPACE",
+            "id": "WORKSPACE_FIXTURE_1"
+          },
+          {
+            "type": "WORKSPACE",
+            "id": "WORKSPACE_FIXTURE_2"
+          }
+        ]
+      },
+      "legacyText": "  refused: WORKSPACE_NAME_AMBIGUOUS\n  what:    multiple workspaces named \"twin\"; use workspaceId\n  owner:   CALLER\n  do:      FIX_REQUEST\n"
+    },
+    {
+      "name": "session recovery: WORKSPACE_NAME_NOT_FOUND",
+      "input": {
+        "source": "HTTP",
+        "status": 400,
+        "body": "{\"statusCode\":400,\"error\":\"Bad Request\",\"code\":\"WORKSPACE_NAME_NOT_FOUND\",\"message\":\"no workspace named \\\"nobody\\\"\",\"owner\":\"CALLER\",\"requiredAction\":\"FIX_REQUEST\",\"retryable\":false,\"workspaceName\":\"nobody\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"NEVER\",\"retryAfterSeconds\":null,\"actionCode\":\"FIX_REQUEST\",\"actor\":\"CALLER\",\"userConfirmation\":\"NOT_REQUIRED\",\"resources\":[]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "WORKSPACE_NAME_NOT_FOUND",
+        "message": "no workspace named \"nobody\"",
+        "kind": "REFUSAL",
+        "status": 400,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": "CALLER",
+        "actionCode": "FIX_REQUEST",
+        "requiredAction": "FIX_REQUEST",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": []
+      },
+      "legacyText": "  refused: WORKSPACE_NAME_NOT_FOUND\n  what:    no workspace named \"nobody\"\n  owner:   CALLER\n  do:      FIX_REQUEST\n"
+    },
+    {
+      "name": "session recovery: ENGINE_SIGNED_OUT",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"ENGINE_SIGNED_OUT\",\"message\":\"Claude is signed out on runner \\\"m\\\"\",\"owner\":\"USER\",\"requiredAction\":\"AWAIT_USER_FIX\",\"retryable\":false,\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"retryAfterSeconds\":null,\"actionCode\":\"AWAIT_USER_FIX\",\"actor\":\"USER\",\"userConfirmation\":\"NOT_REQUIRED\",\"resources\":[{\"type\":\"RUNNER\",\"id\":\"RUNNER_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "ENGINE_SIGNED_OUT",
+        "message": "Claude is signed out on runner \"m\"",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "USER",
+        "owner": "USER",
+        "actionCode": "AWAIT_USER_FIX",
+        "requiredAction": "AWAIT_USER_FIX",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "RUNNER",
+            "id": "RUNNER_FIXTURE_1"
+          }
+        ]
+      },
+      "legacyText": "  refused: ENGINE_SIGNED_OUT\n  what:    Claude is signed out on runner \"m\"\n  owner:   USER\n  do:      AWAIT_USER_FIX\n"
+    },
+    {
+      "name": "session recovery: SESSION_ENDED",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"SESSION_ENDED\",\"message\":\"the session has ended\",\"owner\":\"CALLER\",\"requiredAction\":\"FIX_REQUEST\",\"retryable\":false,\"sessionId\":\"SESSION_FIXTURE_1\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"NEVER\",\"retryAfterSeconds\":null,\"actionCode\":\"FIX_REQUEST\",\"actor\":\"CALLER\",\"userConfirmation\":\"NOT_REQUIRED\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SESSION_ENDED",
+        "message": "the session has ended",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": "CALLER",
+        "actionCode": "FIX_REQUEST",
+        "requiredAction": "FIX_REQUEST",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          }
+        ]
+      },
+      "legacyText": "  refused: SESSION_ENDED\n  what:    the session has ended\n  owner:   CALLER\n  do:      FIX_REQUEST\n"
+    },
+    {
+      "name": "session recovery: SESSION_TRASHED",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"SESSION_TRASHED\",\"message\":\"the session is in Trash; restore it before sending a message\",\"owner\":\"USER\",\"requiredAction\":\"AWAIT_USER_FIX\",\"retryable\":false,\"sessionId\":\"SESSION_FIXTURE_1\",\"resumeBlockedReason\":\"TRASHED\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"retryAfterSeconds\":null,\"actionCode\":\"AWAIT_USER_FIX\",\"actor\":\"USER\",\"userConfirmation\":\"NOT_REQUIRED\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SESSION_TRASHED",
+        "message": "the session is in Trash; restore it before sending a message",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "USER",
+        "owner": "USER",
+        "actionCode": "AWAIT_USER_FIX",
+        "requiredAction": "AWAIT_USER_FIX",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          }
+        ]
+      },
+      "legacyText": "  refused: SESSION_TRASHED\n  what:    the session is in Trash; restore it before sending a message\n  owner:   USER\n  do:      AWAIT_USER_FIX\n"
+    },
+    {
+      "name": "session recovery: SESSION_ENDING",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"SESSION_ENDING\",\"message\":\"the session is ending\",\"owner\":\"SYSTEM\",\"requiredAction\":\"POLL_STATE\",\"retryable\":false,\"retryAfterSeconds\":5,\"sessionId\":\"SESSION_FIXTURE_1\",\"resumeBlockedReason\":\"ENDING\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"retryAfterSeconds\":5,\"actionCode\":\"POLL_STATE\",\"actor\":\"SYSTEM\",\"userConfirmation\":\"NOT_REQUIRED\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SESSION_ENDING",
+        "message": "the session is ending",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": 5
+        },
+        "actor": "SYSTEM",
+        "owner": "SYSTEM",
+        "actionCode": "POLL_STATE",
+        "requiredAction": "POLL_STATE",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          }
+        ]
+      },
+      "legacyText": "  refused: SESSION_ENDING\n  what:    the session is ending\n  owner:   SYSTEM\n  do:      POLL_STATE\n"
+    },
+    {
+      "name": "session recovery: SESSION_NOT_TERMINAL",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"SESSION_NOT_TERMINAL\",\"message\":\"the session has not started yet\",\"owner\":\"SYSTEM\",\"requiredAction\":\"POLL_STATE\",\"retryable\":false,\"retryAfterSeconds\":5,\"sessionId\":\"SESSION_FIXTURE_1\",\"resumeBlockedReason\":\"NOT_TERMINAL\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"retryAfterSeconds\":5,\"actionCode\":\"POLL_STATE\",\"actor\":\"SYSTEM\",\"userConfirmation\":\"NOT_REQUIRED\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SESSION_NOT_TERMINAL",
+        "message": "the session has not started yet",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": 5
+        },
+        "actor": "SYSTEM",
+        "owner": "SYSTEM",
+        "actionCode": "POLL_STATE",
+        "requiredAction": "POLL_STATE",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          }
+        ]
+      },
+      "legacyText": "  refused: SESSION_NOT_TERMINAL\n  what:    the session has not started yet\n  owner:   SYSTEM\n  do:      POLL_STATE\n"
+    },
+    {
+      "name": "session recovery: SESSION_NOT_STARTED",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"SESSION_NOT_STARTED\",\"message\":\"this session never ran and cannot be resumed\",\"owner\":\"CALLER\",\"requiredAction\":\"CREATE_REPLACEMENT\",\"retryable\":false,\"sessionId\":\"SESSION_FIXTURE_1\",\"resumeBlockedReason\":\"NOT_STARTED\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"NEVER\",\"retryAfterSeconds\":null,\"actionCode\":\"CREATE_REPLACEMENT\",\"actor\":\"CALLER\",\"userConfirmation\":\"NOT_REQUIRED\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SESSION_NOT_STARTED",
+        "message": "this session never ran and cannot be resumed",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": "CALLER",
+        "actionCode": "CREATE_REPLACEMENT",
+        "requiredAction": "CREATE_REPLACEMENT",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          }
+        ]
+      },
+      "legacyText": "  refused: SESSION_NOT_STARTED\n  what:    this session never ran and cannot be resumed\n  owner:   CALLER\n  do:      CREATE_REPLACEMENT\n"
+    },
+    {
+      "name": "session recovery: SESSION_MISSING_CONTEXT",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"SESSION_MISSING_CONTEXT\",\"message\":\"this session never ran and cannot be resumed\",\"owner\":\"CALLER\",\"requiredAction\":\"CREATE_REPLACEMENT\",\"retryable\":false,\"sessionId\":\"SESSION_FIXTURE_1\",\"resumeBlockedReason\":\"MISSING_CONTEXT\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"NEVER\",\"retryAfterSeconds\":null,\"actionCode\":\"CREATE_REPLACEMENT\",\"actor\":\"CALLER\",\"userConfirmation\":\"NOT_REQUIRED\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SESSION_MISSING_CONTEXT",
+        "message": "this session never ran and cannot be resumed",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": "CALLER",
+        "actionCode": "CREATE_REPLACEMENT",
+        "requiredAction": "CREATE_REPLACEMENT",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          }
+        ]
+      },
+      "legacyText": "  refused: SESSION_MISSING_CONTEXT\n  what:    this session never ran and cannot be resumed\n  owner:   CALLER\n  do:      CREATE_REPLACEMENT\n"
+    },
+    {
+      "name": "session recovery: SESSION_NO_RUNNER",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"SESSION_NO_RUNNER\",\"message\":\"the session has no runner to resume on\",\"owner\":\"CALLER\",\"requiredAction\":\"CREATE_REPLACEMENT\",\"retryable\":false,\"sessionId\":\"SESSION_FIXTURE_1\",\"resumeBlockedReason\":\"NO_RUNNER\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"NEVER\",\"retryAfterSeconds\":null,\"actionCode\":\"CREATE_REPLACEMENT\",\"actor\":\"CALLER\",\"userConfirmation\":\"NOT_REQUIRED\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SESSION_NO_RUNNER",
+        "message": "the session has no runner to resume on",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": "CALLER",
+        "actionCode": "CREATE_REPLACEMENT",
+        "requiredAction": "CREATE_REPLACEMENT",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          }
+        ]
+      },
+      "legacyText": "  refused: SESSION_NO_RUNNER\n  what:    the session has no runner to resume on\n  owner:   CALLER\n  do:      CREATE_REPLACEMENT\n"
+    },
+    {
+      "name": "session recovery: SESSION_RUNNER_OFFLINE",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"SESSION_RUNNER_OFFLINE\",\"message\":\"the runner is offline; it must be online to resume this session\",\"owner\":\"SYSTEM\",\"requiredAction\":\"AWAIT_SYSTEM_FIX\",\"retryable\":false,\"retryAfterSeconds\":60,\"sessionId\":\"SESSION_FIXTURE_1\",\"resumeBlockedReason\":\"RUNNER_OFFLINE\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"retryAfterSeconds\":60,\"actionCode\":\"AWAIT_SYSTEM_FIX\",\"actor\":\"SYSTEM\",\"userConfirmation\":\"NOT_REQUIRED\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"},{\"type\":\"RUNNER\",\"id\":\"RUNNER_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SESSION_RUNNER_OFFLINE",
+        "message": "the runner is offline; it must be online to resume this session",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": 60
+        },
+        "actor": "SYSTEM",
+        "owner": "SYSTEM",
+        "actionCode": "AWAIT_SYSTEM_FIX",
+        "requiredAction": "AWAIT_SYSTEM_FIX",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          },
+          {
+            "type": "RUNNER",
+            "id": "RUNNER_FIXTURE_1"
+          }
+        ]
+      },
+      "legacyText": "  refused: SESSION_RUNNER_OFFLINE\n  what:    the runner is offline; it must be online to resume this session\n  owner:   SYSTEM\n  do:      AWAIT_SYSTEM_FIX\n"
+    },
+    {
+      "name": "session recovery: SESSION_NEXT_TURN_STARTING",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"SESSION_NEXT_TURN_STARTING\",\"message\":\"the next turn is already starting\",\"owner\":\"SYSTEM\",\"requiredAction\":\"RETRY\",\"retryable\":true,\"retryAfterSeconds\":2,\"sessionId\":\"SESSION_FIXTURE_1\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"SAFE\",\"retryAfterSeconds\":2,\"actionCode\":\"RETRY\",\"actor\":\"SYSTEM\",\"userConfirmation\":\"NOT_REQUIRED\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SESSION_NEXT_TURN_STARTING",
+        "message": "the next turn is already starting",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "SAFE",
+          "afterSeconds": 2
+        },
+        "actor": "SYSTEM",
+        "owner": "SYSTEM",
+        "actionCode": "RETRY",
+        "requiredAction": "RETRY",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          }
+        ]
+      },
+      "legacyText": "  refused: SESSION_NEXT_TURN_STARTING\n  what:    the next turn is already starting\n  owner:   SYSTEM\n  do:      RETRY\n"
     }
   ]
 }
